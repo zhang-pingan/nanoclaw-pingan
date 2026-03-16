@@ -184,8 +184,7 @@ class FeishuChannel implements Channel {
   // Handle inbound messages from Feishu webhook
   handleWebhook(payload: any): void {
     // Support both v1.0 (event.type) and v2.0 (header.event_type) formats
-    const eventType =
-      payload.event?.type || payload.header?.event_type;
+    const eventType = payload.event?.type || payload.header?.event_type;
     if (eventType !== 'im.message.receive_v1') {
       return;
     }
@@ -243,7 +242,12 @@ export function createFeishuChannel(
 
 // Self-registration
 registerChannel('feishu', (opts) => {
-  const env = readEnvFile(['FEISHU_APP_ID', 'FEISHU_APP_SECRET', 'FEISHU_VERIFICATION_TOKEN', 'FEISHU_ENCRYPT_KEY']);
+  const env = readEnvFile([
+    'FEISHU_APP_ID',
+    'FEISHU_APP_SECRET',
+    'FEISHU_VERIFICATION_TOKEN',
+    'FEISHU_ENCRYPT_KEY',
+  ]);
   const appId = env.FEISHU_APP_ID;
   const appSecret = env.FEISHU_APP_SECRET;
   const verificationToken = env.FEISHU_VERIFICATION_TOKEN;
