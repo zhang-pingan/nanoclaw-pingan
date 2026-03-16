@@ -369,12 +369,14 @@ export async function runContainerAgent(
             // so idle timers start even for "silent" query completions.
             // Catch errors to prevent a single failed callback from breaking
             // the entire chain (which would leave runContainerAgent hanging).
-            outputChain = outputChain.then(() => onOutput(parsed)).catch((err) => {
-              logger.error(
-                { group: group.name, error: err },
-                'Error in onOutput callback',
-              );
-            });
+            outputChain = outputChain
+              .then(() => onOutput(parsed))
+              .catch((err) => {
+                logger.error(
+                  { group: group.name, error: err },
+                  'Error in onOutput callback',
+                );
+              });
           } catch (err) {
             logger.warn(
               { group: group.name, error: err },

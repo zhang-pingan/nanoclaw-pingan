@@ -164,7 +164,10 @@ class FeishuChannel implements Channel {
     // Feishu returns HTTP 200 even on errors — check the body code
     if (response.data?.code !== 0) {
       const errMsg = `Feishu API error: code=${response.data?.code} msg=${response.data?.msg}`;
-      logger.error({ jid, code: response.data?.code, msg: response.data?.msg }, errMsg);
+      logger.error(
+        { jid, code: response.data?.code, msg: response.data?.msg },
+        errMsg,
+      );
       throw new Error(errMsg);
     }
   }

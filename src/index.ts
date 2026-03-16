@@ -599,7 +599,11 @@ async function main(): Promise<void> {
         return;
       }
       const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
+      if (!text) {
+        logger.warn({ jid }, 'formatOutbound returned empty, skipping send');
+        return;
+      }
+      await channel.sendMessage(jid, text);
     },
   });
   startIpcWatcher({
