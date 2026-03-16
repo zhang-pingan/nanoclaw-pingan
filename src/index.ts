@@ -4,6 +4,7 @@ import path from 'path';
 import {
   ASSISTANT_NAME,
   CREDENTIAL_PROXY_PORT,
+  DATA_DIR,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
   TIMEZONE,
@@ -27,6 +28,8 @@ import {
   PROXY_BIND_HOST,
 } from './container-runtime.js';
 import {
+  clearMessages,
+  clearSession,
   getAllChats,
   getAllRegisteredGroups,
   getAllSessions,
@@ -163,6 +166,48 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   );
 
   if (missedMessages.length === 0) return true;
+
+  // --- /clear command: wipe conversation context for this group ---
+  const clearMsg = missedMessages.find((m) => {
+    const content = m.content.trim().replace(TRIGGER_PATTERN, '').trim();
+    return content === '/clear';
+  });
+
+  if (clearMsg) {
+    // Advance cursor to consume all messages including /clear
+    lastAgentTimestamp[chatJid] =
+      missedMessages[missedMessages.length - 1].timestamp;
+    saveState();
+
+    const isAllowed = isMainGroup || clearMsg.is_from_me;
+    if (isAllowed) {
+      clearMessages(chatJid);
+      clearSession(group.folder);
+      // Remove SDK session files (will be recreated on next agent run)
+      const sessionDir = path.join(
+        DATA_DIR,
+        'sessions',
+        group.folder,
+        '.claude',
+      );
+      if (fs.existsSync(sessionDir)) {
+        fs.rmSync(sessionDir, { recursive: true });
+      }
+      delete sessions[group.folder];
+      await channel.sendMessage(chatJid, 'Context cleared. Starting fresh.');
+      logger.info({ group: group.name }, '/clear: context reset');
+    } else {
+      await channel.sendMessage(
+        chatJid,
+        'Permission denied: only admin can clear context.',
+      );
+      logger.info(
+        { group: group.name, sender: clearMsg.sender },
+        '/clear: permission denied',
+      );
+    }
+    return true;
+  }
 
   // For non-main groups, check if trigger is required and present
   if (!isMainGroup && group.requiresTrigger !== false) {

@@ -511,6 +511,16 @@ export function setRouterState(key: string, value: string): void {
   ).run(key, value);
 }
 
+// --- Clear / reset ---
+
+export function clearMessages(chatJid: string): void {
+  db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
+}
+
+export function clearSession(groupFolder: string): void {
+  db.prepare('DELETE FROM sessions WHERE group_folder = ?').run(groupFolder);
+}
+
 // --- Session accessors ---
 
 export function getSession(groupFolder: string): string | undefined {
