@@ -185,8 +185,19 @@ async function runTask(
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.result) {
           result = streamedOutput.result;
+          logger.info(
+            { taskId: task.id, resultLength: result.length },
+            `Task result: ${result.slice(0, 200)}`,
+          );
           // Forward result to user (sendMessage handles formatting)
-          await deps.sendMessage(task.chat_jid, streamedOutput.result);
+          try {
+            await deps.sendMessage(task.chat_jid, streamedOutput.result);
+          } catch (sendErr) {
+            logger.error(
+              { taskId: task.id, chatJid: task.chat_jid, error: sendErr },
+              'Failed to send task result to channel',
+            );
+          }
           scheduleClose();
         }
         if (streamedOutput.status === 'success') {

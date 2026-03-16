@@ -8,6 +8,7 @@ import {
   RegisteredGroup,
 } from '../types.js';
 import { readEnvFile } from '../env.js';
+import { logger } from '../logger.js';
 import { registerChannel } from './registry.js';
 
 const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis';
@@ -148,7 +149,7 @@ class FeishuChannel implements Channel {
     const receiveIdType = actualJid.startsWith('ou_') ? 'user_id' : 'chat_id';
 
     // Send as query param (required by Feishu API)
-    await axios.post(
+    const response = await axios.post(
       `${FEISHU_API_BASE}/im/v1/messages?receive_id_type=${receiveIdType}`,
       {
         receive_id: actualJid,
@@ -159,6 +160,13 @@ class FeishuChannel implements Channel {
         headers: { Authorization: `Bearer ${token}` },
       },
     );
+
+    // Feishu returns HTTP 200 even on errors — check the body code
+    if (response.data?.code !== 0) {
+      const errMsg = `Feishu API error: code=${response.data?.code} msg=${response.data?.msg}`;
+      logger.error({ jid, code: response.data?.code, msg: response.data?.msg }, errMsg);
+      throw new Error(errMsg);
+    }
   }
 
   isConnected(): boolean {
