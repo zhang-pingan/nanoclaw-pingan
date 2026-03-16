@@ -43,6 +43,8 @@ export function startCredentialProxy(
   );
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
+  // Preserve base path from ANTHROPIC_BASE_URL (e.g. '/anthropic' for proxies)
+  const basePath = upstreamUrl.pathname.replace(/\/+$/, '');
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
@@ -50,6 +52,16 @@ export function startCredentialProxy(
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
         const body = Buffer.concat(chunks);
+
+        // Extract requested model from POST body (for response rewriting)
+        let requestedModel: string | undefined;
+        if (req.method === 'POST' && body.length > 0) {
+          try {
+            const parsed = JSON.parse(body.toString());
+            if (parsed.model) requestedModel = parsed.model;
+          } catch { /* not JSON, ignore */ }
+        }
+
         const headers: Record<string, string | number | string[] | undefined> =
           {
             ...(req.headers as Record<string, string>),
@@ -83,13 +95,60 @@ export function startCredentialProxy(
           {
             hostname: upstreamUrl.hostname,
             port: upstreamUrl.port || (isHttps ? 443 : 80),
-            path: req.url,
+            path: basePath + req.url,
             method: req.method,
             headers,
           } as RequestOptions,
           (upRes) => {
-            res.writeHead(upRes.statusCode!, upRes.headers);
-            upRes.pipe(res);
+            const contentType = upRes.headers['content-type'] || '';
+            const isStreaming = contentType.includes('text/event-stream');
+
+            // Rewrite model field in upstream responses so the SDK sees
+            // the model it requested, not the upstream provider's alias.
+            if (requestedModel) {
+              if (isStreaming) {
+                // SSE: replace model field in each chunk
+                const upstreamHeaders = { ...upRes.headers };
+                delete upstreamHeaders['content-length'];
+                delete upstreamHeaders['transfer-encoding'];
+                res.writeHead(upRes.statusCode!, {
+                  ...upstreamHeaders,
+                  'transfer-encoding': 'chunked',
+                });
+                upRes.on('data', (chunk: Buffer) => {
+                  const text = chunk.toString();
+                  const rewritten = text.replace(
+                    /"model"\s*:\s*"[^"]*"/g,
+                    `"model":"${requestedModel}"`,
+                  );
+                  res.write(rewritten);
+                });
+                upRes.on('end', () => res.end());
+              } else {
+                // Non-streaming: buffer, rewrite, send
+                const resChunks: Buffer[] = [];
+                upRes.on('data', (c: Buffer) => resChunks.push(c));
+                upRes.on('end', () => {
+                  let resBody = Buffer.concat(resChunks).toString();
+                  resBody = resBody.replace(
+                    /"model"\s*:\s*"[^"]*"/g,
+                    `"model":"${requestedModel}"`,
+                  );
+                  const upstreamHeaders = { ...upRes.headers };
+                  delete upstreamHeaders['content-length'];
+                  delete upstreamHeaders['transfer-encoding'];
+                  res.writeHead(upRes.statusCode!, {
+                    ...upstreamHeaders,
+                    'content-length': Buffer.byteLength(resBody),
+                  });
+                  res.end(resBody);
+                });
+              }
+            } else {
+              // No model rewriting needed — pipe through
+              res.writeHead(upRes.statusCode!, upRes.headers);
+              upRes.pipe(res);
+            }
           },
         );
 

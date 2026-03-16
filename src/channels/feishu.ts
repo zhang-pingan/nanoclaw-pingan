@@ -7,6 +7,7 @@ import {
   OnChatMetadata,
   RegisteredGroup,
 } from '../types.js';
+import { readEnvFile } from '../env.js';
 import { registerChannel } from './registry.js';
 
 const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis';
@@ -82,9 +83,10 @@ class FeishuChannel implements Channel {
               return;
             }
 
-            // Verify token if configured
+            // Verify token if configured (v1.0: payload.verification_token, v2.0: payload.header.token)
             if (this.config.verificationToken) {
-              const reqToken = payload.verification_token;
+              const reqToken =
+                payload.verification_token || payload.header?.token;
               if (reqToken !== this.config.verificationToken) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
                 res.end(
@@ -181,10 +183,13 @@ class FeishuChannel implements Channel {
 
   // Handle inbound messages from Feishu webhook
   handleWebhook(payload: any): void {
-    const event = payload.event;
-    if (!event || event.type !== 'im.message.receive_v1') {
+    // Support both v1.0 (event.type) and v2.0 (header.event_type) formats
+    const eventType =
+      payload.event?.type || payload.header?.event_type;
+    if (eventType !== 'im.message.receive_v1') {
       return;
     }
+    const event = payload.event;
 
     const message = event.message;
     const chatJid = message.chat_id;
@@ -238,10 +243,11 @@ export function createFeishuChannel(
 
 // Self-registration
 registerChannel('feishu', (opts) => {
-  const appId = process.env.FEISHU_APP_ID;
-  const appSecret = process.env.FEISHU_APP_SECRET;
-  const verificationToken = process.env.FEISHU_VERIFICATION_TOKEN;
-  const encryptKey = process.env.FEISHU_ENCRYPT_KEY;
+  const env = readEnvFile(['FEISHU_APP_ID', 'FEISHU_APP_SECRET', 'FEISHU_VERIFICATION_TOKEN', 'FEISHU_ENCRYPT_KEY']);
+  const appId = env.FEISHU_APP_ID;
+  const appSecret = env.FEISHU_APP_SECRET;
+  const verificationToken = env.FEISHU_VERIFICATION_TOKEN;
+  const encryptKey = env.FEISHU_ENCRYPT_KEY;
 
   if (!appId || !appSecret) {
     return null;
