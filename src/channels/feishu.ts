@@ -39,7 +39,7 @@ class FeishuChannel implements Channel {
       onMessage: OnInboundMessage;
       onChatMetadata: OnChatMetadata;
       registeredGroups: () => Record<string, RegisteredGroup>;
-    }
+    },
   ) {
     this.config = config;
     this.onMessage = opts.onMessage;
@@ -74,9 +74,11 @@ class FeishuChannel implements Channel {
             // If this is a verification challenge (type = "url_verification"), return the challenge
             if (payload.type === 'url_verification') {
               res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({
-                challenge: payload.challenge
-              }));
+              res.end(
+                JSON.stringify({
+                  challenge: payload.challenge,
+                }),
+              );
               return;
             }
 
@@ -85,7 +87,9 @@ class FeishuChannel implements Channel {
               const reqToken = payload.verification_token;
               if (reqToken !== this.config.verificationToken) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Invalid verification token' }));
+                res.end(
+                  JSON.stringify({ error: 'Invalid verification token' }),
+                );
                 return;
               }
             }
@@ -121,11 +125,13 @@ class FeishuChannel implements Channel {
       {
         app_id: this.config.appId,
         app_secret: this.config.appSecret,
-      }
+      },
     );
 
     if (response.data.code !== 0) {
-      throw new Error(`Failed to get tenant access token: ${response.data.msg}`);
+      throw new Error(
+        `Failed to get tenant access token: ${response.data.msg}`,
+      );
     }
 
     this.token = response.data.tenant_access_token;
@@ -149,7 +155,7 @@ class FeishuChannel implements Channel {
       },
       {
         headers: { Authorization: `Bearer ${token}` },
-      }
+      },
     );
   }
 
@@ -160,7 +166,9 @@ class FeishuChannel implements Channel {
   ownsJid(jid: string): boolean {
     // Check both with and without feishu: prefix
     const jidWithoutPrefix = jid.startsWith('feishu:') ? jid.slice(7) : jid;
-    return jidWithoutPrefix.startsWith('ou_') || jidWithoutPrefix.startsWith('oc_');
+    return (
+      jidWithoutPrefix.startsWith('ou_') || jidWithoutPrefix.startsWith('oc_')
+    );
   }
 
   async disconnect(): Promise<void> {
@@ -220,7 +228,7 @@ export function createFeishuChannel(
     onMessage: OnInboundMessage;
     onChatMetadata: OnChatMetadata;
     registeredGroups: () => Record<string, RegisteredGroup>;
-  }
+  },
 ): Channel | null {
   if (!config.appId || !config.appSecret) {
     return null;
@@ -241,6 +249,6 @@ registerChannel('feishu', (opts) => {
 
   return createFeishuChannel(
     { appId, appSecret, verificationToken, encryptKey },
-    opts
+    opts,
   );
 });
