@@ -451,7 +451,10 @@ async function startMessageLoop(): Promise<void> {
 
           // --- /clear intercept: handle even when a container is active ---
           const clearMsg = groupMessages.find((m) => {
-            const content = m.content.trim().replace(TRIGGER_PATTERN, '').trim();
+            const content = m.content
+              .trim()
+              .replace(TRIGGER_PATTERN, '')
+              .trim();
             return content === '/clear';
           });
           if (clearMsg) {
@@ -471,12 +474,22 @@ async function startMessageLoop(): Promise<void> {
                 fs.rmSync(sessionDir, { recursive: true });
               }
               delete sessions[group.folder];
-              lastAgentTimestamp[chatJid] = groupMessages[groupMessages.length - 1].timestamp;
+              lastAgentTimestamp[chatJid] =
+                groupMessages[groupMessages.length - 1].timestamp;
               saveState();
-              await channel.sendMessage(chatJid, 'Context cleared. Starting fresh.');
-              logger.info({ group: group.name }, '/clear: context reset (active container)');
+              await channel.sendMessage(
+                chatJid,
+                'Context cleared. Starting fresh.',
+              );
+              logger.info(
+                { group: group.name },
+                '/clear: context reset (active container)',
+              );
             } else {
-              await channel.sendMessage(chatJid, 'Permission denied: only admin can clear context.');
+              await channel.sendMessage(
+                chatJid,
+                'Permission denied: only admin can clear context.',
+              );
             }
             continue;
           }
