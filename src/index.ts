@@ -449,6 +449,38 @@ async function startMessageLoop(): Promise<void> {
             if (!hasTrigger) continue;
           }
 
+          // --- /clear intercept: handle even when a container is active ---
+          const clearMsg = groupMessages.find((m) => {
+            const content = m.content.trim().replace(TRIGGER_PATTERN, '').trim();
+            return content === '/clear';
+          });
+          if (clearMsg) {
+            const isAllowed = isMainGroup || clearMsg.is_from_me;
+            if (isAllowed) {
+              // Kill the active container first
+              queue.closeStdin(chatJid);
+              clearMessages(chatJid);
+              clearSession(group.folder);
+              const sessionDir = path.join(
+                DATA_DIR,
+                'sessions',
+                group.folder,
+                '.claude',
+              );
+              if (fs.existsSync(sessionDir)) {
+                fs.rmSync(sessionDir, { recursive: true });
+              }
+              delete sessions[group.folder];
+              lastAgentTimestamp[chatJid] = groupMessages[groupMessages.length - 1].timestamp;
+              saveState();
+              await channel.sendMessage(chatJid, 'Context cleared. Starting fresh.');
+              logger.info({ group: group.name }, '/clear: context reset (active container)');
+            } else {
+              await channel.sendMessage(chatJid, 'Permission denied: only admin can clear context.');
+            }
+            continue;
+          }
+
           // Pull all messages since lastAgentTimestamp so non-trigger
           // context that accumulated between triggers is included.
           const allPending = getMessagesSince(
