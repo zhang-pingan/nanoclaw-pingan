@@ -8,6 +8,7 @@
 // slack
 
 // telegram
+import './telegram.js';
 
 import './feishu.js';
 
