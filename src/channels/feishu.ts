@@ -228,7 +228,8 @@ class FeishuChannel implements Channel {
     this.onChatMetadata(fullJid, message.create_time);
 
     const envCfg = readEnvFile(['FEISHU_ADMIN_USER_ID']);
-    const adminUserId = process.env.FEISHU_ADMIN_USER_ID || envCfg.FEISHU_ADMIN_USER_ID;
+    const adminUserId =
+      process.env.FEISHU_ADMIN_USER_ID || envCfg.FEISHU_ADMIN_USER_ID;
     this.onMessage(fullJid, {
       id: messageId,
       chat_jid: fullJid,
