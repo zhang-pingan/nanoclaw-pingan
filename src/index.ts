@@ -189,7 +189,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       missedMessages[missedMessages.length - 1].timestamp;
     saveState();
 
-    if (isSessionCommandAllowed(clearMsg.is_from_me === true)) {
+    if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
       clearMessages(chatJid);
       clearSession(group.folder);
       // Remove SDK session files (will be recreated on next agent run)
@@ -490,7 +490,7 @@ async function startMessageLoop(): Promise<void> {
             // Only close active container if the sender is authorized — otherwise an
             // untrusted user could kill in-flight work by sending /compact (DoS).
             // closeStdin no-ops internally when no container is active.
-            if (isSessionCommandAllowed(loopCmdMsg.is_from_me === true)) {
+            if (isSessionCommandAllowed(!!loopCmdMsg.is_from_me)) {
               queue.closeStdin(chatJid);
             }
             // Enqueue so processGroupMessages handles auth + cursor advancement.
@@ -526,7 +526,7 @@ async function startMessageLoop(): Promise<void> {
             return content === '/clear';
           });
           if (clearMsg) {
-            if (isSessionCommandAllowed(clearMsg.is_from_me === true)) {
+            if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
               // Kill the active container first
               queue.closeStdin(chatJid);
               clearMessages(chatJid);
