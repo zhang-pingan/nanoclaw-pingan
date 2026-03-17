@@ -497,7 +497,7 @@ async function main(): Promise<void> {
   // Build initial prompt (drain any pending IPC messages too)
   let prompt = containerInput.prompt;
   if (containerInput.isScheduledTask) {
-    prompt = `[SCHEDULED TASK — this is an automated trigger, not a user message]\nExecute the task below and reply with the result. Be concise and direct.\nRules:\n- Stay focused on the task only. Do NOT do anything unrelated.\n- Do NOT modify, delete, or create scheduled tasks.\n- Do NOT read or modify project source code.\n- If the task is a simple reminder/notification, just output the message text directly without using any tools.\n- If the task requires fetching information (e.g. weather, data lookup), use tools as needed, then output the result.\n\nTask: ${prompt}`;
+    prompt = `[SCHEDULED TASK — this is an automated trigger, not a user message]\nExecute the task below and reply with the result. Be concise and direct.\nRules:\n- Stay focused on the task only. Do NOT do anything unrelated.\n- Do NOT modify, delete, or create scheduled tasks.\n- Do NOT read or modify project source code.\n- Do NOT call send_message. Your output will be sent to the user automatically. Calling send_message causes duplicate messages.\n- If the task is a simple reminder/notification, just output the message text directly without using any tools.\n- If the task requires fetching information (e.g. weather, data lookup), use tools as needed, then output the result.\n\nTask: ${prompt}`;
   }
   const pending = drainIpcInput();
   if (pending.length > 0) {
