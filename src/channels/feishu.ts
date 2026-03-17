@@ -231,7 +231,7 @@ class FeishuChannel implements Channel {
       chat_jid: fullJid,
       sender: senderId || 'unknown',
       sender_name: senderId || 'unknown',
-      content: (content.text || '').replace(/^@[^ ]+\s*/, ''),
+      content: content.text || '',
       timestamp: message.create_time,
     });
   }
