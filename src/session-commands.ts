@@ -17,13 +17,10 @@ export function extractSessionCommand(
 
 /**
  * Check if a session command sender is authorized.
- * Allowed: main group (any sender), or trusted/admin sender (is_from_me) in any group.
+ * Only the admin (is_from_me) can execute session commands in any group.
  */
-export function isSessionCommandAllowed(
-  isMainGroup: boolean,
-  isFromMe: boolean,
-): boolean {
-  return isMainGroup || isFromMe;
+export function isSessionCommandAllowed(isFromMe: boolean): boolean {
+  return isFromMe;
 }
 
 /** Minimal agent result interface — matches the subset of ContainerOutput used here. */
@@ -85,7 +82,7 @@ export async function handleSessionCommand(opts: {
 
   if (!command || !cmdMsg) return { handled: false };
 
-  if (!isSessionCommandAllowed(isMainGroup, cmdMsg.is_from_me === true)) {
+  if (!isSessionCommandAllowed(cmdMsg.is_from_me === true)) {
     // DENIED: send denial if the sender would normally be allowed to interact,
     // then silently consume the command by advancing the cursor past it.
     // Trade-off: other messages in the same batch are also consumed (cursor is

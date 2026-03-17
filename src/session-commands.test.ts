@@ -42,20 +42,12 @@ describe('extractSessionCommand', () => {
 });
 
 describe('isSessionCommandAllowed', () => {
-  it('allows main group regardless of sender', () => {
-    expect(isSessionCommandAllowed(true, false)).toBe(true);
+  it('allows admin sender (is_from_me)', () => {
+    expect(isSessionCommandAllowed(true)).toBe(true);
   });
 
-  it('allows trusted/admin sender (is_from_me) in non-main group', () => {
-    expect(isSessionCommandAllowed(false, true)).toBe(true);
-  });
-
-  it('denies untrusted sender in non-main group', () => {
-    expect(isSessionCommandAllowed(false, false)).toBe(false);
-  });
-
-  it('allows trusted sender in main group', () => {
-    expect(isSessionCommandAllowed(true, true)).toBe(true);
+  it('denies non-admin sender', () => {
+    expect(isSessionCommandAllowed(false)).toBe(false);
   });
 });
 
@@ -105,10 +97,10 @@ describe('handleSessionCommand', () => {
     expect(result.handled).toBe(false);
   });
 
-  it('handles authorized /compact in main group', async () => {
+  it('handles authorized /compact from admin', async () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
-      missedMessages: [makeMsg('/compact')],
+      missedMessages: [makeMsg('/compact', { is_from_me: true })],
       isMainGroup: true,
       groupName: 'test',
       triggerPattern: trigger,
@@ -161,8 +153,8 @@ describe('handleSessionCommand', () => {
   it('processes pre-compact messages before /compact', async () => {
     const deps = makeDeps();
     const msgs = [
-      makeMsg('summarize this', { timestamp: '99' }),
-      makeMsg('/compact', { timestamp: '100' }),
+      makeMsg('summarize this', { timestamp: '99', is_from_me: true }),
+      makeMsg('/compact', { timestamp: '100', is_from_me: true }),
     ];
     const result = await handleSessionCommand({
       missedMessages: msgs,
@@ -212,7 +204,7 @@ describe('handleSessionCommand', () => {
       }),
     });
     const result = await handleSessionCommand({
-      missedMessages: [makeMsg('/compact')],
+      missedMessages: [makeMsg('/compact', { is_from_me: true })],
       isMainGroup: true,
       groupName: 'test',
       triggerPattern: trigger,
@@ -228,8 +220,8 @@ describe('handleSessionCommand', () => {
   it('returns success:false on pre-compact failure with no output', async () => {
     const deps = makeDeps({ runAgent: vi.fn().mockResolvedValue('error') });
     const msgs = [
-      makeMsg('summarize this', { timestamp: '99' }),
-      makeMsg('/compact', { timestamp: '100' }),
+      makeMsg('summarize this', { timestamp: '99', is_from_me: true }),
+      makeMsg('/compact', { timestamp: '100', is_from_me: true }),
     ];
     const result = await handleSessionCommand({
       missedMessages: msgs,

@@ -189,8 +189,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       missedMessages[missedMessages.length - 1].timestamp;
     saveState();
 
-    const isAllowed = isMainGroup || clearMsg.is_from_me;
-    if (isAllowed) {
+    if (isSessionCommandAllowed(clearMsg.is_from_me === true)) {
       clearMessages(chatJid);
       clearSession(group.folder);
       // Remove SDK session files (will be recreated on next agent run)
@@ -491,12 +490,7 @@ async function startMessageLoop(): Promise<void> {
             // Only close active container if the sender is authorized — otherwise an
             // untrusted user could kill in-flight work by sending /compact (DoS).
             // closeStdin no-ops internally when no container is active.
-            if (
-              isSessionCommandAllowed(
-                isMainGroup,
-                loopCmdMsg.is_from_me === true,
-              )
-            ) {
+            if (isSessionCommandAllowed(loopCmdMsg.is_from_me === true)) {
               queue.closeStdin(chatJid);
             }
             // Enqueue so processGroupMessages handles auth + cursor advancement.
@@ -532,8 +526,7 @@ async function startMessageLoop(): Promise<void> {
             return content === '/clear';
           });
           if (clearMsg) {
-            const isAllowed = isMainGroup || clearMsg.is_from_me;
-            if (isAllowed) {
+            if (isSessionCommandAllowed(clearMsg.is_from_me === true)) {
               // Kill the active container first
               queue.closeStdin(chatJid);
               clearMessages(chatJid);
@@ -564,6 +557,9 @@ async function startMessageLoop(): Promise<void> {
                 chatJid,
                 'Permission denied: only admin can clear context.',
               );
+              lastAgentTimestamp[chatJid] =
+                groupMessages[groupMessages.length - 1].timestamp;
+              saveState();
             }
             continue;
           }

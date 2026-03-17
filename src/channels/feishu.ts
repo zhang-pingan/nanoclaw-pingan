@@ -203,7 +203,8 @@ class FeishuChannel implements Channel {
 
     const message = event.message;
     const chatJid = message.chat_id;
-    const senderId = message.sender_id?.user_id;
+    const senderIds = event.sender?.sender_id || {};
+    const senderId = senderIds.user_id || senderIds.open_id || '';
     const content = JSON.parse(message.content || '{}');
 
     // Check if it's the main group (no trigger required)
@@ -226,6 +227,8 @@ class FeishuChannel implements Channel {
     // Create chat metadata first (required for foreign key)
     this.onChatMetadata(fullJid, message.create_time);
 
+    const envCfg = readEnvFile(['FEISHU_ADMIN_USER_ID']);
+    const adminUserId = process.env.FEISHU_ADMIN_USER_ID || envCfg.FEISHU_ADMIN_USER_ID;
     this.onMessage(fullJid, {
       id: messageId,
       chat_jid: fullJid,
@@ -233,6 +236,7 @@ class FeishuChannel implements Channel {
       sender_name: senderId || 'unknown',
       content: content.text || '',
       timestamp: message.create_time,
+      is_from_me: !!(adminUserId && senderId === adminUserId),
     });
   }
 }
