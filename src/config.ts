@@ -6,7 +6,12 @@ import { readEnvFile } from './env.js';
 // Read config values from .env (falls back to process.env).
 // Secrets (API keys, tokens) are NOT read here — they are loaded only
 // by the credential proxy (credential-proxy.ts), never exposed to containers.
-const envConfig = readEnvFile(['ASSISTANT_NAME', 'ASSISTANT_HAS_OWN_NUMBER']);
+const envConfig = readEnvFile([
+  'ASSISTANT_NAME',
+  'ASSISTANT_HAS_OWN_NUMBER',
+  'REPOS_DIR',
+  'SSH_KEY_PATH',
+]);
 
 export const ASSISTANT_NAME =
   process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
@@ -33,12 +38,14 @@ export const SENDER_ALLOWLIST_PATH = path.join(
   'nanoclaw',
   'sender-allowlist.json',
 );
-export const REPOS_DIR = process.env.REPOS_DIR
-  ? path.resolve(process.env.REPOS_DIR.replace(/^~/, HOME_DIR))
+const reposDir = process.env.REPOS_DIR || envConfig.REPOS_DIR;
+export const REPOS_DIR = reposDir
+  ? path.resolve(reposDir.replace(/^~/, HOME_DIR))
   : path.resolve(HOME_DIR, 'IdeaProjects');
-export const SSH_KEY_PATH = process.env.SSH_KEY_PATH
-  ? path.resolve(process.env.SSH_KEY_PATH.replace(/^~/, HOME_DIR))
-  : null; // If set, mount this key file into containers for SSH access
+const sshKeyPath = process.env.SSH_KEY_PATH || envConfig.SSH_KEY_PATH;
+export const SSH_KEY_PATH = sshKeyPath
+  ? path.resolve(sshKeyPath.replace(/^~/, HOME_DIR))
+  : null;
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');

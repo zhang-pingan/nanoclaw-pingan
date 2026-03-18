@@ -335,6 +335,12 @@ function buildContainerArgs(
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
 
+  // Claude model override
+  const modelConfig = readEnvFile(['CLAUDE_MODEL']);
+  if (modelConfig.CLAUDE_MODEL) {
+    args.push('-e', `CLAUDE_MODEL=${modelConfig.CLAUDE_MODEL}`);
+  }
+
   // Jenkins credentials for deployment operations
   const devopsSecrets = readEnvFile([
     'JENKINS_URL',
