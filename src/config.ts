@@ -36,6 +36,9 @@ export const SENDER_ALLOWLIST_PATH = path.join(
 export const REPOS_DIR = process.env.REPOS_DIR
   ? path.resolve(process.env.REPOS_DIR.replace(/^~/, HOME_DIR))
   : path.resolve(HOME_DIR, 'IdeaProjects');
+export const SSH_KEY_PATH = process.env.SSH_KEY_PATH
+  ? path.resolve(process.env.SSH_KEY_PATH.replace(/^~/, HOME_DIR))
+  : null; // If set, mount this key file into containers for SSH access
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');

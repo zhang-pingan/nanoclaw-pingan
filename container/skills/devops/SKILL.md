@@ -119,39 +119,45 @@ curl -s "$JENKINS_URL/job/{jenkins_job}/lastBuild/consoleText" \
 
 ## 3. SSH Log Inspection
 
-Use `ssh {user}@{host} 'command'` to inspect remote logs. The SSH key is mounted at `/home/node/.ssh/`.
+Use `ssh` to inspect remote logs. Two SSH keys may be available:
+- `/home/node/.ssh/` — default SSH directory (contains git keys)
+- `/home/node/.ssh_devops_key` — dedicated server SSH key (if configured via `SSH_KEY_PATH`)
+
+**Always try the devops key first.** If `/home/node/.ssh_devops_key` exists, use `-i /home/node/.ssh_devops_key`. Otherwise fall back to the default key.
 
 ### View Recent Logs
 
 ```bash
+# Check which key to use
+SSH_KEY_FLAG=""
+if [ -f /home/node/.ssh_devops_key ]; then
+  SSH_KEY_FLAG="-i /home/node/.ssh_devops_key"
+fi
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_KEY_FLAG"
+
 # View last 100 lines of error log
-ssh {user}@{host} 'tail -n 100 {logs_error}'
+ssh $SSH_OPTS {user}@{host} 'tail -n 100 {logs_error}'
 
 # View last 100 lines of info log
-ssh {user}@{host} 'tail -n 100 {logs_info}'
+ssh $SSH_OPTS {user}@{host} 'tail -n 100 {logs_info}'
 
 # Search for specific errors
-ssh {user}@{host} 'grep -i "exception\|error\|fatal" {logs_error} | tail -50'
+ssh $SSH_OPTS {user}@{host} 'grep -i "exception\|error\|fatal" {logs_error} | tail -50'
 
 # View logs from a specific time range
-ssh {user}@{host} 'awk "/2024-01-15 14:00/,/2024-01-15 15:00/" {logs_error}'
+ssh $SSH_OPTS {user}@{host} 'awk "/2024-01-15 14:00/,/2024-01-15 15:00/" {logs_error}'
 ```
 
 ### Check Multiple Hosts
 
 When `log_hosts` has multiple entries, check all of them:
 ```bash
+SSH_KEY_FLAG=""
+[ -f /home/node/.ssh_devops_key ] && SSH_KEY_FLAG="-i /home/node/.ssh_devops_key"
 for host in 10.0.0.1 10.0.0.2; do
   echo "=== $host ==="
-  ssh {user}@$host 'tail -n 50 {logs_error}'
+  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_KEY_FLAG {user}@$host 'tail -n 50 {logs_error}'
 done
-```
-
-### SSH Options
-
-Use `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null` for first-time connections:
-```bash
-ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {user}@{host} 'tail -n 100 {logs_error}'
 ```
 
 ### Rules

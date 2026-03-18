@@ -17,6 +17,7 @@ import {
   GROUPS_DIR,
   IDLE_TIMEOUT,
   REPOS_DIR,
+  SSH_KEY_PATH,
   TIMEZONE,
 } from './config.js';
 import { readEnvFile } from './env.js';
@@ -236,11 +237,60 @@ function buildVolumeMounts(
     }
   }
 
-  // SSH keys: needed for git push and SSH to remote servers
-  const sshDir = path.join(HOME_DIR, '.ssh');
-  if (groupServices && groupServices.length > 0 && fs.existsSync(sshDir)) {
+  // SSH keys: needed for git push and SSH to remote servers.
+  // Build a synthetic .ssh directory per group, combining git keys from
+  // ~/.ssh with a dedicated devops key (SSH_KEY_PATH). This avoids the
+  // Docker limitation where file mounts cannot overlay read-only dir mounts.
+  if (groupServices && groupServices.length > 0) {
+    const hostSshDir = path.join(HOME_DIR, '.ssh');
+    const synthSshDir = path.join(DATA_DIR, 'sessions', group.folder, 'ssh');
+    fs.mkdirSync(synthSshDir, { recursive: true });
+
+    // Copy key files and known_hosts from ~/.ssh
+    if (fs.existsSync(hostSshDir)) {
+      const filesToCopy = [
+        'id_rsa',
+        'id_rsa.pub',
+        'id_ed25519',
+        'id_ed25519.pub',
+        'known_hosts',
+      ];
+      for (const file of filesToCopy) {
+        const src = path.join(hostSshDir, file);
+        const dst = path.join(synthSshDir, file);
+        if (fs.existsSync(src)) {
+          fs.copyFileSync(src, dst);
+          // Preserve private key permissions
+          if (!file.endsWith('.pub') && file !== 'known_hosts') {
+            fs.chmodSync(dst, 0o600);
+          }
+        }
+      }
+    }
+
+    // Copy devops key and generate SSH config that prioritizes it
+    if (SSH_KEY_PATH && fs.existsSync(SSH_KEY_PATH)) {
+      const devopsKeyDst = path.join(synthSshDir, 'id_devops');
+      fs.copyFileSync(SSH_KEY_PATH, devopsKeyDst);
+      fs.chmodSync(devopsKeyDst, 0o600);
+
+      fs.writeFileSync(
+        path.join(synthSshDir, 'config'),
+        [
+          'Host *',
+          '    IdentityFile ~/.ssh/id_devops',
+          '    IdentityFile ~/.ssh/id_rsa',
+          '    IdentityFile ~/.ssh/id_ed25519',
+          '    StrictHostKeyChecking no',
+          '    UserKnownHostsFile /dev/null',
+          '',
+        ].join('\n'),
+      );
+      fs.chmodSync(path.join(synthSshDir, 'config'), 0o644);
+    }
+
     mounts.push({
-      hostPath: sshDir,
+      hostPath: synthSshDir,
       containerPath: '/home/node/.ssh',
       readonly: true,
     });
