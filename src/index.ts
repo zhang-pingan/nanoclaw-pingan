@@ -635,10 +635,17 @@ async function main(): Promise<void> {
   restoreRemoteControl();
 
   // Load MySQL configs from services.json for proxy
-  const servicesJsonPath = path.join(process.cwd(), 'groups', 'global', 'services.json');
+  const servicesJsonPath = path.join(
+    process.cwd(),
+    'groups',
+    'global',
+    'services.json',
+  );
   if (fs.existsSync(servicesJsonPath)) {
     try {
-      const servicesConfig = JSON.parse(fs.readFileSync(servicesJsonPath, 'utf-8'));
+      const servicesConfig = JSON.parse(
+        fs.readFileSync(servicesJsonPath, 'utf-8'),
+      );
       loadMysqlConfigs(servicesConfig);
     } catch (err) {
       logger.warn({ err }, 'Failed to load MySQL configs from services.json');

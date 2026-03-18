@@ -47,7 +47,10 @@ export function loadMysqlConfigs(configs: Record<string, unknown>): void {
         user: c.user as string,
         database: c.database as string,
       };
-      logger.info({ service, host: c.host, database: c.database }, 'Loaded MySQL config for service');
+      logger.info(
+        { service, host: c.host, database: c.database },
+        'Loaded MySQL config for service',
+      );
     }
   }
 }
@@ -68,10 +71,12 @@ async function getPool(service: string): Promise<Pool> {
   const secrets = readEnvFile([`MYSQL_PASSWORD_${service}`]);
   const password = secrets[`MYSQL_PASSWORD_${service}`];
   if (!password) {
-    throw new Error(`No password configured for service: ${service} (MYSQL_PASSWORD_${service})`);
+    throw new Error(
+      `No password configured for service: ${service} (MYSQL_PASSWORD_${service})`,
+    );
   }
 
-  const mysql2 = await import('mysql2/promise') as Mysql2Promise;
+  const mysql2 = (await import('mysql2/promise')) as Mysql2Promise;
   const pool = mysql2.createPool({
     host: config.host,
     port: config.port,
@@ -103,7 +108,10 @@ function parseBody(req: IncomingMessage): Promise<QueryRequest> {
   });
 }
 
-async function handleQuery(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleQuery(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
   if (req.method !== 'POST' || req.url !== '/query') {
     res.writeHead(404);
     res.end('Not Found');
@@ -121,16 +129,23 @@ async function handleQuery(req: IncomingMessage, res: ServerResponse): Promise<v
       return;
     }
 
-    logger.info({ service, sql: sql.substring(0, 100) }, 'Executing MySQL query');
+    logger.info(
+      { service, sql: sql.substring(0, 100) },
+      'Executing MySQL query',
+    );
 
     const pool = await getPool(service);
     const [rows, fields] = await pool.query(sql);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      rows,
-      fields: Array.isArray(fields) ? fields.map((f: unknown) => (f as { name: string }).name) : []
-    }));
+    res.end(
+      JSON.stringify({
+        rows,
+        fields: Array.isArray(fields)
+          ? fields.map((f: unknown) => (f as { name: string }).name)
+          : [],
+      }),
+    );
   } catch (err) {
     logger.error({ err }, 'MySQL query error');
     res.writeHead(500);
@@ -138,7 +153,10 @@ async function handleQuery(req: IncomingMessage, res: ServerResponse): Promise<v
   }
 }
 
-export function startMysqlProxy(port: number, host = '127.0.0.1'): Promise<Server> {
+export function startMysqlProxy(
+  port: number,
+  host = '127.0.0.1',
+): Promise<Server> {
   return new Promise((resolve, reject) => {
     const server = createServer(handleQuery);
 
