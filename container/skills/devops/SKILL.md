@@ -1,6 +1,6 @@
 # DevOps Skill
 
-You have DevOps capabilities: code modification (Git), Jenkins deployment, and SSH log inspection.
+You have DevOps capabilities: code modification (Git), Jenkins deployment, SSH log inspection, and MySQL database queries.
 
 ## Service Registry
 
@@ -11,7 +11,7 @@ All service configuration is in `/workspace/global/services.json` (non-main grou
 1. Read the services.json file
 2. Match the user's service name to a key in the JSON
 3. If not found, ask the user to confirm the service name or provide configuration
-4. Use the matched entry's fields: `repo_path`, `git_url`, `jenkins_job`, `user`, `log_hosts`, `logs_info`, `logs_error`
+4. Use the matched entry's fields: `repo_path`, `git_url`, `jenkins_job`, `user`, `log_hosts`, `logs_info`, `logs_error`, `mysql`
 
 ### services.json Format
 
@@ -25,10 +25,18 @@ All service configuration is in `/workspace/global/services.json` (non-main grou
     "user": "deploy",
     "log_hosts": ["10.0.0.1", "10.0.0.2"],
     "logs_info": "/var/log/service-name/info.log",
-    "logs_error": "/var/log/service-name/error.log"
+    "logs_error": "/var/log/service-name/error.log",
+    "mysql": {
+      "host": "rm-xxx.mysql.rds.aliyuncs.com",
+      "port": 3306,
+      "user": "app_user",
+      "database": "service_db"
+    }
   }
 }
 ```
+
+**Note:** MySQL passwords are configured in the host's `.env` file as `MYSQL_PASSWORD_{service}=your_password`. The container never sees the password.
 
 ## 1. Code Modification (Git)
 
@@ -166,3 +174,45 @@ done
 - Never run `rm`, `kill`, `systemctl restart`, or any write operations on remote servers
 - If the user asks for a fix on the server, explain what needs to be done and ask them to do it manually
 - Always tell the user which host you're checking
+
+## 4. MySQL Database Query
+
+Query MySQL databases through a secure proxy. The container never sees database passwords — they are injected by the host proxy.
+
+### Query a Database
+
+Use the `$MYSQL_PROXY_URL` environment variable to query databases:
+
+```bash
+# Query example (replace 'catstory' with the service name)
+curl -s -X POST "$MYSQL_PROXY_URL/query" \
+  -H "Content-Type: application/json" \
+  -d '{"service": "catstory", "sql": "SELECT * FROM users LIMIT 10"}'
+```
+
+### Lookup Service Database Config
+
+1. Read services.json to find the `mysql` configuration for the service
+2. Get `host`, `port`, `user`, and `database` from the config
+3. Use the service name as the `service` field in the API request
+
+### Example Workflow
+
+1. User asks: "Check the user table in catstory database"
+2. Look up service "catstory" in services.json
+3. Find `mysql.host`, `mysql.database` fields
+4. Execute query via proxy:
+
+```bash
+curl -s -X POST "$MYSQL_PROXY_URL/query" \
+  -H "Content-Type: application/json" \
+  -d '{"service": "catstory", "sql": "SELECT * FROM users LIMIT 10"}' | jq .
+```
+
+### Rules
+
+- **READ-ONLY only** — only SELECT queries are allowed
+- Never execute INSERT, UPDATE, DELETE, DROP, or any write operations
+- If the user asks to modify data, explain what needs to be done and ask them to do it manually
+- Format results in a readable way for the user
+- Limit results with LIMIT clause when appropriate (e.g., LIMIT 100)

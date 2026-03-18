@@ -6,11 +6,13 @@ import {
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   IDLE_TIMEOUT,
+  MYSQL_PROXY_PORT,
   POLL_INTERVAL,
   TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
 import { startCredentialProxy } from './credential-proxy.js';
+import { loadMysqlConfigs, startMysqlProxy } from './mysql-proxy.js';
 import './channels/index.js';
 import {
   getChannelFactory,
@@ -632,9 +634,26 @@ async function main(): Promise<void> {
   loadState();
   restoreRemoteControl();
 
+  // Load MySQL configs from services.json for proxy
+  const servicesJsonPath = path.join(process.cwd(), 'groups', 'global', 'services.json');
+  if (fs.existsSync(servicesJsonPath)) {
+    try {
+      const servicesConfig = JSON.parse(fs.readFileSync(servicesJsonPath, 'utf-8'));
+      loadMysqlConfigs(servicesConfig);
+    } catch (err) {
+      logger.warn({ err }, 'Failed to load MySQL configs from services.json');
+    }
+  }
+
   // Start credential proxy (containers route API calls through this)
   const proxyServer = await startCredentialProxy(
     CREDENTIAL_PROXY_PORT,
+    PROXY_BIND_HOST,
+  );
+
+  // Start MySQL proxy (containers query MySQL through this)
+  const mysqlProxyServer = await startMysqlProxy(
+    MYSQL_PROXY_PORT,
     PROXY_BIND_HOST,
   );
 
@@ -642,6 +661,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
+    mysqlProxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);

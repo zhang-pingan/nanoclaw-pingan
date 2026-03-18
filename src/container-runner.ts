@@ -16,6 +16,7 @@ import {
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
+  MYSQL_PROXY_PORT,
   REPOS_DIR,
   SSH_KEY_PATH,
   TIMEZONE,
@@ -352,6 +353,12 @@ function buildContainerArgs(
     args.push('-e', `JENKINS_USER=${devopsSecrets.JENKINS_USER || ''}`);
     args.push('-e', `JENKINS_PASSWORD=${devopsSecrets.JENKINS_PASSWORD || ''}`);
   }
+
+  // MySQL proxy URL for database queries
+  args.push(
+    '-e',
+    `MYSQL_PROXY_URL=http://${CONTAINER_HOST_GATEWAY}:${MYSQL_PROXY_PORT}`,
+  );
 
   // Runtime-specific args for host gateway resolution
   args.push(...hostGatewayArgs());
