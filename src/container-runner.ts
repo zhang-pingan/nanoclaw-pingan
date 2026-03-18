@@ -6,6 +6,8 @@ import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+import os from 'os';
+
 import {
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
@@ -14,8 +16,10 @@ import {
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
+  REPOS_DIR,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -28,6 +32,8 @@ import {
 import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
+
+const HOME_DIR = process.env.HOME || os.homedir();
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -199,6 +205,47 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Per-group service repo mounts: only mount repos this group needs
+  const groupServices = group.containerConfig?.services as string[] | undefined;
+  if (groupServices && groupServices.length > 0) {
+    const servicesJsonPath = path.join(GROUPS_DIR, 'global', 'services.json');
+    if (fs.existsSync(servicesJsonPath)) {
+      try {
+        const allServices = JSON.parse(
+          fs.readFileSync(servicesJsonPath, 'utf-8'),
+        );
+        const isWildcard = groupServices.includes('*');
+        const serviceNames = isWildcard
+          ? Object.keys(allServices)
+          : groupServices;
+        for (const svcName of serviceNames) {
+          const svc = allServices[svcName];
+          if (!svc?.repo_path) continue;
+          const hostPath = path.join(REPOS_DIR, svc.repo_path);
+          if (fs.existsSync(hostPath)) {
+            mounts.push({
+              hostPath,
+              containerPath: `/workspace/repos/${svc.repo_path}`,
+              readonly: false,
+            });
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to parse services.json');
+      }
+    }
+  }
+
+  // SSH keys: needed for git push and SSH to remote servers
+  const sshDir = path.join(HOME_DIR, '.ssh');
+  if (groupServices && groupServices.length > 0 && fs.existsSync(sshDir)) {
+    mounts.push({
+      hostPath: sshDir,
+      containerPath: '/home/node/.ssh',
+      readonly: true,
+    });
+  }
+
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
@@ -236,6 +283,18 @@ function buildContainerArgs(
     args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
+  }
+
+  // Jenkins credentials for deployment operations
+  const devopsSecrets = readEnvFile([
+    'JENKINS_URL',
+    'JENKINS_USER',
+    'JENKINS_PASSWORD',
+  ]);
+  if (devopsSecrets.JENKINS_URL) {
+    args.push('-e', `JENKINS_URL=${devopsSecrets.JENKINS_URL}`);
+    args.push('-e', `JENKINS_USER=${devopsSecrets.JENKINS_USER || ''}`);
+    args.push('-e', `JENKINS_PASSWORD=${devopsSecrets.JENKINS_PASSWORD || ''}`);
   }
 
   // Runtime-specific args for host gateway resolution

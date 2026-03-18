@@ -56,3 +56,31 @@ NEVER use markdown. Only use WhatsApp/Telegram formatting:
 - ```triple backticks``` for code
 
 No ## headings. No [links](url). No **double stars**.
+
+## DevOps Capabilities
+
+You have DevOps capabilities when the group has services configured.
+
+### Service Registry
+
+Read `/workspace/global/services.json` (or `/workspace/project/groups/global/services.json` for main group) to look up service configuration: repo paths, git URLs, Jenkins jobs, SSH hosts, and log paths.
+
+### Code Modification
+
+- Service repos are mounted at `/workspace/repos/{repo_path}/`
+- SSH key is mounted for git authentication
+- Workflow: analyze → show plan → get confirmation → modify → show diff → get confirmation → commit → get confirmation → push
+- NEVER push without explicit user confirmation
+
+### Jenkins Deployment
+
+- Use `$JENKINS_URL`, `$JENKINS_USER`, `$JENKINS_PASSWORD` environment variables
+- Use `curl` to trigger builds, check status, and view logs
+- POST requests require CSRF crumb: fetch from `/crumbIssuer/api/json` first
+- NEVER trigger deployment without explicit user confirmation
+
+### SSH Log Inspection
+
+- SSH to `log_hosts` from services.json to read `logs_info` and `logs_error`
+- READ-ONLY operations only — never modify remote files or restart services
+- Check all hosts in the list when troubleshooting

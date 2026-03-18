@@ -30,6 +30,7 @@ export interface AllowedRoot {
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
+  services?: string[]; // Service names from services.json to mount repos for (use ["*"] for all)
 }
 
 export interface RegisteredGroup {

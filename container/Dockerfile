@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
