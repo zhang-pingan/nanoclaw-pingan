@@ -414,7 +414,20 @@ async function runAgent(
       wrappedOnOutput,
     );
 
-    if (output.newSessionId) {
+    // Handle "No conversation found" error - session is invalid, clear it
+    const isSessionInvalid =
+      output.status === 'error' &&
+      output.error?.includes('No conversation found');
+
+    if (isSessionInvalid) {
+      logger.warn(
+        { group: group.name, sessionId: output.newSessionId },
+        'Session invalid, clearing for retry',
+      );
+      clearSession(group.folder);
+      delete sessions[group.folder];
+      // Don't save the invalid session ID - let retry create a new one
+    } else if (output.newSessionId) {
       sessions[group.folder] = output.newSessionId;
       setSession(group.folder, output.newSessionId);
     }
