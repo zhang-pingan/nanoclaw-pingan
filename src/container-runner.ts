@@ -685,10 +685,15 @@ export async function runContainerAgent(
           'Container exited with error',
         );
 
-        resolve({
-          status: 'error',
-          result: null,
-          error: `Container exited with code ${code}: ${stderr.slice(-200)}`,
+        // Wait for outputChain to settle (like success path) to avoid
+        // race where wrappedOnOutput writes a stale session ID after
+        // isSessionInvalid clears it.
+        outputChain.then(() => {
+          resolve({
+            status: 'error',
+            result: null,
+            error: `Container exited with code ${code}: ${stderr.slice(-200)}`,
+          });
         });
         return;
       }

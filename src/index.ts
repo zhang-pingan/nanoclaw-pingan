@@ -82,6 +82,7 @@ let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+const pendingSessionCleanup = new Set<string>();
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -194,7 +195,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
       clearMessages(chatJid);
       clearSession(group.folder);
-      // Remove SDK session files (will be recreated on next agent run)
+      // No active container in this path — safe to delete immediately
       const sessionDir = path.join(
         DATA_DIR,
         'sessions',
@@ -205,7 +206,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         fs.rmSync(sessionDir, { recursive: true });
       }
       delete sessions[group.folder];
-      await channel.sendMessage(chatJid, 'Context cleared. Starting fresh.');
+      await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
       logger.info({ group: group.name }, '/clear: context reset');
     } else {
       await channel.sendMessage(
@@ -329,6 +330,17 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+
+  // Deferred .claude/ cleanup: safe now that the container has exited
+  if (pendingSessionCleanup.has(group.folder)) {
+    pendingSessionCleanup.delete(group.folder);
+    const sessionDir = path.join(DATA_DIR, 'sessions', group.folder, '.claude');
+    if (fs.existsSync(sessionDir)) {
+      fs.rmSync(sessionDir, { recursive: true });
+    }
+    await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
+    logger.info({ group: group.name }, '/clear: deferred cleanup completed');
+  }
 
   if (output === 'error' || hadError) {
     // If we already sent output to the user, don't roll back the cursor —
@@ -542,31 +554,42 @@ async function startMessageLoop(): Promise<void> {
           });
           if (clearMsg) {
             if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
-              // Kill the active container first
               queue.closeStdin(chatJid);
               clearMessages(chatJid);
               clearSession(group.folder);
-              const sessionDir = path.join(
-                DATA_DIR,
-                'sessions',
-                group.folder,
-                '.claude',
-              );
-              if (fs.existsSync(sessionDir)) {
-                fs.rmSync(sessionDir, { recursive: true });
-              }
               delete sessions[group.folder];
               lastAgentTimestamp[chatJid] =
                 groupMessages[groupMessages.length - 1].timestamp;
               saveState();
-              await channel.sendMessage(
-                chatJid,
-                'Context cleared. Starting fresh.',
-              );
-              logger.info(
-                { group: group.name },
-                '/clear: context reset (active container)',
-              );
+
+              if (queue.isActive(chatJid)) {
+                // Container still running — defer .claude/ removal until exit
+                pendingSessionCleanup.add(group.folder);
+                await channel.sendMessage(chatJid, '数据清理中，请等待');
+                logger.info(
+                  { group: group.name },
+                  '/clear: context reset (active container, deferred cleanup)',
+                );
+              } else {
+                // No active container — safe to delete immediately
+                const sessionDir = path.join(
+                  DATA_DIR,
+                  'sessions',
+                  group.folder,
+                  '.claude',
+                );
+                if (fs.existsSync(sessionDir)) {
+                  fs.rmSync(sessionDir, { recursive: true });
+                }
+                await channel.sendMessage(
+                  chatJid,
+                  '数据已清理完毕，可正常发送命令啦',
+                );
+                logger.info(
+                  { group: group.name },
+                  '/clear: context reset (no active container)',
+                );
+              }
             } else {
               await channel.sendMessage(
                 chatJid,

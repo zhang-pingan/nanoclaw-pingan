@@ -142,6 +142,13 @@ export class GroupQueue {
   }
 
   /**
+   * Check whether a container is currently active for this group.
+   */
+  isActive(groupJid: string): boolean {
+    return this.getGroup(groupJid).active;
+  }
+
+  /**
    * Mark the container as idle-waiting (finished work, waiting for IPC input).
    * If tasks are pending, preempt the idle container immediately.
    */
