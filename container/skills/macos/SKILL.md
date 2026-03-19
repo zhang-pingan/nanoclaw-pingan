@@ -1,43 +1,35 @@
 # macOS Control Skill
 
-Control your Mac through SSH. The container connects to your Mac via localhost SSH.
+Control your Mac through SSH. The container connects to your Mac via the host's LAN IP address.
 
 ## Connection
 
-SSH is configured to connect to `chelaile@localhost`. The SSH key is automatically mounted from the host.
+SSH is configured to connect to `chelaile@172.16.11.100`. The SSH key is automatically mounted from the host.
 
 ## Available Commands
-
-### Lock Screen / Sleep Display
-
-```bash
-ssh -o StrictHostKeyChecking=no chelaile@localhost "caffeinate -u -t 1"
-```
-
-This puts the display to sleep (equivalent to pressing power button briefly).
 
 ### Sleep Mac
 
 ```bash
-ssh -o StrictHostKeyChecking=no chelaile@localhost "pmset sleepnow"
+ssh -o StrictHostKeyChecking=no chelaile@172.16.11.100 "pmset sleepnow"
 ```
 
 ### Restart Mac
 
 ```bash
-ssh -o StrictHostKeyChecking=no chelaile@localhost "sudo shutdown -r now"
+ssh -o StrictHostKeyChecking=no chelaile@172.16.11.100 "sudo shutdown -r now"
 ```
 
 ### Shut Down Mac
 
 ```bash
-ssh -o StrictHostKeyChecking=no chelaile@localhost "sudo shutdown -h now"
+ssh -o StrictHostKeyChecking=no chelaile@172.16.11.100 "sudo shutdown -h now"
 ```
 
 ### Get Mac Info
 
 ```bash
-ssh -o StrictHostKeyChecking=no chelaile@localhost "uname -a && uptime"
+ssh -o StrictHostKeyChecking=no chelaile@172.16.11.100 "uname -a && uptime"
 ```
 
 ## Usage

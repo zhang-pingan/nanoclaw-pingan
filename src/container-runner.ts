@@ -238,11 +238,11 @@ function buildVolumeMounts(
     }
   }
 
-  // SSH keys: needed for git push and SSH to remote servers.
+  // SSH keys: needed for git push and SSH to remote servers (including macOS control skill).
   // Build a synthetic .ssh directory per group, combining git keys from
   // ~/.ssh with a dedicated devops key (SSH_KEY_PATH). This avoids the
   // Docker limitation where file mounts cannot overlay read-only dir mounts.
-  if (groupServices && groupServices.length > 0) {
+  if ((groupServices && groupServices.length > 0) || isMain) {
     const hostSshDir = path.join(HOME_DIR, '.ssh');
     const synthSshDir = path.join(DATA_DIR, 'sessions', group.folder, 'ssh');
     fs.mkdirSync(synthSshDir, { recursive: true });
