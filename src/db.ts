@@ -139,6 +139,43 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* columns already exist */
   }
+
+  // FTS5 full-text search index for messages
+  database.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+      content,
+      content='messages',
+      content_rowid='rowid',
+      tokenize='unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+      INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+      INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+    END;
+  `);
+
+  // Backfill FTS index if empty (one-time migration for existing data)
+  const ftsCount = database
+    .prepare(`SELECT COUNT(*) as cnt FROM messages_fts`)
+    .get() as { cnt: number };
+  const msgCount = database
+    .prepare(`SELECT COUNT(*) as cnt FROM messages`)
+    .get() as { cnt: number };
+  if (ftsCount.cnt === 0 && msgCount.cnt > 0) {
+    logger.info(
+      { messageCount: msgCount.cnt },
+      'Backfilling FTS index for existing messages',
+    );
+    database.exec(`
+      INSERT INTO messages_fts(rowid, content)
+      SELECT rowid, content FROM messages;
+    `);
+    logger.info('FTS backfill complete');
+  }
 }
 
 export function initDatabase(): void {
@@ -642,6 +679,53 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     };
   }
   return result;
+}
+
+// --- Full-text search ---
+
+export interface SearchResult {
+  sender_name: string;
+  content: string;
+  timestamp: string;
+  rank: number;
+}
+
+/**
+ * Search messages using FTS5 full-text search, scoped to a group's chat JIDs.
+ */
+export function searchMessages(
+  groupFolder: string,
+  query: string,
+  limit: number = 10,
+): SearchResult[] {
+  // Find chat JIDs associated with this group folder
+  const group = db
+    .prepare(`SELECT jid FROM registered_groups WHERE folder = ?`)
+    .get(groupFolder) as { jid: string } | undefined;
+
+  if (!group) return [];
+
+  const chatJid = group.jid;
+
+  try {
+    const results = db
+      .prepare(
+        `
+      SELECT m.sender_name, m.content, m.timestamp, fts.rank
+      FROM messages_fts fts
+      JOIN messages m ON m.rowid = fts.rowid
+      WHERE messages_fts MATCH ?
+        AND m.chat_jid = ?
+      ORDER BY fts.rank
+      LIMIT ?
+    `,
+      )
+      .all(query, chatJid, limit) as SearchResult[];
+    return results;
+  } catch (err) {
+    logger.error({ err, groupFolder, query }, 'FTS search failed');
+    return [];
+  }
 }
 
 // --- JSON migration ---

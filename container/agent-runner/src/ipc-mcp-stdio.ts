@@ -333,6 +333,82 @@ Use available_groups.json to find the JID for a group. The folder name must be c
   },
 );
 
+server.tool(
+  'memory_search',
+  '搜索历史对话和消息记录。可以搜索聊天消息和归档的对话记录。',
+  {
+    query: z.string().describe('搜索关键词'),
+    limit: z.number().optional().default(10).describe('最大返回条数'),
+  },
+  async (args) => {
+    const requestId = `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const data = {
+      type: 'memory_search',
+      query: args.query,
+      limit: args.limit || 10,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    // Poll for results
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+
+          const parts: string[] = [];
+
+          if (result.messages?.length > 0) {
+            parts.push('## 消息记录\n');
+            for (const msg of result.messages) {
+              parts.push(`[${msg.timestamp}] ${msg.sender}: ${msg.content}`);
+            }
+          }
+
+          if (result.conversations?.length > 0) {
+            parts.push('\n## 对话归档\n');
+            for (const conv of result.conversations) {
+              parts.push(`### ${conv.file}\n${conv.snippet}\n`);
+            }
+          }
+
+          if (parts.length === 0) {
+            return {
+              content: [{ type: 'text' as const, text: `没有找到与"${args.query}"相关的记录。` }],
+            };
+          }
+
+          return {
+            content: [{ type: 'text' as const, text: parts.join('\n') }],
+          };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `搜索结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: '搜索超时，请稍后重试。' }],
+      isError: true,
+    };
+  },
+);
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

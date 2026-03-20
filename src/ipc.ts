@@ -3,9 +3,15 @@ import path from 'path';
 
 import { CronExpressionParser } from 'cron-parser';
 
-import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
+import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { AvailableGroup } from './container-runner.js';
-import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import {
+  createTask,
+  deleteTask,
+  getTaskById,
+  searchMessages,
+  updateTask,
+} from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
@@ -153,6 +159,59 @@ export function startIpcWatcher(deps: IpcDeps): void {
   logger.info('IPC watcher started (per-group namespaces)');
 }
 
+interface ConversationSearchResult {
+  file: string;
+  snippet: string;
+}
+
+/**
+ * Search conversations/ markdown files for a group by keyword.
+ */
+function searchConversations(
+  groupFolder: string,
+  query: string,
+  limit: number = 10,
+): ConversationSearchResult[] {
+  const conversationsDir = path.join(GROUPS_DIR, groupFolder, 'conversations');
+  if (!fs.existsSync(conversationsDir)) return [];
+
+  const results: ConversationSearchResult[] = [];
+  const queryLower = query.toLowerCase();
+
+  try {
+    const files = fs
+      .readdirSync(conversationsDir)
+      .filter((f) => f.endsWith('.md'))
+      .sort()
+      .reverse(); // newest first
+
+    for (const file of files) {
+      if (results.length >= limit) break;
+      const filePath = path.join(conversationsDir, file);
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          if (results.length >= limit) break;
+          if (lines[i].toLowerCase().includes(queryLower)) {
+            // Extract context: 1 line before and 1 line after
+            const start = Math.max(0, i - 1);
+            const end = Math.min(lines.length, i + 2);
+            const snippet = lines.slice(start, end).join('\n');
+            results.push({ file, snippet });
+          }
+        }
+      } catch {
+        /* skip unreadable files */
+      }
+    }
+  } catch {
+    /* directory read error */
+  }
+
+  return results;
+}
+
 export async function processTaskIpc(
   data: {
     type: string;
@@ -171,6 +230,10 @@ export async function processTaskIpc(
     trigger?: string;
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
+    // For memory_search
+    query?: string;
+    limit?: number;
+    requestId?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -448,6 +511,69 @@ export async function processTaskIpc(
         );
       }
       break;
+
+    case 'memory_search': {
+      if (!data.query || !data.requestId) {
+        logger.warn(
+          { sourceGroup },
+          'memory_search missing query or requestId',
+        );
+        break;
+      }
+
+      const searchLimit = data.limit || 10;
+
+      // Search messages via FTS
+      const messageResults = searchMessages(
+        sourceGroup,
+        data.query,
+        searchLimit,
+      );
+
+      // Search conversations/ files
+      const conversationResults = searchConversations(
+        sourceGroup,
+        data.query,
+        searchLimit,
+      );
+
+      // Write results to IPC response file
+      const resultsDir = path.join(
+        DATA_DIR,
+        'ipc',
+        sourceGroup,
+        'search-results',
+      );
+      fs.mkdirSync(resultsDir, { recursive: true });
+
+      const response = {
+        messages: messageResults.map((r) => ({
+          sender: r.sender_name,
+          content: r.content,
+          timestamp: r.timestamp,
+        })),
+        conversations: conversationResults.map((r) => ({
+          file: r.file,
+          snippet: r.snippet,
+        })),
+      };
+
+      const responsePath = path.join(resultsDir, `${data.requestId}.json`);
+      const tempPath = `${responsePath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify(response, null, 2));
+      fs.renameSync(tempPath, responsePath);
+
+      logger.info(
+        {
+          sourceGroup,
+          query: data.query,
+          messageHits: messageResults.length,
+          conversationHits: conversationResults.length,
+        },
+        'memory_search completed',
+      );
+      break;
+    }
 
     default:
       logger.warn({ type: data.type }, 'Unknown IPC task type');

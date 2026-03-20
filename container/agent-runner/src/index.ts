@@ -117,6 +117,76 @@ function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
 }
 
+/**
+ * Find the transcript JSONL path for a given session ID.
+ * Searches the Claude SDK sessions-index.json under /home/node/.claude/projects/
+ */
+function findTranscriptPath(sessionId: string): string | null {
+  const claudeDir = '/home/node/.claude/projects';
+  if (!fs.existsSync(claudeDir)) return null;
+
+  // Walk project dirs looking for sessions-index.json
+  try {
+    const walkDir = (dir: string): string | null => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          const found = walkDir(fullPath);
+          if (found) return found;
+        } else if (entry.name === 'sessions-index.json') {
+          try {
+            const index: SessionsIndex = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+            const match = index.entries.find(e => e.sessionId === sessionId);
+            if (match?.fullPath && fs.existsSync(match.fullPath)) {
+              return match.fullPath;
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+      return null;
+    };
+    return walkDir(claudeDir);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Archive transcript to conversations/ on container exit.
+ * Uses sessionId prefix in filename so the same session overwrites its own archive.
+ */
+function archiveOnExit(sessionId: string | undefined, input: ContainerInput): void {
+  if (!sessionId) return;
+
+  const transcriptPath = findTranscriptPath(sessionId);
+  if (!transcriptPath) {
+    log('Exit archive: no transcript found');
+    return;
+  }
+
+  try {
+    const content = fs.readFileSync(transcriptPath, 'utf-8');
+    const messages = parseTranscript(content);
+    if (messages.length === 0) {
+      log('Exit archive: no messages to archive');
+      return;
+    }
+
+    const summary = getSessionSummary(sessionId, transcriptPath);
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `${date}-${sessionId.slice(0, 8)}.md`;
+
+    const conversationsDir = '/workspace/group/conversations';
+    fs.mkdirSync(conversationsDir, { recursive: true });
+
+    const markdown = formatTranscriptMarkdown(messages, summary, input.assistantName);
+    fs.writeFileSync(path.join(conversationsDir, filename), markdown);
+    log(`Exit archive: ${filename}`);
+  } catch (err) {
+    log(`Exit archive failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
   const projectDir = path.dirname(transcriptPath);
   const indexPath = path.join(projectDir, 'sessions-index.json');
@@ -140,61 +210,13 @@ function getSessionSummary(sessionId: string, transcriptPath: string): string | 
 }
 
 /**
- * Archive the full transcript to conversations/ before compaction.
+ * PreCompact hook — archiving moved to archiveOnExit(), this is now a no-op placeholder.
  */
-function createPreCompactHook(assistantName?: string): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preCompact = input as PreCompactHookInput;
-    const transcriptPath = preCompact.transcript_path;
-    const sessionId = preCompact.session_id;
-
-    if (!transcriptPath || !fs.existsSync(transcriptPath)) {
-      log('No transcript found for archiving');
-      return {};
-    }
-
-    try {
-      const content = fs.readFileSync(transcriptPath, 'utf-8');
-      const messages = parseTranscript(content);
-
-      if (messages.length === 0) {
-        log('No messages to archive');
-        return {};
-      }
-
-      const summary = getSessionSummary(sessionId, transcriptPath);
-      const name = summary ? sanitizeFilename(summary) : generateFallbackName();
-
-      const conversationsDir = '/workspace/group/conversations';
-      fs.mkdirSync(conversationsDir, { recursive: true });
-
-      const date = new Date().toISOString().split('T')[0];
-      const filename = `${date}-${name}.md`;
-      const filePath = path.join(conversationsDir, filename);
-
-      const markdown = formatTranscriptMarkdown(messages, summary, assistantName);
-      fs.writeFileSync(filePath, markdown);
-
-      log(`Archived conversation to ${filePath}`);
-    } catch (err) {
-      log(`Failed to archive transcript: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
+function createPreCompactHook(_assistantName?: string): HookCallback {
+  return async (_input, _toolUseId, _context) => {
+    log('PreCompact hook fired (archive deferred to exit)');
     return {};
   };
-}
-
-function sanitizeFilename(summary: string): string {
-  return summary
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50);
-}
-
-function generateFallbackName(): string {
-  const time = new Date();
-  return `conversation-${time.getHours().toString().padStart(2, '0')}${time.getMinutes().toString().padStart(2, '0')}`;
 }
 
 interface ParsedMessage {
@@ -645,7 +667,13 @@ async function main(): Promise<void> {
       log(`Got new message (${nextMessage.length} chars), starting new query`);
       prompt = nextMessage;
     }
+
+    // Archive transcript on normal exit
+    archiveOnExit(confirmedSessionId || sessionId, containerInput);
   } catch (err) {
+    // Archive transcript on error exit
+    archiveOnExit(confirmedSessionId || sessionId, containerInput);
+
     const errorMessage = err instanceof Error ? err.message : String(err);
     log(`Agent error: ${errorMessage}`);
     writeOutput({

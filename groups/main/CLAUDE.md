@@ -36,7 +36,23 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 ## Memory
 
+### Persistent Memory (written to group CLAUDE.md)
+
+When the user uses keywords like "记住", "你必须", "以后都要", "永远不要","always", "remember", "never", "you must", or equivalent expressions in any language, append the corresponding instruction to the `## User Memory` section of `/workspace/group/CLAUDE.md`.
+
+Also write to `## User Memory` if you judge the information is a core rule or preference that should appear in every conversation.
+
+Format: append one concise line at the end of `## User Memory`. Examples:
+- Always reply in Chinese
+- Never use emoji
+
+Note: CLAUDE.md is force-loaded into every conversation — do not write temporary information or verbose content.
+
+### Episodic Memory (conversations/)
+
 The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
+
+### Knowledge Files (*.md)
 
 When you learn something important:
 - Create files for structured data (e.g., `customers.md`, `preferences.md`)
@@ -244,3 +260,7 @@ When scheduling tasks for other groups, use the `target_group_jid` parameter wit
 - `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")`
 
 The task will run in that group's context with access to their files and memory.
+
+## User Memory
+
+(Auto-maintained by Agent based on user instructions)
