@@ -272,7 +272,7 @@ export function updateChatName(chatJid: string, name: string): void {
     INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?)
     ON CONFLICT(jid) DO UPDATE SET name = excluded.name
   `,
-  ).run(chatJid, name, new Date().toISOString());
+  ).run(chatJid, name, Date.now().toString());
 }
 
 export interface ChatInfo {
@@ -313,7 +313,7 @@ export function getLastGroupSync(): string | null {
  * Record that group metadata was synced.
  */
 export function setLastGroupSync(): void {
-  const now = new Date().toISOString();
+  const now = Date.now().toString();
   db.prepare(
     `INSERT OR REPLACE INTO chats (jid, name, last_message_time) VALUES ('__group_sync__', '__group_sync__', ?)`,
   ).run(now);
@@ -743,7 +743,7 @@ export function updateDelegation(
   updates: Partial<Pick<Delegation, 'status' | 'result'>>,
 ): void {
   const fields: string[] = ['updated_at = ?'];
-  const values: unknown[] = [new Date().toISOString()];
+  const values: unknown[] = [Date.now().toString()];
 
   if (updates.status !== undefined) {
     fields.push('status = ?');

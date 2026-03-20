@@ -555,7 +555,7 @@ export async function processTaskIpc(
       const delegationId =
         data.delegationId ||
         `del-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const now = new Date().toISOString();
+      const now = Date.now().toString();
 
       // Create delegation record
       createDelegation({
@@ -670,7 +670,7 @@ export async function processTaskIpc(
       // Construct result message for the source (main) group
       const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
       const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const resultNow = new Date().toISOString();
+      const resultNow = Date.now().toString();
 
       storeMessageDirect({
         id: resultMsgId,
