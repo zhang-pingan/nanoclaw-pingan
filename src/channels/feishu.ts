@@ -216,21 +216,33 @@ class FeishuChannel implements Channel {
       const filePath = path.join(attachDir, safeName);
 
       if (fs.existsSync(filePath)) {
-        logger.info({ messageId, filePath }, 'Feishu file already downloaded, skipping');
+        logger.info(
+          { messageId, filePath },
+          'Feishu file already downloaded, skipping',
+        );
         return `attachments/${safeName}`;
       }
 
       const token = await this.getTenantAccessToken();
       const response = await axios.get(
         `${FEISHU_API_BASE}/im/v1/messages/${messageId}/resources/${fileKey}?type=${type}`,
-        { headers: { Authorization: `Bearer ${token}` }, responseType: 'arraybuffer' },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'arraybuffer',
+        },
       );
 
       fs.writeFileSync(filePath, response.data);
-      logger.info({ messageId, fileKey, filePath }, 'Downloaded Feishu file resource');
+      logger.info(
+        { messageId, fileKey, filePath },
+        'Downloaded Feishu file resource',
+      );
       return `attachments/${safeName}`;
     } catch (err) {
-      logger.warn({ messageId, fileKey, err }, 'Failed to download Feishu file resource');
+      logger.warn(
+        { messageId, fileKey, err },
+        'Failed to download Feishu file resource',
+      );
       return null;
     }
   }
@@ -249,7 +261,7 @@ class FeishuChannel implements Channel {
       case 'post': {
         // Rich text (富文本): extract all text segments
         const title = content.title ? `${content.title}\n` : '';
-        const body = (content.content as any[][] || [])
+        const body = ((content.content as any[][]) || [])
           .flat()
           .filter((seg: any) => seg.tag === 'text' || seg.tag === 'a')
           .map((seg: any) => seg.text || seg.href || '')
@@ -259,14 +271,27 @@ class FeishuChannel implements Channel {
       case 'file': {
         const fileName = content.file_name || '未知文件';
         if (messageId && groupFolder && content.file_key) {
-          const relPath = await this.downloadMessageResource(messageId, content.file_key, fileName, 'file', groupFolder);
-          if (relPath) return `[文件: ${fileName}] (已下载到 /workspace/group/${relPath})`;
+          const relPath = await this.downloadMessageResource(
+            messageId,
+            content.file_key,
+            fileName,
+            'file',
+            groupFolder,
+          );
+          if (relPath)
+            return `[文件: ${fileName}] (已下载到 /workspace/group/${relPath})`;
         }
         return `[文件: ${fileName}]`;
       }
       case 'image': {
         if (messageId && groupFolder && content.image_key) {
-          const relPath = await this.downloadMessageResource(messageId, content.image_key, `${content.image_key}.png`, 'image', groupFolder);
+          const relPath = await this.downloadMessageResource(
+            messageId,
+            content.image_key,
+            `${content.image_key}.png`,
+            'image',
+            groupFolder,
+          );
           if (relPath) return `[图片] (已下载到 /workspace/group/${relPath})`;
         }
         return '[图片]';
@@ -274,8 +299,15 @@ class FeishuChannel implements Channel {
       case 'media': {
         const mediaName = content.file_name || '媒体文件';
         if (messageId && groupFolder && content.file_key) {
-          const relPath = await this.downloadMessageResource(messageId, content.file_key, mediaName, 'file', groupFolder);
-          if (relPath) return `[视频/音频: ${mediaName}] (已下载到 /workspace/group/${relPath})`;
+          const relPath = await this.downloadMessageResource(
+            messageId,
+            content.file_key,
+            mediaName,
+            'file',
+            groupFolder,
+          );
+          if (relPath)
+            return `[视频/音频: ${mediaName}] (已下载到 /workspace/group/${relPath})`;
         }
         return `[视频/音频: ${mediaName}]`;
       }
@@ -307,7 +339,10 @@ class FeishuChannel implements Channel {
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (response.data?.code !== 0) {
-        logger.warn({ messageId, code: response.data?.code }, 'Failed to fetch parent message');
+        logger.warn(
+          { messageId, code: response.data?.code },
+          'Failed to fetch parent message',
+        );
         return null;
       }
       const item = response.data?.data?.items?.[0];
@@ -318,8 +353,16 @@ class FeishuChannel implements Channel {
       const content = JSON.parse(rawContent);
       const msgType = item.msg_type || 'text';
       const senderName = item.sender?.id || 'unknown';
-      logger.info({ messageId, msgType, content, groupFolder }, 'Fetched parent message');
-      const text = await this.extractMessageText(msgType, content, messageId, groupFolder);
+      logger.info(
+        { messageId, msgType, content, groupFolder },
+        'Fetched parent message',
+      );
+      const text = await this.extractMessageText(
+        msgType,
+        content,
+        messageId,
+        groupFolder,
+      );
       return { text, senderName };
     } catch (err) {
       logger.warn({ messageId, err }, 'Error fetching parent message');
