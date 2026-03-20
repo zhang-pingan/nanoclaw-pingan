@@ -41,6 +41,7 @@ export interface RegisteredGroup {
   containerConfig?: ContainerConfig;
   requiresTrigger?: boolean; // Default: true for groups, false for solo chats
   isMain?: boolean; // True for the main control group (no trigger, elevated privileges)
+  description?: string; // Human-readable description of this group's capabilities
 }
 
 export interface NewMessage {
@@ -76,6 +77,19 @@ export interface TaskRunLog {
   status: 'success' | 'error';
   result: string | null;
   error: string | null;
+}
+
+export interface Delegation {
+  id: string;
+  source_jid: string;
+  source_folder: string;
+  target_jid: string;
+  target_folder: string;
+  task: string;
+  status: 'pending' | 'completed' | 'failed';
+  result: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // --- Channel abstraction ---

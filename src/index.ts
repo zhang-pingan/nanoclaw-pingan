@@ -21,6 +21,7 @@ import {
 import {
   ContainerOutput,
   runContainerAgent,
+  writeDelegationSnapshot,
   writeGroupsSnapshot,
   writeTasksSnapshot,
 } from './container-runner.js';
@@ -145,6 +146,7 @@ export function getAvailableGroups(): import('./container-runner.js').AvailableG
       name: c.name,
       lastActivity: c.last_message_time,
       isRegistered: registeredJids.has(c.jid),
+      description: registeredGroups[c.jid]?.description || null,
     }));
 }
 
@@ -398,6 +400,9 @@ async function runAgent(
     availableGroups,
     new Set(Object.keys(registeredGroups)),
   );
+
+  // Update delegation snapshot for container to read
+  writeDelegationSnapshot(group.folder, isMain, registeredGroups);
 
   // Wrap onOutput to track session ID from streamed results
   const wrappedOnOutput = onOutput
@@ -854,6 +859,7 @@ async function main(): Promise<void> {
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),
+    enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

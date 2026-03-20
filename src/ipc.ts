@@ -6,10 +6,15 @@ import { CronExpressionParser } from 'cron-parser';
 import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { AvailableGroup } from './container-runner.js';
 import {
+  createDelegation,
   createTask,
   deleteTask,
+  getDelegation,
   getTaskById,
   searchMessages,
+  storeChatMetadata,
+  storeMessageDirect,
+  updateDelegation,
   updateTask,
 } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
@@ -28,6 +33,7 @@ export interface IpcDeps {
     availableGroups: AvailableGroup[],
     registeredJids: Set<string>,
   ) => void;
+  enqueueMessageCheck: (groupJid: string) => void;
 }
 
 let ipcWatcherRunning = false;
@@ -230,10 +236,16 @@ export async function processTaskIpc(
     trigger?: string;
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
+    description?: string;
     // For memory_search
     query?: string;
     limit?: number;
     requestId?: string;
+    // For delegate_task / complete_delegation
+    delegationId?: string;
+    targetGroupJid?: string;
+    task?: string;
+    result?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -503,6 +515,7 @@ export async function processTaskIpc(
           added_at: new Date().toISOString(),
           containerConfig: data.containerConfig,
           requiresTrigger: data.requiresTrigger,
+          description: data.description,
         });
       } else {
         logger.warn(
@@ -511,6 +524,177 @@ export async function processTaskIpc(
         );
       }
       break;
+
+    case 'delegate_task': {
+      // Only main group can delegate tasks
+      if (!isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized delegate_task attempt blocked',
+        );
+        break;
+      }
+
+      if (!data.targetGroupJid || !data.task) {
+        logger.warn(
+          { sourceGroup },
+          'delegate_task missing targetGroupJid or task',
+        );
+        break;
+      }
+
+      const targetGroup = registeredGroups[data.targetGroupJid];
+      if (!targetGroup) {
+        logger.warn(
+          { targetGroupJid: data.targetGroupJid },
+          'delegate_task: target group not registered',
+        );
+        break;
+      }
+
+      const delegationId =
+        data.delegationId ||
+        `del-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const now = new Date().toISOString();
+
+      // Create delegation record
+      createDelegation({
+        id: delegationId,
+        source_jid: Object.entries(registeredGroups).find(
+          ([, g]) => g.folder === sourceGroup,
+        )?.[0] || '',
+        source_folder: sourceGroup,
+        target_jid: data.targetGroupJid,
+        target_folder: targetGroup.folder,
+        task: data.task,
+        status: 'pending',
+        result: null,
+        created_at: now,
+        updated_at: now,
+      });
+
+      // Ensure chat metadata exists for target JID
+      storeChatMetadata(data.targetGroupJid, now);
+
+      // Construct synthetic message with target group's trigger prefix
+      const triggerPrefix = targetGroup.trigger;
+      const syntheticContent = `${triggerPrefix} [委派任务 | ID:${delegationId} | 来自:主群]\n\n${data.task}\n\n完成后请调用 complete_delegation 工具报告结果，delegation_id 为 "${delegationId}"。`;
+      const syntheticId = `del-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      storeMessageDirect({
+        id: syntheticId,
+        chat_jid: data.targetGroupJid,
+        sender: 'system',
+        sender_name: '主群委派',
+        content: syntheticContent,
+        timestamp: now,
+        is_from_me: true,
+        is_bot_message: false,
+      });
+
+      // Wake up the target group's agent
+      deps.enqueueMessageCheck(data.targetGroupJid);
+
+      // Write delegation ID back via IPC response
+      const resultsDir = path.join(
+        DATA_DIR,
+        'ipc',
+        sourceGroup,
+        'delegation-results',
+      );
+      fs.mkdirSync(resultsDir, { recursive: true });
+      if (data.requestId) {
+        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
+        const tempPath = `${responsePath}.tmp`;
+        fs.writeFileSync(
+          tempPath,
+          JSON.stringify({ delegationId, status: 'created' }),
+        );
+        fs.renameSync(tempPath, responsePath);
+      }
+
+      logger.info(
+        {
+          delegationId,
+          sourceGroup,
+          targetFolder: targetGroup.folder,
+          targetJid: data.targetGroupJid,
+        },
+        'Task delegated via IPC',
+      );
+      break;
+    }
+
+    case 'complete_delegation': {
+      if (!data.delegationId || !data.result) {
+        logger.warn(
+          { sourceGroup },
+          'complete_delegation missing delegationId or result',
+        );
+        break;
+      }
+
+      const delegation = getDelegation(data.delegationId);
+      if (!delegation) {
+        logger.warn(
+          { delegationId: data.delegationId },
+          'complete_delegation: delegation not found',
+        );
+        break;
+      }
+
+      // Verify the caller is the delegation's target
+      if (delegation.target_folder !== sourceGroup) {
+        logger.warn(
+          {
+            delegationId: data.delegationId,
+            sourceGroup,
+            expectedFolder: delegation.target_folder,
+          },
+          'Unauthorized complete_delegation attempt',
+        );
+        break;
+      }
+
+      // Update delegation status
+      updateDelegation(data.delegationId, {
+        status: 'completed',
+        result: data.result,
+      });
+
+      // Find the target group name for the result message
+      const delegTargetGroup = registeredGroups[delegation.target_jid];
+      const targetName = delegTargetGroup?.name || delegation.target_folder;
+
+      // Construct result message for the source (main) group
+      const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
+      const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const resultNow = new Date().toISOString();
+
+      storeMessageDirect({
+        id: resultMsgId,
+        chat_jid: delegation.source_jid,
+        sender: 'system',
+        sender_name: `${targetName}委派结果`,
+        content: resultContent,
+        timestamp: resultNow,
+        is_from_me: true,
+        is_bot_message: false,
+      });
+
+      // Wake up the source (main) group's agent
+      deps.enqueueMessageCheck(delegation.source_jid);
+
+      logger.info(
+        {
+          delegationId: data.delegationId,
+          sourceGroup,
+          sourceJid: delegation.source_jid,
+        },
+        'Delegation completed via IPC',
+      );
+      break;
+    }
 
     case 'memory_search': {
       if (!data.query || !data.requestId) {

@@ -307,6 +307,7 @@ Use available_groups.json to find the JID for a group. The folder name must be c
     name: z.string().describe('Display name for the group'),
     folder: z.string().describe('Channel-prefixed folder name (e.g., "whatsapp_family-chat", "telegram_dev-team")'),
     trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
+    description: z.string().optional().describe('Human-readable description of this group\'s capabilities (e.g., "catstory 项目运维：代码仓库、SSH 日志查看、Jenkins 部署")'),
   },
   async (args) => {
     if (!isMain) {
@@ -316,12 +317,13 @@ Use available_groups.json to find the JID for a group. The folder name must be c
       };
     }
 
-    const data = {
+    const data: Record<string, string | undefined> = {
       type: 'register_group',
       jid: args.jid,
       name: args.name,
       folder: args.folder,
       trigger: args.trigger,
+      description: args.description,
       timestamp: new Date().toISOString(),
     };
 
@@ -406,6 +408,153 @@ server.tool(
       content: [{ type: 'text' as const, text: '搜索超时，请稍后重试。' }],
       isError: true,
     };
+  },
+);
+
+server.tool(
+  'delegate_task',
+  `Delegate a task to another group's agent. Main group only.
+
+Use this when a task requires another group's workspace, repos, tools, or context.
+The target group's agent will receive the task as a synthetic message and process it.
+When the target agent completes the task, the result will be sent back to you as a message.
+
+How it works:
+1. You call delegate_task with the target group JID and task description
+2. The target group's agent receives the task and works on it
+3. When done, the result comes back as a [委派结果] message in your conversation
+4. You can then summarize and relay the result to the user
+
+Tips:
+- Be specific in your task description — the target agent has no context from this conversation
+- Include any relevant details (time ranges, error patterns, file paths, etc.)
+- Use list_delegations to check status of pending delegations`,
+  {
+    target_group_jid: z.string().describe('JID of the target group to delegate the task to. Find JIDs in available_groups.json or registered_groups table.'),
+    task: z.string().describe('Detailed description of the task for the target agent. Be specific — the target has no context from this conversation.'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [{ type: 'text' as const, text: 'Only the main group can delegate tasks.' }],
+        isError: true,
+      };
+    }
+
+    const requestId = `delreq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const data = {
+      type: 'delegate_task',
+      targetGroupJid: args.target_group_jid,
+      task: args.task,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    // Poll for delegation ID response
+    const resultsDir = path.join(IPC_DIR, 'delegation-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          return {
+            content: [{ type: 'text' as const, text: `任务已委派。Delegation ID: ${result.delegationId}\n\n目标群 agent 将处理此任务，完成后结果会以消息形式返回。你可以用 list_delegations 查看状态。` }],
+          };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `委派请求已发送但确认解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: '委派请求已发送，但等待确认超时。请用 list_delegations 检查状态。' }],
+    };
+  },
+);
+
+server.tool(
+  'complete_delegation',
+  `Report completion of a delegated task. Call this when you finish processing a task that was delegated to your group.
+
+The result you provide will be sent back to the main group's agent as a message.
+Be thorough in your result — include all relevant findings, data, and conclusions.`,
+  {
+    delegation_id: z.string().describe('The delegation ID from the task message (format: del-xxx)'),
+    result: z.string().describe('The result of the completed task. Be detailed — this is sent back to the requesting agent.'),
+  },
+  async (args) => {
+    const data = {
+      type: 'complete_delegation',
+      delegationId: args.delegation_id,
+      result: args.result,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    return {
+      content: [{ type: 'text' as const, text: `委派任务 ${args.delegation_id} 的结果已提交。` }],
+    };
+  },
+);
+
+server.tool(
+  'list_delegations',
+  'List delegation tasks. Main group sees tasks it delegated; other groups see tasks assigned to them.',
+  {},
+  async () => {
+    const delegationsFile = path.join(IPC_DIR, 'current_delegations.json');
+
+    try {
+      if (!fs.existsSync(delegationsFile)) {
+        return { content: [{ type: 'text' as const, text: '没有找到委派任务。' }] };
+      }
+
+      const data = JSON.parse(fs.readFileSync(delegationsFile, 'utf-8'));
+      const delegations = data.delegations;
+
+      if (!delegations || delegations.length === 0) {
+        return { content: [{ type: 'text' as const, text: '没有找到委派任务。' }] };
+      }
+
+      const formatted = delegations
+        .map(
+          (d: {
+            id: string;
+            target_name: string;
+            task: string;
+            status: string;
+            result: string | null;
+            created_at: string;
+          }) => {
+            let line = `- [${d.id}] → ${d.target_name}: ${d.task.slice(0, 80)}... (${d.status})`;
+            if (d.result) {
+              line += `\n  结果: ${d.result.slice(0, 100)}...`;
+            }
+            return line;
+          },
+        )
+        .join('\n');
+
+      return { content: [{ type: 'text' as const, text: `委派任务列表:\n${formatted}` }] };
+    } catch (err) {
+      return {
+        content: [{ type: 'text' as const, text: `读取委派任务失败: ${err instanceof Error ? err.message : String(err)}` }],
+      };
+    }
   },
 );
 

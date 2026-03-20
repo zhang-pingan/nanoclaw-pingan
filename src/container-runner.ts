@@ -32,6 +32,7 @@ import {
   stopContainer,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
+import { getDelegationsBySource, getDelegationsByTarget } from './db.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
@@ -809,6 +810,7 @@ export interface AvailableGroup {
   name: string;
   lastActivity: string;
   isRegistered: boolean;
+  description?: string | null;
 }
 
 /**
@@ -834,6 +836,54 @@ export function writeGroupsSnapshot(
     JSON.stringify(
       {
         groups: visibleGroups,
+        lastSync: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+/**
+ * Write delegation snapshot for the container to read.
+ * Main group sees delegations it sent; other groups see delegations assigned to them.
+ */
+export function writeDelegationSnapshot(
+  groupFolder: string,
+  isMain: boolean,
+  registeredGroups: Record<string, RegisteredGroup>,
+): void {
+  const groupIpcDir = resolveGroupIpcPath(groupFolder);
+  fs.mkdirSync(groupIpcDir, { recursive: true });
+
+  // Main sees delegations it sent; others see delegations assigned to them
+  const delegations = isMain
+    ? getDelegationsBySource(groupFolder)
+    : getDelegationsByTarget(groupFolder);
+
+  // Build a JID→name lookup for readable output
+  const jidToName: Record<string, string> = {};
+  for (const [jid, group] of Object.entries(registeredGroups)) {
+    jidToName[jid] = group.name;
+  }
+
+  const delegationsFile = path.join(groupIpcDir, 'current_delegations.json');
+  fs.writeFileSync(
+    delegationsFile,
+    JSON.stringify(
+      {
+        delegations: delegations.map((d) => ({
+          id: d.id,
+          source_folder: d.source_folder,
+          target_jid: d.target_jid,
+          target_folder: d.target_folder,
+          target_name: jidToName[d.target_jid] || d.target_folder,
+          task: d.task,
+          status: d.status,
+          result: d.result,
+          created_at: d.created_at,
+          updated_at: d.updated_at,
+        })),
         lastSync: new Date().toISOString(),
       },
       null,

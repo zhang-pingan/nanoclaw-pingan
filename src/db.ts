@@ -6,6 +6,7 @@ import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import {
+  Delegation,
   NewMessage,
   RegisteredGroup,
   ScheduledTask,
@@ -118,6 +119,33 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* column already exists */
   }
+
+  // Add description column if it doesn't exist (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE registered_groups ADD COLUMN description TEXT`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add delegations table if it doesn't exist (migration for existing DBs)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS delegations (
+      id TEXT PRIMARY KEY,
+      source_jid TEXT NOT NULL,
+      source_folder TEXT NOT NULL,
+      target_jid TEXT NOT NULL,
+      target_folder TEXT NOT NULL,
+      task TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      result TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_delegations_source ON delegations(source_jid, status);
+    CREATE INDEX IF NOT EXISTS idx_delegations_target ON delegations(target_jid, status);
+  `);
 
   // Add channel and is_group columns if they don't exist (migration for existing DBs)
   try {
@@ -601,6 +629,7 @@ export function getRegisteredGroup(
         container_config: string | null;
         requires_trigger: number | null;
         is_main: number | null;
+        description: string | null;
       }
     | undefined;
   if (!row) return undefined;
@@ -623,6 +652,7 @@ export function getRegisteredGroup(
     requiresTrigger:
       row.requires_trigger === null ? undefined : row.requires_trigger === 1,
     isMain: row.is_main === 1 ? true : undefined,
+    description: row.description || undefined,
   };
 }
 
@@ -631,8 +661,8 @@ export function setRegisteredGroup(jid: string, group: RegisteredGroup): void {
     throw new Error(`Invalid group folder "${group.folder}" for JID ${jid}`);
   }
   db.prepare(
-    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, is_main)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, container_config, requires_trigger, is_main, description)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     jid,
     group.name,
@@ -642,6 +672,7 @@ export function setRegisteredGroup(jid: string, group: RegisteredGroup): void {
     group.containerConfig ? JSON.stringify(group.containerConfig) : null,
     group.requiresTrigger === undefined ? 1 : group.requiresTrigger ? 1 : 0,
     group.isMain ? 1 : 0,
+    group.description || null,
   );
 }
 
@@ -655,6 +686,7 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     container_config: string | null;
     requires_trigger: number | null;
     is_main: number | null;
+    description: string | null;
   }>;
   const result: Record<string, RegisteredGroup> = {};
   for (const row of rows) {
@@ -676,9 +708,78 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
       requiresTrigger:
         row.requires_trigger === null ? undefined : row.requires_trigger === 1,
       isMain: row.is_main === 1 ? true : undefined,
+      description: row.description || undefined,
     };
   }
   return result;
+}
+
+// --- Delegation accessors ---
+
+export function createDelegation(delegation: Delegation): void {
+  db.prepare(
+    `INSERT INTO delegations (id, source_jid, source_folder, target_jid, target_folder, task, status, result, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    delegation.id,
+    delegation.source_jid,
+    delegation.source_folder,
+    delegation.target_jid,
+    delegation.target_folder,
+    delegation.task,
+    delegation.status,
+    delegation.result,
+    delegation.created_at,
+    delegation.updated_at,
+  );
+}
+
+export function getDelegation(id: string): Delegation | undefined {
+  return db.prepare('SELECT * FROM delegations WHERE id = ?').get(id) as
+    | Delegation
+    | undefined;
+}
+
+export function updateDelegation(
+  id: string,
+  updates: Partial<Pick<Delegation, 'status' | 'result'>>,
+): void {
+  const fields: string[] = ['updated_at = ?'];
+  const values: unknown[] = [new Date().toISOString()];
+
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.result !== undefined) {
+    fields.push('result = ?');
+    values.push(updates.result);
+  }
+
+  values.push(id);
+  db.prepare(
+    `UPDATE delegations SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
+}
+
+export function getDelegationsBySource(
+  sourceFolder: string,
+): Delegation[] {
+  return db
+    .prepare(
+      `SELECT * FROM delegations WHERE source_folder = ? ORDER BY created_at DESC`,
+    )
+    .all(sourceFolder) as Delegation[];
+}
+
+export function getDelegationsByTarget(
+  targetFolder: string,
+): Delegation[] {
+  return db
+    .prepare(
+      `SELECT * FROM delegations WHERE target_folder = ? ORDER BY created_at DESC`,
+    )
+    .all(targetFolder) as Delegation[];
 }
 
 // --- Full-text search ---
