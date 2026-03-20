@@ -560,9 +560,10 @@ export async function processTaskIpc(
       // Create delegation record
       createDelegation({
         id: delegationId,
-        source_jid: Object.entries(registeredGroups).find(
-          ([, g]) => g.folder === sourceGroup,
-        )?.[0] || '',
+        source_jid:
+          Object.entries(registeredGroups).find(
+            ([, g]) => g.folder === sourceGroup,
+          )?.[0] || '',
         source_folder: sourceGroup,
         target_jid: data.targetGroupJid,
         target_folder: targetGroup.folder,

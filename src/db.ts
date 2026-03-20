@@ -122,9 +122,7 @@ function createSchema(database: Database.Database): void {
 
   // Add description column if it doesn't exist (migration for existing DBs)
   try {
-    database.exec(
-      `ALTER TABLE registered_groups ADD COLUMN description TEXT`,
-    );
+    database.exec(`ALTER TABLE registered_groups ADD COLUMN description TEXT`);
   } catch {
     /* column already exists */
   }
@@ -757,14 +755,12 @@ export function updateDelegation(
   }
 
   values.push(id);
-  db.prepare(
-    `UPDATE delegations SET ${fields.join(', ')} WHERE id = ?`,
-  ).run(...values);
+  db.prepare(`UPDATE delegations SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
 }
 
-export function getDelegationsBySource(
-  sourceFolder: string,
-): Delegation[] {
+export function getDelegationsBySource(sourceFolder: string): Delegation[] {
   return db
     .prepare(
       `SELECT * FROM delegations WHERE source_folder = ? ORDER BY created_at DESC`,
@@ -772,9 +768,7 @@ export function getDelegationsBySource(
     .all(sourceFolder) as Delegation[];
 }
 
-export function getDelegationsByTarget(
-  targetFolder: string,
-): Delegation[] {
+export function getDelegationsByTarget(targetFolder: string): Delegation[] {
   return db
     .prepare(
       `SELECT * FROM delegations WHERE target_folder = ? ORDER BY created_at DESC`,
