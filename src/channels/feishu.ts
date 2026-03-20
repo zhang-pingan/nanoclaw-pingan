@@ -1,5 +1,7 @@
 import axios from 'axios';
+import fs from 'fs';
 import http from 'http';
+import path from 'path';
 import {
   Channel,
   NewMessage,
@@ -7,6 +9,7 @@ import {
   OnChatMetadata,
   RegisteredGroup,
 } from '../types.js';
+import { GROUPS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel } from './registry.js';
@@ -96,7 +99,9 @@ class FeishuChannel implements Channel {
                 return;
               }
             }
-            this.handleWebhook(payload);
+            this.handleWebhook(payload).catch((err) => {
+              console.error('[feishu] handleWebhook error:', err);
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ code: 0, msg: 'success' }));
           } catch (e) {
@@ -192,8 +197,138 @@ class FeishuChannel implements Channel {
     this.connected = false;
   }
 
+  // Download a file/image resource from a Feishu message and save to group attachments dir.
+  // Returns the saved file path (relative to group dir, for agent access), or null on failure.
+  // Uses messageId in filename to avoid duplicate downloads of the same file.
+  private async downloadMessageResource(
+    messageId: string,
+    fileKey: string,
+    fileName: string,
+    type: 'file' | 'image',
+    groupFolder: string,
+  ): Promise<string | null> {
+    try {
+      const attachDir = path.join(GROUPS_DIR, groupFolder, 'attachments');
+      fs.mkdirSync(attachDir, { recursive: true });
+
+      // Use messageId as prefix for deduplication — same quoted message won't re-download
+      const safeName = `${messageId}_${fileName.replace(/[/\\]/g, '_')}`;
+      const filePath = path.join(attachDir, safeName);
+
+      if (fs.existsSync(filePath)) {
+        logger.info({ messageId, filePath }, 'Feishu file already downloaded, skipping');
+        return `attachments/${safeName}`;
+      }
+
+      const token = await this.getTenantAccessToken();
+      const response = await axios.get(
+        `${FEISHU_API_BASE}/im/v1/messages/${messageId}/resources/${fileKey}?type=${type}`,
+        { headers: { Authorization: `Bearer ${token}` }, responseType: 'arraybuffer' },
+      );
+
+      fs.writeFileSync(filePath, response.data);
+      logger.info({ messageId, fileKey, filePath }, 'Downloaded Feishu file resource');
+      return `attachments/${safeName}`;
+    } catch (err) {
+      logger.warn({ messageId, fileKey, err }, 'Failed to download Feishu file resource');
+      return null;
+    }
+  }
+
+  // Extract readable text from Feishu message content based on msg_type.
+  // For file/image types, downloads the resource if groupFolder and messageId are provided.
+  private async extractMessageText(
+    msgType: string,
+    content: any,
+    messageId?: string,
+    groupFolder?: string,
+  ): Promise<string> {
+    switch (msgType) {
+      case 'text':
+        return content.text || '';
+      case 'post': {
+        // Rich text (富文本): extract all text segments
+        const title = content.title ? `${content.title}\n` : '';
+        const body = (content.content as any[][] || [])
+          .flat()
+          .filter((seg: any) => seg.tag === 'text' || seg.tag === 'a')
+          .map((seg: any) => seg.text || seg.href || '')
+          .join('');
+        return `${title}${body}`;
+      }
+      case 'file': {
+        const fileName = content.file_name || '未知文件';
+        if (messageId && groupFolder && content.file_key) {
+          const relPath = await this.downloadMessageResource(messageId, content.file_key, fileName, 'file', groupFolder);
+          if (relPath) return `[文件: ${fileName}] (已下载到 /workspace/group/${relPath})`;
+        }
+        return `[文件: ${fileName}]`;
+      }
+      case 'image': {
+        if (messageId && groupFolder && content.image_key) {
+          const relPath = await this.downloadMessageResource(messageId, content.image_key, `${content.image_key}.png`, 'image', groupFolder);
+          if (relPath) return `[图片] (已下载到 /workspace/group/${relPath})`;
+        }
+        return '[图片]';
+      }
+      case 'media': {
+        const mediaName = content.file_name || '媒体文件';
+        if (messageId && groupFolder && content.file_key) {
+          const relPath = await this.downloadMessageResource(messageId, content.file_key, mediaName, 'file', groupFolder);
+          if (relPath) return `[视频/音频: ${mediaName}] (已下载到 /workspace/group/${relPath})`;
+        }
+        return `[视频/音频: ${mediaName}]`;
+      }
+      case 'sticker':
+        return '[表情]';
+      case 'audio':
+        return '[语音消息]';
+      case 'share_chat':
+        return `[分享群聊: ${content.chat_id || ''}]`;
+      case 'share_user':
+        return `[分享用户: ${content.user_id || ''}]`;
+      case 'system':
+        return '[系统消息]';
+      default:
+        return `[${msgType || '未知类型'}消息]`;
+    }
+  }
+
+  // Fetch a message by ID from Feishu API (used to get quoted/parent messages).
+  // When groupFolder is provided, file/image resources are downloaded to the group's attachments dir.
+  private async getMessageContent(
+    messageId: string,
+    groupFolder?: string,
+  ): Promise<{ text: string; senderName: string } | null> {
+    try {
+      const token = await this.getTenantAccessToken();
+      const response = await axios.get(
+        `${FEISHU_API_BASE}/im/v1/messages/${messageId}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (response.data?.code !== 0) {
+        logger.warn({ messageId, code: response.data?.code }, 'Failed to fetch parent message');
+        return null;
+      }
+      const item = response.data?.data?.items?.[0];
+      if (!item) return null;
+
+      // Feishu API returns content in item.body.content (not item.content)
+      const rawContent = item.body?.content || item.content || '{}';
+      const content = JSON.parse(rawContent);
+      const msgType = item.msg_type || 'text';
+      const senderName = item.sender?.id || 'unknown';
+      logger.info({ messageId, msgType, content, groupFolder }, 'Fetched parent message');
+      const text = await this.extractMessageText(msgType, content, messageId, groupFolder);
+      return { text, senderName };
+    } catch (err) {
+      logger.warn({ messageId, err }, 'Error fetching parent message');
+      return null;
+    }
+  }
+
   // Handle inbound messages from Feishu webhook
-  handleWebhook(payload: any): void {
+  async handleWebhook(payload: any): Promise<void> {
     // Support both v1.0 (event.type) and v2.0 (header.event_type) formats
     const eventType = payload.event?.type || payload.header?.event_type;
     if (eventType !== 'im.message.receive_v1') {
@@ -224,6 +359,17 @@ class FeishuChannel implements Channel {
     const messageId = message.message_id || `feishu_${Date.now()}`;
     const fullJid = `feishu:${chatJid}`;
 
+    // If this is a reply, fetch the quoted/parent message content.
+    // Append (not prepend) quoted text so @trigger at the start of content is preserved.
+    let messageContent = content.text || '';
+    const parentId = message.parent_id || message.upper_message_id;
+    if (parentId) {
+      const parentMsg = await this.getMessageContent(parentId, group?.folder);
+      if (parentMsg?.text) {
+        messageContent = `${messageContent}\n[引用消息: ${parentMsg.text}]`;
+      }
+    }
+
     // Create chat metadata first (required for foreign key)
     this.onChatMetadata(fullJid, message.create_time);
 
@@ -235,7 +381,7 @@ class FeishuChannel implements Channel {
       chat_jid: fullJid,
       sender: senderId || 'unknown',
       sender_name: senderId || 'unknown',
-      content: content.text || '',
+      content: messageContent,
       timestamp: message.create_time,
       is_from_me: !!(adminUserId && senderId === adminUserId),
     });
