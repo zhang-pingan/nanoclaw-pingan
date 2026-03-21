@@ -51,7 +51,8 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { initWorkflow } from './workflow.js';
+import { handleCardAction, initWorkflow } from './workflow.js';
+import { FeishuChannel } from './channels/feishu.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -859,6 +860,17 @@ async function main(): Promise<void> {
       await channel.sendMessage(jid, text);
     },
   });
+  // Find feishu channel for card support
+  const feishuChannel = channels.find((ch) => ch.name === 'feishu') as FeishuChannel | undefined;
+  const sendCardFn = feishuChannel
+    ? (jid: string, card: import('./types.js').FeishuCard) => feishuChannel.sendCard(jid, card)
+    : undefined;
+
+  // Wire up feishu card action callback → workflow engine
+  if (feishuChannel) {
+    feishuChannel.onCardAction = handleCardAction;
+  }
+
   startIpcWatcher({
     sendMessage: (jid, text) => {
       const channel = findChannel(channels, jid);
@@ -878,10 +890,12 @@ async function main(): Promise<void> {
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
+    sendCard: sendCardFn,
   });
   initWorkflow({
     registeredGroups: () => registeredGroups,
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
+    sendCard: sendCardFn,
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

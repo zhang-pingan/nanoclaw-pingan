@@ -471,10 +471,6 @@ async function iterateQuery(
  * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
  * allowing agent teams subagents to run to completion.
  * Also pipes IPC messages into the stream during the query.
- *
- * When planMode is true, runs two phases:
- *   Phase 1 (plan):   permissionMode='plan' — read-only, generates plan
- *   Phase 2 (execute): permissionMode='bypassPermissions' — resume same session, execute plan
  */
 async function runQuery(
   prompt: string,
@@ -483,6 +479,7 @@ async function runQuery(
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
+  permissionMode: string = 'bypassPermissions',
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
   const stream = new MessageStream();
   stream.push(prompt);
@@ -511,47 +508,14 @@ async function runQuery(
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
 
-  if (containerInput.planMode) {
-    // ---- Phase 1: Plan (read-only) ----
-    log('Plan mode: starting phase 1 (plan)');
-    const planOptions = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
-      sessionId,
-      resumeAt,
-      permissionMode: 'plan',
-    });
-    const phase1 = await iterateQuery(stream, planOptions);
-    newSessionId = phase1.newSessionId || newSessionId;
-    lastAssistantUuid = phase1.lastAssistantUuid;
-
-    if (closedDuringQuery) {
-      ipcPolling = false;
-      return { newSessionId, lastAssistantUuid, closedDuringQuery };
-    }
-
-    // ---- Phase 2: Execute (resume same session, full permissions) ----
-    log('Plan mode: starting phase 2 (execute)');
-    const execStream = new MessageStream();
-    execStream.push('用户已确认方案，请按照计划执行代码实现。严格按照之前的方案逐步修改代码，完成后提交并 push 工作分支，最后生成交付文档。');
-
-    const execOptions = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
-      sessionId: newSessionId || sessionId,
-      resumeAt: lastAssistantUuid,
-      permissionMode: 'bypassPermissions',
-    });
-    const phase2 = await iterateQuery(execStream, execOptions);
-    newSessionId = phase2.newSessionId || newSessionId;
-    lastAssistantUuid = phase2.lastAssistantUuid;
-  } else {
-    // ---- Normal mode (unchanged) ----
-    const options = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
-      sessionId,
-      resumeAt,
-      permissionMode: 'bypassPermissions',
-    });
-    const result = await iterateQuery(stream, options);
-    newSessionId = result.newSessionId || newSessionId;
-    lastAssistantUuid = result.lastAssistantUuid;
-  }
+  const options = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
+    sessionId,
+    resumeAt,
+    permissionMode,
+  });
+  const result = await iterateQuery(stream, options);
+  newSessionId = result.newSessionId || newSessionId;
+  lastAssistantUuid = result.lastAssistantUuid;
 
   ipcPolling = false;
   log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
@@ -702,11 +666,14 @@ async function main(): Promise<void> {
 
   // Query loop: run query → wait for IPC message → run new query → repeat
   let resumeAt: string | undefined;
+  let planModeActive = containerInput.planMode === true;
   try {
     while (true) {
-      log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
+      // Decide permissionMode for this query
+      const permMode = planModeActive ? 'plan' : 'bypassPermissions';
+      log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'}, permMode: ${permMode})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt, permMode);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
         confirmedSessionId = queryResult.newSessionId;
@@ -721,6 +688,24 @@ async function main(): Promise<void> {
       if (queryResult.closedDuringQuery) {
         log('Close sentinel consumed during query, exiting');
         break;
+      }
+
+      if (planModeActive) {
+        // Phase 1 (plan) complete — wait for user confirmation before Phase 2
+        planModeActive = false;  // used once, all subsequent queries run bypassPermissions
+
+        writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+        log('Plan phase complete, waiting for user confirmation...');
+
+        const nextMessage = await waitForIpcMessage();
+        if (nextMessage === null) {
+          log('Close sentinel received during plan confirmation, exiting');
+          break;
+        }
+
+        log(`Got confirmation message (${nextMessage.length} chars), entering execution phase`);
+        prompt = nextMessage;
+        continue;  // back to loop top — planModeActive is now false, runs bypassPermissions
       }
 
       // Emit session update so host can track it

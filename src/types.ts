@@ -88,6 +88,7 @@ export interface Delegation {
   task: string;
   status: 'pending' | 'completed' | 'failed';
   result: string | null;
+  outcome: 'success' | 'failure' | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,7 +100,9 @@ export type WorkflowStatus =
   | 'testing'
   | 'fixing'
   | 'passed'
-  | 'ops_failed';
+  | 'ops_failed'
+  | 'cancelled'
+  | 'paused';
 
 export interface Workflow {
   id: string;
@@ -111,11 +114,24 @@ export interface Workflow {
   current_delegation_id: string;
   round: number;
   source_jid: string;
+  paused_from: WorkflowStatus | null;
   created_at: string;
   updated_at: string;
 }
 
 // --- Channel abstraction ---
+
+export interface FeishuCard {
+  header: { title: string; template?: string };
+  elements: unknown[];
+}
+
+export type CardActionHandler = (action: {
+  workflow_id: string;
+  action: string; // 'approve' | 'cancel' | 'pause' | 'resume'
+  user_id: string;
+  message_id: string;
+}) => void;
 
 export interface Channel {
   name: string;
@@ -128,6 +144,8 @@ export interface Channel {
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: sync group/chat names from the platform.
   syncGroups?(force: boolean): Promise<void>;
+  // Optional: send interactive card (Feishu). Returns message_id.
+  sendCard?(jid: string, card: FeishuCard): Promise<string | undefined>;
 }
 
 // Callback type that channels use to deliver inbound messages

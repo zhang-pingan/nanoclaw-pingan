@@ -3,7 +3,9 @@ import fs from 'fs';
 import http from 'http';
 import path from 'path';
 import {
+  CardActionHandler,
   Channel,
+  FeishuCard,
   NewMessage,
   OnInboundMessage,
   OnChatMetadata,
@@ -37,6 +39,7 @@ class FeishuChannel implements Channel {
   private registeredGroups: () => Record<string, RegisteredGroup>;
   private connected = false;
   private server: http.Server | null = null;
+  onCardAction: CardActionHandler | null = null;
 
   constructor(
     config: FeishuConfig,
@@ -99,6 +102,13 @@ class FeishuChannel implements Channel {
                 return;
               }
             }
+            // Card action callbacks need synchronous response with updated card
+            const eventType = payload.header?.event_type;
+            if (eventType === 'card.action.trigger') {
+              this.handleCardActionEvent(payload, res);
+              return;
+            }
+
             this.handleWebhook(payload).catch((err) => {
               console.error('[feishu] handleWebhook error:', err);
             });
@@ -175,6 +185,39 @@ class FeishuChannel implements Channel {
       );
       throw new Error(errMsg);
     }
+  }
+
+  async sendCard(jid: string, card: FeishuCard): Promise<string | undefined> {
+    const token = await this.getTenantAccessToken();
+    const actualJid = jid.startsWith('feishu:') ? jid.slice(7) : jid;
+    const receiveIdType = actualJid.startsWith('ou_') ? 'user_id' : 'chat_id';
+
+    const cardContent = {
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: 'plain_text', content: card.header.title },
+        template: card.header.template || 'blue',
+      },
+      elements: card.elements,
+    };
+
+    const response = await axios.post(
+      `${FEISHU_API_BASE}/im/v1/messages?receive_id_type=${receiveIdType}`,
+      {
+        receive_id: actualJid,
+        msg_type: 'interactive',
+        content: JSON.stringify(cardContent),
+      },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    if (response.data?.code !== 0) {
+      const errMsg = `Feishu card API error: code=${response.data?.code} msg=${response.data?.msg}`;
+      logger.error({ jid, code: response.data?.code, msg: response.data?.msg }, errMsg);
+      throw new Error(errMsg);
+    }
+
+    return response.data?.data?.message_id;
   }
 
   isConnected(): boolean {
@@ -370,6 +413,27 @@ class FeishuChannel implements Channel {
     }
   }
 
+  // Handle card action callback from Feishu
+  private handleCardActionEvent(payload: any, res: http.ServerResponse): void {
+    const action = payload.event?.action;
+    const value = action?.value as { workflow_id?: string; action?: string } | undefined;
+    const userId = payload.event?.operator?.user_id || '';
+    const messageId = payload.event?.context?.open_message_id || '';
+
+    if (value?.workflow_id && value?.action && this.onCardAction) {
+      this.onCardAction({
+        workflow_id: value.workflow_id,
+        action: value.action,
+        user_id: userId,
+        message_id: messageId,
+      });
+    }
+
+    // Return empty JSON to acknowledge (card update handled separately)
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({}));
+  }
+
   // Handle inbound messages from Feishu webhook
   async handleWebhook(payload: any): Promise<void> {
     // Support both v1.0 (event.type) and v2.0 (header.event_type) formats
@@ -438,12 +502,14 @@ export function createFeishuChannel(
     onChatMetadata: OnChatMetadata;
     registeredGroups: () => Record<string, RegisteredGroup>;
   },
-): Channel | null {
+): FeishuChannel | null {
   if (!config.appId || !config.appSecret) {
     return null;
   }
   return new FeishuChannel(config, opts);
 }
+
+export { FeishuChannel };
 
 // Self-registration
 registerChannel('feishu', (opts) => {

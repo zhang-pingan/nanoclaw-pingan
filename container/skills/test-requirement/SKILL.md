@@ -113,6 +113,10 @@ TC-301: {测试标题}
 
 如果存在失败用例，告知用户：「共发现 {N} 个问题，详见测试报告。建议将问题反馈给开发群进行修复。」
 
+通过 `complete_delegation` 返回结果时：
+- 全部通过：outcome=`success`，全部失败或部分失败：outcome=`failure`
+- result JSON：{"total":10,"passed":8,"failed":2,"blocked":0,"bugs":[{"id":"BUG-001","title":"xx","severity":"严重"}],"report_path":"test-reports/xx/xx.md","summary":"共10条，通过8条，失败2条"}
+
 ## 工作原则
 
 - *基于代码验证*：不仅看文档描述，要读实际代码确认实现是否正确

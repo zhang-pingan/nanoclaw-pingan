@@ -5,6 +5,12 @@
  *                                                       ├→ passed (terminal)
  *                                                       └→ fixing → ops_deploy → testing (loop)
  *                                          ops_failed (terminal)
+ *                                          cancelled (terminal, from any non-terminal state)
+ *                                          paused (resumable, from any non-terminal state)
+ *
+ * awaiting_confirm sends interactive Feishu card with approve/pause/cancel buttons.
+ * list_workflows sends card with per-workflow action buttons.
+ * Card callbacks route to handleCardAction() → approveWorkflow/cancelWorkflow/pauseWorkflow/resumeWorkflow.
  *
  * Role resolution (no hardcoded group names):
  *   1. skills.json "workflow_roles" explicit mapping (if present)
@@ -19,6 +25,7 @@ import {
   createDelegation,
   createWorkflow as dbCreateWorkflow,
   getAllActiveWorkflows,
+  getAllWorkflows,
   getDelegation,
   getWorkflow,
   getWorkflowByDelegation,
@@ -27,7 +34,7 @@ import {
   updateWorkflow,
 } from './db.js';
 import { logger } from './logger.js';
-import { RegisteredGroup } from './types.js';
+import { FeishuCard, RegisteredGroup, Workflow, WorkflowStatus } from './types.js';
 
 // -------------------------------------------------------
 // Role resolution
@@ -136,6 +143,7 @@ function getRoles(): { roles: WorkflowRoles } | { error: string } {
 export interface WorkflowDeps {
   registeredGroups: () => Record<string, RegisteredGroup>;
   enqueueMessageCheck: (groupJid: string) => void;
+  sendCard?: (jid: string, card: FeishuCard) => Promise<string | undefined>;
 }
 
 let deps: WorkflowDeps | null = null;
@@ -275,6 +283,7 @@ function delegateTo(
     task: taskContent,
     status: 'pending',
     result: null,
+    outcome: null,
     created_at: now,
     updated_at: now,
   });
@@ -360,6 +369,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       current_delegation_id: '',
       round: 0,
       source_jid: opts.sourceJid,
+      paused_from: null,
       created_at: now,
       updated_at: now,
     });
@@ -409,13 +419,15 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     current_delegation_id: '',
     round: 0,
     source_jid: opts.sourceJid,
+    paused_from: null,
     created_at: now,
     updated_at: now,
   });
 
-  notifyMain(
-    `[流程启动] 需求「${opts.name}」测试流程已创建 (${workflowId})。\n\n已读取交付文档：${deliverable.fileName}\n工作分支：${deliverable.branch}\n\n请确认是否开始自动化测试（调用 approve_workflow 工具，workflow_id 为 "${workflowId}"）。`,
-  );
+  const createdWorkflow = getWorkflow(workflowId);
+  if (createdWorkflow) {
+    sendAwaitingConfirmCard(createdWorkflow);
+  }
 
   return { workflowId };
 }
@@ -476,6 +488,15 @@ export function onDelegationComplete(delegationId: string): void {
   const delegation = getDelegation(delegationId);
   if (!delegation) return;
 
+  // If workflow is paused, delegation result is stored but state machine does not advance
+  if (workflow.status === 'paused') {
+    logger.info(
+      { workflowId: workflow.id, delegationId },
+      'Workflow is paused, delegation result stored but not advancing',
+    );
+    return;
+  }
+
   const mainFolder = getMainFolder();
 
   logger.info(
@@ -500,19 +521,23 @@ export function onDelegationComplete(delegationId: string): void {
         current_delegation_id: '',
       });
 
-      notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 开发已完成！\n\n工作分支：${branch}\n交付文档：${deliverable?.fileName || '未找到'}\n\n请确认是否开始自动化测试（调用 approve_workflow 工具，workflow_id 为 "${workflow.id}"）。`,
-      );
+      const updatedWorkflow = getWorkflow(workflow.id);
+      if (updatedWorkflow) {
+        sendAwaitingConfirmCard(updatedWorkflow);
+      }
       break;
     }
 
     case 'ops_deploy': {
-      const result = delegation.result || '';
-      const isFailure =
-        result.includes('失败') ||
-        result.includes('fail') ||
-        result.includes('error') ||
-        result.includes('冲突');
+      const isFailure = delegation.outcome === 'failure';
+
+      let summary = delegation.result || '';
+      try {
+        const p = JSON.parse(summary);
+        summary = p.summary || summary;
+      } catch {
+        /* not JSON, use raw */
+      }
 
       if (isFailure) {
         updateWorkflow(workflow.id, {
@@ -520,7 +545,7 @@ export function onDelegationComplete(delegationId: string): void {
           current_delegation_id: '',
         });
         notifyMain(
-          `[流程终止] 需求「${workflow.name}」(${workflow.id}) 预发部署失败 ❌\n\n${result}`,
+          `[流程终止] 需求「${workflow.name}」(${workflow.id}) 预发部署失败 ❌\n\n${summary}`,
         );
         break;
       }
@@ -558,11 +583,16 @@ export function onDelegationComplete(delegationId: string): void {
     }
 
     case 'testing': {
-      const result = delegation.result || '';
-      const hasFailures =
-        result.includes('❌') ||
-        result.includes('失败') ||
-        result.includes('BUG-');
+      const hasFailures = delegation.outcome === 'failure';
+
+      let testSummary = delegation.result || '';
+      try {
+        const p = JSON.parse(testSummary);
+        testSummary = `总用例 ${p.total}，通过 ${p.passed}，失败 ${p.failed}`;
+        if (p.bugs?.length) testSummary += '\n' + p.bugs.map((b: any) => `- ${b.id}: ${b.title}`).join('\n');
+      } catch {
+        /* not JSON, use raw */
+      }
 
       if (!hasFailures) {
         updateWorkflow(workflow.id, {
@@ -582,7 +612,7 @@ export function onDelegationComplete(delegationId: string): void {
           mainFolder,
           workflow.id,
           'dev-bugfix',
-          `请修复以下测试发现的问题（Round ${newRound}）：\n\n服务名称：${workflow.service}\n工作分支：${workflow.branch}\n\n测试报告：\n${result}`,
+          `请修复以下测试发现的问题（Round ${newRound}）：\n\n服务名称：${workflow.service}\n工作分支：${workflow.branch}\n\n测试报告：\n${delegation.result || testSummary}`,
         );
         updateWorkflow(workflow.id, {
           status: 'fixing',
@@ -601,7 +631,7 @@ export function onDelegationComplete(delegationId: string): void {
       }
 
       notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 测试发现问题 ❌，进入 Round ${newRound} 修复流程，已委派 ${roles.dev} 修复。`,
+        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 测试发现问题 ❌\n${testSummary}\n进入 Round ${newRound} 修复流程，已委派 ${roles.dev} 修复。`,
       );
       break;
     }
@@ -642,6 +672,280 @@ export function onDelegationComplete(delegationId: string): void {
         'Unexpected workflow status on delegation complete',
       );
   }
+}
+
+// -------------------------------------------------------
+// Card helpers
+// -------------------------------------------------------
+
+const STATUS_LABELS: Record<string, string> = {
+  dev: '🔧 开发中',
+  awaiting_confirm: '⏳ 待确认',
+  ops_deploy: '🚀 部署中',
+  testing: '🧪 测试中',
+  fixing: '🔨 修复中',
+  passed: '✅ 已通过',
+  ops_failed: '❌ 部署失败',
+  cancelled: '🚫 已取消',
+  paused: '⏸ 已中断',
+};
+
+function buildAwaitingConfirmCard(workflow: Workflow): FeishuCard {
+  return {
+    header: { title: `📋 需求「${workflow.name}」开发完成`, template: 'blue' },
+    elements: [
+      {
+        tag: 'div',
+        text: {
+          tag: 'lark_md',
+          content: [
+            `**流程 ID**：${workflow.id}`,
+            `**服务**：${workflow.service}`,
+            `**工作分支**：${workflow.branch || 'N/A'}`,
+            `**交付文档**：${workflow.deliverable || 'N/A'}`,
+          ].join('\n'),
+        },
+      },
+      {
+        tag: 'action',
+        actions: [
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '✅ 确认部署' },
+            type: 'primary',
+            value: { workflow_id: workflow.id, action: 'approve' },
+          },
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '⏸ 暂缓' },
+            value: { workflow_id: workflow.id, action: 'pause' },
+          },
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '❌ 取消流程' },
+            type: 'danger',
+            value: { workflow_id: workflow.id, action: 'cancel' },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
+  const elements: unknown[] = [];
+
+  for (const w of workflows) {
+    const statusLabel = w.status === 'paused'
+      ? `⏸ 已中断（原状态：${STATUS_LABELS[w.paused_from || ''] || w.paused_from || '未知'}）`
+      : (STATUS_LABELS[w.status] || w.status);
+
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${w.branch ? `\n分支：${w.branch}` : ''}`,
+      },
+    });
+
+    // Add action buttons based on status
+    const actions: unknown[] = [];
+    const terminalStates = ['passed', 'ops_failed', 'cancelled'];
+
+    if (w.status === 'awaiting_confirm') {
+      actions.push(
+        { tag: 'button', text: { tag: 'plain_text', content: '✅ 确认部署' }, type: 'primary', value: { workflow_id: w.id, action: 'approve' } },
+        { tag: 'button', text: { tag: 'plain_text', content: '⏸ 中断' }, value: { workflow_id: w.id, action: 'pause' } },
+        { tag: 'button', text: { tag: 'plain_text', content: '❌ 取消' }, type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+      );
+    } else if (w.status === 'paused') {
+      actions.push(
+        { tag: 'button', text: { tag: 'plain_text', content: '▶ 继续' }, type: 'primary', value: { workflow_id: w.id, action: 'resume' } },
+        { tag: 'button', text: { tag: 'plain_text', content: '❌ 取消' }, type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+      );
+    } else if (!terminalStates.includes(w.status)) {
+      actions.push(
+        { tag: 'button', text: { tag: 'plain_text', content: '⏸ 中断' }, value: { workflow_id: w.id, action: 'pause' } },
+        { tag: 'button', text: { tag: 'plain_text', content: '❌ 取消' }, type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+      );
+    }
+
+    if (actions.length > 0) {
+      elements.push({ tag: 'action', actions });
+    }
+
+    elements.push({ tag: 'hr' });
+  }
+
+  // Remove trailing hr
+  if (elements.length > 0 && (elements[elements.length - 1] as any)?.tag === 'hr') {
+    elements.pop();
+  }
+
+  return {
+    header: { title: '📊 流程列表', template: 'blue' },
+    elements,
+  };
+}
+
+/** Send awaiting_confirm card to main group. */
+function sendAwaitingConfirmCard(workflow: Workflow): void {
+  const { sendCard } = getDeps();
+  const groups = getDeps().registeredGroups();
+  const mainJid = findMainJid(groups);
+  if (!mainJid) {
+    logger.warn('Workflow: cannot send card — main group not found');
+    return;
+  }
+
+  if (sendCard) {
+    const card = buildAwaitingConfirmCard(workflow);
+    sendCard(mainJid, card).catch((err) => {
+      logger.error({ err, workflowId: workflow.id }, 'Failed to send awaiting_confirm card, falling back to text');
+      notifyMain(
+        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 开发已完成！\n\n工作分支：${workflow.branch}\n交付文档：${workflow.deliverable || '未找到'}\n\n请在飞书群中点击卡片按钮确认部署。`,
+      );
+    });
+  } else {
+    // Fallback: no card support, send text
+    notifyMain(
+      `[流程进展] 需求「${workflow.name}」(${workflow.id}) 开发已完成！\n\n工作分支：${workflow.branch}\n交付文档：${workflow.deliverable || '未找到'}\n\n请确认是否开始部署。`,
+    );
+  }
+}
+
+// -------------------------------------------------------
+// Cancel / Pause / Resume
+// -------------------------------------------------------
+
+export function cancelWorkflow(workflowId: string): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+  const terminalStates: WorkflowStatus[] = ['passed', 'ops_failed', 'cancelled'];
+  if (terminalStates.includes(workflow.status)) {
+    return { error: `流程已结束 (${workflow.status})` };
+  }
+  updateWorkflow(workflowId, { status: 'cancelled', current_delegation_id: '' });
+  notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`);
+  return {};
+}
+
+export function pauseWorkflow(workflowId: string): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+  const terminalStates: WorkflowStatus[] = ['passed', 'ops_failed', 'cancelled'];
+  if (terminalStates.includes(workflow.status) || workflow.status === 'paused') {
+    return { error: `流程当前状态 ${workflow.status}，无法中断` };
+  }
+  updateWorkflow(workflowId, { status: 'paused', paused_from: workflow.status });
+  notifyMain(`[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`);
+  return {};
+}
+
+export function resumeWorkflow(workflowId: string): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+  if (workflow.status !== 'paused' || !workflow.paused_from) {
+    return { error: `流程当前状态 ${workflow.status}，不是中断状态` };
+  }
+
+  // Check if delegation completed while paused
+  if (workflow.current_delegation_id) {
+    const delegation = getDelegation(workflow.current_delegation_id);
+    if (delegation?.status === 'completed') {
+      // Agent completed work while paused — restore state then advance
+      updateWorkflow(workflowId, { status: workflow.paused_from, paused_from: null });
+      onDelegationComplete(workflow.current_delegation_id);
+      notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`);
+      return {};
+    }
+    if (delegation?.status === 'pending') {
+      // Agent still running — restore state, wait for natural completion
+      updateWorkflow(workflowId, { status: workflow.paused_from, paused_from: null });
+      notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`);
+      return {};
+    }
+  }
+
+  // No active delegation (e.g. paused_from='awaiting_confirm') — restore state
+  updateWorkflow(workflowId, { status: workflow.paused_from, paused_from: null });
+  notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`);
+
+  // If resuming to awaiting_confirm, resend the card
+  if (workflow.paused_from === 'awaiting_confirm') {
+    const updatedWorkflow = getWorkflow(workflowId);
+    if (updatedWorkflow) {
+      sendAwaitingConfirmCard(updatedWorkflow);
+    }
+  }
+  return {};
+}
+
+// -------------------------------------------------------
+// Card action handler
+// -------------------------------------------------------
+
+export function handleCardAction(action: {
+  workflow_id: string;
+  action: string;
+  user_id: string;
+  message_id: string;
+}): void {
+  logger.info({ action }, 'Handling card action');
+
+  switch (action.action) {
+    case 'approve': {
+      const result = approveWorkflow(action.workflow_id);
+      if (result.error) {
+        notifyMain(`[操作失败] 确认部署失败: ${result.error}`);
+      }
+      break;
+    }
+    case 'cancel': {
+      const result = cancelWorkflow(action.workflow_id);
+      if (result.error) {
+        notifyMain(`[操作失败] 取消流程失败: ${result.error}`);
+      }
+      break;
+    }
+    case 'pause': {
+      const result = pauseWorkflow(action.workflow_id);
+      if (result.error) {
+        notifyMain(`[操作失败] 中断流程失败: ${result.error}`);
+      }
+      break;
+    }
+    case 'resume': {
+      const result = resumeWorkflow(action.workflow_id);
+      if (result.error) {
+        notifyMain(`[操作失败] 恢复流程失败: ${result.error}`);
+      }
+      break;
+    }
+    default:
+      logger.warn({ action: action.action }, 'Unknown card action');
+  }
+}
+
+// -------------------------------------------------------
+// list_workflows with card
+// -------------------------------------------------------
+
+/** Send workflow list as a card to the main group. Returns true if card was sent. */
+export function sendWorkflowListCard(): boolean {
+  const { sendCard } = getDeps();
+  const groups = getDeps().registeredGroups();
+  const mainJid = findMainJid(groups);
+  if (!mainJid || !sendCard) return false;
+
+  const workflows = getAllWorkflows();
+  if (workflows.length === 0) return false;
+
+  const card = buildWorkflowListCard(workflows);
+  sendCard(mainJid, card).catch((err) => {
+    logger.error({ err }, 'Failed to send workflow list card');
+  });
+  return true;
 }
 
 /** List all active workflows (for MCP tool). */

@@ -491,13 +491,15 @@ server.tool(
 The result you provide will be sent back to the main group's agent as a message.
 Be thorough in your result — include all relevant findings, data, and conclusions.`,
   {
-    delegation_id: z.string().describe('The delegation ID from the task message (format: del-xxx)'),
-    result: z.string().describe('The result of the completed task. Be detailed — this is sent back to the requesting agent.'),
+    delegation_id: z.string().describe('委派任务 ID（格式：del-xxx）'),
+    outcome: z.enum(['success', 'failure']).describe('任务结果：success=成功，failure=失败'),
+    result: z.string().describe('任务结果详情，JSON 格式'),
   },
   async (args) => {
     const data = {
       type: 'complete_delegation',
       delegationId: args.delegation_id,
+      outcome: args.outcome,
       result: args.result,
       groupFolder,
       timestamp: new Date().toISOString(),
@@ -623,63 +625,8 @@ if (isMain) {
   );
 
   server.tool(
-    'approve_workflow',
-    '确认启动自动化测试流程。当用户确认开始测试时调用。流程会自动委派 feishu_ops 部署预发环境。',
-    {
-      workflow_id: z.string().describe('流程 ID（格式：wf-xxx）'),
-    },
-    async (args) => {
-      const requestId = `wf-approve-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-      const data = {
-        type: 'approve_workflow',
-        workflow_id: args.workflow_id,
-        requestId,
-        groupFolder,
-        timestamp: new Date().toISOString(),
-      };
-
-      writeIpcFile(TASKS_DIR, data);
-
-      // Poll for result
-      const resultsDir = path.join(IPC_DIR, 'workflow-results');
-      const resultPath = path.join(resultsDir, `${requestId}.json`);
-      const maxWaitMs = 10000;
-      const pollMs = 300;
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < maxWaitMs) {
-        if (fs.existsSync(resultPath)) {
-          try {
-            const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
-            fs.unlinkSync(resultPath);
-            if (result.error) {
-              return {
-                content: [{ type: 'text' as const, text: `流程确认失败: ${result.error}` }],
-                isError: true,
-              };
-            }
-            return {
-              content: [{ type: 'text' as const, text: `流程 ${args.workflow_id} 已确认，正在委派部署预发环境。` }],
-            };
-          } catch (err) {
-            return {
-              content: [{ type: 'text' as const, text: `确认结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
-            };
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
-      }
-
-      return {
-        content: [{ type: 'text' as const, text: '确认请求已发送，但等待确认超时。' }],
-      };
-    },
-  );
-
-  server.tool(
     'list_workflows',
-    '查看所有开发测试流程的状态。显示活跃的流程及其当前阶段。',
+    '查看所有开发测试流程的状态。会在群内发送带操作按钮的卡片，同时返回流程数据。',
     {},
     async () => {
       const requestId = `wf-list-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -721,7 +668,11 @@ if (isMain) {
               fixing: '🔨 修复中',
               passed: '✅ 已通过',
               ops_failed: '❌ 部署失败',
+              cancelled: '🚫 已取消',
+              paused: '⏸ 已中断',
             };
+
+            const cardSent = result.cardSent ? '（已发送流程卡片到群内）\n\n' : '';
 
             const formatted = workflows
               .map(
@@ -733,13 +684,18 @@ if (isMain) {
                   round: number;
                   branch: string;
                   created_at: string;
-                }) =>
-                  `- [${w.id}] ${w.name} (${w.service}) — ${statusLabels[w.status] || w.status}${w.round > 0 ? ` Round ${w.round}` : ''}\n  分支: ${w.branch || 'N/A'} | 创建: ${w.created_at}`,
+                  paused_from?: string;
+                }) => {
+                  const statusDisplay = w.status === 'paused'
+                    ? `⏸ 已中断（原状态：${statusLabels[w.paused_from || ''] || w.paused_from || '未知'}）`
+                    : (statusLabels[w.status] || w.status);
+                  return `- [${w.id}] ${w.name} (${w.service}) — ${statusDisplay}${w.round > 0 ? ` Round ${w.round}` : ''}\n  分支: ${w.branch || 'N/A'} | 创建: ${w.created_at}`;
+                },
               )
               .join('\n');
 
             return {
-              content: [{ type: 'text' as const, text: `活跃流程:\n${formatted}` }],
+              content: [{ type: 'text' as const, text: `${cardSent}活跃流程:\n${formatted}` }],
             };
           } catch (err) {
             return {

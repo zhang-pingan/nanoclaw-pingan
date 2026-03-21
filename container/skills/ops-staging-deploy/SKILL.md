@@ -18,5 +18,7 @@
    - 触发构建：`POST /job/{staging.jenkins_job}/build`
    - 轮询构建状态直到完成
 5. 通过 `complete_delegation` 返回结果：
-   - 成功：「预发部署完成，分支 {staging.branch} 已包含 {工作分支} 的变更」
-   - 失败：附上错误日志摘要
+   - outcome：成功传 `success`，失败传 `failure`
+   - result：JSON 格式
+     成功：{"service":"xx","branch":"feature/xx","staging_branch":"staging","summary":"预发部署完成"}
+     失败：{"service":"xx","branch":"feature/xx","staging_branch":"staging","summary":"合并冲突","error":"conflict in src/xx.ts"}

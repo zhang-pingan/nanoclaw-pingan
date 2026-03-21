@@ -5,10 +5,10 @@ import { CronExpressionParser } from 'cron-parser';
 
 import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
-  approveWorkflow,
   createNewWorkflow,
   listWorkflows,
   onDelegationComplete as onWorkflowDelegationComplete,
+  sendWorkflowListCard,
 } from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
 import {
@@ -25,7 +25,7 @@ import {
 } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
-import { RegisteredGroup } from './types.js';
+import { FeishuCard, RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -40,6 +40,7 @@ export interface IpcDeps {
     registeredJids: Set<string>,
   ) => void;
   enqueueMessageCheck: (groupJid: string) => void;
+  sendCard?: (jid: string, card: FeishuCard) => Promise<string | undefined>;
 }
 
 let ipcWatcherRunning = false;
@@ -578,6 +579,7 @@ export async function processTaskIpc(
         task: data.task,
         status: 'pending',
         result: null,
+        outcome: null,
         created_at: now,
         updated_at: now,
       });
@@ -669,6 +671,7 @@ export async function processTaskIpc(
       updateDelegation(data.delegationId, {
         status: 'completed',
         result: data.result,
+        outcome: (data as { outcome?: string }).outcome as 'success' | 'failure' | null || null,
       });
 
       // Find the target group name for the result message
@@ -839,50 +842,6 @@ export async function processTaskIpc(
       break;
     }
 
-    case 'approve_workflow': {
-      if (!isMain) {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized approve_workflow attempt blocked',
-        );
-        break;
-      }
-
-      const wfId = (data as { workflow_id?: string }).workflow_id;
-      if (!wfId) {
-        logger.warn({ sourceGroup }, 'approve_workflow missing workflow_id');
-        break;
-      }
-
-      const approveResult = approveWorkflow(wfId);
-
-      if (data.requestId) {
-        const resultsDir = path.join(
-          DATA_DIR,
-          'ipc',
-          sourceGroup,
-          'workflow-results',
-        );
-        fs.mkdirSync(resultsDir, { recursive: true });
-        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
-        const tempPath = `${responsePath}.tmp`;
-        fs.writeFileSync(
-          tempPath,
-          JSON.stringify({
-            workflowId: wfId,
-            error: approveResult.error || null,
-          }),
-        );
-        fs.renameSync(tempPath, responsePath);
-      }
-
-      logger.info(
-        { workflowId: wfId, sourceGroup, error: approveResult.error },
-        'Workflow approved via IPC',
-      );
-      break;
-    }
-
     case 'list_workflows': {
       if (!isMain) {
         logger.warn(
@@ -891,6 +850,9 @@ export async function processTaskIpc(
         );
         break;
       }
+
+      // Try to send as interactive card first
+      const cardSent = sendWorkflowListCard();
 
       const workflows = listWorkflows();
 
@@ -904,12 +866,16 @@ export async function processTaskIpc(
         fs.mkdirSync(resultsDir, { recursive: true });
         const responsePath = path.join(resultsDir, `${data.requestId}.json`);
         const tempPath = `${responsePath}.tmp`;
-        fs.writeFileSync(tempPath, JSON.stringify({ workflows }));
+        if (cardSent) {
+          fs.writeFileSync(tempPath, JSON.stringify({ workflows, cardSent: true }));
+        } else {
+          fs.writeFileSync(tempPath, JSON.stringify({ workflows }));
+        }
         fs.renameSync(tempPath, responsePath);
       }
 
       logger.info(
-        { sourceGroup, count: workflows.length },
+        { sourceGroup, count: workflows.length, cardSent },
         'Workflows listed via IPC',
       );
       break;
