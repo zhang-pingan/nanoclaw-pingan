@@ -197,6 +197,24 @@ function writePlanModeMarker(groupFolder: string): void {
   fs.writeFileSync(markerPath, '1');
 }
 
+/** Write a _plan_confirm sentinel so the container exits waitForPlanSignal() and enters Phase 2. */
+function writePlanConfirmSentinel(groupFolder: string): void {
+  const sentinelPath = path.join(DATA_DIR, 'ipc', groupFolder, 'input', '_plan_confirm');
+  fs.mkdirSync(path.dirname(sentinelPath), { recursive: true });
+  fs.writeFileSync(sentinelPath, '');
+}
+
+/** Write a revision message into the container's IPC input so it re-runs the plan phase. */
+function writeIpcRevision(groupFolder: string, text: string): void {
+  const inputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
+  fs.mkdirSync(inputDir, { recursive: true });
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`;
+  const tempPath = path.join(inputDir, `${filename}.tmp`);
+  const finalPath = path.join(inputDir, filename);
+  fs.writeFileSync(tempPath, JSON.stringify({ type: 'message', text }));
+  fs.renameSync(tempPath, finalPath);
+}
+
 /** Find the JID for a given group folder name. */
 function findJidByFolder(
   folder: string,
@@ -977,6 +995,100 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
 }
 
 // -------------------------------------------------------
+// Plan confirmation
+// -------------------------------------------------------
+
+/**
+ * Send a plan confirmation card to the main group.
+ * groupFolder is the primary identifier; workflow is optional for enriching display.
+ */
+function sendPlanConfirmCard(groupFolder: string, workflow?: Workflow): void {
+  const { sendCard } = getDeps();
+  const groups = getDeps().registeredGroups();
+  const mainJid = findMainJid(groups);
+  if (!mainJid || !sendCard) return;
+
+  const btnValue = (actionName: string) => {
+    const v: Record<string, string> = { group_folder: groupFolder, action: actionName };
+    if (workflow) v.workflow_id = workflow.id;
+    return v;
+  };
+
+  const groupName = Object.values(groups).find(g => g.folder === groupFolder)?.name || groupFolder;
+  const title = workflow
+    ? `📋 需求「${workflow.name}」方案已生成`
+    : `📋 「${groupName}」方案已生成`;
+  const body = workflow
+    ? `**流程 ID**：${workflow.id}\n**服务**：${workflow.service}\n\n开发方案已生成，请查看 dev 群中的方案详情后确认。`
+    : `**群组**：${groupName}\n\n开发方案已生成，请查看群中的方案详情后确认。`;
+
+  const card: FeishuCard = {
+    header: { title, template: 'green' },
+    elements: [
+      {
+        tag: 'div',
+        text: { tag: 'lark_md', content: body },
+      },
+      {
+        tag: 'action',
+        actions: [
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '✅ 确认执行' },
+            type: 'primary',
+            value: btnValue('confirm_plan'),
+          },
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '❌ 取消' },
+            type: 'danger',
+            value: btnValue('cancel'),
+          },
+        ],
+      },
+      { tag: 'hr' },
+      {
+        tag: 'form',
+        name: 'revision_form',
+        elements: [
+          {
+            tag: 'input',
+            name: 'revision_text',
+            placeholder: { tag: 'plain_text', content: '如需修改方案，请输入修改意见...' },
+          },
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '✏️ 提交修改' },
+            value: btnValue('request_revision'),
+          },
+        ],
+      },
+    ],
+  };
+
+  sendCard(mainJid, card).catch((err) => {
+    logger.error({ err, groupFolder, workflowId: workflow?.id }, 'Failed to send plan confirm card');
+  });
+}
+
+/**
+ * Called when a container signals plan_complete via IPC.
+ * Always sends a confirmation card. Optionally enriches with workflow info.
+ */
+export function onPlanComplete(groupFolder: string): void {
+  // Look up workflow for display enrichment (not required for the card to work)
+  const activeWorkflows = getAllActiveWorkflows();
+  const workflow = activeWorkflows.find(w => {
+    if (!w.current_delegation_id) return false;
+    const delegation = getDelegation(w.current_delegation_id);
+    return delegation?.target_folder === groupFolder && delegation?.status === 'pending';
+  });
+
+  sendPlanConfirmCard(groupFolder, workflow || undefined);
+  logger.info({ workflowId: workflow?.id, groupFolder }, 'Plan confirmation card sent');
+}
+
+// -------------------------------------------------------
 // Cancel / Pause / Resume
 // -------------------------------------------------------
 
@@ -1089,39 +1201,74 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
 // -------------------------------------------------------
 
 export function handleCardAction(action: {
-  workflow_id: string;
   action: string;
   user_id: string;
   message_id: string;
+  group_folder?: string;
+  workflow_id?: string;
+  form_value?: Record<string, string>;
 }): void {
   logger.info({ action }, 'Handling card action');
 
-  switch (action.action) {
-    case 'approve': {
-      const result = approveWorkflow(action.workflow_id);
-      if (result.error) {
-        notifyMain(`[操作失败] 确认部署失败: ${result.error}`);
-      }
-      break;
+  /** Display label for notifications. */
+  const getLabel = (): string => {
+    if (action.workflow_id) {
+      const wf = getWorkflow(action.workflow_id);
+      if (wf) return `需求「${wf.name}」(${wf.id})`;
     }
-    case 'cancel': {
-      const result = cancelWorkflow(action.workflow_id);
-      if (result.error) {
-        notifyMain(`[操作失败] 取消流程失败: ${result.error}`);
-      }
+    if (action.group_folder) {
+      const groups = getDeps().registeredGroups();
+      const name = Object.values(groups).find(g => g.folder === action.group_folder)?.name;
+      if (name) return `「${name}」`;
+    }
+    return action.workflow_id || action.group_folder || '未知';
+  };
+
+  switch (action.action) {
+    // --- Workflow-specific actions (require workflow_id) ---
+    case 'approve': {
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
+      const result = approveWorkflow(action.workflow_id);
+      if (result.error) notifyMain(`[操作失败] 确认部署失败: ${result.error}`);
       break;
     }
     case 'pause': {
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
       const result = pauseWorkflow(action.workflow_id);
-      if (result.error) {
-        notifyMain(`[操作失败] 中断流程失败: ${result.error}`);
-      }
+      if (result.error) notifyMain(`[操作失败] 中断流程失败: ${result.error}`);
       break;
     }
     case 'resume': {
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
       const result = resumeWorkflow(action.workflow_id);
-      if (result.error) {
-        notifyMain(`[操作失败] 恢复流程失败: ${result.error}`);
+      if (result.error) notifyMain(`[操作失败] 恢复流程失败: ${result.error}`);
+      break;
+    }
+    // --- Plan actions (require group_folder) ---
+    case 'confirm_plan': {
+      if (!action.group_folder) { notifyMain('[操作失败] 找不到目标群组'); break; }
+      writePlanConfirmSentinel(action.group_folder);
+      notifyMain(`[流程进展] ${getLabel()} 方案已确认，开始执行。`);
+      break;
+    }
+    case 'request_revision': {
+      if (!action.group_folder) { notifyMain('[操作失败] 找不到目标群组'); break; }
+      const revisionText = action.form_value?.revision_text;
+      if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。'); break; }
+      writeIpcRevision(action.group_folder, `[方案修改意见]\n\n${revisionText}`);
+      notifyMain(`[方案修改] ${getLabel()} 修改意见已提交，Agent 正在重新生成方案。`);
+      break;
+    }
+    // --- Cancel: works with both workflow and standalone plan ---
+    case 'cancel': {
+      if (action.workflow_id) {
+        const result = cancelWorkflow(action.workflow_id);
+        if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`);
+      } else if (action.group_folder) {
+        const closePath = path.join(DATA_DIR, 'ipc', action.group_folder, 'input', '_close');
+        fs.mkdirSync(path.dirname(closePath), { recursive: true });
+        fs.writeFileSync(closePath, '');
+        notifyMain(`[已取消] ${getLabel()} 方案已取消。`);
       }
       break;
     }

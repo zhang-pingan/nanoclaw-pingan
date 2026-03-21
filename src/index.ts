@@ -273,7 +273,21 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
   }
 
-  const prompt = formatMessages(missedMessages, TIMEZONE);
+  let prompt = formatMessages(missedMessages, TIMEZONE);
+
+  // Detect /plan command — activate plan mode for this run
+  const hasPlanCommand = missedMessages.some((m) =>
+    /^\s*\/plan\b/i.test(m.content.replace(TRIGGER_PATTERN, '').trim()),
+  );
+  if (hasPlanCommand) {
+    // Strip /plan prefix from all messages that contain it
+    prompt = prompt.replace(/\/plan\s*/gi, '');
+    // Write plan_mode marker so runAgent picks it up
+    const markerPath = path.join(resolveGroupIpcPath(group.folder), 'plan_mode');
+    fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+    fs.writeFileSync(markerPath, '1');
+    logger.info({ group: group.name }, '/plan command detected, plan mode marker written');
+  }
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.

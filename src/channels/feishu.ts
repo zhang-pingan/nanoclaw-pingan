@@ -420,17 +420,21 @@ class FeishuChannel implements Channel {
   private handleCardActionEvent(payload: any, res: http.ServerResponse): void {
     const action = payload.event?.action;
     const value = action?.value as
-      | { workflow_id?: string; action?: string }
+      | { workflow_id?: string; action?: string; group_folder?: string }
       | undefined;
     const userId = payload.event?.operator?.user_id || '';
     const messageId = payload.event?.context?.open_message_id || '';
 
-    if (value?.workflow_id && value?.action && this.onCardAction) {
+    const formValue = action?.form_value as Record<string, string> | undefined;
+
+    if ((value?.workflow_id || value?.group_folder) && value?.action && this.onCardAction) {
       this.onCardAction({
-        workflow_id: value.workflow_id,
         action: value.action,
         user_id: userId,
         message_id: messageId,
+        group_folder: value.group_folder,
+        workflow_id: value.workflow_id,
+        form_value: formValue,
       });
     }
 

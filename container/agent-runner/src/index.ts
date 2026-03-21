@@ -57,6 +57,7 @@ interface SDKUserMessage {
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+const IPC_INPUT_PLAN_CONFIRM = path.join(IPC_INPUT_DIR, '_plan_confirm');
 const IPC_POLL_MS = 500;
 
 /**
@@ -344,6 +345,46 @@ function waitForIpcMessage(): Promise<string | null> {
     };
     poll();
   });
+}
+
+/**
+ * Check for _plan_confirm sentinel.
+ */
+function shouldPlanConfirm(): boolean {
+  if (fs.existsSync(IPC_INPUT_PLAN_CONFIRM)) {
+    try { fs.unlinkSync(IPC_INPUT_PLAN_CONFIRM); } catch { /* ignore */ }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Wait for plan confirmation signal: _plan_confirm, _close, or a new message (revision).
+ */
+function waitForPlanSignal(): Promise<{type:'confirm'}|{type:'close'}|{type:'message',text:string}> {
+  return new Promise((resolve) => {
+    const poll = () => {
+      if (shouldClose()) { resolve({type:'close'}); return; }
+      if (shouldPlanConfirm()) { resolve({type:'confirm'}); return; }
+      const messages = drainIpcInput();
+      if (messages.length > 0) { resolve({type:'message', text: messages.join('\n')}); return; }
+      setTimeout(poll, IPC_POLL_MS);
+    };
+    poll();
+  });
+}
+
+/**
+ * Write a plan_complete IPC message to /workspace/ipc/messages/ for the host to pick up.
+ */
+function writeIpcPlanComplete(): void {
+  const dir = '/workspace/ipc/messages';
+  fs.mkdirSync(dir, { recursive: true });
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2,6)}.json`;
+  const tempPath = path.join(dir, `${filename}.tmp`);
+  const finalPath = path.join(dir, filename);
+  fs.writeFileSync(tempPath, JSON.stringify({ type: 'plan_complete' }));
+  fs.renameSync(tempPath, finalPath);
 }
 
 /** Build shared query options used by both normal and plan-mode queries. */
@@ -691,21 +732,31 @@ async function main(): Promise<void> {
       }
 
       if (planModeActive) {
-        // Phase 1 (plan) complete — wait for user confirmation before Phase 2
-        planModeActive = false;  // used once, all subsequent queries run bypassPermissions
-
+        // Phase 1 (plan) complete — notify host and wait for structured confirmation
+        writeIpcPlanComplete();
         writeOutput({ status: 'success', result: null, newSessionId: sessionId });
-        log('Plan phase complete, waiting for user confirmation...');
+        log('Plan phase complete, waiting for confirmation...');
 
-        const nextMessage = await waitForIpcMessage();
-        if (nextMessage === null) {
-          log('Close sentinel received during plan confirmation, exiting');
+        const signal = await waitForPlanSignal();
+
+        if (signal.type === 'close') {
+          log('Close during plan confirmation, exiting');
           break;
         }
 
-        log(`Got confirmation message (${nextMessage.length} chars), entering execution phase`);
-        prompt = nextMessage;
-        continue;  // back to loop top — planModeActive is now false, runs bypassPermissions
+        if (signal.type === 'confirm') {
+          planModeActive = false;
+          prompt = '用户已确认方案，请按照之前的计划执行代码实现。';
+          log('Plan confirmed, entering execution phase');
+          continue; // back to loop top — permMode = bypassPermissions
+        }
+
+        if (signal.type === 'message') {
+          // Revision — keep planModeActive=true, re-run plan query
+          prompt = signal.text;
+          log(`Plan revision (${signal.text.length} chars), re-running plan phase`);
+          continue; // back to loop top — permMode still plan
+        }
       }
 
       // Emit session update so host can track it

@@ -120,10 +120,12 @@ export interface FeishuCard {
 }
 
 export type CardActionHandler = (action: {
-  workflow_id: string;
-  action: string; // 'approve' | 'cancel' | 'pause' | 'resume'
+  action: string;
   user_id: string;
   message_id: string;
+  group_folder?: string; // Plan confirmation primary key
+  workflow_id?: string; // Workflow operations primary key (approve/pause/resume)
+  form_value?: Record<string, string>;
 }) => void;
 
 export interface Channel {
