@@ -213,7 +213,10 @@ class FeishuChannel implements Channel {
 
     if (response.data?.code !== 0) {
       const errMsg = `Feishu card API error: code=${response.data?.code} msg=${response.data?.msg}`;
-      logger.error({ jid, code: response.data?.code, msg: response.data?.msg }, errMsg);
+      logger.error(
+        { jid, code: response.data?.code, msg: response.data?.msg },
+        errMsg,
+      );
       throw new Error(errMsg);
     }
 
@@ -416,7 +419,9 @@ class FeishuChannel implements Channel {
   // Handle card action callback from Feishu
   private handleCardActionEvent(payload: any, res: http.ServerResponse): void {
     const action = payload.event?.action;
-    const value = action?.value as { workflow_id?: string; action?: string } | undefined;
+    const value = action?.value as
+      | { workflow_id?: string; action?: string }
+      | undefined;
     const userId = payload.event?.operator?.user_id || '';
     const messageId = payload.event?.context?.open_message_id || '';
 

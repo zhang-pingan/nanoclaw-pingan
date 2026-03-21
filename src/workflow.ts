@@ -34,7 +34,12 @@ import {
   updateWorkflow,
 } from './db.js';
 import { logger } from './logger.js';
-import { FeishuCard, RegisteredGroup, Workflow, WorkflowStatus } from './types.js';
+import {
+  FeishuCard,
+  RegisteredGroup,
+  Workflow,
+  WorkflowStatus,
+} from './types.js';
 
 // -------------------------------------------------------
 // Role resolution
@@ -589,7 +594,9 @@ export function onDelegationComplete(delegationId: string): void {
       try {
         const p = JSON.parse(testSummary);
         testSummary = `总用例 ${p.total}，通过 ${p.passed}，失败 ${p.failed}`;
-        if (p.bugs?.length) testSummary += '\n' + p.bugs.map((b: any) => `- ${b.id}: ${b.title}`).join('\n');
+        if (p.bugs?.length)
+          testSummary +=
+            '\n' + p.bugs.map((b: any) => `- ${b.id}: ${b.title}`).join('\n');
       } catch {
         /* not JSON, use raw */
       }
@@ -736,9 +743,10 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
   const elements: unknown[] = [];
 
   for (const w of workflows) {
-    const statusLabel = w.status === 'paused'
-      ? `⏸ 已中断（原状态：${STATUS_LABELS[w.paused_from || ''] || w.paused_from || '未知'}）`
-      : (STATUS_LABELS[w.status] || w.status);
+    const statusLabel =
+      w.status === 'paused'
+        ? `⏸ 已中断（原状态：${STATUS_LABELS[w.paused_from || ''] || w.paused_from || '未知'}）`
+        : STATUS_LABELS[w.status] || w.status;
 
     elements.push({
       tag: 'div',
@@ -754,19 +762,52 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
 
     if (w.status === 'awaiting_confirm') {
       actions.push(
-        { tag: 'button', text: { tag: 'plain_text', content: '✅ 确认部署' }, type: 'primary', value: { workflow_id: w.id, action: 'approve' } },
-        { tag: 'button', text: { tag: 'plain_text', content: '⏸ 中断' }, value: { workflow_id: w.id, action: 'pause' } },
-        { tag: 'button', text: { tag: 'plain_text', content: '❌ 取消' }, type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '✅ 确认部署' },
+          type: 'primary',
+          value: { workflow_id: w.id, action: 'approve' },
+        },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '⏸ 中断' },
+          value: { workflow_id: w.id, action: 'pause' },
+        },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '❌ 取消' },
+          type: 'danger',
+          value: { workflow_id: w.id, action: 'cancel' },
+        },
       );
     } else if (w.status === 'paused') {
       actions.push(
-        { tag: 'button', text: { tag: 'plain_text', content: '▶ 继续' }, type: 'primary', value: { workflow_id: w.id, action: 'resume' } },
-        { tag: 'button', text: { tag: 'plain_text', content: '❌ 取消' }, type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '▶ 继续' },
+          type: 'primary',
+          value: { workflow_id: w.id, action: 'resume' },
+        },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '❌ 取消' },
+          type: 'danger',
+          value: { workflow_id: w.id, action: 'cancel' },
+        },
       );
     } else if (!terminalStates.includes(w.status)) {
       actions.push(
-        { tag: 'button', text: { tag: 'plain_text', content: '⏸ 中断' }, value: { workflow_id: w.id, action: 'pause' } },
-        { tag: 'button', text: { tag: 'plain_text', content: '❌ 取消' }, type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '⏸ 中断' },
+          value: { workflow_id: w.id, action: 'pause' },
+        },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '❌ 取消' },
+          type: 'danger',
+          value: { workflow_id: w.id, action: 'cancel' },
+        },
       );
     }
 
@@ -778,7 +819,10 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
   }
 
   // Remove trailing hr
-  if (elements.length > 0 && (elements[elements.length - 1] as any)?.tag === 'hr') {
+  if (
+    elements.length > 0 &&
+    (elements[elements.length - 1] as any)?.tag === 'hr'
+  ) {
     elements.pop();
   }
 
@@ -801,7 +845,10 @@ function sendAwaitingConfirmCard(workflow: Workflow): void {
   if (sendCard) {
     const card = buildAwaitingConfirmCard(workflow);
     sendCard(mainJid, card).catch((err) => {
-      logger.error({ err, workflowId: workflow.id }, 'Failed to send awaiting_confirm card, falling back to text');
+      logger.error(
+        { err, workflowId: workflow.id },
+        'Failed to send awaiting_confirm card, falling back to text',
+      );
       notifyMain(
         `[流程进展] 需求「${workflow.name}」(${workflow.id}) 开发已完成！\n\n工作分支：${workflow.branch}\n交付文档：${workflow.deliverable || '未找到'}\n\n请在飞书群中点击卡片按钮确认部署。`,
       );
@@ -821,11 +868,18 @@ function sendAwaitingConfirmCard(workflow: Workflow): void {
 export function cancelWorkflow(workflowId: string): { error?: string } {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
-  const terminalStates: WorkflowStatus[] = ['passed', 'ops_failed', 'cancelled'];
+  const terminalStates: WorkflowStatus[] = [
+    'passed',
+    'ops_failed',
+    'cancelled',
+  ];
   if (terminalStates.includes(workflow.status)) {
     return { error: `流程已结束 (${workflow.status})` };
   }
-  updateWorkflow(workflowId, { status: 'cancelled', current_delegation_id: '' });
+  updateWorkflow(workflowId, {
+    status: 'cancelled',
+    current_delegation_id: '',
+  });
   notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`);
   return {};
 }
@@ -833,12 +887,24 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
 export function pauseWorkflow(workflowId: string): { error?: string } {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
-  const terminalStates: WorkflowStatus[] = ['passed', 'ops_failed', 'cancelled'];
-  if (terminalStates.includes(workflow.status) || workflow.status === 'paused') {
+  const terminalStates: WorkflowStatus[] = [
+    'passed',
+    'ops_failed',
+    'cancelled',
+  ];
+  if (
+    terminalStates.includes(workflow.status) ||
+    workflow.status === 'paused'
+  ) {
     return { error: `流程当前状态 ${workflow.status}，无法中断` };
   }
-  updateWorkflow(workflowId, { status: 'paused', paused_from: workflow.status });
-  notifyMain(`[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`);
+  updateWorkflow(workflowId, {
+    status: 'paused',
+    paused_from: workflow.status,
+  });
+  notifyMain(
+    `[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`,
+  );
   return {};
 }
 
@@ -854,21 +920,34 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
     const delegation = getDelegation(workflow.current_delegation_id);
     if (delegation?.status === 'completed') {
       // Agent completed work while paused — restore state then advance
-      updateWorkflow(workflowId, { status: workflow.paused_from, paused_from: null });
+      updateWorkflow(workflowId, {
+        status: workflow.paused_from,
+        paused_from: null,
+      });
       onDelegationComplete(workflow.current_delegation_id);
-      notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`);
+      notifyMain(
+        `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`,
+      );
       return {};
     }
     if (delegation?.status === 'pending') {
       // Agent still running — restore state, wait for natural completion
-      updateWorkflow(workflowId, { status: workflow.paused_from, paused_from: null });
-      notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`);
+      updateWorkflow(workflowId, {
+        status: workflow.paused_from,
+        paused_from: null,
+      });
+      notifyMain(
+        `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`,
+      );
       return {};
     }
   }
 
   // No active delegation (e.g. paused_from='awaiting_confirm') — restore state
-  updateWorkflow(workflowId, { status: workflow.paused_from, paused_from: null });
+  updateWorkflow(workflowId, {
+    status: workflow.paused_from,
+    paused_from: null,
+  });
   notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`);
 
   // If resuming to awaiting_confirm, resend the card

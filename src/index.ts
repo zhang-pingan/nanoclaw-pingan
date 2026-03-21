@@ -861,9 +861,12 @@ async function main(): Promise<void> {
     },
   });
   // Find feishu channel for card support
-  const feishuChannel = channels.find((ch) => ch.name === 'feishu') as FeishuChannel | undefined;
+  const feishuChannel = channels.find((ch) => ch.name === 'feishu') as
+    | FeishuChannel
+    | undefined;
   const sendCardFn = feishuChannel
-    ? (jid: string, card: import('./types.js').FeishuCard) => feishuChannel.sendCard(jid, card)
+    ? (jid: string, card: import('./types.js').FeishuCard) =>
+        feishuChannel.sendCard(jid, card)
     : undefined;
 
   // Wire up feishu card action callback → workflow engine

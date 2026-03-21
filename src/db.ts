@@ -847,7 +847,12 @@ export function updateWorkflow(
   updates: Partial<
     Pick<
       Workflow,
-      'branch' | 'deliverable' | 'status' | 'current_delegation_id' | 'round' | 'paused_from'
+      | 'branch'
+      | 'deliverable'
+      | 'status'
+      | 'current_delegation_id'
+      | 'round'
+      | 'paused_from'
     >
   >,
 ): void {

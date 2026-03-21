@@ -671,7 +671,11 @@ export async function processTaskIpc(
       updateDelegation(data.delegationId, {
         status: 'completed',
         result: data.result,
-        outcome: (data as { outcome?: string }).outcome as 'success' | 'failure' | null || null,
+        outcome:
+          ((data as { outcome?: string }).outcome as
+            | 'success'
+            | 'failure'
+            | null) || null,
       });
 
       // Find the target group name for the result message
@@ -867,7 +871,10 @@ export async function processTaskIpc(
         const responsePath = path.join(resultsDir, `${data.requestId}.json`);
         const tempPath = `${responsePath}.tmp`;
         if (cardSent) {
-          fs.writeFileSync(tempPath, JSON.stringify({ workflows, cardSent: true }));
+          fs.writeFileSync(
+            tempPath,
+            JSON.stringify({ workflows, cardSent: true }),
+          );
         } else {
           fs.writeFileSync(tempPath, JSON.stringify({ workflows }));
         }
