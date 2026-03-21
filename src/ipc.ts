@@ -4,6 +4,12 @@ import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
 import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
+import {
+  approveWorkflow,
+  createNewWorkflow,
+  listWorkflows,
+  onDelegationComplete as onWorkflowDelegationComplete,
+} from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
 import {
   createDelegation,
@@ -246,6 +252,8 @@ export async function processTaskIpc(
     targetGroupJid?: string;
     task?: string;
     result?: string;
+    // For workflow
+    service?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -694,6 +702,17 @@ export async function processTaskIpc(
         },
         'Delegation completed via IPC',
       );
+
+      // Workflow hook: check if this delegation belongs to a workflow
+      try {
+        onWorkflowDelegationComplete(data.delegationId);
+      } catch (err) {
+        logger.error(
+          { err, delegationId: data.delegationId },
+          'Workflow delegation hook failed',
+        );
+      }
+
       break;
     }
 
@@ -756,6 +775,151 @@ export async function processTaskIpc(
           conversationHits: conversationResults.length,
         },
         'memory_search completed',
+      );
+      break;
+    }
+
+    case 'create_workflow': {
+      if (!isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized create_workflow attempt blocked',
+        );
+        break;
+      }
+
+      if (!data.name || !data.service) {
+        logger.warn({ sourceGroup }, 'create_workflow missing name or service');
+        break;
+      }
+
+      const startFrom =
+        (data as { start_from?: string }).start_from === 'testing'
+          ? 'testing'
+          : 'dev';
+
+      // Find the source JID (main group's JID)
+      const mainJid =
+        Object.entries(registeredGroups).find(
+          ([, g]) => g.folder === sourceGroup,
+        )?.[0] || '';
+
+      const wfResult = createNewWorkflow({
+        name: data.name as string,
+        service: data.service as string,
+        sourceJid: mainJid,
+        startFrom: startFrom as 'dev' | 'testing',
+      });
+
+      // Write result back via IPC response
+      if (data.requestId) {
+        const resultsDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'workflow-results',
+        );
+        fs.mkdirSync(resultsDir, { recursive: true });
+        const responsePath = path.join(
+          resultsDir,
+          `${data.requestId}.json`,
+        );
+        const tempPath = `${responsePath}.tmp`;
+        fs.writeFileSync(
+          tempPath,
+          JSON.stringify({
+            workflowId: wfResult.workflowId,
+            error: wfResult.error || null,
+          }),
+        );
+        fs.renameSync(tempPath, responsePath);
+      }
+
+      logger.info(
+        { workflowId: wfResult.workflowId, sourceGroup, startFrom },
+        'Workflow created via IPC',
+      );
+      break;
+    }
+
+    case 'approve_workflow': {
+      if (!isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized approve_workflow attempt blocked',
+        );
+        break;
+      }
+
+      const wfId = (data as { workflow_id?: string }).workflow_id;
+      if (!wfId) {
+        logger.warn({ sourceGroup }, 'approve_workflow missing workflow_id');
+        break;
+      }
+
+      const approveResult = approveWorkflow(wfId);
+
+      if (data.requestId) {
+        const resultsDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'workflow-results',
+        );
+        fs.mkdirSync(resultsDir, { recursive: true });
+        const responsePath = path.join(
+          resultsDir,
+          `${data.requestId}.json`,
+        );
+        const tempPath = `${responsePath}.tmp`;
+        fs.writeFileSync(
+          tempPath,
+          JSON.stringify({
+            workflowId: wfId,
+            error: approveResult.error || null,
+          }),
+        );
+        fs.renameSync(tempPath, responsePath);
+      }
+
+      logger.info(
+        { workflowId: wfId, sourceGroup, error: approveResult.error },
+        'Workflow approved via IPC',
+      );
+      break;
+    }
+
+    case 'list_workflows': {
+      if (!isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized list_workflows attempt blocked',
+        );
+        break;
+      }
+
+      const workflows = listWorkflows();
+
+      if (data.requestId) {
+        const resultsDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'workflow-results',
+        );
+        fs.mkdirSync(resultsDir, { recursive: true });
+        const responsePath = path.join(
+          resultsDir,
+          `${data.requestId}.json`,
+        );
+        const tempPath = `${responsePath}.tmp`;
+        fs.writeFileSync(tempPath, JSON.stringify({ workflows }));
+        fs.renameSync(tempPath, responsePath);
+      }
+
+      logger.info(
+        { sourceGroup, count: workflows.length },
+        'Workflows listed via IPC',
       );
       break;
     }

@@ -27,6 +27,7 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  planMode?: boolean;
 }
 
 interface ContainerOutput {
@@ -345,11 +346,135 @@ function waitForIpcMessage(): Promise<string | null> {
   });
 }
 
+/** Build shared query options used by both normal and plan-mode queries. */
+function buildQueryOptions(
+  containerInput: ContainerInput,
+  mcpServerPath: string,
+  sdkEnv: Record<string, string | undefined>,
+  overrides: {
+    sessionId?: string;
+    resumeAt?: string;
+    permissionMode: string;
+  },
+) {
+  // Load global CLAUDE.md as additional system context (shared across all groups)
+  const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
+  let globalClaudeMd: string | undefined;
+  if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
+    globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
+  }
+
+  // Discover additional directories mounted at /workspace/extra/*
+  const extraDirs: string[] = [];
+  const extraBase = '/workspace/extra';
+  if (fs.existsSync(extraBase)) {
+    for (const entry of fs.readdirSync(extraBase)) {
+      const fullPath = path.join(extraBase, entry);
+      if (fs.statSync(fullPath).isDirectory()) {
+        extraDirs.push(fullPath);
+      }
+    }
+  }
+  if (extraDirs.length > 0) {
+    log(`Additional directories: ${extraDirs.join(', ')}`);
+  }
+
+  return {
+    model: process.env.CLAUDE_MODEL || undefined,
+    cwd: '/workspace/group',
+    additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
+    resume: overrides.sessionId,
+    resumeSessionAt: overrides.resumeAt,
+    systemPrompt: globalClaudeMd
+      ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
+      : undefined,
+    allowedTools: [
+      'Bash',
+      'Read', 'Write', 'Edit', 'Glob', 'Grep',
+      'WebSearch', 'WebFetch',
+      'Task', 'TaskOutput', 'TaskStop',
+      'TeamCreate', 'TeamDelete', 'SendMessage',
+      'TodoWrite', 'ToolSearch', 'Skill',
+      'NotebookEdit',
+      'mcp__nanoclaw__*'
+    ],
+    env: sdkEnv,
+    permissionMode: overrides.permissionMode as 'bypassPermissions' | 'plan',
+    allowDangerouslySkipPermissions: true,
+    settingSources: ['project', 'user'] as Array<'project' | 'user'>,
+    mcpServers: {
+      nanoclaw: {
+        command: 'node',
+        args: [mcpServerPath],
+        env: {
+          NANOCLAW_CHAT_JID: containerInput.chatJid,
+          NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
+          NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+        },
+      },
+    },
+    hooks: {
+      PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
+    },
+  };
+}
+
+/** Iterate a single SDK query, streaming results via writeOutput. */
+async function iterateQuery(
+  stream: MessageStream,
+  options: ReturnType<typeof buildQueryOptions>,
+): Promise<{ newSessionId?: string; lastAssistantUuid?: string; planResult?: string }> {
+  let newSessionId: string | undefined;
+  let lastAssistantUuid: string | undefined;
+  let planResult: string | undefined;
+  let messageCount = 0;
+  let resultCount = 0;
+
+  for await (const message of query({ prompt: stream, options })) {
+    messageCount++;
+    const msgType = message.type === 'system' ? `system/${(message as { subtype?: string }).subtype}` : message.type;
+    log(`[msg #${messageCount}] type=${msgType}`);
+
+    if (message.type === 'assistant' && 'uuid' in message) {
+      lastAssistantUuid = (message as { uuid: string }).uuid;
+    }
+
+    if (message.type === 'system' && message.subtype === 'init') {
+      newSessionId = message.session_id;
+      log(`Session initialized: ${newSessionId}`);
+    }
+
+    if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
+      const tn = message as { task_id: string; status: string; summary: string };
+      log(`Task notification: task=${tn.task_id} status=${tn.status} summary=${tn.summary}`);
+    }
+
+    if (message.type === 'result') {
+      resultCount++;
+      const textResult = 'result' in message ? (message as { result?: string }).result : null;
+      log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
+      planResult = textResult || undefined;
+      writeOutput({
+        status: 'success',
+        result: textResult || null,
+        newSessionId
+      });
+    }
+  }
+
+  log(`Query phase done. Messages: ${messageCount}, results: ${resultCount}`);
+  return { newSessionId, lastAssistantUuid, planResult };
+}
+
 /**
  * Run a single query and stream results via writeOutput.
  * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
  * allowing agent teams subagents to run to completion.
  * Also pipes IPC messages into the stream during the query.
+ *
+ * When planMode is true, runs two phases:
+ *   Phase 1 (plan):   permissionMode='plan' — read-only, generates plan
+ *   Phase 2 (execute): permissionMode='bypassPermissions' — resume same session, execute plan
  */
 async function runQuery(
   prompt: string,
@@ -385,105 +510,51 @@ async function runQuery(
 
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
-  let messageCount = 0;
-  let resultCount = 0;
 
-  // Load global CLAUDE.md as additional system context (shared across all groups)
-  const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
-  let globalClaudeMd: string | undefined;
-  if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
-    globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
-  }
+  if (containerInput.planMode) {
+    // ---- Phase 1: Plan (read-only) ----
+    log('Plan mode: starting phase 1 (plan)');
+    const planOptions = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
+      sessionId,
+      resumeAt,
+      permissionMode: 'plan',
+    });
+    const phase1 = await iterateQuery(stream, planOptions);
+    newSessionId = phase1.newSessionId || newSessionId;
+    lastAssistantUuid = phase1.lastAssistantUuid;
 
-  // Discover additional directories mounted at /workspace/extra/*
-  // These are passed to the SDK so their CLAUDE.md files are loaded automatically
-  const extraDirs: string[] = [];
-  const extraBase = '/workspace/extra';
-  if (fs.existsSync(extraBase)) {
-    for (const entry of fs.readdirSync(extraBase)) {
-      const fullPath = path.join(extraBase, entry);
-      if (fs.statSync(fullPath).isDirectory()) {
-        extraDirs.push(fullPath);
-      }
+    if (closedDuringQuery) {
+      ipcPolling = false;
+      return { newSessionId, lastAssistantUuid, closedDuringQuery };
     }
-  }
-  if (extraDirs.length > 0) {
-    log(`Additional directories: ${extraDirs.join(', ')}`);
-  }
 
-  for await (const message of query({
-    prompt: stream,
-    options: {
-      model: process.env.CLAUDE_MODEL || undefined,
-      cwd: '/workspace/group',
-      additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
-      resume: sessionId,
-      resumeSessionAt: resumeAt,
-      systemPrompt: globalClaudeMd
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
-        : undefined,
-      allowedTools: [
-        'Bash',
-        'Read', 'Write', 'Edit', 'Glob', 'Grep',
-        'WebSearch', 'WebFetch',
-        'Task', 'TaskOutput', 'TaskStop',
-        'TeamCreate', 'TeamDelete', 'SendMessage',
-        'TodoWrite', 'ToolSearch', 'Skill',
-        'NotebookEdit',
-        'mcp__nanoclaw__*'
-      ],
-      env: sdkEnv,
+    // ---- Phase 2: Execute (resume same session, full permissions) ----
+    log('Plan mode: starting phase 2 (execute)');
+    const execStream = new MessageStream();
+    execStream.push('用户已确认方案，请按照计划执行代码实现。严格按照之前的方案逐步修改代码，完成后提交并 push 工作分支，最后生成交付文档。');
+
+    const execOptions = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
+      sessionId: newSessionId || sessionId,
+      resumeAt: lastAssistantUuid,
       permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      settingSources: ['project', 'user'],
-      mcpServers: {
-        nanoclaw: {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            NANOCLAW_CHAT_JID: containerInput.chatJid,
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-            NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-          },
-        },
-      },
-      hooks: {
-        PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
-      },
-    }
-  })) {
-    messageCount++;
-    const msgType = message.type === 'system' ? `system/${(message as { subtype?: string }).subtype}` : message.type;
-    log(`[msg #${messageCount}] type=${msgType}`);
-
-    if (message.type === 'assistant' && 'uuid' in message) {
-      lastAssistantUuid = (message as { uuid: string }).uuid;
-    }
-
-    if (message.type === 'system' && message.subtype === 'init') {
-      newSessionId = message.session_id;
-      log(`Session initialized: ${newSessionId}`);
-    }
-
-    if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
-      const tn = message as { task_id: string; status: string; summary: string };
-      log(`Task notification: task=${tn.task_id} status=${tn.status} summary=${tn.summary}`);
-    }
-
-    if (message.type === 'result') {
-      resultCount++;
-      const textResult = 'result' in message ? (message as { result?: string }).result : null;
-      log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
-      writeOutput({
-        status: 'success',
-        result: textResult || null,
-        newSessionId
-      });
-    }
+    });
+    const phase2 = await iterateQuery(execStream, execOptions);
+    newSessionId = phase2.newSessionId || newSessionId;
+    lastAssistantUuid = phase2.lastAssistantUuid;
+  } else {
+    // ---- Normal mode (unchanged) ----
+    const options = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
+      sessionId,
+      resumeAt,
+      permissionMode: 'bypassPermissions',
+    });
+    const result = await iterateQuery(stream, options);
+    newSessionId = result.newSessionId || newSessionId;
+    lastAssistantUuid = result.lastAssistantUuid;
   }
 
   ipcPolling = false;
-  log(`Query done. Messages: ${messageCount}, results: ${resultCount}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
+  log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
   return { newSessionId, lastAssistantUuid, closedDuringQuery };
 }
 
@@ -554,7 +625,7 @@ async function main(): Promise<void> {
           env: sdkEnv,
           permissionMode: 'bypassPermissions' as const,
           allowDangerouslySkipPermissions: true,
-          settingSources: ['project', 'user'] as const,
+          settingSources: ['project', 'user'] as Array<'project' | 'user'>,
           hooks: {
             PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
           },

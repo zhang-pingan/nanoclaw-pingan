@@ -558,6 +558,206 @@ server.tool(
   },
 );
 
+// --- Workflow tools (main group only) ---
+
+if (isMain) {
+  server.tool(
+    'create_workflow',
+    `创建开发测试流程。当用户提出新需求开发时使用 start_from='dev'，当用户要求对已完成的需求发起自动化测试时使用 start_from='testing'。
+
+流程会自动驱动：开发 → 确认 → 部署预发 → 测试 → 通过/修复循环。`,
+    {
+      name: z.string().describe('需求名称'),
+      service: z.string().describe('服务名称（对应 services.json 中的 key）'),
+      start_from: z.enum(['dev', 'testing']).describe("'dev'=从开发开始（委派feishu_dev），'testing'=从测试开始（读取已有交付文档）"),
+    },
+    async (args) => {
+      const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const data = {
+        type: 'create_workflow',
+        name: args.name,
+        service: args.service,
+        start_from: args.start_from,
+        requestId,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      };
+
+      writeIpcFile(TASKS_DIR, data);
+
+      // Poll for result
+      const resultsDir = path.join(IPC_DIR, 'workflow-results');
+      const resultPath = path.join(resultsDir, `${requestId}.json`);
+      const maxWaitMs = 10000;
+      const pollMs = 300;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        if (fs.existsSync(resultPath)) {
+          try {
+            const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+            fs.unlinkSync(resultPath);
+            if (result.error) {
+              return {
+                content: [{ type: 'text' as const, text: `流程创建失败: ${result.error}` }],
+                isError: true,
+              };
+            }
+            return {
+              content: [{ type: 'text' as const, text: `流程已创建。Workflow ID: ${result.workflowId}\n\n流程将自动推进，进展消息会发送到群内。` }],
+            };
+          } catch (err) {
+            return {
+              content: [{ type: 'text' as const, text: `流程创建结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            };
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: '流程创建请求已发送，但等待确认超时。' }],
+      };
+    },
+  );
+
+  server.tool(
+    'approve_workflow',
+    '确认启动自动化测试流程。当用户确认开始测试时调用。流程会自动委派 feishu_ops 部署预发环境。',
+    {
+      workflow_id: z.string().describe('流程 ID（格式：wf-xxx）'),
+    },
+    async (args) => {
+      const requestId = `wf-approve-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const data = {
+        type: 'approve_workflow',
+        workflow_id: args.workflow_id,
+        requestId,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      };
+
+      writeIpcFile(TASKS_DIR, data);
+
+      // Poll for result
+      const resultsDir = path.join(IPC_DIR, 'workflow-results');
+      const resultPath = path.join(resultsDir, `${requestId}.json`);
+      const maxWaitMs = 10000;
+      const pollMs = 300;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        if (fs.existsSync(resultPath)) {
+          try {
+            const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+            fs.unlinkSync(resultPath);
+            if (result.error) {
+              return {
+                content: [{ type: 'text' as const, text: `流程确认失败: ${result.error}` }],
+                isError: true,
+              };
+            }
+            return {
+              content: [{ type: 'text' as const, text: `流程 ${args.workflow_id} 已确认，正在委派部署预发环境。` }],
+            };
+          } catch (err) {
+            return {
+              content: [{ type: 'text' as const, text: `确认结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            };
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: '确认请求已发送，但等待确认超时。' }],
+      };
+    },
+  );
+
+  server.tool(
+    'list_workflows',
+    '查看所有开发测试流程的状态。显示活跃的流程及其当前阶段。',
+    {},
+    async () => {
+      const requestId = `wf-list-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const data = {
+        type: 'list_workflows',
+        requestId,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      };
+
+      writeIpcFile(TASKS_DIR, data);
+
+      // Poll for result
+      const resultsDir = path.join(IPC_DIR, 'workflow-results');
+      const resultPath = path.join(resultsDir, `${requestId}.json`);
+      const maxWaitMs = 10000;
+      const pollMs = 300;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        if (fs.existsSync(resultPath)) {
+          try {
+            const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+            fs.unlinkSync(resultPath);
+
+            const workflows = result.workflows || [];
+            if (workflows.length === 0) {
+              return {
+                content: [{ type: 'text' as const, text: '当前没有活跃的流程。' }],
+              };
+            }
+
+            const statusLabels: Record<string, string> = {
+              dev: '🔧 开发中',
+              awaiting_confirm: '⏳ 待确认',
+              ops_deploy: '🚀 部署中',
+              testing: '🧪 测试中',
+              fixing: '🔨 修复中',
+              passed: '✅ 已通过',
+              ops_failed: '❌ 部署失败',
+            };
+
+            const formatted = workflows
+              .map(
+                (w: {
+                  id: string;
+                  name: string;
+                  service: string;
+                  status: string;
+                  round: number;
+                  branch: string;
+                  created_at: string;
+                }) =>
+                  `- [${w.id}] ${w.name} (${w.service}) — ${statusLabels[w.status] || w.status}${w.round > 0 ? ` Round ${w.round}` : ''}\n  分支: ${w.branch || 'N/A'} | 创建: ${w.created_at}`,
+              )
+              .join('\n');
+
+            return {
+              content: [{ type: 'text' as const, text: `活跃流程:\n${formatted}` }],
+            };
+          } catch (err) {
+            return {
+              content: [{ type: 'text' as const, text: `流程列表获取失败: ${err instanceof Error ? err.message : String(err)}` }],
+            };
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: '获取流程列表超时，请稍后重试。' }],
+        isError: true,
+      };
+    },
+  );
+}
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

@@ -49,8 +49,12 @@ import {
   storeMessage,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
-import { resolveGroupFolderPath } from './group-folder.js';
+import {
+  resolveGroupFolderPath,
+  resolveGroupIpcPath,
+} from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
+import { initWorkflow } from './workflow.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -415,6 +419,20 @@ async function runAgent(
       }
     : undefined;
 
+  // Check for plan_mode marker (written by workflow engine)
+  let planMode = false;
+  const planModeMarker = path.join(
+    resolveGroupIpcPath(group.folder),
+    'plan_mode',
+  );
+  if (fs.existsSync(planModeMarker)) {
+    planMode = true;
+    try {
+      fs.unlinkSync(planModeMarker);
+    } catch { /* ignore */ }
+    logger.info({ group: group.name }, 'Plan mode activated for this run');
+  }
+
   try {
     const output = await runContainerAgent(
       group,
@@ -424,6 +442,7 @@ async function runAgent(
         groupFolder: group.folder,
         chatJid,
         isMain,
+        planMode,
         assistantName: ASSISTANT_NAME,
       },
       (proc, containerName) =>
@@ -859,6 +878,10 @@ async function main(): Promise<void> {
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),
+    enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
+  });
+  initWorkflow({
+    registeredGroups: () => registeredGroups,
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
   });
   queue.setProcessMessagesFn(processGroupMessages);

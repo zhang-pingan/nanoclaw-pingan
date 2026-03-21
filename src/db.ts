@@ -11,6 +11,7 @@ import {
   RegisteredGroup,
   ScheduledTask,
   TaskRunLog,
+  Workflow,
 } from './types.js';
 
 let db: Database.Database;
@@ -143,6 +144,25 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_delegations_source ON delegations(source_jid, status);
     CREATE INDEX IF NOT EXISTS idx_delegations_target ON delegations(target_jid, status);
+  `);
+
+  // Add workflows table if it doesn't exist (migration for existing DBs)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS workflows (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      service TEXT NOT NULL,
+      branch TEXT DEFAULT '',
+      deliverable TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'dev',
+      current_delegation_id TEXT DEFAULT '',
+      round INTEGER DEFAULT 0,
+      source_jid TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status);
+    CREATE INDEX IF NOT EXISTS idx_workflows_delegation ON workflows(current_delegation_id);
   `);
 
   // Add channel and is_group columns if they don't exist (migration for existing DBs)
@@ -774,6 +794,88 @@ export function getDelegationsByTarget(targetFolder: string): Delegation[] {
       `SELECT * FROM delegations WHERE target_folder = ? ORDER BY created_at DESC`,
     )
     .all(targetFolder) as Delegation[];
+}
+
+// --- Workflow accessors ---
+
+export function createWorkflow(workflow: Workflow): void {
+  db.prepare(
+    `INSERT INTO workflows (id, name, service, branch, deliverable, status, current_delegation_id, round, source_jid, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    workflow.id,
+    workflow.name,
+    workflow.service,
+    workflow.branch,
+    workflow.deliverable,
+    workflow.status,
+    workflow.current_delegation_id,
+    workflow.round,
+    workflow.source_jid,
+    workflow.created_at,
+    workflow.updated_at,
+  );
+}
+
+export function getWorkflow(id: string): Workflow | undefined {
+  return db.prepare('SELECT * FROM workflows WHERE id = ?').get(id) as
+    | Workflow
+    | undefined;
+}
+
+export function updateWorkflow(
+  id: string,
+  updates: Partial<
+    Pick<
+      Workflow,
+      'branch' | 'deliverable' | 'status' | 'current_delegation_id' | 'round'
+    >
+  >,
+): void {
+  const fields: string[] = ['updated_at = ?'];
+  const values: unknown[] = [new Date().toISOString()];
+
+  if (updates.branch !== undefined) {
+    fields.push('branch = ?');
+    values.push(updates.branch);
+  }
+  if (updates.deliverable !== undefined) {
+    fields.push('deliverable = ?');
+    values.push(updates.deliverable);
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.current_delegation_id !== undefined) {
+    fields.push('current_delegation_id = ?');
+    values.push(updates.current_delegation_id);
+  }
+  if (updates.round !== undefined) {
+    fields.push('round = ?');
+    values.push(updates.round);
+  }
+
+  values.push(id);
+  db.prepare(`UPDATE workflows SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+}
+
+export function getWorkflowByDelegation(
+  delegationId: string,
+): Workflow | undefined {
+  return db
+    .prepare('SELECT * FROM workflows WHERE current_delegation_id = ?')
+    .get(delegationId) as Workflow | undefined;
+}
+
+export function getAllActiveWorkflows(): Workflow[] {
+  return db
+    .prepare(
+      `SELECT * FROM workflows WHERE status NOT IN ('passed', 'ops_failed') ORDER BY created_at DESC`,
+    )
+    .all() as Workflow[];
 }
 
 // --- Full-text search ---

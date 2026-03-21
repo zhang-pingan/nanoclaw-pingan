@@ -1,0 +1,7 @@
+{
+  "global": ["agent-browser"],
+  "feishu_dev": ["dev-requirement", "dev-bugfix","devops"],
+  "feishu_ops": ["ops-staging-deploy"],
+  "feishu_test": ["test-requirement"],
+  "feishu_main": ["macos"]
+}

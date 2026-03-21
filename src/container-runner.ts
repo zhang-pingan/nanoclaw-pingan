@@ -50,6 +50,7 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  planMode?: boolean;
 }
 
 export interface ContainerOutput {
@@ -156,12 +157,31 @@ function buildVolumeMounts(
   }
 
   // Sync skills from container/skills/ into each group's .claude/skills/
+  // Uses skills.json to determine which skills go to which group:
+  //   "global" → all groups, "{folder}" → only that group
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
   const skillsDst = path.join(groupSessionsDir, 'skills');
   if (fs.existsSync(skillsSrc)) {
+    const skillsConfigPath = path.join(skillsSrc, 'skills.json');
+    let allowedSkills: Set<string> | null = null; // null = copy all (fallback)
+    if (fs.existsSync(skillsConfigPath)) {
+      try {
+        const skillsConfig = JSON.parse(
+          fs.readFileSync(skillsConfigPath, 'utf-8'),
+        ) as Record<string, string[]>;
+        allowedSkills = new Set<string>(skillsConfig['global'] || []);
+        const groupSkills = skillsConfig[group.folder];
+        if (groupSkills) {
+          for (const s of groupSkills) allowedSkills.add(s);
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to parse skills.json, syncing all skills');
+      }
+    }
     for (const skillDir of fs.readdirSync(skillsSrc)) {
       const srcDir = path.join(skillsSrc, skillDir);
       if (!fs.statSync(srcDir).isDirectory()) continue;
+      if (allowedSkills && !allowedSkills.has(skillDir)) continue;
       const dstDir = path.join(skillsDst, skillDir);
       fs.cpSync(srcDir, dstDir, { recursive: true });
     }

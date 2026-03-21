@@ -92,6 +92,29 @@ export interface Delegation {
   updated_at: string;
 }
 
+export type WorkflowStatus =
+  | 'dev'
+  | 'awaiting_confirm'
+  | 'ops_deploy'
+  | 'testing'
+  | 'fixing'
+  | 'passed'
+  | 'ops_failed';
+
+export interface Workflow {
+  id: string;
+  name: string;
+  service: string;
+  branch: string;
+  deliverable: string;
+  status: WorkflowStatus;
+  current_delegation_id: string;
+  round: number;
+  source_jid: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Channel abstraction ---
 
 export interface Channel {
