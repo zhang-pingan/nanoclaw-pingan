@@ -49,10 +49,7 @@ import {
   storeMessage,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
-import {
-  resolveGroupFolderPath,
-  resolveGroupIpcPath,
-} from './group-folder.js';
+import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { initWorkflow } from './workflow.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
@@ -429,7 +426,9 @@ async function runAgent(
     planMode = true;
     try {
       fs.unlinkSync(planModeMarker);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     logger.info({ group: group.name }, 'Plan mode activated for this run');
   }
 

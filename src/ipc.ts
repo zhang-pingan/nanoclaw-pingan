@@ -820,10 +820,7 @@ export async function processTaskIpc(
           'workflow-results',
         );
         fs.mkdirSync(resultsDir, { recursive: true });
-        const responsePath = path.join(
-          resultsDir,
-          `${data.requestId}.json`,
-        );
+        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
         const tempPath = `${responsePath}.tmp`;
         fs.writeFileSync(
           tempPath,
@@ -867,10 +864,7 @@ export async function processTaskIpc(
           'workflow-results',
         );
         fs.mkdirSync(resultsDir, { recursive: true });
-        const responsePath = path.join(
-          resultsDir,
-          `${data.requestId}.json`,
-        );
+        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
         const tempPath = `${responsePath}.tmp`;
         fs.writeFileSync(
           tempPath,
@@ -908,10 +902,7 @@ export async function processTaskIpc(
           'workflow-results',
         );
         fs.mkdirSync(resultsDir, { recursive: true });
-        const responsePath = path.join(
-          resultsDir,
-          `${data.requestId}.json`,
-        );
+        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
         const tempPath = `${responsePath}.tmp`;
         fs.writeFileSync(tempPath, JSON.stringify({ workflows }));
         fs.renameSync(tempPath, responsePath);

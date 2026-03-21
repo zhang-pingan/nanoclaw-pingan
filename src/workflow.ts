@@ -137,7 +137,9 @@ function delegateTo(
   const groups = getDeps().registeredGroups();
   const targetJid = findJidByFolder(targetFolder, groups);
   if (!targetJid) {
-    throw new Error(`Workflow: target group folder "${targetFolder}" not found`);
+    throw new Error(
+      `Workflow: target group folder "${targetFolder}" not found`,
+    );
   }
   const targetGroup = groups[targetJid];
 
@@ -175,12 +177,7 @@ function delegateTo(
 function readLatestDeliverable(
   service: string,
 ): { content: string; branch: string; fileName: string } | null {
-  const delivDir = path.join(
-    GROUPS_DIR,
-    'feishu_dev',
-    'deliverables',
-    service,
-  );
+  const delivDir = path.join(GROUPS_DIR, 'feishu_dev', 'deliverables', service);
   if (!fs.existsSync(delivDir)) return null;
 
   const files = fs
@@ -300,7 +297,9 @@ export function approveWorkflow(workflowId: string): { error?: string } {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
   if (workflow.status !== 'awaiting_confirm') {
-    return { error: `流程 ${workflowId} 当前状态为 ${workflow.status}，不是 awaiting_confirm` };
+    return {
+      error: `流程 ${workflowId} 当前状态为 ${workflow.status}，不是 awaiting_confirm`,
+    };
   }
 
   const mainFolder =
@@ -416,7 +415,10 @@ export function onDelegationComplete(delegationId: string): void {
           current_delegation_id: delegId,
         });
       } catch (err) {
-        logger.error({ err, workflowId: workflow.id }, 'Failed to delegate test task');
+        logger.error(
+          { err, workflowId: workflow.id },
+          'Failed to delegate test task',
+        );
         notifyMain(
           `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派测试任务失败。`,
         );
@@ -464,7 +466,10 @@ export function onDelegationComplete(delegationId: string): void {
           round: newRound,
         });
       } catch (err) {
-        logger.error({ err, workflowId: workflow.id }, 'Failed to delegate fix task');
+        logger.error(
+          { err, workflowId: workflow.id },
+          'Failed to delegate fix task',
+        );
         notifyMain(
           `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派修复任务失败。`,
         );
@@ -492,7 +497,10 @@ export function onDelegationComplete(delegationId: string): void {
           current_delegation_id: delegId,
         });
       } catch (err) {
-        logger.error({ err, workflowId: workflow.id }, 'Failed to delegate redeploy task');
+        logger.error(
+          { err, workflowId: workflow.id },
+          'Failed to delegate redeploy task',
+        );
         notifyMain(
           `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派重新部署任务失败。`,
         );
