@@ -1,0 +1,267 @@
+/**
+ * Workflow Configuration — types, loader, template renderer, validator.
+ *
+ * Workflow type definitions live in container/skills/workflows.json.
+ * The engine (workflow.ts) reads them once at init and drives state
+ * transitions generically instead of hard-coding each workflow type.
+ */
+import fs from 'fs';
+import path from 'path';
+
+import { logger } from './logger.js';
+
+// -------------------------------------------------------
+// Config types
+// -------------------------------------------------------
+
+export interface StateTransition {
+  target: string;
+  /** Role to delegate to (for delegation states). */
+  role?: string;
+  /** Skill name for the delegation. */
+  skill?: string;
+  /** Task template with {{var}} placeholders. */
+  task_template?: string;
+  /** Whether to enable plan_mode for the delegation. */
+  plan_mode?: boolean;
+  /** Read the latest deliverable doc before delegating. */
+  read_deliverable?: boolean;
+  /** Which role's deliverable folder to read from (defaults to 'dev'). */
+  read_deliverable_role?: string;
+  /** Increment the workflow round counter. */
+  increment_round?: boolean;
+  /** Notification template sent to main group. */
+  notify?: string;
+  /** Card key to send after transition (references cards map). */
+  card?: string;
+}
+
+export interface StateConfig {
+  /** State type: delegation, confirmation, terminal, system. */
+  type: 'delegation' | 'confirmation' | 'terminal' | 'system';
+
+  // --- delegation fields ---
+  role?: string;
+  skill?: string;
+  plan_mode?: boolean;
+  task_template?: string;
+  on_complete?: {
+    success: StateTransition;
+    failure: StateTransition;
+  };
+
+  // --- confirmation fields ---
+  card?: string;
+  on_approve?: StateTransition;
+}
+
+export interface RoleConfig {
+  /** Key used to look up this role's group folder from skills.json. */
+  skill_to_role_key: string;
+}
+
+export interface EntryPointConfig {
+  /** Initial state when entering via this entry point. */
+  state: string;
+  /** Whether the entry point requires an existing deliverable. */
+  requires_deliverable?: boolean;
+}
+
+export interface CardActionConfig {
+  label: string;
+  type?: 'primary' | 'danger';
+  action: string;
+}
+
+export interface CardConfig {
+  header_template: string;
+  header_color?: string;
+  body_template: string;
+  actions: string[];
+}
+
+export interface WorkflowTypeConfig {
+  name: string;
+  roles: Record<string, RoleConfig>;
+  entry_points: Record<string, EntryPointConfig>;
+  states: Record<string, StateConfig>;
+  status_labels: Record<string, string>;
+  cards: Record<string, CardConfig>;
+}
+
+// -------------------------------------------------------
+// Loader
+// -------------------------------------------------------
+
+let loadedConfigs: Record<string, WorkflowTypeConfig> | null = null;
+
+export function loadWorkflowConfigs(): Record<string, WorkflowTypeConfig> | null {
+  const configPath = path.join(
+    process.cwd(),
+    'container',
+    'skills',
+    'workflows.json',
+  );
+
+  if (!fs.existsSync(configPath)) {
+    logger.info('Workflow configs not found at container/skills/workflows.json — workflow engine disabled');
+    return null;
+  }
+
+  try {
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const configs = raw as Record<string, WorkflowTypeConfig>;
+
+    for (const [typeName, config] of Object.entries(configs)) {
+      const errors = validateConfig(typeName, config);
+      if (errors.length > 0) {
+        logger.error(
+          { typeName, errors },
+          'Workflow config validation failed',
+        );
+        return null;
+      }
+    }
+
+    loadedConfigs = configs;
+    logger.info(
+      { types: Object.keys(configs) },
+      'Workflow configs loaded',
+    );
+    return configs;
+  } catch (err) {
+    logger.error(
+      { err },
+      'Failed to parse workflows.json',
+    );
+    return null;
+  }
+}
+
+export function getWorkflowConfigs(): Record<string, WorkflowTypeConfig> | null {
+  return loadedConfigs;
+}
+
+export function getWorkflowTypeConfig(type: string): WorkflowTypeConfig | undefined {
+  return loadedConfigs?.[type];
+}
+
+// -------------------------------------------------------
+// Template renderer
+// -------------------------------------------------------
+
+export interface TemplateVars {
+  name?: string;
+  service?: string;
+  branch?: string;
+  id?: string;
+  round?: number;
+  deliverable?: string;
+  deliverable_content?: string;
+  delegation_result?: string;
+  result_summary?: string;
+  [key: string]: string | number | undefined;
+}
+
+/**
+ * Render a template string, replacing {{key}} placeholders with values.
+ * Also supports {{role_folder:ROLE_NAME}} to insert a role's group folder.
+ */
+export function renderTemplate(
+  template: string,
+  vars: TemplateVars,
+  roleFolders?: Record<string, string>,
+): string {
+  return template.replace(/\{\{(\w+(?::\w+)?)\}\}/g, (_match, key: string) => {
+    if (key.startsWith('role_folder:') && roleFolders) {
+      const roleName = key.slice('role_folder:'.length);
+      return roleFolders[roleName] || '';
+    }
+    const val = vars[key];
+    return val !== undefined ? String(val) : '';
+  });
+}
+
+// -------------------------------------------------------
+// Validator
+// -------------------------------------------------------
+
+export function validateConfig(
+  typeName: string,
+  config: WorkflowTypeConfig,
+): string[] {
+  const errors: string[] = [];
+  const stateNames = new Set(Object.keys(config.states));
+
+  // Check that all transition targets reference existing states
+  for (const [stateName, state] of Object.entries(config.states)) {
+    if (state.on_complete) {
+      for (const [outcome, transition] of Object.entries(state.on_complete)) {
+        if (!stateNames.has(transition.target)) {
+          errors.push(
+            `${typeName}.states.${stateName}.on_complete.${outcome}.target "${transition.target}" does not exist`,
+          );
+        }
+        // Check role references
+        if (transition.role && !config.roles[transition.role]) {
+          errors.push(
+            `${typeName}.states.${stateName}.on_complete.${outcome}.role "${transition.role}" not defined in roles`,
+          );
+        }
+      }
+    }
+    if (state.on_approve) {
+      if (!stateNames.has(state.on_approve.target)) {
+        errors.push(
+          `${typeName}.states.${stateName}.on_approve.target "${state.on_approve.target}" does not exist`,
+        );
+      }
+      if (state.on_approve.role && !config.roles[state.on_approve.role]) {
+        errors.push(
+          `${typeName}.states.${stateName}.on_approve.role "${state.on_approve.role}" not defined in roles`,
+        );
+      }
+    }
+    // Check card references
+    if (state.card && !config.cards[state.card]) {
+      errors.push(
+        `${typeName}.states.${stateName}.card "${state.card}" not defined in cards`,
+      );
+    }
+    // Check role references in delegation states
+    if (state.type === 'delegation' && state.role && !config.roles[state.role]) {
+      errors.push(
+        `${typeName}.states.${stateName}.role "${state.role}" not defined in roles`,
+      );
+    }
+  }
+
+  // Check entry points reference existing states
+  for (const [epName, ep] of Object.entries(config.entry_points)) {
+    if (!stateNames.has(ep.state)) {
+      errors.push(
+        `${typeName}.entry_points.${epName}.state "${ep.state}" does not exist`,
+      );
+    }
+  }
+
+  // Check card references in transitions
+  for (const [stateName, state] of Object.entries(config.states)) {
+    if (state.on_complete) {
+      for (const [outcome, transition] of Object.entries(state.on_complete)) {
+        if (transition.card && !config.cards[transition.card]) {
+          errors.push(
+            `${typeName}.states.${stateName}.on_complete.${outcome}.card "${transition.card}" not defined in cards`,
+          );
+        }
+      }
+    }
+    if (state.on_approve?.card && !config.cards[state.on_approve.card]) {
+      errors.push(
+        `${typeName}.states.${stateName}.on_approve.card "${state.on_approve.card}" not defined in cards`,
+      );
+    }
+  }
+
+  return errors;
+}

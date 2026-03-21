@@ -6,6 +6,7 @@ import { CronExpressionParser } from 'cron-parser';
 import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
   createNewWorkflow,
+  getAvailableWorkflowTypes,
   listWorkflows,
   onDelegationComplete as onWorkflowDelegationComplete,
   sendWorkflowListCard,
@@ -801,9 +802,17 @@ export async function processTaskIpc(
       }
 
       const startFrom =
-        (data as { start_from?: string }).start_from === 'testing'
-          ? 'testing'
-          : 'dev';
+        (data as { start_from?: string }).start_from;
+      const workflowType =
+        (data as { workflow_type?: string }).workflow_type;
+
+      if (!startFrom || !workflowType) {
+        logger.warn(
+          { sourceGroup },
+          'create_workflow missing start_from or workflow_type',
+        );
+        break;
+      }
 
       // Find the source JID (main group's JID)
       const mainJid =
@@ -815,7 +824,8 @@ export async function processTaskIpc(
         name: data.name as string,
         service: data.service as string,
         sourceJid: mainJid,
-        startFrom: startFrom as 'dev' | 'testing',
+        startFrom,
+        workflowType,
       });
 
       // Write result back via IPC response
@@ -884,6 +894,38 @@ export async function processTaskIpc(
       logger.info(
         { sourceGroup, count: workflows.length, cardSent },
         'Workflows listed via IPC',
+      );
+      break;
+    }
+
+    case 'list_workflow_types': {
+      if (!isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized list_workflow_types attempt blocked',
+        );
+        break;
+      }
+
+      const types = getAvailableWorkflowTypes();
+
+      if (data.requestId) {
+        const resultsDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'workflow-results',
+        );
+        fs.mkdirSync(resultsDir, { recursive: true });
+        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
+        const tempPath = `${responsePath}.tmp`;
+        fs.writeFileSync(tempPath, JSON.stringify({ types }));
+        fs.renameSync(tempPath, responsePath);
+      }
+
+      logger.info(
+        { sourceGroup, count: types.length },
+        'Workflow types listed via IPC',
       );
       break;
     }

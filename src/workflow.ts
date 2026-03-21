@@ -1,21 +1,13 @@
 /**
- * Workflow Engine for NanoClaw
+ * Workflow Engine for NanoClaw — Configuration-Driven
  *
- * State machine: dev → awaiting_confirm → ops_deploy → testing
- *                                                       ├→ passed (terminal)
- *                                                       └→ fixing → ops_deploy → testing (loop)
- *                                          ops_failed (terminal)
- *                                          cancelled (terminal, from any non-terminal state)
- *                                          paused (resumable, from any non-terminal state)
- *
- * awaiting_confirm sends interactive Feishu card with approve/pause/cancel buttons.
- * list_workflows sends card with per-workflow action buttons.
- * Card callbacks route to handleCardAction() → approveWorkflow/cancelWorkflow/pauseWorkflow/resumeWorkflow.
+ * State machine definitions live in container/skills/workflows.json.
+ * This engine reads them at init and drives transitions generically.
  *
  * Role resolution (no hardcoded group names):
  *   1. skills.json "workflow_roles" explicit mapping (if present)
- *   2. Infer from skill assignments: dev-requirement → dev, ops-staging-deploy → ops, test-requirement → test
- *   3. If any role is missing → workflow is disabled, create_workflow returns a friendly message
+ *   2. Infer from skill assignments using each workflow type's roles[].skill_to_role_key
+ *   3. If any role is missing for all types → workflow is disabled
  */
 import fs from 'fs';
 import path from 'path';
@@ -38,31 +30,41 @@ import {
   FeishuCard,
   RegisteredGroup,
   Workflow,
-  WorkflowStatus,
 } from './types.js';
+import {
+  getWorkflowConfigs,
+  getWorkflowTypeConfig,
+  loadWorkflowConfigs,
+  renderTemplate,
+  StateTransition,
+  TemplateVars,
+  WorkflowTypeConfig,
+} from './workflow-config.js';
 
 // -------------------------------------------------------
-// Role resolution
+// Role resolution — per workflow type
 // -------------------------------------------------------
 
-/** Skill → workflow role mapping for auto-detection */
-const SKILL_TO_ROLE: Record<string, 'dev' | 'ops' | 'test'> = {
-  'dev-requirement': 'dev',
-  'ops-staging-deploy': 'ops',
-  'test-requirement': 'test',
-};
-
-interface WorkflowRoles {
-  dev: string; // group folder for dev role
-  ops: string; // group folder for ops role
-  test: string; // group folder for test role
-}
-
-let resolvedRoles: WorkflowRoles | null = null;
+/**
+ * Resolved roles for each workflow type.
+ * Key: workflow type name (e.g. "dev_test")
+ * Value: mapping of role name → group folder (e.g. { dev: "feishu_dev", ops: "feishu_ops" })
+ */
+let allResolvedRoles: Record<string, Record<string, string>> = {};
 let roleResolutionError: string | null = null;
 
-/** Resolve workflow roles from skills.json. Called once at init. */
-function resolveRoles(): void {
+/**
+ * Resolve roles for all configured workflow types from skills.json.
+ * For each workflow type, builds a skill_key → role_name reverse map,
+ * then scans skills.json assignments to find folders.
+ */
+function resolveRolesForAllTypes(): void {
+  const configs = getWorkflowConfigs();
+  if (!configs) {
+    roleResolutionError = 'Workflow 未启用：workflows.json 未加载';
+    return;
+  }
+
   const skillsPath = path.join(
     process.cwd(),
     'container',
@@ -90,55 +92,77 @@ function resolveRoles(): void {
   const explicit = skillsConfig['workflow_roles'] as
     | Record<string, string>
     | undefined;
-  const roles: Partial<WorkflowRoles> = {};
 
-  if (explicit && typeof explicit === 'object') {
-    if (explicit.dev) roles.dev = explicit.dev;
-    if (explicit.ops) roles.ops = explicit.ops;
-    if (explicit.test) roles.test = explicit.test;
-  }
-
-  // Priority 2: infer from skill assignments
+  // Build a global skill_key → folder mapping from skills.json assignments
+  const skillKeyToFolder: Record<string, string> = {};
   for (const [folder, skills] of Object.entries(skillsConfig)) {
     if (folder === 'global' || folder === 'workflow_roles') continue;
     if (!Array.isArray(skills)) continue;
     for (const skill of skills) {
-      const role = SKILL_TO_ROLE[skill];
-      if (role && !roles[role]) {
-        roles[role] = folder;
+      if (!skillKeyToFolder[skill]) {
+        skillKeyToFolder[skill] = folder;
       }
     }
   }
 
-  // Check completeness
-  const missing: string[] = [];
-  if (!roles.dev) missing.push('dev (需要 dev-requirement skill)');
-  if (!roles.ops) missing.push('ops (需要 ops-staging-deploy skill)');
-  if (!roles.test) missing.push('test (需要 test-requirement skill)');
+  let anyTypeFullyResolved = false;
 
-  if (missing.length > 0) {
-    roleResolutionError = `Workflow 未启用：缺少角色 ${missing.join(', ')}。请在 skills.json 中配置对应 skill 或添加 workflow_roles。`;
-    logger.info(roleResolutionError);
-    return;
+  for (const [typeName, config] of Object.entries(configs)) {
+    const roles: Record<string, string> = {};
+    const missing: string[] = [];
+
+    for (const [roleName, roleConfig] of Object.entries(config.roles)) {
+      // Priority 1: explicit mapping
+      if (explicit && explicit[roleName]) {
+        roles[roleName] = explicit[roleName];
+        continue;
+      }
+      // Priority 2: infer from skill assignments
+      const folder = skillKeyToFolder[roleConfig.skill_to_role_key];
+      if (folder) {
+        roles[roleName] = folder;
+      } else {
+        missing.push(`${roleName} (需要 ${roleConfig.skill_to_role_key} skill)`);
+      }
+    }
+
+    if (missing.length > 0) {
+      logger.info(
+        { typeName, missing },
+        `Workflow type "${typeName}" 缺少角色: ${missing.join(', ')}`,
+      );
+    } else {
+      allResolvedRoles[typeName] = roles;
+      anyTypeFullyResolved = true;
+      logger.info(
+        { typeName, roles },
+        `Workflow type "${typeName}" roles resolved`,
+      );
+    }
   }
 
-  resolvedRoles = roles as WorkflowRoles;
-  logger.info(
-    {
-      dev: resolvedRoles.dev,
-      ops: resolvedRoles.ops,
-      test: resolvedRoles.test,
-    },
-    'Workflow roles resolved',
-  );
+  if (!anyTypeFullyResolved) {
+    roleResolutionError = `Workflow 未启用：所有 workflow 类型都缺少角色。请在 skills.json 中配置对应 skill 或添加 workflow_roles。`;
+    logger.info(roleResolutionError);
+  }
 }
 
-/** Get resolved roles, or return the error message if not available. */
-function getRoles(): { roles: WorkflowRoles } | { error: string } {
-  if (resolvedRoles) return { roles: resolvedRoles };
+/** Get resolved roles for a specific workflow type. */
+function getRolesForType(
+  workflowType: string,
+): { roles: Record<string, string> } | { error: string } {
+  const roles = allResolvedRoles[workflowType];
+  if (roles) return { roles };
   return {
-    error: roleResolutionError || 'Workflow 未初始化',
+    error:
+      roleResolutionError ||
+      `Workflow type "${workflowType}" 角色未解析或缺少配置`,
   };
+}
+
+/** Check if any workflow type is available. */
+function hasAnyRoles(): boolean {
+  return Object.keys(allResolvedRoles).length > 0;
 }
 
 // -------------------------------------------------------
@@ -155,7 +179,8 @@ let deps: WorkflowDeps | null = null;
 
 export function initWorkflow(d: WorkflowDeps): void {
   deps = d;
-  resolveRoles();
+  loadWorkflowConfigs();
+  resolveRolesForAllTypes();
 }
 
 function getDeps(): WorkflowDeps {
@@ -305,16 +330,14 @@ function delegateTo(
   return delegationId;
 }
 
-/** Read the latest deliverable document from the dev group for a given service. */
+/** Read the latest deliverable document from a role's group folder for a given service. */
 function readLatestDeliverable(
   service: string,
+  roleFolder: string,
 ): { content: string; branch: string; fileName: string } | null {
-  const rolesResult = getRoles();
-  if ('error' in rolesResult) return null;
-
   const delivDir = path.join(
     GROUPS_DIR,
-    rolesResult.roles.dev,
+    roleFolder,
     'deliverables',
     service,
   );
@@ -337,6 +360,158 @@ function readLatestDeliverable(
   return { content, branch, fileName: files[0] };
 }
 
+/** Get terminal state names from a workflow type config. */
+function getTerminalStates(config: WorkflowTypeConfig): string[] {
+  return Object.entries(config.states)
+    .filter(([, s]) => s.type === 'terminal')
+    .map(([name]) => name);
+}
+
+/** Get confirmation state names from a workflow type config. */
+function getConfirmationStates(config: WorkflowTypeConfig): string[] {
+  return Object.entries(config.states)
+    .filter(([, s]) => s.type === 'confirmation')
+    .map(([name]) => name);
+}
+
+/** Get the status label for a workflow. */
+function getStatusLabel(workflow: Workflow): string {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return workflow.status;
+  return config.status_labels[workflow.status] || workflow.status;
+}
+
+/** Build template vars from a workflow + optional delegation result. */
+function buildTemplateVars(
+  workflow: Workflow,
+  extra?: {
+    delegationResult?: string;
+    resultSummary?: string;
+    deliverableContent?: string;
+  },
+): TemplateVars {
+  return {
+    name: workflow.name,
+    service: workflow.service,
+    branch: workflow.branch || 'N/A',
+    id: workflow.id,
+    round: workflow.round,
+    deliverable: workflow.deliverable || 'N/A',
+    deliverable_content: extra?.deliverableContent || '',
+    delegation_result: extra?.delegationResult || '',
+    result_summary: extra?.resultSummary || '',
+  };
+}
+
+// -------------------------------------------------------
+// Generic transition engine
+// -------------------------------------------------------
+
+/**
+ * Apply a state transition defined in the config.
+ * Handles: read_deliverable → increment_round → delegateTo → updateWorkflow → notify → send card
+ */
+function applyTransition(
+  workflow: Workflow,
+  transition: StateTransition,
+  roles: Record<string, string>,
+  extra?: {
+    delegationResult?: string;
+    resultSummary?: string;
+  },
+): void {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return;
+
+  const mainFolder = getMainFolder();
+  const updates: Parameters<typeof updateWorkflow>[1] = {
+    status: transition.target,
+  };
+
+  // 1. Increment round if needed
+  let round = workflow.round;
+  if (transition.increment_round) {
+    round = workflow.round + 1;
+    updates.round = round;
+  }
+
+  // 2. Read deliverable if needed
+  let deliverableContent = '';
+  if (transition.read_deliverable) {
+    const delivRole = transition.read_deliverable_role || 'dev';
+    const delivFolder = roles[delivRole];
+    if (delivFolder) {
+      const deliverable = readLatestDeliverable(workflow.service, delivFolder);
+      if (deliverable) {
+        updates.branch = deliverable.branch;
+        updates.deliverable = deliverable.fileName;
+        deliverableContent = deliverable.content;
+      }
+    }
+  }
+
+  // Build template vars with updated values
+  const vars = buildTemplateVars(
+    { ...workflow, round, branch: (updates.branch as string) || workflow.branch, deliverable: (updates.deliverable as string) || workflow.deliverable },
+    { ...extra, deliverableContent },
+  );
+
+  // 3. Delegate if transition specifies a role + skill
+  const delegateRole = transition.role;
+  const delegateSkill = transition.skill;
+
+  if (delegateRole && delegateSkill && roles[delegateRole]) {
+    const taskContent = transition.task_template
+      ? renderTemplate(transition.task_template, vars, roles)
+      : '';
+
+    try {
+      // Write plan_mode marker if the target state config has plan_mode
+      const targetStateConfig = config.states[transition.target];
+      if (targetStateConfig?.plan_mode) {
+        writePlanModeMarker(roles[delegateRole]);
+      }
+
+      const delegationId = delegateTo(
+        roles[delegateRole],
+        mainFolder,
+        workflow.id,
+        delegateSkill,
+        taskContent,
+      );
+      updates.current_delegation_id = delegationId;
+    } catch (err) {
+      logger.error(
+        { err, workflowId: workflow.id, role: delegateRole },
+        'Failed to delegate task in transition',
+      );
+      notifyMain(
+        `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派任务失败。`,
+      );
+      return;
+    }
+  } else {
+    // No delegation — clear current_delegation_id
+    updates.current_delegation_id = '';
+  }
+
+  // 4. Update workflow state
+  updateWorkflow(workflow.id, updates);
+
+  // 5. Send notification
+  if (transition.notify) {
+    notifyMain(renderTemplate(transition.notify, vars, roles));
+  }
+
+  // 6. Send card if specified
+  if (transition.card) {
+    const updatedWorkflow = getWorkflow(workflow.id);
+    if (updatedWorkflow) {
+      sendConfigCard(updatedWorkflow, transition.card);
+    }
+  }
+}
+
 // -------------------------------------------------------
 // Public API
 // -------------------------------------------------------
@@ -345,136 +520,173 @@ export interface CreateWorkflowOpts {
   name: string;
   service: string;
   sourceJid: string;
-  startFrom: 'dev' | 'testing';
+  startFrom: string;
+  workflowType: string;
 }
 
 export function createNewWorkflow(opts: CreateWorkflowOpts): {
   workflowId: string;
   error?: string;
 } {
-  // Check if workflow is enabled
-  const rolesResult = getRoles();
+  const workflowType = opts.workflowType;
+
+  // Check if workflow type config exists
+  const config = getWorkflowTypeConfig(workflowType);
+  if (!config) {
+    return {
+      workflowId: '',
+      error: `未知的 workflow 类型: ${workflowType}`,
+    };
+  }
+
+  // Check roles
+  const rolesResult = getRolesForType(workflowType);
   if ('error' in rolesResult) {
     return { workflowId: '', error: rolesResult.error };
   }
   const roles = rolesResult.roles;
 
+  // Find entry point
+  const entryPoint = config.entry_points[opts.startFrom];
+  if (!entryPoint) {
+    return {
+      workflowId: '',
+      error: `Workflow type "${workflowType}" 不支持 start_from="${opts.startFrom}"，可选: ${Object.keys(config.entry_points).join(', ')}`,
+    };
+  }
+
   const workflowId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
   const mainFolder = getMainFolder();
 
-  if (opts.startFrom === 'dev') {
+  // If entry point requires deliverable, read it first
+  if (entryPoint.requires_deliverable) {
+    // Find which role provides deliverables (default to 'dev')
+    const delivFolder = roles['dev'];
+    if (!delivFolder) {
+      return {
+        workflowId,
+        error: `Workflow type "${workflowType}" requires deliverable but dev role not found`,
+      };
+    }
+
+    const deliverable = readLatestDeliverable(opts.service, delivFolder);
+    if (!deliverable) {
+      return {
+        workflowId,
+        error: `未找到服务 ${opts.service} 的交付文档 (groups/${delivFolder}/deliverables/${opts.service}/)`,
+      };
+    }
+
     dbCreateWorkflow({
       id: workflowId,
       name: opts.name,
       service: opts.service,
-      branch: '',
-      deliverable: '',
-      status: 'dev',
+      branch: deliverable.branch,
+      deliverable: deliverable.fileName,
+      status: entryPoint.state,
       current_delegation_id: '',
       round: 0,
       source_jid: opts.sourceJid,
       paused_from: null,
+      workflow_type: workflowType,
       created_at: now,
       updated_at: now,
     });
 
-    try {
-      writePlanModeMarker(roles.dev);
-
-      const delegationId = delegateTo(
-        roles.dev,
-        mainFolder,
-        workflowId,
-        'dev-requirement',
-        `请开发以下需求：\n\n需求名称：${opts.name}\n服务名称：${opts.service}`,
-      );
-      updateWorkflow(workflowId, { current_delegation_id: delegationId });
-    } catch (err) {
-      logger.error({ err, workflowId }, 'Failed to delegate dev task');
-      return {
-        workflowId,
-        error: `委派开发任务失败: ${err instanceof Error ? err.message : String(err)}`,
-      };
+    // If entry state is a confirmation state, send the card
+    const entryStateConfig = config.states[entryPoint.state];
+    if (entryStateConfig?.type === 'confirmation' && entryStateConfig.card) {
+      const createdWorkflow = getWorkflow(workflowId);
+      if (createdWorkflow) {
+        sendConfigCard(createdWorkflow, entryStateConfig.card);
+      }
     }
-
-    notifyMain(
-      `[流程启动] 需求「${opts.name}」开发流程已创建 (${workflowId})，已委派 ${roles.dev} 开始开发。`,
-    );
 
     return { workflowId };
   }
 
-  // startFrom === 'testing'
-  const deliverable = readLatestDeliverable(opts.service);
-  if (!deliverable) {
-    return {
-      workflowId,
-      error: `未找到服务 ${opts.service} 的交付文档 (groups/${roles.dev}/deliverables/${opts.service}/)`,
-    };
-  }
+  // Normal entry: create workflow and delegate to the initial state's role
+  const entryStateConfig = config.states[entryPoint.state];
 
   dbCreateWorkflow({
     id: workflowId,
     name: opts.name,
     service: opts.service,
-    branch: deliverable.branch,
-    deliverable: deliverable.fileName,
-    status: 'awaiting_confirm',
+    branch: '',
+    deliverable: '',
+    status: entryPoint.state,
     current_delegation_id: '',
     round: 0,
     source_jid: opts.sourceJid,
     paused_from: null,
+    workflow_type: workflowType,
     created_at: now,
     updated_at: now,
   });
 
-  const createdWorkflow = getWorkflow(workflowId);
-  if (createdWorkflow) {
-    sendAwaitingConfirmCard(createdWorkflow);
+  // If entry state is a delegation state, delegate immediately
+  if (entryStateConfig?.type === 'delegation' && entryStateConfig.role && entryStateConfig.skill) {
+    const targetFolder = roles[entryStateConfig.role];
+    if (!targetFolder) {
+      return {
+        workflowId,
+        error: `角色 ${entryStateConfig.role} 未找到对应的群组`,
+      };
+    }
+
+    try {
+      if (entryStateConfig.plan_mode) {
+        writePlanModeMarker(targetFolder);
+      }
+
+      const vars = buildTemplateVars(getWorkflow(workflowId)!);
+      const taskContent = entryStateConfig.task_template
+        ? renderTemplate(entryStateConfig.task_template, vars, roles)
+        : '';
+
+      const delegationId = delegateTo(
+        targetFolder,
+        mainFolder,
+        workflowId,
+        entryStateConfig.skill,
+        taskContent,
+      );
+      updateWorkflow(workflowId, { current_delegation_id: delegationId });
+    } catch (err) {
+      logger.error({ err, workflowId }, 'Failed to delegate initial task');
+      return {
+        workflowId,
+        error: `委派初始任务失败: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    notifyMain(
+      `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
+    );
   }
 
   return { workflowId };
 }
 
 export function approveWorkflow(workflowId: string): { error?: string } {
-  const rolesResult = getRoles();
-  if ('error' in rolesResult) return { error: rolesResult.error };
-  const roles = rolesResult.roles;
-
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
-  if (workflow.status !== 'awaiting_confirm') {
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+
+  const stateConfig = config.states[workflow.status];
+  if (!stateConfig || stateConfig.type !== 'confirmation' || !stateConfig.on_approve) {
     return {
-      error: `流程 ${workflowId} 当前状态为 ${workflow.status}，不是 awaiting_confirm`,
+      error: `流程 ${workflowId} 当前状态 ${workflow.status} 不支持确认操作`,
     };
   }
 
-  const mainFolder = getMainFolder();
+  const rolesResult = getRolesForType(workflow.workflow_type);
+  if ('error' in rolesResult) return { error: rolesResult.error };
 
-  try {
-    const delegationId = delegateTo(
-      roles.ops,
-      mainFolder,
-      workflowId,
-      'ops-staging-deploy',
-      `请部署以下服务到预发环境：\n\n服务名称：${workflow.service}\n工作分支：${workflow.branch}`,
-    );
-    updateWorkflow(workflowId, {
-      status: 'ops_deploy',
-      current_delegation_id: delegationId,
-    });
-  } catch (err) {
-    logger.error({ err, workflowId }, 'Failed to delegate ops task');
-    return {
-      error: `委派部署任务失败: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
-  notifyMain(
-    `[流程进展] 需求「${workflow.name}」(${workflowId}) 已确认，正在委派 ${roles.ops} 部署预发环境。`,
-  );
-
+  applyTransition(workflow, stateConfig.on_approve, rolesResult.roles);
   return {};
 }
 
@@ -486,8 +698,11 @@ export function onDelegationComplete(delegationId: string): void {
   const workflow = getWorkflowByDelegation(delegationId);
   if (!workflow) return; // Not a workflow delegation
 
-  const rolesResult = getRoles();
-  if ('error' in rolesResult) return; // Workflow disabled
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return;
+
+  const rolesResult = getRolesForType(workflow.workflow_type);
+  if ('error' in rolesResult) return;
   const roles = rolesResult.roles;
 
   const delegation = getDelegation(delegationId);
@@ -502,8 +717,6 @@ export function onDelegationComplete(delegationId: string): void {
     return;
   }
 
-  const mainFolder = getMainFolder();
-
   logger.info(
     {
       workflowId: workflow.id,
@@ -514,239 +727,156 @@ export function onDelegationComplete(delegationId: string): void {
     'Workflow delegation completed',
   );
 
-  switch (workflow.status) {
-    case 'dev': {
-      const deliverable = readLatestDeliverable(workflow.service);
-      const branch = deliverable?.branch || '';
-
-      updateWorkflow(workflow.id, {
-        status: 'awaiting_confirm',
-        branch,
-        deliverable: deliverable?.fileName || '',
-        current_delegation_id: '',
-      });
-
-      const updatedWorkflow = getWorkflow(workflow.id);
-      if (updatedWorkflow) {
-        sendAwaitingConfirmCard(updatedWorkflow);
-      }
-      break;
-    }
-
-    case 'ops_deploy': {
-      const isFailure = delegation.outcome === 'failure';
-
-      let summary = delegation.result || '';
-      try {
-        const p = JSON.parse(summary);
-        summary = p.summary || summary;
-      } catch {
-        /* not JSON, use raw */
-      }
-
-      if (isFailure) {
-        updateWorkflow(workflow.id, {
-          status: 'ops_failed',
-          current_delegation_id: '',
-        });
-        notifyMain(
-          `[流程终止] 需求「${workflow.name}」(${workflow.id}) 预发部署失败 ❌\n\n${summary}`,
-        );
-        break;
-      }
-
-      try {
-        const deliverable = readLatestDeliverable(workflow.service);
-        const deliverableContent = deliverable?.content || '交付文档未找到';
-
-        const delegId = delegateTo(
-          roles.test,
-          mainFolder,
-          workflow.id,
-          'test-requirement',
-          `请对以下需求进行测试：\n\n服务名称：${workflow.service}\n\n交付文档内容：\n${deliverableContent}`,
-        );
-        updateWorkflow(workflow.id, {
-          status: 'testing',
-          current_delegation_id: delegId,
-        });
-      } catch (err) {
-        logger.error(
-          { err, workflowId: workflow.id },
-          'Failed to delegate test task',
-        );
-        notifyMain(
-          `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派测试任务失败。`,
-        );
-        break;
-      }
-
-      notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 预发部署成功 ✅，已委派 ${roles.test} 开始测试。`,
-      );
-      break;
-    }
-
-    case 'testing': {
-      const hasFailures = delegation.outcome === 'failure';
-
-      let testSummary = delegation.result || '';
-      try {
-        const p = JSON.parse(testSummary);
-        testSummary = `总用例 ${p.total}，通过 ${p.passed}，失败 ${p.failed}`;
-        if (p.bugs?.length)
-          testSummary +=
-            '\n' + p.bugs.map((b: any) => `- ${b.id}: ${b.title}`).join('\n');
-      } catch {
-        /* not JSON, use raw */
-      }
-
-      if (!hasFailures) {
-        updateWorkflow(workflow.id, {
-          status: 'passed',
-          current_delegation_id: '',
-        });
-        notifyMain(
-          `[流程完成] 需求「${workflow.name}」(${workflow.id}) 测试全部通过 ✅，可以准备上线！`,
-        );
-        break;
-      }
-
-      const newRound = workflow.round + 1;
-      try {
-        const delegId = delegateTo(
-          roles.dev,
-          mainFolder,
-          workflow.id,
-          'dev-bugfix',
-          `请修复以下测试发现的问题（Round ${newRound}）：\n\n服务名称：${workflow.service}\n工作分支：${workflow.branch}\n\n测试报告：\n${delegation.result || testSummary}`,
-        );
-        updateWorkflow(workflow.id, {
-          status: 'fixing',
-          current_delegation_id: delegId,
-          round: newRound,
-        });
-      } catch (err) {
-        logger.error(
-          { err, workflowId: workflow.id },
-          'Failed to delegate fix task',
-        );
-        notifyMain(
-          `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派修复任务失败。`,
-        );
-        break;
-      }
-
-      notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 测试发现问题 ❌\n${testSummary}\n进入 Round ${newRound} 修复流程，已委派 ${roles.dev} 修复。`,
-      );
-      break;
-    }
-
-    case 'fixing': {
-      try {
-        const delegId = delegateTo(
-          roles.ops,
-          mainFolder,
-          workflow.id,
-          'ops-staging-deploy',
-          `请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：${workflow.service}\n工作分支：${workflow.branch}`,
-        );
-        updateWorkflow(workflow.id, {
-          status: 'ops_deploy',
-          current_delegation_id: delegId,
-        });
-      } catch (err) {
-        logger.error(
-          { err, workflowId: workflow.id },
-          'Failed to delegate redeploy task',
-        );
-        notifyMain(
-          `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派重新部署任务失败。`,
-        );
-        break;
-      }
-
-      notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) Round ${workflow.round} 修复完成，已委派 ${roles.ops} 重新部署预发。`,
-      );
-      break;
-    }
-
-    default:
-      logger.warn(
-        { workflowId: workflow.id, status: workflow.status },
-        'Unexpected workflow status on delegation complete',
-      );
+  // Look up current state config
+  const stateConfig = config.states[workflow.status];
+  if (!stateConfig || stateConfig.type !== 'delegation' || !stateConfig.on_complete) {
+    logger.warn(
+      { workflowId: workflow.id, status: workflow.status },
+      'Unexpected workflow status on delegation complete — no on_complete config',
+    );
+    return;
   }
+
+  // Determine outcome
+  const outcome = delegation.outcome === 'failure' ? 'failure' : 'success';
+  const transition = stateConfig.on_complete[outcome];
+  if (!transition) {
+    logger.warn(
+      { workflowId: workflow.id, status: workflow.status, outcome },
+      'No transition defined for outcome',
+    );
+    return;
+  }
+
+  // Parse result summary
+  let resultSummary = delegation.result || '';
+  try {
+    const p = JSON.parse(resultSummary);
+    if (p.summary) {
+      resultSummary = p.summary;
+    } else if (p.total !== undefined) {
+      resultSummary = `总用例 ${p.total}，通过 ${p.passed}，失败 ${p.failed}`;
+      if (p.bugs?.length) {
+        resultSummary +=
+          '\n' + p.bugs.map((b: any) => `- ${b.id}: ${b.title}`).join('\n');
+      }
+    }
+  } catch {
+    /* not JSON, use raw */
+  }
+
+  applyTransition(workflow, transition, roles, {
+    delegationResult: delegation.result || '',
+    resultSummary,
+  });
 }
 
 // -------------------------------------------------------
-// Card helpers
+// Card helpers — config-driven
 // -------------------------------------------------------
 
-const STATUS_LABELS: Record<string, string> = {
-  dev: '🔧 开发中',
-  awaiting_confirm: '⏳ 待确认',
-  ops_deploy: '🚀 部署中',
-  testing: '🧪 测试中',
-  fixing: '🔨 修复中',
-  passed: '✅ 已通过',
-  ops_failed: '❌ 部署失败',
-  cancelled: '🚫 已取消',
-  paused: '⏸ 已中断',
+const ACTION_BUTTONS: Record<string, { label: string; type?: string }> = {
+  approve: { label: '✅ 确认部署', type: 'primary' },
+  pause: { label: '⏸ 暂缓' },
+  cancel: { label: '❌ 取消流程', type: 'danger' },
+  resume: { label: '▶ 继续', type: 'primary' },
 };
 
-function buildAwaitingConfirmCard(workflow: Workflow): FeishuCard {
+function buildConfigCard(workflow: Workflow, cardKey: string): FeishuCard | null {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return null;
+
+  const cardConfig = config.cards[cardKey];
+  if (!cardConfig) return null;
+
+  const vars = buildTemplateVars(workflow);
+  const roleFolders = allResolvedRoles[workflow.workflow_type] || {};
+
+  const header = renderTemplate(cardConfig.header_template, vars, roleFolders);
+  const body = renderTemplate(cardConfig.body_template, vars, roleFolders);
+
+  const actions: unknown[] = [];
+  for (const actionName of cardConfig.actions) {
+    const btn = ACTION_BUTTONS[actionName];
+    if (btn) {
+      const button: Record<string, unknown> = {
+        tag: 'button',
+        text: { tag: 'plain_text', content: btn.label },
+        value: { workflow_id: workflow.id, action: actionName },
+      };
+      if (btn.type) button.type = btn.type;
+      actions.push(button);
+    }
+  }
+
   return {
-    header: { title: `📋 需求「${workflow.name}」开发完成`, template: 'blue' },
+    header: { title: header, template: cardConfig.header_color || 'blue' },
     elements: [
       {
         tag: 'div',
-        text: {
-          tag: 'lark_md',
-          content: [
-            `**流程 ID**：${workflow.id}`,
-            `**服务**：${workflow.service}`,
-            `**工作分支**：${workflow.branch || 'N/A'}`,
-            `**交付文档**：${workflow.deliverable || 'N/A'}`,
-          ].join('\n'),
-        },
+        text: { tag: 'lark_md', content: body },
       },
-      {
-        tag: 'action',
-        actions: [
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '✅ 确认部署' },
-            type: 'primary',
-            value: { workflow_id: workflow.id, action: 'approve' },
-          },
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '⏸ 暂缓' },
-            value: { workflow_id: workflow.id, action: 'pause' },
-          },
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '❌ 取消流程' },
-            type: 'danger',
-            value: { workflow_id: workflow.id, action: 'cancel' },
-          },
-        ],
-      },
+      ...(actions.length > 0 ? [{ tag: 'action', actions }] : []),
     ],
   };
+}
+
+/** Send a card defined in config to the main group. */
+function sendConfigCard(workflow: Workflow, cardKey: string): void {
+  const { sendCard } = getDeps();
+  const groups = getDeps().registeredGroups();
+  const mainJid = findMainJid(groups);
+  if (!mainJid) {
+    logger.warn('Workflow: cannot send card — main group not found');
+    return;
+  }
+
+  if (sendCard) {
+    const card = buildConfigCard(workflow, cardKey);
+    if (card) {
+      sendCard(mainJid, card).catch((err) => {
+        logger.error(
+          { err, workflowId: workflow.id, cardKey },
+          'Failed to send workflow card, falling back to text',
+        );
+        // Fallback: send text notification
+        const config = getWorkflowTypeConfig(workflow.workflow_type);
+        const cardConfig = config?.cards[cardKey];
+        if (cardConfig) {
+          const vars = buildTemplateVars(workflow);
+          const body = renderTemplate(cardConfig.body_template, vars);
+          notifyMain(
+            `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}`,
+          );
+        }
+      });
+    }
+  } else {
+    // Fallback: no card support
+    const config = getWorkflowTypeConfig(workflow.workflow_type);
+    const cardConfig = config?.cards[cardKey];
+    if (cardConfig) {
+      const vars = buildTemplateVars(workflow);
+      const body = renderTemplate(cardConfig.body_template, vars);
+      notifyMain(
+        `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}\n\n请确认是否继续。`,
+      );
+    }
+  }
 }
 
 function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
   const elements: unknown[] = [];
 
   for (const w of workflows) {
+    const config = getWorkflowTypeConfig(w.workflow_type);
+    const labels = config?.status_labels || {};
+    const terminalStates = config ? getTerminalStates(config) : [];
+
     const statusLabel =
       w.status === 'paused'
-        ? `⏸ 已中断（原状态：${STATUS_LABELS[w.paused_from || ''] || w.paused_from || '未知'}）`
-        : STATUS_LABELS[w.status] || w.status;
+        ? `⏸ 已中断（原状态：${labels[w.paused_from || ''] || w.paused_from || '未知'}）`
+        : labels[w.status] || w.status;
 
     elements.push({
       tag: 'div',
@@ -758,9 +888,9 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
 
     // Add action buttons based on status
     const actions: unknown[] = [];
-    const terminalStates = ['passed', 'ops_failed', 'cancelled'];
+    const confirmationStates = config ? getConfirmationStates(config) : [];
 
-    if (w.status === 'awaiting_confirm') {
+    if (confirmationStates.includes(w.status)) {
       actions.push(
         {
           tag: 'button',
@@ -832,35 +962,6 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
   };
 }
 
-/** Send awaiting_confirm card to main group. */
-function sendAwaitingConfirmCard(workflow: Workflow): void {
-  const { sendCard } = getDeps();
-  const groups = getDeps().registeredGroups();
-  const mainJid = findMainJid(groups);
-  if (!mainJid) {
-    logger.warn('Workflow: cannot send card — main group not found');
-    return;
-  }
-
-  if (sendCard) {
-    const card = buildAwaitingConfirmCard(workflow);
-    sendCard(mainJid, card).catch((err) => {
-      logger.error(
-        { err, workflowId: workflow.id },
-        'Failed to send awaiting_confirm card, falling back to text',
-      );
-      notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 开发已完成！\n\n工作分支：${workflow.branch}\n交付文档：${workflow.deliverable || '未找到'}\n\n请在飞书群中点击卡片按钮确认部署。`,
-      );
-    });
-  } else {
-    // Fallback: no card support, send text
-    notifyMain(
-      `[流程进展] 需求「${workflow.name}」(${workflow.id}) 开发已完成！\n\n工作分支：${workflow.branch}\n交付文档：${workflow.deliverable || '未找到'}\n\n请确认是否开始部署。`,
-    );
-  }
-}
-
 // -------------------------------------------------------
 // Cancel / Pause / Resume
 // -------------------------------------------------------
@@ -868,11 +969,10 @@ function sendAwaitingConfirmCard(workflow: Workflow): void {
 export function cancelWorkflow(workflowId: string): { error?: string } {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
-  const terminalStates: WorkflowStatus[] = [
-    'passed',
-    'ops_failed',
-    'cancelled',
-  ];
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const terminalStates = config ? getTerminalStates(config) : ['passed', 'ops_failed', 'cancelled'];
+
   if (terminalStates.includes(workflow.status)) {
     return { error: `流程已结束 (${workflow.status})` };
   }
@@ -887,11 +987,10 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
 export function pauseWorkflow(workflowId: string): { error?: string } {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
-  const terminalStates: WorkflowStatus[] = [
-    'passed',
-    'ops_failed',
-    'cancelled',
-  ];
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const terminalStates = config ? getTerminalStates(config) : ['passed', 'ops_failed', 'cancelled'];
+
   if (
     terminalStates.includes(workflow.status) ||
     workflow.status === 'paused'
@@ -943,18 +1042,22 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
     }
   }
 
-  // No active delegation (e.g. paused_from='awaiting_confirm') — restore state
+  // No active delegation (e.g. paused_from is a confirmation state) — restore state
   updateWorkflow(workflowId, {
     status: workflow.paused_from,
     paused_from: null,
   });
   notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`);
 
-  // If resuming to awaiting_confirm, resend the card
-  if (workflow.paused_from === 'awaiting_confirm') {
-    const updatedWorkflow = getWorkflow(workflowId);
-    if (updatedWorkflow) {
-      sendAwaitingConfirmCard(updatedWorkflow);
+  // If resuming to a confirmation state, resend its card
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (config) {
+    const resumedStateConfig = config.states[workflow.paused_from];
+    if (resumedStateConfig?.type === 'confirmation' && resumedStateConfig.card) {
+      const updatedWorkflow = getWorkflow(workflowId);
+      if (updatedWorkflow) {
+        sendConfigCard(updatedWorkflow, resumedStateConfig.card);
+      }
     }
   }
   return {};
@@ -1034,10 +1137,39 @@ export function listWorkflows(): ReturnType<typeof getAllActiveWorkflows> {
 
 /** Check if workflow engine is enabled. */
 export function isWorkflowEnabled(): boolean {
-  return resolvedRoles !== null;
+  return hasAnyRoles();
 }
 
 /** Get the reason workflow is disabled (for diagnostics). */
 export function getWorkflowDisabledReason(): string | null {
   return roleResolutionError;
+}
+
+/** Get status labels for a workflow type (used by MCP tool). */
+export function getStatusLabelsForType(workflowType: string): Record<string, string> {
+  const config = getWorkflowTypeConfig(workflowType);
+  return config?.status_labels || {};
+}
+
+/** Return summary of all available workflow types (for MCP tool). */
+export function getAvailableWorkflowTypes(): Array<{
+  type: string;
+  name: string;
+  entry_points: string[];
+  roles: Record<string, string>;
+  roles_resolved: boolean;
+}> {
+  const configs = getWorkflowConfigs();
+  if (!configs) return [];
+
+  return Object.entries(configs).map(([typeName, config]) => {
+    const resolved = allResolvedRoles[typeName];
+    return {
+      type: typeName,
+      name: config.name,
+      entry_points: Object.keys(config.entry_points),
+      roles: resolved || {},
+      roles_resolved: !!resolved,
+    };
+  });
 }

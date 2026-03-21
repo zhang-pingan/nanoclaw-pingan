@@ -93,16 +93,8 @@ export interface Delegation {
   updated_at: string;
 }
 
-export type WorkflowStatus =
-  | 'dev'
-  | 'awaiting_confirm'
-  | 'ops_deploy'
-  | 'testing'
-  | 'fixing'
-  | 'passed'
-  | 'ops_failed'
-  | 'cancelled'
-  | 'paused';
+/** Workflow status is now a plain string — valid values are defined in workflows.json per type. */
+export type WorkflowStatus = string;
 
 export interface Workflow {
   id: string;
@@ -115,6 +107,7 @@ export interface Workflow {
   round: number;
   source_jid: string;
   paused_from: WorkflowStatus | null;
+  workflow_type: string;
   created_at: string;
   updated_at: string;
 }

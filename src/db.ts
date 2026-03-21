@@ -179,6 +179,15 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Add workflow_type column to workflows (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN workflow_type TEXT DEFAULT 'dev_test'`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
   // Add channel and is_group columns if they don't exist (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE chats ADD COLUMN channel TEXT`);
@@ -818,8 +827,8 @@ export function getDelegationsByTarget(targetFolder: string): Delegation[] {
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, branch, deliverable, status, current_delegation_id, round, source_jid, paused_from, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, branch, deliverable, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
@@ -831,6 +840,7 @@ export function createWorkflow(workflow: Workflow): void {
     workflow.round,
     workflow.source_jid,
     workflow.paused_from || null,
+    workflow.workflow_type,
     workflow.created_at,
     workflow.updated_at,
   );
@@ -853,6 +863,7 @@ export function updateWorkflow(
       | 'current_delegation_id'
       | 'round'
       | 'paused_from'
+      | 'workflow_type'
     >
   >,
 ): void {
@@ -882,6 +893,10 @@ export function updateWorkflow(
   if (updates.paused_from !== undefined) {
     fields.push('paused_from = ?');
     values.push(updates.paused_from);
+  }
+  if (updates.workflow_type !== undefined) {
+    fields.push('workflow_type = ?');
+    values.push(updates.workflow_type);
   }
 
   values.push(id);

@@ -565,22 +565,24 @@ server.tool(
 if (isMain) {
   server.tool(
     'create_workflow',
-    `创建开发测试流程。当用户提出新需求开发时使用 start_from='dev'，当用户要求对已完成的需求发起自动化测试时使用 start_from='testing'。
+    `创建工作流。先用 list_workflow_types 查看可用的流程类型和入口点，再调用此工具。
 
-流程会自动驱动：开发 → 确认 → 部署预发 → 测试 → 通过/修复循环。`,
+流程会自动驱动状态转换，进展消息会发送到群内。`,
     {
       name: z.string().describe('需求名称'),
       service: z.string().describe('服务名称（对应 services.json 中的 key）'),
-      start_from: z.enum(['dev', 'testing']).describe("'dev'=从开发开始（委派feishu_dev），'testing'=从测试开始（读取已有交付文档）"),
+      workflow_type: z.string().describe("流程类型（如 'dev_test'）。用 list_workflow_types 查看可用类型。"),
+      start_from: z.string().describe("入口点名称（如 'dev', 'testing'）。用 list_workflow_types 查看各类型的入口点。"),
     },
     async (args) => {
       const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      const data = {
+      const data: Record<string, string> = {
         type: 'create_workflow',
         name: args.name,
         service: args.service,
         start_from: args.start_from,
+        workflow_type: args.workflow_type,
         requestId,
         groupFolder,
         timestamp: new Date().toISOString(),
@@ -620,6 +622,79 @@ if (isMain) {
 
       return {
         content: [{ type: 'text' as const, text: '流程创建请求已发送，但等待确认超时。' }],
+      };
+    },
+  );
+
+  server.tool(
+    'list_workflow_types',
+    '查看所有可用的流程类型定义。返回每个类型的名称、入口点和角色映射情况。用于了解可以创建哪些类型的流程。',
+    {},
+    async () => {
+      const requestId = `wf-types-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const data = {
+        type: 'list_workflow_types',
+        requestId,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      };
+
+      writeIpcFile(TASKS_DIR, data);
+
+      // Poll for result
+      const resultsDir = path.join(IPC_DIR, 'workflow-results');
+      const resultPath = path.join(resultsDir, `${requestId}.json`);
+      const maxWaitMs = 10000;
+      const pollMs = 300;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        if (fs.existsSync(resultPath)) {
+          try {
+            const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+            fs.unlinkSync(resultPath);
+
+            const types = result.types || [];
+            if (types.length === 0) {
+              return {
+                content: [{ type: 'text' as const, text: '没有配置任何流程类型（workflows.json 不存在或为空）。' }],
+              };
+            }
+
+            const formatted = types
+              .map(
+                (t: {
+                  type: string;
+                  name: string;
+                  entry_points: string[];
+                  roles: Record<string, string>;
+                  roles_resolved: boolean;
+                }) => {
+                  const status = t.roles_resolved ? '✅ 可用' : '❌ 角色未就绪';
+                  const rolesStr = Object.entries(t.roles)
+                    .map(([role, folder]) => `${role}→${folder}`)
+                    .join(', ');
+                  return `- **${t.type}** (${t.name}) ${status}\n  入口点: ${t.entry_points.join(', ')}\n  角色: ${rolesStr || '未解析'}`;
+                },
+              )
+              .join('\n');
+
+            return {
+              content: [{ type: 'text' as const, text: `可用流程类型:\n${formatted}` }],
+            };
+          } catch (err) {
+            return {
+              content: [{ type: 'text' as const, text: `流程类型列表获取失败: ${err instanceof Error ? err.message : String(err)}` }],
+            };
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: '获取流程类型列表超时，请稍后重试。' }],
+        isError: true,
       };
     },
   );

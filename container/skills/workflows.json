@@ -1,0 +1,127 @@
+{
+  "dev_test": {
+    "name": "开发测试流程",
+    "roles": {
+      "dev": { "skill_to_role_key": "dev-requirement" },
+      "ops": { "skill_to_role_key": "ops-staging-deploy" },
+      "test": { "skill_to_role_key": "test-requirement" }
+    },
+    "entry_points": {
+      "dev": { "state": "dev" },
+      "testing": { "state": "awaiting_confirm", "requires_deliverable": true }
+    },
+    "states": {
+      "dev": {
+        "type": "delegation",
+        "role": "dev",
+        "skill": "dev-requirement",
+        "plan_mode": true,
+        "task_template": "请开发以下需求：\n\n需求名称：{{name}}\n服务名称：{{service}}",
+        "on_complete": {
+          "success": {
+            "target": "awaiting_confirm",
+            "read_deliverable": true,
+            "read_deliverable_role": "dev",
+            "card": "deploy_confirm",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 开发已完成！\n\n工作分支：{{branch}}\n交付文档：{{deliverable}}\n\n请在飞书群中点击卡片按钮确认部署。"
+          },
+          "failure": {
+            "target": "dev",
+            "notify": "[流程异常] 需求「{{name}}」({{id}}) 开发失败，请检查。"
+          }
+        }
+      },
+      "awaiting_confirm": {
+        "type": "confirmation",
+        "card": "deploy_confirm",
+        "on_approve": {
+          "target": "ops_deploy",
+          "role": "ops",
+          "skill": "ops-staging-deploy",
+          "task_template": "请部署以下服务到预发环境：\n\n服务名称：{{service}}\n工作分支：{{branch}}",
+          "notify": "[流程进展] 需求「{{name}}」({{id}}) 已确认，正在委派 {{role_folder:ops}} 部署预发环境。"
+        }
+      },
+      "ops_deploy": {
+        "type": "delegation",
+        "role": "ops",
+        "skill": "ops-staging-deploy",
+        "on_complete": {
+          "success": {
+            "target": "testing",
+            "role": "test",
+            "skill": "test-requirement",
+            "read_deliverable": true,
+            "read_deliverable_role": "dev",
+            "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n\n交付文档内容：\n{{deliverable_content}}",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 预发部署成功 ✅，已委派 {{role_folder:test}} 开始测试。"
+          },
+          "failure": {
+            "target": "ops_failed",
+            "notify": "[流程终止] 需求「{{name}}」({{id}}) 预发部署失败 ❌\n\n{{result_summary}}"
+          }
+        }
+      },
+      "testing": {
+        "type": "delegation",
+        "role": "test",
+        "skill": "test-requirement",
+        "on_complete": {
+          "success": {
+            "target": "passed",
+            "notify": "[流程完成] 需求「{{name}}」({{id}}) 测试全部通过 ✅，可以准备上线！"
+          },
+          "failure": {
+            "target": "fixing",
+            "role": "dev",
+            "skill": "dev-bugfix",
+            "increment_round": true,
+            "task_template": "请修复以下测试发现的问题（Round {{round}}）：\n\n服务名称：{{service}}\n工作分支：{{branch}}\n\n测试报告：\n{{delegation_result}}",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 测试发现问题 ❌\n{{result_summary}}\n进入 Round {{round}} 修复流程，已委派 {{role_folder:dev}} 修复。"
+          }
+        }
+      },
+      "fixing": {
+        "type": "delegation",
+        "role": "dev",
+        "skill": "dev-bugfix",
+        "on_complete": {
+          "success": {
+            "target": "ops_deploy",
+            "role": "ops",
+            "skill": "ops-staging-deploy",
+            "task_template": "请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：{{service}}\n工作分支：{{branch}}",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) Round {{round}} 修复完成，已委派 {{role_folder:ops}} 重新部署预发。"
+          },
+          "failure": {
+            "target": "fixing",
+            "notify": "[流程异常] 需求「{{name}}」({{id}}) Round {{round}} 修复失败，请检查。"
+          }
+        }
+      },
+      "passed": { "type": "terminal" },
+      "ops_failed": { "type": "terminal" },
+      "cancelled": { "type": "terminal" },
+      "paused": { "type": "system" }
+    },
+    "status_labels": {
+      "dev": "🔧 开发中",
+      "awaiting_confirm": "⏳ 待确认",
+      "ops_deploy": "🚀 部署中",
+      "testing": "🧪 测试中",
+      "fixing": "🔨 修复中",
+      "passed": "✅ 已通过",
+      "ops_failed": "❌ 部署失败",
+      "cancelled": "🚫 已取消",
+      "paused": "⏸ 已中断"
+    },
+    "cards": {
+      "deploy_confirm": {
+        "header_template": "📋 需求「{{name}}」开发完成",
+        "header_color": "blue",
+        "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**工作分支**：{{branch}}\n**交付文档**：{{deliverable}}",
+        "actions": ["approve", "pause", "cancel"]
+      }
+    }
+  }
+}
