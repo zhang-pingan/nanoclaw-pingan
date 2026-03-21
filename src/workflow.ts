@@ -41,9 +41,9 @@ const SKILL_TO_ROLE: Record<string, 'dev' | 'ops' | 'test'> = {
 };
 
 interface WorkflowRoles {
-  dev: string;   // group folder for dev role
-  ops: string;   // group folder for ops role
-  test: string;  // group folder for test role
+  dev: string; // group folder for dev role
+  ops: string; // group folder for ops role
+  test: string; // group folder for test role
 }
 
 let resolvedRoles: WorkflowRoles | null = null;
@@ -112,7 +112,11 @@ function resolveRoles(): void {
 
   resolvedRoles = roles as WorkflowRoles;
   logger.info(
-    { dev: resolvedRoles.dev, ops: resolvedRoles.ops, test: resolvedRoles.test },
+    {
+      dev: resolvedRoles.dev,
+      ops: resolvedRoles.ops,
+      test: resolvedRoles.test,
+    },
     'Workflow roles resolved',
   );
 }
@@ -121,9 +125,7 @@ function resolveRoles(): void {
 function getRoles(): { roles: WorkflowRoles } | { error: string } {
   if (resolvedRoles) return { roles: resolvedRoles };
   return {
-    error:
-      roleResolutionError ||
-      'Workflow 未初始化',
+    error: roleResolutionError || 'Workflow 未初始化',
   };
 }
 
@@ -183,9 +185,7 @@ function findMainJid(
 /** Get the main group's folder name. */
 function getMainFolder(): string {
   const groups = getDeps().registeredGroups();
-  return (
-    Object.values(groups).find((g) => g.isMain)?.folder || ''
-  );
+  return Object.values(groups).find((g) => g.isMain)?.folder || '';
 }
 
 /** Inject a message into a group's chat to trigger the agent. */
