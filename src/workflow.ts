@@ -5,6 +5,11 @@
  *                                                       ├→ passed (terminal)
  *                                                       └→ fixing → ops_deploy → testing (loop)
  *                                          ops_failed (terminal)
+ *
+ * Role resolution (no hardcoded group names):
+ *   1. skills.json "workflow_roles" explicit mapping (if present)
+ *   2. Infer from skill assignments: dev-requirement → dev, ops-staging-deploy → ops, test-requirement → test
+ *   3. If any role is missing → workflow is disabled, create_workflow returns a friendly message
  */
 import fs from 'fs';
 import path from 'path';
@@ -24,6 +29,108 @@ import {
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 
+// -------------------------------------------------------
+// Role resolution
+// -------------------------------------------------------
+
+/** Skill → workflow role mapping for auto-detection */
+const SKILL_TO_ROLE: Record<string, 'dev' | 'ops' | 'test'> = {
+  'dev-requirement': 'dev',
+  'ops-staging-deploy': 'ops',
+  'test-requirement': 'test',
+};
+
+interface WorkflowRoles {
+  dev: string;   // group folder for dev role
+  ops: string;   // group folder for ops role
+  test: string;  // group folder for test role
+}
+
+let resolvedRoles: WorkflowRoles | null = null;
+let roleResolutionError: string | null = null;
+
+/** Resolve workflow roles from skills.json. Called once at init. */
+function resolveRoles(): void {
+  const skillsPath = path.join(
+    process.cwd(),
+    'container',
+    'skills',
+    'skills.json',
+  );
+
+  if (!fs.existsSync(skillsPath)) {
+    roleResolutionError =
+      'Workflow 未启用：未找到 container/skills/skills.json';
+    logger.info(roleResolutionError);
+    return;
+  }
+
+  let skillsConfig: Record<string, string[] | Record<string, string>>;
+  try {
+    skillsConfig = JSON.parse(fs.readFileSync(skillsPath, 'utf-8'));
+  } catch (err) {
+    roleResolutionError = `Workflow 未启用：skills.json 解析失败 — ${err instanceof Error ? err.message : String(err)}`;
+    logger.warn(roleResolutionError);
+    return;
+  }
+
+  // Priority 1: explicit workflow_roles
+  const explicit = skillsConfig['workflow_roles'] as
+    | Record<string, string>
+    | undefined;
+  const roles: Partial<WorkflowRoles> = {};
+
+  if (explicit && typeof explicit === 'object') {
+    if (explicit.dev) roles.dev = explicit.dev;
+    if (explicit.ops) roles.ops = explicit.ops;
+    if (explicit.test) roles.test = explicit.test;
+  }
+
+  // Priority 2: infer from skill assignments
+  for (const [folder, skills] of Object.entries(skillsConfig)) {
+    if (folder === 'global' || folder === 'workflow_roles') continue;
+    if (!Array.isArray(skills)) continue;
+    for (const skill of skills) {
+      const role = SKILL_TO_ROLE[skill];
+      if (role && !roles[role]) {
+        roles[role] = folder;
+      }
+    }
+  }
+
+  // Check completeness
+  const missing: string[] = [];
+  if (!roles.dev) missing.push('dev (需要 dev-requirement skill)');
+  if (!roles.ops) missing.push('ops (需要 ops-staging-deploy skill)');
+  if (!roles.test) missing.push('test (需要 test-requirement skill)');
+
+  if (missing.length > 0) {
+    roleResolutionError = `Workflow 未启用：缺少角色 ${missing.join(', ')}。请在 skills.json 中配置对应 skill 或添加 workflow_roles。`;
+    logger.info(roleResolutionError);
+    return;
+  }
+
+  resolvedRoles = roles as WorkflowRoles;
+  logger.info(
+    { dev: resolvedRoles.dev, ops: resolvedRoles.ops, test: resolvedRoles.test },
+    'Workflow roles resolved',
+  );
+}
+
+/** Get resolved roles, or return the error message if not available. */
+function getRoles(): { roles: WorkflowRoles } | { error: string } {
+  if (resolvedRoles) return { roles: resolvedRoles };
+  return {
+    error:
+      roleResolutionError ||
+      'Workflow 未初始化',
+  };
+}
+
+// -------------------------------------------------------
+// Dependencies
+// -------------------------------------------------------
+
 export interface WorkflowDeps {
   registeredGroups: () => Record<string, RegisteredGroup>;
   enqueueMessageCheck: (groupJid: string) => void;
@@ -33,6 +140,7 @@ let deps: WorkflowDeps | null = null;
 
 export function initWorkflow(d: WorkflowDeps): void {
   deps = d;
+  resolveRoles();
 }
 
 function getDeps(): WorkflowDeps {
@@ -40,7 +148,11 @@ function getDeps(): WorkflowDeps {
   return deps;
 }
 
-/** Write a plan_mode marker to the group's IPC directory. The host reads and deletes it before spawning the container. */
+// -------------------------------------------------------
+// Helpers
+// -------------------------------------------------------
+
+/** Write a plan_mode marker to the group's IPC directory. */
 function writePlanModeMarker(groupFolder: string): void {
   const markerPath = path.join(DATA_DIR, 'ipc', groupFolder, 'plan_mode');
   fs.mkdirSync(path.dirname(markerPath), { recursive: true });
@@ -68,11 +180,18 @@ function findMainJid(
   return undefined;
 }
 
+/** Get the main group's folder name. */
+function getMainFolder(): string {
+  const groups = getDeps().registeredGroups();
+  return (
+    Object.values(groups).find((g) => g.isMain)?.folder || ''
+  );
+}
+
 /** Inject a message into a group's chat to trigger the agent. */
 function injectDelegation(
   targetJid: string,
   targetGroup: RegisteredGroup,
-  sourceFolder: string,
   delegationId: string,
   workflowId: string,
   skillName: string,
@@ -163,7 +282,6 @@ function delegateTo(
   injectDelegation(
     targetJid,
     targetGroup,
-    sourceFolder,
     delegationId,
     workflowId,
     skillName,
@@ -173,11 +291,19 @@ function delegateTo(
   return delegationId;
 }
 
-/** Read the latest deliverable document from feishu_dev for a given service. */
+/** Read the latest deliverable document from the dev group for a given service. */
 function readLatestDeliverable(
   service: string,
 ): { content: string; branch: string; fileName: string } | null {
-  const delivDir = path.join(GROUPS_DIR, 'feishu_dev', 'deliverables', service);
+  const rolesResult = getRoles();
+  if ('error' in rolesResult) return null;
+
+  const delivDir = path.join(
+    GROUPS_DIR,
+    rolesResult.roles.dev,
+    'deliverables',
+    service,
+  );
   if (!fs.existsSync(delivDir)) return null;
 
   const files = fs
@@ -212,12 +338,18 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   workflowId: string;
   error?: string;
 } {
+  // Check if workflow is enabled
+  const rolesResult = getRoles();
+  if ('error' in rolesResult) {
+    return { workflowId: '', error: rolesResult.error };
+  }
+  const roles = rolesResult.roles;
+
   const workflowId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
-  const groups = getDeps().registeredGroups();
+  const mainFolder = getMainFolder();
 
   if (opts.startFrom === 'dev') {
-    // Create workflow in dev status, delegate to feishu_dev
     dbCreateWorkflow({
       id: workflowId,
       name: opts.name,
@@ -232,16 +364,11 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       updated_at: now,
     });
 
-    const mainFolder =
-      Object.values(groups).find((g) => g.isMain)?.folder || 'feishu_main';
-
     try {
-      // Enable plan mode: agent will first generate a plan (read-only),
-      // then automatically execute it in a second phase (full permissions)
-      writePlanModeMarker('feishu_dev');
+      writePlanModeMarker(roles.dev);
 
       const delegationId = delegateTo(
-        'feishu_dev',
+        roles.dev,
         mainFolder,
         workflowId,
         'dev-requirement',
@@ -257,7 +384,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     }
 
     notifyMain(
-      `[流程启动] 需求「${opts.name}」开发流程已创建 (${workflowId})，已委派 feishu_dev 开始开发。`,
+      `[流程启动] 需求「${opts.name}」开发流程已创建 (${workflowId})，已委派 ${roles.dev} 开始开发。`,
     );
 
     return { workflowId };
@@ -268,7 +395,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   if (!deliverable) {
     return {
       workflowId,
-      error: `未找到服务 ${opts.service} 的交付文档 (groups/feishu_dev/deliverables/${opts.service}/)`,
+      error: `未找到服务 ${opts.service} 的交付文档 (groups/${roles.dev}/deliverables/${opts.service}/)`,
     };
   }
 
@@ -294,6 +421,10 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 }
 
 export function approveWorkflow(workflowId: string): { error?: string } {
+  const rolesResult = getRoles();
+  if ('error' in rolesResult) return { error: rolesResult.error };
+  const roles = rolesResult.roles;
+
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
   if (workflow.status !== 'awaiting_confirm') {
@@ -302,14 +433,11 @@ export function approveWorkflow(workflowId: string): { error?: string } {
     };
   }
 
-  const mainFolder =
-    Object.values(getDeps().registeredGroups()).find((g) => g.isMain)?.folder ||
-    'feishu_main';
+  const mainFolder = getMainFolder();
 
-  // Move to ops_deploy, delegate to feishu_ops
   try {
     const delegationId = delegateTo(
-      'feishu_ops',
+      roles.ops,
       mainFolder,
       workflowId,
       'ops-staging-deploy',
@@ -327,7 +455,7 @@ export function approveWorkflow(workflowId: string): { error?: string } {
   }
 
   notifyMain(
-    `[流程进展] 需求「${workflow.name}」(${workflowId}) 已确认，正在委派 feishu_ops 部署预发环境。`,
+    `[流程进展] 需求「${workflow.name}」(${workflowId}) 已确认，正在委派 ${roles.ops} 部署预发环境。`,
   );
 
   return {};
@@ -341,12 +469,14 @@ export function onDelegationComplete(delegationId: string): void {
   const workflow = getWorkflowByDelegation(delegationId);
   if (!workflow) return; // Not a workflow delegation
 
+  const rolesResult = getRoles();
+  if ('error' in rolesResult) return; // Workflow disabled
+  const roles = rolesResult.roles;
+
   const delegation = getDelegation(delegationId);
   if (!delegation) return;
 
-  const groups = getDeps().registeredGroups();
-  const mainFolder =
-    Object.values(groups).find((g) => g.isMain)?.folder || 'feishu_main';
+  const mainFolder = getMainFolder();
 
   logger.info(
     {
@@ -360,7 +490,6 @@ export function onDelegationComplete(delegationId: string): void {
 
   switch (workflow.status) {
     case 'dev': {
-      // Dev completed → extract branch/deliverable info → awaiting_confirm
       const deliverable = readLatestDeliverable(workflow.service);
       const branch = deliverable?.branch || '';
 
@@ -378,7 +507,6 @@ export function onDelegationComplete(delegationId: string): void {
     }
 
     case 'ops_deploy': {
-      // Check deployment result
       const result = delegation.result || '';
       const isFailure =
         result.includes('失败') ||
@@ -397,14 +525,12 @@ export function onDelegationComplete(delegationId: string): void {
         break;
       }
 
-      // Deployment succeeded → delegate to feishu_test
       try {
-        // Read the deliverable to send to test
         const deliverable = readLatestDeliverable(workflow.service);
         const deliverableContent = deliverable?.content || '交付文档未找到';
 
         const delegId = delegateTo(
-          'feishu_test',
+          roles.test,
           mainFolder,
           workflow.id,
           'test-requirement',
@@ -426,13 +552,12 @@ export function onDelegationComplete(delegationId: string): void {
       }
 
       notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 预发部署成功 ✅，已委派 feishu_test 开始测试。`,
+        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 预发部署成功 ✅，已委派 ${roles.test} 开始测试。`,
       );
       break;
     }
 
     case 'testing': {
-      // Check test results
       const result = delegation.result || '';
       const hasFailures =
         result.includes('❌') ||
@@ -450,11 +575,10 @@ export function onDelegationComplete(delegationId: string): void {
         break;
       }
 
-      // Has failures → delegate fix to feishu_dev
       const newRound = workflow.round + 1;
       try {
         const delegId = delegateTo(
-          'feishu_dev',
+          roles.dev,
           mainFolder,
           workflow.id,
           'dev-bugfix',
@@ -477,16 +601,15 @@ export function onDelegationComplete(delegationId: string): void {
       }
 
       notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 测试发现问题 ❌，进入 Round ${newRound} 修复流程，已委派 feishu_dev 修复。`,
+        `[流程进展] 需求「${workflow.name}」(${workflow.id}) 测试发现问题 ❌，进入 Round ${newRound} 修复流程，已委派 ${roles.dev} 修复。`,
       );
       break;
     }
 
     case 'fixing': {
-      // Fix completed → re-deploy via feishu_ops
       try {
         const delegId = delegateTo(
-          'feishu_ops',
+          roles.ops,
           mainFolder,
           workflow.id,
           'ops-staging-deploy',
@@ -508,7 +631,7 @@ export function onDelegationComplete(delegationId: string): void {
       }
 
       notifyMain(
-        `[流程进展] 需求「${workflow.name}」(${workflow.id}) Round ${workflow.round} 修复完成，已委派 feishu_ops 重新部署预发。`,
+        `[流程进展] 需求「${workflow.name}」(${workflow.id}) Round ${workflow.round} 修复完成，已委派 ${roles.ops} 重新部署预发。`,
       );
       break;
     }
@@ -524,4 +647,14 @@ export function onDelegationComplete(delegationId: string): void {
 /** List all active workflows (for MCP tool). */
 export function listWorkflows(): ReturnType<typeof getAllActiveWorkflows> {
   return getAllActiveWorkflows();
+}
+
+/** Check if workflow engine is enabled. */
+export function isWorkflowEnabled(): boolean {
+  return resolvedRoles !== null;
+}
+
+/** Get the reason workflow is disabled (for diagnostics). */
+export function getWorkflowDisabledReason(): string | null {
+  return roleResolutionError;
 }
