@@ -26,11 +26,7 @@ import {
   updateWorkflow,
 } from './db.js';
 import { logger } from './logger.js';
-import {
-  FeishuCard,
-  RegisteredGroup,
-  Workflow,
-} from './types.js';
+import { FeishuCard, RegisteredGroup, Workflow } from './types.js';
 import {
   getWorkflowConfigs,
   getWorkflowTypeConfig,
@@ -122,7 +118,9 @@ function resolveRolesForAllTypes(): void {
       if (folder) {
         roles[roleName] = folder;
       } else {
-        missing.push(`${roleName} (需要 ${roleConfig.skill_to_role_key} skill)`);
+        missing.push(
+          `${roleName} (需要 ${roleConfig.skill_to_role_key} skill)`,
+        );
       }
     }
 
@@ -335,12 +333,7 @@ function readLatestDeliverable(
   service: string,
   roleFolder: string,
 ): { content: string; branch: string; fileName: string } | null {
-  const delivDir = path.join(
-    GROUPS_DIR,
-    roleFolder,
-    'deliverables',
-    service,
-  );
+  const delivDir = path.join(GROUPS_DIR, roleFolder, 'deliverables', service);
   if (!fs.existsSync(delivDir)) return null;
 
   const files = fs
@@ -452,7 +445,12 @@ function applyTransition(
 
   // Build template vars with updated values
   const vars = buildTemplateVars(
-    { ...workflow, round, branch: (updates.branch as string) || workflow.branch, deliverable: (updates.deliverable as string) || workflow.deliverable },
+    {
+      ...workflow,
+      round,
+      branch: (updates.branch as string) || workflow.branch,
+      deliverable: (updates.deliverable as string) || workflow.deliverable,
+    },
     { ...extra, deliverableContent },
   );
 
@@ -626,7 +624,11 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   });
 
   // If entry state is a delegation state, delegate immediately
-  if (entryStateConfig?.type === 'delegation' && entryStateConfig.role && entryStateConfig.skill) {
+  if (
+    entryStateConfig?.type === 'delegation' &&
+    entryStateConfig.role &&
+    entryStateConfig.skill
+  ) {
     const targetFolder = roles[entryStateConfig.role];
     if (!targetFolder) {
       return {
@@ -674,10 +676,15 @@ export function approveWorkflow(workflowId: string): { error?: string } {
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  if (!config) return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+  if (!config)
+    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[workflow.status];
-  if (!stateConfig || stateConfig.type !== 'confirmation' || !stateConfig.on_approve) {
+  if (
+    !stateConfig ||
+    stateConfig.type !== 'confirmation' ||
+    !stateConfig.on_approve
+  ) {
     return {
       error: `流程 ${workflowId} 当前状态 ${workflow.status} 不支持确认操作`,
     };
@@ -729,7 +736,11 @@ export function onDelegationComplete(delegationId: string): void {
 
   // Look up current state config
   const stateConfig = config.states[workflow.status];
-  if (!stateConfig || stateConfig.type !== 'delegation' || !stateConfig.on_complete) {
+  if (
+    !stateConfig ||
+    stateConfig.type !== 'delegation' ||
+    !stateConfig.on_complete
+  ) {
     logger.warn(
       { workflowId: workflow.id, status: workflow.status },
       'Unexpected workflow status on delegation complete — no on_complete config',
@@ -782,7 +793,10 @@ const ACTION_BUTTONS: Record<string, { label: string; type?: string }> = {
   resume: { label: '▶ 继续', type: 'primary' },
 };
 
-function buildConfigCard(workflow: Workflow, cardKey: string): FeishuCard | null {
+function buildConfigCard(
+  workflow: Workflow,
+  cardKey: string,
+): FeishuCard | null {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return null;
 
@@ -971,7 +985,9 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  const terminalStates = config ? getTerminalStates(config) : ['passed', 'ops_failed', 'cancelled'];
+  const terminalStates = config
+    ? getTerminalStates(config)
+    : ['passed', 'ops_failed', 'cancelled'];
 
   if (terminalStates.includes(workflow.status)) {
     return { error: `流程已结束 (${workflow.status})` };
@@ -989,7 +1005,9 @@ export function pauseWorkflow(workflowId: string): { error?: string } {
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  const terminalStates = config ? getTerminalStates(config) : ['passed', 'ops_failed', 'cancelled'];
+  const terminalStates = config
+    ? getTerminalStates(config)
+    : ['passed', 'ops_failed', 'cancelled'];
 
   if (
     terminalStates.includes(workflow.status) ||
@@ -1053,7 +1071,10 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (config) {
     const resumedStateConfig = config.states[workflow.paused_from];
-    if (resumedStateConfig?.type === 'confirmation' && resumedStateConfig.card) {
+    if (
+      resumedStateConfig?.type === 'confirmation' &&
+      resumedStateConfig.card
+    ) {
       const updatedWorkflow = getWorkflow(workflowId);
       if (updatedWorkflow) {
         sendConfigCard(updatedWorkflow, resumedStateConfig.card);
@@ -1146,7 +1167,9 @@ export function getWorkflowDisabledReason(): string | null {
 }
 
 /** Get status labels for a workflow type (used by MCP tool). */
-export function getStatusLabelsForType(workflowType: string): Record<string, string> {
+export function getStatusLabelsForType(
+  workflowType: string,
+): Record<string, string> {
   const config = getWorkflowTypeConfig(workflowType);
   return config?.status_labels || {};
 }

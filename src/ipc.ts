@@ -801,10 +801,8 @@ export async function processTaskIpc(
         break;
       }
 
-      const startFrom =
-        (data as { start_from?: string }).start_from;
-      const workflowType =
-        (data as { workflow_type?: string }).workflow_type;
+      const startFrom = (data as { start_from?: string }).start_from;
+      const workflowType = (data as { workflow_type?: string }).workflow_type;
 
       if (!startFrom || !workflowType) {
         logger.warn(

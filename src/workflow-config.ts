@@ -95,7 +95,10 @@ export interface WorkflowTypeConfig {
 
 let loadedConfigs: Record<string, WorkflowTypeConfig> | null = null;
 
-export function loadWorkflowConfigs(): Record<string, WorkflowTypeConfig> | null {
+export function loadWorkflowConfigs(): Record<
+  string,
+  WorkflowTypeConfig
+> | null {
   const configPath = path.join(
     process.cwd(),
     'container',
@@ -104,7 +107,9 @@ export function loadWorkflowConfigs(): Record<string, WorkflowTypeConfig> | null
   );
 
   if (!fs.existsSync(configPath)) {
-    logger.info('Workflow configs not found at container/skills/workflows.json — workflow engine disabled');
+    logger.info(
+      'Workflow configs not found at container/skills/workflows.json — workflow engine disabled',
+    );
     return null;
   }
 
@@ -115,34 +120,30 @@ export function loadWorkflowConfigs(): Record<string, WorkflowTypeConfig> | null
     for (const [typeName, config] of Object.entries(configs)) {
       const errors = validateConfig(typeName, config);
       if (errors.length > 0) {
-        logger.error(
-          { typeName, errors },
-          'Workflow config validation failed',
-        );
+        logger.error({ typeName, errors }, 'Workflow config validation failed');
         return null;
       }
     }
 
     loadedConfigs = configs;
-    logger.info(
-      { types: Object.keys(configs) },
-      'Workflow configs loaded',
-    );
+    logger.info({ types: Object.keys(configs) }, 'Workflow configs loaded');
     return configs;
   } catch (err) {
-    logger.error(
-      { err },
-      'Failed to parse workflows.json',
-    );
+    logger.error({ err }, 'Failed to parse workflows.json');
     return null;
   }
 }
 
-export function getWorkflowConfigs(): Record<string, WorkflowTypeConfig> | null {
+export function getWorkflowConfigs(): Record<
+  string,
+  WorkflowTypeConfig
+> | null {
   return loadedConfigs;
 }
 
-export function getWorkflowTypeConfig(type: string): WorkflowTypeConfig | undefined {
+export function getWorkflowTypeConfig(
+  type: string,
+): WorkflowTypeConfig | undefined {
   return loadedConfigs?.[type];
 }
 
@@ -229,7 +230,11 @@ export function validateConfig(
       );
     }
     // Check role references in delegation states
-    if (state.type === 'delegation' && state.role && !config.roles[state.role]) {
+    if (
+      state.type === 'delegation' &&
+      state.role &&
+      !config.roles[state.role]
+    ) {
       errors.push(
         `${typeName}.states.${stateName}.role "${state.role}" not defined in roles`,
       );
