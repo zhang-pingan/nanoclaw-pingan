@@ -42,6 +42,7 @@ export interface IpcDeps {
   ) => void;
   enqueueMessageCheck: (groupJid: string) => void;
   sendCard?: (jid: string, card: FeishuCard) => Promise<string | undefined>;
+  sendFile?: (jid: string, filePath: string, caption?: string) => Promise<void>;
 }
 
 let ipcWatcherRunning = false;
@@ -109,6 +110,72 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },
                     'Unauthorized IPC message attempt blocked',
+                  );
+                }
+              } else if (data.type === 'file' && data.chatJid && data.filePath) {
+                // Authorization: same as message
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  // Map container path to host path
+                  const containerPrefix = '/workspace/group/';
+                  if (
+                    typeof data.filePath !== 'string' ||
+                    !data.filePath.startsWith(containerPrefix)
+                  ) {
+                    logger.warn(
+                      { filePath: data.filePath, sourceGroup },
+                      'IPC file path must start with /workspace/group/',
+                    );
+                  } else {
+                    const relativePath = data.filePath.slice(
+                      containerPrefix.length,
+                    );
+                    const hostPath = path.resolve(
+                      path.join(GROUPS_DIR, sourceGroup, relativePath),
+                    );
+                    // Prevent directory traversal
+                    const expectedPrefix = path.resolve(
+                      path.join(GROUPS_DIR, sourceGroup),
+                    );
+                    if (!hostPath.startsWith(expectedPrefix + path.sep) && hostPath !== expectedPrefix) {
+                      logger.warn(
+                        { filePath: data.filePath, hostPath, sourceGroup },
+                        'IPC file path traversal attempt blocked',
+                      );
+                    } else if (!fs.existsSync(hostPath)) {
+                      logger.warn(
+                        { hostPath, sourceGroup },
+                        'IPC file does not exist on host',
+                      );
+                    } else if (deps.sendFile) {
+                      await deps.sendFile(
+                        data.chatJid,
+                        hostPath,
+                        data.caption,
+                      );
+                      logger.info(
+                        { chatJid: data.chatJid, hostPath, sourceGroup },
+                        'IPC file sent',
+                      );
+                    } else {
+                      // Fallback: send caption text if channel doesn't support files
+                      await deps.sendMessage(
+                        data.chatJid,
+                        data.caption || `[文件: ${path.basename(hostPath)}] (该渠道不支持发送文件)`,
+                      );
+                      logger.info(
+                        { chatJid: data.chatJid, sourceGroup },
+                        'IPC file fallback to text (sendFile not supported)',
+                      );
+                    }
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC file attempt blocked',
                   );
                 }
               }

@@ -877,6 +877,14 @@ async function main(): Promise<void> {
       writeGroupsSnapshot(gf, im, ag, rj),
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
     sendCard: sendCardFn,
+    sendFile: (jid, filePath, caption) => {
+      const channel = findChannel(channels, jid);
+      if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      if (!channel.sendFile) {
+        return channel.sendMessage(jid, caption || `[文件: ${path.basename(filePath)}] (该渠道不支持发送文件)`);
+      }
+      return channel.sendFile(jid, filePath, caption);
+    },
   });
   initWorkflow({
     registeredGroups: () => registeredGroups,

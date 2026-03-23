@@ -1,4 +1,5 @@
 import axios from 'axios';
+import FormData from 'form-data';
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
@@ -221,6 +222,106 @@ class FeishuChannel implements Channel {
     }
 
     return response.data?.data?.message_id;
+  }
+
+  private static readonly FILE_TYPE_MAP: Record<string, string> = {
+    pdf: 'pdf', doc: 'doc', docx: 'doc',
+    xls: 'xls', xlsx: 'xls',
+    ppt: 'ppt', pptx: 'ppt',
+    mp4: 'mp4', opus: 'opus', ogg: 'opus',
+  };
+
+  private static readonly IMAGE_EXTS = new Set([
+    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp', 'ico',
+  ]);
+
+  private async uploadImage(filePath: string): Promise<string> {
+    const token = await this.getTenantAccessToken();
+    const form = new FormData();
+    form.append('image_type', 'message');
+    form.append('image', fs.createReadStream(filePath));
+
+    const response = await axios.post(
+      `${FEISHU_API_BASE}/im/v1/images`,
+      form,
+      { headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() } },
+    );
+
+    if (response.data?.code !== 0) {
+      throw new Error(
+        `Feishu uploadImage error: code=${response.data?.code} msg=${response.data?.msg}`,
+      );
+    }
+    return response.data.data.image_key;
+  }
+
+  private async uploadFile(filePath: string, fileType: string): Promise<string> {
+    const token = await this.getTenantAccessToken();
+    const form = new FormData();
+    form.append('file_type', fileType);
+    form.append('file_name', path.basename(filePath));
+    form.append('file', fs.createReadStream(filePath));
+
+    const response = await axios.post(
+      `${FEISHU_API_BASE}/im/v1/files`,
+      form,
+      { headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() } },
+    );
+
+    if (response.data?.code !== 0) {
+      throw new Error(
+        `Feishu uploadFile error: code=${response.data?.code} msg=${response.data?.msg}`,
+      );
+    }
+    return response.data.data.file_key;
+  }
+
+  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+    const token = await this.getTenantAccessToken();
+    const actualJid = jid.startsWith('feishu:') ? jid.slice(7) : jid;
+    const receiveIdType = actualJid.startsWith('ou_') ? 'user_id' : 'chat_id';
+
+    const ext = path.extname(filePath).toLowerCase().replace('.', '');
+    const isImage = FeishuChannel.IMAGE_EXTS.has(ext);
+
+    if (isImage) {
+      const imageKey = await this.uploadImage(filePath);
+      const response = await axios.post(
+        `${FEISHU_API_BASE}/im/v1/messages?receive_id_type=${receiveIdType}`,
+        {
+          receive_id: actualJid,
+          msg_type: 'image',
+          content: JSON.stringify({ image_key: imageKey }),
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (response.data?.code !== 0) {
+        throw new Error(
+          `Feishu send image error: code=${response.data?.code} msg=${response.data?.msg}`,
+        );
+      }
+    } else {
+      const fileType = FeishuChannel.FILE_TYPE_MAP[ext] || 'stream';
+      const fileKey = await this.uploadFile(filePath, fileType);
+      const response = await axios.post(
+        `${FEISHU_API_BASE}/im/v1/messages?receive_id_type=${receiveIdType}`,
+        {
+          receive_id: actualJid,
+          msg_type: 'file',
+          content: JSON.stringify({ file_key: fileKey }),
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (response.data?.code !== 0) {
+        throw new Error(
+          `Feishu send file error: code=${response.data?.code} msg=${response.data?.msg}`,
+        );
+      }
+    }
+
+    if (caption) {
+      await this.sendMessage(jid, caption);
+    }
   }
 
   isConnected(): boolean {

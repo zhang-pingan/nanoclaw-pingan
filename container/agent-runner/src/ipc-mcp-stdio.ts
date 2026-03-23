@@ -63,6 +63,53 @@ server.tool(
 );
 
 server.tool(
+  'send_file',
+  '发送文件或图片到当前群/用户。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/group/ 目录下。',
+  {
+    file_path: z.string().describe('文件绝对路径，必须在 /workspace/group/ 下'),
+    caption: z.string().optional().describe('可选说明文字，会在文件后以文本消息发送'),
+  },
+  async (args) => {
+    const prefix = '/workspace/group/';
+    if (!args.file_path.startsWith(prefix)) {
+      return {
+        content: [{ type: 'text' as const, text: `文件路径必须以 ${prefix} 开头。当前路径: ${args.file_path}` }],
+        isError: true,
+      };
+    }
+
+    // Resolve to catch ../ traversal
+    const resolved = path.resolve(args.file_path);
+    if (!resolved.startsWith(prefix)) {
+      return {
+        content: [{ type: 'text' as const, text: '文件路径不合法（检测到路径穿越）。' }],
+        isError: true,
+      };
+    }
+
+    if (!fs.existsSync(resolved)) {
+      return {
+        content: [{ type: 'text' as const, text: `文件不存在: ${resolved}` }],
+        isError: true,
+      };
+    }
+
+    const data = {
+      type: 'file',
+      chatJid,
+      filePath: resolved,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: '文件发送请求已提交。' }] };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
 

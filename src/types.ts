@@ -141,6 +141,8 @@ export interface Channel {
   syncGroups?(force: boolean): Promise<void>;
   // Optional: send interactive card (Feishu). Returns message_id.
   sendCard?(jid: string, card: FeishuCard): Promise<string | undefined>;
+  // Optional: send file or image. Channels that support it implement it.
+  sendFile?(jid: string, filePath: string, caption?: string): Promise<void>;
 }
 
 // Callback type that channels use to deliver inbound messages
