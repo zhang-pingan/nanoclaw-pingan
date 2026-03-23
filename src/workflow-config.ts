@@ -22,12 +22,6 @@ export interface StateTransition {
   skill?: string;
   /** Task template with {{var}} placeholders. */
   task_template?: string;
-  /** Whether to enable plan_mode for the delegation. */
-  plan_mode?: boolean;
-  /** Read the latest deliverable doc before delegating. */
-  read_deliverable?: boolean;
-  /** Which role's deliverable folder to read from (defaults to 'dev'). */
-  read_deliverable_role?: string;
   /** Increment the workflow round counter. */
   increment_round?: boolean;
   /** Notification template sent to main group. */
@@ -43,7 +37,6 @@ export interface StateConfig {
   // --- delegation fields ---
   role?: string;
   skill?: string;
-  plan_mode?: boolean;
   task_template?: string;
   on_complete?: {
     success: StateTransition;
@@ -53,6 +46,7 @@ export interface StateConfig {
   // --- confirmation fields ---
   card?: string;
   on_approve?: StateTransition;
+  on_revise?: StateTransition;
 }
 
 export interface RoleConfig {
@@ -158,9 +152,9 @@ export interface TemplateVars {
   id?: string;
   round?: number;
   deliverable?: string;
-  deliverable_content?: string;
   delegation_result?: string;
   result_summary?: string;
+  revision_text?: string;
   [key: string]: string | number | undefined;
 }
 
@@ -223,6 +217,18 @@ export function validateConfig(
         );
       }
     }
+    if (state.on_revise) {
+      if (!stateNames.has(state.on_revise.target)) {
+        errors.push(
+          `${typeName}.states.${stateName}.on_revise.target "${state.on_revise.target}" does not exist`,
+        );
+      }
+      if (state.on_revise.role && !config.roles[state.on_revise.role]) {
+        errors.push(
+          `${typeName}.states.${stateName}.on_revise.role "${state.on_revise.role}" not defined in roles`,
+        );
+      }
+    }
     // Check card references
     if (state.card && !config.cards[state.card]) {
       errors.push(
@@ -264,6 +270,11 @@ export function validateConfig(
     if (state.on_approve?.card && !config.cards[state.on_approve.card]) {
       errors.push(
         `${typeName}.states.${stateName}.on_approve.card "${state.on_approve.card}" not defined in cards`,
+      );
+    }
+    if (state.on_revise?.card && !config.cards[state.on_revise.card]) {
+      errors.push(
+        `${typeName}.states.${stateName}.on_revise.card "${state.on_revise.card}" not defined in cards`,
       );
     }
   }

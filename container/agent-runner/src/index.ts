@@ -27,7 +27,6 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
-  planMode?: boolean;
 }
 
 interface ContainerOutput {
@@ -57,7 +56,6 @@ interface SDKUserMessage {
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
-const IPC_INPUT_PLAN_CONFIRM = path.join(IPC_INPUT_DIR, '_plan_confirm');
 const IPC_POLL_MS = 500;
 
 /**
@@ -347,47 +345,7 @@ function waitForIpcMessage(): Promise<string | null> {
   });
 }
 
-/**
- * Check for _plan_confirm sentinel.
- */
-function shouldPlanConfirm(): boolean {
-  if (fs.existsSync(IPC_INPUT_PLAN_CONFIRM)) {
-    try { fs.unlinkSync(IPC_INPUT_PLAN_CONFIRM); } catch { /* ignore */ }
-    return true;
-  }
-  return false;
-}
-
-/**
- * Wait for plan confirmation signal: _plan_confirm, _close, or a new message (revision).
- */
-function waitForPlanSignal(): Promise<{type:'confirm'}|{type:'close'}|{type:'message',text:string}> {
-  return new Promise((resolve) => {
-    const poll = () => {
-      if (shouldClose()) { resolve({type:'close'}); return; }
-      if (shouldPlanConfirm()) { resolve({type:'confirm'}); return; }
-      const messages = drainIpcInput();
-      if (messages.length > 0) { resolve({type:'message', text: messages.join('\n')}); return; }
-      setTimeout(poll, IPC_POLL_MS);
-    };
-    poll();
-  });
-}
-
-/**
- * Write a plan_complete IPC message to /workspace/ipc/messages/ for the host to pick up.
- */
-function writeIpcPlanComplete(): void {
-  const dir = '/workspace/ipc/messages';
-  fs.mkdirSync(dir, { recursive: true });
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2,6)}.json`;
-  const tempPath = path.join(dir, `${filename}.tmp`);
-  const finalPath = path.join(dir, filename);
-  fs.writeFileSync(tempPath, JSON.stringify({ type: 'plan_complete' }));
-  fs.renameSync(tempPath, finalPath);
-}
-
-/** Build shared query options used by both normal and plan-mode queries. */
+/** Build shared query options. */
 function buildQueryOptions(
   containerInput: ContainerInput,
   mcpServerPath: string,
@@ -395,7 +353,6 @@ function buildQueryOptions(
   overrides: {
     sessionId?: string;
     resumeAt?: string;
-    permissionMode: string;
   },
 ) {
   // Load global CLAUDE.md as additional system context (shared across all groups)
@@ -440,7 +397,7 @@ function buildQueryOptions(
       'mcp__nanoclaw__*'
     ],
     env: sdkEnv,
-    permissionMode: overrides.permissionMode as 'bypassPermissions' | 'plan',
+    permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
     settingSources: ['project', 'user'] as Array<'project' | 'user'>,
     mcpServers: {
@@ -520,7 +477,6 @@ async function runQuery(
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
-  permissionMode: string = 'bypassPermissions',
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
   const stream = new MessageStream();
   stream.push(prompt);
@@ -552,7 +508,6 @@ async function runQuery(
   const options = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
     sessionId,
     resumeAt,
-    permissionMode,
   });
   const result = await iterateQuery(stream, options);
   newSessionId = result.newSessionId || newSessionId;
@@ -707,14 +662,11 @@ async function main(): Promise<void> {
 
   // Query loop: run query → wait for IPC message → run new query → repeat
   let resumeAt: string | undefined;
-  let planModeActive = containerInput.planMode === true;
   try {
     while (true) {
-      // Decide permissionMode for this query
-      const permMode = planModeActive ? 'plan' : 'bypassPermissions';
-      log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'}, permMode: ${permMode})...`);
+      log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt, permMode);
+      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
         confirmedSessionId = queryResult.newSessionId;
@@ -729,34 +681,6 @@ async function main(): Promise<void> {
       if (queryResult.closedDuringQuery) {
         log('Close sentinel consumed during query, exiting');
         break;
-      }
-
-      if (planModeActive) {
-        // Phase 1 (plan) complete — notify host and wait for structured confirmation
-        writeIpcPlanComplete();
-        writeOutput({ status: 'success', result: null, newSessionId: sessionId });
-        log('Plan phase complete, waiting for confirmation...');
-
-        const signal = await waitForPlanSignal();
-
-        if (signal.type === 'close') {
-          log('Close during plan confirmation, exiting');
-          break;
-        }
-
-        if (signal.type === 'confirm') {
-          planModeActive = false;
-          prompt = '用户已确认方案，请按照之前的计划执行代码实现。';
-          log('Plan confirmed, entering execution phase');
-          continue; // back to loop top — permMode = bypassPermissions
-        }
-
-        if (signal.type === 'message') {
-          // Revision — keep planModeActive=true, re-run plan query
-          prompt = signal.text;
-          log(`Plan revision (${signal.text.length} chars), re-running plan phase`);
-          continue; // back to loop top — permMode still plan
-        }
       }
 
       // Emit session update so host can track it

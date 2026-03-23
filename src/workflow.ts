@@ -12,7 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR, GROUPS_DIR } from './config.js';
+import { PROJECT_ROOT } from './config.js';
 import {
   createDelegation,
   createWorkflow as dbCreateWorkflow,
@@ -190,31 +190,6 @@ function getDeps(): WorkflowDeps {
 // Helpers
 // -------------------------------------------------------
 
-/** Write a plan_mode marker to the group's IPC directory. */
-function writePlanModeMarker(groupFolder: string): void {
-  const markerPath = path.join(DATA_DIR, 'ipc', groupFolder, 'plan_mode');
-  fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-  fs.writeFileSync(markerPath, '1');
-}
-
-/** Write a _plan_confirm sentinel so the container exits waitForPlanSignal() and enters Phase 2. */
-function writePlanConfirmSentinel(groupFolder: string): void {
-  const sentinelPath = path.join(DATA_DIR, 'ipc', groupFolder, 'input', '_plan_confirm');
-  fs.mkdirSync(path.dirname(sentinelPath), { recursive: true });
-  fs.writeFileSync(sentinelPath, '');
-}
-
-/** Write a revision message into the container's IPC input so it re-runs the plan phase. */
-function writeIpcRevision(groupFolder: string, text: string): void {
-  const inputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
-  fs.mkdirSync(inputDir, { recursive: true });
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`;
-  const tempPath = path.join(inputDir, `${filename}.tmp`);
-  const finalPath = path.join(inputDir, filename);
-  fs.writeFileSync(tempPath, JSON.stringify({ type: 'message', text }));
-  fs.renameSync(tempPath, finalPath);
-}
-
 /** Find the JID for a given group folder name. */
 function findJidByFolder(
   folder: string,
@@ -346,29 +321,42 @@ function delegateTo(
   return delegationId;
 }
 
-/** Read the latest deliverable document from a role's group folder for a given service. */
+/** Role name → deliverable filename inside the folder. */
+const ROLE_DELIVERABLE_FILE: Record<string, string> = {
+  planner: 'plan.md',
+  dev: 'dev.md',
+  test: 'test.md',
+};
+
+/** Read deliverable metadata from the shared projects directory.
+ *  Directory layout: projects/{service}/iteration/{folderName}/{role}.md
+ *  Scans for the latest sub-directory containing the role's file (used by entry points). */
 function readLatestDeliverable(
   service: string,
-  roleFolder: string,
-): { content: string; branch: string; fileName: string } | null {
-  const delivDir = path.join(GROUPS_DIR, roleFolder, 'deliverables', service);
+  role: string,
+): { branch: string; fileName: string } | null {
+  const roleFile = ROLE_DELIVERABLE_FILE[role] || `${role}.md`;
+  const delivDir = path.join(PROJECT_ROOT, 'projects', service, 'iteration');
   if (!fs.existsSync(delivDir)) return null;
 
-  const files = fs
-    .readdirSync(delivDir)
-    .filter((f) => f.endsWith('.md'))
+  const dirs = fs
+    .readdirSync(delivDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
     .sort()
     .reverse();
 
-  if (files.length === 0) return null;
+  for (const dir of dirs) {
+    const filePath = path.join(delivDir, dir, roleFile);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const branchMatch = content.match(/工作分支[：:]\s*(.+)/);
+      const branch = branchMatch ? branchMatch[1].trim() : '';
+      return { branch, fileName: dir };
+    }
+  }
 
-  const content = fs.readFileSync(path.join(delivDir, files[0]), 'utf-8');
-
-  // Extract branch from "- 工作分支：{branch}" pattern
-  const branchMatch = content.match(/工作分支[：:]\s*(.+)/);
-  const branch = branchMatch ? branchMatch[1].trim() : '';
-
-  return { content, branch, fileName: files[0] };
+  return null;
 }
 
 /** Get terminal state names from a workflow type config. */
@@ -398,7 +386,7 @@ function buildTemplateVars(
   extra?: {
     delegationResult?: string;
     resultSummary?: string;
-    deliverableContent?: string;
+    revisionText?: string;
   },
 ): TemplateVars {
   return {
@@ -408,9 +396,9 @@ function buildTemplateVars(
     id: workflow.id,
     round: workflow.round,
     deliverable: workflow.deliverable || 'N/A',
-    deliverable_content: extra?.deliverableContent || '',
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
+    revision_text: extra?.revisionText || '',
   };
 }
 
@@ -420,7 +408,7 @@ function buildTemplateVars(
 
 /**
  * Apply a state transition defined in the config.
- * Handles: read_deliverable → increment_round → delegateTo → updateWorkflow → notify → send card
+ * Handles: increment_round → delegateTo → updateWorkflow → notify → send card
  */
 function applyTransition(
   workflow: Workflow,
@@ -429,6 +417,7 @@ function applyTransition(
   extra?: {
     delegationResult?: string;
     resultSummary?: string;
+    revisionText?: string;
   },
 ): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -446,30 +435,13 @@ function applyTransition(
     updates.round = round;
   }
 
-  // 2. Read deliverable if needed
-  let deliverableContent = '';
-  if (transition.read_deliverable) {
-    const delivRole = transition.read_deliverable_role || 'dev';
-    const delivFolder = roles[delivRole];
-    if (delivFolder) {
-      const deliverable = readLatestDeliverable(workflow.service, delivFolder);
-      if (deliverable) {
-        updates.branch = deliverable.branch;
-        updates.deliverable = deliverable.fileName;
-        deliverableContent = deliverable.content;
-      }
-    }
-  }
-
   // Build template vars with updated values
   const vars = buildTemplateVars(
     {
       ...workflow,
       round,
-      branch: (updates.branch as string) || workflow.branch,
-      deliverable: (updates.deliverable as string) || workflow.deliverable,
     },
-    { ...extra, deliverableContent },
+    extra,
   );
 
   // 3. Delegate if transition specifies a role + skill
@@ -482,12 +454,6 @@ function applyTransition(
       : '';
 
     try {
-      // Write plan_mode marker if the target state config has plan_mode
-      const targetStateConfig = config.states[transition.target];
-      if (targetStateConfig?.plan_mode) {
-        writePlanModeMarker(roles[delegateRole]);
-      }
-
       const delegationId = delegateTo(
         roles[delegateRole],
         mainFolder,
@@ -577,20 +543,11 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
   // If entry point requires deliverable, read it first
   if (entryPoint.requires_deliverable) {
-    // Find which role provides deliverables (default to 'dev')
-    const delivFolder = roles['dev'];
-    if (!delivFolder) {
-      return {
-        workflowId,
-        error: `Workflow type "${workflowType}" requires deliverable but dev role not found`,
-      };
-    }
-
-    const deliverable = readLatestDeliverable(opts.service, delivFolder);
+    const deliverable = readLatestDeliverable(opts.service, 'dev');
     if (!deliverable) {
       return {
         workflowId,
-        error: `未找到服务 ${opts.service} 的交付文档 (groups/${delivFolder}/deliverables/${opts.service}/)`,
+        error: `未找到服务 ${opts.service} 的交付文档 (projects/${opts.service}/iteration/)`,
       };
     }
 
@@ -656,10 +613,6 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     }
 
     try {
-      if (entryStateConfig.plan_mode) {
-        writePlanModeMarker(targetFolder);
-      }
-
       const vars = buildTemplateVars(getWorkflow(workflowId)!);
       const taskContent = entryStateConfig.task_template
         ? renderTemplate(entryStateConfig.task_template, vars, roles)
@@ -712,6 +665,37 @@ export function approveWorkflow(workflowId: string): { error?: string } {
   if ('error' in rolesResult) return { error: rolesResult.error };
 
   applyTransition(workflow, stateConfig.on_approve, rolesResult.roles);
+  return {};
+}
+
+export function reviseWorkflow(
+  workflowId: string,
+  revisionText: string,
+): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config)
+    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+
+  const stateConfig = config.states[workflow.status];
+  if (
+    !stateConfig ||
+    stateConfig.type !== 'confirmation' ||
+    !stateConfig.on_revise
+  ) {
+    return {
+      error: `流程 ${workflowId} 当前状态 ${workflow.status} 不支持修改操作`,
+    };
+  }
+
+  const rolesResult = getRolesForType(workflow.workflow_type);
+  if ('error' in rolesResult) return { error: rolesResult.error };
+
+  applyTransition(workflow, stateConfig.on_revise, rolesResult.roles, {
+    revisionText,
+  });
   return {};
 }
 
@@ -805,10 +789,11 @@ export function onDelegationComplete(delegationId: string): void {
 // -------------------------------------------------------
 
 const ACTION_BUTTONS: Record<string, { label: string; type?: string }> = {
-  approve: { label: '✅ 确认部署', type: 'primary' },
+  approve: { label: '✅ 确认执行', type: 'primary' },
   pause: { label: '⏸ 暂缓' },
   cancel: { label: '❌ 取消流程', type: 'danger' },
   resume: { label: '▶ 继续', type: 'primary' },
+  revise: { label: '✏️ 提交修改' },
 };
 
 function buildConfigCard(
@@ -828,7 +813,12 @@ function buildConfigCard(
   const body = renderTemplate(cardConfig.body_template, vars, roleFolders);
 
   const actions: unknown[] = [];
+  let hasRevise = false;
   for (const actionName of cardConfig.actions) {
+    if (actionName === 'revise') {
+      hasRevise = true;
+      continue; // revise is rendered as a form below, not a regular button
+    }
     const btn = ACTION_BUTTONS[actionName];
     if (btn) {
       const button: Record<string, unknown> = {
@@ -841,15 +831,40 @@ function buildConfigCard(
     }
   }
 
+  const elements: unknown[] = [
+    {
+      tag: 'div',
+      text: { tag: 'lark_md', content: body },
+    },
+    ...(actions.length > 0 ? [{ tag: 'action', actions }] : []),
+  ];
+
+  // Append revision form if the card has a "revise" action
+  if (hasRevise) {
+    elements.push(
+      { tag: 'hr' },
+      {
+        tag: 'form',
+        name: 'revision_form',
+        elements: [
+          {
+            tag: 'input',
+            name: 'revision_text',
+            placeholder: { tag: 'plain_text', content: '如需修改方案，请输入修改意见...' },
+          },
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '✏️ 提交修改' },
+            value: { workflow_id: workflow.id, action: 'request_revision' },
+          },
+        ],
+      },
+    );
+  }
+
   return {
     header: { title: header, template: cardConfig.header_color || 'blue' },
-    elements: [
-      {
-        tag: 'div',
-        text: { tag: 'lark_md', content: body },
-      },
-      ...(actions.length > 0 ? [{ tag: 'action', actions }] : []),
-    ],
+    elements,
   };
 }
 
@@ -995,100 +1010,6 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
 }
 
 // -------------------------------------------------------
-// Plan confirmation
-// -------------------------------------------------------
-
-/**
- * Send a plan confirmation card to the main group.
- * groupFolder is the primary identifier; workflow is optional for enriching display.
- */
-function sendPlanConfirmCard(groupFolder: string, workflow?: Workflow): void {
-  const { sendCard } = getDeps();
-  const groups = getDeps().registeredGroups();
-  const mainJid = findMainJid(groups);
-  if (!mainJid || !sendCard) return;
-
-  const btnValue = (actionName: string) => {
-    const v: Record<string, string> = { group_folder: groupFolder, action: actionName };
-    if (workflow) v.workflow_id = workflow.id;
-    return v;
-  };
-
-  const groupName = Object.values(groups).find(g => g.folder === groupFolder)?.name || groupFolder;
-  const title = workflow
-    ? `📋 需求「${workflow.name}」方案已生成`
-    : `📋 「${groupName}」方案已生成`;
-  const body = workflow
-    ? `**流程 ID**：${workflow.id}\n**服务**：${workflow.service}\n\n开发方案已生成，请查看 dev 群中的方案详情后确认。`
-    : `**群组**：${groupName}\n\n开发方案已生成，请查看群中的方案详情后确认。`;
-
-  const card: FeishuCard = {
-    header: { title, template: 'green' },
-    elements: [
-      {
-        tag: 'div',
-        text: { tag: 'lark_md', content: body },
-      },
-      {
-        tag: 'action',
-        actions: [
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '✅ 确认执行' },
-            type: 'primary',
-            value: btnValue('confirm_plan'),
-          },
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '❌ 取消' },
-            type: 'danger',
-            value: btnValue('cancel'),
-          },
-        ],
-      },
-      { tag: 'hr' },
-      {
-        tag: 'form',
-        name: 'revision_form',
-        elements: [
-          {
-            tag: 'input',
-            name: 'revision_text',
-            placeholder: { tag: 'plain_text', content: '如需修改方案，请输入修改意见...' },
-          },
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '✏️ 提交修改' },
-            value: btnValue('request_revision'),
-          },
-        ],
-      },
-    ],
-  };
-
-  sendCard(mainJid, card).catch((err) => {
-    logger.error({ err, groupFolder, workflowId: workflow?.id }, 'Failed to send plan confirm card');
-  });
-}
-
-/**
- * Called when a container signals plan_complete via IPC.
- * Always sends a confirmation card. Optionally enriches with workflow info.
- */
-export function onPlanComplete(groupFolder: string): void {
-  // Look up workflow for display enrichment (not required for the card to work)
-  const activeWorkflows = getAllActiveWorkflows();
-  const workflow = activeWorkflows.find(w => {
-    if (!w.current_delegation_id) return false;
-    const delegation = getDelegation(w.current_delegation_id);
-    return delegation?.target_folder === groupFolder && delegation?.status === 'pending';
-  });
-
-  sendPlanConfirmCard(groupFolder, workflow || undefined);
-  logger.info({ workflowId: workflow?.id, groupFolder }, 'Plan confirmation card sent');
-}
-
-// -------------------------------------------------------
 // Cancel / Pause / Resume
 // -------------------------------------------------------
 
@@ -1216,12 +1137,7 @@ export function handleCardAction(action: {
       const wf = getWorkflow(action.workflow_id);
       if (wf) return `需求「${wf.name}」(${wf.id})`;
     }
-    if (action.group_folder) {
-      const groups = getDeps().registeredGroups();
-      const name = Object.values(groups).find(g => g.folder === action.group_folder)?.name;
-      if (name) return `「${name}」`;
-    }
-    return action.workflow_id || action.group_folder || '未知';
+    return action.workflow_id || '未知';
   };
 
   switch (action.action) {
@@ -1244,32 +1160,18 @@ export function handleCardAction(action: {
       if (result.error) notifyMain(`[操作失败] 恢复流程失败: ${result.error}`);
       break;
     }
-    // --- Plan actions (require group_folder) ---
-    case 'confirm_plan': {
-      if (!action.group_folder) { notifyMain('[操作失败] 找不到目标群组'); break; }
-      writePlanConfirmSentinel(action.group_folder);
-      notifyMain(`[流程进展] ${getLabel()} 方案已确认，开始执行。`);
-      break;
-    }
     case 'request_revision': {
-      if (!action.group_folder) { notifyMain('[操作失败] 找不到目标群组'); break; }
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
       const revisionText = action.form_value?.revision_text;
       if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。'); break; }
-      writeIpcRevision(action.group_folder, `[方案修改意见]\n\n${revisionText}`);
-      notifyMain(`[方案修改] ${getLabel()} 修改意见已提交，Agent 正在重新生成方案。`);
+      const result = reviseWorkflow(action.workflow_id, `[方案修改意见]\n\n${revisionText}`);
+      if (result.error) notifyMain(`[操作失败] 提交修改失败: ${result.error}`);
       break;
     }
-    // --- Cancel: works with both workflow and standalone plan ---
     case 'cancel': {
-      if (action.workflow_id) {
-        const result = cancelWorkflow(action.workflow_id);
-        if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`);
-      } else if (action.group_folder) {
-        const closePath = path.join(DATA_DIR, 'ipc', action.group_folder, 'input', '_close');
-        fs.mkdirSync(path.dirname(closePath), { recursive: true });
-        fs.writeFileSync(closePath, '');
-        notifyMain(`[已取消] ${getLabel()} 方案已取消。`);
-      }
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
+      const result = cancelWorkflow(action.workflow_id);
+      if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`);
       break;
     }
     default:

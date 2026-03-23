@@ -49,7 +49,7 @@ import {
   storeMessage,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
-import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
+import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { handleCardAction, initWorkflow } from './workflow.js';
 import { FeishuChannel } from './channels/feishu.js';
@@ -275,20 +275,6 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   let prompt = formatMessages(missedMessages, TIMEZONE);
 
-  // Detect /plan command — activate plan mode for this run
-  const hasPlanCommand = missedMessages.some((m) =>
-    /^\s*\/plan\b/i.test(m.content.replace(TRIGGER_PATTERN, '').trim()),
-  );
-  if (hasPlanCommand) {
-    // Strip /plan prefix from all messages that contain it
-    prompt = prompt.replace(/\/plan\s*/gi, '');
-    // Write plan_mode marker so runAgent picks it up
-    const markerPath = path.join(resolveGroupIpcPath(group.folder), 'plan_mode');
-    fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-    fs.writeFileSync(markerPath, '1');
-    logger.info({ group: group.name }, '/plan command detected, plan mode marker written');
-  }
-
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
   const previousCursor = lastAgentTimestamp[chatJid] || '';
@@ -431,22 +417,6 @@ async function runAgent(
       }
     : undefined;
 
-  // Check for plan_mode marker (written by workflow engine)
-  let planMode = false;
-  const planModeMarker = path.join(
-    resolveGroupIpcPath(group.folder),
-    'plan_mode',
-  );
-  if (fs.existsSync(planModeMarker)) {
-    planMode = true;
-    try {
-      fs.unlinkSync(planModeMarker);
-    } catch {
-      /* ignore */
-    }
-    logger.info({ group: group.name }, 'Plan mode activated for this run');
-  }
-
   try {
     const output = await runContainerAgent(
       group,
@@ -456,7 +426,6 @@ async function runAgent(
         groupFolder: group.folder,
         chatJid,
         isMain,
-        planMode,
         assistantName: ASSISTANT_NAME,
       },
       (proc, containerName) =>

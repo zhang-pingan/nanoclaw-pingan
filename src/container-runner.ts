@@ -50,7 +50,6 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
-  planMode?: boolean;
 }
 
 export interface ContainerOutput {
@@ -121,6 +120,15 @@ function buildVolumeMounts(
         readonly: true,
       });
     }
+
+    // Shared projects directory (read-write for all groups)
+    const projectsDir = path.join(projectRoot, 'projects');
+    fs.mkdirSync(projectsDir, { recursive: true });
+    mounts.push({
+      hostPath: projectsDir,
+      containerPath: '/workspace/projects',
+      readonly: false,
+    });
   }
 
   // Per-group Claude sessions directory (isolated from other groups)

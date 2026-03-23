@@ -9,7 +9,6 @@ import {
   getAvailableWorkflowTypes,
   listWorkflows,
   onDelegationComplete as onWorkflowDelegationComplete,
-  onPlanComplete as onWorkflowPlanComplete,
   sendWorkflowListCard,
 } from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
@@ -94,16 +93,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
             const filePath = path.join(messagesDir, file);
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              if (data.type === 'plan_complete') {
-                try {
-                  onWorkflowPlanComplete(sourceGroup);
-                } catch (err) {
-                  logger.error(
-                    { err, sourceGroup },
-                    'plan_complete handler failed',
-                  );
-                }
-              } else if (data.type === 'message' && data.chatJid && data.text) {
+              if (data.type === 'message' && data.chatJid && data.text) {
                 // Authorization: verify this group can send to this chatJid
                 const targetGroup = registeredGroups[data.chatJid];
                 if (

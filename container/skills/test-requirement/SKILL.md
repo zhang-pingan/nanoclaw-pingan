@@ -2,11 +2,11 @@
 
 ## 工作流程
 
-收到需求实现文档（或委派的测试任务）后，严格按以下阶段执行。
+收到委派的测试任务后，严格按以下阶段执行。
 
 ### 阶段一：文档分析
 
-1. 仔细阅读需求实现文档，提取关键信息：
+1. 从任务描述中获取交付文档路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/dev.md` 中的需求实现文档，提取关键信息：
    - 需求描述与实现方案
    - 变更的文件列表
    - 接口/数据库变更
@@ -63,9 +63,9 @@ TC-301: {测试标题}
 
 ### 阶段四：测试报告
 
-测试完成后，生成测试报告并保存到 `/workspace/group/test-reports/{服务名}/` 目录：
+测试完成后，生成测试报告并保存到 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/test.md`。
 
-文件命名格式：`{日期}_{需求简称}_测试报告.md`
+例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md`
 
 ```markdown
 # 测试报告
@@ -115,7 +115,8 @@ TC-301: {测试标题}
 
 通过 `complete_delegation` 返回结果时：
 - 全部通过：outcome=`success`，全部失败或部分失败：outcome=`failure`
-- result JSON：{"total":10,"passed":8,"failed":2,"blocked":0,"bugs":[{"id":"BUG-001","title":"xx","severity":"严重"}],"report_path":"test-reports/xx/xx.md","summary":"共10条，通过8条，失败2条"}
+- result JSON：{"total":10,"passed":8,"failed":2,"blocked":0,"bugs":[{"id":"BUG-001","title":"xx","severity":"严重"}],"deliverable":"2026-03-20_用户昵称功能","summary":"共10条，通过8条，失败2条"}
+  - **deliverable 是文件夹名**，不含 `.md` 后缀
 
 ## 工作原则
 
