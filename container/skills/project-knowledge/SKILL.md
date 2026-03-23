@@ -1,3 +1,8 @@
+---
+name: project-knowledge
+description: Maintain project knowledge base — analyze code repositories, generate architecture docs, domain docs, API overviews, data models, and downstream dependency maps.
+---
+
 # 项目知识库维护 Skill
 
 你是项目知识库的管理者。这不是一个被动调用的流程，而是你应当持续遵循的行为准则。当你处理涉及具体服务的任务时，自动检查知识库状态并做出响应。
@@ -90,7 +95,79 @@
 - `/workspace/projects/{服务名}/docs/data-model.md` — 全部数据表汇总，含表名、所属领域、关键字段、表间关系
 - `/workspace/projects/{服务名}/docs/business-rules.md` — 核心业务规则汇总，按领域分组
 
-### 步骤 8：发送结果摘要
+### 步骤 8：下游服务依赖分析
+
+分析代码中对外部服务的调用，生成下游依赖文档。
+
+#### 8.1 识别下游调用
+
+扫描代码中的外部服务调用，常见模式包括：
+- HTTP 客户端调用：RestTemplate、WebClient、Feign、HttpClient、OkHttp、axios、fetch 等
+- RPC 调用：Dubbo reference、gRPC stub 等
+- 消息队列：Kafka/RabbitMQ/RocketMQ 的 producer 发送
+- 配置文件中的外部服务地址：application.yml、.env、config 文件中的 URL/host 配置
+
+对每个下游调用，提取：
+- 调用方式（HTTP/RPC/MQ 等）
+- 目标服务地址或服务名
+- 调用路径（API path / topic / method）
+- 调用位置（源文件路径）
+- 用途说明（根据上下文推断）
+
+#### 8.2 与 services.json 交叉比对
+
+读取 `/workspace/global/services.json`，将分析出的下游依赖与已配置的服务列表进行比对：
+- 通过域名、服务名、仓库名等信息匹配
+- 记录每个下游依赖是否能对应到 services.json 中的某个服务
+
+如果发现可能的映射关系，通过 `mcp__nanoclaw__send_message` 向用户确认：
+
+```
+🔍 下游服务依赖分析
+
+在 {服务名} 中发现以下下游服务调用，部分可能对应 services.json 中的已配置服务：
+
+1. {下游调用描述} → 疑似对应 services.json 中的「{服务名}」
+2. {下游调用描述} → 疑似对应 services.json 中的「{服务名}」
+3. {下游调用描述} → 未在 services.json 中找到对应服务
+
+请确认以上映射关系是否正确，或补充修正。
+```
+
+等待用户回复确认后，将确认后的映射关系写入文档。
+
+#### 8.3 生成依赖文档
+
+输出到 `/workspace/projects/{服务名}/docs/downstream-dependencies.md`，包含：
+
+```markdown
+# 下游服务依赖
+
+## 概述
+{服务名} 依赖 {N} 个下游服务，涉及 HTTP 调用 {x} 个、RPC 调用 {y} 个、消息队列 {z} 个。
+
+## 依赖列表
+
+### {下游服务1}
+- **调用方式**：HTTP / RPC / MQ
+- **目标地址**：{URL 或服务名}
+- **services.json 映射**：{对应的服务名} 或 无（外部服务）
+- **调用明细**：
+  | 接口/Topic | 方法 | 用途 | 调用位置 |
+  |-----------|------|------|---------|
+  | /api/xxx  | GET  | 获取xx数据 | src/service/XxxService.java:42 |
+- **备注**：{补充说明}
+
+### {下游服务2}
+...
+
+## 依赖拓扑
+{当前服务} → {下游服务1}（HTTP）
+{当前服务} → {下游服务2}（RPC）
+{当前服务} → {MQ Topic}（MQ）→ {消费方}
+```
+
+### 步骤 9：发送结果摘要
 
 通过 `mcp__nanoclaw__send_message` 发送：
 
@@ -99,6 +176,7 @@
 
 服务：{服务名}
 领域数量：{N} 个
+下游依赖：{M} 个（其中 {K} 个已关联 services.json）
 文档列表：
   - docs/overview.md
   - docs/domains/{领域1}.md
@@ -107,6 +185,7 @@
   - docs/api-overview.md
   - docs/data-model.md
   - docs/business-rules.md
+  - docs/downstream-dependencies.md
 ```
 
 ## 增量更新流程

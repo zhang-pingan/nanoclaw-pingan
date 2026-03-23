@@ -1,3 +1,8 @@
+---
+name: test-requirement
+description: Test implemented features — analyze delivery docs, design test cases, execute tests on staging, and report results.
+---
+
 # 需求测试 Skill
 
 ## 工作流程

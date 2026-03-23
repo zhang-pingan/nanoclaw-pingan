@@ -1,3 +1,8 @@
+---
+name: dev-requirement
+description: Implement features based on approved plans — read design docs, write code, create branches, and produce delivery documents.
+---
+
 # 需求开发 Skill
 
 本技能负责**按照已确认的方案执行代码实现**。

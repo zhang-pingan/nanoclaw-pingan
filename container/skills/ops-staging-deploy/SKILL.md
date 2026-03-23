@@ -1,3 +1,8 @@
+---
+name: ops-staging-deploy
+description: Deploy service branches to staging environment — merge code, trigger Jenkins builds, verify deployment, and inspect logs.
+---
+
 # 预发部署 Skill
 
 ## 预发部署流程

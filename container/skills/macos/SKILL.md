@@ -1,3 +1,8 @@
+---
+name: macos
+description: Control the host Mac through SSH — run commands, manage applications, and interact with the desktop environment.
+---
+
 # macOS Control Skill
 
 Control your Mac through SSH. The container connects to your Mac via the host's LAN IP address.

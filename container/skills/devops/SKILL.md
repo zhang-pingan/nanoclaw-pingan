@@ -1,3 +1,8 @@
+---
+name: devops
+description: DevOps capabilities including code modification (Git), Jenkins deployment, SSH log inspection, and MySQL database queries for configured services.
+---
+
 # DevOps Skill
 
 You have DevOps capabilities: code modification (Git), Jenkins deployment, SSH log inspection, and MySQL database queries.

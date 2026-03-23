@@ -1,3 +1,8 @@
+---
+name: dev-bugfix
+description: Fix bugs in service code — locate issues, create fix branches, commit changes, and update delivery documents.
+---
+
 # BUG 修复 Skill
 
 ## 工作流程
