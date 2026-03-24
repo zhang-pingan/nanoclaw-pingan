@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NanoClaw</title>
+  <link rel="stylesheet" href="/styles/main.css" />
+  <!-- Markdown rendering via CDN (no bundle needed for Electron) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+  <script>
+    // Load common languages for syntax highlighting
+    const hljsLanguages = ['javascript', 'typescript', 'python', 'bash', 'json', 'yaml', 'xml', 'sql', 'go', 'rust', 'java'];
+    hljsLanguages.forEach((lang) => {
+      const script = document.createElement('script');
+      script.src = `https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/${lang}.min.js`;
+      document.head.appendChild(script);
+    });
+  </script>
+</head>
+<body>
+  <div id="app">
+    <!-- Token screen -->
+    <div id="token-screen" class="screen">
+      <div class="token-card">
+        <div class="token-logo">⚡</div>
+        <h1>NanoClaw</h1>
+        <p class="subtitle">Local AI Assistant</p>
+        <div id="token-error" class="error hidden"></div>
+        <div class="form-group">
+          <label for="token-input">Access Token</label>
+          <input
+            id="token-input"
+            type="password"
+            placeholder="Enter your WEB_TOKEN (or leave blank for dev)"
+            autocomplete="off"
+          />
+        </div>
+        <button id="token-connect" class="btn-primary">Connect</button>
+        <p class="hint">Leave blank for local development without auth</p>
+      </div>
+    </div>
+
+    <!-- Main app -->
+    <div id="main-screen" class="screen hidden">
+      <!-- Sidebar -->
+      <aside id="sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">NanoClaw</span>
+          <button id="sidebar-collapse" title="Collapse sidebar">‹</button>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-header">
+            <span>Groups</span>
+            <button id="refresh-groups" title="Refresh groups">⟳</button>
+          </div>
+          <div id="groups-list" class="list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-header">
+            <span>Tasks</span>
+          </div>
+          <div id="tasks-list" class="list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div id="connection-status" class="conn-status disconnected">
+            <span class="conn-dot"></span>
+            <span class="conn-label">Disconnected</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Chat area -->
+      <main id="chat-area">
+        <!-- Chat header -->
+        <div id="chat-header">
+          <div id="chat-group-info">
+            <span id="chat-group-name">Select a group</span>
+            <span id="chat-group-folder" class="muted"></span>
+          </div>
+          <div class="header-actions">
+            <button id="clear-chat" class="btn-ghost" title="Clear context">🗑</button>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages">
+          <div id="messages-empty">
+            <p>Select a group from the sidebar to start chatting</p>
+          </div>
+        </div>
+
+        <!-- Typing indicator -->
+        <div id="typing-indicator" class="hidden">
+          <span class="typing-dots">
+            <span></span><span></span><span></span>
+          </span>
+          <span class="typing-text">Agent is typing...</span>
+        </div>
+
+        <!-- Input area -->
+        <div id="input-area">
+          <div id="file-drop-zone" class="hidden">
+            <span>Drop files here to upload</span>
+          </div>
+          <div class="input-row">
+            <button id="attach-btn" class="btn-ghost" title="Attach file">📎</button>
+            <input id="file-input" type="file" multiple class="hidden" />
+            <textarea
+              id="message-input"
+              placeholder="Send a message... (Shift+Enter for new line)"
+              rows="1"
+              autofocus
+            ></textarea>
+            <button id="send-btn" class="btn-primary" title="Send (Enter)">↑</button>
+          </div>
+          <div class="input-hint">
+            <kbd>Enter</kbd> send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> newline &nbsp;·&nbsp;
+            <kbd>/</kbd> agent command
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="/dist/app.js"></script>
+</body>
+</html>

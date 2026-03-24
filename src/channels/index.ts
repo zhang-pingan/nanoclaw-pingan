@@ -10,5 +10,6 @@
 // telegram
 
 import './feishu.js';
+import './web.js';
 
 // whatsapp
