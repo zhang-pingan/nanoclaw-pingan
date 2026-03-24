@@ -56,7 +56,7 @@ RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/
 # Container input (prompt, group info) is passed via stdin JSON.
 # Credentials are injected by the host's credential proxy — never passed here.
 # Follow-up messages arrive via IPC files in /workspace/ipc/input/
-RUN printf '#!/bin/bash\nset -e\n# Add passwd entry for host UID if missing (required for SSH client)\nif ! getent passwd "$(id -u)" >/dev/null 2>&1; then\n  echo "hostuser:x:$(id -u):$(id -g)::/home/node:/bin/bash" >> /etc/passwd 2>/dev/null || true\nfi\ncd /app && npx tsc --outDir /tmp/dist 2>&1 >&2\nln -s /app/node_modules /tmp/dist/node_modules\nchmod -R a-w /tmp/dist\ncat > /tmp/input.json\nnode /tmp/dist/index.js < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+RUN printf '#!/bin/bash\nset -e\n# Add passwd entry for host UID if missing (required for SSH client)\nif ! getent passwd "$(id -u)" >/dev/null 2>&1; then\n  echo "hostuser:x:$(id -u):$(id -g)::/home/node:/bin/bash" >> /etc/passwd 2>/dev/null || true\nfi\ncd /app && npx tsc --outDir /tmp/dist 2>&1 >&2\n# Compile custom tools if present\nif [ -d /app/custom-tools ] && ls /app/custom-tools/*.ts 1>/dev/null 2>&1; then\n  npx tsc --outDir /app/custom-tools --esModuleInterop --module nodenext --moduleResolution nodenext --skipLibCheck /app/custom-tools/*.ts 2>&1 >&2 || true\nfi\nln -s /app/node_modules /tmp/dist/node_modules\nchmod -R a-w /tmp/dist\ncat > /tmp/input.json\nnode /tmp/dist/index.js < /tmp/input.json\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Set ownership to node user (non-root) for writable directories
 # Allow /etc/passwd writes so entrypoint can add host UID mapping (needed for SSH)

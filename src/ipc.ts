@@ -43,6 +43,7 @@ export interface IpcDeps {
   enqueueMessageCheck: (groupJid: string) => void;
   sendCard?: (jid: string, card: FeishuCard) => Promise<string | undefined>;
   sendFile?: (jid: string, filePath: string, caption?: string) => Promise<void>;
+  reloadContainer?: (jid: string) => void;
 }
 
 let ipcWatcherRunning = false;
@@ -992,6 +993,27 @@ export async function processTaskIpc(
         { sourceGroup, count: types.length },
         'Workflow types listed via IPC',
       );
+      break;
+    }
+
+    case 'reload_container': {
+      if (!data.chatJid) {
+        logger.warn({ sourceGroup }, 'reload_container missing chatJid');
+        break;
+      }
+      // Authorization: group can only reload itself, main can reload any
+      const targetGroup = registeredGroups[data.chatJid];
+      if (isMain || (targetGroup && targetGroup.folder === sourceGroup)) {
+        if (deps.reloadContainer) {
+          deps.reloadContainer(data.chatJid);
+          logger.info({ chatJid: data.chatJid, sourceGroup }, 'Container reload requested');
+        }
+      } else {
+        logger.warn(
+          { chatJid: data.chatJid, sourceGroup },
+          'Unauthorized reload_container attempt blocked',
+        );
+      }
       break;
     }
 

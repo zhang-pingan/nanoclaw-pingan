@@ -212,27 +212,27 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Copy agent-runner source into a per-group writable location so agents
-  // can customize it (add tools, change behavior) without affecting other
-  // groups. Recompiled on container startup via entrypoint.sh.
-  const agentRunnerSrc = path.join(
-    projectRoot,
-    'container',
-    'agent-runner',
-    'src',
-  );
-  const groupAgentRunnerDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    'agent-runner-src',
-  );
-  if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+  // Mount agent-runner source directly (read-only) for non-main groups.
+  // Main group already has /workspace/project which contains everything.
+  if (!isMain) {
+    const agentRunnerSrc = path.join(projectRoot, 'container', 'agent-runner', 'src');
+    if (fs.existsSync(agentRunnerSrc)) {
+      mounts.push({
+        hostPath: agentRunnerSrc,
+        containerPath: '/app/src',
+        readonly: true,
+      });
+    }
   }
+
+  // Per-group custom tools directory (plugin mechanism).
+  // Agents can add .ts tool files here; reload_tools restarts the container
+  // to pick them up.
+  const customToolsDir = path.join(groupDir, 'custom-tools');
+  fs.mkdirSync(customToolsDir, { recursive: true });
   mounts.push({
-    hostPath: groupAgentRunnerDir,
-    containerPath: '/app/src',
+    hostPath: customToolsDir,
+    containerPath: '/app/custom-tools',
     readonly: false,
   });
 

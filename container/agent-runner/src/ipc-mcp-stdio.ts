@@ -836,6 +836,37 @@ if (isMain) {
   );
 }
 
+server.tool(
+  'reload_tools',
+  '重新加载工具。修改了自定义工具源码后调用此工具，会重启容器并恢复当前会话。',
+  {},
+  async () => {
+    writeIpcFile(TASKS_DIR, {
+      type: 'reload_container',
+      chatJid,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    });
+    return { content: [{ type: 'text' as const, text: '工具重载请求已提交，容器即将重启...' }] };
+  },
+);
+
+// Load custom tools from /app/custom-tools/*.js (plugin mechanism)
+const CUSTOM_TOOLS_DIR = '/app/custom-tools';
+if (fs.existsSync(CUSTOM_TOOLS_DIR)) {
+  for (const file of fs.readdirSync(CUSTOM_TOOLS_DIR).filter(f => f.endsWith('.js')).sort()) {
+    try {
+      const plugin = await import(path.join(CUSTOM_TOOLS_DIR, file));
+      if (typeof plugin.register === 'function') {
+        plugin.register(server, { chatJid, groupFolder, isMain, writeIpcFile, MESSAGES_DIR, TASKS_DIR });
+      }
+    } catch (err) {
+      // Log but don't crash — bad plugin shouldn't break core tools
+      process.stderr.write(`[plugin] Failed to load ${file}: ${err}\n`);
+    }
+  }
+}
+
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);

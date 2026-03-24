@@ -885,6 +885,12 @@ async function main(): Promise<void> {
       }
       return channel.sendFile(jid, filePath, caption);
     },
+    reloadContainer: (jid) => {
+      // closeStdin triggers container exit, enqueueMessageCheck ensures
+      // a new container starts and resumes the session via sessionId.
+      queue.closeStdin(jid);
+      queue.enqueueMessageCheck(jid);
+    },
   });
   initWorkflow({
     registeredGroups: () => registeredGroups,
