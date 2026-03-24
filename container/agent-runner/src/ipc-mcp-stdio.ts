@@ -479,6 +479,7 @@ Tips:
   {
     target_group_jid: z.string().describe('JID of the target group to delegate the task to. Find JIDs in available_groups.json or registered_groups table.'),
     task: z.string().describe('Detailed description of the task for the target agent. Be specific — the target has no context from this conversation.'),
+    requester_jid: z.string().optional().describe('JID of the group that originally requested this delegation via request_delegation. When provided, the requester will be auto-notified when the task completes.'),
   },
   async (args) => {
     if (!isMain) {
@@ -494,6 +495,7 @@ Tips:
       type: 'delegate_task',
       targetGroupJid: args.target_group_jid,
       task: args.task,
+      requesterJid: args.requester_jid || '',
       requestId,
       groupFolder,
       timestamp: new Date().toISOString(),
@@ -532,10 +534,48 @@ Tips:
 );
 
 server.tool(
+  'request_delegation',
+  `Request the main group to delegate a task to another group on your behalf. Non-main groups only.
+
+Use this when you need help from another group's agent but cannot delegate directly.
+The main group will receive your request and decide whether to delegate and to which group.
+
+How it works:
+1. You call request_delegation with a task description
+2. The main group's agent receives the request as a message
+3. The main group decides whether/where to delegate using delegate_task
+4. If delegated, the result eventually flows back through the main group`,
+  {
+    task: z.string().describe('Detailed description of what you need another group to do. Be specific — include all relevant context.'),
+  },
+  async (args) => {
+    if (isMain) {
+      return {
+        content: [{ type: 'text' as const, text: '主群请直接使用 delegate_task 工具。' }],
+        isError: true,
+      };
+    }
+
+    const data = {
+      type: 'request_delegation',
+      task: args.task,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    return {
+      content: [{ type: 'text' as const, text: '委派请求已发送给主群，主群将决定是否委派及委派目标。' }],
+    };
+  },
+);
+
+server.tool(
   'complete_delegation',
   `Report completion of a delegated task. Call this when you finish processing a task that was delegated to your group.
 
-The result you provide will be sent back to the main group's agent as a message.
+The result you provide will be sent back to the source group's agent as a message.
 Be thorough in your result — include all relevant findings, data, and conclusions.`,
   {
     delegation_id: z.string().describe('委派任务 ID（格式：del-xxx）'),

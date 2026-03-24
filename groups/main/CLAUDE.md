@@ -286,6 +286,16 @@ You can delegate tasks to other groups' agents when the task requires their work
 3. Tell the user you've delegated the task and are waiting for results
 4. When the result arrives as a `[委派结果]` message, summarize and relay to the user
 
+### Handling Delegation Requests from Other Groups
+
+Other groups may send you `[委派请求 | 来自:xxx]` messages via `request_delegation`. When you receive one:
+
+1. Read the request and determine the best target group from `available_groups.json`
+2. Call `delegate_task` with the target JID, task description, and the `requester_jid` from the request message
+3. When the `[委派结果]` arrives, the message will include a note to forward the result — use `send_message` to relay it to the requester group
+
+**Important: always pass `requester_jid` when delegating on behalf of another group, so the result message reminds you to forward it.**
+
 ### Important Notes
 
 - Be specific in task descriptions — the target agent has no context from this conversation

@@ -305,6 +305,7 @@ function delegateTo(
     status: 'pending',
     result: null,
     outcome: null,
+    requester_jid: null,
     created_at: now,
     updated_at: now,
   });

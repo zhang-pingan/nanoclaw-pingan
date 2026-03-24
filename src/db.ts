@@ -172,6 +172,13 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Add requester_jid column to delegations (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE delegations ADD COLUMN requester_jid TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
   // Add paused_from column to workflows (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE workflows ADD COLUMN paused_from TEXT`);
@@ -759,8 +766,8 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
 
 export function createDelegation(delegation: Delegation): void {
   db.prepare(
-    `INSERT INTO delegations (id, source_jid, source_folder, target_jid, target_folder, task, status, result, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO delegations (id, source_jid, source_folder, target_jid, target_folder, task, status, result, requester_jid, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     delegation.id,
     delegation.source_jid,
@@ -770,6 +777,7 @@ export function createDelegation(delegation: Delegation): void {
     delegation.task,
     delegation.status,
     delegation.result,
+    delegation.requester_jid,
     delegation.created_at,
     delegation.updated_at,
   );

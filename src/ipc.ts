@@ -317,9 +317,10 @@ export async function processTaskIpc(
     query?: string;
     limit?: number;
     requestId?: string;
-    // For delegate_task / complete_delegation
+    // For delegate_task / complete_delegation / request_delegation
     delegationId?: string;
     targetGroupJid?: string;
+    requesterJid?: string;
     task?: string;
     result?: string;
     // For workflow
@@ -603,6 +604,68 @@ export async function processTaskIpc(
       }
       break;
 
+    case 'request_delegation': {
+      // Non-main groups request delegation via the main group
+      if (isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Main group should use delegate_task directly, not request_delegation',
+        );
+        break;
+      }
+
+      if (!data.task) {
+        logger.warn(
+          { sourceGroup },
+          'request_delegation missing task',
+        );
+        break;
+      }
+
+      // Find main group JID
+      const mainEntry = Object.entries(registeredGroups).find(
+        ([, g]) => g.isMain,
+      );
+      if (!mainEntry) {
+        logger.warn('request_delegation: main group not found');
+        break;
+      }
+      const [mainJid, mainGroup] = mainEntry;
+
+      // Find source group name
+      const reqSourceEntry = Object.entries(registeredGroups).find(
+        ([, g]) => g.folder === sourceGroup,
+      );
+      const reqSourceName = reqSourceEntry?.[1]?.name || sourceGroup;
+
+      // Construct synthetic message to main group
+      const reqTrigger = mainGroup.trigger;
+      const requesterJid = reqSourceEntry?.[0] || '';
+      const reqContent = `${reqTrigger} [委派请求 | 来自:${reqSourceName}]\n\n${data.task}\n\n请根据 available_groups.json 判断是否需要委派，以及委派给哪个群。如需委派请使用 delegate_task，并传入 requester_jid="${requesterJid}" 以便完成后自动通知请求方。`;
+      const reqMsgId = `delreq-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const reqNow = Date.now().toString();
+
+      storeChatMetadata(mainJid, reqNow);
+      storeMessageDirect({
+        id: reqMsgId,
+        chat_jid: mainJid,
+        sender: 'system',
+        sender_name: `${reqSourceName}委派请求`,
+        content: reqContent,
+        timestamp: reqNow,
+        is_from_me: true,
+        is_bot_message: false,
+      });
+
+      deps.enqueueMessageCheck(mainJid);
+
+      logger.info(
+        { sourceGroup, sourceName: reqSourceName },
+        'Delegation request forwarded to main group',
+      );
+      break;
+    }
+
     case 'delegate_task': {
       // Only main group can delegate tasks
       if (!isMain) {
@@ -649,6 +712,7 @@ export async function processTaskIpc(
         status: 'pending',
         result: null,
         outcome: null,
+        requester_jid: data.requesterJid || null,
         created_at: now,
         updated_at: now,
       });
@@ -752,7 +816,12 @@ export async function processTaskIpc(
       const targetName = delegTargetGroup?.name || delegation.target_folder;
 
       // Construct result message for the source (main) group
-      const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
+      const requesterJid = delegation.requester_jid;
+      const requesterGroup = requesterJid ? registeredGroups[requesterJid] : null;
+      const requesterNote = requesterGroup
+        ? `\n\n请将此结果转发给请求方「${requesterGroup.name}」（使用 send_message，JID: ${requesterJid}）。`
+        : '';
+      const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}${requesterNote}`;
       const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const resultNow = Date.now().toString();
 

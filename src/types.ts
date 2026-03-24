@@ -89,6 +89,7 @@ export interface Delegation {
   status: 'pending' | 'completed' | 'failed';
   result: string | null;
   outcome: 'success' | 'failure' | null;
+  requester_jid: string | null;
   created_at: string;
   updated_at: string;
 }
