@@ -2,10 +2,10 @@
   "dev_test": {
     "name": "开发测试流程",
     "roles": {
-      "planner": { "skill_to_role_key": "plan-requirement" },
-      "dev": { "skill_to_role_key": "dev-requirement" },
-      "ops": { "skill_to_role_key": "ops-staging-deploy" },
-      "test": { "skill_to_role_key": "test-requirement" }
+      "planner": { "channels": { "feishu": "feishu_plan", "web": "web_plan" } },
+      "dev":     { "channels": { "feishu": "feishu_dev",  "web": "web_dev"  } },
+      "ops":     { "channels": { "feishu": "feishu_ops",  "web": "web_ops"  } },
+      "test":    { "channels": { "feishu": "feishu_test", "web": "web_test" } }
     },
     "entry_points": {
       "dev": { "state": "plan" },

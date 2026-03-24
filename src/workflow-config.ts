@@ -50,8 +50,8 @@ export interface StateConfig {
 }
 
 export interface RoleConfig {
-  /** Key used to look up this role's group folder from skills.json. */
-  skill_to_role_key: string;
+  /** Channel → group folder mapping, e.g. { feishu: "feishu_plan", web: "web_plan" } */
+  channels: Record<string, string>;
 }
 
 export interface EntryPointConfig {
@@ -88,6 +88,11 @@ export interface WorkflowTypeConfig {
 // -------------------------------------------------------
 
 let loadedConfigs: Record<string, WorkflowTypeConfig> | null = null;
+let lastLoadError: string | null = null;
+
+export function getWorkflowConfigError(): string | null {
+  return lastLoadError;
+}
 
 export function loadWorkflowConfigs(): Record<
   string,
@@ -101,9 +106,9 @@ export function loadWorkflowConfigs(): Record<
   );
 
   if (!fs.existsSync(configPath)) {
-    logger.info(
-      'Workflow configs not found at container/skills/workflows.json — workflow engine disabled',
-    );
+    lastLoadError =
+      'Workflow 未启用：未找到 container/skills/workflows.json';
+    logger.info(lastLoadError);
     return null;
   }
 
@@ -114,15 +119,18 @@ export function loadWorkflowConfigs(): Record<
     for (const [typeName, config] of Object.entries(configs)) {
       const errors = validateConfig(typeName, config);
       if (errors.length > 0) {
+        lastLoadError = `Workflow 配置校验失败 (${typeName}): ${errors.join('; ')}`;
         logger.error({ typeName, errors }, 'Workflow config validation failed');
         return null;
       }
     }
 
     loadedConfigs = configs;
+    lastLoadError = null;
     logger.info({ types: Object.keys(configs) }, 'Workflow configs loaded');
     return configs;
   } catch (err) {
+    lastLoadError = `Workflow 未启用：workflows.json 解析失败 — ${err instanceof Error ? err.message : String(err)}`;
     logger.error({ err }, 'Failed to parse workflows.json');
     return null;
   }
@@ -187,6 +195,19 @@ export function validateConfig(
 ): string[] {
   const errors: string[] = [];
   const stateNames = new Set(Object.keys(config.states));
+
+  // Check role configs have valid channels
+  for (const [roleName, roleConfig] of Object.entries(config.roles)) {
+    if (
+      !roleConfig.channels ||
+      typeof roleConfig.channels !== 'object' ||
+      Object.keys(roleConfig.channels).length === 0
+    ) {
+      errors.push(
+        `${typeName}.roles.${roleName}.channels must be a non-empty object mapping channel names to group folders`,
+      );
+    }
+  }
 
   // Check that all transition targets reference existing states
   for (const [stateName, state] of Object.entries(config.states)) {

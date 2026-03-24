@@ -28,6 +28,7 @@ import {
 import { logger } from './logger.js';
 import { FeishuCard, RegisteredGroup, Workflow } from './types.js';
 import {
+  getWorkflowConfigError,
   getWorkflowConfigs,
   getWorkflowTypeConfig,
   loadWorkflowConfigs,
@@ -38,129 +39,55 @@ import {
 } from './workflow-config.js';
 
 // -------------------------------------------------------
-// Role resolution — per workflow type
+// Role resolution — per trigger channel
 // -------------------------------------------------------
 
-/**
- * Resolved roles for each workflow type.
- * Key: workflow type name (e.g. "dev_test")
- * Value: mapping of role name → group folder (e.g. { dev: "feishu_dev", ops: "feishu_ops" })
- */
-let allResolvedRoles: Record<string, Record<string, string>> = {};
-let roleResolutionError: string | null = null;
-
-/**
- * Resolve roles for all configured workflow types from skills.json.
- * For each workflow type, builds a skill_key → role_name reverse map,
- * then scans skills.json assignments to find folders.
- */
-function resolveRolesForAllTypes(): void {
-  const configs = getWorkflowConfigs();
-  if (!configs) {
-    roleResolutionError = 'Workflow 未启用：workflows.json 未加载';
-    return;
-  }
-
-  const skillsPath = path.join(
-    process.cwd(),
-    'container',
-    'skills',
-    'skills.json',
-  );
-
-  if (!fs.existsSync(skillsPath)) {
-    roleResolutionError =
-      'Workflow 未启用：未找到 container/skills/skills.json';
-    logger.info(roleResolutionError);
-    return;
-  }
-
-  let skillsConfig: Record<string, string[] | Record<string, string>>;
-  try {
-    skillsConfig = JSON.parse(fs.readFileSync(skillsPath, 'utf-8'));
-  } catch (err) {
-    roleResolutionError = `Workflow 未启用：skills.json 解析失败 — ${err instanceof Error ? err.message : String(err)}`;
-    logger.warn(roleResolutionError);
-    return;
-  }
-
-  // Priority 1: explicit workflow_roles
-  const explicit = skillsConfig['workflow_roles'] as
-    | Record<string, string>
-    | undefined;
-
-  // Build a global skill_key → folder mapping from skills.json assignments
-  const skillKeyToFolder: Record<string, string> = {};
-  for (const [folder, skills] of Object.entries(skillsConfig)) {
-    if (folder === 'global' || folder === 'workflow_roles') continue;
-    if (!Array.isArray(skills)) continue;
-    for (const skill of skills) {
-      if (!skillKeyToFolder[skill]) {
-        skillKeyToFolder[skill] = folder;
-      }
-    }
-  }
-
-  let anyTypeFullyResolved = false;
-
-  for (const [typeName, config] of Object.entries(configs)) {
-    const roles: Record<string, string> = {};
-    const missing: string[] = [];
-
-    for (const [roleName, roleConfig] of Object.entries(config.roles)) {
-      // Priority 1: explicit mapping
-      if (explicit && explicit[roleName]) {
-        roles[roleName] = explicit[roleName];
-        continue;
-      }
-      // Priority 2: infer from skill assignments
-      const folder = skillKeyToFolder[roleConfig.skill_to_role_key];
-      if (folder) {
-        roles[roleName] = folder;
-      } else {
-        missing.push(
-          `${roleName} (需要 ${roleConfig.skill_to_role_key} skill)`,
-        );
-      }
-    }
-
-    if (missing.length > 0) {
-      logger.info(
-        { typeName, missing },
-        `Workflow type "${typeName}" 缺少角色: ${missing.join(', ')}`,
-      );
-    } else {
-      allResolvedRoles[typeName] = roles;
-      anyTypeFullyResolved = true;
-      logger.info(
-        { typeName, roles },
-        `Workflow type "${typeName}" roles resolved`,
-      );
-    }
-  }
-
-  if (!anyTypeFullyResolved) {
-    roleResolutionError = `Workflow 未启用：所有 workflow 类型都缺少角色。请在 skills.json 中配置对应 skill 或添加 workflow_roles。`;
-    logger.info(roleResolutionError);
-  }
+/** 从 folder 名提取渠道前缀，如 "feishu_main" → "feishu" */
+function getChannelFromFolder(folder: string): string {
+  return folder.split('_')[0];
 }
 
-/** Get resolved roles for a specific workflow type. */
-function getRolesForType(
+/**
+ * 根据 workflow 类型和触发群组的 sourceJid 解析所有角色的 folder 映射。
+ * 渠道从触发群组的 folder 名前缀提取，然后查找对应渠道的 folder 配置。
+ */
+function resolveRoles(
   workflowType: string,
+  sourceJid: string,
 ): { roles: Record<string, string> } | { error: string } {
-  const roles = allResolvedRoles[workflowType];
-  if (roles) return { roles };
-  return {
-    error:
-      roleResolutionError ||
-      `Workflow type "${workflowType}" 角色未解析或缺少配置`,
-  };
-}
+  const config = getWorkflowTypeConfig(workflowType);
+  if (!config) return { error: `未知的 workflow 类型: ${workflowType}` };
 
-/** Check if any workflow type is available. */
-function hasAnyRoles(): boolean {
-  return Object.keys(allResolvedRoles).length > 0;
+  const groups = getDeps().registeredGroups();
+  const sourceGroup = groups[sourceJid];
+  const channel = sourceGroup
+    ? getChannelFromFolder(sourceGroup.folder)
+    : '';
+
+  const roles: Record<string, string> = {};
+  const missing: string[] = [];
+
+  for (const [roleName, roleConfig] of Object.entries(config.roles)) {
+    const folder = roleConfig.channels[channel];
+    if (folder) {
+      roles[roleName] = folder;
+    } else {
+      const available = Object.keys(roleConfig.channels).join(', ');
+      missing.push(
+        `${roleName}（渠道 "${channel}" 未配置，已有: ${available || '无'}）`,
+      );
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      error:
+        `渠道 "${channel}" 缺少角色配置：${missing.join('；')}。` +
+        `请在 workflows.json 的对应角色 channels 中添加 "${channel}" 渠道。`,
+    };
+  }
+
+  return { roles };
 }
 
 // -------------------------------------------------------
@@ -178,7 +105,6 @@ let deps: WorkflowDeps | null = null;
 export function initWorkflow(d: WorkflowDeps): void {
   deps = d;
   loadWorkflowConfigs();
-  resolveRolesForAllTypes();
 }
 
 function getDeps(): WorkflowDeps {
@@ -522,7 +448,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   }
 
   // Check roles
-  const rolesResult = getRolesForType(workflowType);
+  const rolesResult = resolveRoles(workflowType, opts.sourceJid);
   if ('error' in rolesResult) {
     return { workflowId: '', error: rolesResult.error };
   }
@@ -661,7 +587,7 @@ export function approveWorkflow(workflowId: string): { error?: string } {
     };
   }
 
-  const rolesResult = getRolesForType(workflow.workflow_type);
+  const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
   if ('error' in rolesResult) return { error: rolesResult.error };
 
   applyTransition(workflow, stateConfig.on_approve, rolesResult.roles);
@@ -690,7 +616,7 @@ export function reviseWorkflow(
     };
   }
 
-  const rolesResult = getRolesForType(workflow.workflow_type);
+  const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
   if ('error' in rolesResult) return { error: rolesResult.error };
 
   applyTransition(workflow, stateConfig.on_revise, rolesResult.roles, {
@@ -710,7 +636,7 @@ export function onDelegationComplete(delegationId: string): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return;
 
-  const rolesResult = getRolesForType(workflow.workflow_type);
+  const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
   if ('error' in rolesResult) return;
   const roles = rolesResult.roles;
 
@@ -807,7 +733,8 @@ function buildConfigCard(
   if (!cardConfig) return null;
 
   const vars = buildTemplateVars(workflow);
-  const roleFolders = allResolvedRoles[workflow.workflow_type] || {};
+  const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
+  const roleFolders = 'roles' in rolesResult ? rolesResult.roles : {};
 
   const header = renderTemplate(cardConfig.header_template, vars, roleFolders);
   const body = renderTemplate(cardConfig.body_template, vars, roleFolders);
@@ -1207,12 +1134,12 @@ export function listWorkflows(): ReturnType<typeof getAllActiveWorkflows> {
 
 /** Check if workflow engine is enabled. */
 export function isWorkflowEnabled(): boolean {
-  return hasAnyRoles();
+  return getWorkflowConfigs() !== null;
 }
 
 /** Get the reason workflow is disabled (for diagnostics). */
 export function getWorkflowDisabledReason(): string | null {
-  return roleResolutionError;
+  return getWorkflowConfigError();
 }
 
 /** Get status labels for a workflow type (used by MCP tool). */
@@ -1228,20 +1155,17 @@ export function getAvailableWorkflowTypes(): Array<{
   type: string;
   name: string;
   entry_points: string[];
-  roles: Record<string, string>;
-  roles_resolved: boolean;
+  role_channels: Record<string, Record<string, string>>;
 }> {
   const configs = getWorkflowConfigs();
   if (!configs) return [];
 
-  return Object.entries(configs).map(([typeName, config]) => {
-    const resolved = allResolvedRoles[typeName];
-    return {
-      type: typeName,
-      name: config.name,
-      entry_points: Object.keys(config.entry_points),
-      roles: resolved || {},
-      roles_resolved: !!resolved,
-    };
-  });
+  return Object.entries(configs).map(([typeName, config]) => ({
+    type: typeName,
+    name: config.name,
+    entry_points: Object.keys(config.entry_points),
+    role_channels: Object.fromEntries(
+      Object.entries(config.roles).map(([role, rc]) => [role, rc.channels]),
+    ),
+  }));
 }
