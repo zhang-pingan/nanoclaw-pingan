@@ -5,5 +5,11 @@
   "feishu_knowledge": ["project-knowledge"],
   "feishu_ops": ["ops-staging-deploy", "devops"],
   "feishu_test": ["test-requirement"],
-  "feishu_main": ["macos"]
+  "feishu_main": ["macos"],
+  "web_dev": ["dev-requirement", "dev-bugfix"],
+  "web_plan": ["plan-requirement"],
+  "web_knowledge": ["project-knowledge"],
+  "web_ops": ["ops-staging-deploy", "devops"],
+  "web_test": ["test-requirement"],
+  "web_main": ["macos"]
 }
