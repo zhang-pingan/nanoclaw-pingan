@@ -278,12 +278,14 @@ class WebChannel {
 
   private apiGetGroups(res: http.ServerResponse): void {
     const registered = this.opts.registeredGroups();
-    const groups = Object.entries(registered).map(([jid, g]) => ({
-      jid,
-      name: g.name,
-      folder: g.folder,
-      isMain: g.isMain ?? false,
-    }));
+    const groups = Object.entries(registered)
+      .filter(([jid]) => jid.startsWith('web:'))
+      .map(([jid, g]) => ({
+        jid,
+        name: g.name,
+        folder: g.folder,
+        isMain: g.isMain ?? false,
+      }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ groups }));
   }
@@ -521,16 +523,19 @@ class WebChannel {
           return;
         }
         // Store sender as 'web_user' for web channel
+        const now = Date.now();
         const newMsg: NewMessage = {
-          id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: `web_${now}_${Math.random().toString(36).slice(2, 8)}`,
           chat_jid: chatJid,
           sender: 'web_user',
           sender_name: 'Web User',
           content,
-          timestamp: Date.now().toString(),
+          timestamp: now.toString(),
           is_from_me: false,
           is_bot_message: false,
         };
+        // Create chat record first (required for foreign key in messages table)
+        this.opts.onChatMetadata(chatJid, now.toString());
         this.opts.onMessage(chatJid, newMsg);
         break;
       }
@@ -557,9 +562,11 @@ class WebChannel {
         const registered = this.opts.registeredGroups();
         send({
           type: 'groups',
-          groups: Object.entries(registered).map(([jid, g]) => ({
-            jid, name: g.name, folder: g.folder, isMain: g.isMain ?? false,
-          })),
+          groups: Object.entries(registered)
+            .filter(([jid]) => jid.startsWith('web:'))
+            .map(([jid, g]) => ({
+              jid, name: g.name, folder: g.folder, isMain: g.isMain ?? false,
+            })),
           selectedJid: chatJid,
         });
         break;
