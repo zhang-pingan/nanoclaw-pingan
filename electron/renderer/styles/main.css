@@ -919,7 +919,7 @@ body::before {
   outline: none;
   line-height: 1.55;
   max-height: 120px;
-  overflow-y: auto;
+  overflow-y: hidden;
   field-sizing: content;
 }
 
