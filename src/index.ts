@@ -48,6 +48,7 @@ import {
   storeChatMetadata,
   storeMessage,
 } from './db.js';
+import { clearWebMessages } from './web-db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
@@ -198,6 +199,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
     if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
       clearMessages(chatJid);
+      if (channel.name === 'web') clearWebMessages(chatJid);
       clearSession(group.folder);
       // No active container in this path — safe to delete immediately
       const sessionDir = path.join(
@@ -563,6 +565,7 @@ async function startMessageLoop(): Promise<void> {
             if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
               queue.closeStdin(chatJid);
               clearMessages(chatJid);
+              if (channel.name === 'web') clearWebMessages(chatJid);
               clearSession(group.folder);
               delete sessions[group.folder];
               lastAgentTimestamp[chatJid] =

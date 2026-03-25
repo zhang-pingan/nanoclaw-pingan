@@ -9,6 +9,7 @@ import { logger } from '../logger.js';
 import { NewMessage } from '../types.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
 import { ASSISTANT_NAME } from '../config.js';
+import { initWebDb, storeWebMessage, getWebMessages } from '../web-db.js';
 
 // --- Config ---
 const WEB_PORT = parseInt(process.env.WEB_PORT || '3000', 10);
@@ -44,6 +45,7 @@ class WebChannel {
   private connected = false;
 
   connect(): Promise<void> {
+    initWebDb();
     return new Promise((resolve, reject) => {
       this.server = http.createServer((req, res) => this.handleHttp(req, res));
       this.wss = new WebSocketServer({ noServer: true });
@@ -95,12 +97,13 @@ class WebChannel {
     const clients = this.clients.get(jid);
     if (!clients || clients.size === 0) return;
 
+    const timestamp = Date.now().toString();
     const payload = JSON.stringify({
       type: 'message',
       chatJid: jid,
       content: text,
       sender: ASSISTANT_NAME,
-      timestamp: Date.now().toString(),
+      timestamp,
     } satisfies OutgoingMsg);
 
     for (const client of clients) {
@@ -108,6 +111,18 @@ class WebChannel {
         client.ws.send(payload);
       }
     }
+
+    // Persist bot reply to web message DB
+    storeWebMessage({
+      id: `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: text,
+      timestamp,
+      is_from_me: false,
+      is_bot_message: true,
+    });
   }
 
   async setTyping(jid: string, isTyping: boolean): Promise<void> {
@@ -301,25 +316,22 @@ class WebChannel {
       res.end(JSON.stringify({ error: 'jid required' }));
       return;
     }
-    // Import lazily to avoid circular issues
-    import('../db.js').then(({ getMessagesSince }) => {
-      const messages = getMessagesSince(jid, since, ASSISTANT_NAME);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          messages: messages.map((m) => ({
-            id: m.id,
-            chat_jid: m.chat_jid,
-            sender: m.sender,
-            sender_name: m.sender_name,
-            content: m.content,
-            timestamp: m.timestamp,
-            is_from_me: m.is_from_me ?? false,
-            is_bot_message: m.is_bot_message ?? false,
-          })),
-        }),
-      );
-    });
+    const messages = getWebMessages(jid, since);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        messages: messages.map((m) => ({
+          id: m.id,
+          chat_jid: m.chat_jid,
+          sender: m.sender,
+          sender_name: m.sender_name,
+          content: m.content,
+          timestamp: m.timestamp,
+          is_from_me: Boolean(m.is_from_me),
+          is_bot_message: Boolean(m.is_bot_message),
+        })),
+      }),
+    );
   }
 
   private apiGetTasks(reqUrl: URL, res: http.ServerResponse): void {
@@ -531,12 +543,14 @@ class WebChannel {
           sender_name: 'Web User',
           content,
           timestamp: now.toString(),
-          is_from_me: false,
+          is_from_me: true,
           is_bot_message: false,
         };
         // Create chat record first (required for foreign key in messages table)
         this.opts.onChatMetadata(chatJid, now.toString());
         this.opts.onMessage(chatJid, newMsg);
+        // Also persist to web message DB for UI history
+        storeWebMessage({ ...newMsg });
         break;
       }
       case 'select_group': {
