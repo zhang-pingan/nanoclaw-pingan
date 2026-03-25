@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, MenuItemConstructorOptions, shell } from 'electron';
 import path from 'path';
 
 // CJS: use native __dirname; ESM: use import.meta.url
@@ -9,6 +9,7 @@ const _dir = typeof __dirname !== 'undefined'
 // Track whether we're doing a full quit (Quit All) vs just hiding
 let isQuitting = false;
 let mainWindow: BrowserWindow | null = null;
+const groupWindows: Map<string, BrowserWindow> = new Map();
 
 const isMac = process.platform === 'darwin';
 
@@ -56,6 +57,47 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 }
+
+// Multi-window: open a group in its own window
+ipcMain.handle('open-group-window', (_event, jid: string, name: string) => {
+  // Reuse existing window for this JID if it exists
+  const existing = groupWindows.get(jid);
+  if (existing && !existing.isDestroyed()) {
+    existing.focus();
+    return;
+  }
+
+  const win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    minWidth: 400,
+    minHeight: 300,
+    title: `${name} — NanoClaw`,
+    backgroundColor: '#1e1e2e',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  win.loadURL(`http://localhost:3000?jid=${encodeURIComponent(jid)}`);
+
+  // Open external links in browser
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  win.on('closed', () => {
+    groupWindows.delete(jid);
+  });
+
+  groupWindows.set(jid, win);
+});
 
 function buildAppMenu(): Menu {
   const template: MenuItemConstructorOptions[] = [

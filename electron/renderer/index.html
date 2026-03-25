@@ -30,13 +30,13 @@
       <aside id="sidebar">
         <div class="sidebar-header">
           <span class="sidebar-title">NanoClaw</span>
-          <button id="sidebar-collapse" title="Collapse sidebar">‹</button>
+          <button id="sidebar-collapse" title="Collapse sidebar">&#8249;</button>
         </div>
 
         <div class="sidebar-section">
           <div class="section-header">
             <span>Groups</span>
-            <button id="refresh-groups" title="Refresh groups">⟳</button>
+            <button id="refresh-groups" title="Refresh groups">&#10227;</button>
           </div>
           <div id="groups-list" class="list">
             <!-- Populated by JS -->
@@ -69,7 +69,8 @@
             <span id="chat-group-folder" class="muted"></span>
           </div>
           <div class="header-actions">
-            <button id="clear-chat" class="btn-ghost" title="Clear context">🗑</button>
+            <button id="popout-btn" class="btn-ghost" title="Open in new window">&#10697;</button>
+            <button id="clear-chat" class="btn-ghost" title="Clear context">&#128465;</button>
           </div>
         </div>
 
@@ -90,11 +91,31 @@
 
         <!-- Input area -->
         <div id="input-area">
+          <!-- Command palette (floating above input) -->
+          <div id="command-palette"></div>
+
+          <!-- Reply preview bar -->
+          <div id="reply-preview">
+            <span id="reply-preview-content"></span>
+            <button id="reply-preview-close" title="Cancel reply">&times;</button>
+          </div>
+
           <div id="file-drop-zone" class="hidden">
             <span>Drop files here to upload</span>
           </div>
+
+          <!-- Markdown toolbar -->
+          <div class="md-toolbar">
+            <button data-md="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button data-md="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button data-md="code" title="Inline code">`</button>
+            <button data-md="codeblock" title="Code block">{ }</button>
+            <button data-md="link" title="Link (Ctrl+K)">&#128279;</button>
+            <button data-md="list" title="List">&bull;</button>
+          </div>
+
           <div class="input-row">
-            <button id="attach-btn" class="btn-ghost" title="Attach file">📎</button>
+            <button id="attach-btn" class="btn-ghost" title="Attach file">&#128206;</button>
             <input id="file-input" type="file" multiple class="hidden" />
             <textarea
               id="message-input"
@@ -102,10 +123,10 @@
               rows="1"
               autofocus
             ></textarea>
-            <button id="send-btn" class="btn-primary" title="Send (Enter)">↑</button>
+            <button id="send-btn" class="btn-primary" title="Send (Enter)">&uarr;</button>
           </div>
           <div class="input-hint">
-            <kbd>Enter</kbd> send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> newline &nbsp;·&nbsp;
+            <kbd>Enter</kbd> send &nbsp;&middot;&nbsp; <kbd>Shift+Enter</kbd> newline &nbsp;&middot;&nbsp;
             <kbd>/</kbd> agent command
           </div>
         </div>

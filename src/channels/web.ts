@@ -9,7 +9,7 @@ import { logger } from '../logger.js';
 import { NewMessage } from '../types.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
 import { ASSISTANT_NAME } from '../config.js';
-import { initWebDb, storeWebMessage, getWebMessages } from '../web-db.js';
+import { initWebDb, storeWebMessage, getWebMessages, getWebMessagesBefore } from '../web-db.js';
 
 // --- Config ---
 const WEB_PORT = parseInt(process.env.WEB_PORT || '3000', 10);
@@ -28,6 +28,7 @@ interface IncomingMsg {
   chatJid?: string;
   content?: string;
   token?: string;
+  replyToId?: string;
 }
 
 interface OutgoingMsg {
@@ -197,6 +198,9 @@ class WebChannel {
       if (pathname === '/api/upload' && req.method === 'POST') {
         return this.apiUpload(req, reqUrl, res);
       }
+      if (pathname.startsWith('/api/uploads/')) {
+        return this.apiServeUpload(pathname, res);
+      }
       if (pathname.startsWith('/api/files/')) {
         return this.apiServeFile(pathname, res);
       }
@@ -311,16 +315,23 @@ class WebChannel {
   ): void {
     const jid = reqUrl.searchParams.get('jid') || '';
     const since = reqUrl.searchParams.get('since') || '0';
+    const before = reqUrl.searchParams.get('before') || '';
+    const limit = parseInt(reqUrl.searchParams.get('limit') || '200', 10);
     if (!jid) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'jid required' }));
       return;
     }
-    const messages = getWebMessages(jid, since);
+
+    // Pagination: if 'before' is set, load older messages
+    const rawMessages = before
+      ? getWebMessagesBefore(jid, before, limit)
+      : getWebMessages(jid, since, limit);
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
-        messages: messages.map((m) => ({
+        messages: rawMessages.map((m) => ({
           id: m.id,
           chat_jid: m.chat_jid,
           sender: m.sender,
@@ -329,6 +340,7 @@ class WebChannel {
           timestamp: m.timestamp,
           is_from_me: Boolean(m.is_from_me),
           is_bot_message: Boolean(m.is_bot_message),
+          reply_to_id: m.reply_to_id || null,
         })),
       }),
     );
@@ -427,6 +439,51 @@ class WebChannel {
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, files: uploadedFiles }));
+  }
+
+  // Serve uploaded files from web-uploads directory
+  private apiServeUpload(pathname: string, res: http.ServerResponse): void {
+    // pathname: /api/uploads/{groupFolder}/{filename}
+    const parts = pathname.split('/');
+    // parts[0]='', parts[1]='api', parts[2]='uploads', parts[3]=groupFolder, parts[4]=filename
+    if (parts.length < 5) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid path' }));
+      return;
+    }
+    const groupFolder = decodeURIComponent(parts[3]);
+    const filename = decodeURIComponent(parts.slice(4).join('/'));
+
+    const uploadBase = path.join(UPLOADS_DIR, groupFolder);
+    const filePath = path.resolve(path.join(uploadBase, filename));
+
+    // Security: ensure resolved path is within uploads dir
+    if (!filePath.startsWith(path.resolve(uploadBase))) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'forbidden' }));
+      return;
+    }
+
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+      return;
+    }
+
+    const data = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mime: Record<string, string> = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+      '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown',
+      '.json': 'application/json', '.js': 'application/javascript',
+      '.html': 'text/html', '.css': 'text/css', '.zip': 'application/zip',
+    };
+    res.writeHead(200, {
+      'Content-Type': mime[ext] || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=3600',
+    });
+    res.end(data);
   }
 
   private apiServeFile(pathname: string, res: http.ServerResponse): void {
@@ -534,6 +591,19 @@ class WebChannel {
           send({ type: 'error', message: 'Unknown chat JID' });
           return;
         }
+
+        // Handle reply reference
+        const replyToId = msg.replyToId || null;
+        let enrichedContent = content;
+        if (replyToId) {
+          // Look up quoted message for agent context
+          const allMsgs = getWebMessages(chatJid, '0', 500);
+          const quoted = allMsgs.find((m) => m.id === replyToId);
+          if (quoted) {
+            enrichedContent = `[Replying to ${quoted.sender_name}: "${quoted.content.slice(0, 100)}"]\n\n${content}`;
+          }
+        }
+
         // Store sender as 'web_user' for web channel
         const now = Date.now();
         const newMsg: NewMessage = {
@@ -541,7 +611,7 @@ class WebChannel {
           chat_jid: chatJid,
           sender: 'web_user',
           sender_name: 'Web User',
-          content,
+          content: enrichedContent,
           timestamp: now.toString(),
           is_from_me: true,
           is_bot_message: false,
@@ -549,8 +619,12 @@ class WebChannel {
         // Create chat record first (required for foreign key in messages table)
         this.opts.onChatMetadata(chatJid, now.toString());
         this.opts.onMessage(chatJid, newMsg);
-        // Also persist to web message DB for UI history
-        storeWebMessage({ ...newMsg });
+        // Also persist to web message DB for UI history (with original content)
+        storeWebMessage({
+          ...newMsg,
+          content,
+          reply_to_id: replyToId,
+        });
         break;
       }
       case 'select_group': {

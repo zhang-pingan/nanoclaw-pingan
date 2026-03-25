@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     // which the main process intercepts
   },
 
+  // Open a group in a new window
+  openGroupWindow: (jid: string, name: string) => {
+    ipcRenderer.invoke('open-group-window', jid, name);
+  },
+
   // Platform info
   platform: process.platform,
 
