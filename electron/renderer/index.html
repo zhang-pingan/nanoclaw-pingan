@@ -107,19 +107,20 @@
           </div>
 
           <div class="input-row">
-            <button id="attach-btn" class="btn-ghost" title="Attach file">&#128206;</button>
-            <input id="file-input" type="file" multiple class="hidden" />
-            <textarea
-              id="message-input"
-              placeholder="Send a message... (Shift+Enter for new line)"
-              rows="1"
-              autofocus
-            ></textarea>
-            <button id="send-btn" class="btn-primary" title="Send (Enter)">&uarr;</button>
-          </div>
-          <div class="input-hint">
-            <kbd>Enter</kbd> send &nbsp;&middot;&nbsp; <kbd>Shift+Enter</kbd> newline &nbsp;&middot;&nbsp;
-            <kbd>/</kbd> agent command
+            <div id="input-wrap">
+              <textarea
+                id="message-input"
+                placeholder="Enter 发送  ·  Shift+Enter 换行  ·  / 召唤命令"
+                rows="1"
+                autofocus
+              ></textarea>
+              <div id="input-actions">
+                <button id="attach-btn" class="btn-tool" title="附件">&#128206;</button>
+                <button id="at-btn" class="btn-tool" title="@ 提及">@</button>
+                <button id="send-btn" class="btn-primary" title="发送 (Enter)">&#10148;</button>
+              </div>
+            </div>
+            <input id="file-input" type="file" multiple hidden />
           </div>
         </div>
       </main>

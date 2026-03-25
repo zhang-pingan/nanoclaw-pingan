@@ -545,37 +545,6 @@ function clearReplyTo() {
   replyPreviewContent.textContent = "";
 }
 
-// --- Markdown toolbar ---
-function insertMarkdown(type) {
-  const ta = messageInput;
-  const start = ta.selectionStart;
-  const end = ta.selectionEnd;
-  const sel = ta.value.substring(start, end);
-  let before = "", after = "";
-
-  switch (type) {
-    case "bold":
-      before = "**"; after = "**"; break;
-    case "italic":
-      before = "*"; after = "*"; break;
-    case "code":
-      before = "`"; after = "`"; break;
-    case "codeblock":
-      before = "```\n"; after = "\n```"; break;
-    case "link":
-      before = "["; after = "](url)"; break;
-    case "list":
-      before = "- "; after = ""; break;
-  }
-
-  const newText = ta.value.substring(0, start) + before + sel + after + ta.value.substring(end);
-  ta.value = newText;
-  ta.selectionStart = start + before.length;
-  ta.selectionEnd = start + before.length + sel.length;
-  ta.focus();
-  autoResizeInput();
-}
-
 // --- Command palette ---
 function showCommandPalette(filter) {
   const filtered = commands.filter((c) => c.name.includes(filter.toLowerCase()));
@@ -713,20 +682,6 @@ messageInput.addEventListener("keydown", (e) => {
     e.preventDefault();
     sendMessage(messageInput.value);
   }
-
-  // Markdown shortcuts
-  if ((e.ctrlKey || e.metaKey) && e.key === "b") {
-    e.preventDefault();
-    insertMarkdown("bold");
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === "i") {
-    e.preventDefault();
-    insertMarkdown("italic");
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-    e.preventDefault();
-    insertMarkdown("link");
-  }
 });
 
 messageInput.addEventListener("input", () => {
@@ -745,6 +700,14 @@ replyPreviewClose.addEventListener("click", clearReplyTo);
 
 attachBtn.addEventListener("click", () => {
   fileInput.click();
+});
+document.getElementById("at-btn").addEventListener("click", () => {
+  const ta = messageInput;
+  const pos = ta.selectionStart;
+  ta.value = ta.value.substring(0, pos) + "@Andy " + ta.value.substring(pos);
+  ta.selectionStart = ta.selectionEnd = pos + 6;
+  ta.focus();
+  autoResizeInput();
 });
 fileInput.addEventListener("change", () => {
   for (const file of fileInput.files || []) {
