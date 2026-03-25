@@ -192,6 +192,12 @@ class WebChannel {
       if (pathname.startsWith('/api/messages')) {
         return this.apiGetMessages(reqUrl, res);
       }
+      if (pathname === '/api/task' && req.method === 'DELETE') {
+        return this.apiDeleteTask(reqUrl, res);
+      }
+      if (pathname === '/api/tasks' && req.method === 'DELETE') {
+        return this.apiDeleteAllTasks(res);
+      }
       if (pathname.startsWith('/api/tasks')) {
         return this.apiGetTasks(reqUrl, res);
       }
@@ -366,6 +372,31 @@ class WebChannel {
           })),
         }),
       );
+    });
+  }
+
+  private apiDeleteTask(reqUrl: URL, res: http.ServerResponse): void {
+    const taskId = reqUrl.searchParams.get('id');
+    if (!taskId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing task id' }));
+      return;
+    }
+    import('../db.js').then(({ deleteTask }) => {
+      deleteTask(taskId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+  }
+
+  private apiDeleteAllTasks(res: http.ServerResponse): void {
+    import('../db.js').then(({ getAllTasks, deleteTask }) => {
+      const tasks = getAllTasks();
+      for (const t of tasks) {
+        deleteTask(t.id);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, deleted: tasks.length }));
     });
   }
 

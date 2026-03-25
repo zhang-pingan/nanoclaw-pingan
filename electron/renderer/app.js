@@ -19,6 +19,7 @@ var schedulersPanel = document.getElementById("schedulers-panel");
 var schedulersList = document.getElementById("schedulers-list");
 var openSchedulersBtn = document.getElementById("open-schedulers");
 var closeSchedulersBtn = document.getElementById("close-schedulers");
+var deleteAllSchedulersBtn = document.getElementById("delete-all-schedulers");
 var connectionStatus = document.getElementById("connection-status");
 var chatHeader = document.getElementById("chat-header");
 var chatGroupName = document.getElementById("chat-group-name");
@@ -367,18 +368,49 @@ async function loadSchedulers() {
         el.innerHTML = `
           <div class="scheduler-prompt">${escapeHtml(task.prompt)}</div>
           <div class="scheduler-meta">
-            <span class="scheduler-id">#${escapeHtml(task.id)}</span>
             <span class="scheduler-status ${status}">${statusIcon} ${task.status}</span>
             <span>${task.schedule_type}: ${scheduleValue}</span>
             <span>Next: ${nextRun}</span>
+            <span class="scheduler-id">${escapeHtml(task.id)}</span>
+            <button class="scheduler-delete-btn" title="Delete task">&#128465;</button>
           </div>
         `;
+        const deleteBtn = el.querySelector(".scheduler-delete-btn");
+        deleteBtn.addEventListener("click", () => deleteSchedulerTask(task.id, el));
         schedulersList.appendChild(el);
       }
     }
   } catch (err) {
     console.error("Failed to load schedulers:", err);
     schedulersList.innerHTML = `<div class="schedulers-empty">Failed to load schedulers</div>`;
+  }
+}
+
+async function deleteSchedulerTask(taskId, el) {
+  if (!confirm("Delete this task?")) return;
+  try {
+    const res = await apiFetch(`/api/task?id=${encodeURIComponent(taskId)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    el.remove();
+    // Show empty message if no tasks left
+    if (schedulersList.querySelectorAll(".scheduler-item").length === 0) {
+      schedulersList.innerHTML = `<div class="schedulers-empty">No scheduled tasks</div>`;
+    }
+  } catch (err) {
+    console.error("Failed to delete scheduler:", err);
+    alert("Failed to delete task");
+  }
+}
+
+async function deleteAllSchedulers() {
+  if (!confirm("Delete all scheduled tasks?")) return;
+  try {
+    const res = await apiFetch("/api/tasks", { method: "DELETE" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    schedulersList.innerHTML = `<div class="schedulers-empty">No scheduled tasks</div>`;
+  } catch (err) {
+    console.error("Failed to delete all schedulers:", err);
+    alert("Failed to delete all tasks");
   }
 }
 async function loadMessages() {
@@ -674,6 +706,7 @@ openSchedulersBtn.addEventListener("click", () => {
   schedulersPanel.classList.add("open");
   loadSchedulers();
 });
+deleteAllSchedulersBtn.addEventListener("click", deleteAllSchedulers);
 closeSchedulersBtn.addEventListener("click", () => {
   schedulersPanel.classList.remove("open");
 });
@@ -763,12 +796,6 @@ document.addEventListener("drop", (e) => {
 messagesEl.addEventListener("scroll", () => {
   if (messagesEl.scrollTop < 100 && hasMoreHistory && !loadingHistory) {
     loadMoreHistory();
-  }
-});
-
-mainScreen.addEventListener("transitionend", () => {
-  if (!mainScreen.classList.contains("hidden")) {
-    messageInput.focus();
   }
 });
 

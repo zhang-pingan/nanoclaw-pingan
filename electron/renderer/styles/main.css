@@ -1206,6 +1206,11 @@ body::before {
   font-size: 14px;
 }
 
+.schedulers-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
 .schedulers-header button {
   background: none;
   border: none;
@@ -1219,6 +1224,15 @@ body::before {
 
 .schedulers-header button:hover {
   color: var(--text-primary);
+}
+
+.scheduler-delete-all {
+  color: #ef4444 !important;
+}
+
+.scheduler-delete-all:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626 !important;
 }
 
 #schedulers-list {
@@ -1285,6 +1299,22 @@ body::before {
 
 .scheduler-status.paused {
   color: var(--text-muted);
+}
+
+.scheduler-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+  margin-left: auto;
+}
+
+.scheduler-delete-btn:hover {
+  color: #ef4444;
 }
 
 .schedulers-empty {
