@@ -390,7 +390,16 @@ export async function processTaskIpc(
           }
           nextRun = new Date(Date.now() + ms).toISOString();
         } else if (scheduleType === 'once') {
-          const date = new Date(data.schedule_value);
+          let scheduleValue = data.schedule_value;
+          // Agent runs in a UTC container; host may be in a different timezone.
+          // Treat naive timestamps (no timezone suffix) as UTC so parsing is consistent.
+          if (
+            !/[Zz]$/.test(scheduleValue) &&
+            !/[+-]\d{2}:\d{2}$/.test(scheduleValue)
+          ) {
+            scheduleValue += 'Z';
+          }
+          const date = new Date(scheduleValue);
           if (isNaN(date.getTime())) {
             logger.warn(
               { scheduleValue: data.schedule_value },
