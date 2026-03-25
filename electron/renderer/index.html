@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NanoClaw</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles/main.css" />
   <!-- Markdown rendering via CDN (no bundle needed for Electron) -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -70,8 +73,7 @@
           </div>
           <div class="header-actions">
             <button id="popout-btn" class="btn-ghost" title="Open in new window">&#10697;</button>
-            <button id="clear-chat" class="btn-ghost" title="Clear context">&#128465;</button>
-          </div>
+                      </div>
         </div>
 
         <!-- Messages -->
@@ -102,16 +104,6 @@
 
           <div id="file-drop-zone" class="hidden">
             <span>Drop files here to upload</span>
-          </div>
-
-          <!-- Markdown toolbar -->
-          <div class="md-toolbar">
-            <button data-md="bold" title="Bold (Ctrl+B)"><b>B</b></button>
-            <button data-md="italic" title="Italic (Ctrl+I)"><i>I</i></button>
-            <button data-md="code" title="Inline code">`</button>
-            <button data-md="codeblock" title="Code block">{ }</button>
-            <button data-md="link" title="Link (Ctrl+K)">&#128279;</button>
-            <button data-md="list" title="List">&bull;</button>
           </div>
 
           <div class="input-row">

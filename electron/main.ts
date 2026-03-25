@@ -20,7 +20,7 @@ function createWindow(): void {
     minWidth: 600,
     minHeight: 400,
     title: 'NanoClaw',
-    backgroundColor: '#1e1e2e',
+    backgroundColor: '#f0f2f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -73,7 +73,7 @@ ipcMain.handle('open-group-window', (_event, jid: string, name: string) => {
     minWidth: 400,
     minHeight: 300,
     title: `${name} — NanoClaw`,
-    backgroundColor: '#1e1e2e',
+    backgroundColor: '#f0f2f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

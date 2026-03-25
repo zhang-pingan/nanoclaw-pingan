@@ -20,7 +20,6 @@ var connectionStatus = document.getElementById("connection-status");
 var chatHeader = document.getElementById("chat-header");
 var chatGroupName = document.getElementById("chat-group-name");
 var chatGroupFolder = document.getElementById("chat-group-folder");
-var clearChatBtn = document.getElementById("clear-chat");
 var popoutBtn = document.getElementById("popout-btn");
 var messagesEl = document.getElementById("messages");
 var messagesEmpty = document.getElementById("messages-empty");
@@ -164,6 +163,7 @@ function createMessageEl(msg) {
   const isUser = msg.is_from_me;
   const isSystem = msg.sender === "system";
   div.setAttribute("data-msg-id", msg.id);
+  div.setAttribute("data-timestamp", msg.timestamp);
 
   if (isSystem) {
     div.className = "message system";
@@ -269,6 +269,7 @@ function renderMessages() {
   clearSkeleton();
   if (messages.length === 0) {
     messagesEmpty.style.display = "flex";
+    messagesEmpty.innerHTML = '<span>Select a group to initiate session</span>';
     const existing2 = messagesEl.querySelectorAll(".message");
     existing2.forEach((el) => el.remove());
     return;
@@ -739,13 +740,6 @@ messageInput.addEventListener("input", () => {
   }
 });
 
-// Markdown toolbar buttons
-document.querySelectorAll(".md-toolbar button[data-md]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    insertMarkdown(btn.getAttribute("data-md"));
-  });
-});
-
 // Reply preview close
 replyPreviewClose.addEventListener("click", clearReplyTo);
 
@@ -772,10 +766,6 @@ document.addEventListener("drop", (e) => {
   for (const file of e.dataTransfer?.files || []) {
     uploadFile(file);
   }
-});
-clearChatBtn.addEventListener("click", () => {
-  messages = [];
-  renderMessages();
 });
 
 // Pop-out button
