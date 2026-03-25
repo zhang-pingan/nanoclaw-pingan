@@ -14,13 +14,15 @@ var mainScreen = document.getElementById("main-screen");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
 var groupsList = document.getElementById("groups-list");
-var tasksList = document.getElementById("tasks-list");
 var refreshGroupsBtn = document.getElementById("refresh-groups");
+var schedulersPanel = document.getElementById("schedulers-panel");
+var schedulersList = document.getElementById("schedulers-list");
+var openSchedulersBtn = document.getElementById("open-schedulers");
+var closeSchedulersBtn = document.getElementById("close-schedulers");
 var connectionStatus = document.getElementById("connection-status");
 var chatHeader = document.getElementById("chat-header");
 var chatGroupName = document.getElementById("chat-group-name");
 var chatGroupFolder = document.getElementById("chat-group-folder");
-var popoutBtn = document.getElementById("popout-btn");
 var messagesEl = document.getElementById("messages");
 var messagesEmpty = document.getElementById("messages-empty");
 var typingIndicator = document.getElementById("typing-indicator");
@@ -327,32 +329,52 @@ async function loadGroups() {
     console.error("Failed to load groups:", err);
   }
 }
-async function loadTasks() {
-  if (!currentGroupJid) return;
-  const folder = currentGroupJid.replace("web:", "");
+async function loadSchedulers() {
   try {
-    const res = await apiFetch(`/api/tasks?folder=${encodeURIComponent(folder)}`);
+    const res = await apiFetch("/api/tasks");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    tasksList.innerHTML = "";
+    schedulersList.innerHTML = "";
+
     if (data.tasks.length === 0) {
-      const el = document.createElement("div");
-      el.className = "list-item";
-      el.style.color = "var(--text-muted)";
-      el.style.cursor = "default";
-      el.innerHTML = `<span class="item-icon">\u2610</span><span class="item-name">No active tasks</span>`;
-      tasksList.appendChild(el);
+      schedulersList.innerHTML = `<div class="schedulers-empty">No scheduled tasks</div>`;
       return;
     }
-    for (const task of data.tasks.slice(0, 10)) {
-      const el = document.createElement("div");
-      el.className = "list-item";
-      el.title = task.prompt;
-      el.innerHTML = `<span class="item-icon">\u2610</span><span class="item-name">${escapeHtml(task.prompt.slice(0, 40))}${task.prompt.length > 40 ? "\u2026" : ""}</span>`;
-      tasksList.appendChild(el);
+
+    // Group by group_folder
+    const byGroup = {};
+    for (const task of data.tasks) {
+      const g = task.group_folder || "Unknown";
+      if (!byGroup[g]) byGroup[g] = [];
+      byGroup[g].push(task);
+    }
+
+    for (const [group, tasks] of Object.entries(byGroup)) {
+      const header = document.createElement("div");
+      header.className = "scheduler-group-header";
+      header.textContent = group;
+      schedulersList.appendChild(header);
+
+      for (const task of tasks) {
+        const el = document.createElement("div");
+        el.className = "scheduler-item";
+        const status = task.status === "active" ? "active" : "paused";
+        const statusIcon = task.status === "active" ? "\u25CF" : "\u25CB";
+        const nextRun = task.next_run ? new Date(task.next_run).toLocaleString() : "—";
+        el.innerHTML = `
+          <div class="scheduler-prompt">${escapeHtml(task.prompt)}</div>
+          <div class="scheduler-meta">
+            <span class="scheduler-status ${status}">${statusIcon} ${task.status}</span>
+            <span>${task.schedule_type}: ${task.schedule_value}</span>
+            <span>Next: ${nextRun}</span>
+          </div>
+        `;
+        schedulersList.appendChild(el);
+      }
     }
   } catch (err) {
-    console.error("Failed to load tasks:", err);
+    console.error("Failed to load schedulers:", err);
+    schedulersList.innerHTML = `<div class="schedulers-empty">Failed to load schedulers</div>`;
   }
 }
 async function loadMessages() {
@@ -503,7 +525,6 @@ async function selectGroup(jid) {
   renderGroups();
 
   await loadMessages();
-  await loadTasks();
   sendWs({ type: "select_group", chatJid: jid });
 }
 async function sendMessage(content) {
@@ -631,23 +652,9 @@ function autoResizeInput() {
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px";
 }
 
-// --- Pop-out window mode detection ---
-function checkPopoutMode() {
-  const params = new URLSearchParams(window.location.search);
-  const jid = params.get("jid");
-  if (jid) {
-    document.body.classList.add("popout-mode");
-    // Auto-select the group after loading
-    loadGroups().then(() => {
-      selectGroup(jid);
-    });
-  }
-}
-
 // Auto-start on page load
 connectWS();
 loadGroups();
-checkPopoutMode();
 
 // --- Event listeners ---
 
@@ -658,6 +665,13 @@ sidebarCollapse.addEventListener("click", () => {
 refreshGroupsBtn.addEventListener("click", () => {
   loadGroups();
   if (currentGroupJid) loadMessages();
+});
+openSchedulersBtn.addEventListener("click", () => {
+  schedulersPanel.classList.add("open");
+  loadSchedulers();
+});
+closeSchedulersBtn.addEventListener("click", () => {
+  schedulersPanel.classList.remove("open");
 });
 sendBtn.addEventListener("click", () => {
   sendMessage(messageInput.value);
@@ -738,18 +752,6 @@ document.addEventListener("drop", (e) => {
   if (!currentGroupJid) return;
   for (const file of e.dataTransfer?.files || []) {
     uploadFile(file);
-  }
-});
-
-// Pop-out button
-popoutBtn.addEventListener("click", () => {
-  if (!currentGroupJid) return;
-  if (typeof window !== "undefined" && window.nanoclawApp && window.nanoclawApp.openGroupWindow) {
-    const group = groups.find((g) => g.jid === currentGroupJid);
-    window.nanoclawApp.openGroupWindow(currentGroupJid, group?.name || "Chat");
-  } else {
-    // Fallback: open in browser tab
-    window.open(`http://localhost:3000?jid=${encodeURIComponent(currentGroupJid)}`, "_blank");
   }
 });
 

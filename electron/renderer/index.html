@@ -36,24 +36,20 @@
           <button id="sidebar-collapse" title="Collapse sidebar">&#8249;</button>
         </div>
 
+        <div class="section-header">
+          <span>Groups</span>
+          <button id="refresh-groups" title="Refresh groups">&#10227;</button>
+        </div>
         <div class="sidebar-section">
-          <div class="section-header">
-            <span>Groups</span>
-            <button id="refresh-groups" title="Refresh groups">&#10227;</button>
-          </div>
           <div id="groups-list" class="list">
             <!-- Populated by JS -->
           </div>
         </div>
 
-        <div class="sidebar-section">
-          <div class="section-header">
-            <span>Tasks</span>
-          </div>
-          <div id="tasks-list" class="list">
-            <!-- Populated by JS -->
-          </div>
-        </div>
+        <button id="open-schedulers" class="section-header schedulers-btn">
+          <span>Schedulers</span>
+          <span class="schedulers-arrow">&#8250;</span>
+        </button>
 
         <div class="sidebar-footer">
           <div id="connection-status" class="conn-status disconnected">
@@ -62,6 +58,15 @@
           </div>
         </div>
       </aside>
+
+      <!-- Schedulers panel -->
+      <div id="schedulers-panel">
+        <div class="schedulers-header">
+          <span>Schedulers</span>
+          <button id="close-schedulers" title="Close">&#10005;</button>
+        </div>
+        <div id="schedulers-list"></div>
+      </div>
 
       <!-- Chat area -->
       <main id="chat-area">
@@ -72,8 +77,7 @@
             <span id="chat-group-folder" class="muted"></span>
           </div>
           <div class="header-actions">
-            <button id="popout-btn" class="btn-ghost" title="Open in new window">&#10697;</button>
-                      </div>
+          </div>
         </div>
 
         <!-- Messages -->

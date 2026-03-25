@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, BrowserWindow } from 'electron';
+import { contextBridge, BrowserWindow } from 'electron';
 
 // Expose a safe API to the renderer process for the NanoClaw web channel.
 
@@ -23,11 +23,6 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     // This would go through IPC in a real implementation
     // For now, let the renderer handle it via window.open with target=_blank
     // which the main process intercepts
-  },
-
-  // Open a group in a new window
-  openGroupWindow: (jid: string, name: string) => {
-    ipcRenderer.invoke('open-group-window', jid, name);
   },
 
   // Platform info

@@ -200,7 +200,7 @@ body::before {
 #sidebar.collapsed .sidebar-section,
 #sidebar.collapsed .sidebar-footer,
 #sidebar.collapsed .sidebar-header span,
-#sidebar.collapsed .section-header span {
+#sidebar.collapsed .section-header {
   display: none;
 }
 
@@ -1125,6 +1125,20 @@ body::before {
   background: rgba(0, 0, 0, 0.25);
 }
 
+/* Sidebar scrollbar hidden until hover/scroll */
+.sidebar-section {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.sidebar-section::-webkit-scrollbar {
+  opacity: 0;
+}
+
+.sidebar-section:hover::-webkit-scrollbar {
+  opacity: 1;
+}
+
 /* === File upload progress === */
 .upload-item {
   display: flex;
@@ -1163,6 +1177,155 @@ body::before {
   display: none;
 }
 
+/* === Schedulers Panel === */
+#schedulers-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100%;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: none;
+  flex-direction: column;
+  z-index: 20;
+  box-shadow: -4px 0 16px rgba(0,0,0,0.1);
+}
+
+#schedulers-panel.open {
+  display: flex;
+}
+
+.schedulers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.schedulers-header button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+}
+
+.schedulers-header button:hover {
+  color: var(--text-primary);
+}
+
+#schedulers-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+#schedulers-list::-webkit-scrollbar {
+  opacity: 0;
+}
+
+#schedulers-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+#schedulers-list:hover::-webkit-scrollbar {
+  opacity: 1;
+}
+
+.scheduler-group-header {
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.scheduler-item {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+}
+
+.scheduler-item:last-child {
+  border-bottom: none;
+}
+
+.scheduler-prompt {
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.scheduler-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.scheduler-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scheduler-status.active {
+  color: #22c55e;
+}
+
+.scheduler-status.paused {
+  color: var(--text-muted);
+}
+
+.schedulers-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Schedulers button in sidebar */
+.schedulers-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  transition: color var(--transition);
+}
+
+.schedulers-btn:hover {
+  color: var(--text-primary);
+}
+
+.schedulers-arrow {
+  font-size: 14px;
+  transition: transform var(--transition);
+}
+
+#sidebar.collapsed .schedulers-btn {
+  display: none;
+}
+
 .command-hint.visible { display: block; }
 
 /* === Loading spinner for infinite scroll === */
@@ -1173,9 +1336,4 @@ body::before {
   padding: 8px;
   color: var(--text-muted);
   font-size: 12px;
-}
-
-/* === Pop-out window mode === */
-body.popout-mode #sidebar {
-  display: none;
 }
