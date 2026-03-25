@@ -365,8 +365,9 @@ async function loadSchedulers() {
           ? new Date(task.schedule_value).toLocaleString()
           : task.schedule_value;
         el.innerHTML = `
-          <div class="scheduler-prompt">${escapeHtml(task.prompt)} <span class="scheduler-id">#${escapeHtml(task.id)}</span></div>
+          <div class="scheduler-prompt">${escapeHtml(task.prompt)}</div>
           <div class="scheduler-meta">
+            <span class="scheduler-id">#${escapeHtml(task.id)}</span>
             <span class="scheduler-status ${status}">${statusIcon} ${task.status}</span>
             <span>${task.schedule_type}: ${scheduleValue}</span>
             <span>Next: ${nextRun}</span>

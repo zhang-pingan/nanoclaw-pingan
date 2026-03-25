@@ -4,6 +4,18 @@ import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
 import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
+
+/** Format a Date to a local timezone string without T/Z (e.g., "2026-03-26 12:05:00") */
+function formatLocalTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const y = date.getFullYear();
+  const mo = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const h = pad(date.getHours());
+  const mi = pad(date.getMinutes());
+  const s = pad(date.getSeconds());
+  return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
+}
 import {
   createNewWorkflow,
   getAvailableWorkflowTypes,
@@ -371,7 +383,7 @@ export async function processTaskIpc(
             const interval = CronExpressionParser.parse(data.schedule_value, {
               tz: TIMEZONE,
             });
-            nextRun = interval.next().toISOString();
+            nextRun = formatLocalTime(interval.next().toDate());
           } catch {
             logger.warn(
               { scheduleValue: data.schedule_value },
@@ -388,18 +400,10 @@ export async function processTaskIpc(
             );
             break;
           }
-          nextRun = new Date(Date.now() + ms).toISOString();
+          nextRun = formatLocalTime(new Date(Date.now() + ms));
         } else if (scheduleType === 'once') {
-          let scheduleValue = data.schedule_value;
-          // Agent runs in a UTC container; host may be in a different timezone.
-          // Treat naive timestamps (no timezone suffix) as UTC so parsing is consistent.
-          if (
-            !/[Zz]$/.test(scheduleValue) &&
-            !/[+-]\d{2}:\d{2}$/.test(scheduleValue)
-          ) {
-            scheduleValue += 'Z';
-          }
-          const date = new Date(scheduleValue);
+          // Node.js Date parses naive strings as local time.
+          const date = new Date(data.schedule_value ?? '');
           if (isNaN(date.getTime())) {
             logger.warn(
               { scheduleValue: data.schedule_value },
@@ -407,7 +411,7 @@ export async function processTaskIpc(
             );
             break;
           }
-          nextRun = date.toISOString();
+          nextRun = formatLocalTime(date);
         }
 
         const taskId =
@@ -427,7 +431,7 @@ export async function processTaskIpc(
           context_mode: contextMode,
           next_run: nextRun,
           status: 'active',
-          created_at: new Date().toISOString(),
+          created_at: formatLocalTime(new Date()),
         });
         logger.info(
           { taskId, sourceGroup, targetFolder, contextMode },
@@ -530,7 +534,7 @@ export async function processTaskIpc(
                 updatedTask.schedule_value,
                 { tz: TIMEZONE },
               );
-              updates.next_run = interval.next().toISOString();
+              updates.next_run = formatLocalTime(interval.next().toDate());
             } catch {
               logger.warn(
                 { taskId: data.taskId, value: updatedTask.schedule_value },
@@ -541,7 +545,12 @@ export async function processTaskIpc(
           } else if (updatedTask.schedule_type === 'interval') {
             const ms = parseInt(updatedTask.schedule_value, 10);
             if (!isNaN(ms) && ms > 0) {
-              updates.next_run = new Date(Date.now() + ms).toISOString();
+              updates.next_run = formatLocalTime(new Date(Date.now() + ms));
+            }
+          } else if (updatedTask.schedule_type === 'once') {
+            const date = new Date(updatedTask.schedule_value ?? '');
+            if (!isNaN(date.getTime())) {
+              updates.next_run = formatLocalTime(date);
             }
           }
         }

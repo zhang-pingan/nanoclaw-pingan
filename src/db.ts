@@ -3,6 +3,15 @@ import fs from 'fs';
 import path from 'path';
 
 import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
+
+/** Format a Date to local timezone string (e.g., "2026-03-26 12:05:00") */
+function formatLocalTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -566,7 +575,7 @@ export function deleteTask(id: string): void {
 }
 
 export function getDueTasks(): ScheduledTask[] {
-  const now = new Date().toISOString();
+  const now = formatLocalTime(new Date());
   return db
     .prepare(
       `
@@ -583,7 +592,7 @@ export function updateTaskAfterRun(
   nextRun: string | null,
   lastResult: string,
 ): void {
-  const now = new Date().toISOString();
+  const now = formatLocalTime(new Date());
   db.prepare(
     `
     UPDATE scheduled_tasks
