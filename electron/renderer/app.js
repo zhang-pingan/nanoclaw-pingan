@@ -9,6 +9,8 @@ var replyToMsg = null;
 var hasMoreHistory = true;
 var loadingHistory = false;
 var cmdPaletteIndex = -1;
+var multiSelectMode = false;
+var selectedMsgIds = new Set();
 
 var mainScreen = document.getElementById("main-screen");
 var sidebar = document.getElementById("sidebar");
@@ -37,6 +39,11 @@ var replyPreview = document.getElementById("reply-preview");
 var replyPreviewContent = document.getElementById("reply-preview-content");
 var replyPreviewClose = document.getElementById("reply-preview-close");
 var commandPalette = document.getElementById("command-palette");
+var selectModeBtn = document.getElementById("select-mode-btn");
+var multiSelectBar = document.getElementById("multi-select-bar");
+var selectedCountEl = document.getElementById("selected-count");
+var copySelectedBtn = document.getElementById("copy-selected-btn");
+var cancelSelectBtn = document.getElementById("cancel-select-btn");
 
 // --- Command palette definitions ---
 var commands = [
@@ -194,6 +201,7 @@ function createMessageEl(msg) {
   const groupFolder = currentGroupJid.replace("web:", "");
 
   div.innerHTML = `
+    <div class="msg-select-check">\u2713</div>
     <div class="msg-avatar" style="background:${senderColor}">${senderInitial}</div>
     <div class="msg-main">
       <div class="msg-header">
@@ -202,6 +210,7 @@ function createMessageEl(msg) {
       </div>
       <div class="msg-body">
         <div class="msg-actions">
+          <button class="msg-copy-btn" title="\u590D\u5236"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
           <button class="msg-reply-btn" title="Reply">\u21A9</button>
         </div>
         ${replyHtml}
@@ -225,6 +234,20 @@ function createMessageEl(msg) {
   if (replyBtn) {
     replyBtn.addEventListener("click", () => setReplyTo(msg));
   }
+
+  // Copy button handler
+  const copyBtn = div.querySelector(".msg-copy-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => copyMessageContent(msg));
+  }
+
+  // Multi-select click handler
+  div.addEventListener("click", (e) => {
+    if (!multiSelectMode) return;
+    if (e.target.closest(".msg-actions")) return;
+    e.preventDefault();
+    toggleMessageSelection(msg.id, div);
+  });
 
   return div;
 }
@@ -541,13 +564,14 @@ function handleWsMessage(msg) {
 }
 function notifyAgent(msg) {
   const group = groups.find((g) => g.jid === msg.chat_jid);
-  const title = `${group?.name || "NanoClaw Agent"}`;
+  const title = `${group?.name || "Support Group Agent"}`;
   const body = `${msg.sender_name}: ${msg.content.slice(0, 100)}`;
   if (typeof window !== "undefined" && window.nanoclawApp) {
     window.nanoclawApp.notify(title, body);
   }
 }
 async function selectGroup(jid) {
+  if (multiSelectMode) exitMultiSelect();
   currentGroupJid = jid;
   messages = [];
   hasMoreHistory = true;
@@ -683,6 +707,85 @@ function showError(msg) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
   setTimeout(() => el.remove(), 5e3);
 }
+// --- Single message copy ---
+function copyMessageContent(msg) {
+  navigator.clipboard.writeText(msg.content).then(() => showCopyToast());
+}
+
+function showCopyToast() {
+  let toast = document.getElementById("copy-toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "copy-toast";
+    toast.textContent = "\u5DF2\u590D\u5236";
+    document.body.appendChild(toast);
+  }
+  toast.classList.remove("visible");
+  void toast.offsetWidth;
+  toast.classList.add("visible");
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove("visible"), 1500);
+}
+
+// --- Multi-select ---
+function enterMultiSelect() {
+  multiSelectMode = true;
+  messagesEl.classList.add("multi-select");
+  multiSelectBar.classList.add("visible");
+  selectModeBtn.classList.add("active");
+  selectModeBtn.textContent = "\u2611";
+  inputArea.style.display = "none";
+  selectedMsgIds.clear();
+  updateMultiSelectBar();
+}
+
+function exitMultiSelect() {
+  multiSelectMode = false;
+  messagesEl.classList.remove("multi-select");
+  multiSelectBar.classList.remove("visible");
+  selectModeBtn.classList.remove("active");
+  selectModeBtn.textContent = "\u2610";
+  inputArea.style.display = "";
+  messagesEl.querySelectorAll(".message.selected").forEach((el) => el.classList.remove("selected"));
+  selectedMsgIds.clear();
+}
+
+function toggleMultiSelectMode() {
+  if (multiSelectMode) exitMultiSelect();
+  else enterMultiSelect();
+}
+
+function toggleMessageSelection(msgId, el) {
+  if (selectedMsgIds.has(msgId)) {
+    selectedMsgIds.delete(msgId);
+    el.classList.remove("selected");
+  } else {
+    selectedMsgIds.add(msgId);
+    el.classList.add("selected");
+  }
+  updateMultiSelectBar();
+}
+
+function updateMultiSelectBar() {
+  const count = selectedMsgIds.size;
+  selectedCountEl.textContent = "\u5DF2\u9009 " + count + " \u6761";
+  copySelectedBtn.disabled = count === 0;
+}
+
+function copySelectedMessages() {
+  const selected = messages.filter((m) => selectedMsgIds.has(m.id));
+  if (selected.length === 0) return;
+  const text = selected.map((m) => {
+    const sender = m.sender_name || m.sender || "Unknown";
+    const time = formatTime(m.timestamp);
+    return `[${sender}] ${time}\n${m.content}`;
+  }).join("\n\n");
+  navigator.clipboard.writeText(text).then(() => {
+    showCopyToast();
+    exitMultiSelect();
+  });
+}
+
 function autoResizeInput() {
   messageInput.style.height = "auto";
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px";
@@ -796,6 +899,16 @@ document.addEventListener("drop", (e) => {
 messagesEl.addEventListener("scroll", () => {
   if (messagesEl.scrollTop < 100 && hasMoreHistory && !loadingHistory) {
     loadMoreHistory();
+  }
+});
+
+// Multi-select
+selectModeBtn.addEventListener("click", toggleMultiSelectMode);
+copySelectedBtn.addEventListener("click", copySelectedMessages);
+cancelSelectBtn.addEventListener("click", exitMultiSelect);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && multiSelectMode) {
+    exitMultiSelect();
   }
 });
 

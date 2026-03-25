@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NanoClaw</title>
+  <title>Support Group</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -32,7 +32,7 @@
       <!-- Sidebar -->
       <aside id="sidebar">
         <div class="sidebar-header">
-          <span class="sidebar-title">NanoClaw</span>
+          <span class="sidebar-title">Support Group</span>
           <button id="sidebar-collapse" title="Collapse sidebar">&#8249;</button>
         </div>
 
@@ -80,6 +80,7 @@
             <span id="chat-group-folder" class="muted"></span>
           </div>
           <div class="header-actions">
+            <button id="select-mode-btn" class="btn-ghost" title="多选消息">&#9744;</button>
           </div>
         </div>
 
@@ -96,6 +97,15 @@
             <span></span><span></span><span></span>
           </span>
           <span class="typing-text">Agent is typing...</span>
+        </div>
+
+        <!-- Multi-select toolbar -->
+        <div id="multi-select-bar">
+          <span id="selected-count">已选 0 条</span>
+          <div class="multi-select-actions">
+            <button id="copy-selected-btn" class="btn-primary" disabled>复制</button>
+            <button id="cancel-select-btn" class="btn-ghost">取消</button>
+          </div>
         </div>
 
         <!-- Input area -->

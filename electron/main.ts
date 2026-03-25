@@ -18,7 +18,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 600,
     minHeight: 400,
-    title: 'NanoClaw',
+    title: 'Support Group',
     backgroundColor: '#f0f2f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -75,7 +75,7 @@ function buildAppMenu(): Menu {
                 },
               },
               {
-                label: 'Quit All (NanoClaw + App)',
+                label: 'Quit All (Support Group + App)',
                 click: () => {
                   // Full quit: stop NanoClaw then quit Electron
                   isQuitting = true;
@@ -91,7 +91,7 @@ function buildAppMenu(): Menu {
                 },
               },
               { type: 'separator' as const },
-              { label: 'Hide NanoClaw', role: 'hide' as const },
+              { label: 'Hide Support Group', role: 'hide' as const },
               { label: 'Hide Others', role: 'hideOthers' as const },
               { label: 'Show All', role: 'unhide' as const },
             ],
@@ -146,7 +146,7 @@ function buildAppMenu(): Menu {
       label: 'Help',
       submenu: [
         {
-          label: 'NanoClaw Docs',
+          label: 'Support Group Docs',
           click: () => {
             shell.openExternal('https://github.com/qwibitai/nanoclaw');
           },
