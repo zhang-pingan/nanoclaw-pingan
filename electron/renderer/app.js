@@ -1,14 +1,9 @@
 // electron/renderer/app.js
-var token = "";
 var ws = null;
 var reconnectTimer = null;
 var currentGroupJid = "";
 var groups = [];
 var messages = [];
-var tokenScreen = document.getElementById("token-screen");
-var tokenInput = document.getElementById("token-input");
-var tokenConnectBtn = document.getElementById("token-connect");
-var tokenError = document.getElementById("token-error");
 var mainScreen = document.getElementById("main-screen");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
@@ -31,9 +26,9 @@ var fileInput = document.getElementById("file-input");
 var fileDropZone = document.getElementById("file-drop-zone");
 function apiFetch(path, options) {
   const headers = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(`http://localhost:3000${path}`, { ...options, headers });
 }
+
 function formatTime(ts) {
   const d = new Date(parseInt(ts));
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -178,7 +173,7 @@ async function loadMessages() {
 function connectWS() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
   setConnectionStatus("connecting");
-  const wsUrl = token ? `ws://localhost:3000/ws?token=${encodeURIComponent(token)}` : "ws://localhost:3000/ws";
+  const wsUrl = "ws://localhost:3000/ws";
   ws = new WebSocket(wsUrl);
   ws.onopen = () => {
     setConnectionStatus("connected");
@@ -293,7 +288,6 @@ async function uploadFile(file) {
   formData.append("file", file);
   try {
     const headers = {};
-    if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(
       `http://localhost:3000/api/upload?jid=${encodeURIComponent(currentGroupJid)}`,
       { method: "POST", headers, body: formData }
@@ -318,19 +312,10 @@ function autoResizeInput() {
   messageInput.style.height = "auto";
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px";
 }
-tokenConnectBtn.addEventListener("click", () => {
-  token = tokenInput.value.trim();
-  tokenScreen.classList.add("hidden");
-  mainScreen.classList.remove("hidden");
-  connectWS();
-  loadGroups();
-});
-tokenInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    tokenConnectBtn.click();
-  }
-});
+// Auto-start on page load
+connectWS();
+loadGroups();
+
 sidebarCollapse.addEventListener("click", () => {
   sidebar.classList.toggle("collapsed");
   sidebarCollapse.textContent = sidebar.classList.contains("collapsed") ? "\u203A" : "\u2039";
@@ -382,4 +367,5 @@ mainScreen.addEventListener("transitionend", () => {
     messageInput.focus();
   }
 });
+
 //# sourceMappingURL=app.js.map
