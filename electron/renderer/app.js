@@ -171,6 +171,9 @@ function createMessageEl(msg) {
     return div;
   }
 
+  const senderInitial = (msg.sender_name || msg.sender || "?")[0].toUpperCase();
+  const senderColor = isUser ? "#2563eb" : "#7c3aed";
+
   div.className = `message ${isUser ? "user" : "assistant"}`;
 
   // Reply quote block
@@ -188,13 +191,20 @@ function createMessageEl(msg) {
   const groupFolder = currentGroupJid.replace("web:", "");
 
   div.innerHTML = `
-    <div class="msg-actions">
-      <button class="msg-reply-btn" title="Reply">\u21A9</button>
+    <div class="msg-avatar" style="background:${senderColor}">${senderInitial}</div>
+    <div class="msg-main">
+      <div class="msg-header">
+        ${msg.sender_name ? `<span class="msg-sender">${escapeHtml(msg.sender_name)}</span>` : ""}
+        <span class="msg-time">${formatTime(msg.timestamp)}</span>
+      </div>
+      <div class="msg-body">
+        <div class="msg-actions">
+          <button class="msg-reply-btn" title="Reply">\u21A9</button>
+        </div>
+        ${replyHtml}
+        <div class="msg-content">${renderedContent}</div>
+      </div>
     </div>
-    ${replyHtml}
-    ${msg.sender_name ? `<span class="msg-sender">${escapeHtml(msg.sender_name)}</span>` : ""}
-    <div class="msg-content">${renderedContent}</div>
-    <span class="msg-time">${formatTime(msg.timestamp)}</span>
   `;
 
   // Add file preview if detected
