@@ -361,11 +361,14 @@ async function loadSchedulers() {
         const status = task.status === "active" ? "active" : "paused";
         const statusIcon = task.status === "active" ? "\u25CF" : "\u25CB";
         const nextRun = task.next_run ? new Date(task.next_run).toLocaleString() : "—";
+        const scheduleValue = task.schedule_type === 'once' && task.schedule_value
+          ? new Date(task.schedule_value).toLocaleString()
+          : task.schedule_value;
         el.innerHTML = `
-          <div class="scheduler-prompt">${escapeHtml(task.prompt)}</div>
+          <div class="scheduler-prompt">${escapeHtml(task.prompt)} <span class="scheduler-id">#${escapeHtml(task.id)}</span></div>
           <div class="scheduler-meta">
             <span class="scheduler-status ${status}">${statusIcon} ${task.status}</span>
-            <span>${task.schedule_type}: ${task.schedule_value}</span>
+            <span>${task.schedule_type}: ${scheduleValue}</span>
             <span>Next: ${nextRun}</span>
           </div>
         `;
