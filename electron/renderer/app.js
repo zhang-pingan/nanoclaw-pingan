@@ -22,6 +22,10 @@ var schedulersList = document.getElementById("schedulers-list");
 var openSchedulersBtn = document.getElementById("open-schedulers");
 var closeSchedulersBtn = document.getElementById("close-schedulers");
 var deleteAllSchedulersBtn = document.getElementById("delete-all-schedulers");
+var agentStatusPanel = document.getElementById("agent-status-panel");
+var agentStatusList = document.getElementById("agent-status-list");
+var openAgentStatusBtn = document.getElementById("open-agent-status");
+var closeAgentStatusBtn = document.getElementById("close-agent-status");
 var connectionStatus = document.getElementById("connection-status");
 var chatHeader = document.getElementById("chat-header");
 var chatGroupName = document.getElementById("chat-group-name");
@@ -44,6 +48,8 @@ var multiSelectBar = document.getElementById("multi-select-bar");
 var selectedCountEl = document.getElementById("selected-count");
 var copySelectedBtn = document.getElementById("copy-selected-btn");
 var cancelSelectBtn = document.getElementById("cancel-select-btn");
+var agentStatusInterval = null;
+var agentStatusData = [];
 
 // --- Command palette definitions ---
 var commands = [
@@ -571,6 +577,75 @@ async function deleteAllSchedulers() {
     alert("Failed to delete all tasks");
   }
 }
+
+function formatDuration(ms) {
+  if (!ms && ms !== 0) return "—";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${secs}s`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours}h ${mins}m`;
+}
+
+function updateAgentDurations() {
+  const now = Date.now();
+  for (const agent of agentStatusData) {
+    const elapsed = now - agent.startedAt;
+    const el = document.querySelector(`[data-agent-jid="${CSS.escape(agent.groupJid)}"] .agent-status-duration`);
+    if (el) {
+      el.textContent = formatDuration(elapsed);
+    }
+  }
+}
+
+function renderAgentStatus(agents) {
+  agentStatusData = agents;
+  if (agents.length === 0) {
+    agentStatusList.innerHTML = `<div class="agent-status-empty">No active agents</div>`;
+    return;
+  }
+  agentStatusList.innerHTML = "";
+  for (const agent of agents) {
+    const now = Date.now();
+    const elapsed = now - agent.startedAt;
+    const statusDot = agent.isIdle ? "agent-status-dot idle" : "agent-status-dot active";
+    const statusLabel = agent.isIdle ? "idle" : "active";
+    const typeLabel = agent.isTask ? "task" : "chat";
+
+    const el = document.createElement("div");
+    el.className = "agent-status-item";
+    el.setAttribute("data-agent-jid", agent.groupJid);
+    el.innerHTML = `
+      <div class="agent-status-name">
+        <span class="${statusDot}"></span>
+        ${escapeHtml(agent.groupName)}
+      </div>
+      <div class="agent-status-prompt">${escapeHtml(agent.promptSummary || "—")}</div>
+      <div class="agent-status-meta">
+        <span class="agent-status-duration">${formatDuration(elapsed)}</span>
+        <span class="agent-status-type">${typeLabel}</span>
+        ${agent.pendingTaskCount > 0 ? `<span class="agent-status-pending">${agent.pendingTaskCount} pending</span>` : ""}
+        ${agent.isTask && agent.runningTaskId ? `<span class="agent-status-task-id">${escapeHtml(agent.runningTaskId.slice(0, 8))}…</span>` : ""}
+      </div>
+    `;
+    agentStatusList.appendChild(el);
+  }
+}
+
+async function loadAgentStatus() {
+  try {
+    const res = await apiFetch("/api/agent-status");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderAgentStatus(data.agents || []);
+  } catch (err) {
+    console.error("Failed to load agent status:", err);
+    agentStatusList.innerHTML = `<div class="agent-status-empty">Failed to load</div>`;
+  }
+}
 async function loadMessages() {
   if (!currentGroupJid) return;
   const since = "0";
@@ -707,6 +782,11 @@ function handleWsMessage(msg) {
     }
     case "typing":
       typingIndicator.className = msg.isTyping ? "" : "hidden";
+      break;
+    case "agent_status":
+      if (agentStatusPanel.classList.contains("open")) {
+        renderAgentStatus(msg.agents || []);
+      }
       break;
     case "error":
       console.error("WS error from server:", msg.message);
@@ -964,6 +1044,20 @@ openSchedulersBtn.addEventListener("click", () => {
 deleteAllSchedulersBtn.addEventListener("click", deleteAllSchedulers);
 closeSchedulersBtn.addEventListener("click", () => {
   schedulersPanel.classList.remove("open");
+});
+openAgentStatusBtn.addEventListener("click", () => {
+  agentStatusPanel.classList.add("open");
+  loadAgentStatus();
+  // Update durations every second
+  if (agentStatusInterval) clearInterval(agentStatusInterval);
+  agentStatusInterval = setInterval(updateAgentDurations, 1000);
+});
+closeAgentStatusBtn.addEventListener("click", () => {
+  agentStatusPanel.classList.remove("open");
+  if (agentStatusInterval) {
+    clearInterval(agentStatusInterval);
+    agentStatusInterval = null;
+  }
 });
 sendBtn.addEventListener("click", () => {
   sendMessage(messageInput.value);

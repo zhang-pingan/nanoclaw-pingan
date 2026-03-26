@@ -653,7 +653,8 @@ if (isMain) {
       name: z.string().describe('需求名称'),
       service: z.string().describe('服务名称（对应 services.json 中的 key）'),
       workflow_type: z.string().describe("流程类型（如 'dev_test'）。用 list_workflow_types 查看可用类型。"),
-      start_from: z.string().describe("入口点名称（如 'dev', 'testing'）。用 list_workflow_types 查看各类型的入口点。"),
+      start_from: z.string().describe("入口点名称（如 'plan', 'dev', 'testing'）。用 list_workflow_types 查看各类型的入口点。"),
+      deliverable: z.string().optional().describe("交付物目录名（位于 projects/{service}/iteration/ 下）。从 list_deliverables 获取可选值。dev/testing 入口必须指定。"),
     },
     async (args) => {
       const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -668,6 +669,9 @@ if (isMain) {
         groupFolder,
         timestamp: new Date().toISOString(),
       };
+      if (args.deliverable) {
+        data.deliverable = args.deliverable;
+      }
 
       writeIpcFile(TASKS_DIR, data);
 
@@ -749,14 +753,17 @@ if (isMain) {
                   type: string;
                   name: string;
                   entry_points: string[];
-                  roles: Record<string, string>;
-                  roles_resolved: boolean;
+                  entry_points_detail: Record<string, { requires_deliverable: boolean; deliverable_role?: string }>;
+                  role_channels: Record<string, Record<string, string>>;
                 }) => {
-                  const status = t.roles_resolved ? '✅ 可用' : '❌ 角色未就绪';
-                  const rolesStr = Object.entries(t.roles)
-                    .map(([role, folder]) => `${role}→${folder}`)
-                    .join(', ');
-                  return `- **${t.type}** (${t.name}) ${status}\n  入口点: ${t.entry_points.join(', ')}\n  角色: ${rolesStr || '未解析'}`;
+                  const epLines = t.entry_points.map((ep) => {
+                    const detail = t.entry_points_detail?.[ep];
+                    if (detail?.requires_deliverable) {
+                      return `${ep} (需指定 deliverable_role=${detail.deliverable_role || 'dev'})`;
+                    }
+                    return ep;
+                  });
+                  return `- **${t.type}** (${t.name})\n  入口点: ${epLines.join(', ')}`;
                 },
               )
               .join('\n');
@@ -777,6 +784,61 @@ if (isMain) {
         content: [{ type: 'text' as const, text: '获取流程类型列表超时，请稍后重试。' }],
         isError: true,
       };
+    },
+  );
+
+  server.tool(
+    'list_deliverables',
+    '查看某个服务下已有的交付物目录列表及其包含的角色文档。返回后请将选项展示给用户确认，不要自行选择。确认后再调用 create_workflow 时传入用户选中的 deliverable。',
+    {
+      service: z.string().describe('服务名称（对应 services.json 中的 key）'),
+    },
+    async (args) => {
+      const requestId = `wf-deliv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const data = {
+        type: 'list_deliverables',
+        service: args.service,
+        requestId,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      };
+
+      writeIpcFile(TASKS_DIR, data);
+
+      const resultsDir = path.join(IPC_DIR, 'workflow-results');
+      const resultPath = path.join(resultsDir, `${requestId}.json`);
+      const maxWaitMs = 10000;
+      const pollMs = 300;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        if (fs.existsSync(resultPath)) {
+          try {
+            const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+            fs.unlinkSync(resultPath);
+
+            if (result.error) {
+              return { content: [{ type: 'text' as const, text: `查询失败: ${result.error}` }], isError: true };
+            }
+
+            const items = result.deliverables || [];
+            if (items.length === 0) {
+              return { content: [{ type: 'text' as const, text: `服务 ${args.service} 暂无交付物文档。` }] };
+            }
+
+            const lines = items.map((d: { dir: string; files: string[]; branch: string }) =>
+              `- **${d.dir}** (分支: ${d.branch || '未知'})：${d.files.join(', ')}`,
+            );
+            return { content: [{ type: 'text' as const, text: `可用交付物:\n${lines.join('\n')}` }] };
+          } catch (err) {
+            return { content: [{ type: 'text' as const, text: `解析结果失败: ${err instanceof Error ? err.message : String(err)}` }] };
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+
+      return { content: [{ type: 'text' as const, text: '查询交付物超时，请稍后重试。' }], isError: true };
     },
   );
 

@@ -51,6 +51,11 @@
           <span class="schedulers-arrow">&#8250;</span>
         </button>
 
+        <button id="open-agent-status" class="section-header agent-status-btn">
+          <span>Agent Status</span>
+          <span class="agent-status-arrow">&#8250;</span>
+        </button>
+
         <div class="sidebar-footer">
           <div id="connection-status" class="conn-status disconnected">
             <span class="conn-dot"></span>
@@ -69,6 +74,15 @@
           </div>
         </div>
         <div id="schedulers-list"></div>
+      </div>
+
+      <!-- Agent Status panel -->
+      <div id="agent-status-panel">
+        <div class="agent-status-header">
+          <span>Agent Status</span>
+          <button id="close-agent-status" title="Close">&#10005;</button>
+        </div>
+        <div id="agent-status-list"></div>
       </div>
 
       <!-- Chat area -->

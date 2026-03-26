@@ -288,6 +288,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     'Processing messages',
   );
 
+  // Record agent info for status panel
+  queue.setAgentInfo(chatJid, {
+    promptSummary: prompt.slice(0, 100),
+    groupName: group.name,
+  });
+
   // Track idle timer for closing stdin when agent is idle
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -764,7 +770,19 @@ async function main(): Promise<void> {
   }
 
   // Channel callbacks (shared by all channels)
-  const channelOpts = {
+  const channelOpts: {
+    onMessage: (chatJid: string, msg: NewMessage) => void;
+    onChatMetadata: (
+      chatJid: string,
+      timestamp: string,
+      name?: string,
+      channel?: string,
+      isGroup?: boolean,
+    ) => void;
+    registeredGroups: () => Record<string, RegisteredGroup>;
+    getAgentStatus?: () => import('./types.js').AgentStatusInfo[];
+    onAgentStatusChange?: () => void;
+  } = {
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage
       const trimmed = msg.content.trim();
@@ -801,7 +819,20 @@ async function main(): Promise<void> {
       isGroup?: boolean,
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
+    getAgentStatus: () => queue.getActiveAgents(),
+    onAgentStatusChange: () => {
+      for (const ch of channels) {
+        if (ch.name === 'web' && 'broadcastAgentStatus' in ch) {
+          (ch as typeof ch & { broadcastAgentStatus: () => void }).broadcastAgentStatus();
+        }
+      }
+    },
   };
+
+  // Wire up agent status change → web channel broadcast
+  queue.onStatusChange(() => {
+    channelOpts.onAgentStatusChange?.();
+  });
 
   // Create and connect all registered channels.
   // Each channel self-registers via the barrel import above.

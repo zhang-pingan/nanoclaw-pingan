@@ -1,4 +1,5 @@
 import {
+  AgentStatusInfo,
   Channel,
   OnInboundMessage,
   OnChatMetadata,
@@ -9,6 +10,7 @@ export interface ChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  getAgentStatus?: () => AgentStatusInfo[];
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;

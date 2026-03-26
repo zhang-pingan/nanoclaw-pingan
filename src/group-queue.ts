@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
+import { AgentStatusInfo } from './types.js';
+export { AgentStatusInfo } from './types.js';
 import { logger } from './logger.js';
 
 interface QueuedTask {
@@ -25,6 +27,9 @@ interface GroupState {
   containerName: string | null;
   groupFolder: string | null;
   retryCount: number;
+  promptSummary: string | null;
+  startedAt: number | null;
+  groupName: string | null;
 }
 
 export class GroupQueue {
@@ -34,6 +39,7 @@ export class GroupQueue {
   private processMessagesFn: ((groupJid: string) => Promise<boolean>) | null =
     null;
   private shuttingDown = false;
+  private statusChangeCallbacks: (() => void)[] = [];
 
   private getGroup(groupJid: string): GroupState {
     let state = this.groups.get(groupJid);
@@ -49,6 +55,9 @@ export class GroupQueue {
         containerName: null,
         groupFolder: null,
         retryCount: 0,
+        promptSummary: null,
+        startedAt: null,
+        groupName: null,
       };
       this.groups.set(groupJid, state);
     }
@@ -57,6 +66,51 @@ export class GroupQueue {
 
   setProcessMessagesFn(fn: (groupJid: string) => Promise<boolean>): void {
     this.processMessagesFn = fn;
+  }
+
+  /**
+   * Record extra agent info when an agent starts processing.
+   */
+  setAgentInfo(groupJid: string, info: { promptSummary: string; groupName: string }): void {
+    const state = this.getGroup(groupJid);
+    state.promptSummary = info.promptSummary;
+    state.groupName = info.groupName;
+  }
+
+  /**
+   * Return all currently active agents with their status info.
+   */
+  getActiveAgents(): AgentStatusInfo[] {
+    const result: AgentStatusInfo[] = [];
+    for (const [groupJid, state] of this.groups) {
+      if (!state.active || !state.startedAt) continue;
+      result.push({
+        groupJid,
+        groupName: state.groupName || groupJid,
+        groupFolder: state.groupFolder || '',
+        promptSummary: state.promptSummary || '',
+        startedAt: state.startedAt,
+        isIdle: state.idleWaiting,
+        isTask: state.isTaskContainer,
+        runningTaskId: state.runningTaskId,
+        pendingMessages: state.pendingMessages,
+        pendingTaskCount: state.pendingTasks.length,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Register a callback invoked whenever agent status changes (start or stop).
+   */
+  onStatusChange(callback: () => void): void {
+    this.statusChangeCallbacks.push(callback);
+  }
+
+  private emitStatusChange(): void {
+    for (const cb of this.statusChangeCallbacks) {
+      try { cb(); } catch { /* ignore */ }
+    }
   }
 
   enqueueMessageCheck(groupJid: string): void {
@@ -209,12 +263,15 @@ export class GroupQueue {
     state.idleWaiting = false;
     state.isTaskContainer = false;
     state.pendingMessages = false;
+    state.startedAt = Date.now();
     this.activeCount++;
 
     logger.debug(
       { groupJid, reason, activeCount: this.activeCount },
       'Starting container for group',
     );
+
+    this.emitStatusChange();
 
     try {
       if (this.processMessagesFn) {
@@ -233,7 +290,11 @@ export class GroupQueue {
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
+      state.startedAt = null;
+      state.promptSummary = null;
+      state.groupName = null;
       this.activeCount--;
+      this.emitStatusChange();
       this.drainGroup(groupJid);
     }
   }
@@ -244,12 +305,15 @@ export class GroupQueue {
     state.idleWaiting = false;
     state.isTaskContainer = true;
     state.runningTaskId = task.id;
+    state.startedAt = Date.now();
     this.activeCount++;
 
     logger.debug(
       { groupJid, taskId: task.id, activeCount: this.activeCount },
       'Running queued task',
     );
+
+    this.emitStatusChange();
 
     try {
       await task.fn();
@@ -262,7 +326,11 @@ export class GroupQueue {
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
+      state.startedAt = null;
+      state.promptSummary = null;
+      state.groupName = null;
       this.activeCount--;
+      this.emitStatusChange();
       this.drainGroup(groupJid);
     }
   }

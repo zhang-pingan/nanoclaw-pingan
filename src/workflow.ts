@@ -247,42 +247,29 @@ function delegateTo(
   return delegationId;
 }
 
-/** Role name → deliverable filename inside the folder. */
-const ROLE_DELIVERABLE_FILE: Record<string, string> = {
-  planner: 'plan.md',
-  dev: 'dev.md',
-  test: 'test.md',
-};
-
-/** Read deliverable metadata from the shared projects directory.
- *  Directory layout: projects/{service}/iteration/{folderName}/{role}.md
- *  Scans for the latest sub-directory containing the role's file (used by entry points). */
-function readLatestDeliverable(
+/** Read a specific deliverable directory and return its metadata. */
+function readDeliverableDir(
   service: string,
-  role: string,
-): { branch: string; fileName: string } | null {
-  const roleFile = ROLE_DELIVERABLE_FILE[role] || `${role}.md`;
-  const delivDir = path.join(PROJECT_ROOT, 'projects', service, 'iteration');
+  dirName: string,
+): { branch: string; fileName: string; files: string[] } | null {
+  const delivDir = path.join(PROJECT_ROOT, 'projects', service, 'iteration', dirName);
   if (!fs.existsSync(delivDir)) return null;
 
-  const dirs = fs
-    .readdirSync(delivDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .sort()
-    .reverse();
+  const files = fs.readdirSync(delivDir).filter((f) => f.endsWith('.md'));
+  if (files.length === 0) return null;
 
-  for (const dir of dirs) {
-    const filePath = path.join(delivDir, dir, roleFile);
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const branchMatch = content.match(/工作分支[：:]\s*(.+)/);
-      const branch = branchMatch ? branchMatch[1].trim() : '';
-      return { branch, fileName: dir };
+  let branch = '';
+  // Try to read branch from any .md file
+  for (const file of files) {
+    const content = fs.readFileSync(path.join(delivDir, file), 'utf-8');
+    const branchMatch = content.match(/工作分支[：:]\s*(.+)/);
+    if (branchMatch) {
+      branch = branchMatch[1].trim();
+      break;
     }
   }
 
-  return null;
+  return { branch, fileName: dirName, files };
 }
 
 /** Get terminal state names from a workflow type config. */
@@ -430,6 +417,7 @@ export interface CreateWorkflowOpts {
   sourceJid: string;
   startFrom: string;
   workflowType: string;
+  deliverable?: string;
 }
 
 export function createNewWorkflow(opts: CreateWorkflowOpts): {
@@ -467,13 +455,20 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   const now = new Date().toISOString();
   const mainFolder = getMainFolder();
 
-  // If entry point requires deliverable, read it first
+  // If entry point requires deliverable, it must be explicitly specified
   if (entryPoint.requires_deliverable) {
-    const deliverable = readLatestDeliverable(opts.service, 'dev');
+    if (!opts.deliverable) {
+      return {
+        workflowId,
+        error: `入口 "${opts.startFrom}" 需要指定 deliverable 参数，请先用 list_deliverables 工具查看可用目录。`,
+      };
+    }
+
+    const deliverable = readDeliverableDir(opts.service, opts.deliverable);
     if (!deliverable) {
       return {
         workflowId,
-        error: `未找到服务 ${opts.service} 的交付文档 (projects/${opts.service}/iteration/)`,
+        error: `交付文档目录 "${opts.deliverable}" 不存在 (projects/${opts.service}/iteration/${opts.deliverable}/)`,
       };
     }
 
@@ -1089,6 +1084,7 @@ export function getAvailableWorkflowTypes(): Array<{
   type: string;
   name: string;
   entry_points: string[];
+  entry_points_detail: Record<string, { requires_deliverable: boolean; deliverable_role?: string }>;
   role_channels: Record<string, Record<string, string>>;
 }> {
   const configs = getWorkflowConfigs();
@@ -1098,8 +1094,42 @@ export function getAvailableWorkflowTypes(): Array<{
     type: typeName,
     name: config.name,
     entry_points: Object.keys(config.entry_points),
+    entry_points_detail: Object.fromEntries(
+      Object.entries(config.entry_points).map(([name, ep]) => [
+        name,
+        { requires_deliverable: ep.requires_deliverable || false, deliverable_role: ep.deliverable_role },
+      ]),
+    ),
     role_channels: Object.fromEntries(
       Object.entries(config.roles).map(([role, rc]) => [role, rc.channels]),
     ),
   }));
+}
+
+/** List all deliverable directories for a service (for MCP tool). */
+export function listDeliverables(service: string): Array<{ dir: string; files: string[]; branch: string }> {
+  const delivDir = path.join(PROJECT_ROOT, 'projects', service, 'iteration');
+  if (!fs.existsSync(delivDir)) return [];
+
+  return fs
+    .readdirSync(delivDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => {
+      const dirPath = path.join(delivDir, d.name);
+      const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.md'));
+
+      let branch = '';
+      for (const file of files) {
+        const content = fs.readFileSync(path.join(dirPath, file), 'utf-8');
+        const match = content.match(/工作分支[：:]\s*(.+)/);
+        if (match) {
+          branch = match[1].trim();
+          break;
+        }
+      }
+
+      return { dir: d.name, files, branch };
+    })
+    .filter((d) => d.files.length > 0)
+    .sort((a, b) => b.dir.localeCompare(a.dir)); // newest first
 }

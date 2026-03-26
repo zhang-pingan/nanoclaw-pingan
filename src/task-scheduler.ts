@@ -276,6 +276,16 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
         deps.queue.enqueueTask(currentTask.chat_jid, currentTask.id, () =>
           runTask(currentTask, deps),
         );
+        // Also set agent info right away for the status panel
+        const taskGroup = Object.values(deps.registeredGroups()).find(
+          (g) => g.folder === currentTask.group_folder,
+        );
+        if (taskGroup) {
+          deps.queue.setAgentInfo(currentTask.chat_jid, {
+            promptSummary: currentTask.prompt.slice(0, 100),
+            groupName: taskGroup.name,
+          });
+        }
       }
     } catch (err) {
       logger.error({ err }, 'Error in scheduler loop');

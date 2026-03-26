@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 
+import { AgentStatusInfo } from '../types.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 import { GROUPS_DIR, DATA_DIR } from '../config.js';
 import { logger } from '../logger.js';
@@ -36,7 +37,7 @@ interface IncomingMsg {
 }
 
 interface OutgoingMsg {
-  type: 'message' | 'typing' | 'groups' | 'error' | 'connected' | 'card';
+  type: 'message' | 'typing' | 'groups' | 'error' | 'connected' | 'card' | 'agent_status';
   [key: string]: unknown;
 }
 
@@ -235,6 +236,9 @@ class WebChannel {
       }
       if (pathname === '/api/task' && req.method === 'DELETE') {
         return this.apiDeleteTask(reqUrl, res);
+      }
+      if (pathname === '/api/agent-status') {
+        return this.apiGetAgentStatus(res);
       }
       if (pathname === '/api/tasks' && req.method === 'DELETE') {
         return this.apiDeleteAllTasks(res);
@@ -442,6 +446,31 @@ class WebChannel {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, deleted: tasks.length }));
     });
+  }
+
+  private apiGetAgentStatus(res: http.ServerResponse): void {
+    const agents = this.opts.getAgentStatus?.() ?? [];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ agents }));
+  }
+
+  /**
+   * Broadcast current agent status to all connected WS clients.
+   */
+  broadcastAgentStatus(): void {
+    const agents = this.opts.getAgentStatus?.() ?? [];
+    const payload = JSON.stringify({
+      type: 'agent_status',
+      agents,
+    } satisfies OutgoingMsg);
+
+    for (const clients of this.clients.values()) {
+      for (const client of clients) {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+    }
   }
 
   private async apiCardAction(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

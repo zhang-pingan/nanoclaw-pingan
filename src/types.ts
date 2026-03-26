@@ -97,6 +97,20 @@ export interface Delegation {
 /** Workflow status is now a plain string — valid values are defined in workflows.json per type. */
 export type WorkflowStatus = string;
 
+/** Agent status info for the Agent Status panel. */
+export interface AgentStatusInfo {
+  groupJid: string;
+  groupName: string;
+  groupFolder: string;
+  promptSummary: string;
+  startedAt: number;
+  isIdle: boolean;
+  isTask: boolean;
+  runningTaskId: string | null;
+  pendingMessages: boolean;
+  pendingTaskCount: number;
+}
+
 export interface Workflow {
   id: string;
   name: string;

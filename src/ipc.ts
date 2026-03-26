@@ -22,6 +22,7 @@ import {
   listWorkflows,
   onDelegationComplete as onWorkflowDelegationComplete,
   sendWorkflowListCard,
+  listDeliverables,
 } from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
 import {
@@ -979,6 +980,7 @@ export async function processTaskIpc(
         sourceJid: mainJid,
         startFrom,
         workflowType,
+        deliverable: (data as { deliverable?: string }).deliverable,
       });
 
       // Write result back via IPC response
@@ -1080,6 +1082,38 @@ export async function processTaskIpc(
         { sourceGroup, count: types.length },
         'Workflow types listed via IPC',
       );
+      break;
+    }
+
+    case 'list_deliverables': {
+      if (!isMain) {
+        logger.warn({ sourceGroup }, 'Unauthorized list_deliverables attempt blocked');
+        break;
+      }
+
+      const service = (data as { service?: string }).service;
+      if (!service) {
+        logger.warn({ sourceGroup }, 'list_deliverables missing service');
+        break;
+      }
+
+      const deliverables = listDeliverables(service);
+
+      if (data.requestId) {
+        const resultsDir = path.join(
+          DATA_DIR,
+          'ipc',
+          sourceGroup,
+          'workflow-results',
+        );
+        fs.mkdirSync(resultsDir, { recursive: true });
+        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
+        const tempPath = `${responsePath}.tmp`;
+        fs.writeFileSync(tempPath, JSON.stringify({ deliverables }));
+        fs.renameSync(tempPath, responsePath);
+      }
+
+      logger.info({ sourceGroup, service, count: deliverables.length }, 'Deliverables listed via IPC');
       break;
     }
 

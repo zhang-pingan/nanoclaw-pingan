@@ -1597,3 +1597,179 @@ body::before {
 .card-input::placeholder {
   color: var(--text-muted);
 }
+
+/* === Agent Status Panel === */
+#agent-status-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100%;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: none;
+  flex-direction: column;
+  z-index: 20;
+  box-shadow: -4px 0 16px rgba(0,0,0,0.1);
+}
+
+#agent-status-panel.open {
+  display: flex;
+}
+
+.agent-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.agent-status-header button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+}
+
+.agent-status-header button:hover {
+  color: var(--text-primary);
+}
+
+#agent-status-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+#agent-status-list::-webkit-scrollbar {
+  opacity: 0;
+}
+
+#agent-status-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+#agent-status-list:hover::-webkit-scrollbar {
+  opacity: 1;
+}
+
+.agent-status-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.agent-status-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-status-item:last-child {
+  border-bottom: none;
+}
+
+.agent-status-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.agent-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-status-dot.active {
+  background: #22c55e;
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
+}
+
+.agent-status-dot.idle {
+  background: #f59e0b;
+  box-shadow: 0 0 4px rgba(245, 158, 11, 0.5);
+}
+
+.agent-status-prompt {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  word-break: break-word;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+}
+
+.agent-status-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.agent-status-duration {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.agent-status-type {
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.agent-status-pending {
+  color: var(--warning);
+}
+
+.agent-status-task-id {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* Agent Status button in sidebar */
+.agent-status-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  transition: color var(--transition);
+}
+
+.agent-status-btn:hover {
+  color: var(--text-primary);
+}
+
+.agent-status-arrow {
+  font-size: 14px;
+  transition: transform var(--transition);
+}
+
+#sidebar.collapsed .agent-status-btn {
+  display: none;
+}

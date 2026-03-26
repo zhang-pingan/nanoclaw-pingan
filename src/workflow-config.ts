@@ -59,6 +59,8 @@ export interface EntryPointConfig {
   state: string;
   /** Whether the entry point requires an existing deliverable. */
   requires_deliverable?: boolean;
+  /** Which role's deliverable to look up (e.g. 'plan' or 'dev'). Defaults to 'dev'. */
+  deliverable_role?: string;
 }
 
 export interface CardActionConfig {
