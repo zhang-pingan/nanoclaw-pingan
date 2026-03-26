@@ -54,6 +54,12 @@ Format: append one concise line at the end of `## User Memory`. Examples:
 
 Note: CLAUDE.md is force-loaded into every conversation — do not write temporary information or verbose content.
 
+---
+
+## User Memory
+
+<!-- 持久记忆区域 — Agent 会根据用户指令在此追加核心规则和偏好 -->
+
 ### Episodic Memory (conversations/)
 
 The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.

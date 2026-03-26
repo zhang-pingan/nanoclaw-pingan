@@ -534,8 +534,7 @@ class WebChannel {
 
     // Extract group folder from JID
     const groupFolder = jid.replace('web:', '');
-    const groupDir = resolveGroupFolderPath(groupFolder);
-    const uploadBase = path.join(UPLOADS_DIR, groupFolder);
+    const uploadBase = UPLOADS_DIR;
     fs.mkdirSync(uploadBase, { recursive: true });
 
     // Collect body
@@ -559,7 +558,7 @@ class WebChannel {
       const filenameMatch = header.match(/filename="([^"]+)"/);
       if (!filenameMatch) continue;
       const filename = filenameMatch[1].replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filePath = path.join(uploadBase, `${Date.now()}_${filename}`);
+      const filePath = path.join(uploadBase, filename);
 
       // Decode URL-encoded data if present
       let fileData: Buffer;
@@ -570,7 +569,7 @@ class WebChannel {
       }
 
       fs.writeFileSync(filePath, fileData);
-      const containerPath = `/workspace/uploads/${groupFolder}/${path.basename(filePath)}`;
+      const containerPath = `/workspace/uploads/${filename}`;
       uploadedFiles.push({ name: filename, path: filePath, containerPath });
       logger.info({ filename, size: fileData.length, jid, containerPath }, 'Web channel file uploaded');
     }
@@ -581,18 +580,17 @@ class WebChannel {
 
   // Serve uploaded files from web-uploads directory
   private apiServeUpload(pathname: string, res: http.ServerResponse): void {
-    // pathname: /api/uploads/{groupFolder}/{filename}
+    // pathname: /api/uploads/{filename}
     const parts = pathname.split('/');
-    // parts[0]='', parts[1]='api', parts[2]='uploads', parts[3]=groupFolder, parts[4]=filename
-    if (parts.length < 5) {
+    // parts[0]='', parts[1]='api', parts[2]='uploads', parts[3]=filename
+    if (parts.length < 4) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid path' }));
       return;
     }
-    const groupFolder = decodeURIComponent(parts[3]);
-    const filename = decodeURIComponent(parts.slice(4).join('/'));
+    const filename = decodeURIComponent(parts.slice(3).join('/'));
 
-    const uploadBase = path.join(UPLOADS_DIR, groupFolder);
+    const uploadBase = UPLOADS_DIR;
     const filePath = path.resolve(path.join(uploadBase, filename));
 
     // Security: ensure resolved path is within uploads dir

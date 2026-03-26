@@ -136,8 +136,8 @@ function detectFileUpload(content) {
   return { filename, ext };
 }
 
-function renderFilePreview(filename, ext, groupFolder) {
-  const uploadPath = `/api/uploads/${encodeURIComponent(groupFolder)}/${encodeURIComponent(filename)}`;
+function renderFilePreview(filename, ext) {
+  const uploadPath = `/api/uploads/${encodeURIComponent(filename)}`;
   const div = document.createElement("div");
   div.className = "file-preview";
 
@@ -366,7 +366,7 @@ function createMessageEl(msg) {
 
   // Add file preview if detected
   if (fileInfo) {
-    const preview = renderFilePreview(fileInfo.filename, fileInfo.ext, groupFolder);
+    const preview = renderFilePreview(fileInfo.filename, fileInfo.ext);
     const contentEl = div.querySelector(".msg-content");
     contentEl.appendChild(preview);
   }
