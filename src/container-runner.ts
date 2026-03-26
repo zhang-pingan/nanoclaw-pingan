@@ -323,6 +323,8 @@ function buildVolumeMounts(
           '    IdentityFile ~/.ssh/id_ed25519',
           '    StrictHostKeyChecking no',
           '    UserKnownHostsFile /dev/null',
+          '    HostkeyAlgorithms +ssh-rsa,ssh-dss',
+          '    PubkeyAcceptedAlgorithms +ssh-rsa',
           '',
         ].join('\n'),
       );
