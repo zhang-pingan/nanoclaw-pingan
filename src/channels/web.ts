@@ -101,11 +101,27 @@ class WebChannel {
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {
+    const timestamp = Date.now().toString();
+    const id = `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // Always persist bot reply to web message DB, even if no WS clients
+    // are connected. This ensures delegation responses from sub-groups
+    // (e.g., web:ops) are preserved for when the user views that chat.
+    storeWebMessage({
+      id,
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: text,
+      timestamp,
+      is_from_me: false,
+      is_bot_message: true,
+    });
+
+    // Deliver via WebSocket to any connected clients
     const clients = this.clients.get(jid);
     if (!clients || clients.size === 0) return;
 
-    const timestamp = Date.now().toString();
-    const id = `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
     const payload = JSON.stringify({
       type: 'message',
       id,
@@ -120,25 +136,28 @@ class WebChannel {
         client.ws.send(payload);
       }
     }
+  }
 
-    // Persist bot reply to web message DB
+  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+    const timestamp = Date.now().toString();
+
+    // Always persist to web message DB
+    const content = caption || `文件: ${path.basename(filePath)}`;
     storeWebMessage({
-      id,
+      id: `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
       chat_jid: jid,
       sender: ASSISTANT_NAME,
       sender_name: ASSISTANT_NAME,
-      content: text,
+      content,
       timestamp,
       is_from_me: false,
       is_bot_message: true,
     });
-  }
 
-  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+    // Deliver via WebSocket to any connected clients
     const clients = this.clients.get(jid);
     if (!clients || clients.size === 0) return;
 
-    const timestamp = Date.now().toString();
     const payload = JSON.stringify({
       type: 'file',
       chatJid: jid,
@@ -153,18 +172,6 @@ class WebChannel {
         client.ws.send(payload);
       }
     }
-
-    const content = caption || `文件: ${path.basename(filePath)}`;
-    storeWebMessage({
-      id: `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
-      chat_jid: jid,
-      sender: ASSISTANT_NAME,
-      sender_name: ASSISTANT_NAME,
-      content,
-      timestamp,
-      is_from_me: false,
-      is_bot_message: true,
-    });
   }
 
   async setTyping(jid: string, isTyping: boolean): Promise<void> {
