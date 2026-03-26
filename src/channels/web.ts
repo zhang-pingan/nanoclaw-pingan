@@ -37,7 +37,7 @@ interface IncomingMsg {
 }
 
 interface OutgoingMsg {
-  type: 'message' | 'typing' | 'groups' | 'error' | 'connected' | 'card' | 'agent_status';
+  type: 'message' | 'typing' | 'groups' | 'error' | 'connected' | 'card' | 'agent_status' | 'file';
   [key: string]: unknown;
 }
 
@@ -126,6 +126,39 @@ class WebChannel {
       sender: ASSISTANT_NAME,
       sender_name: ASSISTANT_NAME,
       content: text,
+      timestamp,
+      is_from_me: false,
+      is_bot_message: true,
+    });
+  }
+
+  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+    const clients = this.clients.get(jid);
+    if (!clients || clients.size === 0) return;
+
+    const timestamp = Date.now().toString();
+    const payload = JSON.stringify({
+      type: 'file',
+      chatJid: jid,
+      filePath,
+      caption: caption || undefined,
+      sender: ASSISTANT_NAME,
+      timestamp,
+    } satisfies OutgoingMsg);
+
+    for (const client of clients) {
+      if (client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(payload);
+      }
+    }
+
+    const content = caption || `文件: ${path.basename(filePath)}`;
+    storeWebMessage({
+      id: `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content,
       timestamp,
       is_from_me: false,
       is_bot_message: true,

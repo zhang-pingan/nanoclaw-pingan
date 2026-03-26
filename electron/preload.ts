@@ -1,4 +1,4 @@
-import { contextBridge, BrowserWindow } from 'electron';
+import { contextBridge, BrowserWindow, ipcRenderer } from 'electron';
 
 // Expose a safe API to the renderer process for the NanoClaw web channel.
 
@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     // This would go through IPC in a real implementation
     // For now, let the renderer handle it via window.open with target=_blank
     // which the main process intercepts
+  },
+
+  // Open a local file in its default application
+  openFile: (filePath: string) => {
+    return ipcRenderer.invoke('open-file', filePath);
   },
 
   // Platform info

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain } from 'electron';
 import path from 'path';
 
 // CJS: use native __dirname; ESM: use import.meta.url
@@ -176,6 +176,16 @@ app.on('before-quit', () => {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(buildAppMenu());
   createWindow();
+
+  // Handle open-file IPC from renderer
+  ipcMain.handle('open-file', async (_event, filePath: string) => {
+    try {
+      const result = await shell.openPath(filePath);
+      return { ok: true, result };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
 });
 
 // Quit when all windows are closed (except on macOS)

@@ -1814,3 +1814,22 @@ body::before {
 #sidebar.collapsed .agent-status-btn {
   display: none;
 }
+
+.file-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: var(--radius);
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.file-open-btn:hover {
+  background: rgba(37, 99, 235, 0.15);
+  border-color: rgba(37, 99, 235, 0.35);
+}

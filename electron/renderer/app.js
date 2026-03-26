@@ -314,6 +314,28 @@ function createMessageEl(msg) {
     }
   }
 
+  // File messages: render with "打开文件" button
+  if (msg._filePath) {
+    const div = document.createElement("div");
+    div.className = "message assistant";
+    div.setAttribute("data-msg-id", msg.id);
+    div.setAttribute("data-timestamp", msg.timestamp);
+
+    const openBtn = document.createElement("button");
+    openBtn.className = "file-open-btn";
+    openBtn.textContent = `\u{1F4CE} ${escapeHtml(msg.content)}`;
+    openBtn.addEventListener("click", () => {
+      if (window.nanoclawApp?.openFile) {
+        window.nanoclawApp.openFile(msg._filePath);
+      } else {
+        window.open(`file://${msg._filePath}`);
+      }
+    });
+
+    div.appendChild(openBtn);
+    return div;
+  }
+
   const div = document.createElement("div");
   const isUser = msg.is_from_me;
   const isSystem = msg.sender === "system";
@@ -781,6 +803,29 @@ function handleWsMessage(msg) {
       if (cardMsg.chat_jid === currentGroupJid) {
         messages.push(cardMsg);
         appendSingleMessage(cardMsg);
+      }
+      break;
+    }
+    case "file": {
+      const content = msg.caption || `文件: ${msg.filePath.split("/").pop()}`;
+      const fileMsg = {
+        id: `file_${msg.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+        chat_jid: msg.chatJid,
+        sender: msg.sender || "assistant",
+        sender_name: msg.sender || "Assistant",
+        content,
+        timestamp: msg.timestamp,
+        is_from_me: false,
+        is_bot_message: true,
+        _filePath: msg.filePath,
+      };
+      if (fileMsg.chat_jid === currentGroupJid) {
+        messages.push(fileMsg);
+        appendSingleMessage(fileMsg);
+      } else {
+        unreadCounts[fileMsg.chat_jid] = (unreadCounts[fileMsg.chat_jid] || 0) + 1;
+        renderGroups();
+        notifyAgent(fileMsg);
       }
       break;
     }
