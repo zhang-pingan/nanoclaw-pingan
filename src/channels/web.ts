@@ -849,7 +849,9 @@ class WebChannel {
           is_bot_message: false,
         };
         // Create chat record first (required for foreign key in messages table)
-        this.opts.onChatMetadata(chatJid, now.toString());
+        const groups = this.opts.registeredGroups();
+        const chatName = groups[chatJid]?.name || chatJid;
+        this.opts.onChatMetadata(chatJid, now.toString(), chatName, 'web', true);
         this.opts.onMessage(chatJid, newMsg);
         // Also persist to web message DB for UI history (with original content)
         storeWebMessage({

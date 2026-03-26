@@ -135,21 +135,19 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
 
 /**
  * Get available groups list for the agent.
- * Returns groups ordered by most recent activity.
+ * Returns registered groups, enriched with last-activity from chats table.
  */
 export function getAvailableGroups(): import('./container-runner.js').AvailableGroup[] {
   const chats = getAllChats();
-  const registeredJids = new Set(Object.keys(registeredGroups));
+  const chatMap = new Map(chats.map((c) => [c.jid, c]));
 
-  return chats
-    .filter((c) => c.jid !== '__group_sync__' && c.is_group)
-    .map((c) => ({
-      jid: c.jid,
-      name: c.name,
-      lastActivity: c.last_message_time,
-      isRegistered: registeredJids.has(c.jid),
-      description: registeredGroups[c.jid]?.description || null,
-    }));
+  return Object.entries(registeredGroups).map(([jid, g]) => ({
+    jid,
+    name: g.name,
+    lastActivity: chatMap.get(jid)?.last_message_time || '',
+    isRegistered: true,
+    description: g.description || null,
+  }));
 }
 
 /** @internal - exported for testing */

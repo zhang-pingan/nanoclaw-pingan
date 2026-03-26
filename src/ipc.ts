@@ -641,10 +641,11 @@ export async function processTaskIpc(
         break;
       }
 
-      // Find main group JID
+      // Find main group of the same channel
+      const sourceChannel = sourceGroup.split('_')[0];
       const mainEntry = Object.entries(registeredGroups).find(
-        ([, g]) => g.isMain,
-      );
+        ([, g]) => g.isMain && g.folder.split('_')[0] === sourceChannel,
+      ) || Object.entries(registeredGroups).find(([, g]) => g.isMain);
       if (!mainEntry) {
         logger.warn('request_delegation: main group not found');
         break;

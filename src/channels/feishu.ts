@@ -675,7 +675,8 @@ class FeishuChannel implements Channel {
     }
 
     // Create chat metadata first (required for foreign key)
-    this.onChatMetadata(fullJid, message.create_time);
+    const chatName = group?.name || fullJid;
+    this.onChatMetadata(fullJid, message.create_time, chatName, 'feishu', true);
 
     const envCfg = readEnvFile(['FEISHU_ADMIN_USER_ID']);
     const adminUserId =
