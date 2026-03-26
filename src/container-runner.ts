@@ -225,6 +225,16 @@ function buildVolumeMounts(
     }
   }
 
+  // Shared uploads directory: web client uploads are stored here.
+  // Mounted at /workspace/uploads for all groups so agents can access uploaded files.
+  const uploadsDir = path.join(DATA_DIR, 'web-uploads');
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  mounts.push({
+    hostPath: uploadsDir,
+    containerPath: '/workspace/uploads',
+    readonly: false,
+  });
+
   // Per-group custom tools directory (plugin mechanism).
   // Agents can add .ts tool files here; reload_tools restarts the container
   // to pick them up.

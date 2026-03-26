@@ -548,7 +548,7 @@ class WebChannel {
 
     // Parse multipart (simple approach: find filename and data sections)
     const parts = text.split(boundary).filter((p) => p.trim() && !p.startsWith('--'));
-    const uploadedFiles: { name: string; path: string }[] = [];
+    const uploadedFiles: { name: string; path: string; containerPath: string }[] = [];
 
     for (const part of parts) {
       const headerEnd = part.indexOf('\r\n\r\n');
@@ -570,8 +570,9 @@ class WebChannel {
       }
 
       fs.writeFileSync(filePath, fileData);
-      uploadedFiles.push({ name: filename, path: filePath });
-      logger.info({ filename, size: fileData.length, jid }, 'Web channel file uploaded');
+      const containerPath = `/workspace/uploads/${groupFolder}/${path.basename(filePath)}`;
+      uploadedFiles.push({ name: filename, path: filePath, containerPath });
+      logger.info({ filename, size: fileData.length, jid, containerPath }, 'Web channel file uploaded');
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });

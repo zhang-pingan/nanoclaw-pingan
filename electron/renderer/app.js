@@ -11,6 +11,7 @@ var loadingHistory = false;
 var cmdPaletteIndex = -1;
 var multiSelectMode = false;
 var selectedMsgIds = new Set();
+var pendingFiles = []; // files staged for upload on next send
 
 var mainScreen = document.getElementById("main-screen");
 var sidebar = document.getElementById("sidebar");
@@ -42,6 +43,9 @@ var fileDropZone = document.getElementById("file-drop-zone");
 var replyPreview = document.getElementById("reply-preview");
 var replyPreviewContent = document.getElementById("reply-preview-content");
 var replyPreviewClose = document.getElementById("reply-preview-close");
+var pendingFilesEl = document.getElementById("pending-files-preview");
+var pendingFilesContent = document.getElementById("pending-files-content");
+var pendingFilesClose = document.getElementById("pending-files-close");
 var commandPalette = document.getElementById("command-palette");
 var selectModeBtn = document.getElementById("select-mode-btn");
 var multiSelectBar = document.getElementById("multi-select-bar");
@@ -804,6 +808,9 @@ function notifyAgent(msg) {
 }
 async function selectGroup(jid) {
   if (multiSelectMode) exitMultiSelect();
+  // Clear staged files when switching groups
+  pendingFiles = [];
+  renderPendingFiles();
   currentGroupJid = jid;
   messages = [];
   hasMoreHistory = true;
@@ -820,12 +827,25 @@ async function selectGroup(jid) {
   sendWs({ type: "select_group", chatJid: jid });
 }
 async function sendMessage(content) {
-  if (!content.trim() || !currentGroupJid) return;
+  if (!content.trim() && pendingFiles.length === 0) return;
+  if (!currentGroupJid) return;
 
+  // Upload pending files first and prepend their container paths
+  let filePrefix = "";
+  if (pendingFiles.length > 0) {
+    try {
+      filePrefix = await uploadPendingFiles();
+    } catch (err) {
+      showError(`附件上传失败: ${err}`);
+      return;
+    }
+  }
+
+  const fullContent = filePrefix + content.trim();
   const payload = {
     type: "message",
     chatJid: currentGroupJid,
-    content: content.trim()
+    content: fullContent,
   };
 
   // Include reply reference if set
@@ -840,7 +860,7 @@ async function sendMessage(content) {
     chat_jid: currentGroupJid,
     sender: "me",
     sender_name: "You",
-    content: content.trim(),
+    content: fullContent,
     timestamp: Date.now().toString(),
     is_from_me: true,
     is_bot_message: false,
@@ -913,23 +933,57 @@ function selectCommandPaletteItem() {
   }
 }
 
-async function uploadFile(file) {
+// Stage a file for upload on next send
+function stageFile(file) {
   if (!currentGroupJid) return;
-  const formData = new FormData();
-  formData.append("file", file);
-  try {
-    const headers = {};
+  pendingFiles.push(file);
+  renderPendingFiles();
+}
+
+// Render the pending files preview bar
+function renderPendingFiles() {
+  if (pendingFiles.length === 0) {
+    pendingFilesEl.classList.remove("visible");
+    return;
+  }
+  const names = pendingFiles.map((f) => f.name).join(", ");
+  pendingFilesContent.textContent = `\u{1F4CE} ${pendingFiles.length} 个附件: ${names}`;
+  pendingFilesEl.classList.add("visible");
+}
+
+// Remove a staged file by index
+function removePendingFile(index) {
+  pendingFiles.splice(index, 1);
+  renderPendingFiles();
+}
+
+// Upload all pending files and return the prefix string to prepend to the message
+async function uploadPendingFiles() {
+  if (pendingFiles.length === 0) return "";
+
+  const containerPaths = [];
+  for (const file of pendingFiles) {
+    const formData = new FormData();
+    formData.append("file", file);
     const res = await fetch(
       `http://localhost:3000/api/upload?jid=${encodeURIComponent(currentGroupJid)}`,
-      { method: "POST", headers, body: formData }
+      { method: "POST", body: formData }
     );
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
     const data = await res.json();
-    const fileRef = `\u{1F4CE} Uploaded: ${data.files[0]?.name || file.name}`;
-    await sendMessage(fileRef);
-  } catch (err) {
-    showError(`Upload failed: ${err}`);
+    if (data.files && data.files[0]) {
+      containerPaths.push(data.files[0].containerPath);
+    }
   }
+  pendingFiles = [];
+  renderPendingFiles();
+
+  if (containerPaths.length === 0) return "";
+  return (
+    "【附件】\n" +
+    containerPaths.map((p) => `文件地址: ${p}`).join("\n") +
+    "\n"
+  );
 }
 function showError(msg) {
   const el = document.createElement("div");
@@ -1107,6 +1161,10 @@ messageInput.addEventListener("input", () => {
 
 // Reply preview close
 replyPreviewClose.addEventListener("click", clearReplyTo);
+pendingFilesClose.addEventListener("click", () => {
+  pendingFiles = [];
+  renderPendingFiles();
+});
 
 attachBtn.addEventListener("click", () => {
   fileInput.click();
@@ -1121,7 +1179,7 @@ document.getElementById("at-btn").addEventListener("click", () => {
 });
 fileInput.addEventListener("change", () => {
   for (const file of fileInput.files || []) {
-    uploadFile(file);
+    stageFile(file);
   }
   fileInput.value = "";
 });
@@ -1137,7 +1195,7 @@ document.addEventListener("drop", (e) => {
   fileDropZone.classList.add("hidden");
   if (!currentGroupJid) return;
   for (const file of e.dataTransfer?.files || []) {
-    uploadFile(file);
+    stageFile(file);
   }
 });
 
