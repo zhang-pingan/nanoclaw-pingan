@@ -127,19 +127,41 @@ function findJidByFolder(
   return undefined;
 }
 
-/** Find the main group's JID. */
+/** Find the main group's JID, optionally scoped to the same channel as sourceJid. */
 function findMainJid(
   groups: Record<string, RegisteredGroup>,
+  sourceJid?: string,
 ): string | undefined {
+  // If sourceJid is provided, find the main group in the same channel
+  if (sourceJid) {
+    const sourceGroup = groups[sourceJid];
+    if (sourceGroup) {
+      const channel = getChannelFromFolder(sourceGroup.folder);
+      for (const [jid, g] of Object.entries(groups)) {
+        if (g.isMain && getChannelFromFolder(g.folder) === channel) return jid;
+      }
+    }
+  }
+  // Fallback: return the first main group found
   for (const [jid, g] of Object.entries(groups)) {
     if (g.isMain) return jid;
   }
   return undefined;
 }
 
-/** Get the main group's folder name. */
-function getMainFolder(): string {
+/** Get the main group's folder name, optionally scoped to a channel via sourceJid. */
+function getMainFolder(sourceJid?: string): string {
   const groups = getDeps().registeredGroups();
+  if (sourceJid) {
+    const sourceGroup = groups[sourceJid];
+    if (sourceGroup) {
+      const channel = getChannelFromFolder(sourceGroup.folder);
+      const match = Object.values(groups).find(
+        (g) => g.isMain && getChannelFromFolder(g.folder) === channel,
+      );
+      if (match) return match.folder;
+    }
+  }
   return Object.values(groups).find((g) => g.isMain)?.folder || '';
 }
 
@@ -174,10 +196,10 @@ function injectDelegation(
   enqueueMessageCheck(targetJid);
 }
 
-/** Send a progress message to the main group. */
-function notifyMain(message: string): void {
+/** Send a progress message to the main group (scoped to the same channel as sourceJid when provided). */
+function notifyMain(message: string, sourceJid?: string): void {
   const groups = getDeps().registeredGroups();
-  const mainJid = findMainJid(groups);
+  const mainJid = findMainJid(groups, sourceJid);
   if (!mainJid) {
     logger.warn('Workflow: cannot notify main — main group not found');
     return;
@@ -336,7 +358,7 @@ function applyTransition(
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return;
 
-  const mainFolder = getMainFolder();
+  const mainFolder = getMainFolder(workflow.source_jid);
   const updates: Parameters<typeof updateWorkflow>[1] = {
     status: transition.target,
   };
@@ -382,6 +404,7 @@ function applyTransition(
       );
       notifyMain(
         `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派任务失败。`,
+        workflow.source_jid,
       );
       return;
     }
@@ -395,7 +418,7 @@ function applyTransition(
 
   // 5. Send notification
   if (transition.notify) {
-    notifyMain(renderTemplate(transition.notify, vars, roles));
+    notifyMain(renderTemplate(transition.notify, vars, roles), workflow.source_jid);
   }
 
   // 6. Send card if specified
@@ -453,7 +476,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
   const workflowId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
-  const mainFolder = getMainFolder();
+  const mainFolder = getMainFolder(opts.sourceJid);
 
   // If entry point requires deliverable, it must be explicitly specified
   if (entryPoint.requires_deliverable) {
@@ -536,6 +559,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
       notifyMain(
         `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
+        opts.sourceJid,
       );
     }
 
@@ -599,6 +623,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
     notifyMain(
       `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
+      opts.sourceJid,
     );
   }
 
@@ -818,11 +843,11 @@ function buildConfigCard(
   return card;
 }
 
-/** Send a card defined in config to the main group. */
+/** Send a card defined in config to the main group (scoped to workflow's source channel). */
 function sendConfigCard(workflow: Workflow, cardKey: string): void {
   const { sendCard } = getDeps();
   const groups = getDeps().registeredGroups();
-  const mainJid = findMainJid(groups);
+  const mainJid = findMainJid(groups, workflow.source_jid);
   if (!mainJid) {
     logger.warn('Workflow: cannot send card — main group not found');
     return;
@@ -844,6 +869,7 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
           const body = renderTemplate(cardConfig.body_template, vars);
           notifyMain(
             `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}`,
+            workflow.source_jid,
           );
         }
       });
@@ -857,6 +883,7 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
       const body = renderTemplate(cardConfig.body_template, vars);
       notifyMain(
         `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}\n\n请确认是否继续。`,
+        workflow.source_jid,
       );
     }
   }
@@ -927,7 +954,7 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
     status: 'cancelled',
     current_delegation_id: '',
   });
-  notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`);
+  notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`, workflow.source_jid);
   return {};
 }
 
@@ -952,6 +979,7 @@ export function pauseWorkflow(workflowId: string): { error?: string } {
   });
   notifyMain(
     `[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`,
+    workflow.source_jid,
   );
   return {};
 }
@@ -975,6 +1003,7 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
       onDelegationComplete(workflow.current_delegation_id);
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`,
+        workflow.source_jid,
       );
       return {};
     }
@@ -986,6 +1015,7 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
       });
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`,
+        workflow.source_jid,
       );
       return {};
     }
@@ -996,7 +1026,7 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
     status: workflow.paused_from,
     paused_from: null,
   });
-  notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`);
+  notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`, workflow.source_jid);
 
   // If resuming to a confirmation state, resend its card
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -1029,6 +1059,11 @@ export function handleCardAction(action: {
 }): void {
   logger.info({ action }, 'Handling card action');
 
+  // Resolve source_jid from the workflow for channel-aware notifications
+  const wfSourceJid = action.workflow_id
+    ? getWorkflow(action.workflow_id)?.source_jid
+    : undefined;
+
   /** Display label for notifications. */
   const getLabel = (): string => {
     if (action.workflow_id) {
@@ -1041,35 +1076,35 @@ export function handleCardAction(action: {
   switch (action.action) {
     // --- Workflow-specific actions (require workflow_id) ---
     case 'approve': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = approveWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 确认部署失败: ${result.error}`);
+      if (result.error) notifyMain(`[操作失败] 确认部署失败: ${result.error}`, wfSourceJid);
       break;
     }
     case 'pause': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = pauseWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 中断流程失败: ${result.error}`);
+      if (result.error) notifyMain(`[操作失败] 中断流程失败: ${result.error}`, wfSourceJid);
       break;
     }
     case 'resume': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = resumeWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 恢复流程失败: ${result.error}`);
+      if (result.error) notifyMain(`[操作失败] 恢复流程失败: ${result.error}`, wfSourceJid);
       break;
     }
     case 'request_revision': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const revisionText = action.form_value?.revision_text;
-      if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。'); break; }
+      if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。', wfSourceJid); break; }
       const result = reviseWorkflow(action.workflow_id, `[方案修改意见]\n\n${revisionText}`);
-      if (result.error) notifyMain(`[操作失败] 提交修改失败: ${result.error}`);
+      if (result.error) notifyMain(`[操作失败] 提交修改失败: ${result.error}`, wfSourceJid);
       break;
     }
     case 'cancel': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID'); break; }
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = cancelWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`);
+      if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`, wfSourceJid);
       break;
     }
     default:
@@ -1082,10 +1117,10 @@ export function handleCardAction(action: {
 // -------------------------------------------------------
 
 /** Send workflow list as a card to the main group. Returns true if card was sent. */
-export function sendWorkflowListCard(): boolean {
+export function sendWorkflowListCard(sourceJid?: string): boolean {
   const { sendCard } = getDeps();
   const groups = getDeps().registeredGroups();
-  const mainJid = findMainJid(groups);
+  const mainJid = findMainJid(groups, sourceJid);
   if (!mainJid || !sendCard) return false;
 
   const workflows = getAllWorkflows();

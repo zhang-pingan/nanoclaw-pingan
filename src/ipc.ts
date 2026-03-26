@@ -1020,8 +1020,12 @@ export async function processTaskIpc(
         break;
       }
 
-      // Try to send as interactive card first
-      const cardSent = sendWorkflowListCard();
+      // Try to send as interactive card first (scoped to the requesting channel)
+      const listSourceJid =
+        Object.entries(registeredGroups).find(
+          ([, g]) => g.folder === sourceGroup,
+        )?.[0] || '';
+      const cardSent = sendWorkflowListCard(listSourceJid);
 
       const workflows = listWorkflows();
 
