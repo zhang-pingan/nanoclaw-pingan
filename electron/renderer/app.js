@@ -129,22 +129,31 @@ var IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "svg", "webp"];
 var PDF_EXTS = ["pdf"];
 
 function detectFileUpload(content) {
+  // Detect "文件地址: /absolute/path" pattern (client upload)
+  const pathMatch = content.match(/文件地址:\s*(.+)/);
+  if (pathMatch) {
+    const filePath = pathMatch[1].trim();
+    const filename = filePath.split("/").pop() || filePath;
+    const ext = filename.split(".").pop().toLowerCase();
+    return { filename, ext, filePath };
+  }
+  // Legacy: detect "📎 Uploaded: filename" pattern
   const match = content.match(/\u{1F4CE}\s*Uploaded:\s*(.+)/u);
   if (!match) return null;
   const filename = match[1].trim();
   const ext = filename.split(".").pop().toLowerCase();
-  return { filename, ext };
+  return { filename, ext, filePath: null };
 }
 
-function renderFilePreview(filename, ext) {
-  const uploadPath = `/api/uploads/${encodeURIComponent(filename)}`;
+function renderFilePreview(filename, ext, filePath) {
   const div = document.createElement("div");
   div.className = "file-preview";
 
   if (IMAGE_EXTS.includes(ext)) {
     const img = document.createElement("img");
     img.className = "file-preview-image";
-    img.src = `http://localhost:3000${uploadPath}`;
+    // Use file:// for local files, fallback to HTTP for legacy
+    img.src = filePath ? `file://${filePath}` : `http://localhost:3000/api/uploads/${encodeURIComponent(filename)}`;
     img.alt = filename;
     img.addEventListener("click", () => openLightbox(img.src));
     div.appendChild(img);
@@ -154,15 +163,30 @@ function renderFilePreview(filename, ext) {
     icon.textContent = PDF_EXTS.includes(ext) ? "\u{1F4C4}" : "\u{1F4C1}";
     div.appendChild(icon);
 
-    const info = document.createElement("div");
-    info.className = "file-preview-info";
-    const link = document.createElement("a");
-    link.className = "file-preview-name";
-    link.href = `http://localhost:3000${uploadPath}`;
-    link.target = "_blank";
-    link.textContent = filename;
-    info.appendChild(link);
-    div.appendChild(info);
+    // "打开文件" button
+    if (filePath) {
+      const btn = document.createElement("button");
+      btn.className = "file-open-btn";
+      btn.textContent = `\u{1F4CE} ${escapeHtml(filename)}`;
+      btn.addEventListener("click", () => {
+        if (window.nanoclawApp?.openFile) {
+          window.nanoclawApp.openFile(filePath);
+        } else {
+          window.open(`file://${filePath}`);
+        }
+      });
+      div.appendChild(btn);
+    } else {
+      const info = document.createElement("div");
+      info.className = "file-preview-info";
+      const link = document.createElement("a");
+      link.className = "file-preview-name";
+      link.href = `http://localhost:3000/api/uploads/${encodeURIComponent(filename)}`;
+      link.target = "_blank";
+      link.textContent = filename;
+      info.appendChild(link);
+      div.appendChild(info);
+    }
   }
   return div;
 }
@@ -388,7 +412,7 @@ function createMessageEl(msg) {
 
   // Add file preview if detected
   if (fileInfo) {
-    const preview = renderFilePreview(fileInfo.filename, fileInfo.ext);
+    const preview = renderFilePreview(fileInfo.filename, fileInfo.ext, fileInfo.filePath);
     const contentEl = div.querySelector(".msg-content");
     contentEl.appendChild(preview);
   }
@@ -1006,7 +1030,7 @@ function removePendingFile(index) {
 async function uploadPendingFiles() {
   if (pendingFiles.length === 0) return "";
 
-  const containerPaths = [];
+  const hostPaths = [];
   for (const file of pendingFiles) {
     const formData = new FormData();
     formData.append("file", file);
@@ -1017,16 +1041,16 @@ async function uploadPendingFiles() {
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
     const data = await res.json();
     if (data.files && data.files[0]) {
-      containerPaths.push(data.files[0].containerPath);
+      hostPaths.push(data.files[0].hostPath);
     }
   }
   pendingFiles = [];
   renderPendingFiles();
 
-  if (containerPaths.length === 0) return "";
+  if (hostPaths.length === 0) return "";
   return (
     "【附件】\n" +
-    containerPaths.map((p) => `文件地址: ${p}`).join("\n") +
+    hostPaths.map((p) => `文件地址: ${p}`).join("\n") +
     "\n"
   );
 }
