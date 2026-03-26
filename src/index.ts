@@ -289,9 +289,13 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   );
 
   // Record agent info for status panel
+  const lastMsg = missedMessages[missedMessages.length - 1];
   queue.setAgentInfo(chatJid, {
     promptSummary: prompt.slice(0, 100),
     groupName: group.name,
+    lastSender: lastMsg.sender_name,
+    lastContent: lastMsg.content.slice(0, 200),
+    lastTime: lastMsg.timestamp,
   });
 
   // Track idle timer for closing stdin when agent is idle

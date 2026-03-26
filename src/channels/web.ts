@@ -105,8 +105,10 @@ class WebChannel {
     if (!clients || clients.size === 0) return;
 
     const timestamp = Date.now().toString();
+    const id = `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
     const payload = JSON.stringify({
       type: 'message',
+      id,
       chatJid: jid,
       content: text,
       sender: ASSISTANT_NAME,
@@ -121,7 +123,7 @@ class WebChannel {
 
     // Persist bot reply to web message DB
     storeWebMessage({
-      id: `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+      id,
       chat_jid: jid,
       sender: ASSISTANT_NAME,
       sender_name: ASSISTANT_NAME,

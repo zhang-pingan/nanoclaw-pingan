@@ -668,12 +668,25 @@ function renderAgentStatus(agents) {
     const el = document.createElement("div");
     el.className = "agent-status-item";
     el.setAttribute("data-agent-jid", agent.groupJid);
+    // Format last message time
+    let lastTimeStr = "";
+    if (agent.lastTime) {
+      const t = new Date(isNaN(Number(agent.lastTime)) ? agent.lastTime : Number(agent.lastTime));
+      if (!isNaN(t.getTime())) {
+        lastTimeStr = t.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }
+    }
+
     el.innerHTML = `
       <div class="agent-status-name">
         <span class="${statusDot}"></span>
         ${escapeHtml(agent.groupName)}
       </div>
-      <div class="agent-status-prompt">${escapeHtml(agent.promptSummary || "—")}</div>
+      <div class="agent-status-last-msg">
+        <span class="agent-status-sender">${escapeHtml(agent.lastSender || "—")}</span>
+        <span class="agent-status-time">${escapeHtml(lastTimeStr)}</span>
+      </div>
+      <div class="agent-status-content">${escapeHtml(agent.lastContent || "—")}</div>
       <div class="agent-status-meta">
         <span class="agent-status-duration">${formatDuration(elapsed)}</span>
         <span class="agent-status-type">${typeLabel}</span>
@@ -1161,6 +1174,16 @@ refreshGroupsBtn.addEventListener("click", () => {
   if (currentGroupJid) loadMessages();
 });
 openSchedulersBtn.addEventListener("click", () => {
+  if (schedulersPanel.classList.contains("open")) {
+    schedulersPanel.classList.remove("open");
+    return;
+  }
+  // Close agent status panel first
+  agentStatusPanel.classList.remove("open");
+  if (agentStatusInterval) {
+    clearInterval(agentStatusInterval);
+    agentStatusInterval = null;
+  }
   schedulersPanel.classList.add("open");
   loadSchedulers();
 });
@@ -1169,6 +1192,16 @@ closeSchedulersBtn.addEventListener("click", () => {
   schedulersPanel.classList.remove("open");
 });
 openAgentStatusBtn.addEventListener("click", () => {
+  if (agentStatusPanel.classList.contains("open")) {
+    agentStatusPanel.classList.remove("open");
+    if (agentStatusInterval) {
+      clearInterval(agentStatusInterval);
+      agentStatusInterval = null;
+    }
+    return;
+  }
+  // Close schedulers panel first
+  schedulersPanel.classList.remove("open");
   agentStatusPanel.classList.add("open");
   loadAgentStatus();
   // Update durations every second

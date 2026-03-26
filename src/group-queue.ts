@@ -28,6 +28,9 @@ interface GroupState {
   groupFolder: string | null;
   retryCount: number;
   promptSummary: string | null;
+  lastSender: string | null;
+  lastContent: string | null;
+  lastTime: string | null;
   startedAt: number | null;
   groupName: string | null;
 }
@@ -56,6 +59,9 @@ export class GroupQueue {
         groupFolder: null,
         retryCount: 0,
         promptSummary: null,
+        lastSender: null,
+        lastContent: null,
+        lastTime: null,
         startedAt: null,
         groupName: null,
       };
@@ -71,10 +77,19 @@ export class GroupQueue {
   /**
    * Record extra agent info when an agent starts processing.
    */
-  setAgentInfo(groupJid: string, info: { promptSummary: string; groupName: string }): void {
+  setAgentInfo(groupJid: string, info: {
+    promptSummary: string;
+    groupName: string;
+    lastSender?: string;
+    lastContent?: string;
+    lastTime?: string;
+  }): void {
     const state = this.getGroup(groupJid);
     state.promptSummary = info.promptSummary;
     state.groupName = info.groupName;
+    state.lastSender = info.lastSender ?? null;
+    state.lastContent = info.lastContent ?? null;
+    state.lastTime = info.lastTime ?? null;
   }
 
   /**
@@ -89,6 +104,9 @@ export class GroupQueue {
         groupName: state.groupName || groupJid,
         groupFolder: state.groupFolder || '',
         promptSummary: state.promptSummary || '',
+        lastSender: state.lastSender || '',
+        lastContent: state.lastContent || '',
+        lastTime: state.lastTime || '',
         startedAt: state.startedAt,
         isIdle: state.idleWaiting,
         isTask: state.isTaskContainer,
@@ -292,6 +310,9 @@ export class GroupQueue {
       state.groupFolder = null;
       state.startedAt = null;
       state.promptSummary = null;
+      state.lastSender = null;
+      state.lastContent = null;
+      state.lastTime = null;
       state.groupName = null;
       this.activeCount--;
       this.emitStatusChange();
@@ -328,6 +349,9 @@ export class GroupQueue {
       state.groupFolder = null;
       state.startedAt = null;
       state.promptSummary = null;
+      state.lastSender = null;
+      state.lastContent = null;
+      state.lastTime = null;
       state.groupName = null;
       this.activeCount--;
       this.emitStatusChange();

@@ -103,6 +103,9 @@ export interface AgentStatusInfo {
   groupName: string;
   groupFolder: string;
   promptSummary: string;
+  lastSender: string;
+  lastContent: string;
+  lastTime: string;
   startedAt: number;
   isIdle: boolean;
   isTask: boolean;

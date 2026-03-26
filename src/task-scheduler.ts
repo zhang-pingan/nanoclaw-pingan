@@ -284,6 +284,9 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
           deps.queue.setAgentInfo(currentTask.chat_jid, {
             promptSummary: currentTask.prompt.slice(0, 100),
             groupName: taskGroup.name,
+            lastSender: 'Scheduled Task',
+            lastContent: currentTask.prompt.slice(0, 200),
+            lastTime: new Date().toISOString(),
           });
         }
       }
