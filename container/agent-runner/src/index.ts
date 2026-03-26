@@ -119,20 +119,26 @@ function log(message: string): void {
 
 /**
  * Find the transcript JSONL path for a given session ID.
- * Searches the Claude SDK sessions-index.json under /home/node/.claude/projects/
+ * The Agent SDK stores transcripts as {sessionId}.jsonl under /home/node/.claude/projects/.
+ * Falls back to sessions-index.json lookup if direct file match isn't found.
  */
 function findTranscriptPath(sessionId: string): string | null {
   const claudeDir = '/home/node/.claude/projects';
   if (!fs.existsSync(claudeDir)) return null;
 
-  // Walk project dirs looking for sessions-index.json
+  const targetFile = `${sessionId}.jsonl`;
+
   try {
     const walkDir = (dir: string): string | null => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
+          // Skip subagents directory — only archive the main session transcript
+          if (entry.name === 'subagents') continue;
           const found = walkDir(fullPath);
           if (found) return found;
+        } else if (entry.name === targetFile) {
+          return fullPath;
         } else if (entry.name === 'sessions-index.json') {
           try {
             const index: SessionsIndex = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
