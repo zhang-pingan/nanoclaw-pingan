@@ -488,13 +488,55 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       updated_at: now,
     });
 
-    // If entry state is a confirmation state, send the card
     const entryStateConfig = config.states[entryPoint.state];
+
+    // If entry state is a confirmation state, send the card
     if (entryStateConfig?.type === 'confirmation' && entryStateConfig.card) {
       const createdWorkflow = getWorkflow(workflowId);
       if (createdWorkflow) {
         sendConfigCard(createdWorkflow, entryStateConfig.card);
       }
+    }
+
+    // If entry state is a delegation state, delegate immediately
+    if (
+      entryStateConfig?.type === 'delegation' &&
+      entryStateConfig.role &&
+      entryStateConfig.skill
+    ) {
+      const targetFolder = roles[entryStateConfig.role];
+      if (!targetFolder) {
+        return {
+          workflowId,
+          error: `角色 ${entryStateConfig.role} 未找到对应的群组`,
+        };
+      }
+
+      try {
+        const vars = buildTemplateVars(getWorkflow(workflowId)!);
+        const taskContent = entryStateConfig.task_template
+          ? renderTemplate(entryStateConfig.task_template, vars, roles)
+          : '';
+
+        const delegationId = delegateTo(
+          targetFolder,
+          mainFolder,
+          workflowId,
+          entryStateConfig.skill,
+          taskContent,
+        );
+        updateWorkflow(workflowId, { current_delegation_id: delegationId });
+      } catch (err) {
+        logger.error({ err, workflowId }, 'Failed to delegate initial task');
+        return {
+          workflowId,
+          error: `委派初始任务失败: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+
+      notifyMain(
+        `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
+      );
     }
 
     return { workflowId };

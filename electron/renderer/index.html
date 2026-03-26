@@ -56,6 +56,11 @@
           <span class="agent-status-arrow">&#8250;</span>
         </button>
 
+        <button id="open-workflows" class="section-header workflows-btn">
+          <span>Workflows</span>
+          <span class="workflows-arrow">&#8250;</span>
+        </button>
+
         <div class="sidebar-footer">
           <div id="connection-status" class="conn-status disconnected">
             <span class="conn-dot"></span>
@@ -83,6 +88,19 @@
           <button id="close-agent-status" title="Close">&#10005;</button>
         </div>
         <div id="agent-status-list"></div>
+      </div>
+
+      <!-- Workflows panel -->
+      <div id="workflows-panel">
+        <div class="workflows-header">
+          <span>Workflows</span>
+          <div class="workflows-header-actions">
+            <button id="refresh-workflows" title="Refresh">&#10227;</button>
+            <button id="delete-all-workflows" class="workflows-delete-all" title="Delete All">&#128465;</button>
+            <button id="close-workflows" title="Close">&#10005;</button>
+          </div>
+        </div>
+        <div id="workflows-list"></div>
       </div>
 
       <!-- Chat area -->

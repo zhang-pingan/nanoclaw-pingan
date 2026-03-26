@@ -281,6 +281,18 @@ class WebChannel {
       if (pathname.startsWith('/api/tasks')) {
         return this.apiGetTasks(reqUrl, res);
       }
+      if (pathname === '/api/workflows') {
+        if (req.method === 'DELETE') {
+          return this.apiDeleteAllWorkflows(res);
+        }
+        return this.apiGetWorkflows(res);
+      }
+      if (pathname === '/api/workflow' && req.method === 'DELETE') {
+        return this.apiDeleteWorkflow(reqUrl, res);
+      }
+      if (pathname === '/api/workflow/stop' && req.method === 'POST') {
+        return this.apiStopWorkflow(req, res);
+      }
       if (pathname === '/api/card-action' && req.method === 'POST') {
         return this.apiCardAction(req, res);
       }
@@ -506,6 +518,56 @@ class WebChannel {
         }
       }
     }
+  }
+
+  private async apiGetWorkflows(res: http.ServerResponse): Promise<void> {
+    const { getAllWorkflows } = await import('../db.js');
+    const workflows = getAllWorkflows();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ workflows }));
+  }
+
+  private async apiDeleteWorkflow(reqUrl: URL, res: http.ServerResponse): Promise<void> {
+    const id = reqUrl.searchParams.get('id');
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing workflow id' }));
+      return;
+    }
+    const { deleteWorkflow } = await import('../db.js');
+    deleteWorkflow(id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  private async apiDeleteAllWorkflows(res: http.ServerResponse): Promise<void> {
+    const { deleteAllWorkflows } = await import('../db.js');
+    deleteAllWorkflows();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  private async apiStopWorkflow(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+    const { id } = body as { id?: string };
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing workflow id' }));
+      return;
+    }
+    const { cancelWorkflow } = await import('../workflow.js');
+    const result = cancelWorkflow(id);
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   private async apiCardAction(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

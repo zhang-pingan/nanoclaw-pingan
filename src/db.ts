@@ -924,6 +924,14 @@ export function getAllWorkflows(): Workflow[] {
     .all() as Workflow[];
 }
 
+export function deleteWorkflow(id: string): void {
+  db.prepare('DELETE FROM workflows WHERE id = ?').run(id);
+}
+
+export function deleteAllWorkflows(): void {
+  db.prepare('DELETE FROM workflows').run();
+}
+
 // --- Full-text search ---
 
 export interface SearchResult {
