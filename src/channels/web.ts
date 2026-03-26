@@ -6,7 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 import { GROUPS_DIR, DATA_DIR } from '../config.js';
 import { logger } from '../logger.js';
-import { NewMessage } from '../types.js';
+import { CardActionHandler, InteractiveCard, NewMessage } from '../types.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
 import { ASSISTANT_NAME } from '../config.js';
 import { initWebDb, storeWebMessage, getWebMessages, getWebMessagesBefore } from '../web-db.js';
@@ -24,15 +24,19 @@ interface WsClient {
 }
 
 interface IncomingMsg {
-  type: 'message' | 'select_group';
+  type: 'message' | 'select_group' | 'card_action';
   chatJid?: string;
   content?: string;
   token?: string;
   replyToId?: string;
+  // card_action fields
+  cardId?: string;
+  value?: Record<string, string>;
+  formValue?: Record<string, string>;
 }
 
 interface OutgoingMsg {
-  type: 'message' | 'typing' | 'groups' | 'error' | 'connected';
+  type: 'message' | 'typing' | 'groups' | 'error' | 'connected' | 'card';
   [key: string]: unknown;
 }
 
@@ -44,6 +48,7 @@ class WebChannel {
   private clients: Map<string, Set<WsClient>> = new Map();
   opts!: ChannelOpts;
   private connected = false;
+  onCardAction: CardActionHandler | null = null;
 
   connect(): Promise<void> {
     initWebDb();
@@ -143,6 +148,42 @@ class WebChannel {
     }
   }
 
+  async sendCard(jid: string, card: InteractiveCard): Promise<string | undefined> {
+    const clients = this.clients.get(jid);
+    const timestamp = Date.now().toString();
+    const cardId = `card_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const payload = JSON.stringify({
+      type: 'card',
+      chatJid: jid,
+      cardId,
+      card,
+      timestamp,
+    } satisfies OutgoingMsg);
+
+    if (clients && clients.size > 0) {
+      for (const client of clients) {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+    }
+
+    // Persist card to web-db for history
+    storeWebMessage({
+      id: cardId,
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: JSON.stringify({ _type: 'card', card }),
+      timestamp,
+      is_from_me: false,
+      is_bot_message: true,
+    });
+
+    return cardId;
+  }
+
   async disconnect(): Promise<void> {
     for (const clients of this.clients.values()) {
       for (const client of clients) {
@@ -200,6 +241,9 @@ class WebChannel {
       }
       if (pathname.startsWith('/api/tasks')) {
         return this.apiGetTasks(reqUrl, res);
+      }
+      if (pathname === '/api/card-action' && req.method === 'POST') {
+        return this.apiCardAction(req, res);
       }
       if (pathname === '/api/upload' && req.method === 'POST') {
         return this.apiUpload(req, reqUrl, res);
@@ -398,6 +442,39 @@ class WebChannel {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, deleted: tasks.length }));
     });
+  }
+
+  private async apiCardAction(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+    const { value, cardId, formValue } = body as {
+      value?: Record<string, string>;
+      cardId?: string;
+      formValue?: Record<string, string>;
+    };
+
+    if (!value?.action) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'value.action required' }));
+      return;
+    }
+
+    if (this.onCardAction) {
+      this.onCardAction({
+        action: value.action,
+        user_id: 'web_user',
+        message_id: cardId || '',
+        workflow_id: value.workflow_id,
+        group_folder: value.group_folder,
+        form_value: formValue,
+      });
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   private async apiUpload(req: http.IncomingMessage, reqUrl: URL, res: http.ServerResponse): Promise<void> {
@@ -688,6 +765,24 @@ class WebChannel {
             })),
           selectedJid: chatJid,
         });
+        break;
+      }
+      case 'card_action': {
+        const { value, cardId, formValue } = msg as IncomingMsg;
+        if (!value?.action) {
+          send({ type: 'error', message: 'value.action required for card_action' });
+          return;
+        }
+        if (this.onCardAction) {
+          this.onCardAction({
+            action: value.action,
+            user_id: 'web_user',
+            message_id: cardId || '',
+            workflow_id: value.workflow_id,
+            group_folder: value.group_folder,
+            form_value: formValue,
+          });
+        }
         break;
       }
       default:

@@ -167,8 +167,143 @@ function openLightbox(src) {
   document.body.appendChild(overlay);
 }
 
+// --- Interactive card detection & rendering ---
+function isCardMessage(msg) {
+  if (!msg.content || !msg.is_bot_message) return false;
+  try {
+    const parsed = JSON.parse(msg.content);
+    return parsed._type === "card" && parsed.card;
+  } catch { return false; }
+}
+
+function parseCardContent(msg) {
+  try { return JSON.parse(msg.content).card; } catch { return null; }
+}
+
+function renderCardElement(card, msgId) {
+  const container = document.createElement("div");
+  container.className = "interactive-card";
+  container.setAttribute("data-card-id", msgId);
+
+  // Header
+  const header = document.createElement("div");
+  const color = card.header.color || "blue";
+  header.className = `card-header card-color-${color}`;
+  header.textContent = card.header.title;
+  container.appendChild(header);
+
+  // Body
+  if (card.body) {
+    const body = document.createElement("div");
+    body.className = "card-body";
+    body.innerHTML = renderMarkdown(card.body);
+    container.appendChild(body);
+  }
+
+  // Buttons
+  if (card.buttons && card.buttons.length > 0) {
+    const actions = document.createElement("div");
+    actions.className = "card-actions";
+    for (const btn of card.buttons) {
+      const button = document.createElement("button");
+      button.className = `card-btn card-btn-${btn.type || "default"}`;
+      button.textContent = btn.label;
+      button.addEventListener("click", () => sendCardAction(btn.value, msgId));
+      actions.appendChild(button);
+    }
+    container.appendChild(actions);
+  }
+
+  // Sections (workflow list)
+  if (card.sections) {
+    for (let i = 0; i < card.sections.length; i++) {
+      const section = card.sections[i];
+      const sectionEl = document.createElement("div");
+      sectionEl.className = "card-section";
+
+      const bodyEl = document.createElement("div");
+      bodyEl.className = "card-body";
+      bodyEl.innerHTML = renderMarkdown(section.body);
+      sectionEl.appendChild(bodyEl);
+
+      if (section.buttons && section.buttons.length > 0) {
+        const actions = document.createElement("div");
+        actions.className = "card-actions";
+        for (const btn of section.buttons) {
+          const button = document.createElement("button");
+          button.className = `card-btn card-btn-${btn.type || "default"}`;
+          button.textContent = btn.label;
+          button.addEventListener("click", () => sendCardAction(btn.value, msgId));
+          actions.appendChild(button);
+        }
+        sectionEl.appendChild(actions);
+      }
+
+      container.appendChild(sectionEl);
+      if (i < card.sections.length - 1) {
+        const hr = document.createElement("hr");
+        hr.className = "card-divider";
+        container.appendChild(hr);
+      }
+    }
+  }
+
+  // Form
+  if (card.form) {
+    const formEl = document.createElement("div");
+    formEl.className = "card-form";
+
+    const formInputs = {};
+    for (const input of card.form.inputs) {
+      const inputEl = document.createElement("input");
+      inputEl.className = "card-input";
+      inputEl.name = input.name;
+      inputEl.placeholder = input.placeholder || "";
+      formInputs[input.name] = inputEl;
+      formEl.appendChild(inputEl);
+    }
+
+    const submitBtn = document.createElement("button");
+    submitBtn.className = `card-btn card-btn-${card.form.submitButton.type || "default"}`;
+    submitBtn.textContent = card.form.submitButton.label;
+    submitBtn.addEventListener("click", () => {
+      const formValue = {};
+      for (const [name, el] of Object.entries(formInputs)) {
+        formValue[name] = el.value;
+      }
+      sendCardAction(card.form.submitButton.value, msgId, formValue);
+    });
+    formEl.appendChild(submitBtn);
+    container.appendChild(formEl);
+  }
+
+  return container;
+}
+
+function sendCardAction(value, cardId, formValue) {
+  sendWs({
+    type: "card_action",
+    cardId: cardId,
+    value: value,
+    formValue: formValue || undefined,
+  });
+}
+
 // --- Create single message element (factory) ---
 function createMessageEl(msg) {
+  // Card messages get special rendering
+  if (isCardMessage(msg)) {
+    const card = parseCardContent(msg);
+    if (card) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "message assistant";
+      wrapper.setAttribute("data-msg-id", msg.id);
+      wrapper.setAttribute("data-timestamp", msg.timestamp);
+      wrapper.appendChild(renderCardElement(card, msg.id));
+      return wrapper;
+    }
+  }
+
   const div = document.createElement("div");
   const isUser = msg.is_from_me;
   const isSystem = msg.sender === "system";
@@ -550,6 +685,23 @@ function handleWsMessage(msg) {
         unreadCounts[incoming.chat_jid] = (unreadCounts[incoming.chat_jid] || 0) + 1;
         renderGroups();
         notifyAgent(incoming);
+      }
+      break;
+    }
+    case "card": {
+      const cardMsg = {
+        id: msg.cardId,
+        chat_jid: msg.chatJid,
+        sender: "assistant",
+        sender_name: "Assistant",
+        content: JSON.stringify({ _type: "card", card: msg.card }),
+        timestamp: msg.timestamp,
+        is_from_me: false,
+        is_bot_message: true,
+      };
+      if (cardMsg.chat_jid === currentGroupJid) {
+        messages.push(cardMsg);
+        appendSingleMessage(cardMsg);
       }
       break;
     }

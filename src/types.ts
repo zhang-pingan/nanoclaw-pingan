@@ -115,9 +115,45 @@ export interface Workflow {
 
 // --- Channel abstraction ---
 
+/** @internal Feishu-specific card format — used only inside the Feishu channel. */
 export interface FeishuCard {
   header: { title: string; template?: string };
   elements: unknown[];
+}
+
+// --- InteractiveCard: channel-agnostic card format ---
+
+export type CardHeaderColor = 'blue' | 'green' | 'red' | 'orange' | 'purple' | 'grey';
+
+export interface CardButton {
+  id: string;
+  label: string;
+  type?: 'primary' | 'danger' | 'default';
+  value: Record<string, string>;
+}
+
+export interface CardInput {
+  name: string;
+  placeholder?: string;
+}
+
+export interface CardForm {
+  name: string;
+  inputs: CardInput[];
+  submitButton: CardButton;
+}
+
+export interface CardSection {
+  body: string;
+  buttons?: CardButton[];
+}
+
+export interface InteractiveCard {
+  header: { title: string; color?: CardHeaderColor };
+  body?: string;
+  buttons?: CardButton[];
+  form?: CardForm;
+  sections?: CardSection[];
 }
 
 export type CardActionHandler = (action: {
@@ -140,8 +176,10 @@ export interface Channel {
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: sync group/chat names from the platform.
   syncGroups?(force: boolean): Promise<void>;
-  // Optional: send interactive card (Feishu). Returns message_id.
-  sendCard?(jid: string, card: FeishuCard): Promise<string | undefined>;
+  // Optional: send interactive card. Returns message_id.
+  sendCard?(jid: string, card: InteractiveCard): Promise<string | undefined>;
+  // Optional: card action callback handler.
+  onCardAction?: CardActionHandler | null;
   // Optional: send file or image. Channels that support it implement it.
   sendFile?(jid: string, filePath: string, caption?: string): Promise<void>;
 }

@@ -53,7 +53,6 @@ import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { handleCardAction, initWorkflow } from './workflow.js';
-import { FeishuChannel } from './channels/feishu.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -72,7 +71,7 @@ import {
   isSessionCommandAllowed,
 } from './session-commands.js';
 import { startSchedulerLoop } from './task-scheduler.js';
-import { Channel, NewMessage, RegisteredGroup } from './types.js';
+import { Channel, InteractiveCard, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
@@ -846,18 +845,20 @@ async function main(): Promise<void> {
       await channel.sendMessage(jid, text);
     },
   });
-  // Find feishu channel for card support
-  const feishuChannel = channels.find((ch) => ch.name === 'feishu') as
-    | FeishuChannel
-    | undefined;
-  const sendCardFn = feishuChannel
-    ? (jid: string, card: import('./types.js').FeishuCard) =>
-        feishuChannel.sendCard(jid, card)
+  // Card support: route to whichever channel owns the JID
+  const anySupportsCards = channels.some(ch => typeof ch.sendCard === 'function');
+  const sendCardFn = anySupportsCards
+    ? (jid: string, card: InteractiveCard) => {
+        const ch = findChannel(channels, jid);
+        return ch?.sendCard ? ch.sendCard(jid, card) : Promise.resolve(undefined);
+      }
     : undefined;
 
-  // Wire up feishu card action callback → workflow engine
-  if (feishuChannel) {
-    feishuChannel.onCardAction = handleCardAction;
+  // Wire up card action callback → workflow engine (all channels that support it)
+  for (const ch of channels) {
+    if ('onCardAction' in ch) {
+      ch.onCardAction = handleCardAction;
+    }
   }
 
   startIpcWatcher({

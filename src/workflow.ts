@@ -26,7 +26,7 @@ import {
   updateWorkflow,
 } from './db.js';
 import { logger } from './logger.js';
-import { FeishuCard, RegisteredGroup, Workflow } from './types.js';
+import { CardButton, CardSection, InteractiveCard, RegisteredGroup, Workflow } from './types.js';
 import {
   getWorkflowConfigError,
   getWorkflowConfigs,
@@ -97,7 +97,7 @@ function resolveRoles(
 export interface WorkflowDeps {
   registeredGroups: () => Record<string, RegisteredGroup>;
   enqueueMessageCheck: (groupJid: string) => void;
-  sendCard?: (jid: string, card: FeishuCard) => Promise<string | undefined>;
+  sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
 }
 
 let deps: WorkflowDeps | null = null;
@@ -714,7 +714,7 @@ export function onDelegationComplete(delegationId: string): void {
 // Card helpers — config-driven
 // -------------------------------------------------------
 
-const ACTION_BUTTONS: Record<string, { label: string; type?: string }> = {
+const ACTION_BUTTONS: Record<string, { label: string; type?: 'primary' | 'danger' | 'default' }> = {
   approve: { label: '✅ 确认执行', type: 'primary' },
   pause: { label: '⏸ 暂缓' },
   cancel: { label: '❌ 取消流程', type: 'danger' },
@@ -725,7 +725,7 @@ const ACTION_BUTTONS: Record<string, { label: string; type?: string }> = {
 function buildConfigCard(
   workflow: Workflow,
   cardKey: string,
-): FeishuCard | null {
+): InteractiveCard | null {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return null;
 
@@ -739,60 +739,46 @@ function buildConfigCard(
   const header = renderTemplate(cardConfig.header_template, vars, roleFolders);
   const body = renderTemplate(cardConfig.body_template, vars, roleFolders);
 
-  const actions: unknown[] = [];
+  const buttons: CardButton[] = [];
   let hasRevise = false;
   for (const actionName of cardConfig.actions) {
     if (actionName === 'revise') {
       hasRevise = true;
-      continue; // revise is rendered as a form below, not a regular button
+      continue;
     }
     const btn = ACTION_BUTTONS[actionName];
     if (btn) {
-      const button: Record<string, unknown> = {
-        tag: 'button',
-        text: { tag: 'plain_text', content: btn.label },
+      buttons.push({
+        id: actionName,
+        label: btn.label,
+        type: btn.type,
         value: { workflow_id: workflow.id, action: actionName },
-      };
-      if (btn.type) button.type = btn.type;
-      actions.push(button);
+      });
     }
   }
 
-  const elements: unknown[] = [
-    {
-      tag: 'div',
-      text: { tag: 'lark_md', content: body },
+  const card: InteractiveCard = {
+    header: {
+      title: header,
+      color: (cardConfig.header_color || 'blue') as InteractiveCard['header']['color'],
     },
-    ...(actions.length > 0 ? [{ tag: 'action', actions }] : []),
-  ];
+    body,
+    buttons: buttons.length > 0 ? buttons : undefined,
+  };
 
-  // Append revision form if the card has a "revise" action
   if (hasRevise) {
-    elements.push(
-      { tag: 'hr' },
-      {
-        tag: 'form',
-        name: 'revision_form',
-        elements: [
-          {
-            tag: 'input',
-            name: 'revision_text',
-            placeholder: { tag: 'plain_text', content: '如需修改方案，请输入修改意见...' },
-          },
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '✏️ 提交修改' },
-            value: { workflow_id: workflow.id, action: 'request_revision' },
-          },
-        ],
+    card.form = {
+      name: 'revision_form',
+      inputs: [{ name: 'revision_text', placeholder: '如需修改方案，请输入修改意见...' }],
+      submitButton: {
+        id: 'request_revision',
+        label: '✏️ 提交修改',
+        value: { workflow_id: workflow.id, action: 'request_revision' },
       },
-    );
+    };
   }
 
-  return {
-    header: { title: header, template: cardConfig.header_color || 'blue' },
-    elements,
-  };
+  return card;
 }
 
 /** Send a card defined in config to the main group. */
@@ -839,8 +825,8 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
   }
 }
 
-function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
-  const elements: unknown[] = [];
+function buildWorkflowListCard(workflows: Workflow[]): InteractiveCard {
+  const sections: CardSection[] = [];
 
   for (const w of workflows) {
     const config = getWorkflowTypeConfig(w.workflow_type);
@@ -852,87 +838,35 @@ function buildWorkflowListCard(workflows: Workflow[]): FeishuCard {
         ? `⏸ 已中断（原状态：${labels[w.paused_from || ''] || w.paused_from || '未知'}）`
         : labels[w.status] || w.status;
 
-    elements.push({
-      tag: 'div',
-      text: {
-        tag: 'lark_md',
-        content: `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${w.branch ? `\n分支：${w.branch}` : ''}`,
-      },
-    });
+    const body = `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${w.branch ? `\n分支：${w.branch}` : ''}`;
 
-    // Add action buttons based on status
-    const actions: unknown[] = [];
+    const buttons: CardButton[] = [];
     const confirmationStates = config ? getConfirmationStates(config) : [];
 
     if (confirmationStates.includes(w.status)) {
-      actions.push(
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '✅ 确认部署' },
-          type: 'primary',
-          value: { workflow_id: w.id, action: 'approve' },
-        },
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '⏸ 中断' },
-          value: { workflow_id: w.id, action: 'pause' },
-        },
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '❌ 取消' },
-          type: 'danger',
-          value: { workflow_id: w.id, action: 'cancel' },
-        },
+      buttons.push(
+        { id: 'approve', label: '✅ 确认部署', type: 'primary', value: { workflow_id: w.id, action: 'approve' } },
+        { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
+        { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
       );
     } else if (w.status === 'paused') {
-      actions.push(
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '▶ 继续' },
-          type: 'primary',
-          value: { workflow_id: w.id, action: 'resume' },
-        },
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '❌ 取消' },
-          type: 'danger',
-          value: { workflow_id: w.id, action: 'cancel' },
-        },
+      buttons.push(
+        { id: 'resume', label: '▶ 继续', type: 'primary', value: { workflow_id: w.id, action: 'resume' } },
+        { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
       );
     } else if (!terminalStates.includes(w.status)) {
-      actions.push(
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '⏸ 中断' },
-          value: { workflow_id: w.id, action: 'pause' },
-        },
-        {
-          tag: 'button',
-          text: { tag: 'plain_text', content: '❌ 取消' },
-          type: 'danger',
-          value: { workflow_id: w.id, action: 'cancel' },
-        },
+      buttons.push(
+        { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
+        { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
       );
     }
 
-    if (actions.length > 0) {
-      elements.push({ tag: 'action', actions });
-    }
-
-    elements.push({ tag: 'hr' });
-  }
-
-  // Remove trailing hr
-  if (
-    elements.length > 0 &&
-    (elements[elements.length - 1] as any)?.tag === 'hr'
-  ) {
-    elements.pop();
+    sections.push({ body, buttons: buttons.length > 0 ? buttons : undefined });
   }
 
   return {
-    header: { title: '📊 流程列表', template: 'blue' },
-    elements,
+    header: { title: '📊 流程列表', color: 'blue' },
+    sections,
   };
 }
 

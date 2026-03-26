@@ -7,6 +7,7 @@ import {
   CardActionHandler,
   Channel,
   FeishuCard,
+  InteractiveCard,
   NewMessage,
   OnInboundMessage,
   OnChatMetadata,
@@ -188,7 +189,93 @@ class FeishuChannel implements Channel {
     }
   }
 
-  async sendCard(jid: string, card: FeishuCard): Promise<string | undefined> {
+  /** Convert a channel-agnostic InteractiveCard to Feishu's native card format. */
+  private convertToFeishuCard(card: InteractiveCard): FeishuCard {
+    const elements: unknown[] = [];
+
+    // Body text
+    if (card.body) {
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: card.body },
+      });
+    }
+
+    // Top-level buttons
+    if (card.buttons && card.buttons.length > 0) {
+      const actions: unknown[] = card.buttons.map((btn) => {
+        const button: Record<string, unknown> = {
+          tag: 'button',
+          text: { tag: 'plain_text', content: btn.label },
+          value: btn.value,
+        };
+        if (btn.type && btn.type !== 'default') button.type = btn.type;
+        return button;
+      });
+      elements.push({ tag: 'action', actions });
+    }
+
+    // Form (revision form)
+    if (card.form) {
+      elements.push({ tag: 'hr' });
+      const formElements: unknown[] = [];
+      for (const input of card.form.inputs) {
+        formElements.push({
+          tag: 'input',
+          name: input.name,
+          placeholder: { tag: 'plain_text', content: input.placeholder || '' },
+        });
+      }
+      formElements.push({
+        tag: 'button',
+        text: { tag: 'plain_text', content: card.form.submitButton.label },
+        value: card.form.submitButton.value,
+      });
+      elements.push({
+        tag: 'form',
+        name: card.form.name,
+        elements: formElements,
+      });
+    }
+
+    // Sections (workflow list items)
+    if (card.sections) {
+      for (let i = 0; i < card.sections.length; i++) {
+        const section = card.sections[i];
+        elements.push({
+          tag: 'div',
+          text: { tag: 'lark_md', content: section.body },
+        });
+        if (section.buttons && section.buttons.length > 0) {
+          const actions: unknown[] = section.buttons.map((btn) => {
+            const button: Record<string, unknown> = {
+              tag: 'button',
+              text: { tag: 'plain_text', content: btn.label },
+              value: btn.value,
+            };
+            if (btn.type && btn.type !== 'default') button.type = btn.type;
+            return button;
+          });
+          elements.push({ tag: 'action', actions });
+        }
+        // Add hr between sections (not after last)
+        if (i < card.sections.length - 1) {
+          elements.push({ tag: 'hr' });
+        }
+      }
+    }
+
+    return {
+      header: {
+        title: card.header.title,
+        template: card.header.color || 'blue',
+      },
+      elements,
+    };
+  }
+
+  async sendCard(jid: string, card: InteractiveCard): Promise<string | undefined> {
+    const feishuCard = this.convertToFeishuCard(card);
     const token = await this.getTenantAccessToken();
     const actualJid = jid.startsWith('feishu:') ? jid.slice(7) : jid;
     const receiveIdType = actualJid.startsWith('ou_') ? 'user_id' : 'chat_id';
@@ -196,10 +283,10 @@ class FeishuChannel implements Channel {
     const cardContent = {
       config: { wide_screen_mode: true },
       header: {
-        title: { tag: 'plain_text', content: card.header.title },
-        template: card.header.template || 'blue',
+        title: { tag: 'plain_text', content: feishuCard.header.title },
+        template: feishuCard.header.template || 'blue',
       },
-      elements: card.elements,
+      elements: feishuCard.elements,
     };
 
     const response = await axios.post(

@@ -1477,3 +1477,123 @@ body::before {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* === Interactive Cards === */
+.interactive-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-secondary);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  min-width: 280px;
+  max-width: 480px;
+}
+
+.card-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #fff;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-color-blue   { background: #2563eb; }
+.card-color-green  { background: #059669; }
+.card-color-red    { background: #dc2626; }
+.card-color-orange { background: #d97706; }
+.card-color-purple { background: #7c3aed; }
+.card-color-grey   { background: #6b7280; }
+
+.card-body {
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.card-body p { margin-bottom: 0.4em; }
+.card-body p:last-child { margin-bottom: 0; }
+.card-body strong { font-weight: 600; }
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 12px;
+}
+
+.card-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: all 150ms ease;
+}
+
+.card-btn:hover {
+  background: var(--bg-hover);
+}
+
+.card-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.card-btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.card-btn-danger {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.card-btn-danger:hover {
+  background: #fecaca;
+}
+
+.card-section {
+  border-top: none;
+}
+
+.card-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0 16px;
+}
+
+.card-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.card-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.card-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.card-input::placeholder {
+  color: var(--text-muted);
+}

@@ -21,7 +21,7 @@
           "success": {
             "target": "plan_confirm",
             "card": "plan_confirm",
-            "notify": "[流程进展] 需求「{{name}}」({{id}}) 方案设计完成！\n\n交付文档：{{deliverable}}\n\n请在飞书群中点击卡片按钮确认。"
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 方案设计完成！\n\n交付文档：{{deliverable}}\n\n请点击卡片按钮确认。"
           },
           "failure": {
             "target": "plan",
@@ -56,7 +56,7 @@
           "success": {
             "target": "awaiting_confirm",
             "card": "deploy_confirm",
-            "notify": "[流程进展] 需求「{{name}}」({{id}}) 开发已完成！\n\n工作分支：{{branch}}\n交付文档：{{deliverable}}\n\n请在飞书群中点击卡片按钮确认部署。"
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 开发已完成！\n\n工作分支：{{branch}}\n交付文档：{{deliverable}}\n\n请点击卡片按钮确认部署。"
           },
           "failure": {
             "target": "dev",
