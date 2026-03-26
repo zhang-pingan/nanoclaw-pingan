@@ -44,9 +44,7 @@ Files you create are saved in `/workspace/group/`. Use this for notes, research,
 
 ### Persistent Memory (written to group CLAUDE.md)
 
-When the user uses keywords like "记住", "你必须", "以后都要", "永远不要","always", "remember", "never", "you must", or equivalent expressions in any language, append the corresponding instruction to the `## User Memory` section of `/workspace/group/CLAUDE.md`.
-
-Also write to `## User Memory` if you judge the information is a core rule or preference that should appear in every conversation.
+When the user asks you to remember something, corrects your behavior, or states a preference/rule that should persist across conversations, **immediately** use the Edit tool to append the instruction to the `## User Memory` section of `/workspace/group/CLAUDE.md`. Do not just acknowledge verbally — you must write it down.
 
 Format: append one concise line at the end of `## User Memory`. Examples:
 - Always reply in Chinese
@@ -57,8 +55,7 @@ Note: CLAUDE.md is force-loaded into every conversation — do not write tempora
 ---
 
 ## User Memory
-
-<!-- 持久记忆区域 — Agent 会根据用户指令在此追加核心规则和偏好 -->
+<!-- 当用户要求你记住某事、纠正你的行为、或表达应跨会话保留的偏好时，立即用 Edit 工具在此追加一行。不要只口头回应。 -->
 
 ### Episodic Memory (conversations/)
 
