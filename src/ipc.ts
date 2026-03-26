@@ -712,6 +712,40 @@ export async function processTaskIpc(
         break;
       }
 
+      // Enforce same-channel delegation
+      const mainChannel = sourceGroup.split('_')[0];
+      const targetChannel = targetGroup.folder.split('_')[0];
+      if (mainChannel !== targetChannel) {
+        logger.warn(
+          {
+            mainChannel,
+            targetChannel,
+            targetGroupJid: data.targetGroupJid,
+          },
+          'delegate_task blocked: cross-channel delegation not allowed',
+        );
+        // Write error response if requestId exists
+        if (data.requestId) {
+          const errDir = path.join(
+            DATA_DIR,
+            'ipc',
+            sourceGroup,
+            'delegation-results',
+          );
+          fs.mkdirSync(errDir, { recursive: true });
+          const errPath = path.join(errDir, `${data.requestId}.json`);
+          const tmpPath = `${errPath}.tmp`;
+          fs.writeFileSync(
+            tmpPath,
+            JSON.stringify({
+              error: `Cross-channel delegation not allowed (main: ${mainChannel}, target: ${targetChannel})`,
+            }),
+          );
+          fs.renameSync(tmpPath, errPath);
+        }
+        break;
+      }
+
       const delegationId =
         data.delegationId ||
         `del-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

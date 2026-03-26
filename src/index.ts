@@ -407,10 +407,18 @@ async function runAgent(
 
   // Update available groups snapshot (main group only can see all groups)
   const availableGroups = getAvailableGroups();
+  // For main group, filter to same-channel groups only
+  let filteredGroups = availableGroups;
+  if (isMain) {
+    const mainCh = findChannel(channels, chatJid);
+    if (mainCh) {
+      filteredGroups = availableGroups.filter((g) => mainCh.ownsJid(g.jid));
+    }
+  }
   writeGroupsSnapshot(
     group.folder,
     isMain,
-    availableGroups,
+    filteredGroups,
     new Set(Object.keys(registeredGroups)),
   );
 
@@ -912,8 +920,22 @@ async function main(): Promise<void> {
       );
     },
     getAvailableGroups,
-    writeGroupsSnapshot: (gf, im, ag, rj) =>
-      writeGroupsSnapshot(gf, im, ag, rj),
+    writeGroupsSnapshot: (gf, im, ag, rj) => {
+      // For main group, filter to same-channel groups only
+      let filtered = ag;
+      if (im) {
+        const mainJid = Object.entries(registeredGroups).find(
+          ([, g]) => g.folder === gf,
+        )?.[0];
+        if (mainJid) {
+          const mainCh = findChannel(channels, mainJid);
+          if (mainCh) {
+            filtered = ag.filter((g) => mainCh.ownsJid(g.jid));
+          }
+        }
+      }
+      writeGroupsSnapshot(gf, im, filtered, rj);
+    },
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
     sendCard: sendCardFn,
     sendFile: (jid, filePath, caption) => {
