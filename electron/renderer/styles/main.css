@@ -1154,16 +1154,10 @@ html, body {
 #file-drop-zone.hidden { display: none; }
 #file-input { display: none; }
 
-#format-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
 #format-sub-btns {
   position: absolute;
-  right: 100%;
+  right: calc(100% + 2px);
+  top: 0;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1184,6 +1178,7 @@ html, body {
   border-radius: var(--radius-lg);
   background: var(--bg-primary);
   transition: border-color var(--transition), box-shadow var(--transition);
+  min-width: 0;
 }
 
 #input-wrap:focus-within {
@@ -1194,6 +1189,7 @@ html, body {
 
 #message-input {
   width: 100%;
+  min-width: 0;
   resize: none;
   background: transparent;
   border: none;
@@ -1206,7 +1202,7 @@ html, body {
   line-height: 1.55;
   max-height: 140px;
   overflow-y: hidden;
-  field-sizing: content;
+  overflow-x: hidden;
 }
 
 #message-input::placeholder {
