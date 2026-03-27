@@ -5,8 +5,6 @@ description: DevOps capabilities including code modification (Git), Jenkins depl
 
 # DevOps Skill
 
-You have DevOps capabilities: code modification (Git), Jenkins deployment, SSH log inspection, and MySQL database queries.
-
 ## Service Registry
 
 All service configuration is in `/workspace/global/services.json` (non-main groups) or `/workspace/project/groups/global/services.json` (main group).
@@ -20,28 +18,7 @@ All service configuration is in `/workspace/global/services.json` (non-main grou
 
 ### services.json Format
 
-```json
-{
-  "service-name": {
-    "repo_path": "service-name",
-    "git_url": "git@github.com:org/service-name.git",
-    "default_branch": "main",
-    "jenkins_job": "deploy/service-name",
-    "user": "deploy",
-    "log_hosts": ["10.0.0.1", "10.0.0.2"],
-    "logs_info": "/var/log/service-name/info.log",
-    "logs_error": "/var/log/service-name/error.log",
-    "mysql": {
-      "host": "rm-xxx.mysql.rds.aliyuncs.com",
-      "port": 3306,
-      "user": "app_user",
-      "database": "service_db"
-    }
-  }
-}
-```
-
-**Note:** MySQL passwords are configured in the host's `.env` file as `MYSQL_PASSWORD_{service}=your_password`. The container never sees the password.
+MySQL passwords are in the host `.env` as `MYSQL_PASSWORD_{service}` — the container never sees them.
 
 ## 1. Code Modification (Git)
 
@@ -63,13 +40,10 @@ Service repos are mounted at `/workspace/repos/{repo_path}/`.
 10. **Ask the user to confirm before pushing**
 11. Push: `git push origin HEAD`
 
-### Rules
-
+Rules:
 - NEVER push without explicit user confirmation
-- NEVER force push (`--force` or `--force-with-lease`)
-- Always create a new branch for changes: `git checkout -b fix/description`
-- Show diffs before committing
-- Write clear commit messages
+- NEVER force push
+- Always create a new branch: `git checkout -b fix/description`
 
 ## 2. Jenkins Deployment
 
@@ -138,38 +112,15 @@ Use `ssh` to inspect remote logs. Two SSH keys may be available:
 
 **Always try the devops key first.** If `/home/node/.ssh_devops_key` exists, use `-i /home/node/.ssh_devops_key`. Otherwise fall back to the default key.
 
-### View Recent Logs
-
-```bash
-# Check which key to use
-SSH_KEY_FLAG=""
-if [ -f /home/node/.ssh_devops_key ]; then
-  SSH_KEY_FLAG="-i /home/node/.ssh_devops_key"
-fi
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_KEY_FLAG"
-
-# View last 100 lines of error log
-ssh $SSH_OPTS {user}@{host} 'tail -n 100 {logs_error}'
-
-# View last 100 lines of info log
-ssh $SSH_OPTS {user}@{host} 'tail -n 100 {logs_info}'
-
-# Search for specific errors
-ssh $SSH_OPTS {user}@{host} 'grep -i "exception\|error\|fatal" {logs_error} | tail -50'
-
-# View logs from a specific time range
-ssh $SSH_OPTS {user}@{host} 'awk "/2024-01-15 14:00/,/2024-01-15 15:00/" {logs_error}'
-```
-
-### Check Multiple Hosts
-
-When `log_hosts` has multiple entries, check all of them:
 ```bash
 SSH_KEY_FLAG=""
 [ -f /home/node/.ssh_devops_key ] && SSH_KEY_FLAG="-i /home/node/.ssh_devops_key"
-for host in 10.0.0.1 10.0.0.2; do
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_KEY_FLAG"
+
+# Check all hosts in log_hosts
+for host in {host1} {host2}; do
   echo "=== $host ==="
-  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_KEY_FLAG {user}@$host 'tail -n 50 {logs_error}'
+  ssh $SSH_OPTS {user}@$host 'tail -n 100 {logs_error}'
 done
 ```
 
@@ -182,17 +133,12 @@ done
 
 ## 4. MySQL Database Query
 
-Query MySQL databases through a secure proxy. The container never sees database passwords — they are injected by the host proxy.
-
-### Query a Database
-
-Use the `$MYSQL_PROXY_URL` environment variable to query databases:
+Query via proxy (`$MYSQL_PROXY_URL`), passwords injected by host:
 
 ```bash
-# Query example (replace 'catstory' with the service name)
 curl -s -X POST "$MYSQL_PROXY_URL/query" \
   -H "Content-Type: application/json" \
-  -d '{"service": "catstory", "sql": "SELECT * FROM users LIMIT 10"}'
+  -d '{"service": "{service-name}", "sql": "SELECT * FROM users LIMIT 10"}' | jq .
 ```
 
 ### Lookup Service Database Config

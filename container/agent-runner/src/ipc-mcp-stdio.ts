@@ -454,19 +454,8 @@ server.tool(
 
 server.tool(
   'delegate_task',
-  `Delegate a task to another group's agent. Main group only.
-
-Use this when a task requires another group's workspace, repos, tools, or context.
-The target group's agent will receive the task as a synthetic message and process it.
-When the target agent completes the task, the result will be sent back to you as a message.
-
-How it works:
-1. You call delegate_task with the target group JID and task description
-2. The target group's agent receives the task and works on it
-3. When done, the result comes back as a [委派结果] message in your conversation
-4. You can then summarize and relay the result to the user
-
-Tips:
+  `Delegate a task to another group's agent. Main group only. The target agent processes the task and returns results as a [委派结果] message. Be specific — the target has no context from this conversation.
+  Tips:
 - Be specific in your task description — the target agent has no context from this conversation
 - Include any relevant details (time ranges, error patterns, file paths, etc.)
 - Use list_delegations to check status of pending delegations`,
@@ -529,16 +518,8 @@ Tips:
 
 server.tool(
   'request_delegation',
-  `Request the main group to delegate a task to another group on your behalf. Non-main groups only.
-
-Use this when you need help from another group's agent but cannot delegate directly.
-The main group will receive your request and decide whether to delegate and to which group.
-
-How it works:
-1. You call request_delegation with a task description
-2. The main group's agent receives the request as a message
-3. The main group decides whether/where to delegate using delegate_task
-4. If delegated, the result eventually flows back through the main group`,
+  `Request the main group to delegate a task on your behalf. Non-main groups only. The main group decides where to delegate.
+  Use this when you need help from another group's agent but cannot delegate directly.`,
   {
     task: z.string().describe('Detailed description of what you need another group to do. Be specific — include all relevant context.'),
   },
