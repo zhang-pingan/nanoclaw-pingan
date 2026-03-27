@@ -786,6 +786,19 @@ class WebChannel {
 
     send({ type: 'connected', message: 'Connected to NanoClaw' });
 
+    // Register this client for ALL web groups so it receives messages
+    // from every group in real-time (frontend shows unread badge for non-active groups)
+    const registered = this.opts.registeredGroups();
+    for (const [jid] of Object.entries(registered)) {
+      if (!this.ownsJid(jid)) continue;
+      let clients = this.clients.get(jid);
+      if (!clients) {
+        clients = new Set();
+        this.clients.set(jid, clients);
+      }
+      clients.add({ ws, groupFolder: jid.replace('web:', '') });
+    }
+
     ws.on('message', (data: unknown) => {
       try {
         const msg = JSON.parse(String(data)) as IncomingMsg;
@@ -874,19 +887,6 @@ class WebChannel {
           send({ type: 'error', message: 'Invalid chat JID' });
           return;
         }
-        // Register client for this group
-        let clients = this.clients.get(chatJid);
-        if (!clients) {
-          clients = new Set();
-          this.clients.set(chatJid, clients);
-        }
-        // Remove from old group (if any)
-        for (const cs of this.clients.values()) {
-          for (const c of cs) {
-            if (c.ws === ws) cs.delete(c);
-          }
-        }
-        clients.add({ ws, groupFolder: chatJid.replace('web:', '') });
         // Send current groups list
         const registered = this.opts.registeredGroups();
         send({
