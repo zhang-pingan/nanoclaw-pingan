@@ -1563,6 +1563,20 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && multiSelectMode) {
     exitMultiSelect();
   }
+  // Cmd/Ctrl+1 — toggle agent status
+  if ((e.metaKey || e.ctrlKey) && e.key === "1") {
+    if (agentStatusPanel.classList.contains("open")) {
+      agentStatusPanel.classList.remove("open");
+      if (agentStatusInterval) clearInterval(agentStatusInterval);
+    } else {
+      schedulersPanel.classList.remove("open");
+      workflowsPanel.classList.remove("open");
+      agentStatusPanel.classList.add("open");
+      loadAgentStatus();
+      if (agentStatusInterval) clearInterval(agentStatusInterval);
+      agentStatusInterval = setInterval(updateAgentDurations, 1000);
+    }
+  }
 });
 
 //# sourceMappingURL=app.js.map
