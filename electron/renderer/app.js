@@ -76,6 +76,22 @@ function formatTime(ts) {
   const d = new Date(parseInt(ts));
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+// --- SVG Icon helpers ---
+const SVG = {
+  trash: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>',
+  file: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
+  pdf: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>',
+  paperclip: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>',
+  stop: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>',
+  checkSquare: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+  square: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>',
+  refresh: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
+};
+
+function iconBtnHTML(iconSvg, extraClass) {
+  return `<button class="icon-btn-sm${extraClass ? ' ' + extraClass : ''}">${iconSvg}</button>`;
+}
+
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -166,14 +182,14 @@ function renderFilePreview(filename, ext, filePath) {
   } else {
     const icon = document.createElement("span");
     icon.className = "file-preview-icon";
-    icon.textContent = PDF_EXTS.includes(ext) ? "\u{1F4C4}" : "\u{1F4C1}";
+    icon.innerHTML = PDF_EXTS.includes(ext) ? SVG.pdf : SVG.file;
     div.appendChild(icon);
 
     // "打开文件" button
     if (filePath) {
       const btn = document.createElement("button");
       btn.className = "file-open-btn";
-      btn.textContent = `\u{1F4CE} ${escapeHtml(filename)}`;
+      btn.innerHTML = `${SVG.paperclip} ${escapeHtml(filename)}`;
       btn.addEventListener("click", () => {
         if (window.nanoclawApp?.openFile) {
           window.nanoclawApp.openFile(filePath);
@@ -353,7 +369,7 @@ function createMessageEl(msg) {
 
     const openBtn = document.createElement("button");
     openBtn.className = "file-open-btn";
-    openBtn.textContent = `\u{1F4CE} ${escapeHtml(msg.content)}`;
+    openBtn.innerHTML = `${SVG.paperclip} ${escapeHtml(msg.content)}`;
     openBtn.addEventListener("click", () => {
       if (window.nanoclawApp?.openFile) {
         window.nanoclawApp.openFile(msg._filePath);
@@ -408,7 +424,7 @@ function createMessageEl(msg) {
       <div class="msg-body">
         <div class="msg-actions">
           <button class="msg-copy-btn" title="\u590D\u5236"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-          <button class="msg-reply-btn" title="Reply">\u21A9</button>
+          <button class="msg-reply-btn" title="Reply"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg></button>
         </div>
         ${replyHtml}
         <div class="msg-content">${renderedContent}</div>
@@ -592,7 +608,7 @@ async function loadSchedulers() {
             <span>${task.schedule_type}: ${scheduleValue}</span>
             <span>Next: ${nextRun}</span>
             <span class="scheduler-id">${escapeHtml(task.id)}</span>
-            <button class="scheduler-delete-btn" title="Delete task">&#128465;</button>
+            <button class="scheduler-delete-btn" title="Delete task">${SVG.trash}</button>
           </div>
         `;
         const deleteBtn = el.querySelector(".scheduler-delete-btn");
@@ -782,8 +798,8 @@ function renderWorkflows(workflows) {
     if (isActive) {
       // Running workflow: show stop button
       const stopBtn = document.createElement("button");
-      stopBtn.className = "workflow-action-btn stop";
-      stopBtn.textContent = "\u23F9 Stop";
+      stopBtn.className = "workflow-action-btn stop icon-text-btn";
+      stopBtn.innerHTML = `${SVG.stop} Stop`;
       stopBtn.addEventListener("click", () => stopWorkflow(wf.id, el));
       actionsEl.appendChild(stopBtn);
     }
@@ -791,8 +807,8 @@ function renderWorkflows(workflows) {
     if (isTerminal || isPaused) {
       // Stopped / terminal workflow: show delete button
       const deleteBtn = document.createElement("button");
-      deleteBtn.className = "workflow-action-btn delete";
-      deleteBtn.textContent = "\u{1F5D1} Delete";
+      deleteBtn.className = "workflow-action-btn delete icon-text-btn";
+      deleteBtn.innerHTML = `${SVG.trash} Delete`;
       deleteBtn.addEventListener("click", () => deleteWorkflow(wf.id, el));
       actionsEl.appendChild(deleteBtn);
     }
@@ -1166,7 +1182,7 @@ function renderPendingFiles() {
     return;
   }
   const names = pendingFiles.map((f) => f.name).join(", ");
-  pendingFilesContent.textContent = `\u{1F4CE} ${pendingFiles.length} 个附件: ${names}`;
+  pendingFilesContent.innerHTML = `${SVG.paperclip} ${pendingFiles.length} 个附件: ${names}`;
   pendingFilesEl.classList.add("visible");
 }
 
@@ -1238,7 +1254,7 @@ function enterMultiSelect() {
   messagesEl.classList.add("multi-select");
   multiSelectBar.classList.add("visible");
   selectModeBtn.classList.add("active");
-  selectModeBtn.textContent = "\u2611";
+  selectModeBtn.innerHTML = SVG.checkSquare;
   inputArea.style.display = "none";
   selectedMsgIds.clear();
   updateMultiSelectBar();
@@ -1249,7 +1265,7 @@ function exitMultiSelect() {
   messagesEl.classList.remove("multi-select");
   multiSelectBar.classList.remove("visible");
   selectModeBtn.classList.remove("active");
-  selectModeBtn.textContent = "\u2610";
+  selectModeBtn.innerHTML = SVG.square;
   inputArea.style.display = "";
   messagesEl.querySelectorAll(".message.selected").forEach((el) => el.classList.remove("selected"));
   selectedMsgIds.clear();
@@ -1304,9 +1320,10 @@ loadGroups();
 
 sidebarCollapse.addEventListener("click", () => {
   sidebar.classList.toggle("collapsed");
-  sidebarCollapse.textContent = sidebar.classList.contains("collapsed") ? "\u203A" : "\u2039";
 });
 refreshGroupsBtn.addEventListener("click", () => {
+  refreshGroupsBtn.classList.add("spinning");
+  setTimeout(() => refreshGroupsBtn.classList.remove("spinning"), 700);
   loadGroups();
   if (currentGroupJid) loadMessages();
 });

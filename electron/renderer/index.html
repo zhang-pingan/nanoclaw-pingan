@@ -33,12 +33,22 @@
       <aside id="sidebar">
         <div class="sidebar-header">
           <span class="sidebar-title">NanoClaw</span>
-          <button id="sidebar-collapse" title="Collapse sidebar">&#8249;</button>
+          <button id="sidebar-collapse" class="icon-btn" title="Collapse sidebar">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
         </div>
 
         <div class="section-header">
           <span>Groups</span>
-          <button id="refresh-groups" title="Refresh groups">&#10227;</button>
+          <button id="refresh-groups" class="icon-btn" title="Refresh groups">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
         </div>
         <div class="sidebar-section">
           <div id="groups-list" class="list">
@@ -48,17 +58,23 @@
 
         <button id="open-schedulers" class="section-header schedulers-btn">
           <span>Schedulers</span>
-          <span class="schedulers-arrow">&#8250;</span>
+          <svg class="icon panel-arrow schedulers-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
         </button>
 
         <button id="open-agent-status" class="section-header agent-status-btn">
           <span>Agent Status</span>
-          <span class="agent-status-arrow">&#8250;</span>
+          <svg class="icon panel-arrow agent-status-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
         </button>
 
         <button id="open-workflows" class="section-header workflows-btn">
           <span>Workflows</span>
-          <span class="workflows-arrow">&#8250;</span>
+          <svg class="icon panel-arrow workflows-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
         </button>
 
         <div class="sidebar-footer">
@@ -74,8 +90,21 @@
         <div class="schedulers-header">
           <span>Schedulers</span>
           <div class="schedulers-header-actions">
-            <button id="delete-all-schedulers" class="scheduler-delete-all" title="Delete All">&#128465;</button>
-            <button id="close-schedulers" title="Close">&#10005;</button>
+            <button id="delete-all-schedulers" class="icon-btn danger" title="Delete All">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+              </svg>
+            </button>
+            <button id="close-schedulers" class="icon-btn" title="Close">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
         <div id="schedulers-list"></div>
@@ -85,7 +114,12 @@
       <div id="agent-status-panel">
         <div class="agent-status-header">
           <span>Agent Status</span>
-          <button id="close-agent-status" title="Close">&#10005;</button>
+          <button id="close-agent-status" class="icon-btn" title="Close">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div id="agent-status-list"></div>
       </div>
@@ -95,9 +129,28 @@
         <div class="workflows-header">
           <span>Workflows</span>
           <div class="workflows-header-actions">
-            <button id="refresh-workflows" title="Refresh">&#10227;</button>
-            <button id="delete-all-workflows" class="workflows-delete-all" title="Delete All">&#128465;</button>
-            <button id="close-workflows" title="Close">&#10005;</button>
+            <button id="refresh-workflows" class="icon-btn" title="Refresh">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+            <button id="delete-all-workflows" class="icon-btn danger" title="Delete All">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+              </svg>
+            </button>
+            <button id="close-workflows" class="icon-btn" title="Close">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
         <div id="workflows-list"></div>
@@ -112,7 +165,14 @@
             <span id="chat-group-folder" class="muted"></span>
           </div>
           <div class="header-actions">
-            <button id="select-mode-btn" class="btn-ghost" title="多选消息">&#9744;</button>
+            <button id="select-mode-btn" class="icon-btn" title="多选消息">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -148,13 +208,23 @@
           <!-- Reply preview bar -->
           <div id="reply-preview">
             <span id="reply-preview-content"></span>
-            <button id="reply-preview-close" title="Cancel reply">&times;</button>
+            <button id="reply-preview-close" class="icon-btn-sm" title="Cancel reply">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
 
           <!-- Pending files preview bar -->
           <div id="pending-files-preview">
             <span id="pending-files-content"></span>
-            <button id="pending-files-close" title="取消附件">&times;</button>
+            <button id="pending-files-close" class="icon-btn-sm" title="取消附件">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
 
           <div id="file-drop-zone" class="hidden">
@@ -170,9 +240,23 @@
                 autofocus
               ></textarea>
               <div id="input-actions">
-                <button id="attach-btn" class="btn-tool" title="附件">&#128206;</button>
-                <button id="at-btn" class="btn-tool" title="@ 提及">@</button>
-                <button id="send-btn" class="btn-primary" title="发送 (Enter)">&#10148;</button>
+                <button id="attach-btn" class="icon-btn" title="附件">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                  </svg>
+                </button>
+                <button id="at-btn" class="icon-btn" title="@ 提及">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"></path>
+                  </svg>
+                </button>
+                <button id="send-btn" class="send-btn" title="发送 (Enter)">
+                  <svg class="icon-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                  </svg>
+                </button>
               </div>
             </div>
             <input id="file-input" type="file" multiple hidden />

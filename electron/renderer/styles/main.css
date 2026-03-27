@@ -174,6 +174,116 @@ html, body {
 
 .error.hidden { display: none; }
 
+/* === Icon base styles === */
+.icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 150ms ease;
+  pointer-events: none;
+}
+
+.icon-sm {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 150ms ease;
+  pointer-events: none;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 5px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 180ms ease,
+              background 180ms ease,
+              transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  color: var(--accent);
+  background: var(--accent-dim);
+  transform: scale(1.08);
+}
+
+.icon-btn:active {
+  transform: scale(0.94);
+}
+
+.icon-btn.danger:hover {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.icon-btn-sm {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 180ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  flex-shrink: 0;
+}
+
+.icon-btn-sm:hover {
+  color: var(--text-primary);
+  transform: scale(1.1);
+}
+
+/* Icon rotate animations for refresh/spin */
+.icon-btn.spinning .icon {
+  animation: iconSpin 700ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes iconSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Panel arrow rotation */
+.panel-arrow {
+  transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms ease;
+}
+
+.schedulers-btn:hover .schedulers-arrow,
+.agent-status-btn:hover .agent-status-arrow,
+.workflows-btn:hover .workflows-arrow {
+  transform: translateX(3px);
+  color: var(--accent);
+}
+
+/* Collapse button rotation */
+#sidebar-collapse .icon {
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms ease;
+}
+
+#sidebar:not(.collapsed) #sidebar-collapse:hover .icon {
+  transform: translateX(-2px);
+}
+
+#sidebar.collapsed #sidebar-collapse .icon {
+  transform: rotate(180deg);
+}
+
+#sidebar.collapsed #sidebar-collapse:hover .icon {
+  transform: rotate(180deg) translateX(-2px);
+}
+
 /* === Sidebar === */
 #sidebar {
   width: var(--sidebar-width);
@@ -795,6 +905,15 @@ html, body {
 .file-preview-icon {
   font-size: 24px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-preview-icon .icon {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
 }
 
 .file-preview-info {
@@ -1103,6 +1222,12 @@ html, body {
   background: var(--accent-dim);
 }
 
+/* btn-tool with SVG icons */
+.btn-tool:hover .icon,
+.btn-tool:hover .icon {
+  color: var(--accent);
+}
+
 /* === Command palette === */
 #command-palette {
   display: none;
@@ -1156,6 +1281,56 @@ html, body {
 }
 
 /* === Buttons === */
+.send-btn {
+  background: linear-gradient(135deg, var(--accent) 0%, #667eea 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px;
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 200ms ease,
+              opacity 200ms ease;
+  flex-shrink: 0;
+  height: 40px;
+  width: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-send {
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+.send-btn:hover {
+  box-shadow: 0 4px 14px rgba(79, 110, 247, 0.4);
+  transform: scale(1.05);
+}
+
+.send-btn:hover .icon-send {
+  transform: translateX(2px) translateY(-1px);
+}
+
+.send-btn:active {
+  transform: scale(0.93);
+}
+
+.send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.send-btn:disabled:hover .icon-send {
+  transform: none;
+}
+
 .btn-primary {
   background: linear-gradient(135deg, var(--accent) 0%, #667eea 100%);
   color: #fff;
@@ -1501,8 +1676,18 @@ html, body {
   justify-content: center;
 }
 
-.msg-copy-btn svg {
+.msg-copy-btn svg,
+.msg-reply-btn svg {
   pointer-events: none;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.msg-copy-btn:hover svg {
+  transform: scale(1.15);
+}
+
+.msg-reply-btn:hover svg {
+  transform: translateX(-2px);
 }
 
 /* === Multi-select mode === */
@@ -2146,6 +2331,44 @@ html, body {
 
 .workflow-action-btn.delete:hover {
   background: rgba(239, 68, 68, 0.12);
+}
+
+.icon-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.icon-text-btn:hover {
+  transform: translateY(-1px);
+}
+
+.icon-text-btn:active {
+  transform: scale(0.97);
+}
+
+.icon-text-btn .icon-sm {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Scheduler delete button with SVG */
+.scheduler-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 180ms ease, background 180ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.scheduler-delete-btn:hover {
+  transform: scale(1.15) !important;
+}
+
+.scheduler-delete-btn .icon-sm {
+  pointer-events: none;
 }
 
 /* Workflows button in sidebar */
