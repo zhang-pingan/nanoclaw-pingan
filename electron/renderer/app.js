@@ -54,6 +54,7 @@ var pendingFilesContent = document.getElementById("pending-files-content");
 var pendingFilesClose = document.getElementById("pending-files-close");
 var commandPalette = document.getElementById("command-palette");
 var selectModeBtn = document.getElementById("select-mode-btn");
+var originalSelectIcon = selectModeBtn.innerHTML; // preserve the original 4-square grid icon
 var multiSelectBar = document.getElementById("multi-select-bar");
 var selectedCountEl = document.getElementById("selected-count");
 var copySelectedBtn = document.getElementById("copy-selected-btn");
@@ -1265,7 +1266,7 @@ function exitMultiSelect() {
   messagesEl.classList.remove("multi-select");
   multiSelectBar.classList.remove("visible");
   selectModeBtn.classList.remove("active");
-  selectModeBtn.innerHTML = SVG.square;
+  selectModeBtn.innerHTML = originalSelectIcon;
   inputArea.style.display = "";
   messagesEl.querySelectorAll(".message.selected").forEach((el) => el.classList.remove("selected"));
   selectedMsgIds.clear();
