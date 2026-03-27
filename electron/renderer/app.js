@@ -1424,6 +1424,15 @@ messageInput.addEventListener("keydown", (e) => {
     e.preventDefault();
     sendMessage(messageInput.value);
   }
+
+  if (e.key === "@") {
+    const pos = messageInput.selectionStart;
+    const text = "@Andy ";
+    messageInput.value = messageInput.value.substring(0, pos) + text + messageInput.value.substring(pos);
+    messageInput.selectionStart = messageInput.selectionEnd = pos + text.length;
+    autoResizeInput();
+    e.preventDefault();
+  }
 });
 
 messageInput.addEventListener("input", () => {
