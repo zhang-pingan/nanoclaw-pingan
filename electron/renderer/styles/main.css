@@ -1154,6 +1154,23 @@ html, body {
 #file-drop-zone.hidden { display: none; }
 #file-input { display: none; }
 
+#format-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+#format-sub-btns {
+  position: absolute;
+  right: 100%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#format-sub-btns.hidden { display: none; }
+
 .input-row {
   display: flex;
   align-items: flex-end;

@@ -1425,6 +1425,35 @@ messageInput.addEventListener("keydown", (e) => {
     sendMessage(messageInput.value);
   }
 
+  // Shift+Enter: insert newline, auto-continue list if current line is a list
+  if (e.key === "Enter" && e.shiftKey) {
+    e.preventDefault();
+    const ta = messageInput;
+    const pos = ta.selectionStart;
+    const before = ta.value.substring(0, pos);
+    const after = ta.value.substring(pos);
+    const lineStart = before.lastIndexOf("\n") + 1;
+    const lineContent = before.substring(lineStart);
+
+    const olMatch = lineContent.match(/^(\d+)\.\s/);
+    const ulMatch = lineContent.match(/^-\s/);
+
+    if (olMatch) {
+      const nextNum = parseInt(olMatch[1]) + 1;
+      ta.value = before + "\n" + nextNum + ". " + after;
+      ta.selectionStart = ta.selectionEnd = pos + 1 + String(nextNum).length + 2;
+      autoResizeInput();
+    } else if (ulMatch) {
+      ta.value = before + "\n- " + after;
+      ta.selectionStart = ta.selectionEnd = pos + 3;
+      autoResizeInput();
+    } else {
+      ta.value = before + "\n" + after;
+      ta.selectionStart = ta.selectionEnd = pos + 1;
+      autoResizeInput();
+    }
+  }
+
   if (e.key === "@") {
     const pos = messageInput.selectionStart;
     const text = "@Andy ";
@@ -1432,6 +1461,17 @@ messageInput.addEventListener("keydown", (e) => {
     messageInput.selectionStart = messageInput.selectionEnd = pos + text.length;
     autoResizeInput();
     e.preventDefault();
+  }
+
+  // Cmd+Shift+7 = ordered list, Cmd+Shift+8 = unordered list
+  if (e.metaKey && e.shiftKey) {
+    if (e.key === "7") {
+      e.preventDefault();
+      insertListPrefix("1. ");
+    } else if (e.key === "8") {
+      e.preventDefault();
+      insertListPrefix("- ");
+    }
   }
 });
 
@@ -1464,6 +1504,27 @@ document.getElementById("at-btn").addEventListener("click", () => {
   ta.focus();
   autoResizeInput();
 });
+
+// Format toolbar - insert list prefix at beginning of current line
+function insertListPrefix(prefix) {
+  const ta = messageInput;
+  const pos = ta.selectionStart;
+  const before = ta.value.substring(0, pos);
+  const after = ta.value.substring(pos);
+  // Find start of current line
+  const lineStart = before.lastIndexOf("\n") + 1;
+  ta.value = before.substring(0, lineStart) + prefix + before.substring(lineStart) + after;
+  ta.selectionStart = ta.selectionEnd = lineStart + prefix.length;
+  ta.focus();
+  autoResizeInput();
+}
+
+document.getElementById("format-toggle-btn").addEventListener("click", () => {
+  document.getElementById("format-sub-btns").classList.toggle("hidden");
+});
+document.getElementById("fmt-ol-btn").addEventListener("click", () => insertListPrefix("1. "));
+document.getElementById("fmt-ul-btn").addEventListener("click", () => insertListPrefix("- "));
+
 fileInput.addEventListener("change", () => {
   for (const file of fileInput.files || []) {
     stageFile(file);
