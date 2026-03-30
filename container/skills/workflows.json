@@ -100,12 +100,26 @@
             "notify": "[流程进展] 需求「{{name}}」({{id}}) 开发复核通过！\n\n工作分支：{{branch}}\n交付文档：{{deliverable}}\n\n请点击卡片按钮确认部署。"
           },
           "failure": {
-            "target": "dev",
-            "role": "dev",
-            "skill": "dev-bugfix",
-            "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n工作分支：{{branch}}\n\n复核意见：\n{{delegation_result}}",
-            "notify": "[流程进展] 需求「{{name}}」({{id}}) 开发复核未通过，已委派 {{role_folder:dev}} 根据复核意见修正。"
+            "target": "dev_examine_confirm",
+            "card": "dev_examine_confirm",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 开发复核未通过 ❌\n\n{{result_summary}}\n\n请确认：直接继续后续流程，或委派 {{role_folder:dev}} 按复核意见修正。"
           }
+        }
+      },
+      "dev_examine_confirm": {
+        "type": "confirmation",
+        "card": "dev_examine_confirm",
+        "on_approve": {
+          "target": "awaiting_confirm",
+          "card": "deploy_confirm",
+          "notify": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程。\n\n请点击卡片按钮确认部署。"
+        },
+        "on_revise": {
+          "target": "dev",
+          "role": "dev",
+          "skill": "dev-bugfix",
+          "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n工作分支：{{branch}}\n\n补充修改意见：\n{{revision_text}}",
+          "notify": "[流程进展] 需求「{{name}}」({{id}}) 已确认回到开发修正，已委派 {{role_folder:dev}} 处理。"
         }
       },
       "awaiting_confirm": {
@@ -185,6 +199,7 @@
       "plan_confirm": "📋 方案待确认",
       "dev": "🔧 开发中",
       "dev_examine": "🧾 开发复核中",
+      "dev_examine_confirm": "📋 开发复核待确认",
       "awaiting_confirm": "⏳ 待确认",
       "ops_deploy": "🚀 部署中",
       "testing": "🧪 测试中",
@@ -206,6 +221,12 @@
         "header_color": "blue",
         "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**工作分支**：{{branch}}\n**交付文档**：{{deliverable}}",
         "actions": ["approve", "pause", "cancel"]
+      },
+      "dev_examine_confirm": {
+        "header_template": "🧾 需求「{{name}}」开发复核未通过",
+        "header_color": "orange",
+        "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**工作分支**：{{branch}}\n**交付文档**：{{deliverable}}\n\n请选择：\n1) 直接继续后续流程\n2) 回到开发修正（可填写补充修改意见）",
+        "actions": ["approve", "revise", "cancel"]
       }
     }
   }
