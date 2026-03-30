@@ -6,7 +6,7 @@
   --bg-tertiary: #edf0f7;
   --bg-hover: #e8ecf4;
   --bg-active: #dce1ed;
-  --bg-chat: #f0f2f8;
+  --bg-chat: transparent;
   --border: rgba(0, 0, 0, 0.06);
   --border-bright: rgba(0, 0, 0, 0.12);
   --text-primary: #1a1f36;
@@ -16,17 +16,17 @@
   --accent-hover: #3b5ce4;
   --accent-dim: rgba(79, 110, 247, 0.08);
   --accent-glow: rgba(79, 110, 247, 0.18);
-  --accent2: #8b5cf6;
-  --accent2-dim: rgba(139, 92, 246, 0.1);
-  --success: #10b981;
-  --error: #ef4444;
-  --warning: #f59e0b;
+  --accent2: #22d3ee;
+  --accent2-dim: rgba(34, 211, 238, 0.14);
+  --success: #34d399;
+  --error: #fb7185;
+  --warning: #fbbf24;
   --radius: 10px;
   --radius-sm: 6px;
   --radius-lg: 16px;
   --radius-xl: 20px;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
   --sidebar-width: 272px;
   --header-height: 56px;
   --transition: 180ms ease;
@@ -34,7 +34,7 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
-  --msg-user-bg: linear-gradient(135deg, #667eea 0%, #4f6ef7 50%, #5a7bf7 100%);
+  --msg-user-bg: linear-gradient(136deg, #0aaef0 0%, #2995ff 54%, #3ecbff 100%);
   --msg-assistant-bg: #ffffff;
 }
 
