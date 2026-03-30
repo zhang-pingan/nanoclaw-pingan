@@ -41,14 +41,35 @@
         "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：/workspace/projects/{{service}}/iteration/{{deliverable}}/plan.md",
         "on_complete": {
           "success": {
-            "target": "plan_confirm",
-            "card": "plan_confirm",
-            "notify": "[流程进展] 需求「{{name}}」({{id}}) 方案审核完成！\n\n请确认：让 Plan 按意见修改，还是直接进入开发。"
+            "target": "dev",
+            "role": "dev",
+            "skill": "dev-requirement",
+            "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：/workspace/projects/{{service}}/iteration/{{deliverable}}/plan.md",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 方案审核通过，已自动进入开发阶段，已委派 {{role_folder:dev}} 开始执行。"
           },
           "failure": {
-            "target": "plan_examine",
-            "notify": "[流程异常] 需求「{{name}}」({{id}}) 方案审核失败，请检查。"
+            "target": "plan_examine_confirm",
+            "card": "plan_examine_confirm",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 方案审核未通过 ❌\n\n{{result_summary}}\n\n请确认：直接继续后续流程，或回到 Plan 按意见修改。"
           }
+        }
+      },
+      "plan_examine_confirm": {
+        "type": "confirmation",
+        "card": "plan_examine_confirm",
+        "on_approve": {
+          "target": "dev",
+          "role": "dev",
+          "skill": "dev-requirement",
+          "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：/workspace/projects/{{service}}/iteration/{{deliverable}}/plan.md",
+          "notify": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程，已委派 {{role_folder:dev}} 开始开发。"
+        },
+        "on_revise": {
+          "target": "plan",
+          "role": "planner",
+          "skill": "plan-requirement",
+          "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n\n{{revision_text}}",
+          "notify": "[方案修改] 需求「{{name}}」({{id}}) 已确认回到 Plan 修改，Plan Agent 正在重新设计方案。"
         }
       },
       "plan_confirm": {
@@ -196,6 +217,7 @@
     "status_labels": {
       "plan": "📝 方案设计中",
       "plan_examine": "🧭 方案审核中",
+      "plan_examine_confirm": "📋 方案复核待确认",
       "plan_confirm": "📋 方案待确认",
       "dev": "🔧 开发中",
       "dev_examine": "🧾 开发复核中",
@@ -214,6 +236,12 @@
         "header_template": "📋 需求「{{name}}」方案审核完成",
         "header_color": "green",
         "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接进入开发\n2) 提交修改意见，回到 Plan 重新设计",
+        "actions": ["approve_dev", "revise", "cancel"]
+      },
+      "plan_examine_confirm": {
+        "header_template": "🧭 需求「{{name}}」方案审核未通过",
+        "header_color": "orange",
+        "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接继续后续流程（进入开发）\n2) 回到 Plan 修改（可填写补充修改意见）",
         "actions": ["approve_dev", "revise", "cancel"]
       },
       "deploy_confirm": {
