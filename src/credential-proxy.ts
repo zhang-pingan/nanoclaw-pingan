@@ -32,11 +32,13 @@ export function startCredentialProxy(
     'CLAUDE_CODE_OAUTH_TOKEN',
     'ANTHROPIC_AUTH_TOKEN',
     'ANTHROPIC_BASE_URL',
+    'CLAUDE_MODEL',
   ]);
 
   const authMode: AuthMode = secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
   const oauthToken =
     secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
+  const modelOverride = secrets.CLAUDE_MODEL;
 
   const upstreamUrl = new URL(
     secrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
@@ -63,6 +65,21 @@ export function startCredentialProxy(
         delete headers['connection'];
         delete headers['keep-alive'];
         delete headers['transfer-encoding'];
+
+        // Model override: replace model in request body before forwarding
+        let forwardedBody = body;
+        if (modelOverride) {
+          try {
+            const parsed = JSON.parse(body.toString());
+            if (parsed.model) {
+              parsed.model = modelOverride;
+              forwardedBody = Buffer.from(JSON.stringify(parsed));
+              headers['content-length'] = forwardedBody.length;
+            }
+          } catch {
+            // Not JSON or parseable — forward body as-is
+          }
+        }
 
         if (authMode === 'api-key') {
           // API key mode: inject x-api-key on every request
@@ -106,7 +123,7 @@ export function startCredentialProxy(
           }
         });
 
-        upstream.write(body);
+        upstream.write(forwardedBody);
         upstream.end();
       });
     });

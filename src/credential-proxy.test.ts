@@ -49,14 +49,21 @@ describe('credential-proxy', () => {
   let proxyPort: number;
   let upstreamPort: number;
   let lastUpstreamHeaders: http.IncomingHttpHeaders;
+  let lastUpstreamBody: string;
 
   beforeEach(async () => {
     lastUpstreamHeaders = {};
+    lastUpstreamBody = '';
 
     upstreamServer = http.createServer((req, res) => {
-      lastUpstreamHeaders = { ...req.headers };
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
+      const chunks: Buffer[] = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        lastUpstreamHeaders = { ...req.headers };
+        lastUpstreamBody = Buffer.concat(chunks).toString();
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      });
     });
     await new Promise<void>((resolve) =>
       upstreamServer.listen(0, '127.0.0.1', resolve),
@@ -166,6 +173,62 @@ describe('credential-proxy', () => {
     // custom keep-alive and transfer-encoding must not be forwarded.
     expect(lastUpstreamHeaders['keep-alive']).toBeUndefined();
     expect(lastUpstreamHeaders['transfer-encoding']).toBeUndefined();
+  });
+
+  it('model override replaces model in request body', async () => {
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CLAUDE_MODEL: 'gpt-4o',
+    });
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+      },
+      JSON.stringify({ model: 'claude-opus-4-6', messages: [{ role: 'user', content: 'hello' }] }),
+    );
+
+    const body = JSON.parse(lastUpstreamBody);
+    expect(body.model).toBe('gpt-4o');
+  });
+
+  it('model override does nothing when body is not JSON', async () => {
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CLAUDE_MODEL: 'gpt-4o',
+    });
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+      },
+      'not json body',
+    );
+
+    expect(lastUpstreamBody).toBe('not json body');
+  });
+
+  it('model override does nothing when CLAUDE_MODEL is not set', async () => {
+    proxyPort = await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+      },
+      JSON.stringify({ model: 'claude-opus-4-6', messages: [] }),
+    );
+
+    const body = JSON.parse(lastUpstreamBody);
+    expect(body.model).toBe('claude-opus-4-6');
   });
 
   it('returns 502 when upstream is unreachable', async () => {
