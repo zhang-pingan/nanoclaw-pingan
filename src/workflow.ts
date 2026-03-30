@@ -778,6 +778,7 @@ export function onDelegationComplete(delegationId: string): void {
 
 const ACTION_BUTTONS: Record<string, { label: string; type?: 'primary' | 'danger' | 'default' }> = {
   approve: { label: '✅ 确认执行', type: 'primary' },
+  approve_dev: { label: '✅ 直接进入开发', type: 'primary' },
   pause: { label: '⏸ 暂缓' },
   cancel: { label: '❌ 取消流程', type: 'danger' },
   resume: { label: '▶ 继续', type: 'primary' },
@@ -1079,6 +1080,12 @@ export function handleCardAction(action: {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = approveWorkflow(action.workflow_id);
       if (result.error) notifyMain(`[操作失败] 确认部署失败: ${result.error}`, wfSourceJid);
+      break;
+    }
+    case 'approve_dev': {
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      const result = approveWorkflow(action.workflow_id);
+      if (result.error) notifyMain(`[操作失败] 进入开发失败: ${result.error}`, wfSourceJid);
       break;
     }
     case 'pause': {
