@@ -259,6 +259,35 @@ interface ConversationSearchResult {
   snippet: string;
 }
 
+function parseDelegationTargetFolder(task: string): {
+  targetFolder: string | null;
+  cleanedTask: string;
+} {
+  const match = task.match(/@\{([^}\s]+)\}/);
+  if (!match) {
+    return { targetFolder: null, cleanedTask: task.trim() };
+  }
+
+  const candidate = match[1].trim();
+  const cleanedTask = task.replace(match[0], '').trim();
+  if (!isValidGroupFolder(candidate)) {
+    return {
+      targetFolder: null,
+      cleanedTask: cleanedTask || task.trim(),
+    };
+  }
+
+  return {
+    targetFolder: candidate,
+    cleanedTask: cleanedTask || task.trim(),
+  };
+}
+
+function stripLeadingTriggerMention(task: string): string {
+  const stripped = task.trim().replace(/^@Andy(?:\s+|$)/, '').trim();
+  return stripped || task.trim();
+}
+
 /**
  * Search conversations/ markdown files for a group by keyword.
  */
@@ -657,11 +686,22 @@ export async function processTaskIpc(
         ([, g]) => g.folder === sourceGroup,
       );
       const reqSourceName = reqSourceEntry?.[1]?.name || sourceGroup;
+      const normalizedTask = stripLeadingTriggerMention(data.task);
+      const { targetFolder, cleanedTask } = parseDelegationTargetFolder(normalizedTask);
 
       // Construct synthetic message to main group
       const reqTrigger = mainGroup.trigger;
       const requesterJid = reqSourceEntry?.[0] || '';
-      const reqContent = `${reqTrigger} [委派请求 | 来自:${reqSourceName}]\n\n${data.task}\n\n请根据 available_groups.json 判断是否需要委派，以及委派给哪个群。如需委派请使用 delegate_task，并传入 requester_jid="${requesterJid}" 以便完成后自动通知请求方。`;
+      const requestedTarget = targetFolder
+        ? Object.entries(registeredGroups).find(([, g]) => g.folder === targetFolder)
+        : undefined;
+      const requestedTargetJid = requestedTarget?.[0] || '';
+      const requestedTargetHint = targetFolder
+        ? requestedTargetJid
+          ? `\n\n请求方指定目标群: folder="${targetFolder}"（JID: ${requestedTargetJid}）。若无冲突请优先委派到该群，并在 delegate_task 中传入 target_group_jid="${requestedTargetJid}"。`
+          : `\n\n请求方指定目标群: folder="${targetFolder}"，但当前未找到该 folder 对应的注册群，请忽略该指定并自行判断委派目标。`
+        : '';
+      const reqContent = `${reqTrigger} [委派请求 | 来自:${reqSourceName}]\n\n${cleanedTask}\n\n请根据 available_groups.json 判断是否需要委派，以及委派给哪个群。如需委派请使用 delegate_task，并传入 requester_jid="${requesterJid}" 以便完成后自动通知请求方。${requestedTargetHint}`;
       const reqMsgId = `delreq-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const reqNow = Date.now().toString();
 

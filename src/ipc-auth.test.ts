@@ -4,6 +4,7 @@ import {
   _initTestDatabase,
   createTask,
   getAllTasks,
+  getMessagesSince,
   getRegisteredGroup,
   getTaskById,
   setRegisteredGroup,
@@ -675,5 +676,72 @@ describe('register_group success', () => {
     );
 
     expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+  });
+});
+
+// --- request_delegation target parsing ---
+
+describe('request_delegation target parsing', () => {
+  it('parses @{groupfolder} and includes target_group_jid hint for main group', async () => {
+    const enqueued: string[] = [];
+    deps.enqueueMessageCheck = (groupJid) => {
+      enqueued.push(groupJid);
+    };
+
+    await processTaskIpc(
+      {
+        type: 'request_delegation',
+        task: '@{third-group} 请帮我排查线上告警并给出修复建议',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const msgs = getMessagesSince('main@g.us', '0', 'Andy');
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].content).toContain('[委派请求 | 来自:Other]');
+    expect(msgs[0].content).toContain('请帮我排查线上告警并给出修复建议');
+    expect(msgs[0].content).not.toContain('@{third-group}');
+    expect(msgs[0].content).toContain('folder="third-group"');
+    expect(msgs[0].content).toContain('target_group_jid="third@g.us"');
+    expect(enqueued).toEqual(['main@g.us']);
+  });
+
+  it('strips leading trigger mention like @Andy from forwarded task body', async () => {
+    await processTaskIpc(
+      {
+        type: 'request_delegation',
+        task: '@Andy @{third-group} 请帮我定位接口超时根因',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const msgs = getMessagesSince('main@g.us', '0', 'Andy');
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].content).toContain('请帮我定位接口超时根因');
+    expect(msgs[0].content).not.toContain('@Andy ');
+    expect(msgs[0].content).not.toContain('@{third-group}');
+    expect(msgs[0].content).toContain('target_group_jid="third@g.us"');
+  });
+
+  it('keeps forwarding when @{groupfolder} is unknown and marks it unresolved', async () => {
+    await processTaskIpc(
+      {
+        type: 'request_delegation',
+        task: '@{missing-group} 请协助处理客户问题',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const msgs = getMessagesSince('main@g.us', '0', 'Andy');
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].content).toContain('请协助处理客户问题');
+    expect(msgs[0].content).toContain('folder="missing-group"');
+    expect(msgs[0].content).toContain('未找到该 folder 对应的注册群');
   });
 });

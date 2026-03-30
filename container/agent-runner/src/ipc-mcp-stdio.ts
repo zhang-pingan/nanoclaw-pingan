@@ -519,7 +519,9 @@ server.tool(
 server.tool(
   'request_delegation',
   `Request the main group to delegate a task on your behalf. Non-main groups only. The main group decides where to delegate.
-  Use this when you need help from another group's agent but cannot delegate directly.`,
+  Use this when you need help from another group's agent but cannot delegate directly.
+  If the original user message contains "@{groupfolder}", keep it in task text. The system will parse and forward it to the main group as a target-group hint.
+  Do not proactively invent or choose "@{groupfolder}" yourself when the user did not specify it.`,
   {
     task: z.string().describe('Detailed description of what you need another group to do. Be specific — include all relevant context.'),
   },
