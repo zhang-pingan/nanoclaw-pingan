@@ -456,12 +456,21 @@ async function iterateQuery(
       resultCount++;
       const textResult = 'result' in message ? (message as { result?: string }).result : null;
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
-      planResult = textResult || undefined;
-      writeOutput({
-        status: 'success',
-        result: textResult || null,
-        newSessionId
-      });
+      if (message.subtype?.startsWith('error')) {
+        writeOutput({
+          status: 'error',
+          result: null,
+          error: textResult || 'Agent query failed.',
+          newSessionId,
+        });
+      } else {
+        planResult = textResult || undefined;
+        writeOutput({
+          status: 'success',
+          result: textResult || null,
+          newSessionId,
+        });
+      }
     }
   }
 

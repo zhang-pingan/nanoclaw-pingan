@@ -80,6 +80,15 @@ class FeishuChannel implements Channel {
         req.on('end', () => {
           try {
             const payload = JSON.parse(body);
+            const eventType = payload.event?.type || payload.header?.event_type;
+            logger.debug(
+              {
+                eventType,
+                hasEncrypt: !!payload.encrypt,
+                hasHeader: !!payload.header,
+              },
+              'Feishu webhook received',
+            );
 
             // If this is a verification challenge (type = "url_verification"), return the challenge
             if (payload.type === 'url_verification') {
@@ -97,6 +106,13 @@ class FeishuChannel implements Channel {
               const reqToken =
                 payload.verification_token || payload.header?.token;
               if (reqToken !== this.config.verificationToken) {
+                logger.warn(
+                  {
+                    eventType,
+                    chatId: payload.event?.message?.chat_id,
+                  },
+                  'Feishu webhook rejected: invalid verification token',
+                );
                 res.writeHead(401, { 'Content-Type': 'application/json' });
                 res.end(
                   JSON.stringify({ error: 'Invalid verification token' }),
@@ -105,7 +121,6 @@ class FeishuChannel implements Channel {
               }
             }
             // Card action callbacks need synchronous response with updated card
-            const eventType = payload.header?.event_type;
             if (eventType === 'card.action.trigger') {
               this.handleCardActionEvent(payload, res);
               return;
@@ -117,7 +132,13 @@ class FeishuChannel implements Channel {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ code: 0, msg: 'success' }));
           } catch (e) {
-            console.error('[feishu] Webhook error:', e);
+            logger.error(
+              {
+                error: e,
+                bodyPreview: body.slice(0, 500),
+              },
+              '[feishu] Webhook error',
+            );
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid payload' }));
           }
@@ -636,6 +657,7 @@ class FeishuChannel implements Channel {
     // Support both v1.0 (event.type) and v2.0 (header.event_type) formats
     const eventType = payload.event?.type || payload.header?.event_type;
     if (eventType !== 'im.message.receive_v1') {
+      logger.debug({ eventType }, 'Feishu webhook ignored: unsupported event');
       return;
     }
     const event = payload.event;
@@ -644,13 +666,36 @@ class FeishuChannel implements Channel {
     const chatJid = message.chat_id;
     const senderIds = event.sender?.sender_id || {};
     const senderId = senderIds.user_id || senderIds.open_id || '';
-    const content = JSON.parse(message.content || '{}');
+    let content: Record<string, any> = {};
+    try {
+      content = JSON.parse(message.content || '{}');
+    } catch (err) {
+      logger.warn(
+        {
+          chatJid,
+          messageId: message.message_id,
+          error: err,
+          contentPreview: String(message.content || '').slice(0, 200),
+        },
+        'Feishu webhook message content parse failed',
+      );
+    }
 
     // Check if it's the main group (no trigger required)
     const groups = this.registeredGroups();
     const groupKey = `feishu:${chatJid}`;
     const group = groups[groupKey];
     const isMainGroup = group?.isMain === true;
+    logger.info(
+      {
+        chatJid,
+        messageId: message.message_id,
+        msgType: message.message_type,
+        senderId,
+        isMainGroup,
+      },
+      'Feishu inbound message received',
+    );
 
     if (!isMainGroup) {
       // Check for trigger pattern
