@@ -422,34 +422,42 @@ Files with `{{PLACEHOLDER}}` values need to be configured:
 
 ## Memory System
 
-NanoClaw uses a hierarchical memory system based on CLAUDE.md files.
+NanoClaw uses a structured memory system backed by SQLite, plus transcript archiving.
 
-### Memory Hierarchy
+### Memory Layers
 
-| Level | Location | Read By | Written By | Purpose |
-|-------|----------|---------|------------|---------|
-| **Global** | `groups/CLAUDE.md` | All groups | Main only | Preferences, facts, context shared across all conversations |
-| **Group** | `groups/{name}/CLAUDE.md` | That group | That group | Group-specific context, conversation memory |
-| **Files** | `groups/{name}/*.md` | That group | That group | Notes, research, documents created during conversation |
+| Layer | Storage | Purpose |
+|-------|---------|---------|
+| `working` | `memories` table | Short-lived session context |
+| `episodic` | `memories` table | Past events/summaries |
+| `canonical` | `memories` table | Stable preferences/rules/facts |
 
-### How Memory Works
+Each memory row has `status`: `active` / `conflicted` / `deprecated`.
 
-1. **Agent Context Loading**
-   - Agent runs with `cwd` set to `groups/{group-name}/`
-   - Claude Agent SDK with `settingSources: ['project']` automatically loads:
-     - `../CLAUDE.md` (parent directory = global memory)
-     - `./CLAUDE.md` (current directory = group memory)
+### Search & Operations
 
-2. **Writing Memory**
-   - When user says "remember this", agent writes to `./CLAUDE.md`
-   - When user says "remember this globally" (main channel only), agent writes to `../CLAUDE.md`
-   - Agent can create files like `notes.md`, `research.md` in the group folder
+- `memory_search`: hybrid retrieval from chat messages + structured memories
+- `memory_write`, `memory_list`, `memory_update`, `memory_delete`: CRUD
+- `memory_doctor`: detect duplicates/conflicts/stale working memory
+- `memory_gc`: deduplicate and prune stale working memory
+- `memory_metrics`: view operation metrics by event type
 
-3. **Main Channel Privileges**
-   - Only the "main" group (self-chat) can write to global memory
-   - Main can manage registered groups and schedule tasks for any group
-   - Main can configure additional directory mounts for any group
-   - All groups have Bash access (safe because it runs inside container)
+### Context Loading
+
+1. Session continuity:
+   - Session IDs are persisted in SQLite (`sessions` table)
+   - Claude Agent SDK resumes with `resume`
+2. Startup memory pack:
+   - Before each new run, NanoClaw builds a budgeted memory pack from structured memory
+   - Layer quotas: canonical > episodic > working
+3. Global prompt context:
+   - Non-main groups read `groups/global/CLAUDE.md` as additional system prompt
+
+### Transcript Archiving
+
+- Archiving on container exit
+- Archiving after successful `/compact`
+- Periodic checkpoint archiving during long-running sessions
 
 ---
 

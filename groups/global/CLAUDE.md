@@ -38,15 +38,17 @@ Files you create are saved in `/workspace/group/`. Use this for notes, research,
 
 ## Memory
 
-### Persistent Memory (written to group CLAUDE.md)
+### Structured Persistent Memory (primary path)
 
-When the user asks you to remember something, corrects your behavior, or states a preference/rule that should persist across conversations, **immediately** use the Edit tool to append the instruction to the `## User Memory` section of `/workspace/group/CLAUDE.md`. Do not just acknowledge verbally — you must write it down.
+When the user asks you to remember stable preferences/rules/facts, use memory tools instead of editing files:
+- `memory_write(content, layer, memory_type)` to add memory
+- `memory_update` / `memory_delete` to correct stale items
+- `memory_list` / `memory_search` to inspect existing memory
 
-Format: append one concise line at the end of `## User Memory`. Examples:
-- Always reply in Chinese
-- Never use emoji
-
-Note: CLAUDE.md is force-loaded into every conversation — do not write temporary information or verbose content.
+Recommended mapping:
+- short-lived context -> `layer=working`
+- session outcomes -> `layer=episodic`
+- stable user preferences/rules -> `layer=canonical`
 
 ### Episodic Memory (conversations/)
 

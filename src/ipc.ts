@@ -27,14 +27,24 @@ import {
 import { AvailableGroup } from './container-runner.js';
 import {
   createDelegation,
+  createMemory,
   createTask,
+  deleteMemory,
   deleteTask,
+  doctorMemories,
+  gcMemories,
   getDelegation,
+  getMemoryMetricSummary,
+  getMemoryById,
   getTaskById,
+  listMemories,
+  recordMemoryMetric,
+  searchMemories,
   searchMessages,
   storeChatMetadata,
   storeMessageDirect,
   updateDelegation,
+  updateMemory,
   updateTask,
 } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
@@ -254,11 +264,6 @@ export function startIpcWatcher(deps: IpcDeps): void {
   logger.info('IPC watcher started (per-group namespaces)');
 }
 
-interface ConversationSearchResult {
-  file: string;
-  snippet: string;
-}
-
 function parseDelegationTargetFolder(task: string): {
   targetFolder: string | null;
   cleanedTask: string;
@@ -288,54 +293,6 @@ function stripLeadingTriggerMention(task: string): string {
   return stripped || task.trim();
 }
 
-/**
- * Search conversations/ markdown files for a group by keyword.
- */
-function searchConversations(
-  groupFolder: string,
-  query: string,
-  limit: number = 10,
-): ConversationSearchResult[] {
-  const conversationsDir = path.join(GROUPS_DIR, groupFolder, 'conversations');
-  if (!fs.existsSync(conversationsDir)) return [];
-
-  const results: ConversationSearchResult[] = [];
-  const queryLower = query.toLowerCase();
-
-  try {
-    const files = fs
-      .readdirSync(conversationsDir)
-      .filter((f) => f.endsWith('.md'))
-      .sort()
-      .reverse(); // newest first
-
-    for (const file of files) {
-      if (results.length >= limit) break;
-      const filePath = path.join(conversationsDir, file);
-      try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          if (results.length >= limit) break;
-          if (lines[i].toLowerCase().includes(queryLower)) {
-            // Extract context: 1 line before and 1 line after
-            const start = Math.max(0, i - 1);
-            const end = Math.min(lines.length, i + 2);
-            const snippet = lines.slice(start, end).join('\n');
-            results.push({ file, snippet });
-          }
-        }
-      } catch {
-        /* skip unreadable files */
-      }
-    }
-  } catch {
-    /* directory read error */
-  }
-
-  return results;
-}
-
 export async function processTaskIpc(
   data: {
     type: string;
@@ -358,7 +315,17 @@ export async function processTaskIpc(
     // For memory_search
     query?: string;
     limit?: number;
+    mode?: string;
     requestId?: string;
+    // For memory CRUD
+    memoryId?: string;
+    content?: string;
+    layer?: 'working' | 'episodic' | 'canonical';
+    memory_type?: 'preference' | 'rule' | 'fact' | 'summary';
+    memory_status?: 'active' | 'conflicted' | 'deprecated';
+    dryRun?: boolean;
+    staleDays?: number;
+    hours?: number;
     // For delegate_task / complete_delegation / request_delegation
     delegationId?: string;
     targetGroupJid?: string;
@@ -373,6 +340,14 @@ export async function processTaskIpc(
   deps: IpcDeps,
 ): Promise<void> {
   const registeredGroups = deps.registeredGroups();
+  const writeMemoryResult = (groupFolder: string, requestId: string, payload: object) => {
+    const resultsDir = path.join(DATA_DIR, 'ipc', groupFolder, 'search-results');
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
 
   switch (data.type) {
     case 'schedule_task':
@@ -965,20 +940,55 @@ export async function processTaskIpc(
       }
 
       const searchLimit = data.limit || 10;
+      const mode = data.mode || 'hybrid';
 
-      // Search messages via FTS
+      // Search message history via FTS
       const messageResults = searchMessages(
         sourceGroup,
         data.query,
-        searchLimit,
+        Math.max(searchLimit * 2, searchLimit),
       );
 
-      // Search conversations/ files
-      const conversationResults = searchConversations(
+      // Search structured memory store
+      const memoryResults = searchMemories(
         sourceGroup,
         data.query,
-        searchLimit,
+        Math.max(searchLimit * 2, searchLimit),
       );
+
+      const nowMs = Date.now();
+      const recencyBoost = (timestamp: string): number => {
+        const ms = Number(timestamp);
+        if (Number.isNaN(ms)) return 0;
+        const ageMs = Math.max(0, nowMs - ms);
+        const dayMs = 24 * 60 * 60 * 1000;
+        if (ageMs <= dayMs) return 0.15;
+        if (ageMs <= 7 * dayMs) return 0.08;
+        return 0;
+      };
+
+      const hits = [
+        ...messageResults.map((r) => ({
+          kind: 'message' as const,
+          score: 0.65 + recencyBoost(r.timestamp),
+          sender: r.sender_name,
+          content: r.content,
+          timestamp: r.timestamp,
+        })),
+        ...(mode === 'hybrid'
+          ? memoryResults.map((r) => ({
+              kind: 'memory' as const,
+              // bm25 smaller is better; invert to positive ranking score.
+              score: 1 / (1 + Math.max(0, r.score)),
+              layer: r.layer,
+              memoryType: r.memory_type,
+              content: r.content,
+              timestamp: r.updated_at,
+            }))
+          : []),
+      ]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, searchLimit);
 
       // Write results to IPC response file
       const resultsDir = path.join(
@@ -990,15 +1000,8 @@ export async function processTaskIpc(
       fs.mkdirSync(resultsDir, { recursive: true });
 
       const response = {
-        messages: messageResults.map((r) => ({
-          sender: r.sender_name,
-          content: r.content,
-          timestamp: r.timestamp,
-        })),
-        conversations: conversationResults.map((r) => ({
-          file: r.file,
-          snippet: r.snippet,
-        })),
+        mode,
+        hits,
       };
 
       const responsePath = path.join(resultsDir, `${data.requestId}.json`);
@@ -1010,11 +1013,134 @@ export async function processTaskIpc(
         {
           sourceGroup,
           query: data.query,
+          mode,
           messageHits: messageResults.length,
-          conversationHits: conversationResults.length,
+          memoryHits: memoryResults.length,
+          resultHits: hits.length,
         },
         'memory_search completed',
       );
+      recordMemoryMetric(sourceGroup, `search:${mode}`, `q=${data.query}`);
+      break;
+    }
+
+    case 'memory_write': {
+      if (!data.requestId || !data.content || !data.layer || !data.memory_type) {
+        logger.warn({ sourceGroup }, 'memory_write missing required fields');
+        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing required fields' });
+        break;
+      }
+      const created = createMemory({
+        group_folder: sourceGroup,
+        layer: data.layer,
+        memory_type: data.memory_type,
+        content: data.content,
+        source: 'agent',
+      });
+
+      writeMemoryResult(sourceGroup, data.requestId, { memory: created });
+      recordMemoryMetric(
+        sourceGroup,
+        'write',
+        `layer=${data.layer},type=${data.memory_type}`,
+      );
+      break;
+    }
+
+    case 'memory_list': {
+      if (!data.requestId) {
+        logger.warn({ sourceGroup }, 'memory_list missing requestId');
+        break;
+      }
+      const limit = data.limit || 20;
+      const memories = listMemories(sourceGroup, limit);
+      writeMemoryResult(sourceGroup, data.requestId, { memories });
+      recordMemoryMetric(sourceGroup, 'list', `limit=${limit}`);
+      break;
+    }
+
+    case 'memory_update': {
+      if (!data.requestId || !data.memoryId) {
+        logger.warn({ sourceGroup }, 'memory_update missing requestId or memoryId');
+        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing requestId or memoryId' });
+        break;
+      }
+      const existing = getMemoryById(data.memoryId);
+      if (!existing || existing.group_folder !== sourceGroup) {
+        logger.warn({ sourceGroup, memoryId: data.memoryId }, 'memory_update memory not found in group scope');
+        writeMemoryResult(sourceGroup, data.requestId, { error: 'memory not found' });
+        break;
+      }
+      updateMemory(data.memoryId, {
+        content: data.content,
+        layer: data.layer,
+        memory_type: data.memory_type,
+        status: data.memory_status,
+      });
+      const updated = getMemoryById(data.memoryId);
+      writeMemoryResult(sourceGroup, data.requestId, { memory: updated });
+      recordMemoryMetric(sourceGroup, 'update', `id=${data.memoryId}`);
+      break;
+    }
+
+    case 'memory_delete': {
+      if (!data.requestId || !data.memoryId) {
+        logger.warn({ sourceGroup }, 'memory_delete missing requestId or memoryId');
+        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing requestId or memoryId' });
+        break;
+      }
+      const existing = getMemoryById(data.memoryId);
+      if (!existing || existing.group_folder !== sourceGroup) {
+        logger.warn({ sourceGroup, memoryId: data.memoryId }, 'memory_delete memory not found in group scope');
+        writeMemoryResult(sourceGroup, data.requestId, { error: 'memory not found' });
+        break;
+      }
+      deleteMemory(data.memoryId);
+      writeMemoryResult(sourceGroup, data.requestId, { deleted: true, memoryId: data.memoryId });
+      recordMemoryMetric(sourceGroup, 'delete', `id=${data.memoryId}`);
+      break;
+    }
+
+    case 'memory_doctor': {
+      if (!data.requestId) {
+        logger.warn({ sourceGroup }, 'memory_doctor missing requestId');
+        break;
+      }
+      const report = doctorMemories(sourceGroup, data.staleDays || 7);
+      writeMemoryResult(sourceGroup, data.requestId, { report });
+      recordMemoryMetric(
+        sourceGroup,
+        'doctor',
+        `staleDays=${data.staleDays || 7}`,
+      );
+      break;
+    }
+
+    case 'memory_gc': {
+      if (!data.requestId) {
+        logger.warn({ sourceGroup }, 'memory_gc missing requestId');
+        break;
+      }
+      const result = gcMemories(sourceGroup, {
+        dryRun: data.dryRun !== undefined ? data.dryRun : true,
+        staleWorkingDays: data.staleDays || 14,
+      });
+      writeMemoryResult(sourceGroup, data.requestId, { result });
+      recordMemoryMetric(
+        sourceGroup,
+        'gc',
+        `dryRun=${data.dryRun !== undefined ? data.dryRun : true},staleDays=${data.staleDays || 14}`,
+      );
+      break;
+    }
+
+    case 'memory_metrics': {
+      if (!data.requestId) {
+        logger.warn({ sourceGroup }, 'memory_metrics missing requestId');
+        break;
+      }
+      const summary = getMemoryMetricSummary(sourceGroup, data.hours || 24);
+      writeMemoryResult(sourceGroup, data.requestId, { summary });
       break;
     }
 

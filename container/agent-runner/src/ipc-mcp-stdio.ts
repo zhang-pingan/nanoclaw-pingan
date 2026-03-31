@@ -378,10 +378,11 @@ Use available_groups.json to find the JID for a group. The folder name must be c
 
 server.tool(
   'memory_search',
-  '搜索历史对话和消息记录。可以搜索聊天消息和归档的对话记录。',
+  '混合检索记忆：联合搜索聊天消息与结构化记忆（working/episodic/canonical）。',
   {
     query: z.string().describe('搜索关键词'),
     limit: z.number().optional().default(10).describe('最大返回条数'),
+    mode: z.enum(['hybrid', 'keyword']).optional().default('hybrid').describe('hybrid=消息+结构化记忆，keyword=仅消息'),
   },
   async (args) => {
     const requestId = `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -390,6 +391,7 @@ server.tool(
       type: 'memory_search',
       query: args.query,
       limit: args.limit || 10,
+      mode: args.mode || 'hybrid',
       requestId,
       groupFolder,
       timestamp: new Date().toISOString(),
@@ -411,18 +413,19 @@ server.tool(
           fs.unlinkSync(resultPath);
 
           const parts: string[] = [];
-
-          if (result.messages?.length > 0) {
-            parts.push('## 消息记录\n');
-            for (const msg of result.messages) {
-              parts.push(`[${msg.timestamp}] ${msg.sender}: ${msg.content}`);
-            }
-          }
-
-          if (result.conversations?.length > 0) {
-            parts.push('\n## 对话归档\n');
-            for (const conv of result.conversations) {
-              parts.push(`### ${conv.file}\n${conv.snippet}\n`);
+          const hits = Array.isArray(result.hits) ? result.hits : [];
+          if (hits.length > 0) {
+            parts.push(`## 检索结果（mode=${result.mode || 'hybrid'}）\n`);
+            for (const hit of hits) {
+              if (hit.kind === 'memory') {
+                parts.push(
+                  `[MEMORY][${hit.layer}/${hit.memoryType}] ${hit.content}`,
+                );
+              } else {
+                parts.push(
+                  `[MSG][${hit.timestamp}] ${hit.sender}: ${hit.content}`,
+                );
+              }
             }
           }
 
@@ -447,6 +450,414 @@ server.tool(
 
     return {
       content: [{ type: 'text' as const, text: '搜索超时，请稍后重试。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'memory_write',
+  '写入结构化记忆到当前群组（working/episodic/canonical）。',
+  {
+    content: z.string().describe('记忆内容'),
+    layer: z.enum(['working', 'episodic', 'canonical']).default('canonical').describe('记忆层级'),
+    memory_type: z
+      .enum(['preference', 'rule', 'fact', 'summary'])
+      .default('preference')
+      .describe('记忆类型'),
+  },
+  async (args) => {
+    const requestId = `memw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_write',
+      content: args.content,
+      layer: args.layer,
+      memory_type: args.memory_type,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `记忆已写入：${result?.memory?.id || 'unknown-id'}`,
+              },
+            ],
+          };
+        } catch (err) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `写入结果解析失败: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: 'memory_write 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'memory_list',
+  '列出当前群组的结构化记忆。',
+  {
+    limit: z.number().optional().default(20).describe('最大返回条数'),
+  },
+  async (args) => {
+    const requestId = `meml-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_list',
+      limit: args.limit || 20,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          const memories = Array.isArray(result.memories) ? result.memories : [];
+          if (memories.length === 0) {
+            return { content: [{ type: 'text' as const, text: '当前没有结构化记忆。' }] };
+          }
+          const formatted = memories
+            .map((m: { id: string; layer: string; memory_type: string; content: string }) =>
+              `- [${m.id}] (${m.layer}/${m.memory_type}) ${m.content}`,
+            )
+            .join('\n');
+          return { content: [{ type: 'text' as const, text: `结构化记忆:\n${formatted}` }] };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `读取记忆失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_list 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'memory_update',
+  '更新一条结构化记忆。',
+  {
+    memory_id: z.string().describe('记忆 ID'),
+    content: z.string().optional().describe('新内容'),
+    layer: z.enum(['working', 'episodic', 'canonical']).optional().describe('新层级'),
+    memory_status: z.enum(['active', 'conflicted', 'deprecated']).optional().describe('记忆状态（可用于手工归档冲突项）'),
+    memory_type: z
+      .enum(['preference', 'rule', 'fact', 'summary'])
+      .optional()
+      .describe('新记忆类型'),
+  },
+  async (args) => {
+    const requestId = `memu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_update',
+      memoryId: args.memory_id,
+      content: args.content,
+      layer: args.layer,
+      memory_status: args.memory_status,
+      memory_type: args.memory_type,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          if (!result.memory) {
+            return {
+              content: [{ type: 'text' as const, text: '未找到要更新的记忆。' }],
+              isError: true,
+            };
+          }
+          return {
+            content: [{ type: 'text' as const, text: `记忆已更新：${result.memory.id}` }],
+          };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `更新记忆失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_update 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'memory_delete',
+  '删除一条结构化记忆。',
+  {
+    memory_id: z.string().describe('记忆 ID'),
+  },
+  async (args) => {
+    const requestId = `memd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_delete',
+      memoryId: args.memory_id,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          if (!result.deleted) {
+            return {
+              content: [{ type: 'text' as const, text: '删除失败或记忆不存在。' }],
+              isError: true,
+            };
+          }
+          return {
+            content: [{ type: 'text' as const, text: `记忆已删除：${result.memoryId}` }],
+          };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `删除记忆失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_delete 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'memory_doctor',
+  '检查当前群组结构化记忆质量：重复、冲突、陈旧 working 记忆。',
+  {
+    stale_days: z.number().optional().default(7).describe('working 记忆判定为陈旧的天数阈值'),
+  },
+  async (args) => {
+    const requestId = `memdoc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_doctor',
+      staleDays: args.stale_days || 7,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+    writeIpcFile(TASKS_DIR, data);
+
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          const report = result.report;
+          if (!report) {
+            return {
+              content: [{ type: 'text' as const, text: 'memory_doctor 未返回报告。' }],
+              isError: true,
+            };
+          }
+          const text = [
+            `总记忆数: ${report.total}`,
+            `重复组: ${report.duplicateGroups?.length || 0}`,
+            `冲突组: ${report.conflictGroups?.length || 0}`,
+            `陈旧 working: ${report.staleWorkingIds?.length || 0}`,
+          ].join('\n');
+          return { content: [{ type: 'text' as const, text }] };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `memory_doctor 解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_doctor 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'memory_gc',
+  '清理结构化记忆：去重并清理陈旧 working。默认 dry-run。',
+  {
+    dry_run: z.boolean().optional().default(true).describe('是否仅预览不实际删除'),
+    stale_days: z.number().optional().default(14).describe('working 陈旧阈值天数'),
+  },
+  async (args) => {
+    const requestId = `memgc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_gc',
+      dryRun: args.dry_run !== undefined ? args.dry_run : true,
+      staleDays: args.stale_days || 14,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+    writeIpcFile(TASKS_DIR, data);
+
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          const gc = result.result;
+          if (!gc) {
+            return {
+              content: [{ type: 'text' as const, text: 'memory_gc 未返回结果。' }],
+              isError: true,
+            };
+          }
+          const text = [
+            `dryRun: ${gc.dryRun}`,
+            `重复删除数: ${gc.duplicateDeletedIds?.length || 0}`,
+            `陈旧删除数: ${gc.staleDeletedIds?.length || 0}`,
+          ].join('\n');
+          return { content: [{ type: 'text' as const, text }] };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `memory_gc 解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_gc 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'memory_metrics',
+  '查看当前群组记忆操作统计（按事件类型聚合）。',
+  {
+    hours: z.number().optional().default(24).describe('统计时间窗口（小时）'),
+  },
+  async (args) => {
+    const requestId = `memmet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_metrics',
+      hours: args.hours || 24,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+    writeIpcFile(TASKS_DIR, data);
+
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          const summary = result.summary;
+          if (!summary) {
+            return {
+              content: [{ type: 'text' as const, text: 'memory_metrics 未返回统计结果。' }],
+              isError: true,
+            };
+          }
+          const lines = [
+            `窗口: ${summary.hours}h`,
+            `总事件数: ${summary.total}`,
+            '分布:',
+            ...(summary.byEvent || []).map(
+              (row: { event: string; count: number }) =>
+                `- ${row.event}: ${row.count}`,
+            ),
+          ];
+          return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `memory_metrics 解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_metrics 请求超时。' }],
       isError: true,
     };
   },

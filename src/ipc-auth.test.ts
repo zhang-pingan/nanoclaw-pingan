@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 
 import {
   _initTestDatabase,
@@ -8,7 +10,10 @@ import {
   getRegisteredGroup,
   getTaskById,
   setRegisteredGroup,
+  storeChatMetadata,
+  storeMessage,
 } from './db.js';
+import { DATA_DIR } from './config.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
 
@@ -37,6 +42,27 @@ const THIRD_GROUP: RegisteredGroup = {
 
 let groups: Record<string, RegisteredGroup>;
 let deps: IpcDeps;
+
+function readMemoryIpcResult(
+  sourceGroup: string,
+  requestId: string,
+): any {
+  const p = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    'search-results',
+    `${requestId}.json`,
+  );
+  expect(fs.existsSync(p)).toBe(true);
+  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+  fs.unlinkSync(p);
+  return data;
+}
+
+function rid(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 beforeEach(() => {
   _initTestDatabase();
@@ -676,6 +702,468 @@ describe('register_group success', () => {
     );
 
     expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+  });
+});
+
+describe('memory IPC tasks', () => {
+  it('memory_write/list/update/delete round-trip works', async () => {
+    const sourceGroup = 'other-group';
+    const writeId = rid('mw');
+    const listId = rid('ml');
+    const updateId = rid('mu');
+    const deleteId = rid('md');
+
+    await processTaskIpc(
+      {
+        type: 'memory_write',
+        requestId: writeId,
+        content: 'Always reply in Chinese',
+        layer: 'canonical',
+        memory_type: 'preference',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const writeRes = readMemoryIpcResult(sourceGroup, writeId);
+    expect(writeRes.memory?.id).toBeTruthy();
+    const memoryId = writeRes.memory.id as string;
+
+    await processTaskIpc(
+      { type: 'memory_list', requestId: listId, limit: 10 },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const listRes = readMemoryIpcResult(sourceGroup, listId);
+    expect(Array.isArray(listRes.memories)).toBe(true);
+    expect(listRes.memories.length).toBeGreaterThan(0);
+
+    await processTaskIpc(
+      {
+        type: 'memory_update',
+        requestId: updateId,
+        memoryId,
+        content: 'Always reply in Chinese language',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const updateRes = readMemoryIpcResult(sourceGroup, updateId);
+    expect(updateRes.memory.content).toContain('language');
+
+    await processTaskIpc(
+      { type: 'memory_delete', requestId: deleteId, memoryId },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const deleteRes = readMemoryIpcResult(sourceGroup, deleteId);
+    expect(deleteRes.deleted).toBe(true);
+  });
+
+  it('memory_search returns hybrid hits', async () => {
+    const sourceGroup = 'other-group';
+    const writeId = rid('mw');
+    const searchId = rid('ms');
+
+    await processTaskIpc(
+      {
+        type: 'memory_write',
+        requestId: writeId,
+        content: 'Service foo uses branch main',
+        layer: 'canonical',
+        memory_type: 'fact',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    readMemoryIpcResult(sourceGroup, writeId);
+
+    // seed one message hit as well
+    storeChatMetadata('other@g.us', Date.now().toString());
+    storeMessage({
+      id: 'm-foo',
+      chat_jid: 'other@g.us',
+      sender: 'u@s.whatsapp.net',
+      sender_name: 'User',
+      content: 'foo release is pending',
+      timestamp: Date.now().toString(),
+    });
+
+    await processTaskIpc(
+      {
+        type: 'memory_search',
+        requestId: searchId,
+        query: 'foo',
+        mode: 'hybrid',
+        limit: 10,
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const searchRes = readMemoryIpcResult(sourceGroup, searchId);
+    expect(searchRes.mode).toBe('hybrid');
+    expect(Array.isArray(searchRes.hits)).toBe(true);
+    expect(searchRes.hits.length).toBeGreaterThan(0);
+    expect(
+      searchRes.hits.some(
+        (h: { kind: string; content: string }) =>
+          h.kind === 'memory' && h.content.includes('branch main'),
+      ),
+    ).toBe(true);
+  });
+
+  it('memory_search keyword mode excludes structured memory hits', async () => {
+    const sourceGroup = 'other-group';
+    const writeId = rid('mw');
+    const searchId = rid('ms');
+
+    await processTaskIpc(
+      {
+        type: 'memory_write',
+        requestId: writeId,
+        content: 'Keyword-only should not include this memory hit',
+        layer: 'canonical',
+        memory_type: 'fact',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    readMemoryIpcResult(sourceGroup, writeId);
+
+    storeChatMetadata('other@g.us', Date.now().toString());
+    storeMessage({
+      id: `m-keyword-${Date.now()}`,
+      chat_jid: 'other@g.us',
+      sender: 'u@s.whatsapp.net',
+      sender_name: 'User',
+      content: 'keyword-only message hit',
+      timestamp: Date.now().toString(),
+    });
+
+    await processTaskIpc(
+      {
+        type: 'memory_search',
+        requestId: searchId,
+        query: 'keyword',
+        mode: 'keyword',
+        limit: 10,
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const res = readMemoryIpcResult(sourceGroup, searchId);
+    expect(res.mode).toBe('keyword');
+    expect(res.hits.some((h: { kind: string }) => h.kind === 'memory')).toBe(
+      false,
+    );
+    expect(res.hits.some((h: { kind: string }) => h.kind === 'message')).toBe(
+      true,
+    );
+  });
+
+  it('memory_update/delete return error payload for unknown memory id', async () => {
+    const sourceGroup = 'other-group';
+    const updateId = rid('mu');
+    const deleteId = rid('md');
+
+    await processTaskIpc(
+      {
+        type: 'memory_update',
+        requestId: updateId,
+        memoryId: 'mem-not-found',
+        content: 'x',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const updateRes = readMemoryIpcResult(sourceGroup, updateId);
+    expect(updateRes.error).toBe('memory not found');
+
+    await processTaskIpc(
+      {
+        type: 'memory_delete',
+        requestId: deleteId,
+        memoryId: 'mem-not-found',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const deleteRes = readMemoryIpcResult(sourceGroup, deleteId);
+    expect(deleteRes.error).toBe('memory not found');
+  });
+
+  it('memory_gc with dryRun=false deletes duplicates', async () => {
+    const sourceGroup = 'other-group';
+    const write1 = rid('mw');
+    const write2 = rid('mw');
+    const gcId = rid('mgc');
+    const listId = rid('ml');
+
+    for (const requestId of [write1, write2]) {
+      await processTaskIpc(
+        {
+          type: 'memory_write',
+          requestId,
+          content: 'Duplicate value for gc',
+          layer: 'canonical',
+          memory_type: 'fact',
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+      readMemoryIpcResult(sourceGroup, requestId);
+    }
+
+    await processTaskIpc(
+      {
+        type: 'memory_gc',
+        requestId: gcId,
+        dryRun: false,
+        staleDays: 365,
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const gcRes = readMemoryIpcResult(sourceGroup, gcId);
+    expect(gcRes.result.dryRun).toBe(false);
+    expect(gcRes.result.duplicateDeletedIds.length).toBeGreaterThan(0);
+
+    await processTaskIpc(
+      { type: 'memory_list', requestId: listId, limit: 50 },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const listRes = readMemoryIpcResult(sourceGroup, listId);
+    const remain = listRes.memories.filter(
+      (m: { content: string }) => m.content === 'Duplicate value for gc',
+    );
+    expect(remain.length).toBe(1);
+  });
+
+  it('memory_doctor/gc/metrics produce response payloads', async () => {
+    const sourceGroup = 'other-group';
+    // duplicates
+    for (let i = 0; i < 2; i++) {
+      const writeId = rid('mw-dup');
+      await processTaskIpc(
+        {
+          type: 'memory_write',
+          requestId: writeId,
+          content: 'Always include summary',
+          layer: 'canonical',
+          memory_type: 'rule',
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+      readMemoryIpcResult(sourceGroup, writeId);
+    }
+
+    const doctorId = rid('mdo');
+    await processTaskIpc(
+      { type: 'memory_doctor', requestId: doctorId, staleDays: 7 },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const doctorRes = readMemoryIpcResult(sourceGroup, doctorId);
+    expect(doctorRes.report).toBeTruthy();
+    expect(doctorRes.report.total).toBeGreaterThan(0);
+
+    const gcId = rid('mgc');
+    await processTaskIpc(
+      { type: 'memory_gc', requestId: gcId, dryRun: true, staleDays: 14 },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const gcRes = readMemoryIpcResult(sourceGroup, gcId);
+    expect(gcRes.result).toBeTruthy();
+    expect(gcRes.result.dryRun).toBe(true);
+
+    const metricsId = rid('mmet');
+    await processTaskIpc(
+      { type: 'memory_metrics', requestId: metricsId, hours: 24 },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const metricsRes = readMemoryIpcResult(sourceGroup, metricsId);
+    expect(metricsRes.summary).toBeTruthy();
+    expect(metricsRes.summary.total).toBeGreaterThan(0);
+  });
+
+  it('handles concurrent memory writes without result file collisions', async () => {
+    const sourceGroup = 'other-group';
+    const tasks = Array.from({ length: 12 }).map((_, i) => {
+      const requestId = rid('mw-concurrent');
+      return {
+        requestId,
+        promise: processTaskIpc(
+          {
+            type: 'memory_write',
+            requestId,
+            content: `Concurrent memory value ${i}`,
+            layer: i % 2 === 0 ? 'canonical' : 'working',
+            memory_type: 'fact',
+          },
+          sourceGroup,
+          false,
+          deps,
+        ),
+      };
+    });
+
+    await Promise.all(tasks.map((t) => t.promise));
+
+    const ids = tasks
+      .map((t) => readMemoryIpcResult(sourceGroup, t.requestId)?.memory?.id)
+      .filter(Boolean);
+    expect(ids.length).toBe(12);
+    expect(new Set(ids).size).toBe(12);
+  });
+
+  it('handles concurrent memory searches and returns per-request results', async () => {
+    const sourceGroup = 'other-group';
+
+    const writeIds = Array.from({ length: 6 }).map(() => rid('mw-base'));
+    for (let i = 0; i < writeIds.length; i++) {
+      await processTaskIpc(
+        {
+          type: 'memory_write',
+          requestId: writeIds[i],
+          content: `Search baseline memory ${i}`,
+          layer: 'canonical',
+          memory_type: 'summary',
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+      readMemoryIpcResult(sourceGroup, writeIds[i]);
+    }
+
+    const searchTasks = Array.from({ length: 8 }).map(() => {
+      const requestId = rid('ms-concurrent');
+      return {
+        requestId,
+        promise: processTaskIpc(
+          {
+            type: 'memory_search',
+            requestId,
+            query: 'baseline',
+            mode: 'hybrid',
+            limit: 5,
+          },
+          sourceGroup,
+          false,
+          deps,
+        ),
+      };
+    });
+
+    await Promise.all(searchTasks.map((t) => t.promise));
+
+    for (const t of searchTasks) {
+      const res = readMemoryIpcResult(sourceGroup, t.requestId);
+      expect(Array.isArray(res.hits)).toBe(true);
+      expect(res.hits.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('memory_metrics stays consistent under concurrent operations', async () => {
+    const sourceGroup = 'other-group';
+
+    const writeTasks = Array.from({ length: 5 }).map((_, i) => {
+      const requestId = rid('mw-metrics');
+      return {
+        requestId,
+        promise: processTaskIpc(
+          {
+            type: 'memory_write',
+            requestId,
+            content: `Metrics seed ${i}`,
+            layer: 'canonical',
+            memory_type: 'fact',
+          },
+          sourceGroup,
+          false,
+          deps,
+        ),
+      };
+    });
+    await Promise.all(writeTasks.map((t) => t.promise));
+    for (const t of writeTasks) readMemoryIpcResult(sourceGroup, t.requestId);
+
+    const listTasks = Array.from({ length: 2 }).map(() => {
+      const requestId = rid('ml-metrics');
+      return {
+        requestId,
+        promise: processTaskIpc(
+          { type: 'memory_list', requestId, limit: 50 },
+          sourceGroup,
+          false,
+          deps,
+        ),
+      };
+    });
+    const searchTasks = Array.from({ length: 3 }).map(() => {
+      const requestId = rid('ms-metrics');
+      return {
+        requestId,
+        promise: processTaskIpc(
+          {
+            type: 'memory_search',
+            requestId,
+            query: 'Metrics',
+            mode: 'hybrid',
+            limit: 5,
+          },
+          sourceGroup,
+          false,
+          deps,
+        ),
+      };
+    });
+
+    await Promise.all([
+      ...listTasks.map((t) => t.promise),
+      ...searchTasks.map((t) => t.promise),
+    ]);
+    for (const t of listTasks) readMemoryIpcResult(sourceGroup, t.requestId);
+    for (const t of searchTasks) readMemoryIpcResult(sourceGroup, t.requestId);
+
+    const metricsId = rid('mmet-consistency');
+    await processTaskIpc(
+      { type: 'memory_metrics', requestId: metricsId, hours: 24 },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const metrics = readMemoryIpcResult(sourceGroup, metricsId).summary;
+    const byEvent = new Map(
+      (metrics.byEvent as Array<{ event: string; count: number }>).map((e) => [
+        e.event,
+        e.count,
+      ]),
+    );
+    expect(byEvent.get('write')).toBe(5);
+    expect(byEvent.get('list')).toBe(2);
+    expect(byEvent.get('search:hybrid')).toBe(3);
+    expect(metrics.total).toBe(10);
   });
 });
 

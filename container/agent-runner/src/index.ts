@@ -57,6 +57,7 @@ interface SDKUserMessage {
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
+const ARCHIVE_CHECKPOINT_INTERVAL_MS = 30 * 60 * 1000;
 
 /**
  * Push-based async iterable for streaming user messages to the SDK.
@@ -652,6 +653,10 @@ async function main(): Promise<void> {
 
     log(`Slash command done. compactBoundarySeen=${compactBoundarySeen}, hadError=${hadError}`);
 
+    if (!hadError && compactBoundarySeen) {
+      archiveOnExit(slashSessionId || sessionId, containerInput);
+    }
+
     // Warn if compact_boundary was never observed — compaction may not have occurred
     if (!hadError && !compactBoundarySeen) {
       log('WARNING: compact_boundary was not observed. Compaction may not have completed.');
@@ -676,6 +681,7 @@ async function main(): Promise<void> {
 
   // Query loop: run query → wait for IPC message → run new query → repeat
   let resumeAt: string | undefined;
+  let lastCheckpointAt = Date.now();
   try {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
@@ -687,6 +693,15 @@ async function main(): Promise<void> {
       }
       if (queryResult.lastAssistantUuid) {
         resumeAt = queryResult.lastAssistantUuid;
+      }
+
+      const now = Date.now();
+      if (
+        now - lastCheckpointAt >= ARCHIVE_CHECKPOINT_INTERVAL_MS &&
+        (confirmedSessionId || sessionId)
+      ) {
+        archiveOnExit(confirmedSessionId || sessionId, containerInput);
+        lastCheckpointAt = now;
       }
 
       // If _close was consumed during the query, exit immediately.

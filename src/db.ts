@@ -16,6 +16,8 @@ import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import {
   Delegation,
+  MemoryRecord,
+  MemorySearchResult,
   NewMessage,
   RegisteredGroup,
   ScheduledTask,
@@ -204,6 +206,39 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Structured memory store (new memory system, independent from file-based memory).
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      group_folder TEXT NOT NULL,
+      layer TEXT NOT NULL DEFAULT 'canonical',
+      memory_type TEXT NOT NULL DEFAULT 'preference',
+      status TEXT NOT NULL DEFAULT 'active',
+      content TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'manual',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(group_folder, layer, updated_at);
+  `);
+
+  try {
+    database.exec(`ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'active'`);
+  } catch {
+    /* column already exists */
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS memory_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_folder TEXT NOT NULL,
+      event TEXT NOT NULL,
+      detail TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_metrics_scope_time ON memory_metrics(group_folder, created_at);
+    CREATE INDEX IF NOT EXISTS idx_memory_metrics_event_time ON memory_metrics(event, created_at);
+  `);
 
   // FTS5 full-text search index for messages
   database.exec(`
@@ -240,6 +275,43 @@ function createSchema(database: Database.Database): void {
       SELECT rowid, content FROM messages;
     `);
     logger.info('FTS backfill complete');
+  }
+
+  // FTS5 full-text index for structured memories
+  database.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+      content,
+      content='memories',
+      content_rowid='rowid',
+      tokenize='unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+      INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+      INSERT INTO memories_fts(memories_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+      INSERT INTO memories_fts(memories_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+      INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+  `);
+
+  const memFtsCount = database
+    .prepare(`SELECT COUNT(*) as cnt FROM memories_fts`)
+    .get() as { cnt: number };
+  const memCount = database
+    .prepare(`SELECT COUNT(*) as cnt FROM memories`)
+    .get() as { cnt: number };
+  if (memFtsCount.cnt === 0 && memCount.cnt > 0) {
+    database.exec(`
+      INSERT INTO memories_fts(rowid, content)
+      SELECT rowid, content FROM memories;
+    `);
+    logger.info({ memoryCount: memCount.cnt }, 'Memory FTS backfill complete');
   }
 }
 
@@ -932,6 +1004,130 @@ export function deleteAllWorkflows(): void {
   db.prepare('DELETE FROM workflows').run();
 }
 
+// --- Structured memory accessors ---
+
+export function createMemory(input: {
+  group_folder: string;
+  layer: 'working' | 'episodic' | 'canonical';
+  memory_type: 'preference' | 'rule' | 'fact' | 'summary';
+  content: string;
+  source?: string;
+}): MemoryRecord {
+  const now = Date.now().toString();
+  const id = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(
+    `INSERT INTO memories (id, group_folder, layer, memory_type, status, content, source, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    input.group_folder,
+    input.layer,
+    input.memory_type,
+    'active',
+    input.content.trim(),
+    input.source || 'manual',
+    now,
+    now,
+  );
+  reconcileMemoryStatuses(input.group_folder);
+  return db.prepare(`SELECT * FROM memories WHERE id = ?`).get(id) as MemoryRecord;
+}
+
+export function searchMemories(
+  groupFolder: string,
+  query: string,
+  limit: number = 10,
+): MemorySearchResult[] {
+  try {
+    return db
+      .prepare(
+        `
+      SELECT m.id, m.layer, m.memory_type, m.content, m.updated_at, bm25(memories_fts) AS score
+      FROM memories_fts
+      JOIN memories m ON m.rowid = memories_fts.rowid
+      WHERE memories_fts MATCH ?
+        AND m.group_folder = ?
+        AND m.status != 'deprecated'
+      ORDER BY score ASC, m.updated_at DESC
+      LIMIT ?
+    `,
+      )
+      .all(query, groupFolder, limit) as MemorySearchResult[];
+  } catch (err) {
+    logger.error({ err, groupFolder, query }, 'Memory FTS search failed');
+    return [];
+  }
+}
+
+export function listMemories(
+  groupFolder: string,
+  limit: number = 20,
+): MemoryRecord[] {
+  return db
+    .prepare(
+      `
+      SELECT * FROM memories
+      WHERE group_folder = ?
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `,
+    )
+    .all(groupFolder, limit) as MemoryRecord[];
+}
+
+export function getMemoryById(id: string): MemoryRecord | undefined {
+  return db.prepare(`SELECT * FROM memories WHERE id = ?`).get(id) as
+    | MemoryRecord
+    | undefined;
+}
+
+export function updateMemory(
+  id: string,
+  updates: Partial<
+    Pick<MemoryRecord, 'content' | 'layer' | 'memory_type' | 'source' | 'status'>
+  >,
+): void {
+  const existing = getMemoryById(id);
+  if (!existing) return;
+  const fields: string[] = ['updated_at = ?'];
+  const values: unknown[] = [Date.now().toString()];
+
+  if (updates.content !== undefined) {
+    fields.push('content = ?');
+    values.push(updates.content.trim());
+  }
+  if (updates.layer !== undefined) {
+    fields.push('layer = ?');
+    values.push(updates.layer);
+  }
+  if (updates.memory_type !== undefined) {
+    fields.push('memory_type = ?');
+    values.push(updates.memory_type);
+  }
+  if (updates.source !== undefined) {
+    fields.push('source = ?');
+    values.push(updates.source);
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+
+  values.push(id);
+  db.prepare(`UPDATE memories SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+  if (updates.status === undefined || updates.status !== 'deprecated') {
+    reconcileMemoryStatuses(existing.group_folder);
+  }
+}
+
+export function deleteMemory(id: string): void {
+  const existing = getMemoryById(id);
+  db.prepare(`DELETE FROM memories WHERE id = ?`).run(id);
+  if (existing) reconcileMemoryStatuses(existing.group_folder);
+}
+
 // --- Full-text search ---
 
 export interface SearchResult {
@@ -939,6 +1135,254 @@ export interface SearchResult {
   content: string;
   timestamp: string;
   rank: number;
+}
+
+export interface MemoryDuplicateGroup {
+  key: string;
+  ids: string[];
+}
+
+export interface MemoryConflictGroup {
+  key: string;
+  positiveIds: string[];
+  negativeIds: string[];
+}
+
+export interface MemoryDoctorReport {
+  total: number;
+  duplicateGroups: MemoryDuplicateGroup[];
+  conflictGroups: MemoryConflictGroup[];
+  staleWorkingIds: string[];
+}
+
+export interface MemoryGcResult {
+  dryRun: boolean;
+  duplicateDeletedIds: string[];
+  staleDeletedIds: string[];
+}
+
+export interface MemoryMetricSummary {
+  hours: number;
+  total: number;
+  byEvent: Array<{ event: string; count: number }>;
+}
+
+function normalizeMemoryText(content: string): string {
+  return content
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[，。！？；：,.!?;:]/g, ' ')
+    .trim();
+}
+
+function getPolarity(content: string): 1 | -1 | 0 {
+  const c = content.toLowerCase();
+  const hasNegative = /(never|don't|do not|不要|不能|不许|禁止)/.test(c);
+  const hasPositive = /(always|must|请务必|必须|总是)/.test(c);
+  if (hasNegative && !hasPositive) return -1;
+  if (hasPositive && !hasNegative) return 1;
+  return 0;
+}
+
+function polarityKey(content: string): string {
+  return normalizeMemoryText(content)
+    .replace(
+      /\b(always|must|never|don't|do not)\b|不要|不能|不许|禁止|请务必|必须|总是/g,
+      '',
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function reconcileMemoryStatuses(groupFolder: string): void {
+  // Reset non-deprecated rows to active first.
+  db.prepare(
+    `UPDATE memories
+     SET status = 'active'
+     WHERE group_folder = ? AND status != 'deprecated'`,
+  ).run(groupFolder);
+
+  const rows = db
+    .prepare(
+      `SELECT id, layer, memory_type, content, status
+       FROM memories
+       WHERE group_folder = ? AND status != 'deprecated'
+       ORDER BY updated_at DESC`,
+    )
+    .all(groupFolder) as Array<{
+      id: string;
+      layer: string;
+      memory_type: string;
+      content: string;
+      status: string;
+    }>;
+
+  const conflictMap = new Map<
+    string,
+    { positiveIds: string[]; negativeIds: string[] }
+  >();
+  for (const row of rows) {
+    const polarity = getPolarity(row.content);
+    if (polarity === 0) continue;
+    const key = `${row.layer}|${row.memory_type}|${polarityKey(row.content)}`;
+    if (!key || key.endsWith('|')) continue;
+    const slot = conflictMap.get(key) || { positiveIds: [], negativeIds: [] };
+    if (polarity > 0) slot.positiveIds.push(row.id);
+    else slot.negativeIds.push(row.id);
+    conflictMap.set(key, slot);
+  }
+
+  const markStmt = db.prepare(`UPDATE memories SET status = 'conflicted' WHERE id = ?`);
+  for (const slot of conflictMap.values()) {
+    if (slot.positiveIds.length === 0 || slot.negativeIds.length === 0) continue;
+    for (const id of [...slot.positiveIds, ...slot.negativeIds]) {
+      markStmt.run(id);
+    }
+  }
+}
+
+export function doctorMemories(
+  groupFolder: string,
+  staleWorkingDays: number = 7,
+): MemoryDoctorReport {
+  const memories = listMemories(groupFolder, 2000);
+  const duplicateMap = new Map<string, string[]>();
+  for (const m of memories) {
+    const key = `${m.layer}|${m.memory_type}|${normalizeMemoryText(m.content)}`;
+    const arr = duplicateMap.get(key) || [];
+    arr.push(m.id);
+    duplicateMap.set(key, arr);
+  }
+
+  const duplicateGroups: MemoryDuplicateGroup[] = [];
+  for (const [key, ids] of duplicateMap.entries()) {
+    if (ids.length > 1) duplicateGroups.push({ key, ids });
+  }
+
+  const conflictMap = new Map<
+    string,
+    { positiveIds: string[]; negativeIds: string[] }
+  >();
+  for (const m of memories) {
+    const polarity = getPolarity(m.content);
+    if (polarity === 0) continue;
+    const key = `${m.layer}|${m.memory_type}|${polarityKey(m.content)}`;
+    if (!key || key.endsWith('|')) continue;
+    const slot = conflictMap.get(key) || { positiveIds: [], negativeIds: [] };
+    if (polarity > 0) slot.positiveIds.push(m.id);
+    else slot.negativeIds.push(m.id);
+    conflictMap.set(key, slot);
+  }
+
+  const conflictGroups: MemoryConflictGroup[] = [];
+  for (const [key, slot] of conflictMap.entries()) {
+    if (slot.positiveIds.length > 0 && slot.negativeIds.length > 0) {
+      conflictGroups.push({
+        key,
+        positiveIds: slot.positiveIds,
+        negativeIds: slot.negativeIds,
+      });
+    }
+  }
+
+  const staleCutoff = Date.now() - staleWorkingDays * 24 * 60 * 60 * 1000;
+  const staleWorkingIds = memories
+    .filter((m) => m.layer === 'working')
+    .filter(
+      (m) => Number(m.updated_at) > 0 && Number(m.updated_at) < staleCutoff,
+    )
+    .map((m) => m.id);
+
+  return {
+    total: memories.length,
+    duplicateGroups,
+    conflictGroups,
+    staleWorkingIds,
+  };
+}
+
+export function gcMemories(
+  groupFolder: string,
+  opts?: { dryRun?: boolean; staleWorkingDays?: number },
+): MemoryGcResult {
+  const dryRun = opts?.dryRun !== undefined ? opts.dryRun : true;
+  const staleWorkingDays = opts?.staleWorkingDays ?? 14;
+  const memories = listMemories(groupFolder, 4000);
+
+  const dupGroups = new Map<string, MemoryRecord[]>();
+  for (const m of memories) {
+    const key = `${m.layer}|${m.memory_type}|${normalizeMemoryText(m.content)}`;
+    const arr = dupGroups.get(key) || [];
+    arr.push(m);
+    dupGroups.set(key, arr);
+  }
+
+  const duplicateDeletedIds: string[] = [];
+  for (const arr of dupGroups.values()) {
+    if (arr.length <= 1) continue;
+    arr.sort((a, b) => Number(b.updated_at) - Number(a.updated_at));
+    for (const m of arr.slice(1)) duplicateDeletedIds.push(m.id);
+  }
+
+  const cutoff = Date.now() - staleWorkingDays * 24 * 60 * 60 * 1000;
+  const staleDeletedIds = memories
+    .filter((m) => m.layer === 'working')
+    .filter((m) => Number(m.updated_at) > 0 && Number(m.updated_at) < cutoff)
+    .map((m) => m.id);
+
+  if (!dryRun) {
+    const ids = Array.from(new Set([...duplicateDeletedIds, ...staleDeletedIds]));
+    const stmt = db.prepare(`DELETE FROM memories WHERE id = ?`);
+    for (const id of ids) stmt.run(id);
+  }
+
+  return {
+    dryRun,
+    duplicateDeletedIds,
+    staleDeletedIds,
+  };
+}
+
+export function recordMemoryMetric(
+  groupFolder: string,
+  event: string,
+  detail?: string,
+): void {
+  db.prepare(
+    `INSERT INTO memory_metrics (group_folder, event, detail, created_at)
+     VALUES (?, ?, ?, ?)`,
+  ).run(groupFolder, event, detail || null, Date.now().toString());
+}
+
+export function getMemoryMetricSummary(
+  groupFolder: string,
+  hours: number = 24,
+): MemoryMetricSummary {
+  const safeHours = Math.max(1, Math.min(hours, 24 * 30));
+  const since = Date.now() - safeHours * 60 * 60 * 1000;
+  const totalRow = db
+    .prepare(
+      `SELECT COUNT(*) as cnt
+       FROM memory_metrics
+       WHERE group_folder = ? AND CAST(created_at AS INTEGER) >= ?`,
+    )
+    .get(groupFolder, since) as { cnt: number };
+
+  const byEvent = db
+    .prepare(
+      `SELECT event, COUNT(*) as count
+       FROM memory_metrics
+       WHERE group_folder = ? AND CAST(created_at AS INTEGER) >= ?
+       GROUP BY event
+       ORDER BY count DESC, event ASC`,
+    )
+    .all(groupFolder, since) as Array<{ event: string; count: number }>;
+
+  return {
+    hours: safeHours,
+    total: totalRow.cnt || 0,
+    byEvent,
+  };
 }
 
 /**

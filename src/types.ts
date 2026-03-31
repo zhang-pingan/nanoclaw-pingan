@@ -130,6 +130,27 @@ export interface Workflow {
   updated_at: string;
 }
 
+export interface MemoryRecord {
+  id: string;
+  group_folder: string;
+  layer: 'working' | 'episodic' | 'canonical';
+  memory_type: 'preference' | 'rule' | 'fact' | 'summary';
+  status: 'active' | 'conflicted' | 'deprecated';
+  content: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemorySearchResult {
+  id: string;
+  layer: MemoryRecord['layer'];
+  memory_type: MemoryRecord['memory_type'];
+  content: string;
+  updated_at: string;
+  score: number;
+}
+
 // --- Channel abstraction ---
 
 /** @internal Feishu-specific card format — used only inside the Feishu channel. */

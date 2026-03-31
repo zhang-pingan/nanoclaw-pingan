@@ -2,16 +2,26 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import {
   _initTestDatabase,
+  createMemory,
   createTask,
+  deleteMemory,
   deleteTask,
+  doctorMemories,
+  gcMemories,
+  getMemoryById,
+  getMemoryMetricSummary,
   getAllChats,
   getAllRegisteredGroups,
   getMessagesSince,
   getNewMessages,
   getTaskById,
+  listMemories,
+  recordMemoryMetric,
+  searchMemories,
   setRegisteredGroup,
   storeChatMetadata,
   storeMessage,
+  updateMemory,
   updateTask,
 } from './db.js';
 
@@ -480,5 +490,154 @@ describe('registered group isMain', () => {
     const group = groups['group@g.us'];
     expect(group).toBeDefined();
     expect(group.isMain).toBeUndefined();
+  });
+});
+
+// --- Structured memory ---
+
+describe('structured memory CRUD/search/status', () => {
+  it('creates, lists, updates, deletes memories', () => {
+    const created = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'preference',
+      content: 'Always reply in Chinese',
+    });
+    expect(created.id).toMatch(/^mem-/);
+
+    const listed = listMemories('web_main', 10);
+    expect(listed).toHaveLength(1);
+    expect(listed[0].status).toBe('active');
+
+    updateMemory(created.id, {
+      content: 'Always reply in Chinese for this group',
+      memory_type: 'rule',
+    });
+    const updated = getMemoryById(created.id)!;
+    expect(updated.content).toContain('this group');
+    expect(updated.memory_type).toBe('rule');
+
+    deleteMemory(created.id);
+    expect(getMemoryById(created.id)).toBeUndefined();
+  });
+
+  it('memory_search includes structured memory hits and excludes deprecated ones', () => {
+    const m1 = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'Service foo uses branch main',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'episodic',
+      memory_type: 'summary',
+      content: 'Yesterday fixed foo timeout',
+    });
+
+    let hits = searchMemories('web_main', 'foo', 10);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.some((h) => h.id === m1.id)).toBe(true);
+
+    updateMemory(m1.id, { status: 'deprecated' });
+    hits = searchMemories('web_main', 'foo', 10);
+    expect(hits.some((h) => h.id === m1.id)).toBe(false);
+  });
+
+  it('marks contradictory rules as conflicted automatically', () => {
+    const pos = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Always use send_message for progress',
+    });
+    const neg = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Never use send_message for progress',
+    });
+
+    const p = getMemoryById(pos.id)!;
+    const n = getMemoryById(neg.id)!;
+    expect(p.status).toBe('conflicted');
+    expect(n.status).toBe('conflicted');
+  });
+});
+
+describe('memory doctor/gc/metrics', () => {
+  it('doctor reports duplicates, conflicts, stale working', () => {
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'preference',
+      content: 'Always reply in Chinese',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'preference',
+      content: 'Always reply in Chinese',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Always include summary',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Never include summary',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'working',
+      memory_type: 'summary',
+      content: 'temporary context',
+    });
+
+    const report = doctorMemories('web_main', -1);
+    expect(report.duplicateGroups.length).toBeGreaterThan(0);
+    expect(report.conflictGroups.length).toBeGreaterThan(0);
+    expect(report.staleWorkingIds.length).toBeGreaterThan(0);
+  });
+
+  it('gc supports dry-run and execute', () => {
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'API endpoint is /v1/orders',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'API endpoint is /v1/orders',
+    });
+
+    const dry = gcMemories('web_main', { dryRun: true, staleWorkingDays: 365 });
+    expect(dry.dryRun).toBe(true);
+    expect(dry.duplicateDeletedIds.length).toBe(1);
+    expect(listMemories('web_main', 20).length).toBe(2);
+
+    const run = gcMemories('web_main', { dryRun: false, staleWorkingDays: 365 });
+    expect(run.dryRun).toBe(false);
+    expect(listMemories('web_main', 20).length).toBe(1);
+  });
+
+  it('aggregates metric summary by event', () => {
+    recordMemoryMetric('web_main', 'write', 'layer=canonical');
+    recordMemoryMetric('web_main', 'write', 'layer=working');
+    recordMemoryMetric('web_main', 'search:hybrid', 'q=foo');
+
+    const summary = getMemoryMetricSummary('web_main', 24);
+    expect(summary.total).toBe(3);
+    const writeRow = summary.byEvent.find((e) => e.event === 'write');
+    const searchRow = summary.byEvent.find((e) => e.event === 'search:hybrid');
+    expect(writeRow?.count).toBe(2);
+    expect(searchRow?.count).toBe(1);
   });
 });

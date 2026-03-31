@@ -37,6 +37,7 @@ import {
   getAllRegisteredGroups,
   getAllSessions,
   getAllTasks,
+  listMemories,
   getMessagesSince,
   getNewMessages,
   getRegisteredGroup,
@@ -73,6 +74,7 @@ import {
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, InteractiveCard, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
+import { buildMemoryPack } from './memory-pack.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -273,6 +275,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   }
 
   let prompt = formatMessages(missedMessages, TIMEZONE);
+  const memoryPack = buildMemoryPack(listMemories(group.folder, 600), prompt);
+  if (memoryPack) {
+    prompt = `${memoryPack}${prompt}`;
+  }
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
