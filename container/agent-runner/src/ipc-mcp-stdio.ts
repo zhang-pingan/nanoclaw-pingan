@@ -864,6 +864,103 @@ server.tool(
 );
 
 server.tool(
+  'memory_resolve_conflict',
+  `Resolve a conflict between two conflicted memories. Two modes:
+- **keep**: Keep one memory as active, deprecate the other. Provide keep_id and deprecate_id.
+- **merge**: Deprecate both and create a new merged memory. Provide merge_ids (array of 2 IDs) and merged_content.
+
+Use memory_doctor or memory_list to find conflicted memories first.`,
+  {
+    mode: z.enum(['keep', 'merge']).describe('Resolution mode: "keep" to keep one and deprecate the other, "merge" to combine both into a new memory'),
+    keep_id: z.string().optional().describe('(keep mode) ID of the memory to keep as active'),
+    deprecate_id: z.string().optional().describe('(keep mode) ID of the memory to deprecate'),
+    merge_ids: z.array(z.string()).optional().describe('(merge mode) Array of exactly 2 memory IDs to merge'),
+    merged_content: z.string().optional().describe('(merge mode) The new merged content that replaces both conflicting memories'),
+  },
+  async (args) => {
+    const requestId = `memrc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const data: Record<string, unknown> = {
+      type: 'memory_resolve_conflict',
+      mode: args.mode,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (args.mode === 'keep') {
+      if (!args.keep_id || !args.deprecate_id) {
+        return {
+          content: [{ type: 'text' as const, text: 'keep 模式需要 keep_id 和 deprecate_id。' }],
+          isError: true,
+        };
+      }
+      data.keep_id = args.keep_id;
+      data.deprecate_id = args.deprecate_id;
+    } else {
+      if (!args.merge_ids || args.merge_ids.length !== 2 || !args.merged_content) {
+        return {
+          content: [{ type: 'text' as const, text: 'merge 模式需要 merge_ids（2个ID）和 merged_content。' }],
+          isError: true,
+        };
+      }
+      data.merge_ids = args.merge_ids;
+      data.merged_content = args.merged_content;
+    }
+
+    writeIpcFile(TASKS_DIR, data);
+
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const raw = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          if (raw.error) {
+            return {
+              content: [{ type: 'text' as const, text: `冲突解决失败: ${raw.error}` }],
+              isError: true,
+            };
+          }
+          const result = raw.result;
+          if (!result) {
+            return {
+              content: [{ type: 'text' as const, text: '冲突解决未返回结果。' }],
+              isError: true,
+            };
+          }
+          const lines: string[] = ['冲突已解决。'];
+          if (args.mode === 'keep') {
+            lines.push(`保留: ${result.kept.id} — ${result.kept.content.slice(0, 80)}`);
+            lines.push(`废弃: ${result.deprecated.id} — ${result.deprecated.content.slice(0, 80)}`);
+          } else {
+            lines.push(`新记忆: ${result.merged.id} — ${result.merged.content.slice(0, 80)}`);
+            for (const dep of result.deprecated) {
+              lines.push(`废弃: ${dep.id} — ${dep.content.slice(0, 80)}`);
+            }
+          }
+          return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `冲突解决结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_resolve_conflict 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
   'delegate_task',
   `Delegate a task to another group's agent. Main group only. The target agent processes the task and returns results as a [委派结果] message. Be specific — the target has no context from this conversation.
   Tips:

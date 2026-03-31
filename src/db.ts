@@ -228,6 +228,12 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  try {
+    database.exec(`ALTER TABLE memories ADD COLUMN metadata TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
   database.exec(`
     CREATE TABLE IF NOT EXISTS memory_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1012,12 +1018,13 @@ export function createMemory(input: {
   memory_type: 'preference' | 'rule' | 'fact' | 'summary';
   content: string;
   source?: string;
+  metadata?: string;
 }): MemoryRecord {
   const now = Date.now().toString();
   const id = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   db.prepare(
-    `INSERT INTO memories (id, group_folder, layer, memory_type, status, content, source, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO memories (id, group_folder, layer, memory_type, status, content, source, metadata, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     input.group_folder,
@@ -1026,6 +1033,7 @@ export function createMemory(input: {
     'active',
     input.content.trim(),
     input.source || 'manual',
+    input.metadata || null,
     now,
     now,
   );
@@ -1084,7 +1092,7 @@ export function getMemoryById(id: string): MemoryRecord | undefined {
 export function updateMemory(
   id: string,
   updates: Partial<
-    Pick<MemoryRecord, 'content' | 'layer' | 'memory_type' | 'source' | 'status'>
+    Pick<MemoryRecord, 'content' | 'layer' | 'memory_type' | 'source' | 'status' | 'metadata'>
   >,
 ): void {
   const existing = getMemoryById(id);
@@ -1111,6 +1119,10 @@ export function updateMemory(
   if (updates.status !== undefined) {
     fields.push('status = ?');
     values.push(updates.status);
+  }
+  if (updates.metadata !== undefined) {
+    fields.push('metadata = ?');
+    values.push(updates.metadata);
   }
 
   values.push(id);
@@ -1239,6 +1251,134 @@ function reconcileMemoryStatuses(groupFolder: string): void {
       markStmt.run(id);
     }
   }
+}
+
+export interface ResolveConflictKeepResult {
+  kept: MemoryRecord;
+  deprecated: MemoryRecord;
+}
+
+export interface ResolveConflictMergeResult {
+  merged: MemoryRecord;
+  deprecated: [MemoryRecord, MemoryRecord];
+}
+
+export function resolveConflict(
+  mode: 'keep',
+  opts: { keepId: string; deprecateId: string; groupFolder: string },
+): ResolveConflictKeepResult;
+export function resolveConflict(
+  mode: 'merge',
+  opts: { mergeIds: [string, string]; mergedContent: string; groupFolder: string },
+): ResolveConflictMergeResult;
+export function resolveConflict(
+  mode: 'keep' | 'merge',
+  opts: {
+    keepId?: string;
+    deprecateId?: string;
+    mergeIds?: [string, string];
+    mergedContent?: string;
+    groupFolder: string;
+  },
+): ResolveConflictKeepResult | ResolveConflictMergeResult {
+  const now = new Date().toISOString();
+
+  if (mode === 'keep') {
+    const { keepId, deprecateId, groupFolder } = opts;
+    if (!keepId || !deprecateId) throw new Error('keep mode requires keepId and deprecateId');
+
+    const keepMem = getMemoryById(keepId);
+    const deprecateMem = getMemoryById(deprecateId);
+    if (!keepMem) throw new Error(`Memory not found: ${keepId}`);
+    if (!deprecateMem) throw new Error(`Memory not found: ${deprecateId}`);
+    if (keepMem.group_folder !== groupFolder) throw new Error(`Memory ${keepId} does not belong to group ${groupFolder}`);
+    if (deprecateMem.group_folder !== groupFolder) throw new Error(`Memory ${deprecateId} does not belong to group ${groupFolder}`);
+    if (keepMem.status !== 'conflicted') throw new Error(`Memory ${keepId} is not conflicted (status: ${keepMem.status})`);
+    if (deprecateMem.status !== 'conflicted') throw new Error(`Memory ${deprecateId} is not conflicted (status: ${deprecateMem.status})`);
+
+    const txn = db.transaction(() => {
+      updateMemory(deprecateId, {
+        status: 'deprecated',
+        metadata: JSON.stringify({
+          deprecated_reason: 'conflict_resolution',
+          resolved_by: 'keep',
+          resolved_at: now,
+          counterpart_id: keepId,
+        }),
+      });
+      updateMemory(keepId, {
+        status: 'active',
+        metadata: JSON.stringify({
+          resolved_conflict_with: deprecateId,
+          resolved_at: now,
+        }),
+      });
+    });
+    txn();
+
+    reconcileMemoryStatuses(groupFolder);
+
+    return {
+      kept: getMemoryById(keepId)!,
+      deprecated: getMemoryById(deprecateId)!,
+    };
+  }
+
+  // merge mode
+  const { mergeIds, mergedContent, groupFolder } = opts;
+  if (!mergeIds || mergeIds.length !== 2) throw new Error('merge mode requires exactly 2 mergeIds');
+  if (!mergedContent) throw new Error('merge mode requires mergedContent');
+
+  const memA = getMemoryById(mergeIds[0]);
+  const memB = getMemoryById(mergeIds[1]);
+  if (!memA) throw new Error(`Memory not found: ${mergeIds[0]}`);
+  if (!memB) throw new Error(`Memory not found: ${mergeIds[1]}`);
+  if (memA.group_folder !== groupFolder) throw new Error(`Memory ${mergeIds[0]} does not belong to group ${groupFolder}`);
+  if (memB.group_folder !== groupFolder) throw new Error(`Memory ${mergeIds[1]} does not belong to group ${groupFolder}`);
+  if (memA.status !== 'conflicted') throw new Error(`Memory ${mergeIds[0]} is not conflicted (status: ${memA.status})`);
+  if (memB.status !== 'conflicted') throw new Error(`Memory ${mergeIds[1]} is not conflicted (status: ${memB.status})`);
+
+  let newMem: MemoryRecord;
+
+  const txn = db.transaction(() => {
+    updateMemory(mergeIds[0], {
+      status: 'deprecated',
+      metadata: JSON.stringify({
+        deprecated_reason: 'conflict_resolution',
+        resolved_by: 'merge',
+        resolved_at: now,
+        counterpart_id: mergeIds[1],
+      }),
+    });
+    updateMemory(mergeIds[1], {
+      status: 'deprecated',
+      metadata: JSON.stringify({
+        deprecated_reason: 'conflict_resolution',
+        resolved_by: 'merge',
+        resolved_at: now,
+        counterpart_id: mergeIds[0],
+      }),
+    });
+    newMem = createMemory({
+      group_folder: memA.group_folder,
+      layer: memA.layer,
+      memory_type: memA.memory_type,
+      content: mergedContent,
+      source: 'conflict_resolution',
+      metadata: JSON.stringify({
+        merged_from: [mergeIds[0], mergeIds[1]],
+        resolved_at: now,
+      }),
+    });
+  });
+  txn();
+
+  reconcileMemoryStatuses(groupFolder);
+
+  return {
+    merged: newMem!,
+    deprecated: [getMemoryById(mergeIds[0])!, getMemoryById(mergeIds[1])!],
+  };
 }
 
 export function doctorMemories(

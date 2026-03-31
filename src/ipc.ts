@@ -39,6 +39,7 @@ import {
   getTaskById,
   listMemories,
   recordMemoryMetric,
+  resolveConflict,
   searchMemories,
   searchMessages,
   storeChatMetadata,
@@ -326,6 +327,11 @@ export async function processTaskIpc(
     dryRun?: boolean;
     staleDays?: number;
     hours?: number;
+    // For memory_resolve_conflict
+    keep_id?: string;
+    deprecate_id?: string;
+    merge_ids?: string[];
+    merged_content?: string;
     // For delegate_task / complete_delegation / request_delegation
     delegationId?: string;
     targetGroupJid?: string;
@@ -1141,6 +1147,48 @@ export async function processTaskIpc(
       }
       const summary = getMemoryMetricSummary(sourceGroup, data.hours || 24);
       writeMemoryResult(sourceGroup, data.requestId, { summary });
+      break;
+    }
+
+    case 'memory_resolve_conflict': {
+      if (!data.requestId || !data.mode) {
+        logger.warn({ sourceGroup }, 'memory_resolve_conflict missing requestId or mode');
+        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing required fields (requestId, mode)' });
+        break;
+      }
+      try {
+        if (data.mode === 'keep') {
+          if (!data.keep_id || !data.deprecate_id) {
+            writeMemoryResult(sourceGroup, data.requestId, { error: 'keep mode requires keep_id and deprecate_id' });
+            break;
+          }
+          const result = resolveConflict('keep', {
+            keepId: data.keep_id,
+            deprecateId: data.deprecate_id,
+            groupFolder: sourceGroup,
+          });
+          writeMemoryResult(sourceGroup, data.requestId, { result });
+          recordMemoryMetric(sourceGroup, 'conflict:resolved', `mode=keep`);
+        } else if (data.mode === 'merge') {
+          if (!data.merge_ids || data.merge_ids.length !== 2 || !data.merged_content) {
+            writeMemoryResult(sourceGroup, data.requestId, { error: 'merge mode requires merge_ids (2 IDs) and merged_content' });
+            break;
+          }
+          const result = resolveConflict('merge', {
+            mergeIds: data.merge_ids as [string, string],
+            mergedContent: data.merged_content,
+            groupFolder: sourceGroup,
+          });
+          writeMemoryResult(sourceGroup, data.requestId, { result });
+          recordMemoryMetric(sourceGroup, 'conflict:resolved', `mode=merge`);
+        } else {
+          writeMemoryResult(sourceGroup, data.requestId, { error: `Unknown mode: ${data.mode}. Use "keep" or "merge".` });
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logger.error({ err, sourceGroup }, 'memory_resolve_conflict failed');
+        writeMemoryResult(sourceGroup, data.requestId, { error: errMsg });
+      }
       break;
     }
 

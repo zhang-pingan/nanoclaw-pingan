@@ -138,6 +138,7 @@ export interface MemoryRecord {
   status: 'active' | 'conflicted' | 'deprecated';
   content: string;
   source: string;
+  metadata?: string;
   created_at: string;
   updated_at: string;
 }

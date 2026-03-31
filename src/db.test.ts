@@ -17,6 +17,7 @@ import {
   getTaskById,
   listMemories,
   recordMemoryMetric,
+  resolveConflict,
   searchMemories,
   setRegisteredGroup,
   storeChatMetadata,
@@ -639,5 +640,118 @@ describe('memory doctor/gc/metrics', () => {
     const searchRow = summary.byEvent.find((e) => e.event === 'search:hybrid');
     expect(writeRow?.count).toBe(2);
     expect(searchRow?.count).toBe(1);
+  });
+});
+
+describe('memory_resolve_conflict', () => {
+  it('keep mode: keeps one memory active, deprecates the other with audit trail', () => {
+    const pos = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Always use send_message for progress',
+    });
+    const neg = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Never use send_message for progress',
+    });
+
+    // Both should be conflicted
+    expect(getMemoryById(pos.id)!.status).toBe('conflicted');
+    expect(getMemoryById(neg.id)!.status).toBe('conflicted');
+
+    const result = resolveConflict('keep', {
+      keepId: pos.id,
+      deprecateId: neg.id,
+      groupFolder: 'web_main',
+    });
+
+    // Verify kept memory
+    expect(result.kept.status).toBe('active');
+    const keptMeta = JSON.parse(result.kept.metadata!);
+    expect(keptMeta.resolved_conflict_with).toBe(neg.id);
+    expect(keptMeta.resolved_at).toBeDefined();
+
+    // Verify deprecated memory
+    expect(result.deprecated.status).toBe('deprecated');
+    const depMeta = JSON.parse(result.deprecated.metadata!);
+    expect(depMeta.deprecated_reason).toBe('conflict_resolution');
+    expect(depMeta.resolved_by).toBe('keep');
+    expect(depMeta.counterpart_id).toBe(pos.id);
+  });
+
+  it('merge mode: deprecates both and creates merged memory with audit trail', () => {
+    const pos = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Always use send_message for progress',
+    });
+    const neg = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Never use send_message for progress',
+    });
+
+    expect(getMemoryById(pos.id)!.status).toBe('conflicted');
+    expect(getMemoryById(neg.id)!.status).toBe('conflicted');
+
+    const result = resolveConflict('merge', {
+      mergeIds: [pos.id, neg.id],
+      mergedContent: 'Use send_message for important progress only',
+      groupFolder: 'web_main',
+    });
+
+    // Verify merged memory
+    expect(result.merged.status).toBe('active');
+    expect(result.merged.content).toBe('Use send_message for important progress only');
+    const mergedMeta = JSON.parse(result.merged.metadata!);
+    expect(mergedMeta.merged_from).toEqual([pos.id, neg.id]);
+    expect(mergedMeta.resolved_at).toBeDefined();
+
+    // Verify both originals deprecated
+    expect(result.deprecated[0].status).toBe('deprecated');
+    expect(result.deprecated[1].status).toBe('deprecated');
+    const depMetaA = JSON.parse(result.deprecated[0].metadata!);
+    expect(depMetaA.resolved_by).toBe('merge');
+    expect(depMetaA.deprecated_reason).toBe('conflict_resolution');
+  });
+
+  it('throws error when memory is not conflicted', () => {
+    const mem1 = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'API endpoint is /v1/orders',
+    });
+    const mem2 = createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'API version is v2',
+    });
+
+    // These are not conflicted (no polarity clash)
+    expect(getMemoryById(mem1.id)!.status).toBe('active');
+    expect(getMemoryById(mem2.id)!.status).toBe('active');
+
+    expect(() =>
+      resolveConflict('keep', {
+        keepId: mem1.id,
+        deprecateId: mem2.id,
+        groupFolder: 'web_main',
+      }),
+    ).toThrow(/not conflicted/);
+
+    expect(() =>
+      resolveConflict('merge', {
+        mergeIds: [mem1.id, mem2.id],
+        mergedContent: 'combined',
+        groupFolder: 'web_main',
+      }),
+    ).toThrow(/not conflicted/);
   });
 });
