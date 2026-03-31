@@ -35,9 +35,6 @@ Text inside `<internal>` tags is logged but not sent to the user. If you've alre
 
 When working as a sub-agent or teammate, only use `send_message` if instructed to by the main agent.
 
-## User Memory
-<!-- 当用户要求你记住某事、纠正你的行为、或表达应跨会话保留的偏好时，立即用 Edit 工具在此追加一行。不要只口头回应。 -->
-
 ---
 
 ## Memory

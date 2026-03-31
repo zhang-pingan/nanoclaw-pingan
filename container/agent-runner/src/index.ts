@@ -16,6 +16,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 
@@ -57,7 +58,7 @@ interface SDKUserMessage {
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
-const ARCHIVE_CHECKPOINT_INTERVAL_MS = 30 * 60 * 1000;
+
 
 /**
  * Push-based async iterable for streaming user messages to the SDK.
@@ -159,8 +160,29 @@ function findTranscriptPath(sessionId: string): string | null {
 }
 
 /**
+ * Extract hash from an archive file's YAML front matter.
+ * Reads only the first 512 bytes for efficiency.
+ * Returns null if no front matter or no hash line found.
+ */
+function extractHashFromArchive(filePath: string): string | null {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(512);
+    const bytesRead = fs.readSync(fd, buf, 0, 512, 0);
+    fs.closeSync(fd);
+    const head = buf.toString('utf-8', 0, bytesRead);
+    if (!head.startsWith('---')) return null;
+    const match = head.match(/^hash:\s*(\S+)/m);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Archive transcript to conversations/ on container exit.
  * Uses sessionId prefix in filename so the same session overwrites its own archive.
+ * Includes YAML front matter with metadata and hash-based deduplication.
  */
 function archiveOnExit(sessionId: string | undefined, input: ContainerInput): void {
   if (!sessionId) return;
@@ -186,9 +208,37 @@ function archiveOnExit(sessionId: string | undefined, input: ContainerInput): vo
     const conversationsDir = '/workspace/group/conversations';
     fs.mkdirSync(conversationsDir, { recursive: true });
 
-    const markdown = formatTranscriptMarkdown(messages, summary, input.assistantName);
+    // Generate markdown body (without metadata) to compute hash
+    const bodyMarkdown = formatTranscriptMarkdown(messages, summary, input.assistantName);
+    const hash = crypto.createHash('sha256').update(bodyMarkdown).digest('hex').slice(0, 16);
+
+    // Hash dedup: scan existing archives
+    try {
+      const existingFiles = fs.readdirSync(conversationsDir).filter(f => f.endsWith('.md'));
+      for (const file of existingFiles) {
+        const existingHash = extractHashFromArchive(path.join(conversationsDir, file));
+        if (existingHash === hash) {
+          log(`Exit archive: skipped (duplicate hash ${hash} in ${file})`);
+          return;
+        }
+      }
+    } catch {
+      // If scan fails, proceed with writing
+    }
+
+    // Build metadata
+    const round = messages.filter(m => m.role === 'user').length;
+    const metadata: ArchiveMetadata = {
+      session: sessionId,
+      round,
+      hash,
+      source: 'exit',
+      created_at: new Date().toISOString(),
+    };
+
+    const markdown = formatTranscriptMarkdown(messages, summary, input.assistantName, metadata);
     fs.writeFileSync(path.join(conversationsDir, filename), markdown);
-    log(`Exit archive: ${filename}`);
+    log(`Exit archive: ${filename} (hash=${hash}, round=${round})`);
   } catch (err) {
     log(`Exit archive failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -257,7 +307,15 @@ function parseTranscript(content: string): ParsedMessage[] {
   return messages;
 }
 
-function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | null, assistantName?: string): string {
+interface ArchiveMetadata {
+  session: string;
+  round: number;
+  hash: string;
+  source: string;
+  created_at: string;
+}
+
+function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | null, assistantName?: string, metadata?: ArchiveMetadata): string {
   const now = new Date();
   const formatDateTime = (d: Date) => d.toLocaleString('en-US', {
     month: 'short',
@@ -268,6 +326,18 @@ function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | nu
   });
 
   const lines: string[] = [];
+
+  if (metadata) {
+    lines.push('---');
+    lines.push(`session: ${metadata.session}`);
+    lines.push(`round: ${metadata.round}`);
+    lines.push(`hash: ${metadata.hash}`);
+    lines.push(`source: ${metadata.source}`);
+    lines.push(`created_at: ${metadata.created_at}`);
+    lines.push('---');
+    lines.push('');
+  }
+
   lines.push(`# ${title || 'Conversation'}`);
   lines.push('');
   lines.push(`Archived: ${formatDateTime(now)}`);
@@ -653,10 +723,6 @@ async function main(): Promise<void> {
 
     log(`Slash command done. compactBoundarySeen=${compactBoundarySeen}, hadError=${hadError}`);
 
-    if (!hadError && compactBoundarySeen) {
-      archiveOnExit(slashSessionId || sessionId, containerInput);
-    }
-
     // Warn if compact_boundary was never observed — compaction may not have occurred
     if (!hadError && !compactBoundarySeen) {
       log('WARNING: compact_boundary was not observed. Compaction may not have completed.');
@@ -681,7 +747,6 @@ async function main(): Promise<void> {
 
   // Query loop: run query → wait for IPC message → run new query → repeat
   let resumeAt: string | undefined;
-  let lastCheckpointAt = Date.now();
   try {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
@@ -693,15 +758,6 @@ async function main(): Promise<void> {
       }
       if (queryResult.lastAssistantUuid) {
         resumeAt = queryResult.lastAssistantUuid;
-      }
-
-      const now = Date.now();
-      if (
-        now - lastCheckpointAt >= ARCHIVE_CHECKPOINT_INTERVAL_MS &&
-        (confirmedSessionId || sessionId)
-      ) {
-        archiveOnExit(confirmedSessionId || sessionId, containerInput);
-        lastCheckpointAt = now;
       }
 
       // If _close was consumed during the query, exit immediately.
