@@ -57,6 +57,7 @@ var pendingFilesEl = document.getElementById("pending-files-preview");
 var pendingFilesContent = document.getElementById("pending-files-content");
 var pendingFilesClose = document.getElementById("pending-files-close");
 var commandPalette = document.getElementById("command-palette");
+var mentionPicker = document.getElementById("mention-picker");
 var selectModeBtn = document.getElementById("select-mode-btn");
 var originalSelectIcon = selectModeBtn.innerHTML; // preserve the original 4-square grid icon
 var multiSelectBar = document.getElementById("multi-select-bar");
@@ -67,6 +68,12 @@ var cancelSelectBtn = document.getElementById("cancel-select-btn");
 var agentStatusInterval = null;
 var agentStatusData = [];
 var activePrimaryNavKey = "agent-groups";
+var mentionSearchInput = null;
+var mentionOptionsEl = null;
+var mentionPickerVisible = false;
+var mentionPickerIndex = -1;
+var mentionCandidates = [];
+var mentionInsertPos = null;
 
 // --- Command palette definitions ---
 var commands = [
@@ -1163,6 +1170,7 @@ async function sendMessage(content) {
   autoResizeInput();
   clearReplyTo();
   hideCommandPalette();
+  hideMentionPicker(false);
 }
 
 // --- Reply handling ---
@@ -1181,6 +1189,7 @@ function clearReplyTo() {
 
 // --- Command palette ---
 function showCommandPalette(filter) {
+  if (mentionPickerVisible) hideMentionPicker(false);
   const filtered = commands.filter((c) => c.name.includes(filter.toLowerCase()));
   if (filtered.length === 0) {
     hideCommandPalette();
@@ -1222,6 +1231,151 @@ function selectCommandPaletteItem() {
   if (cmdPaletteIndex >= 0 && cmdPaletteIndex < items.length) {
     items[cmdPaletteIndex].click();
   }
+}
+
+function fuzzyMatch(text, query) {
+  const source = (text || "").toLowerCase();
+  const target = (query || "").trim().toLowerCase();
+  if (!target) return true;
+  if (source.includes(target)) return true;
+  let j = 0;
+  for (let i = 0; i < source.length && j < target.length; i++) {
+    if (source[i] === target[j]) j++;
+  }
+  return j === target.length;
+}
+
+function getMentionTargets() {
+  const targets = [{ name: "Andy", kind: "assistant" }];
+  const seen = new Set(["andy"]);
+  const folders = groups
+    .filter((g) => g && typeof g.jid === "string" && g.jid.startsWith("web:") && typeof g.folder === "string" && g.folder.trim())
+    .map((g) => g.folder.trim());
+  folders.sort((a, b) => a.localeCompare(b, "zh-CN"));
+
+  for (const folder of folders) {
+    const key = folder.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    targets.push({ name: folder, kind: "groupfolder" });
+  }
+  return targets;
+}
+
+function ensureMentionPickerElements() {
+  if (!mentionPicker || mentionSearchInput || mentionOptionsEl) return;
+
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "mention-search-wrap";
+  mentionSearchInput = document.createElement("input");
+  mentionSearchInput.id = "mention-search-input";
+  mentionSearchInput.type = "text";
+  mentionSearchInput.placeholder = "搜索 Andy 或 group folder";
+  searchWrap.appendChild(mentionSearchInput);
+  mentionPicker.appendChild(searchWrap);
+
+  mentionOptionsEl = document.createElement("div");
+  mentionOptionsEl.id = "mention-options";
+  mentionPicker.appendChild(mentionOptionsEl);
+
+  mentionSearchInput.addEventListener("input", () => {
+    mentionPickerIndex = 0;
+    renderMentionOptions();
+  });
+
+  mentionSearchInput.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      navigateMentionPicker(-1);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      navigateMentionPicker(1);
+      return;
+    }
+    if (e.key === "Enter" || e.key === "Tab") {
+      if (mentionCandidates.length > 0) {
+        e.preventDefault();
+        selectMention(mentionCandidates[Math.max(mentionPickerIndex, 0)].name);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      hideMentionPicker();
+    }
+  });
+}
+
+function renderMentionOptions() {
+  if (!mentionOptionsEl || !mentionSearchInput) return;
+  const query = mentionSearchInput.value || "";
+  mentionCandidates = getMentionTargets().filter((item) => fuzzyMatch(item.name, query));
+  mentionOptionsEl.innerHTML = "";
+
+  if (mentionCandidates.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "mention-empty";
+    empty.textContent = "没有匹配项";
+    mentionOptionsEl.appendChild(empty);
+    mentionPickerIndex = -1;
+    return;
+  }
+
+  if (mentionPickerIndex < 0 || mentionPickerIndex >= mentionCandidates.length) {
+    mentionPickerIndex = 0;
+  }
+
+  mentionCandidates.forEach((item, i) => {
+    const el = document.createElement("div");
+    el.className = `mention-item${i === mentionPickerIndex ? " active" : ""}`;
+    el.innerHTML = `<span class="mention-name">${escapeHtml("@" + item.name)}</span><span class="mention-kind">${escapeHtml(item.kind)}</span>`;
+    el.addEventListener("click", () => selectMention(item.name));
+    mentionOptionsEl.appendChild(el);
+  });
+}
+
+function navigateMentionPicker(direction) {
+  if (!mentionOptionsEl || mentionCandidates.length === 0) return;
+  mentionPickerIndex = (mentionPickerIndex + direction + mentionCandidates.length) % mentionCandidates.length;
+  const items = mentionOptionsEl.querySelectorAll(".mention-item");
+  items.forEach((el, i) => el.classList.toggle("active", i === mentionPickerIndex));
+  items[mentionPickerIndex]?.scrollIntoView({ block: "nearest" });
+}
+
+function showMentionPicker() {
+  if (!mentionPicker) return;
+  hideCommandPalette();
+  ensureMentionPickerElements();
+  mentionInsertPos = messageInput.selectionStart;
+  mentionPickerVisible = true;
+  mentionPicker.classList.add("visible");
+  mentionPickerIndex = 0;
+  if (mentionSearchInput) mentionSearchInput.value = "";
+  renderMentionOptions();
+  mentionSearchInput?.focus();
+}
+
+function hideMentionPicker(restoreFocus = true) {
+  if (!mentionPicker) return;
+  mentionPickerVisible = false;
+  mentionPicker.classList.remove("visible");
+  mentionCandidates = [];
+  mentionPickerIndex = -1;
+  mentionInsertPos = null;
+  if (restoreFocus) messageInput.focus();
+}
+
+function selectMention(name) {
+  const ta = messageInput;
+  const pos = typeof mentionInsertPos === "number" ? mentionInsertPos : ta.selectionStart;
+  const mentionText = `@${name} `;
+  ta.value = ta.value.substring(0, pos) + mentionText + ta.value.substring(pos);
+  ta.selectionStart = ta.selectionEnd = pos + mentionText.length;
+  hideMentionPicker(false);
+  ta.focus();
+  autoResizeInput();
 }
 
 // Stage a file for upload on next send
@@ -1542,12 +1696,9 @@ messageInput.addEventListener("keydown", (e) => {
   }
 
   if (e.key === "@") {
-    const pos = messageInput.selectionStart;
-    const text = "@Andy ";
-    messageInput.value = messageInput.value.substring(0, pos) + text + messageInput.value.substring(pos);
-    messageInput.selectionStart = messageInput.selectionEnd = pos + text.length;
-    autoResizeInput();
     e.preventDefault();
+    showMentionPicker();
+    return;
   }
 
   // Cmd+Shift+7 = ordered list, Cmd+Shift+8 = unordered list
@@ -1564,6 +1715,7 @@ messageInput.addEventListener("keydown", (e) => {
 
 messageInput.addEventListener("input", () => {
   autoResizeInput();
+  if (mentionPickerVisible) hideMentionPicker(false);
   // Command palette trigger
   const val = messageInput.value;
   if (val.startsWith("/") && !val.includes(" ")) {
@@ -1584,12 +1736,15 @@ attachBtn.addEventListener("click", () => {
   fileInput.click();
 });
 document.getElementById("at-btn").addEventListener("click", () => {
-  const ta = messageInput;
-  const pos = ta.selectionStart;
-  ta.value = ta.value.substring(0, pos) + "@Andy " + ta.value.substring(pos);
-  ta.selectionStart = ta.selectionEnd = pos + 6;
-  ta.focus();
-  autoResizeInput();
+  showMentionPicker();
+});
+
+document.addEventListener("mousedown", (e) => {
+  if (!mentionPickerVisible || !mentionPicker) return;
+  const target = e.target;
+  if (mentionPicker.contains(target)) return;
+  if (target && target.closest && target.closest("#at-btn")) return;
+  hideMentionPicker(false);
 });
 
 // Format toolbar - insert list prefix at beginning of current line
@@ -1647,6 +1802,10 @@ copySelectedBtn.addEventListener("click", copySelectedMessages);
 deleteSelectedBtn.addEventListener("click", deleteSelectedMessages);
 cancelSelectBtn.addEventListener("click", exitMultiSelect);
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && mentionPickerVisible) {
+    hideMentionPicker();
+    return;
+  }
   if (e.key === "Escape" && multiSelectMode) {
     exitMultiSelect();
   }

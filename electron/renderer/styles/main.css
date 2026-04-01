@@ -1369,6 +1369,89 @@ html, body {
   display: block;
 }
 
+#mention-picker {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 20px;
+  right: 20px;
+  margin-bottom: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-height: 280px;
+  overflow: hidden;
+  z-index: 101;
+}
+
+#mention-picker.visible {
+  display: block;
+}
+
+.mention-search-wrap {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+#mention-search-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+#mention-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+#mention-options {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 150ms ease;
+  border-bottom: 1px solid var(--border);
+}
+
+.mention-item:last-child {
+  border-bottom: none;
+}
+
+.mention-item:hover,
+.mention-item.active {
+  background: var(--accent-dim);
+}
+
+.mention-name {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.mention-kind {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.mention-empty {
+  padding: 12px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .cmd-item {
   display: flex;
   align-items: center;
@@ -2594,7 +2677,8 @@ html, body {
 #agent-status-panel,
 #workflows-panel,
 #input-wrap,
-#command-palette {
+#command-palette,
+#mention-picker {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
@@ -2686,6 +2770,7 @@ html, body {
 }
 
 #command-palette,
+#mention-picker,
 #schedulers-panel,
 #agent-status-panel,
 #workflows-panel {
