@@ -24,6 +24,7 @@ var memoryGroupSummary = document.getElementById("memory-group-summary");
 var memorySearchInput = document.getElementById("memory-search-input");
 var memoryStatusFilter = document.getElementById("memory-status-filter");
 var memoryDoctorBtn = document.getElementById("memory-doctor-btn");
+var memoryMetricsBtn = document.getElementById("memory-metrics-btn");
 var memoryCreateBtn = document.getElementById("memory-create-btn");
 var memorySearchBtn = document.getElementById("memory-search-btn");
 var memoryRefreshBtn = document.getElementById("memory-refresh-btn");
@@ -47,6 +48,11 @@ var memoryConflictsList = document.getElementById("memory-conflicts-list");
 var memoryGcDuplicatesBtn = document.getElementById("memory-gc-duplicates-btn");
 var memoryGcStaleBtn = document.getElementById("memory-gc-stale-btn");
 var memoryModalMask = document.getElementById("memory-modal-mask");
+var memoryMetricsModal = document.getElementById("memory-metrics-modal");
+var memoryMetricsWindow = document.getElementById("memory-metrics-window");
+var memoryMetricsTotal = document.getElementById("memory-metrics-total");
+var memoryMetricsList = document.getElementById("memory-metrics-list");
+var memoryMetricsCloseBtn = document.getElementById("memory-metrics-close-btn");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
 var primaryNav = document.getElementById("primary-nav");
@@ -107,6 +113,7 @@ var editingMemoryId = "";
 var memoryStatusFilterValue = "all";
 var memoryDoctorReport = null;
 var memoryDoctorMap = {};
+var memoryMetricsSummary = null;
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -653,8 +660,10 @@ function selectMemoryGroup(jid) {
   activeMemoryGroupJid = jid;
   closeMemoryEditor();
   closeDoctorPanel();
+  closeMemoryMetricsModal();
   memoryDoctorReport = null;
   memoryDoctorMap = {};
+  memoryMetricsSummary = null;
   renderDoctorPanel();
   setDoctorLog("");
   renderMemoryGroups();
@@ -710,11 +719,22 @@ function openDoctorPanel() {
   syncMemoryModalMask();
 }
 
+function closeMemoryMetricsModal() {
+  if (memoryMetricsModal) memoryMetricsModal.classList.add("hidden");
+  syncMemoryModalMask();
+}
+
+function openMemoryMetricsModal() {
+  if (memoryMetricsModal) memoryMetricsModal.classList.remove("hidden");
+  syncMemoryModalMask();
+}
+
 function syncMemoryModalMask() {
   if (!memoryModalMask) return;
   const editorVisible = memoryEditor && !memoryEditor.classList.contains("hidden");
   const doctorVisible = memoryDoctorPanel && !memoryDoctorPanel.classList.contains("hidden");
-  memoryModalMask.classList.toggle("hidden", !(editorVisible || doctorVisible));
+  const metricsVisible = memoryMetricsModal && !memoryMetricsModal.classList.contains("hidden");
+  memoryModalMask.classList.toggle("hidden", !(editorVisible || doctorVisible || metricsVisible));
 }
 
 function setDoctorLog(text) {
@@ -728,6 +748,32 @@ function getMemoryBrief(id) {
   if (!m) return id;
   const content = (m.content || "").replace(/\s+/g, " ").slice(0, 80);
   return `${id}: ${content}`;
+}
+
+function renderMemoryMetricsModal() {
+  if (!memoryMetricsWindow || !memoryMetricsTotal || !memoryMetricsList) return;
+  const group = getActiveMemoryGroup();
+  const groupLabel = group ? group.folder : "--";
+  if (!memoryMetricsSummary) {
+    memoryMetricsWindow.textContent = `${groupLabel} | 加载中...`;
+    memoryMetricsTotal.textContent = "正在获取统计数据...";
+    memoryMetricsList.innerHTML = "";
+    return;
+  }
+  const summary = memoryMetricsSummary;
+  memoryMetricsWindow.textContent = `${groupLabel} | 最近 ${summary.hours}h`;
+  memoryMetricsTotal.textContent = `总事件数: ${summary.total}`;
+  const rows = Array.isArray(summary.byEvent) ? summary.byEvent : [];
+  if (rows.length === 0) {
+    memoryMetricsList.innerHTML = '<div class="memory-metrics-item"><span>暂无事件</span><span class="count">0</span></div>';
+    return;
+  }
+  memoryMetricsList.innerHTML = rows
+    .map(
+      (row) =>
+        `<div class="memory-metrics-item"><span>${escapeHtml(row.event || "")}</span><span class="count">${escapeHtml(String(row.count || 0))}</span></div>`,
+    )
+    .join("");
 }
 
 function renderDoctorPanel() {
@@ -854,6 +900,38 @@ async function runDoctor(staleDays) {
   } catch (err) {
     console.error("Doctor failed:", err);
     setDoctorLog(`Doctor 失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function showMemoryMetrics(hours) {
+  const group = getActiveMemoryGroup();
+  if (!group) {
+    alert("请先选择 Group");
+    return;
+  }
+  const safeHours = Number.isFinite(Number(hours)) ? Number(hours) : 24;
+  memoryMetricsSummary = null;
+  openMemoryMetricsModal();
+  renderMemoryMetricsModal();
+  try {
+    const res = await apiFetch("/api/memory/metrics", {
+      method: "POST",
+      body: JSON.stringify({
+        folder: group.folder,
+        hours: safeHours,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    memoryMetricsSummary = data.summary || { hours: safeHours, total: 0, byEvent: [] };
+    renderMemoryMetricsModal();
+  } catch (err) {
+    console.error("Load memory metrics failed:", err);
+    memoryMetricsSummary = { hours: safeHours, total: 0, byEvent: [] };
+    renderMemoryMetricsModal();
+    if (memoryMetricsTotal) {
+      memoryMetricsTotal.textContent = `获取失败: ${err instanceof Error ? err.message : String(err)}`;
+    }
   }
 }
 
@@ -2677,9 +2755,19 @@ if (memoryDoctorBtn) {
     runDoctor(7);
   });
 }
+if (memoryMetricsBtn) {
+  memoryMetricsBtn.addEventListener("click", () => {
+    showMemoryMetrics(24);
+  });
+}
 if (memoryDoctorCloseBtn) {
   memoryDoctorCloseBtn.addEventListener("click", () => {
     closeDoctorPanel();
+  });
+}
+if (memoryMetricsCloseBtn) {
+  memoryMetricsCloseBtn.addEventListener("click", () => {
+    closeMemoryMetricsModal();
   });
 }
 if (memoryCreateBtn) {
@@ -2730,6 +2818,7 @@ if (memoryModalMask) {
   memoryModalMask.addEventListener("click", () => {
     closeMemoryEditor();
     closeDoctorPanel();
+    closeMemoryMetricsModal();
   });
 }
 

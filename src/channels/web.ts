@@ -298,6 +298,9 @@ class WebChannel {
       if (pathname === '/api/memory/gc' && req.method === 'POST') {
         return this.apiMemoryGc(req, res);
       }
+      if (pathname === '/api/memory/metrics' && req.method === 'POST') {
+        return this.apiMemoryMetrics(req, res);
+      }
       if (pathname === '/api/memory/conflict/keep' && req.method === 'POST') {
         return this.apiMemoryConflictKeep(req, res);
       }
@@ -779,6 +782,42 @@ class WebChannel {
           staleDeletedIds,
           totalCandidates: executeIds.length,
         },
+      }),
+    );
+  }
+
+  private async apiMemoryMetrics(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      jid?: string;
+      folder?: string;
+      hours?: number;
+    };
+    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+    const hours = Number.isFinite(Number(data.hours)) ? Number(data.hours) : 24;
+
+    const { getMemoryMetricSummary } = await import('../db.js');
+    const summary = getMemoryMetricSummary(groupFolder, hours);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        group_folder: groupFolder,
+        summary,
       }),
     );
   }

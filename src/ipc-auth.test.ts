@@ -1071,7 +1071,7 @@ describe('memory IPC tasks', () => {
     expect(workingCount).toBeLessThanOrEqual(1);
   });
 
-  it('memory_doctor/gc/metrics produce response payloads', async () => {
+  it('memory_doctor/gc produce response payloads', async () => {
     const sourceGroup = 'other-group';
     // duplicates
     for (let i = 0; i < 2; i++) {
@@ -1113,16 +1113,6 @@ describe('memory IPC tasks', () => {
     expect(gcRes.result).toBeTruthy();
     expect(gcRes.result.dryRun).toBe(true);
 
-    const metricsId = rid('mmet');
-    await processTaskIpc(
-      { type: 'memory_metrics', requestId: metricsId, hours: 24 },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const metricsRes = readMemoryIpcResult(sourceGroup, metricsId);
-    expect(metricsRes.summary).toBeTruthy();
-    expect(metricsRes.summary.total).toBeGreaterThan(0);
   });
 
   it('handles concurrent memory writes without result file collisions', async () => {
@@ -1203,87 +1193,6 @@ describe('memory IPC tasks', () => {
     }
   });
 
-  it('memory_metrics stays consistent under concurrent operations', async () => {
-    const sourceGroup = 'other-group';
-
-    const writeTasks = Array.from({ length: 5 }).map((_, i) => {
-      const requestId = rid('mw-metrics');
-      return {
-        requestId,
-        promise: processTaskIpc(
-          {
-            type: 'memory_write',
-            requestId,
-            content: `Metrics seed ${i}`,
-            layer: 'canonical',
-            memory_type: 'fact',
-          },
-          sourceGroup,
-          false,
-          deps,
-        ),
-      };
-    });
-    await Promise.all(writeTasks.map((t) => t.promise));
-    for (const t of writeTasks) readMemoryIpcResult(sourceGroup, t.requestId);
-
-    const listTasks = Array.from({ length: 2 }).map(() => {
-      const requestId = rid('ml-metrics');
-      return {
-        requestId,
-        promise: processTaskIpc(
-          { type: 'memory_list', requestId, limit: 50 },
-          sourceGroup,
-          false,
-          deps,
-        ),
-      };
-    });
-    const searchTasks = Array.from({ length: 3 }).map(() => {
-      const requestId = rid('ms-metrics');
-      return {
-        requestId,
-        promise: processTaskIpc(
-          {
-            type: 'memory_search',
-            requestId,
-            query: 'Metrics',
-            mode: 'hybrid',
-            limit: 5,
-          },
-          sourceGroup,
-          false,
-          deps,
-        ),
-      };
-    });
-
-    await Promise.all([
-      ...listTasks.map((t) => t.promise),
-      ...searchTasks.map((t) => t.promise),
-    ]);
-    for (const t of listTasks) readMemoryIpcResult(sourceGroup, t.requestId);
-    for (const t of searchTasks) readMemoryIpcResult(sourceGroup, t.requestId);
-
-    const metricsId = rid('mmet-consistency');
-    await processTaskIpc(
-      { type: 'memory_metrics', requestId: metricsId, hours: 24 },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const metrics = readMemoryIpcResult(sourceGroup, metricsId).summary;
-    const byEvent = new Map(
-      (metrics.byEvent as Array<{ event: string; count: number }>).map((e) => [
-        e.event,
-        e.count,
-      ]),
-    );
-    expect(byEvent.get('write')).toBe(5);
-    expect(byEvent.get('list')).toBe(2);
-    expect(byEvent.get('search:hybrid')).toBe(3);
-    expect(metrics.total).toBe(10);
-  });
 });
 
 // --- request_delegation target parsing ---

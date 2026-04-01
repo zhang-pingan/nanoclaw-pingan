@@ -35,7 +35,6 @@ import {
   gcMemories,
   getMemoryExtractConfig,
   getDelegation,
-  getMemoryMetricSummary,
   getMemoryById,
   getTaskById,
   listMemories,
@@ -582,7 +581,6 @@ export async function processTaskIpc(
     memory_status?: 'active' | 'conflicted' | 'deprecated';
     dryRun?: boolean;
     staleDays?: number;
-    hours?: number;
     // For memory_resolve_conflict
     keep_id?: string;
     deprecate_id?: string;
@@ -1505,16 +1503,6 @@ export async function processTaskIpc(
         'gc',
         `dryRun=${data.dryRun !== undefined ? data.dryRun : true},staleDays=${data.staleDays || 14}`,
       );
-      break;
-    }
-
-    case 'memory_metrics': {
-      if (!data.requestId) {
-        logger.warn({ sourceGroup }, 'memory_metrics missing requestId');
-        break;
-      }
-      const summary = getMemoryMetricSummary(sourceGroup, data.hours || 24);
-      writeMemoryResult(sourceGroup, data.requestId, { summary });
       break;
     }
 

@@ -341,6 +341,7 @@
                 <option value="deprecated">deprecated</option>
               </select>
               <button id="memory-doctor-btn" class="btn-primary">Doctor</button>
+              <button id="memory-metrics-btn" class="btn-primary">指标统计</button>
               <button id="memory-create-btn" class="btn-primary">新增记忆</button>
               <button id="memory-search-btn" class="btn-primary">搜索</button>
               <button id="memory-refresh-btn" class="icon-btn" title="刷新记忆列表">
@@ -422,6 +423,15 @@
               <div id="memory-doctor-log" class="memory-doctor-log muted"></div>
             </div>
             <div id="memory-modal-mask" class="memory-modal-mask hidden"></div>
+            <div id="memory-metrics-modal" class="memory-metrics-modal hidden">
+              <div class="memory-metrics-header">
+                <strong>记忆指标统计</strong>
+                <span id="memory-metrics-window" class="muted"></span>
+                <button id="memory-metrics-close-btn" class="icon-btn">关闭</button>
+              </div>
+              <div id="memory-metrics-total" class="memory-metrics-total"></div>
+              <div id="memory-metrics-list" class="memory-metrics-list"></div>
+            </div>
             <div id="memory-list" class="memory-list"></div>
             <div id="memory-empty" class="memory-empty hidden">暂无记忆数据</div>
           </div>
