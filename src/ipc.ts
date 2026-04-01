@@ -294,6 +294,80 @@ function stripLeadingTriggerMention(task: string): string {
   return stripped || task.trim();
 }
 
+interface ExtractedArchiveMessage {
+  sender: string;
+  content: string;
+}
+
+interface ArchiveMemoryCandidate {
+  layer: 'working' | 'episodic' | 'canonical';
+  memory_type: 'preference' | 'rule' | 'fact' | 'summary';
+  content: string;
+}
+
+function parseArchiveMarkdownMessages(markdown: string): ExtractedArchiveMessage[] {
+  const lines = markdown.split('\n');
+  const messages: ExtractedArchiveMessage[] = [];
+  const lineRe = /^\*\*([^*]+)\*\*:\s*(.+)\s*$/;
+  for (const line of lines) {
+    const m = line.match(lineRe);
+    if (!m) continue;
+    const sender = m[1].trim();
+    const content = m[2].trim();
+    if (!sender || !content) continue;
+    messages.push({ sender, content });
+  }
+  return messages;
+}
+
+function extractArchiveMemoryCandidates(
+  markdown: string,
+  archiveFile: string,
+): ArchiveMemoryCandidate[] {
+  const messages = parseArchiveMarkdownMessages(markdown);
+  const userMessages = messages
+    .filter((m) => m.sender.toLowerCase() === 'user')
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+
+  const out: ArchiveMemoryCandidate[] = [];
+  const rememberCue =
+    /(记住|记一下|请记住|remember|keep in mind|my preference|偏好|默认)/i;
+  const ruleCue =
+    /(always|never|must|don['’]?t|do not|必须|不要|不能|不许|禁止|总是)/i;
+
+  for (const content of userMessages) {
+    if (!rememberCue.test(content)) continue;
+    const normalized = content.replace(/\s+/g, ' ').trim();
+    if (normalized.length < 8) continue;
+    out.push({
+      layer: 'canonical',
+      memory_type: ruleCue.test(content) ? 'rule' : 'preference',
+      content: normalized.slice(0, 400),
+    });
+  }
+
+  const latestUser = userMessages[userMessages.length - 1];
+  if (latestUser) {
+    const compact = latestUser.replace(/\s+/g, ' ').trim().slice(0, 320);
+    out.push({
+      layer: 'working',
+      memory_type: 'summary',
+      content: `[archive:${archiveFile}] ${compact}`,
+    });
+  }
+
+  const seen = new Set<string>();
+  const deduped: ArchiveMemoryCandidate[] = [];
+  for (const c of out) {
+    const key = `${c.layer}|${c.memory_type}|${c.content.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(c);
+  }
+  return deduped.slice(0, 8);
+}
+
 export async function processTaskIpc(
   data: {
     type: string;
@@ -313,6 +387,11 @@ export async function processTaskIpc(
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
     description?: string;
+    // For archive-triggered memory extraction
+    archiveFile?: string;
+    archiveHash?: string;
+    round?: number;
+    createdAt?: string;
     // For memory_search
     query?: string;
     limit?: number;
@@ -356,6 +435,104 @@ export async function processTaskIpc(
   };
 
   switch (data.type) {
+    case 'memory_extract_from_archive': {
+      if (!data.archiveFile) {
+        logger.warn({ sourceGroup }, 'memory_extract_from_archive missing archiveFile');
+        break;
+      }
+      const archiveName = path.basename(data.archiveFile);
+      if (archiveName !== data.archiveFile || !archiveName.endsWith('.md')) {
+        logger.warn(
+          { sourceGroup, archiveFile: data.archiveFile },
+          'memory_extract_from_archive invalid archiveFile',
+        );
+        break;
+      }
+
+      const conversationsDir = path.resolve(
+        path.join(GROUPS_DIR, sourceGroup, 'conversations'),
+      );
+      const archivePath = path.resolve(path.join(conversationsDir, archiveName));
+      if (
+        !archivePath.startsWith(`${conversationsDir}${path.sep}`) &&
+        archivePath !== conversationsDir
+      ) {
+        logger.warn(
+          { sourceGroup, archivePath },
+          'memory_extract_from_archive path traversal blocked',
+        );
+        break;
+      }
+      if (!fs.existsSync(archivePath)) {
+        logger.warn(
+          { sourceGroup, archivePath },
+          'memory_extract_from_archive archive file not found',
+        );
+        break;
+      }
+
+      try {
+        const markdown = fs.readFileSync(archivePath, 'utf-8');
+        const candidates = extractArchiveMemoryCandidates(markdown, archiveName);
+        const created = candidates.map((c) =>
+          createMemory({
+            group_folder: sourceGroup,
+            layer: c.layer,
+            memory_type: c.memory_type,
+            content: c.content,
+            source: 'archive',
+            metadata: JSON.stringify({
+              archive_file: archiveName,
+              archive_hash: data.archiveHash || null,
+              archive_round: data.round || null,
+              extracted_at: new Date().toISOString(),
+            }),
+          }),
+        );
+
+        const report = doctorMemories(sourceGroup, 7);
+        const gc = gcMemories(sourceGroup, {
+          dryRun: false,
+          staleWorkingDays: 14,
+        });
+
+        recordMemoryMetric(
+          sourceGroup,
+          'archive:extract',
+          `file=${archiveName},created=${created.length}`,
+        );
+        recordMemoryMetric(
+          sourceGroup,
+          'archive:doctor',
+          `duplicates=${report.duplicateGroups.length},conflicts=${report.conflictGroups.length}`,
+        );
+        recordMemoryMetric(
+          sourceGroup,
+          'archive:gc',
+          `dupDeleted=${gc.duplicateDeletedIds.length},staleDeleted=${gc.staleDeletedIds.length}`,
+        );
+
+        logger.info(
+          {
+            sourceGroup,
+            archiveName,
+            created: created.length,
+            duplicates: report.duplicateGroups.length,
+            conflicts: report.conflictGroups.length,
+            duplicateDeleted: gc.duplicateDeletedIds.length,
+            staleDeleted: gc.staleDeletedIds.length,
+          },
+          'memory_extract_from_archive completed',
+        );
+      } catch (err) {
+        logger.error(
+          { err, sourceGroup, archiveFile: archiveName },
+          'memory_extract_from_archive failed',
+        );
+      }
+      break;
+    }
+
     case 'schedule_task':
       if (
         data.prompt &&

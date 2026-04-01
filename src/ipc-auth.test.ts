@@ -6,6 +6,7 @@ import {
   _initTestDatabase,
   createTask,
   getAllTasks,
+  listMemories,
   getMessagesSince,
   getRegisteredGroup,
   getTaskById,
@@ -950,6 +951,71 @@ describe('memory IPC tasks', () => {
       (m: { content: string }) => m.content === 'Duplicate value for gc',
     );
     expect(remain.length).toBe(1);
+  });
+
+  it('memory_extract_from_archive writes candidates and runs cleanup pipeline', async () => {
+    const sourceGroup = 'other-group';
+    const conversationsDir = path.join(
+      process.cwd(),
+      'groups',
+      sourceGroup,
+      'conversations',
+    );
+    fs.mkdirSync(conversationsDir, { recursive: true });
+    const archiveFile = `2026-04-01-${Date.now()}-archive.md`;
+    const archivePath = path.join(conversationsDir, archiveFile);
+    fs.writeFileSync(
+      archivePath,
+      [
+        '---',
+        'session: sess-1',
+        'round: 2',
+        'hash: abc123',
+        'source: exit',
+        'created_at: 2026-04-01T00:00:00.000Z',
+        '---',
+        '',
+        '# Conversation',
+        '',
+        '**User**: 请记住：以后都用中文回答我',
+        '',
+        '**Andy**: 好的，我会使用中文回答。',
+        '',
+        '**User**: 帮我总结今天进展',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    try {
+      await processTaskIpc(
+        {
+          type: 'memory_extract_from_archive',
+          archiveFile,
+          archiveHash: 'abc123',
+          round: 2,
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+    } finally {
+      fs.unlinkSync(archivePath);
+    }
+
+    const memories = listMemories(sourceGroup, 50);
+    const archiveMemories = memories.filter((m) => m.source === 'archive');
+    expect(archiveMemories.length).toBeGreaterThan(0);
+    expect(
+      archiveMemories.some((m) => m.layer === 'canonical'),
+    ).toBe(true);
+    expect(
+      archiveMemories.some((m) => m.layer === 'working' && m.memory_type === 'summary'),
+    ).toBe(true);
+    expect(
+      archiveMemories.every((m) =>
+        typeof m.metadata === 'string' && m.metadata.includes(archiveFile),
+      ),
+    ).toBe(true);
   });
 
   it('memory_doctor/gc/metrics produce response payloads', async () => {

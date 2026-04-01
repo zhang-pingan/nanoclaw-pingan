@@ -57,6 +57,7 @@ interface SDKUserMessage {
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+const IPC_TASKS_DIR = '/workspace/ipc/tasks';
 const IPC_POLL_MS = 500;
 
 
@@ -239,6 +240,7 @@ function archiveOnExit(sessionId: string | undefined, input: ContainerInput): vo
     const markdown = formatTranscriptMarkdown(messages, summary, input.assistantName, metadata);
     fs.writeFileSync(path.join(conversationsDir, filename), markdown);
     log(`Exit archive: ${filename} (hash=${hash}, round=${round})`);
+    enqueueMemoryExtractTask(filename, metadata);
   } catch (err) {
     log(`Exit archive failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -313,6 +315,34 @@ interface ArchiveMetadata {
   hash: string;
   source: string;
   created_at: string;
+}
+
+function enqueueMemoryExtractTask(
+  archiveFile: string,
+  metadata: ArchiveMetadata,
+): void {
+  try {
+    fs.mkdirSync(IPC_TASKS_DIR, { recursive: true });
+    const requestId = `memext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      type: 'memory_extract_from_archive',
+      requestId,
+      archiveFile,
+      archiveHash: metadata.hash,
+      round: metadata.round,
+      createdAt: metadata.created_at,
+      timestamp: new Date().toISOString(),
+    };
+    const taskPath = path.join(IPC_TASKS_DIR, `${requestId}.json`);
+    const tempPath = `${taskPath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, taskPath);
+    log(`Queued memory extract task: ${requestId} (${archiveFile})`);
+  } catch (err) {
+    log(
+      `Queue memory extract task failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | null, assistantName?: string, metadata?: ArchiveMetadata): string {
