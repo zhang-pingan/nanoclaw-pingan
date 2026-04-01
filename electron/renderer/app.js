@@ -74,6 +74,13 @@ var mentionPickerVisible = false;
 var mentionPickerIndex = -1;
 var mentionCandidates = [];
 var mentionInsertPos = null;
+var commandSearchInput = null;
+var commandOptionsEl = null;
+var commandPickerVisible = false;
+var commandCandidates = [];
+var commandInsertPos = null;
+var workflowCreateOptionsCache = null;
+var workflowCreateOptionsLoading = null;
 
 // --- Command palette definitions ---
 var commands = [
@@ -1189,102 +1196,181 @@ function clearReplyTo() {
 }
 
 // --- Command palette ---
+function ensureCommandPaletteElements() {
+  if (!commandPalette || commandSearchInput || commandOptionsEl) return;
+
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "command-search-wrap";
+  commandSearchInput = document.createElement("input");
+  commandSearchInput.id = "command-search-input";
+  commandSearchInput.type = "text";
+  commandSearchInput.placeholder = "搜索命令，如 create-workflow";
+  searchWrap.appendChild(commandSearchInput);
+  commandPalette.appendChild(searchWrap);
+
+  commandOptionsEl = document.createElement("div");
+  commandOptionsEl.id = "command-options";
+  commandPalette.appendChild(commandOptionsEl);
+
+  commandSearchInput.addEventListener("input", () => {
+    cmdPaletteIndex = 0;
+    renderCommandOptions();
+  });
+
+  commandSearchInput.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      navigateCommandPalette(-1);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      navigateCommandPalette(1);
+      return;
+    }
+    if (e.key === "Enter" || e.key === "Tab") {
+      if (commandCandidates.length > 0) {
+        e.preventDefault();
+        executeCommand(commandCandidates[Math.max(cmdPaletteIndex, 0)]);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      hideCommandPalette();
+    }
+  });
+}
+
+function getCommandCandidates(query) {
+  const q = (query || "").trim().toLowerCase();
+  if (q.includes("create-workflow")) {
+    warmWorkflowCreateOptions();
+  }
+  if (!q) return commands.slice();
+  return commands.filter((c) => fuzzyMatch(c.name.replace(/^\//, ""), q) || fuzzyMatch(c.desc, q));
+}
+
+function renderCommandOptions() {
+  if (!commandOptionsEl || !commandSearchInput) return;
+  const query = commandSearchInput.value || "";
+  commandCandidates = getCommandCandidates(query);
+  commandOptionsEl.innerHTML = "";
+
+  if (commandCandidates.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "mention-empty";
+    empty.textContent = "没有匹配命令";
+    commandOptionsEl.appendChild(empty);
+    cmdPaletteIndex = -1;
+    return;
+  }
+
+  if (cmdPaletteIndex < 0 || cmdPaletteIndex >= commandCandidates.length) {
+    cmdPaletteIndex = 0;
+  }
+
+  commandCandidates.forEach((cmd, i) => {
+    const item = document.createElement("div");
+    item.className = `cmd-item${i === cmdPaletteIndex ? " active" : ""}`;
+    item.innerHTML = `<span class="cmd-item-name">${escapeHtml(cmd.name)}</span><span class="cmd-item-desc">${escapeHtml(cmd.desc)}</span>`;
+    item.addEventListener("click", () => executeCommand(cmd));
+    commandOptionsEl.appendChild(item);
+  });
+}
+
+async function executeCommand(cmd) {
+  hideCommandPalette(false);
+  if (!cmd) return;
+  if (cmd.name === "/create-workflow") {
+    await launchCreateWorkflowWizard();
+    return;
+  }
+  messageInput.value = cmd.name + " ";
+  messageInput.focus();
+  autoResizeInput();
+}
+
 function showCommandPalette(filter) {
   if (mentionPickerVisible) hideMentionPicker(false);
-  const filtered = commands.filter((c) => c.name.includes(filter.toLowerCase()));
-  if (filtered.length === 0) {
-    hideCommandPalette();
-    return;
-  }
-  commandPalette.innerHTML = "";
-  cmdPaletteIndex = 0;
-  filtered.forEach((cmd, i) => {
-    const item = document.createElement("div");
-    item.className = `cmd-item${i === 0 ? " active" : ""}`;
-    item.innerHTML = `<span class="cmd-item-name">${escapeHtml(cmd.name)}</span><span class="cmd-item-desc">${escapeHtml(cmd.desc)}</span>`;
-    item.addEventListener("click", async () => {
-      hideCommandPalette();
-      if (cmd.name === "/create-workflow") {
-        await launchCreateWorkflowWizard();
-        return;
-      }
-      messageInput.value = cmd.name + " ";
-      messageInput.focus();
-      autoResizeInput();
-    });
-    commandPalette.appendChild(item);
-  });
+  if (!commandPalette) return;
+  ensureCommandPaletteElements();
+  commandInsertPos = messageInput.selectionStart;
+  commandPickerVisible = true;
   commandPalette.classList.add("visible");
+  cmdPaletteIndex = 0;
+  const initial = (filter || "").replace(/^\//, "");
+  if (commandSearchInput) commandSearchInput.value = initial;
+  renderCommandOptions();
+  commandSearchInput?.focus();
 }
 
-function hideCommandPalette() {
+function hideCommandPalette(restoreFocus = true) {
+  if (!commandPalette) return;
+  commandPickerVisible = false;
   commandPalette.classList.remove("visible");
   cmdPaletteIndex = -1;
+  commandCandidates = [];
+  commandInsertPos = null;
+  if (restoreFocus) messageInput.focus();
 }
 
-function pickFromList(title, options, opts = {}) {
-  const allowEmpty = opts.allowEmpty === true;
-  const allowCustom = opts.allowCustom === true;
-  const customLabel = opts.customLabel || "自定义输入";
+function loadWorkflowCreateOptions(forceReload = false) {
+  if (!forceReload && workflowCreateOptionsCache) {
+    return Promise.resolve(workflowCreateOptionsCache);
+  }
+  if (!forceReload && workflowCreateOptionsLoading) {
+    return workflowCreateOptionsLoading;
+  }
+  workflowCreateOptionsLoading = apiFetch("/api/workflow/create-options")
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then((data) => {
+      workflowCreateOptionsCache = data;
+      return data;
+    })
+    .finally(() => {
+      workflowCreateOptionsLoading = null;
+    });
+  return workflowCreateOptionsLoading;
+}
 
+function warmWorkflowCreateOptions() {
+  loadWorkflowCreateOptions().catch((err) => {
+    console.error("Failed to prefetch workflow create options:", err);
+  });
+}
+
+function renderSingleOptions(container, options, selected, onPick) {
+  container.innerHTML = "";
   if (!Array.isArray(options) || options.length === 0) {
-    if (allowEmpty) return "";
-    if (allowCustom) {
-      const v = window.prompt(`${title}\n无可选项，请直接输入：`, "");
-      if (v === null) return null;
-      const t = v.trim();
-      return t || null;
-    }
-    return null;
+    const empty = document.createElement("div");
+    empty.className = "workflow-wizard-empty";
+    empty.textContent = "暂无可选项";
+    container.appendChild(empty);
+    return;
   }
-
-  while (true) {
-    const lines = options.map((v, i) => `${i + 1}. ${v}`);
-    if (allowEmpty) lines.push("0. 跳过");
-    if (allowCustom) lines.push("c. " + customLabel);
-    const input = window.prompt(
-      `${title}\n\n${lines.join("\n")}\n\n请输入序号${allowCustom ? "，或输入 c 自定义" : ""}：`,
-      "1"
-    );
-    if (input === null) return null;
-    const raw = input.trim();
-    if (allowEmpty && (raw === "0" || raw === "")) return "";
-    if (allowCustom && raw.toLowerCase() === "c") {
-      const custom = window.prompt(`${title}\n请输入自定义值：`, "");
-      if (custom === null) return null;
-      const customTrimmed = custom.trim();
-      if (customTrimmed) return customTrimmed;
-      alert("输入不能为空");
-      continue;
-    }
-    const index = parseInt(raw, 10);
-    if (!Number.isNaN(index) && index >= 1 && index <= options.length) {
-      return options[index - 1];
-    }
-    alert("输入无效，请重试。");
-  }
+  options.forEach((opt) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "workflow-wizard-option" + (selected === opt.value ? " selected" : "");
+    btn.textContent = opt.label;
+    btn.addEventListener("click", () => onPick(opt.value));
+    container.appendChild(btn);
+  });
 }
 
-async function launchCreateWorkflowWizard() {
-  if (!currentGroupJid) {
-    alert("请先选择一个群聊");
-    return;
-  }
+function closeWorkflowWizard() {
+  const el = document.getElementById("workflow-wizard-overlay");
+  if (el) el.remove();
+}
 
-  let optionsData;
-  try {
-    const res = await apiFetch("/api/workflow/create-options");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    optionsData = await res.json();
-  } catch (err) {
-    console.error("Failed to load workflow create options:", err);
-    alert("加载创建流程选项失败");
-    return;
-  }
+function openWorkflowWizard(optionsData) {
+  closeWorkflowWizard();
 
-  const workflowTypes = Array.isArray(optionsData.workflow_types)
-    ? optionsData.workflow_types
-    : [];
+  const workflowTypes = Array.isArray(optionsData.workflow_types) ? optionsData.workflow_types : [];
   const services = Array.isArray(optionsData.services) ? optionsData.services : [];
   const requirementsByService = optionsData.requirements_by_service || {};
 
@@ -1297,118 +1383,284 @@ async function launchCreateWorkflowWizard() {
     return;
   }
 
-  const workflowTypeOptions = workflowTypes.map((t) => `${t.type} (${t.name})`);
-  const pickedWorkflowTypeLabel = pickFromList("请选择流程类型", workflowTypeOptions);
-  if (!pickedWorkflowTypeLabel) return;
-  const pickedWorkflowType = workflowTypes[workflowTypeOptions.indexOf(pickedWorkflowTypeLabel)];
-  if (!pickedWorkflowType) return;
+  const state = {
+    workflowType: workflowTypes[0].type,
+    entryPoint: "",
+    service: services[0],
+    requirementMode: "preset",
+    requirementPreset: "",
+    requirementCustom: "",
+    deliverableFile: "",
+  };
 
-  const entryPoints = Array.isArray(pickedWorkflowType.entry_points)
-    ? pickedWorkflowType.entry_points
-    : [];
-  if (entryPoints.length === 0) {
-    alert("该流程类型没有可用入口点");
+  const overlay = document.createElement("div");
+  overlay.id = "workflow-wizard-overlay";
+  overlay.className = "workflow-wizard-overlay";
+  overlay.innerHTML = `
+    <div class="workflow-wizard-modal">
+      <div class="workflow-wizard-header">
+        <div class="workflow-wizard-title">创建工作流</div>
+        <button type="button" class="icon-btn" id="workflow-wizard-close" title="关闭">×</button>
+      </div>
+      <div class="workflow-wizard-body">
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">1. 流程类型</div>
+          <div id="wf-type-options" class="workflow-wizard-options"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">2. 入口点</div>
+          <div id="wf-entry-options" class="workflow-wizard-options"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">3. 服务名称</div>
+          <div id="wf-service-options" class="workflow-wizard-options"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">4. 需求名称</div>
+          <div id="wf-requirement-mode" class="workflow-wizard-options compact"></div>
+          <div id="wf-requirement-preset-wrap" class="workflow-wizard-subsection"></div>
+          <div id="wf-requirement-custom-wrap" class="workflow-wizard-subsection"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">5. 交付物文件（按需求目录文件名展示）</div>
+          <div id="wf-deliverable-hint" class="workflow-wizard-hint"></div>
+          <div id="wf-deliverable-options" class="workflow-wizard-options"></div>
+        </div>
+      </div>
+      <div class="workflow-wizard-footer">
+        <button type="button" id="wf-cancel-btn" class="btn-ghost">取消</button>
+        <button type="button" id="wf-submit-btn" class="btn-primary">发送创建命令</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const typeOptionsEl = overlay.querySelector("#wf-type-options");
+  const entryOptionsEl = overlay.querySelector("#wf-entry-options");
+  const serviceOptionsEl = overlay.querySelector("#wf-service-options");
+  const reqModeEl = overlay.querySelector("#wf-requirement-mode");
+  const reqPresetWrapEl = overlay.querySelector("#wf-requirement-preset-wrap");
+  const reqCustomWrapEl = overlay.querySelector("#wf-requirement-custom-wrap");
+  const deliverableHintEl = overlay.querySelector("#wf-deliverable-hint");
+  const deliverableOptionsEl = overlay.querySelector("#wf-deliverable-options");
+  const submitBtn = overlay.querySelector("#wf-submit-btn");
+
+  function getSelectedWorkflowType() {
+    return workflowTypes.find((t) => t.type === state.workflowType) || workflowTypes[0];
+  }
+
+  function getEntryPoints() {
+    const wt = getSelectedWorkflowType();
+    return Array.isArray(wt.entry_points) ? wt.entry_points : [];
+  }
+
+  function getRequirements() {
+    const rows = requirementsByService[state.service];
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  function getRequirementName() {
+    return state.requirementMode === "custom"
+      ? state.requirementCustom.trim()
+      : state.requirementPreset;
+  }
+
+  function getDeliverableFiles() {
+    const reqName = getRequirementName();
+    const req = getRequirements().find((r) => r.requirement_name === reqName);
+    return Array.isArray(req?.deliverables) ? req.deliverables : [];
+  }
+
+  function isDeliverableRequired() {
+    const wt = getSelectedWorkflowType();
+    return !!wt.entry_points_detail?.[state.entryPoint]?.requires_deliverable;
+  }
+
+  function refresh() {
+    renderSingleOptions(
+      typeOptionsEl,
+      workflowTypes.map((t) => ({ value: t.type, label: `${t.type} (${t.name})` })),
+      state.workflowType,
+      (v) => {
+        state.workflowType = v;
+        const eps = getEntryPoints();
+        state.entryPoint = eps[0] || "";
+        state.deliverableFile = "";
+        refresh();
+      }
+    );
+
+    const eps = getEntryPoints();
+    if (!state.entryPoint || !eps.includes(state.entryPoint)) {
+      state.entryPoint = eps[0] || "";
+    }
+    renderSingleOptions(
+      entryOptionsEl,
+      eps.map((ep) => ({
+        value: ep,
+        label: getSelectedWorkflowType().entry_points_detail?.[ep]?.requires_deliverable ? `${ep} (需要交付物)` : ep,
+      })),
+      state.entryPoint,
+      (v) => {
+        state.entryPoint = v;
+        state.deliverableFile = "";
+        refresh();
+      }
+    );
+
+    renderSingleOptions(
+      serviceOptionsEl,
+      services.map((s) => ({ value: s, label: s })),
+      state.service,
+      (v) => {
+        state.service = v;
+        const reqs = getRequirements();
+        state.requirementPreset = reqs[0]?.requirement_name || "";
+        state.deliverableFile = "";
+        refresh();
+      }
+    );
+
+    const reqs = getRequirements();
+    if (!state.requirementPreset && reqs.length > 0) {
+      state.requirementPreset = reqs[0].requirement_name;
+    }
+
+    renderSingleOptions(
+      reqModeEl,
+      [
+        { value: "preset", label: "已有需求" },
+        { value: "custom", label: "自定义需求" },
+      ],
+      state.requirementMode,
+      (v) => {
+        state.requirementMode = v;
+        state.deliverableFile = "";
+        refresh();
+      }
+    );
+
+    reqPresetWrapEl.innerHTML = "";
+    if (state.requirementMode === "preset") {
+      const opts = document.createElement("div");
+      opts.className = "workflow-wizard-options";
+      reqPresetWrapEl.appendChild(opts);
+      renderSingleOptions(
+        opts,
+        reqs.map((r) => ({ value: r.requirement_name, label: r.requirement_name })),
+        state.requirementPreset,
+        (v) => {
+          state.requirementPreset = v;
+          state.deliverableFile = "";
+          refresh();
+        }
+      );
+    }
+
+    reqCustomWrapEl.innerHTML = "";
+    if (state.requirementMode === "custom") {
+      const input = document.createElement("input");
+      input.className = "workflow-wizard-input";
+      input.placeholder = "输入需求名称";
+      input.value = state.requirementCustom;
+      input.addEventListener("input", () => {
+        state.requirementCustom = input.value;
+        state.deliverableFile = "";
+        refresh();
+      });
+      reqCustomWrapEl.appendChild(input);
+    }
+
+    const files = getDeliverableFiles();
+    const required = isDeliverableRequired();
+    deliverableHintEl.textContent = required ? "当前入口点要求交付物（必选）" : "当前入口点交付物可空";
+    renderSingleOptions(
+      deliverableOptionsEl,
+      files.map((f) => ({ value: f, label: f })),
+      state.deliverableFile,
+      (v) => {
+        state.deliverableFile = v;
+        refresh();
+      }
+    );
+
+    const requirementName = getRequirementName();
+    const canSubmit =
+      !!state.workflowType &&
+      !!state.entryPoint &&
+      !!state.service &&
+      !!requirementName &&
+      (!required || !!state.deliverableFile);
+    submitBtn.disabled = !canSubmit;
+  }
+
+  overlay.querySelector("#workflow-wizard-close").addEventListener("click", closeWorkflowWizard);
+  overlay.querySelector("#wf-cancel-btn").addEventListener("click", closeWorkflowWizard);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeWorkflowWizard();
+  });
+
+  overlay.querySelector("#wf-submit-btn").addEventListener("click", async () => {
+    const requirementName = getRequirementName();
+    const required = isDeliverableRequired();
+    if (!requirementName) return;
+
+    const data = {
+      name: requirementName,
+      service: state.service,
+      workflow_type: state.workflowType,
+      start_from: state.entryPoint,
+    };
+    if (required || state.deliverableFile) {
+      data.deliverable = requirementName;
+    }
+    if (state.deliverableFile) {
+      data.deliverable_file = state.deliverableFile;
+    }
+
+    const content = JSON.stringify({
+      command: "/create-workflow",
+      data,
+    });
+
+    await sendMessage(content);
+    closeWorkflowWizard();
+  });
+
+  // init defaults
+  const initReqs = getRequirements();
+  state.requirementPreset = initReqs[0]?.requirement_name || "";
+  state.entryPoint = getEntryPoints()[0] || "";
+  refresh();
+}
+
+async function launchCreateWorkflowWizard() {
+  if (!currentGroupJid) {
+    alert("请先选择一个群聊");
     return;
   }
-  const entryPointLabels = entryPoints.map((ep) => {
-    const detail = pickedWorkflowType.entry_points_detail?.[ep];
-    return detail?.requires_deliverable ? `${ep} (需要交付物)` : ep;
-  });
-  const pickedEntryPointLabel = pickFromList("请选择入口点", entryPointLabels);
-  if (!pickedEntryPointLabel) return;
-  const pickedEntryPoint = entryPoints[entryPointLabels.indexOf(pickedEntryPointLabel)];
-  if (!pickedEntryPoint) return;
-
-  const pickedService = pickFromList("请选择服务名称", services);
-  if (!pickedService) return;
-
-  const requirementItems = Array.isArray(requirementsByService[pickedService])
-    ? requirementsByService[pickedService]
-    : [];
-  const requirementNames = requirementItems.map((r) => r.requirement_name).filter(Boolean);
-  const pickedRequirementName = pickFromList("请选择需求名称", requirementNames, {
-    allowCustom: true,
-    customLabel: "自定义需求名称",
-  });
-  if (!pickedRequirementName) return;
-
-  const selectedRequirement = requirementItems.find(
-    (r) => r.requirement_name === pickedRequirementName
-  );
-  const deliverableFiles = Array.isArray(selectedRequirement?.deliverables)
-    ? selectedRequirement.deliverables
-    : [];
-
-  const requiresDeliverable =
-    !!pickedWorkflowType.entry_points_detail?.[pickedEntryPoint]?.requires_deliverable;
-
-  let pickedDeliverableFile = "";
-  let deliverableDir = "";
-
-  if (requiresDeliverable) {
-    if (deliverableFiles.length > 0) {
-      const picked = pickFromList("请选择交付物文件", deliverableFiles);
-      if (!picked) return;
-      pickedDeliverableFile = picked;
-      deliverableDir = pickedRequirementName;
-    } else {
-      const manualDeliverableDir = window.prompt(
-        `该入口点需要交付物，但当前需求下没有可选文件。\n请输入交付物目录名（projects/${pickedService}/iteration/<目录名>）：`,
-        pickedRequirementName
-      );
-      if (manualDeliverableDir === null) return;
-      const manual = manualDeliverableDir.trim();
-      if (!manual) {
-        alert("该入口点要求交付物目录，不能为空");
-        return;
-      }
-      deliverableDir = manual;
-    }
-  } else if (deliverableFiles.length > 0) {
-    const optionalPicked = pickFromList("请选择交付物文件（可跳过）", deliverableFiles, {
-      allowEmpty: true,
-    });
-    if (optionalPicked === null) return;
-    if (optionalPicked) {
-      pickedDeliverableFile = optionalPicked;
-      deliverableDir = pickedRequirementName;
-    }
+  try {
+    const optionsData = await loadWorkflowCreateOptions();
+    openWorkflowWizard(optionsData);
+  } catch (err) {
+    console.error("Failed to load workflow create options:", err);
+    alert("加载创建流程选项失败");
   }
-
-  const data = {
-    name: pickedRequirementName,
-    service: pickedService,
-    workflow_type: pickedWorkflowType.type,
-    start_from: pickedEntryPoint,
-  };
-  if (deliverableDir) {
-    data.deliverable = deliverableDir;
-  }
-  if (pickedDeliverableFile) {
-    data.deliverable_file = pickedDeliverableFile;
-  }
-
-  const content = JSON.stringify({
-    command: "/create-workflow",
-    data,
-  });
-
-  await sendMessage(content);
 }
 
 function navigateCommandPalette(direction) {
-  const items = commandPalette.querySelectorAll(".cmd-item");
-  if (items.length === 0) return;
+  if (!commandOptionsEl || commandCandidates.length === 0) return;
+  const items = commandOptionsEl.querySelectorAll(".cmd-item");
   items[cmdPaletteIndex]?.classList.remove("active");
-  cmdPaletteIndex = (cmdPaletteIndex + direction + items.length) % items.length;
+  cmdPaletteIndex = (cmdPaletteIndex + direction + commandCandidates.length) % commandCandidates.length;
   items[cmdPaletteIndex]?.classList.add("active");
   items[cmdPaletteIndex]?.scrollIntoView({ block: "nearest" });
 }
 
 function selectCommandPaletteItem() {
-  const items = commandPalette.querySelectorAll(".cmd-item");
-  if (cmdPaletteIndex >= 0 && cmdPaletteIndex < items.length) {
-    items[cmdPaletteIndex].click();
+  if (cmdPaletteIndex >= 0 && cmdPaletteIndex < commandCandidates.length) {
+    executeCommand(commandCandidates[cmdPaletteIndex]);
   }
 }
 
@@ -1726,6 +1978,7 @@ function autoResizeInput() {
 // Auto-start on page load
 connectWS();
 loadGroups();
+warmWorkflowCreateOptions();
 
 // --- Event listeners ---
 if (primaryNav) {
@@ -1880,6 +2133,12 @@ messageInput.addEventListener("keydown", (e) => {
     return;
   }
 
+  if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    showCommandPalette("");
+    return;
+  }
+
   // Cmd+Shift+7 = ordered list, Cmd+Shift+8 = unordered list
   if (e.metaKey && e.shiftKey) {
     if (e.key === "7") {
@@ -1919,6 +2178,13 @@ document.getElementById("at-btn").addEventListener("click", () => {
 });
 
 document.addEventListener("mousedown", (e) => {
+  if (commandPickerVisible && commandPalette) {
+    const target = e.target;
+    if (!(commandPalette.contains(target) || (target && target.closest && target.closest("#message-input")))) {
+      hideCommandPalette(false);
+    }
+  }
+
   if (!mentionPickerVisible || !mentionPicker) return;
   const target = e.target;
   if (mentionPicker.contains(target)) return;
