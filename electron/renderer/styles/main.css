@@ -495,6 +495,14 @@ html, body {
 }
 
 .memory-editor {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1200;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px);
+  overflow: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-secondary);
@@ -651,6 +659,14 @@ html, body {
 }
 
 .memory-doctor-panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1200;
+  width: min(980px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px);
+  overflow: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-secondary);
@@ -664,6 +680,10 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.memory-doctor-header .icon-btn {
+  margin-left: auto;
 }
 
 .memory-doctor-sections {
@@ -710,6 +730,14 @@ html, body {
 
 .memory-doctor-log {
   font-size: 12px;
+}
+
+.memory-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(1px);
+  z-index: 1190;
 }
 
 @media (max-width: 900px) {

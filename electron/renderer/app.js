@@ -40,11 +40,13 @@ var memoryCancelBtn = document.getElementById("memory-cancel-btn");
 var memoryDoctorPanel = document.getElementById("memory-doctor-panel");
 var memoryDoctorSummary = document.getElementById("memory-doctor-summary");
 var memoryDoctorLog = document.getElementById("memory-doctor-log");
+var memoryDoctorCloseBtn = document.getElementById("memory-doctor-close-btn");
 var memoryDuplicatesList = document.getElementById("memory-duplicates-list");
 var memoryStaleList = document.getElementById("memory-stale-list");
 var memoryConflictsList = document.getElementById("memory-conflicts-list");
 var memoryGcDuplicatesBtn = document.getElementById("memory-gc-duplicates-btn");
 var memoryGcStaleBtn = document.getElementById("memory-gc-stale-btn");
+var memoryModalMask = document.getElementById("memory-modal-mask");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
 var primaryNav = document.getElementById("primary-nav");
@@ -650,6 +652,7 @@ function updateMemoryGroupHeader() {
 function selectMemoryGroup(jid) {
   activeMemoryGroupJid = jid;
   closeMemoryEditor();
+  closeDoctorPanel();
   memoryDoctorReport = null;
   memoryDoctorMap = {};
   renderDoctorPanel();
@@ -689,6 +692,29 @@ function getActiveMemoryGroup() {
 function closeMemoryEditor() {
   editingMemoryId = "";
   if (memoryEditor) memoryEditor.classList.add("hidden");
+  syncMemoryModalMask();
+}
+
+function openMemoryEditor() {
+  if (memoryEditor) memoryEditor.classList.remove("hidden");
+  syncMemoryModalMask();
+}
+
+function closeDoctorPanel() {
+  if (memoryDoctorPanel) memoryDoctorPanel.classList.add("hidden");
+  syncMemoryModalMask();
+}
+
+function openDoctorPanel() {
+  if (memoryDoctorPanel) memoryDoctorPanel.classList.remove("hidden");
+  syncMemoryModalMask();
+}
+
+function syncMemoryModalMask() {
+  if (!memoryModalMask) return;
+  const editorVisible = memoryEditor && !memoryEditor.classList.contains("hidden");
+  const doctorVisible = memoryDoctorPanel && !memoryDoctorPanel.classList.contains("hidden");
+  memoryModalMask.classList.toggle("hidden", !(editorVisible || doctorVisible));
 }
 
 function setDoctorLog(text) {
@@ -707,10 +733,12 @@ function getMemoryBrief(id) {
 function renderDoctorPanel() {
   if (!memoryDoctorPanel || !memoryDoctorSummary || !memoryDuplicatesList || !memoryStaleList || !memoryConflictsList) return;
   if (!memoryDoctorReport) {
-    memoryDoctorPanel.classList.add("hidden");
+    memoryDoctorSummary.textContent = "暂无报告";
+    memoryDuplicatesList.innerHTML = '<div class="memory-doctor-item">请点击 Doctor 按钮生成报告</div>';
+    memoryStaleList.innerHTML = '<div class="memory-doctor-item">请点击 Doctor 按钮生成报告</div>';
+    memoryConflictsList.innerHTML = '<div class="memory-doctor-item">请点击 Doctor 按钮生成报告</div>';
     return;
   }
-  memoryDoctorPanel.classList.remove("hidden");
   const report = memoryDoctorReport;
   memoryDoctorSummary.textContent =
     `total=${report.total}, duplicate=${report.duplicateGroups.length}, conflict=${report.conflictGroups.length}, stale=${report.staleWorkingIds.length}`;
@@ -806,6 +834,8 @@ async function runDoctor(staleDays) {
   const group = getActiveMemoryGroup();
   if (!group) return;
   const safeDays = Number.isFinite(Number(staleDays)) ? Number(staleDays) : 7;
+  openDoctorPanel();
+  renderDoctorPanel();
   setDoctorLog("Doctor 执行中...");
   try {
     const res = await apiFetch("/api/memory/doctor", {
@@ -930,7 +960,7 @@ function openCreateMemoryEditor() {
   if (memoryTypeSelect) memoryTypeSelect.value = "fact";
   if (memoryStatusSelect) memoryStatusSelect.value = "active";
   if (memoryContentInput) memoryContentInput.value = "";
-  if (memoryEditor) memoryEditor.classList.remove("hidden");
+  openMemoryEditor();
   memoryContentInput?.focus();
 }
 
@@ -942,7 +972,7 @@ function openEditMemoryEditor(mem) {
   if (memoryTypeSelect) memoryTypeSelect.value = mem.memory_type || "fact";
   if (memoryStatusSelect) memoryStatusSelect.value = mem.status || "active";
   if (memoryContentInput) memoryContentInput.value = mem.content || "";
-  if (memoryEditor) memoryEditor.classList.remove("hidden");
+  openMemoryEditor();
   memoryContentInput?.focus();
 }
 
@@ -2647,6 +2677,11 @@ if (memoryDoctorBtn) {
     runDoctor(7);
   });
 }
+if (memoryDoctorCloseBtn) {
+  memoryDoctorCloseBtn.addEventListener("click", () => {
+    closeDoctorPanel();
+  });
+}
 if (memoryCreateBtn) {
   memoryCreateBtn.addEventListener("click", () => {
     openCreateMemoryEditor();
@@ -2689,6 +2724,12 @@ if (memoryGcDuplicatesBtn) {
 if (memoryGcStaleBtn) {
   memoryGcStaleBtn.addEventListener("click", () => {
     runGcByMode("stale");
+  });
+}
+if (memoryModalMask) {
+  memoryModalMask.addEventListener("click", () => {
+    closeMemoryEditor();
+    closeDoctorPanel();
   });
 }
 
