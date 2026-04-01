@@ -222,6 +222,29 @@ function notifyMain(message: string, sourceJid?: string): void {
   getDeps().enqueueMessageCheck(mainJid);
 }
 
+function notifyGroupFolder(folder: string, senderName: string, message: string): void {
+  const groups = getDeps().registeredGroups();
+  const targetJid = findJidByFolder(folder, groups);
+  if (!targetJid) {
+    logger.warn({ folder }, 'Cannot notify group folder: target JID not found');
+    return;
+  }
+  const now = Date.now().toString();
+  const msgId = `mem-conflict-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  storeChatMetadata(targetJid, now);
+  storeMessageDirect({
+    id: msgId,
+    chat_jid: targetJid,
+    sender: 'system',
+    sender_name: senderName,
+    content: message,
+    timestamp: now,
+    is_from_me: true,
+    is_bot_message: false,
+  });
+  getDeps().enqueueMessageCheck(targetJid);
+}
+
 /** Create a delegation record and inject it into the target group. */
 function delegateTo(
   targetFolder: string,
@@ -1112,6 +1135,58 @@ export function handleCardAction(action: {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = cancelWorkflow(action.workflow_id);
       if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`, wfSourceJid);
+      break;
+    }
+    case 'memory_conflict_keep': {
+      const folder = action.group_folder;
+      const keepId = action.form_value?.keep_id;
+      const deprecateId = action.form_value?.deprecate_id;
+      if (!folder || !keepId || !deprecateId) {
+        notifyMain('[操作失败] 记忆冲突处理缺少必要参数。', wfSourceJid);
+        break;
+      }
+      notifyGroupFolder(
+        folder,
+        '记忆冲突指令',
+        [
+          '[记忆冲突处理] 用户已选择保留方案。',
+          `请调用 memory_resolve_conflict(mode="keep", keep_id="${keepId}", deprecate_id="${deprecateId}")`,
+          '完成后请反馈处理结果。',
+        ].join('\n'),
+      );
+      break;
+    }
+    case 'memory_conflict_merge': {
+      const folder = action.group_folder;
+      const mergedContent = action.form_value?.merged_content?.trim();
+      const mergeA = action.form_value?.merge_id_a;
+      const mergeB = action.form_value?.merge_id_b;
+      if (!folder || !mergeA || !mergeB) {
+        notifyMain('[操作失败] 合并冲突缺少必要参数。', wfSourceJid);
+        break;
+      }
+      if (!mergedContent) {
+        notifyGroupFolder(folder, '记忆整理', '请填写合并内容后再提交。');
+        break;
+      }
+      notifyGroupFolder(
+        folder,
+        '记忆冲突指令',
+        [
+          '[记忆冲突处理] 用户已选择合并方案。',
+          `请调用 memory_resolve_conflict(mode="merge", merge_ids=["${mergeA}","${mergeB}"], merged_content="${mergedContent.replace(/"/g, '\\"')}")`,
+          '完成后请反馈处理结果。',
+        ].join('\n'),
+      );
+      break;
+    }
+    case 'memory_conflict_skip': {
+      const folder = action.group_folder;
+      if (!folder) {
+        notifyMain('[操作失败] 缺少 group_folder。', wfSourceJid);
+        break;
+      }
+      notifyGroupFolder(folder, '记忆整理', '已跳过该冲突，稍后可继续处理。');
       break;
     }
     default:

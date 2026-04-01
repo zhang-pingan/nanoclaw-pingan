@@ -11,6 +11,7 @@ import {
   getRegisteredGroup,
   getTaskById,
   setRegisteredGroup,
+  setMemoryExtractConfig,
   storeChatMetadata,
   storeMessage,
 } from './db.js';
@@ -1016,6 +1017,58 @@ describe('memory IPC tasks', () => {
         typeof m.metadata === 'string' && m.metadata.includes(archiveFile),
       ),
     ).toBe(true);
+  });
+
+  it('memory_extract_from_archive respects configurable thresholds from config table', async () => {
+    const sourceGroup = 'other-group';
+    setMemoryExtractConfig(sourceGroup, 'canonical_max', 1);
+    setMemoryExtractConfig(sourceGroup, 'working_max', 1);
+    setMemoryExtractConfig(sourceGroup, 'canonical_min_confidence', 0.95);
+
+    const conversationsDir = path.join(
+      process.cwd(),
+      'groups',
+      sourceGroup,
+      'conversations',
+    );
+    fs.mkdirSync(conversationsDir, { recursive: true });
+    const archiveFile = `2026-04-01-${Date.now()}-thresholds.md`;
+    const archivePath = path.join(conversationsDir, archiveFile);
+    fs.writeFileSync(
+      archivePath,
+      [
+        '**User**: 请记住：以后都用中文回答我',
+        '',
+        '**User**: 请记住：以后输出要简洁',
+        '',
+        '**User**: 帮我总结今天进展',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    try {
+      await processTaskIpc(
+        {
+          type: 'memory_extract_from_archive',
+          archiveFile,
+          archiveHash: 'cfg-thresholds',
+          round: 3,
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+    } finally {
+      fs.unlinkSync(archivePath);
+    }
+
+    const memories = listMemories(sourceGroup, 50).filter(
+      (m) => m.source === 'archive' && m.metadata?.includes(archiveFile),
+    );
+    const canonicalCount = memories.filter((m) => m.layer === 'canonical').length;
+    const workingCount = memories.filter((m) => m.layer === 'working').length;
+    expect(canonicalCount).toBe(0);
+    expect(workingCount).toBeLessThanOrEqual(1);
   });
 
   it('memory_doctor/gc/metrics produce response payloads', async () => {

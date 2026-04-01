@@ -637,13 +637,17 @@ class FeishuChannel implements Channel {
     const formValue = action?.form_value as Record<string, string> | undefined;
 
     if ((value?.workflow_id || value?.group_folder) && value?.action && this.onCardAction) {
+      const mergedFormValue = {
+        ...(value || {}),
+        ...(formValue || {}),
+      };
       this.onCardAction({
         action: value.action,
         user_id: userId,
         message_id: messageId,
         group_folder: value.group_folder,
         workflow_id: value.workflow_id,
-        form_value: formValue,
+        form_value: mergedFormValue,
       });
     }
 

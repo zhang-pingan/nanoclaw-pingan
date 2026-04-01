@@ -246,6 +246,17 @@ function createSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_memory_metrics_event_time ON memory_metrics(event, created_at);
   `);
 
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS memory_extract_config (
+      group_folder TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (group_folder, key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_extract_config_group ON memory_extract_config(group_folder);
+  `);
+
   // FTS5 full-text search index for messages
   database.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -1179,6 +1190,24 @@ export interface MemoryMetricSummary {
   byEvent: Array<{ event: string; count: number }>;
 }
 
+export interface MemoryExtractConfig {
+  canonical_max: number;
+  working_max: number;
+  episodic_max: number;
+  canonical_min_confidence: number;
+  working_min_confidence: number;
+  episodic_min_confidence: number;
+}
+
+const MEMORY_EXTRACT_DEFAULT_CONFIG: MemoryExtractConfig = {
+  canonical_max: 3,
+  working_max: 4,
+  episodic_max: 1,
+  canonical_min_confidence: 0.8,
+  working_min_confidence: 0.55,
+  episodic_min_confidence: 0.65,
+};
+
 function normalizeMemoryText(content: string): string {
   return content
     .toLowerCase()
@@ -1523,6 +1552,75 @@ export function getMemoryMetricSummary(
     total: totalRow.cnt || 0,
     byEvent,
   };
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  const n = Math.trunc(value);
+  return Math.max(min, Math.min(max, n));
+}
+
+function clampFloat(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+export function getMemoryExtractConfig(groupFolder: string): MemoryExtractConfig {
+  const rows = db
+    .prepare(
+      `SELECT group_folder, key, value
+       FROM memory_extract_config
+       WHERE group_folder IN ('*', ?)`,
+    )
+    .all(groupFolder) as Array<{
+      group_folder: string;
+      key: string;
+      value: string;
+    }>;
+
+  const cfg: MemoryExtractConfig = { ...MEMORY_EXTRACT_DEFAULT_CONFIG };
+  rows
+    .sort((a, b) => (a.group_folder === '*' ? -1 : 1) - (b.group_folder === '*' ? -1 : 1))
+    .forEach((row) => {
+      const raw = Number(row.value);
+      switch (row.key) {
+        case 'canonical_max':
+          cfg.canonical_max = clampInt(raw, 0, 20);
+          break;
+        case 'working_max':
+          cfg.working_max = clampInt(raw, 0, 50);
+          break;
+        case 'episodic_max':
+          cfg.episodic_max = clampInt(raw, 0, 10);
+          break;
+        case 'canonical_min_confidence':
+          cfg.canonical_min_confidence = clampFloat(raw, 0, 1);
+          break;
+        case 'working_min_confidence':
+          cfg.working_min_confidence = clampFloat(raw, 0, 1);
+          break;
+        case 'episodic_min_confidence':
+          cfg.episodic_min_confidence = clampFloat(raw, 0, 1);
+          break;
+        default:
+          break;
+      }
+    });
+
+  return cfg;
+}
+
+export function setMemoryExtractConfig(
+  groupFolder: string,
+  key: keyof MemoryExtractConfig,
+  value: number,
+): void {
+  db.prepare(
+    `INSERT INTO memory_extract_config (group_folder, key, value, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(group_folder, key)
+     DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ).run(groupFolder, key, String(value), Date.now().toString());
 }
 
 /**

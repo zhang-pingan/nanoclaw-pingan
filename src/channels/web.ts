@@ -596,13 +596,17 @@ class WebChannel {
     }
 
     if (this.onCardAction) {
+      const mergedFormValue = {
+        ...(value || {}),
+        ...(formValue || {}),
+      };
       this.onCardAction({
         action: value.action,
         user_id: 'web_user',
         message_id: cardId || '',
         workflow_id: value.workflow_id,
         group_folder: value.group_folder,
-        form_value: formValue,
+        form_value: mergedFormValue,
       });
     }
 
@@ -907,13 +911,17 @@ class WebChannel {
           return;
         }
         if (this.onCardAction) {
+          const mergedFormValue = {
+            ...(value || {}),
+            ...(formValue || {}),
+          };
           this.onCardAction({
             action: value.action,
             user_id: 'web_user',
             message_id: cardId || '',
             workflow_id: value.workflow_id,
             group_folder: value.group_folder,
-            form_value: formValue,
+            form_value: mergedFormValue,
           });
         }
         break;

@@ -33,6 +33,7 @@ import {
   deleteTask,
   doctorMemories,
   gcMemories,
+  getMemoryExtractConfig,
   getDelegation,
   getMemoryMetricSummary,
   getMemoryById,
@@ -303,6 +304,8 @@ interface ArchiveMemoryCandidate {
   layer: 'working' | 'episodic' | 'canonical';
   memory_type: 'preference' | 'rule' | 'fact' | 'summary';
   content: string;
+  reason: string;
+  confidence: number;
 }
 
 function parseArchiveMarkdownMessages(markdown: string): ExtractedArchiveMessage[] {
@@ -323,37 +326,90 @@ function parseArchiveMarkdownMessages(markdown: string): ExtractedArchiveMessage
 function extractArchiveMemoryCandidates(
   markdown: string,
   archiveFile: string,
+  cfg: {
+    canonical_max: number;
+    working_max: number;
+    episodic_max: number;
+    canonical_min_confidence: number;
+    working_min_confidence: number;
+    episodic_min_confidence: number;
+  },
 ): ArchiveMemoryCandidate[] {
   const messages = parseArchiveMarkdownMessages(markdown);
-  const userMessages = messages
-    .filter((m) => m.sender.toLowerCase() === 'user')
-    .map((m) => m.content.trim())
-    .filter(Boolean);
+  const userMessages = messages.filter((m) => m.sender.toLowerCase() === 'user');
+  const assistantMessages = messages.filter(
+    (m) => m.sender.toLowerCase() !== 'user',
+  );
 
   const out: ArchiveMemoryCandidate[] = [];
   const rememberCue =
-    /(记住|记一下|请记住|remember|keep in mind|my preference|偏好|默认)/i;
+    /(记住|记一下|请记住|remember|keep in mind|my preference|偏好|默认|以后都)/i;
   const ruleCue =
     /(always|never|must|don['’]?t|do not|必须|不要|不能|不许|禁止|总是)/i;
+  const temporalCue =
+    /(今天|这次|临时|暂时|本周|明天|稍后|先|once|for now|today|this time|temporar)/i;
+  const taskCue =
+    /(帮我|请你|请先|执行|处理|修复|总结|整理|查询|排查|review|fix|implement|summarize)/i;
+  const canonicalWhitelist =
+    /(语言|中文|英文|称呼|叫我|输出格式|格式|风格|回复方式|简洁|详细|单位|时区|markdown|代码风格|偏好|规则|preference|format|style|timezone|language)/i;
+  const completionCue =
+    /(已完成|完成了|已处理|处理完成|已经修复|done|completed|fixed|implemented)/i;
 
-  for (const content of userMessages) {
-    if (!rememberCue.test(content)) continue;
-    const normalized = content.replace(/\s+/g, ' ').trim();
+  for (const msg of userMessages) {
+    const normalized = msg.content.replace(/\s+/g, ' ').trim();
     if (normalized.length < 8) continue;
-    out.push({
-      layer: 'canonical',
-      memory_type: ruleCue.test(content) ? 'rule' : 'preference',
-      content: normalized.slice(0, 400),
-    });
+
+    const hasRemember = rememberCue.test(normalized);
+    const hasRule = ruleCue.test(normalized);
+    const hasTemporal = temporalCue.test(normalized);
+    const hasTask = taskCue.test(normalized);
+    const inWhitelist = canonicalWhitelist.test(normalized);
+
+    if ((hasRemember || hasRule) && inWhitelist && !hasTemporal && !hasTask) {
+      out.push({
+        layer: 'canonical',
+        memory_type: hasRule ? 'rule' : 'preference',
+        content: normalized.slice(0, 400),
+        reason: 'stable_preference_whitelist',
+        confidence: hasRule ? 0.9 : 0.82,
+      });
+      continue;
+    }
+
+    if (hasTask || hasTemporal || hasRemember) {
+      out.push({
+        layer: 'working',
+        memory_type: 'summary',
+        content: `[archive:${archiveFile}] ${normalized.slice(0, 300)}`,
+        reason: hasTask ? 'task_or_temporal_context' : 'non_whitelist_preference',
+        confidence: hasTask || hasTemporal ? 0.7 : 0.62,
+      });
+    }
   }
 
-  const latestUser = userMessages[userMessages.length - 1];
-  if (latestUser) {
-    const compact = latestUser.replace(/\s+/g, ' ').trim().slice(0, 320);
+  const latestUser = userMessages[userMessages.length - 1]?.content
+    ?.replace(/\s+/g, ' ')
+    .trim();
+  if (latestUser && !out.some((c) => c.content.includes(latestUser.slice(0, 80)))) {
     out.push({
       layer: 'working',
       memory_type: 'summary',
-      content: `[archive:${archiveFile}] ${compact}`,
+      content: `[archive:${archiveFile}] ${latestUser.slice(0, 320)}`,
+      reason: 'latest_user_context',
+      confidence: 0.55,
+    });
+  }
+
+  const latestAssistant = assistantMessages[assistantMessages.length - 1]?.content
+    ?.replace(/\s+/g, ' ')
+    .trim();
+  if (latestAssistant && completionCue.test(latestAssistant) && latestUser) {
+    out.push({
+      layer: 'episodic',
+      memory_type: 'summary',
+      content: `[archive:${archiveFile}] 完成结果：${latestUser.slice(0, 200)}`,
+      reason: 'assistant_completion_detected',
+      confidence: 0.66,
     });
   }
 
@@ -365,7 +421,128 @@ function extractArchiveMemoryCandidates(
     seen.add(key);
     deduped.push(c);
   }
-  return deduped.slice(0, 8);
+  const limited: ArchiveMemoryCandidate[] = [];
+  let canonicalCount = 0;
+  let episodicCount = 0;
+  let workingCount = 0;
+  for (const c of deduped) {
+    if (
+      (c.layer === 'canonical' && c.confidence < cfg.canonical_min_confidence) ||
+      (c.layer === 'working' && c.confidence < cfg.working_min_confidence) ||
+      (c.layer === 'episodic' && c.confidence < cfg.episodic_min_confidence)
+    ) {
+      continue;
+    }
+    if (c.layer === 'canonical' && canonicalCount >= cfg.canonical_max) continue;
+    if (c.layer === 'episodic' && episodicCount >= cfg.episodic_max) continue;
+    if (c.layer === 'working' && workingCount >= cfg.working_max) continue;
+    if (c.layer === 'canonical') canonicalCount += 1;
+    if (c.layer === 'episodic') episodicCount += 1;
+    if (c.layer === 'working') workingCount += 1;
+    limited.push(c);
+  }
+  return limited;
+}
+
+function summarizeMemoryContent(id: string): string {
+  const m = getMemoryById(id);
+  if (!m) return `${id} (not found)`;
+  const preview = m.content.replace(/\s+/g, ' ').trim().slice(0, 120);
+  return `${id}: ${preview}`;
+}
+
+async function sendConflictCardsFromReport(
+  sourceGroup: string,
+  deps: IpcDeps,
+  conflictGroups: Array<{
+    key: string;
+    positiveIds: string[];
+    negativeIds: string[];
+  }>,
+): Promise<void> {
+  if (!deps.sendCard || conflictGroups.length === 0) return;
+  const groups = deps.registeredGroups();
+  const targetEntry = Object.entries(groups).find(
+    ([, g]) => g.folder === sourceGroup,
+  );
+  if (!targetEntry) return;
+  const targetJid = targetEntry[0];
+
+  const cards = conflictGroups.slice(0, 3);
+  for (const group of cards) {
+    const posId = group.positiveIds[0];
+    const negId = group.negativeIds[0];
+    if (!posId || !negId) continue;
+
+    const posText = summarizeMemoryContent(posId);
+    const negText = summarizeMemoryContent(negId);
+
+    const card: InteractiveCard = {
+      header: { title: '记忆冲突待处理', color: 'orange' },
+      body:
+        `检测到冲突：${group.key}\n\n` +
+        `A（正向）\n${posText}\n\n` +
+        `B（反向）\n${negText}\n\n` +
+        '请选择保留方案，或输入合并内容后提交。',
+      buttons: [
+        {
+          id: 'keep-a',
+          label: '保留 A',
+          type: 'primary',
+          value: {
+            action: 'memory_conflict_keep',
+            group_folder: sourceGroup,
+            keep_id: posId,
+            deprecate_id: negId,
+          },
+        },
+        {
+          id: 'keep-b',
+          label: '保留 B',
+          value: {
+            action: 'memory_conflict_keep',
+            group_folder: sourceGroup,
+            keep_id: negId,
+            deprecate_id: posId,
+          },
+        },
+        {
+          id: 'skip',
+          label: '稍后处理',
+          value: {
+            action: 'memory_conflict_skip',
+            group_folder: sourceGroup,
+            keep_id: posId,
+            deprecate_id: negId,
+          },
+        },
+      ],
+      form: {
+        name: 'merge_conflict',
+        inputs: [{ name: 'merged_content', placeholder: '输入合并后的记忆内容' }],
+        submitButton: {
+          id: 'merge-submit',
+          label: '合并提交',
+          type: 'default',
+          value: {
+            action: 'memory_conflict_merge',
+            group_folder: sourceGroup,
+            merge_id_a: posId,
+            merge_id_b: negId,
+          },
+        },
+      },
+    };
+
+    try {
+      await deps.sendCard(targetJid, card);
+    } catch (err) {
+      logger.warn(
+        { err, sourceGroup, targetJid, key: group.key },
+        'Failed to send memory conflict card',
+      );
+    }
+  }
 }
 
 export async function processTaskIpc(
@@ -473,7 +650,12 @@ export async function processTaskIpc(
 
       try {
         const markdown = fs.readFileSync(archivePath, 'utf-8');
-        const candidates = extractArchiveMemoryCandidates(markdown, archiveName);
+        const extractConfig = getMemoryExtractConfig(sourceGroup);
+        const candidates = extractArchiveMemoryCandidates(
+          markdown,
+          archiveName,
+          extractConfig,
+        );
         const created = candidates.map((c) =>
           createMemory({
             group_folder: sourceGroup,
@@ -485,12 +667,20 @@ export async function processTaskIpc(
               archive_file: archiveName,
               archive_hash: data.archiveHash || null,
               archive_round: data.round || null,
+              extraction_reason: c.reason,
+              extraction_confidence: c.confidence,
+              extract_config: extractConfig,
               extracted_at: new Date().toISOString(),
             }),
           }),
         );
 
         const report = doctorMemories(sourceGroup, 7);
+        await sendConflictCardsFromReport(
+          sourceGroup,
+          deps,
+          report.conflictGroups,
+        );
         const gc = gcMemories(sourceGroup, {
           dryRun: false,
           staleWorkingDays: 14,
@@ -517,6 +707,7 @@ export async function processTaskIpc(
             sourceGroup,
             archiveName,
             created: created.length,
+            extractConfig,
             duplicates: report.duplicateGroups.length,
             conflicts: report.conflictGroups.length,
             duplicateDeleted: gc.duplicateDeletedIds.length,

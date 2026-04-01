@@ -9,6 +9,7 @@ import {
   doctorMemories,
   gcMemories,
   getMemoryById,
+  getMemoryExtractConfig,
   getMemoryMetricSummary,
   getAllChats,
   getAllRegisteredGroups,
@@ -20,6 +21,7 @@ import {
   resolveConflict,
   searchMemories,
   setRegisteredGroup,
+  setMemoryExtractConfig,
   storeChatMetadata,
   storeMessage,
   updateMemory,
@@ -640,6 +642,26 @@ describe('memory doctor/gc/metrics', () => {
     const searchRow = summary.byEvent.find((e) => e.event === 'search:hybrid');
     expect(writeRow?.count).toBe(2);
     expect(searchRow?.count).toBe(1);
+  });
+});
+
+describe('memory extract config table', () => {
+  it('returns defaults and supports per-group overrides', () => {
+    const defaults = getMemoryExtractConfig('web_main');
+    expect(defaults.canonical_max).toBe(3);
+    expect(defaults.working_max).toBe(4);
+    expect(defaults.canonical_min_confidence).toBe(0.8);
+
+    setMemoryExtractConfig('*', 'working_max', 7);
+    setMemoryExtractConfig('web_main', 'working_max', 2);
+    setMemoryExtractConfig('web_main', 'canonical_min_confidence', 0.9);
+
+    const cfg = getMemoryExtractConfig('web_main');
+    expect(cfg.working_max).toBe(2);
+    expect(cfg.canonical_min_confidence).toBe(0.9);
+
+    const other = getMemoryExtractConfig('other_group');
+    expect(other.working_max).toBe(7);
   });
 });
 
