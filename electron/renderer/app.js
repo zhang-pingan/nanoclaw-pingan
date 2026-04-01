@@ -1337,8 +1337,15 @@ function loadWorkflowCreateOptions(forceReload = false) {
   return workflowCreateOptionsLoading;
 }
 
-function warmWorkflowCreateOptions() {
-  loadWorkflowCreateOptions().catch((err) => {
+function invalidateWorkflowCreateOptionsCache() {
+  workflowCreateOptionsCache = null;
+}
+
+function warmWorkflowCreateOptions(forceReload = false) {
+  if (forceReload) {
+    invalidateWorkflowCreateOptionsCache();
+  }
+  loadWorkflowCreateOptions(forceReload).catch((err) => {
     console.error("Failed to prefetch workflow create options:", err);
   });
 }
@@ -1390,7 +1397,6 @@ function openWorkflowWizard(optionsData) {
     requirementMode: "preset",
     requirementPreset: "",
     requirementCustom: "",
-    deliverableFile: "",
   };
 
   const overlay = document.createElement("div");
@@ -1420,11 +1426,7 @@ function openWorkflowWizard(optionsData) {
           <div id="wf-requirement-mode" class="workflow-wizard-options compact"></div>
           <div id="wf-requirement-preset-wrap" class="workflow-wizard-subsection"></div>
           <div id="wf-requirement-custom-wrap" class="workflow-wizard-subsection"></div>
-        </div>
-        <div class="workflow-wizard-section">
-          <div class="workflow-wizard-label">5. 交付物文件（按需求目录文件名展示）</div>
-          <div id="wf-deliverable-hint" class="workflow-wizard-hint"></div>
-          <div id="wf-deliverable-options" class="workflow-wizard-options"></div>
+          <div id="wf-requirement-deliverable-hint" class="workflow-wizard-hint"></div>
         </div>
       </div>
       <div class="workflow-wizard-footer">
@@ -1442,8 +1444,7 @@ function openWorkflowWizard(optionsData) {
   const reqModeEl = overlay.querySelector("#wf-requirement-mode");
   const reqPresetWrapEl = overlay.querySelector("#wf-requirement-preset-wrap");
   const reqCustomWrapEl = overlay.querySelector("#wf-requirement-custom-wrap");
-  const deliverableHintEl = overlay.querySelector("#wf-deliverable-hint");
-  const deliverableOptionsEl = overlay.querySelector("#wf-deliverable-options");
+  const reqDeliverableHintEl = overlay.querySelector("#wf-requirement-deliverable-hint");
   const submitBtn = overlay.querySelector("#wf-submit-btn");
 
   function getSelectedWorkflowType() {
@@ -1466,8 +1467,7 @@ function openWorkflowWizard(optionsData) {
       : state.requirementPreset;
   }
 
-  function getDeliverableFiles() {
-    const reqName = getRequirementName();
+  function getRequirementDeliverables(reqName) {
     const req = getRequirements().find((r) => r.requirement_name === reqName);
     return Array.isArray(req?.deliverables) ? req.deliverables : [];
   }
@@ -1486,7 +1486,6 @@ function openWorkflowWizard(optionsData) {
         state.workflowType = v;
         const eps = getEntryPoints();
         state.entryPoint = eps[0] || "";
-        state.deliverableFile = "";
         refresh();
       }
     );
@@ -1504,7 +1503,6 @@ function openWorkflowWizard(optionsData) {
       state.entryPoint,
       (v) => {
         state.entryPoint = v;
-        state.deliverableFile = "";
         refresh();
       }
     );
@@ -1517,7 +1515,6 @@ function openWorkflowWizard(optionsData) {
         state.service = v;
         const reqs = getRequirements();
         state.requirementPreset = reqs[0]?.requirement_name || "";
-        state.deliverableFile = "";
         refresh();
       }
     );
@@ -1536,7 +1533,6 @@ function openWorkflowWizard(optionsData) {
       state.requirementMode,
       (v) => {
         state.requirementMode = v;
-        state.deliverableFile = "";
         refresh();
       }
     );
@@ -1552,7 +1548,6 @@ function openWorkflowWizard(optionsData) {
         state.requirementPreset,
         (v) => {
           state.requirementPreset = v;
-          state.deliverableFile = "";
           refresh();
         }
       );
@@ -1566,32 +1561,28 @@ function openWorkflowWizard(optionsData) {
       input.value = state.requirementCustom;
       input.addEventListener("input", () => {
         state.requirementCustom = input.value;
-        state.deliverableFile = "";
         refresh();
       });
       reqCustomWrapEl.appendChild(input);
     }
 
-    const files = getDeliverableFiles();
     const required = isDeliverableRequired();
-    deliverableHintEl.textContent = required ? "当前入口点要求交付物（必选）" : "当前入口点交付物可空";
-    renderSingleOptions(
-      deliverableOptionsEl,
-      files.map((f) => ({ value: f, label: f })),
-      state.deliverableFile,
-      (v) => {
-        state.deliverableFile = v;
-        refresh();
-      }
-    );
-
     const requirementName = getRequirementName();
+    const deliverableFiles = getRequirementDeliverables(requirementName);
+    const deliverableOk = !required || deliverableFiles.length > 0;
+    if (required) {
+      reqDeliverableHintEl.textContent = deliverableOk
+        ? `已校验交付物文件：${deliverableFiles.join(", ")}`
+        : "当前入口点要求交付物，但该需求目录下未找到交付物文件";
+    } else {
+      reqDeliverableHintEl.textContent = "";
+    }
     const canSubmit =
       !!state.workflowType &&
       !!state.entryPoint &&
       !!state.service &&
       !!requirementName &&
-      (!required || !!state.deliverableFile);
+      deliverableOk;
     submitBtn.disabled = !canSubmit;
   }
 
@@ -1605,6 +1596,11 @@ function openWorkflowWizard(optionsData) {
     const requirementName = getRequirementName();
     const required = isDeliverableRequired();
     if (!requirementName) return;
+    const deliverableFiles = getRequirementDeliverables(requirementName);
+    if (required && deliverableFiles.length === 0) {
+      alert("当前入口点要求交付物，但所选需求目录下没有交付物文件，无法创建流程。");
+      return;
+    }
 
     const data = {
       name: requirementName,
@@ -1612,11 +1608,8 @@ function openWorkflowWizard(optionsData) {
       workflow_type: state.workflowType,
       start_from: state.entryPoint,
     };
-    if (required || state.deliverableFile) {
+    if (required) {
       data.deliverable = requirementName;
-    }
-    if (state.deliverableFile) {
-      data.deliverable_file = state.deliverableFile;
     }
 
     const content = JSON.stringify({
@@ -1998,6 +1991,7 @@ refreshGroupsBtn.addEventListener("click", () => {
   refreshGroupsBtn.classList.add("spinning");
   setTimeout(() => refreshGroupsBtn.classList.remove("spinning"), 700);
   loadGroups();
+  warmWorkflowCreateOptions(true);
   if (currentGroupJid) loadMessages();
 });
 openSchedulersBtn.addEventListener("click", () => {
