@@ -14,8 +14,11 @@ var selectedMsgIds = new Set();
 var pendingFiles = []; // files staged for upload on next send
 
 var mainScreen = document.getElementById("main-screen");
+var workspace = document.getElementById("workspace");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
+var primaryNav = document.getElementById("primary-nav");
+var primaryNavItems = Array.from(document.querySelectorAll(".primary-nav-item"));
 var groupsList = document.getElementById("groups-list");
 var refreshGroupsBtn = document.getElementById("refresh-groups");
 var schedulersPanel = document.getElementById("schedulers-panel");
@@ -61,6 +64,7 @@ var copySelectedBtn = document.getElementById("copy-selected-btn");
 var cancelSelectBtn = document.getElementById("cancel-select-btn");
 var agentStatusInterval = null;
 var agentStatusData = [];
+var activePrimaryNavKey = "agent-groups";
 
 // --- Command palette definitions ---
 var commands = [
@@ -494,6 +498,29 @@ function setConnectionStatus(status) {
   const label = connectionStatus.querySelector(".conn-label");
   label.textContent = status === "connected" ? "Connected" : status === "connecting" ? "Connecting..." : "Disconnected";
 }
+
+function setPrimaryNav(navKey) {
+  if (navKey === null || navKey === void 0) return;
+  activePrimaryNavKey = navKey;
+  primaryNavItems.forEach((item) => {
+    item.classList.toggle("active", item.getAttribute("data-nav-key") === navKey);
+  });
+  const showWorkspace = navKey === "agent-groups";
+  if (workspace) {
+    workspace.classList.toggle("active", showWorkspace);
+  }
+
+  if (!showWorkspace) {
+    schedulersPanel.classList.remove("open");
+    agentStatusPanel.classList.remove("open");
+    workflowsPanel.classList.remove("open");
+    if (agentStatusInterval) {
+      clearInterval(agentStatusInterval);
+      agentStatusInterval = null;
+    }
+  }
+}
+
 function renderGroups() {
   groupsList.innerHTML = "";
   for (const group of groups) {
@@ -1318,6 +1345,15 @@ connectWS();
 loadGroups();
 
 // --- Event listeners ---
+if (primaryNav) {
+  setPrimaryNav(activePrimaryNavKey);
+}
+primaryNavItems.forEach((item) => {
+  item.addEventListener("click", () => {
+    const navKey = item.getAttribute("data-nav-key") || "";
+    setPrimaryNav(navKey);
+  });
+});
 
 sidebarCollapse.addEventListener("click", () => {
   sidebar.classList.toggle("collapsed");

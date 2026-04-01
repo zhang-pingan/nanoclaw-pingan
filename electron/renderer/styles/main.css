@@ -27,6 +27,7 @@
   --radius-xl: 20px;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
   --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  --primary-sidebar-width: 108px;
   --sidebar-width: 272px;
   --header-height: 56px;
   --transition: 180ms ease;
@@ -285,6 +286,99 @@ html, body {
 }
 
 /* === Sidebar === */
+#primary-sidebar {
+  width: var(--primary-sidebar-width);
+  min-width: var(--primary-sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  z-index: 12;
+}
+
+.primary-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72px;
+  border-bottom: 1px solid var(--border);
+}
+
+.primary-brand {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent) 0%, #4ea4ff 100%);
+  box-shadow: 0 6px 14px rgba(10, 132, 255, 0.24);
+}
+
+.primary-nav {
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.primary-nav-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 180ms ease;
+  text-align: center;
+}
+
+.primary-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.primary-nav-item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(79, 110, 247, 0.18);
+}
+
+.primary-nav-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.primary-nav-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+#workspace {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: none;
+}
+
+#workspace.active {
+  display: flex;
+}
+
 #sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
@@ -2479,6 +2573,7 @@ html, body {
     linear-gradient(180deg, #f7f8fc 0%, #eef1f7 100%);
 }
 
+#primary-sidebar,
 #sidebar,
 #chat-header,
 #input-area,
@@ -2495,6 +2590,11 @@ html, body {
   background: rgba(250, 251, 255, 0.68);
   border-right-color: var(--border);
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.55);
+}
+
+#primary-sidebar {
+  background: rgba(250, 251, 255, 0.72);
+  border-right-color: var(--border);
 }
 
 #chat-area {
