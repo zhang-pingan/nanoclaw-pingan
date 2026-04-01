@@ -708,12 +708,9 @@ describe('register_group success', () => {
 });
 
 describe('memory IPC tasks', () => {
-  it('memory_write/list/update/delete round-trip works', async () => {
+  it('memory_write round-trip works', async () => {
     const sourceGroup = 'other-group';
     const writeId = rid('mw');
-    const listId = rid('ml');
-    const updateId = rid('mu');
-    const deleteId = rid('md');
 
     await processTaskIpc(
       {
@@ -729,40 +726,6 @@ describe('memory IPC tasks', () => {
     );
     const writeRes = readMemoryIpcResult(sourceGroup, writeId);
     expect(writeRes.memory?.id).toBeTruthy();
-    const memoryId = writeRes.memory.id as string;
-
-    await processTaskIpc(
-      { type: 'memory_list', requestId: listId, limit: 10 },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const listRes = readMemoryIpcResult(sourceGroup, listId);
-    expect(Array.isArray(listRes.memories)).toBe(true);
-    expect(listRes.memories.length).toBeGreaterThan(0);
-
-    await processTaskIpc(
-      {
-        type: 'memory_update',
-        requestId: updateId,
-        memoryId,
-        content: 'Always reply in Chinese language',
-      },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const updateRes = readMemoryIpcResult(sourceGroup, updateId);
-    expect(updateRes.memory.content).toContain('language');
-
-    await processTaskIpc(
-      { type: 'memory_delete', requestId: deleteId, memoryId },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const deleteRes = readMemoryIpcResult(sourceGroup, deleteId);
-    expect(deleteRes.deleted).toBe(true);
   });
 
   it('memory_search returns hybrid hits', async () => {
@@ -870,45 +833,11 @@ describe('memory IPC tasks', () => {
     );
   });
 
-  it('memory_update/delete return error payload for unknown memory id', async () => {
-    const sourceGroup = 'other-group';
-    const updateId = rid('mu');
-    const deleteId = rid('md');
-
-    await processTaskIpc(
-      {
-        type: 'memory_update',
-        requestId: updateId,
-        memoryId: 'mem-not-found',
-        content: 'x',
-      },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const updateRes = readMemoryIpcResult(sourceGroup, updateId);
-    expect(updateRes.error).toBe('memory not found');
-
-    await processTaskIpc(
-      {
-        type: 'memory_delete',
-        requestId: deleteId,
-        memoryId: 'mem-not-found',
-      },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const deleteRes = readMemoryIpcResult(sourceGroup, deleteId);
-    expect(deleteRes.error).toBe('memory not found');
-  });
-
   it('memory_gc with dryRun=false deletes duplicates', async () => {
     const sourceGroup = 'other-group';
     const write1 = rid('mw');
     const write2 = rid('mw');
     const gcId = rid('mgc');
-    const listId = rid('ml');
 
     for (const requestId of [write1, write2]) {
       await processTaskIpc(
@@ -941,14 +870,7 @@ describe('memory IPC tasks', () => {
     expect(gcRes.result.dryRun).toBe(false);
     expect(gcRes.result.duplicateDeletedIds.length).toBeGreaterThan(0);
 
-    await processTaskIpc(
-      { type: 'memory_list', requestId: listId, limit: 50 },
-      sourceGroup,
-      false,
-      deps,
-    );
-    const listRes = readMemoryIpcResult(sourceGroup, listId);
-    const remain = listRes.memories.filter(
+    const remain = listMemories(sourceGroup, 50).filter(
       (m: { content: string }) => m.content === 'Duplicate value for gc',
     );
     expect(remain.length).toBe(1);

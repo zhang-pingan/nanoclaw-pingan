@@ -29,7 +29,6 @@ import {
   createDelegation,
   createMemory,
   createTask,
-  deleteMemory,
   deleteTask,
   doctorMemories,
   gcMemories,
@@ -37,7 +36,6 @@ import {
   getDelegation,
   getMemoryById,
   getTaskById,
-  listMemories,
   recordMemoryMetric,
   resolveConflict,
   searchMemories,
@@ -45,7 +43,6 @@ import {
   storeChatMetadata,
   storeMessageDirect,
   updateDelegation,
-  updateMemory,
   updateTask,
 } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
@@ -573,8 +570,7 @@ export async function processTaskIpc(
     limit?: number;
     mode?: string;
     requestId?: string;
-    // For memory CRUD
-    memoryId?: string;
+    // For memory
     content?: string;
     layer?: 'working' | 'episodic' | 'canonical';
     memory_type?: 'preference' | 'rule' | 'fact' | 'summary';
@@ -1416,60 +1412,6 @@ export async function processTaskIpc(
         'write',
         `layer=${data.layer},type=${data.memory_type}`,
       );
-      break;
-    }
-
-    case 'memory_list': {
-      if (!data.requestId) {
-        logger.warn({ sourceGroup }, 'memory_list missing requestId');
-        break;
-      }
-      const limit = data.limit || 20;
-      const memories = listMemories(sourceGroup, limit);
-      writeMemoryResult(sourceGroup, data.requestId, { memories });
-      recordMemoryMetric(sourceGroup, 'list', `limit=${limit}`);
-      break;
-    }
-
-    case 'memory_update': {
-      if (!data.requestId || !data.memoryId) {
-        logger.warn({ sourceGroup }, 'memory_update missing requestId or memoryId');
-        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing requestId or memoryId' });
-        break;
-      }
-      const existing = getMemoryById(data.memoryId);
-      if (!existing || existing.group_folder !== sourceGroup) {
-        logger.warn({ sourceGroup, memoryId: data.memoryId }, 'memory_update memory not found in group scope');
-        writeMemoryResult(sourceGroup, data.requestId, { error: 'memory not found' });
-        break;
-      }
-      updateMemory(data.memoryId, {
-        content: data.content,
-        layer: data.layer,
-        memory_type: data.memory_type,
-        status: data.memory_status,
-      });
-      const updated = getMemoryById(data.memoryId);
-      writeMemoryResult(sourceGroup, data.requestId, { memory: updated });
-      recordMemoryMetric(sourceGroup, 'update', `id=${data.memoryId}`);
-      break;
-    }
-
-    case 'memory_delete': {
-      if (!data.requestId || !data.memoryId) {
-        logger.warn({ sourceGroup }, 'memory_delete missing requestId or memoryId');
-        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing requestId or memoryId' });
-        break;
-      }
-      const existing = getMemoryById(data.memoryId);
-      if (!existing || existing.group_folder !== sourceGroup) {
-        logger.warn({ sourceGroup, memoryId: data.memoryId }, 'memory_delete memory not found in group scope');
-        writeMemoryResult(sourceGroup, data.requestId, { error: 'memory not found' });
-        break;
-      }
-      deleteMemory(data.memoryId);
-      writeMemoryResult(sourceGroup, data.requestId, { deleted: true, memoryId: data.memoryId });
-      recordMemoryMetric(sourceGroup, 'delete', `id=${data.memoryId}`);
       break;
     }
 
