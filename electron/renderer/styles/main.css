@@ -838,6 +838,19 @@ html, body {
   word-break: break-word;
 }
 
+.msg-model-tail {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+  opacity: 0.9;
+}
+
+.message.user .msg-model-tail {
+  text-align: right;
+}
+
 /* Reply quote block inside message */
 .msg-reply-quote {
   background: rgba(79, 110, 247, 0.06);

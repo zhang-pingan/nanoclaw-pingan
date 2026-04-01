@@ -12,6 +12,7 @@ var cmdPaletteIndex = -1;
 var multiSelectMode = false;
 var selectedMsgIds = new Set();
 var pendingFiles = []; // files staged for upload on next send
+var modelSyncTimer = null;
 
 var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
@@ -413,6 +414,9 @@ function createMessageEl(msg) {
   }
 
   const renderedContent = isUser ? escapeHtml(msg.content) : renderMarkdown(msg.content);
+  const modelTail = isUser && msg.model
+    ? `<div class="msg-model-tail">模型：${escapeHtml(msg.model)}</div>`
+    : "";
 
   // Check for file upload
   const fileInfo = detectFileUpload(msg.content);
@@ -434,6 +438,7 @@ function createMessageEl(msg) {
         ${replyHtml}
         <div class="msg-content">${renderedContent}</div>
       </div>
+      ${modelTail}
     </div>
   `;
 
@@ -468,6 +473,24 @@ function createMessageEl(msg) {
   });
 
   return div;
+}
+
+function scheduleModelSync() {
+  if (!currentGroupJid) return;
+  if (modelSyncTimer) clearTimeout(modelSyncTimer);
+  modelSyncTimer = setTimeout(async () => {
+    if (!currentGroupJid) return;
+    try {
+      const res = await apiFetch(`/api/messages?jid=${encodeURIComponent(currentGroupJid)}&since=0`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data.messages)) return;
+      messages = data.messages;
+      renderMessages();
+    } catch {
+      // Best effort only.
+    }
+  }, 900);
 }
 
 // --- Skeleton loading ---
@@ -994,11 +1017,15 @@ function handleWsMessage(msg) {
         timestamp: msg.timestamp,
         is_from_me: msg.is_from_me || false,
         is_bot_message: msg.is_bot_message || false,
-        reply_to_id: msg.reply_to_id || null
+        reply_to_id: msg.reply_to_id || null,
+        model: msg.model || null
       };
       if (incoming.chat_jid === currentGroupJid) {
         messages.push(incoming);
         appendSingleMessage(incoming);
+        if (!incoming.is_from_me) {
+          scheduleModelSync();
+        }
       } else if (!incoming.is_from_me) {
         // Increment unread count
         unreadCounts[incoming.chat_jid] = (unreadCounts[incoming.chat_jid] || 0) + 1;
