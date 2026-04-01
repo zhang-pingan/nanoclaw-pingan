@@ -16,6 +16,35 @@ var modelSyncTimer = null;
 
 var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
+var memoryManagementScreen = document.getElementById("memory-management-screen");
+var memoryGroupsList = document.getElementById("memory-groups-list");
+var memoryGroupTitle = document.getElementById("memory-group-title");
+var memoryGroupFolder = document.getElementById("memory-group-folder");
+var memoryGroupSummary = document.getElementById("memory-group-summary");
+var memorySearchInput = document.getElementById("memory-search-input");
+var memoryStatusFilter = document.getElementById("memory-status-filter");
+var memoryDoctorBtn = document.getElementById("memory-doctor-btn");
+var memoryCreateBtn = document.getElementById("memory-create-btn");
+var memorySearchBtn = document.getElementById("memory-search-btn");
+var memoryRefreshBtn = document.getElementById("memory-refresh-btn");
+var memoryList = document.getElementById("memory-list");
+var memoryEmpty = document.getElementById("memory-empty");
+var memoryEditor = document.getElementById("memory-editor");
+var memoryEditorTitle = document.getElementById("memory-editor-title");
+var memoryLayerSelect = document.getElementById("memory-layer-select");
+var memoryTypeSelect = document.getElementById("memory-type-select");
+var memoryStatusSelect = document.getElementById("memory-status-select");
+var memoryContentInput = document.getElementById("memory-content-input");
+var memorySaveBtn = document.getElementById("memory-save-btn");
+var memoryCancelBtn = document.getElementById("memory-cancel-btn");
+var memoryDoctorPanel = document.getElementById("memory-doctor-panel");
+var memoryDoctorSummary = document.getElementById("memory-doctor-summary");
+var memoryDoctorLog = document.getElementById("memory-doctor-log");
+var memoryDuplicatesList = document.getElementById("memory-duplicates-list");
+var memoryStaleList = document.getElementById("memory-stale-list");
+var memoryConflictsList = document.getElementById("memory-conflicts-list");
+var memoryGcDuplicatesBtn = document.getElementById("memory-gc-duplicates-btn");
+var memoryGcStaleBtn = document.getElementById("memory-gc-stale-btn");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
 var primaryNav = document.getElementById("primary-nav");
@@ -68,6 +97,14 @@ var cancelSelectBtn = document.getElementById("cancel-select-btn");
 var agentStatusInterval = null;
 var agentStatusData = [];
 var activePrimaryNavKey = "agent-groups";
+var activeMemoryGroupJid = "";
+var memoryEntries = [];
+var memoryQueryText = "";
+var memoryRequestSeq = 0;
+var editingMemoryId = "";
+var memoryStatusFilterValue = "all";
+var memoryDoctorReport = null;
+var memoryDoctorMap = {};
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -545,8 +582,17 @@ function setPrimaryNav(navKey) {
     item.classList.toggle("active", item.getAttribute("data-nav-key") === navKey);
   });
   const showWorkspace = navKey === "agent-groups";
+  const showMemoryManagement = navKey === "memory-management";
   if (workspace) {
     workspace.classList.toggle("active", showWorkspace);
+  }
+  if (memoryManagementScreen) {
+    memoryManagementScreen.classList.toggle("active", showMemoryManagement);
+  }
+  if (showMemoryManagement) {
+    renderDoctorPanel();
+    renderMemoryList();
+    loadMemories();
   }
 
   if (!showWorkspace) {
@@ -578,6 +624,500 @@ function renderGroups() {
     `;
     el.addEventListener("click", () => selectGroup(group.jid));
     groupsList.appendChild(el);
+  }
+}
+
+function getDefaultMemoryGroupJid() {
+  if (!Array.isArray(groups) || groups.length === 0) return "";
+  const mainGroup = groups.find((g) => g.isMain);
+  return (mainGroup && mainGroup.jid) || groups[0].jid || "";
+}
+
+function updateMemoryGroupHeader() {
+  if (!memoryGroupTitle || !memoryGroupFolder || !memoryGroupSummary) return;
+  const group = groups.find((g) => g.jid === activeMemoryGroupJid);
+  if (!group) {
+    memoryGroupTitle.textContent = "记忆管理";
+    memoryGroupFolder.textContent = "";
+    memoryGroupSummary.textContent = "请先在左侧选择一个 Group。记忆管理按 Group（group_folder）隔离。";
+    return;
+  }
+  memoryGroupTitle.textContent = group.name;
+  memoryGroupFolder.textContent = group.isMain ? "(main)" : `@ ${group.folder}`;
+  memoryGroupSummary.textContent = `当前 Group: ${group.folder}。可在此范围内进行记忆检索、整理与维护。`;
+}
+
+function selectMemoryGroup(jid) {
+  activeMemoryGroupJid = jid;
+  closeMemoryEditor();
+  memoryDoctorReport = null;
+  memoryDoctorMap = {};
+  renderDoctorPanel();
+  setDoctorLog("");
+  renderMemoryGroups();
+  updateMemoryGroupHeader();
+  loadMemories();
+}
+
+function renderMemoryGroups() {
+  if (!memoryGroupsList) return;
+  memoryGroupsList.innerHTML = "";
+  for (const group of groups) {
+    const el = document.createElement("div");
+    el.className = `list-item${group.jid === activeMemoryGroupJid ? " active" : ""}`;
+    const initial = (group.name || "?")[0].toUpperCase();
+    el.innerHTML = `
+      <span class="item-icon">${escapeHtml(initial)}</span>
+      <span class="item-name">${escapeHtml(group.name)}</span>
+      ${group.isMain ? '<span class="item-badge">main</span>' : ""}
+    `;
+    el.addEventListener("click", () => selectMemoryGroup(group.jid));
+    memoryGroupsList.appendChild(el);
+  }
+}
+
+function formatDateTime(ts) {
+  const ms = Number(ts);
+  if (Number.isNaN(ms)) return "--";
+  return new Date(ms).toLocaleString();
+}
+
+function getActiveMemoryGroup() {
+  return groups.find((g) => g.jid === activeMemoryGroupJid) || null;
+}
+
+function closeMemoryEditor() {
+  editingMemoryId = "";
+  if (memoryEditor) memoryEditor.classList.add("hidden");
+}
+
+function setDoctorLog(text) {
+  if (memoryDoctorLog) {
+    memoryDoctorLog.textContent = text || "";
+  }
+}
+
+function getMemoryBrief(id) {
+  const m = memoryDoctorMap && memoryDoctorMap[id];
+  if (!m) return id;
+  const content = (m.content || "").replace(/\s+/g, " ").slice(0, 80);
+  return `${id}: ${content}`;
+}
+
+function renderDoctorPanel() {
+  if (!memoryDoctorPanel || !memoryDoctorSummary || !memoryDuplicatesList || !memoryStaleList || !memoryConflictsList) return;
+  if (!memoryDoctorReport) {
+    memoryDoctorPanel.classList.add("hidden");
+    return;
+  }
+  memoryDoctorPanel.classList.remove("hidden");
+  const report = memoryDoctorReport;
+  memoryDoctorSummary.textContent =
+    `total=${report.total}, duplicate=${report.duplicateGroups.length}, conflict=${report.conflictGroups.length}, stale=${report.staleWorkingIds.length}`;
+
+  memoryDuplicatesList.innerHTML = "";
+  if (report.duplicateGroups.length === 0) {
+    memoryDuplicatesList.innerHTML = '<div class="memory-doctor-item">无重复组</div>';
+  } else {
+    for (const g of report.duplicateGroups) {
+      const el = document.createElement("div");
+      el.className = "memory-doctor-item";
+      el.innerHTML = `
+        <div><strong>${escapeHtml(g.key)}</strong></div>
+        <div>${g.ids.map((id) => escapeHtml(getMemoryBrief(id))).join("<br/>")}</div>
+      `;
+      memoryDuplicatesList.appendChild(el);
+    }
+  }
+
+  memoryStaleList.innerHTML = "";
+  if (report.staleWorkingIds.length === 0) {
+    memoryStaleList.innerHTML = '<div class="memory-doctor-item">无过期 working</div>';
+  } else {
+    for (const id of report.staleWorkingIds) {
+      const el = document.createElement("div");
+      el.className = "memory-doctor-item";
+      el.textContent = getMemoryBrief(id);
+      memoryStaleList.appendChild(el);
+    }
+  }
+
+  memoryConflictsList.innerHTML = "";
+  if (report.conflictGroups.length === 0) {
+    memoryConflictsList.innerHTML = '<div class="memory-doctor-item">无冲突组</div>';
+  } else {
+    for (const g of report.conflictGroups) {
+      const ids = [...g.positiveIds, ...g.negativeIds];
+      const keepDefault = g.positiveIds[0] || ids[0] || "";
+      const depDefault = g.negativeIds[0] || ids[1] || "";
+      const el = document.createElement("div");
+      el.className = "memory-doctor-item";
+      el.innerHTML = `
+        <div><strong>${escapeHtml(g.key)}</strong></div>
+        <div>Positive: ${g.positiveIds.map((id) => escapeHtml(getMemoryBrief(id))).join("<br/>") || "-"}</div>
+        <div>Negative: ${g.negativeIds.map((id) => escapeHtml(getMemoryBrief(id))).join("<br/>") || "-"}</div>
+        <div class="memory-doctor-actions">
+          <button class="memory-action-btn" data-action="keep" data-keep-default="${escapeHtml(keepDefault)}" data-deprecate-default="${escapeHtml(depDefault)}" data-ids="${escapeHtml(ids.join(','))}">Keep</button>
+          <button class="memory-action-btn" data-action="merge" data-ids="${escapeHtml(ids.join(','))}">Merge</button>
+        </div>
+      `;
+      const keepBtn = el.querySelector('button[data-action="keep"]');
+      const mergeBtn = el.querySelector('button[data-action="merge"]');
+      if (keepBtn) {
+        keepBtn.addEventListener("click", async () => {
+          const allowed = (keepBtn.getAttribute("data-ids") || "").split(",").filter(Boolean);
+          const keepDefaultId = keepBtn.getAttribute("data-keep-default") || "";
+          const depDefaultId = keepBtn.getAttribute("data-deprecate-default") || "";
+          const keepId = (prompt(`输入 keep_id（候选：${allowed.join(", ")}）`, keepDefaultId) || "").trim();
+          const deprecateId = (prompt(`输入 deprecate_id（候选：${allowed.join(", ")}）`, depDefaultId) || "").trim();
+          if (!keepId || !deprecateId || keepId === deprecateId) return;
+          if (!allowed.includes(keepId) || !allowed.includes(deprecateId)) {
+            alert("所选 ID 不在该冲突组内");
+            return;
+          }
+          await resolveConflictKeep(keepId, deprecateId);
+        });
+      }
+      if (mergeBtn) {
+        mergeBtn.addEventListener("click", async () => {
+          const allowed = (mergeBtn.getAttribute("data-ids") || "").split(",").filter(Boolean);
+          const raw = (prompt(`输入两个 merge_ids（逗号分隔，候选：${allowed.join(", ")}）`) || "").trim();
+          if (!raw) return;
+          const picks = raw.split(",").map((s) => s.trim()).filter(Boolean);
+          if (picks.length !== 2 || picks[0] === picks[1]) {
+            alert("请提供两个不同的 ID");
+            return;
+          }
+          if (!allowed.includes(picks[0]) || !allowed.includes(picks[1])) {
+            alert("所选 ID 不在该冲突组内");
+            return;
+          }
+          const mergedContent = (prompt("输入 merged_content") || "").trim();
+          if (!mergedContent) return;
+          await resolveConflictMerge([picks[0], picks[1]], mergedContent);
+        });
+      }
+      memoryConflictsList.appendChild(el);
+    }
+  }
+}
+
+async function runDoctor(staleDays) {
+  const group = getActiveMemoryGroup();
+  if (!group) return;
+  const safeDays = Number.isFinite(Number(staleDays)) ? Number(staleDays) : 7;
+  setDoctorLog("Doctor 执行中...");
+  try {
+    const res = await apiFetch("/api/memory/doctor", {
+      method: "POST",
+      body: JSON.stringify({
+        folder: group.folder,
+        staleDays: safeDays,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    memoryDoctorReport = data.report || null;
+    memoryDoctorMap = data.memoryMap || {};
+    renderDoctorPanel();
+    setDoctorLog(`Doctor 完成（staleDays=${safeDays}）`);
+  } catch (err) {
+    console.error("Doctor failed:", err);
+    setDoctorLog(`Doctor 失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function runGcByMode(mode) {
+  const group = getActiveMemoryGroup();
+  if (!group) return;
+  try {
+    const dryRunRes = await apiFetch("/api/memory/gc", {
+      method: "POST",
+      body: JSON.stringify({
+        folder: group.folder,
+        mode,
+        dryRun: true,
+      }),
+    });
+    const dryRunData = await dryRunRes.json();
+    if (!dryRunRes.ok) throw new Error(dryRunData?.error || `HTTP ${dryRunRes.status}`);
+    const r = dryRunData.result || {};
+    const dup = (r.duplicateDeletedIds || []).length;
+    const stale = (r.staleDeletedIds || []).length;
+    const total = Number(r.totalCandidates || 0);
+    if (total === 0) {
+      setDoctorLog(`GC 预演完成：无需清理（mode=${mode}）`);
+      return;
+    }
+    if (!confirm(`GC预演结果：重复=${dup}，过期=${stale}，共=${total}。确认执行真实清理？`)) {
+      setDoctorLog("GC 已取消");
+      return;
+    }
+    const runRes = await apiFetch("/api/memory/gc", {
+      method: "POST",
+      body: JSON.stringify({
+        folder: group.folder,
+        mode,
+        dryRun: false,
+      }),
+    });
+    const runData = await runRes.json();
+    if (!runRes.ok) throw new Error(runData?.error || `HTTP ${runRes.status}`);
+    setDoctorLog(`GC 完成：mode=${mode}, 删除=${runData.result?.totalCandidates || 0}`);
+    loadMemories(memorySearchInput?.value || "");
+    runDoctor(7);
+  } catch (err) {
+    console.error("GC failed:", err);
+    setDoctorLog(`GC 失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function resolveConflictKeep(keepId, deprecateId) {
+  const group = getActiveMemoryGroup();
+  if (!group) return;
+  try {
+    const res = await apiFetch("/api/memory/conflict/keep", {
+      method: "POST",
+      body: JSON.stringify({
+        folder: group.folder,
+        keep_id: keepId,
+        deprecate_id: deprecateId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    setDoctorLog(`冲突已 Keep：${keepId} 保留，${deprecateId} 废弃`);
+    loadMemories(memorySearchInput?.value || "");
+    runDoctor(7);
+  } catch (err) {
+    console.error("Conflict keep failed:", err);
+    setDoctorLog(`Keep 失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function resolveConflictMerge(mergeIds, mergedContent) {
+  const group = getActiveMemoryGroup();
+  if (!group) return;
+  try {
+    const res = await apiFetch("/api/memory/conflict/merge", {
+      method: "POST",
+      body: JSON.stringify({
+        folder: group.folder,
+        merge_ids: mergeIds,
+        merged_content: mergedContent,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    setDoctorLog(`冲突已 Merge：${mergeIds.join(",")} -> ${data?.result?.merged?.id || "new"}`);
+    loadMemories(memorySearchInput?.value || "");
+    runDoctor(7);
+  } catch (err) {
+    console.error("Conflict merge failed:", err);
+    setDoctorLog(`Merge 失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+function openCreateMemoryEditor() {
+  const group = getActiveMemoryGroup();
+  if (!group) {
+    alert("请先选择 Group");
+    return;
+  }
+  editingMemoryId = "";
+  if (memoryEditorTitle) memoryEditorTitle.textContent = "新增记忆";
+  if (memoryLayerSelect) memoryLayerSelect.value = "working";
+  if (memoryTypeSelect) memoryTypeSelect.value = "fact";
+  if (memoryStatusSelect) memoryStatusSelect.value = "active";
+  if (memoryContentInput) memoryContentInput.value = "";
+  if (memoryEditor) memoryEditor.classList.remove("hidden");
+  memoryContentInput?.focus();
+}
+
+function openEditMemoryEditor(mem) {
+  editingMemoryId = mem?.id || "";
+  if (!editingMemoryId) return;
+  if (memoryEditorTitle) memoryEditorTitle.textContent = "编辑记忆";
+  if (memoryLayerSelect) memoryLayerSelect.value = mem.layer || "working";
+  if (memoryTypeSelect) memoryTypeSelect.value = mem.memory_type || "fact";
+  if (memoryStatusSelect) memoryStatusSelect.value = mem.status || "active";
+  if (memoryContentInput) memoryContentInput.value = mem.content || "";
+  if (memoryEditor) memoryEditor.classList.remove("hidden");
+  memoryContentInput?.focus();
+}
+
+async function saveMemoryEditor() {
+  const group = getActiveMemoryGroup();
+  if (!group) {
+    alert("请先选择 Group");
+    return;
+  }
+  const content = (memoryContentInput?.value || "").trim();
+  if (!content) {
+    alert("记忆内容不能为空");
+    return;
+  }
+  const payload = {
+    folder: group.folder,
+    content,
+    layer: memoryLayerSelect?.value || "working",
+    memory_type: memoryTypeSelect?.value || "fact",
+    memory_status: memoryStatusSelect?.value || "active",
+  };
+
+  try {
+    if (editingMemoryId) {
+      const res = await apiFetch("/api/memory", {
+        method: "PATCH",
+        body: JSON.stringify({
+          memoryId: editingMemoryId,
+          ...payload,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await res.json();
+    } else {
+      const res = await apiFetch("/api/memory", {
+        method: "POST",
+        body: JSON.stringify({
+          folder: payload.folder,
+          content: payload.content,
+          layer: payload.layer,
+          memory_type: payload.memory_type,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await res.json();
+    }
+    closeMemoryEditor();
+    loadMemories(memorySearchInput?.value || "");
+  } catch (err) {
+    console.error("Failed to save memory:", err);
+    alert("保存记忆失败");
+  }
+}
+
+async function deleteMemoryById(memoryId) {
+  const group = getActiveMemoryGroup();
+  if (!group) return;
+  if (!confirm("确认删除该记忆？")) return;
+  try {
+    const res = await apiFetch(
+      `/api/memory?id=${encodeURIComponent(memoryId)}&folder=${encodeURIComponent(group.folder)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await res.json();
+    loadMemories(memorySearchInput?.value || "");
+  } catch (err) {
+    console.error("Failed to delete memory:", err);
+    alert("删除记忆失败");
+  }
+}
+
+function renderMemoryList() {
+  if (!memoryList || !memoryEmpty) return;
+  memoryList.innerHTML = "";
+  const visibleMemories =
+    memoryStatusFilterValue === "all"
+      ? memoryEntries
+      : memoryEntries.filter((m) => (m.status || "active") === memoryStatusFilterValue);
+  if (!activeMemoryGroupJid) {
+    memoryEmpty.textContent = "请先在左侧选择 Group";
+    memoryEmpty.classList.remove("hidden");
+    return;
+  }
+  if (!Array.isArray(visibleMemories) || visibleMemories.length === 0) {
+    if (memoryEntries.length > 0 && memoryStatusFilterValue !== "all") {
+      memoryEmpty.textContent = `当前筛选（${memoryStatusFilterValue}）下无记忆`;
+    } else {
+      memoryEmpty.textContent = memoryQueryText
+        ? `没有匹配“${memoryQueryText}”的记忆`
+        : "当前 Group 暂无记忆";
+    }
+    memoryEmpty.classList.remove("hidden");
+    return;
+  }
+
+  memoryEmpty.classList.add("hidden");
+  for (const mem of visibleMemories) {
+    const item = document.createElement("div");
+    item.className = "memory-item";
+    const statusClass = `status-${mem.status || "active"}`;
+    item.innerHTML = `
+      <div class="memory-item-header">
+        <span class="memory-tag">${escapeHtml(mem.layer || "")}</span>
+        <span class="memory-tag">${escapeHtml(mem.memory_type || "")}</span>
+        <span class="memory-tag ${statusClass}">${escapeHtml(mem.status || "active")}</span>
+        <span class="memory-item-time">${escapeHtml(formatDateTime(mem.updated_at))}</span>
+      </div>
+      <p class="memory-item-content">${escapeHtml(mem.content || "")}</p>
+      <div class="memory-item-actions">
+        <button class="memory-action-btn" data-action="edit" data-memory-id="${escapeHtml(mem.id || "")}">编辑</button>
+        <button class="memory-action-btn danger" data-action="delete" data-memory-id="${escapeHtml(mem.id || "")}">删除</button>
+      </div>
+    `;
+    const editBtn = item.querySelector('button[data-action="edit"]');
+    const deleteBtn = item.querySelector('button[data-action="delete"]');
+    if (editBtn) {
+      editBtn.addEventListener("click", () => {
+        openEditMemoryEditor(mem);
+      });
+    }
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", () => {
+        deleteMemoryById(mem.id);
+      });
+    }
+    memoryList.appendChild(item);
+  }
+}
+
+async function loadMemories(queryOverride) {
+  const group = groups.find((g) => g.jid === activeMemoryGroupJid);
+  if (!group) {
+    memoryEntries = [];
+    renderMemoryList();
+    return;
+  }
+
+  const query =
+    typeof queryOverride === "string"
+      ? queryOverride.trim()
+      : (memorySearchInput?.value || "").trim();
+  memoryQueryText = query;
+
+  const reqSeq = ++memoryRequestSeq;
+  if (memoryRefreshBtn) {
+    memoryRefreshBtn.classList.add("spinning");
+  }
+  try {
+    const params = new URLSearchParams({
+      folder: group.folder,
+      limit: "200",
+    });
+    if (query) params.set("query", query);
+    const res = await apiFetch(`/api/memories?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (reqSeq !== memoryRequestSeq) return;
+    memoryEntries = Array.isArray(data.memories) ? data.memories : [];
+    renderMemoryList();
+  } catch (err) {
+    if (reqSeq !== memoryRequestSeq) return;
+    console.error("Failed to load memories:", err);
+    memoryEntries = [];
+    if (memoryEmpty) {
+      memoryEmpty.textContent = "记忆加载失败";
+      memoryEmpty.classList.remove("hidden");
+    }
+    if (memoryList) {
+      memoryList.innerHTML = "";
+    }
+  } finally {
+    if (reqSeq === memoryRequestSeq && memoryRefreshBtn) {
+      memoryRefreshBtn.classList.remove("spinning");
+    }
   }
 }
 
@@ -639,6 +1179,15 @@ async function loadGroups() {
     const data = await res.json();
     groups = data.groups;
     renderGroups();
+    if (!groups.some((g) => g.jid === activeMemoryGroupJid)) {
+      activeMemoryGroupJid = getDefaultMemoryGroupJid();
+    }
+    renderMemoryGroups();
+    updateMemoryGroupHeader();
+    renderMemoryList();
+    if (activePrimaryNavKey === "memory-management") {
+      loadMemories();
+    }
   } catch (err) {
     console.error("Failed to load groups:", err);
   }
@@ -2088,6 +2637,60 @@ primaryNavItems.forEach((item) => {
     setPrimaryNav(navKey);
   });
 });
+if (memorySearchBtn) {
+  memorySearchBtn.addEventListener("click", () => {
+    loadMemories(memorySearchInput?.value || "");
+  });
+}
+if (memoryDoctorBtn) {
+  memoryDoctorBtn.addEventListener("click", () => {
+    runDoctor(7);
+  });
+}
+if (memoryCreateBtn) {
+  memoryCreateBtn.addEventListener("click", () => {
+    openCreateMemoryEditor();
+  });
+}
+if (memoryRefreshBtn) {
+  memoryRefreshBtn.addEventListener("click", () => {
+    loadMemories(memorySearchInput?.value || "");
+  });
+}
+if (memorySaveBtn) {
+  memorySaveBtn.addEventListener("click", () => {
+    saveMemoryEditor();
+  });
+}
+if (memoryCancelBtn) {
+  memoryCancelBtn.addEventListener("click", () => {
+    closeMemoryEditor();
+  });
+}
+if (memorySearchInput) {
+  memorySearchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      loadMemories(memorySearchInput.value || "");
+    }
+  });
+}
+if (memoryStatusFilter) {
+  memoryStatusFilter.addEventListener("change", () => {
+    memoryStatusFilterValue = memoryStatusFilter.value || "all";
+    renderMemoryList();
+  });
+}
+if (memoryGcDuplicatesBtn) {
+  memoryGcDuplicatesBtn.addEventListener("click", () => {
+    runGcByMode("duplicates");
+  });
+}
+if (memoryGcStaleBtn) {
+  memoryGcStaleBtn.addEventListener("click", () => {
+    runGcByMode("stale");
+  });
+}
 
 sidebarCollapse.addEventListener("click", () => {
   sidebar.classList.toggle("collapsed");

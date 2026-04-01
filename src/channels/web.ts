@@ -280,6 +280,30 @@ class WebChannel {
       if (pathname.startsWith('/api/groups')) {
         return this.apiGetGroups(res);
       }
+      if (pathname === '/api/memories' && req.method === 'GET') {
+        return this.apiGetMemories(reqUrl, res);
+      }
+      if (pathname === '/api/memory' && req.method === 'POST') {
+        return this.apiCreateMemory(req, res);
+      }
+      if (pathname === '/api/memory' && req.method === 'PATCH') {
+        return this.apiUpdateMemory(req, res);
+      }
+      if (pathname === '/api/memory' && req.method === 'DELETE') {
+        return this.apiDeleteMemory(reqUrl, res);
+      }
+      if (pathname === '/api/memory/doctor' && req.method === 'POST') {
+        return this.apiMemoryDoctor(req, res);
+      }
+      if (pathname === '/api/memory/gc' && req.method === 'POST') {
+        return this.apiMemoryGc(req, res);
+      }
+      if (pathname === '/api/memory/conflict/keep' && req.method === 'POST') {
+        return this.apiMemoryConflictKeep(req, res);
+      }
+      if (pathname === '/api/memory/conflict/merge' && req.method === 'POST') {
+        return this.apiMemoryConflictMerge(req, res);
+      }
       if (pathname === '/api/messages' && req.method === 'DELETE') {
         return this.apiDeleteMessages(req, res);
       }
@@ -428,6 +452,423 @@ class WebChannel {
       }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ groups }));
+  }
+
+  private apiGetMemories(reqUrl: URL, res: http.ServerResponse): void {
+    const requestedJid = reqUrl.searchParams.get('jid') || '';
+    const requestedFolder = reqUrl.searchParams.get('folder') || '';
+    const query = (reqUrl.searchParams.get('query') || '').trim();
+    const rawLimit = parseInt(reqUrl.searchParams.get('limit') || '200', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 1000) : 200;
+
+    const registered = this.opts.registeredGroups();
+    const webGroups = Object.entries(registered).filter(([jid]) =>
+      jid.startsWith('web:'),
+    );
+
+    let groupFolder = '';
+    if (requestedJid) {
+      const group = registered[requestedJid];
+      if (!group || !requestedJid.startsWith('web:')) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'invalid web group jid' }));
+        return;
+      }
+      groupFolder = group.folder;
+    } else if (requestedFolder) {
+      const matched = webGroups.find(([, group]) => group.folder === requestedFolder);
+      if (!matched) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'group not found' }));
+        return;
+      }
+      groupFolder = matched[1].folder;
+    } else {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'jid or folder required' }));
+      return;
+    }
+
+    import('../db.js')
+      .then(({ listMemories, searchMemories, getMemoryById }) => {
+        const memories = query
+          ? searchMemories(groupFolder, query, limit)
+              .map((item) => getMemoryById(item.id))
+              .filter((item): item is NonNullable<typeof item> => Boolean(item))
+          : listMemories(groupFolder, limit);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            group_folder: groupFolder,
+            query,
+            memories,
+          }),
+        );
+      })
+      .catch((err: unknown) => {
+        logger.error({ err, groupFolder, query }, 'Failed to query memories for web API');
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to query memories' }));
+      });
+  }
+
+  private resolveWebGroupFolder(input: {
+    jid?: string;
+    folder?: string;
+  }): string | null {
+    const requestedJid = input.jid || '';
+    const requestedFolder = input.folder || '';
+    const registered = this.opts.registeredGroups();
+    const webGroups = Object.entries(registered).filter(([jid]) =>
+      jid.startsWith('web:'),
+    );
+
+    if (requestedJid) {
+      const group = registered[requestedJid];
+      if (!group || !requestedJid.startsWith('web:')) return null;
+      return group.folder;
+    }
+
+    if (requestedFolder) {
+      const matched = webGroups.find(([, g]) => g.folder === requestedFolder);
+      return matched ? matched[1].folder : null;
+    }
+
+    return null;
+  }
+
+  private async parseJsonBody(req: http.IncomingMessage): Promise<unknown> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const raw = Buffer.concat(chunks).toString('utf-8') || '{}';
+    return JSON.parse(raw);
+  }
+
+  private async apiCreateMemory(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      jid?: string;
+      folder?: string;
+      layer?: 'working' | 'episodic' | 'canonical';
+      memory_type?: 'preference' | 'rule' | 'fact' | 'summary';
+      content?: string;
+      source?: string;
+      metadata?: string;
+    };
+
+    const groupFolder = this.resolveWebGroupFolder({
+      jid: data.jid,
+      folder: data.folder,
+    });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+    if (!data.content || !data.layer || !data.memory_type) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'content, layer, memory_type required' }));
+      return;
+    }
+
+    const { createMemory } = await import('../db.js');
+    const created = createMemory({
+      group_folder: groupFolder,
+      layer: data.layer,
+      memory_type: data.memory_type,
+      content: data.content,
+      source: data.source,
+      metadata: data.metadata,
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, memory: created }));
+  }
+
+  private async apiUpdateMemory(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      memoryId?: string;
+      jid?: string;
+      folder?: string;
+      content?: string;
+      layer?: 'working' | 'episodic' | 'canonical';
+      memory_type?: 'preference' | 'rule' | 'fact' | 'summary';
+      memory_status?: 'active' | 'conflicted' | 'deprecated';
+      source?: string;
+      metadata?: string;
+    };
+
+    if (!data.memoryId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'memoryId required' }));
+      return;
+    }
+
+    const groupFolder = this.resolveWebGroupFolder({
+      jid: data.jid,
+      folder: data.folder,
+    });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+
+    const { getMemoryById, updateMemory } = await import('../db.js');
+    const existing = getMemoryById(data.memoryId);
+    if (!existing || existing.group_folder !== groupFolder) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'memory not found in group scope' }));
+      return;
+    }
+
+    updateMemory(data.memoryId, {
+      content: data.content,
+      layer: data.layer,
+      memory_type: data.memory_type,
+      status: data.memory_status,
+      source: data.source,
+      metadata: data.metadata,
+    });
+    const updated = getMemoryById(data.memoryId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, memory: updated }));
+  }
+
+  private async apiDeleteMemory(reqUrl: URL, res: http.ServerResponse): Promise<void> {
+    const memoryId = reqUrl.searchParams.get('id') || '';
+    const jid = reqUrl.searchParams.get('jid') || '';
+    const folder = reqUrl.searchParams.get('folder') || '';
+    if (!memoryId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'id required' }));
+      return;
+    }
+
+    const groupFolder = this.resolveWebGroupFolder({ jid, folder });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+
+    const { getMemoryById, deleteMemory } = await import('../db.js');
+    const existing = getMemoryById(memoryId);
+    if (!existing || existing.group_folder !== groupFolder) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'memory not found in group scope' }));
+      return;
+    }
+    deleteMemory(memoryId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, deleted: true, memoryId }));
+  }
+
+  private async apiMemoryDoctor(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { jid?: string; folder?: string; staleDays?: number };
+    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+    const staleDays = Number.isFinite(Number(data.staleDays)) ? Number(data.staleDays) : 7;
+
+    const { doctorMemories, getMemoryById, recordMemoryMetric } = await import('../db.js');
+    const report = doctorMemories(groupFolder, staleDays);
+    const idSet = new Set<string>();
+    for (const g of report.duplicateGroups) for (const id of g.ids) idSet.add(id);
+    for (const g of report.conflictGroups) {
+      for (const id of g.positiveIds) idSet.add(id);
+      for (const id of g.negativeIds) idSet.add(id);
+    }
+    for (const id of report.staleWorkingIds) idSet.add(id);
+
+    const memoryMap: Record<string, unknown> = {};
+    for (const id of idSet) {
+      const mem = getMemoryById(id);
+      if (mem) memoryMap[id] = mem;
+    }
+    recordMemoryMetric(groupFolder, 'doctor', `staleDays=${staleDays}`);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, group_folder: groupFolder, report, memoryMap }));
+  }
+
+  private async apiMemoryGc(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      jid?: string;
+      folder?: string;
+      staleDays?: number;
+      dryRun?: boolean;
+      mode?: 'duplicates' | 'stale' | 'all';
+    };
+    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+
+    const staleDays = Number.isFinite(Number(data.staleDays)) ? Number(data.staleDays) : 14;
+    const dryRun = data.dryRun !== undefined ? data.dryRun : true;
+    const mode = data.mode || 'all';
+
+    const { gcMemories, deleteMemory, recordMemoryMetric } = await import('../db.js');
+    const base = gcMemories(groupFolder, { dryRun: true, staleWorkingDays: staleDays });
+    const duplicateDeletedIds = mode === 'stale' ? [] : base.duplicateDeletedIds;
+    const staleDeletedIds = mode === 'duplicates' ? [] : base.staleDeletedIds;
+    const executeIds = Array.from(new Set([...duplicateDeletedIds, ...staleDeletedIds]));
+
+    if (!dryRun) {
+      for (const id of executeIds) deleteMemory(id);
+    }
+    recordMemoryMetric(
+      groupFolder,
+      `gc:${mode}`,
+      `dryRun=${dryRun},staleDays=${staleDays},count=${executeIds.length}`,
+    );
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        group_folder: groupFolder,
+        result: {
+          dryRun,
+          mode,
+          staleDays,
+          duplicateDeletedIds,
+          staleDeletedIds,
+          totalCandidates: executeIds.length,
+        },
+      }),
+    );
+  }
+
+  private async apiMemoryConflictKeep(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      jid?: string;
+      folder?: string;
+      keep_id?: string;
+      deprecate_id?: string;
+    };
+    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+    if (!data.keep_id || !data.deprecate_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'keep_id and deprecate_id required' }));
+      return;
+    }
+
+    try {
+      const { resolveConflict, recordMemoryMetric } = await import('../db.js');
+      const result = resolveConflict('keep', {
+        keepId: data.keep_id,
+        deprecateId: data.deprecate_id,
+        groupFolder,
+      });
+      recordMemoryMetric(groupFolder, 'conflict:resolved:keep', `${data.keep_id}->${data.deprecate_id}`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+    }
+  }
+
+  private async apiMemoryConflictMerge(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      jid?: string;
+      folder?: string;
+      merge_ids?: string[];
+      merged_content?: string;
+    };
+    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    if (!groupFolder) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid group scope' }));
+      return;
+    }
+    if (!Array.isArray(data.merge_ids) || data.merge_ids.length !== 2 || !data.merged_content) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'merge_ids(2) and merged_content required' }));
+      return;
+    }
+
+    try {
+      const { resolveConflict, recordMemoryMetric } = await import('../db.js');
+      const result = resolveConflict('merge', {
+        mergeIds: [data.merge_ids[0], data.merge_ids[1]],
+        mergedContent: data.merged_content,
+        groupFolder,
+      });
+      recordMemoryMetric(groupFolder, 'conflict:resolved:merge', data.merge_ids.join(','));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+    }
   }
 
   private apiGetMessages(

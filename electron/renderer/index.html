@@ -36,6 +36,10 @@
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">Agent群组</span>
           </button>
+          <button class="primary-nav-item" data-nav-key="memory-management">
+            <span class="primary-nav-dot"></span>
+            <span class="primary-nav-label">记忆管理</span>
+          </button>
         </div>
       </aside>
 
@@ -306,6 +310,121 @@
         </div>
         </main>
       </div>
+
+      <section id="memory-management-screen">
+        <aside class="memory-sidebar">
+          <div class="memory-section-header">
+            <span>GROUPS</span>
+          </div>
+          <div id="memory-groups-list" class="list memory-groups-list"></div>
+        </aside>
+        <main class="memory-main">
+          <div class="memory-main-header">
+            <h2 id="memory-group-title">记忆管理</h2>
+            <span id="memory-group-folder" class="muted"></span>
+          </div>
+          <div class="memory-main-body">
+            <p id="memory-group-summary">
+              请先在左侧选择一个 Group。记忆管理按 Group（group_folder）隔离。
+            </p>
+            <div class="memory-toolbar">
+              <input
+                id="memory-search-input"
+                class="memory-search-input"
+                type="text"
+                placeholder="搜索记忆内容（支持关键词）"
+              />
+              <select id="memory-status-filter" class="memory-status-filter" title="按状态筛选">
+                <option value="all">全部状态</option>
+                <option value="active">active</option>
+                <option value="conflicted">conflicted</option>
+                <option value="deprecated">deprecated</option>
+              </select>
+              <button id="memory-doctor-btn" class="btn-primary">Doctor</button>
+              <button id="memory-create-btn" class="btn-primary">新增记忆</button>
+              <button id="memory-search-btn" class="btn-primary">搜索</button>
+              <button id="memory-refresh-btn" class="icon-btn" title="刷新记忆列表">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+            </div>
+            <div id="memory-editor" class="memory-editor hidden">
+              <div class="memory-editor-header">
+                <span id="memory-editor-title">新增记忆</span>
+              </div>
+              <div class="memory-editor-grid">
+                <label class="memory-field">
+                  <span>Layer</span>
+                  <select id="memory-layer-select">
+                    <option value="working">working</option>
+                    <option value="episodic">episodic</option>
+                    <option value="canonical">canonical</option>
+                  </select>
+                </label>
+                <label class="memory-field">
+                  <span>Type</span>
+                  <select id="memory-type-select">
+                    <option value="preference">preference</option>
+                    <option value="rule">rule</option>
+                    <option value="fact">fact</option>
+                    <option value="summary">summary</option>
+                  </select>
+                </label>
+                <label class="memory-field">
+                  <span>Status</span>
+                  <select id="memory-status-select">
+                    <option value="active">active</option>
+                    <option value="conflicted">conflicted</option>
+                    <option value="deprecated">deprecated</option>
+                  </select>
+                </label>
+              </div>
+              <label class="memory-field memory-field-block">
+                <span>Content</span>
+                <textarea id="memory-content-input" rows="4" placeholder="输入记忆内容"></textarea>
+              </label>
+              <div class="memory-editor-actions">
+                <button id="memory-save-btn" class="btn-primary">保存</button>
+                <button id="memory-cancel-btn" class="icon-btn">取消</button>
+              </div>
+            </div>
+            <div id="memory-doctor-panel" class="memory-doctor-panel hidden">
+              <div class="memory-doctor-header">
+                <strong>Doctor 报告</strong>
+                <span id="memory-doctor-summary" class="muted"></span>
+              </div>
+              <div class="memory-doctor-sections">
+                <section class="memory-doctor-section">
+                  <div class="memory-doctor-section-head">
+                    <span>重复组</span>
+                    <button id="memory-gc-duplicates-btn" class="memory-action-btn">GC（仅重复）</button>
+                  </div>
+                  <div id="memory-duplicates-list" class="memory-doctor-list"></div>
+                </section>
+                <section class="memory-doctor-section">
+                  <div class="memory-doctor-section-head">
+                    <span>过期 Working</span>
+                    <button id="memory-gc-stale-btn" class="memory-action-btn">GC（仅过期）</button>
+                  </div>
+                  <div id="memory-stale-list" class="memory-doctor-list"></div>
+                </section>
+                <section class="memory-doctor-section">
+                  <div class="memory-doctor-section-head">
+                    <span>冲突组（Keep / Merge）</span>
+                  </div>
+                  <div id="memory-conflicts-list" class="memory-doctor-list"></div>
+                </section>
+              </div>
+              <div id="memory-doctor-log" class="memory-doctor-log muted"></div>
+            </div>
+            <div id="memory-list" class="memory-list"></div>
+            <div id="memory-empty" class="memory-empty hidden">暂无记忆数据</div>
+          </div>
+        </main>
+      </section>
     </div>
   </div>
 
