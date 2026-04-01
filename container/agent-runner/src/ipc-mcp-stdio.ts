@@ -418,8 +418,11 @@ server.tool(
             parts.push(`## 检索结果（mode=${result.mode || 'hybrid'}）\n`);
             for (const hit of hits) {
               if (hit.kind === 'memory') {
+                const memoryId = typeof hit.id === 'string' && hit.id.trim().length > 0
+                  ? hit.id
+                  : 'unknown-id';
                 parts.push(
-                  `[MEMORY][${hit.layer}/${hit.memoryType}] ${hit.content}`,
+                  `[MEMORY][${memoryId}][${hit.layer}/${hit.memoryType}] ${hit.content}`,
                 );
               } else {
                 parts.push(
