@@ -43,8 +43,7 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 When the user asks you to remember stable preferences/rules/facts, use memory tools instead of editing files:
 - `memory_write(content, layer, memory_type)` to add memory
-- `memory_update` / `memory_delete` to correct stale items
-- `memory_list` / `memory_search` to inspect existing memory
+- `memory_search` to inspect existing memory
 
 Recommended mapping:
 - short-lived context -> `layer=working`
