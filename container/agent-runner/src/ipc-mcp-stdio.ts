@@ -524,6 +524,63 @@ server.tool(
 );
 
 server.tool(
+  'memory_delete',
+  '删除一条结构化记忆。',
+  {
+    memory_id: z.string().describe('记忆 ID'),
+  },
+  async (args) => {
+    const requestId = `memd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const data = {
+      type: 'memory_delete',
+      memoryId: args.memory_id,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+    const resultsDir = path.join(IPC_DIR, 'search-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = 10000;
+    const pollMs = 300;
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+          fs.unlinkSync(resultPath);
+          if (!result.deleted) {
+            return {
+              content: [{ type: 'text' as const, text: '删除失败或记忆不存在。' }],
+              isError: true,
+            };
+          }
+          return {
+            content: [{ type: 'text' as const, text: `记忆已删除：${result.memoryId}` }],
+          };
+        } catch (err) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `删除记忆失败: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return {
+      content: [{ type: 'text' as const, text: 'memory_delete 请求超时。' }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
   'memory_resolve_conflict',
   `Resolve a conflict between two conflicted memories. Two modes:
 - **keep**: Keep one memory as active, deprecate the other. Provide keep_id and deprecate_id.

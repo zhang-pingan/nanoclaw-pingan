@@ -29,6 +29,7 @@ import {
   createDelegation,
   createMemory,
   createTask,
+  deleteMemory,
   deleteTask,
   doctorMemories,
   gcMemories,
@@ -575,6 +576,7 @@ export async function processTaskIpc(
     layer?: 'working' | 'episodic' | 'canonical';
     memory_type?: 'preference' | 'rule' | 'fact' | 'summary';
     memory_status?: 'active' | 'conflicted' | 'deprecated';
+    memoryId?: string;
     dryRun?: boolean;
     staleDays?: number;
     // For memory_resolve_conflict
@@ -1412,6 +1414,34 @@ export async function processTaskIpc(
         'write',
         `layer=${data.layer},type=${data.memory_type}`,
       );
+      break;
+    }
+
+    case 'memory_delete': {
+      if (!data.requestId || !data.memoryId) {
+        logger.warn({ sourceGroup }, 'memory_delete missing requestId or memoryId');
+        if (data.requestId) {
+          writeMemoryResult(sourceGroup, data.requestId, {
+            error: 'missing requestId or memoryId',
+          });
+        }
+        break;
+      }
+      const existing = getMemoryById(data.memoryId);
+      if (!existing || existing.group_folder !== sourceGroup) {
+        logger.warn(
+          { sourceGroup, memoryId: data.memoryId },
+          'memory_delete memory not found in group scope',
+        );
+        writeMemoryResult(sourceGroup, data.requestId, { error: 'memory not found' });
+        break;
+      }
+      deleteMemory(data.memoryId);
+      writeMemoryResult(sourceGroup, data.requestId, {
+        deleted: true,
+        memoryId: data.memoryId,
+      });
+      recordMemoryMetric(sourceGroup, 'delete', `id=${data.memoryId}`);
       break;
     }
 

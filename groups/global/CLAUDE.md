@@ -42,6 +42,7 @@ Files you create are saved in `/workspace/group/`. Use this for notes, research,
 
 When the user asks you to remember stable preferences/rules/facts, use memory tools instead of editing files:
 - `memory_write(content, layer, memory_type)` to add memory
+- `memory_delete` to correct stale items
 - `memory_search` to inspect existing memory
 
 Recommended mapping:

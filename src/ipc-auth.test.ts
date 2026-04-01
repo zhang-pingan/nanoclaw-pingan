@@ -728,6 +728,45 @@ describe('memory IPC tasks', () => {
     expect(writeRes.memory?.id).toBeTruthy();
   });
 
+  it('memory_delete removes memory in same group', async () => {
+    const sourceGroup = 'other-group';
+    const writeId = rid('mw');
+    const deleteId = rid('md');
+
+    await processTaskIpc(
+      {
+        type: 'memory_write',
+        requestId: writeId,
+        content: 'Delete me',
+        layer: 'working',
+        memory_type: 'summary',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const writeRes = readMemoryIpcResult(sourceGroup, writeId);
+    const memoryId = writeRes.memory?.id as string;
+    expect(memoryId).toBeTruthy();
+
+    await processTaskIpc(
+      {
+        type: 'memory_delete',
+        requestId: deleteId,
+        memoryId,
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const deleteRes = readMemoryIpcResult(sourceGroup, deleteId);
+    expect(deleteRes.deleted).toBe(true);
+    expect(deleteRes.memoryId).toBe(memoryId);
+
+    const remains = listMemories(sourceGroup, 50).filter((m) => m.id === memoryId);
+    expect(remains.length).toBe(0);
+  });
+
   it('memory_search returns hybrid hits', async () => {
     const sourceGroup = 'other-group';
     const writeId = rid('mw');
