@@ -622,6 +622,16 @@ function updateChatHeader() {
     chatGroupFolder.textContent = group.isMain ? "(main)" : `@ ${group.folder}`;
   }
 }
+
+function getCurrentGroup() {
+  if (!currentGroupJid) return null;
+  return groups.find((g) => g.jid === currentGroupJid) || null;
+}
+
+function isCurrentGroupMain() {
+  return getCurrentGroup()?.isMain === true;
+}
+
 async function loadGroups() {
   try {
     const res = await apiFetch("/api/groups");
@@ -1244,9 +1254,6 @@ function ensureCommandPaletteElements() {
 
 function getCommandCandidates(query) {
   const q = (query || "").trim().toLowerCase();
-  if (q.includes("create-workflow")) {
-    warmWorkflowCreateOptions();
-  }
   if (!q) return commands.slice();
   return commands.filter((c) => fuzzyMatch(c.name.replace(/^\//, ""), q) || fuzzyMatch(c.desc, q));
 }
@@ -1283,6 +1290,10 @@ async function executeCommand(cmd) {
   hideCommandPalette(false);
   if (!cmd) return;
   if (cmd.name === "/create-workflow") {
+    if (!isCurrentGroupMain()) {
+      alert("仅主群支持 /create-workflow。请切换到主群后再试。");
+      return;
+    }
     await launchCreateWorkflowWizard();
     return;
   }
@@ -1397,6 +1408,7 @@ function openWorkflowWizard(optionsData) {
     requirementMode: "preset",
     requirementPreset: "",
     requirementCustom: "",
+    requirementSearch: "",
   };
 
   const overlay = document.createElement("div");
@@ -1462,6 +1474,10 @@ function openWorkflowWizard(optionsData) {
   }
 
   function getRequirementName() {
+    if (state.workflowType === "dev_test") {
+      if (state.entryPoint === "plan") return state.requirementCustom.trim();
+      return state.requirementPreset;
+    }
     return state.requirementMode === "custom"
       ? state.requirementCustom.trim()
       : state.requirementPreset;
@@ -1472,9 +1488,57 @@ function openWorkflowWizard(optionsData) {
     return Array.isArray(req?.deliverables) ? req.deliverables : [];
   }
 
+  function stripRequirementDatePrefix(name) {
+    return (name || "").replace(/^\d{4}-\d{2}-\d{2}_/, "").trim();
+  }
+
   function isDeliverableRequired() {
     const wt = getSelectedWorkflowType();
     return !!wt.entry_points_detail?.[state.entryPoint]?.requires_deliverable;
+  }
+
+  function getRequiredDeliverableFile() {
+    const wt = getSelectedWorkflowType();
+    const detail = wt.entry_points_detail?.[state.entryPoint];
+    if (!detail?.requires_deliverable) return "";
+    const role = detail.deliverable_role || "dev";
+    return `${role}.md`;
+  }
+
+  function updateRequirementValidation() {
+    const reqs = getRequirements();
+    const isDevTest = state.workflowType === "dev_test";
+    const isPlanEntry = state.entryPoint === "plan";
+    const planNameDuplicate =
+      isDevTest &&
+      isPlanEntry &&
+      !!state.requirementCustom.trim() &&
+      reqs.some((r) => stripRequirementDatePrefix(r.requirement_name) === stripRequirementDatePrefix(state.requirementCustom));
+
+    const required = isDeliverableRequired();
+    const requirementName = getRequirementName();
+    const deliverableFiles = getRequirementDeliverables(requirementName);
+    const requiredFile = getRequiredDeliverableFile();
+    const deliverableOk = !required || deliverableFiles.includes(requiredFile);
+
+    if (planNameDuplicate) {
+      reqDeliverableHintEl.textContent = `需求名称重复：已存在同名需求（按去前缀后比较）`;
+    } else if (required) {
+      reqDeliverableHintEl.textContent = deliverableOk
+        ? `已校验必需交付物文件：${requiredFile}`
+        : `当前入口点要求交付物文件 ${requiredFile}，但该需求目录下未找到`;
+    } else {
+      reqDeliverableHintEl.textContent = "";
+    }
+
+    const canSubmit =
+      !!state.workflowType &&
+      !!state.entryPoint &&
+      !!state.service &&
+      !!requirementName &&
+      deliverableOk &&
+      !planNameDuplicate;
+    submitBtn.disabled = !canSubmit;
   }
 
   function refresh() {
@@ -1523,67 +1587,94 @@ function openWorkflowWizard(optionsData) {
     if (!state.requirementPreset && reqs.length > 0) {
       state.requirementPreset = reqs[0].requirement_name;
     }
+    const isDevTest = state.workflowType === "dev_test";
+    const isPlanEntry = state.entryPoint === "plan";
 
-    renderSingleOptions(
-      reqModeEl,
-      [
-        { value: "preset", label: "已有需求" },
-        { value: "custom", label: "自定义需求" },
-      ],
-      state.requirementMode,
-      (v) => {
-        state.requirementMode = v;
-        refresh();
-      }
-    );
-
+    reqModeEl.innerHTML = "";
     reqPresetWrapEl.innerHTML = "";
-    if (state.requirementMode === "preset") {
-      const opts = document.createElement("div");
-      opts.className = "workflow-wizard-options";
-      reqPresetWrapEl.appendChild(opts);
+    reqCustomWrapEl.innerHTML = "";
+
+    if (isDevTest) {
+      if (isPlanEntry) {
+        const input = document.createElement("input");
+        input.className = "workflow-wizard-input";
+        input.placeholder = "输入需求名称";
+        input.value = state.requirementCustom;
+        input.addEventListener("input", () => {
+          state.requirementCustom = input.value;
+          updateRequirementValidation();
+        });
+        reqCustomWrapEl.appendChild(input);
+      } else {
+        const search = document.createElement("input");
+        search.className = "workflow-wizard-input";
+        search.placeholder = "搜索需求名称";
+        search.value = state.requirementSearch;
+        search.addEventListener("input", () => {
+          state.requirementSearch = search.value;
+          refresh();
+        });
+        reqModeEl.appendChild(search);
+
+        const filteredReqs = reqs.filter((r) =>
+          !state.requirementSearch || r.requirement_name.includes(state.requirementSearch.trim()),
+        );
+        const opts = document.createElement("div");
+        opts.className = "workflow-wizard-options";
+        reqPresetWrapEl.appendChild(opts);
+        renderSingleOptions(
+          opts,
+          filteredReqs.map((r) => ({ value: r.requirement_name, label: r.requirement_name })),
+          state.requirementPreset,
+          (v) => {
+            state.requirementPreset = v;
+            refresh();
+          }
+        );
+      }
+    } else {
       renderSingleOptions(
-        opts,
-        reqs.map((r) => ({ value: r.requirement_name, label: r.requirement_name })),
-        state.requirementPreset,
+        reqModeEl,
+        [
+          { value: "preset", label: "已有需求" },
+          { value: "custom", label: "自定义需求" },
+        ],
+        state.requirementMode,
         (v) => {
-          state.requirementPreset = v;
+          state.requirementMode = v;
           refresh();
         }
       );
+
+      if (state.requirementMode === "preset") {
+        const opts = document.createElement("div");
+        opts.className = "workflow-wizard-options";
+        reqPresetWrapEl.appendChild(opts);
+        renderSingleOptions(
+          opts,
+          reqs.map((r) => ({ value: r.requirement_name, label: r.requirement_name })),
+          state.requirementPreset,
+          (v) => {
+            state.requirementPreset = v;
+            refresh();
+          }
+        );
+      }
+
+      if (state.requirementMode === "custom") {
+        const input = document.createElement("input");
+        input.className = "workflow-wizard-input";
+        input.placeholder = "输入需求名称";
+        input.value = state.requirementCustom;
+        input.addEventListener("input", () => {
+          state.requirementCustom = input.value;
+          refresh();
+        });
+        reqCustomWrapEl.appendChild(input);
+      }
     }
 
-    reqCustomWrapEl.innerHTML = "";
-    if (state.requirementMode === "custom") {
-      const input = document.createElement("input");
-      input.className = "workflow-wizard-input";
-      input.placeholder = "输入需求名称";
-      input.value = state.requirementCustom;
-      input.addEventListener("input", () => {
-        state.requirementCustom = input.value;
-        refresh();
-      });
-      reqCustomWrapEl.appendChild(input);
-    }
-
-    const required = isDeliverableRequired();
-    const requirementName = getRequirementName();
-    const deliverableFiles = getRequirementDeliverables(requirementName);
-    const deliverableOk = !required || deliverableFiles.length > 0;
-    if (required) {
-      reqDeliverableHintEl.textContent = deliverableOk
-        ? `已校验交付物文件：${deliverableFiles.join(", ")}`
-        : "当前入口点要求交付物，但该需求目录下未找到交付物文件";
-    } else {
-      reqDeliverableHintEl.textContent = "";
-    }
-    const canSubmit =
-      !!state.workflowType &&
-      !!state.entryPoint &&
-      !!state.service &&
-      !!requirementName &&
-      deliverableOk;
-    submitBtn.disabled = !canSubmit;
+    updateRequirementValidation();
   }
 
   overlay.querySelector("#workflow-wizard-close").addEventListener("click", closeWorkflowWizard);
@@ -1596,9 +1687,19 @@ function openWorkflowWizard(optionsData) {
     const requirementName = getRequirementName();
     const required = isDeliverableRequired();
     if (!requirementName) return;
+    const reqs = getRequirements();
+    const planNameDuplicate =
+      state.workflowType === "dev_test" &&
+      state.entryPoint === "plan" &&
+      reqs.some((r) => stripRequirementDatePrefix(r.requirement_name) === stripRequirementDatePrefix(requirementName));
+    if (planNameDuplicate) {
+      alert("需求名称重复：已存在同名需求（按去时间前缀后比较），无法创建流程。");
+      return;
+    }
+    const requiredFile = getRequiredDeliverableFile();
     const deliverableFiles = getRequirementDeliverables(requirementName);
-    if (required && deliverableFiles.length === 0) {
-      alert("当前入口点要求交付物，但所选需求目录下没有交付物文件，无法创建流程。");
+    if (required && !deliverableFiles.includes(requiredFile)) {
+      alert(`当前入口点要求交付物文件 ${requiredFile}，但所选需求目录下未找到，无法创建流程。`);
       return;
     }
 
@@ -1631,6 +1732,10 @@ function openWorkflowWizard(optionsData) {
 async function launchCreateWorkflowWizard() {
   if (!currentGroupJid) {
     alert("请先选择一个群聊");
+    return;
+  }
+  if (!isCurrentGroupMain()) {
+    alert("仅主群支持 /create-workflow。请切换到主群后再试。");
     return;
   }
   try {
