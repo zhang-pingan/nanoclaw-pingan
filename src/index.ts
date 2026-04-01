@@ -46,10 +46,11 @@ import {
   setRegisteredGroup,
   setRouterState,
   setSession,
+  setMessageModelForIds,
   storeChatMetadata,
   storeMessage,
 } from './db.js';
-import { clearWebMessages } from './web-db.js';
+import { clearWebMessages, setWebMessageModelForIds } from './web-db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
@@ -84,10 +85,40 @@ let sessions: Record<string, string> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
+const pendingModelBackfillIds = new Map<string, Set<string>>();
+const activeSelectedModelByChat = new Map<string, string>();
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 const pendingSessionCleanup = new Set<string>();
+
+function queueModelBackfill(chatJid: string, messageIds: string[]): void {
+  if (messageIds.length === 0) return;
+  let pending = pendingModelBackfillIds.get(chatJid);
+  if (!pending) {
+    pending = new Set<string>();
+    pendingModelBackfillIds.set(chatJid, pending);
+  }
+  for (const id of messageIds) {
+    pending.add(id);
+  }
+}
+
+function flushModelBackfill(
+  chatJid: string,
+  model: string,
+  isWebChannel: boolean,
+): void {
+  if (!model) return;
+  const pending = pendingModelBackfillIds.get(chatJid);
+  if (!pending || pending.size === 0) return;
+  const ids = Array.from(pending);
+  setMessageModelForIds(chatJid, ids, model);
+  if (isWebChannel) {
+    setWebMessageModelForIds(chatJid, ids, model);
+  }
+  pendingModelBackfillIds.delete(chatJid);
+}
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -211,6 +242,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         fs.rmSync(sessionDir, { recursive: true });
       }
       delete sessions[group.folder];
+      pendingModelBackfillIds.delete(chatJid);
+      activeSelectedModelByChat.delete(chatJid);
       await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
       logger.info({ group: group.name }, '/clear: context reset');
     } else {
@@ -283,6 +316,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
   const previousCursor = lastAgentTimestamp[chatJid] || '';
+  const processedMessageIds = missedMessages.map((m) => m.id);
+  queueModelBackfill(chatJid, processedMessageIds);
   lastAgentTimestamp[chatJid] =
     missedMessages[missedMessages.length - 1].timestamp;
   saveState();
@@ -321,6 +356,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let outputSentToUser = false;
 
   const output = await runAgent(group, prompt, chatJid, async (result) => {
+    if (result.selectedModel) {
+      activeSelectedModelByChat.set(chatJid, result.selectedModel);
+      flushModelBackfill(chatJid, result.selectedModel, channel.name === 'web');
+    }
+
     // Streaming output callback — called for each agent result
     if (result.result) {
       const raw =
@@ -349,6 +389,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+  activeSelectedModelByChat.delete(chatJid);
+  pendingModelBackfillIds.delete(chatJid);
 
   // Deferred .claude/ cleanup: safe now that the container has exited
   if (pendingSessionCleanup.has(group.folder)) {
@@ -372,6 +414,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       return true;
     }
     // Roll back cursor so retries can re-process these messages
+    pendingModelBackfillIds.delete(chatJid);
     lastAgentTimestamp[chatJid] = previousCursor;
     saveState();
     logger.warn(
@@ -589,6 +632,8 @@ async function startMessageLoop(): Promise<void> {
               if (channel.name === 'web') clearWebMessages(chatJid);
               clearSession(group.folder);
               delete sessions[group.folder];
+              pendingModelBackfillIds.delete(chatJid);
+              activeSelectedModelByChat.delete(chatJid);
               lastAgentTimestamp[chatJid] =
                 groupMessages[groupMessages.length - 1].timestamp;
               saveState();
@@ -645,6 +690,16 @@ async function startMessageLoop(): Promise<void> {
           const formatted = formatMessages(messagesToSend, TIMEZONE);
 
           if (queue.sendMessage(chatJid, formatted)) {
+            const pipedMessageIds = messagesToSend.map((m) => m.id);
+            queueModelBackfill(chatJid, pipedMessageIds);
+            const selectedModel = activeSelectedModelByChat.get(chatJid);
+            if (selectedModel) {
+              flushModelBackfill(
+                chatJid,
+                selectedModel,
+                channel.name === 'web',
+              );
+            }
             logger.debug(
               { chatJid, count: messagesToSend.length },
               'Piped messages to active container',

@@ -35,6 +35,7 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  selectedModel?: string;
 }
 
 interface SessionEntry {
@@ -59,6 +60,117 @@ const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_TASKS_DIR = '/workspace/ipc/tasks';
 const IPC_POLL_MS = 500;
+
+interface ModelSelection {
+  model: string;
+  fallbackModel: string;
+  reason: string;
+}
+
+const MODEL_LIGHT =
+  process.env.NANOCLAW_MODEL_LIGHT || 'claude-4-5-haiku-latest';
+const MODEL_DEFAULT =
+  process.env.NANOCLAW_MODEL_DEFAULT || 'claude-4-6-sonnet-latest';
+const MODEL_HEAVY =
+  process.env.NANOCLAW_MODEL_HEAVY || 'claude-opus-4-6-latest';
+const MODEL_FORCE = process.env.NANOCLAW_MODEL_FORCE || '';
+
+function hasAny(text: string, patterns: RegExp[]): boolean {
+  return patterns.some((p) => p.test(text));
+}
+
+function scoreKeywordHits(text: string, keywords: string[]): number {
+  let score = 0;
+  for (const keyword of keywords) {
+    if (text.includes(keyword)) score++;
+  }
+  return score;
+}
+
+function selectModel(containerInput: ContainerInput, prompt: string): ModelSelection {
+  if (MODEL_FORCE) {
+    return {
+      model: MODEL_FORCE,
+      fallbackModel: MODEL_FORCE,
+      reason: 'forced',
+    };
+  }
+
+  const text = (prompt || '').toLowerCase();
+
+  if (containerInput.isScheduledTask) {
+    const reminderLike = hasAny(text, [
+      /提醒/,
+      /remind/,
+      /notification/,
+      /通知/,
+    ]);
+    const heavyLike = hasAny(text, [
+      /分析/,
+      /research/,
+      /debug/,
+      /代码/,
+      /code/,
+      /测试/,
+      /test/,
+    ]);
+    if (reminderLike && !heavyLike) {
+      return {
+        model: MODEL_LIGHT,
+        fallbackModel: MODEL_DEFAULT,
+        reason: 'scheduled_simple',
+      };
+    }
+    return {
+      model: MODEL_DEFAULT,
+      fallbackModel: MODEL_LIGHT,
+      reason: 'scheduled_general',
+    };
+  }
+
+  if (containerInput.isMain) {
+    return {
+      model: MODEL_HEAVY,
+      fallbackModel: MODEL_DEFAULT,
+      reason: 'main_group',
+    };
+  }
+
+  const hardKeywords = [
+    'bug', 'debug', 'fix', 'refactor', 'test', 'trace',
+    'sql', 'migration', '架构', '性能', '并发', '故障', '回归',
+    '实现', '代码', '编译', '部署', 'workflow',
+  ];
+  const lightKeywords = [
+    '总结', '翻译', '润色', '改写', '提醒', '状态',
+    'summarize', 'translate', 'rewrite',
+  ];
+
+  const hardScore = scoreKeywordHits(text, hardKeywords);
+  const lightScore = scoreKeywordHits(text, lightKeywords);
+
+  if (hardScore >= 2) {
+    return {
+      model: MODEL_HEAVY,
+      fallbackModel: MODEL_DEFAULT,
+      reason: 'hard_prompt',
+    };
+  }
+
+  if (lightScore >= 1 && hardScore === 0) {
+    return {
+      model: MODEL_LIGHT,
+      fallbackModel: MODEL_DEFAULT,
+      reason: 'light_prompt',
+    };
+  }
+
+  return {
+    model: MODEL_DEFAULT,
+    fallbackModel: MODEL_LIGHT,
+    reason: 'default',
+  };
+}
 
 
 /**
@@ -455,6 +567,7 @@ function waitForIpcMessage(): Promise<string | null> {
 /** Build shared query options. */
 function buildQueryOptions(
   containerInput: ContainerInput,
+  prompt: string,
   mcpServerPath: string,
   sdkEnv: Record<string, string | undefined>,
   overrides: {
@@ -483,6 +596,11 @@ function buildQueryOptions(
   if (extraDirs.length > 0) {
     log(`Additional directories: ${extraDirs.join(', ')}`);
   }
+
+  const selectedModel = selectModel(containerInput, prompt);
+  log(
+    `Model selected: model=${selectedModel.model} fallback=${selectedModel.fallbackModel} reason=${selectedModel.reason}`,
+  );
 
   return {
     cwd: '/workspace/group',
@@ -520,6 +638,8 @@ function buildQueryOptions(
     hooks: {
       PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
     },
+    model: selectedModel.model,
+    fallbackModel: selectedModel.fallbackModel,
   };
 }
 
@@ -563,6 +683,7 @@ async function iterateQuery(
           result: null,
           error: textResult || 'Agent query failed.',
           newSessionId,
+          selectedModel: options.model,
         });
       } else {
         planResult = textResult || undefined;
@@ -570,6 +691,7 @@ async function iterateQuery(
           status: 'success',
           result: textResult || null,
           newSessionId,
+          selectedModel: options.model,
         });
       }
     }
@@ -592,7 +714,7 @@ async function runQuery(
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean }> {
+): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; selectedModel: string }> {
   const stream = new MessageStream();
   stream.push(prompt);
 
@@ -620,7 +742,7 @@ async function runQuery(
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
 
-  const options = buildQueryOptions(containerInput, mcpServerPath, sdkEnv, {
+  const options = buildQueryOptions(containerInput, prompt, mcpServerPath, sdkEnv, {
     sessionId,
     resumeAt,
   });
@@ -630,7 +752,7 @@ async function runQuery(
 
   ipcPolling = false;
   log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
-  return { newSessionId, lastAssistantUuid, closedDuringQuery };
+  return { newSessionId, lastAssistantUuid, closedDuringQuery, selectedModel: options.model };
 }
 
 async function main(): Promise<void> {
@@ -799,7 +921,12 @@ async function main(): Promise<void> {
       }
 
       // Emit session update so host can track it
-      writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+      writeOutput({
+        status: 'success',
+        result: null,
+        newSessionId: sessionId,
+        selectedModel: queryResult.selectedModel,
+      });
 
       log('Query ended, waiting for next IPC message...');
 

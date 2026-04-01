@@ -195,6 +195,26 @@ describe('credential-proxy', () => {
     expect(body.model).toBe('gpt-4o');
   });
 
+  it('model override injects model when request body is missing model', async () => {
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CLAUDE_MODEL: 'gpt-4o',
+    });
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+      },
+      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+    );
+
+    const body = JSON.parse(lastUpstreamBody);
+    expect(body.model).toBe('gpt-4o');
+  });
+
   it('model override does nothing when body is not JSON', async () => {
     proxyPort = await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',

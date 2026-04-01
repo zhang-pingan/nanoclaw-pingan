@@ -28,6 +28,7 @@ interface IncomingMsg {
   type: 'message' | 'select_group' | 'card_action';
   chatJid?: string;
   content?: string;
+  model?: string;
   token?: string;
   replyToId?: string;
   // card_action fields
@@ -449,6 +450,7 @@ class WebChannel {
           is_from_me: Boolean(m.is_from_me),
           is_bot_message: Boolean(m.is_bot_message),
           reply_to_id: m.reply_to_id || null,
+          model: m.model || null,
         })),
       }),
     );
@@ -871,6 +873,7 @@ class WebChannel {
           timestamp: now.toString(),
           is_from_me: true,
           is_bot_message: false,
+          model: msg.model || null,
         };
         // Create chat record first (required for foreign key in messages table)
         const groups = this.opts.registeredGroups();
@@ -882,6 +885,7 @@ class WebChannel {
           ...newMsg,
           content,
           reply_to_id: replyToId,
+          model: msg.model || null,
         });
         break;
       }

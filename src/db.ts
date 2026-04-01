@@ -45,6 +45,7 @@ function createSchema(database: Database.Database): void {
       timestamp TEXT,
       is_from_me INTEGER,
       is_bot_message INTEGER DEFAULT 0,
+      model TEXT,
       PRIMARY KEY (id, chat_jid),
       FOREIGN KEY (chat_jid) REFERENCES chats(jid)
     );
@@ -115,6 +116,13 @@ function createSchema(database: Database.Database): void {
     database
       .prepare(`UPDATE messages SET is_bot_message = 1 WHERE content LIKE ?`)
       .run(`${ASSISTANT_NAME}:%`);
+  } catch {
+    /* column already exists */
+  }
+
+  // Add model column if it doesn't exist (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE messages ADD COLUMN model TEXT`);
   } catch {
     /* column already exists */
   }
@@ -453,7 +461,7 @@ export function setLastGroupSync(): void {
  */
 export function storeMessage(msg: NewMessage): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -463,6 +471,7 @@ export function storeMessage(msg: NewMessage): void {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
+    msg.model ?? null,
   );
 }
 
@@ -478,9 +487,10 @@ export function storeMessageDirect(msg: {
   timestamp: string;
   is_from_me: boolean;
   is_bot_message?: boolean;
+  model?: string | null;
 }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -490,6 +500,7 @@ export function storeMessageDirect(msg: {
     msg.timestamp,
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
+    msg.model ?? null,
   );
 }
 
@@ -706,6 +717,23 @@ export function setRouterState(key: string, value: string): void {
 
 export function clearMessages(chatJid: string): void {
   db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
+}
+
+export function setMessageModelForIds(
+  chatJid: string,
+  messageIds: string[],
+  model: string,
+): void {
+  if (!messageIds.length || !model) return;
+  const update = db.prepare(
+    'UPDATE messages SET model = ? WHERE chat_jid = ? AND id = ?',
+  );
+  const tx = db.transaction((ids: string[]) => {
+    for (const id of ids) {
+      update.run(model, chatJid, id);
+    }
+  });
+  tx(messageIds);
 }
 
 export function clearSession(groupFolder: string): void {
