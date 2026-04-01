@@ -5,7 +5,7 @@
  * Input protocol:
  *   Stdin: Full ContainerInput JSON (read until EOF, like before)
  *   IPC:   Follow-up messages written as JSON files to /workspace/ipc/input/
- *          Files: {type:"message", text:"..."}.json — polled and consumed
+ *          Files: {type:"message", text:"...", selectedModel:"..."}.json — polled and consumed
  *          Sentinel: /workspace/ipc/input/_close — signals session end
  *
  * Stdout protocol:
@@ -23,6 +23,7 @@ import { fileURLToPath } from 'url';
 interface ContainerInput {
   prompt: string;
   sessionId?: string;
+  selectedModel?: string;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -60,117 +61,7 @@ const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_TASKS_DIR = '/workspace/ipc/tasks';
 const IPC_POLL_MS = 500;
-
-interface ModelSelection {
-  model: string;
-  fallbackModel: string;
-  reason: string;
-}
-
-const MODEL_LIGHT =
-  process.env.NANOCLAW_MODEL_LIGHT || 'claude-4-5-haiku-latest';
-const MODEL_DEFAULT =
-  process.env.NANOCLAW_MODEL_DEFAULT || 'claude-4-6-sonnet-latest';
-const MODEL_HEAVY =
-  process.env.NANOCLAW_MODEL_HEAVY || 'claude-opus-4-6-latest';
-const MODEL_FORCE = process.env.NANOCLAW_MODEL_FORCE || '';
-
-function hasAny(text: string, patterns: RegExp[]): boolean {
-  return patterns.some((p) => p.test(text));
-}
-
-function scoreKeywordHits(text: string, keywords: string[]): number {
-  let score = 0;
-  for (const keyword of keywords) {
-    if (text.includes(keyword)) score++;
-  }
-  return score;
-}
-
-function selectModel(containerInput: ContainerInput, prompt: string): ModelSelection {
-  if (MODEL_FORCE) {
-    return {
-      model: MODEL_FORCE,
-      fallbackModel: MODEL_FORCE,
-      reason: 'forced',
-    };
-  }
-
-  const text = (prompt || '').toLowerCase();
-
-  if (containerInput.isScheduledTask) {
-    const reminderLike = hasAny(text, [
-      /提醒/,
-      /remind/,
-      /notification/,
-      /通知/,
-    ]);
-    const heavyLike = hasAny(text, [
-      /分析/,
-      /research/,
-      /debug/,
-      /代码/,
-      /code/,
-      /测试/,
-      /test/,
-    ]);
-    if (reminderLike && !heavyLike) {
-      return {
-        model: MODEL_LIGHT,
-        fallbackModel: MODEL_DEFAULT,
-        reason: 'scheduled_simple',
-      };
-    }
-    return {
-      model: MODEL_DEFAULT,
-      fallbackModel: MODEL_LIGHT,
-      reason: 'scheduled_general',
-    };
-  }
-
-  if (containerInput.isMain) {
-    return {
-      model: MODEL_HEAVY,
-      fallbackModel: MODEL_DEFAULT,
-      reason: 'main_group',
-    };
-  }
-
-  const hardKeywords = [
-    'bug', 'debug', 'fix', 'refactor', 'test', 'trace',
-    'sql', 'migration', '架构', '性能', '并发', '故障', '回归',
-    '实现', '代码', '编译', '部署', 'workflow',
-  ];
-  const lightKeywords = [
-    '总结', '翻译', '润色', '改写', '提醒', '状态',
-    'summarize', 'translate', 'rewrite',
-  ];
-
-  const hardScore = scoreKeywordHits(text, hardKeywords);
-  const lightScore = scoreKeywordHits(text, lightKeywords);
-
-  if (hardScore >= 2) {
-    return {
-      model: MODEL_HEAVY,
-      fallbackModel: MODEL_DEFAULT,
-      reason: 'hard_prompt',
-    };
-  }
-
-  if (lightScore >= 1 && hardScore === 0) {
-    return {
-      model: MODEL_LIGHT,
-      fallbackModel: MODEL_DEFAULT,
-      reason: 'light_prompt',
-    };
-  }
-
-  return {
-    model: MODEL_DEFAULT,
-    fallbackModel: MODEL_LIGHT,
-    reason: 'default',
-  };
-}
+const MODEL_DEFAULT = process.env.NANOCLAW_MODEL_DEFAULT || 'claude-4-6-sonnet-latest';
 
 
 /**
@@ -514,21 +405,32 @@ function shouldClose(): boolean {
  * Drain all pending IPC input messages.
  * Returns messages found, or empty array.
  */
-function drainIpcInput(): string[] {
+interface IpcInputMessage {
+  text: string;
+  selectedModel?: string;
+}
+
+function drainIpcInput(): IpcInputMessage[] {
   try {
     fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
     const files = fs.readdirSync(IPC_INPUT_DIR)
       .filter(f => f.endsWith('.json'))
       .sort();
 
-    const messages: string[] = [];
+    const messages: IpcInputMessage[] = [];
     for (const file of files) {
       const filePath = path.join(IPC_INPUT_DIR, file);
       try {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         fs.unlinkSync(filePath);
         if (data.type === 'message' && data.text) {
-          messages.push(data.text);
+          messages.push({
+            text: String(data.text),
+            selectedModel:
+              typeof data.selectedModel === 'string'
+                ? data.selectedModel
+                : undefined,
+          });
         }
       } catch (err) {
         log(`Failed to process input file ${file}: ${err instanceof Error ? err.message : String(err)}`);
@@ -544,9 +446,9 @@ function drainIpcInput(): string[] {
 
 /**
  * Wait for a new IPC message or _close sentinel.
- * Returns the messages as a single string, or null if _close.
+ * Returns merged prompt text plus selectedModel, or null if _close.
  */
-function waitForIpcMessage(): Promise<string | null> {
+function waitForIpcMessage(): Promise<{ prompt: string; selectedModel: string } | null> {
   return new Promise((resolve) => {
     const poll = () => {
       if (shouldClose()) {
@@ -555,7 +457,9 @@ function waitForIpcMessage(): Promise<string | null> {
       }
       const messages = drainIpcInput();
       if (messages.length > 0) {
-        resolve(messages.join('\n'));
+        const prompt = messages.map((m) => m.text).join('\n');
+        const selectedModel = messages[messages.length - 1].selectedModel || MODEL_DEFAULT;
+        resolve({ prompt, selectedModel });
         return;
       }
       setTimeout(poll, IPC_POLL_MS);
@@ -567,7 +471,7 @@ function waitForIpcMessage(): Promise<string | null> {
 /** Build shared query options. */
 function buildQueryOptions(
   containerInput: ContainerInput,
-  prompt: string,
+  selectedModel: string,
   mcpServerPath: string,
   sdkEnv: Record<string, string | undefined>,
   overrides: {
@@ -597,10 +501,8 @@ function buildQueryOptions(
     log(`Additional directories: ${extraDirs.join(', ')}`);
   }
 
-  const selectedModel = selectModel(containerInput, prompt);
-  log(
-    `Model selected: model=${selectedModel.model} fallback=${selectedModel.fallbackModel} reason=${selectedModel.reason}`,
-  );
+  const resolvedModel = selectedModel || MODEL_DEFAULT;
+  log(`Model from host: model=${resolvedModel}`);
 
   return {
     cwd: '/workspace/group',
@@ -638,8 +540,7 @@ function buildQueryOptions(
     hooks: {
       PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
     },
-    model: selectedModel.model,
-    fallbackModel: selectedModel.fallbackModel,
+    model: resolvedModel,
   };
 }
 
@@ -709,6 +610,7 @@ async function iterateQuery(
  */
 async function runQuery(
   prompt: string,
+  selectedModel: string,
   sessionId: string | undefined,
   mcpServerPath: string,
   containerInput: ContainerInput,
@@ -731,9 +633,9 @@ async function runQuery(
       return;
     }
     const messages = drainIpcInput();
-    for (const text of messages) {
-      log(`Piping IPC message into active query (${text.length} chars)`);
-      stream.push(text);
+    for (const message of messages) {
+      log(`Piping IPC message into active query (${message.text.length} chars)`);
+      stream.push(message.text);
     }
     setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
   };
@@ -742,7 +644,7 @@ async function runQuery(
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
 
-  const options = buildQueryOptions(containerInput, prompt, mcpServerPath, sdkEnv, {
+  const options = buildQueryOptions(containerInput, selectedModel, mcpServerPath, sdkEnv, {
     sessionId,
     resumeAt,
   });
@@ -781,6 +683,7 @@ async function main(): Promise<void> {
 
   let sessionId = containerInput.sessionId;
   let confirmedSessionId: string | undefined;
+  let selectedModel = containerInput.selectedModel || MODEL_DEFAULT;
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
 
   // Clean up stale _close sentinel from previous container runs
@@ -794,7 +697,8 @@ async function main(): Promise<void> {
   const pending = drainIpcInput();
   if (pending.length > 0) {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
-    prompt += '\n' + pending.join('\n');
+    prompt += '\n' + pending.map((m) => m.text).join('\n');
+    selectedModel = pending[pending.length - 1].selectedModel || MODEL_DEFAULT;
   }
 
   // --- Slash command handling ---
@@ -903,7 +807,7 @@ async function main(): Promise<void> {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(prompt, selectedModel, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
         confirmedSessionId = queryResult.newSessionId;
@@ -937,8 +841,9 @@ async function main(): Promise<void> {
         break;
       }
 
-      log(`Got new message (${nextMessage.length} chars), starting new query`);
-      prompt = nextMessage;
+      log(`Got new message (${nextMessage.prompt.length} chars), starting new query`);
+      prompt = nextMessage.prompt;
+      selectedModel = nextMessage.selectedModel || MODEL_DEFAULT;
     }
 
     // Archive transcript on normal exit

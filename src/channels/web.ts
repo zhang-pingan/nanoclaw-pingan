@@ -933,7 +933,7 @@ class WebChannel {
           timestamp: now.toString(),
           is_from_me: true,
           is_bot_message: false,
-          model: msg.model || null,
+          model: null,
         };
         // Create chat record first (required for foreign key in messages table)
         const groups = this.opts.registeredGroups();
@@ -945,7 +945,7 @@ class WebChannel {
           ...newMsg,
           content,
           reply_to_id: replyToId,
-          model: msg.model || null,
+          model: newMsg.model ?? null,
         });
         break;
       }

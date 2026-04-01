@@ -145,20 +145,3 @@ export function deleteWebMessagesByIds(chatJid: string, messageIds: string[]): n
   });
   return tx(messageIds);
 }
-
-export function setWebMessageModelForIds(
-  chatJid: string,
-  messageIds: string[],
-  model: string,
-): void {
-  if (!messageIds.length || !model) return;
-  const update = db.prepare(
-    'UPDATE messages SET model = ? WHERE chat_jid = ? AND id = ?',
-  );
-  const tx = db.transaction((ids: string[]) => {
-    for (const id of ids) {
-      update.run(model, chatJid, id);
-    }
-  });
-  tx(messageIds);
-}

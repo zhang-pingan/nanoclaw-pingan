@@ -19,6 +19,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
+import { selectModel } from './model-selector.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
 /**
@@ -169,6 +170,20 @@ async function runTask(
   };
 
   try {
+    const modelSelection = selectModel({
+      prompt: task.prompt,
+      isMain,
+      isScheduledTask: true,
+    });
+    logger.info(
+      {
+        taskId: task.id,
+        group: group.name,
+        selectedModel: modelSelection.selectedModel,
+        reason: modelSelection.reason,
+      },
+      'Selected model for scheduled task',
+    );
     const output = await runContainerAgent(
       group,
       {
@@ -179,6 +194,7 @@ async function runTask(
         isMain,
         isScheduledTask: true,
         assistantName: ASSISTANT_NAME,
+        selectedModel: modelSelection.selectedModel,
       },
       (proc, containerName) =>
         deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
