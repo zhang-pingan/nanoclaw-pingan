@@ -79,6 +79,7 @@ var mentionInsertPos = null;
 var commands = [
   { name: "/clear", desc: "Clear conversation context" },
   { name: "/compact", desc: "Compact conversation history" },
+  { name: "/create-workflow", desc: "Create workflow with guided selections" },
 ];
 
 function apiFetch(path, options) {
@@ -1201,9 +1202,13 @@ function showCommandPalette(filter) {
     const item = document.createElement("div");
     item.className = `cmd-item${i === 0 ? " active" : ""}`;
     item.innerHTML = `<span class="cmd-item-name">${escapeHtml(cmd.name)}</span><span class="cmd-item-desc">${escapeHtml(cmd.desc)}</span>`;
-    item.addEventListener("click", () => {
-      messageInput.value = cmd.name + " ";
+    item.addEventListener("click", async () => {
       hideCommandPalette();
+      if (cmd.name === "/create-workflow") {
+        await launchCreateWorkflowWizard();
+        return;
+      }
+      messageInput.value = cmd.name + " ";
       messageInput.focus();
       autoResizeInput();
     });
@@ -1215,6 +1220,180 @@ function showCommandPalette(filter) {
 function hideCommandPalette() {
   commandPalette.classList.remove("visible");
   cmdPaletteIndex = -1;
+}
+
+function pickFromList(title, options, opts = {}) {
+  const allowEmpty = opts.allowEmpty === true;
+  const allowCustom = opts.allowCustom === true;
+  const customLabel = opts.customLabel || "自定义输入";
+
+  if (!Array.isArray(options) || options.length === 0) {
+    if (allowEmpty) return "";
+    if (allowCustom) {
+      const v = window.prompt(`${title}\n无可选项，请直接输入：`, "");
+      if (v === null) return null;
+      const t = v.trim();
+      return t || null;
+    }
+    return null;
+  }
+
+  while (true) {
+    const lines = options.map((v, i) => `${i + 1}. ${v}`);
+    if (allowEmpty) lines.push("0. 跳过");
+    if (allowCustom) lines.push("c. " + customLabel);
+    const input = window.prompt(
+      `${title}\n\n${lines.join("\n")}\n\n请输入序号${allowCustom ? "，或输入 c 自定义" : ""}：`,
+      "1"
+    );
+    if (input === null) return null;
+    const raw = input.trim();
+    if (allowEmpty && (raw === "0" || raw === "")) return "";
+    if (allowCustom && raw.toLowerCase() === "c") {
+      const custom = window.prompt(`${title}\n请输入自定义值：`, "");
+      if (custom === null) return null;
+      const customTrimmed = custom.trim();
+      if (customTrimmed) return customTrimmed;
+      alert("输入不能为空");
+      continue;
+    }
+    const index = parseInt(raw, 10);
+    if (!Number.isNaN(index) && index >= 1 && index <= options.length) {
+      return options[index - 1];
+    }
+    alert("输入无效，请重试。");
+  }
+}
+
+async function launchCreateWorkflowWizard() {
+  if (!currentGroupJid) {
+    alert("请先选择一个群聊");
+    return;
+  }
+
+  let optionsData;
+  try {
+    const res = await apiFetch("/api/workflow/create-options");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    optionsData = await res.json();
+  } catch (err) {
+    console.error("Failed to load workflow create options:", err);
+    alert("加载创建流程选项失败");
+    return;
+  }
+
+  const workflowTypes = Array.isArray(optionsData.workflow_types)
+    ? optionsData.workflow_types
+    : [];
+  const services = Array.isArray(optionsData.services) ? optionsData.services : [];
+  const requirementsByService = optionsData.requirements_by_service || {};
+
+  if (workflowTypes.length === 0) {
+    alert("没有可用的流程类型");
+    return;
+  }
+  if (services.length === 0) {
+    alert("没有可用的服务（groups/global/services.json 为空或缺失）");
+    return;
+  }
+
+  const workflowTypeOptions = workflowTypes.map((t) => `${t.type} (${t.name})`);
+  const pickedWorkflowTypeLabel = pickFromList("请选择流程类型", workflowTypeOptions);
+  if (!pickedWorkflowTypeLabel) return;
+  const pickedWorkflowType = workflowTypes[workflowTypeOptions.indexOf(pickedWorkflowTypeLabel)];
+  if (!pickedWorkflowType) return;
+
+  const entryPoints = Array.isArray(pickedWorkflowType.entry_points)
+    ? pickedWorkflowType.entry_points
+    : [];
+  if (entryPoints.length === 0) {
+    alert("该流程类型没有可用入口点");
+    return;
+  }
+  const entryPointLabels = entryPoints.map((ep) => {
+    const detail = pickedWorkflowType.entry_points_detail?.[ep];
+    return detail?.requires_deliverable ? `${ep} (需要交付物)` : ep;
+  });
+  const pickedEntryPointLabel = pickFromList("请选择入口点", entryPointLabels);
+  if (!pickedEntryPointLabel) return;
+  const pickedEntryPoint = entryPoints[entryPointLabels.indexOf(pickedEntryPointLabel)];
+  if (!pickedEntryPoint) return;
+
+  const pickedService = pickFromList("请选择服务名称", services);
+  if (!pickedService) return;
+
+  const requirementItems = Array.isArray(requirementsByService[pickedService])
+    ? requirementsByService[pickedService]
+    : [];
+  const requirementNames = requirementItems.map((r) => r.requirement_name).filter(Boolean);
+  const pickedRequirementName = pickFromList("请选择需求名称", requirementNames, {
+    allowCustom: true,
+    customLabel: "自定义需求名称",
+  });
+  if (!pickedRequirementName) return;
+
+  const selectedRequirement = requirementItems.find(
+    (r) => r.requirement_name === pickedRequirementName
+  );
+  const deliverableFiles = Array.isArray(selectedRequirement?.deliverables)
+    ? selectedRequirement.deliverables
+    : [];
+
+  const requiresDeliverable =
+    !!pickedWorkflowType.entry_points_detail?.[pickedEntryPoint]?.requires_deliverable;
+
+  let pickedDeliverableFile = "";
+  let deliverableDir = "";
+
+  if (requiresDeliverable) {
+    if (deliverableFiles.length > 0) {
+      const picked = pickFromList("请选择交付物文件", deliverableFiles);
+      if (!picked) return;
+      pickedDeliverableFile = picked;
+      deliverableDir = pickedRequirementName;
+    } else {
+      const manualDeliverableDir = window.prompt(
+        `该入口点需要交付物，但当前需求下没有可选文件。\n请输入交付物目录名（projects/${pickedService}/iteration/<目录名>）：`,
+        pickedRequirementName
+      );
+      if (manualDeliverableDir === null) return;
+      const manual = manualDeliverableDir.trim();
+      if (!manual) {
+        alert("该入口点要求交付物目录，不能为空");
+        return;
+      }
+      deliverableDir = manual;
+    }
+  } else if (deliverableFiles.length > 0) {
+    const optionalPicked = pickFromList("请选择交付物文件（可跳过）", deliverableFiles, {
+      allowEmpty: true,
+    });
+    if (optionalPicked === null) return;
+    if (optionalPicked) {
+      pickedDeliverableFile = optionalPicked;
+      deliverableDir = pickedRequirementName;
+    }
+  }
+
+  const data = {
+    name: pickedRequirementName,
+    service: pickedService,
+    workflow_type: pickedWorkflowType.type,
+    start_from: pickedEntryPoint,
+  };
+  if (deliverableDir) {
+    data.deliverable = deliverableDir;
+  }
+  if (pickedDeliverableFile) {
+    data.deliverable_file = pickedDeliverableFile;
+  }
+
+  const content = JSON.stringify({
+    command: "/create-workflow",
+    data,
+  });
+
+  await sendMessage(content);
 }
 
 function navigateCommandPalette(direction) {

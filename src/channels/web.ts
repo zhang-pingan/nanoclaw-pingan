@@ -310,6 +310,9 @@ class WebChannel {
       if (pathname === '/api/workflow/stop' && req.method === 'POST') {
         return this.apiStopWorkflow(req, res);
       }
+      if (pathname === '/api/workflow/create-options') {
+        return this.apiGetWorkflowCreateOptions(res);
+      }
       if (pathname === '/api/card-action' && req.method === 'POST') {
         return this.apiCardAction(req, res);
       }
@@ -637,6 +640,69 @@ class WebChannel {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
+  }
+
+  private async apiGetWorkflowCreateOptions(
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const { getAvailableWorkflowTypes } = await import('../workflow.js');
+    const workflowTypes = getAvailableWorkflowTypes();
+
+    const servicesPath = path.join(GROUPS_DIR, 'global', 'services.json');
+    let services: string[] = [];
+    if (fs.existsSync(servicesPath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(servicesPath, 'utf-8')) as Record<
+          string,
+          unknown
+        >;
+        services = Object.keys(raw).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+      } catch (err) {
+        logger.warn({ err, servicesPath }, 'Failed to parse services.json for web workflow options');
+      }
+    }
+
+    const requirementsByService: Record<
+      string,
+      Array<{ requirement_name: string; deliverables: string[] }>
+    > = {};
+
+    for (const service of services) {
+      const iterationDir = path.join(process.cwd(), 'projects', service, 'iteration');
+      if (!fs.existsSync(iterationDir)) {
+        requirementsByService[service] = [];
+        continue;
+      }
+
+      const requirements = fs
+        .readdirSync(iterationDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => {
+          const reqDir = path.join(iterationDir, d.name);
+          const deliverables = fs
+            .readdirSync(reqDir, { withFileTypes: true })
+            .filter((entry) => entry.isFile())
+            .map((entry) => entry.name)
+            .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+
+          return {
+            requirement_name: d.name,
+            deliverables,
+          };
+        })
+        .sort((a, b) => b.requirement_name.localeCompare(a.requirement_name, 'zh-CN'));
+
+      requirementsByService[service] = requirements;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        services,
+        workflow_types: workflowTypes,
+        requirements_by_service: requirementsByService,
+      }),
+    );
   }
 
   private async apiCardAction(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
