@@ -10,7 +10,13 @@ import { logger } from '../logger.js';
 import { CardActionHandler, InteractiveCard, NewMessage } from '../types.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
 import { ASSISTANT_NAME } from '../config.js';
-import { initWebDb, storeWebMessage, getWebMessages, getWebMessagesBefore } from '../web-db.js';
+import {
+  initWebDb,
+  storeWebMessage,
+  getWebMessages,
+  getWebMessagesBefore,
+  deleteWebMessagesByIds,
+} from '../web-db.js';
 
 // --- Config ---
 const WEB_PORT = parseInt(process.env.WEB_PORT || '3000', 10);
@@ -245,7 +251,7 @@ class WebChannel {
   private async handleHttp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     // CORS for local development
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
@@ -273,6 +279,9 @@ class WebChannel {
       }
       if (pathname.startsWith('/api/groups')) {
         return this.apiGetGroups(res);
+      }
+      if (pathname === '/api/messages' && req.method === 'DELETE') {
+        return this.apiDeleteMessages(req, res);
       }
       if (pathname.startsWith('/api/messages')) {
         return this.apiGetMessages(reqUrl, res);
@@ -454,6 +463,57 @@ class WebChannel {
         })),
       }),
     );
+  }
+
+  private async apiDeleteMessages(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.from(chunk));
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const { jid, ids } = body as { jid?: string; ids?: unknown };
+    if (!jid || !this.ownsJid(jid)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'valid jid required' }));
+      return;
+    }
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'ids must be a non-empty array' }));
+      return;
+    }
+
+    const uniqIds = Array.from(
+      new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0)),
+    );
+    if (uniqIds.length === 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'ids must contain valid message ids' }));
+      return;
+    }
+
+    const deletedWeb = deleteWebMessagesByIds(jid, uniqIds);
+    const { deleteMessagesByIds } = await import('../db.js');
+    const deletedMessages = deleteMessagesByIds(jid, uniqIds);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: true,
+      deleted: deletedWeb,
+      deleted_web_messages: deletedWeb,
+      deleted_messages: deletedMessages,
+    }));
   }
 
   private apiGetTasks(reqUrl: URL, res: http.ServerResponse): void {

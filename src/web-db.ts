@@ -132,6 +132,20 @@ export function clearWebMessages(chatJid: string): void {
   db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
 }
 
+export function deleteWebMessagesByIds(chatJid: string, messageIds: string[]): number {
+  if (!chatJid || messageIds.length === 0) return 0;
+  const del = db.prepare('DELETE FROM messages WHERE chat_jid = ? AND id = ?');
+  const tx = db.transaction((ids: string[]) => {
+    let deleted = 0;
+    for (const id of ids) {
+      const result = del.run(chatJid, id);
+      deleted += result.changes;
+    }
+    return deleted;
+  });
+  return tx(messageIds);
+}
+
 export function setWebMessageModelForIds(
   chatJid: string,
   messageIds: string[],

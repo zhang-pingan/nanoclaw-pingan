@@ -62,6 +62,7 @@ var originalSelectIcon = selectModeBtn.innerHTML; // preserve the original 4-squ
 var multiSelectBar = document.getElementById("multi-select-bar");
 var selectedCountEl = document.getElementById("selected-count");
 var copySelectedBtn = document.getElementById("copy-selected-btn");
+var deleteSelectedBtn = document.getElementById("delete-selected-btn");
 var cancelSelectBtn = document.getElementById("cancel-select-btn");
 var agentStatusInterval = null;
 var agentStatusData = [];
@@ -1346,6 +1347,7 @@ function updateMultiSelectBar() {
   const count = selectedMsgIds.size;
   selectedCountEl.textContent = "\u5DF2\u9009 " + count + " \u6761";
   copySelectedBtn.disabled = count === 0;
+  deleteSelectedBtn.disabled = count === 0;
 }
 
 function copySelectedMessages() {
@@ -1360,6 +1362,27 @@ function copySelectedMessages() {
     showCopyToast();
     exitMultiSelect();
   });
+}
+
+async function deleteSelectedMessages() {
+  if (!currentGroupJid) return;
+  const ids = Array.from(selectedMsgIds);
+  if (ids.length === 0) return;
+  if (!confirm(`删除已选的 ${ids.length} 条消息？`)) return;
+
+  try {
+    const res = await apiFetch("/api/messages", {
+      method: "DELETE",
+      body: JSON.stringify({ jid: currentGroupJid, ids }),
+    });
+    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+    await res.json();
+    await loadMessages();
+    exitMultiSelect();
+  } catch (err) {
+    console.error("Failed to delete selected messages:", err);
+    alert("删除失败");
+  }
 }
 
 function autoResizeInput() {
@@ -1621,6 +1644,7 @@ messagesEl.addEventListener("scroll", () => {
 // Multi-select
 selectModeBtn.addEventListener("click", toggleMultiSelectMode);
 copySelectedBtn.addEventListener("click", copySelectedMessages);
+deleteSelectedBtn.addEventListener("click", deleteSelectedMessages);
 cancelSelectBtn.addEventListener("click", exitMultiSelect);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && multiSelectMode) {
