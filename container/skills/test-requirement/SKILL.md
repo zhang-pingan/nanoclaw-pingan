@@ -21,7 +21,7 @@ description: Test implemented features — analyze delivery docs, design test ca
 
 ### 阶段二：测试用例生成
 
-根据文档和代码生成测试用例，格式如下：
+根据文档和代码生成测试用例，并保存到 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/test.md`，格式如下（每条用例前必须有 `[ ]`）：
 
 ```
 *测试用例*
@@ -30,7 +30,7 @@ description: Test implemented features — analyze delivery docs, design test ca
 📅 日期：{日期}
 
 🔹 功能测试
-TC-001: {测试标题}
+- [ ] TC-001: {测试标题}
   前置条件：{条件}
   操作步骤：
   1. {步骤1}
@@ -38,23 +38,23 @@ TC-001: {测试标题}
   预期结果：{预期}
   优先级：P0/P1/P2
 
-TC-002: {测试标题}
+- [ ] TC-002: {测试标题}
   ...
 
 🔹 边界测试
-TC-101: {测试标题}
+- [ ] TC-101: {测试标题}
   ...
 
 🔹 异常测试
-TC-201: {测试标题}
+- [ ] TC-201: {测试标题}
   ...
 
 🔹 兼容性/回归测试（如需）
-TC-301: {测试标题}
+- [ ] TC-301: {测试标题}
   ...
 ```
 
-测试用例生成后发送给用户确认，确认后开始执行。
+测试用例生成并写入 `test.md` 后，发送给用户确认，确认后开始执行。
 
 ### 阶段三：测试执行
 
@@ -63,12 +63,15 @@ TC-301: {测试标题}
    - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求/响应
    - *日志验证*：SSH 到 `staging.log_hosts`，查看 `staging.logs_info` 和 `staging.logs_error`，确认无异常日志
    - *数据库验证*：通过 MySQL 代理查询 `staging.mysql` 预发数据库，验证数据变更是否符合预期(注意**预发的表后缀+`_gray`**)
-2. 对每条用例记录结果：通过 ✅ / 失败 ❌ / 阻塞 ⚠️
+2. 对每条用例记录结果，在 `[ ]` 框内直接标记：
+   - 通过：`[x]`
+   - 失败：`[!]`
+   - 阻塞：`[-]`
 3. 发现问题时，附上日志片段或数据库查询结果作为证据
 
 ### 阶段四：测试报告
 
-测试完成后，生成测试报告并保存到 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/test.md`。
+测试完成后，不再新建独立测试报告文档，而是在同一个 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/test.md` 文件下继续补充“测试报告”部分。
 
 例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md`
 
