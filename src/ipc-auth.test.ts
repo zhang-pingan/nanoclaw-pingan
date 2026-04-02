@@ -19,6 +19,7 @@ import {
 import { DATA_DIR } from './config.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
+import { handleAskQuestionResponse } from './ask-user-question.js';
 
 // Set up registered groups used across tests
 const MAIN_GROUP: RegisteredGroup = {
@@ -776,6 +777,60 @@ describe('ask_user_question', () => {
     expect(res.status).toBe('rejected');
     expect(typeof res.error).toBe('string');
     expect(getAskQuestion(requestId)).toBeUndefined();
+  });
+
+  it('supports schema form questions and validates answer types', async () => {
+    const requestId = rid('aq');
+    await processTaskIpc(
+      {
+        type: 'ask_user_question',
+        requestId,
+        questions: [
+          {
+            id: 'deploy',
+            question: '填写部署参数',
+            fields: [
+              { id: 'env', label: '环境', type: 'string', required: true },
+              { id: 'replicas', label: '副本数', type: 'integer', min: 1, max: 5, required: true },
+              { id: 'dry_run', label: '仅演练', type: 'boolean' },
+            ],
+          },
+        ],
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const invalid = await handleAskQuestionResponse({
+      requestId,
+      groupFolder: 'other-group',
+      userId: 'user-1',
+      answer: '{"env":"prod","replicas":"bad"}',
+      registeredGroups: groups,
+      sendMessage: deps.sendMessage,
+      sendCard: deps.sendCard,
+    });
+    expect(invalid.ok).toBe(false);
+    expect(invalid.completed).toBe(false);
+
+    const valid = await handleAskQuestionResponse({
+      requestId,
+      groupFolder: 'other-group',
+      userId: 'user-1',
+      answer: '{"env":"prod","replicas":3,"dry_run":false}',
+      registeredGroups: groups,
+      sendMessage: deps.sendMessage,
+      sendCard: deps.sendCard,
+    });
+    expect(valid.ok).toBe(true);
+    expect(valid.completed).toBe(true);
+
+    const res = readAskIpcResult('other-group', requestId);
+    expect(res.status).toBe('answered');
+    expect(res.answers.deploy.env).toBe('prod');
+    expect(res.answers.deploy.replicas).toBe(3);
+    expect(res.answers.deploy.dry_run).toBe(false);
   });
 });
 

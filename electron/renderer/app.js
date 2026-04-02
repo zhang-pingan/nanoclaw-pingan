@@ -304,6 +304,64 @@ function parseCardContent(msg) {
   try { return JSON.parse(msg.content).card; } catch { return null; }
 }
 
+function lockCardInteraction(container, pendingLabel) {
+  if (!container || container.dataset.locked === "1") return;
+  container.dataset.locked = "1";
+  container.classList.add("card-locked");
+  const controls = container.querySelectorAll("button, input, select, textarea");
+  controls.forEach((el) => {
+    el.disabled = true;
+  });
+  if (pendingLabel) {
+    const status = document.createElement("div");
+    status.className = "card-submit-status";
+    status.textContent = pendingLabel;
+    container.appendChild(status);
+  }
+}
+
+function validateCardFormField(input, value) {
+  const text = String(value || "").trim();
+  const label = input.placeholder || input.name;
+
+  if (input.required && !text) return `${label} 为必填项`;
+  if (!text) return null;
+
+  if (input.type === "integer") {
+    if (!/^[-+]?\d+$/.test(text)) return `${label} 必须是整数`;
+    const n = Number.parseInt(text, 10);
+    if (typeof input.min === "number" && n < input.min) return `${label} 不能小于 ${input.min}`;
+    if (typeof input.max === "number" && n > input.max) return `${label} 不能大于 ${input.max}`;
+  }
+  if (input.type === "number") {
+    const n = Number(text);
+    if (Number.isNaN(n)) return `${label} 必须是数字`;
+    if (typeof input.min === "number" && n < input.min) return `${label} 不能小于 ${input.min}`;
+    if (typeof input.max === "number" && n > input.max) return `${label} 不能大于 ${input.max}`;
+  }
+  if (typeof input.min_length === "number" && text.length < input.min_length) {
+    return `${label} 长度不能少于 ${input.min_length}`;
+  }
+  if (typeof input.max_length === "number" && text.length > input.max_length) {
+    return `${label} 长度不能超过 ${input.max_length}`;
+  }
+  if (input.format === "email") {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!re.test(text)) return `${label} 不是有效邮箱`;
+  }
+  if (input.format === "uri") {
+    try { new URL(text); } catch { return `${label} 不是有效链接`; }
+  }
+  if (input.format === "date") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${label} 日期格式应为 YYYY-MM-DD`;
+  }
+  if (input.format === "date-time") {
+    if (Number.isNaN(new Date(text).getTime())) return `${label} 时间格式无效`;
+  }
+
+  return null;
+}
+
 function renderCardElement(card, msgId) {
   const container = document.createElement("div");
   container.className = "interactive-card";
@@ -332,7 +390,10 @@ function renderCardElement(card, msgId) {
       const button = document.createElement("button");
       button.className = `card-btn card-btn-${btn.type || "default"}`;
       button.textContent = btn.label;
-      button.addEventListener("click", () => sendCardAction(btn.value, msgId));
+      button.addEventListener("click", () => {
+        lockCardInteraction(container, "已提交，处理中...");
+        sendCardAction(btn.value, msgId);
+      });
       actions.appendChild(button);
     }
     container.appendChild(actions);
@@ -357,7 +418,10 @@ function renderCardElement(card, msgId) {
           const button = document.createElement("button");
           button.className = `card-btn card-btn-${btn.type || "default"}`;
           button.textContent = btn.label;
-          button.addEventListener("click", () => sendCardAction(btn.value, msgId));
+          button.addEventListener("click", () => {
+            lockCardInteraction(container, "已提交，处理中...");
+            sendCardAction(btn.value, msgId);
+          });
           actions.appendChild(button);
         }
         sectionEl.appendChild(actions);
@@ -376,25 +440,116 @@ function renderCardElement(card, msgId) {
   if (card.form) {
     const formEl = document.createElement("div");
     formEl.className = "card-form";
+    const formError = document.createElement("div");
+    formError.className = "card-form-error hidden";
+    formEl.appendChild(formError);
 
     const formInputs = {};
+    const clearInputErrors = () => {
+      for (const item of Object.values(formInputs)) {
+        if (item.errorEl) item.errorEl.remove();
+        if (item.container) item.container.classList.remove("card-input-invalid");
+      }
+    };
+
+    const addInputError = (item, message) => {
+      if (!item || !message) return;
+      if (item.errorEl) item.errorEl.remove();
+      if (item.container) item.container.classList.add("card-input-invalid");
+      const errEl = document.createElement("div");
+      errEl.className = "card-input-error";
+      errEl.textContent = message;
+      item.errorEl = errEl;
+      formEl.appendChild(errEl);
+    };
+
     for (const input of card.form.inputs) {
+      if (input.type === "enum" && Array.isArray(input.options) && input.options.length > 0) {
+        const selectEl = document.createElement("select");
+        selectEl.className = "card-input";
+        selectEl.name = input.name;
+        const emptyOpt = document.createElement("option");
+        emptyOpt.value = "";
+        emptyOpt.textContent = input.placeholder || "请选择";
+        selectEl.appendChild(emptyOpt);
+        for (const opt of input.options) {
+          const optEl = document.createElement("option");
+          optEl.value = opt.value;
+          optEl.textContent = opt.label || opt.value;
+          selectEl.appendChild(optEl);
+        }
+        formInputs[input.name] = { el: selectEl, type: "enum", meta: input, container: selectEl };
+        formEl.appendChild(selectEl);
+        if (input.error) addInputError(formInputs[input.name], input.error);
+        continue;
+      }
+
+      if (input.type === "boolean") {
+        const wrap = document.createElement("label");
+        wrap.className = "card-input";
+        wrap.style.display = "flex";
+        wrap.style.alignItems = "center";
+        wrap.style.gap = "8px";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = input.name;
+        const text = document.createElement("span");
+        text.textContent = input.placeholder || input.name;
+        wrap.appendChild(checkbox);
+        wrap.appendChild(text);
+        formInputs[input.name] = { el: checkbox, type: "boolean", meta: input, container: wrap };
+        formEl.appendChild(wrap);
+        if (input.error) addInputError(formInputs[input.name], input.error);
+        continue;
+      }
+
       const inputEl = document.createElement("input");
       inputEl.className = "card-input";
       inputEl.name = input.name;
       inputEl.placeholder = input.placeholder || "";
-      formInputs[input.name] = inputEl;
+      if (input.type === "number") inputEl.type = "number";
+      if (input.type === "integer") {
+        inputEl.type = "number";
+        inputEl.step = "1";
+      }
+      if (input.format === "date") inputEl.type = "date";
+      if (input.format === "date-time") inputEl.type = "datetime-local";
+      if (input.required) inputEl.required = true;
+      if (typeof input.min === "number") inputEl.min = String(input.min);
+      if (typeof input.max === "number") inputEl.max = String(input.max);
+      if (typeof input.min_length === "number") inputEl.minLength = input.min_length;
+      if (typeof input.max_length === "number") inputEl.maxLength = input.max_length;
+      formInputs[input.name] = { el: inputEl, type: input.type || "text", meta: input, container: inputEl };
       formEl.appendChild(inputEl);
+      if (input.error) addInputError(formInputs[input.name], input.error);
     }
 
     const submitBtn = document.createElement("button");
     submitBtn.className = `card-btn card-btn-${card.form.submitButton.type || "default"}`;
     submitBtn.textContent = card.form.submitButton.label;
     submitBtn.addEventListener("click", () => {
+      clearInputErrors();
       const formValue = {};
-      for (const [name, el] of Object.entries(formInputs)) {
-        formValue[name] = el.value;
+      for (const [name, item] of Object.entries(formInputs)) {
+        if (item.type === "boolean") {
+          formValue[name] = item.el.checked ? "true" : "false";
+        } else {
+          formValue[name] = item.el.value;
+        }
       }
+      for (const [name, item] of Object.entries(formInputs)) {
+        const val = item.type === "boolean" ? (item.el.checked ? "true" : "false") : item.el.value;
+        const err = validateCardFormField(item.meta || {}, val);
+        if (err) {
+          addInputError(item, err);
+          formError.textContent = `${name}: ${err}`;
+          formError.classList.remove("hidden");
+          return;
+        }
+      }
+      formError.textContent = "";
+      formError.classList.add("hidden");
+      lockCardInteraction(container, "表单已提交，处理中...");
       sendCardAction(card.form.submitButton.value, msgId, formValue);
     });
     formEl.appendChild(submitBtn);

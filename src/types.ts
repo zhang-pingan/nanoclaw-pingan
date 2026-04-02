@@ -100,10 +100,31 @@ export interface AskQuestionOption {
   description?: string;
 }
 
+export interface AskQuestionFieldEnumOption {
+  value: string;
+  label?: string;
+}
+
+export interface AskQuestionField {
+  id: string;
+  label: string;
+  type: 'string' | 'number' | 'integer' | 'boolean';
+  description?: string;
+  required?: boolean;
+  default?: string | number | boolean;
+  min_length?: number;
+  max_length?: number;
+  min?: number;
+  max?: number;
+  format?: 'email' | 'uri' | 'date' | 'date-time';
+  enum?: AskQuestionFieldEnumOption[];
+}
+
 export interface AskQuestionItem {
   id: string;
   question: string;
-  options: AskQuestionOption[];
+  options?: AskQuestionOption[];
+  fields?: AskQuestionField[];
   multi_select?: boolean;
 }
 
@@ -201,6 +222,15 @@ export interface CardButton {
 export interface CardInput {
   name: string;
   placeholder?: string;
+  type?: 'text' | 'number' | 'integer' | 'boolean' | 'enum';
+  options?: Array<{ value: string; label?: string }>;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  min_length?: number;
+  max_length?: number;
+  format?: 'email' | 'uri' | 'date' | 'date-time';
+  error?: string;
 }
 
 export interface CardForm {

@@ -2670,6 +2670,12 @@ html, body {
   transform: translateY(-1px);
 }
 
+.card-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .card-btn-primary {
   background: linear-gradient(135deg, var(--accent), #667eea);
   color: #fff;
@@ -2708,6 +2714,16 @@ html, body {
   border-top: 1px solid var(--border);
 }
 
+.card-form-error {
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  border-radius: var(--radius);
+  font-size: 12px;
+  padding: 8px 10px;
+  line-height: 1.4;
+}
+
 .card-input {
   width: 100%;
   padding: 9px 14px;
@@ -2720,12 +2736,33 @@ html, body {
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
+.card-input-invalid {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18) !important;
+}
+
+.card-input-error {
+  margin-top: -4px;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
 .card-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .card-input::placeholder {
+  color: var(--text-muted);
+}
+
+.card-locked {
+  opacity: 0.92;
+}
+
+.card-submit-status {
+  margin: 6px 18px 14px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 

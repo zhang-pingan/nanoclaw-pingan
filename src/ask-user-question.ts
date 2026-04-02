@@ -10,6 +10,8 @@ import {
 } from './db.js';
 import { logger } from './logger.js';
 import {
+  AskQuestionField,
+  AskQuestionFieldEnumOption,
   AskQuestionItem,
   AskQuestionOption,
   InteractiveCard,
@@ -24,7 +26,16 @@ type AskPayload = {
   metadata?: Record<string, string>;
 };
 
-type AskAnswers = Record<string, string | string[]>;
+type AskAnswers = Record<string, unknown>;
+
+type AskResolution = {
+  ok: true;
+  value: unknown;
+} | {
+  ok: false;
+  error: string;
+  fieldErrors?: Record<string, string>;
+};
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -77,25 +88,105 @@ function findChatJidByGroupFolder(
   return entry?.[0];
 }
 
+function isFormQuestion(question: AskQuestionItem): boolean {
+  return Array.isArray(question.fields) && question.fields.length > 0;
+}
+
+function formatFieldLine(field: AskQuestionField): string {
+  const req = field.required ? ' (必填)' : '';
+  const type = ` [${field.type}]`;
+  const enumHint = Array.isArray(field.enum) && field.enum.length > 0
+    ? ` 可选值: ${field.enum.map((o) => o.label || o.value).join(' / ')}`
+    : '';
+  const desc = field.description ? ` - ${field.description}` : '';
+  return `- ${field.label} (${field.id})${type}${req}${desc}${enumHint}`;
+}
+
 function renderFallbackQuestionText(
   requestId: string,
   question: AskQuestionItem,
   index: number,
   total: number,
+  validationError?: string,
+  validationErrors?: Record<string, string>,
 ): string {
+  const errorLines = validationError
+    ? [`⚠ 校验失败: ${validationError}`, '']
+    : [];
+  const fieldErrorLines = validationErrors && Object.keys(validationErrors).length > 0
+    ? [
+      '字段错误:',
+      ...Object.entries(validationErrors).map(([k, v]) => `- ${k}: ${v}`),
+      '',
+    ]
+    : [];
+  if (isFormQuestion(question)) {
+    const lines = [
+      `问题 ${index + 1}/${total}`,
+      question.question,
+      '',
+      ...errorLines,
+      ...fieldErrorLines,
+      '请填写以下字段：',
+      ...(question.fields || []).map(formatFieldLine),
+      '',
+      `回复方式1(JSON): /answer ${requestId} {"字段id":"值"}`,
+      `回复方式2(key=value): /answer ${requestId} key1=value1; key2=value2`,
+      `如需跳过: /answer ${requestId} skip`,
+    ];
+    return lines.join('\n');
+  }
+
   const lines = [
     `问题 ${index + 1}/${total}`,
     question.question,
     '',
-    ...question.options.map((opt, i) => {
+    ...errorLines,
+    ...fieldErrorLines,
+    ...((question.options || []).map((opt, i) => {
       const desc = opt.description ? ` - ${opt.description}` : '';
       return `${i + 1}. ${opt.label}${desc}`;
-    }),
+    })),
     '',
     `请回复: /answer ${requestId} <选项序号或选项文本>`,
     `如需跳过: /answer ${requestId} skip`,
   ];
   return lines.join('\n');
+}
+
+function buildFormBody(question: AskQuestionItem): string {
+  const fields = question.fields || [];
+  const lines = [question.question, '', '字段说明:'];
+  for (const f of fields) {
+    lines.push(formatFieldLine(f));
+  }
+  return lines.join('\n');
+}
+
+function withValidationError(body: string, validationError?: string): string {
+  if (!validationError) return body;
+  return `⚠ 校验失败: ${validationError}\n\n${body}`;
+}
+
+function fieldPlaceholder(field: AskQuestionField): string {
+  if (field.description && field.description.trim()) return field.description.trim();
+  if (Array.isArray(field.enum) && field.enum.length > 0) {
+    return `可选: ${field.enum.map((o) => o.label || o.value).join(', ')}`;
+  }
+  if (field.type === 'boolean') return 'true / false';
+  if (field.type === 'integer') return '整数';
+  if (field.type === 'number') return '数字';
+  if (field.format === 'date') return 'YYYY-MM-DD';
+  if (field.format === 'date-time') return 'YYYY-MM-DDTHH:mm:ssZ';
+  return '';
+}
+
+function fieldInputType(field: AskQuestionField): 'text' | 'number' | 'integer' | 'boolean' | 'enum' {
+  if (Array.isArray(field.enum) && field.enum.length > 0) return 'enum';
+  if (field.type === 'boolean') return 'boolean';
+  if (field.type === 'integer') return 'integer';
+  if (field.type === 'number') return 'number';
+  return 'text';
 }
 
 function buildQuestionCard(
@@ -104,12 +195,63 @@ function buildQuestionCard(
   question: AskQuestionItem,
   index: number,
   total: number,
+  validationError?: string,
+  validationErrors?: Record<string, string>,
 ): InteractiveCard {
+  if (isFormQuestion(question)) {
+    const fields = question.fields || [];
+    return {
+      header: { title: `问题 ${index + 1}/${total}`, color: 'blue' },
+      body: withValidationError(buildFormBody(question), validationError),
+      buttons: [
+        {
+          id: `skip-${index}`,
+          label: '跳过',
+          value: {
+            action: ASK_ACTION_SKIP,
+            group_folder: groupFolder,
+            request_id: requestId,
+          },
+        },
+      ],
+      form: {
+        name: `ask-form-${requestId}-${question.id}`,
+        inputs: fields.map((f) => ({
+          name: f.id,
+          placeholder: fieldPlaceholder(f),
+          type: fieldInputType(f),
+          options: f.enum?.map((o) => ({
+            value: o.value,
+            label: o.label,
+          })),
+          required: f.required === true,
+          min: f.min,
+          max: f.max,
+          min_length: f.min_length,
+          max_length: f.max_length,
+          format: f.format,
+          error: validationErrors?.[f.id],
+        })),
+        submitButton: {
+          id: `submit-${index}`,
+          label: '提交',
+          type: 'primary',
+          value: {
+            action: ASK_ACTION_ANSWER,
+            group_folder: groupFolder,
+            request_id: requestId,
+            question_id: question.id,
+          },
+        },
+      },
+    };
+  }
+
   return {
     header: { title: `问题 ${index + 1}/${total}`, color: 'blue' },
-    body: question.question,
+    body: withValidationError(question.question, validationError),
     buttons: [
-      ...question.options.map((opt, idx) => ({
+      ...((question.options || []).map((opt, idx) => ({
         id: `answer-${index}-${idx}`,
         label: opt.label,
         value: {
@@ -119,7 +261,7 @@ function buildQuestionCard(
           question_id: question.id,
           answer: opt.label,
         },
-      })),
+      }))),
       {
         id: `skip-${index}`,
         label: '跳过',
@@ -133,22 +275,26 @@ function buildQuestionCard(
   };
 }
 
-function resolveAnswer(
+function normalizeToken(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+function resolveOptionAnswer(
   question: AskQuestionItem,
   rawAnswer: string,
-): string | string[] | null {
+): AskResolution {
+  const options = question.options || [];
   const text = rawAnswer.trim();
-  if (!text) return null;
+  if (!text) return { ok: false, error: '答案不能为空。' };
 
-  const normalize = (s: string) => s.trim().toLowerCase();
   const findByToken = (token: string): string | null => {
     const n = Number.parseInt(token, 10);
-    if (!Number.isNaN(n) && n >= 1 && n <= question.options.length) {
-      return question.options[n - 1].label;
+    if (!Number.isNaN(n) && n >= 1 && n <= options.length) {
+      return options[n - 1].label;
     }
-    const exact = question.options.find((o) => o.label === token);
+    const exact = options.find((o) => o.label === token);
     if (exact) return exact.label;
-    const ci = question.options.find((o) => normalize(o.label) === normalize(token));
+    const ci = options.find((o) => normalizeToken(o.label) === normalizeToken(token));
     return ci?.label || null;
   };
 
@@ -157,17 +303,322 @@ function resolveAnswer(
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
-    if (tokens.length === 0) return null;
+    if (tokens.length === 0) return { ok: false, error: '至少选择一个选项。' };
     const selected: string[] = [];
     for (const token of tokens) {
       const v = findByToken(token);
-      if (!v) return null;
+      if (!v) return { ok: false, error: `无效选项: ${token}` };
       if (!selected.includes(v)) selected.push(v);
     }
-    return selected;
+    return { ok: true, value: selected };
   }
 
-  return findByToken(text);
+  const resolved = findByToken(text);
+  if (!resolved) {
+    return { ok: false, error: '答案无效，请回复选项序号或完整选项文本。' };
+  }
+  return { ok: true, value: resolved };
+}
+
+function parseAnswerPairs(answerText: string): Record<string, string> | null {
+  const text = answerText.trim();
+  if (!text) return null;
+
+  if (text.startsWith('{') && text.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+          out[k] = String(v);
+        }
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  }
+
+  const pairs: Record<string, string> = {};
+  const chunks = text
+    .split(/[;\n]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  let hasEq = false;
+  for (const chunk of chunks) {
+    const eq = chunk.indexOf('=');
+    if (eq <= 0) continue;
+    hasEq = true;
+    const key = chunk.slice(0, eq).trim();
+    const value = chunk.slice(eq + 1).trim();
+    if (key) pairs[key] = value;
+  }
+  if (!hasEq) return null;
+  return pairs;
+}
+
+function parseBoolean(raw: string): boolean | null {
+  const v = normalizeToken(raw);
+  if (['true', '1', 'yes', 'y', '是'].includes(v)) return true;
+  if (['false', '0', 'no', 'n', '否'].includes(v)) return false;
+  return null;
+}
+
+function isValidDate(raw: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
+  const d = new Date(`${raw}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.toISOString().startsWith(raw);
+}
+
+function isValidDateTime(raw: string): boolean {
+  const d = new Date(raw);
+  return !Number.isNaN(d.getTime());
+}
+
+function validateFieldValue(field: AskQuestionField, raw: string): AskResolution {
+  const text = raw.trim();
+  if (!text) return { ok: false, error: `字段 ${field.label} 不能为空。` };
+
+  if (Array.isArray(field.enum) && field.enum.length > 0) {
+    const matched = resolveEnumValue(field.enum, text);
+    if (!matched) {
+      return {
+        ok: false,
+        error: `字段 ${field.label} 必须是预设选项之一。`,
+      };
+    }
+    return { ok: true, value: matched };
+  }
+
+  if (field.type === 'boolean') {
+    const b = parseBoolean(text);
+    if (b === null) return { ok: false, error: `字段 ${field.label} 必须是 true/false。` };
+    return { ok: true, value: b };
+  }
+
+  if (field.type === 'integer') {
+    const n = Number.parseInt(text, 10);
+    if (Number.isNaN(n) || !/^[-+]?\d+$/.test(text)) {
+      return { ok: false, error: `字段 ${field.label} 必须是整数。` };
+    }
+    if (typeof field.min === 'number' && n < field.min) {
+      return { ok: false, error: `字段 ${field.label} 不能小于 ${field.min}。` };
+    }
+    if (typeof field.max === 'number' && n > field.max) {
+      return { ok: false, error: `字段 ${field.label} 不能大于 ${field.max}。` };
+    }
+    return { ok: true, value: n };
+  }
+
+  if (field.type === 'number') {
+    const n = Number(text);
+    if (Number.isNaN(n)) {
+      return { ok: false, error: `字段 ${field.label} 必须是数字。` };
+    }
+    if (typeof field.min === 'number' && n < field.min) {
+      return { ok: false, error: `字段 ${field.label} 不能小于 ${field.min}。` };
+    }
+    if (typeof field.max === 'number' && n > field.max) {
+      return { ok: false, error: `字段 ${field.label} 不能大于 ${field.max}。` };
+    }
+    return { ok: true, value: n };
+  }
+
+  if (typeof field.min_length === 'number' && text.length < field.min_length) {
+    return {
+      ok: false,
+      error: `字段 ${field.label} 长度不能少于 ${field.min_length}。`,
+    };
+  }
+  if (typeof field.max_length === 'number' && text.length > field.max_length) {
+    return {
+      ok: false,
+      error: `字段 ${field.label} 长度不能超过 ${field.max_length}。`,
+    };
+  }
+
+  if (field.format === 'email') {
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(text)) {
+      return { ok: false, error: `字段 ${field.label} 不是有效邮箱。` };
+    }
+  }
+
+  if (field.format === 'uri') {
+    try {
+      // eslint-disable-next-line no-new
+      new URL(text);
+    } catch {
+      return { ok: false, error: `字段 ${field.label} 不是有效链接。` };
+    }
+  }
+
+  if (field.format === 'date' && !isValidDate(text)) {
+    return { ok: false, error: `字段 ${field.label} 日期格式应为 YYYY-MM-DD。` };
+  }
+
+  if (field.format === 'date-time' && !isValidDateTime(text)) {
+    return { ok: false, error: `字段 ${field.label} 不是有效时间。` };
+  }
+
+  return { ok: true, value: text };
+}
+
+function resolveEnumValue(options: AskQuestionFieldEnumOption[], raw: string): string | null {
+  const text = raw.trim();
+  const n = Number.parseInt(text, 10);
+  if (!Number.isNaN(n) && n >= 1 && n <= options.length) {
+    return options[n - 1].value;
+  }
+  const exact = options.find((o) => o.value === text || o.label === text);
+  if (exact) return exact.value;
+  const ci = options.find(
+    (o) => normalizeToken(o.value) === normalizeToken(text)
+      || normalizeToken(o.label || '') === normalizeToken(text),
+  );
+  return ci?.value || null;
+}
+
+function resolveFormAnswer(
+  question: AskQuestionItem,
+  rawAnswer: string,
+  formValues?: Record<string, string>,
+): AskResolution {
+  const fields = question.fields || [];
+  const merged: Record<string, string> = {};
+
+  if (formValues && typeof formValues === 'object') {
+    for (const field of fields) {
+      const v = formValues[field.id];
+      if (typeof v === 'string') merged[field.id] = v;
+    }
+  }
+
+  const parsedByText = parseAnswerPairs(rawAnswer);
+  if (parsedByText) {
+    for (const [k, v] of Object.entries(parsedByText)) {
+      merged[k] = v;
+    }
+  } else if (rawAnswer.trim() && fields.length === 1 && !merged[fields[0].id]) {
+    merged[fields[0].id] = rawAnswer.trim();
+  }
+
+  const output: Record<string, unknown> = {};
+  const fieldErrors: Record<string, string> = {};
+  for (const field of fields) {
+    const provided = merged[field.id];
+    if ((provided === undefined || provided.trim() === '')) {
+      if (field.required) {
+        fieldErrors[field.id] = `缺少必填字段: ${field.label}(${field.id})`;
+      }
+      if (field.default !== undefined) {
+        output[field.id] = field.default;
+      }
+      continue;
+    }
+
+    const validated = validateFieldValue(field, provided);
+    if (!validated.ok) {
+      fieldErrors[field.id] = validated.error;
+      continue;
+    }
+    output[field.id] = validated.value;
+  }
+
+  const errorKeys = Object.keys(fieldErrors);
+  if (errorKeys.length > 0) {
+    return {
+      ok: false,
+      error: fieldErrors[errorKeys[0]],
+      fieldErrors,
+    };
+  }
+
+  return { ok: true, value: output };
+}
+
+function resolveAnswer(
+  question: AskQuestionItem,
+  rawAnswer: string,
+  formValues?: Record<string, string>,
+): AskResolution {
+  if (isFormQuestion(question)) {
+    return resolveFormAnswer(question, rawAnswer, formValues);
+  }
+  return resolveOptionAnswer(question, rawAnswer);
+}
+
+function normalizeField(
+  questionId: string,
+  raw: unknown,
+  idx: number,
+): { ok: true; field: AskQuestionField } | { ok: false; error: string } {
+  const f = raw as Partial<AskQuestionField>;
+  const id = (f.id || '').trim();
+  const label = (f.label || '').trim();
+  if (!id) return { ok: false, error: `questions[${questionId}].fields[${idx}].id is required` };
+  if (!label) return { ok: false, error: `questions[${questionId}].fields[${idx}].label is required` };
+  const t = f.type;
+  if (!t || !['string', 'number', 'integer', 'boolean'].includes(t)) {
+    return { ok: false, error: `questions[${questionId}].fields[${idx}].type must be string|number|integer|boolean` };
+  }
+
+  const field: AskQuestionField = {
+    id,
+    label,
+    type: t,
+    description: f.description?.trim() || undefined,
+    required: f.required === true,
+  };
+
+  if (f.default !== undefined) {
+    if (['string', 'number', 'boolean'].includes(typeof f.default)) {
+      field.default = f.default;
+    } else {
+      return { ok: false, error: `questions[${questionId}].fields[${idx}].default type is invalid` };
+    }
+  }
+
+  if (typeof f.min_length === 'number') field.min_length = Math.max(0, Math.floor(f.min_length));
+  if (typeof f.max_length === 'number') field.max_length = Math.max(0, Math.floor(f.max_length));
+  if (typeof f.min === 'number') field.min = f.min;
+  if (typeof f.max === 'number') field.max = f.max;
+  if (field.min_length !== undefined && field.max_length !== undefined && field.min_length > field.max_length) {
+    return { ok: false, error: `questions[${questionId}].fields[${idx}] min_length cannot exceed max_length` };
+  }
+  if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+    return { ok: false, error: `questions[${questionId}].fields[${idx}] min cannot exceed max` };
+  }
+
+  if (f.format !== undefined) {
+    if (['email', 'uri', 'date', 'date-time'].includes(String(f.format))) {
+      field.format = f.format as AskQuestionField['format'];
+    } else {
+      return { ok: false, error: `questions[${questionId}].fields[${idx}].format is invalid` };
+    }
+  }
+
+  if (Array.isArray(f.enum) && f.enum.length > 0) {
+    const normalizedEnum: AskQuestionFieldEnumOption[] = [];
+    const seenValues = new Set<string>();
+    for (let i = 0; i < f.enum.length; i += 1) {
+      const opt = f.enum[i] as Partial<AskQuestionFieldEnumOption>;
+      const value = (opt.value || '').trim();
+      if (!value) {
+        return { ok: false, error: `questions[${questionId}].fields[${idx}].enum[${i}].value is required` };
+      }
+      if (seenValues.has(value)) {
+        return { ok: false, error: `questions[${questionId}].fields[${idx}] duplicate enum value: ${value}` };
+      }
+      seenValues.add(value);
+      normalizedEnum.push({ value, label: opt.label?.trim() || undefined });
+    }
+    field.enum = normalizedEnum;
+  }
+
+  return { ok: true, field };
 }
 
 export function normalizeAskQuestions(raw: unknown): {
@@ -193,38 +644,78 @@ export function normalizeAskQuestions(raw: unknown): {
     if (!question) {
       return { ok: false, error: `questions[${i}].question is required` };
     }
-    if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6) {
+
+    const hasOptions = Array.isArray(q.options) && q.options.length > 0;
+    const hasFields = Array.isArray(q.fields) && q.fields.length > 0;
+    if (!hasOptions && !hasFields) {
       return {
         ok: false,
-        error: `questions[${i}].options must be an array with 2-6 items`,
+        error: `questions[${i}] must provide either options or fields`,
       };
     }
-    const options: AskQuestionOption[] = [];
-    const seenLabels = new Set<string>();
-    for (let j = 0; j < q.options.length; j += 1) {
-      const opt = q.options[j] as Partial<AskQuestionOption>;
-      const label = (opt.label || '').trim();
-      if (!label) {
+    if (hasOptions && hasFields) {
+      return {
+        ok: false,
+        error: `questions[${i}] cannot provide both options and fields`,
+      };
+    }
+
+    if (hasOptions) {
+      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6) {
         return {
           ok: false,
-          error: `questions[${i}].options[${j}].label is required`,
+          error: `questions[${i}].options must be an array with 2-6 items`,
         };
       }
-      if (seenLabels.has(label)) {
-        return { ok: false, error: `duplicate option label in ${id}: ${label}` };
+      const options: AskQuestionOption[] = [];
+      const seenLabels = new Set<string>();
+      for (let j = 0; j < q.options.length; j += 1) {
+        const opt = q.options[j] as Partial<AskQuestionOption>;
+        const label = (opt.label || '').trim();
+        if (!label) {
+          return {
+            ok: false,
+            error: `questions[${i}].options[${j}].label is required`,
+          };
+        }
+        if (seenLabels.has(label)) {
+          return { ok: false, error: `duplicate option label in ${id}: ${label}` };
+        }
+        seenLabels.add(label);
+        options.push({
+          label,
+          description: opt.description?.trim() || undefined,
+        });
       }
-      seenLabels.add(label);
-      options.push({
-        label,
-        description: opt.description?.trim() || undefined,
+      questions.push({
+        id,
+        question,
+        options,
+        multi_select: q.multi_select === true,
       });
+      continue;
     }
-    questions.push({
-      id,
-      question,
-      options,
-      multi_select: q.multi_select === true,
-    });
+
+    if (!Array.isArray(q.fields) || q.fields.length < 1 || q.fields.length > 8) {
+      return {
+        ok: false,
+        error: `questions[${i}].fields must be an array with 1-8 items`,
+      };
+    }
+
+    const fields: AskQuestionField[] = [];
+    const seenFieldIds = new Set<string>();
+    for (let j = 0; j < q.fields.length; j += 1) {
+      const normalizedField = normalizeField(id, q.fields[j], j);
+      if (!normalizedField.ok) return normalizedField;
+      if (seenFieldIds.has(normalizedField.field.id)) {
+        return { ok: false, error: `duplicate field id in ${id}: ${normalizedField.field.id}` };
+      }
+      seenFieldIds.add(normalizedField.field.id);
+      fields.push(normalizedField.field);
+    }
+
+    questions.push({ id, question, fields });
   }
 
   return { ok: true, questions };
@@ -260,6 +751,8 @@ export function createPendingAskQuestion(params: {
 export async function dispatchCurrentAskQuestion(params: {
   requestId: string;
   groupFolder: string;
+  validationError?: string;
+  validationErrors?: Record<string, string>;
   registeredGroups: Record<string, RegisteredGroup>;
   sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
   sendMessage?: (jid: string, text: string) => Promise<void>;
@@ -292,6 +785,8 @@ export async function dispatchCurrentAskQuestion(params: {
           q,
           rec.current_index,
           payload.questions.length,
+          params.validationError,
+          params.validationErrors,
         ),
       );
       return { ok: true, message: 'question card sent' };
@@ -311,6 +806,8 @@ export async function dispatchCurrentAskQuestion(params: {
         q,
         rec.current_index,
         payload.questions.length,
+        params.validationError,
+        params.validationErrors,
       ),
     );
     return { ok: true, message: 'question text sent' };
@@ -340,12 +837,18 @@ export async function handleAskQuestionResponse(params: {
   groupFolder: string;
   userId: string;
   answer?: string;
+  formValues?: Record<string, string>;
   skip?: boolean;
   reject?: boolean;
   registeredGroups: Record<string, RegisteredGroup>;
   sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
   sendMessage?: (jid: string, text: string) => Promise<void>;
-}): Promise<{ ok: boolean; userMessage: string; completed: boolean }> {
+}): Promise<{
+  ok: boolean;
+  userMessage: string;
+  completed: boolean;
+  validationErrors?: Record<string, string>;
+}> {
   const rec = getAskQuestion(params.requestId);
   if (!rec || rec.group_folder !== params.groupFolder) {
     return { ok: false, userMessage: '未找到对应的问题请求。', completed: false };
@@ -401,17 +904,22 @@ export async function handleAskQuestionResponse(params: {
     return { ok: false, userMessage: '当前问题索引无效。', completed: true };
   }
 
-  const resolved = resolveAnswer(currentQuestion, params.answer || '');
-  if (resolved === null) {
+  const resolved = resolveAnswer(
+    currentQuestion,
+    params.answer || '',
+    params.formValues,
+  );
+  if (!resolved.ok) {
     return {
       ok: false,
-      userMessage: '答案无效，请回复选项序号或完整选项文本。',
+      userMessage: resolved.error,
       completed: false,
+      validationErrors: resolved.fieldErrors,
     };
   }
 
   const answers = parseAnswers(rec.answers_json);
-  answers[currentQuestion.id] = resolved;
+  answers[currentQuestion.id] = resolved.value;
   const nextIndex = rec.current_index + 1;
   const isComplete = nextIndex >= payload.questions.length;
 

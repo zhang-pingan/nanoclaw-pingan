@@ -378,12 +378,14 @@ Use available_groups.json to find the JID for a group. The folder name must be c
 
 server.tool(
   'ask_user_question',
-  `Ask the user one or more multiple-choice questions and wait for responses.
+  `Ask the user one or more questions and wait for responses.
 
 Use this when requirements are ambiguous and you need explicit user choices before proceeding.
-Questions are asked sequentially. Each question must include 2-6 options.
+Questions are asked sequentially. Each question must provide either:
+- options mode: 2-6 options (single or multi-select)
+- form mode: 1-8 schema fields (text input form with host-side validation)
 Users can answer via interactive cards (when supported) or by replying:
-/answer <requestId> <option number or option label>`,
+/answer <requestId> <option / free text / JSON / key=value pairs>`,
   {
     questions: z.array(
       z.object({
@@ -394,7 +396,28 @@ Users can answer via interactive cards (when supported) or by replying:
             label: z.string().describe('Option label shown to user'),
             description: z.string().optional().describe('Optional explanation for the option'),
           }),
-        ).min(2).max(6),
+        ).min(2).max(6).optional(),
+        fields: z.array(
+          z.object({
+            id: z.string().describe('Field id used as response key'),
+            label: z.string().describe('Field label shown to user'),
+            type: z.enum(['string', 'number', 'integer', 'boolean']),
+            description: z.string().optional(),
+            required: z.boolean().optional(),
+            default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+            min_length: z.number().optional(),
+            max_length: z.number().optional(),
+            min: z.number().optional(),
+            max: z.number().optional(),
+            format: z.enum(['email', 'uri', 'date', 'date-time']).optional(),
+            enum: z.array(
+              z.object({
+                value: z.string(),
+                label: z.string().optional(),
+              }),
+            ).optional(),
+          }),
+        ).min(1).max(8).optional(),
         multi_select: z.boolean().optional().describe('Whether multiple options can be selected'),
       }),
     ).min(1).max(4),
@@ -427,7 +450,7 @@ Users can answer via interactive cards (when supported) or by replying:
         try {
           const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8')) as {
             status?: 'answered' | 'skipped' | 'timeout' | 'rejected';
-            answers?: Record<string, string | string[]>;
+            answers?: Record<string, unknown>;
             error?: string;
             requestId?: string;
           };

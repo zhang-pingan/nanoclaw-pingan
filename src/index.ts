@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import {
+  dispatchCurrentAskQuestion,
   handleAskQuestionResponse,
   parseAskAnswerCommand,
 } from './ask-user-question.js';
@@ -130,7 +131,7 @@ async function handleAskAnswerCommand(opts: {
   if (!parsed.answer) {
     await channel.sendMessage(
       chatJid,
-      '用法: /answer <requestId> <选项序号或选项文本>；跳过请用 /answer <requestId> skip',
+      '用法: /answer <requestId> <选项/文本>；表单可用 JSON 或 key=value；跳过请用 /answer <requestId> skip',
     );
     return true;
   }
@@ -155,6 +156,24 @@ async function handleAskAnswerCommand(opts: {
   });
 
   await channel.sendMessage(chatJid, result.userMessage);
+  if (!result.ok && !result.completed) {
+    await dispatchCurrentAskQuestion({
+      requestId: parsed.requestId,
+      groupFolder: group.folder,
+      validationError: result.userMessage,
+      validationErrors: result.validationErrors,
+      registeredGroups,
+      sendCard: async (jid, card) => {
+        const ch = findChannel(channels, jid);
+        return ch?.sendCard ? ch.sendCard(jid, card) : undefined;
+      },
+      sendMessage: async (jid, text) => {
+        const ch = findChannel(channels, jid);
+        if (!ch) return;
+        await ch.sendMessage(jid, text);
+      },
+    });
+  }
   return true;
 }
 
