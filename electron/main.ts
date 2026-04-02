@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification } from 'electron';
 import path from 'path';
 
 // CJS: use native __dirname; ESM: use import.meta.url
@@ -11,6 +11,14 @@ let isQuitting = false;
 let mainWindow: BrowserWindow | null = null;
 
 const isMac = process.platform === 'darwin';
+
+interface ShowNotificationPayload {
+  title: string;
+  body: string;
+  meta?: {
+    chatJid?: string;
+  };
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -185,6 +193,29 @@ app.whenReady().then(() => {
     } catch (err) {
       return { ok: false, error: String(err) };
     }
+  });
+
+  // Handle native system notifications from renderer via preload bridge.
+  ipcMain.on('show-notification', (_event, payload: ShowNotificationPayload) => {
+    if (!Notification.isSupported()) return;
+    // Avoid duplicate disturbance when app window is already foregrounded.
+    if (mainWindow && mainWindow.isVisible() && mainWindow.isFocused()) return;
+
+    const title = typeof payload?.title === 'string' ? payload.title : 'NanoClaw';
+    const body = typeof payload?.body === 'string' ? payload.body : '';
+    const notification = new Notification({ title, body });
+    notification.on('click', () => {
+      if (mainWindow) {
+        if (!mainWindow.isVisible()) mainWindow.show();
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+        const chatJid = payload?.meta?.chatJid;
+        if (typeof chatJid === 'string' && chatJid.length > 0) {
+          mainWindow.webContents.send('notification-clicked', { chatJid });
+        }
+      }
+    });
+    notification.show();
   });
 });
 

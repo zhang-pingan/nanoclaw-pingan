@@ -1934,6 +1934,19 @@ function sendWs(payload) {
     ws.send(JSON.stringify(payload));
   }
 }
+
+function isAppForeground() {
+  if (typeof document === "undefined") return false;
+  return document.visibilityState === "visible" && document.hasFocus();
+}
+
+function shouldIncrementUnread(chatJid) {
+  if (!chatJid) return false;
+  if (chatJid !== currentGroupJid) return true;
+  // Current group should also become unread if app is not in foreground.
+  return !isAppForeground();
+}
+
 function handleWsMessage(msg) {
   switch (msg.type) {
     case "connected":
@@ -1962,10 +1975,12 @@ function handleWsMessage(msg) {
         if (!incoming.is_from_me) {
           scheduleModelSync();
         }
-      } else if (!incoming.is_from_me) {
-        // Increment unread count
+      }
+      if (!incoming.is_from_me && shouldIncrementUnread(incoming.chat_jid)) {
         unreadCounts[incoming.chat_jid] = (unreadCounts[incoming.chat_jid] || 0) + 1;
         renderGroups();
+      }
+      if (!incoming.is_from_me) {
         notifyAgent(incoming);
       }
       break;
@@ -1985,6 +2000,11 @@ function handleWsMessage(msg) {
         messages.push(cardMsg);
         appendSingleMessage(cardMsg);
       }
+      if (shouldIncrementUnread(cardMsg.chat_jid)) {
+        unreadCounts[cardMsg.chat_jid] = (unreadCounts[cardMsg.chat_jid] || 0) + 1;
+        renderGroups();
+      }
+      notifyAgent(cardMsg);
       break;
     }
     case "file": {
@@ -2003,11 +2023,12 @@ function handleWsMessage(msg) {
       if (fileMsg.chat_jid === currentGroupJid) {
         messages.push(fileMsg);
         appendSingleMessage(fileMsg);
-      } else {
+      }
+      if (shouldIncrementUnread(fileMsg.chat_jid)) {
         unreadCounts[fileMsg.chat_jid] = (unreadCounts[fileMsg.chat_jid] || 0) + 1;
         renderGroups();
-        notifyAgent(fileMsg);
       }
+      notifyAgent(fileMsg);
       break;
     }
     case "typing":
@@ -2029,8 +2050,19 @@ function notifyAgent(msg) {
   const title = `${group?.name || "Support Group Agent"}`;
   const body = `${msg.sender_name}: ${msg.content.slice(0, 100)}`;
   if (typeof window !== "undefined" && window.nanoclawApp) {
-    window.nanoclawApp.notify(title, body);
+    window.nanoclawApp.notify(title, body, { chatJid: msg.chat_jid });
   }
+}
+
+function bindNotificationClickHandler() {
+  if (typeof window === "undefined" || !window.nanoclawApp?.onNotificationClick) return;
+  window.nanoclawApp.onNotificationClick(({ chatJid }) => {
+    if (typeof chatJid !== "string" || !chatJid) return;
+    if (chatJid === currentGroupJid) return;
+    selectGroup(chatJid).catch((err) => {
+      console.error("Failed to switch group from notification click:", err);
+    });
+  });
 }
 async function selectGroup(jid) {
   if (multiSelectMode) exitMultiSelect();
@@ -3109,6 +3141,7 @@ function initChatBgParticleNudge() {
 // Auto-start on page load
 initTakeCopterCursor();
 initChatBgParticleNudge();
+bindNotificationClickHandler();
 connectWS();
 loadGroups();
 warmWorkflowCreateOptions();
