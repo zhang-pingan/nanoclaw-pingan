@@ -9,9 +9,9 @@ export interface ModelSelection {
   reason: string;
 }
 
-const MODEL_LIGHT = process.env.NANOCLAW_MODEL_LIGHT || 'claude-4-5-haiku-latest';
-const MODEL_DEFAULT = process.env.NANOCLAW_MODEL_DEFAULT || 'claude-4-6-sonnet-latest';
-const MODEL_HEAVY = process.env.NANOCLAW_MODEL_HEAVY || 'claude-opus-4-6-latest';
+const MODEL_LIGHT = process.env.NANOCLAW_MODEL_LIGHT || 'claude-haiku-4-5';
+const MODEL_DEFAULT = process.env.NANOCLAW_MODEL_DEFAULT || 'claude-sonnet-4-6';
+const MODEL_HEAVY = process.env.NANOCLAW_MODEL_HEAVY || 'claude-opus-4-6';
 const MODEL_FORCE = process.env.NANOCLAW_MODEL_FORCE || '';
 
 function hasAny(text: string, patterns: RegExp[]): boolean {
