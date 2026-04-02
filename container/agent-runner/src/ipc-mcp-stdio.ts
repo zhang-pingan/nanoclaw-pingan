@@ -422,7 +422,10 @@ Users can answer via interactive cards (when supported) or by replying:
       }),
     ).min(1).max(4),
     timeout_sec: z.number().optional().default(300).describe('Timeout in seconds (30-3600)'),
-    metadata: z.record(z.string()).optional().describe('Optional tracking metadata'),
+    metadata: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe('Optional tracking metadata'),
   },
   async (args) => {
     const requestId = `aq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

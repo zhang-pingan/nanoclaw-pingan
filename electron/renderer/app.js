@@ -3241,11 +3241,32 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && multiSelectMode) {
     exitMultiSelect();
   }
-  // Cmd/Ctrl+1 — toggle agent status
+  // Cmd/Ctrl+1 — toggle schedulers
   if ((e.metaKey || e.ctrlKey) && e.key === "1") {
+    e.preventDefault();
+    if (schedulersPanel.classList.contains("open")) {
+      schedulersPanel.classList.remove("open");
+    } else {
+      schedulersPanel.classList.add("open");
+      agentStatusPanel.classList.remove("open");
+      workflowsPanel.classList.remove("open");
+      loadSchedulers();
+      if (agentStatusInterval) {
+        clearInterval(agentStatusInterval);
+        agentStatusInterval = null;
+      }
+    }
+    return;
+  }
+  // Cmd/Ctrl+2 — toggle agent status
+  if ((e.metaKey || e.ctrlKey) && e.key === "2") {
+    e.preventDefault();
     if (agentStatusPanel.classList.contains("open")) {
       agentStatusPanel.classList.remove("open");
-      if (agentStatusInterval) clearInterval(agentStatusInterval);
+      if (agentStatusInterval) {
+        clearInterval(agentStatusInterval);
+        agentStatusInterval = null;
+      }
     } else {
       schedulersPanel.classList.remove("open");
       workflowsPanel.classList.remove("open");
@@ -3253,6 +3274,23 @@ document.addEventListener("keydown", (e) => {
       loadAgentStatus();
       if (agentStatusInterval) clearInterval(agentStatusInterval);
       agentStatusInterval = setInterval(updateAgentDurations, 1000);
+    }
+    return;
+  }
+  // Cmd/Ctrl+3 — toggle workflows
+  if ((e.metaKey || e.ctrlKey) && e.key === "3") {
+    e.preventDefault();
+    if (workflowsPanel.classList.contains("open")) {
+      workflowsPanel.classList.remove("open");
+    } else {
+      schedulersPanel.classList.remove("open");
+      agentStatusPanel.classList.remove("open");
+      workflowsPanel.classList.add("open");
+      loadWorkflows();
+      if (agentStatusInterval) {
+        clearInterval(agentStatusInterval);
+        agentStatusInterval = null;
+      }
     }
   }
 });
