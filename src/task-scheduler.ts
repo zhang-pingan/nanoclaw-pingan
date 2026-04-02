@@ -170,7 +170,7 @@ async function runTask(
   };
 
   try {
-    const modelSelection = selectModel({
+    const modelSelection = await selectModel({
       prompt: task.prompt,
       isMain,
       isScheduledTask: true,

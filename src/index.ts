@@ -81,7 +81,7 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, InteractiveCard, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 import { buildMemoryPack } from './memory-pack.js';
-import { selectModel } from './model-selector.js';
+import { selectModel, selectModelByRules } from './model-selector.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -578,7 +578,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
   let outputSentToUser = false;
-  const modelSelection = selectModel({
+  const modelSelection = await selectModel({
     prompt,
     isMain: isMainGroup,
   });
@@ -667,7 +667,7 @@ async function runAgent(
   const sessionId = sessions[group.folder];
   const modelSelection = selectedModel
     ? { selectedModel, reason: 'preselected' }
-    : selectModel({ prompt, isMain });
+    : await selectModel({ prompt, isMain });
   logger.info(
     {
       group: group.name,
@@ -952,7 +952,7 @@ async function startMessageLoop(): Promise<void> {
           const messagesToSend =
             allPending.length > 0 ? allPending : groupMessages;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
-          const pipedSelection = selectModel({
+          const pipedSelection = await selectModel({
             prompt: formatted,
             isMain: isMainGroup,
           });
@@ -1144,7 +1144,7 @@ async function main(): Promise<void> {
         }
       }
       const group = registeredGroups[chatJid];
-      const modelSelection = selectModel({
+      const modelSelection = selectModelByRules({
         prompt: msg.content,
         isMain: group?.isMain === true,
       });
