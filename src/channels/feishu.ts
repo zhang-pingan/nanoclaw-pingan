@@ -20,8 +20,12 @@ import { registerChannel } from './registry.js';
 
 const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis';
 const FEISHU_API_BASE_V2 = 'https://open.feishu.cn/open-apis/v2';
-const WEBHOOK_PORT = process.env.FEISHU_WEBHOOK_PORT
-  ? parseInt(process.env.FEISHU_WEBHOOK_PORT, 10)
+const feishuEnv = readEnvFile(['FEISHU_WEBHOOK_PORT']);
+const webhookPortRaw =
+  process.env.FEISHU_WEBHOOK_PORT || feishuEnv.FEISHU_WEBHOOK_PORT || '3002';
+const parsedWebhookPort = Number.parseInt(webhookPortRaw, 10);
+const WEBHOOK_PORT = Number.isFinite(parsedWebhookPort)
+  ? parsedWebhookPort
   : 3002;
 
 interface FeishuConfig {

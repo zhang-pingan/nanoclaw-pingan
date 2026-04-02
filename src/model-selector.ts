@@ -1,3 +1,5 @@
+import { readEnvFile } from './env.js';
+
 export interface ModelSelectionInput {
   prompt: string;
   isMain: boolean;
@@ -9,17 +11,40 @@ export interface ModelSelection {
   reason: string;
 }
 
-const MODEL_LIGHT = process.env.NANOCLAW_MODEL_LIGHT || 'claude-haiku-4-5';
-const MODEL_DEFAULT = process.env.NANOCLAW_MODEL_DEFAULT || 'claude-sonnet-4-6';
-const MODEL_HEAVY = process.env.NANOCLAW_MODEL_HEAVY || 'claude-opus-4-6';
-const MODEL_FORCE = process.env.NANOCLAW_MODEL_FORCE || '';
+const modelEnv = readEnvFile([
+  'NANOCLAW_MODEL_LIGHT',
+  'NANOCLAW_MODEL_DEFAULT',
+  'NANOCLAW_MODEL_HEAVY',
+  'NANOCLAW_MODEL_FORCE',
+  'NANOCLAW_MODEL_SELECTOR_URL',
+  'NANOCLAW_MODEL_SELECTOR_MODEL',
+  'NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS',
+]);
+const MODEL_LIGHT =
+  process.env.NANOCLAW_MODEL_LIGHT || modelEnv.NANOCLAW_MODEL_LIGHT || 'claude-haiku-4-5';
+const MODEL_DEFAULT =
+  process.env.NANOCLAW_MODEL_DEFAULT ||
+  modelEnv.NANOCLAW_MODEL_DEFAULT ||
+  'claude-sonnet-4-6';
+const MODEL_HEAVY =
+  process.env.NANOCLAW_MODEL_HEAVY || modelEnv.NANOCLAW_MODEL_HEAVY || 'claude-opus-4-6';
+const MODEL_FORCE = process.env.NANOCLAW_MODEL_FORCE || modelEnv.NANOCLAW_MODEL_FORCE || '';
 const SELECTOR_API_BASE_URL =
-  process.env.NANOCLAW_MODEL_SELECTOR_URL || 'http://101.42.48.209:8000/v1';
+  process.env.NANOCLAW_MODEL_SELECTOR_URL ||
+  modelEnv.NANOCLAW_MODEL_SELECTOR_URL ||
+  'http://101.42.48.209:8000/v1';
 const SELECTOR_API_MODEL =
-  process.env.NANOCLAW_MODEL_SELECTOR_MODEL || 'DeepSeek-R1-Distill-Llama-70B';
+  process.env.NANOCLAW_MODEL_SELECTOR_MODEL ||
+  modelEnv.NANOCLAW_MODEL_SELECTOR_MODEL ||
+  'DeepSeek-R1-Distill-Llama-70B';
 const SELECTOR_TIMEOUT_MS = Math.max(
   1000,
-  Number.parseInt(process.env.NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS || '30000', 10) || 30000,
+  Number.parseInt(
+    process.env.NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS ||
+      modelEnv.NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS ||
+      '30000',
+    10,
+  ) || 30000,
 );
 const SELECTOR_MAX_TOKENS = 512;
 

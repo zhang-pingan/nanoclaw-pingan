@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { AgentStatusInfo } from '../types.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 import { GROUPS_DIR, DATA_DIR } from '../config.js';
+import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { CardActionHandler, InteractiveCard, NewMessage } from '../types.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
@@ -19,8 +20,9 @@ import {
 } from '../web-db.js';
 
 // --- Config ---
-const WEB_PORT = parseInt(process.env.WEB_PORT || '3000', 10);
-const WEB_TOKEN = process.env.WEB_TOKEN;
+const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
+const WEB_PORT = parseInt(process.env.WEB_PORT || webEnv.WEB_PORT || '3000', 10);
+const WEB_TOKEN = process.env.WEB_TOKEN || webEnv.WEB_TOKEN;
 const RENDERER_DIR = path.resolve(process.cwd(), 'electron', 'renderer');
 const UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
 

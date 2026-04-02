@@ -2,6 +2,7 @@
 var ws = null;
 var reconnectTimer = null;
 var currentGroupJid = "";
+var browserNotificationPermissionRequested = false;
 var groups = [];
 var messages = [];
 var unreadCounts = {};
@@ -2051,7 +2052,46 @@ function notifyAgent(msg) {
   const body = `${msg.sender_name}: ${msg.content.slice(0, 100)}`;
   if (typeof window !== "undefined" && window.nanoclawApp) {
     window.nanoclawApp.notify(title, body, { chatJid: msg.chat_jid });
+    return;
   }
+
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission !== "granted") {
+    ensureBrowserNotificationPermission();
+    return;
+  }
+
+  const notification = new Notification(title, {
+    body,
+    tag: `nanoclaw-${msg.chat_jid}`,
+  });
+  notification.onclick = () => {
+    window.focus();
+    if (msg.chat_jid && msg.chat_jid !== currentGroupJid) {
+      selectGroup(msg.chat_jid).catch((err) => {
+        console.error("Failed to switch group from browser notification click:", err);
+      });
+    }
+  };
+}
+
+function ensureBrowserNotificationPermission() {
+  if (typeof window === "undefined" || window.nanoclawApp) return;
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission !== "default") return;
+  if (browserNotificationPermissionRequested) return;
+
+  browserNotificationPermissionRequested = true;
+  Notification.requestPermission().catch((err) => {
+    console.error("Failed to request browser notification permission:", err);
+  });
+}
+
+function bindNotificationPermissionPrimer() {
+  if (typeof window === "undefined" || window.nanoclawApp) return;
+  const requestOnce = () => ensureBrowserNotificationPermission();
+  window.addEventListener("pointerdown", requestOnce, { once: true, capture: true });
+  window.addEventListener("keydown", requestOnce, { once: true, capture: true });
 }
 
 function bindNotificationClickHandler() {
@@ -3142,6 +3182,7 @@ function initChatBgParticleNudge() {
 initTakeCopterCursor();
 initChatBgParticleNudge();
 bindNotificationClickHandler();
+bindNotificationPermissionPrimer();
 connectWS();
 loadGroups();
 warmWorkflowCreateOptions();
