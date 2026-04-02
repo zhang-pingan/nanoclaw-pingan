@@ -6,6 +6,7 @@ import {
   _initTestDatabase,
   createTask,
   getAllTasks,
+  getAskQuestion,
   listMemories,
   getMessagesSince,
   getRegisteredGroup,
@@ -54,6 +55,23 @@ function readMemoryIpcResult(
     'ipc',
     sourceGroup,
     'search-results',
+    `${requestId}.json`,
+  );
+  expect(fs.existsSync(p)).toBe(true);
+  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+  fs.unlinkSync(p);
+  return data;
+}
+
+function readAskIpcResult(
+  sourceGroup: string,
+  requestId: string,
+): any {
+  const p = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    'ask-results',
     `${requestId}.json`,
   );
   expect(fs.existsSync(p)).toBe(true);
@@ -704,6 +722,60 @@ describe('register_group success', () => {
     );
 
     expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+  });
+});
+
+describe('ask_user_question', () => {
+  it('creates pending ask question and dispatches first prompt via card', async () => {
+    const sentCards: Array<{ jid: string; card: unknown }> = [];
+    deps.sendCard = async (jid, card) => {
+      sentCards.push({ jid, card });
+      return 'card-1';
+    };
+
+    const requestId = rid('aq');
+    await processTaskIpc(
+      {
+        type: 'ask_user_question',
+        requestId,
+        questions: [
+          {
+            id: 'q1',
+            question: 'Choose env?',
+            options: [{ label: 'prod' }, { label: 'staging' }],
+          },
+        ],
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const rec = getAskQuestion(requestId);
+    expect(rec).toBeDefined();
+    expect(rec?.status).toBe('pending');
+    expect(rec?.group_folder).toBe('other-group');
+    expect(sentCards.length).toBe(1);
+    expect(sentCards[0].jid).toBe('other@g.us');
+  });
+
+  it('writes rejected ask-result when payload is invalid', async () => {
+    const requestId = rid('aq');
+    await processTaskIpc(
+      {
+        type: 'ask_user_question',
+        requestId,
+        questions: [{ id: 'q1', question: 'bad', options: [{ label: 'only-one' }] }],
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const res = readAskIpcResult('other-group', requestId);
+    expect(res.status).toBe('rejected');
+    expect(typeof res.error).toBe('string');
+    expect(getAskQuestion(requestId)).toBeUndefined();
   });
 });
 

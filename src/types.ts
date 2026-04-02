@@ -95,6 +95,32 @@ export interface Delegation {
   updated_at: string;
 }
 
+export interface AskQuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface AskQuestionItem {
+  id: string;
+  question: string;
+  options: AskQuestionOption[];
+  multi_select?: boolean;
+}
+
+export interface AskQuestionRecord {
+  id: string;
+  group_folder: string;
+  chat_jid: string;
+  status: 'pending' | 'answered' | 'skipped' | 'timeout' | 'rejected';
+  payload_json: string;
+  answers_json: string | null;
+  current_index: number;
+  created_at: string;
+  expires_at: string;
+  answered_at: string | null;
+  responder_user_id: string | null;
+}
+
 /** Workflow status is now a plain string — valid values are defined in workflows.json per type. */
 export type WorkflowStatus = string;
 

@@ -2,6 +2,11 @@ import fs from 'fs';
 import path from 'path';
 
 import {
+  handleAskQuestionResponse,
+  parseAskAnswerCommand,
+} from './ask-user-question.js';
+import { createCardActionHandler } from './card-action-router.js';
+import {
   ASSISTANT_NAME,
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
@@ -53,7 +58,7 @@ import { clearWebMessages } from './web-db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { createNewWorkflow, handleCardAction, initWorkflow } from './workflow.js';
+import { createNewWorkflow, initWorkflow } from './workflow.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -101,6 +106,56 @@ interface CreateWorkflowCommandData {
 interface ParsedCreateWorkflowCommand {
   isCreateWorkflowCommand: boolean;
   data?: CreateWorkflowCommandData;
+}
+
+async function handleAskAnswerCommand(opts: {
+  chatJid: string;
+  group: RegisteredGroup;
+  channel: Channel;
+  messages: NewMessage[];
+}): Promise<boolean> {
+  const { chatJid, group, channel, messages } = opts;
+  const cmdMsg = messages.find(
+    (m) => parseAskAnswerCommand(m.content, TRIGGER_PATTERN) !== null,
+  );
+  if (!cmdMsg) return false;
+
+  const parsed = parseAskAnswerCommand(cmdMsg.content, TRIGGER_PATTERN);
+  if (!parsed) return false;
+
+  // Consume the entire pending batch, matching /clear and /create-workflow behavior.
+  lastAgentTimestamp[chatJid] = messages[messages.length - 1].timestamp;
+  saveState();
+
+  if (!parsed.answer) {
+    await channel.sendMessage(
+      chatJid,
+      '用法: /answer <requestId> <选项序号或选项文本>；跳过请用 /answer <requestId> skip',
+    );
+    return true;
+  }
+
+  const result = await handleAskQuestionResponse({
+    requestId: parsed.requestId,
+    groupFolder: group.folder,
+    userId: cmdMsg.sender || 'unknown',
+    answer: parsed.answer,
+    skip: parsed.answer.toLowerCase() === 'skip',
+    reject: parsed.answer.toLowerCase() === 'reject',
+    registeredGroups,
+    sendCard: async (jid, card) => {
+      const ch = findChannel(channels, jid);
+      return ch?.sendCard ? ch.sendCard(jid, card) : undefined;
+    },
+    sendMessage: async (jid, text) => {
+      const ch = findChannel(channels, jid);
+      if (!ch) return;
+      await ch.sendMessage(jid, text);
+    },
+  });
+
+  await channel.sendMessage(chatJid, result.userMessage);
+  return true;
 }
 
 function extractCreateWorkflowJsonObject(content: string): unknown | null {
@@ -384,6 +439,17 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         '/clear: permission denied',
       );
     }
+    return true;
+  }
+
+  if (
+    await handleAskAnswerCommand({
+      chatJid,
+      group,
+      channel,
+      messages: missedMessages,
+    })
+  ) {
     return true;
   }
 
@@ -737,6 +803,17 @@ async function startMessageLoop(): Promise<void> {
           }
 
           const isMainGroup = group.isMain === true;
+
+          if (
+            await handleAskAnswerCommand({
+              chatJid,
+              group,
+              channel,
+              messages: groupMessages,
+            })
+          ) {
+            continue;
+          }
 
           // --- Session command interception (message loop) ---
           // Scan ALL messages in the batch for a session command.
@@ -1138,9 +1215,18 @@ async function main(): Promise<void> {
     : undefined;
 
   // Wire up card action callback → workflow engine (all channels that support it)
+  const cardActionHandler = createCardActionHandler({
+    registeredGroups: () => registeredGroups,
+    sendCard: sendCardFn,
+    sendMessage: async (jid, text) => {
+      const ch = findChannel(channels, jid);
+      if (!ch) return;
+      await ch.sendMessage(jid, text);
+    },
+  });
   for (const ch of channels) {
     if ('onCardAction' in ch) {
-      ch.onCardAction = handleCardAction;
+      ch.onCardAction = cardActionHandler;
     }
   }
 

@@ -377,6 +377,104 @@ Use available_groups.json to find the JID for a group. The folder name must be c
 );
 
 server.tool(
+  'ask_user_question',
+  `Ask the user one or more multiple-choice questions and wait for responses.
+
+Use this when requirements are ambiguous and you need explicit user choices before proceeding.
+Questions are asked sequentially. Each question must include 2-6 options.
+Users can answer via interactive cards (when supported) or by replying:
+/answer <requestId> <option number or option label>`,
+  {
+    questions: z.array(
+      z.object({
+        id: z.string().describe('Unique question id within this tool call'),
+        question: z.string().describe('Question text shown to user'),
+        options: z.array(
+          z.object({
+            label: z.string().describe('Option label shown to user'),
+            description: z.string().optional().describe('Optional explanation for the option'),
+          }),
+        ).min(2).max(6),
+        multi_select: z.boolean().optional().describe('Whether multiple options can be selected'),
+      }),
+    ).min(1).max(4),
+    timeout_sec: z.number().optional().default(300).describe('Timeout in seconds (30-3600)'),
+    metadata: z.record(z.string()).optional().describe('Optional tracking metadata'),
+  },
+  async (args) => {
+    const requestId = `aq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const timeoutSec = Math.min(3600, Math.max(30, Math.floor(args.timeout_sec || 300)));
+    const data = {
+      type: 'ask_user_question',
+      requestId,
+      questions: args.questions,
+      timeoutSec,
+      metadata: args.metadata,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    const resultsDir = path.join(IPC_DIR, 'ask-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = timeoutSec * 1000 + 5000;
+    const pollMs = 300;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        try {
+          const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8')) as {
+            status?: 'answered' | 'skipped' | 'timeout' | 'rejected';
+            answers?: Record<string, string | string[]>;
+            error?: string;
+            requestId?: string;
+          };
+          fs.unlinkSync(resultPath);
+
+          const status = result.status || 'rejected';
+          const answers = result.answers || {};
+          const summary = JSON.stringify({
+            requestId: result.requestId || requestId,
+            status,
+            answers,
+          });
+
+          if (status === 'answered') {
+            return {
+              content: [{ type: 'text' as const, text: `User answered questions: ${summary}` }],
+            };
+          }
+
+          if (status === 'rejected') {
+            return {
+              content: [{ type: 'text' as const, text: `Question flow rejected: ${result.error || 'rejected by host'}. ${summary}` }],
+              isError: true,
+            };
+          }
+
+          return {
+            content: [{ type: 'text' as const, text: `Question flow ended with status=${status}. ${summary}` }],
+          };
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `ask_user_question result parse failed: ${err instanceof Error ? err.message : String(err)}` }],
+            isError: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: `ask_user_question timed out waiting for user response (requestId=${requestId}).` }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
   'memory_search',
   '混合检索记忆：联合搜索聊天消息与结构化记忆（working/episodic/canonical）。',
   {

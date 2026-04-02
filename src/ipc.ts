@@ -17,6 +17,12 @@ function formatLocalTime(date: Date): string {
   return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
 }
 import {
+  createPendingAskQuestion,
+  dispatchCurrentAskQuestion,
+  expirePendingAskQuestions,
+  normalizeAskQuestions,
+} from './ask-user-question.js';
+import {
   createNewWorkflow,
   getAvailableWorkflowTypes,
   listWorkflows,
@@ -95,6 +101,15 @@ export function startIpcWatcher(deps: IpcDeps): void {
     }
 
     const registeredGroups = deps.registeredGroups();
+
+    try {
+      await expirePendingAskQuestions({
+        registeredGroups,
+        sendMessage: deps.sendMessage,
+      });
+    } catch (err) {
+      logger.warn({ err }, 'Failed to expire pending ask questions');
+    }
 
     // Build folder→isMain lookup from registered groups
     const folderIsMain = new Map<string, boolean>();
@@ -592,6 +607,10 @@ export async function processTaskIpc(
     result?: string;
     // For workflow
     service?: string;
+    // For ask_user_question
+    questions?: unknown;
+    timeoutSec?: number;
+    metadata?: Record<string, string>;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -600,6 +619,18 @@ export async function processTaskIpc(
   const registeredGroups = deps.registeredGroups();
   const writeMemoryResult = (groupFolder: string, requestId: string, payload: object) => {
     const resultsDir = path.join(DATA_DIR, 'ipc', groupFolder, 'search-results');
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
+  const writeAskResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(DATA_DIR, 'ipc', groupFolder, 'ask-results');
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
     const tempPath = `${responsePath}.tmp`;
@@ -996,6 +1027,102 @@ export async function processTaskIpc(
         );
       }
       break;
+
+    case 'ask_user_question': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn({ sourceGroup }, 'ask_user_question missing requestId');
+        break;
+      }
+
+      const normalized = normalizeAskQuestions(data.questions);
+      if (!normalized.ok) {
+        writeAskResult(sourceGroup, data.requestId, {
+          requestId: data.requestId,
+          status: 'rejected',
+          answers: {},
+          error: normalized.error,
+          answeredAt: new Date().toISOString(),
+          responder: null,
+        });
+        logger.warn(
+          { sourceGroup, requestId: data.requestId, error: normalized.error },
+          'ask_user_question rejected: invalid questions payload',
+        );
+        break;
+      }
+
+      const sourceEntry = Object.entries(registeredGroups).find(
+        ([, g]) => g.folder === sourceGroup,
+      );
+      const targetJid = sourceEntry?.[0];
+      if (!targetJid) {
+        writeAskResult(sourceGroup, data.requestId, {
+          requestId: data.requestId,
+          status: 'rejected',
+          answers: {},
+          error: `target group not found for folder=${sourceGroup}`,
+          answeredAt: new Date().toISOString(),
+          responder: null,
+        });
+        logger.warn(
+          { sourceGroup, requestId: data.requestId },
+          'ask_user_question rejected: target JID not found',
+        );
+        break;
+      }
+
+      const timeout =
+        typeof data.timeoutSec === 'number' && Number.isFinite(data.timeoutSec)
+          ? Math.min(3600, Math.max(30, Math.floor(data.timeoutSec)))
+          : 300;
+
+      createPendingAskQuestion({
+        requestId: data.requestId,
+        groupFolder: sourceGroup,
+        chatJid: targetJid,
+        questions: normalized.questions,
+        timeoutSec: timeout,
+        metadata: data.metadata,
+      });
+
+      const dispatch = await dispatchCurrentAskQuestion({
+        requestId: data.requestId,
+        groupFolder: sourceGroup,
+        registeredGroups,
+        sendCard: deps.sendCard,
+        sendMessage: deps.sendMessage,
+      });
+
+      if (!dispatch.ok) {
+        writeAskResult(sourceGroup, data.requestId, {
+          requestId: data.requestId,
+          status: 'rejected',
+          answers: {},
+          error: dispatch.message,
+          answeredAt: new Date().toISOString(),
+          responder: null,
+        });
+        logger.warn(
+          {
+            sourceGroup,
+            requestId: data.requestId,
+            dispatchMessage: dispatch.message,
+          },
+          'ask_user_question rejected: failed to dispatch question',
+        );
+      } else {
+        logger.info(
+          {
+            sourceGroup,
+            requestId: data.requestId,
+            questionCount: normalized.questions.length,
+            timeout,
+          },
+          'ask_user_question created and dispatched',
+        );
+      }
+      break;
+    }
 
     case 'request_delegation': {
       // Non-main groups request delegation via the main group

@@ -15,6 +15,7 @@ function formatLocalTime(date: Date): string {
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import {
+  AskQuestionRecord,
   Delegation,
   MemoryRecord,
   MemorySearchResult,
@@ -182,6 +183,25 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status);
     CREATE INDEX IF NOT EXISTS idx_workflows_delegation ON workflows(current_delegation_id);
+  `);
+
+  // Add ask_questions table if it doesn't exist (human-in-the-loop questions)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ask_questions (
+      id TEXT PRIMARY KEY,
+      group_folder TEXT NOT NULL,
+      chat_jid TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      payload_json TEXT NOT NULL,
+      answers_json TEXT,
+      current_index INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      answered_at TEXT,
+      responder_user_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_ask_questions_status_expires ON ask_questions(status, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_ask_questions_group_status ON ask_questions(group_folder, status);
   `);
 
   // Add outcome column to delegations (migration for existing DBs)
@@ -932,6 +952,94 @@ export function getDelegationsByTarget(targetFolder: string): Delegation[] {
       `SELECT * FROM delegations WHERE target_folder = ? ORDER BY created_at DESC`,
     )
     .all(targetFolder) as Delegation[];
+}
+
+// --- Ask-user-question accessors ---
+
+export function createAskQuestion(record: AskQuestionRecord): void {
+  db.prepare(
+    `INSERT INTO ask_questions (
+      id, group_folder, chat_jid, status, payload_json, answers_json,
+      current_index, created_at, expires_at, answered_at, responder_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.group_folder,
+    record.chat_jid,
+    record.status,
+    record.payload_json,
+    record.answers_json,
+    record.current_index,
+    record.created_at,
+    record.expires_at,
+    record.answered_at,
+    record.responder_user_id,
+  );
+}
+
+export function getAskQuestion(id: string): AskQuestionRecord | undefined {
+  return db.prepare('SELECT * FROM ask_questions WHERE id = ?').get(id) as
+    | AskQuestionRecord
+    | undefined;
+}
+
+export function updateAskQuestion(
+  id: string,
+  updates: Partial<
+    Pick<
+      AskQuestionRecord,
+      | 'status'
+      | 'answers_json'
+      | 'current_index'
+      | 'answered_at'
+      | 'responder_user_id'
+      | 'expires_at'
+    >
+  >,
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.answers_json !== undefined) {
+    fields.push('answers_json = ?');
+    values.push(updates.answers_json);
+  }
+  if (updates.current_index !== undefined) {
+    fields.push('current_index = ?');
+    values.push(updates.current_index);
+  }
+  if (updates.answered_at !== undefined) {
+    fields.push('answered_at = ?');
+    values.push(updates.answered_at);
+  }
+  if (updates.responder_user_id !== undefined) {
+    fields.push('responder_user_id = ?');
+    values.push(updates.responder_user_id);
+  }
+  if (updates.expires_at !== undefined) {
+    fields.push('expires_at = ?');
+    values.push(updates.expires_at);
+  }
+
+  if (fields.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE ask_questions SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+}
+
+export function getExpiredPendingAskQuestions(nowIso: string): AskQuestionRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM ask_questions
+       WHERE status = 'pending' AND expires_at <= ?
+       ORDER BY expires_at ASC`,
+    )
+    .all(nowIso) as AskQuestionRecord[];
 }
 
 // --- Workflow accessors ---
