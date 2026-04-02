@@ -19,7 +19,7 @@ const SELECTOR_API_MODEL =
   process.env.NANOCLAW_MODEL_SELECTOR_MODEL || 'DeepSeek-R1-Distill-Llama-70B';
 const SELECTOR_TIMEOUT_MS = Math.max(
   1000,
-  Number.parseInt(process.env.NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS || '6000', 10) || 6000,
+  Number.parseInt(process.env.NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS || '30000', 10) || 30000,
 );
 const SELECTOR_MAX_TOKENS = 512;
 
