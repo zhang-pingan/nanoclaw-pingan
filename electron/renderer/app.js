@@ -135,6 +135,55 @@ var commands = [
   { name: "/create-workflow", desc: "Create workflow with guided selections" },
 ];
 
+const MAIN_GROUP_AVATAR = "/assets/doraemon-face.png";
+const GROUP_AVATAR_POOL = [
+  "/assets/avatar-char-dorami.png",
+  "/assets/avatar-char-shizuka.png",
+  "/assets/avatar-char-suneo.png",
+  "/assets/avatar-char-gounda-takeshi.png",
+  "/assets/avatar-char-tamako-nobi-mother.png",
+  "/assets/avatar-char-nobisuke-nobi-father.png",
+  "/assets/avatar-char-teacher.png",
+];
+
+var fixedGroupAvatarMap = null;
+
+function initFixedGroupAvatarMap() {
+  if (!Array.isArray(groups) || groups.length === 0) return;
+  if (fixedGroupAvatarMap) {
+    let stale = false;
+    for (const group of groups) {
+      if (!group || typeof group.jid !== "string" || group.isMain) continue;
+      const assigned = fixedGroupAvatarMap[group.jid];
+      if (assigned && !GROUP_AVATAR_POOL.includes(assigned)) {
+        stale = true;
+        break;
+      }
+    }
+    if (!stale) return;
+  }
+  fixedGroupAvatarMap = {};
+  let poolIndex = 0;
+  for (const group of groups) {
+    if (!group || typeof group.jid !== "string") continue;
+    if (group.isMain) {
+      fixedGroupAvatarMap[group.jid] = MAIN_GROUP_AVATAR;
+      continue;
+    }
+    if (poolIndex < GROUP_AVATAR_POOL.length) {
+      fixedGroupAvatarMap[group.jid] = GROUP_AVATAR_POOL[poolIndex];
+      poolIndex += 1;
+    }
+  }
+}
+
+function getFixedAvatar(group) {
+  if (!group || typeof group.jid !== "string") return null;
+  if (group.isMain) return MAIN_GROUP_AVATAR;
+  if (!fixedGroupAvatarMap) return null;
+  return fixedGroupAvatarMap[group.jid] || null;
+}
+
 function apiFetch(path, options) {
   const headers = { "Content-Type": "application/json" };
   return fetch(`http://localhost:3000${path}`, { ...options, headers });
@@ -568,6 +617,12 @@ function sendCardAction(value, cardId, formValue) {
   });
 }
 
+function getMessageAvatarHtml(isUser) {
+  const avatarSrc = isUser ? "/assets/nobita.png" : "/assets/doraemon-face.png";
+  const avatarAlt = isUser ? "Nobita" : "Doraemon";
+  return `<div class="msg-avatar"><img src="${avatarSrc}" alt="${avatarAlt}" /></div>`;
+}
+
 // --- Create single message element (factory) ---
 function createMessageEl(msg) {
   // Card messages get special rendering
@@ -575,15 +630,13 @@ function createMessageEl(msg) {
     const card = parseCardContent(msg);
     if (card) {
       const senderName = msg.sender_name || msg.sender || "Assistant";
-      const senderInitial = senderName[0].toUpperCase();
-      const senderColor = "#7c3aed";
       const wrapper = document.createElement("div");
       wrapper.className = "message assistant card-message";
       wrapper.setAttribute("data-msg-id", msg.id);
       wrapper.setAttribute("data-timestamp", msg.timestamp);
       wrapper.innerHTML = `
         <div class="msg-select-check">\u2713</div>
-        <div class="msg-avatar" style="background:${senderColor}">${escapeHtml(senderInitial)}</div>
+        ${getMessageAvatarHtml(false)}
         <div class="msg-main">
           <div class="msg-header">
             <span class="msg-sender">${escapeHtml(senderName)}</span>
@@ -607,15 +660,13 @@ function createMessageEl(msg) {
   // File messages: render with "打开文件" button
   if (msg._filePath) {
     const senderName = msg.sender_name || msg.sender || "Assistant";
-    const senderInitial = senderName[0].toUpperCase();
-    const senderColor = "#7c3aed";
     const wrapper = document.createElement("div");
     wrapper.className = "message assistant file-message";
     wrapper.setAttribute("data-msg-id", msg.id);
     wrapper.setAttribute("data-timestamp", msg.timestamp);
     wrapper.innerHTML = `
       <div class="msg-select-check">\u2713</div>
-      <div class="msg-avatar" style="background:${senderColor}">${escapeHtml(senderInitial)}</div>
+      ${getMessageAvatarHtml(false)}
       <div class="msg-main">
         <div class="msg-header">
           <span class="msg-sender">${escapeHtml(senderName)}</span>
@@ -658,9 +709,6 @@ function createMessageEl(msg) {
     return div;
   }
 
-  const senderInitial = (msg.sender_name || msg.sender || "?")[0].toUpperCase();
-  const senderColor = isUser ? "#2563eb" : "#7c3aed";
-
   div.className = `message ${isUser ? "user" : "assistant"}`;
 
   // Reply quote block
@@ -682,7 +730,7 @@ function createMessageEl(msg) {
 
   div.innerHTML = `
     <div class="msg-select-check">\u2713</div>
-    <div class="msg-avatar" style="background:${senderColor}">${senderInitial}</div>
+    ${getMessageAvatarHtml(isUser)}
     <div class="msg-main">
       <div class="msg-header">
         ${msg.sender_name ? `<span class="msg-sender">${escapeHtml(msg.sender_name)}</span>` : ""}
@@ -812,17 +860,21 @@ function setPrimaryNav(navKey) {
 }
 
 function renderGroups() {
+  initFixedGroupAvatarMap();
   groupsList.innerHTML = "";
   for (const group of groups) {
     const el = document.createElement("div");
     el.className = `list-item${group.jid === currentGroupJid ? " active" : ""}`;
 
-    // First letter avatar icon
+    const avatar = getFixedAvatar(group);
     const initial = (group.name || "?")[0].toUpperCase();
     const unread = unreadCounts[group.jid] || 0;
+    const iconHtml = avatar
+      ? `<span class="item-icon item-avatar"><img src="${avatar}" alt="Group avatar" /></span>`
+      : `<span class="item-icon">${escapeHtml(initial)}</span>`;
 
     el.innerHTML = `
-      <span class="item-icon">${escapeHtml(initial)}</span>
+      ${iconHtml}
       <span class="item-name">${escapeHtml(group.name)}</span>
       ${group.isMain ? '<span class="item-badge">main</span>' : ""}
       ${unread > 0 ? `<span class="item-unread">${unread > 99 ? "99+" : unread}</span>` : ""}
@@ -869,13 +921,18 @@ function selectMemoryGroup(jid) {
 
 function renderMemoryGroups() {
   if (!memoryGroupsList) return;
+  initFixedGroupAvatarMap();
   memoryGroupsList.innerHTML = "";
   for (const group of groups) {
     const el = document.createElement("div");
     el.className = `list-item${group.jid === activeMemoryGroupJid ? " active" : ""}`;
+    const avatar = getFixedAvatar(group);
     const initial = (group.name || "?")[0].toUpperCase();
+    const iconHtml = avatar
+      ? `<span class="item-icon item-avatar"><img src="${avatar}" alt="Group avatar" /></span>`
+      : `<span class="item-icon">${escapeHtml(initial)}</span>`;
     el.innerHTML = `
-      <span class="item-icon">${escapeHtml(initial)}</span>
+      ${iconHtml}
       <span class="item-name">${escapeHtml(group.name)}</span>
       ${group.isMain ? '<span class="item-badge">main</span>' : ""}
     `;
@@ -2926,7 +2983,132 @@ function autoResizeInput() {
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px";
 }
 
+function isTextCursorTarget(target) {
+  if (!target || !(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      'textarea, input[type="text"], input[type="search"], input[type="password"], input[type="email"], input[type="url"], input[type="number"], [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]'
+    )
+  );
+}
+
+function initTakeCopterCursor() {
+  if (!window.matchMedia || !window.matchMedia("(pointer:fine)").matches) return;
+  const el = document.createElement("div");
+  el.className = "take-copter-cursor";
+  const glyph = document.createElement("div");
+  glyph.className = "take-copter-cursor-glyph";
+  el.appendChild(glyph);
+  document.body.appendChild(el);
+  document.body.classList.add("take-copter-cursor-on");
+  let isHoveringActionable = false;
+
+  const hoverSelector = 'button, a, [role="button"], .list-item, .primary-nav-item, .icon-btn, .icon-btn-sm, .btn-primary, .btn-ghost, .btn-tool, input[type="button"], input[type="submit"], input[type="checkbox"], input[type="radio"], select, summary';
+
+  function setCursorState(target) {
+    const onText = isTextCursorTarget(target);
+    document.body.classList.toggle("take-copter-cursor-text", onText);
+    if (onText) {
+      el.classList.remove("visible");
+      return;
+    }
+
+    el.classList.add("visible");
+    isHoveringActionable = target instanceof Element && Boolean(target.closest(hoverSelector));
+    el.classList.toggle("hovering", isHoveringActionable);
+  }
+
+  document.addEventListener(
+    "pointermove",
+    (e) => {
+      if (e.pointerType && e.pointerType !== "mouse") return;
+      const x = e.clientX - 16;
+      const y = e.clientY - 9;
+      if (isHoveringActionable) {
+        el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1.04)`;
+      } else {
+        el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1)`;
+      }
+    },
+    { passive: true }
+  );
+
+  document.addEventListener("mouseover", (e) => {
+    setCursorState(e.target);
+  });
+
+  document.addEventListener("mouseleave", () => {
+    el.classList.remove("visible");
+  });
+
+  window.addEventListener("blur", () => {
+    el.classList.remove("visible");
+  });
+}
+
+function initChatBgParticleNudge() {
+  const chatAreaEl = document.getElementById("chat-area");
+  const bgEl = document.getElementById("chat-animated-bg");
+  if (!chatAreaEl || !bgEl) return;
+
+  const targets = Array.from(
+    bgEl.querySelectorAll(".bg-particle, .bg-star, .bg-copter, .bg-bell")
+  );
+  if (targets.length === 0) return;
+
+  function applyNudge(clientX, clientY) {
+    const areaRect = chatAreaEl.getBoundingClientRect();
+    const radius = 190;
+    const maxPush = 16;
+
+    targets.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = cx - clientX;
+      const dy = cy - clientY;
+      const d = Math.hypot(dx, dy);
+
+      if (d <= 0.01 || d > radius) {
+        el.style.translate = "0 0";
+        return;
+      }
+
+      const force = (1 - d / radius) * maxPush;
+      const nx = (dx / d) * force;
+      const ny = (dy / d) * force;
+
+      // Constrain tiny elements inside chat area while nudging.
+      const safeX = Math.max(-20, Math.min(20, nx));
+      const safeY = Math.max(-16, Math.min(16, ny));
+      const inArea =
+        cx >= areaRect.left &&
+        cx <= areaRect.right &&
+        cy >= areaRect.top &&
+        cy <= areaRect.bottom;
+      el.style.translate = inArea ? `${safeX}px ${safeY}px` : "0 0";
+    });
+  }
+
+  chatAreaEl.addEventListener(
+    "pointermove",
+    (e) => {
+      if (e.pointerType && e.pointerType !== "mouse") return;
+      applyNudge(e.clientX, e.clientY);
+    },
+    { passive: true }
+  );
+
+  chatAreaEl.addEventListener("pointerleave", () => {
+    targets.forEach((el) => {
+      el.style.translate = "0 0";
+    });
+  });
+}
+
 // Auto-start on page load
+initTakeCopterCursor();
+initChatBgParticleNudge();
 connectWS();
 loadGroups();
 warmWorkflowCreateOptions();

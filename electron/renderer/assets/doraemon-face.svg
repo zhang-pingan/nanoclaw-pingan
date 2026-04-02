@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Doraemon face icon">
+  <defs>
+    <radialGradient id="blue" cx="34%" cy="28%" r="78%">
+      <stop offset="0" stop-color="#39c8ff"/>
+      <stop offset="1" stop-color="#0098de"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="256" cy="256" r="244" fill="url(#blue)" stroke="#0a2a40" stroke-width="12"/>
+  <ellipse cx="256" cy="292" rx="174" ry="162" fill="#fff" stroke="#0a2a40" stroke-width="10"/>
+
+  <ellipse cx="206" cy="212" rx="42" ry="52" fill="#fff" stroke="#0a2a40" stroke-width="9"/>
+  <ellipse cx="306" cy="212" rx="42" ry="52" fill="#fff" stroke="#0a2a40" stroke-width="9"/>
+  <circle cx="222" cy="228" r="13" fill="#0a2a40"/>
+  <circle cx="290" cy="228" r="13" fill="#0a2a40"/>
+  <ellipse cx="256" cy="252" rx="26" ry="22" fill="#ff4f4f" stroke="#a41f1f" stroke-width="8"/>
+
+  <line x1="256" y1="274" x2="256" y2="342" stroke="#0a2a40" stroke-width="9" stroke-linecap="round"/>
+  <path d="M170 308 Q256 386 342 308" fill="none" stroke="#0a2a40" stroke-width="12" stroke-linecap="round"/>
+
+  <line x1="160" y1="264" x2="60" y2="245" stroke="#0a2a40" stroke-width="9" stroke-linecap="round"/>
+  <line x1="160" y1="292" x2="54" y2="292" stroke="#0a2a40" stroke-width="9" stroke-linecap="round"/>
+  <line x1="352" y1="264" x2="452" y2="245" stroke="#0a2a40" stroke-width="9" stroke-linecap="round"/>
+  <line x1="352" y1="292" x2="458" y2="292" stroke="#0a2a40" stroke-width="9" stroke-linecap="round"/>
+
+  <rect x="118" y="374" width="276" height="38" rx="19" fill="#ff4a4a" stroke="#a41f1f" stroke-width="8"/>
+  <circle cx="256" cy="418" r="30" fill="#ffd24f" stroke="#a97c00" stroke-width="8"/>
+  <circle cx="256" cy="418" r="7" fill="#8a6500"/>
+  <path d="M232 432 H280" stroke="#8a6500" stroke-width="8" stroke-linecap="round"/>
+</svg>

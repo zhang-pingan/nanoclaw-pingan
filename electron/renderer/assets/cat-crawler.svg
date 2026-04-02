@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Cute crawling cat">
+  <defs>
+    <radialGradient id="fur" cx="35%" cy="28%" r="72%">
+      <stop offset="0" stop-color="#ffe6c8"/>
+      <stop offset="1" stop-color="#f2c58f"/>
+    </radialGradient>
+    <radialGradient id="belly" cx="40%" cy="30%" r="70%">
+      <stop offset="0" stop-color="#fff8ee"/>
+      <stop offset="1" stop-color="#ffe9cf"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse cx="51" cy="56" rx="28" ry="20" fill="url(#fur)"/>
+  <ellipse cx="52" cy="60" rx="14" ry="10" fill="url(#belly)"/>
+
+  <path d="M20 54c-4 0-8 3-8 7s4 7 8 7h9v-14h-9z" fill="#e9b883"/>
+  <path d="M71 54h9c4 0 8 3 8 7s-4 7-8 7h-9v-14z" fill="#e9b883"/>
+
+  <circle cx="46" cy="30" r="20" fill="url(#fur)"/>
+  <path d="M31 17l-7-8c-2-2-1-5 2-5h8z" fill="#f2c58f"/>
+  <path d="M61 17l7-8c2-2 1-5-2-5h-8z" fill="#f2c58f"/>
+  <path d="M31 17l-4-4c-1-1 0-2 1-2h4z" fill="#ffccb6"/>
+  <path d="M61 17l4-4c1-1 0-2-1-2h-4z" fill="#ffccb6"/>
+
+  <circle cx="39" cy="30" r="3.2" fill="#33251d"/>
+  <circle cx="53" cy="30" r="3.2" fill="#33251d"/>
+  <ellipse cx="46" cy="36" rx="4" ry="3" fill="#ff8a8a"/>
+  <path d="M40 40q6 4 12 0" fill="none" stroke="#8a5c45" stroke-width="2.2" stroke-linecap="round"/>
+
+  <circle cx="33" cy="35" r="2.2" fill="#ffb6ad" opacity="0.7"/>
+  <circle cx="59" cy="35" r="2.2" fill="#ffb6ad" opacity="0.7"/>
+
+  <path d="M25 40l-9-2" stroke="#8a5c45" stroke-width="2" stroke-linecap="round"/>
+  <path d="M25 44l-9 1" stroke="#8a5c45" stroke-width="2" stroke-linecap="round"/>
+  <path d="M67 40l9-2" stroke="#8a5c45" stroke-width="2" stroke-linecap="round"/>
+  <path d="M67 44l9 1" stroke="#8a5c45" stroke-width="2" stroke-linecap="round"/>
+
+  <path d="M74 56c7 1 11 5 11 9 0 3-2 5-5 5" fill="none" stroke="#d9a46f" stroke-width="5" stroke-linecap="round"/>
+</svg>

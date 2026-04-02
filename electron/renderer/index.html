@@ -29,7 +29,7 @@
       <!-- Primary navigation -->
       <aside id="primary-sidebar">
         <div class="primary-sidebar-header">
-          <span class="primary-brand">M</span>
+          <img class="doraemon-mini" src="/assets/doraemon-face.png" alt="Doraemon face" />
         </div>
         <div id="primary-nav" class="primary-nav">
           <button class="primary-nav-item" data-nav-key="agent-groups">
@@ -173,11 +173,35 @@
 
         <!-- Chat area -->
         <main id="chat-area">
+        <div id="chat-animated-bg" aria-hidden="true">
+          <span class="bg-cloud cloud-a"></span>
+          <span class="bg-cloud cloud-b"></span>
+          <span class="bg-cloud cloud-c"></span>
+          <span class="bg-copter copter-a"></span>
+          <span class="bg-copter copter-b"></span>
+          <span class="bg-bell bell-a"></span>
+          <span class="bg-bell bell-b"></span>
+          <span class="bg-particle p1"></span>
+          <span class="bg-particle p2"></span>
+          <span class="bg-particle p3"></span>
+          <span class="bg-particle p4"></span>
+          <span class="bg-particle p5"></span>
+          <span class="bg-particle p6"></span>
+          <span class="bg-particle p7"></span>
+          <span class="bg-particle p8"></span>
+          <span class="bg-star star-a"></span>
+          <span class="bg-star star-b"></span>
+          <span class="bg-star star-c"></span>
+        </div>
         <!-- Chat header -->
         <div id="chat-header">
           <div id="chat-group-info">
             <span id="chat-group-name">Select a group</span>
             <span id="chat-group-folder" class="muted"></span>
+          </div>
+          <div class="doraemon-header-decor">
+            <img class="doraemon-take-copter" src="/assets/doraemon-bell.png" alt="Doraemon bell" />
+            <span class="doraemon-tag">铃铛频道</span>
           </div>
           <div class="header-actions">
             <button id="select-mode-btn" class="icon-btn" title="多选消息">
@@ -194,7 +218,9 @@
         <!-- Messages -->
         <div id="messages">
           <div id="messages-empty">
+            <img id="messages-empty-mascot" src="/assets/doraemon-joy.png" alt="Doraemon mascot" />
             <p>Select a group from the sidebar to start chatting</p>
+            <span class="messages-empty-sub">从四次元口袋里拿个群聊开始吧</span>
           </div>
         </div>
 

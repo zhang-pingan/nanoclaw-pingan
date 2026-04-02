@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 120" role="img" aria-label="Take-copter">
+  <defs>
+    <linearGradient id="wing" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffcc4d"/>
+      <stop offset="1" stop-color="#ffb02e"/>
+    </linearGradient>
+  </defs>
+  <rect x="102" y="34" width="16" height="58" rx="8" fill="#f5b93b"/>
+  <ellipse cx="62" cy="30" rx="56" ry="16" fill="url(#wing)"/>
+  <ellipse cx="158" cy="30" rx="56" ry="16" fill="url(#wing)"/>
+  <ellipse cx="62" cy="30" rx="56" ry="16" fill="none" stroke="#cf8e10" stroke-width="4"/>
+  <ellipse cx="158" cy="30" rx="56" ry="16" fill="none" stroke="#cf8e10" stroke-width="4"/>
+  <circle cx="110" cy="30" r="12" fill="#ffefb0" stroke="#cf8e10" stroke-width="4"/>
+</svg>

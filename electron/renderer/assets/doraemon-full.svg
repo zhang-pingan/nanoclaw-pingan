@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 720" role="img" aria-label="Doraemon mascot">
+  <defs>
+    <radialGradient id="blueBody" cx="34%" cy="22%" r="88%">
+      <stop offset="0" stop-color="#3acbff"/>
+      <stop offset="1" stop-color="#0098de"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse cx="320" cy="360" rx="250" ry="286" fill="url(#blueBody)" stroke="#0a2a40" stroke-width="14"/>
+  <ellipse cx="320" cy="408" rx="188" ry="214" fill="#fff" stroke="#0a2a40" stroke-width="12"/>
+
+  <ellipse cx="248" cy="274" rx="56" ry="66" fill="#fff" stroke="#0a2a40" stroke-width="10"/>
+  <ellipse cx="392" cy="274" rx="56" ry="66" fill="#fff" stroke="#0a2a40" stroke-width="10"/>
+  <circle cx="272" cy="294" r="18" fill="#0a2a40"/>
+  <circle cx="368" cy="294" r="18" fill="#0a2a40"/>
+  <ellipse cx="320" cy="332" rx="34" ry="28" fill="#ff4f4f" stroke="#a41f1f" stroke-width="10"/>
+
+  <line x1="320" y1="360" x2="320" y2="474" stroke="#0a2a40" stroke-width="10" stroke-linecap="round"/>
+  <path d="M190 420 Q320 536 450 420" fill="none" stroke="#0a2a40" stroke-width="14" stroke-linecap="round"/>
+
+  <line x1="182" y1="346" x2="72" y2="326" stroke="#0a2a40" stroke-width="10" stroke-linecap="round"/>
+  <line x1="182" y1="380" x2="66" y2="380" stroke="#0a2a40" stroke-width="10" stroke-linecap="round"/>
+  <line x1="458" y1="346" x2="568" y2="326" stroke="#0a2a40" stroke-width="10" stroke-linecap="round"/>
+  <line x1="458" y1="380" x2="574" y2="380" stroke="#0a2a40" stroke-width="10" stroke-linecap="round"/>
+
+  <rect x="152" y="522" width="336" height="48" rx="24" fill="#ff4a4a" stroke="#a41f1f" stroke-width="10"/>
+  <circle cx="320" cy="580" r="46" fill="#ffd24f" stroke="#a97c00" stroke-width="10"/>
+  <circle cx="320" cy="580" r="10" fill="#8a6500"/>
+  <path d="M284 600 H356" stroke="#8a6500" stroke-width="10" stroke-linecap="round"/>
+
+  <path d="M222 608 H418" stroke="#0a90d3" stroke-width="18" stroke-linecap="round"/>
+  <path d="M210 610 Q320 706 430 610" fill="#fff" stroke="#0a90d3" stroke-width="14"/>
+</svg>
