@@ -37,6 +37,7 @@ import {
   PROXY_BIND_HOST,
 } from './container-runtime.js';
 import {
+  backfillMessageModel,
   clearMessages,
   clearSession,
   getAllChats,
@@ -55,7 +56,7 @@ import {
   storeChatMetadata,
   storeMessage,
 } from './db.js';
-import { clearWebMessages } from './web-db.js';
+import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
@@ -81,7 +82,7 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, InteractiveCard, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 import { buildMemoryPack } from './memory-pack.js';
-import { selectModel, selectModelByRules } from './model-selector.js';
+import { selectModel } from './model-selector.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -582,10 +583,27 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     prompt,
     isMain: isMainGroup,
   });
+  const updatedRows = backfillMessageModel(
+    chatJid,
+    missedMessages.map((m) => m.id),
+    modelSelection.selectedModel,
+    modelSelection.reason,
+  );
+  const updatedWebRows =
+    channel.name === 'web'
+      ? backfillWebMessageModel(
+          chatJid,
+          missedMessages.map((m) => m.id),
+          modelSelection.selectedModel,
+          modelSelection.reason,
+        )
+      : 0;
   logger.info(
     {
       group: group.name,
       chatJid,
+      updatedRows,
+      updatedWebRows,
       selectedModel: modelSelection.selectedModel,
       reason: modelSelection.reason,
     },
@@ -958,10 +976,27 @@ async function startMessageLoop(): Promise<void> {
           });
 
           if (queue.sendMessage(chatJid, formatted, pipedSelection.selectedModel)) {
+            const updatedRows = backfillMessageModel(
+              chatJid,
+              messagesToSend.map((m) => m.id),
+              pipedSelection.selectedModel,
+              pipedSelection.reason,
+            );
+            const updatedWebRows =
+              channel.name === 'web'
+                ? backfillWebMessageModel(
+                    chatJid,
+                    messagesToSend.map((m) => m.id),
+                    pipedSelection.selectedModel,
+                    pipedSelection.reason,
+                  )
+                : 0;
             logger.debug(
               {
                 chatJid,
                 count: messagesToSend.length,
+                updatedRows,
+                updatedWebRows,
                 selectedModel: pipedSelection.selectedModel,
                 reason: pipedSelection.reason,
               },
@@ -1143,20 +1178,6 @@ async function main(): Promise<void> {
           return;
         }
       }
-      const group = registeredGroups[chatJid];
-      const modelSelection = selectModelByRules({
-        prompt: msg.content,
-        isMain: group?.isMain === true,
-      });
-      msg.model = modelSelection.selectedModel;
-      logger.debug(
-        {
-          chatJid,
-          selectedModel: modelSelection.selectedModel,
-          reason: modelSelection.reason,
-        },
-        'Selected model for inbound message storage',
-      );
       storeMessage(msg);
     },
     onChatMetadata: (

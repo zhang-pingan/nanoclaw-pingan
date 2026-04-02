@@ -54,6 +54,7 @@ export interface NewMessage {
   is_from_me?: boolean;
   is_bot_message?: boolean;
   model?: string | null;
+  model_reason?: string | null;
 }
 
 export interface ScheduledTask {

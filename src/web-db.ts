@@ -17,6 +17,7 @@ export interface WebMessage {
   is_bot_message: boolean;
   reply_to_id?: string | null;
   model?: string | null;
+  model_reason?: string | null;
 }
 
 export function initWebDb(): void {
@@ -33,6 +34,7 @@ export function initWebDb(): void {
       is_from_me  INTEGER,
       is_bot_message INTEGER,
       model TEXT,
+      model_reason TEXT,
       PRIMARY KEY (chat_jid, id)
     );
     CREATE INDEX IF NOT EXISTS idx_messages_chat_time
@@ -49,6 +51,10 @@ export function initWebDb(): void {
     db.exec('ALTER TABLE messages ADD COLUMN model TEXT');
     logger.info('Web DB migrated: added model column');
   }
+  if (!columns.some((c) => c.name === 'model_reason')) {
+    db.exec('ALTER TABLE messages ADD COLUMN model_reason TEXT');
+    logger.info('Web DB migrated: added model_reason column');
+  }
 
   logger.info({ path: dbPath }, 'Web message DB initialized');
 }
@@ -64,13 +70,14 @@ export function storeWebMessage(msg: {
   is_bot_message?: boolean;
   reply_to_id?: string | null;
   model?: string | null;
+  model_reason?: string | null;
 }): void {
   const isBotMessage = msg.is_bot_message ? 1 : 0;
 
   db.prepare(`
     INSERT OR REPLACE INTO messages
-      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     msg.id,
     msg.chat_jid,
@@ -82,7 +89,44 @@ export function storeWebMessage(msg: {
     isBotMessage,
     msg.reply_to_id || null,
     msg.model ?? null,
+    msg.model_reason ?? null,
   );
+}
+
+/**
+ * Backfill model for already persisted web user messages that were actually processed.
+ * Returns number of updated rows.
+ */
+export function backfillWebMessageModel(
+  chatJid: string,
+  messageIds: string[],
+  model: string,
+  modelReason: string,
+): number {
+  if (!chatJid || !model || !modelReason || messageIds.length === 0) return 0;
+
+  const dedupedIds = Array.from(new Set(messageIds.filter(Boolean)));
+  if (dedupedIds.length === 0) return 0;
+
+  const batchSize = 300;
+  const updateBatch = db.transaction((ids: string[]) => {
+    const placeholders = ids.map(() => '?').join(',');
+    const stmt = db.prepare(
+      `UPDATE messages
+       SET model = ?, model_reason = ?
+       WHERE chat_jid = ?
+         AND is_bot_message = 0
+         AND id IN (${placeholders})`,
+    );
+    const result = stmt.run(model, modelReason, chatJid, ...ids);
+    return result.changes;
+  });
+
+  let updated = 0;
+  for (let i = 0; i < dedupedIds.length; i += batchSize) {
+    updated += updateBatch(dedupedIds.slice(i, i + batchSize));
+  }
+  return updated;
 }
 
 export function getWebMessages(
@@ -96,7 +140,7 @@ export function getWebMessages(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             reply_to_id, model
+             reply_to_id, model, model_reason
         FROM messages
        WHERE chat_jid = ? AND timestamp >= ?
        ORDER BY timestamp ASC
@@ -117,7 +161,7 @@ export function getWebMessagesBefore(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             reply_to_id, model
+             reply_to_id, model, model_reason
         FROM messages
        WHERE chat_jid = ? AND timestamp < ?
        ORDER BY timestamp DESC

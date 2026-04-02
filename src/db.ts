@@ -47,6 +47,7 @@ function createSchema(database: Database.Database): void {
       is_from_me INTEGER,
       is_bot_message INTEGER DEFAULT 0,
       model TEXT,
+      model_reason TEXT,
       PRIMARY KEY (id, chat_jid),
       FOREIGN KEY (chat_jid) REFERENCES chats(jid)
     );
@@ -124,6 +125,13 @@ function createSchema(database: Database.Database): void {
   // Add model column if it doesn't exist (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE messages ADD COLUMN model TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
+  // Add model_reason column if it doesn't exist (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE messages ADD COLUMN model_reason TEXT`);
   } catch {
     /* column already exists */
   }
@@ -481,7 +489,7 @@ export function setLastGroupSync(): void {
  */
 export function storeMessage(msg: NewMessage): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model, model_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -492,7 +500,44 @@ export function storeMessage(msg: NewMessage): void {
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
     msg.model ?? null,
+    msg.model_reason ?? null,
   );
+}
+
+/**
+ * Backfill model for a set of user message IDs that were actually processed.
+ * Returns number of updated rows.
+ */
+export function backfillMessageModel(
+  chatJid: string,
+  messageIds: string[],
+  model: string,
+  modelReason: string,
+): number {
+  if (!chatJid || !model || !modelReason || messageIds.length === 0) return 0;
+
+  const dedupedIds = Array.from(new Set(messageIds.filter(Boolean)));
+  if (dedupedIds.length === 0) return 0;
+
+  const batchSize = 300; // Keep parameter count safely below SQLite limits.
+  const updateBatch = db.transaction((ids: string[]) => {
+    const placeholders = ids.map(() => '?').join(',');
+    const stmt = db.prepare(
+      `UPDATE messages
+       SET model = ?, model_reason = ?
+       WHERE chat_jid = ?
+         AND is_bot_message = 0
+         AND id IN (${placeholders})`,
+    );
+    const result = stmt.run(model, modelReason, chatJid, ...ids);
+    return result.changes;
+  });
+
+  let updated = 0;
+  for (let i = 0; i < dedupedIds.length; i += batchSize) {
+    updated += updateBatch(dedupedIds.slice(i, i + batchSize));
+  }
+  return updated;
 }
 
 /**
@@ -508,9 +553,10 @@ export function storeMessageDirect(msg: {
   is_from_me: boolean;
   is_bot_message?: boolean;
   model?: string | null;
+  model_reason?: string | null;
 }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model, model_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -521,6 +567,7 @@ export function storeMessageDirect(msg: {
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
     msg.model ?? null,
+    msg.model_reason ?? null,
   );
 }
 
