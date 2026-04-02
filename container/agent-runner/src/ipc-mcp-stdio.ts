@@ -421,7 +421,7 @@ Users can answer via interactive cards (when supported) or by replying:
         multi_select: z.boolean().optional().describe('Whether multiple options can be selected'),
       }),
     ).min(1).max(4),
-    timeout_sec: z.number().optional().default(300).describe('Timeout in seconds (30-3600)'),
+    timeout_sec: z.number().optional().default(1800).describe('Timeout in seconds (30-3600)'),
     metadata: z
       .record(z.string(), z.string())
       .optional()
@@ -429,7 +429,7 @@ Users can answer via interactive cards (when supported) or by replying:
   },
   async (args) => {
     const requestId = `aq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const timeoutSec = Math.min(3600, Math.max(30, Math.floor(args.timeout_sec || 300)));
+    const timeoutSec = Math.min(3600, Math.max(30, Math.floor(args.timeout_sec || 1800)));
     const data = {
       type: 'ask_user_question',
       requestId,

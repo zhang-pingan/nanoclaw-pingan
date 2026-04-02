@@ -1243,6 +1243,18 @@ html, body {
   box-shadow: var(--shadow-sm);
 }
 
+.message.card-message .msg-body {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.message.card-message .interactive-card {
+  min-width: 0;
+  max-width: min(560px, 100%);
+}
+
 .message.system {
   align-self: center;
   background: transparent;

@@ -574,21 +574,56 @@ function createMessageEl(msg) {
   if (isCardMessage(msg)) {
     const card = parseCardContent(msg);
     if (card) {
+      const senderName = msg.sender_name || msg.sender || "Assistant";
+      const senderInitial = senderName[0].toUpperCase();
+      const senderColor = "#7c3aed";
       const wrapper = document.createElement("div");
-      wrapper.className = "message assistant";
+      wrapper.className = "message assistant card-message";
       wrapper.setAttribute("data-msg-id", msg.id);
       wrapper.setAttribute("data-timestamp", msg.timestamp);
-      wrapper.appendChild(renderCardElement(card, msg.id));
+      wrapper.innerHTML = `
+        <div class="msg-select-check">\u2713</div>
+        <div class="msg-avatar" style="background:${senderColor}">${escapeHtml(senderInitial)}</div>
+        <div class="msg-main">
+          <div class="msg-header">
+            <span class="msg-sender">${escapeHtml(senderName)}</span>
+            <span class="msg-time">${formatTime(msg.timestamp)}</span>
+          </div>
+          <div class="msg-body"></div>
+        </div>
+      `;
+      const body = wrapper.querySelector(".msg-body");
+      if (body) body.appendChild(renderCardElement(card, msg.id));
+      wrapper.addEventListener("click", (e) => {
+        if (!multiSelectMode) return;
+        if (e.target.closest(".msg-actions")) return;
+        e.preventDefault();
+        toggleMessageSelection(msg.id, wrapper);
+      });
       return wrapper;
     }
   }
 
   // File messages: render with "打开文件" button
   if (msg._filePath) {
-    const div = document.createElement("div");
-    div.className = "message assistant";
-    div.setAttribute("data-msg-id", msg.id);
-    div.setAttribute("data-timestamp", msg.timestamp);
+    const senderName = msg.sender_name || msg.sender || "Assistant";
+    const senderInitial = senderName[0].toUpperCase();
+    const senderColor = "#7c3aed";
+    const wrapper = document.createElement("div");
+    wrapper.className = "message assistant file-message";
+    wrapper.setAttribute("data-msg-id", msg.id);
+    wrapper.setAttribute("data-timestamp", msg.timestamp);
+    wrapper.innerHTML = `
+      <div class="msg-select-check">\u2713</div>
+      <div class="msg-avatar" style="background:${senderColor}">${escapeHtml(senderInitial)}</div>
+      <div class="msg-main">
+        <div class="msg-header">
+          <span class="msg-sender">${escapeHtml(senderName)}</span>
+          <span class="msg-time">${formatTime(msg.timestamp)}</span>
+        </div>
+        <div class="msg-body"></div>
+      </div>
+    `;
 
     const openBtn = document.createElement("button");
     openBtn.className = "file-open-btn";
@@ -600,9 +635,15 @@ function createMessageEl(msg) {
         window.open(`file://${msg._filePath}`);
       }
     });
-
-    div.appendChild(openBtn);
-    return div;
+    const body = wrapper.querySelector(".msg-body");
+    if (body) body.appendChild(openBtn);
+    wrapper.addEventListener("click", (e) => {
+      if (!multiSelectMode) return;
+      if (e.target.closest(".msg-actions")) return;
+      e.preventDefault();
+      toggleMessageSelection(msg.id, wrapper);
+    });
+    return wrapper;
   }
 
   const div = document.createElement("div");

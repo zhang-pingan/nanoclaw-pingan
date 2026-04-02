@@ -1074,7 +1074,7 @@ export async function processTaskIpc(
       const timeout =
         typeof data.timeoutSec === 'number' && Number.isFinite(data.timeoutSec)
           ? Math.min(3600, Math.max(30, Math.floor(data.timeoutSec)))
-          : 300;
+          : 1800;
 
       createPendingAskQuestion({
         requestId: data.requestId,
