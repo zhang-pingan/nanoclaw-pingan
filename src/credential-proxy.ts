@@ -14,6 +14,11 @@ import { createServer, Server } from 'http';
 import { request as httpsRequest } from 'https';
 import { request as httpRequest, RequestOptions } from 'http';
 
+import {
+  AnthropicMessagesRequest,
+  forwardAnthropicRequestToOpenAi,
+  getCredentialProxyOpenAiCompatConfig,
+} from './agent-api.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 
@@ -32,13 +37,13 @@ export function startCredentialProxy(
     'CLAUDE_CODE_OAUTH_TOKEN',
     'ANTHROPIC_AUTH_TOKEN',
     'ANTHROPIC_BASE_URL',
-    'CLAUDE_MODEL',
+    'ANTHROPIC_CLAUDE_MODEL',
   ]);
 
   const authMode: AuthMode = secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
   const oauthToken =
     secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
-  const modelOverride = secrets.CLAUDE_MODEL;
+  const modelOverride = secrets.ANTHROPIC_CLAUDE_MODEL;
 
   const upstreamUrl = new URL(
     secrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
@@ -47,12 +52,13 @@ export function startCredentialProxy(
   const makeRequest = isHttps ? httpsRequest : httpRequest;
   // Preserve base path from ANTHROPIC_BASE_URL (e.g. '/anthropic' for proxies)
   const basePath = upstreamUrl.pathname.replace(/\/+$/, '');
+  const openAiCompat = getCredentialProxyOpenAiCompatConfig();
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
+      req.on('end', async () => {
         const body = Buffer.concat(chunks);
         const headers: Record<string, string | number | string[] | undefined> =
           {
@@ -68,9 +74,11 @@ export function startCredentialProxy(
 
         // Model override: replace model in request body before forwarding
         let forwardedBody = body;
+        let parsedJsonBody: Record<string, unknown> | null = null;
         if (modelOverride) {
           try {
-            const parsed = JSON.parse(body.toString());
+            const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
+            parsedJsonBody = parsed;
             if (parsed.model) {
               parsed.model = modelOverride;
               forwardedBody = Buffer.from(JSON.stringify(parsed));
@@ -78,6 +86,55 @@ export function startCredentialProxy(
             }
           } catch {
             // Not JSON or parseable — forward body as-is
+          }
+        } else {
+          try {
+            parsedJsonBody = JSON.parse(body.toString()) as Record<string, unknown>;
+          } catch {
+            parsedJsonBody = null;
+          }
+        }
+
+        if (openAiCompat.enabled && req.url?.split('?')[0] === '/v1/messages' && parsedJsonBody) {
+          try {
+            if (!openAiCompat.apiKey) {
+              throw new Error('CREDENTIAL_PROXY_OPENAI_API_KEY is required');
+            }
+
+            const compatResult = await forwardAnthropicRequestToOpenAi(
+              parsedJsonBody as unknown as AnthropicMessagesRequest,
+              {
+                apiKey: openAiCompat.apiKey,
+                baseUrl: openAiCompat.baseUrl,
+                model: openAiCompat.model,
+                timeoutMs: openAiCompat.timeoutMs,
+                openAiProtocol: openAiCompat.openAiProtocol,
+              },
+            );
+
+            if (compatResult.stream) {
+              res.writeHead(200, {
+                'content-type': compatResult.contentType,
+                'cache-control': 'no-cache',
+                connection: 'keep-alive',
+              });
+              res.end(compatResult.body);
+              return;
+            }
+
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify(compatResult.anthropicResponse));
+            return;
+          } catch (err) {
+            logger.error(
+              { err, url: req.url },
+              'Credential proxy OpenAI compatibility error',
+            );
+            if (!res.headersSent) {
+              res.writeHead(502);
+              res.end('Bad Gateway');
+            }
+            return;
           }
         }
 

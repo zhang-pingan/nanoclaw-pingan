@@ -24,7 +24,15 @@ function makeRequest(
 }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { ...options, hostname: '127.0.0.1', port },
+      {
+        ...options,
+        hostname: '127.0.0.1',
+        port,
+        headers: {
+          connection: 'close',
+          ...(options.headers || {}),
+        },
+      },
       (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (c) => chunks.push(c));
@@ -50,10 +58,18 @@ describe('credential-proxy', () => {
   let upstreamPort: number;
   let lastUpstreamHeaders: http.IncomingHttpHeaders;
   let lastUpstreamBody: string;
+  let upstreamHandler: (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ) => void;
 
   beforeEach(async () => {
     lastUpstreamHeaders = {};
     lastUpstreamBody = '';
+    upstreamHandler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    };
 
     upstreamServer = http.createServer((req, res) => {
       const chunks: Buffer[] = [];
@@ -61,8 +77,7 @@ describe('credential-proxy', () => {
       req.on('end', () => {
         lastUpstreamHeaders = { ...req.headers };
         lastUpstreamBody = Buffer.concat(chunks).toString();
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
+        upstreamHandler(req, res);
       });
     });
     await new Promise<void>((resolve) =>
@@ -72,6 +87,8 @@ describe('credential-proxy', () => {
   });
 
   afterEach(async () => {
+    proxyServer?.closeAllConnections?.();
+    upstreamServer?.closeAllConnections?.();
     await new Promise<void>((r) => proxyServer?.close(() => r()));
     await new Promise<void>((r) => upstreamServer?.close(() => r()));
     for (const key of Object.keys(mockEnv)) delete mockEnv[key];
@@ -178,7 +195,7 @@ describe('credential-proxy', () => {
   it('model override replaces model in request body', async () => {
     proxyPort = await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
-      CLAUDE_MODEL: 'gpt-4o',
+      ANTHROPIC_CLAUDE_MODEL: 'gpt-4o',
     });
 
     await makeRequest(
@@ -198,7 +215,7 @@ describe('credential-proxy', () => {
   it('model override injects model when request body is missing model', async () => {
     proxyPort = await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
-      CLAUDE_MODEL: 'gpt-4o',
+      ANTHROPIC_CLAUDE_MODEL: 'gpt-4o',
     });
 
     await makeRequest(
@@ -218,7 +235,7 @@ describe('credential-proxy', () => {
   it('model override does nothing when body is not JSON', async () => {
     proxyPort = await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
-      CLAUDE_MODEL: 'gpt-4o',
+      ANTHROPIC_CLAUDE_MODEL: 'gpt-4o',
     });
 
     await makeRequest(
@@ -234,7 +251,7 @@ describe('credential-proxy', () => {
     expect(lastUpstreamBody).toBe('not json body');
   });
 
-  it('model override does nothing when CLAUDE_MODEL is not set', async () => {
+  it('model override does nothing when ANTHROPIC_CLAUDE_MODEL is not set', async () => {
     proxyPort = await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
 
     await makeRequest(
@@ -271,5 +288,279 @@ describe('credential-proxy', () => {
 
     expect(res.statusCode).toBe(502);
     expect(res.body).toBe('Bad Gateway');
+  });
+
+  it('uses OpenAI compat for non-stream anthropic messages when enabled', async () => {
+    upstreamHandler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"model":"gpt-5.4","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"OK"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"model":"gpt-5.4","output_text":"OK"}}',
+          '',
+        ].join('\n'),
+      );
+    };
+
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+    });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'placeholder',
+        },
+      },
+      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('application/json');
+    expect(JSON.parse(lastUpstreamBody)).toMatchObject({
+      model: 'gpt-5.4',
+      stream: true,
+      input: [
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hello' }],
+        },
+      ],
+    });
+    expect(lastUpstreamHeaders['authorization']).toBe('Bearer sk-openai-real');
+    expect(JSON.parse(res.body)).toEqual({
+      id: 'msg_openai_compat',
+      type: 'message',
+      role: 'assistant',
+      model: 'gpt-5.4',
+      content: [{ type: 'text', text: 'OK' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+    });
+  });
+
+  it('uses OpenAI compat for stream anthropic messages when enabled', async () => {
+    upstreamHandler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(
+        [
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"Hel"}}]}',
+          '',
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"lo"}}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      );
+    };
+
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'chat_completions',
+    });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'placeholder',
+        },
+      },
+      JSON.stringify({
+        stream: true,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.body).toContain('event: message_start');
+    expect(res.body).toContain('event: content_block_delta');
+    expect(res.body).toContain('"text":"Hel"');
+    expect(res.body).toContain('"text":"lo"');
+    expect(res.body).toContain('event: message_stop');
+  });
+
+  it('preserves tool_use blocks in non-stream compat responses', async () => {
+    upstreamHandler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(
+        [
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"Checking."}}]}',
+          '',
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"weather","arguments":"{\\"city\\":\\"Shang"}}]}}]}',
+          '',
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"hai\\"}"}}]},"finish_reason":"tool_calls"}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      );
+    };
+
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'chat_completions',
+    });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'placeholder',
+        },
+      },
+      JSON.stringify({ messages: [{ role: 'user', content: 'weather?' }] }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('application/json');
+    expect(JSON.parse(res.body)).toEqual({
+      id: 'msg_openai_compat',
+      type: 'message',
+      role: 'assistant',
+      model: 'gpt-4.1',
+      content: [
+        { type: 'text', text: 'Checking.' },
+        {
+          type: 'tool_use',
+          id: 'call_1',
+          name: 'weather',
+          input: { city: 'Shanghai' },
+        },
+      ],
+      stop_reason: 'tool_use',
+      stop_sequence: null,
+    });
+  });
+
+  it('preserves tool_use deltas in stream compat responses', async () => {
+    upstreamHandler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(
+        [
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"delta":"Need a tool."}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_2","name":"weather"}}',
+          '',
+          'event: response.function_call_arguments.delta',
+          'data: {"type":"response.function_call_arguments.delta","output_index":1,"delta":"{\\"city\\":\\"Shanghai\\"}"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"model":"gpt-5.4","status":"completed"}}',
+          '',
+        ].join('\n'),
+      );
+    };
+
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+    });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'placeholder',
+        },
+      },
+      JSON.stringify({
+        stream: true,
+        messages: [{ role: 'user', content: 'weather?' }],
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.body).toContain('"type":"text_delta","text":"Need a tool."');
+    expect(res.body).toContain('"type":"tool_use","id":"call_2","name":"weather"');
+    expect(res.body).toContain(
+      '"type":"input_json_delta","partial_json":"{\\"city\\":\\"Shanghai\\"}"',
+    );
+  });
+
+  it('ignores ANTHROPIC_CLAUDE_MODEL in compat mode and uses compat model config instead', async () => {
+    upstreamHandler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"model":"gpt-5.4","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"OK"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"model":"gpt-5.4","output_text":"OK"}}',
+          '',
+        ].join('\n'),
+      );
+    };
+
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      ANTHROPIC_CLAUDE_MODEL: 'claude-should-not-apply',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4',
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+    });
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'placeholder',
+        },
+      },
+      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+    );
+
+    expect(JSON.parse(lastUpstreamBody)).toMatchObject({
+      model: 'gpt-5.4',
+    });
+    expect(JSON.parse(lastUpstreamBody).model).not.toBe('claude-should-not-apply');
   });
 });

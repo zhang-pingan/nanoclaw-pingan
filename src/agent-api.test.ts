@@ -11,6 +11,7 @@ vi.mock('./env.js', () => ({
 import {
   callAnthropicMessages,
   forwardAnthropicRequestToOpenAi,
+  getCredentialProxyOpenAiCompatConfig,
 } from './agent-api.js';
 
 describe('agent-api', () => {
@@ -264,6 +265,223 @@ describe('agent-api', () => {
       expect(res.body).toContain('"text":"Hel"');
       expect(res.body).toContain('"text":"lo"');
       expect(res.body).toContain('event: message_stop');
+    }
+  });
+
+  it('reads credential proxy compat config from env', () => {
+    readEnvFileMock.mockReturnValue({
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-proxy',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'https://proxy.example.test/',
+      CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4-mini',
+      CREDENTIAL_PROXY_OPENAI_TIMEOUT_MS: '45000',
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+    });
+
+    expect(getCredentialProxyOpenAiCompatConfig()).toEqual({
+      enabled: true,
+      apiKey: 'sk-proxy',
+      baseUrl: 'https://proxy.example.test',
+      model: 'gpt-5.4-mini',
+      timeoutMs: 45000,
+      openAiProtocol: 'responses',
+    });
+  });
+
+  it('maps anthropic tools, tool_use and tool_result into openai requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        [
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"done"}}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+    });
+
+    await forwardAnthropicRequestToOpenAi(
+      {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'checking' },
+              {
+                type: 'tool_use',
+                id: 'toolu_1',
+                name: 'weather',
+                input: { city: 'Shanghai' },
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'toolu_1',
+                content: [{ type: 'text', text: '{"temp":25}' }],
+              },
+            ],
+          },
+        ],
+        tools: [
+          {
+            name: 'weather',
+            description: 'Get weather',
+            input_schema: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+              required: ['city'],
+            },
+          },
+        ],
+      },
+      {
+        apiKey: 'sk-openai',
+        baseUrl: 'https://example.test/api',
+        model: 'gpt-4.1',
+        timeoutMs: 30000,
+        openAiProtocol: 'chat_completions',
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'weather',
+            description: 'Get weather',
+            parameters: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+              required: ['city'],
+            },
+          },
+        },
+      ],
+      messages: [
+        {
+          role: 'assistant',
+          content: 'checking',
+          tool_calls: [
+            {
+              id: 'toolu_1',
+              type: 'function',
+              function: {
+                name: 'weather',
+                arguments: '{"city":"Shanghai"}',
+              },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'toolu_1',
+          content: '{"temp":25}',
+        },
+      ],
+    });
+  });
+
+  it('converts chat completions tool calls back to anthropic tool_use blocks', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        [
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"I will check."}}]}',
+          '',
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"weather","arguments":"{\\"city\\":\\"Shang"}}]}}]}',
+          '',
+          'data: {"model":"gpt-4.1","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"hai\\"}"}}]},"finish_reason":"tool_calls"}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+    });
+
+    const res = await forwardAnthropicRequestToOpenAi(
+      {
+        messages: [{ role: 'user', content: 'weather?' }],
+      },
+      {
+        apiKey: 'sk-openai',
+        baseUrl: 'https://example.test/api',
+        model: 'gpt-4.1',
+        timeoutMs: 30000,
+        openAiProtocol: 'chat_completions',
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+
+    expect(res.stream).toBe(false);
+    if (!res.stream) {
+      expect(res.anthropicResponse).toEqual({
+        id: 'msg_openai_compat',
+        type: 'message',
+        role: 'assistant',
+        model: 'gpt-4.1',
+        content: [
+          { type: 'text', text: 'I will check.' },
+          {
+            type: 'tool_use',
+            id: 'call_1',
+            name: 'weather',
+            input: { city: 'Shanghai' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        stop_sequence: null,
+      });
+    }
+  });
+
+  it('converts responses function call events into anthropic stream tool blocks', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        [
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","output_index":0,"delta":"Need a tool."}',
+          '',
+          'event: response.output_item.added',
+          'data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_2","name":"weather"}}',
+          '',
+          'event: response.function_call_arguments.delta',
+          'data: {"type":"response.function_call_arguments.delta","output_index":1,"delta":"{\\"city\\":\\"Shanghai\\"}"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"model":"gpt-5.4","status":"completed"}}',
+          '',
+        ].join('\n'),
+    });
+
+    const res = await forwardAnthropicRequestToOpenAi(
+      {
+        messages: [{ role: 'user', content: 'weather?' }],
+        stream: true,
+      },
+      {
+        apiKey: 'sk-openai',
+        baseUrl: 'https://example.test/api',
+        model: 'gpt-5.4',
+        timeoutMs: 30000,
+        openAiProtocol: 'responses',
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+
+    expect(res.stream).toBe(true);
+    if (res.stream) {
+      expect(res.body).toContain('"type":"text_delta","text":"Need a tool."');
+      expect(res.body).toContain('"type":"tool_use","id":"call_2","name":"weather"');
+      expect(res.body).toContain('"type":"input_json_delta","partial_json":"{\\"city\\":\\"Shanghai\\"}"');
     }
   });
 });
