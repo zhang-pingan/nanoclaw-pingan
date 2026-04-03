@@ -4,6 +4,7 @@ import path from 'path';
 
 import {
   _initTestDatabase,
+  createDelegation,
   createTask,
   getAllTasks,
   getAskQuestion,
@@ -1281,6 +1282,95 @@ describe('memory IPC tasks', () => {
     }
   });
 
+});
+
+// --- complete_delegation requester auto-copy ---
+
+describe('complete_delegation requester auto-copy', () => {
+  it('auto-sends a copy to requester_jid when requester differs from source', async () => {
+    const enqueued: string[] = [];
+    deps.enqueueMessageCheck = (groupJid) => {
+      enqueued.push(groupJid);
+    };
+
+    createDelegation({
+      id: 'del-auto-copy',
+      source_jid: 'main@g.us',
+      source_folder: 'whatsapp_main',
+      target_jid: 'third@g.us',
+      target_folder: 'third-group',
+      task: 'run diagnostics',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      requester_jid: 'other@g.us',
+      created_at: Date.now().toString(),
+      updated_at: Date.now().toString(),
+    });
+    storeChatMetadata('main@g.us', Date.now().toString());
+    storeChatMetadata('other@g.us', Date.now().toString());
+
+    await processTaskIpc(
+      {
+        type: 'complete_delegation',
+        delegationId: 'del-auto-copy',
+        outcome: 'success',
+        result: '诊断完成：未发现异常',
+      },
+      'third-group',
+      false,
+      deps,
+    );
+
+    const sourceMsgs = getMessagesSince('main@g.us', '0', 'Andy');
+    const requesterMsgs = getMessagesSince('other@g.us', '0', 'Andy');
+    expect(sourceMsgs).toHaveLength(1);
+    expect(requesterMsgs).toHaveLength(1);
+    expect(sourceMsgs[0].content).toContain('[委派结果 | 来自:Third | ID:del-auto-copy]');
+    expect(requesterMsgs[0].content).toContain('[委派结果抄送 | 来自:Third | ID:del-auto-copy]');
+    expect(sourceMsgs[0].content).not.toContain('请将此结果转发给请求方');
+    expect(enqueued.sort()).toEqual(['main@g.us', 'other@g.us'].sort());
+  });
+
+  it('does not duplicate delivery when requester_jid equals source_jid', async () => {
+    const enqueued: string[] = [];
+    deps.enqueueMessageCheck = (groupJid) => {
+      enqueued.push(groupJid);
+    };
+
+    createDelegation({
+      id: 'del-no-dup',
+      source_jid: 'main@g.us',
+      source_folder: 'whatsapp_main',
+      target_jid: 'third@g.us',
+      target_folder: 'third-group',
+      task: 'run diagnostics',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      requester_jid: 'main@g.us',
+      created_at: Date.now().toString(),
+      updated_at: Date.now().toString(),
+    });
+    storeChatMetadata('main@g.us', Date.now().toString());
+
+    await processTaskIpc(
+      {
+        type: 'complete_delegation',
+        delegationId: 'del-no-dup',
+        outcome: 'success',
+        result: '完成',
+      },
+      'third-group',
+      false,
+      deps,
+    );
+
+    const sourceMsgs = getMessagesSince('main@g.us', '0', 'Andy');
+    expect(sourceMsgs).toHaveLength(1);
+    expect(sourceMsgs[0].content).toContain('[委派结果 | 来自:Third | ID:del-no-dup]');
+    expect(enqueued).toEqual(['main@g.us']);
+  });
 });
 
 // --- request_delegation target parsing ---

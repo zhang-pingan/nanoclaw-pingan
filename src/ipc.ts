@@ -1384,10 +1384,7 @@ export async function processTaskIpc(
       // Construct result message for the source (main) group
       const requesterJid = delegation.requester_jid;
       const requesterGroup = requesterJid ? registeredGroups[requesterJid] : null;
-      const requesterNote = requesterGroup
-        ? `\n\n请将此结果转发给请求方「${requesterGroup.name}」（使用 send_message，JID: ${requesterJid}）。`
-        : '';
-      const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}${requesterNote}`;
+      const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
       const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const resultNow = Date.now().toString();
 
@@ -1404,6 +1401,34 @@ export async function processTaskIpc(
 
       // Wake up the source (main) group's agent
       deps.enqueueMessageCheck(delegation.source_jid);
+
+      // Auto-copy to requester group when delegation was requested by another group.
+      // Avoid duplicate sends when requester is the same as source.
+      if (requesterJid && requesterJid !== delegation.source_jid) {
+        if (requesterGroup) {
+          const requesterContent = `[委派结果抄送 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
+          const requesterMsgId = `del-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          storeMessageDirect({
+            id: requesterMsgId,
+            chat_jid: requesterJid,
+            sender: 'system',
+            sender_name: `${targetName}委派结果`,
+            content: requesterContent,
+            timestamp: resultNow,
+            is_from_me: true,
+            is_bot_message: false,
+          });
+          deps.enqueueMessageCheck(requesterJid);
+        } else {
+          logger.warn(
+            {
+              delegationId: data.delegationId,
+              requesterJid,
+            },
+            'Delegation requester_jid is not registered; skip auto-copy',
+          );
+        }
+      }
 
       logger.info(
         {
