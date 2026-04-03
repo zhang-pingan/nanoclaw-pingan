@@ -21,7 +21,7 @@ const modelEnv = readEnvFile([
   'NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS',
 ]);
 const MODEL_LIGHT =
-  process.env.NANOCLAW_MODEL_LIGHT || modelEnv.NANOCLAW_MODEL_LIGHT || 'claude-haiku-4-5';
+  process.env.NANOCLAW_MODEL_LIGHT || modelEnv.NANOCLAW_MODEL_LIGHT || 'claude-haiku-4-5-20251001';
 const MODEL_DEFAULT =
   process.env.NANOCLAW_MODEL_DEFAULT ||
   modelEnv.NANOCLAW_MODEL_DEFAULT ||
