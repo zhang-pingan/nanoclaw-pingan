@@ -1948,6 +1948,19 @@ function shouldIncrementUnread(chatJid) {
   return !isAppForeground();
 }
 
+function clearUnreadForGroup(chatJid) {
+  if (!chatJid) return;
+  if (!unreadCounts[chatJid]) return;
+  unreadCounts[chatJid] = 0;
+  renderGroups();
+}
+
+function clearCurrentGroupUnreadIfForeground() {
+  if (!currentGroupJid) return;
+  if (!isAppForeground()) return;
+  clearUnreadForGroup(currentGroupJid);
+}
+
 function handleWsMessage(msg) {
   switch (msg.type) {
     case "connected":
@@ -2098,7 +2111,10 @@ function bindNotificationClickHandler() {
   if (typeof window === "undefined" || !window.nanoclawApp?.onNotificationClick) return;
   window.nanoclawApp.onNotificationClick(({ chatJid }) => {
     if (typeof chatJid !== "string" || !chatJid) return;
-    if (chatJid === currentGroupJid) return;
+    if (chatJid === currentGroupJid) {
+      clearUnreadForGroup(chatJid);
+      return;
+    }
     selectGroup(chatJid).catch((err) => {
       console.error("Failed to switch group from notification click:", err);
     });
@@ -3183,6 +3199,8 @@ initTakeCopterCursor();
 initChatBgParticleNudge();
 bindNotificationClickHandler();
 bindNotificationPermissionPrimer();
+window.addEventListener("focus", clearCurrentGroupUnreadIfForeground);
+document.addEventListener("visibilitychange", clearCurrentGroupUnreadIfForeground);
 connectWS();
 loadGroups();
 warmWorkflowCreateOptions();

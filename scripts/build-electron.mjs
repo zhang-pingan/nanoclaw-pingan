@@ -33,7 +33,7 @@ await esbuild.build({
   sourcemap: true,
   external: ['electron'],
   entryPoints: [path.join(electronDir, 'preload.ts')],
-  outfile: path.join(outDir, 'preload.js'),
+  outfile: path.join(outDir, 'preload.cjs'),
   format: 'cjs',
   target: 'node18',
 });

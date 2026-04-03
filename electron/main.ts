@@ -20,6 +20,19 @@ interface ShowNotificationPayload {
   };
 }
 
+function bringMainWindowToFront(): void {
+  if (!mainWindow) return;
+
+  if (isMac) {
+    app.focus({ steal: true });
+  }
+
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.moveTop();
+  mainWindow.focus();
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -29,7 +42,7 @@ function createWindow(): void {
     title: 'MixClaw',
     backgroundColor: '#f0f2f5',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -171,7 +184,7 @@ app.on('activate', () => {
   if (mainWindow === null) {
     createWindow();
   } else {
-    mainWindow.show();
+    bringMainWindowToFront();
   }
 });
 
@@ -206,9 +219,7 @@ app.whenReady().then(() => {
     const notification = new Notification({ title, body });
     notification.on('click', () => {
       if (mainWindow) {
-        if (!mainWindow.isVisible()) mainWindow.show();
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.focus();
+        bringMainWindowToFront();
         const chatJid = payload?.meta?.chatJid;
         if (typeof chatJid === 'string' && chatJid.length > 0) {
           mainWindow.webContents.send('notification-clicked', { chatJid });
