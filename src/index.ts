@@ -145,11 +145,10 @@ function finalizePendingQueryBatch(result: ContainerOutput): {
   updatedRows?: number;
   updatedWebRows?: number;
 } {
-  if (
-    result.status !== 'success' ||
-    result.result !== null ||
-    !result.queryId
-  ) {
+  // Backfill as soon as the query succeeds once. Waiting for the trailing
+  // null-result completion marker is fragile in streaming mode because the
+  // user-visible text result may arrive even if that marker is never observed.
+  if (result.status !== 'success' || !result.queryId) {
     return { applied: false };
   }
 
