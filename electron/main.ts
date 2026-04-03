@@ -1,10 +1,7 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification } from 'electron';
 import path from 'path';
 
-// CJS: use native __dirname; ESM: use import.meta.url
-const _dir = typeof __dirname !== 'undefined'
-  ? __dirname
-  : path.dirname(String(import.meta.url));
+const mainDir = __dirname;
 
 // Track whether we're doing a full quit (Quit All) vs just hiding
 let isQuitting = false;
@@ -42,7 +39,7 @@ function createWindow(): void {
     title: 'MixClaw',
     backgroundColor: '#f0f2f5',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: path.join(mainDir, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
