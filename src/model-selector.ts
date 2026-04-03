@@ -76,10 +76,6 @@ function selectModelByRules(input: ModelSelectionInput): ModelSelection {
     return { selectedModel: MODEL_FORCE, reason: 'forced' };
   }
 
-  if (CREDENTIAL_PROXY_OPENAI_COMPAT) {
-    return { selectedModel: MODEL_LIGHT, reason: 'openai_compat' };
-  }
-
   const text = (input.prompt || '').toLowerCase();
 
   if (input.isScheduledTask) {
@@ -273,6 +269,10 @@ async function selectModelByApi(input: ModelSelectionInput): Promise<ModelSelect
 export async function selectModel(input: ModelSelectionInput): Promise<ModelSelection> {
   if (MODEL_FORCE) {
     return { selectedModel: MODEL_FORCE, reason: 'forced' };
+  }
+
+  if (CREDENTIAL_PROXY_OPENAI_COMPAT) {
+    return { selectedModel: MODEL_LIGHT, reason: 'openai_compat' };
   }
 
   try {
