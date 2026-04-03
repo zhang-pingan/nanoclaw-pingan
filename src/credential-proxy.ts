@@ -18,6 +18,7 @@ import {
   AnthropicMessagesRequest,
   forwardAnthropicRequestToOpenAi,
   getCredentialProxyOpenAiCompatConfig,
+  OpenAiCompatRequestError,
 } from './agent-api.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
@@ -26,6 +27,15 @@ export type AuthMode = 'api-key' | 'oauth';
 
 export interface ProxyConfig {
   authMode: AuthMode;
+}
+
+function parseProxyErrorBody(body: string): unknown {
+  if (!body) return null;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
 }
 
 export function startCredentialProxy(
@@ -102,7 +112,10 @@ export function startCredentialProxy(
             }
 
             const compatResult = await forwardAnthropicRequestToOpenAi(
-              parsedJsonBody as unknown as AnthropicMessagesRequest,
+              {
+                ...((parsedJsonBody as unknown) as AnthropicMessagesRequest),
+                model: openAiCompat.model,
+              },
               {
                 apiKey: openAiCompat.apiKey,
                 baseUrl: openAiCompat.baseUrl,
@@ -126,13 +139,33 @@ export function startCredentialProxy(
             res.end(JSON.stringify(compatResult.anthropicResponse));
             return;
           } catch (err) {
+            const compatError =
+              err instanceof OpenAiCompatRequestError
+                ? {
+                    upstreamStatus: err.status,
+                    actualRequestApi: err.endpoint,
+                    upstreamBody: parseProxyErrorBody(err.responseBody),
+                  }
+                : undefined;
             logger.error(
-              { err, url: req.url },
+              { err, url: req.url, ...compatError },
               'Credential proxy OpenAI compatibility error',
             );
             if (!res.headersSent) {
-              res.writeHead(502);
-              res.end('Bad Gateway');
+              if (err instanceof OpenAiCompatRequestError) {
+                res.writeHead(err.status, { 'content-type': 'application/json' });
+                res.end(
+                  JSON.stringify({
+                    error: 'Gateway compatibility translation request failed',
+                    actualRequestApi: err.endpoint,
+                    upstreamStatus: err.status,
+                    upstreamBody: parseProxyErrorBody(err.responseBody),
+                  }),
+                );
+              } else {
+                res.writeHead(502);
+                res.end('Bad Gateway');
+              }
             }
             return;
           }

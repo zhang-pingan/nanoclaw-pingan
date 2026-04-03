@@ -81,12 +81,34 @@ export type OpenAiCompatResult =
 
 type FetchLike = typeof fetch;
 
+export class OpenAiCompatRequestError extends Error {
+  status: number;
+  endpoint: string;
+  responseBody: string;
+
+  constructor(status: number, endpoint: string, responseBody: string) {
+    const bodySuffix = responseBody
+      ? ` body=${responseBody.slice(0, 2000)}`
+      : '';
+    super(
+      `OpenAI-compatible API request failed with status ${status} endpoint=${endpoint}${bodySuffix}`,
+    );
+    this.name = 'OpenAiCompatRequestError';
+    this.status = status;
+    this.endpoint = endpoint;
+    this.responseBody = responseBody;
+  }
+}
+
 interface AgentApiConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
   timeoutMs: number;
   useOpenAiCompat: boolean;
+  openAiApiKey: string;
+  openAiBaseUrl: string;
+  openAiModel: string;
   openAiProtocol: 'chat_completions' | 'responses';
 }
 
@@ -153,6 +175,9 @@ function getAgentApiConfig(): AgentApiConfig {
     'NANOCLAW_AGENT_API_MODEL',
     'NANOCLAW_AGENT_API_TIMEOUT_MS',
     'NANOCLAW_AGENT_API_USE_OPENAI_COMPAT',
+    'NANOCLAW_AGENT_API_OPENAI_KEY',
+    'NANOCLAW_AGENT_API_OPENAI_BASE_URL',
+    'NANOCLAW_AGENT_API_OPENAI_MODEL',
     'NANOCLAW_AGENT_API_OPENAI_PROTOCOL',
   ]);
 
@@ -169,6 +194,13 @@ function getAgentApiConfig(): AgentApiConfig {
     (getEnvValue('NANOCLAW_AGENT_API_USE_OPENAI_COMPAT', env) || '')
       .trim()
       .toLowerCase() === 'true';
+  const openAiApiKey =
+    getEnvValue('NANOCLAW_AGENT_API_OPENAI_KEY', env) || apiKey;
+  const openAiBaseUrl = (
+    getEnvValue('NANOCLAW_AGENT_API_OPENAI_BASE_URL', env) || rawBaseUrl
+  ).replace(/\/+$/, '');
+  const openAiModel =
+    getEnvValue('NANOCLAW_AGENT_API_OPENAI_MODEL', env) || model;
   const openAiProtocol = parseOpenAiProtocol(
     getEnvValue('NANOCLAW_AGENT_API_OPENAI_PROTOCOL', env),
   );
@@ -179,6 +211,9 @@ function getAgentApiConfig(): AgentApiConfig {
     model,
     timeoutMs,
     useOpenAiCompat,
+    openAiApiKey,
+    openAiBaseUrl,
+    openAiModel,
     openAiProtocol,
   };
 }
@@ -282,17 +317,29 @@ function getAnthropicMessageToolResults(
   );
 }
 
-function toOpenAiTools(tools: AnthropicTool[] | undefined): unknown[] | undefined {
+function toOpenAiTools(
+  tools: AnthropicTool[] | undefined,
+  protocol: 'chat_completions' | 'responses',
+): unknown[] | undefined {
   if (!Array.isArray(tools) || tools.length === 0) return undefined;
 
-  return tools.map((tool) => ({
-    type: 'function',
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.input_schema,
-    },
-  }));
+  return tools.map((tool) =>
+    protocol === 'responses'
+      ? {
+          type: 'function',
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.input_schema,
+        }
+      : {
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.input_schema,
+          },
+        },
+  );
 }
 
 function toOpenAiChatMessages(input: AnthropicMessagesRequest): OpenAiChatMessage[] {
@@ -935,7 +982,7 @@ export async function forwardAnthropicRequestToOpenAi(
         ? {
             model: anthropicRequest.model || config.model,
             input: toOpenAiResponsesInput(anthropicRequest),
-            tools: toOpenAiTools(anthropicRequest.tools),
+            tools: toOpenAiTools(anthropicRequest.tools, 'responses'),
             max_output_tokens: anthropicRequest.max_tokens ?? 1200,
             temperature: anthropicRequest.temperature ?? 0,
             stream: true,
@@ -945,7 +992,7 @@ export async function forwardAnthropicRequestToOpenAi(
             max_tokens: anthropicRequest.max_tokens ?? 1200,
             temperature: anthropicRequest.temperature ?? 0,
             messages: toOpenAiChatMessages(anthropicRequest),
-            tools: toOpenAiTools(anthropicRequest.tools),
+            tools: toOpenAiTools(anthropicRequest.tools, 'chat_completions'),
             stream: true,
           };
 
@@ -960,8 +1007,11 @@ export async function forwardAnthropicRequestToOpenAi(
     });
 
     if (!response.ok) {
-      throw new Error(
-        `OpenAI-compatible API request failed with status ${response.status}`,
+      const errorText = (await response.text()).trim();
+      throw new OpenAiCompatRequestError(
+        response.status,
+        endpoint,
+        errorText,
       );
     }
 
@@ -994,17 +1044,24 @@ export async function callAnthropicMessages(
   fetchImpl: FetchLike = fetch,
 ): Promise<AnthropicMessagesResponse> {
   const config = getAgentApiConfig();
+  const normalizedInput: AnthropicMessagesRequest = {
+    ...input,
+    model: config.model,
+  };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
   try {
     if (config.useOpenAiCompat) {
       const compatResult = await forwardAnthropicRequestToOpenAi(
-        input,
         {
-          apiKey: config.apiKey,
-          baseUrl: config.baseUrl,
-          model: config.model,
+          ...normalizedInput,
+          model: config.openAiModel,
+        },
+        {
+          apiKey: config.openAiApiKey,
+          baseUrl: config.openAiBaseUrl,
+          model: config.openAiModel,
           timeoutMs: config.timeoutMs,
           openAiProtocol: config.openAiProtocol,
         },
@@ -1032,11 +1089,11 @@ export async function callAnthropicMessages(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: input.model || config.model,
-        max_tokens: input.max_tokens ?? 1200,
-        temperature: input.temperature ?? 0,
-        system: input.system,
-        messages: input.messages,
+        model: normalizedInput.model,
+        max_tokens: normalizedInput.max_tokens ?? 1200,
+        temperature: normalizedInput.temperature ?? 0,
+        system: normalizedInput.system,
+        messages: normalizedInput.messages,
       }),
       signal: controller.signal,
     });

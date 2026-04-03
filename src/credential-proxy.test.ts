@@ -353,6 +353,98 @@ describe('credential-proxy', () => {
     });
   });
 
+  it('overrides request model with CREDENTIAL_PROXY_OPENAI_MODEL when compat is enabled', async () => {
+    upstreamHandler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"model":"gpt-5.4","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"OK"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"model":"gpt-5.4","output_text":"OK"}}',
+          '',
+        ].join('\n'),
+      );
+    };
+
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4',
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+    });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'placeholder',
+        },
+      },
+      JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(lastUpstreamBody)).toMatchObject({
+      model: 'gpt-5.4',
+    });
+  });
+
+  it('returns upstream compat status and body instead of masking as 502', async () => {
+    upstreamHandler = (_req, res) => {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          detail: 'Model not supported',
+        }),
+      );
+    };
+
+    proxyPort = await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4',
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+    });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': 'placeholder',
+        },
+      },
+      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body)).toEqual({
+      error: 'Gateway compatibility translation request failed',
+      actualRequestApi: `http://127.0.0.1:${upstreamPort}/v1/responses`,
+      upstreamStatus: 400,
+      upstreamBody: {
+        detail: 'Model not supported',
+      },
+    });
+  });
+
   it('uses OpenAI compat for stream anthropic messages when enabled', async () => {
     upstreamHandler = (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/event-stream' });

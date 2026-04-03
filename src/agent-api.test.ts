@@ -106,10 +106,13 @@ describe('agent-api', () => {
 
   it('routes callAnthropicMessages through the compat helper when enabled', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-openai',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test/api/',
-      NANOCLAW_AGENT_API_MODEL: 'gpt-4.1',
+      NANOCLAW_AGENT_API_API_KEY: 'sk-anthropic',
+      NANOCLAW_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
+      NANOCLAW_AGENT_API_MODEL: 'claude-test',
       NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'true',
+      NANOCLAW_AGENT_API_OPENAI_KEY: 'sk-openai',
+      NANOCLAW_AGENT_API_OPENAI_BASE_URL: 'https://example.test/api/',
+      NANOCLAW_AGENT_API_OPENAI_MODEL: 'gpt-4.1',
       NANOCLAW_AGENT_API_OPENAI_PROTOCOL: 'chat_completions',
     });
     const fetchMock = vi.fn().mockResolvedValue({
@@ -224,6 +227,47 @@ describe('agent-api', () => {
         stop_reason: 'end_turn',
         stop_sequence: null,
       },
+    });
+  });
+
+  it('ignores input.model and uses env-backed models for both non-compat and compat calls', async () => {
+    readEnvFileMock.mockReturnValue({
+      NANOCLAW_AGENT_API_API_KEY: 'sk-anthropic',
+      NANOCLAW_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
+      NANOCLAW_AGENT_API_MODEL: 'claude-env',
+      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'true',
+      NANOCLAW_AGENT_API_OPENAI_KEY: 'sk-openai',
+      NANOCLAW_AGENT_API_OPENAI_BASE_URL: 'https://openai.example.test/api/',
+      NANOCLAW_AGENT_API_OPENAI_MODEL: 'gpt-env',
+      NANOCLAW_AGENT_API_OPENAI_PROTOCOL: 'responses',
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"model":"gpt-env","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"OK"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"model":"gpt-env","output_text":"OK"}}',
+          '',
+        ].join('\n'),
+    });
+
+    await callAnthropicMessages(
+      {
+        model: 'ignored-input-model',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://openai.example.test/api/v1/responses');
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      model: 'gpt-env',
     });
   });
 
@@ -382,6 +426,64 @@ describe('agent-api', () => {
           role: 'tool',
           tool_call_id: 'toolu_1',
           content: '{"temp":25}',
+        },
+      ],
+    });
+  });
+
+  it('maps anthropic tools into responses API tool format', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        [
+          'event: response.created',
+          'data: {"type":"response.created","response":{"model":"gpt-5.4","status":"in_progress"}}',
+          '',
+          'event: response.output_text.delta',
+          'data: {"type":"response.output_text.delta","delta":"done"}',
+          '',
+          'event: response.completed',
+          'data: {"type":"response.completed","response":{"model":"gpt-5.4","output_text":"done"}}',
+          '',
+        ].join('\n'),
+    });
+
+    await forwardAnthropicRequestToOpenAi(
+      {
+        messages: [{ role: 'user', content: 'weather?' }],
+        tools: [
+          {
+            name: 'weather',
+            description: 'Get weather',
+            input_schema: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+              required: ['city'],
+            },
+          },
+        ],
+      },
+      {
+        apiKey: 'sk-openai',
+        baseUrl: 'https://example.test/api',
+        model: 'gpt-5.4',
+        timeoutMs: 30000,
+        openAiProtocol: 'responses',
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      tools: [
+        {
+          type: 'function',
+          name: 'weather',
+          description: 'Get weather',
+          parameters: {
+            type: 'object',
+            properties: { city: { type: 'string' } },
+            required: ['city'],
+          },
         },
       ],
     });
