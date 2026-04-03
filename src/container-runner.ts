@@ -46,6 +46,8 @@ export interface ContainerInput {
   prompt: string;
   sessionId?: string;
   selectedModel?: string;
+  runId?: string;
+  queryId?: string;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -59,6 +61,8 @@ export interface ContainerOutput {
   newSessionId?: string;
   error?: string;
   selectedModel?: string;
+  runId?: string;
+  queryId?: string;
 }
 
 interface VolumeMount {

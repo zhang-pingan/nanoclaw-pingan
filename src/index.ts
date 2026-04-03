@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 import {
   dispatchCurrentAskQuestion,
@@ -17,7 +18,10 @@ import {
   TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
-import { startCredentialProxy } from './credential-proxy.js';
+import {
+  resolveCredentialProxyExecutionModel,
+  startCredentialProxy,
+} from './credential-proxy.js';
 import { loadMysqlConfigs, startMysqlProxy } from './mysql-proxy.js';
 import './channels/index.js';
 import {
@@ -82,6 +86,10 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, InteractiveCard, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 import { buildMemoryPack } from './memory-pack.js';
+import {
+  clearModelResolutionsForRun,
+  consumeModelResolution,
+} from './model-resolution.js';
 import { selectModel } from './model-selector.js';
 
 // Re-export for backwards compatibility during refactor
@@ -93,9 +101,86 @@ let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
+interface PendingQueryBatch {
+  runId: string;
+  queryId: string;
+  chatJid: string;
+  messageIds: string[];
+  selectedModel: string;
+  modelReason: string;
+  channelName: string;
+}
+
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 const pendingSessionCleanup = new Set<string>();
+const activeRunIds = new Map<string, string>();
+const pendingQueryBatches = new Map<string, PendingQueryBatch>();
+
+function createExecutionId(): string {
+  return crypto.randomUUID();
+}
+
+function rememberPendingQueryBatch(batch: PendingQueryBatch): void {
+  pendingQueryBatches.set(batch.queryId, batch);
+}
+
+function forgetPendingQueryBatch(queryId: string | undefined): void {
+  if (queryId) pendingQueryBatches.delete(queryId);
+}
+
+function forgetPendingQueryBatchesForRun(runId: string | undefined): void {
+  if (!runId) return;
+  for (const [queryId, batch] of pendingQueryBatches) {
+    if (batch.runId === runId) {
+      pendingQueryBatches.delete(queryId);
+    }
+  }
+}
+
+function finalizePendingQueryBatch(result: ContainerOutput): {
+  applied: boolean;
+  batch?: PendingQueryBatch;
+  actualModel?: string;
+  updatedRows?: number;
+  updatedWebRows?: number;
+} {
+  if (
+    result.status !== 'success' ||
+    result.result !== null ||
+    !result.queryId
+  ) {
+    return { applied: false };
+  }
+
+  const batch = pendingQueryBatches.get(result.queryId);
+  if (!batch) {
+    return { applied: false };
+  }
+
+  const resolution = consumeModelResolution(batch.runId, batch.queryId);
+  const actualModel =
+    resolution?.actualModel ||
+    resolveCredentialProxyExecutionModel(batch.selectedModel);
+  const updatedRows = backfillMessageModel(
+    batch.chatJid,
+    batch.messageIds,
+    actualModel,
+    batch.modelReason,
+  );
+  const updatedWebRows =
+    batch.channelName === 'web'
+      ? backfillWebMessageModel(
+          batch.chatJid,
+          batch.messageIds,
+          actualModel,
+          batch.modelReason,
+        )
+      : 0;
+
+  pendingQueryBatches.delete(result.queryId);
+  return { applied: true, batch, actualModel, updatedRows, updatedWebRows };
+}
 
 interface CreateWorkflowCommandData {
   name: string;
@@ -583,27 +668,23 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     prompt,
     isMain: isMainGroup,
   });
-  const updatedRows = backfillMessageModel(
+  const runId = createExecutionId();
+  const initialQueryId = createExecutionId();
+  rememberPendingQueryBatch({
+    runId,
+    queryId: initialQueryId,
     chatJid,
-    missedMessages.map((m) => m.id),
-    modelSelection.selectedModel,
-    modelSelection.reason,
-  );
-  const updatedWebRows =
-    channel.name === 'web'
-      ? backfillWebMessageModel(
-          chatJid,
-          missedMessages.map((m) => m.id),
-          modelSelection.selectedModel,
-          modelSelection.reason,
-        )
-      : 0;
+    messageIds: missedMessages.map((m) => m.id),
+    selectedModel: modelSelection.selectedModel,
+    modelReason: modelSelection.reason,
+    channelName: channel.name,
+  });
   logger.info(
     {
       group: group.name,
       chatJid,
-      updatedRows,
-      updatedWebRows,
+      runId,
+      queryId: initialQueryId,
       selectedModel: modelSelection.selectedModel,
       reason: modelSelection.reason,
     },
@@ -628,6 +709,24 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       resetIdleTimer();
     }
 
+    const finalized = finalizePendingQueryBatch(result);
+    if (finalized.applied) {
+      logger.info(
+        {
+          group: group.name,
+          chatJid,
+          runId: finalized.batch?.runId,
+          queryId: finalized.batch?.queryId,
+          actualModel: finalized.actualModel,
+          updatedRows: finalized.updatedRows,
+          updatedWebRows: finalized.updatedWebRows,
+          selectedModel: finalized.batch?.selectedModel,
+          reason: finalized.batch?.modelReason,
+        },
+        'Backfilled actual model after query completion',
+      );
+    }
+
     if (result.status === 'success') {
       queue.notifyIdle(chatJid);
     }
@@ -635,7 +734,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (result.status === 'error') {
       hadError = true;
     }
-  }, modelSelection.selectedModel);
+  }, modelSelection.selectedModel, runId, initialQueryId);
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -652,6 +751,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   }
 
   if (output === 'error' || hadError) {
+    forgetPendingQueryBatch(initialQueryId);
     // If we already sent output to the user, don't roll back the cursor —
     // the user got their response and re-processing would send duplicates.
     if (outputSentToUser) {
@@ -680,9 +780,13 @@ async function runAgent(
   chatJid: string,
   onOutput?: (output: ContainerOutput) => Promise<void>,
   selectedModel?: string,
+  runId?: string,
+  initialQueryId?: string,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = sessions[group.folder];
+  const resolvedRunId = runId || createExecutionId();
+  const resolvedInitialQueryId = initialQueryId || createExecutionId();
   const modelSelection = selectedModel
     ? { selectedModel, reason: 'preselected' }
     : await selectModel({ prompt, isMain });
@@ -690,6 +794,8 @@ async function runAgent(
     {
       group: group.name,
       chatJid,
+      runId: resolvedRunId,
+      queryId: resolvedInitialQueryId,
       selectedModel: modelSelection.selectedModel,
       reason: modelSelection.reason,
     },
@@ -744,11 +850,14 @@ async function runAgent(
     : undefined;
 
   try {
+    activeRunIds.set(chatJid, resolvedRunId);
     const output = await runContainerAgent(
       group,
       {
         prompt,
         sessionId,
+        runId: resolvedRunId,
+        queryId: resolvedInitialQueryId,
         groupFolder: group.folder,
         chatJid,
         isMain,
@@ -790,6 +899,10 @@ async function runAgent(
   } catch (err) {
     logger.error({ group: group.name, err }, 'Agent error');
     return 'error';
+  } finally {
+    clearModelResolutionsForRun(resolvedRunId);
+    forgetPendingQueryBatchesForRun(resolvedRunId);
+    activeRunIds.delete(chatJid);
   }
 }
 
@@ -974,29 +1087,25 @@ async function startMessageLoop(): Promise<void> {
             prompt: formatted,
             isMain: isMainGroup,
           });
+          const runId = activeRunIds.get(chatJid);
+          const queryId = createExecutionId();
 
-          if (queue.sendMessage(chatJid, formatted, pipedSelection.selectedModel)) {
-            const updatedRows = backfillMessageModel(
+          if (runId && queue.sendMessage(chatJid, formatted, pipedSelection.selectedModel, queryId)) {
+            rememberPendingQueryBatch({
+              runId,
+              queryId,
               chatJid,
-              messagesToSend.map((m) => m.id),
-              pipedSelection.selectedModel,
-              pipedSelection.reason,
-            );
-            const updatedWebRows =
-              channel.name === 'web'
-                ? backfillWebMessageModel(
-                    chatJid,
-                    messagesToSend.map((m) => m.id),
-                    pipedSelection.selectedModel,
-                    pipedSelection.reason,
-                  )
-                : 0;
+              messageIds: messagesToSend.map((m) => m.id),
+              selectedModel: pipedSelection.selectedModel,
+              modelReason: pipedSelection.reason,
+              channelName: channel.name,
+            });
             logger.debug(
               {
                 chatJid,
                 count: messagesToSend.length,
-                updatedRows,
-                updatedWebRows,
+                runId,
+                queryId,
                 selectedModel: pipedSelection.selectedModel,
                 reason: pipedSelection.reason,
               },
@@ -1011,6 +1120,8 @@ async function startMessageLoop(): Promise<void> {
               ?.catch((err) =>
                 logger.warn({ chatJid, err }, 'Failed to set typing indicator'),
               );
+          } else if (runId) {
+            forgetPendingQueryBatch(queryId);
           } else {
             // No active container — enqueue for a new one
             queue.enqueueMessageCheck(chatJid);

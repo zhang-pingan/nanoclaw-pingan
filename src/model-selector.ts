@@ -16,6 +16,7 @@ const modelEnv = readEnvFile([
   'NANOCLAW_MODEL_DEFAULT',
   'NANOCLAW_MODEL_HEAVY',
   'NANOCLAW_MODEL_FORCE',
+  'CREDENTIAL_PROXY_OPENAI_COMPAT',
   'NANOCLAW_MODEL_SELECTOR_URL',
   'NANOCLAW_MODEL_SELECTOR_MODEL',
   'NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS',
@@ -29,6 +30,12 @@ const MODEL_DEFAULT =
 const MODEL_HEAVY =
   process.env.NANOCLAW_MODEL_HEAVY || modelEnv.NANOCLAW_MODEL_HEAVY || 'claude-opus-4-6';
 const MODEL_FORCE = process.env.NANOCLAW_MODEL_FORCE || modelEnv.NANOCLAW_MODEL_FORCE || '';
+const CREDENTIAL_PROXY_OPENAI_COMPAT =
+  (process.env.CREDENTIAL_PROXY_OPENAI_COMPAT ||
+    modelEnv.CREDENTIAL_PROXY_OPENAI_COMPAT ||
+    '')
+    .trim()
+    .toLowerCase() === 'true';
 const SELECTOR_API_BASE_URL =
   process.env.NANOCLAW_MODEL_SELECTOR_URL ||
   modelEnv.NANOCLAW_MODEL_SELECTOR_URL ||
@@ -67,6 +74,10 @@ export function getDefaultModel(): string {
 function selectModelByRules(input: ModelSelectionInput): ModelSelection {
   if (MODEL_FORCE) {
     return { selectedModel: MODEL_FORCE, reason: 'forced' };
+  }
+
+  if (CREDENTIAL_PROXY_OPENAI_COMPAT) {
+    return { selectedModel: MODEL_LIGHT, reason: 'openai_compat' };
   }
 
   const text = (input.prompt || '').toLowerCase();

@@ -22,11 +22,52 @@ import {
 } from './agent-api.js';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
+import { recordModelResolution } from './model-resolution.js';
 
 export type AuthMode = 'api-key' | 'oauth';
 
 export interface ProxyConfig {
   authMode: AuthMode;
+}
+
+interface ProxyRequestContext {
+  runId?: string;
+  queryId?: string;
+  path: string;
+}
+
+export function resolveCredentialProxyExecutionModel(
+  requestedModel: string,
+): string {
+  const secrets = readEnvFile(['ANTHROPIC_CLAUDE_MODEL']);
+  const openAiCompat = getCredentialProxyOpenAiCompatConfig();
+
+  if (openAiCompat.enabled && openAiCompat.model) {
+    return openAiCompat.model;
+  }
+
+  const overrideModel = (secrets.ANTHROPIC_CLAUDE_MODEL || '').trim();
+  if (overrideModel) {
+    return overrideModel;
+  }
+
+  return requestedModel;
+}
+
+function extractProxyRequestContext(rawUrl: string | undefined): ProxyRequestContext {
+  const url = rawUrl || '/';
+  const match = url.match(
+    /^\/__nanoclaw__\/([^/]+)\/([^/]+)(\/.*)?$/,
+  );
+  if (!match) {
+    return { path: url };
+  }
+
+  return {
+    runId: decodeURIComponent(match[1]),
+    queryId: decodeURIComponent(match[2]),
+    path: match[3] || '/',
+  };
 }
 
 function parseProxyErrorBody(body: string): unknown {
@@ -70,6 +111,8 @@ export function startCredentialProxy(
       req.on('data', (c) => chunks.push(c));
       req.on('end', async () => {
         const body = Buffer.concat(chunks);
+        const requestContext = extractProxyRequestContext(req.url);
+        const targetPath = requestContext.path.split('?')[0] || '/';
         const headers: Record<string, string | number | string[] | undefined> =
           {
             ...(req.headers as Record<string, string>),
@@ -105,7 +148,7 @@ export function startCredentialProxy(
           }
         }
 
-        if (openAiCompat.enabled && req.url?.split('?')[0] === '/v1/messages' && parsedJsonBody) {
+        if (openAiCompat.enabled && targetPath === '/v1/messages' && parsedJsonBody) {
           try {
             if (!openAiCompat.apiKey) {
               throw new Error('CREDENTIAL_PROXY_OPENAI_API_KEY is required');
@@ -126,6 +169,23 @@ export function startCredentialProxy(
             );
 
             if (compatResult.stream) {
+              if (
+                requestContext.runId &&
+                requestContext.queryId &&
+                compatResult.model
+              ) {
+                recordModelResolution({
+                  runId: requestContext.runId,
+                  queryId: requestContext.queryId,
+                  requestedModel:
+                    typeof parsedJsonBody.model === 'string'
+                      ? parsedJsonBody.model
+                      : undefined,
+                  actualModel: compatResult.model,
+                  source: 'compat_response',
+                  updatedAt: Date.now(),
+                });
+              }
               res.writeHead(200, {
                 'content-type': compatResult.contentType,
                 'cache-control': 'no-cache',
@@ -136,6 +196,23 @@ export function startCredentialProxy(
             }
 
             res.writeHead(200, { 'content-type': 'application/json' });
+            if (
+              requestContext.runId &&
+              requestContext.queryId &&
+              compatResult.model
+            ) {
+              recordModelResolution({
+                runId: requestContext.runId,
+                queryId: requestContext.queryId,
+                requestedModel:
+                  typeof parsedJsonBody.model === 'string'
+                    ? parsedJsonBody.model
+                    : undefined,
+                actualModel: compatResult.model,
+                source: 'compat_response',
+                updatedAt: Date.now(),
+              });
+            }
             res.end(JSON.stringify(compatResult.anthropicResponse));
             return;
           } catch (err) {
@@ -188,11 +265,33 @@ export function startCredentialProxy(
           }
         }
 
+        if (
+          requestContext.runId &&
+          requestContext.queryId &&
+          parsedJsonBody &&
+          targetPath === '/v1/messages'
+        ) {
+          const actualModel =
+            typeof parsedJsonBody.model === 'string' && parsedJsonBody.model.trim()
+              ? parsedJsonBody.model
+              : undefined;
+          if (actualModel) {
+            recordModelResolution({
+              runId: requestContext.runId,
+              queryId: requestContext.queryId,
+              requestedModel: actualModel,
+              actualModel,
+              source: 'proxy_forward',
+              updatedAt: Date.now(),
+            });
+          }
+        }
+
         const upstream = makeRequest(
           {
             hostname: upstreamUrl.hostname,
             port: upstreamUrl.port || (isHttps ? 443 : 80),
-            path: basePath + req.url,
+            path: basePath + requestContext.path,
             method: req.method,
             headers,
           } as RequestOptions,

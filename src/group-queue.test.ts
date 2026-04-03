@@ -388,7 +388,12 @@ describe('GroupQueue', () => {
     queue.notifyIdle('group1@g.us');
 
     // A new user message arrives — resets idleWaiting
-    queue.sendMessage('group1@g.us', 'hello', 'claude-4-6-sonnet-latest');
+    queue.sendMessage(
+      'group1@g.us',
+      'hello',
+      'claude-4-6-sonnet-latest',
+      'query-1',
+    );
 
     // Task enqueued after message reset — should NOT preempt (agent is working)
     const writeFileSync = vi.mocked(fs.default.writeFileSync);
@@ -430,6 +435,7 @@ describe('GroupQueue', () => {
       'group1@g.us',
       'hello',
       'claude-4-6-sonnet-latest',
+      'query-1',
     );
     expect(result).toBe(false);
 

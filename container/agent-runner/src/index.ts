@@ -5,7 +5,7 @@
  * Input protocol:
  *   Stdin: Full ContainerInput JSON (read until EOF, like before)
  *   IPC:   Follow-up messages written as JSON files to /workspace/ipc/input/
- *          Files: {type:"message", text:"...", selectedModel:"..."}.json — polled and consumed
+ *          Files: {type:"message", text:"...", selectedModel:"...", queryId:"..."}.json — polled and consumed
  *          Sentinel: /workspace/ipc/input/_close — signals session end
  *
  * Stdout protocol:
@@ -24,6 +24,8 @@ interface ContainerInput {
   prompt: string;
   sessionId?: string;
   selectedModel?: string;
+  runId?: string;
+  queryId?: string;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -37,6 +39,8 @@ interface ContainerOutput {
   newSessionId?: string;
   error?: string;
   selectedModel?: string;
+  runId?: string;
+  queryId?: string;
 }
 
 interface SessionEntry {
@@ -408,6 +412,7 @@ function shouldClose(): boolean {
 interface IpcInputMessage {
   text: string;
   selectedModel?: string;
+  queryId?: string;
 }
 
 function drainIpcInput(): IpcInputMessage[] {
@@ -430,6 +435,8 @@ function drainIpcInput(): IpcInputMessage[] {
               typeof data.selectedModel === 'string'
                 ? data.selectedModel
                 : undefined,
+            queryId:
+              typeof data.queryId === 'string' ? data.queryId : undefined,
           });
         }
       } catch (err) {
@@ -448,7 +455,11 @@ function drainIpcInput(): IpcInputMessage[] {
  * Wait for a new IPC message or _close sentinel.
  * Returns merged prompt text plus selectedModel, or null if _close.
  */
-function waitForIpcMessage(): Promise<{ prompt: string; selectedModel: string } | null> {
+function waitForIpcMessage(): Promise<{
+  prompt: string;
+  selectedModel: string;
+  queryId?: string;
+} | null> {
   return new Promise((resolve) => {
     const poll = () => {
       if (shouldClose()) {
@@ -459,7 +470,8 @@ function waitForIpcMessage(): Promise<{ prompt: string; selectedModel: string } 
       if (messages.length > 0) {
         const prompt = messages.map((m) => m.text).join('\n');
         const selectedModel = messages[messages.length - 1].selectedModel || MODEL_DEFAULT;
-        resolve({ prompt, selectedModel });
+        const queryId = messages[messages.length - 1].queryId;
+        resolve({ prompt, selectedModel, queryId });
         return;
       }
       setTimeout(poll, IPC_POLL_MS);
@@ -468,10 +480,27 @@ function waitForIpcMessage(): Promise<{ prompt: string; selectedModel: string } 
   });
 }
 
+function withQueryScopedEnv(
+  env: Record<string, string | undefined>,
+  runId: string | undefined,
+  queryId: string | undefined,
+): Record<string, string | undefined> {
+  if (!runId || !queryId || !env.ANTHROPIC_BASE_URL) {
+    return env;
+  }
+
+  const baseUrl = env.ANTHROPIC_BASE_URL.replace(/\/+$/, '');
+  return {
+    ...env,
+    ANTHROPIC_BASE_URL: `${baseUrl}/__nanoclaw__/${encodeURIComponent(runId)}/${encodeURIComponent(queryId)}`,
+  };
+}
+
 /** Build shared query options. */
 function buildQueryOptions(
   containerInput: ContainerInput,
   selectedModel: string,
+  queryId: string | undefined,
   mcpServerPath: string,
   sdkEnv: Record<string, string | undefined>,
   overrides: {
@@ -522,7 +551,7 @@ function buildQueryOptions(
       'NotebookEdit',
       'mcp__nanoclaw__*'
     ],
-    env: sdkEnv,
+    env: withQueryScopedEnv(sdkEnv, containerInput.runId, queryId),
     permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
     settingSources: ['project', 'user'] as Array<'project' | 'user'>,
@@ -548,6 +577,7 @@ function buildQueryOptions(
 async function iterateQuery(
   stream: MessageStream,
   options: ReturnType<typeof buildQueryOptions>,
+  identifiers: { runId?: string; queryId?: string },
 ): Promise<{ newSessionId?: string; lastAssistantUuid?: string; planResult?: string }> {
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
@@ -585,6 +615,8 @@ async function iterateQuery(
           error: textResult || 'Agent query failed.',
           newSessionId,
           selectedModel: options.model,
+          runId: identifiers.runId,
+          queryId: identifiers.queryId,
         });
       } else {
         planResult = textResult || undefined;
@@ -593,6 +625,8 @@ async function iterateQuery(
           result: textResult || null,
           newSessionId,
           selectedModel: options.model,
+          runId: identifiers.runId,
+          queryId: identifiers.queryId,
         });
       }
     }
@@ -611,12 +645,19 @@ async function iterateQuery(
 async function runQuery(
   prompt: string,
   selectedModel: string,
+  queryId: string | undefined,
   sessionId: string | undefined,
   mcpServerPath: string,
   containerInput: ContainerInput,
   sdkEnv: Record<string, string | undefined>,
   resumeAt?: string,
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; closedDuringQuery: boolean; selectedModel: string }> {
+): Promise<{
+  newSessionId?: string;
+  lastAssistantUuid?: string;
+  closedDuringQuery: boolean;
+  selectedModel: string;
+  queryId?: string;
+}> {
   const stream = new MessageStream();
   stream.push(prompt);
 
@@ -644,17 +685,33 @@ async function runQuery(
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
 
-  const options = buildQueryOptions(containerInput, selectedModel, mcpServerPath, sdkEnv, {
-    sessionId,
-    resumeAt,
+  const options = buildQueryOptions(
+    containerInput,
+    selectedModel,
+    queryId,
+    mcpServerPath,
+    sdkEnv,
+    {
+      sessionId,
+      resumeAt,
+    },
+  );
+  const result = await iterateQuery(stream, options, {
+    runId: containerInput.runId,
+    queryId,
   });
-  const result = await iterateQuery(stream, options);
   newSessionId = result.newSessionId || newSessionId;
   lastAssistantUuid = result.lastAssistantUuid;
 
   ipcPolling = false;
   log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
-  return { newSessionId, lastAssistantUuid, closedDuringQuery, selectedModel: options.model };
+  return {
+    newSessionId,
+    lastAssistantUuid,
+    closedDuringQuery,
+    selectedModel: options.model,
+    queryId,
+  };
 }
 
 async function main(): Promise<void> {
@@ -684,6 +741,7 @@ async function main(): Promise<void> {
   let sessionId = containerInput.sessionId;
   let confirmedSessionId: string | undefined;
   let selectedModel = containerInput.selectedModel || MODEL_DEFAULT;
+  let currentQueryId = containerInput.queryId;
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
 
   // Clean up stale _close sentinel from previous container runs
@@ -699,6 +757,7 @@ async function main(): Promise<void> {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
     prompt += '\n' + pending.map((m) => m.text).join('\n');
     selectedModel = pending[pending.length - 1].selectedModel || MODEL_DEFAULT;
+    currentQueryId = pending[pending.length - 1].queryId || currentQueryId;
   }
 
   // --- Slash command handling ---
@@ -807,7 +866,16 @@ async function main(): Promise<void> {
     while (true) {
       log(`Starting query (session: ${sessionId || 'new'}, resumeAt: ${resumeAt || 'latest'})...`);
 
-      const queryResult = await runQuery(prompt, selectedModel, sessionId, mcpServerPath, containerInput, sdkEnv, resumeAt);
+      const queryResult = await runQuery(
+        prompt,
+        selectedModel,
+        currentQueryId,
+        sessionId,
+        mcpServerPath,
+        containerInput,
+        sdkEnv,
+        resumeAt,
+      );
       if (queryResult.newSessionId) {
         sessionId = queryResult.newSessionId;
         confirmedSessionId = queryResult.newSessionId;
@@ -830,6 +898,8 @@ async function main(): Promise<void> {
         result: null,
         newSessionId: sessionId,
         selectedModel: queryResult.selectedModel,
+        runId: containerInput.runId,
+        queryId: queryResult.queryId,
       });
 
       log('Query ended, waiting for next IPC message...');
@@ -844,6 +914,7 @@ async function main(): Promise<void> {
       log(`Got new message (${nextMessage.prompt.length} chars), starting new query`);
       prompt = nextMessage.prompt;
       selectedModel = nextMessage.selectedModel || MODEL_DEFAULT;
+      currentQueryId = nextMessage.queryId;
     }
 
     // Archive transcript on normal exit
