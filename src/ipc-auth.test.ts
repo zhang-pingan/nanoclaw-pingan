@@ -1,6 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+vi.mock('./agent-api.js', () => ({
+  callAnthropicMessages: vi.fn(),
+}));
 
 import {
   _initTestDatabase,
@@ -18,6 +22,7 @@ import {
   storeMessage,
 } from './db.js';
 import { DATA_DIR } from './config.js';
+import { callAnthropicMessages } from './agent-api.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
@@ -47,6 +52,7 @@ const THIRD_GROUP: RegisteredGroup = {
 
 let groups: Record<string, RegisteredGroup>;
 let deps: IpcDeps;
+const callAnthropicMessagesMock = vi.mocked(callAnthropicMessages);
 
 function readMemoryIpcResult(
   sourceGroup: string,
@@ -88,6 +94,7 @@ function rid(prefix: string): string {
 
 beforeEach(() => {
   _initTestDatabase();
+  callAnthropicMessagesMock.mockReset();
 
   groups = {
     'main@g.us': MAIN_GROUP,
@@ -1075,6 +1082,30 @@ describe('memory IPC tasks', () => {
       ].join('\n'),
       'utf-8',
     );
+    callAnthropicMessagesMock.mockResolvedValue({
+      model: 'claude-test',
+      raw: {},
+      text: JSON.stringify({
+        memories: [
+          {
+            layer: 'canonical',
+            memory_type: 'preference',
+            content: '用户偏好使用中文交流',
+            reason: '用户明确要求以后都用中文回答',
+            confidence: 0.93,
+            source_indexes: [0],
+          },
+          {
+            layer: 'working',
+            memory_type: 'summary',
+            content: '当前任务是总结今天进展',
+            reason: '用户要求总结今天进展',
+            confidence: 0.78,
+            source_indexes: [2],
+          },
+        ],
+      }),
+    });
 
     try {
       await processTaskIpc(
@@ -1096,16 +1127,103 @@ describe('memory IPC tasks', () => {
     const archiveMemories = memories.filter((m) => m.source === 'archive');
     expect(archiveMemories.length).toBeGreaterThan(0);
     expect(
-      archiveMemories.some((m) => m.layer === 'canonical'),
+      archiveMemories.some(
+        (m) => m.layer === 'canonical' && m.content === '用户偏好使用中文交流',
+      ),
     ).toBe(true);
     expect(
-      archiveMemories.some((m) => m.layer === 'working' && m.memory_type === 'summary'),
+      archiveMemories.some(
+        (m) =>
+          m.layer === 'working' &&
+          m.memory_type === 'summary' &&
+          m.content === '当前任务是总结今天进展',
+      ),
     ).toBe(true);
     expect(
       archiveMemories.every((m) =>
         typeof m.metadata === 'string' && m.metadata.includes(archiveFile),
       ),
     ).toBe(true);
+    expect(
+      archiveMemories.every((m) =>
+        typeof m.metadata === 'string' &&
+        m.metadata.includes('"extraction_mode":"agent_api"'),
+      ),
+    ).toBe(true);
+  });
+
+  it('memory_extract_from_archive ignores internal context fragments', async () => {
+    const sourceGroup = 'other-group';
+    const conversationsDir = path.join(
+      process.cwd(),
+      'groups',
+      sourceGroup,
+      'conversations',
+    );
+    fs.mkdirSync(conversationsDir, { recursive: true });
+    const archiveFile = `2026-04-01-${Date.now()}-internal.md`;
+    const archivePath = path.join(conversationsDir, archiveFile);
+    fs.writeFileSync(
+      archivePath,
+      [
+        '---',
+        'session: sess-2',
+        'round: 3',
+        'hash: def456',
+        'source: exit',
+        'created_at: 2026-04-01T00:00:00.000Z',
+        '---',
+        '',
+        '# Conversation',
+        '',
+        '**User**: Base directory for this skill: /home/node/.claude/skills/dev-examine',
+        '',
+        '**User**: <context timezone="Asia/Shanghai" />',
+        '',
+        '**User**: [MEMORY PACK]',
+      ].join('\n'),
+      'utf-8',
+    );
+    callAnthropicMessagesMock.mockResolvedValue({
+      model: 'claude-test',
+      raw: {},
+      text: JSON.stringify({
+        memories: [
+          {
+            layer: 'working',
+            memory_type: 'summary',
+            content: '[MEMORY PACK]',
+            reason: '模型误提取内部包装内容',
+            confidence: 0.8,
+            source_indexes: [0],
+          },
+        ],
+      }),
+    });
+
+    try {
+      await processTaskIpc(
+        {
+          type: 'memory_extract_from_archive',
+          archiveFile,
+          archiveHash: 'def456',
+          round: 3,
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+    } finally {
+      fs.unlinkSync(archivePath);
+    }
+
+    const archiveMemories = listMemories(sourceGroup, 50).filter(
+      (m) =>
+        m.source === 'archive' &&
+        typeof m.metadata === 'string' &&
+        m.metadata.includes(archiveFile),
+    );
+    expect(archiveMemories).toHaveLength(0);
   });
 
   it('memory_extract_from_archive respects configurable thresholds from config table', async () => {
@@ -1134,6 +1252,38 @@ describe('memory IPC tasks', () => {
       ].join('\n'),
       'utf-8',
     );
+    callAnthropicMessagesMock.mockResolvedValue({
+      model: 'claude-test',
+      raw: {},
+      text: JSON.stringify({
+        memories: [
+          {
+            layer: 'canonical',
+            memory_type: 'preference',
+            content: '用户偏好使用中文交流',
+            reason: '用户明确要求用中文',
+            confidence: 0.91,
+            source_indexes: [0],
+          },
+          {
+            layer: 'canonical',
+            memory_type: 'preference',
+            content: '用户偏好输出简洁',
+            reason: '用户明确要求输出简洁',
+            confidence: 0.9,
+            source_indexes: [1],
+          },
+          {
+            layer: 'working',
+            memory_type: 'summary',
+            content: '当前任务是总结今天进展',
+            reason: '用户要求总结今天进展',
+            confidence: 0.74,
+            source_indexes: [2],
+          },
+        ],
+      }),
+    });
 
     try {
       await processTaskIpc(

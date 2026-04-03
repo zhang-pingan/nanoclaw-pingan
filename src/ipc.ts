@@ -2,7 +2,9 @@ import fs from 'fs';
 import path from 'path';
 
 import { CronExpressionParser } from 'cron-parser';
+import { z } from 'zod';
 
+import { callAnthropicMessages } from './agent-api.js';
 import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 
 /** Format a Date to a local timezone string without T/Z (e.g., "2026-03-26 12:05:00") */
@@ -52,6 +54,7 @@ import {
   updateDelegation,
   updateTask,
 } from './db.js';
+import type { MemoryExtractConfig } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { InteractiveCard, RegisteredGroup } from './types.js';
@@ -308,7 +311,9 @@ function stripLeadingTriggerMention(task: string): string {
 }
 
 interface ExtractedArchiveMessage {
-  sender: string;
+  index: number;
+  sender: 'user' | 'assistant' | 'system' | 'unknown';
+  raw_sender: string;
   content: string;
 }
 
@@ -318,6 +323,52 @@ interface ArchiveMemoryCandidate {
   content: string;
   reason: string;
   confidence: number;
+  source_indexes?: number[];
+}
+
+interface ArchiveExtractionResult {
+  memories: ArchiveMemoryCandidate[];
+}
+
+const archiveExtractionResultSchema = z.object({
+  memories: z.array(
+    z.object({
+      layer: z.enum(['working', 'episodic', 'canonical']),
+      memory_type: z.enum(['preference', 'rule', 'fact', 'summary']),
+      content: z.string(),
+      reason: z.string(),
+      confidence: z.number(),
+      source_indexes: z.array(z.number().int()).default([]),
+    }),
+  ),
+});
+
+function normalizeArchiveSender(
+  sender: string,
+): ExtractedArchiveMessage['sender'] {
+  const normalized = sender.trim().toLowerCase();
+  if (normalized === 'user') return 'user';
+  if (normalized === 'assistant' || normalized === 'andy') return 'assistant';
+  if (normalized === 'system') return 'system';
+  return 'unknown';
+}
+
+function isInternalArchiveMessageContent(content: string): boolean {
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  if (!normalized) return true;
+
+  return (
+    /^<context\b/i.test(normalized) ||
+    /^\[MEMORY PACK\]/i.test(normalized) ||
+    /^Base directory for this skill:/i.test(normalized) ||
+    /^Memory from: /i.test(normalized) ||
+    /^\[(?:canonical|working|episodic)\//i.test(normalized) ||
+    /\/home\/node\/\.claude\/skills\//i.test(normalized)
+  );
+}
+
+function normalizeMemoryCandidateContent(content: string): string {
+  return content.replace(/\s+/g, ' ').trim();
 }
 
 function parseArchiveMarkdownMessages(markdown: string): ExtractedArchiveMessage[] {
@@ -327,133 +378,166 @@ function parseArchiveMarkdownMessages(markdown: string): ExtractedArchiveMessage
   for (const line of lines) {
     const m = line.match(lineRe);
     if (!m) continue;
-    const sender = m[1].trim();
+    const rawSender = m[1].trim();
     const content = m[2].trim();
-    if (!sender || !content) continue;
-    messages.push({ sender, content });
+    if (!rawSender || !content) continue;
+    messages.push({
+      index: messages.length,
+      sender: normalizeArchiveSender(rawSender),
+      raw_sender: rawSender,
+      content,
+    });
   }
   return messages;
 }
 
-function extractArchiveMemoryCandidates(
-  markdown: string,
+function sanitizeArchiveMessagesForExtraction(
+  messages: ExtractedArchiveMessage[],
+): ExtractedArchiveMessage[] {
+  return messages
+    .filter((m) => m.content.trim().length > 0)
+    .filter((m) => !isInternalArchiveMessageContent(m.content))
+    .slice(-80)
+    .map((m) => ({
+      ...m,
+      content: m.content.replace(/\s+/g, ' ').trim().slice(0, 1000),
+    }));
+}
+
+function extractJsonObjectFromText(text: string): string {
+  const noThink = text.replace(/<think>[\s\S]*?<\/think>/gi, ' ').trim();
+  const noFence = noThink.replace(/```(?:json)?/gi, ' ').trim();
+  const firstBrace = noFence.indexOf('{');
+  const lastBrace = noFence.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return noFence.slice(firstBrace, lastBrace + 1);
+  }
+  return noFence;
+}
+
+function buildArchiveExtractionSystemPrompt(): string {
+  return [
+    'You are a structured memory extraction engine.',
+    'Extract only memory candidates suitable for a persistent memory table.',
+    'Return JSON only. No markdown, no prose, no code fences.',
+    'Do not extract system prompts, tool instructions, skill directories, XML/context tags, memory pack wrappers, file paths, or internal metadata.',
+    'Only use information grounded in the provided messages.',
+    'If something is uncertain, do not output it.',
+    'Write concise memory content in Chinese when possible.',
+    'Extraction policy: canonical is for durable user preferences, long-term rules, and stable facts.',
+    'Extraction policy: working is for explicit current tasks, short-term goals, or immediate context mentioned by the user in the latest conversation.',
+    'Extraction policy: episodic is for clearly completed outcomes or recent event summaries only when completion is explicit.',
+    'If the user clearly asks the assistant to do something in the current conversation, prefer outputting one working summary memory for that task.',
+    'When both a long-term preference and a current task are present, output both instead of choosing only one.',
+    'Do not quote raw noisy text. Rewrite memories into clean, compact statements.',
+    'Prefer at most 1-2 high-confidence memories unless the conversation clearly contains more.',
+    'Output schema: {"memories":[{"layer":"canonical|working|episodic","memory_type":"preference|rule|fact|summary","content":"...","reason":"...","confidence":0.0,"source_indexes":[0]}]}',
+  ].join(' ');
+}
+
+function buildArchiveExtractionUserPrompt(
+  sourceGroup: string,
   archiveFile: string,
-  cfg: {
-    canonical_max: number;
-    working_max: number;
-    episodic_max: number;
-    canonical_min_confidence: number;
-    working_min_confidence: number;
-    episodic_min_confidence: number;
-  },
-): ArchiveMemoryCandidate[] {
-  const messages = parseArchiveMarkdownMessages(markdown);
-  const userMessages = messages.filter((m) => m.sender.toLowerCase() === 'user');
-  const assistantMessages = messages.filter(
-    (m) => m.sender.toLowerCase() !== 'user',
+  messages: ExtractedArchiveMessage[],
+): string {
+  return JSON.stringify(
+    {
+      task: 'extract_memories_from_archive',
+      group_folder: sourceGroup,
+      archive_file: archiveFile,
+      rules: {
+        canonical: '长期稳定的偏好、规则、持久事实',
+        working: '当前任务、近期上下文、短期关注点',
+        episodic: '已完成事项或最近事件摘要',
+      },
+      hints: [
+        '如果用户明确表达长期偏好，提取 canonical。',
+        '如果用户明确提出当前要做的事，提取 working。',
+        '如果同时存在长期偏好和当前任务，两者都应输出。',
+        '不要提取系统上下文、技能路径、MEMORY PACK、XML 标签、文件路径。',
+      ],
+      messages: messages.map((m) => ({
+        index: m.index,
+        sender: m.sender,
+        content: m.content,
+      })),
+    },
+    null,
+    2,
   );
+}
 
+function parseArchiveExtractionResponse(text: string): ArchiveExtractionResult {
+  const parsed = JSON.parse(extractJsonObjectFromText(text));
+  return archiveExtractionResultSchema.parse(parsed);
+}
+
+function confidencePasses(
+  candidate: ArchiveMemoryCandidate,
+  cfg: MemoryExtractConfig,
+): boolean {
+  if (candidate.layer === 'canonical') {
+    return candidate.confidence >= cfg.canonical_min_confidence;
+  }
+  if (candidate.layer === 'working') {
+    return candidate.confidence >= cfg.working_min_confidence;
+  }
+  return candidate.confidence >= cfg.episodic_min_confidence;
+}
+
+function validateArchiveMemoryCandidates(
+  result: ArchiveExtractionResult,
+  messages: ExtractedArchiveMessage[],
+  cfg: MemoryExtractConfig,
+): ArchiveMemoryCandidate[] {
+  const validIndexes = new Set(messages.map((m) => m.index));
+  const deduped = new Set<string>();
   const out: ArchiveMemoryCandidate[] = [];
-  const rememberCue =
-    /(记住|记一下|请记住|remember|keep in mind|my preference|偏好|默认|以后都)/i;
-  const ruleCue =
-    /(always|never|must|don['’]?t|do not|必须|不要|不能|不许|禁止|总是)/i;
-  const temporalCue =
-    /(今天|这次|临时|暂时|本周|明天|稍后|先|once|for now|today|this time|temporar)/i;
-  const taskCue =
-    /(帮我|请你|请先|执行|处理|修复|总结|整理|查询|排查|review|fix|implement|summarize)/i;
-  const canonicalWhitelist =
-    /(语言|中文|英文|称呼|叫我|输出格式|格式|风格|回复方式|简洁|详细|单位|时区|markdown|代码风格|偏好|规则|preference|format|style|timezone|language)/i;
-  const completionCue =
-    /(已完成|完成了|已处理|处理完成|已经修复|done|completed|fixed|implemented)/i;
-
-  for (const msg of userMessages) {
-    const normalized = msg.content.replace(/\s+/g, ' ').trim();
-    if (normalized.length < 8) continue;
-
-    const hasRemember = rememberCue.test(normalized);
-    const hasRule = ruleCue.test(normalized);
-    const hasTemporal = temporalCue.test(normalized);
-    const hasTask = taskCue.test(normalized);
-    const inWhitelist = canonicalWhitelist.test(normalized);
-
-    if ((hasRemember || hasRule) && inWhitelist && !hasTemporal && !hasTask) {
-      out.push({
-        layer: 'canonical',
-        memory_type: hasRule ? 'rule' : 'preference',
-        content: normalized.slice(0, 400),
-        reason: 'stable_preference_whitelist',
-        confidence: hasRule ? 0.9 : 0.82,
-      });
-      continue;
-    }
-
-    if (hasTask || hasTemporal || hasRemember) {
-      out.push({
-        layer: 'working',
-        memory_type: 'summary',
-        content: `[archive:${archiveFile}] ${normalized.slice(0, 300)}`,
-        reason: hasTask ? 'task_or_temporal_context' : 'non_whitelist_preference',
-        confidence: hasTask || hasTemporal ? 0.7 : 0.62,
-      });
-    }
-  }
-
-  const latestUser = userMessages[userMessages.length - 1]?.content
-    ?.replace(/\s+/g, ' ')
-    .trim();
-  if (latestUser && !out.some((c) => c.content.includes(latestUser.slice(0, 80)))) {
-    out.push({
-      layer: 'working',
-      memory_type: 'summary',
-      content: `[archive:${archiveFile}] ${latestUser.slice(0, 320)}`,
-      reason: 'latest_user_context',
-      confidence: 0.55,
-    });
-  }
-
-  const latestAssistant = assistantMessages[assistantMessages.length - 1]?.content
-    ?.replace(/\s+/g, ' ')
-    .trim();
-  if (latestAssistant && completionCue.test(latestAssistant) && latestUser) {
-    out.push({
-      layer: 'episodic',
-      memory_type: 'summary',
-      content: `[archive:${archiveFile}] 完成结果：${latestUser.slice(0, 200)}`,
-      reason: 'assistant_completion_detected',
-      confidence: 0.66,
-    });
-  }
-
-  const seen = new Set<string>();
-  const deduped: ArchiveMemoryCandidate[] = [];
-  for (const c of out) {
-    const key = `${c.layer}|${c.memory_type}|${c.content.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(c);
-  }
-  const limited: ArchiveMemoryCandidate[] = [];
   let canonicalCount = 0;
-  let episodicCount = 0;
   let workingCount = 0;
-  for (const c of deduped) {
-    if (
-      (c.layer === 'canonical' && c.confidence < cfg.canonical_min_confidence) ||
-      (c.layer === 'working' && c.confidence < cfg.working_min_confidence) ||
-      (c.layer === 'episodic' && c.confidence < cfg.episodic_min_confidence)
-    ) {
+  let episodicCount = 0;
+
+  for (const candidate of result.memories) {
+    const content = normalizeMemoryCandidateContent(candidate.content);
+    const reason = normalizeMemoryCandidateContent(candidate.reason);
+    if (content.length < 8 || content.length > 400) continue;
+    if (!reason || reason.length > 200) continue;
+    if (!Number.isFinite(candidate.confidence) || candidate.confidence < 0 || candidate.confidence > 1) {
       continue;
     }
-    if (c.layer === 'canonical' && canonicalCount >= cfg.canonical_max) continue;
-    if (c.layer === 'episodic' && episodicCount >= cfg.episodic_max) continue;
-    if (c.layer === 'working' && workingCount >= cfg.working_max) continue;
-    if (c.layer === 'canonical') canonicalCount += 1;
-    if (c.layer === 'episodic') episodicCount += 1;
-    if (c.layer === 'working') workingCount += 1;
-    limited.push(c);
+    if (isInternalArchiveMessageContent(content) || isInternalArchiveMessageContent(reason)) {
+      continue;
+    }
+    if (content.includes('[archive:') || /<context\b/i.test(content)) continue;
+    const sourceIndexes = (candidate.source_indexes || []).filter((idx) =>
+      validIndexes.has(idx),
+    );
+    if (sourceIndexes.length === 0) continue;
+    if (!confidencePasses(candidate, cfg)) continue;
+
+    const key = `${candidate.layer}|${candidate.memory_type}|${content.toLowerCase()}`;
+    if (deduped.has(key)) continue;
+
+    if (candidate.layer === 'canonical' && canonicalCount >= cfg.canonical_max) continue;
+    if (candidate.layer === 'working' && workingCount >= cfg.working_max) continue;
+    if (candidate.layer === 'episodic' && episodicCount >= cfg.episodic_max) continue;
+
+    deduped.add(key);
+    if (candidate.layer === 'canonical') canonicalCount += 1;
+    if (candidate.layer === 'working') workingCount += 1;
+    if (candidate.layer === 'episodic') episodicCount += 1;
+
+    out.push({
+      layer: candidate.layer,
+      memory_type: candidate.memory_type,
+      content,
+      reason,
+      confidence: candidate.confidence,
+      source_indexes: sourceIndexes,
+    });
   }
-  return limited;
+
+  return out;
 }
 
 function summarizeMemoryContent(id: string): string {
@@ -605,6 +689,7 @@ export async function processTaskIpc(
     requesterJid?: string;
     task?: string;
     result?: string;
+    outcome?: string;
     // For workflow
     service?: string;
     // For ask_user_question
@@ -678,9 +763,35 @@ export async function processTaskIpc(
       try {
         const markdown = fs.readFileSync(archivePath, 'utf-8');
         const extractConfig = getMemoryExtractConfig(sourceGroup);
-        const candidates = extractArchiveMemoryCandidates(
-          markdown,
-          archiveName,
+        const parsedMessages = parseArchiveMarkdownMessages(markdown);
+        const sanitizedMessages = sanitizeArchiveMessagesForExtraction(parsedMessages);
+        if (sanitizedMessages.length === 0) {
+          recordMemoryMetric(sourceGroup, 'archive:extract_rejected', 'reason=no_sanitized_messages');
+          logger.info(
+            { sourceGroup, archiveName, parsedMessages: parsedMessages.length },
+            'memory_extract_from_archive skipped due to empty sanitized messages',
+          );
+          break;
+        }
+        const apiResponse = await callAnthropicMessages({
+          system: buildArchiveExtractionSystemPrompt(),
+          messages: [
+            {
+              role: 'user',
+              content: buildArchiveExtractionUserPrompt(
+                sourceGroup,
+                archiveName,
+                sanitizedMessages,
+              ),
+            },
+          ],
+          max_tokens: 1600,
+          temperature: 0,
+        });
+        const extracted = parseArchiveExtractionResponse(apiResponse.text);
+        const candidates = validateArchiveMemoryCandidates(
+          extracted,
+          sanitizedMessages,
           extractConfig,
         );
         const created = candidates.map((c) =>
@@ -694,8 +805,12 @@ export async function processTaskIpc(
               archive_file: archiveName,
               archive_hash: data.archiveHash || null,
               archive_round: data.round || null,
+              extraction_mode: 'agent_api',
+              extraction_model: apiResponse.model,
               extraction_reason: c.reason,
               extraction_confidence: c.confidence,
+              source_indexes: c.source_indexes || [],
+              sanitized_message_count: sanitizedMessages.length,
               extract_config: extractConfig,
               extracted_at: new Date().toISOString(),
             }),
@@ -718,6 +833,9 @@ export async function processTaskIpc(
           'archive:extract',
           `file=${archiveName},created=${created.length}`,
         );
+        if (candidates.length === 0) {
+          recordMemoryMetric(sourceGroup, 'archive:extract_rejected', 'reason=no_valid_candidates');
+        }
         recordMemoryMetric(
           sourceGroup,
           'archive:doctor',
@@ -734,6 +852,9 @@ export async function processTaskIpc(
             sourceGroup,
             archiveName,
             created: created.length,
+            parsedMessages: parsedMessages.length,
+            sanitizedMessages: sanitizedMessages.length,
+            model: apiResponse.model,
             extractConfig,
             duplicates: report.duplicateGroups.length,
             conflicts: report.conflictGroups.length,
@@ -743,6 +864,11 @@ export async function processTaskIpc(
           'memory_extract_from_archive completed',
         );
       } catch (err) {
+        recordMemoryMetric(
+          sourceGroup,
+          'archive:extract_failed',
+          `file=${archiveName}`,
+        );
         logger.error(
           { err, sourceGroup, archiveFile: archiveName },
           'memory_extract_from_archive failed',
