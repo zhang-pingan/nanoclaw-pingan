@@ -75,9 +75,19 @@ export function storeWebMessage(msg: {
   const isBotMessage = msg.is_bot_message ? 1 : 0;
 
   db.prepare(`
-    INSERT OR REPLACE INTO messages
+    INSERT INTO messages
       (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(chat_jid, id) DO UPDATE SET
+      sender = excluded.sender,
+      sender_name = excluded.sender_name,
+      content = excluded.content,
+      timestamp = excluded.timestamp,
+      is_from_me = excluded.is_from_me,
+      is_bot_message = excluded.is_bot_message,
+      reply_to_id = COALESCE(excluded.reply_to_id, messages.reply_to_id),
+      model = COALESCE(excluded.model, messages.model),
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason)
   `).run(
     msg.id,
     msg.chat_jid,

@@ -489,7 +489,27 @@ export function setLastGroupSync(): void {
  */
 export function storeMessage(msg: NewMessage): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model, model_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO messages (
+      id,
+      chat_jid,
+      sender,
+      sender_name,
+      content,
+      timestamp,
+      is_from_me,
+      is_bot_message,
+      model,
+      model_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id, chat_jid) DO UPDATE SET
+      sender = excluded.sender,
+      sender_name = excluded.sender_name,
+      content = excluded.content,
+      timestamp = excluded.timestamp,
+      is_from_me = excluded.is_from_me,
+      is_bot_message = excluded.is_bot_message,
+      model = COALESCE(excluded.model, messages.model),
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -556,7 +576,27 @@ export function storeMessageDirect(msg: {
   model_reason?: string | null;
 }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO messages (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, model, model_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO messages (
+      id,
+      chat_jid,
+      sender,
+      sender_name,
+      content,
+      timestamp,
+      is_from_me,
+      is_bot_message,
+      model,
+      model_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id, chat_jid) DO UPDATE SET
+      sender = excluded.sender,
+      sender_name = excluded.sender_name,
+      content = excluded.content,
+      timestamp = excluded.timestamp,
+      is_from_me = excluded.is_from_me,
+      is_bot_message = excluded.is_bot_message,
+      model = COALESCE(excluded.model, messages.model),
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason)`,
   ).run(
     msg.id,
     msg.chat_jid,
