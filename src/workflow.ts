@@ -191,13 +191,14 @@ function injectDelegation(
     timestamp: now,
     is_from_me: true,
     is_bot_message: false,
+    workflow_id: workflowId,
   });
 
   enqueueMessageCheck(targetJid);
 }
 
 /** Send a progress message to the main group (scoped to the same channel as sourceJid when provided). */
-function notifyMain(message: string, sourceJid?: string): void {
+function notifyMain(message: string, sourceJid?: string, workflowId?: string): void {
   const groups = getDeps().registeredGroups();
   const mainJid = findMainJid(groups, sourceJid);
   if (!mainJid) {
@@ -217,12 +218,13 @@ function notifyMain(message: string, sourceJid?: string): void {
     timestamp: now,
     is_from_me: true,
     is_bot_message: false,
+    workflow_id: workflowId,
   });
 
   getDeps().enqueueMessageCheck(mainJid);
 }
 
-function notifyGroupFolder(folder: string, senderName: string, message: string): void {
+function notifyGroupFolder(folder: string, senderName: string, message: string, workflowId?: string): void {
   const groups = getDeps().registeredGroups();
   const targetJid = findJidByFolder(folder, groups);
   if (!targetJid) {
@@ -241,6 +243,7 @@ function notifyGroupFolder(folder: string, senderName: string, message: string):
     timestamp: now,
     is_from_me: true,
     is_bot_message: false,
+    workflow_id: workflowId,
   });
   getDeps().enqueueMessageCheck(targetJid);
 }
@@ -276,6 +279,7 @@ function delegateTo(
     status: 'pending',
     result: null,
     outcome: null,
+    workflow_id: workflowId,
     created_at: now,
     updated_at: now,
   });
@@ -428,6 +432,7 @@ function applyTransition(
       notifyMain(
         `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派任务失败。`,
         workflow.source_jid,
+        workflow.id,
       );
       return;
     }
@@ -441,7 +446,7 @@ function applyTransition(
 
   // 5. Send notification
   if (transition.notify) {
-    notifyMain(renderTemplate(transition.notify, vars, roles), workflow.source_jid);
+    notifyMain(renderTemplate(transition.notify, vars, roles), workflow.source_jid, workflow.id);
   }
 
   // 6. Send card if specified
@@ -583,6 +588,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       notifyMain(
         `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
         opts.sourceJid,
+        workflowId,
       );
     }
 
@@ -647,6 +653,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     notifyMain(
       `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
       opts.sourceJid,
+      workflowId,
     );
   }
 
@@ -894,6 +901,7 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
           notifyMain(
             `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}`,
             workflow.source_jid,
+            workflow.id,
           );
         }
       });
@@ -908,6 +916,7 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
       notifyMain(
         `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}\n\n请确认是否继续。`,
         workflow.source_jid,
+        workflow.id,
       );
     }
   }
@@ -978,7 +987,7 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
     status: 'cancelled',
     current_delegation_id: '',
   });
-  notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`, workflow.source_jid);
+  notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`, workflow.source_jid, workflowId);
   return {};
 }
 
@@ -1004,6 +1013,7 @@ export function pauseWorkflow(workflowId: string): { error?: string } {
   notifyMain(
     `[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`,
     workflow.source_jid,
+    workflowId,
   );
   return {};
 }
@@ -1028,6 +1038,7 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`,
         workflow.source_jid,
+        workflowId,
       );
       return {};
     }
@@ -1040,6 +1051,7 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`,
         workflow.source_jid,
+        workflowId,
       );
       return {};
     }
@@ -1050,7 +1062,7 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
     status: workflow.paused_from,
     paused_from: null,
   });
-  notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`, workflow.source_jid);
+  notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`, workflow.source_jid, workflowId);
 
   // If resuming to a confirmation state, resend its card
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -1102,39 +1114,39 @@ export function handleCardAction(action: {
     case 'approve': {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = approveWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 确认部署失败: ${result.error}`, wfSourceJid);
+      if (result.error) notifyMain(`[操作失败] 确认部署失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'approve_dev': {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = approveWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 进入开发失败: ${result.error}`, wfSourceJid);
+      if (result.error) notifyMain(`[操作失败] 进入开发失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'pause': {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = pauseWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 中断流程失败: ${result.error}`, wfSourceJid);
+      if (result.error) notifyMain(`[操作失败] 中断流程失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'resume': {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = resumeWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 恢复流程失败: ${result.error}`, wfSourceJid);
+      if (result.error) notifyMain(`[操作失败] 恢复流程失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'request_revision': {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const revisionText = action.form_value?.revision_text;
-      if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。', wfSourceJid); break; }
+      if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。', wfSourceJid, action.workflow_id); break; }
       const result = reviseWorkflow(action.workflow_id, `[方案修改意见]\n\n${revisionText}`);
-      if (result.error) notifyMain(`[操作失败] 提交修改失败: ${result.error}`, wfSourceJid);
+      if (result.error) notifyMain(`[操作失败] 提交修改失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'cancel': {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = cancelWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`, wfSourceJid);
+      if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'memory_conflict_keep': {

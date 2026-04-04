@@ -927,6 +927,7 @@ export function writeDelegationSnapshot(
           task: d.task,
           status: d.status,
           result: d.result,
+          workflow_id: d.workflow_id || null,
           created_at: d.created_at,
           updated_at: d.updated_at,
         })),

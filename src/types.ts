@@ -55,6 +55,7 @@ export interface NewMessage {
   is_bot_message?: boolean;
   model?: string | null;
   model_reason?: string | null;
+  workflow_id?: string | null;
 }
 
 export interface ScheduledTask {
@@ -92,6 +93,7 @@ export interface Delegation {
   result: string | null;
   outcome: 'success' | 'failure' | null;
   requester_jid?: string | null;
+  workflow_id?: string | null;
   created_at: string;
   updated_at: string;
 }

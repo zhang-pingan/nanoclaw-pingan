@@ -1510,6 +1510,7 @@ export async function processTaskIpc(
       // Construct result message for the source (main) group
       const requesterJid = delegation.requester_jid;
       const requesterGroup = requesterJid ? registeredGroups[requesterJid] : null;
+      const delegationWorkflowId = (delegation as { workflow_id?: string | null }).workflow_id || undefined;
       const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
       const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const resultNow = Date.now().toString();
@@ -1523,6 +1524,7 @@ export async function processTaskIpc(
         timestamp: resultNow,
         is_from_me: true,
         is_bot_message: false,
+        workflow_id: delegationWorkflowId,
       });
 
       // Wake up the source (main) group's agent
@@ -1543,6 +1545,7 @@ export async function processTaskIpc(
             timestamp: resultNow,
             is_from_me: true,
             is_bot_message: false,
+            workflow_id: delegationWorkflowId,
           });
           deps.enqueueMessageCheck(requesterJid);
         } else {

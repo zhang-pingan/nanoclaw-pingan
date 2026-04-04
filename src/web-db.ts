@@ -18,6 +18,7 @@ export interface WebMessage {
   reply_to_id?: string | null;
   model?: string | null;
   model_reason?: string | null;
+  workflow_id?: string | null;
 }
 
 export function initWebDb(): void {
@@ -55,6 +56,10 @@ export function initWebDb(): void {
     db.exec('ALTER TABLE messages ADD COLUMN model_reason TEXT');
     logger.info('Web DB migrated: added model_reason column');
   }
+  if (!columns.some((c) => c.name === 'workflow_id')) {
+    db.exec('ALTER TABLE messages ADD COLUMN workflow_id TEXT');
+    logger.info('Web DB migrated: added workflow_id column');
+  }
 
   logger.info({ path: dbPath }, 'Web message DB initialized');
 }
@@ -71,13 +76,14 @@ export function storeWebMessage(msg: {
   reply_to_id?: string | null;
   model?: string | null;
   model_reason?: string | null;
+  workflow_id?: string | null;
 }): void {
   const isBotMessage = msg.is_bot_message ? 1 : 0;
 
   db.prepare(`
     INSERT INTO messages
-      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason, workflow_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chat_jid, id) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -87,7 +93,8 @@ export function storeWebMessage(msg: {
       is_bot_message = excluded.is_bot_message,
       reply_to_id = COALESCE(excluded.reply_to_id, messages.reply_to_id),
       model = COALESCE(excluded.model, messages.model),
-      model_reason = COALESCE(excluded.model_reason, messages.model_reason)
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason),
+      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id)
   `).run(
     msg.id,
     msg.chat_jid,
@@ -100,6 +107,7 @@ export function storeWebMessage(msg: {
     msg.reply_to_id || null,
     msg.model ?? null,
     msg.model_reason ?? null,
+    msg.workflow_id ?? null,
   );
 }
 

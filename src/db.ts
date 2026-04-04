@@ -242,6 +242,22 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  // Add workflow_id column to delegations (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE delegations ADD COLUMN workflow_id TEXT`);
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_delegations_workflow ON delegations(workflow_id)`);
+  } catch {
+    /* column already exists */
+  }
+
+  // Add workflow_id column to messages (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE messages ADD COLUMN workflow_id TEXT`);
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_messages_workflow ON messages(workflow_id)`);
+  } catch {
+    /* column already exists */
+  }
+
   // Structured memory store (new memory system, independent from file-based memory).
   database.exec(`
     CREATE TABLE IF NOT EXISTS memories (
@@ -499,8 +515,9 @@ export function storeMessage(msg: NewMessage): void {
       is_from_me,
       is_bot_message,
       model,
-      model_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      model_reason,
+      workflow_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id, chat_jid) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -509,7 +526,8 @@ export function storeMessage(msg: NewMessage): void {
       is_from_me = excluded.is_from_me,
       is_bot_message = excluded.is_bot_message,
       model = COALESCE(excluded.model, messages.model),
-      model_reason = COALESCE(excluded.model_reason, messages.model_reason)`,
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason),
+      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -521,6 +539,7 @@ export function storeMessage(msg: NewMessage): void {
     msg.is_bot_message ? 1 : 0,
     msg.model ?? null,
     msg.model_reason ?? null,
+    msg.workflow_id ?? null,
   );
 }
 
@@ -574,6 +593,7 @@ export function storeMessageDirect(msg: {
   is_bot_message?: boolean;
   model?: string | null;
   model_reason?: string | null;
+  workflow_id?: string | null;
 }): void {
   db.prepare(
     `INSERT INTO messages (
@@ -586,8 +606,9 @@ export function storeMessageDirect(msg: {
       is_from_me,
       is_bot_message,
       model,
-      model_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      model_reason,
+      workflow_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id, chat_jid) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -596,7 +617,8 @@ export function storeMessageDirect(msg: {
       is_from_me = excluded.is_from_me,
       is_bot_message = excluded.is_bot_message,
       model = COALESCE(excluded.model, messages.model),
-      model_reason = COALESCE(excluded.model_reason, messages.model_reason)`,
+      model_reason = COALESCE(excluded.model_reason, messages.model_reason),
+      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -608,6 +630,7 @@ export function storeMessageDirect(msg: {
     msg.is_bot_message ? 1 : 0,
     msg.model ?? null,
     msg.model_reason ?? null,
+    msg.workflow_id ?? null,
   );
 }
 
@@ -976,8 +999,8 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
 
 export function createDelegation(delegation: Delegation): void {
   db.prepare(
-    `INSERT INTO delegations (id, source_jid, source_folder, target_jid, target_folder, task, status, result, requester_jid, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO delegations (id, source_jid, source_folder, target_jid, target_folder, task, status, result, requester_jid, workflow_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     delegation.id,
     delegation.source_jid,
@@ -988,6 +1011,7 @@ export function createDelegation(delegation: Delegation): void {
     delegation.status,
     delegation.result,
     delegation.requester_jid,
+    delegation.workflow_id ?? null,
     delegation.created_at,
     delegation.updated_at,
   );
@@ -1214,9 +1238,21 @@ export function updateWorkflow(
 export function getWorkflowByDelegation(
   delegationId: string,
 ): Workflow | undefined {
+  // First try via delegation record's workflow_id (supports historical delegations)
+  const delegation = getDelegation(delegationId);
+  if (delegation?.workflow_id) {
+    return getWorkflow(delegation.workflow_id);
+  }
+  // Fallback: old records without workflow_id — match via current_delegation_id
   return db
     .prepare('SELECT * FROM workflows WHERE current_delegation_id = ?')
     .get(delegationId) as Workflow | undefined;
+}
+
+export function getDelegationsByWorkflow(workflowId: string): Delegation[] {
+  return db
+    .prepare('SELECT * FROM delegations WHERE workflow_id = ? ORDER BY created_at ASC')
+    .all(workflowId) as Delegation[];
 }
 
 export function getAllActiveWorkflows(): Workflow[] {
