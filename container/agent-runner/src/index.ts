@@ -77,6 +77,8 @@ class MessageStream {
   private waiting: (() => void) | null = null;
   private done = false;
 
+  get ended(): boolean { return this.done; }
+
   push(text: string): void {
     this.queue.push({
       type: 'user',
@@ -629,6 +631,9 @@ async function iterateQuery(
           queryId: identifiers.queryId,
         });
       }
+      // Result received — end the stream so the query exits naturally
+      // and the null completion marker can be emitted by the main loop.
+      stream.end();
     }
   }
 
@@ -640,7 +645,8 @@ async function iterateQuery(
  * Run a single query and stream results via writeOutput.
  * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
  * allowing agent teams subagents to run to completion.
- * Also pipes IPC messages into the stream during the query.
+ * Stream is ended when a result is received, causing the query
+ * to exit naturally and the null completion marker to be emitted.
  */
 async function runQuery(
   prompt: string,
@@ -673,6 +679,7 @@ async function runQuery(
       ipcPolling = false;
       return;
     }
+    if (stream.ended) return;
     const messages = drainIpcInput();
     for (const message of messages) {
       log(`Piping IPC message into active query (${message.text.length} chars)`);
