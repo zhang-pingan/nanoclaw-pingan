@@ -181,6 +181,95 @@ export interface Workflow {
   updated_at: string;
 }
 
+export interface WorkbenchTaskRecord {
+  id: string;
+  workflow_id: string;
+  source_jid: string;
+  title: string;
+  service: string;
+  workflow_type: string;
+  status: string;
+  current_stage: string;
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+  last_event_at: string | null;
+}
+
+export interface WorkbenchSubtaskRecord {
+  id: string;
+  task_id: string;
+  workflow_id: string;
+  delegation_id: string | null;
+  stage_key: string;
+  title: string;
+  role: string | null;
+  group_folder: string | null;
+  status: string;
+  input_summary: string | null;
+  output_summary: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
+
+export interface WorkbenchEventRecord {
+  id: string;
+  task_id: string;
+  subtask_id: string | null;
+  event_type: string;
+  title: string;
+  body: string | null;
+  raw_ref_type: string | null;
+  raw_ref_id: string | null;
+  created_at: string;
+}
+
+export interface WorkbenchArtifactRecord {
+  id: string;
+  task_id: string;
+  workflow_id: string;
+  artifact_type: string;
+  title: string;
+  path: string;
+  source_role: string | null;
+  created_at: string;
+}
+
+export interface WorkbenchApprovalRecord {
+  id: string;
+  task_id: string;
+  workflow_id: string;
+  status: string;
+  approval_type: string;
+  title: string;
+  body: string | null;
+  card_key: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface WorkbenchCommentRecord {
+  id: string;
+  task_id: string;
+  workflow_id: string;
+  author: string;
+  content: string;
+  created_at: string;
+}
+
+export interface WorkbenchContextAssetRecord {
+  id: string;
+  task_id: string;
+  workflow_id: string;
+  asset_type: string;
+  title: string;
+  path: string | null;
+  url: string | null;
+  note: string | null;
+  created_at: string;
+}
+
 export interface MemoryRecord {
   id: string;
   group_folder: string;

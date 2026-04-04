@@ -37,6 +37,13 @@ import {
   TemplateVars,
   WorkflowTypeConfig,
 } from './workflow-config.js';
+import {
+  syncWorkbenchOnDelegationCompleted,
+  syncWorkbenchOnDelegationCreated,
+  syncWorkbenchOnTransition,
+  syncWorkbenchOnWorkflowCreated,
+  syncWorkbenchOnWorkflowUpdated,
+} from './workbench-store.js';
 
 // -------------------------------------------------------
 // Role resolution — per trigger channel
@@ -385,6 +392,7 @@ function applyTransition(
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return;
 
+  const fromStatus = workflow.status;
   const mainFolder = getMainFolder(workflow.source_jid);
   const updates: Parameters<typeof updateWorkflow>[1] = {
     status: transition.target,
@@ -443,6 +451,16 @@ function applyTransition(
 
   // 4. Update workflow state
   updateWorkflow(workflow.id, updates);
+  if (updates.current_delegation_id) {
+    syncWorkbenchOnDelegationCreated(workflow.id, updates.current_delegation_id);
+  }
+  syncWorkbenchOnTransition(
+    workflow.id,
+    fromStatus,
+    transition.target,
+    updates.current_delegation_id,
+  );
+  syncWorkbenchOnWorkflowUpdated(workflow.id);
 
   // 5. Send notification
   if (transition.notify) {
@@ -538,6 +556,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       created_at: now,
       updated_at: now,
     });
+    syncWorkbenchOnWorkflowCreated(workflowId);
 
     const entryStateConfig = config.states[entryPoint.state];
 
@@ -577,6 +596,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           taskContent,
         );
         updateWorkflow(workflowId, { current_delegation_id: delegationId });
+        syncWorkbenchOnDelegationCreated(workflowId, delegationId);
       } catch (err) {
         logger.error({ err, workflowId }, 'Failed to delegate initial task');
         return {
@@ -613,6 +633,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     created_at: now,
     updated_at: now,
   });
+  syncWorkbenchOnWorkflowCreated(workflowId);
 
   // If entry state is a delegation state, delegate immediately
   if (
@@ -642,6 +663,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         taskContent,
       );
       updateWorkflow(workflowId, { current_delegation_id: delegationId });
+      syncWorkbenchOnDelegationCreated(workflowId, delegationId);
     } catch (err) {
       logger.error({ err, workflowId }, 'Failed to delegate initial task');
       return {
@@ -717,6 +739,79 @@ export function reviseWorkflow(
   return {};
 }
 
+export function retryWorkflowStage(
+  workflowId: string,
+  stageKey: string,
+): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+  if (workflow.status === 'paused') {
+    return { error: `流程 ${workflowId} 当前已暂停，请先恢复后再重跑` };
+  }
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config)
+    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+
+  const stateConfig = config.states[stageKey];
+  if (!stateConfig) {
+    return { error: `阶段 ${stageKey} 不存在` };
+  }
+  if (
+    stateConfig.type !== 'delegation' ||
+    !stateConfig.role ||
+    !stateConfig.skill
+  ) {
+    return { error: `阶段 ${stageKey} 不支持重跑` };
+  }
+
+  const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
+  if ('error' in rolesResult) return { error: rolesResult.error };
+  const roles = rolesResult.roles;
+
+  const targetFolder = roles[stateConfig.role];
+  if (!targetFolder) {
+    return { error: `角色 ${stateConfig.role} 未找到对应群组` };
+  }
+
+  try {
+    const vars = buildTemplateVars(workflow);
+    const taskContent = stateConfig.task_template
+      ? renderTemplate(stateConfig.task_template, vars, roles)
+      : '';
+    const delegationId = delegateTo(
+      targetFolder,
+      getMainFolder(workflow.source_jid),
+      workflowId,
+      stateConfig.skill,
+      taskContent,
+    );
+
+    const fromStatus = workflow.status;
+    updateWorkflow(workflowId, {
+      status: stageKey,
+      current_delegation_id: delegationId,
+      paused_from: null,
+    });
+    syncWorkbenchOnDelegationCreated(workflowId, delegationId);
+    syncWorkbenchOnTransition(workflowId, fromStatus, stageKey, delegationId);
+    syncWorkbenchOnWorkflowUpdated(
+      workflowId,
+      `已重跑阶段 ${config.status_labels[stageKey] || stageKey}`,
+    );
+    notifyMain(
+      `[流程重跑] 需求「${workflow.name}」(${workflowId}) 已重新执行阶段 ${config.status_labels[stageKey] || stageKey}，已委派 ${targetFolder}。`,
+      workflow.source_jid,
+      workflowId,
+    );
+    return {};
+  } catch (err) {
+    return {
+      error: `重跑阶段失败: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
 /**
  * Called when a delegation completes. Checks if it belongs to a workflow
  * and advances the state machine accordingly.
@@ -734,6 +829,7 @@ export function onDelegationComplete(delegationId: string): void {
 
   const delegation = getDelegation(delegationId);
   if (!delegation) return;
+  syncWorkbenchOnDelegationCompleted(workflow.id, delegationId);
 
   // If workflow is paused, delegation result is stored but state machine does not advance
   if (workflow.status === 'paused') {
@@ -987,6 +1083,8 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
     status: 'cancelled',
     current_delegation_id: '',
   });
+  syncWorkbenchOnTransition(workflowId, workflow.status, 'cancelled');
+  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已取消');
   notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`, workflow.source_jid, workflowId);
   return {};
 }
@@ -1010,6 +1108,8 @@ export function pauseWorkflow(workflowId: string): { error?: string } {
     status: 'paused',
     paused_from: workflow.status,
   });
+  syncWorkbenchOnTransition(workflowId, workflow.status, 'paused');
+  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已暂停');
   notifyMain(
     `[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`,
     workflow.source_jid,
@@ -1034,6 +1134,7 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
         status: workflow.paused_from,
         paused_from: null,
       });
+      syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
       onDelegationComplete(workflow.current_delegation_id);
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`,
@@ -1048,6 +1149,8 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
         status: workflow.paused_from,
         paused_from: null,
       });
+      syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
+      syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复，委派仍在执行');
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`,
         workflow.source_jid,
@@ -1062,6 +1165,8 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
     status: workflow.paused_from,
     paused_from: null,
   });
+  syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
+  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复');
   notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`, workflow.source_jid, workflowId);
 
   // If resuming to a confirmation state, resend its card

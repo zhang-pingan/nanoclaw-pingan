@@ -23,6 +23,13 @@ import {
   RegisteredGroup,
   ScheduledTask,
   TaskRunLog,
+  WorkbenchApprovalRecord,
+  WorkbenchArtifactRecord,
+  WorkbenchCommentRecord,
+  WorkbenchContextAssetRecord,
+  WorkbenchEventRecord,
+  WorkbenchSubtaskRecord,
+  WorkbenchTaskRecord,
   Workflow,
 } from './types.js';
 
@@ -191,6 +198,106 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status);
     CREATE INDEX IF NOT EXISTS idx_workflows_delegation ON workflows(current_delegation_id);
+  `);
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS workbench_tasks (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL UNIQUE,
+      source_jid TEXT NOT NULL,
+      title TEXT NOT NULL,
+      service TEXT NOT NULL,
+      workflow_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      current_stage TEXT NOT NULL,
+      summary TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_event_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_workbench_tasks_status ON workbench_tasks(status, updated_at);
+
+    CREATE TABLE IF NOT EXISTS workbench_subtasks (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      delegation_id TEXT,
+      stage_key TEXT NOT NULL,
+      title TEXT NOT NULL,
+      role TEXT,
+      group_folder TEXT,
+      status TEXT NOT NULL,
+      input_summary TEXT,
+      output_summary TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workbench_subtasks_task ON workbench_subtasks(task_id, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_workbench_subtasks_workflow_stage ON workbench_subtasks(workflow_id, stage_key);
+
+    CREATE TABLE IF NOT EXISTS workbench_events (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      event_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      raw_ref_type TEXT,
+      raw_ref_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workbench_events_task ON workbench_events(task_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS workbench_artifacts (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      artifact_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      path TEXT NOT NULL,
+      source_role TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workbench_artifacts_task ON workbench_artifacts(task_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS workbench_approvals (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      approval_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      card_key TEXT,
+      created_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_workbench_approvals_task ON workbench_approvals(task_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workbench_approvals_status ON workbench_approvals(status, created_at);
+
+    CREATE TABLE IF NOT EXISTS workbench_comments (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      author TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workbench_comments_task ON workbench_comments(task_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS workbench_context_assets (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      asset_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      path TEXT,
+      url TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workbench_assets_task ON workbench_context_assets(task_id, created_at);
   `);
 
   // Add ask_questions table if it doesn't exist (human-in-the-loop questions)
@@ -1275,6 +1382,315 @@ export function deleteWorkflow(id: string): void {
 
 export function deleteAllWorkflows(): void {
   db.prepare('DELETE FROM workflows').run();
+}
+
+// --- Workbench accessors ---
+
+export function createWorkbenchTask(record: WorkbenchTaskRecord): void {
+  db.prepare(
+    `INSERT INTO workbench_tasks (
+      id, workflow_id, source_jid, title, service, workflow_type, status,
+      current_stage, summary, created_at, updated_at, last_event_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.workflow_id,
+    record.source_jid,
+    record.title,
+    record.service,
+    record.workflow_type,
+    record.status,
+    record.current_stage,
+    record.summary,
+    record.created_at,
+    record.updated_at,
+    record.last_event_at,
+  );
+}
+
+export function getWorkbenchTaskById(id: string): WorkbenchTaskRecord | undefined {
+  return db.prepare('SELECT * FROM workbench_tasks WHERE id = ?').get(id) as
+    | WorkbenchTaskRecord
+    | undefined;
+}
+
+export function getWorkbenchTaskByWorkflowId(
+  workflowId: string,
+): WorkbenchTaskRecord | undefined {
+  return db.prepare('SELECT * FROM workbench_tasks WHERE workflow_id = ?').get(workflowId) as
+    | WorkbenchTaskRecord
+    | undefined;
+}
+
+export function listWorkbenchTasks(): WorkbenchTaskRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_tasks ORDER BY updated_at DESC')
+    .all() as WorkbenchTaskRecord[];
+}
+
+export function updateWorkbenchTask(
+  id: string,
+  updates: Partial<
+    Pick<
+      WorkbenchTaskRecord,
+      'status' | 'current_stage' | 'summary' | 'updated_at' | 'last_event_at' | 'title'
+    >
+  >,
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.current_stage !== undefined) {
+    fields.push('current_stage = ?');
+    values.push(updates.current_stage);
+  }
+  if (updates.summary !== undefined) {
+    fields.push('summary = ?');
+    values.push(updates.summary);
+  }
+  if (updates.updated_at !== undefined) {
+    fields.push('updated_at = ?');
+    values.push(updates.updated_at);
+  }
+  if (updates.last_event_at !== undefined) {
+    fields.push('last_event_at = ?');
+    values.push(updates.last_event_at);
+  }
+  if (updates.title !== undefined) {
+    fields.push('title = ?');
+    values.push(updates.title);
+  }
+
+  if (fields.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE workbench_tasks SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+}
+
+export function createWorkbenchSubtask(record: WorkbenchSubtaskRecord): void {
+  db.prepare(
+    `INSERT INTO workbench_subtasks (
+      id, task_id, workflow_id, delegation_id, stage_key, title, role, group_folder,
+      status, input_summary, output_summary, started_at, finished_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.task_id,
+    record.workflow_id,
+    record.delegation_id,
+    record.stage_key,
+    record.title,
+    record.role,
+    record.group_folder,
+    record.status,
+    record.input_summary,
+    record.output_summary,
+    record.started_at,
+    record.finished_at,
+    record.updated_at,
+  );
+}
+
+export function getWorkbenchSubtaskByStage(
+  taskId: string,
+  stageKey: string,
+): WorkbenchSubtaskRecord | undefined {
+  return db
+    .prepare('SELECT * FROM workbench_subtasks WHERE task_id = ? AND stage_key = ?')
+    .get(taskId, stageKey) as WorkbenchSubtaskRecord | undefined;
+}
+
+export function listWorkbenchSubtasksByTask(taskId: string): WorkbenchSubtaskRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_subtasks WHERE task_id = ? ORDER BY updated_at ASC')
+    .all(taskId) as WorkbenchSubtaskRecord[];
+}
+
+export function updateWorkbenchSubtask(
+  id: string,
+  updates: Partial<
+    Pick<
+      WorkbenchSubtaskRecord,
+      | 'delegation_id'
+      | 'group_folder'
+      | 'status'
+      | 'input_summary'
+      | 'output_summary'
+      | 'started_at'
+      | 'finished_at'
+      | 'updated_at'
+    >
+  >,
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.delegation_id !== undefined) {
+    fields.push('delegation_id = ?');
+    values.push(updates.delegation_id);
+  }
+  if (updates.group_folder !== undefined) {
+    fields.push('group_folder = ?');
+    values.push(updates.group_folder);
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.input_summary !== undefined) {
+    fields.push('input_summary = ?');
+    values.push(updates.input_summary);
+  }
+  if (updates.output_summary !== undefined) {
+    fields.push('output_summary = ?');
+    values.push(updates.output_summary);
+  }
+  if (updates.started_at !== undefined) {
+    fields.push('started_at = ?');
+    values.push(updates.started_at);
+  }
+  if (updates.finished_at !== undefined) {
+    fields.push('finished_at = ?');
+    values.push(updates.finished_at);
+  }
+  if (updates.updated_at !== undefined) {
+    fields.push('updated_at = ?');
+    values.push(updates.updated_at);
+  }
+
+  if (fields.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE workbench_subtasks SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+}
+
+export function createWorkbenchEvent(record: WorkbenchEventRecord): void {
+  db.prepare(
+    `INSERT INTO workbench_events (
+      id, task_id, subtask_id, event_type, title, body, raw_ref_type, raw_ref_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.task_id,
+    record.subtask_id,
+    record.event_type,
+    record.title,
+    record.body,
+    record.raw_ref_type,
+    record.raw_ref_id,
+    record.created_at,
+  );
+}
+
+export function listWorkbenchEventsByTask(taskId: string): WorkbenchEventRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_events WHERE task_id = ? ORDER BY created_at DESC')
+    .all(taskId) as WorkbenchEventRecord[];
+}
+
+export function createWorkbenchArtifact(record: WorkbenchArtifactRecord): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO workbench_artifacts (
+      id, task_id, workflow_id, artifact_type, title, path, source_role, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.task_id,
+    record.workflow_id,
+    record.artifact_type,
+    record.title,
+    record.path,
+    record.source_role,
+    record.created_at,
+  );
+}
+
+export function listWorkbenchArtifactsByTask(taskId: string): WorkbenchArtifactRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_artifacts WHERE task_id = ? ORDER BY created_at DESC')
+    .all(taskId) as WorkbenchArtifactRecord[];
+}
+
+export function createWorkbenchApproval(record: WorkbenchApprovalRecord): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO workbench_approvals (
+      id, task_id, workflow_id, status, approval_type, title, body, card_key, created_at, resolved_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.task_id,
+    record.workflow_id,
+    record.status,
+    record.approval_type,
+    record.title,
+    record.body,
+    record.card_key,
+    record.created_at,
+    record.resolved_at,
+  );
+}
+
+export function listWorkbenchApprovalsByTask(taskId: string): WorkbenchApprovalRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_approvals WHERE task_id = ? ORDER BY created_at DESC')
+    .all(taskId) as WorkbenchApprovalRecord[];
+}
+
+export function resolveWorkbenchApproval(id: string, resolvedAt: string): void {
+  db.prepare(
+    `UPDATE workbench_approvals SET status = 'resolved', resolved_at = ? WHERE id = ?`,
+  ).run(resolvedAt, id);
+}
+
+export function createWorkbenchComment(record: WorkbenchCommentRecord): void {
+  db.prepare(
+    `INSERT INTO workbench_comments (
+      id, task_id, workflow_id, author, content, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.task_id,
+    record.workflow_id,
+    record.author,
+    record.content,
+    record.created_at,
+  );
+}
+
+export function listWorkbenchCommentsByTask(taskId: string): WorkbenchCommentRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_comments WHERE task_id = ? ORDER BY created_at DESC')
+    .all(taskId) as WorkbenchCommentRecord[];
+}
+
+export function createWorkbenchContextAsset(record: WorkbenchContextAssetRecord): void {
+  db.prepare(
+    `INSERT INTO workbench_context_assets (
+      id, task_id, workflow_id, asset_type, title, path, url, note, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.task_id,
+    record.workflow_id,
+    record.asset_type,
+    record.title,
+    record.path,
+    record.url,
+    record.note,
+    record.created_at,
+  );
+}
+
+export function listWorkbenchContextAssetsByTask(taskId: string): WorkbenchContextAssetRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_context_assets WHERE task_id = ? ORDER BY created_at DESC')
+    .all(taskId) as WorkbenchContextAssetRecord[];
 }
 
 // --- Structured memory accessors ---

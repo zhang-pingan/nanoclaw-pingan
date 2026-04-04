@@ -4,6 +4,7 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import { AgentStatusInfo } from '../types.js';
+import type { WorkbenchRealtimeEvent } from '../workbench-events.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 import { GROUPS_DIR, DATA_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
@@ -18,6 +19,15 @@ import {
   getWebMessagesBefore,
   deleteWebMessagesByIds,
 } from '../web-db.js';
+import {
+  addWorkbenchAsset,
+  addWorkbenchComment,
+  createWorkbenchTask,
+  getWorkbenchTaskDetail,
+  listWorkbenchTasks,
+  retryWorkbenchSubtask,
+  runWorkbenchTaskAction,
+} from '../workbench.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -46,7 +56,16 @@ interface IncomingMsg {
 }
 
 interface OutgoingMsg {
-  type: 'message' | 'typing' | 'groups' | 'error' | 'connected' | 'card' | 'agent_status' | 'file';
+  type:
+    | 'message'
+    | 'typing'
+    | 'groups'
+    | 'error'
+    | 'connected'
+    | 'card'
+    | 'agent_status'
+    | 'file'
+    | 'workbench_event';
   [key: string]: unknown;
 }
 
@@ -342,6 +361,27 @@ class WebChannel {
       }
       if (pathname === '/api/workflow/create-options') {
         return this.apiGetWorkflowCreateOptions(res);
+      }
+      if (pathname === '/api/workbench/tasks') {
+        return this.apiGetWorkbenchTasks(res);
+      }
+      if (pathname === '/api/workbench/task' && req.method === 'GET') {
+        return this.apiGetWorkbenchTask(reqUrl, res);
+      }
+      if (pathname === '/api/workbench/task' && req.method === 'POST') {
+        return this.apiCreateWorkbenchTask(req, res);
+      }
+      if (pathname === '/api/workbench/task/action' && req.method === 'POST') {
+        return this.apiWorkbenchTaskAction(req, res);
+      }
+      if (pathname === '/api/workbench/task/comment' && req.method === 'POST') {
+        return this.apiWorkbenchTaskComment(req, res);
+      }
+      if (pathname === '/api/workbench/task/asset' && req.method === 'POST') {
+        return this.apiWorkbenchTaskAsset(req, res);
+      }
+      if (pathname === '/api/workbench/subtask/retry' && req.method === 'POST') {
+        return this.apiWorkbenchSubtaskRetry(req, res);
       }
       if (pathname === '/api/card-action' && req.method === 'POST') {
         return this.apiCardAction(req, res);
@@ -1076,6 +1116,21 @@ class WebChannel {
     }
   }
 
+  broadcastWorkbenchEvent(event: WorkbenchRealtimeEvent): void {
+    const payload = JSON.stringify({
+      type: 'workbench_event',
+      event,
+    } satisfies OutgoingMsg);
+
+    for (const clients of this.clients.values()) {
+      for (const client of clients) {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+    }
+  }
+
   private async apiGetWorkflows(res: http.ServerResponse): Promise<void> {
     const { getAllWorkflows } = await import('../db.js');
     const workflows = getAllWorkflows();
@@ -1187,6 +1242,245 @@ class WebChannel {
         requirements_by_service: requirementsByService,
       }),
     );
+  }
+
+  private async apiGetWorkbenchTasks(res: http.ServerResponse): Promise<void> {
+    const tasks = listWorkbenchTasks();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ tasks }));
+  }
+
+  private async apiGetWorkbenchTask(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const id = reqUrl.searchParams.get('id') || '';
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing task id' }));
+      return;
+    }
+
+    const detail = getWorkbenchTaskDetail(id);
+    if (!detail) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Task not found' }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(detail));
+  }
+
+  private async apiCreateWorkbenchTask(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      name?: string;
+      service?: string;
+      source_jid?: string;
+      start_from?: string;
+      workflow_type?: string;
+      deliverable?: string;
+    };
+
+    if (
+      !data.name ||
+      !data.service ||
+      !data.source_jid ||
+      !data.start_from ||
+      !data.workflow_type
+    ) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error:
+            'name, service, source_jid, start_from, workflow_type required',
+        }),
+      );
+      return;
+    }
+
+    const result = createWorkbenchTask({
+      name: data.name,
+      service: data.service,
+      sourceJid: data.source_jid,
+      startFrom: data.start_from,
+      workflowType: data.workflow_type,
+      deliverable: data.deliverable,
+    });
+
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+
+    const detail = getWorkbenchTaskDetail(result.workflowId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        workflow_id: result.workflowId,
+        task: detail?.task || null,
+      }),
+    );
+  }
+
+  private async apiWorkbenchTaskAction(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      task_id?: string;
+      action?: 'approve' | 'revise' | 'pause' | 'resume' | 'cancel';
+      revision_text?: string;
+    };
+
+    if (!data.task_id || !data.action) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'task_id and action required' }));
+      return;
+    }
+
+    const result = runWorkbenchTaskAction({
+      taskId: data.task_id,
+      action: data.action,
+      revisionText: data.revision_text,
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+
+    const detail = getWorkbenchTaskDetail(data.task_id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, task: detail?.task || null }));
+  }
+
+  private async apiWorkbenchTaskComment(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+    const data = body as { task_id?: string; author?: string; content?: string };
+    if (!data.task_id || !data.content?.trim()) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'task_id and content required' }));
+      return;
+    }
+    const result = addWorkbenchComment({
+      taskId: data.task_id,
+      author: data.author?.trim() || 'Web User',
+      content: data.content,
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  private async apiWorkbenchTaskAsset(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+    const data = body as {
+      task_id?: string;
+      title?: string;
+      asset_type?: string;
+      path?: string;
+      url?: string;
+      note?: string;
+    };
+    if (!data.task_id || !data.title?.trim() || !data.asset_type?.trim()) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'task_id, title, asset_type required' }));
+      return;
+    }
+    const result = addWorkbenchAsset({
+      taskId: data.task_id,
+      title: data.title.trim(),
+      assetType: data.asset_type.trim(),
+      path: data.path,
+      url: data.url,
+      note: data.note,
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  private async apiWorkbenchSubtaskRetry(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+    const data = body as { task_id?: string; subtask_id?: string };
+    if (!data.task_id || !data.subtask_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'task_id and subtask_id required' }));
+      return;
+    }
+    const result = retryWorkbenchSubtask({
+      taskId: data.task_id,
+      subtaskId: data.subtask_id,
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   private async apiCardAction(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

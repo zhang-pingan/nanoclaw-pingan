@@ -17,6 +17,7 @@ var modelSyncTimer = null;
 
 var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
+var workbenchScreen = document.getElementById("workbench-screen");
 var memoryManagementScreen = document.getElementById("memory-management-screen");
 var memoryGroupsList = document.getElementById("memory-groups-list");
 var memoryGroupTitle = document.getElementById("memory-group-title");
@@ -75,6 +76,24 @@ var openWorkflowsBtn = document.getElementById("open-workflows");
 var closeWorkflowsBtn = document.getElementById("close-workflows");
 var refreshWorkflowsBtn = document.getElementById("refresh-workflows");
 var deleteAllWorkflowsBtn = document.getElementById("delete-all-workflows");
+var workbenchTaskList = document.getElementById("workbench-task-list");
+var workbenchRefreshBtn = document.getElementById("workbench-refresh-btn");
+var workbenchCreateTaskBtn = document.getElementById("workbench-create-task-btn");
+var workbenchDetailEmpty = document.getElementById("workbench-detail-empty");
+var workbenchTaskDetail = document.getElementById("workbench-task-detail");
+var workbenchTaskTitle = document.getElementById("workbench-task-title");
+var workbenchTaskMeta = document.getElementById("workbench-task-meta");
+var workbenchTaskActions = document.getElementById("workbench-task-actions");
+var workbenchSubtasks = document.getElementById("workbench-subtasks");
+var workbenchApprovals = document.getElementById("workbench-approvals");
+var workbenchArtifacts = document.getElementById("workbench-artifacts");
+var workbenchAssets = document.getElementById("workbench-assets");
+var workbenchAddLinkBtn = document.getElementById("workbench-add-link-btn");
+var workbenchAddFileBtn = document.getElementById("workbench-add-file-btn");
+var workbenchComments = document.getElementById("workbench-comments");
+var workbenchCommentInput = document.getElementById("workbench-comment-input");
+var workbenchCommentSubmit = document.getElementById("workbench-comment-submit");
+var workbenchTimeline = document.getElementById("workbench-timeline");
 var connectionStatus = document.getElementById("connection-status");
 var chatHeader = document.getElementById("chat-header");
 var chatGroupName = document.getElementById("chat-group-name");
@@ -115,6 +134,10 @@ var memoryStatusFilterValue = "all";
 var memoryDoctorReport = null;
 var memoryDoctorMap = {};
 var memoryMetricsSummary = null;
+var workbenchTasks = [];
+var currentWorkbenchDetail = null;
+var currentWorkbenchTaskId = "";
+var workbenchRefreshInterval = null;
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -906,8 +929,12 @@ function setPrimaryNav(navKey) {
   primaryNavItems.forEach((item) => {
     item.classList.toggle("active", item.getAttribute("data-nav-key") === navKey);
   });
+  const showWorkbench = navKey === "workbench";
   const showWorkspace = navKey === "agent-groups";
   const showMemoryManagement = navKey === "memory-management";
+  if (workbenchScreen) {
+    workbenchScreen.classList.toggle("active", showWorkbench);
+  }
   if (workspace) {
     workspace.classList.toggle("active", showWorkspace);
   }
@@ -919,6 +946,15 @@ function setPrimaryNav(navKey) {
     renderMemoryList();
     loadMemories();
   }
+  if (showWorkbench) {
+    loadWorkbenchTasks();
+    if (workbenchRefreshInterval) clearInterval(workbenchRefreshInterval);
+    workbenchRefreshInterval = setInterval(() => {
+      if (activePrimaryNavKey === "workbench") {
+        loadWorkbenchTasks(currentWorkbenchTaskId, false);
+      }
+    }, 5000);
+  }
 
   if (!showWorkspace) {
     schedulersPanel.classList.remove("open");
@@ -928,6 +964,10 @@ function setPrimaryNav(navKey) {
       clearInterval(agentStatusInterval);
       agentStatusInterval = null;
     }
+  }
+  if (!showWorkbench && workbenchRefreshInterval) {
+    clearInterval(workbenchRefreshInterval);
+    workbenchRefreshInterval = null;
   }
 }
 
@@ -1921,6 +1961,710 @@ async function deleteAllWorkflows() {
   }
 }
 
+async function loadWorkbenchTasks(preferredTaskId, autoSelect = true) {
+  try {
+    const res = await apiFetch("/api/workbench/tasks");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    workbenchTasks = Array.isArray(data.tasks) ? data.tasks : [];
+    renderWorkbenchTaskList();
+
+    const nextTaskId = preferredTaskId && workbenchTasks.some((task) => task.id === preferredTaskId)
+      ? preferredTaskId
+      : currentWorkbenchTaskId && workbenchTasks.some((task) => task.id === currentWorkbenchTaskId)
+        ? currentWorkbenchTaskId
+        : autoSelect && workbenchTasks[0]
+          ? workbenchTasks[0].id
+          : "";
+
+    if (nextTaskId) {
+      loadWorkbenchTaskDetail(nextTaskId);
+    } else {
+      currentWorkbenchTaskId = "";
+      currentWorkbenchDetail = null;
+      workbenchTaskDetail.classList.add("hidden");
+      workbenchDetailEmpty.classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error("Failed to load workbench tasks:", err);
+    workbenchTaskList.innerHTML = `<div class="workbench-empty">任务加载失败</div>`;
+  }
+}
+
+function renderWorkbenchTaskList() {
+  workbenchTaskList.innerHTML = "";
+  if (workbenchTasks.length === 0) {
+    workbenchTaskList.innerHTML = `<div class="workbench-empty">暂无任务，点击“新建任务”开始。</div>`;
+    return;
+  }
+
+  for (const task of workbenchTasks) {
+    const el = document.createElement("div");
+    el.className = `workbench-task-item${task.id === currentWorkbenchTaskId ? " active" : ""}`;
+    el.innerHTML = `
+      <div class="workbench-task-title">${escapeHtml(task.title)}</div>
+      <div class="workbench-task-badges">
+        <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
+        <span class="workbench-badge">${escapeHtml(task.service)}</span>
+        ${task.pending_approval ? '<span class="workbench-badge">待审批</span>' : ""}
+      </div>
+      <div class="workbench-task-snippet">
+        当前阶段：${escapeHtml(task.current_stage_label || task.current_stage)}<br />
+        ${task.branch ? `分支：${escapeHtml(task.branch)}` : "尚未生成开发分支"}
+      </div>
+    `;
+    el.addEventListener("click", () => loadWorkbenchTaskDetail(task.id));
+    workbenchTaskList.appendChild(el);
+  }
+}
+
+async function loadWorkbenchTaskDetail(taskId) {
+  if (!taskId) return;
+  try {
+    const res = await apiFetch(`/api/workbench/task?id=${encodeURIComponent(taskId)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const detail = await res.json();
+    currentWorkbenchTaskId = taskId;
+    renderWorkbenchTaskList();
+    renderWorkbenchTaskDetail(detail);
+  } catch (err) {
+    console.error("Failed to load workbench task detail:", err);
+    alert("任务详情加载失败");
+  }
+}
+
+function renderWorkbenchTaskDetail(detail) {
+  const task = detail.task;
+  if (!task) return;
+  currentWorkbenchDetail = detail;
+
+  workbenchDetailEmpty.classList.add("hidden");
+  workbenchTaskDetail.classList.remove("hidden");
+  workbenchTaskTitle.textContent = task.title;
+  workbenchTaskMeta.innerHTML = `
+    <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
+    <span class="workbench-badge">${escapeHtml(task.service)}</span>
+    <span class="workbench-badge">${escapeHtml(task.workflow_type)}</span>
+    ${task.branch ? `<span class="workbench-badge">${escapeHtml(task.branch)}</span>` : ""}
+    ${task.deliverable ? `<span class="workbench-badge">${escapeHtml(task.deliverable)}</span>` : ""}
+    ${task.round > 0 ? `<span class="workbench-badge">Round ${escapeHtml(String(task.round))}</span>` : ""}
+  `;
+
+  renderWorkbenchActions(task, detail.approvals || []);
+  renderWorkbenchSubtasks(detail.subtasks || []);
+  renderWorkbenchApprovals(detail.approvals || [], task.id);
+  renderWorkbenchArtifacts(detail.artifacts || []);
+  renderWorkbenchAssets(detail.assets || []);
+  renderWorkbenchComments(detail.comments || []);
+  renderWorkbenchTimeline(detail.timeline || []);
+}
+
+function renderWorkbenchActions(task, approvals) {
+  workbenchTaskActions.innerHTML = "";
+  const buttons = [];
+  if (approvals.length > 0) {
+    buttons.push({ label: "通过", action: "approve" });
+    if (approvals.some((item) => item.action_mode === "approve_or_revise")) {
+      buttons.push({ label: "驳回并修改", action: "revise" });
+    }
+  }
+  if (task.status === "paused") buttons.push({ label: "恢复", action: "resume" });
+  else if (!TERMINAL_STATUSES.includes(task.status)) buttons.push({ label: "暂停", action: "pause" });
+  if (!TERMINAL_STATUSES.includes(task.status)) buttons.push({ label: "取消", action: "cancel" });
+
+  buttons.forEach((item) => {
+    const btn = document.createElement("button");
+    btn.className = item.action === "cancel" ? "btn-ghost" : "btn-primary";
+    btn.textContent = item.label;
+    btn.addEventListener("click", () => triggerWorkbenchAction(task.id, item.action));
+    workbenchTaskActions.appendChild(btn);
+  });
+}
+
+function renderWorkbenchSubtasks(subtasks) {
+  workbenchSubtasks.innerHTML = "";
+  if (subtasks.length === 0) {
+    workbenchSubtasks.innerHTML = `<div class="workbench-empty">暂无阶段数据</div>`;
+    return;
+  }
+  subtasks.forEach((item) => {
+    const el = document.createElement("div");
+    el.className = `workbench-subtask-item ${item.status}`;
+    el.innerHTML = `
+      <div class="workbench-item-row">
+        <div class="workbench-item-title">${escapeHtml(item.stage_label || item.title)}</div>
+        <span class="workbench-badge">${escapeHtml(item.status)}</span>
+      </div>
+      <div class="workbench-item-body">
+        ${item.target_folder ? `执行群组：${escapeHtml(item.target_folder)}\n` : ""}
+        ${item.result ? `结果摘要：${escapeHtml(item.result)}` : "等待执行或审批推进"}
+      </div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "workbench-task-actions";
+    if (item.role) {
+      const retryBtn = document.createElement("button");
+      retryBtn.className = "btn-ghost";
+      retryBtn.textContent = "重跑";
+      retryBtn.addEventListener("click", () => triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, item.id));
+      actions.appendChild(retryBtn);
+      el.appendChild(actions);
+    }
+    workbenchSubtasks.appendChild(el);
+  });
+}
+
+function renderWorkbenchApprovals(approvals, taskId) {
+  workbenchApprovals.innerHTML = "";
+  if (approvals.length === 0) {
+    workbenchApprovals.innerHTML = `<div class="workbench-empty">当前没有待审批项</div>`;
+    return;
+  }
+  approvals.forEach((item) => {
+    const el = document.createElement("div");
+    el.className = "workbench-approval-item";
+    el.innerHTML = `
+      <div class="workbench-item-row">
+        <div class="workbench-item-title">${escapeHtml(item.title)}</div>
+        <span class="workbench-badge">pending</span>
+      </div>
+      <div class="workbench-item-body">${escapeHtml(item.body)}</div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "workbench-task-actions";
+    const approveBtn = document.createElement("button");
+    approveBtn.className = "btn-primary";
+    approveBtn.textContent = "通过";
+    approveBtn.addEventListener("click", () => triggerWorkbenchAction(taskId, "approve"));
+    actions.appendChild(approveBtn);
+    if (item.action_mode === "approve_or_revise") {
+      const reviseBtn = document.createElement("button");
+      reviseBtn.className = "btn-ghost";
+      reviseBtn.textContent = "驳回并修改";
+      reviseBtn.addEventListener("click", () => triggerWorkbenchAction(taskId, "revise"));
+      actions.appendChild(reviseBtn);
+    }
+    el.appendChild(actions);
+    workbenchApprovals.appendChild(el);
+  });
+}
+
+function renderWorkbenchArtifacts(artifacts) {
+  workbenchArtifacts.innerHTML = "";
+  if (artifacts.length === 0) {
+    workbenchArtifacts.innerHTML = `<div class="workbench-empty">暂无产出物</div>`;
+    return;
+  }
+  artifacts.forEach((item) => {
+    const el = document.createElement("div");
+    el.className = "workbench-artifact-item";
+    el.innerHTML = `
+      <div class="workbench-item-row">
+        <div class="workbench-item-title">${escapeHtml(item.title)}</div>
+        <span class="workbench-badge">${item.exists ? "ready" : "missing"}</span>
+      </div>
+      <div class="workbench-item-body">${escapeHtml(item.path)}</div>
+    `;
+    workbenchArtifacts.appendChild(el);
+  });
+}
+
+function renderWorkbenchAssets(assets) {
+  workbenchAssets.innerHTML = "";
+  if (assets.length === 0) {
+    workbenchAssets.innerHTML = `<div class="workbench-empty">暂无上下文资产</div>`;
+    return;
+  }
+  assets.forEach((item) => {
+    const el = document.createElement("div");
+    el.className = "workbench-artifact-item";
+    const href = item.url || (item.path ? `file://${item.path}` : "");
+    el.innerHTML = `
+      <div class="workbench-item-row">
+        <div class="workbench-item-title">${escapeHtml(item.title)}</div>
+        <span class="workbench-badge">${escapeHtml(item.asset_type)}</span>
+      </div>
+      <div class="workbench-item-body">${escapeHtml(item.note || item.path || item.url || "")}</div>
+    `;
+    if (href) {
+      el.style.cursor = "pointer";
+      el.addEventListener("click", () => window.open(href));
+    }
+    workbenchAssets.appendChild(el);
+  });
+}
+
+function renderWorkbenchComments(comments) {
+  workbenchComments.innerHTML = "";
+  if (comments.length === 0) {
+    workbenchComments.innerHTML = `<div class="workbench-empty">暂无备注评论</div>`;
+    return;
+  }
+  comments.forEach((item) => {
+    const el = document.createElement("div");
+    el.className = "workbench-event-item";
+    el.innerHTML = `
+      <div class="workbench-item-row">
+        <div class="workbench-item-title">${escapeHtml(item.author)}</div>
+        <span class="workbench-badge">${escapeHtml(new Date(item.created_at).toLocaleString())}</span>
+      </div>
+      <div class="workbench-item-body">${escapeHtml(item.content)}</div>
+    `;
+    workbenchComments.appendChild(el);
+  });
+}
+
+function renderWorkbenchTimeline(timeline) {
+  workbenchTimeline.innerHTML = "";
+  if (timeline.length === 0) {
+    workbenchTimeline.innerHTML = `<div class="workbench-empty">暂无执行记录</div>`;
+    return;
+  }
+  timeline.forEach((item) => {
+    const el = document.createElement("div");
+    el.className = "workbench-event-item";
+    el.innerHTML = `
+      <div class="workbench-item-row">
+        <div class="workbench-item-title">${escapeHtml(item.title)}</div>
+        <span class="workbench-badge">${escapeHtml(new Date(item.created_at).toLocaleString())}</span>
+      </div>
+      <div class="workbench-item-body">${escapeHtml(item.body || "")}</div>
+    `;
+    workbenchTimeline.appendChild(el);
+  });
+}
+
+async function triggerWorkbenchAction(taskId, action) {
+  let revisionText = "";
+  if (action === "revise") {
+    revisionText = window.prompt("请输入修改意见", "") || "";
+    if (!revisionText.trim()) return;
+  }
+  try {
+    const res = await apiFetch("/api/workbench/task/action", {
+      method: "POST",
+      body: JSON.stringify({
+        task_id: taskId,
+        action,
+        revision_text: revisionText,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await loadWorkbenchTasks(taskId);
+  } catch (err) {
+    console.error("Failed to run workbench action:", err);
+    alert(err.message || "任务操作失败");
+  }
+}
+
+async function triggerWorkbenchSubtaskRetry(taskId, subtaskId) {
+  try {
+    const res = await apiFetch("/api/workbench/subtask/retry", {
+      method: "POST",
+      body: JSON.stringify({ task_id: taskId, subtask_id: subtaskId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  } catch (err) {
+    console.error("Failed to retry subtask:", err);
+    alert(err.message || "子任务重跑失败");
+  }
+}
+
+async function submitWorkbenchComment() {
+  if (!currentWorkbenchTaskId || !workbenchCommentInput.value.trim()) return;
+  try {
+    const res = await apiFetch("/api/workbench/task/comment", {
+      method: "POST",
+      body: JSON.stringify({
+        task_id: currentWorkbenchTaskId,
+        author: "Web User",
+        content: workbenchCommentInput.value.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    workbenchCommentInput.value = "";
+  } catch (err) {
+    console.error("Failed to add workbench comment:", err);
+    alert(err.message || "添加备注失败");
+  }
+}
+
+async function addWorkbenchLinkAsset() {
+  if (!currentWorkbenchTaskId) return;
+  const url = window.prompt("输入链接 URL", "https://");
+  if (!url || !url.trim()) return;
+  const title = window.prompt("链接标题", "参考链接") || "参考链接";
+  const note = window.prompt("补充说明", "") || "";
+  try {
+    const res = await apiFetch("/api/workbench/task/asset", {
+      method: "POST",
+      body: JSON.stringify({
+        task_id: currentWorkbenchTaskId,
+        title,
+        asset_type: "link",
+        url: url.trim(),
+        note,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  } catch (err) {
+    console.error("Failed to add workbench link asset:", err);
+    alert(err.message || "添加链接失败");
+  }
+}
+
+async function addWorkbenchFileAsset() {
+  if (!currentWorkbenchTaskId) return;
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.onchange = async () => {
+    const file = picker.files && picker.files[0];
+    if (!file) return;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch(
+        `http://localhost:3000/api/upload?jid=${encodeURIComponent(currentGroupJid || groups.find((g) => g.isMain)?.jid || "")}`,
+        { method: "POST", body: formData }
+      );
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || `HTTP ${uploadRes.status}`);
+      const uploaded = uploadData.files && uploadData.files[0];
+      if (!uploaded) throw new Error("上传结果为空");
+      const note = window.prompt("补充说明", "") || "";
+      const assetRes = await apiFetch("/api/workbench/task/asset", {
+        method: "POST",
+        body: JSON.stringify({
+          task_id: currentWorkbenchTaskId,
+          title: file.name,
+          asset_type: "file",
+          path: uploaded.hostPath,
+          note,
+        }),
+      });
+      const assetData = await assetRes.json();
+      if (!assetRes.ok) throw new Error(assetData.error || `HTTP ${assetRes.status}`);
+    } catch (err) {
+      console.error("Failed to add workbench file asset:", err);
+      alert(err.message || "添加文件失败");
+    }
+  };
+  picker.click();
+}
+
+async function openWorkbenchCreateTaskModal() {
+  const optionsData = await loadWorkflowCreateOptions();
+  const workflowTypes = Array.isArray(optionsData.workflow_types) ? optionsData.workflow_types : [];
+  const services = Array.isArray(optionsData.services) ? optionsData.services : [];
+  const requirementsByService = optionsData.requirements_by_service || {};
+  const mainGroup = groups.find((group) => group.isMain) || groups[0];
+
+  if (!mainGroup) {
+    alert("未找到可用主群，无法创建任务");
+    return;
+  }
+  if (workflowTypes.length === 0 || services.length === 0) {
+    alert("当前没有可用 workflow 类型或服务配置");
+    return;
+  }
+
+  const existing = document.getElementById("workbench-create-overlay");
+  if (existing) existing.remove();
+
+  const state = {
+    workflowType: workflowTypes[0].type,
+    entryPoint: workflowTypes[0].entry_points[0] || "",
+    service: services[0],
+    requirementMode: "preset",
+    requirementPreset: "",
+    requirementCustom: "",
+    requirementSearch: "",
+  };
+
+  const overlay = document.createElement("div");
+  overlay.id = "workbench-create-overlay";
+  overlay.className = "workflow-wizard-overlay";
+  overlay.innerHTML = `
+    <div class="workflow-wizard-modal">
+      <div class="workflow-wizard-header">
+        <div class="workflow-wizard-title">新建工作台任务</div>
+        <button type="button" class="icon-btn" id="workbench-create-close" title="关闭">×</button>
+      </div>
+      <div class="workflow-wizard-body">
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">1. 流程类型</div>
+          <div id="wb-type-options" class="workflow-wizard-options"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">2. 入口点</div>
+          <div id="wb-entry-options" class="workflow-wizard-options"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">3. 服务名称</div>
+          <div id="wb-service-options" class="workflow-wizard-options"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">4. 任务名称</div>
+          <div id="wb-requirement-mode" class="workflow-wizard-options compact"></div>
+          <div id="wb-requirement-preset-wrap" class="workflow-wizard-subsection"></div>
+          <div id="wb-requirement-custom-wrap" class="workflow-wizard-subsection"></div>
+          <div id="wb-requirement-hint" class="workflow-wizard-hint"></div>
+        </div>
+      </div>
+      <div class="workflow-wizard-footer">
+        <button type="button" id="wb-cancel-btn" class="btn-ghost">取消</button>
+        <button type="button" id="wb-submit-btn" class="btn-primary">创建任务</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const typeOptionsEl = overlay.querySelector("#wb-type-options");
+  const entryOptionsEl = overlay.querySelector("#wb-entry-options");
+  const serviceOptionsEl = overlay.querySelector("#wb-service-options");
+  const reqModeEl = overlay.querySelector("#wb-requirement-mode");
+  const reqPresetWrapEl = overlay.querySelector("#wb-requirement-preset-wrap");
+  const reqCustomWrapEl = overlay.querySelector("#wb-requirement-custom-wrap");
+  const reqHintEl = overlay.querySelector("#wb-requirement-hint");
+  const submitBtn = overlay.querySelector("#wb-submit-btn");
+
+  function closeWorkbenchCreateModal() {
+    overlay.remove();
+  }
+
+  function getSelectedWorkflowType() {
+    return workflowTypes.find((item) => item.type === state.workflowType) || workflowTypes[0];
+  }
+
+  function getEntryPoints() {
+    return Array.isArray(getSelectedWorkflowType().entry_points) ? getSelectedWorkflowType().entry_points : [];
+  }
+
+  function getRequirements() {
+    const rows = requirementsByService[state.service];
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  function getRequirementName() {
+    const selectedType = getSelectedWorkflowType();
+    if (selectedType.type === "dev_test") {
+      if (state.entryPoint === "plan") return state.requirementCustom.trim();
+      return state.requirementPreset;
+    }
+    return state.requirementMode === "custom" ? state.requirementCustom.trim() : state.requirementPreset;
+  }
+
+  function getRequirementDeliverables(reqName) {
+    const req = getRequirements().find((item) => item.requirement_name === reqName);
+    return Array.isArray(req?.deliverables) ? req.deliverables : [];
+  }
+
+  function getRequiredDeliverableFile() {
+    const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
+    if (!detail?.requires_deliverable) return "";
+    return `${detail.deliverable_role || "dev"}.md`;
+  }
+
+  function updateValidation() {
+    const requirementName = getRequirementName();
+    const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
+    const deliverableRequired = !!detail?.requires_deliverable;
+    const requiredFile = getRequiredDeliverableFile();
+    const deliverableFiles = getRequirementDeliverables(requirementName);
+    const deliverableOk = !deliverableRequired || deliverableFiles.includes(requiredFile);
+
+    if (!requirementName) {
+      reqHintEl.textContent = "请输入或选择一个任务名称";
+    } else if (deliverableRequired) {
+      reqHintEl.textContent = deliverableOk
+        ? `已校验交付物文件：${requiredFile}`
+        : `当前入口点要求存在 ${requiredFile}，所选需求暂不满足`;
+    } else {
+      reqHintEl.textContent = "将使用当前名称创建新的工作流任务";
+    }
+
+    submitBtn.disabled = !requirementName || !state.entryPoint || !state.service || !deliverableOk;
+  }
+
+  function refreshWorkbenchCreateModal() {
+    renderSingleOptions(
+      typeOptionsEl,
+      workflowTypes.map((item) => ({ value: item.type, label: `${item.type} (${item.name})` })),
+      state.workflowType,
+      (value) => {
+        state.workflowType = value;
+        state.entryPoint = getEntryPoints()[0] || "";
+        refreshWorkbenchCreateModal();
+      }
+    );
+
+    const entryPoints = getEntryPoints();
+    if (!state.entryPoint || !entryPoints.includes(state.entryPoint)) {
+      state.entryPoint = entryPoints[0] || "";
+    }
+    renderSingleOptions(
+      entryOptionsEl,
+      entryPoints.map((entry) => ({
+        value: entry,
+        label: getSelectedWorkflowType().entry_points_detail?.[entry]?.requires_deliverable ? `${entry} (需要交付物)` : entry,
+      })),
+      state.entryPoint,
+      (value) => {
+        state.entryPoint = value;
+        refreshWorkbenchCreateModal();
+      }
+    );
+
+    renderSingleOptions(
+      serviceOptionsEl,
+      services.map((service) => ({ value: service, label: service })),
+      state.service,
+      (value) => {
+        state.service = value;
+        const reqs = getRequirements();
+        state.requirementPreset = reqs[0]?.requirement_name || "";
+        refreshWorkbenchCreateModal();
+      }
+    );
+
+    const reqs = getRequirements();
+    if (!state.requirementPreset && reqs.length > 0) {
+      state.requirementPreset = reqs[0].requirement_name;
+    }
+
+    reqModeEl.innerHTML = "";
+    reqPresetWrapEl.innerHTML = "";
+    reqCustomWrapEl.innerHTML = "";
+
+    const isDevTest = getSelectedWorkflowType().type === "dev_test";
+    const isPlanEntry = state.entryPoint === "plan";
+
+    if (isDevTest) {
+      if (isPlanEntry) {
+        const input = document.createElement("input");
+        input.className = "workflow-wizard-input";
+        input.placeholder = "输入新需求名称";
+        input.value = state.requirementCustom;
+        input.addEventListener("input", () => {
+          state.requirementCustom = input.value;
+          updateValidation();
+        });
+        reqCustomWrapEl.appendChild(input);
+      } else {
+        const search = document.createElement("input");
+        search.className = "workflow-wizard-input";
+        search.placeholder = "搜索已有需求";
+        search.value = state.requirementSearch;
+        search.addEventListener("input", () => {
+          state.requirementSearch = search.value;
+          refreshWorkbenchCreateModal();
+        });
+        reqModeEl.appendChild(search);
+
+        const filteredReqs = reqs.filter((item) => !state.requirementSearch || item.requirement_name.includes(state.requirementSearch.trim()));
+        const opts = document.createElement("div");
+        opts.className = "workflow-wizard-options";
+        reqPresetWrapEl.appendChild(opts);
+        renderSingleOptions(
+          opts,
+          filteredReqs.map((item) => ({ value: item.requirement_name, label: item.requirement_name })),
+          state.requirementPreset,
+          (value) => {
+            state.requirementPreset = value;
+            refreshWorkbenchCreateModal();
+          }
+        );
+      }
+    } else {
+      renderSingleOptions(
+        reqModeEl,
+        [
+          { value: "preset", label: "已有需求" },
+          { value: "custom", label: "自定义任务" },
+        ],
+        state.requirementMode,
+        (value) => {
+          state.requirementMode = value;
+          refreshWorkbenchCreateModal();
+        }
+      );
+
+      if (state.requirementMode === "preset") {
+        const opts = document.createElement("div");
+        opts.className = "workflow-wizard-options";
+        reqPresetWrapEl.appendChild(opts);
+        renderSingleOptions(
+          opts,
+          reqs.map((item) => ({ value: item.requirement_name, label: item.requirement_name })),
+          state.requirementPreset,
+          (value) => {
+            state.requirementPreset = value;
+            refreshWorkbenchCreateModal();
+          }
+        );
+      } else {
+        const input = document.createElement("input");
+        input.className = "workflow-wizard-input";
+        input.placeholder = "输入任务名称";
+        input.value = state.requirementCustom;
+        input.addEventListener("input", () => {
+          state.requirementCustom = input.value;
+          updateValidation();
+        });
+        reqCustomWrapEl.appendChild(input);
+      }
+    }
+
+    updateValidation();
+  }
+
+  overlay.querySelector("#workbench-create-close").addEventListener("click", closeWorkbenchCreateModal);
+  overlay.querySelector("#wb-cancel-btn").addEventListener("click", closeWorkbenchCreateModal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeWorkbenchCreateModal();
+  });
+  submitBtn.addEventListener("click", async () => {
+    const name = getRequirementName();
+    const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
+    const deliverableRequired = !!detail?.requires_deliverable;
+    const requiredFile = getRequiredDeliverableFile();
+    const deliverableFiles = getRequirementDeliverables(name);
+    if (!name) return;
+    if (deliverableRequired && !deliverableFiles.includes(requiredFile)) {
+      alert(`当前入口点要求交付物文件 ${requiredFile}，所选需求不满足。`);
+      return;
+    }
+
+    try {
+      const res = await apiFetch("/api/workbench/task", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          service: state.service,
+          source_jid: mainGroup.jid,
+          start_from: state.entryPoint,
+          workflow_type: state.workflowType,
+          deliverable: deliverableRequired ? name : void 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      closeWorkbenchCreateModal();
+      await loadWorkbenchTasks(data.workflow_id || "");
+    } catch (err) {
+      console.error("Failed to create workbench task:", err);
+      alert(err.message || "任务创建失败");
+    }
+  });
+
+  refreshWorkbenchCreateModal();
+}
+
 async function loadMessages() {
   if (!currentGroupJid) return;
   const since = "0";
@@ -2033,6 +2777,118 @@ function clearCurrentGroupUnreadIfForeground() {
   clearUnreadForGroup(currentGroupJid);
 }
 
+function handleWorkbenchRealtimeEvent(event) {
+  if (!event || activePrimaryNavKey !== "workbench") return;
+  applyWorkbenchRealtimeEvent(event);
+}
+
+function applyWorkbenchRealtimeEvent(event) {
+  if (!event) return;
+  const payload = event.payload || {};
+  const taskIdx = workbenchTasks.findIndex((item) => item.id === event.taskId);
+
+  if (taskIdx >= 0) {
+    const existing = workbenchTasks[taskIdx];
+    if (event.type === "task_created") {
+      workbenchTasks[taskIdx] = { ...existing, ...payload };
+    } else if (event.type === "task_updated") {
+      workbenchTasks[taskIdx] = {
+        ...existing,
+        status: payload.status || existing.status,
+        current_stage: payload.currentStage || existing.current_stage,
+        current_stage_label: payload.currentStage || existing.current_stage_label,
+        updated_at: payload.updatedAt || existing.updated_at,
+      };
+    }
+    renderWorkbenchTaskList();
+  } else if (event.type === "task_created" && payload.id) {
+    workbenchTasks.unshift({
+      id: event.taskId,
+      title: payload.title || "新任务",
+      service: payload.service || "",
+      workflow_type: payload.workflowType || "",
+      status: payload.status || "created",
+      status_label: payload.status || "created",
+      current_stage: payload.status || "created",
+      current_stage_label: payload.status || "created",
+      branch: "",
+      deliverable: "",
+      round: 0,
+      source_jid: payload.sourceJid || "",
+      created_at: payload.createdAt || new Date().toISOString(),
+      updated_at: payload.createdAt || new Date().toISOString(),
+      pending_approval: false,
+      active_delegation_id: "",
+    });
+    renderWorkbenchTaskList();
+  }
+
+  if (!currentWorkbenchDetail || currentWorkbenchTaskId !== event.taskId) return;
+
+  if (event.type === "task_updated") {
+    currentWorkbenchDetail.task = {
+      ...currentWorkbenchDetail.task,
+      status: payload.status || currentWorkbenchDetail.task.status,
+      current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
+      current_stage_label: payload.currentStage || currentWorkbenchDetail.task.current_stage_label,
+      updated_at: payload.updatedAt || currentWorkbenchDetail.task.updated_at,
+    };
+    renderWorkbenchTaskDetail(currentWorkbenchDetail);
+  } else if (event.type === "subtask_updated") {
+    const subtask = currentWorkbenchDetail.subtasks.find((item) => item.id === payload.id);
+    if (subtask) {
+      if (payload.status && ["completed", "current", "pending"].includes(payload.status)) {
+        subtask.status = payload.status;
+      }
+      if (payload.groupFolder) subtask.target_folder = payload.groupFolder;
+      renderWorkbenchSubtasks(currentWorkbenchDetail.subtasks);
+    }
+  } else if (event.type === "event_created") {
+    currentWorkbenchDetail.timeline.unshift({
+      id: payload.id || `rt-${Date.now()}`,
+      type: "delegation",
+      title: payload.title || "任务更新",
+      body: payload.body || "",
+      created_at: payload.createdAt || new Date().toISOString(),
+      status: payload.status || ""
+    });
+    renderWorkbenchTimeline(currentWorkbenchDetail.timeline);
+  } else if (event.type === "artifact_created") {
+    const exists = currentWorkbenchDetail.artifacts.some((item) => item.id === payload.id);
+    if (!exists) {
+      currentWorkbenchDetail.artifacts.unshift({
+        id: payload.id,
+        title: payload.title || "新产出",
+        artifact_type: payload.artifactType || "artifact",
+        path: payload.path || "",
+        exists: true,
+      });
+      renderWorkbenchArtifacts(currentWorkbenchDetail.artifacts);
+    }
+  } else if (event.type === "approval_updated") {
+    loadWorkbenchTaskDetail(currentWorkbenchTaskId);
+  } else if (event.type === "comment_created") {
+    currentWorkbenchDetail.comments.unshift({
+      id: payload.id,
+      author: payload.author || "Web User",
+      content: payload.content || "",
+      created_at: payload.createdAt || new Date().toISOString(),
+    });
+    renderWorkbenchComments(currentWorkbenchDetail.comments);
+  } else if (event.type === "asset_created") {
+    currentWorkbenchDetail.assets.unshift({
+      id: payload.id,
+      title: payload.title || "新资产",
+      asset_type: payload.assetType || "asset",
+      path: payload.path || null,
+      url: payload.url || null,
+      note: payload.note || null,
+      created_at: payload.createdAt || new Date().toISOString(),
+    });
+    renderWorkbenchAssets(currentWorkbenchDetail.assets);
+  }
+}
+
 function handleWsMessage(msg) {
   switch (msg.type) {
     case "connected":
@@ -2124,6 +2980,9 @@ function handleWsMessage(msg) {
       if (agentStatusPanel.classList.contains("open")) {
         renderAgentStatus(msg.agents || []);
       }
+      break;
+    case "workbench_event":
+      handleWorkbenchRealtimeEvent(msg.event);
       break;
     case "error":
       console.error("WS error from server:", msg.message);
@@ -3287,6 +4146,36 @@ primaryNavItems.forEach((item) => {
     setPrimaryNav(navKey);
   });
 });
+if (workbenchRefreshBtn) {
+  workbenchRefreshBtn.addEventListener("click", () => {
+    loadWorkbenchTasks(currentWorkbenchTaskId);
+  });
+}
+if (workbenchCreateTaskBtn) {
+  workbenchCreateTaskBtn.addEventListener("click", async () => {
+    try {
+      await openWorkbenchCreateTaskModal();
+    } catch (err) {
+      console.error("Failed to open workbench create dialog:", err);
+      alert(err.message || "打开创建任务失败");
+    }
+  });
+}
+if (workbenchCommentSubmit) {
+  workbenchCommentSubmit.addEventListener("click", () => {
+    submitWorkbenchComment();
+  });
+}
+if (workbenchAddLinkBtn) {
+  workbenchAddLinkBtn.addEventListener("click", () => {
+    addWorkbenchLinkAsset();
+  });
+}
+if (workbenchAddFileBtn) {
+  workbenchAddFileBtn.addEventListener("click", () => {
+    addWorkbenchFileAsset();
+  });
+}
 if (memorySearchBtn) {
   memorySearchBtn.addEventListener("click", () => {
     loadMemories(memorySearchInput?.value || "");

@@ -32,6 +32,10 @@
           <img class="doraemon-mini" src="/assets/doraemon-face.png" alt="Doraemon face" />
         </div>
         <div id="primary-nav" class="primary-nav">
+          <button class="primary-nav-item" data-nav-key="workbench">
+            <span class="primary-nav-dot"></span>
+            <span class="primary-nav-label">工作台</span>
+          </button>
           <button class="primary-nav-item" data-nav-key="agent-groups">
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">Agent群组</span>
@@ -336,6 +340,82 @@
         </div>
         </main>
       </div>
+
+      <section id="workbench-screen">
+        <aside class="workbench-sidebar">
+          <div class="workbench-section-header">
+            <span>任务</span>
+            <div class="workbench-section-actions">
+              <button id="workbench-refresh-btn" class="icon-btn" title="刷新任务">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+              <button id="workbench-create-task-btn" class="btn-primary">新建任务</button>
+            </div>
+          </div>
+          <div id="workbench-task-list" class="workbench-task-list"></div>
+        </aside>
+
+        <main class="workbench-main">
+          <div id="workbench-detail-empty" class="workbench-detail-empty">
+            <img src="/assets/doraemon-joy.png" alt="Doraemon mascot" />
+            <h3>工作台</h3>
+            <p>左侧选择一个任务，查看阶段进度、审批项和产出物。</p>
+          </div>
+
+          <div id="workbench-task-detail" class="workbench-task-detail hidden">
+            <div class="workbench-task-header">
+              <div class="workbench-task-header-main">
+                <div class="workbench-kicker">任务概览</div>
+                <h2 id="workbench-task-title">任务标题</h2>
+                <div id="workbench-task-meta" class="workbench-task-meta"></div>
+              </div>
+              <div id="workbench-task-actions" class="workbench-task-actions"></div>
+            </div>
+
+            <section class="workbench-panel">
+              <div class="workbench-panel-title">阶段进度</div>
+              <div id="workbench-subtasks" class="workbench-subtasks"></div>
+            </section>
+
+            <section class="workbench-panel">
+              <div class="workbench-panel-title">待处理</div>
+              <div id="workbench-approvals" class="workbench-approvals"></div>
+            </section>
+
+            <section class="workbench-panel">
+              <div class="workbench-panel-title">产出物</div>
+              <div id="workbench-artifacts" class="workbench-artifacts"></div>
+            </section>
+
+            <section class="workbench-panel">
+              <div class="workbench-panel-title">上下文资产</div>
+              <div class="workbench-inline-actions">
+                <button id="workbench-add-link-btn" class="btn-ghost">添加链接</button>
+                <button id="workbench-add-file-btn" class="btn-ghost">添加文件</button>
+              </div>
+              <div id="workbench-assets" class="workbench-artifacts"></div>
+            </section>
+
+            <section class="workbench-panel">
+              <div class="workbench-panel-title">备注评论</div>
+              <div class="workbench-comment-composer">
+                <textarea id="workbench-comment-input" rows="3" placeholder="记录补充说明、风险、交接信息"></textarea>
+                <button id="workbench-comment-submit" class="btn-primary">添加备注</button>
+              </div>
+              <div id="workbench-comments" class="workbench-timeline"></div>
+            </section>
+
+            <section class="workbench-panel">
+              <div class="workbench-panel-title">执行时间线</div>
+              <div id="workbench-timeline" class="workbench-timeline"></div>
+            </section>
+          </div>
+        </main>
+      </section>
 
       <section id="memory-management-screen">
         <aside class="memory-sidebar">

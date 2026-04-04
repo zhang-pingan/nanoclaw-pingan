@@ -65,6 +65,7 @@ import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { createNewWorkflow, initWorkflow } from './workflow.js';
+import { initWorkbenchEvents } from './workbench-events.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -1433,6 +1434,17 @@ async function main(): Promise<void> {
     registeredGroups: () => registeredGroups,
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
     sendCard: sendCardFn,
+  });
+  initWorkbenchEvents((event) => {
+    for (const ch of channels) {
+      if (ch.name === 'web' && 'broadcastWorkbenchEvent' in ch) {
+        (
+          ch as typeof ch & {
+            broadcastWorkbenchEvent: (payload: typeof event) => void;
+          }
+        ).broadcastWorkbenchEvent(event);
+      }
+    }
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
