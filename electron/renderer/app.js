@@ -658,9 +658,11 @@ function createMessageEl(msg) {
     }
   }
 
-  // File messages: render with "打开文件" button
+  // File messages: render as file card with icon and filename
   if (msg._filePath) {
     const senderName = msg.sender_name || msg.sender || "Assistant";
+    const fileName = msg._filePath.split("/").pop() || msg.content;
+    const ext = fileName.split(".").pop().toLowerCase();
     const wrapper = document.createElement("div");
     wrapper.className = "message assistant file-message";
     wrapper.setAttribute("data-msg-id", msg.id);
@@ -673,22 +675,27 @@ function createMessageEl(msg) {
           <span class="msg-sender">${escapeHtml(senderName)}</span>
           <span class="msg-time">${formatTime(msg.timestamp)}</span>
         </div>
-        <div class="msg-body"></div>
+        <div class="msg-body">
+          <div class="file-card" data-ext="${escapeHtml(ext)}">
+            <div class="file-card-icon">${getFileIcon(ext)}</div>
+            <div class="file-card-name">${escapeHtml(fileName)}</div>
+          </div>
+        </div>
       </div>
     `;
 
-    const openBtn = document.createElement("button");
-    openBtn.className = "file-open-btn";
-    openBtn.innerHTML = `${SVG.paperclip} ${escapeHtml(msg.content)}`;
-    openBtn.addEventListener("click", () => {
+    const card = wrapper.querySelector(".file-card");
+    card.addEventListener("click", () => {
       if (window.nanoclawApp?.openFile) {
         window.nanoclawApp.openFile(msg._filePath);
       } else {
         window.open(`file://${msg._filePath}`);
       }
     });
-    const body = wrapper.querySelector(".msg-body");
-    if (body) body.appendChild(openBtn);
+    card.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showFileContextMenu(e, msg._filePath);
+    });
     wrapper.addEventListener("click", (e) => {
       if (!multiSelectMode) return;
       if (e.target.closest(".msg-actions")) return;
@@ -782,6 +789,70 @@ function createMessageEl(msg) {
   return div;
 }
 
+// --- File icon by extension ---
+function getFileIcon(ext) {
+  const icons = {
+    pdf: "📄", doc: "📝", docx: "📝", txt: "📃",
+    sql: "🗃️", db: "🗃️",
+    png: "🖼️", jpg: "🖼️", jpeg: "🖼️", gif: "🖼️", svg: "🖼️", webp: "🖼️",
+    mp4: "🎬", mov: "🎬", avi: "🎬",
+    mp3: "🎵", wav: "🎵", flac: "🎵",
+    zip: "📦", rar: "📦", tar: "📦", gz: "📦",
+    js: "⚡", ts: "⚡", py: "🐍", java: "☕", go: "🔵", rs: "🦀",
+    json: "📋", xml: "📋", csv: "📊",
+    xls: "📊", xlsx: "📊",
+    ppt: "📑", pptx: "📑",
+    html: "🌐", css: "🎨",
+  };
+  return icons[ext] || "📎";
+}
+
+// --- File context menu ---
+function showFileContextMenu(e, filePath) {
+  // Remove existing menu if any
+  document.querySelector(".file-context-menu")?.remove();
+
+  const menu = document.createElement("div");
+  menu.className = "file-context-menu";
+
+  const items = [
+    { label: "打开", icon: "📂", action: () => window.nanoclawApp?.openFile?.(filePath) },
+    { label: "打开方式…", icon: "🔀", action: () => window.nanoclawApp?.openFileWith?.(filePath) },
+    { label: "在文件夹中显示", icon: "📁", action: () => window.nanoclawApp?.showInFolder?.(filePath) },
+    { label: "复制路径", icon: "📋", action: () => navigator.clipboard?.writeText(filePath) },
+  ];
+
+  for (const item of items) {
+    const el = document.createElement("div");
+    el.className = "file-context-item";
+    el.innerHTML = `<span class="file-context-icon">${item.icon}</span>${escapeHtml(item.label)}`;
+    el.addEventListener("click", () => {
+      item.action();
+      menu.remove();
+    });
+    menu.appendChild(el);
+  }
+
+  // Position at cursor
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+  document.body.appendChild(menu);
+
+  // Adjust if menu overflows viewport
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) menu.style.left = `${window.innerWidth - rect.width - 8}px`;
+  if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 8}px`;
+
+  // Close on click outside
+  const closeHandler = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener("click", closeHandler);
+    }
+  };
+  requestAnimationFrame(() => document.addEventListener("click", closeHandler));
+}
+
 function scheduleModelSync() {
   if (!currentGroupJid) return;
   if (modelSyncTimer) clearTimeout(modelSyncTimer);
@@ -792,7 +863,7 @@ function scheduleModelSync() {
       if (!res.ok) return;
       const data = await res.json();
       if (!Array.isArray(data.messages)) return;
-      messages = data.messages;
+      messages = data.messages.map(m => ({ ...m, _filePath: m.file_path || undefined }));
       renderMessages();
     } catch {
       // Best effort only.
@@ -1857,7 +1928,7 @@ async function loadMessages() {
     const res = await apiFetch(`/api/messages?jid=${encodeURIComponent(currentGroupJid)}&since=${since}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    messages = data.messages;
+    messages = data.messages.map(m => ({ ...m, _filePath: m.file_path || undefined }));
     hasMoreHistory = messages.length >= 200;
     renderMessages();
   } catch (err) {
@@ -1885,7 +1956,8 @@ async function loadMoreHistory() {
       return;
     }
     // Prepend older messages
-    messages = [...data.messages, ...messages];
+    const olderMessages = data.messages.map(m => ({ ...m, _filePath: m.file_path || undefined }));
+    messages = [...olderMessages, ...messages];
     // Rebuild DOM and restore scroll position
     renderMessages();
     const newScrollHeight = messagesEl.scrollHeight;

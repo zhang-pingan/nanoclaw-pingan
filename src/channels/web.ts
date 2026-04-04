@@ -161,6 +161,7 @@ class WebChannel {
       timestamp,
       is_from_me: false,
       is_bot_message: true,
+      file_path: filePath,
     });
 
     // Deliver via WebSocket to any connected clients
@@ -945,6 +946,7 @@ class WebChannel {
           is_bot_message: Boolean(m.is_bot_message),
           reply_to_id: m.reply_to_id || null,
           model: m.model || null,
+          file_path: m.file_path || null,
         })),
       }),
     );

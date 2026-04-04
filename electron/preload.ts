@@ -33,6 +33,16 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     return ipcRenderer.invoke('open-file', filePath);
   },
 
+  // Open file with system app picker
+  openFileWith: (filePath: string) => {
+    return ipcRenderer.invoke('open-file-with', filePath);
+  },
+
+  // Show file in folder
+  showInFolder: (filePath: string) => {
+    return ipcRenderer.invoke('show-in-folder', filePath);
+  },
+
   // Platform info
   platform: process.platform,
 

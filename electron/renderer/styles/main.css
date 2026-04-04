@@ -3318,6 +3318,80 @@ html, body {
   transform: translateY(-1px);
 }
 
+/* === File Card === */
+.file-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+  max-width: 200px;
+}
+
+.file-card:hover {
+  background: var(--bg-hover);
+  border-color: rgba(79, 110, 247, 0.3);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.file-card-icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.file-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  word-break: break-all;
+  line-height: 1.3;
+  max-width: 180px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* === File Context Menu === */
+.file-context-menu {
+  position: fixed;
+  z-index: 1300;
+  min-width: 180px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 4px 0;
+}
+
+.file-context-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background var(--transition);
+}
+
+.file-context-item:hover {
+  background: var(--bg-hover);
+}
+
+.file-context-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
 /* === Doraemon Theme Refresh === */
 :root {
   --bg-primary: #e8f7ff;

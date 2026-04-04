@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification } from 'electron';
 import path from 'path';
+import { execFile } from 'child_process';
 
 const mainDir = __dirname;
 
@@ -200,6 +201,42 @@ app.whenReady().then(() => {
     try {
       const result = await shell.openPath(filePath);
       return { ok: true, result };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  // Handle open-file-with: triggers OS app picker
+  ipcMain.handle('open-file-with', async (_event, filePath: string) => {
+    try {
+      if (process.platform === 'darwin') {
+        // macOS: list all .app bundles from /Applications and let user choose
+        const script = 'set appPaths to paragraphs of (do shell script "ls -d /Applications/*.app ~/Applications/*.app 2>/dev/null || true")\n'
+          + 'set appNames to {}\n'
+          + 'repeat with p in appPaths\n'
+          + '  set end of appNames to (do shell script "basename " & quoted form of p & " .app")\n'
+          + 'end repeat\n'
+          + 'choose from list appNames with prompt "Open with:" with title "Choose Application"';
+        execFile('osascript', ['-e', script], (err, stdout) => {
+          if (err || !stdout.trim() || stdout.trim() === 'false') return;
+          const appName = stdout.trim();
+          execFile('open', ['-a', appName, filePath]);
+        });
+        return { ok: true };
+      }
+      // Linux
+      execFile('mimeopen', ['-d', [filePath]]);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  // Handle show-in-folder
+  ipcMain.handle('show-in-folder', async (_event, filePath: string) => {
+    try {
+      shell.showItemInFolder(filePath);
+      return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err) };
     }

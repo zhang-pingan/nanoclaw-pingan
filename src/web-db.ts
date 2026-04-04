@@ -19,6 +19,7 @@ export interface WebMessage {
   model?: string | null;
   model_reason?: string | null;
   workflow_id?: string | null;
+  file_path?: string | null;
 }
 
 export function initWebDb(): void {
@@ -60,6 +61,10 @@ export function initWebDb(): void {
     db.exec('ALTER TABLE messages ADD COLUMN workflow_id TEXT');
     logger.info('Web DB migrated: added workflow_id column');
   }
+  if (!columns.some((c) => c.name === 'file_path')) {
+    db.exec('ALTER TABLE messages ADD COLUMN file_path TEXT');
+    logger.info('Web DB migrated: added file_path column');
+  }
 
   logger.info({ path: dbPath }, 'Web message DB initialized');
 }
@@ -77,13 +82,14 @@ export function storeWebMessage(msg: {
   model?: string | null;
   model_reason?: string | null;
   workflow_id?: string | null;
+  file_path?: string | null;
 }): void {
   const isBotMessage = msg.is_bot_message ? 1 : 0;
 
   db.prepare(`
     INSERT INTO messages
-      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason, workflow_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message, reply_to_id, model, model_reason, workflow_id, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chat_jid, id) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -94,7 +100,8 @@ export function storeWebMessage(msg: {
       reply_to_id = COALESCE(excluded.reply_to_id, messages.reply_to_id),
       model = COALESCE(excluded.model, messages.model),
       model_reason = COALESCE(excluded.model_reason, messages.model_reason),
-      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id)
+      workflow_id = COALESCE(excluded.workflow_id, messages.workflow_id),
+      file_path = COALESCE(excluded.file_path, messages.file_path)
   `).run(
     msg.id,
     msg.chat_jid,
@@ -108,6 +115,7 @@ export function storeWebMessage(msg: {
     msg.model ?? null,
     msg.model_reason ?? null,
     msg.workflow_id ?? null,
+    msg.file_path ?? null,
   );
 }
 
@@ -158,7 +166,7 @@ export function getWebMessages(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             reply_to_id, model, model_reason
+             reply_to_id, model, model_reason, file_path
         FROM messages
        WHERE chat_jid = ? AND timestamp >= ?
        ORDER BY timestamp ASC
@@ -179,7 +187,7 @@ export function getWebMessagesBefore(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             reply_to_id, model, model_reason
+             reply_to_id, model, model_reason, file_path
         FROM messages
        WHERE chat_jid = ? AND timestamp < ?
        ORDER BY timestamp DESC
