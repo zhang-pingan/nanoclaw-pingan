@@ -330,6 +330,11 @@ interface ArchiveExtractionResult {
   memories: ArchiveMemoryCandidate[];
 }
 
+interface ArchiveExtractionAttempt {
+  attempt: number;
+  apiResponse: Awaited<ReturnType<typeof callAnthropicMessages>>;
+}
+
 const archiveExtractionResultSchema = z.object({
   memories: z.array(
     z.object({
@@ -413,6 +418,93 @@ function extractJsonObjectFromText(text: string): string {
     return noFence.slice(firstBrace, lastBrace + 1);
   }
   return noFence;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function summarizeArchiveMessages(
+  messages: ExtractedArchiveMessage[],
+): Array<{ index: number; sender: ExtractedArchiveMessage['sender']; preview: string }> {
+  return messages.slice(0, 5).map((message) => ({
+    index: message.index,
+    sender: message.sender,
+    preview: message.content.slice(0, 160),
+  }));
+}
+
+function buildArchiveExtractionRequestPayload(
+  sourceGroup: string,
+  archiveName: string,
+  sanitizedMessages: ExtractedArchiveMessage[],
+) {
+  return {
+    system: buildArchiveExtractionSystemPrompt(),
+    messages: [
+      {
+        role: 'user' as const,
+        content: buildArchiveExtractionUserPrompt(
+          sourceGroup,
+          archiveName,
+          sanitizedMessages,
+        ),
+      },
+    ],
+    max_tokens: 1600,
+    temperature: 0,
+  };
+}
+
+async function callArchiveExtractionWithRetry(
+  sourceGroup: string,
+  archiveName: string,
+  sanitizedMessages: ExtractedArchiveMessage[],
+): Promise<ArchiveExtractionAttempt> {
+  const requestPayload = buildArchiveExtractionRequestPayload(
+    sourceGroup,
+    archiveName,
+    sanitizedMessages,
+  );
+  const retryDelaysMs = [0, 1200, 3000];
+  let lastError: unknown;
+
+  for (let i = 0; i < retryDelaysMs.length; i += 1) {
+    const attempt = i + 1;
+    const delayMs = retryDelaysMs[i];
+    if (delayMs > 0) await sleep(delayMs);
+
+    try {
+      const apiResponse = await callAnthropicMessages(requestPayload);
+      if (attempt > 1) {
+        logger.info(
+          {
+            sourceGroup,
+            archiveName,
+            attempt,
+            maxAttempts: retryDelaysMs.length,
+          },
+          'memory_extract_from_archive retry succeeded',
+        );
+      }
+      return { attempt, apiResponse };
+    } catch (err) {
+      lastError = err;
+      logger.warn(
+        {
+          err,
+          sourceGroup,
+          archiveName,
+          attempt,
+          maxAttempts: retryDelaysMs.length,
+          retryDelayMs: attempt < retryDelaysMs.length ? retryDelaysMs[attempt] : 0,
+        },
+        'memory_extract_from_archive attempt failed',
+      );
+    }
+  }
+
+  throw lastError;
 }
 
 function buildArchiveExtractionSystemPrompt(): string {
@@ -760,11 +852,18 @@ export async function processTaskIpc(
         break;
       }
 
+      const archiveBytes = fs.statSync(archivePath).size;
+      const markdown = fs.readFileSync(archivePath, 'utf-8');
+      const extractConfig = getMemoryExtractConfig(sourceGroup);
+      const parsedMessages = parseArchiveMarkdownMessages(markdown);
+      const sanitizedMessages = sanitizeArchiveMessagesForExtraction(parsedMessages);
+      const requestPayload = buildArchiveExtractionRequestPayload(
+        sourceGroup,
+        archiveName,
+        sanitizedMessages,
+      );
+
       try {
-        const markdown = fs.readFileSync(archivePath, 'utf-8');
-        const extractConfig = getMemoryExtractConfig(sourceGroup);
-        const parsedMessages = parseArchiveMarkdownMessages(markdown);
-        const sanitizedMessages = sanitizeArchiveMessagesForExtraction(parsedMessages);
         if (sanitizedMessages.length === 0) {
           recordMemoryMetric(sourceGroup, 'archive:extract_rejected', 'reason=no_sanitized_messages');
           logger.info(
@@ -773,21 +872,11 @@ export async function processTaskIpc(
           );
           break;
         }
-        const apiResponse = await callAnthropicMessages({
-          system: buildArchiveExtractionSystemPrompt(),
-          messages: [
-            {
-              role: 'user',
-              content: buildArchiveExtractionUserPrompt(
-                sourceGroup,
-                archiveName,
-                sanitizedMessages,
-              ),
-            },
-          ],
-          max_tokens: 1600,
-          temperature: 0,
-        });
+        const { apiResponse, attempt } = await callArchiveExtractionWithRetry(
+          sourceGroup,
+          archiveName,
+          sanitizedMessages,
+        );
         const extracted = parseArchiveExtractionResponse(apiResponse.text);
         const candidates = validateArchiveMemoryCandidates(
           extracted,
@@ -855,6 +944,7 @@ export async function processTaskIpc(
             parsedMessages: parsedMessages.length,
             sanitizedMessages: sanitizedMessages.length,
             model: apiResponse.model,
+            attempts: attempt,
             extractConfig,
             duplicates: report.duplicateGroups.length,
             conflicts: report.conflictGroups.length,
@@ -870,7 +960,25 @@ export async function processTaskIpc(
           `file=${archiveName}`,
         );
         logger.error(
-          { err, sourceGroup, archiveFile: archiveName },
+          {
+            err,
+            sourceGroup,
+            archiveFile: archiveName,
+            archivePath,
+            archiveBytes,
+            requestSummary: {
+              max_tokens: requestPayload.max_tokens,
+              temperature: requestPayload.temperature,
+              systemLength: requestPayload.system.length,
+              userMessageLength:
+                typeof requestPayload.messages[0]?.content === 'string'
+                  ? requestPayload.messages[0].content.length
+                  : 0,
+            },
+            parsedMessages: parsedMessages.length,
+            sanitizedMessages: sanitizedMessages.length,
+            sanitizedPreview: summarizeArchiveMessages(sanitizedMessages),
+          },
           'memory_extract_from_archive failed',
         );
       }

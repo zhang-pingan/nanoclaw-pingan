@@ -1099,8 +1099,12 @@ export async function callAnthropicMessages(
     });
 
     if (!response.ok) {
+      const responseBody = await response.text().catch(() => '');
+      const bodySuffix = responseBody
+        ? ` body=${responseBody.slice(0, 2000)}`
+        : '';
       throw new Error(
-        `Anthropic API request failed with status ${response.status}`,
+        `Anthropic API request failed with status ${response.status}${bodySuffix}`,
       );
     }
 
