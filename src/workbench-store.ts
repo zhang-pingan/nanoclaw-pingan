@@ -23,10 +23,25 @@ import { emitWorkbenchEvent } from './workbench-events.js';
 import {
   getReachableWorkflowStages,
   getWorkflowTypeConfig,
+  renderTemplate,
 } from './workflow-config.js';
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function buildTemplateVars(workflow: Workflow): Record<string, string | number> {
+  return {
+    name: workflow.name,
+    service: workflow.service,
+    branch: workflow.branch || 'N/A',
+    id: workflow.id,
+    round: workflow.round,
+    deliverable: workflow.deliverable || 'N/A',
+    delegation_result: '',
+    result_summary: '',
+    revision_text: '',
+  };
 }
 
 function truncate(text: string | null | undefined, max = 400): string {
@@ -94,6 +109,7 @@ function upsertApprovalForStage(workflow: Workflow): void {
   if (!state || state.type !== 'confirmation') return;
   const card = state.card ? config.cards[state.card] : undefined;
   const title = config.status_labels[workflow.status] || workflow.status;
+  const vars = buildTemplateVars(workflow);
   const nextApproval = {
     id: approvalId(workflow.id, workflow.status),
     task_id: task.id,
@@ -101,7 +117,7 @@ function upsertApprovalForStage(workflow: Workflow): void {
     status: 'pending' as const,
     approval_type: workflow.status,
     title,
-    body: card ? `${card.header_template}\n${card.body_template}` : title,
+    body: card ? renderTemplate(card.body_template, vars) : title,
     card_key: state.card || null,
     created_at: workflow.updated_at,
     resolved_at: null,
@@ -314,7 +330,8 @@ export function syncWorkbenchOnTransition(
   const fromSubtask = getWorkbenchSubtaskByStage(task.id, fromStatus);
   if (fromSubtask) {
     updateWorkbenchSubtask(fromSubtask.id, {
-      status: 'completed',
+      // Preserve explicit failure markers so the UI can still surface retry.
+      status: fromSubtask.status === 'failed' ? 'failed' : 'completed',
       finished_at: workflow.updated_at,
       updated_at: workflow.updated_at,
     });

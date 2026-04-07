@@ -40,10 +40,12 @@ import {
   resumeWorkflow,
   retryWorkflowStage,
   reviseWorkflow,
+  skipWorkflow,
 } from './workflow.js';
 import {
   getReachableWorkflowStages,
   getWorkflowTypeConfig,
+  renderTemplate,
 } from './workflow-config.js';
 import { syncWorkbenchFromWorkflow } from './workbench-store.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
@@ -82,7 +84,7 @@ export interface WorkbenchSubtask {
   title: string;
   stage_key: string;
   stage_label: string;
-  status: 'completed' | 'current' | 'pending';
+  status: 'completed' | 'current' | 'pending' | 'failed';
   role?: string;
   skill?: string;
   target_folder?: string;
@@ -167,6 +169,8 @@ function mapPersistedSubtask(item: WorkbenchSubtaskRecord): WorkbenchSubtask {
         ? 'completed'
         : item.status === 'current'
           ? 'current'
+          : item.status === 'failed'
+            ? 'failed'
           : 'pending',
     role: item.role || undefined,
     target_folder: item.group_folder || undefined,
@@ -300,6 +304,7 @@ function buildSubtasks(workflow: Workflow, delegations: Delegation[]): Workbench
 
     let status: WorkbenchSubtask['status'] = 'pending';
     if (stage.stage_key === currentKey) status = 'current';
+    else if (linkedDelegation?.outcome === 'failure') status = 'failed';
     else if (linkedDelegation?.status === 'completed') status = 'completed';
 
     return {
@@ -351,8 +356,19 @@ function buildApprovals(workflow: Workflow): WorkbenchApproval[] {
   if (!config || !stateConfig || stateConfig.type !== 'confirmation') return [];
 
   const card = stateConfig.card ? config.cards[stateConfig.card] : undefined;
+  const vars = {
+    name: workflow.name,
+    service: workflow.service,
+    branch: workflow.branch || 'N/A',
+    id: workflow.id,
+    round: workflow.round,
+    deliverable: workflow.deliverable || 'N/A',
+    delegation_result: '',
+    result_summary: '',
+    revision_text: '',
+  };
   const body = card
-    ? `${card.header_template}\n${card.body_template}`
+    ? renderTemplate(card.body_template, vars)
     : `${config.status_labels[workflow.status] || workflow.status} 等待处理`;
 
   return [
@@ -547,7 +563,7 @@ export function createWorkbenchTask(input: {
 
 export function runWorkbenchTaskAction(input: {
   taskId: string;
-  action: 'approve' | 'revise' | 'pause' | 'resume' | 'cancel';
+  action: 'approve' | 'revise' | 'pause' | 'resume' | 'cancel' | 'skip';
   revisionText?: string;
 }): { error?: string } {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
@@ -564,6 +580,8 @@ export function runWorkbenchTaskAction(input: {
       return resumeWorkflow(workflowId);
     case 'cancel':
       return cancelWorkflow(workflowId);
+    case 'skip':
+      return skipWorkflow(workflowId);
     default:
       return { error: `Unsupported action: ${input.action}` };
   }
@@ -663,6 +681,7 @@ export function retryWorkbenchSubtask(input: {
 
   const subtask = listWorkbenchSubtasksByTask(task.id).find((item) => item.id === input.subtaskId);
   if (!subtask) return { error: 'Subtask not found' };
+  if (subtask.status !== 'failed') return { error: 'Only failed subtasks can be retried' };
 
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };

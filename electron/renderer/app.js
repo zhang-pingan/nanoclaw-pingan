@@ -2137,6 +2137,7 @@ function renderWorkbenchSubtasks(subtasks) {
     pending: "未开始",
     current: "进行中",
     completed: "已完成",
+    failed: "失败",
   };
   const selectedId = subtasks.some((item) => item.id === workbenchSelectedSubtaskId)
     ? workbenchSelectedSubtaskId
@@ -2189,7 +2190,7 @@ function renderWorkbenchSubtasks(subtasks) {
     </div>
   `;
 
-  if (selected.role) {
+  if (selected.role && selected.status === "failed") {
     const actions = document.createElement("div");
     actions.className = "workbench-subtask-actions";
     const retryBtn = document.createElement("button");
@@ -2218,17 +2219,18 @@ function renderWorkbenchSubtasks(subtasks) {
 function getWorkbenchApprovalLabels(task, approval) {
   switch (task.status) {
     case "plan_confirm":
-      return { approve: "进入开发", revise: "返回方案修改" };
+      return { approve: "进入开发", revise: "返回方案修改", skip: "跳过当前节点" };
     case "plan_examine_confirm":
-      return { approve: "继续开发", revise: "返回方案修改" };
+      return { approve: "继续开发", revise: "返回方案修改", skip: "跳过当前节点" };
     case "dev_examine_confirm":
-      return { approve: "继续后续流程", revise: "返回开发修正" };
+      return { approve: "继续后续流程", revise: "返回开发修正", skip: "跳过当前节点" };
     case "awaiting_confirm":
-      return { approve: "开始预发部署", revise: "" };
+      return { approve: "开始预发部署", revise: "", skip: "跳过当前节点" };
     default:
       return {
         approve: "通过",
         revise: approval.action_mode === "approve_or_revise" ? "驳回并修改" : "",
+        skip: "跳过当前节点",
       };
   }
 }
@@ -2259,6 +2261,14 @@ function renderWorkbenchApprovals(approvals, task) {
     approveBtn.textContent = labels.approve;
     approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
     actions.appendChild(approveBtn);
+    const skipBtn = document.createElement("button");
+    skipBtn.className = "btn-ghost";
+    skipBtn.textContent = labels.skip || "跳过当前节点";
+    skipBtn.addEventListener("click", () => {
+      if (!confirm(`确认跳过“${item.title}”并直接进入下一步吗？`)) return;
+      triggerWorkbenchAction(task.id, "skip");
+    });
+    actions.appendChild(skipBtn);
     if (item.action_mode === "approve_or_revise") {
       const reviseBtn = document.createElement("button");
       reviseBtn.className = "btn-ghost";

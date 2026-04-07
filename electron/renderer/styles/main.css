@@ -607,6 +607,13 @@ html, body {
   margin-left: auto;
 }
 
+.workbench-subtask-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .workbench-task-action-btn {
   position: relative;
   border: 1px solid rgba(79, 110, 247, 0.14);
@@ -852,6 +859,20 @@ html, body {
   background: linear-gradient(90deg, rgba(16, 185, 129, 0.78), rgba(16, 185, 129, 0.38));
 }
 
+.workbench-subtask-step.failed .workbench-subtask-card {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.workbench-subtask-step.failed .workbench-subtask-dot {
+  border-color: rgba(239, 68, 68, 0.92);
+  background: rgba(239, 68, 68, 0.92);
+}
+
+.workbench-subtask-step.failed .workbench-subtask-line {
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.7), rgba(239, 68, 68, 0.24));
+}
+
 @keyframes workbenchStepPulse {
   0% {
     opacity: 0.9;
@@ -952,6 +973,12 @@ html, body {
   color: #0f766e;
 }
 
+.workbench-subtask-step.failed .workbench-subtask-index,
+.workbench-subtask-detail-card.failed .workbench-subtask-detail-index {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
 .workbench-subtask-detail-card {
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -970,6 +997,11 @@ html, body {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.96));
 }
 
+.workbench-subtask-detail-card.failed {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.96));
+}
+
 .workbench-subtask-detail-card .workbench-item-title {
   display: flex;
   align-items: center;
@@ -983,6 +1015,47 @@ html, body {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.workbench-subtask-actions .btn-ghost,
+.workbench-approval-item .btn-ghost {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid rgba(79, 110, 247, 0.22);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.workbench-subtask-actions .btn-ghost:hover,
+.workbench-approval-item .btn-ghost:hover {
+  border-color: rgba(79, 110, 247, 0.4);
+  background: rgba(79, 110, 247, 0.1);
+  color: var(--accent-hover);
+}
+
+.workbench-subtask-detail-card.failed .workbench-subtask-actions .btn-ghost {
+  border-color: rgba(239, 68, 68, 0.26);
+  background: rgba(255, 255, 255, 0.94);
+  color: #b91c1c;
+}
+
+.workbench-subtask-detail-card.failed .workbench-subtask-actions .btn-ghost:hover {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: rgba(239, 68, 68, 0.12);
+  color: #991b1b;
+}
+
+.workbench-approval-item .workbench-task-actions {
+  margin-top: 14px;
+}
+
+.workbench-approval-item .btn-primary {
+  min-height: 38px;
+  padding: 9px 16px;
+  box-shadow: 0 10px 22px rgba(79, 110, 247, 0.22);
 }
 
 .workbench-comment-composer {

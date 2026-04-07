@@ -710,6 +710,32 @@ export function approveWorkflow(workflowId: string): { error?: string } {
   return {};
 }
 
+export function skipWorkflow(workflowId: string): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config)
+    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+
+  const stateConfig = config.states[workflow.status];
+  if (
+    !stateConfig ||
+    stateConfig.type !== 'confirmation' ||
+    !stateConfig.on_approve
+  ) {
+    return {
+      error: `流程 ${workflowId} 当前状态 ${workflow.status} 不支持跳过操作`,
+    };
+  }
+
+  const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
+  if ('error' in rolesResult) return { error: rolesResult.error };
+
+  applyTransition(workflow, stateConfig.on_approve, rolesResult.roles);
+  return {};
+}
+
 export function reviseWorkflow(
   workflowId: string,
   revisionText: string,
@@ -1251,6 +1277,12 @@ export function handleCardAction(action: {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = approveWorkflow(action.workflow_id);
       if (result.error) notifyMain(`[操作失败] 进入开发失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      break;
+    }
+    case 'skip': {
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      const result = skipWorkflow(action.workflow_id);
+      if (result.error) notifyMain(`[操作失败] 跳过当前节点失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'pause': {
