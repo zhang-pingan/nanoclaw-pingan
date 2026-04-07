@@ -2379,6 +2379,8 @@ function getWorkbenchApprovalLabels(task, approval) {
       return { approve: "继续后续流程", revise: "返回开发修正", skip: "跳过当前节点" };
     case "awaiting_confirm":
       return { approve: "开始预发部署", revise: "", skip: "跳过当前节点" };
+    case "testing_confirm":
+      return { approve: "", revise: "填写 access_token 并开始测试", skip: "跳过鉴权直接测试" };
     default:
       return {
         approve: "通过",
@@ -2409,11 +2411,13 @@ function renderWorkbenchApprovals(approvals, task) {
     `;
     const actions = document.createElement("div");
     actions.className = "workbench-task-actions";
-    const approveBtn = document.createElement("button");
-    approveBtn.className = "btn-primary";
-    approveBtn.textContent = labels.approve;
-    approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
-    actions.appendChild(approveBtn);
+    if (item.action_mode !== "input_required") {
+      const approveBtn = document.createElement("button");
+      approveBtn.className = "btn-primary";
+      approveBtn.textContent = labels.approve;
+      approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
+      actions.appendChild(approveBtn);
+    }
     const skipBtn = document.createElement("button");
     skipBtn.className = "btn-ghost";
     skipBtn.textContent = labels.skip || "跳过当前节点";
@@ -2422,11 +2426,13 @@ function renderWorkbenchApprovals(approvals, task) {
       triggerWorkbenchAction(task.id, "skip");
     });
     actions.appendChild(skipBtn);
-    if (item.action_mode === "approve_or_revise") {
+    if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
       const reviseBtn = document.createElement("button");
-      reviseBtn.className = "btn-ghost";
+      reviseBtn.className = item.action_mode === "input_required" ? "btn-primary" : "btn-ghost";
       reviseBtn.textContent = labels.revise || "驳回并修改";
-      reviseBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "revise"));
+      reviseBtn.addEventListener("click", () =>
+        triggerWorkbenchAction(task.id, item.action_mode === "input_required" ? "submit_access_token" : "revise")
+      );
       actions.appendChild(reviseBtn);
     }
     el.appendChild(actions);
@@ -2521,9 +2527,13 @@ function renderWorkbenchTimeline(timeline) {
 
 async function triggerWorkbenchAction(taskId, action) {
   let revisionText = "";
+  let accessToken = "";
   if (action === "revise") {
     revisionText = window.prompt("请输入修改意见", "") || "";
     if (!revisionText.trim()) return;
+  } else if (action === "submit_access_token") {
+    accessToken = window.prompt("请输入 access_token", "") || "";
+    if (!accessToken.trim()) return;
   }
   try {
     const res = await apiFetch("/api/workbench/task/action", {
@@ -2532,6 +2542,7 @@ async function triggerWorkbenchAction(taskId, action) {
         task_id: taskId,
         action,
         revision_text: revisionText,
+        access_token: accessToken,
       }),
     });
     const data = await res.json();

@@ -16,6 +16,7 @@ description: Test implemented features — analyze delivery docs, design test ca
    - 变更的文件列表
    - 接口/数据库变更
    - 文档中列出的测试要点
+   - 如任务描述中提供了 `access_token`，提取该值，并在后续接口测试中统一拼装为 `Authorization: Bearer {access_token}` 请求头
 2. 阅读项目代码中对应的变更文件，理解实际实现
 3. 如有不清楚的地方，向用户确认
 
@@ -60,7 +61,7 @@ description: Test implemented features — analyze delivery docs, design test ca
 
 1. 按用例逐条执行，综合以下手段验证：
    - *代码审查*：阅读变更代码确认逻辑正确性
-   - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求/响应
+   - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求/响应；若接口需要登录鉴权，优先使用任务描述中提供的 `access_token`，并在请求头中显式拼装 `Authorization: Bearer {access_token}`，例如 `-H 'Authorization: Bearer eyJ...'`
    - *日志验证*：SSH 到 `staging.log_hosts`，查看 `staging.logs_info` 和 `staging.logs_error`，确认无异常日志
    - *数据库验证*：通过 MySQL 代理查询 `staging.mysql` 预发数据库，验证数据变更是否符合预期(注意**预发的表后缀+`_gray`**)
 2. 对每条用例记录结果，在 `[ ]` 框内直接标记：
@@ -130,5 +131,6 @@ description: Test implemented features — analyze delivery docs, design test ca
 
 - *基于代码验证*：不仅看文档描述，要读实际代码确认实现是否正确
 - *覆盖边界情况*：空值、极端值、并发、权限等边界场景必须覆盖
+- *鉴权不可省略*：涉及受保护接口时，执行接口测试前先从任务描述中提取 `access_token`，并在所有相关 `curl` 请求中携带拼装后的 `Authorization: Bearer {access_token}` 请求头
 - *问题描述精准*：每个 bug 都要有明确的复现步骤和预期/实际对比
 - *回归意识*：关注变更是否影响已有功能，必要时补充回归用例

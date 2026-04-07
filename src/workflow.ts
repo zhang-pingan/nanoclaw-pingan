@@ -366,6 +366,7 @@ function buildTemplateVars(
     round: workflow.round,
     deliverable: workflow.deliverable || 'N/A',
     deploy_branch: workflow.deploy_branch || '',
+    access_token: workflow.access_token || '',
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
@@ -400,6 +401,7 @@ function applyTransition(
     delegationResult?: string;
     resultSummary?: string;
     revisionText?: string;
+    accessToken?: string;
   },
 ): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -410,6 +412,10 @@ function applyTransition(
   const updates: Parameters<typeof updateWorkflow>[1] = {
     status: transition.target,
   };
+
+  if (extra?.accessToken !== undefined) {
+    updates.access_token = extra.accessToken;
+  }
 
   // 1. Increment round if needed
   let round = workflow.round;
@@ -506,6 +512,7 @@ export interface CreateWorkflowOpts {
   workflowType: string;
   deliverable?: string;
   deployBranch?: string;
+  accessToken?: string;
 }
 
 export function createNewWorkflow(opts: CreateWorkflowOpts): {
@@ -568,6 +575,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       branch: deliverable.branch,
       deliverable: deliverable.fileName,
       deploy_branch: opts.deployBranch || '',
+      access_token: opts.accessToken || '',
       status: entryPoint.state,
       current_delegation_id: '',
       round: 0,
@@ -653,6 +661,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     branch: '',
     deliverable: '',
     deploy_branch: opts.deployBranch || '',
+    access_token: opts.accessToken || '',
     status: entryPoint.state,
     current_delegation_id: '',
     round: 0,
@@ -796,6 +805,8 @@ export function reviseWorkflow(
 
   applyTransition(workflow, stateConfig.on_revise, rolesResult.roles, {
     revisionText,
+    accessToken:
+      workflow.status === 'testing_confirm' ? revisionText.trim() : undefined,
   });
   return {};
 }
@@ -971,10 +982,12 @@ export function onDelegationComplete(delegationId: string): void {
 const ACTION_BUTTONS: Record<string, { label: string; type?: 'primary' | 'danger' | 'default' }> = {
   approve: { label: '✅ 确认执行', type: 'primary' },
   approve_dev: { label: '✅ 进入开发', type: 'primary' },
+  skip: { label: '⏭ 跳过当前节点' },
   pause: { label: '⏸ 暂缓' },
   cancel: { label: '❌ 取消流程', type: 'danger' },
   resume: { label: '▶ 继续', type: 'primary' },
   revise: { label: '✏️ 提交修改' },
+  submit_access_token: { label: '🔐 提交 Token', type: 'primary' },
 };
 
 function getActionButtonLabel(actionName: string, workflow: Workflow): string {
@@ -993,6 +1006,10 @@ function getActionButtonLabel(actionName: string, workflow: Workflow): string {
       break;
     case 'awaiting_confirm':
       if (actionName === 'approve') return '✅ 开始预发部署';
+      break;
+    case 'testing_confirm':
+      if (actionName === 'submit_access_token') return '🔐 提交 Token 并开始测试';
+      if (actionName === 'skip') return '⏭ 跳过鉴权直接测试';
       break;
     default:
       break;
@@ -1045,15 +1062,27 @@ function buildConfigCard(
   };
 
   if (hasRevise) {
-    card.form = {
-      name: 'revision_form',
-      inputs: [{ name: 'revision_text', placeholder: '如需修改方案，请输入修改意见...' }],
-      submitButton: {
-        id: 'request_revision',
-        label: '✏️ 提交修改',
-        value: { workflow_id: workflow.id, action: 'request_revision' },
-      },
-    };
+    if (workflow.status === 'testing_confirm') {
+      card.form = {
+        name: 'access_token_form',
+        inputs: [{ name: 'access_token', placeholder: '请输入接口测试所需的 access_token' }],
+        submitButton: {
+          id: 'submit_access_token',
+          label: '🔐 提交 Token 并开始测试',
+          value: { workflow_id: workflow.id, action: 'submit_access_token' },
+        },
+      };
+    } else {
+      card.form = {
+        name: 'revision_form',
+        inputs: [{ name: 'revision_text', placeholder: '如需修改方案，请输入修改意见...' }],
+        submitButton: {
+          id: 'request_revision',
+          label: '✏️ 提交修改',
+          value: { workflow_id: workflow.id, action: 'request_revision' },
+        },
+      };
+    }
   }
 
   return card;
@@ -1126,11 +1155,19 @@ function buildWorkflowListCard(workflows: Workflow[]): InteractiveCard {
     const confirmationStates = config ? getConfirmationStates(config) : [];
 
     if (confirmationStates.includes(w.status)) {
-      buttons.push(
-        { id: 'approve', label: '✅ 确认部署', type: 'primary', value: { workflow_id: w.id, action: 'approve' } },
-        { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
-        { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
-      );
+      if (w.status === 'testing_confirm') {
+        buttons.push(
+          { id: 'skip', label: '⏭ 跳过鉴权直接测试', value: { workflow_id: w.id, action: 'skip' } },
+          { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
+          { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+        );
+      } else {
+        buttons.push(
+          { id: 'approve', label: '✅ 确认部署', type: 'primary', value: { workflow_id: w.id, action: 'approve' } },
+          { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
+          { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+        );
+      }
     } else if (w.status === 'paused') {
       buttons.push(
         { id: 'resume', label: '▶ 继续', type: 'primary', value: { workflow_id: w.id, action: 'resume' } },
@@ -1341,6 +1378,14 @@ export function handleCardAction(action: {
       if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。', wfSourceJid, action.workflow_id); break; }
       const result = reviseWorkflow(action.workflow_id, `[方案修改意见]\n\n${revisionText}`);
       if (result.error) notifyMain(`[操作失败] 提交修改失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      break;
+    }
+    case 'submit_access_token': {
+      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      const accessToken = action.form_value?.access_token?.trim();
+      if (!accessToken) { notifyMain('[操作失败] 请输入 access_token 后再开始测试。', wfSourceJid, action.workflow_id); break; }
+      const result = reviseWorkflow(action.workflow_id, accessToken);
+      if (result.error) notifyMain(`[操作失败] 提交 access_token 失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'cancel': {

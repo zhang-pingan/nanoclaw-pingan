@@ -191,6 +191,7 @@ function createSchema(database: Database.Database): void {
       branch TEXT DEFAULT '',
       deliverable TEXT DEFAULT '',
       deploy_branch TEXT DEFAULT '',
+      access_token TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'dev',
       current_delegation_id TEXT DEFAULT '',
       round INTEGER DEFAULT 0,
@@ -355,6 +356,13 @@ function createSchema(database: Database.Database): void {
   // Add deploy_branch column to workflows (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE workflows ADD COLUMN deploy_branch TEXT DEFAULT ''`);
+  } catch {
+    /* column already exists */
+  }
+
+  // Add access_token column to workflows (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE workflows ADD COLUMN access_token TEXT DEFAULT ''`);
   } catch {
     /* column already exists */
   }
@@ -1292,8 +1300,8 @@ export function getExpiredPendingAskQuestions(nowIso: string): AskQuestionRecord
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, start_from, branch, deliverable, deploy_branch, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, start_from, branch, deliverable, deploy_branch, access_token, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
@@ -1302,6 +1310,7 @@ export function createWorkflow(workflow: Workflow): void {
     workflow.branch,
     workflow.deliverable,
     workflow.deploy_branch,
+    workflow.access_token,
     workflow.status,
     workflow.current_delegation_id,
     workflow.round,
@@ -1327,6 +1336,7 @@ export function updateWorkflow(
       | 'branch'
       | 'deliverable'
       | 'deploy_branch'
+      | 'access_token'
       | 'status'
       | 'current_delegation_id'
       | 'round'
@@ -1349,6 +1359,10 @@ export function updateWorkflow(
   if (updates.deploy_branch !== undefined) {
     fields.push('deploy_branch = ?');
     values.push(updates.deploy_branch);
+  }
+  if (updates.access_token !== undefined) {
+    fields.push('access_token = ?');
+    values.push(updates.access_token);
   }
   if (updates.status !== undefined) {
     fields.push('status = ?');

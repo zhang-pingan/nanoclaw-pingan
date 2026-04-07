@@ -189,6 +189,7 @@ interface CreateWorkflowCommandData {
   start_from: string;
   deliverable?: string;
   deploy_branch?: string;
+  access_token?: string;
 }
 
 interface ParsedCreateWorkflowCommand {
@@ -338,6 +339,10 @@ function parseCreateWorkflowCommand(
     typeof raw.deploy_branch === 'string' && raw.deploy_branch.trim()
       ? raw.deploy_branch.trim()
       : undefined;
+  const accessToken =
+    typeof raw.access_token === 'string' && raw.access_token.trim()
+      ? raw.access_token.trim()
+      : undefined;
 
   if (!name || !service || !workflowType || !startFrom) {
     return { isCreateWorkflowCommand: true };
@@ -352,6 +357,7 @@ function parseCreateWorkflowCommand(
       start_from: startFrom,
       deliverable,
       deploy_branch: deployBranch,
+      access_token: accessToken,
     },
   };
 }
@@ -399,6 +405,7 @@ async function handleCreateWorkflowCommand(opts: {
     workflowType: cmdData.workflow_type,
     deliverable: cmdData.deliverable,
     deployBranch: cmdData.deploy_branch,
+    accessToken: cmdData.access_token,
   });
 
   if (wfResult.error) {

@@ -108,7 +108,7 @@ export interface WorkbenchApproval {
   title: string;
   body: string;
   status: 'pending';
-  action_mode: 'approve_only' | 'approve_or_revise';
+  action_mode: 'approve_only' | 'approve_or_revise' | 'input_required';
 }
 
 export interface WorkbenchTaskDetail {
@@ -214,13 +214,19 @@ function mapPersistedArtifact(item: WorkbenchArtifactRecord): WorkbenchArtifact 
 }
 
 function mapPersistedApproval(item: WorkbenchApprovalRecord): WorkbenchApproval {
+  const actionMode =
+    item.approval_type === 'testing_confirm'
+      ? 'input_required'
+      : item.approval_type.includes('confirm')
+        ? 'approve_or_revise'
+        : 'approve_only';
   return {
     id: item.id,
     approval_type: item.approval_type,
     title: item.title,
     body: item.body || '',
     status: 'pending',
-    action_mode: item.approval_type.includes('confirm') ? 'approve_or_revise' : 'approve_only',
+    action_mode: actionMode,
   };
 }
 
@@ -415,7 +421,12 @@ function buildApprovals(workflow: Workflow): WorkbenchApproval[] {
       title: config.status_labels[workflow.status] || workflow.status,
       body,
       status: 'pending',
-      action_mode: stateConfig.on_revise ? 'approve_or_revise' : 'approve_only',
+      action_mode:
+        workflow.status === 'testing_confirm'
+          ? 'input_required'
+          : stateConfig.on_revise
+            ? 'approve_or_revise'
+            : 'approve_only',
     },
   ];
 }
@@ -601,6 +612,7 @@ export function createWorkbenchTask(input: {
   workflowType: string;
   deliverable?: string;
   deployBranch?: string;
+  accessToken?: string;
 }): { workflowId: string; error?: string } {
   return createNewWorkflow({
     name: input.name,
@@ -610,13 +622,22 @@ export function createWorkbenchTask(input: {
     workflowType: input.workflowType,
     deliverable: input.deliverable,
     deployBranch: input.deployBranch,
+    accessToken: input.accessToken,
   });
 }
 
 export function runWorkbenchTaskAction(input: {
   taskId: string;
-  action: 'approve' | 'revise' | 'pause' | 'resume' | 'cancel' | 'skip';
+  action:
+    | 'approve'
+    | 'revise'
+    | 'pause'
+    | 'resume'
+    | 'cancel'
+    | 'skip'
+    | 'submit_access_token';
   revisionText?: string;
+  accessToken?: string;
 }): { error?: string } {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
@@ -634,6 +655,11 @@ export function runWorkbenchTaskAction(input: {
       return cancelWorkflow(workflowId);
     case 'skip':
       return skipWorkflow(workflowId);
+    case 'submit_access_token':
+      if (!input.accessToken?.trim()) {
+        return { error: 'access_token required' };
+      }
+      return reviseWorkflow(workflowId, input.accessToken.trim());
     default:
       return { error: `Unsupported action: ${input.action}` };
   }

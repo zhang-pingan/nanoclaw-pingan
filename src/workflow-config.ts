@@ -205,6 +205,7 @@ export interface TemplateVars {
   round?: number;
   deliverable?: string;
   deploy_branch?: string;
+  access_token?: string;
   delegation_result?: string;
   result_summary?: string;
   revision_text?: string;

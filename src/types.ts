@@ -181,6 +181,7 @@ export interface Workflow {
   branch: string;
   deliverable: string;
   deploy_branch: string;
+  access_token: string;
   status: WorkflowStatus;
   current_delegation_id: string;
   round: number;

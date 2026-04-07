@@ -1347,6 +1347,7 @@ class WebChannel {
       workflow_type?: string;
       deliverable?: string;
       deploy_branch?: string;
+      access_token?: string;
     };
 
     if (
@@ -1374,6 +1375,7 @@ class WebChannel {
       workflowType: data.workflow_type,
       deliverable: data.deliverable,
       deployBranch: data.deploy_branch,
+      accessToken: data.access_token,
     });
 
     if (result.error) {
@@ -1410,8 +1412,16 @@ class WebChannel {
 
     const data = body as {
       task_id?: string;
-      action?: 'approve' | 'revise' | 'pause' | 'resume' | 'cancel';
+      action?:
+        | 'approve'
+        | 'revise'
+        | 'pause'
+        | 'resume'
+        | 'cancel'
+        | 'skip'
+        | 'submit_access_token';
       revision_text?: string;
+      access_token?: string;
     };
 
     if (!data.task_id || !data.action) {
@@ -1424,6 +1434,7 @@ class WebChannel {
       taskId: data.task_id,
       action: data.action,
       revisionText: data.revision_text,
+      accessToken: data.access_token,
     });
     if (result.error) {
       res.writeHead(400, { 'Content-Type': 'application/json' });

@@ -160,16 +160,31 @@
         "skill": "ops-staging-deploy",
         "on_complete": {
           "success": {
-            "target": "testing",
-            "role": "test",
-            "skill": "test-requirement",
-            "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n交付文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/dev.md",
-            "notify": "[流程进展] 需求「{{name}}」({{id}}) 预发部署成功 ✅，已委派 {{role_folder:test}} 开始测试。"
+            "target": "testing_confirm",
+            "card": "testing_confirm",
+            "notify": "[流程进展] 需求「{{name}}」({{id}}) 预发部署成功 ✅\n\n请先确认接口测试使用的 access_token，再进入测试阶段。"
           },
           "failure": {
             "target": "ops_failed",
             "notify": "[流程终止] 需求「{{name}}」({{id}}) 预发部署失败 ❌\n\n{{result_summary}}"
           }
+        }
+      },
+      "testing_confirm": {
+        "type": "confirmation",
+        "card": "testing_confirm",
+        "on_approve": {
+          "target": "testing",
+          "role": "test",
+          "skill": "test-requirement",
+          "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n交付文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/dev.md"
+        },
+        "on_revise": {
+          "target": "testing",
+          "role": "test",
+          "skill": "test-requirement",
+          "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n交付文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/dev.md\naccess_token: {{access_token}}",
+          "notify": "[流程进展] 需求「{{name}}」({{id}}) 已确认 access_token，已委派 {{role_folder:test}} 开始测试。"
         }
       },
       "testing": {
@@ -224,6 +239,7 @@
       "dev_examine_confirm": "📋 确认回修或继续后续流程",
       "awaiting_confirm": "⏳ 确认预发部署",
       "ops_deploy": "🚀 部署中",
+      "testing_confirm": "🔐 确认测试 Token",
       "testing": "🧪 测试中",
       "fixing": "🔨 修复中",
       "passed": "✅ 已通过",
@@ -255,6 +271,12 @@
         "header_color": "orange",
         "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**工作分支**：{{branch}}\n**交付文档**：{{deliverable}}\n\n请选择：\n1) 直接继续后续流程\n2) 回到开发修正（可填写补充修改意见）",
         "actions": ["approve", "revise", "cancel"]
+      },
+      "testing_confirm": {
+        "header_template": "🔐 填写 access_token 后开始测试",
+        "header_color": "orange",
+        "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**交付文档**：{{deliverable}}\n\n部署已完成。请先填写接口测试使用的 access_token，系统会在委派测试任务时自动附带该字段。\n\n如本轮测试无需鉴权，也可直接点击“跳过当前节点”。",
+        "actions": ["skip", "pause", "cancel", "revise"]
       }
     }
   }

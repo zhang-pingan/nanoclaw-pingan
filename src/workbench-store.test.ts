@@ -69,6 +69,7 @@ describe('workbench approval transition sync', () => {
       branch: 'feature/predeploy',
       deliverable: '2026-04-07_predeploy',
       deploy_branch: 'staging-deploy/feature-predeploy',
+      access_token: '',
       status: 'awaiting_confirm',
       current_delegation_id: '',
       round: 0,
@@ -96,6 +97,7 @@ describe('workbench approval transition sync', () => {
     expect(detail?.subtasks.map((item) => item.stage_key)).toEqual([
       'awaiting_confirm',
       'ops_deploy',
+      'testing_confirm',
       'testing',
       'fixing',
     ]);
@@ -110,6 +112,7 @@ describe('workbench approval transition sync', () => {
       branch: 'feature/fail',
       deliverable: '2026-04-07_fail',
       deploy_branch: 'staging-deploy/feature-fail',
+      access_token: '',
       status: 'ops_failed',
       current_delegation_id: 'wf-del-1',
       round: 0,
@@ -142,6 +145,7 @@ describe('workbench approval transition sync', () => {
       branch: 'feature/cancel-fixing',
       deliverable: '2026-04-07_cancel_fixing',
       deploy_branch: 'staging-deploy/feature-cancel-fixing',
+      access_token: '',
       status: 'fixing',
       current_delegation_id: 'wf-del-cancel',
       round: 1,
