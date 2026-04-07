@@ -4553,7 +4553,7 @@ body::after {
 #schedulers-panel,
 #agent-status-panel,
 #workflows-panel {
-  background: rgba(242, 252, 255, 0.9);
+  background: rgba(242, 252, 255, 0.76);
   border-color: var(--border);
   box-shadow: var(--shadow-lg);
 }
