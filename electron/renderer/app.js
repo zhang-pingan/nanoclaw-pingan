@@ -2304,7 +2304,8 @@ function renderWorkbenchSubtasks(subtasks) {
 }
 
 function getWorkbenchApprovalLabels(task, approval) {
-  switch (task.status) {
+  const approvalType = approval.approval_type || task.status;
+  switch (approvalType) {
     case "plan_confirm":
       return { approve: "进入开发", revise: "返回方案修改", skip: "跳过当前节点" };
     case "plan_examine_confirm":
@@ -2874,8 +2875,26 @@ async function openWorkbenchCreateTaskModal() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       closeWorkbenchCreateModal();
-      const selectedTaskId = data.task_id || (data.task && data.task.id) || data.workflow_id || "";
-      await loadWorkbenchTasks(selectedTaskId);
+      const createdDetail = data.detail && data.detail.task ? data.detail : null;
+      const selectedTaskId = data.task_id || (createdDetail && createdDetail.task && createdDetail.task.id) || data.workflow_id || "";
+
+      if (createdDetail) {
+        currentWorkbenchTaskId = createdDetail.task.id;
+        currentWorkbenchDetail = createdDetail;
+        const taskIdx = workbenchTasks.findIndex((item) => item.id === createdDetail.task.id);
+        if (taskIdx >= 0) {
+          workbenchTasks[taskIdx] = { ...workbenchTasks[taskIdx], ...createdDetail.task };
+        } else {
+          workbenchTasks.unshift(createdDetail.task);
+        }
+        renderWorkbenchTaskList();
+        renderWorkbenchTaskDetail(createdDetail);
+      }
+
+      await loadWorkbenchTasks(selectedTaskId, false, !createdDetail);
+      if (selectedTaskId) {
+        scheduleWorkbenchTaskDetailReload(selectedTaskId, createdDetail ? 400 : 0);
+      }
     } catch (err) {
       console.error("Failed to create workbench task:", err);
       alert(err.message || "任务创建失败");

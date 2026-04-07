@@ -104,6 +104,7 @@ export interface WorkbenchArtifact {
 
 export interface WorkbenchApproval {
   id: string;
+  approval_type: string;
   title: string;
   body: string;
   status: 'pending';
@@ -213,6 +214,7 @@ function mapPersistedArtifact(item: WorkbenchArtifactRecord): WorkbenchArtifact 
 function mapPersistedApproval(item: WorkbenchApprovalRecord): WorkbenchApproval {
   return {
     id: item.id,
+    approval_type: item.approval_type,
     title: item.title,
     body: item.body || '',
     status: 'pending',
@@ -374,6 +376,7 @@ function buildApprovals(workflow: Workflow): WorkbenchApproval[] {
   return [
     {
       id: `${workflow.id}-approval-${workflow.status}`,
+      approval_type: workflow.status,
       title: config.status_labels[workflow.status] || workflow.status,
       body,
       status: 'pending',
@@ -512,6 +515,9 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
 
   const workflow = getWorkflow(workflowId);
   if (!workflow) return null;
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const stateConfig = config?.states[workflow.status];
+  const shouldShowApprovals = stateConfig?.type === 'confirmation';
 
   const task = getWorkbenchTaskRecord(taskId);
   if (task) {
@@ -523,9 +529,15 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
         .map(mapPersistedSubtask),
       timeline: listWorkbenchEventsByTask(task.id).map(mapPersistedEvent),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(mapPersistedArtifact),
-      approvals: listWorkbenchApprovalsByTask(task.id)
-        .filter((item) => item.status === 'pending')
-        .map(mapPersistedApproval),
+      approvals: shouldShowApprovals
+        ? listWorkbenchApprovalsByTask(task.id)
+            .filter(
+              (item) =>
+                item.status === 'pending' &&
+                item.approval_type === workflow.status,
+            )
+            .map(mapPersistedApproval)
+        : [],
       comments: listWorkbenchCommentsByTask(task.id).map(mapPersistedComment),
       assets: listWorkbenchContextAssetsByTask(task.id).map(mapPersistedAsset),
     };

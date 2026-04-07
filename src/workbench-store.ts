@@ -172,6 +172,28 @@ function resolvePendingApprovals(taskId: string, resolvedAt: string): void {
   }
 }
 
+function resolveStalePendingApprovals(
+  taskId: string,
+  currentApprovalType: string | null,
+  resolvedAt: string,
+): void {
+  for (const approval of listWorkbenchApprovalsByTask(taskId)) {
+    if (approval.status !== 'pending') continue;
+    if (currentApprovalType && approval.approval_type === currentApprovalType) continue;
+    resolveWorkbenchApproval(approval.id, resolvedAt);
+    emitWorkbenchEvent({
+      type: 'approval_updated',
+      taskId,
+      workflowId: approval.workflow_id,
+      payload: {
+        id: approval.id,
+        status: 'resolved',
+        resolvedAt,
+      },
+    });
+  }
+}
+
 function ensureSubtasks(workflow: Workflow): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const task = getWorkbenchTaskByWorkflowId(workflow.id);
@@ -271,6 +293,8 @@ export function syncWorkbenchOnWorkflowUpdated(workflowId: string, summary?: str
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);
   if (!workflow || !task) return;
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const stateConfig = config?.states[workflow.status];
 
   updateWorkbenchTask(task.id, {
     status: workflow.status,
@@ -312,6 +336,12 @@ export function syncWorkbenchOnWorkflowUpdated(workflowId: string, summary?: str
       },
     });
   }
+
+  resolveStalePendingApprovals(
+    task.id,
+    stateConfig?.type === 'confirmation' ? workflow.status : null,
+    workflow.updated_at,
+  );
 
   ensureArtifacts(workflow);
   upsertApprovalForStage(workflow);

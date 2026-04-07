@@ -1388,6 +1388,7 @@ class WebChannel {
         workflow_id: result.workflowId,
         task_id: detail?.task.id || null,
         task: detail?.task || null,
+        detail,
       }),
     );
   }
