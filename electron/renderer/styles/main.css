@@ -446,7 +446,8 @@ html, body {
 }
 
 .workbench-sidebar.collapsed #workbench-refresh-btn,
-.workbench-sidebar.collapsed #workbench-create-task-btn {
+.workbench-sidebar.collapsed #workbench-create-task-btn,
+.workbench-sidebar.collapsed #workbench-delete-all-btn {
   display: none;
 }
 

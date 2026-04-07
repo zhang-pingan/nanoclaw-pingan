@@ -81,6 +81,7 @@ var workbenchSidebarCollapse = document.getElementById("workbench-sidebar-collap
 var workbenchTaskList = document.getElementById("workbench-task-list");
 var workbenchRefreshBtn = document.getElementById("workbench-refresh-btn");
 var workbenchCreateTaskBtn = document.getElementById("workbench-create-task-btn");
+var workbenchDeleteAllBtn = document.getElementById("workbench-delete-all-btn");
 var workbenchDetailEmpty = document.getElementById("workbench-detail-empty");
 var workbenchTaskDetail = document.getElementById("workbench-task-detail");
 var workbenchTaskTitle = document.getElementById("workbench-task-title");
@@ -1993,6 +1994,23 @@ async function loadWorkbenchTasks(preferredTaskId, autoSelect = true) {
   }
 }
 
+async function deleteAllWorkbenchTaskData() {
+  if (!confirm("确认删除所有任务相关数据？这会清空工作台中的任务、阶段、审批和产出记录。")) return;
+  try {
+    const res = await apiFetch("/api/workbench/tasks", { method: "DELETE" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    workbenchTasks = [];
+    currentWorkbenchTaskId = "";
+    currentWorkbenchDetail = null;
+    renderWorkbenchTaskList();
+    workbenchTaskDetail.classList.add("hidden");
+    workbenchDetailEmpty.classList.remove("hidden");
+  } catch (err) {
+    console.error("Failed to delete all workbench task data:", err);
+    alert("删除任务数据失败");
+  }
+}
+
 function renderWorkbenchTaskList() {
   workbenchTaskList.innerHTML = "";
   if (workbenchTasks.length === 0) {
@@ -2026,7 +2044,7 @@ async function loadWorkbenchTaskDetail(taskId) {
     const res = await apiFetch(`/api/workbench/task?id=${encodeURIComponent(taskId)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const detail = await res.json();
-    currentWorkbenchTaskId = taskId;
+    currentWorkbenchTaskId = detail.task && detail.task.id ? detail.task.id : taskId;
     renderWorkbenchTaskList();
     renderWorkbenchTaskDetail(detail);
   } catch (err) {
@@ -2657,7 +2675,8 @@ async function openWorkbenchCreateTaskModal() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       closeWorkbenchCreateModal();
-      await loadWorkbenchTasks(data.workflow_id || "");
+      const selectedTaskId = data.task_id || (data.task && data.task.id) || data.workflow_id || "";
+      await loadWorkbenchTasks(selectedTaskId);
     } catch (err) {
       console.error("Failed to create workbench task:", err);
       alert(err.message || "任务创建失败");
@@ -4161,6 +4180,11 @@ if (workbenchCreateTaskBtn) {
       console.error("Failed to open workbench create dialog:", err);
       alert(err.message || "打开创建任务失败");
     }
+  });
+}
+if (workbenchDeleteAllBtn) {
+  workbenchDeleteAllBtn.addEventListener("click", () => {
+    deleteAllWorkbenchTaskData();
   });
 }
 if (workbenchCommentSubmit) {

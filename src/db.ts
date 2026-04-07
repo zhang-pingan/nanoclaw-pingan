@@ -1384,6 +1384,51 @@ export function deleteAllWorkflows(): void {
   db.prepare('DELETE FROM workflows').run();
 }
 
+export function deleteAllWorkbenchTaskData(): {
+  workflows: number;
+  delegations: number;
+  workbench_tasks: number;
+  workbench_subtasks: number;
+  workbench_events: number;
+  workbench_artifacts: number;
+  workbench_approvals: number;
+  workbench_comments: number;
+  workbench_context_assets: number;
+} {
+  const count = (sql: string) => (db.prepare(sql).get() as { count: number }).count;
+
+  const summary = {
+    workflows: count('SELECT COUNT(*) AS count FROM workflows'),
+    delegations: count(
+      'SELECT COUNT(*) AS count FROM delegations WHERE workflow_id IS NOT NULL',
+    ),
+    workbench_tasks: count('SELECT COUNT(*) AS count FROM workbench_tasks'),
+    workbench_subtasks: count('SELECT COUNT(*) AS count FROM workbench_subtasks'),
+    workbench_events: count('SELECT COUNT(*) AS count FROM workbench_events'),
+    workbench_artifacts: count('SELECT COUNT(*) AS count FROM workbench_artifacts'),
+    workbench_approvals: count('SELECT COUNT(*) AS count FROM workbench_approvals'),
+    workbench_comments: count('SELECT COUNT(*) AS count FROM workbench_comments'),
+    workbench_context_assets: count(
+      'SELECT COUNT(*) AS count FROM workbench_context_assets',
+    ),
+  };
+
+  const clear = db.transaction(() => {
+    db.prepare('DELETE FROM workbench_context_assets').run();
+    db.prepare('DELETE FROM workbench_comments').run();
+    db.prepare('DELETE FROM workbench_approvals').run();
+    db.prepare('DELETE FROM workbench_artifacts').run();
+    db.prepare('DELETE FROM workbench_events').run();
+    db.prepare('DELETE FROM workbench_subtasks').run();
+    db.prepare('DELETE FROM workbench_tasks').run();
+    db.prepare('DELETE FROM delegations WHERE workflow_id IS NOT NULL').run();
+    db.prepare('DELETE FROM workflows').run();
+  });
+
+  clear();
+  return summary;
+}
+
 // --- Workbench accessors ---
 
 export function createWorkbenchTask(record: WorkbenchTaskRecord): void {

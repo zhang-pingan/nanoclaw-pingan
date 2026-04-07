@@ -2,8 +2,18 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import {
   _initTestDatabase,
+  createDelegation,
   createMemory,
+  createWorkbenchApproval,
+  createWorkbenchArtifact,
+  createWorkbenchComment,
+  createWorkbenchContextAsset,
+  createWorkbenchEvent,
+  createWorkbenchSubtask,
+  createWorkbenchTask,
   createTask,
+  createWorkflow,
+  deleteAllWorkbenchTaskData,
   deleteMemory,
   deleteTask,
   doctorMemories,
@@ -13,6 +23,7 @@ import {
   getMemoryMetricSummary,
   getAllChats,
   getAllRegisteredGroups,
+  getAllWorkflows,
   getMessagesSince,
   getNewMessages,
   getTaskById,
@@ -308,6 +319,151 @@ describe('getNewMessages', () => {
     const { messages, newTimestamp } = getNewMessages([], '', 'Andy');
     expect(messages).toHaveLength(0);
     expect(newTimestamp).toBe('');
+  });
+});
+
+describe('deleteAllWorkbenchTaskData', () => {
+  it('removes workflow and workbench records together', () => {
+    createWorkflow({
+      id: 'wf-1',
+      name: 'Task 1',
+      service: 'svc-a',
+      branch: 'feature/task-1',
+      deliverable: 'req-1',
+      status: 'dev',
+      current_delegation_id: 'del-1',
+      round: 0,
+      source_jid: 'group@g.us',
+      created_at: '2024-01-01T00:00:00.000Z',
+      updated_at: '2024-01-01T00:00:00.000Z',
+      workflow_type: 'dev_test',
+      paused_from: null,
+    });
+
+    createDelegation({
+      id: 'del-1',
+      source_jid: 'group@g.us',
+      source_folder: 'main',
+      target_jid: 'dev@g.us',
+      target_folder: 'dev',
+      task: 'Implement feature',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      requester_jid: 'group@g.us',
+      workflow_id: 'wf-1',
+      created_at: '2024-01-01T00:00:00.000Z',
+      updated_at: '2024-01-01T00:00:00.000Z',
+    });
+
+    createWorkbenchTask({
+      id: 'wb-wf-1',
+      workflow_id: 'wf-1',
+      source_jid: 'group@g.us',
+      title: 'Task 1',
+      service: 'svc-a',
+      workflow_type: 'dev_test',
+      status: 'dev',
+      current_stage: 'dev',
+      summary: 'summary',
+      created_at: '2024-01-01T00:00:00.000Z',
+      updated_at: '2024-01-01T00:00:00.000Z',
+      last_event_at: '2024-01-01T00:00:00.000Z',
+    });
+    createWorkbenchSubtask({
+      id: 'sub-1',
+      task_id: 'wb-wf-1',
+      workflow_id: 'wf-1',
+      delegation_id: 'del-1',
+      stage_key: 'dev',
+      title: '开发',
+      role: 'dev',
+      group_folder: 'dev',
+      status: 'current',
+      input_summary: 'input',
+      output_summary: 'output',
+      started_at: '2024-01-01T00:00:00.000Z',
+      finished_at: null,
+      updated_at: '2024-01-01T00:00:00.000Z',
+    });
+    createWorkbenchEvent({
+      id: 'event-1',
+      task_id: 'wb-wf-1',
+      subtask_id: 'sub-1',
+      event_type: 'workflow_created',
+      title: 'Created',
+      body: 'body',
+      raw_ref_type: 'workflow',
+      raw_ref_id: 'wf-1',
+      created_at: '2024-01-01T00:00:00.000Z',
+    });
+    createWorkbenchArtifact({
+      id: 'artifact-1',
+      task_id: 'wb-wf-1',
+      workflow_id: 'wf-1',
+      artifact_type: 'plan_doc',
+      title: 'Plan',
+      path: 'projects/svc-a/iteration/req-1/plan.md',
+      source_role: 'planner',
+      created_at: '2024-01-01T00:00:00.000Z',
+    });
+    createWorkbenchApproval({
+      id: 'approval-1',
+      task_id: 'wb-wf-1',
+      workflow_id: 'wf-1',
+      status: 'pending',
+      approval_type: 'confirm_dev',
+      title: 'Approve',
+      body: 'body',
+      card_key: null,
+      created_at: '2024-01-01T00:00:00.000Z',
+      resolved_at: null,
+    });
+    createWorkbenchComment({
+      id: 'comment-1',
+      task_id: 'wb-wf-1',
+      workflow_id: 'wf-1',
+      author: 'Alice',
+      content: 'note',
+      created_at: '2024-01-01T00:00:00.000Z',
+    });
+    createWorkbenchContextAsset({
+      id: 'asset-1',
+      task_id: 'wb-wf-1',
+      workflow_id: 'wf-1',
+      asset_type: 'link',
+      title: 'Spec',
+      path: null,
+      url: 'https://example.com',
+      note: 'reference',
+      created_at: '2024-01-01T00:00:00.000Z',
+    });
+
+    const deleted = deleteAllWorkbenchTaskData();
+
+    expect(deleted).toMatchObject({
+      workflows: 1,
+      delegations: 1,
+      workbench_tasks: 1,
+      workbench_subtasks: 1,
+      workbench_events: 1,
+      workbench_artifacts: 1,
+      workbench_approvals: 1,
+      workbench_comments: 1,
+      workbench_context_assets: 1,
+    });
+    expect(getAllWorkflows()).toHaveLength(0);
+    expect(deleteAllWorkbenchTaskData()).toMatchObject({
+      workflows: 0,
+      delegations: 0,
+      workbench_tasks: 0,
+      workbench_subtasks: 0,
+      workbench_events: 0,
+      workbench_artifacts: 0,
+      workbench_approvals: 0,
+      workbench_comments: 0,
+      workbench_context_assets: 0,
+    });
   });
 });
 

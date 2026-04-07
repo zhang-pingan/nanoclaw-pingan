@@ -8,6 +8,7 @@ import {
   getDelegationsByWorkflow,
   getWorkflow,
   getAllWorkflows,
+  getWorkbenchTaskById,
   getWorkbenchTaskByWorkflowId,
   listWorkbenchApprovalsByTask,
   listWorkbenchArtifactsByTask,
@@ -434,11 +435,39 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
   });
 }
 
+function resolveWorkbenchWorkflowId(taskId: string): string | null {
+  if (!taskId) return null;
+
+  const normalizedTaskId = taskId.trim();
+  if (!normalizedTaskId) return null;
+
+  const persistedById = getWorkbenchTaskById(normalizedTaskId);
+  if (persistedById) return persistedById.workflow_id;
+
+  const normalizedWorkflowId = normalizedTaskId.replace(/^wb-/, '');
+  if (getWorkflow(normalizedWorkflowId)) return normalizedWorkflowId;
+
+  const persistedByWorkflowId = getWorkbenchTaskByWorkflowId(normalizedWorkflowId);
+  if (persistedByWorkflowId) return persistedByWorkflowId.workflow_id;
+
+  return null;
+}
+
+function getWorkbenchTaskRecord(taskId: string): WorkbenchTaskRecord | null {
+  const workflowId = resolveWorkbenchWorkflowId(taskId);
+  if (!workflowId) return null;
+  syncWorkbenchFromWorkflow(workflowId);
+  return getWorkbenchTaskByWorkflowId(workflowId) || null;
+}
+
 export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | null {
-  const workflow = getWorkflow(taskId) || getAllWorkflows().find((item) => `wb-${item.id}` === taskId);
+  const workflowId = resolveWorkbenchWorkflowId(taskId);
+  if (!workflowId) return null;
+
+  const workflow = getWorkflow(workflowId);
   if (!workflow) return null;
-  syncWorkbenchFromWorkflow(workflow.id);
-  const task = getWorkbenchTaskByWorkflowId(workflow.id);
+
+  const task = getWorkbenchTaskRecord(taskId);
   if (task) {
     return {
       task: toTaskItem(workflow),
@@ -488,10 +517,9 @@ export function runWorkbenchTaskAction(input: {
   action: 'approve' | 'revise' | 'pause' | 'resume' | 'cancel';
   revisionText?: string;
 }): { error?: string } {
-  const workflowId = getWorkflow(input.taskId)
-    ? input.taskId
-    : listWorkbenchTaskRecords().find((item) => item.id === input.taskId)?.workflow_id ||
-      input.taskId.replace(/^wb-/, '');
+  const workflowId = resolveWorkbenchWorkflowId(input.taskId);
+  if (!workflowId) return { error: 'Task not found' };
+
   switch (input.action) {
     case 'approve':
       return approveWorkflow(workflowId);
@@ -523,9 +551,10 @@ export function addWorkbenchComment(input: {
 }): { error?: string } {
   const detail = getWorkbenchTaskDetail(input.taskId);
   if (!detail) return { error: 'Task not found' };
-  const workflowId =
-    listWorkbenchTaskRecords().find((item) => item.id === input.taskId)?.workflow_id ||
-    input.taskId.replace(/^wb-/, '');
+
+  const workflowId = resolveWorkbenchWorkflowId(input.taskId);
+  if (!workflowId) return { error: 'Task not found' };
+
   const now = new Date().toISOString();
   const id = `wb-comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   createWorkbenchComment({
@@ -555,9 +584,10 @@ export function addWorkbenchAsset(input: {
 }): { error?: string } {
   const detail = getWorkbenchTaskDetail(input.taskId);
   if (!detail) return { error: 'Task not found' };
-  const workflowId =
-    listWorkbenchTaskRecords().find((item) => item.id === input.taskId)?.workflow_id ||
-    input.taskId.replace(/^wb-/, '');
+
+  const workflowId = resolveWorkbenchWorkflowId(input.taskId);
+  if (!workflowId) return { error: 'Task not found' };
+
   const now = new Date().toISOString();
   const id = `wb-asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   createWorkbenchContextAsset({
@@ -594,11 +624,16 @@ export function retryWorkbenchSubtask(input: {
 }): { error?: string } {
   const detail = getWorkbenchTaskDetail(input.taskId);
   if (!detail) return { error: 'Task not found' };
-  const subtask = listWorkbenchSubtasksByTask(detail.task.id).find((item) => item.id === input.subtaskId);
+
+  const task = getWorkbenchTaskRecord(input.taskId);
+  if (!task) return { error: 'Task not found' };
+
+  const subtask = listWorkbenchSubtasksByTask(task.id).find((item) => item.id === input.subtaskId);
   if (!subtask) return { error: 'Subtask not found' };
-  const workflowId =
-    listWorkbenchTaskRecords().find((item) => item.id === detail.task.id)?.workflow_id ||
-    detail.task.id.replace(/^wb-/, '');
+
+  const workflowId = resolveWorkbenchWorkflowId(input.taskId);
+  if (!workflowId) return { error: 'Task not found' };
+
   const result = retryWorkflowStage(workflowId, subtask.stage_key);
   if (result.error) return result;
   updateWorkbenchSubtask(subtask.id, {

@@ -363,6 +363,9 @@ class WebChannel {
         return this.apiGetWorkflowCreateOptions(res);
       }
       if (pathname === '/api/workbench/tasks') {
+        if (req.method === 'DELETE') {
+          return this.apiDeleteAllWorkbenchTaskData(res);
+        }
         return this.apiGetWorkbenchTasks(res);
       }
       if (pathname === '/api/workbench/task' && req.method === 'GET') {
@@ -1250,6 +1253,13 @@ class WebChannel {
     res.end(JSON.stringify({ tasks }));
   }
 
+  private async apiDeleteAllWorkbenchTaskData(res: http.ServerResponse): Promise<void> {
+    const { deleteAllWorkbenchTaskData } = await import('../db.js');
+    const deleted = deleteAllWorkbenchTaskData();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, deleted }));
+  }
+
   private async apiGetWorkbenchTask(
     reqUrl: URL,
     res: http.ServerResponse,
@@ -1332,6 +1342,7 @@ class WebChannel {
       JSON.stringify({
         ok: true,
         workflow_id: result.workflowId,
+        task_id: detail?.task.id || null,
         task: detail?.task || null,
       }),
     );
