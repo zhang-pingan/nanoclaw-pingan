@@ -88,6 +88,7 @@ var workbenchTaskTitle = document.getElementById("workbench-task-title");
 var workbenchTaskMeta = document.getElementById("workbench-task-meta");
 var workbenchTaskActions = document.getElementById("workbench-task-actions");
 var workbenchSubtasks = document.getElementById("workbench-subtasks");
+var workbenchApprovalsPanel = document.getElementById("workbench-approvals-panel");
 var workbenchApprovals = document.getElementById("workbench-approvals");
 var workbenchArtifacts = document.getElementById("workbench-artifacts");
 var workbenchAssets = document.getElementById("workbench-assets");
@@ -140,7 +141,9 @@ var memoryMetricsSummary = null;
 var workbenchTasks = [];
 var currentWorkbenchDetail = null;
 var currentWorkbenchTaskId = "";
-var workbenchRefreshInterval = null;
+var workbenchDetailLoading = false;
+var workbenchQueuedDetailTaskId = "";
+var workbenchDetailReloadTimer = null;
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -223,6 +226,8 @@ function formatTime(ts) {
 // --- SVG Icon helpers ---
 const SVG = {
   trash: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>',
+  pause: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="4" x2="10" y2="20"></line><line x1="14" y1="4" x2="14" y2="20"></line></svg>',
+  play: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>',
   file: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>',
   pdf: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>',
   paperclip: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>',
@@ -951,12 +956,6 @@ function setPrimaryNav(navKey) {
   }
   if (showWorkbench) {
     loadWorkbenchTasks();
-    if (workbenchRefreshInterval) clearInterval(workbenchRefreshInterval);
-    workbenchRefreshInterval = setInterval(() => {
-      if (activePrimaryNavKey === "workbench") {
-        loadWorkbenchTasks(currentWorkbenchTaskId, false);
-      }
-    }, 5000);
   }
 
   if (!showWorkspace) {
@@ -967,10 +966,6 @@ function setPrimaryNav(navKey) {
       clearInterval(agentStatusInterval);
       agentStatusInterval = null;
     }
-  }
-  if (!showWorkbench && workbenchRefreshInterval) {
-    clearInterval(workbenchRefreshInterval);
-    workbenchRefreshInterval = null;
   }
 }
 
@@ -1964,7 +1959,7 @@ async function deleteAllWorkflows() {
   }
 }
 
-async function loadWorkbenchTasks(preferredTaskId, autoSelect = true) {
+async function loadWorkbenchTasks(preferredTaskId, autoSelect = true, refreshDetail = true) {
   try {
     const res = await apiFetch("/api/workbench/tasks");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1980,9 +1975,9 @@ async function loadWorkbenchTasks(preferredTaskId, autoSelect = true) {
           ? workbenchTasks[0].id
           : "";
 
-    if (nextTaskId) {
+    if (nextTaskId && refreshDetail) {
       loadWorkbenchTaskDetail(nextTaskId);
-    } else {
+    } else if (!nextTaskId) {
       currentWorkbenchTaskId = "";
       currentWorkbenchDetail = null;
       workbenchTaskDetail.classList.add("hidden");
@@ -2024,9 +2019,8 @@ function renderWorkbenchTaskList() {
     el.innerHTML = `
       <div class="workbench-task-title">${escapeHtml(task.title)}</div>
       <div class="workbench-task-badges">
-        <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
         <span class="workbench-badge">${escapeHtml(task.service)}</span>
-        ${task.pending_approval ? '<span class="workbench-badge">待审批</span>' : ""}
+        <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
       </div>
       <div class="workbench-task-snippet">
         当前阶段：${escapeHtml(task.current_stage_label || task.current_stage)}<br />
@@ -2040,6 +2034,11 @@ function renderWorkbenchTaskList() {
 
 async function loadWorkbenchTaskDetail(taskId) {
   if (!taskId) return;
+  if (workbenchDetailLoading) {
+    workbenchQueuedDetailTaskId = taskId;
+    return;
+  }
+  workbenchDetailLoading = true;
   try {
     const res = await apiFetch(`/api/workbench/task?id=${encodeURIComponent(taskId)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2050,6 +2049,30 @@ async function loadWorkbenchTaskDetail(taskId) {
   } catch (err) {
     console.error("Failed to load workbench task detail:", err);
     alert("任务详情加载失败");
+  } finally {
+    workbenchDetailLoading = false;
+    const queuedTaskId = workbenchQueuedDetailTaskId;
+    workbenchQueuedDetailTaskId = "";
+    if (queuedTaskId) {
+      loadWorkbenchTaskDetail(queuedTaskId);
+    }
+  }
+}
+
+function scheduleWorkbenchTaskDetailReload(taskId, delay = 250) {
+  if (!taskId) return;
+  if (workbenchDetailReloadTimer) clearTimeout(workbenchDetailReloadTimer);
+  workbenchDetailReloadTimer = setTimeout(() => {
+    workbenchDetailReloadTimer = null;
+    loadWorkbenchTaskDetail(taskId);
+  }, delay);
+}
+
+async function refreshWorkbenchView() {
+  const activeTaskId = currentWorkbenchTaskId;
+  await loadWorkbenchTasks(activeTaskId, true, false);
+  if (activeTaskId && workbenchTasks.some((task) => task.id === activeTaskId)) {
+    await loadWorkbenchTaskDetail(activeTaskId);
   }
 }
 
@@ -2062,15 +2085,14 @@ function renderWorkbenchTaskDetail(detail) {
   workbenchTaskDetail.classList.remove("hidden");
   workbenchTaskTitle.textContent = task.title;
   workbenchTaskMeta.innerHTML = `
-    <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
     <span class="workbench-badge">${escapeHtml(task.service)}</span>
     <span class="workbench-badge">${escapeHtml(task.workflow_type)}</span>
     ${task.branch ? `<span class="workbench-badge">${escapeHtml(task.branch)}</span>` : ""}
-    ${task.deliverable ? `<span class="workbench-badge">${escapeHtml(task.deliverable)}</span>` : ""}
     ${task.round > 0 ? `<span class="workbench-badge">Round ${escapeHtml(String(task.round))}</span>` : ""}
+    <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
   `;
 
-  renderWorkbenchActions(task, detail.approvals || []);
+  renderWorkbenchActions(task);
   renderWorkbenchSubtasks(detail.subtasks || []);
   renderWorkbenchApprovals(detail.approvals || [], task.id);
   renderWorkbenchArtifacts(detail.artifacts || []);
@@ -2079,23 +2101,26 @@ function renderWorkbenchTaskDetail(detail) {
   renderWorkbenchTimeline(detail.timeline || []);
 }
 
-function renderWorkbenchActions(task, approvals) {
+function renderWorkbenchActions(task) {
   workbenchTaskActions.innerHTML = "";
   const buttons = [];
-  if (approvals.length > 0) {
-    buttons.push({ label: "通过", action: "approve" });
-    if (approvals.some((item) => item.action_mode === "approve_or_revise")) {
-      buttons.push({ label: "驳回并修改", action: "revise" });
-    }
+  if (task.status === "paused") {
+    buttons.push({ title: "恢复任务", action: "resume", icon: SVG.play });
+  } else if (!TERMINAL_STATUSES.includes(task.status)) {
+    buttons.push({ title: "暂停任务", action: "pause", icon: SVG.pause });
   }
-  if (task.status === "paused") buttons.push({ label: "恢复", action: "resume" });
-  else if (!TERMINAL_STATUSES.includes(task.status)) buttons.push({ label: "暂停", action: "pause" });
-  if (!TERMINAL_STATUSES.includes(task.status)) buttons.push({ label: "取消", action: "cancel" });
+  if (!TERMINAL_STATUSES.includes(task.status)) {
+    buttons.push({ title: "取消任务", action: "cancel", icon: SVG.trash, danger: true });
+  }
 
   buttons.forEach((item) => {
     const btn = document.createElement("button");
-    btn.className = item.action === "cancel" ? "btn-ghost" : "btn-primary";
-    btn.textContent = item.label;
+    btn.className = `icon-btn workbench-task-action-btn${item.danger ? " danger" : ""}`;
+    btn.type = "button";
+    btn.title = item.title;
+    btn.setAttribute("aria-label", item.title);
+    btn.setAttribute("data-tooltip", item.title);
+    btn.innerHTML = item.icon;
     btn.addEventListener("click", () => triggerWorkbenchAction(task.id, item.action));
     workbenchTaskActions.appendChild(btn);
   });
@@ -2137,9 +2162,11 @@ function renderWorkbenchSubtasks(subtasks) {
 function renderWorkbenchApprovals(approvals, taskId) {
   workbenchApprovals.innerHTML = "";
   if (approvals.length === 0) {
+    if (workbenchApprovalsPanel) workbenchApprovalsPanel.classList.add("hidden");
     workbenchApprovals.innerHTML = `<div class="workbench-empty">当前没有待审批项</div>`;
     return;
   }
+  if (workbenchApprovalsPanel) workbenchApprovalsPanel.classList.remove("hidden");
   approvals.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-approval-item";
@@ -2887,7 +2914,7 @@ function applyWorkbenchRealtimeEvent(event) {
       renderWorkbenchArtifacts(currentWorkbenchDetail.artifacts);
     }
   } else if (event.type === "approval_updated") {
-    loadWorkbenchTaskDetail(currentWorkbenchTaskId);
+    scheduleWorkbenchTaskDetailReload(currentWorkbenchTaskId);
   } else if (event.type === "comment_created") {
     currentWorkbenchDetail.comments.unshift({
       id: payload.id,
@@ -4168,8 +4195,8 @@ primaryNavItems.forEach((item) => {
   });
 });
 if (workbenchRefreshBtn) {
-  workbenchRefreshBtn.addEventListener("click", () => {
-    loadWorkbenchTasks(currentWorkbenchTaskId);
+  workbenchRefreshBtn.addEventListener("click", async () => {
+    await refreshWorkbenchView();
   });
 }
 if (workbenchCreateTaskBtn) {

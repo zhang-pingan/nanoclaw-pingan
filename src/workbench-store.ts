@@ -94,25 +94,44 @@ function upsertApprovalForStage(workflow: Workflow): void {
   if (!state || state.type !== 'confirmation') return;
   const card = state.card ? config.cards[state.card] : undefined;
   const title = config.status_labels[workflow.status] || workflow.status;
-  createWorkbenchApproval({
+  const nextApproval = {
     id: approvalId(workflow.id, workflow.status),
     task_id: task.id,
     workflow_id: workflow.id,
-    status: 'pending',
+    status: 'pending' as const,
     approval_type: workflow.status,
     title,
     body: card ? `${card.header_template}\n${card.body_template}` : title,
     card_key: state.card || null,
     created_at: workflow.updated_at,
     resolved_at: null,
+  };
+
+  const existing = listWorkbenchApprovalsByTask(task.id).find(
+    (item) => item.id === nextApproval.id,
+  );
+  if (
+    existing &&
+    existing.status === nextApproval.status &&
+    existing.approval_type === nextApproval.approval_type &&
+    existing.title === nextApproval.title &&
+    (existing.body || '') === nextApproval.body &&
+    existing.card_key === nextApproval.card_key &&
+    existing.resolved_at === nextApproval.resolved_at
+  ) {
+    return;
+  }
+
+  createWorkbenchApproval({
+    ...nextApproval,
   });
   emitWorkbenchEvent({
     type: 'approval_updated',
     taskId: task.id,
     workflowId: workflow.id,
     payload: {
-      id: approvalId(workflow.id, workflow.status),
-      status: 'pending',
+      id: nextApproval.id,
+      status: nextApproval.status,
       title,
       approvalType: workflow.status,
     },

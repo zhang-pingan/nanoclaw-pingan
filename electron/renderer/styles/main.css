@@ -564,9 +564,15 @@ html, body {
 
 .workbench-task-header {
   display: flex;
-  justify-content: space-between;
   gap: 18px;
   padding: 22px 24px;
+}
+
+.workbench-task-header-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
 }
 
 .workbench-kicker {
@@ -586,6 +592,65 @@ html, body {
 .workbench-task-meta {
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.workbench-task-header-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.workbench-task-actions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.workbench-task-action-btn {
+  position: relative;
+  border: 1px solid rgba(79, 110, 247, 0.14);
+  background: rgba(79, 110, 247, 0.06);
+  color: var(--accent-strong);
+}
+
+.workbench-task-action-btn:hover {
+  background: rgba(79, 110, 247, 0.12);
+}
+
+.workbench-task-action-btn.danger {
+  border-color: rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.06);
+  color: var(--error);
+}
+
+.workbench-task-action-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.workbench-task-action-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(20, 28, 48, 0.92);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.workbench-task-action-btn:hover::after,
+.workbench-task-action-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .workbench-panel {
