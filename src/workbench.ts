@@ -562,6 +562,7 @@ export function createWorkbenchTask(input: {
   startFrom: string;
   workflowType: string;
   deliverable?: string;
+  deployBranch?: string;
 }): { workflowId: string; error?: string } {
   return createNewWorkflow({
     name: input.name,
@@ -570,6 +571,7 @@ export function createWorkbenchTask(input: {
     startFrom: input.startFrom,
     workflowType: input.workflowType,
     deliverable: input.deliverable,
+    deployBranch: input.deployBranch,
   });
 }
 

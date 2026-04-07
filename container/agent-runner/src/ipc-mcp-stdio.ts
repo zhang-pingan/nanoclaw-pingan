@@ -985,6 +985,7 @@ if (isMain) {
       workflow_type: z.string().describe("流程类型（如 'dev_test'）。用 list_workflow_types 查看可用类型。"),
       start_from: z.string().describe("入口点名称（如 'plan', 'dev', 'testing'）。用 list_workflow_types 查看各类型的入口点。"),
       deliverable: z.string().optional().describe("交付物目录名（位于 projects/{service}/iteration/ 下）。从 list_deliverables 获取可选值。dev/testing 入口必须指定。"),
+      deploy_branch: z.string().optional().describe('预发工作分支。适用于 testing 入口或需指定预发分支的部署场景。'),
     },
     async (args) => {
       const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1001,6 +1002,9 @@ if (isMain) {
       };
       if (args.deliverable) {
         data.deliverable = args.deliverable;
+      }
+      if (args.deploy_branch) {
+        data.deploy_branch = args.deploy_branch;
       }
 
       writeIpcFile(TASKS_DIR, data);

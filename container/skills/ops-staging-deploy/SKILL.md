@@ -21,6 +21,7 @@ description: Deploy service branches to staging environment — merge code, trig
    - `git pull origin {staging.branch}`
    - `git checkout -B {预发工作分支}`
    - `git merge origin/{工作分支}`
+   - 如果 `git merge` 出现冲突，必须自行分析并完成冲突解决，然后继续提交合并结果；不要因为冲突直接中止任务或返回失败，除非确认无法安全解决
    - `git push -f origin {预发工作分支}`
 6. 触发 Jenkins 部署：
    - 使用 `$JENKINS_URL`、`$JENKINS_USER`、`$JENKINS_PASSWORD` 环境变量

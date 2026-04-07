@@ -365,10 +365,23 @@ function buildTemplateVars(
     id: workflow.id,
     round: workflow.round,
     deliverable: workflow.deliverable || 'N/A',
+    deploy_branch: workflow.deploy_branch || '',
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
   };
+}
+
+function finalizeDelegationTaskContent(
+  skill: string,
+  taskContent: string,
+  workflow: Workflow,
+): string {
+  if (skill !== 'ops-staging-deploy' || !workflow.deploy_branch) {
+    return taskContent;
+  }
+  const suffix = `deploy_branch: ${workflow.deploy_branch}`;
+  return taskContent ? `${taskContent}\n${suffix}` : suffix;
 }
 
 // -------------------------------------------------------
@@ -422,6 +435,11 @@ function applyTransition(
     const taskContent = transition.task_template
       ? renderTemplate(transition.task_template, vars, roles)
       : '';
+    const finalTaskContent = finalizeDelegationTaskContent(
+      delegateSkill,
+      taskContent,
+      workflow,
+    );
 
     try {
       const delegationId = delegateTo(
@@ -429,7 +447,7 @@ function applyTransition(
         mainFolder,
         workflow.id,
         delegateSkill,
-        taskContent,
+        finalTaskContent,
       );
       updates.current_delegation_id = delegationId;
     } catch (err) {
@@ -487,6 +505,7 @@ export interface CreateWorkflowOpts {
   startFrom: string;
   workflowType: string;
   deliverable?: string;
+  deployBranch?: string;
 }
 
 export function createNewWorkflow(opts: CreateWorkflowOpts): {
@@ -548,6 +567,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       start_from: opts.startFrom,
       branch: deliverable.branch,
       deliverable: deliverable.fileName,
+      deploy_branch: opts.deployBranch || '',
       status: entryPoint.state,
       current_delegation_id: '',
       round: 0,
@@ -584,17 +604,23 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       }
 
       try {
-        const vars = buildTemplateVars(getWorkflow(workflowId)!);
+        const createdWorkflow = getWorkflow(workflowId)!;
+        const vars = buildTemplateVars(createdWorkflow);
         const taskContent = entryStateConfig.task_template
           ? renderTemplate(entryStateConfig.task_template, vars, roles)
           : '';
+        const finalTaskContent = finalizeDelegationTaskContent(
+          entryStateConfig.skill,
+          taskContent,
+          createdWorkflow,
+        );
 
         const delegationId = delegateTo(
           targetFolder,
           mainFolder,
           workflowId,
           entryStateConfig.skill,
-          taskContent,
+          finalTaskContent,
         );
         updateWorkflow(workflowId, { current_delegation_id: delegationId });
         syncWorkbenchOnDelegationCreated(workflowId, delegationId);
@@ -626,6 +652,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     start_from: opts.startFrom,
     branch: '',
     deliverable: '',
+    deploy_branch: opts.deployBranch || '',
     status: entryPoint.state,
     current_delegation_id: '',
     round: 0,
@@ -652,17 +679,23 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     }
 
     try {
-      const vars = buildTemplateVars(getWorkflow(workflowId)!);
+      const createdWorkflow = getWorkflow(workflowId)!;
+      const vars = buildTemplateVars(createdWorkflow);
       const taskContent = entryStateConfig.task_template
         ? renderTemplate(entryStateConfig.task_template, vars, roles)
         : '';
+      const finalTaskContent = finalizeDelegationTaskContent(
+        entryStateConfig.skill,
+        taskContent,
+        createdWorkflow,
+      );
 
       const delegationId = delegateTo(
         targetFolder,
         mainFolder,
         workflowId,
         entryStateConfig.skill,
-        taskContent,
+        finalTaskContent,
       );
       updateWorkflow(workflowId, { current_delegation_id: delegationId });
       syncWorkbenchOnDelegationCreated(workflowId, delegationId);
@@ -807,12 +840,17 @@ export function retryWorkflowStage(
     const taskContent = stateConfig.task_template
       ? renderTemplate(stateConfig.task_template, vars, roles)
       : '';
+    const finalTaskContent = finalizeDelegationTaskContent(
+      stateConfig.skill,
+      taskContent,
+      workflow,
+    );
     const delegationId = delegateTo(
       targetFolder,
       getMainFolder(workflow.source_jid),
       workflowId,
       stateConfig.skill,
-      taskContent,
+      finalTaskContent,
     );
 
     const fromStatus = workflow.status;

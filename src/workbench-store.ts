@@ -13,6 +13,7 @@ import {
   getWorkbenchSubtaskByStage,
   getWorkbenchTaskByWorkflowId,
   getWorkflow,
+  listWorkbenchSubtasksByTask,
   listWorkbenchApprovalsByTask,
   resolveWorkbenchApproval,
   updateWorkbenchSubtask,
@@ -359,21 +360,44 @@ export function syncWorkbenchOnTransition(
 
   const fromSubtask = getWorkbenchSubtaskByStage(task.id, fromStatus);
   if (fromSubtask) {
+    const nextStatus = fromSubtask.status === 'failed' ? 'failed' : 'completed';
     updateWorkbenchSubtask(fromSubtask.id, {
       // Preserve explicit failure markers so the UI can still surface retry.
-      status: fromSubtask.status === 'failed' ? 'failed' : 'completed',
+      status: nextStatus,
       finished_at: workflow.updated_at,
       updated_at: workflow.updated_at,
+    });
+    emitWorkbenchEvent({
+      type: 'subtask_updated',
+      taskId: task.id,
+      workflowId,
+      payload: {
+        id: fromSubtask.id,
+        stageKey: fromStatus,
+        status: nextStatus,
+      },
     });
   }
 
   const toSubtask = getWorkbenchSubtaskByStage(task.id, toStatus);
   if (toSubtask) {
+    const nextStatus = workflow.status === 'paused' ? 'paused' : 'current';
     updateWorkbenchSubtask(toSubtask.id, {
-      status: workflow.status === 'paused' ? 'paused' : 'current',
+      status: nextStatus,
       delegation_id: delegationId ?? toSubtask.delegation_id,
       started_at: toSubtask.started_at || workflow.updated_at,
       updated_at: workflow.updated_at,
+    });
+    emitWorkbenchEvent({
+      type: 'subtask_updated',
+      taskId: task.id,
+      workflowId,
+      payload: {
+        id: toSubtask.id,
+        stageKey: toStatus,
+        status: nextStatus,
+        delegationId: delegationId ?? toSubtask.delegation_id,
+      },
     });
   }
 
@@ -531,6 +555,16 @@ export function syncWorkbenchFromWorkflow(workflowId: string): void {
     if (delegation.status !== 'pending') {
       syncWorkbenchOnDelegationCompleted(workflowId, delegation.id);
     }
+  }
+  for (const subtask of listWorkbenchSubtasksByTask(task.id)) {
+    if (subtask.stage_key === workflow.status || subtask.status !== 'current') {
+      continue;
+    }
+    updateWorkbenchSubtask(subtask.id, {
+      status: 'completed',
+      finished_at: subtask.finished_at || workflow.updated_at,
+      updated_at: workflow.updated_at,
+    });
   }
   syncWorkbenchOnWorkflowUpdated(workflowId);
 }

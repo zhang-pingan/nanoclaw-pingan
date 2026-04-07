@@ -2603,6 +2603,7 @@ async function openWorkbenchCreateTaskModal() {
     requirementPreset: "",
     requirementCustom: "",
     requirementSearch: "",
+    deployBranch: "",
   };
 
   const overlay = document.createElement("div");
@@ -2634,6 +2635,10 @@ async function openWorkbenchCreateTaskModal() {
           <div id="wb-requirement-custom-wrap" class="workflow-wizard-subsection"></div>
           <div id="wb-requirement-hint" class="workflow-wizard-hint"></div>
         </div>
+        <div class="workflow-wizard-section" id="wb-deploy-branch-section">
+          <div class="workflow-wizard-label">5. deploy_branch（预发工作分支，可选）</div>
+          <div id="wb-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
+        </div>
       </div>
       <div class="workflow-wizard-footer">
         <button type="button" id="wb-cancel-btn" class="btn-ghost">取消</button>
@@ -2651,6 +2656,8 @@ async function openWorkbenchCreateTaskModal() {
   const reqPresetWrapEl = overlay.querySelector("#wb-requirement-preset-wrap");
   const reqCustomWrapEl = overlay.querySelector("#wb-requirement-custom-wrap");
   const reqHintEl = overlay.querySelector("#wb-requirement-hint");
+  const deployBranchSectionEl = overlay.querySelector("#wb-deploy-branch-section");
+  const deployBranchWrapEl = overlay.querySelector("#wb-deploy-branch-wrap");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
 
   function closeWorkbenchCreateModal() {
@@ -2760,9 +2767,25 @@ async function openWorkbenchCreateTaskModal() {
     reqModeEl.innerHTML = "";
     reqPresetWrapEl.innerHTML = "";
     reqCustomWrapEl.innerHTML = "";
+    deployBranchWrapEl.innerHTML = "";
 
     const isDevTest = getSelectedWorkflowType().type === "dev_test";
     const isPlanEntry = state.entryPoint === "plan";
+    const showDeployBranch = isDevTest && state.entryPoint === "testing";
+
+    deployBranchSectionEl.style.display = showDeployBranch ? "" : "none";
+    if (showDeployBranch) {
+      const input = document.createElement("input");
+      input.className = "workflow-wizard-input";
+      input.placeholder = "例如：staging-deploy/feature-xxx";
+      input.value = state.deployBranch;
+      input.addEventListener("input", () => {
+        state.deployBranch = input.value;
+      });
+      deployBranchWrapEl.appendChild(input);
+    } else {
+      state.deployBranch = "";
+    }
 
     if (isDevTest) {
       if (isPlanEntry) {
@@ -2870,6 +2893,7 @@ async function openWorkbenchCreateTaskModal() {
           start_from: state.entryPoint,
           workflow_type: state.workflowType,
           deliverable: deliverableRequired ? name : void 0,
+          deploy_branch: state.deployBranch.trim() || void 0,
         }),
       });
       const data = await res.json();
@@ -3076,7 +3100,7 @@ function applyWorkbenchRealtimeEvent(event) {
   } else if (event.type === "subtask_updated") {
     const subtask = currentWorkbenchDetail.subtasks.find((item) => item.id === payload.id);
     if (subtask) {
-      if (payload.status && ["completed", "current", "pending"].includes(payload.status)) {
+      if (payload.status && ["completed", "current", "pending", "failed"].includes(payload.status)) {
         subtask.status = payload.status;
       }
       if (payload.groupFolder) subtask.target_folder = payload.groupFolder;
@@ -3577,6 +3601,7 @@ function openWorkflowWizard(optionsData) {
     requirementPreset: "",
     requirementCustom: "",
     requirementSearch: "",
+    deployBranch: "",
   };
 
   const overlay = document.createElement("div");
@@ -3608,6 +3633,10 @@ function openWorkflowWizard(optionsData) {
           <div id="wf-requirement-custom-wrap" class="workflow-wizard-subsection"></div>
           <div id="wf-requirement-deliverable-hint" class="workflow-wizard-hint"></div>
         </div>
+        <div class="workflow-wizard-section" id="wf-deploy-branch-section">
+          <div class="workflow-wizard-label">5. deploy_branch（预发工作分支，可选）</div>
+          <div id="wf-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
+        </div>
       </div>
       <div class="workflow-wizard-footer">
         <button type="button" id="wf-cancel-btn" class="btn-ghost">取消</button>
@@ -3625,6 +3654,8 @@ function openWorkflowWizard(optionsData) {
   const reqPresetWrapEl = overlay.querySelector("#wf-requirement-preset-wrap");
   const reqCustomWrapEl = overlay.querySelector("#wf-requirement-custom-wrap");
   const reqDeliverableHintEl = overlay.querySelector("#wf-requirement-deliverable-hint");
+  const deployBranchSectionEl = overlay.querySelector("#wf-deploy-branch-section");
+  const deployBranchWrapEl = overlay.querySelector("#wf-deploy-branch-wrap");
   const submitBtn = overlay.querySelector("#wf-submit-btn");
 
   function getSelectedWorkflowType() {
@@ -3761,8 +3792,24 @@ function openWorkflowWizard(optionsData) {
     reqModeEl.innerHTML = "";
     reqPresetWrapEl.innerHTML = "";
     reqCustomWrapEl.innerHTML = "";
+    deployBranchWrapEl.innerHTML = "";
 
     if (isDevTest) {
+      const showDeployBranch = state.entryPoint === "testing";
+      deployBranchSectionEl.style.display = showDeployBranch ? "" : "none";
+      if (showDeployBranch) {
+        const input = document.createElement("input");
+        input.className = "workflow-wizard-input";
+        input.placeholder = "例如：staging-deploy/feature-xxx";
+        input.value = state.deployBranch;
+        input.addEventListener("input", () => {
+          state.deployBranch = input.value;
+        });
+        deployBranchWrapEl.appendChild(input);
+      } else {
+        state.deployBranch = "";
+      }
+
       if (isPlanEntry) {
         const input = document.createElement("input");
         input.className = "workflow-wizard-input";
@@ -3801,6 +3848,11 @@ function openWorkflowWizard(optionsData) {
         );
       }
     } else {
+      deployBranchSectionEl.style.display = "none";
+      state.deployBranch = "";
+    }
+
+    if (!isDevTest) {
       renderSingleOptions(
         reqModeEl,
         [
@@ -3879,6 +3931,9 @@ function openWorkflowWizard(optionsData) {
     };
     if (required) {
       data.deliverable = requirementName;
+    }
+    if (state.deployBranch.trim()) {
+      data.deploy_branch = state.deployBranch.trim();
     }
 
     const content = JSON.stringify({

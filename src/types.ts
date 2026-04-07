@@ -180,6 +180,7 @@ export interface Workflow {
   start_from: string;
   branch: string;
   deliverable: string;
+  deploy_branch: string;
   status: WorkflowStatus;
   current_delegation_id: string;
   round: number;

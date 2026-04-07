@@ -190,6 +190,7 @@ function createSchema(database: Database.Database): void {
       start_from TEXT NOT NULL DEFAULT 'plan',
       branch TEXT DEFAULT '',
       deliverable TEXT DEFAULT '',
+      deploy_branch TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'dev',
       current_delegation_id TEXT DEFAULT '',
       round INTEGER DEFAULT 0,
@@ -347,6 +348,13 @@ function createSchema(database: Database.Database): void {
     database.exec(
       `ALTER TABLE workflows ADD COLUMN workflow_type TEXT DEFAULT 'dev_test'`,
     );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add deploy_branch column to workflows (migration for existing DBs)
+  try {
+    database.exec(`ALTER TABLE workflows ADD COLUMN deploy_branch TEXT DEFAULT ''`);
   } catch {
     /* column already exists */
   }
@@ -1284,8 +1292,8 @@ export function getExpiredPendingAskQuestions(nowIso: string): AskQuestionRecord
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, start_from, branch, deliverable, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, start_from, branch, deliverable, deploy_branch, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
@@ -1293,6 +1301,7 @@ export function createWorkflow(workflow: Workflow): void {
     workflow.start_from,
     workflow.branch,
     workflow.deliverable,
+    workflow.deploy_branch,
     workflow.status,
     workflow.current_delegation_id,
     workflow.round,
@@ -1317,6 +1326,7 @@ export function updateWorkflow(
       Workflow,
       | 'branch'
       | 'deliverable'
+      | 'deploy_branch'
       | 'status'
       | 'current_delegation_id'
       | 'round'
@@ -1335,6 +1345,10 @@ export function updateWorkflow(
   if (updates.deliverable !== undefined) {
     fields.push('deliverable = ?');
     values.push(updates.deliverable);
+  }
+  if (updates.deploy_branch !== undefined) {
+    fields.push('deploy_branch = ?');
+    values.push(updates.deploy_branch);
   }
   if (updates.status !== undefined) {
     fields.push('status = ?');
@@ -1639,7 +1653,7 @@ export function updateWorkbenchSubtask(
 
 export function createWorkbenchEvent(record: WorkbenchEventRecord): void {
   db.prepare(
-    `INSERT INTO workbench_events (
+    `INSERT OR IGNORE INTO workbench_events (
       id, task_id, subtask_id, event_type, title, body, raw_ref_type, raw_ref_id, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(

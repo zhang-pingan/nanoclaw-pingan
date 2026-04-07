@@ -1346,6 +1346,7 @@ class WebChannel {
       start_from?: string;
       workflow_type?: string;
       deliverable?: string;
+      deploy_branch?: string;
     };
 
     if (
@@ -1372,6 +1373,7 @@ class WebChannel {
       startFrom: data.start_from,
       workflowType: data.workflow_type,
       deliverable: data.deliverable,
+      deployBranch: data.deploy_branch,
     });
 
     if (result.error) {

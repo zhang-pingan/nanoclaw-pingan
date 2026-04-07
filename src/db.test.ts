@@ -331,6 +331,7 @@ describe('deleteAllWorkbenchTaskData', () => {
       start_from: 'dev',
       branch: 'feature/task-1',
       deliverable: 'req-1',
+      deploy_branch: '',
       status: 'dev',
       current_delegation_id: 'del-1',
       round: 0,

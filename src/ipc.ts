@@ -1947,6 +1947,7 @@ export async function processTaskIpc(
         startFrom,
         workflowType,
         deliverable: (data as { deliverable?: string }).deliverable,
+        deployBranch: (data as { deploy_branch?: string }).deploy_branch,
       });
 
       // Write result back via IPC response
