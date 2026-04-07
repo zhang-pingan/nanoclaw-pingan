@@ -2105,6 +2105,7 @@ async function deleteAllWorkbenchTaskData() {
 }
 
 function renderWorkbenchTaskList() {
+  workbenchTasks = sortWorkbenchTaskItems(workbenchTasks);
   workbenchTaskList.innerHTML = "";
   if (workbenchTasks.length === 0) {
     workbenchTaskList.innerHTML = `<div class="workbench-empty">暂无任务，点击“新建任务”开始。</div>`;
@@ -2128,6 +2129,18 @@ function renderWorkbenchTaskList() {
     el.addEventListener("click", () => loadWorkbenchTaskDetail(task.id));
     workbenchTaskList.appendChild(el);
   }
+}
+
+function sortWorkbenchTaskItems(tasks) {
+  if (!Array.isArray(tasks)) return [];
+  return [...tasks].sort((a, b) => {
+    const aTs = Date.parse(a?.updated_at || a?.created_at || "");
+    const bTs = Date.parse(b?.updated_at || b?.created_at || "");
+    const safeATs = Number.isFinite(aTs) ? aTs : 0;
+    const safeBTs = Number.isFinite(bTs) ? bTs : 0;
+    if (safeATs !== safeBTs) return safeBTs - safeATs;
+    return String(b?.id || "").localeCompare(String(a?.id || ""));
+  });
 }
 
 async function loadWorkbenchTaskDetail(taskId) {
@@ -2440,13 +2453,26 @@ function renderWorkbenchApprovals(approvals, task) {
   });
 }
 
+function sortWorkbenchItemsByCreatedAt(items) {
+  if (!Array.isArray(items)) return [];
+  return [...items].sort((a, b) => {
+    const aTs = Date.parse(a?.created_at || "");
+    const bTs = Date.parse(b?.created_at || "");
+    const safeATs = Number.isFinite(aTs) ? aTs : 0;
+    const safeBTs = Number.isFinite(bTs) ? bTs : 0;
+    if (safeATs !== safeBTs) return safeBTs - safeATs;
+    return String(b?.id || "").localeCompare(String(a?.id || ""));
+  });
+}
+
 function renderWorkbenchArtifacts(artifacts) {
+  const sortedArtifacts = sortWorkbenchItemsByCreatedAt(artifacts);
   workbenchArtifacts.innerHTML = "";
-  if (artifacts.length === 0) {
+  if (sortedArtifacts.length === 0) {
     workbenchArtifacts.innerHTML = `<div class="workbench-empty">暂无产出物</div>`;
     return;
   }
-  artifacts.forEach((item) => {
+  sortedArtifacts.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-artifact-item";
     el.innerHTML = `
@@ -2461,12 +2487,13 @@ function renderWorkbenchArtifacts(artifacts) {
 }
 
 function renderWorkbenchAssets(assets) {
+  const sortedAssets = sortWorkbenchItemsByCreatedAt(assets);
   workbenchAssets.innerHTML = "";
-  if (assets.length === 0) {
+  if (sortedAssets.length === 0) {
     workbenchAssets.innerHTML = `<div class="workbench-empty">暂无上下文资产</div>`;
     return;
   }
-  assets.forEach((item) => {
+  sortedAssets.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-artifact-item";
     const href = item.url || (item.path ? `file://${item.path}` : "");
@@ -2486,12 +2513,13 @@ function renderWorkbenchAssets(assets) {
 }
 
 function renderWorkbenchComments(comments) {
+  const sortedComments = sortWorkbenchItemsByCreatedAt(comments);
   workbenchComments.innerHTML = "";
-  if (comments.length === 0) {
+  if (sortedComments.length === 0) {
     workbenchComments.innerHTML = `<div class="workbench-empty">暂无备注评论</div>`;
     return;
   }
-  comments.forEach((item) => {
+  sortedComments.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-event-item";
     el.innerHTML = `
@@ -2506,12 +2534,13 @@ function renderWorkbenchComments(comments) {
 }
 
 function renderWorkbenchTimeline(timeline) {
+  const sortedTimeline = sortWorkbenchTimeline(timeline);
   workbenchTimeline.innerHTML = "";
-  if (timeline.length === 0) {
+  if (sortedTimeline.length === 0) {
     workbenchTimeline.innerHTML = `<div class="workbench-empty">暂无执行记录</div>`;
     return;
   }
-  timeline.forEach((item) => {
+  sortedTimeline.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-event-item";
     el.innerHTML = `
@@ -2523,6 +2552,10 @@ function renderWorkbenchTimeline(timeline) {
     `;
     workbenchTimeline.appendChild(el);
   });
+}
+
+function sortWorkbenchTimeline(timeline) {
+  return sortWorkbenchItemsByCreatedAt(timeline);
 }
 
 async function triggerWorkbenchAction(taskId, action) {
@@ -3139,9 +3172,10 @@ function applyWorkbenchRealtimeEvent(event) {
         updated_at: payload.updatedAt || existing.updated_at,
       };
     }
+    workbenchTasks = sortWorkbenchTaskItems(workbenchTasks);
     renderWorkbenchTaskList();
   } else if (event.type === "task_created" && payload.id) {
-    workbenchTasks.unshift({
+    workbenchTasks.push({
       id: event.taskId,
       title: payload.title || "新任务",
       service: payload.service || "",
@@ -3159,6 +3193,7 @@ function applyWorkbenchRealtimeEvent(event) {
       pending_approval: false,
       active_delegation_id: "",
     });
+    workbenchTasks = sortWorkbenchTaskItems(workbenchTasks);
     renderWorkbenchTaskList();
   }
 
@@ -3196,33 +3231,37 @@ function applyWorkbenchRealtimeEvent(event) {
     if (existingIdx >= 0) {
       currentWorkbenchDetail.timeline[existingIdx] = nextItem;
     } else {
-      currentWorkbenchDetail.timeline.unshift(nextItem);
+      currentWorkbenchDetail.timeline.push(nextItem);
     }
+    currentWorkbenchDetail.timeline = sortWorkbenchTimeline(currentWorkbenchDetail.timeline);
     renderWorkbenchTimeline(currentWorkbenchDetail.timeline);
   } else if (event.type === "artifact_created") {
     const exists = currentWorkbenchDetail.artifacts.some((item) => item.id === payload.id);
     if (!exists) {
-      currentWorkbenchDetail.artifacts.unshift({
+      currentWorkbenchDetail.artifacts.push({
         id: payload.id,
         title: payload.title || "新产出",
         artifact_type: payload.artifactType || "artifact",
         path: payload.path || "",
         exists: true,
+        created_at: getPayloadTimestamp(payload),
       });
+      currentWorkbenchDetail.artifacts = sortWorkbenchItemsByCreatedAt(currentWorkbenchDetail.artifacts);
       renderWorkbenchArtifacts(currentWorkbenchDetail.artifacts);
     }
   } else if (event.type === "approval_updated") {
     scheduleWorkbenchTaskDetailReload(currentWorkbenchTaskId);
   } else if (event.type === "comment_created") {
-    currentWorkbenchDetail.comments.unshift({
+    currentWorkbenchDetail.comments.push({
       id: payload.id,
       author: payload.author || "Web User",
       content: payload.content || "",
       created_at: getPayloadTimestamp(payload),
     });
+    currentWorkbenchDetail.comments = sortWorkbenchItemsByCreatedAt(currentWorkbenchDetail.comments);
     renderWorkbenchComments(currentWorkbenchDetail.comments);
   } else if (event.type === "asset_created") {
-    currentWorkbenchDetail.assets.unshift({
+    currentWorkbenchDetail.assets.push({
       id: payload.id,
       title: payload.title || "新资产",
       asset_type: payload.assetType || "asset",
@@ -3231,6 +3270,7 @@ function applyWorkbenchRealtimeEvent(event) {
       note: payload.note || null,
       created_at: getPayloadTimestamp(payload),
     });
+    currentWorkbenchDetail.assets = sortWorkbenchItemsByCreatedAt(currentWorkbenchDetail.assets);
     renderWorkbenchAssets(currentWorkbenchDetail.assets);
   }
 }

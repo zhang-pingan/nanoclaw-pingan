@@ -11,7 +11,7 @@ import {
 } from './db.js';
 import { RegisteredGroup } from './types.js';
 import { approveWorkflow, cancelWorkflow, initWorkflow } from './workflow.js';
-import { getWorkbenchTaskDetail } from './workbench.js';
+import { getWorkbenchTaskDetail, listWorkbenchTasks } from './workbench.js';
 import { syncWorkbenchOnTransition, syncWorkbenchOnWorkflowCreated } from './workbench-store.js';
 
 const MAIN_GROUP: RegisteredGroup = {
@@ -134,6 +134,83 @@ describe('workbench approval transition sync', () => {
       (item) => item.event_type === 'transition' && item.title.includes('部署中') && item.title.includes('部署失败'),
     );
     expect(transitionEvents).toHaveLength(1);
+  });
+
+  it('returns task timeline in reverse chronological order', () => {
+    dbCreateWorkflow({
+      id: 'wf-timeline-order',
+      name: '时间线排序',
+      service: 'order-service',
+      start_from: 'testing',
+      branch: 'feature/timeline-order',
+      deliverable: '2026-04-07_timeline_order',
+      deploy_branch: 'staging-deploy/feature-timeline-order',
+      access_token: '',
+      status: 'ops_failed',
+      current_delegation_id: 'wf-del-order',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:30:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-timeline-order');
+    syncWorkbenchOnTransition('wf-timeline-order', 'ops_deploy', 'ops_failed', 'wf-del-order');
+
+    const detail = getWorkbenchTaskDetail('wb-wf-timeline-order');
+    expect(detail).not.toBeNull();
+    expect(detail?.timeline.map((item) => item.created_at)).toEqual([
+      '2026-04-07T00:30:00.000Z',
+      '2026-04-07T00:00:00.000Z',
+    ]);
+  });
+
+  it('returns workbench task list in reverse updated_at order', () => {
+    dbCreateWorkflow({
+      id: 'wf-task-order-older',
+      name: '较早任务',
+      service: 'order-service',
+      start_from: 'testing',
+      branch: 'feature/task-order-older',
+      deliverable: '2026-04-07_task_order_older',
+      deploy_branch: 'staging-deploy/feature-task-order-older',
+      access_token: '',
+      status: 'testing',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:10:00.000Z',
+    });
+    dbCreateWorkflow({
+      id: 'wf-task-order-newer',
+      name: '较新任务',
+      service: 'order-service',
+      start_from: 'testing',
+      branch: 'feature/task-order-newer',
+      deliverable: '2026-04-07_task_order_newer',
+      deploy_branch: 'staging-deploy/feature-task-order-newer',
+      access_token: '',
+      status: 'testing',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:20:00.000Z',
+    });
+
+    syncWorkbenchOnWorkflowCreated('wf-task-order-older');
+    syncWorkbenchOnWorkflowCreated('wf-task-order-newer');
+
+    expect(listWorkbenchTasks().map((item) => item.id).slice(0, 2)).toEqual([
+      'wb-wf-task-order-newer',
+      'wb-wf-task-order-older',
+    ]);
   });
 
   it('marks the active stage cancelled instead of completed when workflow is cancelled', () => {

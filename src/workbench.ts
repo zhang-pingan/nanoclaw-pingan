@@ -100,6 +100,7 @@ export interface WorkbenchArtifact {
   artifact_type: string;
   path: string;
   exists: boolean;
+  created_at?: string;
 }
 
 export interface WorkbenchApproval {
@@ -210,6 +211,7 @@ function mapPersistedArtifact(item: WorkbenchArtifactRecord): WorkbenchArtifact 
     artifact_type: item.artifact_type,
     path: item.path,
     exists: fs.existsSync(fullPath),
+    created_at: item.created_at,
   };
 }
 
@@ -389,6 +391,7 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
       artifact_type: candidate.artifact_type,
       path: path.relative(PROJECT_ROOT, fullPath),
       exists: fs.existsSync(fullPath),
+      created_at: workflow.updated_at,
     };
   });
 }
@@ -490,17 +493,33 @@ function buildTimeline(workflow: Workflow, delegations: Delegation[]): Workbench
     });
   }
 
-  return timeline.sort((a, b) => {
+  return sortTimelineEvents(timeline);
+}
+
+function sortTimelineEvents(
+  timeline: WorkbenchTimelineEvent[],
+): WorkbenchTimelineEvent[] {
+  return [...timeline].sort((a, b) => {
     const aTs = new Date(a.created_at).getTime();
     const bTs = new Date(b.created_at).getTime();
-    return bTs - aTs;
+    if (aTs !== bTs) return bTs - aTs;
+    return b.id.localeCompare(a.id);
+  });
+}
+
+function sortWorkbenchTaskItems(tasks: WorkbenchTaskItem[]): WorkbenchTaskItem[] {
+  return [...tasks].sort((a, b) => {
+    const aTs = new Date(a.updated_at || a.created_at).getTime();
+    const bTs = new Date(b.updated_at || b.created_at).getTime();
+    if (aTs !== bTs) return bTs - aTs;
+    return b.id.localeCompare(a.id);
   });
 }
 
 export function listWorkbenchTasks(): WorkbenchTaskItem[] {
   const persisted = listWorkbenchTaskRecords();
   if (persisted.length > 0) {
-    return persisted.map((item: WorkbenchTaskRecord) => {
+    return sortWorkbenchTaskItems(persisted.map((item: WorkbenchTaskRecord) => {
       const workflow = getWorkflow(item.workflow_id);
       if (workflow) return toTaskItem(workflow);
       return {
@@ -522,12 +541,12 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
         pending_approval: false,
         active_delegation_id: '',
       };
-    });
+    }));
   }
-  return getAllWorkflows().map((workflow) => {
+  return sortWorkbenchTaskItems(getAllWorkflows().map((workflow) => {
     syncWorkbenchFromWorkflow(workflow.id);
     return toTaskItem(workflow);
-  });
+  }));
 }
 
 function resolveWorkbenchWorkflowId(taskId: string): string | null {
@@ -576,7 +595,9 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
           .filter((item) => visibleStageKeys.has(item.stage_key))
           .map(mapPersistedSubtask),
       ),
-      timeline: listWorkbenchEventsByTask(task.id).map(mapPersistedEvent),
+      timeline: sortTimelineEvents(
+        listWorkbenchEventsByTask(task.id).map(mapPersistedEvent),
+      ),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(mapPersistedArtifact),
       approvals: shouldShowApprovals
         ? listWorkbenchApprovalsByTask(task.id)

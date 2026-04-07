@@ -1425,12 +1425,51 @@ export function getAllWorkflows(): Workflow[] {
     .all() as Workflow[];
 }
 
+function getWorkbenchTaskIdsByWorkflow(workflowId: string): string[] {
+  return (
+    db
+      .prepare('SELECT id FROM workbench_tasks WHERE workflow_id = ?')
+      .all(workflowId) as Array<{ id: string }>
+  ).map((row) => row.id);
+}
+
+function deleteWorkflowRelatedRecords(workflowId: string): void {
+  const remove = db.transaction((id: string) => {
+    const taskIds = getWorkbenchTaskIdsByWorkflow(id);
+
+    for (const taskId of taskIds) {
+      db.prepare('DELETE FROM workbench_events WHERE task_id = ?').run(taskId);
+    }
+
+    db.prepare('DELETE FROM workbench_context_assets WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workbench_comments WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workbench_approvals WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workbench_artifacts WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workbench_subtasks WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workbench_tasks WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM delegations WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workflows WHERE id = ?').run(id);
+  });
+
+  remove(workflowId);
+}
+
 export function deleteWorkflow(id: string): void {
-  db.prepare('DELETE FROM workflows WHERE id = ?').run(id);
+  deleteWorkflowRelatedRecords(id);
 }
 
 export function deleteAllWorkflows(): void {
-  db.prepare('DELETE FROM workflows').run();
+  const workflowIds = (
+    db.prepare('SELECT id FROM workflows').all() as Array<{ id: string }>
+  ).map((row) => row.id);
+
+  const clear = db.transaction((ids: string[]) => {
+    for (const workflowId of ids) {
+      deleteWorkflowRelatedRecords(workflowId);
+    }
+  });
+
+  clear(workflowIds);
 }
 
 export function deleteAllWorkbenchTaskData(): {
@@ -1519,7 +1558,7 @@ export function getWorkbenchTaskByWorkflowId(
 
 export function listWorkbenchTasks(): WorkbenchTaskRecord[] {
   return db
-    .prepare('SELECT * FROM workbench_tasks ORDER BY updated_at DESC')
+    .prepare('SELECT * FROM workbench_tasks ORDER BY updated_at DESC, id DESC')
     .all() as WorkbenchTaskRecord[];
 }
 
