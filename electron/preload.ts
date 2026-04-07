@@ -21,6 +21,15 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     return () => ipcRenderer.removeListener('notification-clicked', listener);
   },
 
+  // Listen for app-level shortcuts forwarded by the main process.
+  onCyclePrimaryNav: (handler: () => void) => {
+    const listener = () => {
+      handler();
+    };
+    ipcRenderer.on('cycle-primary-nav', listener);
+    return () => ipcRenderer.removeListener('cycle-primary-nav', listener);
+  },
+
   // Open external URL in system browser
   openExternal: (url: string) => {
     // This would go through IPC in a real implementation

@@ -74,6 +74,15 @@ function createWindow(): void {
     }
     return { action: 'deny' };
   });
+
+  // Intercept Cmd+Q in the renderer so it cycles the primary nav instead of quitting the app.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isCyclePrimaryNavShortcut = isMac && input.type === 'keyDown' && input.meta && !input.control && !input.alt && !input.shift && input.key.toLowerCase() === 'q';
+    if (!isCyclePrimaryNavShortcut) return;
+
+    event.preventDefault();
+    mainWindow?.webContents.send('cycle-primary-nav');
+  });
 }
 function buildAppMenu(): Menu {
   const template: MenuItemConstructorOptions[] = [

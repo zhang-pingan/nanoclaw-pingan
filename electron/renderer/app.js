@@ -961,6 +961,17 @@ function setPrimaryNav(navKey) {
   }
 }
 
+function cyclePrimaryNav(step) {
+  if (!primaryNavItems.length) return;
+  const currentIndex = primaryNavItems.findIndex((item) => item.getAttribute("data-nav-key") === activePrimaryNavKey);
+  const baseIndex = currentIndex >= 0 ? currentIndex : 0;
+  const nextIndex = (baseIndex + step + primaryNavItems.length) % primaryNavItems.length;
+  const nextNavKey = primaryNavItems[nextIndex] && primaryNavItems[nextIndex].getAttribute("data-nav-key");
+  if (nextNavKey) {
+    setPrimaryNav(nextNavKey);
+  }
+}
+
 function openSchedulersPanel() {
   agentStatusPanel.classList.remove("open");
   workflowsPanel.classList.remove("open");
@@ -4352,6 +4363,11 @@ warmWorkflowCreateOptions();
 // --- Event listeners ---
 if (primaryNav) {
   setPrimaryNav(activePrimaryNavKey);
+}
+if (window.nanoclawApp && typeof window.nanoclawApp.onCyclePrimaryNav === "function") {
+  window.nanoclawApp.onCyclePrimaryNav(() => {
+    cyclePrimaryNav(1);
+  });
 }
 primaryNavItems.forEach((item) => {
   item.addEventListener("click", () => {
