@@ -45,6 +45,35 @@
             <span class="primary-nav-label">记忆管理</span>
           </button>
         </div>
+        <div id="primary-sidebar-tools" class="primary-sidebar-tools">
+          <button id="open-schedulers" class="section-header schedulers-btn">
+            <span>Schedulers</span>
+            <svg class="icon panel-arrow schedulers-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+
+          <button id="open-agent-status" class="section-header agent-status-btn">
+            <span>Agent Status</span>
+            <svg class="icon panel-arrow agent-status-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+
+          <button id="open-workflows" class="section-header workflows-btn">
+            <span>Workflows</span>
+            <svg class="icon panel-arrow workflows-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+
+          <div class="sidebar-footer">
+            <div id="connection-status" class="conn-status disconnected">
+              <span class="conn-dot"></span>
+              <span class="conn-label">Disconnected</span>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <div id="workspace">
@@ -74,106 +103,7 @@
               <!-- Populated by JS -->
             </div>
           </div>
-
-          <button id="open-schedulers" class="section-header schedulers-btn">
-            <span>Schedulers</span>
-            <svg class="icon panel-arrow schedulers-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
-
-          <button id="open-agent-status" class="section-header agent-status-btn">
-            <span>Agent Status</span>
-            <svg class="icon panel-arrow agent-status-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
-
-          <button id="open-workflows" class="section-header workflows-btn">
-            <span>Workflows</span>
-            <svg class="icon panel-arrow workflows-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
-
-          <div class="sidebar-footer">
-            <div id="connection-status" class="conn-status disconnected">
-              <span class="conn-dot"></span>
-              <span class="conn-label">Disconnected</span>
-            </div>
-          </div>
         </aside>
-
-        <!-- Schedulers panel -->
-        <div id="schedulers-panel">
-          <div class="schedulers-header">
-            <span>Schedulers</span>
-            <div class="schedulers-header-actions">
-              <button id="delete-all-schedulers" class="icon-btn danger" title="Delete All">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                  <path d="M10 11v6"></path>
-                  <path d="M14 11v6"></path>
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-                </svg>
-              </button>
-              <button id="close-schedulers" class="icon-btn" title="Close">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div id="schedulers-list"></div>
-        </div>
-
-        <!-- Agent Status panel -->
-        <div id="agent-status-panel">
-          <div class="agent-status-header">
-            <span>Agent Status</span>
-            <button id="close-agent-status" class="icon-btn" title="Close">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          <div id="agent-status-list"></div>
-        </div>
-
-        <!-- Workflows panel -->
-        <div id="workflows-panel">
-          <div class="workflows-header">
-            <span>Workflows</span>
-            <div class="workflows-header-actions">
-              <button id="refresh-workflows" class="icon-btn" title="Refresh">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="23 4 23 10 17 10"></polyline>
-                  <polyline points="1 20 1 14 7 14"></polyline>
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                </svg>
-              </button>
-              <button id="delete-all-workflows" class="icon-btn danger" title="Delete All">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                  <path d="M10 11v6"></path>
-                  <path d="M14 11v6"></path>
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-                </svg>
-              </button>
-              <button id="close-workflows" class="icon-btn" title="Close">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div id="workflows-list"></div>
-        </div>
 
         <!-- Chat area -->
         <main id="chat-area">
@@ -564,6 +494,77 @@
           </div>
         </main>
       </section>
+
+      <!-- Schedulers panel -->
+      <div id="schedulers-panel">
+        <div class="schedulers-header">
+          <span>Schedulers</span>
+          <div class="schedulers-header-actions">
+            <button id="delete-all-schedulers" class="icon-btn danger" title="Delete All">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+              </svg>
+            </button>
+            <button id="close-schedulers" class="icon-btn" title="Close">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="schedulers-list"></div>
+      </div>
+
+      <!-- Agent Status panel -->
+      <div id="agent-status-panel">
+        <div class="agent-status-header">
+          <span>Agent Status</span>
+          <button id="close-agent-status" class="icon-btn" title="Close">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div id="agent-status-list"></div>
+      </div>
+
+      <!-- Workflows panel -->
+      <div id="workflows-panel">
+        <div class="workflows-header">
+          <span>Workflows</span>
+          <div class="workflows-header-actions">
+            <button id="refresh-workflows" class="icon-btn" title="Refresh">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+            <button id="delete-all-workflows" class="icon-btn danger" title="Delete All">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+              </svg>
+            </button>
+            <button id="close-workflows" class="icon-btn" title="Close">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="workflows-list"></div>
+      </div>
     </div>
   </div>
 

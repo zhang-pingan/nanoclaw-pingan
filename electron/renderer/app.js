@@ -959,16 +959,37 @@ function setPrimaryNav(navKey) {
   if (showWorkbench) {
     loadWorkbenchTasks();
   }
+}
 
-  if (!showWorkspace) {
-    schedulersPanel.classList.remove("open");
-    agentStatusPanel.classList.remove("open");
-    workflowsPanel.classList.remove("open");
-    if (agentStatusInterval) {
-      clearInterval(agentStatusInterval);
-      agentStatusInterval = null;
-    }
+function openSchedulersPanel() {
+  agentStatusPanel.classList.remove("open");
+  workflowsPanel.classList.remove("open");
+  if (agentStatusInterval) {
+    clearInterval(agentStatusInterval);
+    agentStatusInterval = null;
   }
+  schedulersPanel.classList.add("open");
+  loadSchedulers();
+}
+
+function openAgentStatusPanel() {
+  schedulersPanel.classList.remove("open");
+  workflowsPanel.classList.remove("open");
+  agentStatusPanel.classList.add("open");
+  loadAgentStatus();
+  if (agentStatusInterval) clearInterval(agentStatusInterval);
+  agentStatusInterval = setInterval(updateAgentDurations, 1000);
+}
+
+function openWorkflowsPanel() {
+  schedulersPanel.classList.remove("open");
+  agentStatusPanel.classList.remove("open");
+  if (agentStatusInterval) {
+    clearInterval(agentStatusInterval);
+    agentStatusInterval = null;
+  }
+  workflowsPanel.classList.add("open");
+  loadWorkflows();
 }
 
 function renderGroups() {
@@ -4470,15 +4491,7 @@ openSchedulersBtn.addEventListener("click", () => {
     schedulersPanel.classList.remove("open");
     return;
   }
-  // Close other panels first
-  agentStatusPanel.classList.remove("open");
-  workflowsPanel.classList.remove("open");
-  if (agentStatusInterval) {
-    clearInterval(agentStatusInterval);
-    agentStatusInterval = null;
-  }
-  schedulersPanel.classList.add("open");
-  loadSchedulers();
+  openSchedulersPanel();
 });
 deleteAllSchedulersBtn.addEventListener("click", deleteAllSchedulers);
 closeSchedulersBtn.addEventListener("click", () => {
@@ -4493,14 +4506,7 @@ openAgentStatusBtn.addEventListener("click", () => {
     }
     return;
   }
-  // Close other panels first
-  schedulersPanel.classList.remove("open");
-  workflowsPanel.classList.remove("open");
-  agentStatusPanel.classList.add("open");
-  loadAgentStatus();
-  // Update durations every second
-  if (agentStatusInterval) clearInterval(agentStatusInterval);
-  agentStatusInterval = setInterval(updateAgentDurations, 1000);
+  openAgentStatusPanel();
 });
 closeAgentStatusBtn.addEventListener("click", () => {
   agentStatusPanel.classList.remove("open");
@@ -4514,15 +4520,7 @@ openWorkflowsBtn.addEventListener("click", () => {
     workflowsPanel.classList.remove("open");
     return;
   }
-  // Close other panels first
-  schedulersPanel.classList.remove("open");
-  agentStatusPanel.classList.remove("open");
-  if (agentStatusInterval) {
-    clearInterval(agentStatusInterval);
-    agentStatusInterval = null;
-  }
-  workflowsPanel.classList.add("open");
-  loadWorkflows();
+  openWorkflowsPanel();
 });
 closeWorkflowsBtn.addEventListener("click", () => {
   workflowsPanel.classList.remove("open");
@@ -4725,14 +4723,7 @@ document.addEventListener("keydown", (e) => {
     if (schedulersPanel.classList.contains("open")) {
       schedulersPanel.classList.remove("open");
     } else {
-      schedulersPanel.classList.add("open");
-      agentStatusPanel.classList.remove("open");
-      workflowsPanel.classList.remove("open");
-      loadSchedulers();
-      if (agentStatusInterval) {
-        clearInterval(agentStatusInterval);
-        agentStatusInterval = null;
-      }
+      openSchedulersPanel();
     }
     return;
   }
@@ -4746,12 +4737,7 @@ document.addEventListener("keydown", (e) => {
         agentStatusInterval = null;
       }
     } else {
-      schedulersPanel.classList.remove("open");
-      workflowsPanel.classList.remove("open");
-      agentStatusPanel.classList.add("open");
-      loadAgentStatus();
-      if (agentStatusInterval) clearInterval(agentStatusInterval);
-      agentStatusInterval = setInterval(updateAgentDurations, 1000);
+      openAgentStatusPanel();
     }
     return;
   }
@@ -4761,14 +4747,7 @@ document.addEventListener("keydown", (e) => {
     if (workflowsPanel.classList.contains("open")) {
       workflowsPanel.classList.remove("open");
     } else {
-      schedulersPanel.classList.remove("open");
-      agentStatusPanel.classList.remove("open");
-      workflowsPanel.classList.add("open");
-      loadWorkflows();
-      if (agentStatusInterval) {
-        clearInterval(agentStatusInterval);
-        agentStatusInterval = null;
-      }
+      openWorkflowsPanel();
     }
   }
 });

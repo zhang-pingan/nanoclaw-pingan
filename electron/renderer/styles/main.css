@@ -334,6 +334,14 @@ html, body {
   gap: 8px;
 }
 
+.primary-sidebar-tools {
+  display: flex;
+  margin-top: auto;
+  padding: 8px 8px 12px;
+  border-top: 1px solid var(--border);
+  flex-direction: column;
+}
+
 .primary-nav-item {
   width: 100%;
   display: flex;
@@ -1815,6 +1823,52 @@ html, body {
 .sidebar-footer {
   padding: 14px 20px;
   border-top: 1px solid var(--border);
+}
+
+.primary-sidebar-tools .sidebar-footer {
+  border-top: none;
+}
+
+.primary-sidebar-tools .section-header {
+  position: relative;
+  padding: 9px 24px 9px 10px;
+  border-radius: var(--radius);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.primary-sidebar-tools .section-header span:first-child {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.primary-sidebar-tools .panel-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+}
+
+.primary-sidebar-tools .sidebar-footer {
+  padding: 12px 10px 0;
+}
+
+.primary-sidebar-tools .conn-status {
+  font-size: 11px;
+  gap: 6px;
+}
+
+.primary-sidebar-tools .conn-label {
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .conn-status {
