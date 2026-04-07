@@ -3651,10 +3651,28 @@ html, body {
   padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   transition: background var(--transition);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .agent-status-item:hover {
   background: var(--bg-hover);
+}
+
+.agent-status-item.is-stopping {
+  opacity: 0.72;
+  border-left: 3px solid rgba(245, 158, 11, 0.75);
+  padding-left: 17px;
+  background:
+    linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent 22%),
+    var(--bg-secondary);
+}
+
+.agent-status-item.is-stopping:hover {
+  background:
+    linear-gradient(90deg, rgba(245, 158, 11, 0.1), transparent 22%),
+    var(--bg-hover);
 }
 
 .agent-status-item:last-child {
@@ -3735,6 +3753,17 @@ html, body {
   flex-wrap: wrap;
 }
 
+.agent-status-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.agent-stop-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .agent-status-duration {
   font-family: var(--font-mono);
   font-weight: 500;
@@ -3749,6 +3778,14 @@ html, body {
 
 .agent-status-pending {
   color: var(--warning);
+}
+
+.agent-status-workflow-count {
+  background: rgba(245, 158, 11, 0.08);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .agent-status-task-id {

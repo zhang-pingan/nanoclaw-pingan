@@ -4,6 +4,7 @@ import {
   OnInboundMessage,
   OnChatMetadata,
   RegisteredGroup,
+  StopAgentResult,
 } from '../types.js';
 
 export interface ChannelOpts {
@@ -11,6 +12,7 @@ export interface ChannelOpts {
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
   getAgentStatus?: () => AgentStatusInfo[];
+  stopAgent?: (groupJid: string) => Promise<StopAgentResult>;
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;

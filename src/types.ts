@@ -163,6 +163,14 @@ export interface AgentStatusInfo {
   runningTaskId: string | null;
   pendingMessages: boolean;
   pendingTaskCount: number;
+  activeWorkflowCount: number;
+}
+
+export interface StopAgentResult {
+  ok: boolean;
+  stoppedTaskId?: string | null;
+  cancelledWorkflowIds?: string[];
+  error?: string;
 }
 
 export interface Workflow {

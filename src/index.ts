@@ -1261,6 +1261,9 @@ async function main(): Promise<void> {
     ) => void;
     registeredGroups: () => Record<string, RegisteredGroup>;
     getAgentStatus?: () => import('./types.js').AgentStatusInfo[];
+    stopAgent?: (
+      groupJid: string,
+    ) => Promise<import('./types.js').StopAgentResult>;
     onAgentStatusChange?: () => void;
   } = {
     onMessage: (chatJid: string, msg: NewMessage) => {
@@ -1300,6 +1303,7 @@ async function main(): Promise<void> {
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
     getAgentStatus: () => queue.getActiveAgents(),
+    stopAgent: (groupJid: string) => queue.stopAgent(groupJid),
     onAgentStatusChange: () => {
       for (const ch of channels) {
         if (ch.name === 'web' && 'broadcastAgentStatus' in ch) {

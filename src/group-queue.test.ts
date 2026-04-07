@@ -2,11 +2,35 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 import { GroupQueue } from './group-queue.js';
 
+const {
+  mockExec,
+  mockUpdateTask,
+  mockGetDelegationsByTarget,
+  mockGetAllActiveWorkflows,
+  mockUpdateDelegation,
+  mockCancelWorkflow,
+} = vi.hoisted(() => ({
+  mockExec: vi.fn(),
+  mockUpdateTask: vi.fn(),
+  mockGetDelegationsByTarget: vi.fn(),
+  mockGetAllActiveWorkflows: vi.fn(),
+  mockUpdateDelegation: vi.fn(),
+  mockCancelWorkflow: vi.fn(),
+}));
+
 // Mock config to control concurrency limit
 vi.mock('./config.js', () => ({
   DATA_DIR: '/tmp/nanoclaw-test-data',
   MAX_CONCURRENT_CONTAINERS: 2,
 }));
+
+vi.mock('child_process', async () => {
+  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  return {
+    ...actual,
+    exec: mockExec,
+  };
+});
 
 // Mock fs operations used by sendMessage/closeStdin
 vi.mock('fs', async () => {
@@ -22,12 +46,49 @@ vi.mock('fs', async () => {
   };
 });
 
+vi.mock('./db.js', async () => {
+  const actual = await vi.importActual<typeof import('./db.js')>('./db.js');
+  return {
+    ...actual,
+    updateTask: mockUpdateTask,
+    getDelegationsByTarget: mockGetDelegationsByTarget,
+    getAllActiveWorkflows: mockGetAllActiveWorkflows,
+    updateDelegation: mockUpdateDelegation,
+  };
+});
+
+vi.mock('./workflow.js', async () => {
+  const actual = await vi.importActual<typeof import('./workflow.js')>('./workflow.js');
+  return {
+    ...actual,
+    cancelWorkflow: mockCancelWorkflow,
+  };
+});
+
+vi.mock('./container-runtime.js', async () => {
+  const actual = await vi.importActual<typeof import('./container-runtime.js')>('./container-runtime.js');
+  return {
+    ...actual,
+    stopContainer: vi.fn((name: string) => `docker stop ${name}`),
+  };
+});
+
 describe('GroupQueue', () => {
   let queue: GroupQueue;
 
   beforeEach(() => {
     vi.useFakeTimers();
     queue = new GroupQueue();
+    mockExec.mockReset();
+    mockExec.mockImplementation((_cmd, _opts, cb) => cb?.(null));
+    mockUpdateTask.mockReset();
+    mockGetDelegationsByTarget.mockReset();
+    mockGetDelegationsByTarget.mockReturnValue([]);
+    mockGetAllActiveWorkflows.mockReset();
+    mockGetAllActiveWorkflows.mockReturnValue([]);
+    mockUpdateDelegation.mockReset();
+    mockCancelWorkflow.mockReset();
+    mockCancelWorkflow.mockReturnValue({});
   });
 
   afterEach(() => {
@@ -487,6 +548,101 @@ describe('GroupQueue', () => {
       (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
     );
     expect(closeWrites).toHaveLength(1);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
+  it('stops an active scheduled task and marks it paused', async () => {
+    let resolveTask: () => void;
+    const proc = {
+      killed: false,
+      once: vi.fn((event: string, handler: () => void) => {
+        if (event === 'close') proc._onClose = handler;
+      }),
+      kill: vi.fn((signal?: string) => {
+        proc.killed = true;
+        if (signal === 'SIGKILL' || signal === 'SIGTERM') {
+          proc._onClose?.();
+        }
+        return true;
+      }),
+      _onClose: undefined as undefined | (() => void),
+    };
+
+    queue.enqueueTask('group1@g.us', 'task-1', async () => {
+      await new Promise<void>((resolve) => {
+        resolveTask = resolve;
+      });
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess('group1@g.us', proc as any, 'container-1', 'test-group');
+
+    const resultPromise = queue.stopAgent('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    proc._onClose?.();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(result.stoppedTaskId).toBe('task-1');
+    expect(mockUpdateTask).toHaveBeenCalledWith('task-1', { status: 'paused' });
+
+    resolveTask!();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
+  it('stops an active workflow delegation and cancels the workflow', async () => {
+    let resolveProcess: () => void;
+    const proc = {
+      killed: false,
+      once: vi.fn((event: string, handler: () => void) => {
+        if (event === 'close') proc._onClose = handler;
+      }),
+      kill: vi.fn(() => {
+        proc.killed = true;
+        proc._onClose?.();
+        return true;
+      }),
+      _onClose: undefined as undefined | (() => void),
+    };
+
+    mockGetDelegationsByTarget.mockReturnValue([
+      {
+        id: 'del-1',
+        target_folder: 'test-group',
+        status: 'pending',
+      },
+    ]);
+    mockGetAllActiveWorkflows.mockReturnValue([
+      {
+        id: 'wf-1',
+        current_delegation_id: 'del-1',
+      },
+    ]);
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess('group1@g.us', proc as any, 'container-1', 'test-group');
+
+    const resultPromise = queue.stopAgent('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    proc._onClose?.();
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(true);
+    expect(result.cancelledWorkflowIds).toEqual(['wf-1']);
+    expect(mockUpdateDelegation).toHaveBeenCalledWith('del-1', {
+      status: 'failed',
+      outcome: 'failure',
+      result: 'Agent stopped manually from Agent Status panel.',
+    });
+    expect(mockCancelWorkflow).toHaveBeenCalledWith('wf-1');
 
     resolveProcess!();
     await vi.advanceTimersByTimeAsync(10);

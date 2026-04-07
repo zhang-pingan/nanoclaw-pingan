@@ -341,6 +341,9 @@ class WebChannel {
       if (pathname === '/api/agent-status') {
         return this.apiGetAgentStatus(res);
       }
+      if (pathname === '/api/agent-status/stop' && req.method === 'POST') {
+        return this.apiStopAgent(req, res);
+      }
       if (pathname === '/api/tasks' && req.method === 'DELETE') {
         return this.apiDeleteAllTasks(res);
       }
@@ -1098,6 +1101,47 @@ class WebChannel {
     const agents = this.opts.getAgentStatus?.() ?? [];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ agents }));
+  }
+
+  private async apiStopAgent(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    if (!this.opts.stopAgent) {
+      res.writeHead(501, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Stopping agents is not supported' }));
+      return;
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.from(chunk));
+    }
+
+    let body: { groupJid?: string };
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    if (!body.groupJid) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing groupJid' }));
+      return;
+    }
+
+    const result = await this.opts.stopAgent(body.groupJid);
+    if (!result.ok) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error || 'Failed to stop agent' }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
   }
 
   /**

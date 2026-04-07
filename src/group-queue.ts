@@ -1,11 +1,19 @@
-import { ChildProcess } from 'child_process';
+import { ChildProcess, exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
-import { AgentStatusInfo } from './types.js';
-export { AgentStatusInfo } from './types.js';
+import { AgentStatusInfo, StopAgentResult } from './types.js';
+export { AgentStatusInfo, StopAgentResult } from './types.js';
+import {
+  getAllActiveWorkflows,
+  getDelegationsByTarget,
+  updateDelegation,
+  updateTask,
+} from './db.js';
+import { stopContainer } from './container-runtime.js';
 import { logger } from './logger.js';
+import { cancelWorkflow } from './workflow.js';
 
 interface QueuedTask {
   id: string;
@@ -33,6 +41,7 @@ interface GroupState {
   lastTime: string | null;
   startedAt: number | null;
   groupName: string | null;
+  stopRequested: boolean;
 }
 
 export class GroupQueue {
@@ -64,6 +73,7 @@ export class GroupQueue {
         lastTime: null,
         startedAt: null,
         groupName: null,
+        stopRequested: false,
       };
       this.groups.set(groupJid, state);
     }
@@ -96,6 +106,7 @@ export class GroupQueue {
    * Return all currently active agents with their status info.
    */
   getActiveAgents(): AgentStatusInfo[] {
+    const activeWorkflowByTargetFolder = this.getActiveWorkflowCountByTargetFolder();
     const result: AgentStatusInfo[] = [];
     for (const [groupJid, state] of this.groups) {
       if (!state.active || !state.startedAt) continue;
@@ -113,6 +124,8 @@ export class GroupQueue {
         runningTaskId: state.runningTaskId,
         pendingMessages: state.pendingMessages,
         pendingTaskCount: state.pendingTasks.length,
+        activeWorkflowCount:
+          activeWorkflowByTargetFolder.get(state.groupFolder || '') || 0,
       });
     }
     return result;
@@ -220,6 +233,79 @@ export class GroupQueue {
     return this.getGroup(groupJid).active;
   }
 
+  async stopAgent(groupJid: string): Promise<StopAgentResult> {
+    const state = this.groups.get(groupJid);
+    if (!state?.active) {
+      return { ok: false, error: 'Agent is not active' };
+    }
+
+    state.stopRequested = true;
+    state.pendingMessages = false;
+    state.pendingTasks = [];
+
+    const stoppedTaskId = state.runningTaskId;
+    if (stoppedTaskId) {
+      updateTask(stoppedTaskId, { status: 'paused' });
+    }
+
+    const cancelledWorkflowIds = this.cancelActiveWorkflowsForGroup(state);
+
+    const proc = state.process;
+    const containerName = state.containerName;
+    if (!proc && !containerName) {
+      this.emitStatusChange();
+      return { ok: true, stoppedTaskId, cancelledWorkflowIds };
+    }
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      const forceKillTimer = setTimeout(() => {
+        if (proc && !proc.killed) {
+          logger.warn({ groupJid, containerName }, 'Agent stop timed out, force killing process');
+          proc.kill('SIGKILL');
+        }
+        finish();
+      }, 5000);
+
+      if (proc) {
+        proc.once('close', () => {
+          clearTimeout(forceKillTimer);
+          finish();
+        });
+      }
+
+      if (containerName) {
+        exec(stopContainer(containerName), { timeout: 15000 }, (err) => {
+          if (err) {
+            logger.warn(
+              { groupJid, containerName, err },
+              'Graceful container stop failed, falling back to process kill',
+            );
+            if (proc && !proc.killed) proc.kill('SIGTERM');
+            return;
+          }
+          if (!proc || proc.killed) {
+            clearTimeout(forceKillTimer);
+            finish();
+          }
+        });
+      } else if (proc && !proc.killed) {
+        proc.kill('SIGTERM');
+      } else {
+        clearTimeout(forceKillTimer);
+        finish();
+      }
+    });
+
+    return { ok: true, stoppedTaskId, cancelledWorkflowIds };
+  }
+
   /**
    * Mark the container as idle-waiting (finished work, waiting for IPC input).
    * If tasks are pending, preempt the idle container immediately.
@@ -285,6 +371,7 @@ export class GroupQueue {
     reason: 'messages' | 'drain',
   ): Promise<void> {
     const state = this.getGroup(groupJid);
+    state.stopRequested = false;
     state.active = true;
     state.idleWaiting = false;
     state.isTaskContainer = false;
@@ -304,13 +391,15 @@ export class GroupQueue {
         const success = await this.processMessagesFn(groupJid);
         if (success) {
           state.retryCount = 0;
-        } else {
+        } else if (!state.stopRequested) {
           this.scheduleRetry(groupJid, state);
         }
       }
     } catch (err) {
       logger.error({ groupJid, err }, 'Error processing messages for group');
-      this.scheduleRetry(groupJid, state);
+      if (!state.stopRequested) {
+        this.scheduleRetry(groupJid, state);
+      }
     } finally {
       state.active = false;
       state.process = null;
@@ -322,6 +411,7 @@ export class GroupQueue {
       state.lastContent = null;
       state.lastTime = null;
       state.groupName = null;
+      state.stopRequested = false;
       this.activeCount--;
       this.emitStatusChange();
       this.drainGroup(groupJid);
@@ -330,6 +420,7 @@ export class GroupQueue {
 
   private async runTask(groupJid: string, task: QueuedTask): Promise<void> {
     const state = this.getGroup(groupJid);
+    state.stopRequested = false;
     state.active = true;
     state.idleWaiting = false;
     state.isTaskContainer = true;
@@ -361,6 +452,7 @@ export class GroupQueue {
       state.lastContent = null;
       state.lastTime = null;
       state.groupName = null;
+      state.stopRequested = false;
       this.activeCount--;
       this.emitStatusChange();
       this.drainGroup(groupJid);
@@ -394,6 +486,7 @@ export class GroupQueue {
     if (this.shuttingDown) return;
 
     const state = this.getGroup(groupJid);
+    if (state.stopRequested) return;
 
     // Tasks first (they won't be re-discovered from SQLite like messages)
     if (state.pendingTasks.length > 0) {
@@ -420,6 +513,63 @@ export class GroupQueue {
 
     // Nothing pending for this group; check if other groups are waiting for a slot
     this.drainWaiting();
+  }
+
+  private cancelActiveWorkflowsForGroup(state: GroupState): string[] {
+    if (!state.groupFolder) return [];
+
+    const pendingDelegations = getDelegationsByTarget(state.groupFolder).filter(
+      (delegation) => delegation.status === 'pending',
+    );
+    if (pendingDelegations.length === 0) return [];
+
+    const activeWorkflowByDelegation = new Map(
+      getAllActiveWorkflows()
+        .filter((workflow) => workflow.current_delegation_id)
+        .map((workflow) => [workflow.current_delegation_id, workflow.id]),
+    );
+
+    const cancelledWorkflowIds: string[] = [];
+    for (const delegation of pendingDelegations) {
+      const workflowId = activeWorkflowByDelegation.get(delegation.id);
+      if (!workflowId) continue;
+
+      updateDelegation(delegation.id, {
+        status: 'failed',
+        outcome: 'failure',
+        result: 'Agent stopped manually from Agent Status panel.',
+      });
+
+      const result = cancelWorkflow(workflowId);
+      if (!result.error) {
+        cancelledWorkflowIds.push(workflowId);
+      }
+    }
+
+    return cancelledWorkflowIds;
+  }
+
+  private getActiveWorkflowCountByTargetFolder(): Map<string, number> {
+    const counts = new Map<string, number>();
+    const activeWorkflowByDelegation = new Map(
+      getAllActiveWorkflows()
+        .filter((workflow) => workflow.current_delegation_id)
+        .map((workflow) => [workflow.current_delegation_id, workflow.id]),
+    );
+
+    for (const state of this.groups.values()) {
+      if (!state.groupFolder) continue;
+      const activeCount = getDelegationsByTarget(state.groupFolder).filter(
+        (delegation) =>
+          delegation.status === 'pending' &&
+          activeWorkflowByDelegation.has(delegation.id),
+      ).length;
+      if (activeCount > 0) {
+        counts.set(state.groupFolder, activeCount);
+      }
+    }
+
+    return counts;
   }
 
   private drainWaiting(): void {

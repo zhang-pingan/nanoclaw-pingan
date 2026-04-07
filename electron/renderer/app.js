@@ -70,6 +70,7 @@ var agentStatusPanel = document.getElementById("agent-status-panel");
 var agentStatusList = document.getElementById("agent-status-list");
 var openAgentStatusBtn = document.getElementById("open-agent-status");
 var closeAgentStatusBtn = document.getElementById("close-agent-status");
+var stoppingAgentIds = new Set();
 var workflowsPanel = document.getElementById("workflows-panel");
 var workflowsList = document.getElementById("workflows-list");
 var openWorkflowsBtn = document.getElementById("open-workflows");
@@ -1782,11 +1783,11 @@ function renderAgentStatus(agents) {
     const now = Date.now();
     const elapsed = now - agent.startedAt;
     const statusDot = agent.isIdle ? "agent-status-dot idle" : "agent-status-dot active";
-    const statusLabel = agent.isIdle ? "idle" : "active";
     const typeLabel = agent.isTask ? "task" : "chat";
+    const isStopping = stoppingAgentIds.has(agent.groupJid);
 
     const el = document.createElement("div");
-    el.className = "agent-status-item";
+    el.className = `agent-status-item${isStopping ? " is-stopping" : ""}`;
     el.setAttribute("data-agent-jid", agent.groupJid);
     // Format last message time
     let lastTimeStr = "";
@@ -1810,11 +1811,59 @@ function renderAgentStatus(agents) {
       <div class="agent-status-meta">
         <span class="agent-status-duration">${formatDuration(elapsed)}</span>
         <span class="agent-status-type">${typeLabel}</span>
+        ${agent.activeWorkflowCount > 0 ? `<span class="agent-status-workflow-count">workflow ${escapeHtml(String(agent.activeWorkflowCount))}</span>` : ""}
         ${agent.pendingTaskCount > 0 ? `<span class="agent-status-pending">${agent.pendingTaskCount} pending</span>` : ""}
         ${agent.isTask && agent.runningTaskId ? `<span class="agent-status-task-id">${escapeHtml(agent.runningTaskId.slice(0, 8))}…</span>` : ""}
       </div>
+      <div class="agent-status-actions">
+        <button type="button" class="workflow-action-btn stop icon-text-btn agent-stop-btn"${isStopping ? " disabled" : ""}>
+          ${isStopping ? "Stopping..." : `${SVG.stop} Stop`}
+        </button>
+      </div>
     `;
+    const stopBtn = el.querySelector(".agent-stop-btn");
+    if (!isStopping) {
+      stopBtn.addEventListener("click", () => stopAgent(agent.groupJid, stopBtn));
+    }
     agentStatusList.appendChild(el);
+  }
+}
+
+async function stopAgent(groupJid, btn) {
+  const agent = agentStatusData.find((item) => item.groupJid === groupJid);
+  const activeWorkflowCount = Number(agent?.activeWorkflowCount || 0);
+  const confirmMessage =
+    activeWorkflowCount > 0
+      ? `确认停止这个 agent 吗？\n\n这会同时取消 ${activeWorkflowCount} 个关联 workflow。`
+      : agent?.isTask
+        ? "确认停止这个任务 agent 吗？\n\n对应任务会被标记为暂停。"
+        : "确认停止这个 agent 吗？\n\n当前会话会被中止，排队中的消息和任务也会清空。";
+  if (!confirm(confirmMessage)) return;
+  stoppingAgentIds.add(groupJid);
+  renderAgentStatus(agentStatusData);
+  try {
+    const res = await apiFetch("/api/agent-status/stop", {
+      method: "POST",
+      body: JSON.stringify({ groupJid }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    await loadAgentStatus();
+    await loadWorkflows();
+    const toastMessage =
+      data.cancelledWorkflowIds?.length > 0
+        ? `已停止 agent，并取消 ${data.cancelledWorkflowIds.length} 个 workflow`
+        : data.stoppedTaskId
+          ? "已停止任务 agent，任务已暂停"
+          : "已停止 agent";
+    showToast(toastMessage);
+  } catch (err) {
+    console.error("Failed to stop agent:", err);
+    stoppingAgentIds.delete(groupJid);
+    renderAgentStatus(agentStatusData);
+    alert("Failed to stop agent: " + err.message);
   }
 }
 
@@ -1823,6 +1872,12 @@ async function loadAgentStatus() {
     const res = await apiFetch("/api/agent-status");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    const activeIds = new Set((data.agents || []).map((agent) => agent.groupJid));
+    stoppingAgentIds.forEach((groupJid) => {
+      if (!activeIds.has(groupJid)) {
+        stoppingAgentIds.delete(groupJid);
+      }
+    });
     renderAgentStatus(data.agents || []);
   } catch (err) {
     console.error("Failed to load agent status:", err);
@@ -4035,13 +4090,17 @@ function copyMessageContent(msg) {
 }
 
 function showCopyToast() {
+  showToast("\u5DF2\u590D\u5236");
+}
+
+function showToast(message) {
   let toast = document.getElementById("copy-toast");
   if (!toast) {
     toast = document.createElement("div");
     toast.id = "copy-toast";
-    toast.textContent = "\u5DF2\u590D\u5236";
     document.body.appendChild(toast);
   }
+  toast.textContent = message;
   toast.classList.remove("visible");
   void toast.offsetWidth;
   toast.classList.add("visible");
