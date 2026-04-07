@@ -4,13 +4,15 @@ import {
   _initTestDatabase,
   createWorkflow as dbCreateWorkflow,
   getAllRegisteredGroups,
+  getWorkbenchTaskByWorkflowId,
+  listWorkbenchEventsByTask,
   setRegisteredGroup,
   storeChatMetadata,
 } from './db.js';
 import { RegisteredGroup } from './types.js';
 import { approveWorkflow, initWorkflow } from './workflow.js';
 import { getWorkbenchTaskDetail } from './workbench.js';
-import { syncWorkbenchOnWorkflowCreated } from './workbench-store.js';
+import { syncWorkbenchOnTransition, syncWorkbenchOnWorkflowCreated } from './workbench-store.js';
 
 const MAIN_GROUP: RegisteredGroup = {
   name: 'Main',
@@ -91,5 +93,43 @@ describe('workbench approval transition sync', () => {
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'ops_deploy')?.status,
     ).toBe('current');
+    expect(detail?.subtasks.map((item) => item.stage_key)).toEqual([
+      'awaiting_confirm',
+      'ops_deploy',
+      'testing',
+      'fixing',
+    ]);
+  });
+
+  it('does not duplicate the same transition event when re-synced', () => {
+    dbCreateWorkflow({
+      id: 'wf-transition-dedupe',
+      name: '部署失败去重',
+      service: 'order-service',
+      start_from: 'testing',
+      branch: 'feature/fail',
+      deliverable: '2026-04-07_fail',
+      deploy_branch: 'staging-deploy/feature-fail',
+      status: 'ops_failed',
+      current_delegation_id: 'wf-del-1',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:10:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-transition-dedupe');
+
+    syncWorkbenchOnTransition('wf-transition-dedupe', 'ops_deploy', 'ops_failed', 'wf-del-1');
+    syncWorkbenchOnTransition('wf-transition-dedupe', 'ops_deploy', 'ops_failed', 'wf-del-1');
+
+    const task = getWorkbenchTaskByWorkflowId('wf-transition-dedupe');
+    expect(task).not.toBeNull();
+
+    const transitionEvents = listWorkbenchEventsByTask(task!.id).filter(
+      (item) => item.event_type === 'transition' && item.title.includes('部署中') && item.title.includes('部署失败'),
+    );
+    expect(transitionEvents).toHaveLength(1);
   });
 });

@@ -260,6 +260,39 @@ function getVisibleStageKeys(workflow: Workflow): string[] {
   return visibleStageKeys.length > 0 ? visibleStageKeys : [workflow.status];
 }
 
+function getOrderedVisibleStageKeys(workflow: Workflow): string[] {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return getVisibleStageKeys(workflow);
+
+  const visibleStageKeys = new Set(getVisibleStageKeys(workflow));
+  const orderedStageKeys = Object.keys(config.states).filter(
+    (stageKey) =>
+      visibleStageKeys.has(stageKey) &&
+      config.states[stageKey]?.type !== 'system' &&
+      config.states[stageKey]?.type !== 'terminal',
+  );
+
+  return orderedStageKeys.length > 0
+    ? orderedStageKeys
+    : Array.from(visibleStageKeys);
+}
+
+function sortSubtasksByWorkflowOrder(
+  workflow: Workflow,
+  subtasks: WorkbenchSubtask[],
+): WorkbenchSubtask[] {
+  const stageOrder = new Map(
+    getOrderedVisibleStageKeys(workflow).map((stageKey, index) => [stageKey, index]),
+  );
+
+  return [...subtasks].sort((a, b) => {
+    const aIndex = stageOrder.get(a.stage_key) ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = stageOrder.get(b.stage_key) ?? Number.MAX_SAFE_INTEGER;
+    if (aIndex !== bIndex) return aIndex - bIndex;
+    return a.title.localeCompare(b.title, 'zh-CN');
+  });
+}
+
 function getStageDefinitions(workflow: Workflow): WorkbenchSubtask[] {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return [];
@@ -524,9 +557,12 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
     const visibleStageKeys = new Set(getVisibleStageKeys(workflow));
     return {
       task: toTaskItem(workflow),
-      subtasks: listWorkbenchSubtasksByTask(task.id)
-        .filter((item) => visibleStageKeys.has(item.stage_key))
-        .map(mapPersistedSubtask),
+      subtasks: sortSubtasksByWorkflowOrder(
+        workflow,
+        listWorkbenchSubtasksByTask(task.id)
+          .filter((item) => visibleStageKeys.has(item.stage_key))
+          .map(mapPersistedSubtask),
+      ),
       timeline: listWorkbenchEventsByTask(task.id).map(mapPersistedEvent),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(mapPersistedArtifact),
       approvals: shouldShowApprovals
@@ -546,7 +582,7 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
 
   return {
     task: toTaskItem(workflow),
-    subtasks: buildSubtasks(workflow, delegations),
+    subtasks: sortSubtasksByWorkflowOrder(workflow, buildSubtasks(workflow, delegations)),
     timeline: buildTimeline(workflow, delegations),
     artifacts: buildArtifacts(workflow),
     approvals: buildApprovals(workflow),

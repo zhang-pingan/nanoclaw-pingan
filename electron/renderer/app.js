@@ -1086,9 +1086,19 @@ function renderMemoryGroups() {
 }
 
 function formatDateTime(ts) {
-  const ms = Number(ts);
-  if (Number.isNaN(ms)) return "--";
-  return new Date(ms).toLocaleString();
+  if (ts === null || ts === undefined || ts === "") return "--";
+  const parsed = new Date(ts);
+  if (Number.isNaN(parsed.getTime())) {
+    const ms = Number(ts);
+    if (Number.isNaN(ms)) return "--";
+    const fromMs = new Date(ms);
+    return Number.isNaN(fromMs.getTime()) ? "--" : fromMs.toLocaleString();
+  }
+  return parsed.toLocaleString();
+}
+
+function getPayloadTimestamp(payload) {
+  return payload.createdAt || payload.created_at || payload.updatedAt || payload.updated_at || new Date().toISOString();
 }
 
 function getActiveMemoryGroup() {
@@ -2220,12 +2230,21 @@ function renderWorkbenchSubtasks(subtasks) {
     workbenchSubtasks.innerHTML = `<div class="workbench-empty">暂无阶段数据</div>`;
     return;
   }
-  const statusLabelMap = {
-    pending: "未开始",
-    current: "进行中",
-    completed: "已完成",
-    failed: "失败",
-  };
+  function isAwaitingStage(item) {
+    return typeof item.stage_key === "string" && item.stage_key.startsWith("awaiting_");
+  }
+  function getSubtaskStatusLabel(item) {
+    if (item.status === "current" && isAwaitingStage(item)) {
+      return "待确认";
+    }
+    const statusLabelMap = {
+      pending: "未开始",
+      current: "进行中",
+      completed: "已完成",
+      failed: "失败",
+    };
+    return statusLabelMap[item.status] || item.status;
+  }
   const selectedId = subtasks.some((item) => item.id === workbenchSelectedSubtaskId)
     ? workbenchSelectedSubtaskId
     : (subtasks.find((item) => item.status === "current") || subtasks[0]).id;
@@ -2239,13 +2258,22 @@ function renderWorkbenchSubtasks(subtasks) {
     const el = document.createElement("button");
     el.type = "button";
     el.className = `workbench-subtask-step ${item.status}${item.id === selectedId ? " active" : ""}`;
+    const stepHint = item.status === "current"
+      ? (isAwaitingStage(item) ? "等待确认" : "正在处理")
+      : item.status === "failed"
+        ? "需处理"
+        : item.status === "completed"
+          ? "已通过"
+          : "待开始";
     el.innerHTML = `
       <div class="workbench-subtask-card">
+        ${item.status === "current" ? '<span class="workbench-subtask-spotlight"></span>' : ""}
         <div class="workbench-subtask-title">
           <span class="workbench-subtask-index">0${stepIndex}</span>
           ${escapeHtml(item.stage_label || item.title)}
           ${item.status === "current" ? '<span class="workbench-current-chip">当前</span>' : ""}
         </div>
+        <div class="workbench-subtask-caption">${escapeHtml(stepHint)}</div>
       </div>
       <div class="workbench-subtask-marker">
         <span class="workbench-subtask-dot"></span>
@@ -2261,6 +2289,30 @@ function renderWorkbenchSubtasks(subtasks) {
 
   const selected = subtasks.find((item) => item.id === selectedId) || subtasks[0];
   const selectedIndex = subtasks.findIndex((item) => item.id === selected.id) + 1;
+  const selectedBody = selected.result
+    ? `结果摘要：${escapeHtml(selected.result)}`
+    : selected.status === "current" && isAwaitingStage(selected)
+      ? "等待审批确认后进入下一阶段"
+      : "等待执行或审批推进";
+  const detailHint = selected.status === "failed"
+    ? `
+      <div class="workbench-subtask-hint failed">
+        <div class="workbench-subtask-hint-title">处理建议</div>
+        <div class="workbench-subtask-hint-body">
+          优先查看结果摘要中的报错信息，确认修复后可直接点击“重跑”重新推进该阶段。
+        </div>
+      </div>
+    `
+    : selected.status === "current"
+      ? `
+        <div class="workbench-subtask-hint current">
+          <div class="workbench-subtask-hint-title">当前焦点</div>
+          <div class="workbench-subtask-hint-body">
+            ${escapeHtml(isAwaitingStage(selected) ? "这个阶段正在等待审批确认。" : "这个阶段正在执行中，可关注结果摘要与时间线更新。")}
+          </div>
+        </div>
+      `
+      : "";
   const detailEl = document.createElement("div");
   detailEl.className = `workbench-subtask-detail-card ${selected.status}`;
   detailEl.innerHTML = `
@@ -2268,13 +2320,14 @@ function renderWorkbenchSubtasks(subtasks) {
       <div class="workbench-item-title">
         <span class="workbench-subtask-detail-index">阶段 ${selectedIndex}</span>
         ${escapeHtml(selected.stage_label || selected.title)}
-        <span class="workbench-badge">${escapeHtml(statusLabelMap[selected.status] || selected.status)}</span>
+        <span class="workbench-badge">${escapeHtml(getSubtaskStatusLabel(selected))}</span>
       </div>
     </div>
     <div class="workbench-item-body">
       ${selected.target_folder ? `执行群组：${escapeHtml(selected.target_folder)}\n` : ""}
-      ${selected.result ? `结果摘要：${escapeHtml(selected.result)}` : "等待执行或审批推进"}
+      ${selectedBody}
     </div>
+    ${detailHint}
   `;
 
   if (selected.role && selected.status === "failed") {
@@ -2426,7 +2479,7 @@ function renderWorkbenchComments(comments) {
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.author)}</div>
-        <span class="workbench-badge">${escapeHtml(new Date(item.created_at).toLocaleString())}</span>
+        <span class="workbench-badge">${escapeHtml(formatDateTime(item.created_at))}</span>
       </div>
       <div class="workbench-item-body">${escapeHtml(item.content)}</div>
     `;
@@ -2446,7 +2499,7 @@ function renderWorkbenchTimeline(timeline) {
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.title)}</div>
-        <span class="workbench-badge">${escapeHtml(new Date(item.created_at).toLocaleString())}</span>
+        <span class="workbench-badge">${escapeHtml(formatDateTime(item.created_at))}</span>
       </div>
       <div class="workbench-item-body">${escapeHtml(item.body || "")}</div>
     `;
@@ -3078,8 +3131,8 @@ function applyWorkbenchRealtimeEvent(event) {
       deliverable: "",
       round: 0,
       source_jid: payload.sourceJid || "",
-      created_at: payload.createdAt || new Date().toISOString(),
-      updated_at: payload.createdAt || new Date().toISOString(),
+      created_at: getPayloadTimestamp(payload),
+      updated_at: getPayloadTimestamp(payload),
       pending_approval: false,
       active_delegation_id: "",
     });
@@ -3107,14 +3160,21 @@ function applyWorkbenchRealtimeEvent(event) {
       renderWorkbenchSubtasks(currentWorkbenchDetail.subtasks);
     }
   } else if (event.type === "event_created") {
-    currentWorkbenchDetail.timeline.unshift({
-      id: payload.id || `rt-${Date.now()}`,
+    const nextId = payload.id || `rt-${Date.now()}`;
+    const existingIdx = currentWorkbenchDetail.timeline.findIndex((item) => item.id === nextId);
+    const nextItem = {
+      id: nextId,
       type: "delegation",
       title: payload.title || "任务更新",
       body: payload.body || "",
-      created_at: payload.createdAt || new Date().toISOString(),
+      created_at: getPayloadTimestamp(payload),
       status: payload.status || ""
-    });
+    };
+    if (existingIdx >= 0) {
+      currentWorkbenchDetail.timeline[existingIdx] = nextItem;
+    } else {
+      currentWorkbenchDetail.timeline.unshift(nextItem);
+    }
     renderWorkbenchTimeline(currentWorkbenchDetail.timeline);
   } else if (event.type === "artifact_created") {
     const exists = currentWorkbenchDetail.artifacts.some((item) => item.id === payload.id);
@@ -3135,7 +3195,7 @@ function applyWorkbenchRealtimeEvent(event) {
       id: payload.id,
       author: payload.author || "Web User",
       content: payload.content || "",
-      created_at: payload.createdAt || new Date().toISOString(),
+      created_at: getPayloadTimestamp(payload),
     });
     renderWorkbenchComments(currentWorkbenchDetail.comments);
   } else if (event.type === "asset_created") {
@@ -3146,7 +3206,7 @@ function applyWorkbenchRealtimeEvent(event) {
       path: payload.path || null,
       url: payload.url || null,
       note: payload.note || null,
-      created_at: payload.createdAt || new Date().toISOString(),
+      created_at: getPayloadTimestamp(payload),
     });
     renderWorkbenchAssets(currentWorkbenchDetail.assets);
   }

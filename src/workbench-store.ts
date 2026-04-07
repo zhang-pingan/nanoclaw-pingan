@@ -412,8 +412,16 @@ export function syncWorkbenchOnTransition(
   const fromLabel = config?.status_labels[fromStatus] || fromStatus;
   const toLabel = config?.status_labels[toStatus] || toStatus;
   const transitionTitle = `阶段切换：${fromLabel} -> ${toLabel}`;
+  const transitionEventId = [
+    'wb-event',
+    workflow.id,
+    'transition',
+    fromStatus,
+    toStatus,
+    workflow.updated_at,
+  ].join('-');
   createWorkbenchEvent({
-    id: `wb-event-${workflow.id}-${toStatus}-${Date.now()}`,
+    id: transitionEventId,
     task_id: task.id,
     subtask_id: toSubtask?.id || null,
     event_type: 'transition',
@@ -428,7 +436,9 @@ export function syncWorkbenchOnTransition(
     taskId: task.id,
     workflowId,
     payload: {
+      id: transitionEventId,
       title: transitionTitle,
+      body: delegationId ? `delegation_id=${delegationId}` : null,
       status: toStatus,
       createdAt: workflow.updated_at,
     },
@@ -482,7 +492,9 @@ export function syncWorkbenchOnDelegationCreated(workflowId: string, delegationI
     taskId: task.id,
     workflowId,
     payload: {
+      id: `wb-event-${delegation.id}-created`,
       title: `已委派 ${delegation.target_folder}`,
+      body: truncate(delegation.task, 500),
       delegationId: delegation.id,
       createdAt: delegation.created_at,
     },
@@ -531,10 +543,12 @@ export function syncWorkbenchOnDelegationCompleted(workflowId: string, delegatio
     taskId: task.id,
     workflowId,
     payload: {
+      id: `wb-event-${delegation.id}-completed`,
       title:
         delegation.outcome === 'failure'
           ? `委派失败 ${delegation.target_folder}`
           : `委派完成 ${delegation.target_folder}`,
+      body: truncate(delegation.result, 700),
       delegationId: delegation.id,
       createdAt: delegation.updated_at,
     },

@@ -795,9 +795,13 @@ html, body {
   background: rgba(245, 247, 250, 0.82);
   transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
   display: flex;
+  position: relative;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
   text-align: center;
+  gap: 6px;
+  overflow: hidden;
 }
 
 .workbench-subtask-step:last-child {
@@ -829,11 +833,15 @@ html, body {
   background: rgba(255, 255, 255, 0.96);
 }
 
+.workbench-subtask-step.pending .workbench-subtask-line {
+  background: linear-gradient(90deg, rgba(203, 213, 225, 0.95), rgba(226, 232, 240, 0.35));
+}
+
 .workbench-subtask-step.current .workbench-subtask-card {
   border-color: rgba(79, 110, 247, 0.34);
   background: linear-gradient(135deg, rgba(79, 110, 247, 0.12), rgba(255, 255, 255, 0.96));
   box-shadow: 0 10px 24px rgba(79, 110, 247, 0.08);
-  transform: scale(1.015);
+  transform: translateY(-2px) scale(1.03);
   transform-origin: left center;
 }
 
@@ -889,6 +897,26 @@ html, body {
 .workbench-subtask-step.failed .workbench-subtask-dot {
   border-color: rgba(239, 68, 68, 0.92);
   background: rgba(239, 68, 68, 0.92);
+}
+
+.workbench-subtask-step.failed .workbench-subtask-dot::before,
+.workbench-subtask-step.failed .workbench-subtask-dot::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 2px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.workbench-subtask-step.failed .workbench-subtask-dot::before {
+  transform: rotate(45deg);
+}
+
+.workbench-subtask-step.failed .workbench-subtask-dot::after {
+  transform: rotate(-45deg);
 }
 
 .workbench-subtask-step.failed .workbench-subtask-line {
@@ -966,6 +994,34 @@ html, body {
   word-break: break-word;
 }
 
+.workbench-subtask-caption {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.workbench-subtask-step.current .workbench-subtask-caption {
+  color: var(--accent-strong);
+}
+
+.workbench-subtask-step.failed .workbench-subtask-caption {
+  color: #b91c1c;
+}
+
+.workbench-subtask-step.completed .workbench-subtask-caption {
+  color: #0f766e;
+}
+
+.workbench-subtask-spotlight {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(79, 110, 247, 0.96), rgba(56, 189, 248, 0.72));
+  box-shadow: 0 0 18px rgba(79, 110, 247, 0.4);
+}
+
 .workbench-subtask-index,
 .workbench-subtask-detail-index {
   display: inline-flex;
@@ -987,6 +1043,11 @@ html, body {
 .workbench-subtask-detail-card.current .workbench-subtask-detail-index {
   background: rgba(79, 110, 247, 0.12);
   color: var(--accent-strong);
+}
+
+.workbench-subtask-detail-card.pending .workbench-subtask-detail-index {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
 }
 
 .workbench-subtask-step.completed .workbench-subtask-index,
@@ -1014,6 +1075,11 @@ html, body {
   background: linear-gradient(135deg, rgba(79, 110, 247, 0.1), rgba(255, 255, 255, 0.96));
 }
 
+.workbench-subtask-detail-card.pending {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.96));
+}
+
 .workbench-subtask-detail-card.completed {
   border-color: rgba(16, 185, 129, 0.24);
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.96));
@@ -1037,6 +1103,37 @@ html, body {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.workbench-subtask-hint {
+  margin-top: 12px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.workbench-subtask-hint.current {
+  border-color: rgba(79, 110, 247, 0.18);
+  background: linear-gradient(135deg, rgba(79, 110, 247, 0.08), rgba(255, 255, 255, 0.82));
+}
+
+.workbench-subtask-hint.failed {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.84));
+}
+
+.workbench-subtask-hint-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.workbench-subtask-hint-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .workbench-subtask-actions .btn-ghost,
@@ -1608,6 +1705,10 @@ html, body {
   .workbench-current-chip {
     margin-left: 6px;
     padding: 1px 6px;
+    font-size: 10px;
+  }
+
+  .workbench-subtask-caption {
     font-size: 10px;
   }
 
