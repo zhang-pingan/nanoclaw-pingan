@@ -342,7 +342,7 @@
       </div>
 
       <section id="workbench-screen">
-        <aside class="workbench-sidebar">
+        <aside id="workbench-sidebar" class="workbench-sidebar">
           <div class="workbench-section-header">
             <span>任务</span>
             <div class="workbench-section-actions">
@@ -353,7 +353,17 @@
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                 </svg>
               </button>
-              <button id="workbench-create-task-btn" class="btn-primary">新建任务</button>
+              <button id="workbench-create-task-btn" class="icon-btn" title="新建任务" aria-label="新建任务">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14"></path>
+                  <path d="M5 12h14"></path>
+                </svg>
+              </button>
+              <button id="workbench-sidebar-collapse" class="icon-btn" title="Collapse sidebar">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+              </button>
             </div>
           </div>
           <div id="workbench-task-list" class="workbench-task-list"></div>

@@ -76,6 +76,8 @@ var openWorkflowsBtn = document.getElementById("open-workflows");
 var closeWorkflowsBtn = document.getElementById("close-workflows");
 var refreshWorkflowsBtn = document.getElementById("refresh-workflows");
 var deleteAllWorkflowsBtn = document.getElementById("delete-all-workflows");
+var workbenchSidebar = document.getElementById("workbench-sidebar");
+var workbenchSidebarCollapse = document.getElementById("workbench-sidebar-collapse");
 var workbenchTaskList = document.getElementById("workbench-task-list");
 var workbenchRefreshBtn = document.getElementById("workbench-refresh-btn");
 var workbenchCreateTaskBtn = document.getElementById("workbench-create-task-btn");
@@ -4256,6 +4258,11 @@ if (memoryModalMask) {
 sidebarCollapse.addEventListener("click", () => {
   sidebar.classList.toggle("collapsed");
 });
+if (workbenchSidebarCollapse && workbenchSidebar) {
+  workbenchSidebarCollapse.addEventListener("click", () => {
+    workbenchSidebar.classList.toggle("collapsed");
+  });
+}
 refreshGroupsBtn.addEventListener("click", () => {
   refreshGroupsBtn.classList.add("spinning");
   setTimeout(() => refreshGroupsBtn.classList.remove("spinning"), 700);
