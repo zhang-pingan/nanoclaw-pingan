@@ -923,6 +923,31 @@ html, body {
   background: linear-gradient(90deg, rgba(239, 68, 68, 0.7), rgba(239, 68, 68, 0.24));
 }
 
+.workbench-subtask-step.cancelled .workbench-subtask-card {
+  border-color: rgba(245, 158, 11, 0.34);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(255, 255, 255, 0.96));
+}
+
+.workbench-subtask-step.cancelled .workbench-subtask-dot {
+  border-color: rgba(245, 158, 11, 0.92);
+  background: rgba(245, 158, 11, 0.92);
+}
+
+.workbench-subtask-step.cancelled .workbench-subtask-dot::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  width: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.workbench-subtask-step.cancelled .workbench-subtask-line {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.72), rgba(245, 158, 11, 0.24));
+}
+
 @keyframes workbenchStepPulse {
   0% {
     opacity: 0.9;
@@ -1009,6 +1034,10 @@ html, body {
   color: #b91c1c;
 }
 
+.workbench-subtask-step.cancelled .workbench-subtask-caption {
+  color: #b45309;
+}
+
 .workbench-subtask-step.completed .workbench-subtask-caption {
   color: #0f766e;
 }
@@ -1062,6 +1091,12 @@ html, body {
   color: #b91c1c;
 }
 
+.workbench-subtask-step.cancelled .workbench-subtask-index,
+.workbench-subtask-detail-card.cancelled .workbench-subtask-detail-index {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
 .workbench-subtask-detail-card {
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -1088,6 +1123,11 @@ html, body {
 .workbench-subtask-detail-card.failed {
   border-color: rgba(239, 68, 68, 0.24);
   background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.workbench-subtask-detail-card.cancelled {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-detail-card .workbench-item-title {
@@ -1121,6 +1161,11 @@ html, body {
 .workbench-subtask-hint.failed {
   border-color: rgba(239, 68, 68, 0.2);
   background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.84));
+}
+
+.workbench-subtask-hint.cancelled {
+  border-color: rgba(245, 158, 11, 0.2);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.84));
 }
 
 .workbench-subtask-hint-title {

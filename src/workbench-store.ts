@@ -360,7 +360,12 @@ export function syncWorkbenchOnTransition(
 
   const fromSubtask = getWorkbenchSubtaskByStage(task.id, fromStatus);
   if (fromSubtask) {
-    const nextStatus = fromSubtask.status === 'failed' ? 'failed' : 'completed';
+    const nextStatus =
+      toStatus === 'cancelled'
+        ? 'cancelled'
+        : fromSubtask.status === 'failed'
+          ? 'failed'
+          : 'completed';
     updateWorkbenchSubtask(fromSubtask.id, {
       // Preserve explicit failure markers so the UI can still surface retry.
       status: nextStatus,

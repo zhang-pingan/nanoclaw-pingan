@@ -84,7 +84,7 @@ export interface WorkbenchSubtask {
   title: string;
   stage_key: string;
   stage_label: string;
-  status: 'completed' | 'current' | 'pending' | 'failed';
+  status: 'completed' | 'current' | 'pending' | 'failed' | 'cancelled';
   role?: string;
   skill?: string;
   target_folder?: string;
@@ -170,6 +170,8 @@ function mapPersistedSubtask(item: WorkbenchSubtaskRecord): WorkbenchSubtask {
         ? 'completed'
         : item.status === 'current'
           ? 'current'
+          : item.status === 'cancelled'
+            ? 'cancelled'
           : item.status === 'failed'
             ? 'failed'
           : 'pending',

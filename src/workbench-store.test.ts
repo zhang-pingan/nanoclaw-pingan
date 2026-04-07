@@ -10,7 +10,7 @@ import {
   storeChatMetadata,
 } from './db.js';
 import { RegisteredGroup } from './types.js';
-import { approveWorkflow, initWorkflow } from './workflow.js';
+import { approveWorkflow, cancelWorkflow, initWorkflow } from './workflow.js';
 import { getWorkbenchTaskDetail } from './workbench.js';
 import { syncWorkbenchOnTransition, syncWorkbenchOnWorkflowCreated } from './workbench-store.js';
 
@@ -131,5 +131,41 @@ describe('workbench approval transition sync', () => {
       (item) => item.event_type === 'transition' && item.title.includes('部署中') && item.title.includes('部署失败'),
     );
     expect(transitionEvents).toHaveLength(1);
+  });
+
+  it('marks the active stage cancelled instead of completed when workflow is cancelled', () => {
+    dbCreateWorkflow({
+      id: 'wf-cancel-fixing',
+      name: '取消中的修复',
+      service: 'order-service',
+      start_from: 'testing',
+      branch: 'feature/cancel-fixing',
+      deliverable: '2026-04-07_cancel_fixing',
+      deploy_branch: 'staging-deploy/feature-cancel-fixing',
+      status: 'fixing',
+      current_delegation_id: 'wf-del-cancel',
+      round: 1,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:20:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-cancel-fixing');
+
+    const task = getWorkbenchTaskByWorkflowId('wf-cancel-fixing');
+    expect(task).not.toBeNull();
+    const fixingSubtaskBefore = getWorkbenchTaskDetail(task!.id)?.subtasks.find(
+      (item) => item.stage_key === 'fixing',
+    );
+    expect(fixingSubtaskBefore?.status).toBe('current');
+
+    const result = cancelWorkflow('wf-cancel-fixing');
+    expect(result.error).toBeUndefined();
+
+    const detail = getWorkbenchTaskDetail(task!.id);
+    expect(detail).not.toBeNull();
+    expect(detail?.task.status).toBe('cancelled');
+    expect(detail?.subtasks.find((item) => item.stage_key === 'fixing')?.status).toBe('cancelled');
   });
 });

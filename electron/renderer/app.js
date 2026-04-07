@@ -2242,6 +2242,7 @@ function renderWorkbenchSubtasks(subtasks) {
       current: "进行中",
       completed: "已完成",
       failed: "失败",
+      cancelled: "已取消",
     };
     return statusLabelMap[item.status] || item.status;
   }
@@ -2262,6 +2263,8 @@ function renderWorkbenchSubtasks(subtasks) {
       ? (isAwaitingStage(item) ? "等待确认" : "正在处理")
       : item.status === "failed"
         ? "需处理"
+        : item.status === "cancelled"
+          ? "已取消"
         : item.status === "completed"
           ? "已通过"
           : "待开始";
@@ -2303,6 +2306,15 @@ function renderWorkbenchSubtasks(subtasks) {
         </div>
       </div>
     `
+    : selected.status === "cancelled"
+      ? `
+        <div class="workbench-subtask-hint cancelled">
+          <div class="workbench-subtask-hint-title">阶段已取消</div>
+          <div class="workbench-subtask-hint-body">
+            这个阶段因手动取消或流程终止而停止，不代表执行成功，也不会继续自动推进。
+          </div>
+        </div>
+      `
     : selected.status === "current"
       ? `
         <div class="workbench-subtask-hint current">
@@ -3153,7 +3165,7 @@ function applyWorkbenchRealtimeEvent(event) {
   } else if (event.type === "subtask_updated") {
     const subtask = currentWorkbenchDetail.subtasks.find((item) => item.id === payload.id);
     if (subtask) {
-      if (payload.status && ["completed", "current", "pending", "failed"].includes(payload.status)) {
+      if (payload.status && ["completed", "current", "pending", "failed", "cancelled"].includes(payload.status)) {
         subtask.status = payload.status;
       }
       if (payload.groupFolder) subtask.target_folder = payload.groupFolder;
