@@ -698,6 +698,195 @@ html, body {
   border-color: rgba(52, 211, 153, 0.22);
 }
 
+.workbench-subtasks {
+  gap: 14px;
+}
+
+.workbench-subtasks-chain {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  position: relative;
+  mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+}
+
+.workbench-subtask-step {
+  display: grid;
+  grid-template-columns: minmax(132px, 180px) auto;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: inherit;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.workbench-subtask-step:hover {
+  transform: translateY(-1px);
+}
+
+.workbench-subtask-marker {
+  display: flex;
+  align-items: center;
+}
+
+.workbench-subtask-dot {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.65);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9);
+}
+
+.workbench-subtask-line {
+  width: clamp(28px, 4vw, 52px);
+  height: 2px;
+  margin-left: 10px;
+  background: linear-gradient(90deg, rgba(203, 213, 225, 0.95), rgba(226, 232, 240, 0.35));
+}
+
+.workbench-subtask-step:last-child .workbench-subtask-line {
+  display: none;
+}
+
+.workbench-subtask-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 16px;
+  background: rgba(245, 247, 250, 0.82);
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.workbench-subtask-step:last-child {
+  padding-right: 4px;
+}
+
+.workbench-subtask-step.active .workbench-subtask-card {
+  border-color: rgba(79, 110, 247, 0.52);
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.16);
+  animation: workbenchStepActivate 240ms ease;
+}
+
+.workbench-subtask-step.active.pending .workbench-subtask-card {
+  background: linear-gradient(135deg, rgba(79, 110, 247, 0.08), rgba(248, 250, 252, 0.96));
+}
+
+.workbench-subtask-step.active .workbench-subtask-index {
+  background: rgba(79, 110, 247, 0.14);
+  color: var(--accent-strong);
+}
+
+.workbench-subtask-step.pending .workbench-subtask-card {
+  border-color: rgba(203, 213, 225, 0.9);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.workbench-subtask-step.pending .workbench-subtask-dot {
+  border-color: rgba(148, 163, 184, 0.58);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.workbench-subtask-step.current .workbench-subtask-card {
+  border-color: rgba(79, 110, 247, 0.34);
+  background: linear-gradient(135deg, rgba(79, 110, 247, 0.12), rgba(255, 255, 255, 0.96));
+  box-shadow: 0 10px 24px rgba(79, 110, 247, 0.08);
+  transform: scale(1.015);
+  transform-origin: left center;
+}
+
+.workbench-subtask-step.current .workbench-subtask-dot {
+  border-color: rgba(79, 110, 247, 0.92);
+  background: var(--accent);
+}
+
+.workbench-subtask-step.current .workbench-subtask-line {
+  background: linear-gradient(90deg, rgba(79, 110, 247, 0.52), rgba(203, 213, 225, 0.35));
+}
+
+.workbench-subtask-step.completed .workbench-subtask-card {
+  border-color: rgba(52, 211, 153, 0.3);
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.12), rgba(255, 255, 255, 0.96));
+}
+
+.workbench-subtask-step.completed .workbench-subtask-dot {
+  border-color: rgba(16, 185, 129, 0.92);
+  background: rgba(16, 185, 129, 0.92);
+}
+
+.workbench-subtask-step.completed .workbench-subtask-dot::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg);
+}
+
+.workbench-subtask-step.current .workbench-subtask-dot::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 110, 247, 0.28);
+  animation: workbenchStepPulse 1.8s ease-out infinite;
+}
+
+.workbench-subtask-step.completed .workbench-subtask-line {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.78), rgba(16, 185, 129, 0.38));
+}
+
+@keyframes workbenchStepPulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.8);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes workbenchStepActivate {
+  0% {
+    transform: scale(0.97);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes workbenchDetailSwap {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .workbench-item-row {
   display: flex;
   justify-content: space-between;
@@ -708,6 +897,84 @@ html, body {
 .workbench-item-title {
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.workbench-current-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(79, 110, 247, 0.12);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.workbench-subtask-title {
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.workbench-subtask-index,
+.workbench-subtask-detail-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 20px;
+  padding: 0 6px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.workbench-subtask-step.current .workbench-subtask-index,
+.workbench-subtask-detail-card.current .workbench-subtask-detail-index {
+  background: rgba(79, 110, 247, 0.12);
+  color: var(--accent-strong);
+}
+
+.workbench-subtask-step.completed .workbench-subtask-index,
+.workbench-subtask-detail-card.completed .workbench-subtask-detail-index {
+  background: rgba(16, 185, 129, 0.12);
+  color: #0f766e;
+}
+
+.workbench-subtask-detail-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px 18px;
+  background: rgba(245, 247, 250, 0.9);
+  animation: workbenchDetailSwap 220ms ease;
+}
+
+.workbench-subtask-detail-card.current {
+  border-color: rgba(79, 110, 247, 0.34);
+  background: linear-gradient(135deg, rgba(79, 110, 247, 0.1), rgba(255, 255, 255, 0.96));
+}
+
+.workbench-subtask-detail-card.completed {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.workbench-subtask-detail-card .workbench-item-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .workbench-item-body {
@@ -1189,6 +1456,62 @@ html, body {
 
   .workbench-task-header {
     flex-direction: column;
+  }
+
+  .workbench-task-meta {
+    gap: 6px;
+  }
+
+  .workbench-badge {
+    padding: 3px 8px;
+    font-size: 11px;
+    line-height: 1.1;
+  }
+
+  .workbench-subtasks {
+    gap: 12px;
+  }
+
+  .workbench-subtasks-chain {
+    padding: 2px 0 6px;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .workbench-subtask-step {
+    grid-template-columns: minmax(108px, 132px) auto;
+    gap: 8px;
+  }
+
+  .workbench-subtask-card {
+    min-height: 54px;
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .workbench-subtask-line {
+    width: 24px;
+    margin-left: 8px;
+  }
+
+  .workbench-subtask-title {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  .workbench-subtask-index,
+  .workbench-subtask-detail-index {
+    min-width: 24px;
+    height: 18px;
+    padding: 0 5px;
+    margin-right: 6px;
+    font-size: 10px;
+  }
+
+  .workbench-current-chip {
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 10px;
   }
 
   .memory-toolbar {

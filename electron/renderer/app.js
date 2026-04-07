@@ -141,6 +141,7 @@ var memoryMetricsSummary = null;
 var workbenchTasks = [];
 var currentWorkbenchDetail = null;
 var currentWorkbenchTaskId = "";
+var workbenchSelectedSubtaskId = "";
 var workbenchDetailLoading = false;
 var workbenchQueuedDetailTaskId = "";
 var workbenchDetailReloadTimer = null;
@@ -2094,7 +2095,7 @@ function renderWorkbenchTaskDetail(detail) {
 
   renderWorkbenchActions(task);
   renderWorkbenchSubtasks(detail.subtasks || []);
-  renderWorkbenchApprovals(detail.approvals || [], task.id);
+  renderWorkbenchApprovals(detail.approvals || [], task);
   renderWorkbenchArtifacts(detail.artifacts || []);
   renderWorkbenchAssets(detail.assets || []);
   renderWorkbenchComments(detail.comments || []);
@@ -2132,34 +2133,107 @@ function renderWorkbenchSubtasks(subtasks) {
     workbenchSubtasks.innerHTML = `<div class="workbench-empty">暂无阶段数据</div>`;
     return;
   }
+  const statusLabelMap = {
+    pending: "未开始",
+    current: "进行中",
+    completed: "已完成",
+  };
+  const selectedId = subtasks.some((item) => item.id === workbenchSelectedSubtaskId)
+    ? workbenchSelectedSubtaskId
+    : (subtasks.find((item) => item.status === "current") || subtasks[0]).id;
+  workbenchSelectedSubtaskId = selectedId;
+
+  const chainEl = document.createElement("div");
+  chainEl.className = "workbench-subtasks-chain";
+
   subtasks.forEach((item) => {
-    const el = document.createElement("div");
-    el.className = `workbench-subtask-item ${item.status}`;
+    const stepIndex = subtasks.findIndex((subtask) => subtask.id === item.id) + 1;
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `workbench-subtask-step ${item.status}${item.id === selectedId ? " active" : ""}`;
     el.innerHTML = `
-      <div class="workbench-item-row">
-        <div class="workbench-item-title">${escapeHtml(item.stage_label || item.title)}</div>
-        <span class="workbench-badge">${escapeHtml(item.status)}</span>
+      <div class="workbench-subtask-card">
+        <div class="workbench-subtask-title">
+          <span class="workbench-subtask-index">0${stepIndex}</span>
+          ${escapeHtml(item.stage_label || item.title)}
+          ${item.status === "current" ? '<span class="workbench-current-chip">当前</span>' : ""}
+        </div>
       </div>
-      <div class="workbench-item-body">
-        ${item.target_folder ? `执行群组：${escapeHtml(item.target_folder)}\n` : ""}
-        ${item.result ? `结果摘要：${escapeHtml(item.result)}` : "等待执行或审批推进"}
+      <div class="workbench-subtask-marker">
+        <span class="workbench-subtask-dot"></span>
+        <span class="workbench-subtask-line"></span>
       </div>
     `;
-    const actions = document.createElement("div");
-    actions.className = "workbench-task-actions";
-    if (item.role) {
-      const retryBtn = document.createElement("button");
-      retryBtn.className = "btn-ghost";
-      retryBtn.textContent = "重跑";
-      retryBtn.addEventListener("click", () => triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, item.id));
-      actions.appendChild(retryBtn);
-      el.appendChild(actions);
-    }
-    workbenchSubtasks.appendChild(el);
+    el.addEventListener("click", () => {
+      workbenchSelectedSubtaskId = item.id;
+      renderWorkbenchSubtasks(subtasks);
+    });
+    chainEl.appendChild(el);
   });
+
+  const selected = subtasks.find((item) => item.id === selectedId) || subtasks[0];
+  const selectedIndex = subtasks.findIndex((item) => item.id === selected.id) + 1;
+  const detailEl = document.createElement("div");
+  detailEl.className = `workbench-subtask-detail-card ${selected.status}`;
+  detailEl.innerHTML = `
+    <div class="workbench-item-row">
+      <div class="workbench-item-title">
+        <span class="workbench-subtask-detail-index">阶段 ${selectedIndex}</span>
+        ${escapeHtml(selected.stage_label || selected.title)}
+        <span class="workbench-badge">${escapeHtml(statusLabelMap[selected.status] || selected.status)}</span>
+      </div>
+    </div>
+    <div class="workbench-item-body">
+      ${selected.target_folder ? `执行群组：${escapeHtml(selected.target_folder)}\n` : ""}
+      ${selected.result ? `结果摘要：${escapeHtml(selected.result)}` : "等待执行或审批推进"}
+    </div>
+  `;
+
+  if (selected.role) {
+    const actions = document.createElement("div");
+    actions.className = "workbench-subtask-actions";
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "btn-ghost";
+    retryBtn.textContent = "重跑";
+    retryBtn.addEventListener("click", () => triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, selected.id));
+    actions.appendChild(retryBtn);
+    detailEl.appendChild(actions);
+  }
+
+  workbenchSubtasks.appendChild(chainEl);
+  workbenchSubtasks.appendChild(detailEl);
+
+  const activeStep = chainEl.querySelector(".workbench-subtask-step.active");
+  if (activeStep) {
+    const targetLeft =
+      activeStep.offsetLeft -
+      Math.max(0, (chainEl.clientWidth - activeStep.clientWidth) / 2);
+    chainEl.scrollTo({
+      left: Math.max(0, targetLeft),
+      behavior: "auto",
+    });
+  }
 }
 
-function renderWorkbenchApprovals(approvals, taskId) {
+function getWorkbenchApprovalLabels(task, approval) {
+  switch (task.status) {
+    case "plan_confirm":
+      return { approve: "进入开发", revise: "返回方案修改" };
+    case "plan_examine_confirm":
+      return { approve: "继续开发", revise: "返回方案修改" };
+    case "dev_examine_confirm":
+      return { approve: "继续后续流程", revise: "返回开发修正" };
+    case "awaiting_confirm":
+      return { approve: "开始预发部署", revise: "" };
+    default:
+      return {
+        approve: "通过",
+        revise: approval.action_mode === "approve_or_revise" ? "驳回并修改" : "",
+      };
+  }
+}
+
+function renderWorkbenchApprovals(approvals, task) {
   workbenchApprovals.innerHTML = "";
   if (approvals.length === 0) {
     if (workbenchApprovalsPanel) workbenchApprovalsPanel.classList.add("hidden");
@@ -2168,6 +2242,7 @@ function renderWorkbenchApprovals(approvals, taskId) {
   }
   if (workbenchApprovalsPanel) workbenchApprovalsPanel.classList.remove("hidden");
   approvals.forEach((item) => {
+    const labels = getWorkbenchApprovalLabels(task, item);
     const el = document.createElement("div");
     el.className = "workbench-approval-item";
     el.innerHTML = `
@@ -2181,14 +2256,14 @@ function renderWorkbenchApprovals(approvals, taskId) {
     actions.className = "workbench-task-actions";
     const approveBtn = document.createElement("button");
     approveBtn.className = "btn-primary";
-    approveBtn.textContent = "通过";
-    approveBtn.addEventListener("click", () => triggerWorkbenchAction(taskId, "approve"));
+    approveBtn.textContent = labels.approve;
+    approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
     actions.appendChild(approveBtn);
     if (item.action_mode === "approve_or_revise") {
       const reviseBtn = document.createElement("button");
       reviseBtn.className = "btn-ghost";
-      reviseBtn.textContent = "驳回并修改";
-      reviseBtn.addEventListener("click", () => triggerWorkbenchAction(taskId, "revise"));
+      reviseBtn.textContent = labels.revise || "驳回并修改";
+      reviseBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "revise"));
       actions.appendChild(reviseBtn);
     }
     el.appendChild(actions);

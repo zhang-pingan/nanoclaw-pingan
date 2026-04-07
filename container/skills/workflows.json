@@ -217,12 +217,12 @@
     "status_labels": {
       "plan": "📝 方案设计中",
       "plan_examine": "🧭 方案审核中",
-      "plan_examine_confirm": "📋 方案复核待确认",
+      "plan_examine_confirm": "📋 确认方案修改或继续开发",
       "plan_confirm": "📋 方案待确认",
       "dev": "🔧 开发中",
       "dev_examine": "🧾 开发复核中",
-      "dev_examine_confirm": "📋 开发复核待确认",
-      "awaiting_confirm": "⏳ 待确认",
+      "dev_examine_confirm": "📋 确认回修或继续后续流程",
+      "awaiting_confirm": "⏳ 确认预发部署",
       "ops_deploy": "🚀 部署中",
       "testing": "🧪 测试中",
       "fixing": "🔨 修复中",
@@ -233,25 +233,25 @@
     },
     "cards": {
       "plan_confirm": {
-        "header_template": "📋 需求「{{name}}」方案审核完成",
+        "header_template": "📋 确认方案后进入开发",
         "header_color": "green",
         "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接进入开发\n2) 提交修改意见，回到 Plan 重新设计",
         "actions": ["approve_dev", "revise", "cancel"]
       },
       "plan_examine_confirm": {
-        "header_template": "🧭 需求「{{name}}」方案审核未通过",
+        "header_template": "📋 确认方案修改或继续开发",
         "header_color": "orange",
         "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接继续后续流程（进入开发）\n2) 回到 Plan 修改（可填写补充修改意见）",
         "actions": ["approve_dev", "revise", "cancel"]
       },
       "deploy_confirm": {
-        "header_template": "📋 需求「{{name}}」开发完成",
+        "header_template": "⏳ 确认预发部署",
         "header_color": "blue",
-        "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**工作分支**：{{branch}}\n**交付文档**：{{deliverable}}",
+        "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**工作分支**：{{branch}}\n**交付文档**：{{deliverable}}\n\n请选择是否开始预发部署。",
         "actions": ["approve", "pause", "cancel"]
       },
       "dev_examine_confirm": {
-        "header_template": "🧾 需求「{{name}}」开发复核未通过",
+        "header_template": "📋 确认回修或继续后续流程",
         "header_color": "orange",
         "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**工作分支**：{{branch}}\n**交付文档**：{{deliverable}}\n\n请选择：\n1) 直接继续后续流程\n2) 回到开发修正（可填写补充修改意见）",
         "actions": ["approve", "revise", "cancel"]

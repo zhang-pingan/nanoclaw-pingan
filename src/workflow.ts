@@ -906,12 +906,35 @@ export function onDelegationComplete(delegationId: string): void {
 
 const ACTION_BUTTONS: Record<string, { label: string; type?: 'primary' | 'danger' | 'default' }> = {
   approve: { label: '✅ 确认执行', type: 'primary' },
-  approve_dev: { label: '✅ 直接进入开发', type: 'primary' },
+  approve_dev: { label: '✅ 进入开发', type: 'primary' },
   pause: { label: '⏸ 暂缓' },
   cancel: { label: '❌ 取消流程', type: 'danger' },
   resume: { label: '▶ 继续', type: 'primary' },
   revise: { label: '✏️ 提交修改' },
 };
+
+function getActionButtonLabel(actionName: string, workflow: Workflow): string {
+  switch (workflow.status) {
+    case 'plan_confirm':
+      if (actionName === 'approve_dev') return '✅ 进入开发';
+      if (actionName === 'revise') return '✏️ 返回方案修改';
+      break;
+    case 'plan_examine_confirm':
+      if (actionName === 'approve_dev') return '✅ 继续开发';
+      if (actionName === 'revise') return '✏️ 返回方案修改';
+      break;
+    case 'dev_examine_confirm':
+      if (actionName === 'approve') return '✅ 继续后续流程';
+      if (actionName === 'revise') return '✏️ 返回开发修正';
+      break;
+    case 'awaiting_confirm':
+      if (actionName === 'approve') return '✅ 开始预发部署';
+      break;
+    default:
+      break;
+  }
+  return ACTION_BUTTONS[actionName]?.label || actionName;
+}
 
 function buildConfigCard(
   workflow: Workflow,
@@ -941,7 +964,7 @@ function buildConfigCard(
     if (btn) {
       buttons.push({
         id: actionName,
-        label: btn.label,
+        label: getActionButtonLabel(actionName, workflow),
         type: btn.type,
         value: { workflow_id: workflow.id, action: actionName },
       });
