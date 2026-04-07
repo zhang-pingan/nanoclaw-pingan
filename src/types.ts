@@ -169,6 +169,7 @@ export interface Workflow {
   id: string;
   name: string;
   service: string;
+  start_from: string;
   branch: string;
   deliverable: string;
   status: WorkflowStatus;
@@ -187,6 +188,7 @@ export interface WorkbenchTaskRecord {
   source_jid: string;
   title: string;
   service: string;
+  start_from: string;
   workflow_type: string;
   status: string;
   current_stage: string;

@@ -151,6 +151,48 @@ export function getWorkflowTypeConfig(
   return loadedConfigs?.[type];
 }
 
+export function getReachableWorkflowStages(
+  workflowType: string,
+  startState: string,
+): string[] {
+  const config = getWorkflowTypeConfig(workflowType);
+  if (!config || !config.states[startState]) return [];
+
+  const visited = new Set<string>();
+  const queue = [startState];
+
+  while (queue.length > 0) {
+    const stateKey = queue.shift();
+    if (!stateKey || visited.has(stateKey)) continue;
+    visited.add(stateKey);
+
+    const state = config.states[stateKey];
+    if (!state) continue;
+
+    const nextStates = [
+      state.on_complete?.success?.target,
+      state.on_complete?.failure?.target,
+      state.on_approve?.target,
+      state.on_revise?.target,
+    ];
+
+    for (const target of nextStates) {
+      if (target && !visited.has(target) && config.states[target]) {
+        queue.push(target);
+      }
+    }
+  }
+
+  return Object.keys(config.states).filter((stateKey) => {
+    const state = config.states[stateKey];
+    return (
+      visited.has(stateKey) &&
+      state.type !== 'system' &&
+      state.type !== 'terminal'
+    );
+  });
+}
+
 // -------------------------------------------------------
 // Template renderer
 // -------------------------------------------------------

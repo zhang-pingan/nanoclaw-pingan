@@ -41,7 +41,10 @@ import {
   retryWorkflowStage,
   reviseWorkflow,
 } from './workflow.js';
-import { getWorkflowTypeConfig } from './workflow-config.js';
+import {
+  getReachableWorkflowStages,
+  getWorkflowTypeConfig,
+} from './workflow-config.js';
 import { syncWorkbenchFromWorkflow } from './workbench-store.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 
@@ -49,6 +52,7 @@ export interface WorkbenchTaskItem {
   id: string;
   title: string;
   service: string;
+  start_from: string;
   workflow_type: string;
   status: string;
   status_label: string;
@@ -132,6 +136,7 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     id: persisted?.id || workflow.id,
     title: persisted?.title || workflow.name,
     service: persisted?.service || workflow.service,
+    start_from: persisted?.start_from || workflow.start_from,
     workflow_type: persisted?.workflow_type || workflow.workflow_type,
     status: persisted?.status || workflow.status,
     status_label: statusLabels[workflow.status] || workflow.status,
@@ -232,12 +237,36 @@ function mapPersistedAsset(item: WorkbenchContextAssetRecord) {
   };
 }
 
-function getStageDefinitions(workflowType: string): WorkbenchSubtask[] {
-  const config = getWorkflowTypeConfig(workflowType);
+function getVisibleStageKeys(workflow: Workflow): string[] {
+  const task = getWorkbenchTaskByWorkflowId(workflow.id);
+  const persistedStageKeys = task
+    ? listWorkbenchSubtasksByTask(task.id).map((item) => item.stage_key)
+    : [];
+
+  if (persistedStageKeys.length > 0) {
+    return persistedStageKeys;
+  }
+
+  const visibleStageKeys = getReachableWorkflowStages(
+    workflow.workflow_type,
+    workflow.status,
+  );
+  return visibleStageKeys.length > 0 ? visibleStageKeys : [workflow.status];
+}
+
+function getStageDefinitions(workflow: Workflow): WorkbenchSubtask[] {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return [];
 
+  const visibleStageKeys = new Set(getVisibleStageKeys(workflow));
+
   return Object.entries(config.states)
-    .filter(([, state]) => state.type !== 'system' && state.type !== 'terminal')
+    .filter(
+      ([key, state]) =>
+        state.type !== 'system' &&
+        state.type !== 'terminal' &&
+        visibleStageKeys.has(key),
+    )
     .map(([key, state]) => ({
       id: `stage-${key}`,
       title: state.role || key,
@@ -257,7 +286,7 @@ function summarizeResult(result: string | null): string {
 
 function buildSubtasks(workflow: Workflow, delegations: Delegation[]): WorkbenchSubtask[] {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  const stages = getStageDefinitions(workflow.workflow_type);
+  const stages = getStageDefinitions(workflow);
   if (!config || stages.length === 0) return [];
 
   const currentKey = workflow.status;
@@ -413,6 +442,7 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
         id: item.id,
         title: item.title,
         service: item.service,
+        start_from: item.start_from,
         workflow_type: item.workflow_type,
         status: item.status,
         status_label: item.status,
@@ -469,9 +499,12 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
 
   const task = getWorkbenchTaskRecord(taskId);
   if (task) {
+    const visibleStageKeys = new Set(getVisibleStageKeys(workflow));
     return {
       task: toTaskItem(workflow),
-      subtasks: listWorkbenchSubtasksByTask(task.id).map(mapPersistedSubtask),
+      subtasks: listWorkbenchSubtasksByTask(task.id)
+        .filter((item) => visibleStageKeys.has(item.stage_key))
+        .map(mapPersistedSubtask),
       timeline: listWorkbenchEventsByTask(task.id).map(mapPersistedEvent),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(mapPersistedArtifact),
       approvals: listWorkbenchApprovalsByTask(task.id)

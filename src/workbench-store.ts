@@ -20,7 +20,10 @@ import {
 } from './db.js';
 import type { Delegation, Workflow } from './types.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
-import { getWorkflowTypeConfig } from './workflow-config.js';
+import {
+  getReachableWorkflowStages,
+  getWorkflowTypeConfig,
+} from './workflow-config.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -139,8 +142,18 @@ function ensureSubtasks(workflow: Workflow): void {
   const task = getWorkbenchTaskByWorkflowId(workflow.id);
   if (!config || !task) return;
 
+  const visibleStages = new Set(
+    getReachableWorkflowStages(workflow.workflow_type, workflow.status),
+  );
+
   for (const [stageKey, state] of Object.entries(config.states)) {
-    if (state.type === 'system' || state.type === 'terminal') continue;
+    if (
+      state.type === 'system' ||
+      state.type === 'terminal' ||
+      !visibleStages.has(stageKey)
+    ) {
+      continue;
+    }
     const existing = getWorkbenchSubtaskByStage(task.id, stageKey);
     if (existing) continue;
     createWorkbenchSubtask({
@@ -183,6 +196,7 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
       source_jid: workflow.source_jid,
       title: workflow.name,
       service: workflow.service,
+      start_from: workflow.start_from,
       workflow_type: workflow.workflow_type,
       status: workflow.status,
       current_stage: workflow.status,
@@ -304,12 +318,16 @@ export function syncWorkbenchOnTransition(
     updated_at: workflow.updated_at,
     last_event_at: workflow.updated_at,
   });
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const fromLabel = config?.status_labels[fromStatus] || fromStatus;
+  const toLabel = config?.status_labels[toStatus] || toStatus;
+  const transitionTitle = `阶段切换：${fromLabel} -> ${toLabel}`;
   createWorkbenchEvent({
     id: `wb-event-${workflow.id}-${toStatus}-${Date.now()}`,
     task_id: task.id,
     subtask_id: toSubtask?.id || null,
     event_type: 'transition',
-    title: `阶段切换：${fromStatus} -> ${toStatus}`,
+    title: transitionTitle,
     body: delegationId ? `delegation_id=${delegationId}` : null,
     raw_ref_type: 'workflow',
     raw_ref_id: workflow.id,
@@ -320,7 +338,7 @@ export function syncWorkbenchOnTransition(
     taskId: task.id,
     workflowId,
     payload: {
-      title: `阶段切换：${fromStatus} -> ${toStatus}`,
+      title: transitionTitle,
       status: toStatus,
       createdAt: workflow.updated_at,
     },

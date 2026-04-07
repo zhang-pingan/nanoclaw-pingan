@@ -187,6 +187,7 @@ function createSchema(database: Database.Database): void {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       service TEXT NOT NULL,
+      start_from TEXT NOT NULL DEFAULT 'plan',
       branch TEXT DEFAULT '',
       deliverable TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'dev',
@@ -207,6 +208,7 @@ function createSchema(database: Database.Database): void {
       source_jid TEXT NOT NULL,
       title TEXT NOT NULL,
       service TEXT NOT NULL,
+      start_from TEXT NOT NULL DEFAULT 'plan',
       workflow_type TEXT NOT NULL,
       status TEXT NOT NULL,
       current_stage TEXT NOT NULL,
@@ -344,6 +346,24 @@ function createSchema(database: Database.Database): void {
   try {
     database.exec(
       `ALTER TABLE workflows ADD COLUMN workflow_type TEXT DEFAULT 'dev_test'`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add start_from column to workflows (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN start_from TEXT DEFAULT 'plan'`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add start_from column to workbench_tasks (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE workbench_tasks ADD COLUMN start_from TEXT DEFAULT 'plan'`,
     );
   } catch {
     /* column already exists */
@@ -1264,12 +1284,13 @@ export function getExpiredPendingAskQuestions(nowIso: string): AskQuestionRecord
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, branch, deliverable, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, start_from, branch, deliverable, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
     workflow.service,
+    workflow.start_from,
     workflow.branch,
     workflow.deliverable,
     workflow.status,
@@ -1434,15 +1455,16 @@ export function deleteAllWorkbenchTaskData(): {
 export function createWorkbenchTask(record: WorkbenchTaskRecord): void {
   db.prepare(
     `INSERT INTO workbench_tasks (
-      id, workflow_id, source_jid, title, service, workflow_type, status,
-      current_stage, summary, created_at, updated_at, last_event_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, workflow_id, source_jid, title, service, start_from, workflow_type,
+      status, current_stage, summary, created_at, updated_at, last_event_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
     record.workflow_id,
     record.source_jid,
     record.title,
     record.service,
+    record.start_from,
     record.workflow_type,
     record.status,
     record.current_stage,
