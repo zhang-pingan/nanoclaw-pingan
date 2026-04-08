@@ -178,9 +178,10 @@ export interface Workflow {
   name: string;
   service: string;
   start_from: string;
-  branch: string;
+  work_branch: string;
   deliverable: string;
-  deploy_branch: string;
+  staging_base_branch: string;
+  staging_work_branch: string;
   access_token: string;
   status: WorkflowStatus;
   current_delegation_id: string;
@@ -322,7 +323,13 @@ export interface FeishuCard {
 
 // --- InteractiveCard: channel-agnostic card format ---
 
-export type CardHeaderColor = 'blue' | 'green' | 'red' | 'orange' | 'purple' | 'grey';
+export type CardHeaderColor =
+  | 'blue'
+  | 'green'
+  | 'red'
+  | 'orange'
+  | 'purple'
+  | 'grey';
 
 export interface CardButton {
   id: string;

@@ -108,8 +108,7 @@ export function loadWorkflowConfigs(): Record<
   );
 
   if (!fs.existsSync(configPath)) {
-    lastLoadError =
-      'Workflow 未启用：未找到 container/skills/workflows.json';
+    lastLoadError = 'Workflow 未启用：未找到 container/skills/workflows.json';
     logger.info(lastLoadError);
     return null;
   }
@@ -200,12 +199,15 @@ export function getReachableWorkflowStages(
 export interface TemplateVars {
   name?: string;
   service?: string;
-  branch?: string;
+  work_branch?: string;
   id?: string;
   round?: number;
   deliverable?: string;
-  deploy_branch?: string;
+  staging_base_branch?: string;
+  staging_work_branch?: string;
   access_token?: string;
+  plan_doc?: string;
+  dev_doc?: string;
   test_doc?: string;
   delegation_result?: string;
   result_summary?: string;

@@ -30,6 +30,13 @@ description: Implement features based on approved plans — read design docs, wr
 例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/dev.md`
 
 ```markdown
+---
+service: {服务名}
+deliverable: {日期}_{需求简称}
+work_branch: {分支名}
+doc_type: dev
+---
+
 # 需求实现报告
 
 ## 基本信息
@@ -79,7 +86,7 @@ description: Implement features based on approved plans — read design docs, wr
 1. 将交付文档关键内容通过 `mcp__nanoclaw__send_message` 发送给用户
 2. 通过 `complete_delegation` 返回结果：
    - outcome：`success`
-   - result：JSON 格式 {"service":"xx","branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"需求开发完成"}
+   - result：JSON 格式 {"service":"xx","work_branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"需求开发完成"}
      - **deliverable 是文件夹名**，不含 `.md` 后缀
 
 ## 工作原则

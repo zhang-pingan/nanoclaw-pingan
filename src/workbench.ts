@@ -63,7 +63,9 @@ export interface WorkbenchTaskItem {
   status_label: string;
   current_stage: string;
   current_stage_label: string;
-  branch: string;
+  work_branch: string;
+  staging_base_branch: string;
+  staging_work_branch: string;
   deliverable: string;
   round: number;
   source_jid: string;
@@ -110,10 +112,20 @@ export interface WorkbenchArtifact {
 export interface WorkbenchActionItem {
   id: string;
   item_type: 'approval' | 'interactive';
-  source_type: 'workflow' | 'request_human_input' | 'ask_user_question' | 'send_message';
+  source_type:
+    | 'workflow'
+    | 'request_human_input'
+    | 'ask_user_question'
+    | 'send_message';
   title: string;
   body: string;
-  status: 'pending' | 'confirmed' | 'resolved' | 'skipped' | 'cancelled' | 'expired';
+  status:
+    | 'pending'
+    | 'confirmed'
+    | 'resolved'
+    | 'skipped'
+    | 'cancelled'
+    | 'expired';
   stage_key?: string;
   delegation_id?: string;
   group_folder?: string;
@@ -130,7 +142,12 @@ export interface WorkbenchTaskDetail {
   timeline: WorkbenchTimelineEvent[];
   artifacts: WorkbenchArtifact[];
   action_items: WorkbenchActionItem[];
-  comments: Array<{ id: string; author: string; content: string; created_at: string }>;
+  comments: Array<{
+    id: string;
+    author: string;
+    content: string;
+    created_at: string;
+  }>;
   assets: Array<{
     id: string;
     title: string;
@@ -161,7 +178,9 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
       statusLabels[persisted?.current_stage || workflow.status] ||
       persisted?.current_stage ||
       workflow.status,
-    branch: workflow.branch,
+    work_branch: workflow.work_branch,
+    staging_base_branch: workflow.staging_base_branch,
+    staging_work_branch: workflow.staging_work_branch,
     deliverable: workflow.deliverable,
     round: workflow.round,
     source_jid: persisted?.source_jid || workflow.source_jid,
@@ -188,9 +207,9 @@ function mapPersistedSubtask(
           ? 'current'
           : item.status === 'cancelled'
             ? 'cancelled'
-          : item.status === 'failed'
-            ? 'failed'
-          : 'pending',
+            : item.status === 'failed'
+              ? 'failed'
+              : 'pending',
     manually_skipped: manuallySkippedSubtaskIds?.has(item.id) || undefined,
     role: item.role || undefined,
     target_folder: item.group_folder || undefined,
@@ -208,12 +227,12 @@ function mapPersistedEvent(item: WorkbenchEventRecord): WorkbenchTimelineEvent {
       item.event_type === 'manual_skip'
         ? 'manual'
         : item.event_type === 'workflow_created'
-        ? 'lifecycle'
-        : item.event_type.includes('approval')
-          ? 'approval'
-          : item.event_type.includes('artifact')
-            ? 'artifact'
-            : 'delegation',
+          ? 'lifecycle'
+          : item.event_type.includes('approval')
+            ? 'approval'
+            : item.event_type.includes('artifact')
+              ? 'artifact'
+              : 'delegation',
     title: item.title,
     body: item.body || '',
     created_at: item.created_at,
@@ -221,7 +240,9 @@ function mapPersistedEvent(item: WorkbenchEventRecord): WorkbenchTimelineEvent {
   };
 }
 
-function mapPersistedArtifact(item: WorkbenchArtifactRecord): WorkbenchArtifact {
+function mapPersistedArtifact(
+  item: WorkbenchArtifactRecord,
+): WorkbenchArtifact {
   const fullPath = path.join(PROJECT_ROOT, item.path);
   return {
     id: item.id,
@@ -233,8 +254,12 @@ function mapPersistedArtifact(item: WorkbenchArtifactRecord): WorkbenchArtifact 
   };
 }
 
-function mapPersistedActionItem(item: WorkbenchActionItemRecord): WorkbenchActionItem {
-  const extra = item.extra_json ? JSON.parse(item.extra_json) as Record<string, unknown> : undefined;
+function mapPersistedActionItem(
+  item: WorkbenchActionItemRecord,
+): WorkbenchActionItem {
+  const extra = item.extra_json
+    ? (JSON.parse(item.extra_json) as Record<string, unknown>)
+    : undefined;
   return {
     id: item.id,
     item_type: item.item_type === 'approval' ? 'approval' : 'interactive',
@@ -330,7 +355,10 @@ function sortSubtasksByWorkflowOrder(
   subtasks: WorkbenchSubtask[],
 ): WorkbenchSubtask[] {
   const stageOrder = new Map(
-    getOrderedVisibleStageKeys(workflow).map((stageKey, index) => [stageKey, index]),
+    getOrderedVisibleStageKeys(workflow).map((stageKey, index) => [
+      stageKey,
+      index,
+    ]),
   );
 
   return [...subtasks].sort((a, b) => {
@@ -368,10 +396,15 @@ function getStageDefinitions(workflow: Workflow): WorkbenchSubtask[] {
 function summarizeResult(result: string | null): string {
   if (!result) return '';
   const normalized = result.replace(/\s+/g, ' ').trim();
-  return normalized.length > 180 ? `${normalized.slice(0, 177)}...` : normalized;
+  return normalized.length > 180
+    ? `${normalized.slice(0, 177)}...`
+    : normalized;
 }
 
-function buildSubtasks(workflow: Workflow, delegations: Delegation[]): WorkbenchSubtask[] {
+function buildSubtasks(
+  workflow: Workflow,
+  delegations: Delegation[],
+): WorkbenchSubtask[] {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const stages = getStageDefinitions(workflow);
   if (!config || stages.length === 0) return [];
@@ -383,7 +416,8 @@ function buildSubtasks(workflow: Workflow, delegations: Delegation[]): Workbench
 
   return stages.map((stage) => {
     const delegationIndex = delegationStates.indexOf(stage.stage_key);
-    const linkedDelegation = delegationIndex >= 0 ? delegations[delegationIndex] : undefined;
+    const linkedDelegation =
+      delegationIndex >= 0 ? delegations[delegationIndex] : undefined;
 
     let status: WorkbenchSubtask['status'] = 'pending';
     if (stage.stage_key === currentKey) status = 'current';
@@ -443,7 +477,9 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   const vars = {
     name: workflow.name,
     service: workflow.service,
-    branch: workflow.branch || 'N/A',
+    work_branch: workflow.work_branch || 'N/A',
+    staging_base_branch: workflow.staging_base_branch || '',
+    staging_work_branch: workflow.staging_work_branch || '',
     id: workflow.id,
     round: workflow.round,
     deliverable: workflow.deliverable || 'N/A',
@@ -477,7 +513,10 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   ];
 }
 
-function buildTimeline(workflow: Workflow, delegations: Delegation[]): WorkbenchTimelineEvent[] {
+function buildTimeline(
+  workflow: Workflow,
+  delegations: Delegation[],
+): WorkbenchTimelineEvent[] {
   const timeline: WorkbenchTimelineEvent[] = [
     {
       id: `${workflow.id}-created`,
@@ -514,7 +553,9 @@ function buildTimeline(workflow: Workflow, delegations: Delegation[]): Workbench
     }
   }
 
-  for (const artifact of buildArtifacts(workflow).filter((item) => item.exists)) {
+  for (const artifact of buildArtifacts(workflow).filter(
+    (item) => item.exists,
+  )) {
     timeline.push({
       id: `${artifact.id}-artifact`,
       type: 'artifact',
@@ -550,7 +591,9 @@ function sortTimelineEvents(
   });
 }
 
-function sortWorkbenchTaskItems(tasks: WorkbenchTaskItem[]): WorkbenchTaskItem[] {
+function sortWorkbenchTaskItems(
+  tasks: WorkbenchTaskItem[],
+): WorkbenchTaskItem[] {
   return [...tasks].sort((a, b) => {
     const aTs = parseTimestamp(a.updated_at || a.created_at);
     const bTs = parseTimestamp(b.updated_at || b.created_at);
@@ -570,34 +613,40 @@ function parseTimestamp(value: string | undefined | null): number {
 export function listWorkbenchTasks(): WorkbenchTaskItem[] {
   const persisted = listWorkbenchTaskRecords();
   if (persisted.length > 0) {
-    return sortWorkbenchTaskItems(persisted.map((item: WorkbenchTaskRecord) => {
-      const workflow = getWorkflow(item.workflow_id);
-      if (workflow) return toTaskItem(workflow);
-      return {
-        id: item.id,
-        title: item.title,
-        service: item.service,
-        start_from: item.start_from,
-        workflow_type: item.workflow_type,
-        status: item.status,
-        status_label: item.status,
-        current_stage: item.current_stage,
-        current_stage_label: item.current_stage,
-        branch: '',
-        deliverable: '',
-        round: 0,
-        source_jid: item.source_jid,
-        created_at: item.created_at,
-        updated_at: item.updated_at,
-        pending_approval: false,
-        active_delegation_id: '',
-      };
-    }));
+    return sortWorkbenchTaskItems(
+      persisted.map((item: WorkbenchTaskRecord) => {
+        const workflow = getWorkflow(item.workflow_id);
+        if (workflow) return toTaskItem(workflow);
+        return {
+          id: item.id,
+          title: item.title,
+          service: item.service,
+          start_from: item.start_from,
+          workflow_type: item.workflow_type,
+          status: item.status,
+          status_label: item.status,
+          current_stage: item.current_stage,
+          current_stage_label: item.current_stage,
+          work_branch: '',
+          staging_base_branch: '',
+          staging_work_branch: '',
+          deliverable: '',
+          round: 0,
+          source_jid: item.source_jid,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          pending_approval: false,
+          active_delegation_id: '',
+        };
+      }),
+    );
   }
-  return sortWorkbenchTaskItems(getAllWorkflows().map((workflow) => {
-    syncWorkbenchFromWorkflow(workflow.id);
-    return toTaskItem(workflow);
-  }));
+  return sortWorkbenchTaskItems(
+    getAllWorkflows().map((workflow) => {
+      syncWorkbenchFromWorkflow(workflow.id);
+      return toTaskItem(workflow);
+    }),
+  );
 }
 
 function resolveWorkbenchWorkflowId(taskId: string): string | null {
@@ -612,7 +661,8 @@ function resolveWorkbenchWorkflowId(taskId: string): string | null {
   const normalizedWorkflowId = normalizedTaskId.replace(/^wb-/, '');
   if (getWorkflow(normalizedWorkflowId)) return normalizedWorkflowId;
 
-  const persistedByWorkflowId = getWorkbenchTaskByWorkflowId(normalizedWorkflowId);
+  const persistedByWorkflowId =
+    getWorkbenchTaskByWorkflowId(normalizedWorkflowId);
   if (persistedByWorkflowId) return persistedByWorkflowId.workflow_id;
 
   return null;
@@ -625,7 +675,9 @@ function getWorkbenchTaskRecord(taskId: string): WorkbenchTaskRecord | null {
   return getWorkbenchTaskByWorkflowId(workflowId) || null;
 }
 
-export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | null {
+export function getWorkbenchTaskDetail(
+  taskId: string,
+): WorkbenchTaskDetail | null {
   const workflowId = resolveWorkbenchWorkflowId(taskId);
   if (!workflowId) return null;
 
@@ -649,10 +701,10 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
           .filter((item) => visibleStageKeys.has(item.stage_key))
           .map((item) => mapPersistedSubtask(item, manuallySkippedSubtaskIds)),
       ),
-      timeline: sortTimelineEvents(
-        events.map(mapPersistedEvent),
+      timeline: sortTimelineEvents(events.map(mapPersistedEvent)),
+      artifacts: listWorkbenchArtifactsByTask(task.id).map(
+        mapPersistedArtifact,
       ),
-      artifacts: listWorkbenchArtifactsByTask(task.id).map(mapPersistedArtifact),
       action_items: listWorkbenchActionItemsByTask(task.id)
         .filter((item) => {
           if (item.status !== 'pending') return false;
@@ -670,7 +722,10 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
 
   return {
     task: toTaskItem(workflow),
-    subtasks: sortSubtasksByWorkflowOrder(workflow, buildSubtasks(workflow, delegations)),
+    subtasks: sortSubtasksByWorkflowOrder(
+      workflow,
+      buildSubtasks(workflow, delegations),
+    ),
     timeline: buildTimeline(workflow, delegations),
     artifacts: buildArtifacts(workflow),
     action_items: buildActionItems(workflow),
@@ -686,7 +741,9 @@ export function createWorkbenchTask(input: {
   startFrom: string;
   workflowType: string;
   deliverable?: string;
-  deployBranch?: string;
+  workBranch?: string;
+  stagingBaseBranch?: string;
+  stagingWorkBranch?: string;
   accessToken?: string;
 }): { workflowId: string; error?: string } {
   return createNewWorkflow({
@@ -696,7 +753,9 @@ export function createWorkbenchTask(input: {
     startFrom: input.startFrom,
     workflowType: input.workflowType,
     deliverable: input.deliverable,
-    deployBranch: input.deployBranch,
+    workBranch: input.workBranch,
+    stagingBaseBranch: input.stagingBaseBranch,
+    stagingWorkBranch: input.stagingWorkBranch,
     accessToken: input.accessToken,
   });
 }
@@ -722,7 +781,10 @@ export function runWorkbenchTaskAction(input: {
     case 'approve':
       return approveWorkflow(workflowId);
     case 'revise':
-      return reviseWorkflow(workflowId, input.revisionText?.trim() || '请按最新意见修正');
+      return reviseWorkflow(
+        workflowId,
+        input.revisionText?.trim() || '请按最新意见修正',
+      );
     case 'pause':
       return pauseWorkflow(workflowId);
     case 'resume':
@@ -737,11 +799,11 @@ export function runWorkbenchTaskAction(input: {
         (item) => item.id === input.subtaskId,
       );
       if (!subtask) return { error: 'Subtask not found' };
-      if (
-        subtask.status !== 'failed' &&
-        subtask.status !== 'cancelled'
-      ) {
-        return { error: 'Only failed or cancelled subtasks can be skipped from stage progress' };
+      if (subtask.status !== 'failed' && subtask.status !== 'cancelled') {
+        return {
+          error:
+            'Only failed or cancelled subtasks can be skipped from stage progress',
+        };
       }
       return skipWorkflowStage(workflowId, subtask.stage_key);
     }
@@ -788,7 +850,12 @@ export function addWorkbenchComment(input: {
     type: 'comment_created',
     taskId: detail.task.id,
     workflowId,
-    payload: { id, author: input.author, content: input.content.trim(), createdAt: now },
+    payload: {
+      id,
+      author: input.author,
+      content: input.content.trim(),
+      createdAt: now,
+    },
   });
   return {};
 }
@@ -821,7 +888,11 @@ export function runWorkbenchActionItemAction(input: {
     type: 'action_item_updated',
     taskId: item.task_id,
     workflowId,
-    payload: { id: item.id, status: nextStatus, resolvedAt: nextStatus === 'confirmed' ? null : now },
+    payload: {
+      id: item.id,
+      status: nextStatus,
+      resolvedAt: nextStatus === 'confirmed' ? null : now,
+    },
   });
   return {};
 }
@@ -880,9 +951,12 @@ export function retryWorkbenchSubtask(input: {
   const task = getWorkbenchTaskRecord(input.taskId);
   if (!task) return { error: 'Task not found' };
 
-  const subtask = listWorkbenchSubtasksByTask(task.id).find((item) => item.id === input.subtaskId);
+  const subtask = listWorkbenchSubtasksByTask(task.id).find(
+    (item) => item.id === input.subtaskId,
+  );
   if (!subtask) return { error: 'Subtask not found' };
-  if (subtask.status !== 'failed') return { error: 'Only failed subtasks can be retried' };
+  if (subtask.status !== 'failed')
+    return { error: 'Only failed subtasks can be retried' };
 
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };

@@ -36,11 +36,15 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function buildTemplateVars(workflow: Workflow): Record<string, string | number> {
+function buildTemplateVars(
+  workflow: Workflow,
+): Record<string, string | number> {
   return {
     name: workflow.name,
     service: workflow.service,
-    branch: workflow.branch || 'N/A',
+    work_branch: workflow.work_branch || 'N/A',
+    staging_base_branch: workflow.staging_base_branch || '',
+    staging_work_branch: workflow.staging_work_branch || '',
     id: workflow.id,
     round: workflow.round,
     deliverable: workflow.deliverable || 'N/A',
@@ -68,11 +72,20 @@ function subtaskId(taskId: string, stageKey: string): string {
   return `wb-subtask-${taskId}-${stageKey}`;
 }
 
-function actionItemId(workflowId: string, stageKey: string, sourceType: string, sourceRefId: string): string {
+function actionItemId(
+  workflowId: string,
+  stageKey: string,
+  sourceType: string,
+  sourceRefId: string,
+): string {
   return `wb-action-${workflowId}-${stageKey}-${sourceType}-${sourceRefId}`;
 }
 
-function emitActionItemUpdate(taskId: string, workflowId: string, payload: Record<string, unknown>): void {
+function emitActionItemUpdate(
+  taskId: string,
+  workflowId: string,
+  payload: Record<string, unknown>,
+): void {
   emitWorkbenchEvent({
     type: 'action_item_updated',
     taskId,
@@ -109,7 +122,10 @@ function upsertActionItem(params: {
     delegation_id: params.delegationId ?? null,
     group_folder: params.groupFolder ?? null,
     item_type: params.itemType,
-    status: existing?.status && existing.status !== 'resolved' ? existing.status : 'pending',
+    status:
+      existing?.status && existing.status !== 'resolved'
+        ? existing.status
+        : 'pending',
     title: params.title,
     body: params.body ?? null,
     source_type: params.sourceType,
@@ -137,7 +153,13 @@ function ensureArtifacts(workflow: Workflow): void {
   const task = getWorkbenchTaskByWorkflowId(workflow.id);
   if (!task) return;
 
-  const baseDir = path.join(PROJECT_ROOT, 'projects', workflow.service, 'iteration', workflow.deliverable);
+  const baseDir = path.join(
+    PROJECT_ROOT,
+    'projects',
+    workflow.service,
+    'iteration',
+    workflow.deliverable,
+  );
   const defs = [
     { type: 'plan_doc', title: '方案文档', file: 'plan.md', role: 'planner' },
     { type: 'dev_doc', title: '开发文档', file: 'dev.md', role: 'dev' },
@@ -198,7 +220,7 @@ function upsertStageActionItem(workflow: Workflow): void {
       approval_type: workflow.status,
       action_mode:
         workflow.status === 'testing_confirm'
-        ? 'input_required'
+          ? 'input_required'
           : state.on_revise
             ? 'approve_or_revise'
             : 'approve_only',
@@ -206,10 +228,18 @@ function upsertStageActionItem(workflow: Workflow): void {
   });
 }
 
-function resolveCurrentStageActionItems(taskId: string, resolvedAt: string): void {
+function resolveCurrentStageActionItems(
+  taskId: string,
+  resolvedAt: string,
+): void {
   const task = getWorkbenchTaskById(taskId);
   if (!task) return;
-  resolveWorkbenchActionItemsByStage(task.workflow_id, task.current_stage, 'resolved', resolvedAt);
+  resolveWorkbenchActionItemsByStage(
+    task.workflow_id,
+    task.current_stage,
+    'resolved',
+    resolvedAt,
+  );
 }
 
 function resolveStaleStageActionItems(
@@ -221,7 +251,11 @@ function resolveStaleStageActionItems(
   if (!task) return;
   for (const item of listWorkbenchActionItemsByTask(taskId)) {
     if (item.status !== 'pending') continue;
-    if (item.source_type === 'workflow' && item.source_ref_id === currentApprovalType) continue;
+    if (
+      item.source_type === 'workflow' &&
+      item.source_ref_id === currentApprovalType
+    )
+      continue;
     updateWorkbenchActionItem(item.id, {
       status: 'resolved',
       updated_at: resolvedAt,
@@ -264,7 +298,9 @@ function ensureSubtasks(workflow: Workflow): void {
       role: state.role || null,
       group_folder: null,
       status: stageKey === workflow.status ? 'current' : 'pending',
-      input_summary: state.task_template ? truncate(state.task_template, 240) : null,
+      input_summary: state.task_template
+        ? truncate(state.task_template, 240)
+        : null,
       output_summary: null,
       started_at: stageKey === workflow.status ? workflow.created_at : null,
       finished_at: null,
@@ -301,11 +337,17 @@ export function createWorkbenchInteractionItem(input: {
   if (!workflow || !task) return;
   const subtask = getWorkbenchSubtaskByStage(task.id, input.stageKey);
   upsertActionItem({
-    id: actionItemId(input.workflowId, input.stageKey, input.sourceType, input.sourceRefId),
+    id: actionItemId(
+      input.workflowId,
+      input.stageKey,
+      input.sourceType,
+      input.sourceRefId,
+    ),
     workflowId: input.workflowId,
     stageKey: input.stageKey,
     subtaskId: subtask?.id || null,
-    delegationId: input.delegationId ?? (workflow.current_delegation_id || null),
+    delegationId:
+      input.delegationId ?? (workflow.current_delegation_id || null),
     groupFolder: input.groupFolder ?? subtask?.group_folder ?? null,
     itemType: 'interactive',
     title: input.title,
@@ -324,8 +366,16 @@ export function updateWorkbenchInteractionItemStatus(input: {
   status: 'confirmed' | 'resolved' | 'skipped' | 'cancelled' | 'expired';
 }): void {
   const now = nowIso();
-  const items = listWorkbenchActionItemsBySource(input.sourceType, input.sourceRefId);
-  resolveWorkbenchActionItemsBySource(input.sourceType, input.sourceRefId, input.status, now);
+  const items = listWorkbenchActionItemsBySource(
+    input.sourceType,
+    input.sourceRefId,
+  );
+  resolveWorkbenchActionItemsBySource(
+    input.sourceType,
+    input.sourceRefId,
+    input.status,
+    now,
+  );
   for (const item of items) {
     emitActionItemUpdate(item.task_id, item.workflow_id, {
       id: item.id,
@@ -382,7 +432,10 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
   upsertStageActionItem(workflow);
 }
 
-export function syncWorkbenchOnWorkflowUpdated(workflowId: string, summary?: string): void {
+export function syncWorkbenchOnWorkflowUpdated(
+  workflowId: string,
+  summary?: string,
+): void {
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);
   if (!workflow || !task) return;
@@ -589,7 +642,10 @@ export function createWorkbenchManualSkipEvent(
   });
 }
 
-export function syncWorkbenchOnDelegationCreated(workflowId: string, delegationId: string): void {
+export function syncWorkbenchOnDelegationCreated(
+  workflowId: string,
+  delegationId: string,
+): void {
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);
   const delegation = getDelegation(delegationId);
@@ -643,7 +699,10 @@ export function syncWorkbenchOnDelegationCreated(workflowId: string, delegationI
   });
 }
 
-export function syncWorkbenchOnDelegationCompleted(workflowId: string, delegationId: string): void {
+export function syncWorkbenchOnDelegationCompleted(
+  workflowId: string,
+  delegationId: string,
+): void {
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);
   const delegation = getDelegation(delegationId);
@@ -674,7 +733,10 @@ export function syncWorkbenchOnDelegationCompleted(workflowId: string, delegatio
     task_id: task.id,
     subtask_id: subtask?.id || null,
     event_type: 'delegation_completed',
-    title: delegation.outcome === 'failure' ? `委派失败 ${delegation.target_folder}` : `委派完成 ${delegation.target_folder}`,
+    title:
+      delegation.outcome === 'failure'
+        ? `委派失败 ${delegation.target_folder}`
+        : `委派完成 ${delegation.target_folder}`,
     body: truncate(delegation.result, 700),
     raw_ref_type: 'delegation',
     raw_ref_id: delegation.id,

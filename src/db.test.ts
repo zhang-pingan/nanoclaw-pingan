@@ -330,9 +330,10 @@ describe('deleteAllWorkbenchTaskData', () => {
       name: 'Task 1',
       service: 'svc-a',
       start_from: 'dev',
-      branch: 'feature/task-1',
+      work_branch: 'feature/task-1',
+      staging_base_branch: 'staging',
       deliverable: 'req-1',
-      deploy_branch: '',
+      staging_work_branch: '',
       access_token: '',
       status: 'cancelled',
       current_delegation_id: 'del-1',
@@ -348,9 +349,10 @@ describe('deleteAllWorkbenchTaskData', () => {
       name: 'Task 2',
       service: 'svc-b',
       start_from: 'dev',
-      branch: 'feature/task-2',
+      work_branch: 'feature/task-2',
+      staging_base_branch: 'staging',
       deliverable: 'req-2',
-      deploy_branch: '',
+      staging_work_branch: '',
       access_token: '',
       status: 'cancelled',
       current_delegation_id: 'del-2',
@@ -598,9 +600,10 @@ describe('deleteAllWorkbenchTaskData', () => {
       name: 'Task 1',
       service: 'svc-a',
       start_from: 'dev',
-      branch: 'feature/task-1',
+      work_branch: 'feature/task-1',
+      staging_base_branch: 'staging',
       deliverable: 'req-1',
-      deploy_branch: '',
+      staging_work_branch: '',
       access_token: '',
       status: 'dev',
       current_delegation_id: 'del-1',
@@ -1063,7 +1066,10 @@ describe('memory doctor/gc/metrics', () => {
     expect(dry.duplicateDeletedIds.length).toBe(1);
     expect(listMemories('web_main', 20).length).toBe(2);
 
-    const run = gcMemories('web_main', { dryRun: false, staleWorkingDays: 365 });
+    const run = gcMemories('web_main', {
+      dryRun: false,
+      staleWorkingDays: 365,
+    });
     expect(run.dryRun).toBe(false);
     expect(listMemories('web_main', 20).length).toBe(1);
   });
@@ -1166,7 +1172,9 @@ describe('memory_resolve_conflict', () => {
 
     // Verify merged memory
     expect(result.merged.status).toBe('active');
-    expect(result.merged.content).toBe('Use send_message for important progress only');
+    expect(result.merged.content).toBe(
+      'Use send_message for important progress only',
+    );
     const mergedMeta = JSON.parse(result.merged.metadata!);
     expect(mergedMeta.merged_from).toEqual([pos.id, neg.id]);
     expect(mergedMeta.resolved_at).toBeDefined();

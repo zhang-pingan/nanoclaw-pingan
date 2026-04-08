@@ -57,6 +57,13 @@ description: Design implementation plans for new requirements — analyze code, 
 综合用户确认的信息，生成详细的实现方案：
 
 ```
+---
+service: {服务名}
+deliverable: {日期}_{需求简称}
+work_branch: feature/{需求名}_{日期}
+doc_type: plan
+---
+
 *实现方案*
 
 📋 需求概述：{一句话描述}
@@ -92,7 +99,7 @@ description: Design implementation plans for new requirements — analyze code, 
   - 变更原因：{为什么需要下游配合改动}
   - 涉及文件：{下游服务中需要修改的文件}
   - 改动说明：{具体改动内容}
-  - 工作分支：feature/{需求名}_{日期}
+  - 下游服务工作分支：feature/{需求名}_{日期}
 
 🌿 工作分支：feature/{需求名}_{日期}
 ```
@@ -111,7 +118,7 @@ description: Design implementation plans for new requirements — analyze code, 
 
 通过 `complete_delegation` 返回结果：
 - outcome：`success`
-- result：JSON 格式 `{"service":"xx","branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
+- result：JSON 格式 `{"service":"xx","work_branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
   - **deliverable 是文件夹名**，不含 `.md` 后缀
 
 ## 处理修改意见

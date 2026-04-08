@@ -47,7 +47,12 @@ server.tool(
   "Send a message to the user or group immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times.",
   {
     text: z.string().describe('The message text to send'),
-    sender: z.string().optional().describe('Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.'),
+    sender: z
+      .string()
+      .optional()
+      .describe(
+        'Your role/identity name (e.g. "Researcher"). When set, messages appear from a dedicated bot in Telegram.',
+      ),
   },
   async (args) => {
     const data: Record<string, string | undefined> = {
@@ -75,13 +80,21 @@ server.tool(
   '发送文件或图片到当前群/用户。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/group/ 目录下。',
   {
     file_path: z.string().describe('文件绝对路径，必须在 /workspace/group/ 下'),
-    caption: z.string().optional().describe('可选说明文字，会在文件后以文本消息发送'),
+    caption: z
+      .string()
+      .optional()
+      .describe('可选说明文字，会在文件后以文本消息发送'),
   },
   async (args) => {
     const prefix = '/workspace/group/';
     if (!args.file_path.startsWith(prefix)) {
       return {
-        content: [{ type: 'text' as const, text: `文件路径必须以 ${prefix} 开头。当前路径: ${args.file_path}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `文件路径必须以 ${prefix} 开头。当前路径: ${args.file_path}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -90,7 +103,9 @@ server.tool(
     const resolved = path.resolve(args.file_path);
     if (!resolved.startsWith(prefix)) {
       return {
-        content: [{ type: 'text' as const, text: '文件路径不合法（检测到路径穿越）。' }],
+        content: [
+          { type: 'text' as const, text: '文件路径不合法（检测到路径穿越）。' },
+        ],
         isError: true,
       };
     }
@@ -113,7 +128,9 @@ server.tool(
 
     writeIpcFile(MESSAGES_DIR, data);
 
-    return { content: [{ type: 'text' as const, text: '文件发送请求已提交。' }] };
+    return {
+      content: [{ type: 'text' as const, text: '文件发送请求已提交。' }],
+    };
   },
 );
 
@@ -141,11 +158,33 @@ SCHEDULE VALUE FORMAT:
 \u2022 interval: Milliseconds between runs (e.g., "300000" for 5 minutes, "3600000" for 1 hour)
 \u2022 once: Local timestamp like "2026-03-26 12:05" or "2026-03-26 12:05:00". Interpreted in the container's local timezone.`,
   {
-    prompt: z.string().describe('What the agent should do when the task runs. For isolated mode, include all necessary context here.'),
-    schedule_type: z.enum(['cron', 'interval', 'once']).describe('cron=recurring at specific times, interval=recurring every N ms, once=run once at specific time'),
-    schedule_value: z.string().describe('cron: "*/5 * * * *" | interval: milliseconds like "300000" | once: local time like "2026-03-26 12:05"'),
-    context_mode: z.enum(['group', 'isolated']).default('group').describe('group=runs with chat history and memory, isolated=fresh session (include context in prompt)'),
-    target_group_jid: z.string().optional().describe('(Main group only) JID of the group to schedule the task for. Defaults to the current group.'),
+    prompt: z
+      .string()
+      .describe(
+        'What the agent should do when the task runs. For isolated mode, include all necessary context here.',
+      ),
+    schedule_type: z
+      .enum(['cron', 'interval', 'once'])
+      .describe(
+        'cron=recurring at specific times, interval=recurring every N ms, once=run once at specific time',
+      ),
+    schedule_value: z
+      .string()
+      .describe(
+        'cron: "*/5 * * * *" | interval: milliseconds like "300000" | once: local time like "2026-03-26 12:05"',
+      ),
+    context_mode: z
+      .enum(['group', 'isolated'])
+      .default('group')
+      .describe(
+        'group=runs with chat history and memory, isolated=fresh session (include context in prompt)',
+      ),
+    target_group_jid: z
+      .string()
+      .optional()
+      .describe(
+        '(Main group only) JID of the group to schedule the task for. Defaults to the current group.',
+      ),
   },
   async (args) => {
     // Validate schedule_value before writing IPC
@@ -154,7 +193,12 @@ SCHEDULE VALUE FORMAT:
         CronExpressionParser.parse(args.schedule_value);
       } catch {
         return {
-          content: [{ type: 'text' as const, text: `Invalid cron: "${args.schedule_value}". Use format like "0 9 * * *" (daily 9am) or "*/5 * * * *" (every 5 min).` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Invalid cron: "${args.schedule_value}". Use format like "0 9 * * *" (daily 9am) or "*/5 * * * *" (every 5 min).`,
+            },
+          ],
           isError: true,
         };
       }
@@ -162,7 +206,12 @@ SCHEDULE VALUE FORMAT:
       const ms = parseInt(args.schedule_value, 10);
       if (isNaN(ms) || ms <= 0) {
         return {
-          content: [{ type: 'text' as const, text: `Invalid interval: "${args.schedule_value}". Must be positive milliseconds (e.g., "300000" for 5 min).` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Invalid interval: "${args.schedule_value}". Must be positive milliseconds (e.g., "300000" for 5 min).`,
+            },
+          ],
           isError: true,
         };
       }
@@ -170,14 +219,20 @@ SCHEDULE VALUE FORMAT:
       const date = new Date(args.schedule_value);
       if (isNaN(date.getTime())) {
         return {
-          content: [{ type: 'text' as const, text: `Invalid timestamp: "${args.schedule_value}". Use local time format like "2026-02-01T15:30:00".` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Invalid timestamp: "${args.schedule_value}". Use local time format like "2026-02-01T15:30:00".`,
+            },
+          ],
           isError: true,
         };
       }
     }
 
     // Non-main groups can only schedule for themselves
-    const targetJid = isMain && args.target_group_jid ? args.target_group_jid : chatJid;
+    const targetJid =
+      isMain && args.target_group_jid ? args.target_group_jid : chatJid;
 
     const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -196,7 +251,12 @@ SCHEDULE VALUE FORMAT:
     writeIpcFile(TASKS_DIR, data);
 
     return {
-      content: [{ type: 'text' as const, text: `Task ${taskId} scheduled: ${args.schedule_type} - ${args.schedule_value}` }],
+      content: [
+        {
+          type: 'text' as const,
+          text: `Task ${taskId} scheduled: ${args.schedule_type} - ${args.schedule_value}`,
+        },
+      ],
     };
   },
 );
@@ -210,30 +270,56 @@ server.tool(
 
     try {
       if (!fs.existsSync(tasksFile)) {
-        return { content: [{ type: 'text' as const, text: 'No scheduled tasks found.' }] };
+        return {
+          content: [
+            { type: 'text' as const, text: 'No scheduled tasks found.' },
+          ],
+        };
       }
 
       const allTasks = JSON.parse(fs.readFileSync(tasksFile, 'utf-8'));
 
       const tasks = isMain
         ? allTasks
-        : allTasks.filter((t: { groupFolder: string }) => t.groupFolder === groupFolder);
+        : allTasks.filter(
+            (t: { groupFolder: string }) => t.groupFolder === groupFolder,
+          );
 
       if (tasks.length === 0) {
-        return { content: [{ type: 'text' as const, text: 'No scheduled tasks found.' }] };
+        return {
+          content: [
+            { type: 'text' as const, text: 'No scheduled tasks found.' },
+          ],
+        };
       }
 
       const formatted = tasks
         .map(
-          (t: { id: string; prompt: string; schedule_type: string; schedule_value: string; status: string; next_run: string }) =>
+          (t: {
+            id: string;
+            prompt: string;
+            schedule_type: string;
+            schedule_value: string;
+            status: string;
+            next_run: string;
+          }) =>
             `- [${t.id}] ${t.prompt.slice(0, 50)}... (${t.schedule_type}: ${t.schedule_value}) - ${t.status}, next: ${t.next_run || 'N/A'}`,
         )
         .join('\n');
 
-      return { content: [{ type: 'text' as const, text: `Scheduled tasks:\n${formatted}` }] };
+      return {
+        content: [
+          { type: 'text' as const, text: `Scheduled tasks:\n${formatted}` },
+        ],
+      };
     } catch (err) {
       return {
-        content: [{ type: 'text' as const, text: `Error reading tasks: ${err instanceof Error ? err.message : String(err)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error reading tasks: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
       };
     }
   },
@@ -254,7 +340,14 @@ server.tool(
 
     writeIpcFile(TASKS_DIR, data);
 
-    return { content: [{ type: 'text' as const, text: `Task ${args.task_id} pause requested.` }] };
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Task ${args.task_id} pause requested.`,
+        },
+      ],
+    };
   },
 );
 
@@ -273,7 +366,14 @@ server.tool(
 
     writeIpcFile(TASKS_DIR, data);
 
-    return { content: [{ type: 'text' as const, text: `Task ${args.task_id} resume requested.` }] };
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Task ${args.task_id} resume requested.`,
+        },
+      ],
+    };
   },
 );
 
@@ -292,7 +392,14 @@ server.tool(
 
     writeIpcFile(TASKS_DIR, data);
 
-    return { content: [{ type: 'text' as const, text: `Task ${args.task_id} cancellation requested.` }] };
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Task ${args.task_id} cancellation requested.`,
+        },
+      ],
+    };
   },
 );
 
@@ -302,18 +409,32 @@ server.tool(
   {
     task_id: z.string().describe('The task ID to update'),
     prompt: z.string().optional().describe('New prompt for the task'),
-    schedule_type: z.enum(['cron', 'interval', 'once']).optional().describe('New schedule type'),
-    schedule_value: z.string().optional().describe('New schedule value (see schedule_task for format)'),
+    schedule_type: z
+      .enum(['cron', 'interval', 'once'])
+      .optional()
+      .describe('New schedule type'),
+    schedule_value: z
+      .string()
+      .optional()
+      .describe('New schedule value (see schedule_task for format)'),
   },
   async (args) => {
     // Validate schedule_value if provided
-    if (args.schedule_type === 'cron' || (!args.schedule_type && args.schedule_value)) {
+    if (
+      args.schedule_type === 'cron' ||
+      (!args.schedule_type && args.schedule_value)
+    ) {
       if (args.schedule_value) {
         try {
           CronExpressionParser.parse(args.schedule_value);
         } catch {
           return {
-            content: [{ type: 'text' as const, text: `Invalid cron: "${args.schedule_value}".` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `Invalid cron: "${args.schedule_value}".`,
+              },
+            ],
             isError: true,
           };
         }
@@ -323,7 +444,12 @@ server.tool(
       const ms = parseInt(args.schedule_value, 10);
       if (isNaN(ms) || ms <= 0) {
         return {
-          content: [{ type: 'text' as const, text: `Invalid interval: "${args.schedule_value}".` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Invalid interval: "${args.schedule_value}".`,
+            },
+          ],
           isError: true,
         };
       }
@@ -337,12 +463,21 @@ server.tool(
       timestamp: new Date().toISOString(),
     };
     if (args.prompt !== undefined) data.prompt = args.prompt;
-    if (args.schedule_type !== undefined) data.schedule_type = args.schedule_type;
-    if (args.schedule_value !== undefined) data.schedule_value = args.schedule_value;
+    if (args.schedule_type !== undefined)
+      data.schedule_type = args.schedule_type;
+    if (args.schedule_value !== undefined)
+      data.schedule_value = args.schedule_value;
 
     writeIpcFile(TASKS_DIR, data);
 
-    return { content: [{ type: 'text' as const, text: `Task ${args.task_id} update requested.` }] };
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Task ${args.task_id} update requested.`,
+        },
+      ],
+    };
   },
 );
 
@@ -352,16 +487,34 @@ server.tool(
 
 Use available_groups.json to find the JID for a group. The folder name must be channel-prefixed: "{channel}_{group-name}" (e.g., "whatsapp_family-chat", "telegram_dev-team", "discord_general"). Use lowercase with hyphens for the group name part.`,
   {
-    jid: z.string().describe('The chat JID (e.g., "120363336345536173@g.us", "tg:-1001234567890", "dc:1234567890123456")'),
+    jid: z
+      .string()
+      .describe(
+        'The chat JID (e.g., "120363336345536173@g.us", "tg:-1001234567890", "dc:1234567890123456")',
+      ),
     name: z.string().describe('Display name for the group'),
-    folder: z.string().describe('Channel-prefixed folder name (e.g., "whatsapp_family-chat", "telegram_dev-team")'),
+    folder: z
+      .string()
+      .describe(
+        'Channel-prefixed folder name (e.g., "whatsapp_family-chat", "telegram_dev-team")',
+      ),
     trigger: z.string().describe('Trigger word (e.g., "@Andy")'),
-    description: z.string().optional().describe('Human-readable description of this group\'s capabilities (e.g., "catstory 项目运维：代码仓库、SSH 日志查看、Jenkins 部署")'),
+    description: z
+      .string()
+      .optional()
+      .describe(
+        'Human-readable description of this group\'s capabilities (e.g., "catstory 项目运维：代码仓库、SSH 日志查看、Jenkins 部署")',
+      ),
   },
   async (args) => {
     if (!isMain) {
       return {
-        content: [{ type: 'text' as const, text: 'Only the main group can register new groups.' }],
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can register new groups.',
+          },
+        ],
         isError: true,
       };
     }
@@ -379,7 +532,12 @@ Use available_groups.json to find the JID for a group. The folder name must be c
     writeIpcFile(TASKS_DIR, data);
 
     return {
-      content: [{ type: 'text' as const, text: `Group "${args.name}" registered. It will start receiving messages immediately.` }],
+      content: [
+        {
+          type: 'text' as const,
+          text: `Group "${args.name}" registered. It will start receiving messages immediately.`,
+        },
+      ],
     };
   },
 );
@@ -395,41 +553,68 @@ Questions are asked sequentially. Each question must provide either:
 Users can answer via interactive cards (when supported) or by replying:
 /answer <requestId> <option / free text / JSON / key=value pairs>`,
   {
-    questions: z.array(
-      z.object({
-        id: z.string().describe('Unique question id within this tool call'),
-        question: z.string().describe('Question text shown to user'),
-        options: z.array(
-          z.object({
-            label: z.string().describe('Option label shown to user'),
-            description: z.string().optional().describe('Optional explanation for the option'),
-          }),
-        ).min(2).max(6).optional(),
-        fields: z.array(
-          z.object({
-            id: z.string().describe('Field id used as response key'),
-            label: z.string().describe('Field label shown to user'),
-            type: z.enum(['string', 'number', 'integer', 'boolean']),
-            description: z.string().optional(),
-            required: z.boolean().optional(),
-            default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-            min_length: z.number().optional(),
-            max_length: z.number().optional(),
-            min: z.number().optional(),
-            max: z.number().optional(),
-            format: z.enum(['email', 'uri', 'date', 'date-time']).optional(),
-            enum: z.array(
+    questions: z
+      .array(
+        z.object({
+          id: z.string().describe('Unique question id within this tool call'),
+          question: z.string().describe('Question text shown to user'),
+          options: z
+            .array(
               z.object({
-                value: z.string(),
-                label: z.string().optional(),
+                label: z.string().describe('Option label shown to user'),
+                description: z
+                  .string()
+                  .optional()
+                  .describe('Optional explanation for the option'),
               }),
-            ).optional(),
-          }),
-        ).min(1).max(8).optional(),
-        multi_select: z.boolean().optional().describe('Whether multiple options can be selected'),
-      }),
-    ).min(1).max(4),
-    timeout_sec: z.number().optional().default(1800).describe('Timeout in seconds (30-3600)'),
+            )
+            .min(2)
+            .max(6)
+            .optional(),
+          fields: z
+            .array(
+              z.object({
+                id: z.string().describe('Field id used as response key'),
+                label: z.string().describe('Field label shown to user'),
+                type: z.enum(['string', 'number', 'integer', 'boolean']),
+                description: z.string().optional(),
+                required: z.boolean().optional(),
+                default: z
+                  .union([z.string(), z.number(), z.boolean()])
+                  .optional(),
+                min_length: z.number().optional(),
+                max_length: z.number().optional(),
+                min: z.number().optional(),
+                max: z.number().optional(),
+                format: z
+                  .enum(['email', 'uri', 'date', 'date-time'])
+                  .optional(),
+                enum: z
+                  .array(
+                    z.object({
+                      value: z.string(),
+                      label: z.string().optional(),
+                    }),
+                  )
+                  .optional(),
+              }),
+            )
+            .min(1)
+            .max(8)
+            .optional(),
+          multi_select: z
+            .boolean()
+            .optional()
+            .describe('Whether multiple options can be selected'),
+        }),
+      )
+      .min(1)
+      .max(4),
+    timeout_sec: z
+      .number()
+      .optional()
+      .default(1800)
+      .describe('Timeout in seconds (30-3600)'),
     metadata: z
       .record(z.string(), z.string())
       .optional()
@@ -437,7 +622,10 @@ Users can answer via interactive cards (when supported) or by replying:
   },
   async (args) => {
     const requestId = `aq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const timeoutSec = Math.min(3600, Math.max(30, Math.floor(args.timeout_sec || 1800)));
+    const timeoutSec = Math.min(
+      3600,
+      Math.max(30, Math.floor(args.timeout_sec || 1800)),
+    );
     const data = {
       type: 'ask_user_question',
       requestId,
@@ -480,23 +668,43 @@ Users can answer via interactive cards (when supported) or by replying:
 
           if (status === 'answered') {
             return {
-              content: [{ type: 'text' as const, text: `User answered questions: ${summary}` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `User answered questions: ${summary}`,
+                },
+              ],
             };
           }
 
           if (status === 'rejected') {
             return {
-              content: [{ type: 'text' as const, text: `Question flow rejected: ${result.error || 'rejected by host'}. ${summary}` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `Question flow rejected: ${result.error || 'rejected by host'}. ${summary}`,
+                },
+              ],
               isError: true,
             };
           }
 
           return {
-            content: [{ type: 'text' as const, text: `Question flow ended with status=${status}. ${summary}` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `Question flow ended with status=${status}. ${summary}`,
+              },
+            ],
           };
         } catch (err) {
           return {
-            content: [{ type: 'text' as const, text: `ask_user_question result parse failed: ${err instanceof Error ? err.message : String(err)}` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `ask_user_question result parse failed: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -505,7 +713,12 @@ Users can answer via interactive cards (when supported) or by replying:
     }
 
     return {
-      content: [{ type: 'text' as const, text: `ask_user_question timed out waiting for user response (requestId=${requestId}).` }],
+      content: [
+        {
+          type: 'text' as const,
+          text: `ask_user_question timed out waiting for user response (requestId=${requestId}).`,
+        },
+      ],
       isError: true,
     };
   },
@@ -517,11 +730,18 @@ server.tool(
   {
     title: z.string().describe('Short title shown in the workbench'),
     text: z.string().describe('Question or prompt sent to the user'),
-    timeout_sec: z.number().optional().default(1800).describe('Timeout in seconds (30-3600)'),
+    timeout_sec: z
+      .number()
+      .optional()
+      .default(1800)
+      .describe('Timeout in seconds (30-3600)'),
   },
   async (args) => {
     const requestId = `aq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const timeoutSec = Math.min(3600, Math.max(30, Math.floor(args.timeout_sec || 1800)));
+    const timeoutSec = Math.min(
+      3600,
+      Math.max(30, Math.floor(args.timeout_sec || 1800)),
+    );
     const data = {
       type: 'ask_user_question',
       requestId,
@@ -568,24 +788,46 @@ server.tool(
         };
         fs.unlinkSync(resultPath);
         if (result.status === 'answered') {
-          const value = typeof result.answers?.reply === 'string'
-            ? result.answers.reply
-            : JSON.stringify(result.answers?.reply ?? '');
-          return { content: [{ type: 'text' as const, text: `User replied: ${value}` }] };
+          const value =
+            typeof result.answers?.reply === 'string'
+              ? result.answers.reply
+              : JSON.stringify(result.answers?.reply ?? '');
+          return {
+            content: [
+              { type: 'text' as const, text: `User replied: ${value}` },
+            ],
+          };
         }
         if (result.status === 'rejected') {
           return {
-            content: [{ type: 'text' as const, text: `request_human_input rejected: ${result.error || 'rejected'}` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `request_human_input rejected: ${result.error || 'rejected'}`,
+              },
+            ],
             isError: true,
           };
         }
-        return { content: [{ type: 'text' as const, text: `request_human_input ended with status=${result.status || 'unknown'}.` }] };
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `request_human_input ended with status=${result.status || 'unknown'}.`,
+            },
+          ],
+        };
       }
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
 
     return {
-      content: [{ type: 'text' as const, text: `request_human_input timed out waiting for user response (requestId=${requestId}).` }],
+      content: [
+        {
+          type: 'text' as const,
+          text: `request_human_input timed out waiting for user response (requestId=${requestId}).`,
+        },
+      ],
       isError: true,
     };
   },
@@ -597,7 +839,11 @@ server.tool(
   {
     query: z.string().describe('搜索关键词'),
     limit: z.number().optional().default(10).describe('最大返回条数'),
-    mode: z.enum(['hybrid', 'keyword']).optional().default('hybrid').describe('hybrid=消息+结构化记忆，keyword=仅消息'),
+    mode: z
+      .enum(['hybrid', 'keyword'])
+      .optional()
+      .default('hybrid')
+      .describe('hybrid=消息+结构化记忆，keyword=仅消息'),
   },
   async (args) => {
     const requestId = `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -633,9 +879,10 @@ server.tool(
             parts.push(`## 检索结果（mode=${result.mode || 'hybrid'}）\n`);
             for (const hit of hits) {
               if (hit.kind === 'memory') {
-                const memoryId = typeof hit.id === 'string' && hit.id.trim().length > 0
-                  ? hit.id
-                  : 'unknown-id';
+                const memoryId =
+                  typeof hit.id === 'string' && hit.id.trim().length > 0
+                    ? hit.id
+                    : 'unknown-id';
                 parts.push(
                   `[MEMORY][${memoryId}][${hit.layer}/${hit.memoryType}] ${hit.content}`,
                 );
@@ -649,7 +896,12 @@ server.tool(
 
           if (parts.length === 0) {
             return {
-              content: [{ type: 'text' as const, text: `没有找到与"${args.query}"相关的记录。` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `没有找到与"${args.query}"相关的记录。`,
+                },
+              ],
             };
           }
 
@@ -658,7 +910,12 @@ server.tool(
           };
         } catch (err) {
           return {
-            content: [{ type: 'text' as const, text: `搜索结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `搜索结果解析失败: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -678,7 +935,10 @@ server.tool(
   '写入结构化记忆到当前群组（working/episodic/canonical）。',
   {
     content: z.string().describe('记忆内容'),
-    layer: z.enum(['working', 'episodic', 'canonical']).default('canonical').describe('记忆层级'),
+    layer: z
+      .enum(['working', 'episodic', 'canonical'])
+      .default('canonical')
+      .describe('记忆层级'),
     memory_type: z
       .enum(['preference', 'rule', 'fact', 'summary'])
       .default('preference')
@@ -767,12 +1027,16 @@ server.tool(
           fs.unlinkSync(resultPath);
           if (!result.deleted) {
             return {
-              content: [{ type: 'text' as const, text: '删除失败或记忆不存在。' }],
+              content: [
+                { type: 'text' as const, text: '删除失败或记忆不存在。' },
+              ],
               isError: true,
             };
           }
           return {
-            content: [{ type: 'text' as const, text: `记忆已删除：${result.memoryId}` }],
+            content: [
+              { type: 'text' as const, text: `记忆已删除：${result.memoryId}` },
+            ],
           };
         } catch (err) {
           return {
@@ -801,11 +1065,29 @@ server.tool(
 - **keep**: Keep one memory as active, deprecate the other. Provide keep_id and deprecate_id.
 - **merge**: Deprecate both and create a new merged memory. Provide merge_ids (array of 2 IDs) and merged_content.`,
   {
-    mode: z.enum(['keep', 'merge']).describe('Resolution mode: "keep" to keep one and deprecate the other, "merge" to combine both into a new memory'),
-    keep_id: z.string().optional().describe('(keep mode) ID of the memory to keep as active'),
-    deprecate_id: z.string().optional().describe('(keep mode) ID of the memory to deprecate'),
-    merge_ids: z.array(z.string()).optional().describe('(merge mode) Array of exactly 2 memory IDs to merge'),
-    merged_content: z.string().optional().describe('(merge mode) The new merged content that replaces both conflicting memories'),
+    mode: z
+      .enum(['keep', 'merge'])
+      .describe(
+        'Resolution mode: "keep" to keep one and deprecate the other, "merge" to combine both into a new memory',
+      ),
+    keep_id: z
+      .string()
+      .optional()
+      .describe('(keep mode) ID of the memory to keep as active'),
+    deprecate_id: z
+      .string()
+      .optional()
+      .describe('(keep mode) ID of the memory to deprecate'),
+    merge_ids: z
+      .array(z.string())
+      .optional()
+      .describe('(merge mode) Array of exactly 2 memory IDs to merge'),
+    merged_content: z
+      .string()
+      .optional()
+      .describe(
+        '(merge mode) The new merged content that replaces both conflicting memories',
+      ),
   },
   async (args) => {
     const requestId = `memrc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -821,16 +1103,30 @@ server.tool(
     if (args.mode === 'keep') {
       if (!args.keep_id || !args.deprecate_id) {
         return {
-          content: [{ type: 'text' as const, text: 'keep 模式需要 keep_id 和 deprecate_id。' }],
+          content: [
+            {
+              type: 'text' as const,
+              text: 'keep 模式需要 keep_id 和 deprecate_id。',
+            },
+          ],
           isError: true,
         };
       }
       data.keep_id = args.keep_id;
       data.deprecate_id = args.deprecate_id;
     } else {
-      if (!args.merge_ids || args.merge_ids.length !== 2 || !args.merged_content) {
+      if (
+        !args.merge_ids ||
+        args.merge_ids.length !== 2 ||
+        !args.merged_content
+      ) {
         return {
-          content: [{ type: 'text' as const, text: 'merge 模式需要 merge_ids（2个ID）和 merged_content。' }],
+          content: [
+            {
+              type: 'text' as const,
+              text: 'merge 模式需要 merge_ids（2个ID）和 merged_content。',
+            },
+          ],
           isError: true,
         };
       }
@@ -852,31 +1148,48 @@ server.tool(
           fs.unlinkSync(resultPath);
           if (raw.error) {
             return {
-              content: [{ type: 'text' as const, text: `冲突解决失败: ${raw.error}` }],
+              content: [
+                { type: 'text' as const, text: `冲突解决失败: ${raw.error}` },
+              ],
               isError: true,
             };
           }
           const result = raw.result;
           if (!result) {
             return {
-              content: [{ type: 'text' as const, text: '冲突解决未返回结果。' }],
+              content: [
+                { type: 'text' as const, text: '冲突解决未返回结果。' },
+              ],
               isError: true,
             };
           }
           const lines: string[] = ['冲突已解决。'];
           if (args.mode === 'keep') {
-            lines.push(`保留: ${result.kept.id} — ${result.kept.content.slice(0, 80)}`);
-            lines.push(`废弃: ${result.deprecated.id} — ${result.deprecated.content.slice(0, 80)}`);
+            lines.push(
+              `保留: ${result.kept.id} — ${result.kept.content.slice(0, 80)}`,
+            );
+            lines.push(
+              `废弃: ${result.deprecated.id} — ${result.deprecated.content.slice(0, 80)}`,
+            );
           } else {
-            lines.push(`新记忆: ${result.merged.id} — ${result.merged.content.slice(0, 80)}`);
+            lines.push(
+              `新记忆: ${result.merged.id} — ${result.merged.content.slice(0, 80)}`,
+            );
             for (const dep of result.deprecated) {
               lines.push(`废弃: ${dep.id} — ${dep.content.slice(0, 80)}`);
             }
           }
-          return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+          return {
+            content: [{ type: 'text' as const, text: lines.join('\n') }],
+          };
         } catch (err) {
           return {
-            content: [{ type: 'text' as const, text: `冲突解决结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `冲突解决结果解析失败: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -884,7 +1197,9 @@ server.tool(
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
     return {
-      content: [{ type: 'text' as const, text: 'memory_resolve_conflict 请求超时。' }],
+      content: [
+        { type: 'text' as const, text: 'memory_resolve_conflict 请求超时。' },
+      ],
       isError: true,
     };
   },
@@ -898,14 +1213,32 @@ server.tool(
 - Include any relevant details (time ranges, error patterns, file paths, etc.)
 - Use list_delegations to check status of pending delegations`,
   {
-    target_group_jid: z.string().describe('JID of the target group to delegate the task to. Find JIDs in available_groups.json or registered_groups table.'),
-    task: z.string().describe('Detailed description of the task for the target agent. Be specific — the target has no context from this conversation.'),
-    requester_jid: z.string().optional().describe('JID of the group that originally requested this delegation via request_delegation. When provided, the requester will be auto-notified when the task completes.'),
+    target_group_jid: z
+      .string()
+      .describe(
+        'JID of the target group to delegate the task to. Find JIDs in available_groups.json or registered_groups table.',
+      ),
+    task: z
+      .string()
+      .describe(
+        'Detailed description of the task for the target agent. Be specific — the target has no context from this conversation.',
+      ),
+    requester_jid: z
+      .string()
+      .optional()
+      .describe(
+        'JID of the group that originally requested this delegation via request_delegation. When provided, the requester will be auto-notified when the task completes.',
+      ),
   },
   async (args) => {
     if (!isMain) {
       return {
-        content: [{ type: 'text' as const, text: 'Only the main group can delegate tasks.' }],
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can delegate tasks.',
+          },
+        ],
         isError: true,
       };
     }
@@ -937,11 +1270,21 @@ server.tool(
           const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
           fs.unlinkSync(resultPath);
           return {
-            content: [{ type: 'text' as const, text: `任务已委派。Delegation ID: ${result.delegationId}\n\n目标群 agent 将处理此任务，完成后结果会以消息形式返回。你可以用 list_delegations 查看状态。` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `任务已委派。Delegation ID: ${result.delegationId}\n\n目标群 agent 将处理此任务，完成后结果会以消息形式返回。你可以用 list_delegations 查看状态。`,
+              },
+            ],
           };
         } catch (err) {
           return {
-            content: [{ type: 'text' as const, text: `委派请求已发送但确认解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `委派请求已发送但确认解析失败: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
           };
         }
       }
@@ -949,7 +1292,12 @@ server.tool(
     }
 
     return {
-      content: [{ type: 'text' as const, text: '委派请求已发送，但等待确认超时。请用 list_delegations 检查状态。' }],
+      content: [
+        {
+          type: 'text' as const,
+          text: '委派请求已发送，但等待确认超时。请用 list_delegations 检查状态。',
+        },
+      ],
     };
   },
 );
@@ -961,12 +1309,21 @@ server.tool(
   If the original user message contains "@{groupfolder}", keep it in task text. The system will parse and forward it to the main group as a target-group hint.
   Do not proactively invent or choose "@{groupfolder}" yourself when the user did not specify it.`,
   {
-    task: z.string().describe('Detailed description of what you need another group to do. Be specific — include all relevant context.'),
+    task: z
+      .string()
+      .describe(
+        'Detailed description of what you need another group to do. Be specific — include all relevant context.',
+      ),
   },
   async (args) => {
     if (isMain) {
       return {
-        content: [{ type: 'text' as const, text: '主群请直接使用 delegate_task 工具。' }],
+        content: [
+          {
+            type: 'text' as const,
+            text: '主群请直接使用 delegate_task 工具。',
+          },
+        ],
         isError: true,
       };
     }
@@ -981,7 +1338,12 @@ server.tool(
     writeIpcFile(TASKS_DIR, data);
 
     return {
-      content: [{ type: 'text' as const, text: '委派请求已发送给主群，主群将决定是否委派及委派目标。' }],
+      content: [
+        {
+          type: 'text' as const,
+          text: '委派请求已发送给主群，主群将决定是否委派及委派目标。',
+        },
+      ],
     };
   },
 );
@@ -994,7 +1356,9 @@ The result you provide will be sent back to the source group's agent as a messag
 Be thorough in your result — include all relevant findings, data, and conclusions.`,
   {
     delegation_id: z.string().describe('委派任务 ID（格式：del-xxx）'),
-    outcome: z.enum(['success', 'failure']).describe('任务结果：success=成功，failure=失败'),
+    outcome: z
+      .enum(['success', 'failure'])
+      .describe('任务结果：success=成功，failure=失败'),
     result: z.string().describe('任务结果详情，JSON 格式'),
   },
   async (args) => {
@@ -1010,7 +1374,12 @@ Be thorough in your result — include all relevant findings, data, and conclusi
     writeIpcFile(TASKS_DIR, data);
 
     return {
-      content: [{ type: 'text' as const, text: `委派任务 ${args.delegation_id} 的结果已提交。` }],
+      content: [
+        {
+          type: 'text' as const,
+          text: `委派任务 ${args.delegation_id} 的结果已提交。`,
+        },
+      ],
     };
   },
 );
@@ -1024,14 +1393,18 @@ server.tool(
 
     try {
       if (!fs.existsSync(delegationsFile)) {
-        return { content: [{ type: 'text' as const, text: '没有找到委派任务。' }] };
+        return {
+          content: [{ type: 'text' as const, text: '没有找到委派任务。' }],
+        };
       }
 
       const data = JSON.parse(fs.readFileSync(delegationsFile, 'utf-8'));
       const delegations = data.delegations;
 
       if (!delegations || delegations.length === 0) {
-        return { content: [{ type: 'text' as const, text: '没有找到委派任务。' }] };
+        return {
+          content: [{ type: 'text' as const, text: '没有找到委派任务。' }],
+        };
       }
 
       const formatted = delegations
@@ -1053,10 +1426,19 @@ server.tool(
         )
         .join('\n');
 
-      return { content: [{ type: 'text' as const, text: `委派任务列表:\n${formatted}` }] };
+      return {
+        content: [
+          { type: 'text' as const, text: `委派任务列表:\n${formatted}` },
+        ],
+      };
     } catch (err) {
       return {
-        content: [{ type: 'text' as const, text: `读取委派任务失败: ${err instanceof Error ? err.message : String(err)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `读取委派任务失败: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
       };
     }
   },
@@ -1073,10 +1455,38 @@ if (isMain) {
     {
       name: z.string().describe('需求名称'),
       service: z.string().describe('服务名称（对应 services.json 中的 key）'),
-      workflow_type: z.string().describe("流程类型（如 'dev_test'）。用 list_workflow_types 查看可用类型。"),
-      start_from: z.string().describe("入口点名称（如 'plan', 'dev', 'testing'）。用 list_workflow_types 查看各类型的入口点。"),
-      deliverable: z.string().optional().describe("交付物目录名（位于 projects/{service}/iteration/ 下）。从 list_deliverables 获取可选值。dev/testing 入口必须指定。"),
-      deploy_branch: z.string().optional().describe('预发工作分支。适用于 testing 入口或需指定预发分支的部署场景。'),
+      workflow_type: z
+        .string()
+        .describe(
+          "流程类型（如 'dev_test'）。用 list_workflow_types 查看可用类型。",
+        ),
+      start_from: z
+        .string()
+        .describe(
+          "入口点名称（如 'plan', 'dev', 'testing'）。用 list_workflow_types 查看各类型的入口点。",
+        ),
+      deliverable: z
+        .string()
+        .optional()
+        .describe(
+          '交付物目录名（位于 projects/{service}/iteration/ 下）。从 list_deliverables 获取可选值。dev/testing 入口必须指定。',
+        ),
+      work_branch: z
+        .string()
+        .optional()
+        .describe('工作分支。适用于从已有交付物恢复流程或显式指定分支的场景。'),
+      staging_base_branch: z
+        .string()
+        .optional()
+        .describe(
+          '预发分支。若不传，部署时从 services.json 的 staging.branch 获取。',
+        ),
+      staging_work_branch: z
+        .string()
+        .optional()
+        .describe(
+          '预发工作分支。适用于 testing 入口或需指定预发工作分支的部署场景。',
+        ),
     },
     async (args) => {
       const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1094,8 +1504,14 @@ if (isMain) {
       if (args.deliverable) {
         data.deliverable = args.deliverable;
       }
-      if (args.deploy_branch) {
-        data.deploy_branch = args.deploy_branch;
+      if (args.work_branch) {
+        data.work_branch = args.work_branch;
+      }
+      if (args.staging_base_branch) {
+        data.staging_base_branch = args.staging_base_branch;
+      }
+      if (args.staging_work_branch) {
+        data.staging_work_branch = args.staging_work_branch;
       }
 
       writeIpcFile(TASKS_DIR, data);
@@ -1114,16 +1530,31 @@ if (isMain) {
             fs.unlinkSync(resultPath);
             if (result.error) {
               return {
-                content: [{ type: 'text' as const, text: `流程创建失败: ${result.error}` }],
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `流程创建失败: ${result.error}`,
+                  },
+                ],
                 isError: true,
               };
             }
             return {
-              content: [{ type: 'text' as const, text: `流程已创建。Workflow ID: ${result.workflowId}\n\n流程将自动推进，进展消息会发送到群内。` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `流程已创建。Workflow ID: ${result.workflowId}\n\n流程将自动推进，进展消息会发送到群内。`,
+                },
+              ],
             };
           } catch (err) {
             return {
-              content: [{ type: 'text' as const, text: `流程创建结果解析失败: ${err instanceof Error ? err.message : String(err)}` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `流程创建结果解析失败: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
             };
           }
         }
@@ -1131,7 +1562,12 @@ if (isMain) {
       }
 
       return {
-        content: [{ type: 'text' as const, text: '流程创建请求已发送，但等待确认超时。' }],
+        content: [
+          {
+            type: 'text' as const,
+            text: '流程创建请求已发送，但等待确认超时。',
+          },
+        ],
       };
     },
   );
@@ -1168,7 +1604,12 @@ if (isMain) {
             const types = result.types || [];
             if (types.length === 0) {
               return {
-                content: [{ type: 'text' as const, text: '没有配置任何流程类型（workflows.json 不存在或为空）。' }],
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: '没有配置任何流程类型（workflows.json 不存在或为空）。',
+                  },
+                ],
               };
             }
 
@@ -1178,7 +1619,10 @@ if (isMain) {
                   type: string;
                   name: string;
                   entry_points: string[];
-                  entry_points_detail: Record<string, { requires_deliverable: boolean; deliverable_role?: string }>;
+                  entry_points_detail: Record<
+                    string,
+                    { requires_deliverable: boolean; deliverable_role?: string }
+                  >;
                   role_channels: Record<string, Record<string, string>>;
                 }) => {
                   const epLines = t.entry_points.map((ep) => {
@@ -1194,11 +1638,18 @@ if (isMain) {
               .join('\n');
 
             return {
-              content: [{ type: 'text' as const, text: `可用流程类型:\n${formatted}` }],
+              content: [
+                { type: 'text' as const, text: `可用流程类型:\n${formatted}` },
+              ],
             };
           } catch (err) {
             return {
-              content: [{ type: 'text' as const, text: `流程类型列表获取失败: ${err instanceof Error ? err.message : String(err)}` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `流程类型列表获取失败: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
             };
           }
         }
@@ -1206,7 +1657,9 @@ if (isMain) {
       }
 
       return {
-        content: [{ type: 'text' as const, text: '获取流程类型列表超时，请稍后重试。' }],
+        content: [
+          { type: 'text' as const, text: '获取流程类型列表超时，请稍后重试。' },
+        ],
         isError: true,
       };
     },
@@ -1244,26 +1697,64 @@ if (isMain) {
             fs.unlinkSync(resultPath);
 
             if (result.error) {
-              return { content: [{ type: 'text' as const, text: `查询失败: ${result.error}` }], isError: true };
+              return {
+                content: [
+                  { type: 'text' as const, text: `查询失败: ${result.error}` },
+                ],
+                isError: true,
+              };
             }
 
             const items = result.deliverables || [];
             if (items.length === 0) {
-              return { content: [{ type: 'text' as const, text: `服务 ${args.service} 暂无交付物文档。` }] };
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `服务 ${args.service} 暂无交付物文档。`,
+                  },
+                ],
+              };
             }
 
-            const lines = items.map((d: { dir: string; files: string[]; branch: string }) =>
-              `- **${d.dir}** (分支: ${d.branch || '未知'})：${d.files.join(', ')}`,
+            const lines = items.map(
+              (d: {
+                dir: string;
+                files: string[];
+                work_branch: string;
+                staging_base_branch: string;
+                staging_work_branch: string;
+              }) =>
+                `- **${d.dir}** (工作分支: ${d.work_branch || '未知'} | 预发分支: ${d.staging_base_branch || '未知'} | 预发工作分支: ${d.staging_work_branch || '未知'})：${d.files.join(', ')}`,
             );
-            return { content: [{ type: 'text' as const, text: `可用交付物:\n${lines.join('\n')}` }] };
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `可用交付物:\n${lines.join('\n')}`,
+                },
+              ],
+            };
           } catch (err) {
-            return { content: [{ type: 'text' as const, text: `解析结果失败: ${err instanceof Error ? err.message : String(err)}` }] };
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `解析结果失败: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
+            };
           }
         }
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
 
-      return { content: [{ type: 'text' as const, text: '查询交付物超时，请稍后重试。' }], isError: true };
+      return {
+        content: [
+          { type: 'text' as const, text: '查询交付物超时，请稍后重试。' },
+        ],
+        isError: true,
+      };
     },
   );
 
@@ -1299,7 +1790,9 @@ if (isMain) {
             const workflows = result.workflows || [];
             if (workflows.length === 0) {
               return {
-                content: [{ type: 'text' as const, text: '当前没有活跃的流程。' }],
+                content: [
+                  { type: 'text' as const, text: '当前没有活跃的流程。' },
+                ],
               };
             }
 
@@ -1315,7 +1808,9 @@ if (isMain) {
               paused: '⏸ 已中断',
             };
 
-            const cardSent = result.cardSent ? '（已发送流程卡片到群内）\n\n' : '';
+            const cardSent = result.cardSent
+              ? '（已发送流程卡片到群内）\n\n'
+              : '';
 
             const formatted = workflows
               .map(
@@ -1325,24 +1820,36 @@ if (isMain) {
                   service: string;
                   status: string;
                   round: number;
-                  branch: string;
+                  work_branch: string;
+                  staging_work_branch: string;
                   created_at: string;
                   paused_from?: string;
                 }) => {
-                  const statusDisplay = w.status === 'paused'
-                    ? `⏸ 已中断（原状态：${statusLabels[w.paused_from || ''] || w.paused_from || '未知'}）`
-                    : (statusLabels[w.status] || w.status);
-                  return `- [${w.id}] ${w.name} (${w.service}) — ${statusDisplay}${w.round > 0 ? ` Round ${w.round}` : ''}\n  分支: ${w.branch || 'N/A'} | 创建: ${w.created_at}`;
+                  const statusDisplay =
+                    w.status === 'paused'
+                      ? `⏸ 已中断（原状态：${statusLabels[w.paused_from || ''] || w.paused_from || '未知'}）`
+                      : statusLabels[w.status] || w.status;
+                  return `- [${w.id}] ${w.name} (${w.service}) — ${statusDisplay}${w.round > 0 ? ` Round ${w.round}` : ''}\n  工作分支: ${w.work_branch || 'N/A'} | 预发工作分支: ${w.staging_work_branch || 'N/A'} | 创建: ${w.created_at}`;
                 },
               )
               .join('\n');
 
             return {
-              content: [{ type: 'text' as const, text: `${cardSent}活跃流程:\n${formatted}` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `${cardSent}活跃流程:\n${formatted}`,
+                },
+              ],
             };
           } catch (err) {
             return {
-              content: [{ type: 'text' as const, text: `流程列表获取失败: ${err instanceof Error ? err.message : String(err)}` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `流程列表获取失败: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
             };
           }
         }
@@ -1350,7 +1857,9 @@ if (isMain) {
       }
 
       return {
-        content: [{ type: 'text' as const, text: '获取流程列表超时，请稍后重试。' }],
+        content: [
+          { type: 'text' as const, text: '获取流程列表超时，请稍后重试。' },
+        ],
         isError: true,
       };
     },
@@ -1368,18 +1877,32 @@ server.tool(
       groupFolder,
       timestamp: new Date().toISOString(),
     });
-    return { content: [{ type: 'text' as const, text: '工具重载请求已提交，容器即将重启...' }] };
+    return {
+      content: [
+        { type: 'text' as const, text: '工具重载请求已提交，容器即将重启...' },
+      ],
+    };
   },
 );
 
 // Load custom tools from /app/custom-tools/*.js (plugin mechanism)
 const CUSTOM_TOOLS_DIR = '/app/custom-tools';
 if (fs.existsSync(CUSTOM_TOOLS_DIR)) {
-  for (const file of fs.readdirSync(CUSTOM_TOOLS_DIR).filter(f => f.endsWith('.js')).sort()) {
+  for (const file of fs
+    .readdirSync(CUSTOM_TOOLS_DIR)
+    .filter((f) => f.endsWith('.js'))
+    .sort()) {
     try {
       const plugin = await import(path.join(CUSTOM_TOOLS_DIR, file));
       if (typeof plugin.register === 'function') {
-        plugin.register(server, { chatJid, groupFolder, isMain, writeIpcFile, MESSAGES_DIR, TASKS_DIR });
+        plugin.register(server, {
+          chatJid,
+          groupFolder,
+          isMain,
+          writeIpcFile,
+          MESSAGES_DIR,
+          TASKS_DIR,
+        });
       }
     } catch (err) {
       // Log but don't crash — bad plugin shouldn't break core tools

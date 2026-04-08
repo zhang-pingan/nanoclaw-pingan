@@ -47,7 +47,7 @@ description: Fix bugs in service code on the existing work branch — use the de
 6. 通过 `complete_delegation` 返回修复结果
    - 成功时需包含：服务名、工作分支、交付目录、测试文档、已修复问题列表、修复概要
    - 失败时需明确说明：失败原因、是否因缺少工作分支而中止
-   - 推荐返回字段：`service`、`branch`、`deliverable`、`test_doc`、`fixed_bugs`、`summary`
+   - 推荐返回字段：`service`、`work_branch`、`deliverable`、`test_doc`、`fixed_bugs`、`summary`
    - `fixed_bugs` 必须与测试报告中的 `BUG ID` 一一对应，不要自行改写 ID
    - `fixed_bugs` 中每个对象建议包含：`id`、`title`、`related_case`、`fix`
    - `fixed_bugs` 只返回本轮实际已完成修复、并已提交到当前工作分支的 BUG
@@ -59,7 +59,7 @@ description: Fix bugs in service code on the existing work branch — use the de
 ```json
 {
   "service": "catstory",
-  "branch": "feature/user-nickname_20260320",
+  "work_branch": "feature/user-nickname_20260320",
   "deliverable": "2026-03-20_用户昵称功能",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "fixed_bugs": [
@@ -85,7 +85,7 @@ description: Fix bugs in service code on the existing work branch — use the de
 ```json
 {
   "service": "catstory",
-  "branch": "",
+  "work_branch": "",
   "deliverable": "2026-03-20_用户昵称功能",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "fixed_bugs": [],

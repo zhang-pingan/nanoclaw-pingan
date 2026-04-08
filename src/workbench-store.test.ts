@@ -12,7 +12,10 @@ import {
 import { RegisteredGroup } from './types.js';
 import { approveWorkflow, cancelWorkflow, initWorkflow } from './workflow.js';
 import { getWorkbenchTaskDetail, listWorkbenchTasks } from './workbench.js';
-import { syncWorkbenchOnTransition, syncWorkbenchOnWorkflowCreated } from './workbench-store.js';
+import {
+  syncWorkbenchOnTransition,
+  syncWorkbenchOnWorkflowCreated,
+} from './workbench-store.js';
 
 const MAIN_GROUP: RegisteredGroup = {
   name: 'Main',
@@ -66,9 +69,10 @@ describe('workbench approval transition sync', () => {
       name: '预发部署验证',
       service: 'order-service',
       start_from: 'testing',
-      branch: 'feature/predeploy',
+      work_branch: 'feature/predeploy',
+      staging_base_branch: 'staging',
       deliverable: '2026-04-07_predeploy',
-      deploy_branch: 'staging-deploy/feature-predeploy',
+      staging_work_branch: 'staging-deploy/feature-predeploy',
       access_token: '',
       status: 'awaiting_confirm',
       current_delegation_id: '',
@@ -89,7 +93,8 @@ describe('workbench approval transition sync', () => {
     expect(detail?.task.current_stage).toBe('ops_deploy');
     expect(detail?.action_items).toHaveLength(0);
     expect(
-      detail?.subtasks.find((item) => item.stage_key === 'awaiting_confirm')?.status,
+      detail?.subtasks.find((item) => item.stage_key === 'awaiting_confirm')
+        ?.status,
     ).toBe('completed');
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'ops_deploy')?.status,
@@ -109,9 +114,10 @@ describe('workbench approval transition sync', () => {
       name: '部署失败去重',
       service: 'order-service',
       start_from: 'testing',
-      branch: 'feature/fail',
+      work_branch: 'feature/fail',
+      staging_base_branch: 'staging',
       deliverable: '2026-04-07_fail',
-      deploy_branch: 'staging-deploy/feature-fail',
+      staging_work_branch: 'staging-deploy/feature-fail',
       access_token: '',
       status: 'ops_failed',
       current_delegation_id: 'wf-del-1',
@@ -124,14 +130,27 @@ describe('workbench approval transition sync', () => {
     });
     syncWorkbenchOnWorkflowCreated('wf-transition-dedupe');
 
-    syncWorkbenchOnTransition('wf-transition-dedupe', 'ops_deploy', 'ops_failed', 'wf-del-1');
-    syncWorkbenchOnTransition('wf-transition-dedupe', 'ops_deploy', 'ops_failed', 'wf-del-1');
+    syncWorkbenchOnTransition(
+      'wf-transition-dedupe',
+      'ops_deploy',
+      'ops_failed',
+      'wf-del-1',
+    );
+    syncWorkbenchOnTransition(
+      'wf-transition-dedupe',
+      'ops_deploy',
+      'ops_failed',
+      'wf-del-1',
+    );
 
     const task = getWorkbenchTaskByWorkflowId('wf-transition-dedupe');
     expect(task).not.toBeNull();
 
     const transitionEvents = listWorkbenchEventsByTask(task!.id).filter(
-      (item) => item.event_type === 'transition' && item.title.includes('部署中') && item.title.includes('部署失败'),
+      (item) =>
+        item.event_type === 'transition' &&
+        item.title.includes('部署中') &&
+        item.title.includes('部署失败'),
     );
     expect(transitionEvents).toHaveLength(1);
   });
@@ -142,9 +161,10 @@ describe('workbench approval transition sync', () => {
       name: '时间线排序',
       service: 'order-service',
       start_from: 'testing',
-      branch: 'feature/timeline-order',
+      work_branch: 'feature/timeline-order',
+      staging_base_branch: 'staging',
       deliverable: '2026-04-07_timeline_order',
-      deploy_branch: 'staging-deploy/feature-timeline-order',
+      staging_work_branch: 'staging-deploy/feature-timeline-order',
       access_token: '',
       status: 'ops_failed',
       current_delegation_id: 'wf-del-order',
@@ -156,7 +176,12 @@ describe('workbench approval transition sync', () => {
       updated_at: '2026-04-07T00:30:00.000Z',
     });
     syncWorkbenchOnWorkflowCreated('wf-timeline-order');
-    syncWorkbenchOnTransition('wf-timeline-order', 'ops_deploy', 'ops_failed', 'wf-del-order');
+    syncWorkbenchOnTransition(
+      'wf-timeline-order',
+      'ops_deploy',
+      'ops_failed',
+      'wf-del-order',
+    );
 
     const detail = getWorkbenchTaskDetail('wb-wf-timeline-order');
     expect(detail).not.toBeNull();
@@ -172,9 +197,10 @@ describe('workbench approval transition sync', () => {
       name: '较早任务',
       service: 'order-service',
       start_from: 'testing',
-      branch: 'feature/task-order-older',
+      work_branch: 'feature/task-order-older',
+      staging_base_branch: 'staging',
       deliverable: '2026-04-07_task_order_older',
-      deploy_branch: 'staging-deploy/feature-task-order-older',
+      staging_work_branch: 'staging-deploy/feature-task-order-older',
       access_token: '',
       status: 'testing',
       current_delegation_id: '',
@@ -190,9 +216,10 @@ describe('workbench approval transition sync', () => {
       name: '较新任务',
       service: 'order-service',
       start_from: 'testing',
-      branch: 'feature/task-order-newer',
+      work_branch: 'feature/task-order-newer',
+      staging_base_branch: 'staging',
       deliverable: '2026-04-07_task_order_newer',
-      deploy_branch: 'staging-deploy/feature-task-order-newer',
+      staging_work_branch: 'staging-deploy/feature-task-order-newer',
       access_token: '',
       status: 'testing',
       current_delegation_id: '',
@@ -207,10 +234,11 @@ describe('workbench approval transition sync', () => {
     syncWorkbenchOnWorkflowCreated('wf-task-order-older');
     syncWorkbenchOnWorkflowCreated('wf-task-order-newer');
 
-    expect(listWorkbenchTasks().map((item) => item.id).slice(0, 2)).toEqual([
-      'wb-wf-task-order-newer',
-      'wb-wf-task-order-older',
-    ]);
+    expect(
+      listWorkbenchTasks()
+        .map((item) => item.id)
+        .slice(0, 2),
+    ).toEqual(['wb-wf-task-order-newer', 'wb-wf-task-order-older']);
   });
 
   it('marks the active stage cancelled instead of completed when workflow is cancelled', () => {
@@ -219,9 +247,10 @@ describe('workbench approval transition sync', () => {
       name: '取消中的修复',
       service: 'order-service',
       start_from: 'testing',
-      branch: 'feature/cancel-fixing',
+      work_branch: 'feature/cancel-fixing',
+      staging_base_branch: 'staging',
       deliverable: '2026-04-07_cancel_fixing',
-      deploy_branch: 'staging-deploy/feature-cancel-fixing',
+      staging_work_branch: 'staging-deploy/feature-cancel-fixing',
       access_token: '',
       status: 'fixing',
       current_delegation_id: 'wf-del-cancel',
@@ -247,6 +276,8 @@ describe('workbench approval transition sync', () => {
     const detail = getWorkbenchTaskDetail(task!.id);
     expect(detail).not.toBeNull();
     expect(detail?.task.status).toBe('cancelled');
-    expect(detail?.subtasks.find((item) => item.stage_key === 'fixing')?.status).toBe('cancelled');
+    expect(
+      detail?.subtasks.find((item) => item.stage_key === 'fixing')?.status,
+    ).toBe('cancelled');
   });
 });

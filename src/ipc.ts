@@ -76,7 +76,10 @@ export interface IpcDeps {
     registeredJids: Set<string>,
   ) => void;
   enqueueMessageCheck: (groupJid: string) => void;
-  sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
+  sendCard?: (
+    jid: string,
+    card: InteractiveCard,
+  ) => Promise<string | undefined>;
   sendFile?: (jid: string, filePath: string, caption?: string) => Promise<void>;
   reloadContainer?: (jid: string) => void;
 }
@@ -159,7 +162,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
                       workflowId: data.workflowId,
                       stageKey: data.stageKey,
                       delegationId:
-                        typeof data.delegationId === 'string' && data.delegationId
+                        typeof data.delegationId === 'string' &&
+                        data.delegationId
                           ? data.delegationId
                           : null,
                       groupFolder: sourceGroup,
@@ -183,7 +187,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
-              } else if (data.type === 'file' && data.chatJid && data.filePath) {
+              } else if (
+                data.type === 'file' &&
+                data.chatJid &&
+                data.filePath
+              ) {
                 // Authorization: same as message
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
@@ -211,7 +219,10 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     const expectedPrefix = path.resolve(
                       path.join(GROUPS_DIR, sourceGroup),
                     );
-                    if (!hostPath.startsWith(expectedPrefix + path.sep) && hostPath !== expectedPrefix) {
+                    if (
+                      !hostPath.startsWith(expectedPrefix + path.sep) &&
+                      hostPath !== expectedPrefix
+                    ) {
                       logger.warn(
                         { filePath: data.filePath, hostPath, sourceGroup },
                         'IPC file path traversal attempt blocked',
@@ -222,11 +233,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
                         'IPC file does not exist on host',
                       );
                     } else if (deps.sendFile) {
-                      await deps.sendFile(
-                        data.chatJid,
-                        hostPath,
-                        data.caption,
-                      );
+                      await deps.sendFile(data.chatJid, hostPath, data.caption);
                       logger.info(
                         { chatJid: data.chatJid, hostPath, sourceGroup },
                         'IPC file sent',
@@ -235,7 +242,8 @@ export function startIpcWatcher(deps: IpcDeps): void {
                       // Fallback: send caption text if channel doesn't support files
                       await deps.sendMessage(
                         data.chatJid,
-                        data.caption || `[文件: ${path.basename(hostPath)}] (该渠道不支持发送文件)`,
+                        data.caption ||
+                          `[文件: ${path.basename(hostPath)}] (该渠道不支持发送文件)`,
                       );
                       logger.info(
                         { chatJid: data.chatJid, sourceGroup },
@@ -336,7 +344,10 @@ function parseDelegationTargetFolder(task: string): {
 }
 
 function stripLeadingTriggerMention(task: string): string {
-  const stripped = task.trim().replace(/^@Andy(?:\s+|$)/, '').trim();
+  const stripped = task
+    .trim()
+    .replace(/^@Andy(?:\s+|$)/, '')
+    .trim();
   return stripped || task.trim();
 }
 
@@ -406,7 +417,9 @@ function normalizeMemoryCandidateContent(content: string): string {
   return content.replace(/\s+/g, ' ').trim();
 }
 
-function parseArchiveMarkdownMessages(markdown: string): ExtractedArchiveMessage[] {
+function parseArchiveMarkdownMessages(
+  markdown: string,
+): ExtractedArchiveMessage[] {
   const lines = markdown.split('\n');
   const messages: ExtractedArchiveMessage[] = [];
   const lineRe = /^\*\*([^*]+)\*\*:\s*(.+)\s*$/;
@@ -456,7 +469,11 @@ function sleep(ms: number): Promise<void> {
 
 function summarizeArchiveMessages(
   messages: ExtractedArchiveMessage[],
-): Array<{ index: number; sender: ExtractedArchiveMessage['sender']; preview: string }> {
+): Array<{
+  index: number;
+  sender: ExtractedArchiveMessage['sender'];
+  preview: string;
+}> {
   return messages.slice(0, 5).map((message) => ({
     index: message.index,
     sender: message.sender,
@@ -527,7 +544,8 @@ async function callArchiveExtractionWithRetry(
           archiveName,
           attempt,
           maxAttempts: retryDelaysMs.length,
-          retryDelayMs: attempt < retryDelaysMs.length ? retryDelaysMs[attempt] : 0,
+          retryDelayMs:
+            attempt < retryDelaysMs.length ? retryDelaysMs[attempt] : 0,
         },
         'memory_extract_from_archive attempt failed',
       );
@@ -624,10 +642,17 @@ function validateArchiveMemoryCandidates(
     const reason = normalizeMemoryCandidateContent(candidate.reason);
     if (content.length < 8 || content.length > 400) continue;
     if (!reason || reason.length > 200) continue;
-    if (!Number.isFinite(candidate.confidence) || candidate.confidence < 0 || candidate.confidence > 1) {
+    if (
+      !Number.isFinite(candidate.confidence) ||
+      candidate.confidence < 0 ||
+      candidate.confidence > 1
+    ) {
       continue;
     }
-    if (isInternalArchiveMessageContent(content) || isInternalArchiveMessageContent(reason)) {
+    if (
+      isInternalArchiveMessageContent(content) ||
+      isInternalArchiveMessageContent(reason)
+    ) {
       continue;
     }
     if (content.includes('[archive:') || /<context\b/i.test(content)) continue;
@@ -640,9 +665,12 @@ function validateArchiveMemoryCandidates(
     const key = `${candidate.layer}|${candidate.memory_type}|${content.toLowerCase()}`;
     if (deduped.has(key)) continue;
 
-    if (candidate.layer === 'canonical' && canonicalCount >= cfg.canonical_max) continue;
-    if (candidate.layer === 'working' && workingCount >= cfg.working_max) continue;
-    if (candidate.layer === 'episodic' && episodicCount >= cfg.episodic_max) continue;
+    if (candidate.layer === 'canonical' && canonicalCount >= cfg.canonical_max)
+      continue;
+    if (candidate.layer === 'working' && workingCount >= cfg.working_max)
+      continue;
+    if (candidate.layer === 'episodic' && episodicCount >= cfg.episodic_max)
+      continue;
 
     deduped.add(key);
     if (candidate.layer === 'canonical') canonicalCount += 1;
@@ -737,7 +765,9 @@ async function sendConflictCardsFromReport(
       ],
       form: {
         name: 'merge_conflict',
-        inputs: [{ name: 'merged_content', placeholder: '输入合并后的记忆内容' }],
+        inputs: [
+          { name: 'merged_content', placeholder: '输入合并后的记忆内容' },
+        ],
         submitButton: {
           id: 'merge-submit',
           label: '合并提交',
@@ -828,8 +858,17 @@ export async function processTaskIpc(
   deps: IpcDeps,
 ): Promise<void> {
   const registeredGroups = deps.registeredGroups();
-  const writeMemoryResult = (groupFolder: string, requestId: string, payload: object) => {
-    const resultsDir = path.join(DATA_DIR, 'ipc', groupFolder, 'search-results');
+  const writeMemoryResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'search-results',
+    );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
     const tempPath = `${responsePath}.tmp`;
@@ -852,7 +891,10 @@ export async function processTaskIpc(
   switch (data.type) {
     case 'memory_extract_from_archive': {
       if (!data.archiveFile) {
-        logger.warn({ sourceGroup }, 'memory_extract_from_archive missing archiveFile');
+        logger.warn(
+          { sourceGroup },
+          'memory_extract_from_archive missing archiveFile',
+        );
         break;
       }
       const archiveName = path.basename(data.archiveFile);
@@ -867,7 +909,9 @@ export async function processTaskIpc(
       const conversationsDir = path.resolve(
         path.join(GROUPS_DIR, sourceGroup, 'conversations'),
       );
-      const archivePath = path.resolve(path.join(conversationsDir, archiveName));
+      const archivePath = path.resolve(
+        path.join(conversationsDir, archiveName),
+      );
       if (
         !archivePath.startsWith(`${conversationsDir}${path.sep}`) &&
         archivePath !== conversationsDir
@@ -890,7 +934,8 @@ export async function processTaskIpc(
       const markdown = fs.readFileSync(archivePath, 'utf-8');
       const extractConfig = getMemoryExtractConfig(sourceGroup);
       const parsedMessages = parseArchiveMarkdownMessages(markdown);
-      const sanitizedMessages = sanitizeArchiveMessagesForExtraction(parsedMessages);
+      const sanitizedMessages =
+        sanitizeArchiveMessagesForExtraction(parsedMessages);
       const requestPayload = buildArchiveExtractionRequestPayload(
         sourceGroup,
         archiveName,
@@ -899,7 +944,11 @@ export async function processTaskIpc(
 
       try {
         if (sanitizedMessages.length === 0) {
-          recordMemoryMetric(sourceGroup, 'archive:extract_rejected', 'reason=no_sanitized_messages');
+          recordMemoryMetric(
+            sourceGroup,
+            'archive:extract_rejected',
+            'reason=no_sanitized_messages',
+          );
           logger.info(
             { sourceGroup, archiveName, parsedMessages: parsedMessages.length },
             'memory_extract_from_archive skipped due to empty sanitized messages',
@@ -957,7 +1006,11 @@ export async function processTaskIpc(
           `file=${archiveName},created=${created.length}`,
         );
         if (candidates.length === 0) {
-          recordMemoryMetric(sourceGroup, 'archive:extract_rejected', 'reason=no_valid_candidates');
+          recordMemoryMetric(
+            sourceGroup,
+            'archive:extract_rejected',
+            'reason=no_valid_candidates',
+          );
         }
         recordMemoryMetric(
           sourceGroup,
@@ -1436,18 +1489,16 @@ export async function processTaskIpc(
       }
 
       if (!data.task) {
-        logger.warn(
-          { sourceGroup },
-          'request_delegation missing task',
-        );
+        logger.warn({ sourceGroup }, 'request_delegation missing task');
         break;
       }
 
       // Find main group of the same channel
       const sourceChannel = sourceGroup.split('_')[0];
-      const mainEntry = Object.entries(registeredGroups).find(
-        ([, g]) => g.isMain && g.folder.split('_')[0] === sourceChannel,
-      ) || Object.entries(registeredGroups).find(([, g]) => g.isMain);
+      const mainEntry =
+        Object.entries(registeredGroups).find(
+          ([, g]) => g.isMain && g.folder.split('_')[0] === sourceChannel,
+        ) || Object.entries(registeredGroups).find(([, g]) => g.isMain);
       if (!mainEntry) {
         logger.warn('request_delegation: main group not found');
         break;
@@ -1460,13 +1511,16 @@ export async function processTaskIpc(
       );
       const reqSourceName = reqSourceEntry?.[1]?.name || sourceGroup;
       const normalizedTask = stripLeadingTriggerMention(data.task);
-      const { targetFolder, cleanedTask } = parseDelegationTargetFolder(normalizedTask);
+      const { targetFolder, cleanedTask } =
+        parseDelegationTargetFolder(normalizedTask);
 
       // Construct synthetic message to main group
       const reqTrigger = mainGroup.trigger;
       const requesterJid = reqSourceEntry?.[0] || '';
       const requestedTarget = targetFolder
-        ? Object.entries(registeredGroups).find(([, g]) => g.folder === targetFolder)
+        ? Object.entries(registeredGroups).find(
+            ([, g]) => g.folder === targetFolder,
+          )
         : undefined;
       const requestedTargetJid = requestedTarget?.[0] || '';
       const requestedTargetHint = targetFolder
@@ -1684,8 +1738,12 @@ export async function processTaskIpc(
 
       // Construct result message for the source (main) group
       const requesterJid = delegation.requester_jid;
-      const requesterGroup = requesterJid ? registeredGroups[requesterJid] : null;
-      const delegationWorkflowId = (delegation as { workflow_id?: string | null }).workflow_id || undefined;
+      const requesterGroup = requesterJid
+        ? registeredGroups[requesterJid]
+        : null;
+      const delegationWorkflowId =
+        (delegation as { workflow_id?: string | null }).workflow_id ||
+        undefined;
       const resultContent = `[委派结果 | 来自:${targetName} | ID:${data.delegationId}]\n\n${data.result}`;
       const resultMsgId = `del-result-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const resultNow = Date.now().toString();
@@ -1851,9 +1909,17 @@ export async function processTaskIpc(
     }
 
     case 'memory_write': {
-      if (!data.requestId || !data.content || !data.layer || !data.memory_type) {
+      if (
+        !data.requestId ||
+        !data.content ||
+        !data.layer ||
+        !data.memory_type
+      ) {
         logger.warn({ sourceGroup }, 'memory_write missing required fields');
-        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing required fields' });
+        if (data.requestId)
+          writeMemoryResult(sourceGroup, data.requestId, {
+            error: 'missing required fields',
+          });
         break;
       }
       const created = createMemory({
@@ -1875,7 +1941,10 @@ export async function processTaskIpc(
 
     case 'memory_delete': {
       if (!data.requestId || !data.memoryId) {
-        logger.warn({ sourceGroup }, 'memory_delete missing requestId or memoryId');
+        logger.warn(
+          { sourceGroup },
+          'memory_delete missing requestId or memoryId',
+        );
         if (data.requestId) {
           writeMemoryResult(sourceGroup, data.requestId, {
             error: 'missing requestId or memoryId',
@@ -1889,7 +1958,9 @@ export async function processTaskIpc(
           { sourceGroup, memoryId: data.memoryId },
           'memory_delete memory not found in group scope',
         );
-        writeMemoryResult(sourceGroup, data.requestId, { error: 'memory not found' });
+        writeMemoryResult(sourceGroup, data.requestId, {
+          error: 'memory not found',
+        });
         break;
       }
       deleteMemory(data.memoryId);
@@ -1936,14 +2007,22 @@ export async function processTaskIpc(
 
     case 'memory_resolve_conflict': {
       if (!data.requestId || !data.mode) {
-        logger.warn({ sourceGroup }, 'memory_resolve_conflict missing requestId or mode');
-        if (data.requestId) writeMemoryResult(sourceGroup, data.requestId, { error: 'missing required fields (requestId, mode)' });
+        logger.warn(
+          { sourceGroup },
+          'memory_resolve_conflict missing requestId or mode',
+        );
+        if (data.requestId)
+          writeMemoryResult(sourceGroup, data.requestId, {
+            error: 'missing required fields (requestId, mode)',
+          });
         break;
       }
       try {
         if (data.mode === 'keep') {
           if (!data.keep_id || !data.deprecate_id) {
-            writeMemoryResult(sourceGroup, data.requestId, { error: 'keep mode requires keep_id and deprecate_id' });
+            writeMemoryResult(sourceGroup, data.requestId, {
+              error: 'keep mode requires keep_id and deprecate_id',
+            });
             break;
           }
           const result = resolveConflict('keep', {
@@ -1954,8 +2033,14 @@ export async function processTaskIpc(
           writeMemoryResult(sourceGroup, data.requestId, { result });
           recordMemoryMetric(sourceGroup, 'conflict:resolved', `mode=keep`);
         } else if (data.mode === 'merge') {
-          if (!data.merge_ids || data.merge_ids.length !== 2 || !data.merged_content) {
-            writeMemoryResult(sourceGroup, data.requestId, { error: 'merge mode requires merge_ids (2 IDs) and merged_content' });
+          if (
+            !data.merge_ids ||
+            data.merge_ids.length !== 2 ||
+            !data.merged_content
+          ) {
+            writeMemoryResult(sourceGroup, data.requestId, {
+              error: 'merge mode requires merge_ids (2 IDs) and merged_content',
+            });
             break;
           }
           const result = resolveConflict('merge', {
@@ -1966,7 +2051,9 @@ export async function processTaskIpc(
           writeMemoryResult(sourceGroup, data.requestId, { result });
           recordMemoryMetric(sourceGroup, 'conflict:resolved', `mode=merge`);
         } else {
-          writeMemoryResult(sourceGroup, data.requestId, { error: `Unknown mode: ${data.mode}. Use "keep" or "merge".` });
+          writeMemoryResult(sourceGroup, data.requestId, {
+            error: `Unknown mode: ${data.mode}. Use "keep" or "merge".`,
+          });
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -2014,7 +2101,11 @@ export async function processTaskIpc(
         startFrom,
         workflowType,
         deliverable: (data as { deliverable?: string }).deliverable,
-        deployBranch: (data as { deploy_branch?: string }).deploy_branch,
+        workBranch: (data as { work_branch?: string }).work_branch,
+        stagingBaseBranch: (data as { staging_base_branch?: string })
+          .staging_base_branch,
+        stagingWorkBranch: (data as { staging_work_branch?: string })
+          .staging_work_branch,
         accessToken: (data as { access_token?: string }).access_token,
       });
 
@@ -2126,7 +2217,10 @@ export async function processTaskIpc(
 
     case 'list_deliverables': {
       if (!isMain) {
-        logger.warn({ sourceGroup }, 'Unauthorized list_deliverables attempt blocked');
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized list_deliverables attempt blocked',
+        );
         break;
       }
 
@@ -2152,7 +2246,10 @@ export async function processTaskIpc(
         fs.renameSync(tempPath, responsePath);
       }
 
-      logger.info({ sourceGroup, service, count: deliverables.length }, 'Deliverables listed via IPC');
+      logger.info(
+        { sourceGroup, service, count: deliverables.length },
+        'Deliverables listed via IPC',
+      );
       break;
     }
 
@@ -2166,7 +2263,10 @@ export async function processTaskIpc(
       if (isMain || (targetGroup && targetGroup.folder === sourceGroup)) {
         if (deps.reloadContainer) {
           deps.reloadContainer(data.chatJid);
-          logger.info({ chatJid: data.chatJid, sourceGroup }, 'Container reload requested');
+          logger.info(
+            { chatJid: data.chatJid, sourceGroup },
+            'Container reload requested',
+          );
         }
       } else {
         logger.warn(

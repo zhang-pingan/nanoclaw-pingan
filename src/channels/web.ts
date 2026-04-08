@@ -32,7 +32,10 @@ import {
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
-const WEB_PORT = parseInt(process.env.WEB_PORT || webEnv.WEB_PORT || '3000', 10);
+const WEB_PORT = parseInt(
+  process.env.WEB_PORT || webEnv.WEB_PORT || '3000',
+  10,
+);
 const WEB_TOKEN = process.env.WEB_TOKEN || webEnv.WEB_TOKEN;
 const RENDERER_DIR = path.resolve(process.cwd(), 'electron', 'renderer');
 const UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
@@ -167,7 +170,11 @@ class WebChannel {
     }
   }
 
-  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+  async sendFile(
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
     const timestamp = Date.now().toString();
 
     // Always persist to web message DB
@@ -221,7 +228,10 @@ class WebChannel {
     }
   }
 
-  async sendCard(jid: string, card: InteractiveCard): Promise<string | undefined> {
+  async sendCard(
+    jid: string,
+    card: InteractiveCard,
+  ): Promise<string | undefined> {
     const clients = this.clients.get(jid);
     const timestamp = Date.now().toString();
     const cardId = `card_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
@@ -271,11 +281,17 @@ class WebChannel {
   }
 
   // --- HTTP Handler ---
-  private async handleHttp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async handleHttp(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     // CORS for local development
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -390,7 +406,10 @@ class WebChannel {
       if (pathname === '/api/workbench/task/asset' && req.method === 'POST') {
         return this.apiWorkbenchTaskAsset(req, res);
       }
-      if (pathname === '/api/workbench/subtask/retry' && req.method === 'POST') {
+      if (
+        pathname === '/api/workbench/subtask/retry' &&
+        req.method === 'POST'
+      ) {
         return this.apiWorkbenchSubtaskRetry(req, res);
       }
       if (pathname === '/api/card-action' && req.method === 'POST') {
@@ -432,7 +451,11 @@ class WebChannel {
     }
   }
 
-  private serveFile(relPath: string, contentType: string, res: http.ServerResponse): void {
+  private serveFile(
+    relPath: string,
+    contentType: string,
+    res: http.ServerResponse,
+  ): void {
     const filePath = path.join(RENDERER_DIR, relPath.replace(/^\//, ''));
     if (!fs.existsSync(filePath)) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -466,7 +489,10 @@ class WebChannel {
     res.end(data);
   }
 
-  private serveRendererStatic(pathname: string, res: http.ServerResponse): void {
+  private serveRendererStatic(
+    pathname: string,
+    res: http.ServerResponse,
+  ): void {
     const filePath = path.join(RENDERER_DIR, pathname.replace(/^\//, ''));
     if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
       // Fall back to index.html (SPA)
@@ -492,7 +518,9 @@ class WebChannel {
       '.woff2': 'font/woff2',
     };
     const data = fs.readFileSync(filePath);
-    res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': mime[ext] || 'application/octet-stream',
+    });
     res.end(data);
   }
 
@@ -515,7 +543,9 @@ class WebChannel {
     const requestedFolder = reqUrl.searchParams.get('folder') || '';
     const query = (reqUrl.searchParams.get('query') || '').trim();
     const rawLimit = parseInt(reqUrl.searchParams.get('limit') || '200', 10);
-    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 1000) : 200;
+    const limit = Number.isFinite(rawLimit)
+      ? Math.min(Math.max(rawLimit, 1), 1000)
+      : 200;
 
     const registered = this.opts.registeredGroups();
     const webGroups = Object.entries(registered).filter(([jid]) =>
@@ -532,7 +562,9 @@ class WebChannel {
       }
       groupFolder = group.folder;
     } else if (requestedFolder) {
-      const matched = webGroups.find(([, group]) => group.folder === requestedFolder);
+      const matched = webGroups.find(
+        ([, group]) => group.folder === requestedFolder,
+      );
       if (!matched) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'group not found' }));
@@ -563,7 +595,10 @@ class WebChannel {
         );
       })
       .catch((err: unknown) => {
-        logger.error({ err, groupFolder, query }, 'Failed to query memories for web API');
+        logger.error(
+          { err, groupFolder, query },
+          'Failed to query memories for web API',
+        );
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Failed to query memories' }));
       });
@@ -603,7 +638,10 @@ class WebChannel {
     return JSON.parse(raw);
   }
 
-  private async apiCreateMemory(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiCreateMemory(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
@@ -634,7 +672,9 @@ class WebChannel {
     }
     if (!data.content || !data.layer || !data.memory_type) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'content, layer, memory_type required' }));
+      res.end(
+        JSON.stringify({ error: 'content, layer, memory_type required' }),
+      );
       return;
     }
 
@@ -651,7 +691,10 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true, memory: created }));
   }
 
-  private async apiUpdateMemory(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiUpdateMemory(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
@@ -710,7 +753,10 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true, memory: updated }));
   }
 
-  private async apiDeleteMemory(reqUrl: URL, res: http.ServerResponse): Promise<void> {
+  private async apiDeleteMemory(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const memoryId = reqUrl.searchParams.get('id') || '';
     const jid = reqUrl.searchParams.get('jid') || '';
     const folder = reqUrl.searchParams.get('folder') || '';
@@ -739,7 +785,10 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true, deleted: true, memoryId }));
   }
 
-  private async apiMemoryDoctor(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiMemoryDoctor(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
@@ -750,18 +799,25 @@ class WebChannel {
     }
 
     const data = body as { jid?: string; folder?: string; staleDays?: number };
-    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    const groupFolder = this.resolveWebGroupFolder({
+      jid: data.jid,
+      folder: data.folder,
+    });
     if (!groupFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid group scope' }));
       return;
     }
-    const staleDays = Number.isFinite(Number(data.staleDays)) ? Number(data.staleDays) : 7;
+    const staleDays = Number.isFinite(Number(data.staleDays))
+      ? Number(data.staleDays)
+      : 7;
 
-    const { doctorMemories, getMemoryById, recordMemoryMetric } = await import('../db.js');
+    const { doctorMemories, getMemoryById, recordMemoryMetric } =
+      await import('../db.js');
     const report = doctorMemories(groupFolder, staleDays);
     const idSet = new Set<string>();
-    for (const g of report.duplicateGroups) for (const id of g.ids) idSet.add(id);
+    for (const g of report.duplicateGroups)
+      for (const id of g.ids) idSet.add(id);
     for (const g of report.conflictGroups) {
       for (const id of g.positiveIds) idSet.add(id);
       for (const id of g.negativeIds) idSet.add(id);
@@ -776,10 +832,20 @@ class WebChannel {
     recordMemoryMetric(groupFolder, 'doctor', `staleDays=${staleDays}`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, group_folder: groupFolder, report, memoryMap }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        group_folder: groupFolder,
+        report,
+        memoryMap,
+      }),
+    );
   }
 
-  private async apiMemoryGc(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiMemoryGc(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
@@ -796,22 +862,34 @@ class WebChannel {
       dryRun?: boolean;
       mode?: 'duplicates' | 'stale' | 'all';
     };
-    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    const groupFolder = this.resolveWebGroupFolder({
+      jid: data.jid,
+      folder: data.folder,
+    });
     if (!groupFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid group scope' }));
       return;
     }
 
-    const staleDays = Number.isFinite(Number(data.staleDays)) ? Number(data.staleDays) : 14;
+    const staleDays = Number.isFinite(Number(data.staleDays))
+      ? Number(data.staleDays)
+      : 14;
     const dryRun = data.dryRun !== undefined ? data.dryRun : true;
     const mode = data.mode || 'all';
 
-    const { gcMemories, deleteMemory, recordMemoryMetric } = await import('../db.js');
-    const base = gcMemories(groupFolder, { dryRun: true, staleWorkingDays: staleDays });
-    const duplicateDeletedIds = mode === 'stale' ? [] : base.duplicateDeletedIds;
+    const { gcMemories, deleteMemory, recordMemoryMetric } =
+      await import('../db.js');
+    const base = gcMemories(groupFolder, {
+      dryRun: true,
+      staleWorkingDays: staleDays,
+    });
+    const duplicateDeletedIds =
+      mode === 'stale' ? [] : base.duplicateDeletedIds;
     const staleDeletedIds = mode === 'duplicates' ? [] : base.staleDeletedIds;
-    const executeIds = Array.from(new Set([...duplicateDeletedIds, ...staleDeletedIds]));
+    const executeIds = Array.from(
+      new Set([...duplicateDeletedIds, ...staleDeletedIds]),
+    );
 
     if (!dryRun) {
       for (const id of executeIds) deleteMemory(id);
@@ -839,7 +917,10 @@ class WebChannel {
     );
   }
 
-  private async apiMemoryMetrics(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiMemoryMetrics(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
@@ -854,7 +935,10 @@ class WebChannel {
       folder?: string;
       hours?: number;
     };
-    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    const groupFolder = this.resolveWebGroupFolder({
+      jid: data.jid,
+      folder: data.folder,
+    });
     if (!groupFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid group scope' }));
@@ -875,7 +959,10 @@ class WebChannel {
     );
   }
 
-  private async apiMemoryConflictKeep(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiMemoryConflictKeep(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
@@ -891,7 +978,10 @@ class WebChannel {
       keep_id?: string;
       deprecate_id?: string;
     };
-    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    const groupFolder = this.resolveWebGroupFolder({
+      jid: data.jid,
+      folder: data.folder,
+    });
     if (!groupFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid group scope' }));
@@ -910,16 +1000,27 @@ class WebChannel {
         deprecateId: data.deprecate_id,
         groupFolder,
       });
-      recordMemoryMetric(groupFolder, 'conflict:resolved:keep', `${data.keep_id}->${data.deprecate_id}`);
+      recordMemoryMetric(
+        groupFolder,
+        'conflict:resolved:keep',
+        `${data.keep_id}->${data.deprecate_id}`,
+      );
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, result }));
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
   }
 
-  private async apiMemoryConflictMerge(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiMemoryConflictMerge(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
@@ -935,15 +1036,24 @@ class WebChannel {
       merge_ids?: string[];
       merged_content?: string;
     };
-    const groupFolder = this.resolveWebGroupFolder({ jid: data.jid, folder: data.folder });
+    const groupFolder = this.resolveWebGroupFolder({
+      jid: data.jid,
+      folder: data.folder,
+    });
     if (!groupFolder) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid group scope' }));
       return;
     }
-    if (!Array.isArray(data.merge_ids) || data.merge_ids.length !== 2 || !data.merged_content) {
+    if (
+      !Array.isArray(data.merge_ids) ||
+      data.merge_ids.length !== 2 ||
+      !data.merged_content
+    ) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'merge_ids(2) and merged_content required' }));
+      res.end(
+        JSON.stringify({ error: 'merge_ids(2) and merged_content required' }),
+      );
       return;
     }
 
@@ -954,19 +1064,24 @@ class WebChannel {
         mergedContent: data.merged_content,
         groupFolder,
       });
-      recordMemoryMetric(groupFolder, 'conflict:resolved:merge', data.merge_ids.join(','));
+      recordMemoryMetric(
+        groupFolder,
+        'conflict:resolved:merge',
+        data.merge_ids.join(','),
+      );
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, result }));
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
   }
 
-  private apiGetMessages(
-    reqUrl: URL,
-    res: http.ServerResponse,
-  ): void {
+  private apiGetMessages(reqUrl: URL, res: http.ServerResponse): void {
     const jid = reqUrl.searchParams.get('jid') || '';
     const since = reqUrl.searchParams.get('since') || '0';
     const before = reqUrl.searchParams.get('before') || '';
@@ -1033,7 +1148,11 @@ class WebChannel {
     }
 
     const uniqIds = Array.from(
-      new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0)),
+      new Set(
+        ids.filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        ),
+      ),
     );
     if (uniqIds.length === 0) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1045,12 +1164,14 @@ class WebChannel {
     const { deleteMessagesByIds } = await import('../db.js');
     const deletedMessages = deleteMessagesByIds(jid, uniqIds);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      ok: true,
-      deleted: deletedWeb,
-      deleted_web_messages: deletedWeb,
-      deleted_messages: deletedMessages,
-    }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        deleted: deletedWeb,
+        deleted_web_messages: deletedWeb,
+        deleted_messages: deletedMessages,
+      }),
+    );
   }
 
   private apiGetTasks(reqUrl: URL, res: http.ServerResponse): void {
@@ -1140,7 +1261,9 @@ class WebChannel {
     const result = await this.opts.stopAgent(body.groupJid);
     if (!result.ok) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: result.error || 'Failed to stop agent' }));
+      res.end(
+        JSON.stringify({ error: result.error || 'Failed to stop agent' }),
+      );
       return;
     }
 
@@ -1189,7 +1312,10 @@ class WebChannel {
     res.end(JSON.stringify({ workflows }));
   }
 
-  private async apiDeleteWorkflow(reqUrl: URL, res: http.ServerResponse): Promise<void> {
+  private async apiDeleteWorkflow(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const id = reqUrl.searchParams.get('id');
     if (!id) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1209,7 +1335,10 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true }));
   }
 
-  private async apiStopWorkflow(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiStopWorkflow(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
       chunks.push(Buffer.from(chunk));
@@ -1242,13 +1371,15 @@ class WebChannel {
     let services: string[] = [];
     if (fs.existsSync(servicesPath)) {
       try {
-        const raw = JSON.parse(fs.readFileSync(servicesPath, 'utf-8')) as Record<
-          string,
-          unknown
-        >;
+        const raw = JSON.parse(
+          fs.readFileSync(servicesPath, 'utf-8'),
+        ) as Record<string, unknown>;
         services = Object.keys(raw).sort((a, b) => a.localeCompare(b, 'zh-CN'));
       } catch (err) {
-        logger.warn({ err, servicesPath }, 'Failed to parse services.json for web workflow options');
+        logger.warn(
+          { err, servicesPath },
+          'Failed to parse services.json for web workflow options',
+        );
       }
     }
 
@@ -1258,7 +1389,12 @@ class WebChannel {
     > = {};
 
     for (const service of services) {
-      const iterationDir = path.join(process.cwd(), 'projects', service, 'iteration');
+      const iterationDir = path.join(
+        process.cwd(),
+        'projects',
+        service,
+        'iteration',
+      );
       if (!fs.existsSync(iterationDir)) {
         requirementsByService[service] = [];
         continue;
@@ -1280,7 +1416,9 @@ class WebChannel {
             deliverables,
           };
         })
-        .sort((a, b) => b.requirement_name.localeCompare(a.requirement_name, 'zh-CN'));
+        .sort((a, b) =>
+          b.requirement_name.localeCompare(a.requirement_name, 'zh-CN'),
+        );
 
       requirementsByService[service] = requirements;
     }
@@ -1301,7 +1439,9 @@ class WebChannel {
     res.end(JSON.stringify({ tasks }));
   }
 
-  private async apiDeleteAllWorkbenchTaskData(res: http.ServerResponse): Promise<void> {
+  private async apiDeleteAllWorkbenchTaskData(
+    res: http.ServerResponse,
+  ): Promise<void> {
     const { deleteAllWorkbenchTaskData } = await import('../db.js');
     const deleted = deleteAllWorkbenchTaskData();
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1350,7 +1490,9 @@ class WebChannel {
       start_from?: string;
       workflow_type?: string;
       deliverable?: string;
-      deploy_branch?: string;
+      work_branch?: string;
+      staging_base_branch?: string;
+      staging_work_branch?: string;
       access_token?: string;
     };
 
@@ -1378,7 +1520,9 @@ class WebChannel {
       startFrom: data.start_from,
       workflowType: data.workflow_type,
       deliverable: data.deliverable,
-      deployBranch: data.deploy_branch,
+      workBranch: data.work_branch,
+      stagingBaseBranch: data.staging_base_branch,
+      stagingWorkBranch: data.staging_work_branch,
       accessToken: data.access_token,
     });
 
@@ -1493,12 +1637,18 @@ class WebChannel {
     };
     if (!data.task_id || !data.action_item_id || !data.action) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'task_id, action_item_id and action required' }));
+      res.end(
+        JSON.stringify({
+          error: 'task_id, action_item_id and action required',
+        }),
+      );
       return;
     }
 
     const detail = getWorkbenchTaskDetail(data.task_id);
-    const item = detail?.action_items?.find((entry) => entry.id === data.action_item_id);
+    const item = detail?.action_items?.find(
+      (entry) => entry.id === data.action_item_id,
+    );
     if (!detail || !item) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Action item not found' }));
@@ -1513,7 +1663,9 @@ class WebChannel {
         return;
       }
       const groups = this.opts.registeredGroups();
-      const targetEntry = Object.entries(groups).find(([, group]) => group.folder === item.group_folder);
+      const targetEntry = Object.entries(groups).find(
+        ([, group]) => group.folder === item.group_folder,
+      );
       if (!targetEntry) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Target group not found' }));
@@ -1521,7 +1673,8 @@ class WebChannel {
       }
       const [chatJid] = targetEntry;
       const content =
-        item.source_type === 'ask_user_question' || item.source_type === 'request_human_input'
+        item.source_type === 'ask_user_question' ||
+        item.source_type === 'request_human_input'
           ? `/answer ${item.source_ref_id} ${replyText}`
           : replyText;
       this.injectWorkbenchReply(chatJid, content);
@@ -1561,7 +1714,11 @@ class WebChannel {
       res.end(JSON.stringify({ error: 'Invalid JSON body' }));
       return;
     }
-    const data = body as { task_id?: string; author?: string; content?: string };
+    const data = body as {
+      task_id?: string;
+      author?: string;
+      content?: string;
+    };
     if (!data.task_id || !data.content?.trim()) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'task_id and content required' }));
@@ -1654,7 +1811,10 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true }));
   }
 
-  private async apiCardAction(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async apiCardAction(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
       chunks.push(Buffer.from(chunk));
@@ -1691,7 +1851,11 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true }));
   }
 
-  private async apiUpload(req: http.IncomingMessage, reqUrl: URL, res: http.ServerResponse): Promise<void> {
+  private async apiUpload(
+    req: http.IncomingMessage,
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const contentType = req.headers['content-type'] || '';
     if (!contentType.includes('multipart/form-data')) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1731,14 +1895,19 @@ class WebChannel {
     const text = body.toString('utf-8');
 
     // Parse multipart (simple approach: find filename and data sections)
-    const parts = text.split(boundary).filter((p) => p.trim() && !p.startsWith('--'));
+    const parts = text
+      .split(boundary)
+      .filter((p) => p.trim() && !p.startsWith('--'));
     const uploadedFiles: { name: string; hostPath: string }[] = [];
 
     for (const part of parts) {
       const headerEnd = part.indexOf('\r\n\r\n');
       if (headerEnd === -1) continue;
       const header = part.slice(0, headerEnd);
-      const data = part.slice(headerEnd + 4, part.endsWith('\r\n') ? -2 : undefined);
+      const data = part.slice(
+        headerEnd + 4,
+        part.endsWith('\r\n') ? -2 : undefined,
+      );
 
       const filenameMatch = header.match(/filename="([^"]+)"/);
       if (!filenameMatch) continue;
@@ -1755,7 +1924,10 @@ class WebChannel {
 
       fs.writeFileSync(filePath, fileData);
       uploadedFiles.push({ name: filename, hostPath: filePath });
-      logger.info({ filename, size: fileData.length, jid, hostPath: filePath }, 'Web channel file uploaded');
+      logger.info(
+        { filename, size: fileData.length, jid, hostPath: filePath },
+        'Web channel file uploaded',
+      );
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1793,11 +1965,20 @@ class WebChannel {
     const data = fs.readFileSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
     const mime: Record<string, string> = {
-      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
-      '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown',
-      '.json': 'application/json', '.js': 'application/javascript',
-      '.html': 'text/html', '.css': 'text/css', '.zip': 'application/zip',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.json': 'application/json',
+      '.js': 'application/javascript',
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.zip': 'application/zip',
     };
     res.writeHead(200, {
       'Content-Type': mime[ext] || 'application/octet-stream',
@@ -1845,13 +2026,24 @@ class WebChannel {
     const data = fs.readFileSync(resolved);
     const ext = path.extname(resolved);
     const mime: Record<string, string> = {
-      '.txt': 'text/plain', '.md': 'text/markdown', '.json': 'application/json',
-      '.js': 'application/javascript', '.ts': 'application/typescript', '.py': 'text/x-python',
-      '.html': 'text/html', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg',
-      '.gif': 'image/gif', '.svg': 'image/svg+xml', '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.json': 'application/json',
+      '.js': 'application/javascript',
+      '.ts': 'application/typescript',
+      '.py': 'text/x-python',
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.pdf': 'application/pdf',
       '.zip': 'application/zip',
     };
-    res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': mime[ext] || 'application/octet-stream',
+    });
     res.end(data);
   }
 
@@ -1953,7 +2145,13 @@ class WebChannel {
         // Create chat record first (required for foreign key in messages table)
         const groups = this.opts.registeredGroups();
         const chatName = groups[chatJid]?.name || chatJid;
-        this.opts.onChatMetadata(chatJid, now.toString(), chatName, 'web', true);
+        this.opts.onChatMetadata(
+          chatJid,
+          now.toString(),
+          chatName,
+          'web',
+          true,
+        );
         this.opts.onMessage(chatJid, newMsg);
         // Also persist to web message DB for UI history (with original content)
         storeWebMessage({
@@ -1977,7 +2175,10 @@ class WebChannel {
           groups: Object.entries(registered)
             .filter(([jid]) => jid.startsWith('web:'))
             .map(([jid, g]) => ({
-              jid, name: g.name, folder: g.folder, isMain: g.isMain ?? false,
+              jid,
+              name: g.name,
+              folder: g.folder,
+              isMain: g.isMain ?? false,
             })),
           selectedJid: chatJid,
         });
@@ -1986,7 +2187,10 @@ class WebChannel {
       case 'card_action': {
         const { value, cardId, formValue } = msg as IncomingMsg;
         if (!value?.action) {
-          send({ type: 'error', message: 'value.action required for card_action' });
+          send({
+            type: 'error',
+            message: 'value.action required for card_action',
+          });
           return;
         }
         if (this.onCardAction) {
@@ -2006,7 +2210,10 @@ class WebChannel {
         break;
       }
       default:
-        send({ type: 'error', message: `Unknown message type: ${(msg as any).type}` });
+        send({
+          type: 'error',
+          message: `Unknown message type: ${(msg as any).type}`,
+        });
     }
   }
 }

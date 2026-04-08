@@ -11,6 +11,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import YAML from 'yaml';
 
 import { PROJECT_ROOT } from './config.js';
 import {
@@ -26,7 +27,13 @@ import {
   updateWorkflow,
 } from './db.js';
 import { logger } from './logger.js';
-import { CardButton, CardSection, InteractiveCard, RegisteredGroup, Workflow } from './types.js';
+import {
+  CardButton,
+  CardSection,
+  InteractiveCard,
+  RegisteredGroup,
+  Workflow,
+} from './types.js';
 import {
   getWorkflowConfigError,
   getWorkflowConfigs,
@@ -45,6 +52,34 @@ import {
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
+
+interface DeliverableMetadata {
+  fileName: string;
+  files: string[];
+  work_branch: string;
+  staging_base_branch: string;
+  staging_work_branch: string;
+}
+
+interface ParsedDelegationPayload {
+  summary?: string;
+  deliverable?: string;
+  work_branch?: string;
+  staging_base_branch?: string;
+  staging_work_branch?: string;
+  access_token?: string;
+  test_doc?: string;
+  total?: number;
+  passed?: number;
+  failed?: number;
+  blocked?: number;
+  bugs?: Array<{
+    id: string;
+    title?: string;
+    severity?: string;
+    related_case?: string;
+  }>;
+}
 
 // -------------------------------------------------------
 // Role resolution — per trigger channel
@@ -68,9 +103,7 @@ function resolveRoles(
 
   const groups = getDeps().registeredGroups();
   const sourceGroup = groups[sourceJid];
-  const channel = sourceGroup
-    ? getChannelFromFolder(sourceGroup.folder)
-    : '';
+  const channel = sourceGroup ? getChannelFromFolder(sourceGroup.folder) : '';
 
   const roles: Record<string, string> = {};
   const missing: string[] = [];
@@ -105,7 +138,10 @@ function resolveRoles(
 export interface WorkflowDeps {
   registeredGroups: () => Record<string, RegisteredGroup>;
   enqueueMessageCheck: (groupJid: string) => void;
-  sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
+  sendCard?: (
+    jid: string,
+    card: InteractiveCard,
+  ) => Promise<string | undefined>;
 }
 
 let deps: WorkflowDeps | null = null;
@@ -206,7 +242,11 @@ function injectDelegation(
 }
 
 /** Send a progress message to the main group (scoped to the same channel as sourceJid when provided). */
-function notifyMain(message: string, sourceJid?: string, workflowId?: string): void {
+function notifyMain(
+  message: string,
+  sourceJid?: string,
+  workflowId?: string,
+): void {
   const groups = getDeps().registeredGroups();
   const mainJid = findMainJid(groups, sourceJid);
   if (!mainJid) {
@@ -232,7 +272,12 @@ function notifyMain(message: string, sourceJid?: string, workflowId?: string): v
   getDeps().enqueueMessageCheck(mainJid);
 }
 
-function notifyGroupFolder(folder: string, senderName: string, message: string, workflowId?: string): void {
+function notifyGroupFolder(
+  folder: string,
+  senderName: string,
+  message: string,
+  workflowId?: string,
+): void {
   const groups = getDeps().registeredGroups();
   const targetJid = findJidByFolder(folder, groups);
   if (!targetJid) {
@@ -304,29 +349,95 @@ function delegateTo(
   return delegationId;
 }
 
+function readFrontMatter(content: string): Record<string, unknown> | null {
+  if (!content.startsWith('---\n')) return null;
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return null;
+  const frontMatter = content.slice(4, end);
+  try {
+    const parsed = YAML.parse(frontMatter);
+    return parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function readMetadataFromFile(filePath: string): Partial<DeliverableMetadata> {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const metadata = readFrontMatter(content);
+  if (!metadata) return {};
+
+  return {
+    work_branch:
+      typeof metadata.work_branch === 'string'
+        ? metadata.work_branch.trim()
+        : '',
+    staging_base_branch:
+      typeof metadata.staging_base_branch === 'string'
+        ? metadata.staging_base_branch.trim()
+        : '',
+    staging_work_branch:
+      typeof metadata.staging_work_branch === 'string'
+        ? metadata.staging_work_branch.trim()
+        : '',
+  };
+}
+
 /** Read a specific deliverable directory and return its metadata. */
 function readDeliverableDir(
   service: string,
   dirName: string,
-): { branch: string; fileName: string; files: string[] } | null {
-  const delivDir = path.join(PROJECT_ROOT, 'projects', service, 'iteration', dirName);
+): DeliverableMetadata | null {
+  const delivDir = path.join(
+    PROJECT_ROOT,
+    'projects',
+    service,
+    'iteration',
+    dirName,
+  );
   if (!fs.existsSync(delivDir)) return null;
 
   const files = fs.readdirSync(delivDir).filter((f) => f.endsWith('.md'));
   if (files.length === 0) return null;
 
-  let branch = '';
-  // Try to read branch from any .md file
+  const metadata: DeliverableMetadata = {
+    fileName: dirName,
+    files,
+    work_branch: '',
+    staging_base_branch: '',
+    staging_work_branch: '',
+  };
+
   for (const file of files) {
-    const content = fs.readFileSync(path.join(delivDir, file), 'utf-8');
-    const branchMatch = content.match(/工作分支[：:]\s*(.+)/);
-    if (branchMatch) {
-      branch = branchMatch[1].trim();
-      break;
-    }
+    const parsed = readMetadataFromFile(path.join(delivDir, file));
+    metadata.work_branch ||= parsed.work_branch || '';
+    metadata.staging_base_branch ||= parsed.staging_base_branch || '';
+    metadata.staging_work_branch ||= parsed.staging_work_branch || '';
   }
 
-  return { branch, fileName: dirName, files };
+  return metadata;
+}
+
+function buildDocPath(
+  workflow: Pick<Workflow, 'service' | 'deliverable'>,
+  fileName: 'plan.md' | 'dev.md' | 'test.md',
+): string {
+  return `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/${fileName}`;
+}
+
+function parseDelegationPayload(
+  result: string | null | undefined,
+): ParsedDelegationPayload {
+  if (!result) return {};
+  try {
+    const parsed = JSON.parse(result);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed as ParsedDelegationPayload;
+  } catch {
+    return {};
+  }
 }
 
 /** Get terminal state names from a workflow type config. */
@@ -363,15 +474,16 @@ function buildTemplateVars(
   return {
     name: workflow.name,
     service: workflow.service,
-    branch: workflow.branch || 'N/A',
+    work_branch: workflow.work_branch || 'N/A',
     id: workflow.id,
     round: workflow.round,
     deliverable: workflow.deliverable || 'N/A',
-    deploy_branch: workflow.deploy_branch || '',
+    staging_base_branch: workflow.staging_base_branch || '',
+    staging_work_branch: workflow.staging_work_branch || '',
     access_token: workflow.access_token || '',
-    test_doc:
-      extra?.testDoc ||
-      `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/test.md`,
+    plan_doc: buildDocPath(workflow, 'plan.md'),
+    dev_doc: buildDocPath(workflow, 'dev.md'),
+    test_doc: extra?.testDoc || buildDocPath(workflow, 'test.md'),
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
@@ -387,19 +499,19 @@ function finalizeDelegationTaskContent(
   },
 ): string {
   if (skill === 'dev-bugfix') {
-    const testDoc =
-      extra?.testDoc ||
-      `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/test.md`;
+    const testDoc = extra?.testDoc || buildDocPath(workflow, 'test.md');
     const testDocLine = `测试文档：${testDoc}`;
     const hasTestDocLine = taskContent.includes('测试文档：');
-    let finalContent = hasTestDocLine ? taskContent : `${taskContent}\n${testDocLine}`;
+    let finalContent = hasTestDocLine
+      ? taskContent
+      : `${taskContent}\n${testDocLine}`;
 
-    if (!workflow.branch) {
+    if (!workflow.work_branch) {
       const warning = [
         '[分支缺失警告]',
         '当前 workflow 未记录明确的工作分支。',
         '请先从以下交付文档确认工作分支后再修复：',
-        `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/dev.md`,
+        buildDocPath(workflow, 'dev.md'),
         '本轮修复记录应更新到以下测试文档：',
         testDoc,
         '若仍无法确定，请不要猜测或直接在主干分支修改；请停止修改并反馈失败原因。',
@@ -410,10 +522,13 @@ function finalizeDelegationTaskContent(
     return finalContent;
   }
 
-  if (skill !== 'ops-staging-deploy' || !workflow.deploy_branch) {
+  if (skill !== 'ops-staging-deploy' || !workflow.staging_work_branch) {
     return taskContent;
   }
-  const suffix = `deploy_branch: ${workflow.deploy_branch}`;
+  if (taskContent.includes('预发工作分支：')) {
+    return taskContent;
+  }
+  const suffix = `预发工作分支：${workflow.staging_work_branch}`;
   return taskContent ? `${taskContent}\n${suffix}` : suffix;
 }
 
@@ -436,6 +551,7 @@ function applyTransition(
     revisionText?: string;
     accessToken?: string;
     testDoc?: string;
+    workflowUpdates?: Parameters<typeof updateWorkflow>[1];
   },
 ): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -454,6 +570,9 @@ function applyTransition(
   if (extra?.accessToken !== undefined) {
     updates.access_token = extra.accessToken;
   }
+  if (extra?.workflowUpdates) {
+    Object.assign(updates, extra.workflowUpdates);
+  }
 
   // 1. Increment round if needed
   let round = workflow.round;
@@ -466,6 +585,7 @@ function applyTransition(
   const vars = buildTemplateVars(
     {
       ...workflow,
+      ...updates,
       round,
     },
     extra,
@@ -479,12 +599,12 @@ function applyTransition(
     const taskContent = transition.task_template
       ? renderTemplate(transition.task_template, vars, roles)
       : '';
-      const finalTaskContent = finalizeDelegationTaskContent(
-        delegateSkill,
-        taskContent,
-        workflow,
-        extra,
-      );
+    const finalTaskContent = finalizeDelegationTaskContent(
+      delegateSkill,
+      taskContent,
+      { ...workflow, ...updates, round },
+      extra,
+    );
 
     try {
       const delegationId = delegateTo(
@@ -515,7 +635,10 @@ function applyTransition(
   // 4. Update workflow state
   updateWorkflow(workflow.id, updates);
   if (updates.current_delegation_id) {
-    syncWorkbenchOnDelegationCreated(workflow.id, updates.current_delegation_id);
+    syncWorkbenchOnDelegationCreated(
+      workflow.id,
+      updates.current_delegation_id,
+    );
   }
   syncWorkbenchOnTransition(
     workflow.id,
@@ -527,7 +650,11 @@ function applyTransition(
 
   // 5. Send notification
   if (transition.notify) {
-    notifyMain(renderTemplate(transition.notify, vars, roles), workflow.source_jid, workflow.id);
+    notifyMain(
+      renderTemplate(transition.notify, vars, roles),
+      workflow.source_jid,
+      workflow.id,
+    );
   }
 
   // 6. Send card if specified
@@ -550,7 +677,9 @@ export interface CreateWorkflowOpts {
   startFrom: string;
   workflowType: string;
   deliverable?: string;
-  deployBranch?: string;
+  workBranch?: string;
+  stagingBaseBranch?: string;
+  stagingWorkBranch?: string;
   accessToken?: string;
 }
 
@@ -611,9 +740,12 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       name: opts.name,
       service: opts.service,
       start_from: opts.startFrom,
-      branch: deliverable.branch,
+      work_branch: opts.workBranch || deliverable.work_branch,
       deliverable: deliverable.fileName,
-      deploy_branch: opts.deployBranch || '',
+      staging_base_branch:
+        opts.stagingBaseBranch || deliverable.staging_base_branch,
+      staging_work_branch:
+        opts.stagingWorkBranch || deliverable.staging_work_branch,
       access_token: opts.accessToken || '',
       status: entryPoint.state,
       current_delegation_id: '',
@@ -697,9 +829,10 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     name: opts.name,
     service: opts.service,
     start_from: opts.startFrom,
-    branch: '',
+    work_branch: opts.workBranch || '',
     deliverable: '',
-    deploy_branch: opts.deployBranch || '',
+    staging_base_branch: opts.stagingBaseBranch || '',
+    staging_work_branch: opts.stagingWorkBranch || '',
     access_token: opts.accessToken || '',
     status: entryPoint.state,
     current_delegation_id: '',
@@ -1028,31 +1161,38 @@ export function onDelegationComplete(delegationId: string): void {
     return;
   }
 
-  // Parse result summary
+  // Parse result summary and persisted workflow fields
   let resultSummary = delegation.result || '';
   let testDoc = '';
-  try {
-    const p = JSON.parse(resultSummary);
-    if (p.summary) {
-      resultSummary = p.summary;
-    } else if (p.total !== undefined) {
-      resultSummary = `总用例 ${p.total}，通过 ${p.passed}，失败 ${p.failed}`;
-      if (p.bugs?.length) {
-        resultSummary +=
-          '\n' + p.bugs.map((b: any) => `- ${b.id}: ${b.title}`).join('\n');
-      }
+  const payload = parseDelegationPayload(delegation.result);
+  const workflowUpdates: Parameters<typeof updateWorkflow>[1] = {};
+  if (payload.summary) {
+    resultSummary = payload.summary;
+  } else if (payload.total !== undefined) {
+    resultSummary = `总用例 ${payload.total}，通过 ${payload.passed}，失败 ${payload.failed}`;
+    if (payload.bugs?.length) {
+      resultSummary +=
+        '\n' + payload.bugs.map((b) => `- ${b.id}: ${b.title}`).join('\n');
     }
-    if (typeof p.test_doc === 'string' && p.test_doc.trim()) {
-      testDoc = p.test_doc.trim();
-    }
-  } catch {
-    /* not JSON, use raw */
+  }
+  if (payload.deliverable) workflowUpdates.deliverable = payload.deliverable;
+  if (payload.work_branch) workflowUpdates.work_branch = payload.work_branch;
+  if (payload.staging_base_branch) {
+    workflowUpdates.staging_base_branch = payload.staging_base_branch;
+  }
+  if (payload.staging_work_branch) {
+    workflowUpdates.staging_work_branch = payload.staging_work_branch;
+  }
+  if (payload.access_token) workflowUpdates.access_token = payload.access_token;
+  if (typeof payload.test_doc === 'string' && payload.test_doc.trim()) {
+    testDoc = payload.test_doc.trim();
   }
 
   applyTransition(workflow, transition, roles, {
     delegationResult: delegation.result || '',
     resultSummary,
     testDoc,
+    workflowUpdates,
   });
 }
 
@@ -1060,7 +1200,10 @@ export function onDelegationComplete(delegationId: string): void {
 // Card helpers — config-driven
 // -------------------------------------------------------
 
-const ACTION_BUTTONS: Record<string, { label: string; type?: 'primary' | 'danger' | 'default' }> = {
+const ACTION_BUTTONS: Record<
+  string,
+  { label: string; type?: 'primary' | 'danger' | 'default' }
+> = {
   approve: { label: '✅ 确认执行', type: 'primary' },
   approve_dev: { label: '✅ 进入开发', type: 'primary' },
   skip: { label: '⏭ 跳过此节点' },
@@ -1089,7 +1232,8 @@ function getActionButtonLabel(actionName: string, workflow: Workflow): string {
       if (actionName === 'approve') return '✅ 开始预发部署';
       break;
     case 'testing_confirm':
-      if (actionName === 'submit_access_token') return '🔐 提交 Token 并开始测试';
+      if (actionName === 'submit_access_token')
+        return '🔐 提交 Token 并开始测试';
       if (actionName === 'skip') return '⏭ 跳过鉴权直接测试';
       break;
     default:
@@ -1136,7 +1280,8 @@ function buildConfigCard(
   const card: InteractiveCard = {
     header: {
       title: header,
-      color: (cardConfig.header_color || 'blue') as InteractiveCard['header']['color'],
+      color: (cardConfig.header_color ||
+        'blue') as InteractiveCard['header']['color'],
     },
     body,
     buttons: buttons.length > 0 ? buttons : undefined,
@@ -1146,7 +1291,12 @@ function buildConfigCard(
     if (workflow.status === 'testing_confirm') {
       card.form = {
         name: 'access_token_form',
-        inputs: [{ name: 'access_token', placeholder: '请输入接口测试所需的 access_token' }],
+        inputs: [
+          {
+            name: 'access_token',
+            placeholder: '请输入接口测试所需的 access_token',
+          },
+        ],
         submitButton: {
           id: 'submit_access_token',
           label: '🔐 提交 Token 并开始测试',
@@ -1156,7 +1306,12 @@ function buildConfigCard(
     } else {
       card.form = {
         name: 'revision_form',
-        inputs: [{ name: 'revision_text', placeholder: '如需修改方案，请输入修改意见...' }],
+        inputs: [
+          {
+            name: 'revision_text',
+            placeholder: '如需修改方案，请输入修改意见...',
+          },
+        ],
         submitButton: {
           id: 'request_revision',
           label: '✏️ 提交修改',
@@ -1230,7 +1385,7 @@ function buildWorkflowListCard(workflows: Workflow[]): InteractiveCard {
         ? `⏸ 已中断（原状态：${labels[w.paused_from || ''] || w.paused_from || '未知'}）`
         : labels[w.status] || w.status;
 
-    const body = `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${w.branch ? `\n分支：${w.branch}` : ''}`;
+    const body = `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${w.work_branch ? `\n工作分支：${w.work_branch}` : ''}${w.staging_work_branch ? `\n预发工作分支：${w.staging_work_branch}` : ''}`;
 
     const buttons: CardButton[] = [];
     const confirmationStates = config ? getConfirmationStates(config) : [];
@@ -1238,26 +1393,72 @@ function buildWorkflowListCard(workflows: Workflow[]): InteractiveCard {
     if (confirmationStates.includes(w.status)) {
       if (w.status === 'testing_confirm') {
         buttons.push(
-          { id: 'skip', label: '⏭ 跳过鉴权直接测试', value: { workflow_id: w.id, action: 'skip' } },
-          { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
-          { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+          {
+            id: 'skip',
+            label: '⏭ 跳过鉴权直接测试',
+            value: { workflow_id: w.id, action: 'skip' },
+          },
+          {
+            id: 'pause',
+            label: '⏸ 中断',
+            value: { workflow_id: w.id, action: 'pause' },
+          },
+          {
+            id: 'cancel',
+            label: '❌ 取消',
+            type: 'danger',
+            value: { workflow_id: w.id, action: 'cancel' },
+          },
         );
       } else {
         buttons.push(
-          { id: 'approve', label: '✅ 确认部署', type: 'primary', value: { workflow_id: w.id, action: 'approve' } },
-          { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
-          { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+          {
+            id: 'approve',
+            label: '✅ 确认部署',
+            type: 'primary',
+            value: { workflow_id: w.id, action: 'approve' },
+          },
+          {
+            id: 'pause',
+            label: '⏸ 中断',
+            value: { workflow_id: w.id, action: 'pause' },
+          },
+          {
+            id: 'cancel',
+            label: '❌ 取消',
+            type: 'danger',
+            value: { workflow_id: w.id, action: 'cancel' },
+          },
         );
       }
     } else if (w.status === 'paused') {
       buttons.push(
-        { id: 'resume', label: '▶ 继续', type: 'primary', value: { workflow_id: w.id, action: 'resume' } },
-        { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+        {
+          id: 'resume',
+          label: '▶ 继续',
+          type: 'primary',
+          value: { workflow_id: w.id, action: 'resume' },
+        },
+        {
+          id: 'cancel',
+          label: '❌ 取消',
+          type: 'danger',
+          value: { workflow_id: w.id, action: 'cancel' },
+        },
       );
     } else if (!terminalStates.includes(w.status)) {
       buttons.push(
-        { id: 'pause', label: '⏸ 中断', value: { workflow_id: w.id, action: 'pause' } },
-        { id: 'cancel', label: '❌ 取消', type: 'danger', value: { workflow_id: w.id, action: 'cancel' } },
+        {
+          id: 'pause',
+          label: '⏸ 中断',
+          value: { workflow_id: w.id, action: 'pause' },
+        },
+        {
+          id: 'cancel',
+          label: '❌ 取消',
+          type: 'danger',
+          value: { workflow_id: w.id, action: 'cancel' },
+        },
       );
     }
 
@@ -1292,7 +1493,11 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
   });
   syncWorkbenchOnTransition(workflowId, workflow.status, 'cancelled');
   syncWorkbenchOnWorkflowUpdated(workflowId, '任务已取消');
-  notifyMain(`[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`, workflow.source_jid, workflowId);
+  notifyMain(
+    `[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`,
+    workflow.source_jid,
+    workflowId,
+  );
   return {};
 }
 
@@ -1341,7 +1546,11 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
         status: workflow.paused_from,
         paused_from: null,
       });
-      syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
+      syncWorkbenchOnTransition(
+        workflowId,
+        workflow.status,
+        workflow.paused_from,
+      );
       onDelegationComplete(workflow.current_delegation_id);
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`,
@@ -1356,7 +1565,11 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
         status: workflow.paused_from,
         paused_from: null,
       });
-      syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
+      syncWorkbenchOnTransition(
+        workflowId,
+        workflow.status,
+        workflow.paused_from,
+      );
       syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复，委派仍在执行');
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`,
@@ -1374,7 +1587,11 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
   });
   syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
   syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复');
-  notifyMain(`[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`, workflow.source_jid, workflowId);
+  notifyMain(
+    `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`,
+    workflow.source_jid,
+    workflowId,
+  );
 
   // If resuming to a confirmation state, resend its card
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -1424,55 +1641,136 @@ export function handleCardAction(action: {
   switch (action.action) {
     // --- Workflow-specific actions (require workflow_id) ---
     case 'approve': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const result = approveWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 确认部署失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error)
+        notifyMain(
+          `[操作失败] 确认部署失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'approve_dev': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const result = approveWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 进入开发失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error)
+        notifyMain(
+          `[操作失败] 进入开发失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'skip': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const result = skipWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 跳过此节点失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error)
+        notifyMain(
+          `[操作失败] 跳过此节点失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'pause': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const result = pauseWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 中断流程失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error)
+        notifyMain(
+          `[操作失败] 中断流程失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'resume': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const result = resumeWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 恢复流程失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error)
+        notifyMain(
+          `[操作失败] 恢复流程失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'request_revision': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const revisionText = action.form_value?.revision_text;
-      if (!revisionText?.trim()) { notifyMain('[操作失败] 请输入修改意见后再提交。', wfSourceJid, action.workflow_id); break; }
-      const result = reviseWorkflow(action.workflow_id, `[方案修改意见]\n\n${revisionText}`);
-      if (result.error) notifyMain(`[操作失败] 提交修改失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (!revisionText?.trim()) {
+        notifyMain(
+          '[操作失败] 请输入修改意见后再提交。',
+          wfSourceJid,
+          action.workflow_id,
+        );
+        break;
+      }
+      const result = reviseWorkflow(
+        action.workflow_id,
+        `[方案修改意见]\n\n${revisionText}`,
+      );
+      if (result.error)
+        notifyMain(
+          `[操作失败] 提交修改失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'submit_access_token': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const accessToken = action.form_value?.access_token?.trim();
-      if (!accessToken) { notifyMain('[操作失败] 请输入 access_token 后再开始测试。', wfSourceJid, action.workflow_id); break; }
+      if (!accessToken) {
+        notifyMain(
+          '[操作失败] 请输入 access_token 后再开始测试。',
+          wfSourceJid,
+          action.workflow_id,
+        );
+        break;
+      }
       const result = reviseWorkflow(action.workflow_id, accessToken);
-      if (result.error) notifyMain(`[操作失败] 提交 access_token 失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error)
+        notifyMain(
+          `[操作失败] 提交 access_token 失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'cancel': {
-      if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
+      if (!action.workflow_id) {
+        notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
+        break;
+      }
       const result = cancelWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 取消流程失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error)
+        notifyMain(
+          `[操作失败] 取消流程失败: ${result.error}`,
+          wfSourceJid,
+          action.workflow_id,
+        );
       break;
     }
     case 'memory_conflict_keep': {
@@ -1581,7 +1879,10 @@ export function getAvailableWorkflowTypes(): Array<{
   type: string;
   name: string;
   entry_points: string[];
-  entry_points_detail: Record<string, { requires_deliverable: boolean; deliverable_role?: string }>;
+  entry_points_detail: Record<
+    string,
+    { requires_deliverable: boolean; deliverable_role?: string }
+  >;
   role_channels: Record<string, Record<string, string>>;
 }> {
   const configs = getWorkflowConfigs();
@@ -1594,7 +1895,10 @@ export function getAvailableWorkflowTypes(): Array<{
     entry_points_detail: Object.fromEntries(
       Object.entries(config.entry_points).map(([name, ep]) => [
         name,
-        { requires_deliverable: ep.requires_deliverable || false, deliverable_role: ep.deliverable_role },
+        {
+          requires_deliverable: ep.requires_deliverable || false,
+          deliverable_role: ep.deliverable_role,
+        },
       ]),
     ),
     role_channels: Object.fromEntries(
@@ -1604,7 +1908,9 @@ export function getAvailableWorkflowTypes(): Array<{
 }
 
 /** List all deliverable directories for a service (for MCP tool). */
-export function listDeliverables(service: string): Array<{ dir: string; files: string[]; branch: string }> {
+export function listDeliverables(
+  service: string,
+): Array<DeliverableMetadata & { dir: string }> {
   const delivDir = path.join(PROJECT_ROOT, 'projects', service, 'iteration');
   if (!fs.existsSync(delivDir)) return [];
 
@@ -1615,17 +1921,21 @@ export function listDeliverables(service: string): Array<{ dir: string; files: s
       const dirPath = path.join(delivDir, d.name);
       const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.md'));
 
-      let branch = '';
+      const metadata: DeliverableMetadata = {
+        fileName: d.name,
+        files,
+        work_branch: '',
+        staging_base_branch: '',
+        staging_work_branch: '',
+      };
       for (const file of files) {
-        const content = fs.readFileSync(path.join(dirPath, file), 'utf-8');
-        const match = content.match(/工作分支[：:]\s*(.+)/);
-        if (match) {
-          branch = match[1].trim();
-          break;
-        }
+        const parsed = readMetadataFromFile(path.join(dirPath, file));
+        metadata.work_branch ||= parsed.work_branch || '';
+        metadata.staging_base_branch ||= parsed.staging_base_branch || '';
+        metadata.staging_work_branch ||= parsed.staging_work_branch || '';
       }
 
-      return { dir: d.name, files, branch };
+      return { dir: d.name, ...metadata };
     })
     .filter((d) => d.files.length > 0)
     .sort((a, b) => b.dir.localeCompare(a.dir)); // newest first

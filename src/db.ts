@@ -188,9 +188,10 @@ function createSchema(database: Database.Database): void {
       name TEXT NOT NULL,
       service TEXT NOT NULL,
       start_from TEXT NOT NULL DEFAULT 'plan',
-      branch TEXT DEFAULT '',
+      work_branch TEXT DEFAULT '',
       deliverable TEXT DEFAULT '',
-      deploy_branch TEXT DEFAULT '',
+      staging_base_branch TEXT DEFAULT '',
+      staging_work_branch TEXT DEFAULT '',
       access_token TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'dev',
       current_delegation_id TEXT DEFAULT '',
@@ -362,16 +363,38 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
-  // Add deploy_branch column to workflows (migration for existing DBs)
+  // Add work_branch column to workflows (migration for existing DBs)
   try {
-    database.exec(`ALTER TABLE workflows ADD COLUMN deploy_branch TEXT DEFAULT ''`);
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN work_branch TEXT DEFAULT ''`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add staging_base_branch column to workflows (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN staging_base_branch TEXT DEFAULT ''`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add staging_work_branch column to workflows (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN staging_work_branch TEXT DEFAULT ''`,
+    );
   } catch {
     /* column already exists */
   }
 
   // Add access_token column to workflows (migration for existing DBs)
   try {
-    database.exec(`ALTER TABLE workflows ADD COLUMN access_token TEXT DEFAULT ''`);
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN access_token TEXT DEFAULT ''`,
+    );
   } catch {
     /* column already exists */
   }
@@ -397,7 +420,9 @@ function createSchema(database: Database.Database): void {
   // Add workflow_id column to delegations (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE delegations ADD COLUMN workflow_id TEXT`);
-    database.exec(`CREATE INDEX IF NOT EXISTS idx_delegations_workflow ON delegations(workflow_id)`);
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_delegations_workflow ON delegations(workflow_id)`,
+    );
   } catch {
     /* column already exists */
   }
@@ -405,7 +430,9 @@ function createSchema(database: Database.Database): void {
   // Add workflow_id column to messages (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE messages ADD COLUMN workflow_id TEXT`);
-    database.exec(`CREATE INDEX IF NOT EXISTS idx_messages_workflow ON messages(workflow_id)`);
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_messages_workflow ON messages(workflow_id)`,
+    );
   } catch {
     /* column already exists */
   }
@@ -427,7 +454,9 @@ function createSchema(database: Database.Database): void {
   `);
 
   try {
-    database.exec(`ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'active'`);
+    database.exec(
+      `ALTER TABLE memories ADD COLUMN status TEXT DEFAULT 'active'`,
+    );
   } catch {
     /* column already exists */
   }
@@ -1001,7 +1030,10 @@ export function clearMessages(chatJid: string): void {
   db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
 }
 
-export function deleteMessagesByIds(chatJid: string, messageIds: string[]): number {
+export function deleteMessagesByIds(
+  chatJid: string,
+  messageIds: string[],
+): number {
   if (!chatJid || messageIds.length === 0) return 0;
   const del = db.prepare('DELETE FROM messages WHERE chat_jid = ? AND id = ?');
   const tx = db.transaction((ids: string[]) => {
@@ -1295,7 +1327,9 @@ export function updateAskQuestion(
   );
 }
 
-export function getExpiredPendingAskQuestions(nowIso: string): AskQuestionRecord[] {
+export function getExpiredPendingAskQuestions(
+  nowIso: string,
+): AskQuestionRecord[] {
   return db
     .prepare(
       `SELECT * FROM ask_questions
@@ -1309,16 +1343,17 @@ export function getExpiredPendingAskQuestions(nowIso: string): AskQuestionRecord
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, start_from, branch, deliverable, deploy_branch, access_token, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, start_from, work_branch, deliverable, staging_base_branch, staging_work_branch, access_token, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
     workflow.service,
     workflow.start_from,
-    workflow.branch,
+    workflow.work_branch,
     workflow.deliverable,
-    workflow.deploy_branch,
+    workflow.staging_base_branch,
+    workflow.staging_work_branch,
     workflow.access_token,
     workflow.status,
     workflow.current_delegation_id,
@@ -1342,9 +1377,10 @@ export function updateWorkflow(
   updates: Partial<
     Pick<
       Workflow,
-      | 'branch'
+      | 'work_branch'
       | 'deliverable'
-      | 'deploy_branch'
+      | 'staging_base_branch'
+      | 'staging_work_branch'
       | 'access_token'
       | 'status'
       | 'current_delegation_id'
@@ -1357,17 +1393,21 @@ export function updateWorkflow(
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [Date.now().toString()];
 
-  if (updates.branch !== undefined) {
-    fields.push('branch = ?');
-    values.push(updates.branch);
+  if (updates.work_branch !== undefined) {
+    fields.push('work_branch = ?');
+    values.push(updates.work_branch);
   }
   if (updates.deliverable !== undefined) {
     fields.push('deliverable = ?');
     values.push(updates.deliverable);
   }
-  if (updates.deploy_branch !== undefined) {
-    fields.push('deploy_branch = ?');
-    values.push(updates.deploy_branch);
+  if (updates.staging_base_branch !== undefined) {
+    fields.push('staging_base_branch = ?');
+    values.push(updates.staging_base_branch);
+  }
+  if (updates.staging_work_branch !== undefined) {
+    fields.push('staging_work_branch = ?');
+    values.push(updates.staging_work_branch);
   }
   if (updates.access_token !== undefined) {
     fields.push('access_token = ?');
@@ -1416,7 +1456,9 @@ export function getWorkflowByDelegation(
 
 export function getDelegationsByWorkflow(workflowId: string): Delegation[] {
   return db
-    .prepare('SELECT * FROM delegations WHERE workflow_id = ? ORDER BY created_at ASC')
+    .prepare(
+      'SELECT * FROM delegations WHERE workflow_id = ? ORDER BY created_at ASC',
+    )
     .all(workflowId) as Delegation[];
 }
 
@@ -1450,9 +1492,13 @@ function deleteWorkflowRelatedRecords(workflowId: string): void {
       db.prepare('DELETE FROM workbench_events WHERE task_id = ?').run(taskId);
     }
 
-    db.prepare('DELETE FROM workbench_context_assets WHERE workflow_id = ?').run(id);
+    db.prepare(
+      'DELETE FROM workbench_context_assets WHERE workflow_id = ?',
+    ).run(id);
     db.prepare('DELETE FROM workbench_comments WHERE workflow_id = ?').run(id);
-    db.prepare('DELETE FROM workbench_action_items WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workbench_action_items WHERE workflow_id = ?').run(
+      id,
+    );
     db.prepare('DELETE FROM workbench_artifacts WHERE workflow_id = ?').run(id);
     db.prepare('DELETE FROM workbench_subtasks WHERE workflow_id = ?').run(id);
     db.prepare('DELETE FROM workbench_tasks WHERE workflow_id = ?').run(id);
@@ -1492,7 +1538,8 @@ export function deleteAllWorkbenchTaskData(): {
   workbench_comments: number;
   workbench_context_assets: number;
 } {
-  const count = (sql: string) => (db.prepare(sql).get() as { count: number }).count;
+  const count = (sql: string) =>
+    (db.prepare(sql).get() as { count: number }).count;
 
   const summary = {
     workflows: count('SELECT COUNT(*) AS count FROM workflows'),
@@ -1500,11 +1547,19 @@ export function deleteAllWorkbenchTaskData(): {
       'SELECT COUNT(*) AS count FROM delegations WHERE workflow_id IS NOT NULL',
     ),
     workbench_tasks: count('SELECT COUNT(*) AS count FROM workbench_tasks'),
-    workbench_subtasks: count('SELECT COUNT(*) AS count FROM workbench_subtasks'),
+    workbench_subtasks: count(
+      'SELECT COUNT(*) AS count FROM workbench_subtasks',
+    ),
     workbench_events: count('SELECT COUNT(*) AS count FROM workbench_events'),
-    workbench_artifacts: count('SELECT COUNT(*) AS count FROM workbench_artifacts'),
-    workbench_action_items: count('SELECT COUNT(*) AS count FROM workbench_action_items'),
-    workbench_comments: count('SELECT COUNT(*) AS count FROM workbench_comments'),
+    workbench_artifacts: count(
+      'SELECT COUNT(*) AS count FROM workbench_artifacts',
+    ),
+    workbench_action_items: count(
+      'SELECT COUNT(*) AS count FROM workbench_action_items',
+    ),
+    workbench_comments: count(
+      'SELECT COUNT(*) AS count FROM workbench_comments',
+    ),
     workbench_context_assets: count(
       'SELECT COUNT(*) AS count FROM workbench_context_assets',
     ),
@@ -1551,7 +1606,9 @@ export function createWorkbenchTask(record: WorkbenchTaskRecord): void {
   );
 }
 
-export function getWorkbenchTaskById(id: string): WorkbenchTaskRecord | undefined {
+export function getWorkbenchTaskById(
+  id: string,
+): WorkbenchTaskRecord | undefined {
   return db.prepare('SELECT * FROM workbench_tasks WHERE id = ?').get(id) as
     | WorkbenchTaskRecord
     | undefined;
@@ -1560,9 +1617,9 @@ export function getWorkbenchTaskById(id: string): WorkbenchTaskRecord | undefine
 export function getWorkbenchTaskByWorkflowId(
   workflowId: string,
 ): WorkbenchTaskRecord | undefined {
-  return db.prepare('SELECT * FROM workbench_tasks WHERE workflow_id = ?').get(workflowId) as
-    | WorkbenchTaskRecord
-    | undefined;
+  return db
+    .prepare('SELECT * FROM workbench_tasks WHERE workflow_id = ?')
+    .get(workflowId) as WorkbenchTaskRecord | undefined;
 }
 
 export function listWorkbenchTasks(): WorkbenchTaskRecord[] {
@@ -1576,7 +1633,12 @@ export function updateWorkbenchTask(
   updates: Partial<
     Pick<
       WorkbenchTaskRecord,
-      'status' | 'current_stage' | 'summary' | 'updated_at' | 'last_event_at' | 'title'
+      | 'status'
+      | 'current_stage'
+      | 'summary'
+      | 'updated_at'
+      | 'last_event_at'
+      | 'title'
     >
   >,
 ): void {
@@ -1610,9 +1672,9 @@ export function updateWorkbenchTask(
 
   if (fields.length === 0) return;
   values.push(id);
-  db.prepare(`UPDATE workbench_tasks SET ${fields.join(', ')} WHERE id = ?`).run(
-    ...values,
-  );
+  db.prepare(
+    `UPDATE workbench_tasks SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
 }
 
 export function createWorkbenchSubtask(record: WorkbenchSubtaskRecord): void {
@@ -1644,13 +1706,19 @@ export function getWorkbenchSubtaskByStage(
   stageKey: string,
 ): WorkbenchSubtaskRecord | undefined {
   return db
-    .prepare('SELECT * FROM workbench_subtasks WHERE task_id = ? AND stage_key = ?')
+    .prepare(
+      'SELECT * FROM workbench_subtasks WHERE task_id = ? AND stage_key = ?',
+    )
     .get(taskId, stageKey) as WorkbenchSubtaskRecord | undefined;
 }
 
-export function listWorkbenchSubtasksByTask(taskId: string): WorkbenchSubtaskRecord[] {
+export function listWorkbenchSubtasksByTask(
+  taskId: string,
+): WorkbenchSubtaskRecord[] {
   return db
-    .prepare('SELECT * FROM workbench_subtasks WHERE task_id = ? ORDER BY updated_at ASC')
+    .prepare(
+      'SELECT * FROM workbench_subtasks WHERE task_id = ? ORDER BY updated_at ASC',
+    )
     .all(taskId) as WorkbenchSubtaskRecord[];
 }
 
@@ -1708,9 +1776,9 @@ export function updateWorkbenchSubtask(
 
   if (fields.length === 0) return;
   values.push(id);
-  db.prepare(`UPDATE workbench_subtasks SET ${fields.join(', ')} WHERE id = ?`).run(
-    ...values,
-  );
+  db.prepare(
+    `UPDATE workbench_subtasks SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
 }
 
 export function createWorkbenchEvent(record: WorkbenchEventRecord): void {
@@ -1731,9 +1799,13 @@ export function createWorkbenchEvent(record: WorkbenchEventRecord): void {
   );
 }
 
-export function listWorkbenchEventsByTask(taskId: string): WorkbenchEventRecord[] {
+export function listWorkbenchEventsByTask(
+  taskId: string,
+): WorkbenchEventRecord[] {
   return db
-    .prepare('SELECT * FROM workbench_events WHERE task_id = ? ORDER BY created_at DESC')
+    .prepare(
+      'SELECT * FROM workbench_events WHERE task_id = ? ORDER BY created_at DESC',
+    )
     .all(taskId) as WorkbenchEventRecord[];
 }
 
@@ -1754,13 +1826,19 @@ export function createWorkbenchArtifact(record: WorkbenchArtifactRecord): void {
   );
 }
 
-export function listWorkbenchArtifactsByTask(taskId: string): WorkbenchArtifactRecord[] {
+export function listWorkbenchArtifactsByTask(
+  taskId: string,
+): WorkbenchArtifactRecord[] {
   return db
-    .prepare('SELECT * FROM workbench_artifacts WHERE task_id = ? ORDER BY created_at DESC')
+    .prepare(
+      'SELECT * FROM workbench_artifacts WHERE task_id = ? ORDER BY created_at DESC',
+    )
     .all(taskId) as WorkbenchArtifactRecord[];
 }
 
-export function createWorkbenchActionItem(record: WorkbenchActionItemRecord): void {
+export function createWorkbenchActionItem(
+  record: WorkbenchActionItemRecord,
+): void {
   db.prepare(
     `INSERT OR REPLACE INTO workbench_action_items (
       id, task_id, workflow_id, subtask_id, stage_key, delegation_id, group_folder,
@@ -1789,15 +1867,21 @@ export function createWorkbenchActionItem(record: WorkbenchActionItemRecord): vo
   );
 }
 
-export function getWorkbenchActionItem(id: string): WorkbenchActionItemRecord | undefined {
-  return db.prepare('SELECT * FROM workbench_action_items WHERE id = ?').get(id) as
-    | WorkbenchActionItemRecord
-    | undefined;
+export function getWorkbenchActionItem(
+  id: string,
+): WorkbenchActionItemRecord | undefined {
+  return db
+    .prepare('SELECT * FROM workbench_action_items WHERE id = ?')
+    .get(id) as WorkbenchActionItemRecord | undefined;
 }
 
-export function listWorkbenchActionItemsByTask(taskId: string): WorkbenchActionItemRecord[] {
+export function listWorkbenchActionItemsByTask(
+  taskId: string,
+): WorkbenchActionItemRecord[] {
   return db
-    .prepare('SELECT * FROM workbench_action_items WHERE task_id = ? ORDER BY created_at DESC')
+    .prepare(
+      'SELECT * FROM workbench_action_items WHERE task_id = ? ORDER BY created_at DESC',
+    )
     .all(taskId) as WorkbenchActionItemRecord[];
 }
 
@@ -1817,7 +1901,13 @@ export function updateWorkbenchActionItem(
   updates: Partial<
     Pick<
       WorkbenchActionItemRecord,
-      'status' | 'title' | 'body' | 'replyable' | 'updated_at' | 'resolved_at' | 'extra_json'
+      | 'status'
+      | 'title'
+      | 'body'
+      | 'replyable'
+      | 'updated_at'
+      | 'resolved_at'
+      | 'extra_json'
     >
   >,
 ): void {
@@ -1855,9 +1945,9 @@ export function updateWorkbenchActionItem(
 
   if (fields.length === 0) return;
   values.push(id);
-  db.prepare(`UPDATE workbench_action_items SET ${fields.join(', ')} WHERE id = ?`).run(
-    ...values,
-  );
+  db.prepare(
+    `UPDATE workbench_action_items SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
 }
 
 export function resolveWorkbenchActionItemsBySource(
@@ -1901,13 +1991,19 @@ export function createWorkbenchComment(record: WorkbenchCommentRecord): void {
   );
 }
 
-export function listWorkbenchCommentsByTask(taskId: string): WorkbenchCommentRecord[] {
+export function listWorkbenchCommentsByTask(
+  taskId: string,
+): WorkbenchCommentRecord[] {
   return db
-    .prepare('SELECT * FROM workbench_comments WHERE task_id = ? ORDER BY created_at DESC')
+    .prepare(
+      'SELECT * FROM workbench_comments WHERE task_id = ? ORDER BY created_at DESC',
+    )
     .all(taskId) as WorkbenchCommentRecord[];
 }
 
-export function createWorkbenchContextAsset(record: WorkbenchContextAssetRecord): void {
+export function createWorkbenchContextAsset(
+  record: WorkbenchContextAssetRecord,
+): void {
   db.prepare(
     `INSERT INTO workbench_context_assets (
       id, task_id, workflow_id, asset_type, title, path, url, note, created_at
@@ -1925,9 +2021,13 @@ export function createWorkbenchContextAsset(record: WorkbenchContextAssetRecord)
   );
 }
 
-export function listWorkbenchContextAssetsByTask(taskId: string): WorkbenchContextAssetRecord[] {
+export function listWorkbenchContextAssetsByTask(
+  taskId: string,
+): WorkbenchContextAssetRecord[] {
   return db
-    .prepare('SELECT * FROM workbench_context_assets WHERE task_id = ? ORDER BY created_at DESC')
+    .prepare(
+      'SELECT * FROM workbench_context_assets WHERE task_id = ? ORDER BY created_at DESC',
+    )
     .all(taskId) as WorkbenchContextAssetRecord[];
 }
 
@@ -1959,7 +2059,9 @@ export function createMemory(input: {
     now,
   );
   reconcileMemoryStatuses(input.group_folder);
-  return db.prepare(`SELECT * FROM memories WHERE id = ?`).get(id) as MemoryRecord;
+  return db
+    .prepare(`SELECT * FROM memories WHERE id = ?`)
+    .get(id) as MemoryRecord;
 }
 
 export function searchMemories(
@@ -2013,7 +2115,10 @@ export function getMemoryById(id: string): MemoryRecord | undefined {
 export function updateMemory(
   id: string,
   updates: Partial<
-    Pick<MemoryRecord, 'content' | 'layer' | 'memory_type' | 'source' | 'status' | 'metadata'>
+    Pick<
+      MemoryRecord,
+      'content' | 'layer' | 'memory_type' | 'source' | 'status' | 'metadata'
+    >
   >,
 ): void {
   const existing = getMemoryById(id);
@@ -2161,12 +2266,12 @@ function reconcileMemoryStatuses(groupFolder: string): void {
        ORDER BY updated_at DESC`,
     )
     .all(groupFolder) as Array<{
-      id: string;
-      layer: string;
-      memory_type: string;
-      content: string;
-      status: string;
-    }>;
+    id: string;
+    layer: string;
+    memory_type: string;
+    content: string;
+    status: string;
+  }>;
 
   const conflictMap = new Map<
     string,
@@ -2183,9 +2288,12 @@ function reconcileMemoryStatuses(groupFolder: string): void {
     conflictMap.set(key, slot);
   }
 
-  const markStmt = db.prepare(`UPDATE memories SET status = 'conflicted' WHERE id = ?`);
+  const markStmt = db.prepare(
+    `UPDATE memories SET status = 'conflicted' WHERE id = ?`,
+  );
   for (const slot of conflictMap.values()) {
-    if (slot.positiveIds.length === 0 || slot.negativeIds.length === 0) continue;
+    if (slot.positiveIds.length === 0 || slot.negativeIds.length === 0)
+      continue;
     for (const id of [...slot.positiveIds, ...slot.negativeIds]) {
       markStmt.run(id);
     }
@@ -2208,7 +2316,11 @@ export function resolveConflict(
 ): ResolveConflictKeepResult;
 export function resolveConflict(
   mode: 'merge',
-  opts: { mergeIds: [string, string]; mergedContent: string; groupFolder: string },
+  opts: {
+    mergeIds: [string, string];
+    mergedContent: string;
+    groupFolder: string;
+  },
 ): ResolveConflictMergeResult;
 export function resolveConflict(
   mode: 'keep' | 'merge',
@@ -2224,16 +2336,29 @@ export function resolveConflict(
 
   if (mode === 'keep') {
     const { keepId, deprecateId, groupFolder } = opts;
-    if (!keepId || !deprecateId) throw new Error('keep mode requires keepId and deprecateId');
+    if (!keepId || !deprecateId)
+      throw new Error('keep mode requires keepId and deprecateId');
 
     const keepMem = getMemoryById(keepId);
     const deprecateMem = getMemoryById(deprecateId);
     if (!keepMem) throw new Error(`Memory not found: ${keepId}`);
     if (!deprecateMem) throw new Error(`Memory not found: ${deprecateId}`);
-    if (keepMem.group_folder !== groupFolder) throw new Error(`Memory ${keepId} does not belong to group ${groupFolder}`);
-    if (deprecateMem.group_folder !== groupFolder) throw new Error(`Memory ${deprecateId} does not belong to group ${groupFolder}`);
-    if (keepMem.status !== 'conflicted') throw new Error(`Memory ${keepId} is not conflicted (status: ${keepMem.status})`);
-    if (deprecateMem.status !== 'conflicted') throw new Error(`Memory ${deprecateId} is not conflicted (status: ${deprecateMem.status})`);
+    if (keepMem.group_folder !== groupFolder)
+      throw new Error(
+        `Memory ${keepId} does not belong to group ${groupFolder}`,
+      );
+    if (deprecateMem.group_folder !== groupFolder)
+      throw new Error(
+        `Memory ${deprecateId} does not belong to group ${groupFolder}`,
+      );
+    if (keepMem.status !== 'conflicted')
+      throw new Error(
+        `Memory ${keepId} is not conflicted (status: ${keepMem.status})`,
+      );
+    if (deprecateMem.status !== 'conflicted')
+      throw new Error(
+        `Memory ${deprecateId} is not conflicted (status: ${deprecateMem.status})`,
+      );
 
     const txn = db.transaction(() => {
       updateMemory(deprecateId, {
@@ -2265,17 +2390,30 @@ export function resolveConflict(
 
   // merge mode
   const { mergeIds, mergedContent, groupFolder } = opts;
-  if (!mergeIds || mergeIds.length !== 2) throw new Error('merge mode requires exactly 2 mergeIds');
+  if (!mergeIds || mergeIds.length !== 2)
+    throw new Error('merge mode requires exactly 2 mergeIds');
   if (!mergedContent) throw new Error('merge mode requires mergedContent');
 
   const memA = getMemoryById(mergeIds[0]);
   const memB = getMemoryById(mergeIds[1]);
   if (!memA) throw new Error(`Memory not found: ${mergeIds[0]}`);
   if (!memB) throw new Error(`Memory not found: ${mergeIds[1]}`);
-  if (memA.group_folder !== groupFolder) throw new Error(`Memory ${mergeIds[0]} does not belong to group ${groupFolder}`);
-  if (memB.group_folder !== groupFolder) throw new Error(`Memory ${mergeIds[1]} does not belong to group ${groupFolder}`);
-  if (memA.status !== 'conflicted') throw new Error(`Memory ${mergeIds[0]} is not conflicted (status: ${memA.status})`);
-  if (memB.status !== 'conflicted') throw new Error(`Memory ${mergeIds[1]} is not conflicted (status: ${memB.status})`);
+  if (memA.group_folder !== groupFolder)
+    throw new Error(
+      `Memory ${mergeIds[0]} does not belong to group ${groupFolder}`,
+    );
+  if (memB.group_folder !== groupFolder)
+    throw new Error(
+      `Memory ${mergeIds[1]} does not belong to group ${groupFolder}`,
+    );
+  if (memA.status !== 'conflicted')
+    throw new Error(
+      `Memory ${mergeIds[0]} is not conflicted (status: ${memA.status})`,
+    );
+  if (memB.status !== 'conflicted')
+    throw new Error(
+      `Memory ${mergeIds[1]} is not conflicted (status: ${memB.status})`,
+    );
 
   let newMem: MemoryRecord;
 
@@ -2410,7 +2548,9 @@ export function gcMemories(
     .map((m) => m.id);
 
   if (!dryRun) {
-    const ids = Array.from(new Set([...duplicateDeletedIds, ...staleDeletedIds]));
+    const ids = Array.from(
+      new Set([...duplicateDeletedIds, ...staleDeletedIds]),
+    );
     const stmt = db.prepare(`DELETE FROM memories WHERE id = ?`);
     for (const id of ids) stmt.run(id);
   }
@@ -2475,7 +2615,9 @@ function clampFloat(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function getMemoryExtractConfig(groupFolder: string): MemoryExtractConfig {
+export function getMemoryExtractConfig(
+  groupFolder: string,
+): MemoryExtractConfig {
   const rows = db
     .prepare(
       `SELECT group_folder, key, value
@@ -2483,14 +2625,17 @@ export function getMemoryExtractConfig(groupFolder: string): MemoryExtractConfig
        WHERE group_folder IN ('*', ?)`,
     )
     .all(groupFolder) as Array<{
-      group_folder: string;
-      key: string;
-      value: string;
-    }>;
+    group_folder: string;
+    key: string;
+    value: string;
+  }>;
 
   const cfg: MemoryExtractConfig = { ...MEMORY_EXTRACT_DEFAULT_CONFIG };
   rows
-    .sort((a, b) => (a.group_folder === '*' ? -1 : 1) - (b.group_folder === '*' ? -1 : 1))
+    .sort(
+      (a, b) =>
+        (a.group_folder === '*' ? -1 : 1) - (b.group_folder === '*' ? -1 : 1),
+    )
     .forEach((row) => {
       const raw = Number(row.value);
       switch (row.key) {

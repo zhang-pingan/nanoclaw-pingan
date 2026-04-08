@@ -91,13 +91,24 @@ description: Test implemented features in first-pass or regression mode — anal
 3. 测试报告格式示例：
 
 ```markdown
+---
+service: {服务名}
+deliverable: {日期}_{需求简称}
+work_branch: {工作分支}
+staging_base_branch: {预发分支}
+staging_work_branch: {预发工作分支}
+doc_type: test
+---
+
 # 测试报告
 
 ## 基本信息
 - 需求名称：{名称}
 - 测试日期：{日期}
 - 测试环境：{staging.domain}
-- 测试分支：{staging.branch}
+- 工作分支：{工作分支}
+- 预发分支：{预发分支}
+- 预发工作分支：{预发工作分支}
 - 测试依据：{需求实现文档名}
 
 ## 测试概况

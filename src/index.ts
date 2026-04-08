@@ -86,7 +86,12 @@ import {
   isSessionCommandAllowed,
 } from './session-commands.js';
 import { startSchedulerLoop } from './task-scheduler.js';
-import { Channel, InteractiveCard, NewMessage, RegisteredGroup } from './types.js';
+import {
+  Channel,
+  InteractiveCard,
+  NewMessage,
+  RegisteredGroup,
+} from './types.js';
 import { logger } from './logger.js';
 import { buildMemoryPack } from './memory-pack.js';
 import {
@@ -190,7 +195,9 @@ interface CreateWorkflowCommandData {
   workflow_type: string;
   start_from: string;
   deliverable?: string;
-  deploy_branch?: string;
+  work_branch?: string;
+  staging_base_branch?: string;
+  staging_work_branch?: string;
   access_token?: string;
 }
 
@@ -325,10 +332,8 @@ function parseCreateWorkflowCommand(
   }
 
   const raw = data as Record<string, unknown>;
-  const name =
-    typeof raw.name === 'string' ? raw.name.trim() : '';
-  const service =
-    typeof raw.service === 'string' ? raw.service.trim() : '';
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  const service = typeof raw.service === 'string' ? raw.service.trim() : '';
   const workflowType =
     typeof raw.workflow_type === 'string' ? raw.workflow_type.trim() : '';
   const startFrom =
@@ -337,9 +342,19 @@ function parseCreateWorkflowCommand(
     typeof raw.deliverable === 'string' && raw.deliverable.trim()
       ? raw.deliverable.trim()
       : undefined;
-  const deployBranch =
-    typeof raw.deploy_branch === 'string' && raw.deploy_branch.trim()
-      ? raw.deploy_branch.trim()
+  const workBranch =
+    typeof raw.work_branch === 'string' && raw.work_branch.trim()
+      ? raw.work_branch.trim()
+      : undefined;
+  const stagingBaseBranch =
+    typeof raw.staging_base_branch === 'string' &&
+    raw.staging_base_branch.trim()
+      ? raw.staging_base_branch.trim()
+      : undefined;
+  const stagingWorkBranch =
+    typeof raw.staging_work_branch === 'string' &&
+    raw.staging_work_branch.trim()
+      ? raw.staging_work_branch.trim()
       : undefined;
   const accessToken =
     typeof raw.access_token === 'string' && raw.access_token.trim()
@@ -358,7 +373,9 @@ function parseCreateWorkflowCommand(
       workflow_type: workflowType,
       start_from: startFrom,
       deliverable,
-      deploy_branch: deployBranch,
+      work_branch: workBranch,
+      staging_base_branch: stagingBaseBranch,
+      staging_work_branch: stagingWorkBranch,
       access_token: accessToken,
     },
   };
@@ -393,7 +410,7 @@ async function handleCreateWorkflowCommand(opts: {
   if (!parsed.data) {
     await channel.sendMessage(
       chatJid,
-      'create-workflow 参数缺失。消息格式必须是 JSON：{"command":"/create-workflow","data":{"name":"","service":"","workflow_type":"","start_from":"","deliverable":""}}',
+      'create-workflow 参数缺失。消息格式必须是 JSON：{"command":"/create-workflow","data":{"name":"","service":"","workflow_type":"","start_from":"","deliverable":"","work_branch":"","staging_base_branch":"","staging_work_branch":""}}',
     );
     return true;
   }
@@ -406,7 +423,9 @@ async function handleCreateWorkflowCommand(opts: {
     startFrom: cmdData.start_from,
     workflowType: cmdData.workflow_type,
     deliverable: cmdData.deliverable,
-    deployBranch: cmdData.deploy_branch,
+    workBranch: cmdData.work_branch,
+    stagingBaseBranch: cmdData.staging_base_branch,
+    stagingWorkBranch: cmdData.staging_work_branch,
     accessToken: cmdData.access_token,
   });
 
@@ -708,50 +727,62 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     'Selected model for runAgent',
   );
 
-  const output = await runAgent(group, prompt, chatJid, async (result) => {
-    // Streaming output callback — called for each agent result
-    if (result.result) {
-      const raw =
-        typeof result.result === 'string'
-          ? result.result
-          : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (text) {
-        await channel.sendMessage(chatJid, text);
-        outputSentToUser = true;
+  const output = await runAgent(
+    group,
+    prompt,
+    chatJid,
+    async (result) => {
+      // Streaming output callback — called for each agent result
+      if (result.result) {
+        const raw =
+          typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result);
+        // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
+        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        logger.info(
+          { group: group.name },
+          `Agent output: ${raw.slice(0, 200)}`,
+        );
+        if (text) {
+          await channel.sendMessage(chatJid, text);
+          outputSentToUser = true;
+        }
+        // Only reset idle timer on actual results, not session-update markers (result: null)
+        resetIdleTimer();
       }
-      // Only reset idle timer on actual results, not session-update markers (result: null)
-      resetIdleTimer();
-    }
 
-    const finalized = finalizePendingQueryBatch(result);
-    if (finalized.applied) {
-      logger.info(
-        {
-          group: group.name,
-          chatJid,
-          runId: finalized.batch?.runId,
-          queryId: finalized.batch?.queryId,
-          actualModel: finalized.actualModel,
-          updatedRows: finalized.updatedRows,
-          updatedWebRows: finalized.updatedWebRows,
-          selectedModel: finalized.batch?.selectedModel,
-          reason: finalized.batch?.modelReason,
-        },
-        'Backfilled actual model after query completion',
-      );
-    }
+      const finalized = finalizePendingQueryBatch(result);
+      if (finalized.applied) {
+        logger.info(
+          {
+            group: group.name,
+            chatJid,
+            runId: finalized.batch?.runId,
+            queryId: finalized.batch?.queryId,
+            actualModel: finalized.actualModel,
+            updatedRows: finalized.updatedRows,
+            updatedWebRows: finalized.updatedWebRows,
+            selectedModel: finalized.batch?.selectedModel,
+            reason: finalized.batch?.modelReason,
+          },
+          'Backfilled actual model after query completion',
+        );
+      }
 
-    if (result.status === 'success') {
-      queue.notifyIdle(chatJid);
-    }
+      if (result.status === 'success') {
+        queue.notifyIdle(chatJid);
+      }
 
-    if (result.status === 'error') {
-      hadError = true;
-    }
-  }, modelSelection.selectedModel, runId, initialQueryId, executionContext);
+      if (result.status === 'error') {
+        hadError = true;
+      }
+    },
+    modelSelection.selectedModel,
+    runId,
+    initialQueryId,
+    executionContext,
+  );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -799,7 +830,11 @@ async function runAgent(
   selectedModel?: string,
   runId?: string,
   initialQueryId?: string,
-  executionContext?: { workflowId?: string; stageKey?: string; delegationId?: string },
+  executionContext?: {
+    workflowId?: string;
+    stageKey?: string;
+    delegationId?: string;
+  },
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = sessions[group.folder];
@@ -1109,7 +1144,15 @@ async function startMessageLoop(): Promise<void> {
           const runId = activeRunIds.get(chatJid);
           const queryId = createExecutionId();
 
-          if (runId && queue.sendMessage(chatJid, formatted, pipedSelection.selectedModel, queryId)) {
+          if (
+            runId &&
+            queue.sendMessage(
+              chatJid,
+              formatted,
+              pipedSelection.selectedModel,
+              queryId,
+            )
+          ) {
             rememberPendingQueryBatch({
               runId,
               queryId,
@@ -1180,10 +1223,15 @@ function ensureContainerSystemRunning(): void {
 function resolveExecutionContext(
   group: RegisteredGroup,
   messages: NewMessage[],
-): { workflowId?: string; stageKey?: string; delegationId?: string } | undefined {
+):
+  | { workflowId?: string; stageKey?: string; delegationId?: string }
+  | undefined {
   const workflowId = [...messages]
     .reverse()
-    .find((message) => typeof message.workflow_id === 'string' && message.workflow_id.trim())
+    .find(
+      (message) =>
+        typeof message.workflow_id === 'string' && message.workflow_id.trim(),
+    )
     ?.workflow_id?.trim();
   let workflow = workflowId ? getWorkflow(workflowId) : undefined;
 
@@ -1353,7 +1401,9 @@ async function main(): Promise<void> {
     onAgentStatusChange: () => {
       for (const ch of channels) {
         if (ch.name === 'web' && 'broadcastAgentStatus' in ch) {
-          (ch as typeof ch & { broadcastAgentStatus: () => void }).broadcastAgentStatus();
+          (
+            ch as typeof ch & { broadcastAgentStatus: () => void }
+          ).broadcastAgentStatus();
         }
       }
     },
@@ -1407,11 +1457,15 @@ async function main(): Promise<void> {
     },
   });
   // Card support: route to whichever channel owns the JID
-  const anySupportsCards = channels.some(ch => typeof ch.sendCard === 'function');
+  const anySupportsCards = channels.some(
+    (ch) => typeof ch.sendCard === 'function',
+  );
   const sendCardFn = anySupportsCards
     ? (jid: string, card: InteractiveCard) => {
         const ch = findChannel(channels, jid);
-        return ch?.sendCard ? ch.sendCard(jid, card) : Promise.resolve(undefined);
+        return ch?.sendCard
+          ? ch.sendCard(jid, card)
+          : Promise.resolve(undefined);
       }
     : undefined;
 
@@ -1469,7 +1523,11 @@ async function main(): Promise<void> {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       if (!channel.sendFile) {
-        return channel.sendMessage(jid, caption || `[文件: ${path.basename(filePath)}] (该渠道不支持发送文件)`);
+        return channel.sendMessage(
+          jid,
+          caption ||
+            `[文件: ${path.basename(filePath)}] (该渠道不支持发送文件)`,
+        );
       }
       return channel.sendFile(jid, filePath, caption);
     },
