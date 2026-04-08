@@ -14,6 +14,8 @@ var multiSelectMode = false;
 var selectedMsgIds = new Set();
 var pendingFiles = []; // files staged for upload on next send
 var modelSyncTimer = null;
+var INITIAL_MESSAGE_LIMIT = 100;
+var LIVE_MESSAGE_BUFFER_LIMIT = 250;
 
 var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
@@ -393,6 +395,8 @@ function renderFilePreview(filename, ext, filePath) {
   if (IMAGE_EXTS.includes(ext)) {
     const img = document.createElement("img");
     img.className = "file-preview-image";
+    img.loading = "lazy";
+    img.decoding = "async";
     // Use file:// for local files, fallback to HTTP for legacy
     img.src = filePath ? `file://${filePath}` : `http://localhost:3000/api/uploads/${encodeURIComponent(filename)}`;
     img.alt = filename;
@@ -1735,6 +1739,25 @@ function appendSingleMessage(msg) {
   const el = createMessageEl(msg);
   messagesEl.appendChild(el);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function trimLiveMessageBuffer() {
+  if (messages.length <= LIVE_MESSAGE_BUFFER_LIMIT) return 0;
+
+  const removedMessages = messages.slice(0, messages.length - LIVE_MESSAGE_BUFFER_LIMIT);
+  const removedIds = new Set(removedMessages.map((msg) => msg.id));
+  messages = messages.slice(-LIVE_MESSAGE_BUFFER_LIMIT);
+
+  if (replyToMsg && removedIds.has(replyToMsg.id)) {
+    clearReplyTo();
+  }
+
+  if (selectedMsgIds.size > 0) {
+    removedIds.forEach((id) => selectedMsgIds.delete(id));
+    updateSelectedBar();
+  }
+
+  return removedMessages.length;
 }
 
 function updateChatHeader() {
@@ -3271,13 +3294,14 @@ async function openWorkbenchCreateTaskModal() {
 
 async function loadMessages() {
   if (!currentGroupJid) return;
-  const since = "0";
   try {
-    const res = await apiFetch(`/api/messages?jid=${encodeURIComponent(currentGroupJid)}&since=${since}`);
+    const res = await apiFetch(
+      `/api/messages?jid=${encodeURIComponent(currentGroupJid)}&since=0&limit=${INITIAL_MESSAGE_LIMIT}`
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     messages = data.messages.map(m => ({ ...m, _filePath: m.file_path || undefined }));
-    hasMoreHistory = messages.length >= 200;
+    hasMoreHistory = messages.length >= INITIAL_MESSAGE_LIMIT;
     renderMessages();
   } catch (err) {
     console.error("Failed to load messages:", err);
@@ -3534,7 +3558,12 @@ function handleWsMessage(msg) {
       };
       if (incoming.chat_jid === currentGroupJid) {
         messages.push(incoming);
-        appendSingleMessage(incoming);
+        const dropped = trimLiveMessageBuffer();
+        if (dropped > 0) {
+          renderMessages();
+        } else {
+          appendSingleMessage(incoming);
+        }
         if (!incoming.is_from_me) {
           scheduleModelSync();
         }
@@ -3561,7 +3590,12 @@ function handleWsMessage(msg) {
       };
       if (cardMsg.chat_jid === currentGroupJid) {
         messages.push(cardMsg);
-        appendSingleMessage(cardMsg);
+        const dropped = trimLiveMessageBuffer();
+        if (dropped > 0) {
+          renderMessages();
+        } else {
+          appendSingleMessage(cardMsg);
+        }
       }
       if (shouldIncrementUnread(cardMsg.chat_jid)) {
         unreadCounts[cardMsg.chat_jid] = (unreadCounts[cardMsg.chat_jid] || 0) + 1;
@@ -3585,7 +3619,12 @@ function handleWsMessage(msg) {
       };
       if (fileMsg.chat_jid === currentGroupJid) {
         messages.push(fileMsg);
-        appendSingleMessage(fileMsg);
+        const dropped = trimLiveMessageBuffer();
+        if (dropped > 0) {
+          renderMessages();
+        } else {
+          appendSingleMessage(fileMsg);
+        }
       }
       if (shouldIncrementUnread(fileMsg.chat_jid)) {
         unreadCounts[fileMsg.chat_jid] = (unreadCounts[fileMsg.chat_jid] || 0) + 1;
@@ -3733,7 +3772,12 @@ async function sendMessage(content) {
     reply_to_id: replyToMsg ? replyToMsg.id : null
   };
   messages.push(userMsg);
-  appendSingleMessage(userMsg);
+  const dropped = trimLiveMessageBuffer();
+  if (dropped > 0) {
+    renderMessages();
+  } else {
+    appendSingleMessage(userMsg);
+  }
   messageInput.value = "";
   autoResizeInput();
   clearReplyTo();
