@@ -5,6 +5,7 @@ import {
   createWorkflow as dbCreateWorkflow,
   getAllRegisteredGroups,
   getWorkbenchTaskByWorkflowId,
+  getWorkbenchActionItem,
   listWorkbenchEventsByTask,
   setRegisteredGroup,
   storeChatMetadata,
@@ -13,8 +14,10 @@ import { RegisteredGroup } from './types.js';
 import { approveWorkflow, cancelWorkflow, initWorkflow } from './workflow.js';
 import { getWorkbenchTaskDetail, listWorkbenchTasks } from './workbench.js';
 import {
+  createWorkbenchInteractionItem,
   syncWorkbenchOnTransition,
   syncWorkbenchOnWorkflowCreated,
+  syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
 
 const MAIN_GROUP: RegisteredGroup = {
@@ -279,5 +282,88 @@ describe('workbench approval transition sync', () => {
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'fixing')?.status,
     ).toBe('cancelled');
+  });
+
+  it('keeps only current-stage current-delegation interaction items pending', () => {
+    dbCreateWorkflow({
+      id: 'wf-stale-action-items',
+      name: '互动项清理',
+      service: 'order-service',
+      start_from: 'testing',
+      work_branch: 'feature/stale-items',
+      staging_base_branch: 'staging',
+      deliverable: '2026-04-07_stale_items',
+      staging_work_branch: 'staging-deploy/feature-stale-items',
+      access_token: '',
+      status: 'ops_deploy',
+      current_delegation_id: 'wf-del-current',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-stale-action-items');
+
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-stale-action-items',
+      stageKey: 'ops_deploy',
+      delegationId: 'wf-del-current',
+      groupFolder: 'web_ops',
+      sourceType: 'ask_user_question',
+      sourceRefId: 'aq-current',
+      title: '当前委派提问',
+      body: 'current ask',
+      createdAt: '2026-04-07T00:01:00.000Z',
+    });
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-stale-action-items',
+      stageKey: 'ops_deploy',
+      delegationId: 'wf-del-old',
+      groupFolder: 'web_ops',
+      sourceType: 'request_human_input',
+      sourceRefId: 'rhi-old',
+      title: '旧委派输入',
+      body: 'old delegation',
+      createdAt: '2026-04-07T00:01:01.000Z',
+    });
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-stale-action-items',
+      stageKey: 'awaiting_confirm',
+      delegationId: 'wf-del-current',
+      groupFolder: 'web_ops',
+      sourceType: 'send_message',
+      sourceRefId: 'msg-old-stage',
+      title: '旧阶段消息',
+      body: 'old stage',
+      createdAt: '2026-04-07T00:01:02.000Z',
+    });
+
+    syncWorkbenchOnWorkflowUpdated(
+      'wf-stale-action-items',
+      '同步当前阶段待处理项',
+    );
+
+    expect(
+      getWorkbenchActionItem(
+        'wb-action-wf-stale-action-items-ops_deploy-ask_user_question-aq-current',
+      )?.status,
+    ).toBe('pending');
+    expect(
+      getWorkbenchActionItem(
+        'wb-action-wf-stale-action-items-ops_deploy-request_human_input-rhi-old',
+      )?.status,
+    ).toBe('resolved');
+    expect(
+      getWorkbenchActionItem(
+        'wb-action-wf-stale-action-items-awaiting_confirm-send_message-msg-old-stage',
+      )?.status,
+    ).toBe('resolved');
+
+    const detail = getWorkbenchTaskDetail('wb-wf-stale-action-items');
+    expect(detail?.action_items.map((item) => item.id)).toEqual([
+      'wb-action-wf-stale-action-items-ops_deploy-ask_user_question-aq-current',
+    ]);
   });
 });

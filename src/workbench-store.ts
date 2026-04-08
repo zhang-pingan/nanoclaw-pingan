@@ -24,7 +24,11 @@ import {
   updateWorkbenchSubtask,
   updateWorkbenchTask,
 } from './db.js';
-import type { Delegation, Workflow } from './types.js';
+import type {
+  Delegation,
+  Workflow,
+  WorkbenchActionItemRecord,
+} from './types.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 import {
   getReachableWorkflowStages,
@@ -249,13 +253,29 @@ function resolveStaleStageActionItems(
 ): void {
   const task = getWorkbenchTaskById(taskId);
   if (!task) return;
+  const workflow = getWorkflow(task.workflow_id);
+  if (!workflow) return;
+
+  const isCurrentWorkflowApprovalItem = (item: WorkbenchActionItemRecord) =>
+    item.source_type === 'workflow' &&
+    !!currentApprovalType &&
+    item.source_ref_id === currentApprovalType;
+
+  const isCurrentInteractionItem = (item: WorkbenchActionItemRecord) => {
+    if (item.source_type === 'workflow') return false;
+    if (item.stage_key !== task.current_stage) return false;
+    if (!item.delegation_id || !workflow.current_delegation_id) return false;
+    return item.delegation_id === workflow.current_delegation_id;
+  };
+
   for (const item of listWorkbenchActionItemsByTask(taskId)) {
     if (item.status !== 'pending') continue;
     if (
-      item.source_type === 'workflow' &&
-      item.source_ref_id === currentApprovalType
-    )
+      isCurrentWorkflowApprovalItem(item) ||
+      isCurrentInteractionItem(item)
+    ) {
       continue;
+    }
     updateWorkbenchActionItem(item.id, {
       status: 'resolved',
       updated_at: resolvedAt,
