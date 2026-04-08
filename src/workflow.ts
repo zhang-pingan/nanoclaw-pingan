@@ -38,6 +38,7 @@ import {
   WorkflowTypeConfig,
 } from './workflow-config.js';
 import {
+  createWorkbenchManualSkipEvent,
   syncWorkbenchOnDelegationCompleted,
   syncWorkbenchOnDelegationCreated,
   syncWorkbenchOnTransition,
@@ -398,6 +399,7 @@ function applyTransition(
   transition: StateTransition,
   roles: Record<string, string>,
   extra?: {
+    fromStatusOverride?: string;
     delegationResult?: string;
     resultSummary?: string;
     revisionText?: string;
@@ -407,11 +409,15 @@ function applyTransition(
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return;
 
-  const fromStatus = workflow.status;
+  const fromStatus = extra?.fromStatusOverride || workflow.status;
   const mainFolder = getMainFolder(workflow.source_jid);
   const updates: Parameters<typeof updateWorkflow>[1] = {
     status: transition.target,
   };
+
+  if (workflow.status === 'paused' && workflow.paused_from) {
+    updates.paused_from = null;
+  }
 
   if (extra?.accessToken !== undefined) {
     updates.access_token = extra.accessToken;
@@ -547,7 +553,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   }
 
   const workflowId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const now = new Date().toISOString();
+  const now = Date.now().toString();
   const mainFolder = getMainFolder(opts.sourceJid);
 
   // If entry point requires deliverable, it must be explicitly specified
@@ -760,21 +766,58 @@ export function skipWorkflow(workflowId: string): { error?: string } {
   if (!config)
     return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
 
-  const stateConfig = config.states[workflow.status];
+  return skipWorkflowStage(workflowId, workflow.status);
+}
+
+export function skipWorkflowStage(
+  workflowId: string,
+  stageKey: string,
+): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config)
+    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+
+  const terminalStates = getTerminalStates(config);
+  const stateConfig = config.states[stageKey];
+  if (!stateConfig) {
+    return {
+      error: `流程 ${workflowId} 不存在阶段 ${stageKey}`,
+    };
+  }
+
   if (
-    !stateConfig ||
-    stateConfig.type !== 'confirmation' ||
-    !stateConfig.on_approve
+    stageKey !== workflow.status &&
+    workflow.status !== 'paused' &&
+    !terminalStates.includes(workflow.status)
   ) {
     return {
-      error: `流程 ${workflowId} 当前状态 ${workflow.status} 不支持跳过操作`,
+      error: `流程 ${workflowId} 当前状态 ${workflow.status} 不支持跳过阶段 ${stageKey}`,
+    };
+  }
+
+  let transition: StateTransition | undefined;
+  if (stateConfig.type === 'confirmation') {
+    transition = stateConfig.on_approve;
+  } else if (stateConfig.type === 'delegation') {
+    transition = stateConfig.on_complete?.success;
+  }
+
+  if (!transition) {
+    return {
+      error: `流程 ${workflowId} 当前节点 ${stageKey} 不支持跳过操作`,
     };
   }
 
   const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
   if ('error' in rolesResult) return { error: rolesResult.error };
 
-  applyTransition(workflow, stateConfig.on_approve, rolesResult.roles);
+  createWorkbenchManualSkipEvent(workflowId, stageKey);
+  applyTransition(workflow, transition, rolesResult.roles, {
+    fromStatusOverride: stageKey,
+  });
   return {};
 }
 
@@ -982,7 +1025,7 @@ export function onDelegationComplete(delegationId: string): void {
 const ACTION_BUTTONS: Record<string, { label: string; type?: 'primary' | 'danger' | 'default' }> = {
   approve: { label: '✅ 确认执行', type: 'primary' },
   approve_dev: { label: '✅ 进入开发', type: 'primary' },
-  skip: { label: '⏭ 跳过当前节点' },
+  skip: { label: '⏭ 跳过此节点' },
   pause: { label: '⏸ 暂缓' },
   cancel: { label: '❌ 取消流程', type: 'danger' },
   resume: { label: '▶ 继续', type: 'primary' },
@@ -1357,7 +1400,7 @@ export function handleCardAction(action: {
     case 'skip': {
       if (!action.workflow_id) { notifyMain('[操作失败] 缺少流程 ID', wfSourceJid); break; }
       const result = skipWorkflow(action.workflow_id);
-      if (result.error) notifyMain(`[操作失败] 跳过当前节点失败: ${result.error}`, wfSourceJid, action.workflow_id);
+      if (result.error) notifyMain(`[操作失败] 跳过此节点失败: ${result.error}`, wfSourceJid, action.workflow_id);
       break;
     }
     case 'pause': {

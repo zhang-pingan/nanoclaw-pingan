@@ -1346,7 +1346,7 @@ export function updateWorkflow(
   >,
 ): void {
   const fields: string[] = ['updated_at = ?'];
-  const values: unknown[] = [new Date().toISOString()];
+  const values: unknown[] = [Date.now().toString()];
 
   if (updates.branch !== undefined) {
     fields.push('branch = ?');

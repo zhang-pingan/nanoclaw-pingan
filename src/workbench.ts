@@ -41,6 +41,7 @@ import {
   retryWorkflowStage,
   reviseWorkflow,
   skipWorkflow,
+  skipWorkflowStage,
 } from './workflow.js';
 import {
   getReachableWorkflowStages,
@@ -72,7 +73,7 @@ export interface WorkbenchTaskItem {
 
 export interface WorkbenchTimelineEvent {
   id: string;
-  type: 'lifecycle' | 'delegation' | 'approval' | 'artifact';
+  type: 'lifecycle' | 'delegation' | 'approval' | 'artifact' | 'manual';
   title: string;
   body: string;
   created_at: string;
@@ -85,6 +86,7 @@ export interface WorkbenchSubtask {
   stage_key: string;
   stage_label: string;
   status: 'completed' | 'current' | 'pending' | 'failed' | 'cancelled';
+  manually_skipped?: boolean;
   role?: string;
   skill?: string;
   target_folder?: string;
@@ -160,7 +162,10 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
   };
 }
 
-function mapPersistedSubtask(item: WorkbenchSubtaskRecord): WorkbenchSubtask {
+function mapPersistedSubtask(
+  item: WorkbenchSubtaskRecord,
+  manuallySkippedSubtaskIds?: Set<string>,
+): WorkbenchSubtask {
   return {
     id: item.id,
     title: item.title,
@@ -176,6 +181,7 @@ function mapPersistedSubtask(item: WorkbenchSubtaskRecord): WorkbenchSubtask {
           : item.status === 'failed'
             ? 'failed'
           : 'pending',
+    manually_skipped: manuallySkippedSubtaskIds?.has(item.id) || undefined,
     role: item.role || undefined,
     target_folder: item.group_folder || undefined,
     delegation_id: item.delegation_id || undefined,
@@ -189,7 +195,9 @@ function mapPersistedEvent(item: WorkbenchEventRecord): WorkbenchTimelineEvent {
   return {
     id: item.id,
     type:
-      item.event_type === 'workflow_created'
+      item.event_type === 'manual_skip'
+        ? 'manual'
+        : item.event_type === 'workflow_created'
         ? 'lifecycle'
         : item.event_type.includes('approval')
           ? 'approval'
@@ -500,20 +508,28 @@ function sortTimelineEvents(
   timeline: WorkbenchTimelineEvent[],
 ): WorkbenchTimelineEvent[] {
   return [...timeline].sort((a, b) => {
-    const aTs = new Date(a.created_at).getTime();
-    const bTs = new Date(b.created_at).getTime();
-    if (aTs !== bTs) return bTs - aTs;
-    return b.id.localeCompare(a.id);
+    const aTs = parseTimestamp(a.created_at);
+    const bTs = parseTimestamp(b.created_at);
+    if (aTs !== bTs) return aTs - bTs;
+    return a.id.localeCompare(b.id);
   });
 }
 
 function sortWorkbenchTaskItems(tasks: WorkbenchTaskItem[]): WorkbenchTaskItem[] {
   return [...tasks].sort((a, b) => {
-    const aTs = new Date(a.updated_at || a.created_at).getTime();
-    const bTs = new Date(b.updated_at || b.created_at).getTime();
+    const aTs = parseTimestamp(a.updated_at || a.created_at);
+    const bTs = parseTimestamp(b.updated_at || b.created_at);
     if (aTs !== bTs) return bTs - aTs;
     return b.id.localeCompare(a.id);
   });
+}
+
+function parseTimestamp(value: string | undefined | null): number {
+  if (!value) return 0;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function listWorkbenchTasks(): WorkbenchTaskItem[] {
@@ -586,6 +602,12 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
 
   const task = getWorkbenchTaskRecord(taskId);
   if (task) {
+    const events = listWorkbenchEventsByTask(task.id);
+    const manuallySkippedSubtaskIds = new Set(
+      events
+        .filter((item) => item.event_type === 'manual_skip' && item.subtask_id)
+        .map((item) => item.subtask_id as string),
+    );
     const visibleStageKeys = new Set(getVisibleStageKeys(workflow));
     return {
       task: toTaskItem(workflow),
@@ -593,10 +615,10 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
         workflow,
         listWorkbenchSubtasksByTask(task.id)
           .filter((item) => visibleStageKeys.has(item.stage_key))
-          .map(mapPersistedSubtask),
+          .map((item) => mapPersistedSubtask(item, manuallySkippedSubtaskIds)),
       ),
       timeline: sortTimelineEvents(
-        listWorkbenchEventsByTask(task.id).map(mapPersistedEvent),
+        events.map(mapPersistedEvent),
       ),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(mapPersistedArtifact),
       approvals: shouldShowApprovals
@@ -657,6 +679,7 @@ export function runWorkbenchTaskAction(input: {
     | 'cancel'
     | 'skip'
     | 'submit_access_token';
+  subtaskId?: string;
   revisionText?: string;
   accessToken?: string;
 }): { error?: string } {
@@ -674,8 +697,22 @@ export function runWorkbenchTaskAction(input: {
       return resumeWorkflow(workflowId);
     case 'cancel':
       return cancelWorkflow(workflowId);
-    case 'skip':
-      return skipWorkflow(workflowId);
+    case 'skip': {
+      if (!input.subtaskId) {
+        return skipWorkflow(workflowId);
+      }
+      const subtask = listWorkbenchSubtasksByTask(input.taskId).find(
+        (item) => item.id === input.subtaskId,
+      );
+      if (!subtask) return { error: 'Subtask not found' };
+      if (
+        subtask.status !== 'failed' &&
+        subtask.status !== 'cancelled'
+      ) {
+        return { error: 'Only failed or cancelled subtasks can be skipped from stage progress' };
+      }
+      return skipWorkflowStage(workflowId, subtask.stage_key);
+    }
     case 'submit_access_token':
       if (!input.accessToken?.trim()) {
         return { error: 'access_token required' };

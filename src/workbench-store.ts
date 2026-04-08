@@ -453,6 +453,51 @@ export function syncWorkbenchOnTransition(
   upsertApprovalForStage(workflow);
 }
 
+export function createWorkbenchManualSkipEvent(
+  workflowId: string,
+  stageKey: string,
+): void {
+  const workflow = getWorkflow(workflowId);
+  const task = getWorkbenchTaskByWorkflowId(workflowId);
+  if (!workflow || !task) return;
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const stageLabel = config?.status_labels[stageKey] || stageKey;
+  const subtask = getWorkbenchSubtaskByStage(task.id, stageKey);
+  const createdAt = nowIso();
+  const eventId = [
+    'wb-event',
+    workflow.id,
+    'manual-skip',
+    stageKey,
+    createdAt,
+  ].join('-');
+
+  createWorkbenchEvent({
+    id: eventId,
+    task_id: task.id,
+    subtask_id: subtask?.id || null,
+    event_type: 'manual_skip',
+    title: `手动跳过阶段：${stageLabel}`,
+    body: `按“成功处理”跳过 ${stageLabel}，直接进入下一阶段。`,
+    raw_ref_type: 'workflow',
+    raw_ref_id: workflow.id,
+    created_at: createdAt,
+  });
+  emitWorkbenchEvent({
+    type: 'event_created',
+    taskId: task.id,
+    workflowId,
+    payload: {
+      id: eventId,
+      title: `手动跳过阶段：${stageLabel}`,
+      body: `按“成功处理”跳过 ${stageLabel}，直接进入下一阶段。`,
+      status: workflow.status,
+      createdAt,
+    },
+  });
+}
+
 export function syncWorkbenchOnDelegationCreated(workflowId: string, delegationId: string): void {
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);

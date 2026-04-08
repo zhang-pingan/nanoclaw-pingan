@@ -1412,6 +1412,7 @@ class WebChannel {
 
     const data = body as {
       task_id?: string;
+      subtask_id?: string;
       action?:
         | 'approve'
         | 'revise'
@@ -1433,6 +1434,7 @@ class WebChannel {
     const result = runWorkbenchTaskAction({
       taskId: data.task_id,
       action: data.action,
+      subtaskId: data.subtask_id,
       revisionText: data.revision_text,
       accessToken: data.access_token,
     });

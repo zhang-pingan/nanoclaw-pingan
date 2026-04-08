@@ -1087,14 +1087,18 @@ function renderMemoryGroups() {
 
 function formatDateTime(ts) {
   if (ts === null || ts === undefined || ts === "") return "--";
-  const parsed = new Date(ts);
-  if (Number.isNaN(parsed.getTime())) {
-    const ms = Number(ts);
-    if (Number.isNaN(ms)) return "--";
-    const fromMs = new Date(ms);
-    return Number.isNaN(fromMs.getTime()) ? "--" : fromMs.toLocaleString();
-  }
+  const parsedMs = parseTimestamp(ts);
+  if (!Number.isFinite(parsedMs) || parsedMs <= 0) return "--";
+  const parsed = new Date(parsedMs);
   return parsed.toLocaleString();
+}
+
+function parseTimestamp(ts) {
+  if (ts === null || ts === undefined || ts === "") return NaN;
+  const numeric = Number(ts);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(ts);
+  return Number.isFinite(parsed) ? parsed : NaN;
 }
 
 function getPayloadTimestamp(payload) {
@@ -2134,8 +2138,8 @@ function renderWorkbenchTaskList() {
 function sortWorkbenchTaskItems(tasks) {
   if (!Array.isArray(tasks)) return [];
   return [...tasks].sort((a, b) => {
-    const aTs = Date.parse(a?.updated_at || a?.created_at || "");
-    const bTs = Date.parse(b?.updated_at || b?.created_at || "");
+    const aTs = parseTimestamp(a?.updated_at || a?.created_at || "");
+    const bTs = parseTimestamp(b?.updated_at || b?.created_at || "");
     const safeATs = Number.isFinite(aTs) ? aTs : 0;
     const safeBTs = Number.isFinite(bTs) ? bTs : 0;
     if (safeATs !== safeBTs) return safeBTs - safeATs;
@@ -2250,6 +2254,9 @@ function renderWorkbenchSubtasks(subtasks) {
     if (item.status === "current" && isAwaitingStage(item)) {
       return "待确认";
     }
+    if (item.manually_skipped && item.status === "completed") {
+      return "已跳过";
+    }
     const statusLabelMap = {
       pending: "未开始",
       current: "进行中",
@@ -2274,6 +2281,8 @@ function renderWorkbenchSubtasks(subtasks) {
     el.className = `workbench-subtask-step ${item.status}${item.id === selectedId ? " active" : ""}`;
     const stepHint = item.status === "current"
       ? (isAwaitingStage(item) ? "等待确认" : "正在处理")
+      : item.manually_skipped && item.status === "completed"
+        ? "已手动跳过"
       : item.status === "failed"
         ? "需处理"
         : item.status === "cancelled"
@@ -2288,6 +2297,7 @@ function renderWorkbenchSubtasks(subtasks) {
           <span class="workbench-subtask-index">0${stepIndex}</span>
           ${escapeHtml(item.stage_label || item.title)}
           ${item.status === "current" ? '<span class="workbench-current-chip">当前</span>' : ""}
+          ${item.manually_skipped ? '<span class="workbench-badge">已手动跳过</span>' : ""}
         </div>
         <div class="workbench-subtask-caption">${escapeHtml(stepHint)}</div>
       </div>
@@ -2307,15 +2317,26 @@ function renderWorkbenchSubtasks(subtasks) {
   const selectedIndex = subtasks.findIndex((item) => item.id === selected.id) + 1;
   const selectedBody = selected.result
     ? `结果摘要：${escapeHtml(selected.result)}`
+    : selected.manually_skipped
+      ? "该阶段已由人工按成功处理跳过，流程直接进入下一阶段"
     : selected.status === "current" && isAwaitingStage(selected)
       ? "等待审批确认后进入下一阶段"
       : "等待执行或审批推进";
-  const detailHint = selected.status === "failed"
+  const detailHint = selected.manually_skipped
+    ? `
+      <div class="workbench-subtask-hint current">
+        <div class="workbench-subtask-hint-title">已手动跳过</div>
+        <div class="workbench-subtask-hint-body">
+          这个阶段未按原路径完成，而是由人工按“成功处理”跳过；当前仅保留历史记录，不提供重跑入口。
+        </div>
+      </div>
+    `
+    : selected.status === "failed"
     ? `
       <div class="workbench-subtask-hint failed">
         <div class="workbench-subtask-hint-title">处理建议</div>
         <div class="workbench-subtask-hint-body">
-          优先查看结果摘要中的报错信息，确认修复后可直接点击“重跑”重新推进该阶段。
+          优先查看结果摘要中的报错信息；如果不再处理这个阶段，也可以点击“跳过此节点”，按该节点成功处理并直接进入下一阶段。
         </div>
       </div>
     `
@@ -2324,7 +2345,7 @@ function renderWorkbenchSubtasks(subtasks) {
         <div class="workbench-subtask-hint cancelled">
           <div class="workbench-subtask-hint-title">阶段已取消</div>
           <div class="workbench-subtask-hint-body">
-            这个阶段因手动取消或流程终止而停止，不代表执行成功，也不会继续自动推进。
+            这个阶段因手动取消或流程终止而停止；如需继续流程，可点击“跳过此节点”，按该节点成功处理并直接进入下一阶段。
           </div>
         </div>
       `
@@ -2346,6 +2367,7 @@ function renderWorkbenchSubtasks(subtasks) {
         <span class="workbench-subtask-detail-index">阶段 ${selectedIndex}</span>
         ${escapeHtml(selected.stage_label || selected.title)}
         <span class="workbench-badge">${escapeHtml(getSubtaskStatusLabel(selected))}</span>
+        ${selected.manually_skipped ? '<span class="workbench-badge">已手动跳过</span>' : ""}
       </div>
     </div>
     <div class="workbench-item-body">
@@ -2355,14 +2377,34 @@ function renderWorkbenchSubtasks(subtasks) {
     ${detailHint}
   `;
 
-  if (selected.role && selected.status === "failed") {
+  const activeTask = currentWorkbenchDetail && currentWorkbenchDetail.task
+    ? currentWorkbenchDetail.task
+    : null;
+
+  if (selected.role && (selected.status === "failed" || selected.status === "cancelled")) {
     const actions = document.createElement("div");
     actions.className = "workbench-subtask-actions";
-    const retryBtn = document.createElement("button");
-    retryBtn.className = "btn-ghost";
-    retryBtn.textContent = "重跑";
-    retryBtn.addEventListener("click", () => triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, selected.id));
-    actions.appendChild(retryBtn);
+    if (selected.status === "failed") {
+      const retryBtn = document.createElement("button");
+      retryBtn.className = "btn-ghost";
+      retryBtn.textContent = "重跑";
+      retryBtn.addEventListener("click", () => triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, selected.id));
+      actions.appendChild(retryBtn);
+    }
+    if (activeTask) {
+      const labels = getWorkbenchApprovalLabels(activeTask, {
+        approval_type: selected.stage_key,
+        action_mode: "approve_only",
+      });
+      const skipBtn = document.createElement("button");
+      skipBtn.className = "btn-ghost";
+      skipBtn.textContent = labels.skip || "跳过此节点";
+      skipBtn.addEventListener("click", () => {
+        if (!confirm(`确认按“成功处理”跳过“${selected.stage_label || selected.title}”并直接进入下一步吗？`)) return;
+        triggerWorkbenchAction(activeTask.id, "skip", selected.id);
+      });
+      actions.appendChild(skipBtn);
+    }
     detailEl.appendChild(actions);
   }
 
@@ -2385,20 +2427,20 @@ function getWorkbenchApprovalLabels(task, approval) {
   const approvalType = approval.approval_type || task.status;
   switch (approvalType) {
     case "plan_confirm":
-      return { approve: "进入开发", revise: "返回方案修改", skip: "跳过当前节点" };
+      return { approve: "进入开发", revise: "返回方案修改", skip: "跳过此节点" };
     case "plan_examine_confirm":
-      return { approve: "继续开发", revise: "返回方案修改", skip: "跳过当前节点" };
+      return { approve: "继续开发", revise: "返回方案修改", skip: "跳过此节点" };
     case "dev_examine_confirm":
-      return { approve: "继续后续流程", revise: "返回开发修正", skip: "跳过当前节点" };
+      return { approve: "继续后续流程", revise: "返回开发修正", skip: "跳过此节点" };
     case "awaiting_confirm":
-      return { approve: "开始预发部署", revise: "", skip: "跳过当前节点" };
+      return { approve: "开始预发部署", revise: "", skip: "跳过此节点" };
     case "testing_confirm":
       return { approve: "", revise: "填写 access_token 并开始测试", skip: "跳过鉴权直接测试" };
     default:
       return {
         approve: "通过",
         revise: approval.action_mode === "approve_or_revise" ? "驳回并修改" : "",
-        skip: "跳过当前节点",
+        skip: "跳过此节点",
       };
   }
 }
@@ -2433,9 +2475,9 @@ function renderWorkbenchApprovals(approvals, task) {
     }
     const skipBtn = document.createElement("button");
     skipBtn.className = "btn-ghost";
-    skipBtn.textContent = labels.skip || "跳过当前节点";
+    skipBtn.textContent = labels.skip || "跳过此节点";
     skipBtn.addEventListener("click", () => {
-      if (!confirm(`确认跳过“${item.title}”并直接进入下一步吗？`)) return;
+      if (!confirm(`确认跳过“${item.title}”并进入下一步吗？`)) return;
       triggerWorkbenchAction(task.id, "skip");
     });
     actions.appendChild(skipBtn);
@@ -2456,8 +2498,8 @@ function renderWorkbenchApprovals(approvals, task) {
 function sortWorkbenchItemsByCreatedAt(items) {
   if (!Array.isArray(items)) return [];
   return [...items].sort((a, b) => {
-    const aTs = Date.parse(a?.created_at || "");
-    const bTs = Date.parse(b?.created_at || "");
+    const aTs = parseTimestamp(a?.created_at || "");
+    const bTs = parseTimestamp(b?.created_at || "");
     const safeATs = Number.isFinite(aTs) ? aTs : 0;
     const safeBTs = Number.isFinite(bTs) ? bTs : 0;
     if (safeATs !== safeBTs) return safeBTs - safeATs;
@@ -2542,10 +2584,22 @@ function renderWorkbenchTimeline(timeline) {
   }
   sortedTimeline.forEach((item) => {
     const el = document.createElement("div");
-    el.className = "workbench-event-item";
+    el.className = `workbench-event-item ${item.type || ""}`;
+    const eventTypeLabel = item.type === "manual"
+      ? "手动处理"
+      : item.type === "approval"
+        ? "审批"
+        : item.type === "artifact"
+          ? "产物"
+          : item.type === "lifecycle"
+            ? "流程"
+            : "执行";
     el.innerHTML = `
       <div class="workbench-item-row">
-        <div class="workbench-item-title">${escapeHtml(item.title)}</div>
+        <div class="workbench-item-title">
+          ${escapeHtml(item.title)}
+          <span class="workbench-badge">${escapeHtml(eventTypeLabel)}</span>
+        </div>
         <span class="workbench-badge">${escapeHtml(formatDateTime(item.created_at))}</span>
       </div>
       <div class="workbench-item-body">${escapeHtml(item.body || "")}</div>
@@ -2555,10 +2609,18 @@ function renderWorkbenchTimeline(timeline) {
 }
 
 function sortWorkbenchTimeline(timeline) {
-  return sortWorkbenchItemsByCreatedAt(timeline);
+  if (!Array.isArray(timeline)) return [];
+  return [...timeline].sort((a, b) => {
+    const aTs = parseTimestamp(a?.created_at || "");
+    const bTs = parseTimestamp(b?.created_at || "");
+    const safeATs = Number.isFinite(aTs) ? aTs : 0;
+    const safeBTs = Number.isFinite(bTs) ? bTs : 0;
+    if (safeATs !== safeBTs) return safeATs - safeBTs;
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  });
 }
 
-async function triggerWorkbenchAction(taskId, action) {
+async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
   let revisionText = "";
   let accessToken = "";
   if (action === "revise") {
@@ -2573,6 +2635,7 @@ async function triggerWorkbenchAction(taskId, action) {
       method: "POST",
       body: JSON.stringify({
         task_id: taskId,
+        subtask_id: subtaskId || undefined,
         action,
         revision_text: revisionText,
         access_token: accessToken,
@@ -3222,7 +3285,7 @@ function applyWorkbenchRealtimeEvent(event) {
     const existingIdx = currentWorkbenchDetail.timeline.findIndex((item) => item.id === nextId);
     const nextItem = {
       id: nextId,
-      type: "delegation",
+      type: payload.status === "manual_skip" ? "manual" : "delegation",
       title: payload.title || "任务更新",
       body: payload.body || "",
       created_at: getPayloadTimestamp(payload),

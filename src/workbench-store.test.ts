@@ -136,7 +136,7 @@ describe('workbench approval transition sync', () => {
     expect(transitionEvents).toHaveLength(1);
   });
 
-  it('returns task timeline in reverse chronological order', () => {
+  it('returns task timeline in chronological order', () => {
     dbCreateWorkflow({
       id: 'wf-timeline-order',
       name: '时间线排序',
@@ -161,8 +161,8 @@ describe('workbench approval transition sync', () => {
     const detail = getWorkbenchTaskDetail('wb-wf-timeline-order');
     expect(detail).not.toBeNull();
     expect(detail?.timeline.map((item) => item.created_at)).toEqual([
-      '2026-04-07T00:30:00.000Z',
       '2026-04-07T00:00:00.000Z',
+      '2026-04-07T00:30:00.000Z',
     ]);
   });
 
