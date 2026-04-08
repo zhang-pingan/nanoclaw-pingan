@@ -357,6 +357,7 @@ function buildTemplateVars(
     delegationResult?: string;
     resultSummary?: string;
     revisionText?: string;
+    testDoc?: string;
   },
 ): TemplateVars {
   return {
@@ -368,6 +369,9 @@ function buildTemplateVars(
     deliverable: workflow.deliverable || 'N/A',
     deploy_branch: workflow.deploy_branch || '',
     access_token: workflow.access_token || '',
+    test_doc:
+      extra?.testDoc ||
+      `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/test.md`,
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
@@ -378,7 +382,34 @@ function finalizeDelegationTaskContent(
   skill: string,
   taskContent: string,
   workflow: Workflow,
+  extra?: {
+    testDoc?: string;
+  },
 ): string {
+  if (skill === 'dev-bugfix') {
+    const testDoc =
+      extra?.testDoc ||
+      `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/test.md`;
+    const testDocLine = `测试文档：${testDoc}`;
+    const hasTestDocLine = taskContent.includes('测试文档：');
+    let finalContent = hasTestDocLine ? taskContent : `${taskContent}\n${testDocLine}`;
+
+    if (!workflow.branch) {
+      const warning = [
+        '[分支缺失警告]',
+        '当前 workflow 未记录明确的工作分支。',
+        '请先从以下交付文档确认工作分支后再修复：',
+        `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/dev.md`,
+        '本轮修复记录应更新到以下测试文档：',
+        testDoc,
+        '若仍无法确定，请不要猜测或直接在主干分支修改；请停止修改并反馈失败原因。',
+      ].join('\n');
+      return finalContent ? `${finalContent}\n\n${warning}` : warning;
+    }
+
+    return finalContent;
+  }
+
   if (skill !== 'ops-staging-deploy' || !workflow.deploy_branch) {
     return taskContent;
   }
@@ -404,6 +435,7 @@ function applyTransition(
     resultSummary?: string;
     revisionText?: string;
     accessToken?: string;
+    testDoc?: string;
   },
 ): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -447,11 +479,12 @@ function applyTransition(
     const taskContent = transition.task_template
       ? renderTemplate(transition.task_template, vars, roles)
       : '';
-    const finalTaskContent = finalizeDelegationTaskContent(
-      delegateSkill,
-      taskContent,
-      workflow,
-    );
+      const finalTaskContent = finalizeDelegationTaskContent(
+        delegateSkill,
+        taskContent,
+        workflow,
+        extra,
+      );
 
     try {
       const delegationId = delegateTo(
@@ -997,6 +1030,7 @@ export function onDelegationComplete(delegationId: string): void {
 
   // Parse result summary
   let resultSummary = delegation.result || '';
+  let testDoc = '';
   try {
     const p = JSON.parse(resultSummary);
     if (p.summary) {
@@ -1008,6 +1042,9 @@ export function onDelegationComplete(delegationId: string): void {
           '\n' + p.bugs.map((b: any) => `- ${b.id}: ${b.title}`).join('\n');
       }
     }
+    if (typeof p.test_doc === 'string' && p.test_doc.trim()) {
+      testDoc = p.test_doc.trim();
+    }
   } catch {
     /* not JSON, use raw */
   }
@@ -1015,6 +1052,7 @@ export function onDelegationComplete(delegationId: string): void {
   applyTransition(workflow, transition, roles, {
     delegationResult: delegation.result || '',
     resultSummary,
+    testDoc,
   });
 }
 

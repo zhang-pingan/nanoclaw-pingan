@@ -206,6 +206,7 @@ export interface TemplateVars {
   deliverable?: string;
   deploy_branch?: string;
   access_token?: string;
+  test_doc?: string;
   delegation_result?: string;
   result_summary?: string;
   revision_text?: string;

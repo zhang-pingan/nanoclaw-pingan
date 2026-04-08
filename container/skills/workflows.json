@@ -139,7 +139,7 @@
           "target": "dev",
           "role": "dev",
           "skill": "dev-bugfix",
-          "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n工作分支：{{branch}}\n\n补充修改意见：\n{{revision_text}}",
+          "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n工作分支：{{branch}}\n交付文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/dev.md\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}",
           "notify": "[流程进展] 需求「{{name}}」({{id}}) 已确认回到开发修正，已委派 {{role_folder:dev}} 处理。"
         }
       },
@@ -201,7 +201,7 @@
             "role": "dev",
             "skill": "dev-bugfix",
             "increment_round": true,
-            "task_template": "请修复以下测试发现的问题（Round {{round}}）：\n\n服务名称：{{service}}\n工作分支：{{branch}}\n\n测试报告：\n{{delegation_result}}",
+            "task_template": "请修复以下测试发现的问题（Round {{round}}）：\n\n服务名称：{{service}}\n工作分支：{{branch}}\n交付文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/dev.md\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
             "notify": "[流程进展] 需求「{{name}}」({{id}}) 测试发现问题 ❌\n{{result_summary}}\n进入 Round {{round}} 修复流程，已委派 {{role_folder:dev}} 修复。"
           }
         }

@@ -1,30 +1,44 @@
 ---
 name: test-requirement
-description: Test implemented features — analyze delivery docs, design test cases, execute tests on staging, and report results.
+description: Test implemented features in first-pass or regression mode — analyze delivery docs, execute staging verification, and update test reports.
 ---
 
 # 需求测试 Skill
 
-## 工作流程
+## 模式说明
 
-收到委派的测试任务后，严格按以下阶段执行。
+本 skill 同时支持两种模式：
 
-### 阶段一：文档分析
+- 首测模式：首次对该需求进行完整测试，负责建立测试基线，生成或补全 `test.md`，并产出首轮测试报告
+- 复测模式：在开发修复问题后，基于已有 `test.md`、历史 BUG 和修复记录执行回归验证，并追加新一轮测试结果
 
-1. 从任务描述中获取交付文档路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/dev.md` 中的需求实现文档，提取关键信息：
+模式判断规则：
+
+1. 如果任务上下文中包含历史 BUG、修复记录、`Round N`、或明确提到“修复后重新测试/回归测试/复测”，按复测模式执行
+2. 如果测试文档 `test.md` 已存在，且其中已经包含测试报告或历史修复记录，优先按复测模式执行
+3. 其他情况按首测模式执行
+
+## 首测工作流程
+
+### 1. 文档分析
+
+1. 从任务描述中获取交付文档路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/dev.md`，提取：
    - 需求描述与实现方案
-   - 变更的文件列表
-   - 接口/数据库变更
-   - 文档中列出的测试要点
-   - 如任务描述中提供了 `access_token`，提取该值，并在后续接口测试中统一拼装为 `Authorization: Bearer {access_token}` 请求头
-2. 阅读项目代码中对应的变更文件，理解实际实现
-3. 如有不清楚的地方，向用户确认
+   - 变更文件列表
+   - 接口和数据库变更
+   - 文档中的测试要点
+   - 如任务中提供了 `access_token`，提取该值，并在后续接口测试中统一拼装为 `Authorization: Bearer {access_token}` 请求头
+2. 确认测试文档路径，优先使用任务中明确给出的 `测试文档：xxx`；若未给出，则默认使用 `/workspace/projects/{服务名}/iteration/{文件夹名}/test.md`
+3. 阅读项目代码中对应的变更文件，理解实际实现
+4. 如有不清楚的地方，向用户确认
 
-### 阶段二：测试用例生成
+### 2. 测试用例生成
 
-根据文档和代码生成测试用例，并保存到 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/test.md`，格式如下（每条用例前必须有 `[ ]`）：
+1. 根据文档和代码生成测试用例，并写入 `test.md`
+2. 若 `test.md` 已存在但内容不完整，可在原文件内补全，不要创建多个测试文档
+3. 测试用例格式如下，每条用例前必须有 `[ ]`
 
-```
+```text
 *测试用例*
 
 📋 测试需求：{需求名称}
@@ -55,26 +69,26 @@ description: Test implemented features — analyze delivery docs, design test ca
   ...
 ```
 
-测试用例生成并写入 `test.md` 后，发送给用户确认，确认后开始执行。
+4. 测试用例生成并写入 `test.md` 后，发送给用户确认，确认后开始执行
 
-### 阶段三：测试执行
+### 3. 测试执行
 
 1. 按用例逐条执行，综合以下手段验证：
    - *代码审查*：阅读变更代码确认逻辑正确性
-   - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求/响应；若接口需要登录鉴权，优先使用任务描述中提供的 `access_token`，并在请求头中显式拼装 `Authorization: Bearer {access_token}`，例如 `-H 'Authorization: Bearer eyJ...'`
-   - *日志验证*：SSH 到 `staging.log_hosts`，查看 `staging.logs_info` 和 `staging.logs_error`，确认无异常日志
-   - *数据库验证*：通过 MySQL 代理查询 `staging.mysql` 预发数据库，验证数据变更是否符合预期(注意**预发的表后缀+`_gray`**)
+   - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求和响应；若接口需要登录鉴权，优先使用任务中提供的 `access_token`，并显式拼装 `Authorization: Bearer {access_token}` 请求头
+   - *日志验证*：SSH 到 `staging.log_hosts`，查看 `staging.logs_info` 和 `staging.logs_error`
+   - *数据库验证*：通过 MySQL 代理查询 `staging.mysql` 预发数据库，验证数据变更是否符合预期，注意预发表后缀加 `_gray`
 2. 对每条用例记录结果，在 `[ ]` 框内直接标记：
    - 通过：`[x]`
    - 失败：`[!]`
    - 阻塞：`[-]`
 3. 发现问题时，附上日志片段或数据库查询结果作为证据
 
-### 阶段四：测试报告
+### 4. 测试报告
 
-测试完成后，不再新建独立测试报告文档，而是在同一个 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/test.md` 文件下继续补充“测试报告”部分。
-
-例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md`
+1. 测试完成后，不新建独立测试报告文档，而是在同一个 `test.md` 中补充首轮“测试报告”
+2. 示例路径：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md`
+3. 测试报告格式示例：
 
 ```markdown
 # 测试报告
@@ -118,19 +132,142 @@ description: Test implemented features — analyze delivery docs, design test ca
 {整体评估：是否可以发布，还需要修复哪些问题}
 ```
 
-保存报告后，在群内发送测试概况和失败用例摘要。
+### 5. 返回结果
 
-如果存在失败用例，告知用户：「共发现 {N} 个问题，详见测试报告。建议将问题反馈给开发群进行修复。」
+1. 保存报告后，在群内发送测试概况和失败用例摘要
+2. 如果存在失败用例，告知用户：“共发现 {N} 个问题，详见测试报告。建议将问题反馈给开发群进行修复。”
+3. 调用 `complete_delegation` 返回结果：
+   - 全部通过：outcome=`success`
+   - 全部失败或部分失败：outcome=`failure`
+4. result JSON 应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`test_doc`、`summary`
+   - `deliverable` 是文件夹名，不含 `.md` 后缀
+   - `bugs` 中每个对象建议包含：`id`、`title`、`severity`、`related_case`
+   - `id` 必须与测试报告中的 BUG 编号一致，例如 `BUG-001`
+   - `related_case` 建议填写对应测试用例编号，例如 `TC-001`
 
-通过 `complete_delegation` 返回结果时：
-- 全部通过：outcome=`success`，全部失败或部分失败：outcome=`failure`
-- result JSON：{"total":10,"passed":8,"failed":2,"blocked":0,"bugs":[{"id":"BUG-001","title":"xx","severity":"严重"}],"deliverable":"2026-03-20_用户昵称功能","summary":"共10条，通过8条，失败2条"}
-  - **deliverable 是文件夹名**，不含 `.md` 后缀
+全部通过返回示例：
 
-## 工作原则
+```json
+{
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "blocked": 0,
+  "bugs": [],
+  "deliverable": "2026-03-20_用户昵称功能",
+  "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+  "summary": "共 10 条，通过 10 条，失败 0 条，阻塞 0 条"
+}
+```
+
+存在失败用例返回示例：
+
+```json
+{
+  "total": 10,
+  "passed": 8,
+  "failed": 2,
+  "blocked": 0,
+  "bugs": [
+    {
+      "id": "BUG-001",
+      "title": "昵称长度超限时接口未返回预期错误",
+      "severity": "严重",
+      "related_case": "TC-001"
+    },
+    {
+      "id": "BUG-002",
+      "title": "未登录访问资料接口返回 500",
+      "severity": "一般",
+      "related_case": "TC-004"
+    }
+  ],
+  "deliverable": "2026-03-20_用户昵称功能",
+  "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+  "summary": "共 10 条，通过 8 条，失败 2 条，阻塞 0 条"
+}
+```
+
+## 复测工作流程
+
+### 1. 复测准备
+
+1. 从任务描述中确认：
+   - 交付文档 `dev.md`
+   - 测试文档 `test.md`
+   - 如有提供，读取 `access_token`
+   - 如有提供，读取历史测试结果中的 BUG 列表和修复记录
+2. 读取已有 `test.md`，重点提取：
+   - 上一轮失败的 BUG 列表
+   - 每个 BUG 的 `BUG ID`、`关联用例`、严重程度、复现步骤
+   - 开发写回的“修复记录”
+   - 需要优先回归的受影响功能点
+3. 阅读最新代码变更，确认开发实际修复内容
+
+### 2. 复测用例整理
+
+1. 不要推翻已有测试用例
+2. 优先复用已有 `test.md` 中的失败用例和关键回归用例
+3. 如修复影响到新的模块或边界场景，可在原 `test.md` 中补充新的回归用例
+4. 复测关注重点应依次为：
+   - 上一轮失败用例对应的回归验证
+   - 开发已声明修复的 `BUG ID` 对应验证
+   - 与修复点直接相关的影响面回归
+   - 必要的冒烟测试
+
+### 3. 复测执行
+
+1. 使用与首测相同的验证手段执行回归验证：
+   - 代码审查
+   - 接口测试
+   - 日志验证
+   - 数据库验证
+2. 对复测涉及的用例更新执行结果
+3. 若“旧问题未修复”，必须沿用原 `BUG ID`
+4. 若发现“新的问题”，再新增新的 `BUG ID`
+5. 所有结论都要有可追溯证据
+
+### 4. 复测报告
+
+1. 保留原有 `test.md` 内容，不覆盖上一轮报告
+2. 在原文件末尾追加新的“Round N 复测结果”或“Round N 回归结果”
+3. 建议格式如下：
+
+```markdown
+# Round {N} 复测结果
+
+## 回归范围
+- BUG-001 / TC-001
+- BUG-002 / TC-004
+
+## 回归结果
+- BUG-001：已修复 / 未修复
+- BUG-002：已修复 / 未修复
+
+## 新发现问题
+- 无
+
+## 本轮结论
+{是否通过复测，是否还需继续修复}
+```
+
+### 5. 返回结果
+
+1. 保存复测结果后，在群内发送本轮回归概况和未通过问题摘要
+2. 调用 `complete_delegation` 返回结果：
+   - 本轮全部通过：outcome=`success`
+   - 仍有未修复或新问题：outcome=`failure`
+3. result JSON 仍应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`test_doc`、`summary`
+4. 复测模式下的额外要求：
+   - 对“旧问题未修复”的情况，必须继续使用原 `BUG ID`
+   - 对“已修复”的问题，不要继续保留在 `bugs` 中
+   - `bugs` 只返回本轮仍未通过或新发现的问题
+
+## 通用规则
 
 - *基于代码验证*：不仅看文档描述，要读实际代码确认实现是否正确
 - *覆盖边界情况*：空值、极端值、并发、权限等边界场景必须覆盖
 - *鉴权不可省略*：涉及受保护接口时，执行接口测试前先从任务描述中提取 `access_token`，并在所有相关 `curl` 请求中携带拼装后的 `Authorization: Bearer {access_token}` 请求头
 - *问题描述精准*：每个 bug 都要有明确的复现步骤和预期/实际对比
 - *回归意识*：关注变更是否影响已有功能，必要时补充回归用例
+- *首测复测一体化*：首测负责建立基线，复测负责沿用基线并验证修复结果，不要把复测当成全新需求测试
