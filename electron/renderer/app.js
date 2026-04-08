@@ -2338,6 +2338,28 @@ function renderWorkbenchSubtasks(subtasks) {
     workbenchSubtasks.innerHTML = `<div class="workbench-empty">暂无阶段数据</div>`;
     return;
   }
+  function getDisplaySubtasks(items) {
+    const currentItems = items.filter((item) => item.status === "current");
+    if (currentItems.length <= 1) {
+      return items;
+    }
+
+    const taskCurrentStage = currentWorkbenchDetail && currentWorkbenchDetail.task
+      ? currentWorkbenchDetail.task.current_stage
+      : "";
+    const preferredCurrent = currentItems.find((item) => item.stage_key === taskCurrentStage)
+      || currentItems[currentItems.length - 1];
+
+    return items.map((item) => {
+      if (item.status !== "current" || item.id === preferredCurrent.id) {
+        return item;
+      }
+      return {
+        ...item,
+        status: "completed",
+      };
+    });
+  }
   function isAwaitingStage(item) {
     return typeof item.stage_key === "string" && item.stage_key.startsWith("awaiting_");
   }
@@ -2357,8 +2379,9 @@ function renderWorkbenchSubtasks(subtasks) {
     };
     return statusLabelMap[item.status] || item.status;
   }
-  const currentSubtask = subtasks.find((item) => item.status === "current") || null;
-  const persistedSelection = subtasks.find((item) => item.id === workbenchSelectedSubtaskId) || null;
+  const displaySubtasks = getDisplaySubtasks(subtasks);
+  const currentSubtask = displaySubtasks.find((item) => item.status === "current") || null;
+  const persistedSelection = displaySubtasks.find((item) => item.id === workbenchSelectedSubtaskId) || null;
   const shouldAutoFollowCurrent =
     workbenchFollowCurrentSubtaskOnce &&
     currentSubtask &&
@@ -2379,8 +2402,8 @@ function renderWorkbenchSubtasks(subtasks) {
   const chainEl = document.createElement("div");
   chainEl.className = "workbench-subtasks-chain";
 
-  subtasks.forEach((item) => {
-    const stepIndex = subtasks.findIndex((subtask) => subtask.id === item.id) + 1;
+  displaySubtasks.forEach((item) => {
+    const stepIndex = displaySubtasks.findIndex((subtask) => subtask.id === item.id) + 1;
     const el = document.createElement("button");
     el.type = "button";
     el.className = `workbench-subtask-step ${item.status}${item.id === selectedId ? " active" : ""}`;
@@ -2421,8 +2444,8 @@ function renderWorkbenchSubtasks(subtasks) {
     chainEl.appendChild(el);
   });
 
-  const selected = subtasks.find((item) => item.id === selectedId) || subtasks[0];
-  const selectedIndex = subtasks.findIndex((item) => item.id === selected.id) + 1;
+  const selected = displaySubtasks.find((item) => item.id === selectedId) || displaySubtasks[0];
+  const selectedIndex = displaySubtasks.findIndex((item) => item.id === selected.id) + 1;
   const selectedBody = selected.result
     ? `结果摘要：${escapeHtml(selected.result)}`
     : selected.manually_skipped
