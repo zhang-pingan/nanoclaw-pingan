@@ -316,7 +316,7 @@ function extractCreateWorkflowJsonObject(content: string): unknown | null {
   return null;
 }
 
-function parseCreateWorkflowCommand(
+export function parseCreateWorkflowCommand(
   content: string,
 ): ParsedCreateWorkflowCommand {
   const parsed = extractCreateWorkflowJsonObject(content);

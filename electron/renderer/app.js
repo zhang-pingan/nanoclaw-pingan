@@ -2977,7 +2977,7 @@ async function openWorkbenchCreateTaskModal() {
           <div id="wb-requirement-hint" class="workflow-wizard-hint"></div>
         </div>
         <div class="workflow-wizard-section" id="wb-deploy-branch-section">
-          <div class="workflow-wizard-label">5. deploy_branch（预发工作分支，可选）</div>
+          <div class="workflow-wizard-label">5. staging_work_branch（预发工作分支，可选）</div>
           <div id="wb-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
         </div>
       </div>
@@ -3234,7 +3234,7 @@ async function openWorkbenchCreateTaskModal() {
           start_from: state.entryPoint,
           workflow_type: state.workflowType,
           deliverable: deliverableRequired ? name : void 0,
-          deploy_branch: state.deployBranch.trim() || void 0,
+          staging_work_branch: state.deployBranch.trim() || void 0,
         }),
       });
       const data = await res.json();
@@ -3992,7 +3992,7 @@ function openWorkflowWizard(optionsData) {
           <div id="wf-requirement-deliverable-hint" class="workflow-wizard-hint"></div>
         </div>
         <div class="workflow-wizard-section" id="wf-deploy-branch-section">
-          <div class="workflow-wizard-label">5. deploy_branch（预发工作分支，可选）</div>
+          <div class="workflow-wizard-label">5. staging_work_branch（预发工作分支，可选）</div>
           <div id="wf-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
         </div>
       </div>
@@ -4291,7 +4291,7 @@ function openWorkflowWizard(optionsData) {
       data.deliverable = requirementName;
     }
     if (state.deployBranch.trim()) {
-      data.deploy_branch = state.deployBranch.trim();
+      data.staging_work_branch = state.deployBranch.trim();
     }
 
     const content = JSON.stringify({
