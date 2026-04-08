@@ -354,6 +354,12 @@ function sortSubtasksByWorkflowOrder(
   workflow: Workflow,
   subtasks: WorkbenchSubtask[],
 ): WorkbenchSubtask[] {
+  const hasRepeatedStages =
+    new Set(subtasks.map((item) => item.stage_key)).size !== subtasks.length;
+  if (hasRepeatedStages) {
+    return [...subtasks];
+  }
+
   const stageOrder = new Map(
     getOrderedVisibleStageKeys(workflow).map((stageKey, index) => [
       stageKey,

@@ -72,8 +72,9 @@ function stageActionItemId(workflowId: string, stageKey: string): string {
   return `wb-action-${workflowId}-${stageKey}`;
 }
 
-function subtaskId(taskId: string, stageKey: string): string {
-  return `wb-subtask-${taskId}-${stageKey}`;
+function subtaskId(taskId: string, stageKey: string, attempt = 1): string {
+  const baseId = `wb-subtask-${taskId}-${stageKey}`;
+  return attempt <= 1 ? baseId : `${baseId}-${attempt}`;
 }
 
 function actionItemId(
@@ -270,10 +271,7 @@ function resolveStaleStageActionItems(
 
   for (const item of listWorkbenchActionItemsByTask(taskId)) {
     if (item.status !== 'pending') continue;
-    if (
-      isCurrentWorkflowApprovalItem(item) ||
-      isCurrentInteractionItem(item)
-    ) {
+    if (isCurrentWorkflowApprovalItem(item) || isCurrentInteractionItem(item)) {
       continue;
     }
     updateWorkbenchActionItem(item.id, {
@@ -287,6 +285,62 @@ function resolveStaleStageActionItems(
       resolvedAt,
     });
   }
+}
+
+function nextSubtaskAttempt(taskId: string, stageKey: string): number {
+  return (
+    listWorkbenchSubtasksByTask(taskId).filter(
+      (item) => item.stage_key === stageKey,
+    ).length + 1
+  );
+}
+
+function createStageSubtask(params: {
+  workflow: Workflow;
+  taskId: string;
+  stageKey: string;
+  status: 'current' | 'pending';
+  startedAt: string | null;
+  updatedAt: string;
+  attempt?: number;
+}): string | null {
+  const config = getWorkflowTypeConfig(params.workflow.workflow_type);
+  const state = config?.states[params.stageKey];
+  if (!config || !state) return null;
+
+  const attempt =
+    params.attempt ?? nextSubtaskAttempt(params.taskId, params.stageKey);
+  const id = subtaskId(params.taskId, params.stageKey, attempt);
+  createWorkbenchSubtask({
+    id,
+    task_id: params.taskId,
+    workflow_id: params.workflow.id,
+    delegation_id: null,
+    stage_key: params.stageKey,
+    title: config.status_labels[params.stageKey] || params.stageKey,
+    role: state.role || null,
+    group_folder: null,
+    status: params.status,
+    input_summary: state.task_template
+      ? truncate(state.task_template, 240)
+      : null,
+    output_summary: null,
+    started_at: params.startedAt,
+    finished_at: null,
+    updated_at: params.updatedAt,
+  });
+  emitWorkbenchEvent({
+    type: 'subtask_updated',
+    taskId: params.taskId,
+    workflowId: params.workflow.id,
+    payload: {
+      id,
+      stageKey: params.stageKey,
+      status: params.status,
+      attempt,
+    },
+  });
+  return id;
 }
 
 function ensureSubtasks(workflow: Workflow): void {
@@ -308,33 +362,14 @@ function ensureSubtasks(workflow: Workflow): void {
     }
     const existing = getWorkbenchSubtaskByStage(task.id, stageKey);
     if (existing) continue;
-    createWorkbenchSubtask({
-      id: subtaskId(task.id, stageKey),
-      task_id: task.id,
-      workflow_id: workflow.id,
-      delegation_id: null,
-      stage_key: stageKey,
-      title: config.status_labels[stageKey] || stageKey,
-      role: state.role || null,
-      group_folder: null,
-      status: stageKey === workflow.status ? 'current' : 'pending',
-      input_summary: state.task_template
-        ? truncate(state.task_template, 240)
-        : null,
-      output_summary: null,
-      started_at: stageKey === workflow.status ? workflow.created_at : null,
-      finished_at: null,
-      updated_at: workflow.updated_at,
-    });
-    emitWorkbenchEvent({
-      type: 'subtask_updated',
+    createStageSubtask({
+      workflow,
       taskId: task.id,
-      workflowId: workflow.id,
-      payload: {
-        id: subtaskId(task.id, stageKey),
-        stageKey,
-        status: stageKey === workflow.status ? 'current' : 'pending',
-      },
+      stageKey,
+      status: stageKey === workflow.status ? 'current' : 'pending',
+      startedAt: stageKey === workflow.status ? workflow.created_at : null,
+      updatedAt: workflow.updated_at,
+      attempt: 1,
     });
   }
 }
@@ -549,7 +584,28 @@ export function syncWorkbenchOnTransition(
     });
   }
 
-  const toSubtask = getWorkbenchSubtaskByStage(task.id, toStatus);
+  let toSubtask = getWorkbenchSubtaskByStage(task.id, toStatus);
+  const shouldCreateReentrySubtask =
+    !!toSubtask &&
+    fromStatus !== 'paused' &&
+    toSubtask.stage_key === toStatus &&
+    toSubtask.status !== 'pending' &&
+    toSubtask.status !== 'current';
+
+  if (shouldCreateReentrySubtask) {
+    const createdSubtaskId = createStageSubtask({
+      workflow,
+      taskId: task.id,
+      stageKey: toStatus,
+      status: 'current',
+      startedAt: workflow.updated_at,
+      updatedAt: workflow.updated_at,
+    });
+    toSubtask = createdSubtaskId
+      ? getWorkbenchSubtaskByStage(task.id, toStatus)
+      : toSubtask;
+  }
+
   if (toSubtask) {
     const nextStatus = workflow.status === 'paused' ? 'paused' : 'current';
     updateWorkbenchSubtask(toSubtask.id, {

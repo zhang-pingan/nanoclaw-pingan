@@ -9,6 +9,7 @@ import {
   listWorkbenchEventsByTask,
   setRegisteredGroup,
   storeChatMetadata,
+  updateWorkflow,
 } from './db.js';
 import { RegisteredGroup } from './types.js';
 import { approveWorkflow, cancelWorkflow, initWorkflow } from './workflow.js';
@@ -191,6 +192,94 @@ describe('workbench approval transition sync', () => {
     expect(detail?.timeline.map((item) => item.created_at)).toEqual([
       '2026-04-07T00:00:00.000Z',
       '2026-04-07T00:30:00.000Z',
+    ]);
+  });
+
+  it('appends a new stage node when workflow re-enters deployment after fixing', () => {
+    dbCreateWorkflow({
+      id: 'wf-reenter-deploy',
+      name: '重新部署链路',
+      service: 'order-service',
+      start_from: 'testing',
+      work_branch: 'feature/reenter-deploy',
+      staging_base_branch: 'staging',
+      deliverable: '2026-04-07_reenter_deploy',
+      staging_work_branch: 'staging-deploy/feature-reenter-deploy',
+      access_token: '',
+      status: 'fixing',
+      current_delegation_id: 'wf-del-fixing-1',
+      round: 1,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:20:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-reenter-deploy');
+
+    updateWorkflow('wf-reenter-deploy', {
+      status: 'testing_confirm',
+      current_delegation_id: '',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reenter-deploy',
+      'ops_deploy',
+      'testing_confirm',
+      'wf-del-ops-1',
+    );
+
+    updateWorkflow('wf-reenter-deploy', {
+      status: 'testing',
+      current_delegation_id: '',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reenter-deploy',
+      'testing_confirm',
+      'testing',
+    );
+
+    updateWorkflow('wf-reenter-deploy', {
+      status: 'fixing',
+      current_delegation_id: 'wf-del-fixing-1',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reenter-deploy',
+      'testing',
+      'fixing',
+      'wf-del-test-1',
+    );
+
+    updateWorkflow('wf-reenter-deploy', {
+      status: 'ops_deploy',
+      current_delegation_id: 'wf-del-ops-2',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reenter-deploy',
+      'fixing',
+      'ops_deploy',
+      'wf-del-ops-2',
+    );
+
+    const detail = getWorkbenchTaskDetail('wb-wf-reenter-deploy');
+    expect(detail).not.toBeNull();
+
+    const deploymentSubtasks =
+      detail?.subtasks.filter((item) => item.stage_key === 'ops_deploy') || [];
+    expect(deploymentSubtasks).toHaveLength(2);
+    expect(deploymentSubtasks.map((item) => item.id)).toEqual([
+      'wb-subtask-wb-wf-reenter-deploy-ops_deploy',
+      'wb-subtask-wb-wf-reenter-deploy-ops_deploy-2',
+    ]);
+    expect(detail?.subtasks.map((item) => item.stage_key)).toEqual([
+      'ops_deploy',
+      'testing_confirm',
+      'testing',
+      'fixing',
+      'ops_deploy',
+    ]);
+    expect(deploymentSubtasks.map((item) => item.status)).toEqual([
+      'completed',
+      'current',
     ]);
   });
 

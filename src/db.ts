@@ -1707,7 +1707,7 @@ export function getWorkbenchSubtaskByStage(
 ): WorkbenchSubtaskRecord | undefined {
   return db
     .prepare(
-      'SELECT * FROM workbench_subtasks WHERE task_id = ? AND stage_key = ?',
+      'SELECT * FROM workbench_subtasks WHERE task_id = ? AND stage_key = ? ORDER BY rowid DESC LIMIT 1',
     )
     .get(taskId, stageKey) as WorkbenchSubtaskRecord | undefined;
 }
@@ -1717,7 +1717,7 @@ export function listWorkbenchSubtasksByTask(
 ): WorkbenchSubtaskRecord[] {
   return db
     .prepare(
-      'SELECT * FROM workbench_subtasks WHERE task_id = ? ORDER BY updated_at ASC',
+      'SELECT * FROM workbench_subtasks WHERE task_id = ? ORDER BY rowid ASC',
     )
     .all(taskId) as WorkbenchSubtaskRecord[];
 }
