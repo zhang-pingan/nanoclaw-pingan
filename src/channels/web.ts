@@ -26,6 +26,7 @@ import {
   getWorkbenchTaskDetail,
   listWorkbenchTasks,
   retryWorkbenchSubtask,
+  runWorkbenchActionItemAction,
   runWorkbenchTaskAction,
 } from '../workbench.js';
 
@@ -379,6 +380,9 @@ class WebChannel {
       }
       if (pathname === '/api/workbench/task/action' && req.method === 'POST') {
         return this.apiWorkbenchTaskAction(req, res);
+      }
+      if (pathname === '/api/workbench/action-item' && req.method === 'POST') {
+        return this.apiWorkbenchActionItem(req, res);
       }
       if (pathname === '/api/workbench/task/comment' && req.method === 'POST') {
         return this.apiWorkbenchTaskComment(req, res);
@@ -1447,6 +1451,102 @@ class WebChannel {
     const detail = getWorkbenchTaskDetail(data.task_id);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, task: detail?.task || null }));
+  }
+
+  private injectWorkbenchReply(chatJid: string, content: string): void {
+    const now = Date.now();
+    const groups = this.opts.registeredGroups();
+    const chatName = groups[chatJid]?.name || chatJid;
+    this.opts.onChatMetadata(chatJid, now.toString(), chatName, 'web', true);
+    const msg: NewMessage = {
+      id: `wb_${now}_${Math.random().toString(36).slice(2, 8)}`,
+      chat_jid: chatJid,
+      sender: 'web_user',
+      sender_name: 'Web User',
+      content,
+      timestamp: now.toString(),
+      is_from_me: true,
+      is_bot_message: false,
+      model: null,
+    };
+    this.opts.onMessage(chatJid, msg);
+  }
+
+  private async apiWorkbenchActionItem(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      task_id?: string;
+      action_item_id?: string;
+      action?: 'confirm' | 'skip' | 'cancel' | 'reply';
+      reply_text?: string;
+    };
+    if (!data.task_id || !data.action_item_id || !data.action) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'task_id, action_item_id and action required' }));
+      return;
+    }
+
+    const detail = getWorkbenchTaskDetail(data.task_id);
+    const item = detail?.action_items?.find((entry) => entry.id === data.action_item_id);
+    if (!detail || !item) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Action item not found' }));
+      return;
+    }
+
+    if (data.action === 'reply') {
+      const replyText = data.reply_text?.trim();
+      if (!replyText) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'reply_text required' }));
+        return;
+      }
+      const groups = this.opts.registeredGroups();
+      const targetEntry = Object.entries(groups).find(([, group]) => group.folder === item.group_folder);
+      if (!targetEntry) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Target group not found' }));
+        return;
+      }
+      const [chatJid] = targetEntry;
+      const content =
+        item.source_type === 'ask_user_question' || item.source_type === 'request_human_input'
+          ? `/answer ${item.source_ref_id} ${replyText}`
+          : replyText;
+      this.injectWorkbenchReply(chatJid, content);
+      if (item.source_type === 'send_message') {
+        runWorkbenchActionItemAction({
+          taskId: data.task_id,
+          actionItemId: data.action_item_id,
+          action: 'confirm',
+        });
+      }
+    } else {
+      const result = runWorkbenchActionItemAction({
+        taskId: data.task_id,
+        actionItemId: data.action_item_id,
+        action: data.action,
+      });
+      if (result.error) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: result.error }));
+        return;
+      }
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   private async apiWorkbenchTaskComment(

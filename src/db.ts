@@ -23,7 +23,7 @@ import {
   RegisteredGroup,
   ScheduledTask,
   TaskRunLog,
-  WorkbenchApprovalRecord,
+  WorkbenchActionItemRecord,
   WorkbenchArtifactRecord,
   WorkbenchCommentRecord,
   WorkbenchContextAssetRecord,
@@ -265,20 +265,29 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_workbench_artifacts_task ON workbench_artifacts(task_id, created_at);
 
-    CREATE TABLE IF NOT EXISTS workbench_approvals (
+    CREATE TABLE IF NOT EXISTS workbench_action_items (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
       workflow_id TEXT NOT NULL,
+      subtask_id TEXT,
+      stage_key TEXT,
+      delegation_id TEXT,
+      group_folder TEXT,
+      item_type TEXT NOT NULL,
       status TEXT NOT NULL,
-      approval_type TEXT NOT NULL,
       title TEXT NOT NULL,
       body TEXT,
-      card_key TEXT,
+      source_type TEXT NOT NULL,
+      source_ref_id TEXT,
+      replyable INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
-      resolved_at TEXT
+      updated_at TEXT NOT NULL,
+      resolved_at TEXT,
+      extra_json TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_workbench_approvals_task ON workbench_approvals(task_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_workbench_approvals_status ON workbench_approvals(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workbench_action_items_task ON workbench_action_items(task_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workbench_action_items_stage ON workbench_action_items(workflow_id, stage_key, status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_workbench_action_items_source ON workbench_action_items(source_type, source_ref_id);
 
     CREATE TABLE IF NOT EXISTS workbench_comments (
       id TEXT PRIMARY KEY,
@@ -1443,7 +1452,7 @@ function deleteWorkflowRelatedRecords(workflowId: string): void {
 
     db.prepare('DELETE FROM workbench_context_assets WHERE workflow_id = ?').run(id);
     db.prepare('DELETE FROM workbench_comments WHERE workflow_id = ?').run(id);
-    db.prepare('DELETE FROM workbench_approvals WHERE workflow_id = ?').run(id);
+    db.prepare('DELETE FROM workbench_action_items WHERE workflow_id = ?').run(id);
     db.prepare('DELETE FROM workbench_artifacts WHERE workflow_id = ?').run(id);
     db.prepare('DELETE FROM workbench_subtasks WHERE workflow_id = ?').run(id);
     db.prepare('DELETE FROM workbench_tasks WHERE workflow_id = ?').run(id);
@@ -1479,7 +1488,7 @@ export function deleteAllWorkbenchTaskData(): {
   workbench_subtasks: number;
   workbench_events: number;
   workbench_artifacts: number;
-  workbench_approvals: number;
+  workbench_action_items: number;
   workbench_comments: number;
   workbench_context_assets: number;
 } {
@@ -1494,7 +1503,7 @@ export function deleteAllWorkbenchTaskData(): {
     workbench_subtasks: count('SELECT COUNT(*) AS count FROM workbench_subtasks'),
     workbench_events: count('SELECT COUNT(*) AS count FROM workbench_events'),
     workbench_artifacts: count('SELECT COUNT(*) AS count FROM workbench_artifacts'),
-    workbench_approvals: count('SELECT COUNT(*) AS count FROM workbench_approvals'),
+    workbench_action_items: count('SELECT COUNT(*) AS count FROM workbench_action_items'),
     workbench_comments: count('SELECT COUNT(*) AS count FROM workbench_comments'),
     workbench_context_assets: count(
       'SELECT COUNT(*) AS count FROM workbench_context_assets',
@@ -1504,7 +1513,7 @@ export function deleteAllWorkbenchTaskData(): {
   const clear = db.transaction(() => {
     db.prepare('DELETE FROM workbench_context_assets').run();
     db.prepare('DELETE FROM workbench_comments').run();
-    db.prepare('DELETE FROM workbench_approvals').run();
+    db.prepare('DELETE FROM workbench_action_items').run();
     db.prepare('DELETE FROM workbench_artifacts').run();
     db.prepare('DELETE FROM workbench_events').run();
     db.prepare('DELETE FROM workbench_subtasks').run();
@@ -1751,35 +1760,130 @@ export function listWorkbenchArtifactsByTask(taskId: string): WorkbenchArtifactR
     .all(taskId) as WorkbenchArtifactRecord[];
 }
 
-export function createWorkbenchApproval(record: WorkbenchApprovalRecord): void {
+export function createWorkbenchActionItem(record: WorkbenchActionItemRecord): void {
   db.prepare(
-    `INSERT OR REPLACE INTO workbench_approvals (
-      id, task_id, workflow_id, status, approval_type, title, body, card_key, created_at, resolved_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO workbench_action_items (
+      id, task_id, workflow_id, subtask_id, stage_key, delegation_id, group_folder,
+      item_type, status, title, body, source_type, source_ref_id, replyable,
+      created_at, updated_at, resolved_at, extra_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
     record.task_id,
     record.workflow_id,
+    record.subtask_id,
+    record.stage_key,
+    record.delegation_id,
+    record.group_folder,
+    record.item_type,
     record.status,
-    record.approval_type,
     record.title,
     record.body,
-    record.card_key,
+    record.source_type,
+    record.source_ref_id,
+    record.replyable,
     record.created_at,
+    record.updated_at,
     record.resolved_at,
+    record.extra_json,
   );
 }
 
-export function listWorkbenchApprovalsByTask(taskId: string): WorkbenchApprovalRecord[] {
-  return db
-    .prepare('SELECT * FROM workbench_approvals WHERE task_id = ? ORDER BY created_at DESC')
-    .all(taskId) as WorkbenchApprovalRecord[];
+export function getWorkbenchActionItem(id: string): WorkbenchActionItemRecord | undefined {
+  return db.prepare('SELECT * FROM workbench_action_items WHERE id = ?').get(id) as
+    | WorkbenchActionItemRecord
+    | undefined;
 }
 
-export function resolveWorkbenchApproval(id: string, resolvedAt: string): void {
+export function listWorkbenchActionItemsByTask(taskId: string): WorkbenchActionItemRecord[] {
+  return db
+    .prepare('SELECT * FROM workbench_action_items WHERE task_id = ? ORDER BY created_at DESC')
+    .all(taskId) as WorkbenchActionItemRecord[];
+}
+
+export function listWorkbenchActionItemsBySource(
+  sourceType: string,
+  sourceRefId: string,
+): WorkbenchActionItemRecord[] {
+  return db
+    .prepare(
+      'SELECT * FROM workbench_action_items WHERE source_type = ? AND source_ref_id = ? ORDER BY created_at DESC',
+    )
+    .all(sourceType, sourceRefId) as WorkbenchActionItemRecord[];
+}
+
+export function updateWorkbenchActionItem(
+  id: string,
+  updates: Partial<
+    Pick<
+      WorkbenchActionItemRecord,
+      'status' | 'title' | 'body' | 'replyable' | 'updated_at' | 'resolved_at' | 'extra_json'
+    >
+  >,
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.title !== undefined) {
+    fields.push('title = ?');
+    values.push(updates.title);
+  }
+  if (updates.body !== undefined) {
+    fields.push('body = ?');
+    values.push(updates.body);
+  }
+  if (updates.replyable !== undefined) {
+    fields.push('replyable = ?');
+    values.push(updates.replyable);
+  }
+  if (updates.updated_at !== undefined) {
+    fields.push('updated_at = ?');
+    values.push(updates.updated_at);
+  }
+  if (updates.resolved_at !== undefined) {
+    fields.push('resolved_at = ?');
+    values.push(updates.resolved_at);
+  }
+  if (updates.extra_json !== undefined) {
+    fields.push('extra_json = ?');
+    values.push(updates.extra_json);
+  }
+
+  if (fields.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE workbench_action_items SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+}
+
+export function resolveWorkbenchActionItemsBySource(
+  sourceType: string,
+  sourceRefId: string,
+  status: string,
+  resolvedAt: string,
+): void {
   db.prepare(
-    `UPDATE workbench_approvals SET status = 'resolved', resolved_at = ? WHERE id = ?`,
-  ).run(resolvedAt, id);
+    `UPDATE workbench_action_items
+     SET status = ?, updated_at = ?, resolved_at = ?
+     WHERE source_type = ? AND source_ref_id = ? AND status = 'pending'`,
+  ).run(status, resolvedAt, resolvedAt, sourceType, sourceRefId);
+}
+
+export function resolveWorkbenchActionItemsByStage(
+  workflowId: string,
+  stageKey: string,
+  status: string,
+  resolvedAt: string,
+): void {
+  db.prepare(
+    `UPDATE workbench_action_items
+     SET status = ?, updated_at = ?, resolved_at = ?
+     WHERE workflow_id = ? AND stage_key = ? AND status IN ('pending', 'confirmed')`,
+  ).run(status, resolvedAt, resolvedAt, workflowId, stageKey);
 }
 
 export function createWorkbenchComment(record: WorkbenchCommentRecord): void {

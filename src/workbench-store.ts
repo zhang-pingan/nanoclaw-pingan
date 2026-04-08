@@ -3,19 +3,24 @@ import path from 'path';
 
 import { PROJECT_ROOT } from './config.js';
 import {
-  createWorkbenchApproval,
+  createWorkbenchActionItem,
   createWorkbenchArtifact,
   createWorkbenchEvent,
   createWorkbenchSubtask,
   createWorkbenchTask,
   getDelegation,
   getDelegationsByWorkflow,
+  getWorkbenchActionItem,
+  getWorkbenchTaskById,
   getWorkbenchSubtaskByStage,
   getWorkbenchTaskByWorkflowId,
   getWorkflow,
+  listWorkbenchActionItemsByTask,
+  listWorkbenchActionItemsBySource,
   listWorkbenchSubtasksByTask,
-  listWorkbenchApprovalsByTask,
-  resolveWorkbenchApproval,
+  resolveWorkbenchActionItemsBySource,
+  resolveWorkbenchActionItemsByStage,
+  updateWorkbenchActionItem,
   updateWorkbenchSubtask,
   updateWorkbenchTask,
 } from './db.js';
@@ -55,12 +60,76 @@ function taskIdForWorkflow(workflow: Workflow): string {
   return `wb-${workflow.id}`;
 }
 
-function approvalId(workflowId: string, stageKey: string): string {
-  return `wb-approval-${workflowId}-${stageKey}`;
+function stageActionItemId(workflowId: string, stageKey: string): string {
+  return `wb-action-${workflowId}-${stageKey}`;
 }
 
 function subtaskId(taskId: string, stageKey: string): string {
   return `wb-subtask-${taskId}-${stageKey}`;
+}
+
+function actionItemId(workflowId: string, stageKey: string, sourceType: string, sourceRefId: string): string {
+  return `wb-action-${workflowId}-${stageKey}-${sourceType}-${sourceRefId}`;
+}
+
+function emitActionItemUpdate(taskId: string, workflowId: string, payload: Record<string, unknown>): void {
+  emitWorkbenchEvent({
+    type: 'action_item_updated',
+    taskId,
+    workflowId,
+    payload,
+  });
+}
+
+function upsertActionItem(params: {
+  id: string;
+  workflowId: string;
+  stageKey: string | null;
+  subtaskId: string | null;
+  delegationId?: string | null;
+  groupFolder?: string | null;
+  itemType: string;
+  title: string;
+  body?: string | null;
+  sourceType: string;
+  sourceRefId: string;
+  replyable: boolean;
+  extra?: Record<string, unknown>;
+  createdAt: string;
+}): void {
+  const task = getWorkbenchTaskByWorkflowId(params.workflowId);
+  if (!task) return;
+  const existing = getWorkbenchActionItem(params.id);
+  createWorkbenchActionItem({
+    id: params.id,
+    task_id: task.id,
+    workflow_id: params.workflowId,
+    subtask_id: params.subtaskId,
+    stage_key: params.stageKey,
+    delegation_id: params.delegationId ?? null,
+    group_folder: params.groupFolder ?? null,
+    item_type: params.itemType,
+    status: existing?.status && existing.status !== 'resolved' ? existing.status : 'pending',
+    title: params.title,
+    body: params.body ?? null,
+    source_type: params.sourceType,
+    source_ref_id: params.sourceRefId,
+    replyable: params.replyable ? 1 : 0,
+    created_at: existing?.created_at || params.createdAt,
+    updated_at: params.createdAt,
+    resolved_at: existing?.resolved_at ?? null,
+    extra_json: params.extra ? JSON.stringify(params.extra) : null,
+  });
+  emitActionItemUpdate(task.id, params.workflowId, {
+    id: params.id,
+    status: 'pending',
+    itemType: params.itemType,
+    sourceType: params.sourceType,
+    title: params.title,
+    body: params.body ?? '',
+    createdAt: existing?.created_at || params.createdAt,
+    updatedAt: params.createdAt,
+  });
 }
 
 function ensureArtifacts(workflow: Workflow): void {
@@ -103,7 +172,7 @@ function ensureArtifacts(workflow: Workflow): void {
   }
 }
 
-function upsertApprovalForStage(workflow: Workflow): void {
+function upsertStageActionItem(workflow: Workflow): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const task = getWorkbenchTaskByWorkflowId(workflow.id);
   if (!config || !task) return;
@@ -112,86 +181,56 @@ function upsertApprovalForStage(workflow: Workflow): void {
   const card = state.card ? config.cards[state.card] : undefined;
   const title = config.status_labels[workflow.status] || workflow.status;
   const vars = buildTemplateVars(workflow);
-  const nextApproval = {
-    id: approvalId(workflow.id, workflow.status),
-    task_id: task.id,
-    workflow_id: workflow.id,
-    status: 'pending' as const,
-    approval_type: workflow.status,
+  upsertActionItem({
+    id: stageActionItemId(workflow.id, workflow.status),
+    workflowId: workflow.id,
+    stageKey: workflow.status,
+    subtaskId: getWorkbenchSubtaskByStage(task.id, workflow.status)?.id || null,
+    delegationId: workflow.current_delegation_id || null,
+    itemType: 'approval',
     title,
     body: card ? renderTemplate(card.body_template, vars) : title,
-    card_key: state.card || null,
-    created_at: workflow.updated_at,
-    resolved_at: null,
-  };
-
-  const existing = listWorkbenchApprovalsByTask(task.id).find(
-    (item) => item.id === nextApproval.id,
-  );
-  if (
-    existing &&
-    existing.status === nextApproval.status &&
-    existing.approval_type === nextApproval.approval_type &&
-    existing.title === nextApproval.title &&
-    (existing.body || '') === nextApproval.body &&
-    existing.card_key === nextApproval.card_key &&
-    existing.resolved_at === nextApproval.resolved_at
-  ) {
-    return;
-  }
-
-  createWorkbenchApproval({
-    ...nextApproval,
-  });
-  emitWorkbenchEvent({
-    type: 'approval_updated',
-    taskId: task.id,
-    workflowId: workflow.id,
-    payload: {
-      id: nextApproval.id,
-      status: nextApproval.status,
-      title,
-      approvalType: workflow.status,
+    sourceType: 'workflow',
+    sourceRefId: workflow.status,
+    replyable: false,
+    createdAt: workflow.updated_at,
+    extra: {
+      approval_type: workflow.status,
+      action_mode:
+        workflow.status === 'testing_confirm'
+        ? 'input_required'
+          : state.on_revise
+            ? 'approve_or_revise'
+            : 'approve_only',
     },
   });
 }
 
-function resolvePendingApprovals(taskId: string, resolvedAt: string): void {
-  for (const approval of listWorkbenchApprovalsByTask(taskId)) {
-    if (approval.status === 'pending') {
-      resolveWorkbenchApproval(approval.id, resolvedAt);
-      emitWorkbenchEvent({
-        type: 'approval_updated',
-        taskId,
-        workflowId: approval.workflow_id,
-        payload: {
-          id: approval.id,
-          status: 'resolved',
-          resolvedAt,
-        },
-      });
-    }
-  }
+function resolveCurrentStageActionItems(taskId: string, resolvedAt: string): void {
+  const task = getWorkbenchTaskById(taskId);
+  if (!task) return;
+  resolveWorkbenchActionItemsByStage(task.workflow_id, task.current_stage, 'resolved', resolvedAt);
 }
 
-function resolveStalePendingApprovals(
+function resolveStaleStageActionItems(
   taskId: string,
   currentApprovalType: string | null,
   resolvedAt: string,
 ): void {
-  for (const approval of listWorkbenchApprovalsByTask(taskId)) {
-    if (approval.status !== 'pending') continue;
-    if (currentApprovalType && approval.approval_type === currentApprovalType) continue;
-    resolveWorkbenchApproval(approval.id, resolvedAt);
-    emitWorkbenchEvent({
-      type: 'approval_updated',
-      taskId,
-      workflowId: approval.workflow_id,
-      payload: {
-        id: approval.id,
-        status: 'resolved',
-        resolvedAt,
-      },
+  const task = getWorkbenchTaskById(taskId);
+  if (!task) return;
+  for (const item of listWorkbenchActionItemsByTask(taskId)) {
+    if (item.status !== 'pending') continue;
+    if (item.source_type === 'workflow' && item.source_ref_id === currentApprovalType) continue;
+    updateWorkbenchActionItem(item.id, {
+      status: 'resolved',
+      updated_at: resolvedAt,
+      resolved_at: resolvedAt,
+    });
+    emitActionItemUpdate(taskId, task.workflow_id, {
+      id: item.id,
+      status: 'resolved',
+      resolvedAt,
     });
   }
 }
@@ -244,6 +283,58 @@ function ensureSubtasks(workflow: Workflow): void {
   }
 }
 
+export function createWorkbenchInteractionItem(input: {
+  workflowId: string;
+  stageKey: string;
+  delegationId?: string | null;
+  groupFolder?: string | null;
+  sourceType: 'request_human_input' | 'ask_user_question' | 'send_message';
+  sourceRefId: string;
+  title: string;
+  body?: string | null;
+  replyable?: boolean;
+  createdAt?: string;
+  extra?: Record<string, unknown>;
+}): void {
+  const workflow = getWorkflow(input.workflowId);
+  const task = getWorkbenchTaskByWorkflowId(input.workflowId);
+  if (!workflow || !task) return;
+  const subtask = getWorkbenchSubtaskByStage(task.id, input.stageKey);
+  upsertActionItem({
+    id: actionItemId(input.workflowId, input.stageKey, input.sourceType, input.sourceRefId),
+    workflowId: input.workflowId,
+    stageKey: input.stageKey,
+    subtaskId: subtask?.id || null,
+    delegationId: input.delegationId ?? (workflow.current_delegation_id || null),
+    groupFolder: input.groupFolder ?? subtask?.group_folder ?? null,
+    itemType: 'interactive',
+    title: input.title,
+    body: input.body ?? null,
+    sourceType: input.sourceType,
+    sourceRefId: input.sourceRefId,
+    replyable: input.replyable !== false,
+    createdAt: input.createdAt || workflow.updated_at,
+    extra: input.extra,
+  });
+}
+
+export function updateWorkbenchInteractionItemStatus(input: {
+  sourceType: string;
+  sourceRefId: string;
+  status: 'confirmed' | 'resolved' | 'skipped' | 'cancelled' | 'expired';
+}): void {
+  const now = nowIso();
+  const items = listWorkbenchActionItemsBySource(input.sourceType, input.sourceRefId);
+  resolveWorkbenchActionItemsBySource(input.sourceType, input.sourceRefId, input.status, now);
+  for (const item of items) {
+    emitActionItemUpdate(item.task_id, item.workflow_id, {
+      id: item.id,
+      status: input.status,
+      resolvedAt: now,
+    });
+  }
+}
+
 export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return;
@@ -288,7 +379,7 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
   }
   ensureSubtasks(workflow);
   ensureArtifacts(workflow);
-  upsertApprovalForStage(workflow);
+  upsertStageActionItem(workflow);
 }
 
 export function syncWorkbenchOnWorkflowUpdated(workflowId: string, summary?: string): void {
@@ -339,14 +430,14 @@ export function syncWorkbenchOnWorkflowUpdated(workflowId: string, summary?: str
     });
   }
 
-  resolveStalePendingApprovals(
+  resolveStaleStageActionItems(
     task.id,
     stateConfig?.type === 'confirmation' ? workflow.status : null,
     workflow.updated_at,
   );
 
   ensureArtifacts(workflow);
-  upsertApprovalForStage(workflow);
+  upsertStageActionItem(workflow);
 }
 
 export function syncWorkbenchOnTransition(
@@ -407,7 +498,7 @@ export function syncWorkbenchOnTransition(
     });
   }
 
-  resolvePendingApprovals(task.id, workflow.updated_at);
+  resolveCurrentStageActionItems(task.id, workflow.updated_at);
   updateWorkbenchTask(task.id, {
     status: workflow.status,
     current_stage: toStatus,
@@ -450,7 +541,7 @@ export function syncWorkbenchOnTransition(
     },
   });
   ensureArtifacts(workflow);
-  upsertApprovalForStage(workflow);
+  upsertStageActionItem(workflow);
 }
 
 export function createWorkbenchManualSkipEvent(

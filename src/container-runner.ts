@@ -53,6 +53,11 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  executionContext?: {
+    workflowId?: string;
+    stageKey?: string;
+    delegationId?: string;
+  };
 }
 
 export interface ContainerOutput {

@@ -87,7 +87,7 @@ describe('workbench approval transition sync', () => {
     const detail = getWorkbenchTaskDetail('wb-wf-predeploy');
     expect(detail).not.toBeNull();
     expect(detail?.task.current_stage).toBe('ops_deploy');
-    expect(detail?.approvals).toHaveLength(0);
+    expect(detail?.action_items).toHaveLength(0);
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'awaiting_confirm')?.status,
     ).toBe('completed');

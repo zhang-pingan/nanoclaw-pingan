@@ -58,6 +58,10 @@ import type { MemoryExtractConfig } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { InteractiveCard, RegisteredGroup } from './types.js';
+import {
+  createWorkbenchInteractionItem,
+  updateWorkbenchInteractionItemStatus,
+} from './workbench-store.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -143,6 +147,32 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
                   await deps.sendMessage(data.chatJid, data.text);
+                  if (
+                    typeof data.workflowId === 'string' &&
+                    data.workflowId &&
+                    typeof data.stageKey === 'string' &&
+                    data.stageKey &&
+                    typeof data.sourceRefId === 'string' &&
+                    data.sourceRefId
+                  ) {
+                    createWorkbenchInteractionItem({
+                      workflowId: data.workflowId,
+                      stageKey: data.stageKey,
+                      delegationId:
+                        typeof data.delegationId === 'string' && data.delegationId
+                          ? data.delegationId
+                          : null,
+                      groupFolder: sourceGroup,
+                      sourceType: 'send_message',
+                      sourceRefId: data.sourceRefId,
+                      title: data.sender ? `${data.sender} 消息` : '节点消息',
+                      body: typeof data.text === 'string' ? data.text : '',
+                      createdAt:
+                        typeof data.timestamp === 'string'
+                          ? data.timestamp
+                          : new Date().toISOString(),
+                    });
+                  }
                   logger.info(
                     { chatJid: data.chatJid, sourceGroup },
                     'IPC message sent',
@@ -788,6 +818,10 @@ export async function processTaskIpc(
     questions?: unknown;
     timeoutSec?: number;
     metadata?: Record<string, string>;
+    workflowId?: string;
+    stageKey?: string;
+    sourceType?: string;
+    sourceRefId?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -1318,6 +1352,31 @@ export async function processTaskIpc(
         timeoutSec: timeout,
         metadata: data.metadata,
       });
+      if (data.workflowId && data.stageKey) {
+        const firstQuestion = normalized.questions[0];
+        createWorkbenchInteractionItem({
+          workflowId: data.workflowId,
+          stageKey: data.stageKey,
+          delegationId: data.delegationId || null,
+          groupFolder: sourceGroup,
+          sourceType:
+            data.metadata?.source_type === 'request_human_input'
+              ? 'request_human_input'
+              : 'ask_user_question',
+          sourceRefId: data.requestId,
+          title:
+            data.metadata?.title ||
+            (data.metadata?.source_type === 'request_human_input'
+              ? '人工输入请求'
+              : '节点提问'),
+          body: firstQuestion?.question || '',
+          createdAt: new Date().toISOString(),
+          extra: {
+            request_id: data.requestId,
+            question_count: normalized.questions.length,
+          },
+        });
+      }
 
       const dispatch = await dispatchCurrentAskQuestion({
         requestId: data.requestId,
@@ -1344,6 +1403,14 @@ export async function processTaskIpc(
           },
           'ask_user_question rejected: failed to dispatch question',
         );
+        updateWorkbenchInteractionItemStatus({
+          sourceType:
+            data.metadata?.source_type === 'request_human_input'
+              ? 'request_human_input'
+              : 'ask_user_question',
+          sourceRefId: data.requestId,
+          status: 'cancelled',
+        });
       } else {
         logger.info(
           {

@@ -248,17 +248,25 @@ export interface WorkbenchArtifactRecord {
   created_at: string;
 }
 
-export interface WorkbenchApprovalRecord {
+export interface WorkbenchActionItemRecord {
   id: string;
   task_id: string;
   workflow_id: string;
+  subtask_id: string | null;
+  stage_key: string | null;
+  delegation_id: string | null;
+  group_folder: string | null;
+  item_type: string;
   status: string;
-  approval_type: string;
   title: string;
   body: string | null;
-  card_key: string | null;
+  source_type: string;
+  source_ref_id: string | null;
+  replyable: number;
   created_at: string;
+  updated_at: string;
   resolved_at: string | null;
+  extra_json: string | null;
 }
 
 export interface WorkbenchCommentRecord {

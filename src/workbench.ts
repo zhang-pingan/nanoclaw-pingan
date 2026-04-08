@@ -5,23 +5,25 @@ import { PROJECT_ROOT } from './config.js';
 import {
   createWorkbenchComment,
   createWorkbenchContextAsset,
+  getWorkbenchActionItem,
   getDelegationsByWorkflow,
   getWorkflow,
   getAllWorkflows,
   getWorkbenchTaskById,
   getWorkbenchTaskByWorkflowId,
-  listWorkbenchApprovalsByTask,
+  listWorkbenchActionItemsByTask,
   listWorkbenchArtifactsByTask,
   listWorkbenchCommentsByTask,
   listWorkbenchContextAssetsByTask,
   listWorkbenchEventsByTask,
   listWorkbenchSubtasksByTask,
   listWorkbenchTasks as listWorkbenchTaskRecords,
+  updateWorkbenchActionItem,
   updateWorkbenchSubtask,
 } from './db.js';
 import type {
   Delegation,
-  WorkbenchApprovalRecord,
+  WorkbenchActionItemRecord,
   WorkbenchArtifactRecord,
   WorkbenchCommentRecord,
   WorkbenchContextAssetRecord,
@@ -105,13 +107,21 @@ export interface WorkbenchArtifact {
   created_at?: string;
 }
 
-export interface WorkbenchApproval {
+export interface WorkbenchActionItem {
   id: string;
-  approval_type: string;
+  item_type: 'approval' | 'interactive';
+  source_type: 'workflow' | 'request_human_input' | 'ask_user_question' | 'send_message';
   title: string;
   body: string;
-  status: 'pending';
-  action_mode: 'approve_only' | 'approve_or_revise' | 'input_required';
+  status: 'pending' | 'confirmed' | 'resolved' | 'skipped' | 'cancelled' | 'expired';
+  stage_key?: string;
+  delegation_id?: string;
+  group_folder?: string;
+  source_ref_id?: string;
+  replyable: boolean;
+  action_mode?: 'approve_only' | 'approve_or_revise' | 'input_required';
+  created_at?: string;
+  extra?: Record<string, unknown>;
 }
 
 export interface WorkbenchTaskDetail {
@@ -119,7 +129,7 @@ export interface WorkbenchTaskDetail {
   subtasks: WorkbenchSubtask[];
   timeline: WorkbenchTimelineEvent[];
   artifacts: WorkbenchArtifact[];
-  approvals: WorkbenchApproval[];
+  action_items: WorkbenchActionItem[];
   comments: Array<{ id: string; author: string; content: string; created_at: string }>;
   assets: Array<{
     id: string;
@@ -223,20 +233,40 @@ function mapPersistedArtifact(item: WorkbenchArtifactRecord): WorkbenchArtifact 
   };
 }
 
-function mapPersistedApproval(item: WorkbenchApprovalRecord): WorkbenchApproval {
-  const actionMode =
-    item.approval_type === 'testing_confirm'
-      ? 'input_required'
-      : item.approval_type.includes('confirm')
-        ? 'approve_or_revise'
-        : 'approve_only';
+function mapPersistedActionItem(item: WorkbenchActionItemRecord): WorkbenchActionItem {
+  const extra = item.extra_json ? JSON.parse(item.extra_json) as Record<string, unknown> : undefined;
   return {
     id: item.id,
-    approval_type: item.approval_type,
+    item_type: item.item_type === 'approval' ? 'approval' : 'interactive',
+    source_type:
+      item.source_type === 'request_human_input' ||
+      item.source_type === 'ask_user_question' ||
+      item.source_type === 'send_message'
+        ? item.source_type
+        : 'workflow',
     title: item.title,
     body: item.body || '',
-    status: 'pending',
-    action_mode: actionMode,
+    status:
+      item.status === 'confirmed' ||
+      item.status === 'resolved' ||
+      item.status === 'skipped' ||
+      item.status === 'cancelled' ||
+      item.status === 'expired'
+        ? item.status
+        : 'pending',
+    stage_key: item.stage_key || undefined,
+    delegation_id: item.delegation_id || undefined,
+    group_folder: item.group_folder || undefined,
+    source_ref_id: item.source_ref_id || undefined,
+    replyable: item.replyable === 1,
+    action_mode:
+      extra?.action_mode === 'approve_only' ||
+      extra?.action_mode === 'approve_or_revise' ||
+      extra?.action_mode === 'input_required'
+        ? extra.action_mode
+        : undefined,
+    created_at: item.created_at,
+    extra,
   };
 }
 
@@ -404,7 +434,7 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
   });
 }
 
-function buildApprovals(workflow: Workflow): WorkbenchApproval[] {
+function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const stateConfig = config?.states[workflow.status];
   if (!config || !stateConfig || stateConfig.type !== 'confirmation') return [];
@@ -428,16 +458,21 @@ function buildApprovals(workflow: Workflow): WorkbenchApproval[] {
   return [
     {
       id: `${workflow.id}-approval-${workflow.status}`,
-      approval_type: workflow.status,
+      item_type: 'approval',
+      source_type: 'workflow',
       title: config.status_labels[workflow.status] || workflow.status,
       body,
       status: 'pending',
+      stage_key: workflow.status,
+      source_ref_id: workflow.status,
+      replyable: false,
       action_mode:
         workflow.status === 'testing_confirm'
           ? 'input_required'
           : stateConfig.on_revise
             ? 'approve_or_revise'
             : 'approve_only',
+      created_at: workflow.updated_at,
     },
   ];
 }
@@ -490,14 +525,14 @@ function buildTimeline(workflow: Workflow, delegations: Delegation[]): Workbench
     });
   }
 
-  for (const approval of buildApprovals(workflow)) {
+  for (const item of buildActionItems(workflow)) {
     timeline.push({
-      id: `${approval.id}-approval`,
+      id: `${item.id}-approval`,
       type: 'approval',
-      title: `等待审批：${approval.title}`,
-      body: approval.body,
+      title: `等待审批：${item.title}`,
+      body: item.body,
       created_at: workflow.updated_at,
-      status: approval.status,
+      status: item.status,
     });
   }
 
@@ -597,9 +632,6 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
   const workflow = getWorkflow(workflowId);
   if (!workflow) return null;
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  const stateConfig = config?.states[workflow.status];
-  const shouldShowApprovals = stateConfig?.type === 'confirmation';
-
   const task = getWorkbenchTaskRecord(taskId);
   if (task) {
     const events = listWorkbenchEventsByTask(task.id);
@@ -621,15 +653,15 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
         events.map(mapPersistedEvent),
       ),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(mapPersistedArtifact),
-      approvals: shouldShowApprovals
-        ? listWorkbenchApprovalsByTask(task.id)
-            .filter(
-              (item) =>
-                item.status === 'pending' &&
-                item.approval_type === workflow.status,
-            )
-            .map(mapPersistedApproval)
-        : [],
+      action_items: listWorkbenchActionItemsByTask(task.id)
+        .filter((item) => {
+          if (item.status !== 'pending') return false;
+          if (item.delegation_id) {
+            return workflow.current_delegation_id === item.delegation_id;
+          }
+          return item.stage_key === workflow.status;
+        })
+        .map(mapPersistedActionItem),
       comments: listWorkbenchCommentsByTask(task.id).map(mapPersistedComment),
       assets: listWorkbenchContextAssetsByTask(task.id).map(mapPersistedAsset),
     };
@@ -641,7 +673,7 @@ export function getWorkbenchTaskDetail(taskId: string): WorkbenchTaskDetail | nu
     subtasks: sortSubtasksByWorkflowOrder(workflow, buildSubtasks(workflow, delegations)),
     timeline: buildTimeline(workflow, delegations),
     artifacts: buildArtifacts(workflow),
-    approvals: buildApprovals(workflow),
+    action_items: buildActionItems(workflow),
     comments: [],
     assets: [],
   };
@@ -757,6 +789,39 @@ export function addWorkbenchComment(input: {
     taskId: detail.task.id,
     workflowId,
     payload: { id, author: input.author, content: input.content.trim(), createdAt: now },
+  });
+  return {};
+}
+
+export function runWorkbenchActionItemAction(input: {
+  taskId: string;
+  actionItemId: string;
+  action: 'confirm' | 'skip' | 'cancel' | 'resolve';
+}): { error?: string } {
+  const workflowId = resolveWorkbenchWorkflowId(input.taskId);
+  if (!workflowId) return { error: 'Task not found' };
+  const item = getWorkbenchActionItem(input.actionItemId);
+  if (!item) return { error: 'Action item not found' };
+
+  const nextStatus =
+    input.action === 'confirm'
+      ? 'confirmed'
+      : input.action === 'skip'
+        ? 'skipped'
+        : input.action === 'cancel'
+          ? 'cancelled'
+          : 'resolved';
+  const now = new Date().toISOString();
+  updateWorkbenchActionItem(item.id, {
+    status: nextStatus,
+    updated_at: now,
+    resolved_at: nextStatus === 'confirmed' ? null : now,
+  });
+  emitWorkbenchEvent({
+    type: 'action_item_updated',
+    taskId: item.task_id,
+    workflowId,
+    payload: { id: item.id, status: nextStatus, resolvedAt: nextStatus === 'confirmed' ? null : now },
   });
   return {};
 }

@@ -17,6 +17,7 @@ import {
   InteractiveCard,
   RegisteredGroup,
 } from './types.js';
+import { updateWorkbenchInteractionItemStatus } from './workbench-store.js';
 
 export const ASK_ACTION_ANSWER = 'ask_question_answer';
 export const ASK_ACTION_SKIP = 'ask_question_skip';
@@ -875,6 +876,15 @@ export async function handleAskQuestionResponse(params: {
       answeredAt: now,
       responder: params.userId,
     });
+    const timeoutPayload = parsePayload(rec.payload_json);
+    updateWorkbenchInteractionItemStatus({
+      sourceType:
+        timeoutPayload?.metadata?.source_type === 'request_human_input'
+          ? 'request_human_input'
+          : 'ask_user_question',
+      sourceRefId: rec.id,
+      status: 'expired',
+    });
     return { ok: false, userMessage: '该问题已超时。', completed: true };
   }
 
@@ -891,6 +901,15 @@ export async function handleAskQuestionResponse(params: {
       answers: parseAnswers(rec.answers_json),
       answeredAt: now,
       responder: params.userId,
+    });
+    const skipPayload = parsePayload(rec.payload_json);
+    updateWorkbenchInteractionItemStatus({
+      sourceType:
+        skipPayload?.metadata?.source_type === 'request_human_input'
+          ? 'request_human_input'
+          : 'ask_user_question',
+      sourceRefId: rec.id,
+      status: params.reject ? 'cancelled' : 'skipped',
     });
     return { ok: true, userMessage: '已记录为跳过。', completed: true };
   }
@@ -937,6 +956,14 @@ export async function handleAskQuestionResponse(params: {
       answers,
       answeredAt: now,
       responder: params.userId,
+    });
+    updateWorkbenchInteractionItemStatus({
+      sourceType:
+        payload.metadata?.source_type === 'request_human_input'
+          ? 'request_human_input'
+          : 'ask_user_question',
+      sourceRefId: rec.id,
+      status: 'resolved',
     });
     return { ok: true, userMessage: '答案已提交，感谢。', completed: true };
   }
@@ -985,6 +1012,15 @@ export async function expirePendingAskQuestions(params: {
       answers: parseAnswers(rec.answers_json),
       answeredAt: now,
       responder: null,
+    });
+    const payload = parsePayload(rec.payload_json);
+    updateWorkbenchInteractionItemStatus({
+      sourceType:
+        payload?.metadata?.source_type === 'request_human_input'
+          ? 'request_human_input'
+          : 'ask_user_question',
+      sourceRefId: rec.id,
+      status: 'expired',
     });
     if (params.sendMessage) {
       const chatJid =

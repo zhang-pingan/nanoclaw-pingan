@@ -48,6 +48,7 @@ import {
   getAllRegisteredGroups,
   getAllSessions,
   getAllTasks,
+  getDelegationsByTarget,
   listMemories,
   getMessagesSince,
   getNewMessages,
@@ -59,6 +60,7 @@ import {
   setSession,
   storeChatMetadata,
   storeMessage,
+  getWorkflow,
 } from './db.js';
 import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
 import { GroupQueue } from './group-queue.js';
@@ -682,6 +684,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     prompt,
     isMain: isMainGroup,
   });
+  const executionContext = resolveExecutionContext(group, missedMessages);
   const runId = createExecutionId();
   const initialQueryId = createExecutionId();
   rememberPendingQueryBatch({
@@ -748,7 +751,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (result.status === 'error') {
       hadError = true;
     }
-  }, modelSelection.selectedModel, runId, initialQueryId);
+  }, modelSelection.selectedModel, runId, initialQueryId, executionContext);
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -796,6 +799,7 @@ async function runAgent(
   selectedModel?: string,
   runId?: string,
   initialQueryId?: string,
+  executionContext?: { workflowId?: string; stageKey?: string; delegationId?: string },
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = sessions[group.folder];
@@ -877,6 +881,7 @@ async function runAgent(
         isMain,
         assistantName: ASSISTANT_NAME,
         selectedModel: modelSelection.selectedModel,
+        executionContext,
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
@@ -1170,6 +1175,33 @@ function recoverPendingMessages(): void {
 function ensureContainerSystemRunning(): void {
   ensureContainerRuntimeRunning();
   cleanupOrphans();
+}
+
+function resolveExecutionContext(
+  group: RegisteredGroup,
+  messages: NewMessage[],
+): { workflowId?: string; stageKey?: string; delegationId?: string } | undefined {
+  const workflowId = [...messages]
+    .reverse()
+    .find((message) => typeof message.workflow_id === 'string' && message.workflow_id.trim())
+    ?.workflow_id?.trim();
+  let workflow = workflowId ? getWorkflow(workflowId) : undefined;
+
+  if (!workflow) {
+    const pendingDelegations = getDelegationsByTarget(group.folder).filter(
+      (delegation) => delegation.status === 'pending' && delegation.workflow_id,
+    );
+    if (pendingDelegations.length === 1) {
+      workflow = getWorkflow(pendingDelegations[0].workflow_id || '');
+    }
+  }
+
+  if (!workflow) return undefined;
+  return {
+    workflowId: workflow.id,
+    stageKey: workflow.status,
+    delegationId: workflow.current_delegation_id || undefined,
+  };
 }
 
 async function main(): Promise<void> {

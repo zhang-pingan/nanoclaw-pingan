@@ -700,7 +700,7 @@ html, body {
 }
 
 .workbench-subtasks,
-.workbench-approvals,
+.workbench-action-items,
 .workbench-artifacts,
 .workbench-timeline {
   display: flex;
@@ -811,6 +811,9 @@ html, body {
 .workbench-subtask-step.active .workbench-subtask-card {
   border-color: rgba(79, 110, 247, 0.52);
   box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.16);
+}
+
+.workbench-subtask-step.active.animate-in .workbench-subtask-card {
   animation: workbenchStepActivate 240ms ease;
 }
 
@@ -1102,6 +1105,9 @@ html, body {
   border-radius: 18px;
   padding: 16px 18px;
   background: rgba(245, 247, 250, 0.9);
+}
+
+.workbench-subtask-detail-card.animate-in {
   animation: workbenchDetailSwap 220ms ease;
 }
 
@@ -1239,6 +1245,70 @@ html, body {
   font: inherit;
   color: var(--text-primary);
   resize: vertical;
+}
+
+.app-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(10px);
+}
+
+.app-prompt-dialog {
+  width: min(520px, 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
+  padding: 20px;
+}
+
+.app-prompt-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.app-prompt-message {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-prompt-input {
+  width: 100%;
+  min-height: 88px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(248, 250, 252, 0.92);
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.app-prompt-input:focus {
+  border-color: rgba(79, 110, 247, 0.48);
+  box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.14);
+}
+
+.app-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .workbench-empty {

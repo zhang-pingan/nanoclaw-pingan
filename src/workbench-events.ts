@@ -5,7 +5,7 @@ export interface WorkbenchRealtimeEvent {
     | 'subtask_updated'
     | 'event_created'
     | 'artifact_created'
-    | 'approval_updated'
+    | 'action_item_updated'
     | 'comment_created'
     | 'asset_created';
   taskId: string;

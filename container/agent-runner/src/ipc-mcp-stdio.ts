@@ -19,6 +19,9 @@ const TASKS_DIR = path.join(IPC_DIR, 'tasks');
 const chatJid = process.env.NANOCLAW_CHAT_JID!;
 const groupFolder = process.env.NANOCLAW_GROUP_FOLDER!;
 const isMain = process.env.NANOCLAW_IS_MAIN === '1';
+const workflowId = process.env.NANOCLAW_WORKFLOW_ID || '';
+const stageKey = process.env.NANOCLAW_STAGE_KEY || '';
+const delegationId = process.env.NANOCLAW_DELEGATION_ID || '';
 
 function writeIpcFile(dir: string, data: object): string {
   fs.mkdirSync(dir, { recursive: true });
@@ -53,6 +56,11 @@ server.tool(
       text: args.text,
       sender: args.sender || undefined,
       groupFolder,
+      workflowId: workflowId || undefined,
+      stageKey: stageKey || undefined,
+      delegationId: delegationId || undefined,
+      sourceType: 'send_message',
+      sourceRefId: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       timestamp: new Date().toISOString(),
     };
 
@@ -437,6 +445,9 @@ Users can answer via interactive cards (when supported) or by replying:
       timeoutSec,
       metadata: args.metadata,
       groupFolder,
+      workflowId: workflowId || undefined,
+      stageKey: stageKey || undefined,
+      delegationId: delegationId || undefined,
       timestamp: new Date().toISOString(),
     };
 
@@ -495,6 +506,86 @@ Users can answer via interactive cards (when supported) or by replying:
 
     return {
       content: [{ type: 'text' as const, text: `ask_user_question timed out waiting for user response (requestId=${requestId}).` }],
+      isError: true,
+    };
+  },
+);
+
+server.tool(
+  'request_human_input',
+  'Create a standard human-input request, send it to the user, and wait for a free-text reply.',
+  {
+    title: z.string().describe('Short title shown in the workbench'),
+    text: z.string().describe('Question or prompt sent to the user'),
+    timeout_sec: z.number().optional().default(1800).describe('Timeout in seconds (30-3600)'),
+  },
+  async (args) => {
+    const requestId = `aq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const timeoutSec = Math.min(3600, Math.max(30, Math.floor(args.timeout_sec || 1800)));
+    const data = {
+      type: 'ask_user_question',
+      requestId,
+      questions: [
+        {
+          id: 'reply',
+          question: args.text,
+          fields: [
+            {
+              id: 'reply',
+              label: '回复',
+              type: 'string' as const,
+              required: true,
+            },
+          ],
+        },
+      ],
+      timeoutSec,
+      metadata: {
+        title: args.title,
+        source_type: 'request_human_input',
+      },
+      groupFolder,
+      workflowId: workflowId || undefined,
+      stageKey: stageKey || undefined,
+      delegationId: delegationId || undefined,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(TASKS_DIR, data);
+
+    const resultsDir = path.join(IPC_DIR, 'ask-results');
+    const resultPath = path.join(resultsDir, `${requestId}.json`);
+    const maxWaitMs = timeoutSec * 1000 + 5000;
+    const pollMs = 300;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      if (fs.existsSync(resultPath)) {
+        const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8')) as {
+          status?: string;
+          answers?: Record<string, unknown>;
+          error?: string;
+        };
+        fs.unlinkSync(resultPath);
+        if (result.status === 'answered') {
+          const value = typeof result.answers?.reply === 'string'
+            ? result.answers.reply
+            : JSON.stringify(result.answers?.reply ?? '');
+          return { content: [{ type: 'text' as const, text: `User replied: ${value}` }] };
+        }
+        if (result.status === 'rejected') {
+          return {
+            content: [{ type: 'text' as const, text: `request_human_input rejected: ${result.error || 'rejected'}` }],
+            isError: true,
+          };
+        }
+        return { content: [{ type: 'text' as const, text: `request_human_input ended with status=${result.status || 'unknown'}.` }] };
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: `request_human_input timed out waiting for user response (requestId=${requestId}).` }],
       isError: true,
     };
   },

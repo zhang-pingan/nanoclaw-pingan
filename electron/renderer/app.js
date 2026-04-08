@@ -89,8 +89,8 @@ var workbenchTaskTitle = document.getElementById("workbench-task-title");
 var workbenchTaskMeta = document.getElementById("workbench-task-meta");
 var workbenchTaskActions = document.getElementById("workbench-task-actions");
 var workbenchSubtasks = document.getElementById("workbench-subtasks");
-var workbenchApprovalsPanel = document.getElementById("workbench-approvals-panel");
-var workbenchApprovals = document.getElementById("workbench-approvals");
+var workbenchActionItemsPanel = document.getElementById("workbench-action-items-panel");
+var workbenchActionItems = document.getElementById("workbench-action-items");
 var workbenchArtifacts = document.getElementById("workbench-artifacts");
 var workbenchAssets = document.getElementById("workbench-assets");
 var workbenchAddLinkBtn = document.getElementById("workbench-add-link-btn");
@@ -143,6 +143,8 @@ var workbenchTasks = [];
 var currentWorkbenchDetail = null;
 var currentWorkbenchTaskId = "";
 var workbenchSelectedSubtaskId = "";
+var workbenchAnimatedSubtaskKey = "";
+var workbenchFollowCurrentSubtaskOnce = false;
 var workbenchDetailLoading = false;
 var workbenchQueuedDetailTaskId = "";
 var workbenchDetailReloadTimer = null;
@@ -219,6 +221,72 @@ function getFixedAvatar(group) {
 function apiFetch(path, options) {
   const headers = { "Content-Type": "application/json" };
   return fetch(`http://localhost:3000${path}`, { ...options, headers });
+}
+
+async function openTextPrompt(message, defaultValue = "", options = {}) {
+  const promptFn = typeof window.prompt === "function" ? window.prompt.bind(window) : null;
+  if (promptFn) {
+    try {
+      return promptFn(message, defaultValue);
+    } catch (err) {
+      console.warn("window.prompt unavailable, falling back to custom prompt:", err);
+    }
+  }
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "app-prompt-overlay";
+    overlay.innerHTML = `
+      <div class="app-prompt-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(options.title || "输入")}">
+        <div class="app-prompt-title">${escapeHtml(options.title || "请输入内容")}</div>
+        <div class="app-prompt-message">${escapeHtml(message)}</div>
+        <textarea class="app-prompt-input" rows="${options.multiline ? "5" : "3"}" placeholder="${escapeHtml(options.placeholder || "")}"></textarea>
+        <div class="app-prompt-actions">
+          <button type="button" class="btn-ghost" data-action="cancel">取消</button>
+          <button type="button" class="btn-primary" data-action="confirm">确认</button>
+        </div>
+      </div>
+    `;
+
+    const input = overlay.querySelector(".app-prompt-input");
+    const confirmBtn = overlay.querySelector('[data-action="confirm"]');
+    const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+    let settled = false;
+
+    function cleanup(value) {
+      if (settled) return;
+      settled = true;
+      overlay.remove();
+      resolve(value);
+    }
+
+    input.value = defaultValue || "";
+    document.body.appendChild(overlay);
+    input.focus();
+    input.setSelectionRange(0, input.value.length);
+
+    confirmBtn.addEventListener("click", () => cleanup(input.value));
+    cancelBtn.addEventListener("click", () => cleanup(null));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) cleanup(null);
+    });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanup(null);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        cleanup(input.value);
+        return;
+      }
+      if (!options.multiline && event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        cleanup(input.value);
+      }
+    });
+  });
 }
 
 function formatTime(ts) {
@@ -1253,8 +1321,8 @@ function renderDoctorPanel() {
           const allowed = (keepBtn.getAttribute("data-ids") || "").split(",").filter(Boolean);
           const keepDefaultId = keepBtn.getAttribute("data-keep-default") || "";
           const depDefaultId = keepBtn.getAttribute("data-deprecate-default") || "";
-          const keepId = (prompt(`输入 keep_id（候选：${allowed.join(", ")}）`, keepDefaultId) || "").trim();
-          const deprecateId = (prompt(`输入 deprecate_id（候选：${allowed.join(", ")}）`, depDefaultId) || "").trim();
+          const keepId = ((await openTextPrompt(`输入 keep_id（候选：${allowed.join(", ")}）`, keepDefaultId, { title: "冲突处理" })) || "").trim();
+          const deprecateId = ((await openTextPrompt(`输入 deprecate_id（候选：${allowed.join(", ")}）`, depDefaultId, { title: "冲突处理" })) || "").trim();
           if (!keepId || !deprecateId || keepId === deprecateId) return;
           if (!allowed.includes(keepId) || !allowed.includes(deprecateId)) {
             alert("所选 ID 不在该冲突组内");
@@ -1266,7 +1334,7 @@ function renderDoctorPanel() {
       if (mergeBtn) {
         mergeBtn.addEventListener("click", async () => {
           const allowed = (mergeBtn.getAttribute("data-ids") || "").split(",").filter(Boolean);
-          const raw = (prompt(`输入两个 merge_ids（逗号分隔，候选：${allowed.join(", ")}）`) || "").trim();
+          const raw = ((await openTextPrompt(`输入两个 merge_ids（逗号分隔，候选：${allowed.join(", ")}）`, "", { title: "冲突合并" })) || "").trim();
           if (!raw) return;
           const picks = raw.split(",").map((s) => s.trim()).filter(Boolean);
           if (picks.length !== 2 || picks[0] === picks[1]) {
@@ -1277,7 +1345,7 @@ function renderDoctorPanel() {
             alert("所选 ID 不在该冲突组内");
             return;
           }
-          const mergedContent = (prompt("输入 merged_content") || "").trim();
+          const mergedContent = ((await openTextPrompt("输入 merged_content", "", { title: "冲突合并", multiline: true })) || "").trim();
           if (!mergedContent) return;
           await resolveConflictMerge([picks[0], picks[1]], mergedContent);
         });
@@ -2209,7 +2277,7 @@ function renderWorkbenchTaskDetail(detail) {
 
   renderWorkbenchActions(task);
   renderWorkbenchSubtasks(detail.subtasks || []);
-  renderWorkbenchApprovals(detail.approvals || [], task);
+  renderWorkbenchActionItems(detail.action_items || [], task);
   renderWorkbenchArtifacts(detail.artifacts || []);
   renderWorkbenchAssets(detail.assets || []);
   renderWorkbenchComments(detail.comments || []);
@@ -2266,10 +2334,24 @@ function renderWorkbenchSubtasks(subtasks) {
     };
     return statusLabelMap[item.status] || item.status;
   }
-  const selectedId = subtasks.some((item) => item.id === workbenchSelectedSubtaskId)
-    ? workbenchSelectedSubtaskId
-    : (subtasks.find((item) => item.status === "current") || subtasks[0]).id;
+  const currentSubtask = subtasks.find((item) => item.status === "current") || null;
+  const persistedSelection = subtasks.find((item) => item.id === workbenchSelectedSubtaskId) || null;
+  const shouldAutoFollowCurrent =
+    workbenchFollowCurrentSubtaskOnce &&
+    currentSubtask &&
+    (!persistedSelection || currentSubtask.id !== persistedSelection.id);
+  const selectedId = shouldAutoFollowCurrent
+    ? currentSubtask.id
+    : persistedSelection
+      ? persistedSelection.id
+      : (currentSubtask || subtasks[0]).id;
   workbenchSelectedSubtaskId = selectedId;
+  if (shouldAutoFollowCurrent) {
+    workbenchFollowCurrentSubtaskOnce = false;
+  }
+  const animationKey = `${currentWorkbenchTaskId}:${selectedId}`;
+  const shouldAnimateSelection = workbenchAnimatedSubtaskKey !== animationKey;
+  workbenchAnimatedSubtaskKey = animationKey;
 
   const chainEl = document.createElement("div");
   chainEl.className = "workbench-subtasks-chain";
@@ -2279,6 +2361,9 @@ function renderWorkbenchSubtasks(subtasks) {
     const el = document.createElement("button");
     el.type = "button";
     el.className = `workbench-subtask-step ${item.status}${item.id === selectedId ? " active" : ""}`;
+    if (item.id === selectedId && shouldAnimateSelection) {
+      el.classList.add("animate-in");
+    }
     const stepHint = item.status === "current"
       ? (isAwaitingStage(item) ? "等待确认" : "正在处理")
       : item.manually_skipped && item.status === "completed"
@@ -2360,7 +2445,7 @@ function renderWorkbenchSubtasks(subtasks) {
       `
       : "";
   const detailEl = document.createElement("div");
-  detailEl.className = `workbench-subtask-detail-card ${selected.status}`;
+  detailEl.className = `workbench-subtask-detail-card ${selected.status}${shouldAnimateSelection ? " animate-in" : ""}`;
   detailEl.innerHTML = `
     <div class="workbench-item-row">
       <div class="workbench-item-title">
@@ -2381,7 +2466,7 @@ function renderWorkbenchSubtasks(subtasks) {
     ? currentWorkbenchDetail.task
     : null;
 
-  if (selected.role && (selected.status === "failed" || selected.status === "cancelled")) {
+  if (selected.role && !selected.manually_skipped && (selected.status === "failed" || selected.status === "cancelled")) {
     const actions = document.createElement("div");
     actions.className = "workbench-subtask-actions";
     if (selected.status === "failed") {
@@ -2445,53 +2530,88 @@ function getWorkbenchApprovalLabels(task, approval) {
   }
 }
 
-function renderWorkbenchApprovals(approvals, task) {
-  workbenchApprovals.innerHTML = "";
-  if (approvals.length === 0) {
-    if (workbenchApprovalsPanel) workbenchApprovalsPanel.classList.add("hidden");
-    workbenchApprovals.innerHTML = `<div class="workbench-empty">当前没有待审批项</div>`;
+function renderWorkbenchActionItems(actionItems, task) {
+  workbenchActionItems.innerHTML = "";
+  if (actionItems.length === 0) {
+    if (workbenchActionItemsPanel) workbenchActionItemsPanel.classList.add("hidden");
+    workbenchActionItems.innerHTML = `<div class="workbench-empty">当前没有待处理项</div>`;
     return;
   }
-  if (workbenchApprovalsPanel) workbenchApprovalsPanel.classList.remove("hidden");
-  approvals.forEach((item) => {
-    const labels = getWorkbenchApprovalLabels(task, item);
+  if (workbenchActionItemsPanel) workbenchActionItemsPanel.classList.remove("hidden");
+  actionItems.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-approval-item";
+    const badge = item.item_type === "approval"
+      ? "待确认"
+      : item.source_type === "request_human_input"
+        ? "人工输入"
+        : item.source_type === "ask_user_question"
+          ? "提问"
+          : "消息";
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.title)}</div>
-        <span class="workbench-badge">pending</span>
+        <span class="workbench-badge">${escapeHtml(badge)}</span>
       </div>
       <div class="workbench-item-body">${escapeHtml(item.body)}</div>
     `;
     const actions = document.createElement("div");
     actions.className = "workbench-task-actions";
-    if (item.action_mode !== "input_required") {
+    if (item.item_type === "approval") {
+      const labels = getWorkbenchApprovalLabels(task, {
+        approval_type: item.stage_key || task.status,
+        action_mode: item.action_mode || "approve_only",
+      });
+      if (item.action_mode !== "input_required") {
+        const approveBtn = document.createElement("button");
+        approveBtn.className = "btn-primary";
+        approveBtn.textContent = labels.approve;
+        approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
+        actions.appendChild(approveBtn);
+      }
+      const skipBtn = document.createElement("button");
+      skipBtn.className = "btn-ghost";
+      skipBtn.textContent = labels.skip || "跳过此节点";
+      skipBtn.addEventListener("click", () => {
+        if (!confirm(`确认跳过“${item.title}”并进入下一步吗？`)) return;
+        triggerWorkbenchAction(task.id, "skip");
+      });
+      actions.appendChild(skipBtn);
+      if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
+        const reviseBtn = document.createElement("button");
+        reviseBtn.className = item.action_mode === "input_required" ? "btn-primary" : "btn-ghost";
+        reviseBtn.textContent = labels.revise || "驳回并修改";
+        reviseBtn.addEventListener("click", () =>
+          triggerWorkbenchAction(task.id, item.action_mode === "input_required" ? "submit_access_token" : "revise")
+        );
+        actions.appendChild(reviseBtn);
+      }
+    } else {
+      if (item.replyable) {
+        const replyBtn = document.createElement("button");
+        replyBtn.className = "btn-primary";
+        replyBtn.textContent = "回复";
+        replyBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "reply"));
+        actions.appendChild(replyBtn);
+      }
       const approveBtn = document.createElement("button");
-      approveBtn.className = "btn-primary";
-      approveBtn.textContent = labels.approve;
-      approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
+      approveBtn.className = "btn-ghost";
+      approveBtn.textContent = "确认";
+      approveBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "confirm"));
       actions.appendChild(approveBtn);
-    }
-    const skipBtn = document.createElement("button");
-    skipBtn.className = "btn-ghost";
-    skipBtn.textContent = labels.skip || "跳过此节点";
-    skipBtn.addEventListener("click", () => {
-      if (!confirm(`确认跳过“${item.title}”并进入下一步吗？`)) return;
-      triggerWorkbenchAction(task.id, "skip");
-    });
-    actions.appendChild(skipBtn);
-    if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
-      const reviseBtn = document.createElement("button");
-      reviseBtn.className = item.action_mode === "input_required" ? "btn-primary" : "btn-ghost";
-      reviseBtn.textContent = labels.revise || "驳回并修改";
-      reviseBtn.addEventListener("click", () =>
-        triggerWorkbenchAction(task.id, item.action_mode === "input_required" ? "submit_access_token" : "revise")
-      );
-      actions.appendChild(reviseBtn);
+      const skipBtn = document.createElement("button");
+      skipBtn.className = "btn-ghost";
+      skipBtn.textContent = "跳过";
+      skipBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "skip"));
+      actions.appendChild(skipBtn);
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "btn-ghost";
+      cancelBtn.textContent = "取消";
+      cancelBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "cancel"));
+      actions.appendChild(cancelBtn);
     }
     el.appendChild(actions);
-    workbenchApprovals.appendChild(el);
+    workbenchActionItems.appendChild(el);
   });
 }
 
@@ -2624,10 +2744,16 @@ async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
   let revisionText = "";
   let accessToken = "";
   if (action === "revise") {
-    revisionText = window.prompt("请输入修改意见", "") || "";
+    revisionText = await openTextPrompt("请输入修改意见", "", {
+      title: "修改意见",
+      multiline: true,
+    }) || "";
     if (!revisionText.trim()) return;
   } else if (action === "submit_access_token") {
-    accessToken = window.prompt("请输入 access_token", "") || "";
+    accessToken = await openTextPrompt("请输入 access_token", "", {
+      title: "填写 access_token",
+      placeholder: "请输入测试 token",
+    }) || "";
     if (!accessToken.trim()) return;
   }
   try {
@@ -2643,10 +2769,42 @@ async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (action === "skip") {
+      workbenchSelectedSubtaskId = "";
+      workbenchFollowCurrentSubtaskOnce = true;
+    }
     await loadWorkbenchTasks(taskId);
   } catch (err) {
     console.error("Failed to run workbench action:", err);
     alert(err.message || "任务操作失败");
+  }
+}
+
+async function triggerWorkbenchActionItem(taskId, actionItemId, action) {
+  let replyText = "";
+  if (action === "reply") {
+    replyText = await openTextPrompt("请输入回复内容", "", {
+      title: "回复待处理项",
+      multiline: true,
+    }) || "";
+    if (!replyText.trim()) return;
+  }
+  try {
+    const res = await apiFetch("/api/workbench/action-item", {
+      method: "POST",
+      body: JSON.stringify({
+        task_id: taskId,
+        action_item_id: actionItemId,
+        action,
+        reply_text: replyText || undefined,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await loadWorkbenchTaskDetail(taskId);
+  } catch (err) {
+    console.error("Failed to handle workbench action item:", err);
+    alert(err.message || "待处理项操作失败");
   }
 }
 
@@ -2686,10 +2844,18 @@ async function submitWorkbenchComment() {
 
 async function addWorkbenchLinkAsset() {
   if (!currentWorkbenchTaskId) return;
-  const url = window.prompt("输入链接 URL", "https://");
+  const url = await openTextPrompt("输入链接 URL", "https://", {
+    title: "添加链接",
+    placeholder: "https://",
+  });
   if (!url || !url.trim()) return;
-  const title = window.prompt("链接标题", "参考链接") || "参考链接";
-  const note = window.prompt("补充说明", "") || "";
+  const title = await openTextPrompt("链接标题", "参考链接", {
+    title: "添加链接",
+  }) || "参考链接";
+  const note = await openTextPrompt("补充说明", "", {
+    title: "添加链接",
+    multiline: true,
+  }) || "";
   try {
     const res = await apiFetch("/api/workbench/task/asset", {
       method: "POST",
@@ -2727,7 +2893,10 @@ async function addWorkbenchFileAsset() {
       if (!uploadRes.ok) throw new Error(uploadData.error || `HTTP ${uploadRes.status}`);
       const uploaded = uploadData.files && uploadData.files[0];
       if (!uploaded) throw new Error("上传结果为空");
-      const note = window.prompt("补充说明", "") || "";
+      const note = await openTextPrompt("补充说明", "", {
+        title: "添加文件",
+        multiline: true,
+      }) || "";
       const assetRes = await apiFetch("/api/workbench/task/asset", {
         method: "POST",
         body: JSON.stringify({
@@ -3277,6 +3446,9 @@ function applyWorkbenchRealtimeEvent(event) {
       if (payload.status && ["completed", "current", "pending", "failed", "cancelled"].includes(payload.status)) {
         subtask.status = payload.status;
       }
+      if (typeof payload.manuallySkipped === "boolean") {
+        subtask.manually_skipped = payload.manuallySkipped;
+      }
       if (payload.groupFolder) subtask.target_folder = payload.groupFolder;
       renderWorkbenchSubtasks(currentWorkbenchDetail.subtasks);
     }
@@ -3312,7 +3484,7 @@ function applyWorkbenchRealtimeEvent(event) {
       currentWorkbenchDetail.artifacts = sortWorkbenchItemsByCreatedAt(currentWorkbenchDetail.artifacts);
       renderWorkbenchArtifacts(currentWorkbenchDetail.artifacts);
     }
-  } else if (event.type === "approval_updated") {
+  } else if (event.type === "action_item_updated") {
     scheduleWorkbenchTaskDetailReload(currentWorkbenchTaskId);
   } else if (event.type === "comment_created") {
     currentWorkbenchDetail.comments.push({

@@ -31,6 +31,11 @@ interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  executionContext?: {
+    workflowId?: string;
+    stageKey?: string;
+    delegationId?: string;
+  };
 }
 
 interface ContainerOutput {
@@ -565,6 +570,9 @@ function buildQueryOptions(
           NANOCLAW_CHAT_JID: containerInput.chatJid,
           NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
           NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+          NANOCLAW_WORKFLOW_ID: containerInput.executionContext?.workflowId || '',
+          NANOCLAW_STAGE_KEY: containerInput.executionContext?.stageKey || '',
+          NANOCLAW_DELEGATION_ID: containerInput.executionContext?.delegationId || '',
         },
       },
     },
