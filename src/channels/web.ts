@@ -30,6 +30,7 @@ import {
   runWorkbenchTaskAction,
 } from '../workbench.js';
 import {
+  deleteHistoricalAgentQueries,
   getAgentQuery,
   listAgentQueryEvents,
   listAgentQuerySteps,
@@ -372,6 +373,9 @@ class WebChannel {
         return this.apiGetActiveAgentQueries(res);
       }
       if (pathname === '/api/agent-queries') {
+        if (req.method === 'DELETE') {
+          return this.apiDeleteAgentQueryHistory(res);
+        }
         return this.apiListAgentQueries(reqUrl, res);
       }
       if (pathname.startsWith('/api/agent-queries/')) {
@@ -1348,6 +1352,15 @@ class WebChannel {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ query }));
+  }
+
+  private apiDeleteAgentQueryHistory(res: http.ServerResponse): void {
+    const activeQueryIds = (this.opts.getActiveAgentQueryTraces?.() ?? []).map(
+      (query) => query.queryId,
+    );
+    const deleted = deleteHistoricalAgentQueries(activeQueryIds);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ deleted }));
   }
 
   /**

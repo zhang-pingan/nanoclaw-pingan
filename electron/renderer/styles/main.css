@@ -1427,6 +1427,12 @@ html, body {
   border-bottom: 1px solid var(--stroke-soft);
 }
 
+.trace-monitor-sidebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .trace-monitor-kicker {
   font-size: 11px;
   text-transform: uppercase;

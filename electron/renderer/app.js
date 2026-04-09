@@ -82,6 +82,7 @@ var refreshWorkflowsBtn = document.getElementById("refresh-workflows");
 var deleteAllWorkflowsBtn = document.getElementById("delete-all-workflows");
 var traceMonitorList = document.getElementById("trace-monitor-list");
 var traceMonitorRefreshBtn = document.getElementById("trace-monitor-refresh-btn");
+var traceMonitorClearHistoryBtn = document.getElementById("trace-monitor-clear-history-btn");
 var traceMonitorScopeBtns = Array.from(document.querySelectorAll(".trace-monitor-scope-btn"));
 var traceMonitorDetailEmpty = document.getElementById("trace-monitor-detail-empty");
 var traceMonitorDetail = document.getElementById("trace-monitor-detail");
@@ -183,6 +184,8 @@ var traceMonitorHistoryRuns = [];
 var traceMonitorHistoryOffset = 0;
 var traceMonitorHistoryHasMore = false;
 var traceMonitorHistoryLoading = false;
+var traceMonitorHistoryClearing = false;
+var traceMonitorHistoryJustCleared = false;
 var currentTraceRunId = "";
 var currentTraceRunRecord = null;
 var currentTraceRunSteps = [];
@@ -2287,6 +2290,9 @@ async function loadTraceHistoryPage(options) {
       .filter((run) => run && !activeRunIds.has(run.id));
     if (reset) {
       traceMonitorHistoryRuns = sortTraceRunsByLatest(nextRuns);
+      if (nextRuns.length > 0) {
+        traceMonitorHistoryJustCleared = false;
+      }
     } else {
       const merged = [...traceMonitorHistoryRuns];
       const seen = new Set(merged.map((run) => run.id));
@@ -2319,6 +2325,9 @@ async function loadMoreTraceHistory() {
 }
 
 function getTraceRunListEmptyText(scope) {
+  if (scope === "history" && traceMonitorHistoryJustCleared) {
+    return "活动历史已清空";
+  }
   return scope === "history" ? "暂无历史 Agent Trace" : "暂无正在活动的 Agent Trace";
 }
 
@@ -2336,8 +2345,21 @@ function renderTraceHistoryLoadingSkeleton() {
   `;
 }
 
+function syncTraceMonitorHeaderActions() {
+  if (!traceMonitorClearHistoryBtn) return;
+  const isHistoryScope = activeTraceMonitorScope === "history";
+  const hasHistoryRuns = traceMonitorHistoryRuns.length > 0;
+  traceMonitorClearHistoryBtn.style.display = isHistoryScope ? "" : "none";
+  traceMonitorClearHistoryBtn.disabled =
+    !isHistoryScope || !hasHistoryRuns || traceMonitorHistoryClearing;
+  traceMonitorClearHistoryBtn.title = traceMonitorHistoryClearing
+    ? "正在删除活动历史"
+    : "一键删除所有活动历史";
+}
+
 function renderTraceMonitorList() {
   if (!traceMonitorList) return;
+  syncTraceMonitorHeaderActions();
   const runs = getTraceRunCollection(activeTraceMonitorScope);
   if (!runs.length) {
     traceMonitorList.innerHTML = `<div class="trace-monitor-list-empty">${getTraceRunListEmptyText(activeTraceMonitorScope)}</div>`;
@@ -2723,11 +2745,13 @@ function setTraceMonitorScope(scope) {
     currentTraceRunEvents = [];
   }
   renderTraceMonitorList();
+  syncTraceMonitorHeaderActions();
   ensureTraceSelectionVisible(activeTraceMonitorScope);
   if (activeTraceMonitorScope === "history" && traceMonitorHistoryRuns.length === 0 && !traceMonitorHistoryLoading) {
     loadTraceHistoryPage({ reset: true })
       .then(() => {
         renderTraceMonitorList();
+        syncTraceMonitorHeaderActions();
         ensureTraceSelectionVisible("history");
       })
       .catch((err) => {
@@ -2768,6 +2792,7 @@ async function loadTraceMonitorData(options) {
       );
     }
     renderTraceMonitorList();
+    syncTraceMonitorHeaderActions();
     if (force || !currentTraceRunId) {
       ensureTraceSelectionVisible(activeTraceMonitorScope);
       return;
@@ -2783,7 +2808,39 @@ async function loadTraceMonitorData(options) {
     if (traceMonitorList) {
       traceMonitorList.innerHTML = `<div class="trace-monitor-list-empty">Trace 列表加载失败</div>`;
     }
+    syncTraceMonitorHeaderActions();
     renderTraceMonitorDetailEmpty();
+  }
+}
+
+async function clearAllTraceHistory() {
+  if (traceMonitorHistoryClearing) return;
+  if (!confirm("确认删除所有 agent 活动历史吗？\n\n当前仍在运行的活跃 Trace 不会被删除。")) return;
+  traceMonitorHistoryClearing = true;
+  syncTraceMonitorHeaderActions();
+  try {
+    const res = await apiFetch("/api/agent-queries", { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    traceMonitorHistoryRuns = [];
+    traceMonitorHistoryOffset = 0;
+    traceMonitorHistoryHasMore = false;
+    traceMonitorHistoryJustCleared = true;
+    if (currentTraceRunScope === "history") {
+      currentTraceRunId = "";
+      currentTraceRunScope = "history";
+      renderTraceMonitorDetailEmpty();
+    }
+    await loadTraceHistoryPage({ reset: true });
+    renderTraceMonitorList();
+    syncTraceMonitorHeaderActions();
+    showToast(`已删除 ${Number(data.deleted || 0)} 条活动历史`);
+  } catch (err) {
+    console.error("Failed to clear trace history:", err);
+    alert("删除活动历史失败");
+  } finally {
+    traceMonitorHistoryClearing = false;
+    syncTraceMonitorHeaderActions();
   }
 }
 // --- Workflows panel ---
@@ -5502,6 +5559,11 @@ if (memoryCreateBtn) {
 if (traceMonitorRefreshBtn) {
   traceMonitorRefreshBtn.addEventListener("click", () => {
     loadTraceMonitorData({ force: true });
+  });
+}
+if (traceMonitorClearHistoryBtn) {
+  traceMonitorClearHistoryBtn.addEventListener("click", () => {
+    clearAllTraceHistory();
   });
 }
 if (traceMonitorList) {

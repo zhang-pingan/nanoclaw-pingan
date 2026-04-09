@@ -3098,6 +3098,42 @@ export function deleteAgentQuery(queryId: string): void {
   db.prepare('DELETE FROM agent_queries WHERE query_id = ?').run(queryId);
 }
 
+export function deleteHistoricalAgentQueries(activeQueryIds: string[] = []): number {
+  const uniqueActiveIds = [...new Set(activeQueryIds.filter(Boolean))];
+  const deleteEventsStmt = db.prepare(
+    'DELETE FROM agent_query_events WHERE query_id = ?',
+  );
+  const deleteStepsStmt = db.prepare(
+    'DELETE FROM agent_query_steps WHERE query_id = ?',
+  );
+  const deleteQueryStmt = db.prepare(
+    'DELETE FROM agent_queries WHERE query_id = ?',
+  );
+  let deleted = 0;
+
+  const queryIds = uniqueActiveIds.length
+    ? db
+        .prepare(
+          `SELECT query_id FROM agent_queries WHERE query_id NOT IN (${uniqueActiveIds
+            .map(() => '?')
+            .join(', ')})`,
+        )
+        .all(...uniqueActiveIds)
+    : db.prepare('SELECT query_id FROM agent_queries').all();
+
+  const runDelete = db.transaction((rows: unknown[]) => {
+    for (const row of rows) {
+      const queryId = String((row as { query_id: string }).query_id);
+      deleteEventsStmt.run(queryId);
+      deleteStepsStmt.run(queryId);
+      deleted += Number(deleteQueryStmt.run(queryId).changes || 0);
+    }
+  });
+
+  runDelete(queryIds);
+  return deleted;
+}
+
 // --- JSON migration ---
 
 function migrateJsonState(): void {
