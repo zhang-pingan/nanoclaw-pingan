@@ -166,24 +166,24 @@ export interface AgentStatusInfo {
   activeWorkflowCount: number;
 }
 
-export type AgentRunStatus =
+export type AgentQueryStatus =
   | 'running'
   | 'success'
   | 'error'
   | 'cancelled'
   | 'timeout';
 
-export type AgentRunSourceType =
+export type AgentQuerySourceType =
   | 'message'
   | 'scheduled_task'
   | 'workflow_delegation'
   | 'web_action';
 
-export interface AgentRunRecord {
+export interface AgentQueryRecord {
   id: string;
-  run_id: string;
-  query_id: string | null;
-  source_type: AgentRunSourceType;
+  query_id: string;
+  run_id: string | null;
+  source_type: AgentQuerySourceType;
   source_ref_id: string | null;
   chat_jid: string | null;
   group_folder: string | null;
@@ -198,7 +198,7 @@ export interface AgentRunRecord {
   memory_pack_hash: string | null;
   tools_hash: string | null;
   mounts_hash: string | null;
-  status: AgentRunStatus;
+  status: AgentQueryStatus;
   current_step_id: string | null;
   current_phase: string | null;
   current_action: string | null;
@@ -219,13 +219,13 @@ export interface AgentRunRecord {
   updated_at: string;
 }
 
-export interface AgentRunStepRecord {
+export interface AgentQueryStepRecord {
   id: string;
-  run_id: string;
+  query_id: string;
   step_index: number;
   step_type: string;
   step_name: string;
-  status: AgentRunStatus;
+  status: AgentQueryStatus;
   summary: string | null;
   payload_json: string | null;
   started_at: string;
@@ -235,9 +235,9 @@ export interface AgentRunStepRecord {
   updated_at: string;
 }
 
-export interface AgentRunEventRecord {
+export interface AgentQueryEventRecord {
   id: string;
-  run_id: string;
+  query_id: string;
   step_id: string | null;
   event_index: number;
   event_type: string;
@@ -251,9 +251,9 @@ export interface AgentRunEventRecord {
   created_at: string;
 }
 
-export interface ActiveAgentRunTrace {
-  runId: string;
-  queryId: string | null;
+export interface ActiveAgentQueryTrace {
+  queryId: string;
+  runId: string | null;
   groupJid: string | null;
   groupFolder: string | null;
   workflowId: string | null;
@@ -261,7 +261,7 @@ export interface ActiveAgentRunTrace {
   sessionId: string | null;
   selectedModel: string | null;
   actualModel: string | null;
-  status: AgentRunStatus;
+  status: AgentQueryStatus;
   currentStepId: string | null;
   currentStepType: string | null;
   currentStepName: string | null;
@@ -271,7 +271,7 @@ export interface ActiveAgentRunTrace {
   startedAt: string;
   firstOutputAt: string | null;
   lastEventAt: string;
-  recentEvents: AgentRunEventRecord[];
+  recentEvents: AgentQueryEventRecord[];
 }
 
 export interface StopAgentResult {

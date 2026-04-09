@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
-import { agentRunTraceManager } from './agent-run-trace.js';
+import { agentQueryTraceManager } from './agent-query-trace.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -164,9 +164,9 @@ async function runTask(
   const sessionId =
     task.context_mode === 'group' ? sessions[task.group_folder] : undefined;
 
-  agentRunTraceManager.startRun({
-    runId,
+  agentQueryTraceManager.startQuery({
     queryId,
+    runId,
     sourceType: 'scheduled_task',
     sourceRefId: task.id,
     chatJid: task.chat_jid,
@@ -175,14 +175,14 @@ async function runTask(
     promptSummary: task.prompt.slice(0, 140),
     promptHash,
   });
-  const inputStepId = agentRunTraceManager.startStep({
-    runId,
+  const inputStepId = agentQueryTraceManager.startStep({
+    queryId,
     stepType: 'input',
     stepName: 'task_received',
     summary: `Scheduled task ${task.id} started`,
     payload: { taskId: task.id, contextMode: task.context_mode },
   });
-  agentRunTraceManager.completeStep(runId, inputStepId, 'success');
+  agentQueryTraceManager.completeStep(queryId, inputStepId, 'success');
 
   // After the task produces a result, close the container promptly.
   // Tasks are single-turn — no need to wait IDLE_TIMEOUT (30 min) for the
@@ -199,8 +199,8 @@ async function runTask(
   };
 
   try {
-    const modelStepId = agentRunTraceManager.startStep({
-      runId,
+    const modelStepId = agentQueryTraceManager.startStep({
+      queryId,
       stepType: 'model_select',
       stepName: 'select_model',
       summary: 'Selecting execution model',
@@ -210,13 +210,13 @@ async function runTask(
       isMain,
       isScheduledTask: true,
     });
-    agentRunTraceManager.updateRun(runId, {
+    agentQueryTraceManager.updateQuery(queryId, {
       selected_model: modelSelection.selectedModel,
       selected_model_reason: modelSelection.reason,
       current_action: `Using ${modelSelection.selectedModel}`,
     });
-    agentRunTraceManager.completeStep(
-      runId,
+    agentQueryTraceManager.completeStep(
+      queryId,
       modelStepId,
       'success',
       `Selected ${modelSelection.selectedModel}`,
@@ -230,8 +230,8 @@ async function runTask(
       },
       'Selected model for scheduled task',
     );
-    const executionStepId = agentRunTraceManager.startStep({
-      runId,
+    const executionStepId = agentQueryTraceManager.startStep({
+      queryId,
       stepType: 'agent_execution',
       stepName: 'run_agent',
       summary: 'Starting scheduled task execution',
@@ -256,18 +256,18 @@ async function runTask(
         deps.onProcess(task.chat_jid, proc, containerName, task.group_folder),
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.newSessionId) {
-          agentRunTraceManager.updateRun(runId, {
+          agentQueryTraceManager.updateQuery(queryId, {
             session_id: streamedOutput.newSessionId,
           });
         }
         if (streamedOutput.selectedModel) {
-          agentRunTraceManager.updateRun(runId, {
+          agentQueryTraceManager.updateQuery(queryId, {
             actual_model: streamedOutput.selectedModel,
           });
         }
         if (streamedOutput.event) {
-          agentRunTraceManager.appendEvent({
-            runId,
+          agentQueryTraceManager.appendEvent({
+            queryId,
             stepId: resultDeliveryStepId || executionStepId,
             eventType: streamedOutput.event.type,
             eventName: streamedOutput.event.name,
@@ -278,22 +278,22 @@ async function runTask(
         }
         if (streamedOutput.result) {
           if (!resultDeliveryStepId) {
-            agentRunTraceManager.completeStep(
-              runId,
+            agentQueryTraceManager.completeStep(
+              queryId,
               executionStepId,
               'success',
               'Task execution produced output',
             );
-            resultDeliveryStepId = agentRunTraceManager.startStep({
-              runId,
+            resultDeliveryStepId = agentQueryTraceManager.startStep({
+              queryId,
               stepType: 'result_delivery',
               stepName: 'deliver_result',
               summary: 'Delivering task result',
             });
           }
           result = streamedOutput.result;
-          agentRunTraceManager.appendEvent({
-            runId,
+          agentQueryTraceManager.appendEvent({
+            queryId,
             stepId: resultDeliveryStepId,
             eventType: 'output',
             eventName: 'assistant_output',
@@ -307,8 +307,8 @@ async function runTask(
           );
           // Forward result to user (sendMessage handles formatting)
           try {
-            agentRunTraceManager.appendEvent({
-              runId,
+            agentQueryTraceManager.appendEvent({
+              queryId,
               stepId: resultDeliveryStepId,
               eventType: 'lifecycle',
               eventName: 'channel_send_started',
@@ -316,8 +316,8 @@ async function runTask(
               summary: 'Sending task result to channel',
             });
             await deps.sendMessage(task.chat_jid, streamedOutput.result);
-            agentRunTraceManager.appendEvent({
-              runId,
+            agentQueryTraceManager.appendEvent({
+              queryId,
               stepId: resultDeliveryStepId,
               eventType: 'lifecycle',
               eventName: 'channel_send_finished',
@@ -329,8 +329,8 @@ async function runTask(
               { taskId: task.id, chatJid: task.chat_jid, error: sendErr },
               'Failed to send task result to channel',
             );
-            agentRunTraceManager.appendEvent({
-              runId,
+            agentQueryTraceManager.appendEvent({
+              queryId,
               stepId: resultDeliveryStepId,
               eventType: 'error',
               eventName: 'channel_send_failed',
@@ -347,8 +347,8 @@ async function runTask(
         }
         if (streamedOutput.status === 'error') {
           error = streamedOutput.error || 'Unknown error';
-          agentRunTraceManager.appendEvent({
-            runId,
+          agentQueryTraceManager.appendEvent({
+            queryId,
             stepId: resultDeliveryStepId || executionStepId,
             eventType: 'error',
             eventName: 'run_failed',
@@ -362,8 +362,8 @@ async function runTask(
     if (closeTimer) clearTimeout(closeTimer);
 
     if (!resultDeliveryStepId) {
-      agentRunTraceManager.completeStep(
-        runId,
+      agentQueryTraceManager.completeStep(
+        queryId,
         executionStepId,
         output.status === 'error' ? 'error' : 'success',
         output.status === 'error'
@@ -371,8 +371,8 @@ async function runTask(
           : 'Task execution finished',
       );
     } else {
-      agentRunTraceManager.completeStep(
-        runId,
+      agentQueryTraceManager.completeStep(
+        queryId,
         resultDeliveryStepId,
         output.status === 'error' ? 'error' : 'success',
         output.status === 'error'
@@ -393,27 +393,27 @@ async function runTask(
       'Task completed',
     );
     if (error) {
-      const errorStepId = agentRunTraceManager.startStep({
-        runId,
+      const errorStepId = agentQueryTraceManager.startStep({
+        queryId,
         stepType: 'error',
         stepName: 'run_error',
         summary: 'Scheduled task failed',
       });
-      agentRunTraceManager.completeStep(runId, errorStepId, 'error');
-      agentRunTraceManager.finishRun(runId, 'error', {
+      agentQueryTraceManager.completeStep(queryId, errorStepId, 'error');
+      agentQueryTraceManager.finishQuery(queryId, 'error', {
         error_message: error,
         failure_type: 'scheduled_task_error',
         output_preview: result ? result.slice(0, 200) : null,
       });
     } else {
-      const finishStepId = agentRunTraceManager.startStep({
-        runId,
+      const finishStepId = agentQueryTraceManager.startStep({
+        queryId,
         stepType: 'finish',
         stepName: 'run_completed',
         summary: 'Scheduled task completed',
       });
-      agentRunTraceManager.completeStep(runId, finishStepId, 'success');
-      agentRunTraceManager.finishRun(runId, 'success', {
+      agentQueryTraceManager.completeStep(queryId, finishStepId, 'success');
+      agentQueryTraceManager.finishQuery(queryId, 'success', {
         output_preview: result ? result.slice(0, 200) : 'Completed',
       });
     }
@@ -421,14 +421,14 @@ async function runTask(
     if (closeTimer) clearTimeout(closeTimer);
     error = err instanceof Error ? err.message : String(err);
     logger.error({ taskId: task.id, error }, 'Task failed');
-    const errorStepId = agentRunTraceManager.startStep({
-      runId,
+    const errorStepId = agentQueryTraceManager.startStep({
+      queryId,
       stepType: 'error',
       stepName: 'run_error',
       summary: 'Scheduled task failed',
     });
-    agentRunTraceManager.completeStep(runId, errorStepId, 'error');
-    agentRunTraceManager.finishRun(runId, 'error', {
+    agentQueryTraceManager.completeStep(queryId, errorStepId, 'error');
+    agentQueryTraceManager.finishQuery(queryId, 'error', {
       error_message: error,
       failure_type: 'scheduled_task_error',
     });

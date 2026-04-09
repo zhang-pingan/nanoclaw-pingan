@@ -15,9 +15,9 @@ function formatLocalTime(date: Date): string {
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import {
-  AgentRunEventRecord,
-  AgentRunRecord,
-  AgentRunStepRecord,
+  AgentQueryEventRecord,
+  AgentQueryRecord,
+  AgentQueryStepRecord,
   AskQuestionRecord,
   Delegation,
   MemoryRecord,
@@ -109,10 +109,14 @@ function createSchema(database: Database.Database): void {
       requires_trigger INTEGER DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS agent_runs (
+    DROP TABLE IF EXISTS agent_run_events;
+    DROP TABLE IF EXISTS agent_run_steps;
+    DROP TABLE IF EXISTS agent_runs;
+
+    CREATE TABLE IF NOT EXISTS agent_queries (
       id TEXT PRIMARY KEY,
-      run_id TEXT NOT NULL UNIQUE,
-      query_id TEXT,
+      query_id TEXT NOT NULL UNIQUE,
+      run_id TEXT,
       source_type TEXT NOT NULL,
       source_ref_id TEXT,
       chat_jid TEXT,
@@ -148,22 +152,22 @@ function createSchema(database: Database.Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_agent_runs_started_at
-      ON agent_runs(started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_runs_group_status
-      ON agent_runs(group_folder, status, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_runs_workflow
-      ON agent_runs(workflow_id, stage_key, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_runs_failure
-      ON agent_runs(failure_type, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_runs_source
-      ON agent_runs(source_type, source_ref_id, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_runs_last_event_at
-      ON agent_runs(last_event_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_started_at
+      ON agent_queries(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_group_status
+      ON agent_queries(group_folder, status, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_workflow
+      ON agent_queries(workflow_id, stage_key, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_failure
+      ON agent_queries(failure_type, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_source
+      ON agent_queries(source_type, source_ref_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_last_event_at
+      ON agent_queries(last_event_at DESC);
 
-    CREATE TABLE IF NOT EXISTS agent_run_steps (
+    CREATE TABLE IF NOT EXISTS agent_query_steps (
       id TEXT PRIMARY KEY,
-      run_id TEXT NOT NULL,
+      query_id TEXT NOT NULL,
       step_index INTEGER NOT NULL,
       step_type TEXT NOT NULL,
       step_name TEXT NOT NULL,
@@ -176,14 +180,14 @@ function createSchema(database: Database.Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_agent_run_steps_run
-      ON agent_run_steps(run_id, step_index);
-    CREATE INDEX IF NOT EXISTS idx_agent_run_steps_type
-      ON agent_run_steps(step_type, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_query_steps_query
+      ON agent_query_steps(query_id, step_index);
+    CREATE INDEX IF NOT EXISTS idx_agent_query_steps_type
+      ON agent_query_steps(step_type, created_at DESC);
 
-    CREATE TABLE IF NOT EXISTS agent_run_events (
+    CREATE TABLE IF NOT EXISTS agent_query_events (
       id TEXT PRIMARY KEY,
-      run_id TEXT NOT NULL,
+      query_id TEXT NOT NULL,
       step_id TEXT,
       event_index INTEGER NOT NULL,
       event_type TEXT NOT NULL,
@@ -196,12 +200,12 @@ function createSchema(database: Database.Database): void {
       latency_ms INTEGER,
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_agent_run_events_run
-      ON agent_run_events(run_id, event_index);
-    CREATE INDEX IF NOT EXISTS idx_agent_run_events_step
-      ON agent_run_events(step_id, event_index);
-    CREATE INDEX IF NOT EXISTS idx_agent_run_events_type
-      ON agent_run_events(event_type, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_query_events_query
+      ON agent_query_events(query_id, event_index);
+    CREATE INDEX IF NOT EXISTS idx_agent_query_events_step
+      ON agent_query_events(step_id, event_index);
+    CREATE INDEX IF NOT EXISTS idx_agent_query_events_type
+      ON agent_query_events(event_type, created_at DESC);
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -2824,14 +2828,14 @@ export function searchMessages(
   }
 }
 
-// --- Agent run accessors ---
+// --- Agent query accessors ---
 
-export function createAgentRun(record: AgentRunRecord): void {
+export function createAgentQuery(record: AgentQueryRecord): void {
   db.prepare(
-    `INSERT INTO agent_runs (
+    `INSERT INTO agent_queries (
       id,
-      run_id,
       query_id,
+      run_id,
       source_type,
       source_ref_id,
       chat_jid,
@@ -2869,8 +2873,8 @@ export function createAgentRun(record: AgentRunRecord): void {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
-    record.run_id,
     record.query_id,
+    record.run_id,
     record.source_type,
     record.source_ref_id,
     record.chat_jid,
@@ -2908,20 +2912,20 @@ export function createAgentRun(record: AgentRunRecord): void {
   );
 }
 
-export function updateAgentRun(
-  runId: string,
-  patch: Partial<AgentRunRecord>,
+export function updateAgentQuery(
+  queryId: string,
+  patch: Partial<AgentQueryRecord>,
 ): void {
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [patch.updated_at ?? new Date().toISOString()];
-  const assign = <K extends keyof AgentRunRecord>(key: K) => {
+  const assign = <K extends keyof AgentQueryRecord>(key: K) => {
     if (patch[key] !== undefined) {
       fields.push(`${String(key)} = ?`);
       values.push(patch[key]);
     }
   };
 
-  assign('query_id');
+  assign('run_id');
   assign('source_type');
   assign('source_ref_id');
   assign('chat_jid');
@@ -2956,32 +2960,32 @@ export function updateAgentRun(
   assign('latency_ms');
   assign('created_at');
 
-  values.push(runId);
-  db.prepare(`UPDATE agent_runs SET ${fields.join(', ')} WHERE run_id = ?`).run(
+  values.push(queryId);
+  db.prepare(`UPDATE agent_queries SET ${fields.join(', ')} WHERE query_id = ?`).run(
     ...values,
   );
 }
 
-export function getAgentRun(runId: string): AgentRunRecord | undefined {
-  return db.prepare('SELECT * FROM agent_runs WHERE run_id = ?').get(runId) as
-    | AgentRunRecord
+export function getAgentQuery(queryId: string): AgentQueryRecord | undefined {
+  return db.prepare('SELECT * FROM agent_queries WHERE query_id = ?').get(queryId) as
+    | AgentQueryRecord
     | undefined;
 }
 
-export function listAgentRuns(
+export function listAgentQueries(
   limit: number = 50,
   offset: number = 0,
-): AgentRunRecord[] {
+): AgentQueryRecord[] {
   return db
-    .prepare('SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT ? OFFSET ?')
-    .all(limit, Math.max(offset, 0)) as AgentRunRecord[];
+    .prepare('SELECT * FROM agent_queries ORDER BY started_at DESC LIMIT ? OFFSET ?')
+    .all(limit, Math.max(offset, 0)) as AgentQueryRecord[];
 }
 
-export function createAgentRunStep(record: AgentRunStepRecord): void {
+export function createAgentQueryStep(record: AgentQueryStepRecord): void {
   db.prepare(
-    `INSERT INTO agent_run_steps (
+    `INSERT INTO agent_query_steps (
       id,
-      run_id,
+      query_id,
       step_index,
       step_type,
       step_name,
@@ -2996,7 +3000,7 @@ export function createAgentRunStep(record: AgentRunStepRecord): void {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
-    record.run_id,
+    record.query_id,
     record.step_index,
     record.step_type,
     record.step_name,
@@ -3011,20 +3015,20 @@ export function createAgentRunStep(record: AgentRunStepRecord): void {
   );
 }
 
-export function updateAgentRunStep(
+export function updateAgentQueryStep(
   stepId: string,
-  patch: Partial<AgentRunStepRecord>,
+  patch: Partial<AgentQueryStepRecord>,
 ): void {
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [patch.updated_at ?? new Date().toISOString()];
-  const assign = <K extends keyof AgentRunStepRecord>(key: K) => {
+  const assign = <K extends keyof AgentQueryStepRecord>(key: K) => {
     if (patch[key] !== undefined) {
       fields.push(`${String(key)} = ?`);
       values.push(patch[key]);
     }
   };
 
-  assign('run_id');
+  assign('query_id');
   assign('step_index');
   assign('step_type');
   assign('step_name');
@@ -3038,23 +3042,23 @@ export function updateAgentRunStep(
 
   values.push(stepId);
   db.prepare(
-    `UPDATE agent_run_steps SET ${fields.join(', ')} WHERE id = ?`,
+    `UPDATE agent_query_steps SET ${fields.join(', ')} WHERE id = ?`,
   ).run(...values);
 }
 
-export function listAgentRunSteps(runId: string): AgentRunStepRecord[] {
+export function listAgentQuerySteps(runId: string): AgentQueryStepRecord[] {
   return db
     .prepare(
-      'SELECT * FROM agent_run_steps WHERE run_id = ? ORDER BY step_index ASC',
+      'SELECT * FROM agent_query_steps WHERE query_id = ? ORDER BY step_index ASC',
     )
-    .all(runId) as AgentRunStepRecord[];
+    .all(runId) as AgentQueryStepRecord[];
 }
 
-export function createAgentRunEvent(record: AgentRunEventRecord): void {
+export function createAgentQueryEvent(record: AgentQueryEventRecord): void {
   db.prepare(
-    `INSERT INTO agent_run_events (
+    `INSERT INTO agent_query_events (
       id,
-      run_id,
+      query_id,
       step_id,
       event_index,
       event_type,
@@ -3069,7 +3073,7 @@ export function createAgentRunEvent(record: AgentRunEventRecord): void {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
-    record.run_id,
+    record.query_id,
     record.step_id,
     record.event_index,
     record.event_type,
@@ -3084,12 +3088,18 @@ export function createAgentRunEvent(record: AgentRunEventRecord): void {
   );
 }
 
-export function listAgentRunEvents(runId: string): AgentRunEventRecord[] {
+export function listAgentQueryEvents(queryId: string): AgentQueryEventRecord[] {
   return db
     .prepare(
-      'SELECT * FROM agent_run_events WHERE run_id = ? ORDER BY event_index ASC',
+      'SELECT * FROM agent_query_events WHERE query_id = ? ORDER BY event_index ASC',
     )
-    .all(runId) as AgentRunEventRecord[];
+    .all(queryId) as AgentQueryEventRecord[];
+}
+
+export function deleteAgentQuery(queryId: string): void {
+  db.prepare('DELETE FROM agent_query_events WHERE query_id = ?').run(queryId);
+  db.prepare('DELETE FROM agent_query_steps WHERE query_id = ?').run(queryId);
+  db.prepare('DELETE FROM agent_queries WHERE query_id = ?').run(queryId);
 }
 
 // --- JSON migration ---

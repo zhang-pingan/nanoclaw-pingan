@@ -1127,6 +1127,25 @@ async function runQuery(
     if (stream.ended) return;
     const messages = drainIpcInput();
     for (const message of messages) {
+      writeEvent(
+        {
+          type: 'lifecycle',
+          name: 'query_merged_into_active_query',
+          status: 'success',
+          summary: 'Merged incoming message into active query stream',
+          payload: {
+            mergedQueryId: message.queryId,
+            targetQueryId: queryId,
+            textLength: message.text.length,
+          },
+        },
+        {
+          newSessionId,
+          selectedModel: options.model,
+          runId: containerInput.runId,
+          queryId,
+        },
+      );
       log(`Piping IPC message into active query (${message.text.length} chars)`);
       stream.push(message.text);
     }

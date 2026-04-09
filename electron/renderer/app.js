@@ -2176,13 +2176,13 @@ async function loadAgentStatus() {
   try {
     const [statusRes, traceRes] = await Promise.all([
       apiFetch("/api/agent-status"),
-      apiFetch("/api/agent-runs/active")
+      apiFetch("/api/agent-queries/active")
     ]);
     if (!statusRes.ok) throw new Error(`HTTP ${statusRes.status}`);
     if (!traceRes.ok) throw new Error(`HTTP ${traceRes.status}`);
     const data = await statusRes.json();
     const traceData = await traceRes.json();
-    updateAgentRunTraces(traceData.runs || []);
+    updateAgentRunTraces(traceData.queries || []);
     const activeIds = new Set((data.agents || []).map((agent) => agent.groupJid));
     stoppingAgentIds.forEach((groupJid) => {
       if (!activeIds.has(groupJid)) {
@@ -2217,7 +2217,7 @@ function normalizeTraceRun(run, scope) {
   if (!run) return null;
   if (scope === "active") {
     return {
-      id: run.runId,
+      id: run.queryId,
       scope,
       groupJid: run.groupJid || null,
       groupFolder: run.groupFolder || null,
@@ -2237,7 +2237,7 @@ function normalizeTraceRun(run, scope) {
     };
   }
   return {
-    id: run.run_id || run.id,
+    id: run.query_id || run.id,
     scope,
     groupJid: run.chat_jid || null,
     groupFolder: run.group_folder || null,
@@ -2278,11 +2278,11 @@ async function loadTraceHistoryPage(options) {
   }
   try {
     const offset = reset ? 0 : traceMonitorHistoryOffset;
-    const res = await apiFetch(`/api/agent-runs?limit=${TRACE_HISTORY_PAGE_SIZE}&offset=${offset}`);
+    const res = await apiFetch(`/api/agent-queries?limit=${TRACE_HISTORY_PAGE_SIZE}&offset=${offset}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const activeRunIds = new Set(traceMonitorActiveRuns.map((run) => run.id));
-    const nextRuns = (data.runs || [])
+    const nextRuns = (data.queries || [])
       .map((run) => normalizeTraceRun(run, "history"))
       .filter((run) => run && !activeRunIds.has(run.id));
     if (reset) {
@@ -2298,7 +2298,7 @@ async function loadTraceHistoryPage(options) {
       }
       traceMonitorHistoryRuns = sortTraceRunsByLatest(merged);
     }
-    traceMonitorHistoryOffset = offset + (data.runs || []).length;
+    traceMonitorHistoryOffset = offset + (data.queries || []).length;
     traceMonitorHistoryHasMore = Boolean(data.hasMore);
   } finally {
     traceMonitorHistoryLoading = false;
@@ -2428,7 +2428,7 @@ function renderTraceSummaryPills(run) {
 
 function renderTraceMetaPills(run) {
   const pills = [];
-  pills.push(`<span class="trace-monitor-pill"><strong>Run</strong>${escapeHtml(run.run_id || run.id)}</span>`);
+  pills.push(`<span class="trace-monitor-pill"><strong>Run</strong>${escapeHtml(run.query_id || run.id)}</span>`);
   pills.push(`<span class="trace-monitor-pill"><strong>Source</strong>${escapeHtml(run.source_type || "--")}</span>`);
   if (run.chat_jid) {
     pills.push(`<span class="trace-monitor-pill"><strong>Group</strong>${escapeHtml(getGroupDisplayNameByJid(run.chat_jid))}</span>`);
@@ -2672,9 +2672,9 @@ async function loadTraceRunDetail(runId, scope) {
   if (traceMonitorDetailEmpty) traceMonitorDetailEmpty.classList.add("hidden");
   try {
     const [runRes, stepsRes, eventsRes] = await Promise.all([
-      apiFetch(`/api/agent-runs/${encodeURIComponent(runId)}`),
-      apiFetch(`/api/agent-runs/${encodeURIComponent(runId)}/steps`),
-      apiFetch(`/api/agent-runs/${encodeURIComponent(runId)}/events`),
+      apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}`),
+      apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}/steps`),
+      apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}/events`),
     ]);
     if (!runRes.ok) throw new Error(`HTTP ${runRes.status}`);
     if (!stepsRes.ok) throw new Error(`HTTP ${stepsRes.status}`);
@@ -2682,7 +2682,7 @@ async function loadTraceRunDetail(runId, scope) {
     const runData = await runRes.json();
     const stepsData = await stepsRes.json();
     const eventsData = await eventsRes.json();
-    currentTraceRunRecord = runData.run || null;
+    currentTraceRunRecord = runData.query || null;
     currentTraceRunSteps = Array.isArray(stepsData.steps) ? stepsData.steps : [];
     currentTraceRunEvents = Array.isArray(eventsData.events) ? eventsData.events : [];
     renderTraceRunDetail();
@@ -2754,10 +2754,10 @@ function scheduleTraceDetailReload() {
 async function loadTraceMonitorData(options) {
   const force = Boolean(options && options.force);
   try {
-    const activeRes = await apiFetch("/api/agent-runs/active");
+    const activeRes = await apiFetch("/api/agent-queries/active");
     if (!activeRes.ok) throw new Error(`HTTP ${activeRes.status}`);
     const activeData = await activeRes.json();
-    traceMonitorActiveRuns = sortTraceRunsByLatest((activeData.runs || [])
+    traceMonitorActiveRuns = sortTraceRunsByLatest((activeData.queries || [])
       .map((run) => normalizeTraceRun(run, "active"))
       .filter(Boolean));
     if (force || traceMonitorHistoryRuns.length === 0) {
@@ -4615,9 +4615,9 @@ function handleWsMessage(msg) {
         renderAgentStatus(msg.agents || []);
       }
       break;
-    case "agent_run_trace":
-      updateAgentRunTraces(msg.runs || []);
-      traceMonitorActiveRuns = (msg.runs || [])
+    case "agent_query_trace":
+      updateAgentRunTraces(msg.queries || []);
+      traceMonitorActiveRuns = (msg.queries || [])
         .map((run) => normalizeTraceRun(run, "active"))
         .filter(Boolean);
       if (agentStatusPanel.classList.contains("open")) {

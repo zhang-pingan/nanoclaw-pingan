@@ -30,10 +30,10 @@ import {
   runWorkbenchTaskAction,
 } from '../workbench.js';
 import {
-  getAgentRun,
-  listAgentRunEvents,
-  listAgentRunSteps,
-  listAgentRuns,
+  getAgentQuery,
+  listAgentQueryEvents,
+  listAgentQuerySteps,
+  listAgentQueries,
 } from '../db.js';
 
 // --- Config ---
@@ -74,7 +74,7 @@ interface OutgoingMsg {
     | 'connected'
     | 'card'
     | 'agent_status'
-    | 'agent_run_trace'
+    | 'agent_query_trace'
     | 'file'
     | 'workbench_event';
   [key: string]: unknown;
@@ -368,14 +368,14 @@ class WebChannel {
       if (pathname === '/api/agent-status/stop' && req.method === 'POST') {
         return this.apiStopAgent(req, res);
       }
-      if (pathname === '/api/agent-runs/active') {
-        return this.apiGetActiveAgentRuns(res);
+      if (pathname === '/api/agent-queries/active') {
+        return this.apiGetActiveAgentQueries(res);
       }
-      if (pathname === '/api/agent-runs') {
-        return this.apiListAgentRuns(reqUrl, res);
+      if (pathname === '/api/agent-queries') {
+        return this.apiListAgentQueries(reqUrl, res);
       }
-      if (pathname.startsWith('/api/agent-runs/')) {
-        return this.apiGetAgentRun(pathname, res);
+      if (pathname.startsWith('/api/agent-queries/')) {
+        return this.apiGetAgentQuery(pathname, res);
       }
       if (pathname === '/api/tasks' && req.method === 'DELETE') {
         return this.apiDeleteAllTasks(res);
@@ -1287,13 +1287,13 @@ class WebChannel {
     res.end(JSON.stringify(result));
   }
 
-  private apiGetActiveAgentRuns(res: http.ServerResponse): void {
-    const runs = this.opts.getActiveAgentRunTraces?.() ?? [];
+  private apiGetActiveAgentQueries(res: http.ServerResponse): void {
+    const queries = this.opts.getActiveAgentQueryTraces?.() ?? [];
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ runs }));
+    res.end(JSON.stringify({ queries }));
   }
 
-  private apiListAgentRuns(
+  private apiListAgentQueries(
     reqUrl: URL,
     res: http.ServerResponse,
   ): void {
@@ -1303,51 +1303,51 @@ class WebChannel {
       ? Math.min(Math.max(limitRaw, 1), 200)
       : 50;
     const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
-    const runs = listAgentRuns(limit, offset);
+    const queries = listAgentQueries(limit, offset);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
-        runs,
+        queries,
         limit,
         offset,
-        hasMore: runs.length === limit,
+        hasMore: queries.length === limit,
       }),
     );
   }
 
-  private apiGetAgentRun(
+  private apiGetAgentQuery(
     pathname: string,
     res: http.ServerResponse,
   ): void {
-    const match = pathname.match(/^\/api\/agent-runs\/([^/]+)(?:\/(steps|events))?$/);
+    const match = pathname.match(/^\/api\/agent-queries\/([^/]+)(?:\/(steps|events))?$/);
     if (!match) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
       return;
     }
 
-    const [, runId, suffix] = match;
+    const [, queryId, suffix] = match;
     if (suffix === 'steps') {
-      const steps = listAgentRunSteps(runId);
+      const steps = listAgentQuerySteps(queryId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ steps }));
       return;
     }
     if (suffix === 'events') {
-      const events = listAgentRunEvents(runId);
+      const events = listAgentQueryEvents(queryId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ events }));
       return;
     }
 
-    const run = getAgentRun(runId);
-    if (!run) {
+    const query = getAgentQuery(queryId);
+    if (!query) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Run not found' }));
+      res.end(JSON.stringify({ error: 'Query not found' }));
       return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ run }));
+    res.end(JSON.stringify({ query }));
   }
 
   /**
@@ -1369,11 +1369,11 @@ class WebChannel {
     }
   }
 
-  broadcastAgentRunTraces(): void {
-    const runs = this.opts.getActiveAgentRunTraces?.() ?? [];
+  broadcastAgentQueryTraces(): void {
+    const queries = this.opts.getActiveAgentQueryTraces?.() ?? [];
     const payload = JSON.stringify({
-      type: 'agent_run_trace',
-      runs,
+      type: 'agent_query_trace',
+      queries,
     } satisfies OutgoingMsg);
 
     for (const clients of this.clients.values()) {
@@ -2163,8 +2163,8 @@ class WebChannel {
       agents: this.opts.getAgentStatus?.() ?? [],
     });
     send({
-      type: 'agent_run_trace',
-      runs: this.opts.getActiveAgentRunTraces?.() ?? [],
+      type: 'agent_query_trace',
+      queries: this.opts.getActiveAgentQueryTraces?.() ?? [],
     });
 
     // Register this client for ALL web groups so it receives messages
