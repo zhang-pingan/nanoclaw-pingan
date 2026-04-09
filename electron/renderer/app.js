@@ -3525,8 +3525,9 @@ function applyWorkbenchRealtimeEvent(event) {
       workbenchTasks[taskIdx] = {
         ...existing,
         status: payload.status || existing.status,
+        status_label: payload.statusLabel || existing.status_label,
         current_stage: payload.currentStage || existing.current_stage,
-        current_stage_label: payload.currentStage || existing.current_stage_label,
+        current_stage_label: payload.currentStageLabel || existing.current_stage_label,
         updated_at: payload.updatedAt || existing.updated_at,
       };
     }
@@ -3539,9 +3540,9 @@ function applyWorkbenchRealtimeEvent(event) {
       service: payload.service || "",
       workflow_type: payload.workflowType || "",
       status: payload.status || "created",
-      status_label: payload.status || "created",
-      current_stage: payload.status || "created",
-      current_stage_label: payload.status || "created",
+      status_label: payload.statusLabel || payload.status || "created",
+      current_stage: payload.currentStage || payload.status || "created",
+      current_stage_label: payload.currentStageLabel || payload.currentStage || payload.status || "created",
       branch: "",
       deliverable: "",
       round: 0,
@@ -3561,8 +3562,9 @@ function applyWorkbenchRealtimeEvent(event) {
     currentWorkbenchDetail.task = {
       ...currentWorkbenchDetail.task,
       status: payload.status || currentWorkbenchDetail.task.status,
+      status_label: payload.statusLabel || currentWorkbenchDetail.task.status_label,
       current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
-      current_stage_label: payload.currentStage || currentWorkbenchDetail.task.current_stage_label,
+      current_stage_label: payload.currentStageLabel || currentWorkbenchDetail.task.current_stage_label,
       updated_at: payload.updatedAt || currentWorkbenchDetail.task.updated_at,
     };
     renderWorkbenchTaskDetail(currentWorkbenchDetail);

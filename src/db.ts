@@ -1712,6 +1712,17 @@ export function getWorkbenchSubtaskByStage(
     .get(taskId, stageKey) as WorkbenchSubtaskRecord | undefined;
 }
 
+export function getWorkbenchSubtaskByDelegationId(
+  taskId: string,
+  delegationId: string,
+): WorkbenchSubtaskRecord | undefined {
+  return db
+    .prepare(
+      'SELECT * FROM workbench_subtasks WHERE task_id = ? AND delegation_id = ? ORDER BY rowid DESC LIMIT 1',
+    )
+    .get(taskId, delegationId) as WorkbenchSubtaskRecord | undefined;
+}
+
 export function listWorkbenchSubtasksByTask(
   taskId: string,
 ): WorkbenchSubtaskRecord[] {

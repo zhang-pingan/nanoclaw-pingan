@@ -13,7 +13,7 @@ description: Deploy service branches to staging environment — merge code, trig
 2. 服务仓库目录为 `/workspace/repos/{服务名}/`
 3. 明确以下参数并严格区分：
    - `主分支` = 当前项目的主分支，如果未提供，则使用 `default_branch`
-   - `工作分支` = 当前需求开发/修复所在业务分支
+   - `工作分支` = 当前需求开发/修复所在业务分支，如果未提供，则需要和用户确认
    - `预发分支` = 预发基线分支；若消息未提供，则使用 `staging.branch`
    - `预发工作分支` = 用于部署预发的分支；如果消息未提供，则要基于`预发分支`新建分支，命名为 `staging-deploy/{工作分支名中将 / 替换为 -}`
 4. 将`工作分支` merge到 `预发工作分支` 中并推送：

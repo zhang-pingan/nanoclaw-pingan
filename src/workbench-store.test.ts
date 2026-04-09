@@ -24,6 +24,8 @@ import {
 import { getWorkbenchTaskDetail, listWorkbenchTasks } from './workbench.js';
 import {
   createWorkbenchInteractionItem,
+  syncWorkbenchOnDelegationCompleted,
+  syncWorkbenchOnDelegationCreated,
   syncWorkbenchOnTransition,
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
@@ -169,6 +171,44 @@ describe('workbench approval transition sync', () => {
     expect(
       emittedEvents.filter((item) => item === 'subtask_updated:testing'),
     ).toHaveLength(1);
+  });
+
+  it('emits human-readable labels in realtime task updates', () => {
+    dbCreateWorkflow({
+      id: 'wf-realtime-labels',
+      name: '实时标签',
+      service: 'order-service',
+      start_from: 'testing',
+      work_branch: 'feature/realtime-labels',
+      staging_base_branch: 'staging',
+      deliverable: '2026-04-07_realtime_labels',
+      staging_work_branch: 'staging-deploy/feature-realtime-labels',
+      access_token: '',
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-realtime-labels');
+
+    const events: Array<Record<string, unknown>> = [];
+    initWorkbenchEvents((event) => {
+      if (event.type === 'task_updated') {
+        events.push(event.payload);
+      }
+    });
+
+    const result = approveWorkflow('wf-realtime-labels');
+    expect(result.error).toBeUndefined();
+    expect(events).not.toHaveLength(0);
+    expect(events[0]?.status).toBe('testing');
+    expect(events[0]?.statusLabel).toBe('🧪 测试中');
+    expect(events[0]?.currentStage).toBe('testing');
+    expect(events[0]?.currentStageLabel).toBe('🧪 测试中');
   });
 
   it('does not duplicate the same transition event when re-synced', () => {
@@ -399,6 +439,157 @@ describe('workbench approval transition sync', () => {
         item.title.includes('修复中 -> 修复中'),
       ),
     ).toBe(false);
+  });
+
+  it('keeps historical delegation data on the correct re-entry subtask', () => {
+    dbCreateWorkflow({
+      id: 'wf-reentry-delegation-history',
+      name: '历史节点归属',
+      service: 'order-service',
+      start_from: 'testing',
+      work_branch: 'feature/reentry-history',
+      staging_base_branch: 'staging',
+      deliverable: '2026-04-07_reentry_history',
+      staging_work_branch: 'staging-deploy/feature-reentry-history',
+      access_token: '',
+      status: 'ops_deploy',
+      current_delegation_id: 'wf-del-ops-1',
+      round: 1,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-reentry-delegation-history');
+
+    createDelegation({
+      id: 'wf-del-ops-1',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'ops@g.us',
+      target_folder: 'web_ops',
+      task: '第一次预发部署',
+      status: 'completed',
+      result: '{"summary":"预发部署完成"}',
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-reentry-delegation-history',
+      created_at: '2026-04-07T00:01:00.000Z',
+      updated_at: '2026-04-07T00:02:00.000Z',
+    });
+    syncWorkbenchOnDelegationCreated(
+      'wf-reentry-delegation-history',
+      'wf-del-ops-1',
+    );
+    syncWorkbenchOnDelegationCompleted(
+      'wf-reentry-delegation-history',
+      'wf-del-ops-1',
+    );
+
+    updateWorkflow('wf-reentry-delegation-history', {
+      status: 'testing_confirm',
+      current_delegation_id: '',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reentry-delegation-history',
+      'ops_deploy',
+      'testing_confirm',
+      'wf-del-ops-1',
+    );
+
+    updateWorkflow('wf-reentry-delegation-history', {
+      status: 'testing',
+      current_delegation_id: 'wf-del-test-1',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reentry-delegation-history',
+      'testing_confirm',
+      'testing',
+      'wf-del-test-1',
+    );
+    createDelegation({
+      id: 'wf-del-test-1',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'test@g.us',
+      target_folder: 'web_test',
+      task: '执行测试',
+      status: 'completed',
+      result: '{"summary":"测试发现问题"}',
+      outcome: 'failure',
+      requester_jid: null,
+      workflow_id: 'wf-reentry-delegation-history',
+      created_at: '2026-04-07T00:03:00.000Z',
+      updated_at: '2026-04-07T00:04:00.000Z',
+    });
+    syncWorkbenchOnDelegationCreated(
+      'wf-reentry-delegation-history',
+      'wf-del-test-1',
+    );
+    syncWorkbenchOnDelegationCompleted(
+      'wf-reentry-delegation-history',
+      'wf-del-test-1',
+    );
+
+    updateWorkflow('wf-reentry-delegation-history', {
+      status: 'fixing',
+      current_delegation_id: '',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reentry-delegation-history',
+      'testing',
+      'fixing',
+      'wf-del-test-1',
+    );
+
+    updateWorkflow('wf-reentry-delegation-history', {
+      status: 'ops_deploy',
+      current_delegation_id: 'wf-del-ops-2',
+    });
+    syncWorkbenchOnTransition(
+      'wf-reentry-delegation-history',
+      'fixing',
+      'ops_deploy',
+      'wf-del-ops-2',
+    );
+    createDelegation({
+      id: 'wf-del-ops-2',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'ops@g.us',
+      target_folder: 'web_ops',
+      task: '修复后重新部署',
+      status: 'pending',
+      result: '',
+      outcome: undefined,
+      requester_jid: null,
+      workflow_id: 'wf-reentry-delegation-history',
+      created_at: '2026-04-07T00:05:00.000Z',
+      updated_at: '2026-04-07T00:05:00.000Z',
+    });
+    syncWorkbenchOnDelegationCreated(
+      'wf-reentry-delegation-history',
+      'wf-del-ops-2',
+    );
+
+    const detail = getWorkbenchTaskDetail('wb-wf-reentry-delegation-history');
+    expect(detail).not.toBeNull();
+
+    const deploymentSubtasks =
+      detail?.subtasks.filter((item) => item.stage_key === 'ops_deploy') || [];
+    expect(deploymentSubtasks).toHaveLength(2);
+    expect(deploymentSubtasks[0]?.target_folder).toBe('web_ops');
+    expect(deploymentSubtasks[0]?.result).toContain('预发部署完成');
+    expect(
+      detail?.subtasks.find((item) => item.stage_key === 'testing')
+        ?.target_folder,
+    ).toBe('web_test');
+    expect(
+      detail?.subtasks.find((item) => item.stage_key === 'testing')?.result,
+    ).toContain('测试发现问题');
+    expect(deploymentSubtasks[1]?.target_folder).toBe('web_ops');
+    expect(deploymentSubtasks[1]?.result).toBeUndefined();
   });
 
   it('returns workbench task list in reverse updated_at order', () => {

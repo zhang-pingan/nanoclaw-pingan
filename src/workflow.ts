@@ -634,12 +634,6 @@ function applyTransition(
 
   // 4. Update workflow state
   updateWorkflow(workflow.id, updates);
-  if (updates.current_delegation_id) {
-    syncWorkbenchOnDelegationCreated(
-      workflow.id,
-      updates.current_delegation_id,
-    );
-  }
   const isPassiveSelfLoop =
     transition.target === fromStatus && !updates.current_delegation_id;
   if (!isPassiveSelfLoop) {
@@ -647,6 +641,12 @@ function applyTransition(
       workflow.id,
       fromStatus,
       transition.target,
+      updates.current_delegation_id,
+    );
+  }
+  if (updates.current_delegation_id) {
+    syncWorkbenchOnDelegationCreated(
+      workflow.id,
       updates.current_delegation_id,
     );
   }

@@ -9,6 +9,7 @@ import {
   createWorkbenchSubtask,
   createWorkbenchTask,
   getDelegation,
+  getWorkbenchSubtaskByDelegationId,
   getDelegationsByWorkflow,
   getWorkbenchActionItem,
   getWorkbenchTaskById,
@@ -97,6 +98,27 @@ function emitActionItemUpdate(
     workflowId,
     payload,
   });
+}
+
+function getStatusLabel(workflowType: string, stageKey: string): string {
+  const config = getWorkflowTypeConfig(workflowType);
+  return config?.status_labels[stageKey] || stageKey;
+}
+
+function resolveSubtaskForDelegation(params: {
+  taskId: string;
+  workflow: Workflow;
+  delegationId: string;
+}): ReturnType<typeof getWorkbenchSubtaskByStage> {
+  const exactMatch = getWorkbenchSubtaskByDelegationId(
+    params.taskId,
+    params.delegationId,
+  );
+  if (exactMatch) return exactMatch;
+  if (params.workflow.current_delegation_id !== params.delegationId) {
+    return undefined;
+  }
+  return getWorkbenchSubtaskByStage(params.taskId, params.workflow.status);
 }
 
 function upsertActionItem(params: {
@@ -480,6 +502,12 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
         id: taskId,
         title: workflow.name,
         status: workflow.status,
+        statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
+        currentStage: workflow.status,
+        currentStageLabel: getStatusLabel(
+          workflow.workflow_type,
+          workflow.status,
+        ),
       },
     });
   }
@@ -517,7 +545,12 @@ export function syncWorkbenchOnWorkflowUpdated(
       workflowId,
       payload: {
         status: workflow.status,
+        statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
         currentStage: workflow.status,
+        currentStageLabel: getStatusLabel(
+          workflow.workflow_type,
+          workflow.status,
+        ),
         summary: summary !== undefined ? truncate(summary) : task.summary,
         updatedAt: workflow.updated_at,
       },
@@ -648,7 +681,9 @@ export function syncWorkbenchOnTransition(
     workflowId,
     payload: {
       status: workflow.status,
+      statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
       currentStage: toStatus,
+      currentStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
       updatedAt: workflow.updated_at,
     },
   });
@@ -753,7 +788,11 @@ export function syncWorkbenchOnDelegationCreated(
   const delegation = getDelegation(delegationId);
   if (!workflow || !task || !delegation) return;
 
-  const subtask = getWorkbenchSubtaskByStage(task.id, workflow.status);
+  const subtask = resolveSubtaskForDelegation({
+    taskId: task.id,
+    workflow,
+    delegationId,
+  });
   if (subtask) {
     updateWorkbenchSubtask(subtask.id, {
       delegation_id: delegation.id,
@@ -810,7 +849,11 @@ export function syncWorkbenchOnDelegationCompleted(
   const delegation = getDelegation(delegationId);
   if (!workflow || !task || !delegation) return;
 
-  const subtask = getWorkbenchSubtaskByStage(task.id, workflow.status);
+  const subtask = resolveSubtaskForDelegation({
+    taskId: task.id,
+    workflow,
+    delegationId,
+  });
   if (subtask) {
     updateWorkbenchSubtask(subtask.id, {
       output_summary: truncate(delegation.result),
