@@ -3137,7 +3137,7 @@ async function openWorkbenchCreateTaskModal() {
     return;
   }
   if (workflowTypes.length === 0 || services.length === 0) {
-    alert("当前没有可用 workflow 类型或服务配置");
+    alert("当前没有可用流程类型或服务配置");
     return;
   }
 
@@ -4157,7 +4157,7 @@ function warmWorkflowCreateOptions(forceReload = false) {
     invalidateWorkflowCreateOptionsCache();
   }
   loadWorkflowCreateOptions(forceReload).catch((err) => {
-    console.error("Failed to prefetch workflow create options:", err);
+    console.error("Failed to prefetch task create options:", err);
   });
 }
 

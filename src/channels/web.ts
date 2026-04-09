@@ -1378,7 +1378,7 @@ class WebChannel {
       } catch (err) {
         logger.warn(
           { err, servicesPath },
-          'Failed to parse services.json for web workflow options',
+          'Failed to parse services.json for task create options',
         );
       }
     }

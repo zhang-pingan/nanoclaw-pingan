@@ -91,7 +91,7 @@ function getChannelFromFolder(folder: string): string {
 }
 
 /**
- * 根据 workflow 类型和触发群组的 sourceJid 解析所有角色的 folder 映射。
+ * 根据流程类型和触发群组的 sourceJid 解析所有角色的 folder 映射。
  * 渠道从触发群组的 folder 名前缀提取，然后查找对应渠道的 folder 配置。
  */
 function resolveRoles(
@@ -99,7 +99,7 @@ function resolveRoles(
   sourceJid: string,
 ): { roles: Record<string, string> } | { error: string } {
   const config = getWorkflowTypeConfig(workflowType);
-  if (!config) return { error: `未知的 workflow 类型: ${workflowType}` };
+  if (!config) return { error: `未知的流程类型: ${workflowType}` };
 
   const groups = getDeps().registeredGroups();
   const sourceGroup = groups[sourceJid];
@@ -714,7 +714,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   if (!config) {
     return {
       workflowId: '',
-      error: `未知的 workflow 类型: ${workflowType}`,
+      error: `未知的流程类型: ${workflowType}`,
     };
   }
 
@@ -730,7 +730,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   if (!entryPoint) {
     return {
       workflowId: '',
-      error: `Workflow type "${workflowType}" 不支持 start_from="${opts.startFrom}"，可选: ${Object.keys(config.entry_points).join(', ')}`,
+      error: `流程类型 "${workflowType}" 不支持 start_from="${opts.startFrom}"，可选: ${Object.keys(config.entry_points).join(', ')}`,
     };
   }
 
@@ -841,7 +841,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     return { workflowId };
   }
 
-  // Normal entry: create workflow and delegate to the initial state's role
+  // 正常入口：创建任务对应的流程实例，并委派到初始状态对应角色
   const entryStateConfig = config.states[entryPoint.state];
 
   dbCreateWorkflow({
@@ -924,7 +924,7 @@ export function approveWorkflow(workflowId: string): { error?: string } {
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config)
-    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+    return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[workflow.status];
   if (
@@ -950,7 +950,7 @@ export function skipWorkflow(workflowId: string): { error?: string } {
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config)
-    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+    return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   return skipWorkflowStage(workflowId, workflow.status);
 }
@@ -964,7 +964,7 @@ export function skipWorkflowStage(
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config)
-    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+    return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const terminalStates = getTerminalStates(config);
   const stateConfig = config.states[stageKey];
@@ -1016,7 +1016,7 @@ export function reviseWorkflow(
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config)
-    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+    return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[workflow.status];
   if (
@@ -1055,7 +1055,7 @@ export function retryWorkflowStage(
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config)
-    return { error: `未知的 workflow 类型: ${workflow.workflow_type}` };
+    return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[stageKey];
   if (!stateConfig) {
