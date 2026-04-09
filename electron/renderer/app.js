@@ -3070,6 +3070,7 @@ async function openWorkbenchCreateTaskModal() {
     requirementCustom: "",
     requirementSearch: "",
     deployBranch: "",
+    workBranch: "",
   };
 
   const overlay = document.createElement("div");
@@ -3105,6 +3106,10 @@ async function openWorkbenchCreateTaskModal() {
           <div class="workflow-wizard-label">5. staging_work_branch（预发工作分支，可选）</div>
           <div id="wb-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
         </div>
+        <div class="workflow-wizard-section" id="wb-work-branch-section">
+          <div class="workflow-wizard-label">6. work_branch（工作分支，可选）</div>
+          <div id="wb-work-branch-wrap" class="workflow-wizard-subsection"></div>
+        </div>
       </div>
       <div class="workflow-wizard-footer">
         <button type="button" id="wb-cancel-btn" class="btn-ghost">取消</button>
@@ -3124,6 +3129,8 @@ async function openWorkbenchCreateTaskModal() {
   const reqHintEl = overlay.querySelector("#wb-requirement-hint");
   const deployBranchSectionEl = overlay.querySelector("#wb-deploy-branch-section");
   const deployBranchWrapEl = overlay.querySelector("#wb-deploy-branch-wrap");
+  const workBranchSectionEl = overlay.querySelector("#wb-work-branch-section");
+  const workBranchWrapEl = overlay.querySelector("#wb-work-branch-wrap");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
 
   function closeWorkbenchCreateModal() {
@@ -3234,10 +3241,12 @@ async function openWorkbenchCreateTaskModal() {
     reqPresetWrapEl.innerHTML = "";
     reqCustomWrapEl.innerHTML = "";
     deployBranchWrapEl.innerHTML = "";
+    workBranchWrapEl.innerHTML = "";
 
     const isDevTest = getSelectedWorkflowType().type === "dev_test";
     const isPlanEntry = state.entryPoint === "plan";
     const showDeployBranch = isDevTest && state.entryPoint === "testing";
+    const showWorkBranch = isDevTest && state.entryPoint === "testing";
 
     deployBranchSectionEl.style.display = showDeployBranch ? "" : "none";
     if (showDeployBranch) {
@@ -3251,6 +3260,20 @@ async function openWorkbenchCreateTaskModal() {
       deployBranchWrapEl.appendChild(input);
     } else {
       state.deployBranch = "";
+    }
+
+    workBranchSectionEl.style.display = showWorkBranch ? "" : "none";
+    if (showWorkBranch) {
+      const input = document.createElement("input");
+      input.className = "workflow-wizard-input";
+      input.placeholder = "例如：feature/xxx";
+      input.value = state.workBranch;
+      input.addEventListener("input", () => {
+        state.workBranch = input.value;
+      });
+      workBranchWrapEl.appendChild(input);
+    } else {
+      state.workBranch = "";
     }
 
     if (isDevTest) {
@@ -3360,6 +3383,7 @@ async function openWorkbenchCreateTaskModal() {
           workflow_type: state.workflowType,
           deliverable: deliverableRequired ? name : void 0,
           staging_work_branch: state.deployBranch.trim() || void 0,
+          work_branch: state.workBranch.trim() || void 0,
         }),
       });
       const data = await res.json();
@@ -4111,6 +4135,7 @@ function openWorkflowWizard(optionsData) {
     requirementCustom: "",
     requirementSearch: "",
     deployBranch: "",
+    workBranch: "",
   };
 
   const overlay = document.createElement("div");
@@ -4146,6 +4171,10 @@ function openWorkflowWizard(optionsData) {
           <div class="workflow-wizard-label">5. staging_work_branch（预发工作分支，可选）</div>
           <div id="wf-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
         </div>
+        <div class="workflow-wizard-section" id="wf-work-branch-section">
+          <div class="workflow-wizard-label">6. work_branch（工作分支，可选）</div>
+          <div id="wf-work-branch-wrap" class="workflow-wizard-subsection"></div>
+        </div>
       </div>
       <div class="workflow-wizard-footer">
         <button type="button" id="wf-cancel-btn" class="btn-ghost">取消</button>
@@ -4165,6 +4194,8 @@ function openWorkflowWizard(optionsData) {
   const reqDeliverableHintEl = overlay.querySelector("#wf-requirement-deliverable-hint");
   const deployBranchSectionEl = overlay.querySelector("#wf-deploy-branch-section");
   const deployBranchWrapEl = overlay.querySelector("#wf-deploy-branch-wrap");
+  const workBranchSectionEl = overlay.querySelector("#wf-work-branch-section");
+  const workBranchWrapEl = overlay.querySelector("#wf-work-branch-wrap");
   const submitBtn = overlay.querySelector("#wf-submit-btn");
 
   function getSelectedWorkflowType() {
@@ -4302,9 +4333,11 @@ function openWorkflowWizard(optionsData) {
     reqPresetWrapEl.innerHTML = "";
     reqCustomWrapEl.innerHTML = "";
     deployBranchWrapEl.innerHTML = "";
+    workBranchWrapEl.innerHTML = "";
 
     if (isDevTest) {
       const showDeployBranch = state.entryPoint === "testing";
+      const showWorkBranch = state.entryPoint === "testing";
       deployBranchSectionEl.style.display = showDeployBranch ? "" : "none";
       if (showDeployBranch) {
         const input = document.createElement("input");
@@ -4317,6 +4350,20 @@ function openWorkflowWizard(optionsData) {
         deployBranchWrapEl.appendChild(input);
       } else {
         state.deployBranch = "";
+      }
+
+      workBranchSectionEl.style.display = showWorkBranch ? "" : "none";
+      if (showWorkBranch) {
+        const input = document.createElement("input");
+        input.className = "workflow-wizard-input";
+        input.placeholder = "例如：feature/xxx";
+        input.value = state.workBranch;
+        input.addEventListener("input", () => {
+          state.workBranch = input.value;
+        });
+        workBranchWrapEl.appendChild(input);
+      } else {
+        state.workBranch = "";
       }
 
       if (isPlanEntry) {
@@ -4359,6 +4406,8 @@ function openWorkflowWizard(optionsData) {
     } else {
       deployBranchSectionEl.style.display = "none";
       state.deployBranch = "";
+      workBranchSectionEl.style.display = "none";
+      state.workBranch = "";
     }
 
     if (!isDevTest) {
@@ -4443,6 +4492,9 @@ function openWorkflowWizard(optionsData) {
     }
     if (state.deployBranch.trim()) {
       data.staging_work_branch = state.deployBranch.trim();
+    }
+    if (state.workBranch.trim()) {
+      data.work_branch = state.workBranch.trim();
     }
 
     const content = JSON.stringify({
