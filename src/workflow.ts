@@ -1876,7 +1876,7 @@ export function getWorkflowDisabledReason(): string | null {
   return getWorkflowConfigError();
 }
 
-/** Get status labels for a workflow type (used by MCP tool). */
+/** Get status labels for a workflow type. */
 export function getStatusLabelsForType(
   workflowType: string,
 ): Record<string, string> {
@@ -1884,7 +1884,7 @@ export function getStatusLabelsForType(
   return config?.status_labels || {};
 }
 
-/** Return summary of all available workflow types (for MCP tool). */
+/** Return summary of all available workflow types for UI/task creation. */
 export function getAvailableWorkflowTypes(): Array<{
   type: string;
   name: string;

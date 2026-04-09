@@ -25,7 +25,6 @@ import {
   normalizeAskQuestions,
 } from './ask-user-question.js';
 import {
-  getAvailableWorkflowTypes,
   onDelegationComplete as onWorkflowDelegationComplete,
 } from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
@@ -2056,38 +2055,6 @@ export async function processTaskIpc(
         logger.error({ err, sourceGroup }, 'memory_resolve_conflict failed');
         writeMemoryResult(sourceGroup, data.requestId, { error: errMsg });
       }
-      break;
-    }
-
-    case 'list_workflow_types': {
-      if (!isMain) {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized list_workflow_types attempt blocked',
-        );
-        break;
-      }
-
-      const types = getAvailableWorkflowTypes();
-
-      if (data.requestId) {
-        const resultsDir = path.join(
-          DATA_DIR,
-          'ipc',
-          sourceGroup,
-          'workflow-results',
-        );
-        fs.mkdirSync(resultsDir, { recursive: true });
-        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
-        const tempPath = `${responsePath}.tmp`;
-        fs.writeFileSync(tempPath, JSON.stringify({ types }));
-        fs.renameSync(tempPath, responsePath);
-      }
-
-      logger.info(
-        { sourceGroup, count: types.length },
-        'Workflow types listed via IPC',
-      );
       break;
     }
 
