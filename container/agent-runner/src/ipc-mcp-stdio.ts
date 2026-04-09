@@ -1448,131 +1448,6 @@ server.tool(
 
 if (isMain) {
   server.tool(
-    'create_workflow',
-    `创建工作流。先用 list_workflow_types 查看可用的流程类型和入口点，再调用此工具。
-
-流程会自动驱动状态转换，进展消息会发送到群内。`,
-    {
-      name: z.string().describe('需求名称'),
-      service: z.string().describe('服务名称（对应 services.json 中的 key）'),
-      workflow_type: z
-        .string()
-        .describe(
-          "流程类型（如 'dev_test'）。用 list_workflow_types 查看可用类型。",
-        ),
-      start_from: z
-        .string()
-        .describe(
-          "入口点名称（如 'plan', 'dev', 'testing'）。用 list_workflow_types 查看各类型的入口点。",
-        ),
-      deliverable: z
-        .string()
-        .optional()
-        .describe(
-          '交付物目录名（位于 projects/{service}/iteration/ 下）。从 list_deliverables 获取可选值。dev/testing 入口必须指定。',
-        ),
-      work_branch: z
-        .string()
-        .optional()
-        .describe('工作分支。适用于从已有交付物恢复流程或显式指定分支的场景。'),
-      staging_base_branch: z
-        .string()
-        .optional()
-        .describe(
-          '预发分支。若不传，部署时从 services.json 的 staging.branch 获取。',
-        ),
-      staging_work_branch: z
-        .string()
-        .optional()
-        .describe(
-          '预发工作分支。适用于 testing 入口或需指定预发工作分支的部署场景。',
-        ),
-    },
-    async (args) => {
-      const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-      const data: Record<string, string> = {
-        type: 'create_workflow',
-        name: args.name,
-        service: args.service,
-        start_from: args.start_from,
-        workflow_type: args.workflow_type,
-        requestId,
-        groupFolder,
-        timestamp: new Date().toISOString(),
-      };
-      if (args.deliverable) {
-        data.deliverable = args.deliverable;
-      }
-      if (args.work_branch) {
-        data.work_branch = args.work_branch;
-      }
-      if (args.staging_base_branch) {
-        data.staging_base_branch = args.staging_base_branch;
-      }
-      if (args.staging_work_branch) {
-        data.staging_work_branch = args.staging_work_branch;
-      }
-
-      writeIpcFile(TASKS_DIR, data);
-
-      // Poll for result
-      const resultsDir = path.join(IPC_DIR, 'workflow-results');
-      const resultPath = path.join(resultsDir, `${requestId}.json`);
-      const maxWaitMs = 10000;
-      const pollMs = 300;
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < maxWaitMs) {
-        if (fs.existsSync(resultPath)) {
-          try {
-            const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
-            fs.unlinkSync(resultPath);
-            if (result.error) {
-              return {
-                content: [
-                  {
-                    type: 'text' as const,
-                    text: `流程创建失败: ${result.error}`,
-                  },
-                ],
-                isError: true,
-              };
-            }
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `流程已创建。Workflow ID: ${result.workflowId}\n\n流程将自动推进，进展消息会发送到群内。`,
-                },
-              ],
-            };
-          } catch (err) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `流程创建结果解析失败: ${err instanceof Error ? err.message : String(err)}`,
-                },
-              ],
-            };
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
-      }
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: '流程创建请求已发送，但等待确认超时。',
-          },
-        ],
-      };
-    },
-  );
-
-  server.tool(
     'list_workflow_types',
     '查看所有可用的流程类型定义。返回每个类型的名称、入口点和角色映射情况。用于了解可以创建哪些类型的流程。',
     {},
@@ -1667,7 +1542,7 @@ if (isMain) {
 
   server.tool(
     'list_deliverables',
-    '查看某个服务下已有的交付物目录列表及其包含的角色文档。返回后请将选项展示给用户确认，不要自行选择。确认后再调用 create_workflow 时传入用户选中的 deliverable。',
+    '查看某个服务下已有的交付物目录列表及其包含的角色文档。返回后请将选项展示给用户确认，不要自行选择。',
     {
       service: z.string().describe('服务名称（对应 services.json 中的 key）'),
     },

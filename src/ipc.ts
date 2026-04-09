@@ -25,7 +25,6 @@ import {
   normalizeAskQuestions,
 } from './ask-user-question.js';
 import {
-  createNewWorkflow,
   getAvailableWorkflowTypes,
   listWorkflows,
   onDelegationComplete as onWorkflowDelegationComplete,
@@ -2060,80 +2059,6 @@ export async function processTaskIpc(
         logger.error({ err, sourceGroup }, 'memory_resolve_conflict failed');
         writeMemoryResult(sourceGroup, data.requestId, { error: errMsg });
       }
-      break;
-    }
-
-    case 'create_workflow': {
-      if (!isMain) {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized create_workflow attempt blocked',
-        );
-        break;
-      }
-
-      if (!data.name || !data.service) {
-        logger.warn({ sourceGroup }, 'create_workflow missing name or service');
-        break;
-      }
-
-      const startFrom = (data as { start_from?: string }).start_from;
-      const workflowType = (data as { workflow_type?: string }).workflow_type;
-
-      if (!startFrom || !workflowType) {
-        logger.warn(
-          { sourceGroup },
-          'create_workflow missing start_from or workflow_type',
-        );
-        break;
-      }
-
-      // Find the source JID (main group's JID)
-      const mainJid =
-        Object.entries(registeredGroups).find(
-          ([, g]) => g.folder === sourceGroup,
-        )?.[0] || '';
-
-      const wfResult = createNewWorkflow({
-        name: data.name as string,
-        service: data.service as string,
-        sourceJid: mainJid,
-        startFrom,
-        workflowType,
-        deliverable: (data as { deliverable?: string }).deliverable,
-        workBranch: (data as { work_branch?: string }).work_branch,
-        stagingBaseBranch: (data as { staging_base_branch?: string })
-          .staging_base_branch,
-        stagingWorkBranch: (data as { staging_work_branch?: string })
-          .staging_work_branch,
-        accessToken: (data as { access_token?: string }).access_token,
-      });
-
-      // Write result back via IPC response
-      if (data.requestId) {
-        const resultsDir = path.join(
-          DATA_DIR,
-          'ipc',
-          sourceGroup,
-          'workflow-results',
-        );
-        fs.mkdirSync(resultsDir, { recursive: true });
-        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
-        const tempPath = `${responsePath}.tmp`;
-        fs.writeFileSync(
-          tempPath,
-          JSON.stringify({
-            workflowId: wfResult.workflowId,
-            error: wfResult.error || null,
-          }),
-        );
-        fs.renameSync(tempPath, responsePath);
-      }
-
-      logger.info(
-        { workflowId: wfResult.workflowId, sourceGroup, startFrom },
-        'Workflow created via IPC',
-      );
       break;
     }
 

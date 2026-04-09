@@ -66,7 +66,7 @@ import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { createNewWorkflow, initWorkflow } from './workflow.js';
+import { initWorkflow } from './workflow.js';
 import { initWorkbenchEvents } from './workbench-events.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
@@ -189,23 +189,6 @@ function finalizePendingQueryBatch(result: ContainerOutput): {
   return { applied: true, batch, actualModel, updatedRows, updatedWebRows };
 }
 
-interface CreateWorkflowCommandData {
-  name: string;
-  service: string;
-  workflow_type: string;
-  start_from: string;
-  deliverable?: string;
-  work_branch?: string;
-  staging_base_branch?: string;
-  staging_work_branch?: string;
-  access_token?: string;
-}
-
-interface ParsedCreateWorkflowCommand {
-  isCreateWorkflowCommand: boolean;
-  data?: CreateWorkflowCommandData;
-}
-
 async function handleAskAnswerCommand(opts: {
   chatJid: string;
   group: RegisteredGroup;
@@ -221,7 +204,7 @@ async function handleAskAnswerCommand(opts: {
   const parsed = parseAskAnswerCommand(cmdMsg.content, TRIGGER_PATTERN);
   if (!parsed) return false;
 
-  // Consume the entire pending batch, matching /clear and /create-workflow behavior.
+  // Consume the entire pending batch, matching /clear behavior.
   lastAgentTimestamp[chatJid] = messages[messages.length - 1].timestamp;
   saveState();
 
@@ -271,177 +254,6 @@ async function handleAskAnswerCommand(opts: {
       },
     });
   }
-  return true;
-}
-
-function extractCreateWorkflowJsonObject(content: string): unknown | null {
-  const text = content.trim().replace(TRIGGER_PATTERN, '').trim();
-
-  // Fast path: pure JSON body
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Fall through and try extracting embedded JSON.
-  }
-
-  const firstBrace = text.indexOf('{');
-  if (firstBrace < 0) return null;
-
-  // Tolerate extra prefix/suffix around JSON by scanning balanced `{...}` blocks.
-  for (let start = firstBrace; start < text.length; start++) {
-    if (text[start] !== '{') continue;
-    let depth = 0;
-    for (let i = start; i < text.length; i++) {
-      const ch = text[i];
-      if (ch === '{') depth += 1;
-      if (ch === '}') {
-        depth -= 1;
-        if (depth === 0) {
-          const candidate = text.slice(start, i + 1);
-          try {
-            const parsed = JSON.parse(candidate);
-            if (parsed && typeof parsed === 'object') {
-              const cmd = (parsed as { command?: unknown }).command;
-              if (cmd === '/create-workflow') return parsed;
-            }
-          } catch {
-            // Continue scanning next candidate.
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
-export function parseCreateWorkflowCommand(
-  content: string,
-): ParsedCreateWorkflowCommand {
-  const parsed = extractCreateWorkflowJsonObject(content);
-  if (!parsed) return { isCreateWorkflowCommand: false };
-  if (!parsed || typeof parsed !== 'object') {
-    return { isCreateWorkflowCommand: false };
-  }
-  const cmd = (parsed as { command?: unknown }).command;
-  if (cmd !== '/create-workflow') return { isCreateWorkflowCommand: false };
-  const data = (parsed as { data?: unknown }).data;
-  if (!data || typeof data !== 'object') {
-    return { isCreateWorkflowCommand: true };
-  }
-
-  const raw = data as Record<string, unknown>;
-  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
-  const service = typeof raw.service === 'string' ? raw.service.trim() : '';
-  const workflowType =
-    typeof raw.workflow_type === 'string' ? raw.workflow_type.trim() : '';
-  const startFrom =
-    typeof raw.start_from === 'string' ? raw.start_from.trim() : '';
-  const deliverable =
-    typeof raw.deliverable === 'string' && raw.deliverable.trim()
-      ? raw.deliverable.trim()
-      : undefined;
-  const workBranch =
-    typeof raw.work_branch === 'string' && raw.work_branch.trim()
-      ? raw.work_branch.trim()
-      : undefined;
-  const stagingBaseBranch =
-    typeof raw.staging_base_branch === 'string' &&
-    raw.staging_base_branch.trim()
-      ? raw.staging_base_branch.trim()
-      : undefined;
-  const stagingWorkBranch =
-    typeof raw.staging_work_branch === 'string' &&
-    raw.staging_work_branch.trim()
-      ? raw.staging_work_branch.trim()
-      : undefined;
-  const accessToken =
-    typeof raw.access_token === 'string' && raw.access_token.trim()
-      ? raw.access_token.trim()
-      : undefined;
-
-  if (!name || !service || !workflowType || !startFrom) {
-    return { isCreateWorkflowCommand: true };
-  }
-
-  return {
-    isCreateWorkflowCommand: true,
-    data: {
-      name,
-      service,
-      workflow_type: workflowType,
-      start_from: startFrom,
-      deliverable,
-      work_branch: workBranch,
-      staging_base_branch: stagingBaseBranch,
-      staging_work_branch: stagingWorkBranch,
-      access_token: accessToken,
-    },
-  };
-}
-
-async function handleCreateWorkflowCommand(opts: {
-  chatJid: string;
-  group: RegisteredGroup;
-  channel: Channel;
-  messages: NewMessage[];
-}): Promise<boolean> {
-  const { chatJid, group, channel, messages } = opts;
-  const cmdMsg = messages.find((m) => {
-    const parsed = parseCreateWorkflowCommand(m.content);
-    return parsed.isCreateWorkflowCommand;
-  });
-  if (!cmdMsg) return false;
-
-  // Consume the entire pending batch, matching /clear behavior.
-  lastAgentTimestamp[chatJid] = messages[messages.length - 1].timestamp;
-  saveState();
-
-  if (!group.isMain) {
-    await channel.sendMessage(
-      chatJid,
-      'Permission denied: /create-workflow is only available in the main group.',
-    );
-    return true;
-  }
-
-  const parsed = parseCreateWorkflowCommand(cmdMsg.content);
-  if (!parsed.data) {
-    await channel.sendMessage(
-      chatJid,
-      'create-workflow 参数缺失。消息格式必须是 JSON：{"command":"/create-workflow","data":{"name":"","service":"","workflow_type":"","start_from":"","deliverable":"","work_branch":"","staging_base_branch":"","staging_work_branch":""}}',
-    );
-    return true;
-  }
-  const cmdData = parsed.data;
-
-  const wfResult = createNewWorkflow({
-    name: cmdData.name,
-    service: cmdData.service,
-    sourceJid: chatJid,
-    startFrom: cmdData.start_from,
-    workflowType: cmdData.workflow_type,
-    deliverable: cmdData.deliverable,
-    workBranch: cmdData.work_branch,
-    stagingBaseBranch: cmdData.staging_base_branch,
-    stagingWorkBranch: cmdData.staging_work_branch,
-    accessToken: cmdData.access_token,
-  });
-
-  if (wfResult.error) {
-    await channel.sendMessage(chatJid, `流程创建失败: ${wfResult.error}`);
-    return true;
-  }
-
-  await channel.sendMessage(
-    chatJid,
-    `流程已创建。Workflow ID: ${wfResult.workflowId}\n\n流程将自动推进，进展消息会发送到群内。`,
-  );
-  logger.info(
-    { group: group.name, chatJid, workflowId: wfResult.workflowId },
-    'Workflow created via /create-workflow command',
-  );
   return true;
 }
 
@@ -627,19 +439,6 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   });
   if (cmdResult.handled) return cmdResult.success;
   // --- End session command interception ---
-
-  // --- /create-workflow JSON command interception ---
-  if (
-    await handleCreateWorkflowCommand({
-      chatJid,
-      group,
-      channel,
-      messages: missedMessages,
-    })
-  ) {
-    return true;
-  }
-  // --- End /create-workflow interception ---
 
   // For non-main groups, check if trigger is required and present
   if (!isMainGroup && group.requiresTrigger !== false) {
@@ -1112,18 +911,6 @@ async function startMessageLoop(): Promise<void> {
                 groupMessages[groupMessages.length - 1].timestamp;
               saveState();
             }
-            continue;
-          }
-
-          // --- /create-workflow JSON command intercept: handle even when a container is active ---
-          if (
-            await handleCreateWorkflowCommand({
-              chatJid,
-              group,
-              channel,
-              messages: groupMessages,
-            })
-          ) {
             continue;
           }
 
