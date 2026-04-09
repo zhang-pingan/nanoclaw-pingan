@@ -562,7 +562,7 @@ describe('workbench approval transition sync', () => {
       task: '修复后重新部署',
       status: 'pending',
       result: '',
-      outcome: undefined,
+      outcome: null,
       requester_jid: null,
       workflow_id: 'wf-reentry-delegation-history',
       created_at: '2026-04-07T00:05:00.000Z',
