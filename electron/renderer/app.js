@@ -2673,6 +2673,70 @@ function sortWorkbenchItemsByCreatedAt(items) {
   });
 }
 
+function applyWorkbenchActionItemRealtimeUpdate(payload) {
+  if (!currentWorkbenchDetail || !Array.isArray(currentWorkbenchDetail.action_items)) {
+    return false;
+  }
+  const itemId = typeof payload.id === "string" ? payload.id : "";
+  if (!itemId) return false;
+
+  const nextStatus = typeof payload.status === "string" ? payload.status : "";
+  const existingIdx = currentWorkbenchDetail.action_items.findIndex((item) => item.id === itemId);
+  const shouldRemove = ["resolved", "confirmed", "skipped", "cancelled", "expired"].includes(nextStatus);
+  if (shouldRemove) {
+    if (existingIdx < 0) return true;
+    currentWorkbenchDetail.action_items.splice(existingIdx, 1);
+    renderWorkbenchActionItems(currentWorkbenchDetail.action_items, currentWorkbenchDetail.task);
+    return true;
+  }
+
+  if (nextStatus && nextStatus !== "pending") {
+    return false;
+  }
+
+  const nextItem = existingIdx >= 0
+    ? { ...currentWorkbenchDetail.action_items[existingIdx] }
+    : {
+        id: itemId,
+        item_type: payload.itemType === "approval" ? "approval" : "interactive",
+        source_type: typeof payload.sourceType === "string" ? payload.sourceType : "workflow",
+        title: "",
+        body: "",
+        status: "pending",
+        stage_key: typeof payload.stageKey === "string" ? payload.stageKey : undefined,
+        delegation_id: typeof payload.delegationId === "string" ? payload.delegationId : undefined,
+        group_folder: typeof payload.groupFolder === "string" ? payload.groupFolder : undefined,
+        source_ref_id: typeof payload.sourceRefId === "string" ? payload.sourceRefId : undefined,
+        replyable: Boolean(payload.replyable),
+        action_mode: typeof payload.actionMode === "string" ? payload.actionMode : undefined,
+        created_at: typeof payload.createdAt === "string" ? payload.createdAt : new Date().toISOString(),
+      };
+
+  if (typeof payload.title === "string") nextItem.title = payload.title;
+  if (typeof payload.body === "string") nextItem.body = payload.body;
+  if (typeof payload.stageKey === "string") nextItem.stage_key = payload.stageKey;
+  if (typeof payload.delegationId === "string") nextItem.delegation_id = payload.delegationId;
+  if (typeof payload.groupFolder === "string") nextItem.group_folder = payload.groupFolder;
+  if (typeof payload.sourceRefId === "string") nextItem.source_ref_id = payload.sourceRefId;
+  if (typeof payload.replyable === "boolean") nextItem.replyable = payload.replyable;
+  if (typeof payload.actionMode === "string") nextItem.action_mode = payload.actionMode;
+  if (typeof payload.itemType === "string") {
+    nextItem.item_type = payload.itemType === "approval" ? "approval" : "interactive";
+  }
+  if (typeof payload.sourceType === "string") nextItem.source_type = payload.sourceType;
+  if (typeof payload.createdAt === "string") nextItem.created_at = payload.createdAt;
+  nextItem.status = "pending";
+
+  if (existingIdx >= 0) {
+    currentWorkbenchDetail.action_items[existingIdx] = nextItem;
+  } else {
+    currentWorkbenchDetail.action_items.push(nextItem);
+  }
+  currentWorkbenchDetail.action_items = sortWorkbenchItemsByCreatedAt(currentWorkbenchDetail.action_items);
+  renderWorkbenchActionItems(currentWorkbenchDetail.action_items, currentWorkbenchDetail.task);
+  return true;
+}
+
 function renderWorkbenchArtifacts(artifacts) {
   const sortedArtifacts = sortWorkbenchItemsByCreatedAt(artifacts);
   workbenchArtifacts.innerHTML = "";
@@ -3532,7 +3596,9 @@ function applyWorkbenchRealtimeEvent(event) {
       renderWorkbenchArtifacts(currentWorkbenchDetail.artifacts);
     }
   } else if (event.type === "action_item_updated") {
-    scheduleWorkbenchTaskDetailReload(currentWorkbenchTaskId);
+    if (!applyWorkbenchActionItemRealtimeUpdate(payload)) {
+      scheduleWorkbenchTaskDetailReload(currentWorkbenchTaskId);
+    }
   } else if (event.type === "comment_created") {
     currentWorkbenchDetail.comments.push({
       id: payload.id,

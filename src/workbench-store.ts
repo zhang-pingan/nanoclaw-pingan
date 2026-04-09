@@ -490,10 +490,14 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
 export function syncWorkbenchOnWorkflowUpdated(
   workflowId: string,
   summary?: string,
+  options?: {
+    emitRealtime?: boolean;
+  },
 ): void {
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);
   if (!workflow || !task) return;
+  const emitRealtime = options?.emitRealtime !== false;
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const stateConfig = config?.states[workflow.status];
 
@@ -505,17 +509,19 @@ export function syncWorkbenchOnWorkflowUpdated(
     last_event_at: workflow.updated_at,
     title: workflow.name,
   });
-  emitWorkbenchEvent({
-    type: 'task_updated',
-    taskId: task.id,
-    workflowId,
-    payload: {
-      status: workflow.status,
-      currentStage: workflow.status,
-      summary: summary !== undefined ? truncate(summary) : task.summary,
-      updatedAt: workflow.updated_at,
-    },
-  });
+  if (emitRealtime) {
+    emitWorkbenchEvent({
+      type: 'task_updated',
+      taskId: task.id,
+      workflowId,
+      payload: {
+        status: workflow.status,
+        currentStage: workflow.status,
+        summary: summary !== undefined ? truncate(summary) : task.summary,
+        updatedAt: workflow.updated_at,
+      },
+    });
+  }
 
   ensureSubtasks(workflow);
 
@@ -526,16 +532,18 @@ export function syncWorkbenchOnWorkflowUpdated(
       started_at: current.started_at || workflow.updated_at,
       updated_at: workflow.updated_at,
     });
-    emitWorkbenchEvent({
-      type: 'subtask_updated',
-      taskId: task.id,
-      workflowId,
-      payload: {
-        id: current.id,
-        stageKey: workflow.status,
-        status: workflow.status === 'paused' ? 'paused' : 'current',
-      },
-    });
+    if (emitRealtime) {
+      emitWorkbenchEvent({
+        type: 'subtask_updated',
+        taskId: task.id,
+        workflowId,
+        payload: {
+          id: current.id,
+          stageKey: workflow.status,
+          status: workflow.status === 'paused' ? 'paused' : 'current',
+        },
+      });
+    }
   }
 
   resolveStaleStageActionItems(
@@ -557,6 +565,7 @@ export function syncWorkbenchOnTransition(
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);
   if (!workflow || !task) return;
+  const subtaskEvents: Array<Record<string, unknown>> = [];
 
   const fromSubtask = getWorkbenchSubtaskByStage(task.id, fromStatus);
   if (fromSubtask) {
@@ -572,15 +581,10 @@ export function syncWorkbenchOnTransition(
       finished_at: workflow.updated_at,
       updated_at: workflow.updated_at,
     });
-    emitWorkbenchEvent({
-      type: 'subtask_updated',
-      taskId: task.id,
-      workflowId,
-      payload: {
-        id: fromSubtask.id,
-        stageKey: fromStatus,
-        status: nextStatus,
-      },
+    subtaskEvents.push({
+      id: fromSubtask.id,
+      stageKey: fromStatus,
+      status: nextStatus,
     });
   }
 
@@ -614,16 +618,11 @@ export function syncWorkbenchOnTransition(
       started_at: toSubtask.started_at || workflow.updated_at,
       updated_at: workflow.updated_at,
     });
-    emitWorkbenchEvent({
-      type: 'subtask_updated',
-      taskId: task.id,
-      workflowId,
-      payload: {
-        id: toSubtask.id,
-        stageKey: toStatus,
-        status: nextStatus,
-        delegationId: delegationId ?? toSubtask.delegation_id,
-      },
+    subtaskEvents.push({
+      id: toSubtask.id,
+      stageKey: toStatus,
+      status: nextStatus,
+      delegationId: delegationId ?? toSubtask.delegation_id,
     });
   }
 
@@ -634,6 +633,24 @@ export function syncWorkbenchOnTransition(
     updated_at: workflow.updated_at,
     last_event_at: workflow.updated_at,
   });
+  emitWorkbenchEvent({
+    type: 'task_updated',
+    taskId: task.id,
+    workflowId,
+    payload: {
+      status: workflow.status,
+      currentStage: toStatus,
+      updatedAt: workflow.updated_at,
+    },
+  });
+  for (const payload of subtaskEvents) {
+    emitWorkbenchEvent({
+      type: 'subtask_updated',
+      taskId: task.id,
+      workflowId,
+      payload,
+    });
+  }
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const fromLabel = config?.status_labels[fromStatus] || fromStatus;
   const toLabel = config?.status_labels[toStatus] || toStatus;

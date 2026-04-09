@@ -646,7 +646,9 @@ function applyTransition(
     transition.target,
     updates.current_delegation_id,
   );
-  syncWorkbenchOnWorkflowUpdated(workflow.id);
+  syncWorkbenchOnWorkflowUpdated(workflow.id, undefined, {
+    emitRealtime: false,
+  });
 
   // 5. Send notification
   if (transition.notify) {
@@ -1084,6 +1086,7 @@ export function retryWorkflowStage(
     syncWorkbenchOnWorkflowUpdated(
       workflowId,
       `已重跑阶段 ${config.status_labels[stageKey] || stageKey}`,
+      { emitRealtime: false },
     );
     notifyMain(
       `[流程重跑] 需求「${workflow.name}」(${workflowId}) 已重新执行阶段 ${config.status_labels[stageKey] || stageKey}，已委派 ${targetFolder}。`,
@@ -1492,7 +1495,9 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
     current_delegation_id: '',
   });
   syncWorkbenchOnTransition(workflowId, workflow.status, 'cancelled');
-  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已取消');
+  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已取消', {
+    emitRealtime: false,
+  });
   notifyMain(
     `[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`,
     workflow.source_jid,
@@ -1521,7 +1526,9 @@ export function pauseWorkflow(workflowId: string): { error?: string } {
     paused_from: workflow.status,
   });
   syncWorkbenchOnTransition(workflowId, workflow.status, 'paused');
-  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已暂停');
+  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已暂停', {
+    emitRealtime: false,
+  });
   notifyMain(
     `[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`,
     workflow.source_jid,
@@ -1570,7 +1577,9 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
         workflow.status,
         workflow.paused_from,
       );
-      syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复，委派仍在执行');
+      syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复，委派仍在执行', {
+        emitRealtime: false,
+      });
       notifyMain(
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`,
         workflow.source_jid,
@@ -1586,7 +1595,9 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
     paused_from: null,
   });
   syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
-  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复');
+  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复', {
+    emitRealtime: false,
+  });
   notifyMain(
     `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`,
     workflow.source_jid,

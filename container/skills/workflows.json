@@ -150,7 +150,7 @@
           "target": "ops_deploy",
           "role": "ops",
           "skill": "ops-staging-deploy",
-          "task_template": "请部署以下服务到预发环境：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}",
+          "task_template": "请部署以下服务到预发环境：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。",
           "notify": "[流程进展] 需求「{{name}}」({{id}}) 已确认，正在委派 {{role_folder:ops}} 部署预发环境。"
         }
       },
@@ -215,7 +215,7 @@
             "target": "ops_deploy",
             "role": "ops",
             "skill": "ops-staging-deploy",
-            "task_template": "请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}",
+            "task_template": "请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前也必须先把最新工作分支合并进预发工作分支并推送，再执行部署。",
             "notify": "[流程进展] 需求「{{name}}」({{id}}) Round {{round}} 修复完成，已委派 {{role_folder:ops}} 重新部署预发。"
           },
           "failure": {

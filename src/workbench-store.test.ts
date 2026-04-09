@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { initWorkbenchEvents } from './workbench-events.js';
 import {
   _initTestDatabase,
   createWorkflow as dbCreateWorkflow,
@@ -52,6 +53,7 @@ const DEV_GROUP: RegisteredGroup = {
 
 beforeEach(() => {
   _initTestDatabase();
+  initWorkbenchEvents(() => {});
   setRegisteredGroup('main@g.us', MAIN_GROUP);
   setRegisteredGroup('ops@g.us', OPS_GROUP);
   setRegisteredGroup('test@g.us', TEST_GROUP);
@@ -110,6 +112,56 @@ describe('workbench approval transition sync', () => {
       'testing',
       'fixing',
     ]);
+  });
+
+  it('emits task update before subtask updates during approve transition', () => {
+    dbCreateWorkflow({
+      id: 'wf-approve-event-order',
+      name: '审批事件顺序',
+      service: 'order-service',
+      start_from: 'testing',
+      work_branch: 'feature/approve-order',
+      staging_base_branch: 'staging',
+      deliverable: '2026-04-07_approve_order',
+      staging_work_branch: 'staging-deploy/feature-approve-order',
+      access_token: '',
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-approve-event-order');
+
+    const emittedEvents: string[] = [];
+    initWorkbenchEvents((event) => {
+      emittedEvents.push(
+        `${event.type}:${String(event.payload.currentStage || event.payload.stageKey || '')}`,
+      );
+    });
+
+    const result = approveWorkflow('wf-approve-event-order');
+    expect(result.error).toBeUndefined();
+
+    const firstTransitionSubtaskIdx = emittedEvents.findIndex(
+      (item) => item === 'subtask_updated:testing',
+    );
+    const firstTransitionTaskIdx = emittedEvents.findIndex(
+      (item) => item === 'task_updated:testing',
+    );
+
+    expect(firstTransitionTaskIdx).toBeGreaterThanOrEqual(0);
+    expect(firstTransitionSubtaskIdx).toBeGreaterThanOrEqual(0);
+    expect(firstTransitionTaskIdx).toBeLessThan(firstTransitionSubtaskIdx);
+    expect(
+      emittedEvents.filter((item) => item === 'task_updated:testing'),
+    ).toHaveLength(1);
+    expect(
+      emittedEvents.filter((item) => item === 'subtask_updated:testing'),
+    ).toHaveLength(1);
   });
 
   it('does not duplicate the same transition event when re-synced', () => {
