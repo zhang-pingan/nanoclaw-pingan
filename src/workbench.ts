@@ -105,6 +105,7 @@ export interface WorkbenchArtifact {
   title: string;
   artifact_type: string;
   path: string;
+  absolute_path: string;
   exists: boolean;
   created_at?: string;
 }
@@ -249,6 +250,7 @@ function mapPersistedArtifact(
     title: item.title,
     artifact_type: item.artifact_type,
     path: item.path,
+    absolute_path: fullPath,
     exists: fs.existsSync(fullPath),
     created_at: item.created_at,
   };
@@ -468,6 +470,7 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
       title: candidate.title,
       artifact_type: candidate.artifact_type,
       path: path.relative(PROJECT_ROOT, fullPath),
+      absolute_path: fullPath,
       exists: fs.existsSync(fullPath),
       created_at: workflow.updated_at,
     };

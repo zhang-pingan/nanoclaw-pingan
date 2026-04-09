@@ -718,6 +718,17 @@ html, body {
   background: rgba(245, 247, 250, 0.8);
 }
 
+.workbench-artifact-item.is-clickable {
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.workbench-artifact-item.is-clickable:hover {
+  transform: translateY(-1px);
+  border-color: rgba(79, 110, 247, 0.28);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
 .workbench-subtask-item.current {
   border-color: rgba(79, 110, 247, 0.28);
   background: rgba(79, 110, 247, 0.08);

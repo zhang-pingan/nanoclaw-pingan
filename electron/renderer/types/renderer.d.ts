@@ -9,6 +9,12 @@ interface NanoClawAppAPI {
   onCyclePrimaryNav(handler: () => void): () => void;
   /** Open a URL in the system browser */
   openExternal(url: string): void;
+  /** Open a local file in the default app */
+  openFile(filePath: string): Promise<{ ok: boolean; result?: string; error?: string }>;
+  /** Open file with system app picker */
+  openFileWith(filePath: string): Promise<{ ok: boolean; error?: string }>;
+  /** Reveal a file in the system file manager */
+  showInFolder(filePath: string): Promise<{ ok: boolean; error?: string }>;
   /** Current platform (darwin, win32, linux) */
   platform: string;
   /** Hide the window (quit Electron UI, keep NanoClaw running) */

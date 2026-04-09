@@ -2746,7 +2746,8 @@ function renderWorkbenchArtifacts(artifacts) {
   }
   sortedArtifacts.forEach((item) => {
     const el = document.createElement("div");
-    el.className = "workbench-artifact-item";
+    const canOpen = Boolean(item.exists && item.absolute_path);
+    el.className = `workbench-artifact-item${canOpen ? " is-clickable" : ""}`;
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.title)}</div>
@@ -2754,6 +2755,20 @@ function renderWorkbenchArtifacts(artifacts) {
       </div>
       <div class="workbench-item-body">${escapeHtml(item.path)}</div>
     `;
+    if (canOpen) {
+      el.title = "点击打开产出物";
+      el.addEventListener("click", () => {
+        if (window.nanoclawApp?.openFile) {
+          window.nanoclawApp.openFile(item.absolute_path);
+        } else {
+          window.open(`file://${item.absolute_path}`);
+        }
+      });
+      el.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showFileContextMenu(e, item.absolute_path);
+      });
+    }
     workbenchArtifacts.appendChild(el);
   });
 }
@@ -3589,6 +3604,7 @@ function applyWorkbenchRealtimeEvent(event) {
         title: payload.title || "新产出",
         artifact_type: payload.artifactType || "artifact",
         path: payload.path || "",
+        absolute_path: payload.absolutePath || "",
         exists: true,
         created_at: getPayloadTimestamp(payload),
       });

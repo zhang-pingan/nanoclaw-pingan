@@ -193,6 +193,7 @@ function ensureArtifacts(workflow: Workflow): void {
         id: `${task.id}-${def.file}`,
         title: def.title,
         path: path.relative(PROJECT_ROOT, fullPath),
+        absolutePath: fullPath,
         createdAt: workflow.updated_at,
       },
     });
