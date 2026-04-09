@@ -12,6 +12,7 @@ import {
   getWorkflow,
   setRegisteredGroup,
   storeChatMetadata,
+  updateDelegation,
 } from './db.js';
 import { PROJECT_ROOT } from './config.js';
 import type { RegisteredGroup } from './types.js';
@@ -265,6 +266,55 @@ describe('workflow metadata and branch flow', () => {
     expect(testingDelegation?.task).toContain(
       '预发工作分支：staging-deploy/feature-test_20260408',
     );
+  });
+
+  it('keeps fixing failed without creating a passive self-loop delegation', () => {
+    createWorkflow({
+      id: 'wf-fixing-failed',
+      name: 'Fixing failed flow',
+      service: TEST_SERVICE,
+      start_from: 'testing',
+      work_branch: 'feature/test_20260408',
+      deliverable: '2026-04-08_feature',
+      staging_base_branch: 'staging',
+      staging_work_branch: 'staging-deploy/feature-test_20260408',
+      access_token: 'abc123',
+      status: 'fixing',
+      current_delegation_id: 'del-fixing',
+      round: 2,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-fixing',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'dev@g.us',
+      target_folder: 'web_dev',
+      task: 'fixing task',
+      status: 'completed',
+      result: '修复失败，需要人工介入',
+      outcome: 'failure',
+      requester_jid: null,
+      workflow_id: 'wf-fixing-failed',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+    updateDelegation('del-fixing', {
+      status: 'completed',
+      result: '修复失败，需要人工介入',
+      outcome: 'failure',
+    });
+
+    onDelegationComplete('del-fixing');
+
+    const workflow = getWorkflow('wf-fixing-failed');
+    expect(workflow?.status).toBe('fixing');
+    expect(workflow?.current_delegation_id).toBe('');
+    expect(getDelegationsByWorkflow('wf-fixing-failed')).toHaveLength(1);
   });
 
   it('lists deliverables using front matter metadata instead of text scanning', () => {

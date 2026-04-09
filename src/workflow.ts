@@ -640,12 +640,16 @@ function applyTransition(
       updates.current_delegation_id,
     );
   }
-  syncWorkbenchOnTransition(
-    workflow.id,
-    fromStatus,
-    transition.target,
-    updates.current_delegation_id,
-  );
+  const isPassiveSelfLoop =
+    transition.target === fromStatus && !updates.current_delegation_id;
+  if (!isPassiveSelfLoop) {
+    syncWorkbenchOnTransition(
+      workflow.id,
+      fromStatus,
+      transition.target,
+      updates.current_delegation_id,
+    );
+  }
   syncWorkbenchOnWorkflowUpdated(workflow.id, undefined, {
     emitRealtime: false,
   });

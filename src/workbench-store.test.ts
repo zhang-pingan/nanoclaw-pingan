@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { initWorkbenchEvents } from './workbench-events.js';
 import {
   _initTestDatabase,
+  createDelegation,
   createWorkflow as dbCreateWorkflow,
   getAllRegisteredGroups,
   getWorkbenchTaskByWorkflowId,
@@ -10,10 +11,16 @@ import {
   listWorkbenchEventsByTask,
   setRegisteredGroup,
   storeChatMetadata,
+  updateDelegation,
   updateWorkflow,
 } from './db.js';
 import { RegisteredGroup } from './types.js';
-import { approveWorkflow, cancelWorkflow, initWorkflow } from './workflow.js';
+import {
+  approveWorkflow,
+  cancelWorkflow,
+  initWorkflow,
+  onDelegationComplete,
+} from './workflow.js';
 import { getWorkbenchTaskDetail, listWorkbenchTasks } from './workbench.js';
 import {
   createWorkbenchInteractionItem,
@@ -333,6 +340,65 @@ describe('workbench approval transition sync', () => {
       'completed',
       'current',
     ]);
+  });
+
+  it('does not append a duplicate stage node for a failed fixing self-loop', () => {
+    dbCreateWorkflow({
+      id: 'wf-fixing-self-loop',
+      name: '修复失败回环',
+      service: 'order-service',
+      start_from: 'testing',
+      work_branch: 'feature/fixing-self-loop',
+      staging_base_branch: 'staging',
+      deliverable: '2026-04-07_fixing_self_loop',
+      staging_work_branch: 'staging-deploy/feature-fixing-self-loop',
+      access_token: '',
+      status: 'fixing',
+      current_delegation_id: 'wf-del-fixing-self-loop',
+      round: 2,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'wf-del-fixing-self-loop',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'dev@g.us',
+      target_folder: 'web_dev',
+      task: 'fixing task',
+      status: 'completed',
+      result: '修复失败，需要人工介入',
+      outcome: 'failure',
+      requester_jid: null,
+      workflow_id: 'wf-fixing-self-loop',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:10:00.000Z',
+    });
+    updateDelegation('wf-del-fixing-self-loop', {
+      status: 'completed',
+      result: '修复失败，需要人工介入',
+      outcome: 'failure',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-fixing-self-loop');
+
+    onDelegationComplete('wf-del-fixing-self-loop');
+
+    const detail = getWorkbenchTaskDetail('wb-wf-fixing-self-loop');
+    expect(detail).not.toBeNull();
+    expect(
+      detail?.subtasks.filter((item) => item.stage_key === 'fixing'),
+    ).toHaveLength(1);
+    expect(
+      detail?.subtasks.find((item) => item.stage_key === 'fixing')?.status,
+    ).toBe('failed');
+    expect(
+      listWorkbenchEventsByTask('wb-wf-fixing-self-loop').some((item) =>
+        item.title.includes('修复中 -> 修复中'),
+      ),
+    ).toBe(false);
   });
 
   it('returns workbench task list in reverse updated_at order', () => {

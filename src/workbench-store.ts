@@ -528,22 +528,30 @@ export function syncWorkbenchOnWorkflowUpdated(
 
   const current = getWorkbenchSubtaskByStage(task.id, workflow.status);
   if (current) {
-    updateWorkbenchSubtask(current.id, {
-      status: workflow.status === 'paused' ? 'paused' : 'current',
-      started_at: current.started_at || workflow.updated_at,
-      updated_at: workflow.updated_at,
-    });
-    if (emitRealtime) {
-      emitWorkbenchEvent({
-        type: 'subtask_updated',
-        taskId: task.id,
-        workflowId,
-        payload: {
-          id: current.id,
-          stageKey: workflow.status,
-          status: workflow.status === 'paused' ? 'paused' : 'current',
-        },
+    const currentStatus =
+      workflow.status === 'paused'
+        ? 'paused'
+        : stateConfig?.type === 'delegation' && !workflow.current_delegation_id
+          ? null
+          : 'current';
+    if (currentStatus) {
+      updateWorkbenchSubtask(current.id, {
+        status: currentStatus,
+        started_at: current.started_at || workflow.updated_at,
+        updated_at: workflow.updated_at,
       });
+      if (emitRealtime) {
+        emitWorkbenchEvent({
+          type: 'subtask_updated',
+          taskId: task.id,
+          workflowId,
+          payload: {
+            id: current.id,
+            stageKey: workflow.status,
+            status: currentStatus,
+          },
+        });
+      }
     }
   }
 
@@ -860,6 +868,7 @@ export function syncWorkbenchFromWorkflow(workflowId: string): void {
   const workflow = getWorkflow(workflowId);
   const task = getWorkbenchTaskByWorkflowId(workflowId);
   if (!workflow || !task) return;
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
 
   const delegations = getDelegationsByWorkflow(workflowId);
   for (const delegation of delegations) {
@@ -877,6 +886,31 @@ export function syncWorkbenchFromWorkflow(workflowId: string): void {
       finished_at: subtask.finished_at || workflow.updated_at,
       updated_at: workflow.updated_at,
     });
+  }
+  if (
+    config?.states[workflow.status]?.type === 'delegation' &&
+    !workflow.current_delegation_id
+  ) {
+    for (const subtask of listWorkbenchSubtasksByTask(task.id)) {
+      if (subtask.stage_key !== workflow.status || subtask.status !== 'current') {
+        continue;
+      }
+      const delegation = subtask.delegation_id
+        ? getDelegation(subtask.delegation_id)
+        : undefined;
+      const inferredStatus =
+        delegation?.outcome === 'failure'
+          ? 'failed'
+          : delegation?.status === 'completed'
+            ? 'completed'
+            : null;
+      if (!inferredStatus) continue;
+      updateWorkbenchSubtask(subtask.id, {
+        status: inferredStatus,
+        finished_at: subtask.finished_at || delegation?.updated_at || workflow.updated_at,
+        updated_at: workflow.updated_at,
+      });
+    }
   }
   syncWorkbenchOnWorkflowUpdated(workflowId);
 }
