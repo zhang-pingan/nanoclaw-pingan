@@ -743,7 +743,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     if (!opts.deliverable) {
       return {
         workflowId,
-        error: `入口 "${opts.startFrom}" 需要指定 deliverable 参数，请先用 list_deliverables 工具查看可用目录。`,
+        error: `入口 "${opts.startFrom}" 需要指定 deliverable 参数，请先在 Workbench 中选择需求目录。`,
       };
     }
 
@@ -1941,38 +1941,4 @@ export function getAvailableWorkflowTypes(): Array<{
       Object.entries(config.roles).map(([role, rc]) => [role, rc.channels]),
     ),
   }));
-}
-
-/** List all deliverable directories for a service (for MCP tool). */
-export function listDeliverables(
-  service: string,
-): Array<DeliverableMetadata & { dir: string }> {
-  const delivDir = path.join(PROJECT_ROOT, 'projects', service, 'iteration');
-  if (!fs.existsSync(delivDir)) return [];
-
-  return fs
-    .readdirSync(delivDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => {
-      const dirPath = path.join(delivDir, d.name);
-      const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.md'));
-
-      const metadata: DeliverableMetadata = {
-        fileName: d.name,
-        files,
-        work_branch: '',
-        staging_base_branch: '',
-        staging_work_branch: '',
-      };
-      for (const file of files) {
-        const parsed = readMetadataFromFile(path.join(dirPath, file));
-        metadata.work_branch ||= parsed.work_branch || '';
-        metadata.staging_base_branch ||= parsed.staging_base_branch || '';
-        metadata.staging_work_branch ||= parsed.staging_work_branch || '';
-      }
-
-      return { dir: d.name, ...metadata };
-    })
-    .filter((d) => d.files.length > 0)
-    .sort((a, b) => b.dir.localeCompare(a.dir)); // newest first
 }

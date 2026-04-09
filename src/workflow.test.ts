@@ -20,7 +20,6 @@ import {
   approveWorkflow,
   createNewWorkflow,
   initWorkflow,
-  listDeliverables,
   onDelegationComplete,
 } from './workflow.js';
 
@@ -317,19 +316,4 @@ describe('workflow metadata and branch flow', () => {
     expect(getDelegationsByWorkflow('wf-fixing-failed')).toHaveLength(1);
   });
 
-  it('lists deliverables using front matter metadata instead of text scanning', () => {
-    writeDoc(
-      '2026-04-08_feature',
-      'dev.md',
-      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nwork_branch: feature/test_20260408\nstaging_base_branch: staging\nstaging_work_branch: staging-deploy/feature-test_20260408\ndoc_type: dev\n---\n\n主工作分支：feature/ignored\n下游服务工作分支：feature/downstream\n`,
-    );
-
-    const deliverables = listDeliverables(TEST_SERVICE);
-    expect(deliverables).toHaveLength(1);
-    expect(deliverables[0].work_branch).toBe('feature/test_20260408');
-    expect(deliverables[0].staging_base_branch).toBe('staging');
-    expect(deliverables[0].staging_work_branch).toBe(
-      'staging-deploy/feature-test_20260408',
-    );
-  });
 });
