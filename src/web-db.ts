@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 
 import { STORE_DIR } from './config.js';
@@ -24,6 +25,7 @@ export interface WebMessage {
 
 export function initWebDb(): void {
   const dbPath = path.join(STORE_DIR, 'web-messages.db');
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   db = new Database(dbPath);
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -67,6 +69,31 @@ export function initWebDb(): void {
   }
 
   logger.info({ path: dbPath }, 'Web message DB initialized');
+}
+
+/** @internal - for tests only. Creates a fresh in-memory database. */
+export function _initTestWebDb(): void {
+  db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id          TEXT,
+      chat_jid    TEXT,
+      sender      TEXT,
+      sender_name TEXT,
+      content     TEXT,
+      timestamp   TEXT,
+      is_from_me  INTEGER,
+      is_bot_message INTEGER,
+      model TEXT,
+      model_reason TEXT,
+      reply_to_id TEXT,
+      workflow_id TEXT,
+      file_path TEXT,
+      PRIMARY KEY (chat_jid, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_chat_time
+      ON messages (chat_jid, timestamp);
+  `);
 }
 
 export function storeWebMessage(msg: {
@@ -163,14 +190,16 @@ export function getWebMessages(
   return db
     .prepare(
       `
-      SELECT id, chat_jid, sender, sender_name, content, timestamp,
-             CAST(is_from_me AS INTEGER) AS is_from_me,
-             CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             reply_to_id, model, model_reason, file_path
-        FROM messages
-       WHERE chat_jid = ? AND timestamp >= ?
-       ORDER BY timestamp ASC
-       LIMIT ?
+      SELECT * FROM (
+        SELECT id, chat_jid, sender, sender_name, content, timestamp,
+               CAST(is_from_me AS INTEGER) AS is_from_me,
+               CAST(is_bot_message AS INTEGER) AS is_bot_message,
+               reply_to_id, model, model_reason, file_path
+          FROM messages
+         WHERE chat_jid = ? AND timestamp >= ?
+         ORDER BY timestamp DESC
+         LIMIT ?
+      ) ORDER BY timestamp ASC
     `,
     )
     .all(chatJid, sinceTimestamp, limit) as WebMessage[];
