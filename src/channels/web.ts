@@ -29,6 +29,12 @@ import {
   runWorkbenchActionItemAction,
   runWorkbenchTaskAction,
 } from '../workbench.js';
+import {
+  getAgentRun,
+  listAgentRunEvents,
+  listAgentRunSteps,
+  listAgentRuns,
+} from '../db.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -68,6 +74,7 @@ interface OutgoingMsg {
     | 'connected'
     | 'card'
     | 'agent_status'
+    | 'agent_run_trace'
     | 'file'
     | 'workbench_event';
   [key: string]: unknown;
@@ -360,6 +367,15 @@ class WebChannel {
       }
       if (pathname === '/api/agent-status/stop' && req.method === 'POST') {
         return this.apiStopAgent(req, res);
+      }
+      if (pathname === '/api/agent-runs/active') {
+        return this.apiGetActiveAgentRuns(res);
+      }
+      if (pathname === '/api/agent-runs') {
+        return this.apiListAgentRuns(reqUrl, res);
+      }
+      if (pathname.startsWith('/api/agent-runs/')) {
+        return this.apiGetAgentRun(pathname, res);
       }
       if (pathname === '/api/tasks' && req.method === 'DELETE') {
         return this.apiDeleteAllTasks(res);
@@ -1271,6 +1287,60 @@ class WebChannel {
     res.end(JSON.stringify(result));
   }
 
+  private apiGetActiveAgentRuns(res: http.ServerResponse): void {
+    const runs = this.opts.getActiveAgentRunTraces?.() ?? [];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ runs }));
+  }
+
+  private apiListAgentRuns(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): void {
+    const limitRaw = parseInt(reqUrl.searchParams.get('limit') || '50', 10);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(limitRaw, 1), 200)
+      : 50;
+    const runs = listAgentRuns(limit);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ runs }));
+  }
+
+  private apiGetAgentRun(
+    pathname: string,
+    res: http.ServerResponse,
+  ): void {
+    const match = pathname.match(/^\/api\/agent-runs\/([^/]+)(?:\/(steps|events))?$/);
+    if (!match) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
+    const [, runId, suffix] = match;
+    if (suffix === 'steps') {
+      const steps = listAgentRunSteps(runId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ steps }));
+      return;
+    }
+    if (suffix === 'events') {
+      const events = listAgentRunEvents(runId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ events }));
+      return;
+    }
+
+    const run = getAgentRun(runId);
+    if (!run) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Run not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ run }));
+  }
+
   /**
    * Broadcast current agent status to all connected WS clients.
    */
@@ -1279,6 +1349,22 @@ class WebChannel {
     const payload = JSON.stringify({
       type: 'agent_status',
       agents,
+    } satisfies OutgoingMsg);
+
+    for (const clients of this.clients.values()) {
+      for (const client of clients) {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+    }
+  }
+
+  broadcastAgentRunTraces(): void {
+    const runs = this.opts.getActiveAgentRunTraces?.() ?? [];
+    const payload = JSON.stringify({
+      type: 'agent_run_trace',
+      runs,
     } satisfies OutgoingMsg);
 
     for (const clients of this.clients.values()) {
@@ -2063,6 +2149,14 @@ class WebChannel {
     };
 
     send({ type: 'connected', message: 'Connected to NanoClaw' });
+    send({
+      type: 'agent_status',
+      agents: this.opts.getAgentStatus?.() ?? [],
+    });
+    send({
+      type: 'agent_run_trace',
+      runs: this.opts.getActiveAgentRunTraces?.() ?? [],
+    });
 
     // Register this client for ALL web groups so it receives messages
     // from every group in real-time (frontend shows unread badge for non-active groups)

@@ -131,6 +131,7 @@ var deleteSelectedBtn = document.getElementById("delete-selected-btn");
 var cancelSelectBtn = document.getElementById("cancel-select-btn");
 var agentStatusInterval = null;
 var agentStatusData = [];
+var agentRunTraceByGroup = {};
 var activePrimaryNavKey = "agent-groups";
 var activeMemoryGroupJid = "";
 var memoryEntries = [];
@@ -1920,6 +1921,120 @@ function updateAgentDurations() {
   }
 }
 
+function updateAgentRunTraces(runs) {
+  agentRunTraceByGroup = {};
+  for (const run of runs) {
+    if (run && run.groupJid) {
+      agentRunTraceByGroup[run.groupJid] = run;
+    }
+  }
+}
+
+function parseAgentEventPayload(event) {
+  if (!event || !event.payload_json) return null;
+  if (typeof event.payload_json === "object") return event.payload_json;
+  try {
+    return JSON.parse(event.payload_json);
+  } catch {
+    return null;
+  }
+}
+
+function renderAgentTraceEvent(event) {
+  const payload = parseAgentEventPayload(event) || {};
+  const summary = escapeHtml(event.summary || event.event_name || "event");
+  const kind = escapeHtml(event.event_type || "event");
+  const highlightVariant =
+    event.event_name === "file_edit_complete"
+      ? "edit"
+      : event.event_name === "file_write_complete"
+        ? "write"
+        : "";
+  const isHighlightedFileChange = Boolean(highlightVariant);
+  const highlightTitle =
+    highlightVariant === "edit"
+      ? "Edited File"
+      : highlightVariant === "write"
+        ? "Wrote File"
+        : "";
+  let details = "";
+  const filePath = typeof payload.path === "string" ? payload.path : "";
+  const normalizedFilePath = filePath
+    .replace(/^\/workspace\/group\//, "")
+    .replace(/^\/workspace\/project\//, "")
+    .replace(/^\/workspace\//, "");
+  const hasDiffStats = payload.additions || payload.deletions;
+  const collapsedDiffLines = Array.isArray(payload.patchPreview)
+    ? payload.patchPreview.slice(0, 6)
+    : [];
+  const hiddenDiffLines = Array.isArray(payload.patchPreview)
+    ? payload.patchPreview.slice(6)
+    : [];
+
+  if (collapsedDiffLines.length > 0) {
+    details += `
+      <div class="agent-trace-diff">
+        <div class="agent-trace-diff-header">
+          ${normalizedFilePath ? `<span class="agent-trace-diff-file">${escapeHtml(normalizedFilePath)}</span>` : `<span class="agent-trace-diff-file">Modified file</span>`}
+          ${hasDiffStats ? `<span class="agent-trace-diff-badge plus">+${escapeHtml(String(payload.additions || 0))}</span><span class="agent-trace-diff-badge minus">-${escapeHtml(String(payload.deletions || 0))}</span>` : ""}
+        </div>
+        ${collapsedDiffLines.map((line) => `<div class="agent-trace-diff-line ${line.startsWith("+") ? "add" : "del"}">${escapeHtml(line)}</div>`).join("")}
+        ${hiddenDiffLines.length > 0 ? `
+          <details class="agent-trace-disclosure">
+            <summary>Show ${hiddenDiffLines.length} more diff lines</summary>
+            <div class="agent-trace-disclosure-body">
+              ${hiddenDiffLines.map((line) => `<div class="agent-trace-diff-line ${line.startsWith("+") ? "add" : "del"}">${escapeHtml(line)}</div>`).join("")}
+            </div>
+          </details>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  if (Array.isArray(payload.filenames) && payload.filenames.length > 0) {
+    details += `
+      <div class="agent-trace-files">
+        ${payload.filenames.map((name) => `<span class="agent-trace-file">${escapeHtml(name)}</span>`).join("")}
+      </div>
+    `;
+  }
+
+  if (typeof payload.contentPreview === "string" && payload.contentPreview.trim()) {
+    const previewText = String(payload.contentPreview);
+    const collapsedPreview = previewText.length > 320 ? previewText.slice(0, 320) : previewText;
+    const hiddenPreview = previewText.length > 320 ? previewText.slice(320) : "";
+    details += `
+      <div class="agent-trace-preview-wrap">
+        ${normalizedFilePath ? `<div class="agent-trace-preview-header">${escapeHtml(normalizedFilePath)}</div>` : ""}
+        <pre class="agent-trace-preview">${escapeHtml(collapsedPreview)}${hiddenPreview ? "..." : ""}</pre>
+      </div>
+      ${hiddenPreview ? `
+        <details class="agent-trace-disclosure">
+          <summary>Show more matches</summary>
+          <div class="agent-trace-preview-wrap">
+            ${normalizedFilePath ? `<div class="agent-trace-preview-header">${escapeHtml(normalizedFilePath)}</div>` : ""}
+            <pre class="agent-trace-preview agent-trace-preview-expanded">${escapeHtml(previewText)}</pre>
+          </div>
+        </details>
+      ` : ""}
+    `;
+  }
+
+  if (hasDiffStats && collapsedDiffLines.length === 0) {
+    details += `<div class="agent-trace-stats">+${escapeHtml(String(payload.additions || 0))} / -${escapeHtml(String(payload.deletions || 0))}</div>`;
+  }
+
+  return `
+    <div class="agent-trace-event${isHighlightedFileChange ? ` agent-trace-event-highlight agent-trace-event-highlight-${highlightVariant}` : ""}">
+      ${highlightTitle ? `<div class="agent-trace-highlight-title">${escapeHtml(highlightTitle)}</div>` : ""}
+      <div class="agent-trace-event-head${isHighlightedFileChange ? " agent-trace-event-head-highlight" : ""}">
+        <span class="agent-trace-kind">${kind}</span>${summary}
+      </div>
+      ${details}
+    </div>
+  `;
+}
+
 function renderAgentStatus(agents) {
   agentStatusData = agents;
   if (agents.length === 0) {
@@ -1933,6 +2048,10 @@ function renderAgentStatus(agents) {
     const statusDot = agent.isIdle ? "agent-status-dot idle" : "agent-status-dot active";
     const typeLabel = agent.isTask ? "task" : "chat";
     const isStopping = stoppingAgentIds.has(agent.groupJid);
+    const trace = agentRunTraceByGroup[agent.groupJid] || null;
+    const currentAction = trace?.currentAction || "";
+    const currentStep = trace?.currentStepType || "";
+    const recentEvents = Array.isArray(trace?.recentEvents) ? trace.recentEvents.slice(-3).reverse() : [];
 
     const el = document.createElement("div");
     el.className = `agent-status-item${isStopping ? " is-stopping" : ""}`;
@@ -1956,6 +2075,13 @@ function renderAgentStatus(agents) {
         <span class="agent-status-time">${escapeHtml(lastTimeStr)}</span>
       </div>
       <div class="agent-status-content">${escapeHtml(agent.lastContent || "—")}</div>
+      ${currentAction ? `<div class="agent-trace-current">${escapeHtml(currentAction)}</div>` : ""}
+      ${currentStep ? `<div class="agent-trace-step">${escapeHtml(currentStep)}</div>` : ""}
+      ${recentEvents.length > 0 ? `
+        <div class="agent-trace-events">
+          ${recentEvents.map((event) => renderAgentTraceEvent(event)).join("")}
+        </div>
+      ` : ""}
       <div class="agent-status-meta">
         <span class="agent-status-duration">${formatDuration(elapsed)}</span>
         <span class="agent-status-type">${typeLabel}</span>
@@ -2017,9 +2143,15 @@ async function stopAgent(groupJid, btn) {
 
 async function loadAgentStatus() {
   try {
-    const res = await apiFetch("/api/agent-status");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const [statusRes, traceRes] = await Promise.all([
+      apiFetch("/api/agent-status"),
+      apiFetch("/api/agent-runs/active")
+    ]);
+    if (!statusRes.ok) throw new Error(`HTTP ${statusRes.status}`);
+    if (!traceRes.ok) throw new Error(`HTTP ${traceRes.status}`);
+    const data = await statusRes.json();
+    const traceData = await traceRes.json();
+    updateAgentRunTraces(traceData.runs || []);
     const activeIds = new Set((data.agents || []).map((agent) => agent.groupJid));
     stoppingAgentIds.forEach((groupJid) => {
       if (!activeIds.has(groupJid)) {
@@ -3853,6 +3985,12 @@ function handleWsMessage(msg) {
     case "agent_status":
       if (agentStatusPanel.classList.contains("open")) {
         renderAgentStatus(msg.agents || []);
+      }
+      break;
+    case "agent_run_trace":
+      updateAgentRunTraces(msg.runs || []);
+      if (agentStatusPanel.classList.contains("open")) {
+        renderAgentStatus(agentStatusData);
       }
       break;
     case "workbench_event":

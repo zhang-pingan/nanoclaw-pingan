@@ -166,6 +166,114 @@ export interface AgentStatusInfo {
   activeWorkflowCount: number;
 }
 
+export type AgentRunStatus =
+  | 'running'
+  | 'success'
+  | 'error'
+  | 'cancelled'
+  | 'timeout';
+
+export type AgentRunSourceType =
+  | 'message'
+  | 'scheduled_task'
+  | 'workflow_delegation'
+  | 'web_action';
+
+export interface AgentRunRecord {
+  id: string;
+  run_id: string;
+  query_id: string | null;
+  source_type: AgentRunSourceType;
+  source_ref_id: string | null;
+  chat_jid: string | null;
+  group_folder: string | null;
+  workflow_id: string | null;
+  stage_key: string | null;
+  delegation_id: string | null;
+  session_id: string | null;
+  selected_model: string | null;
+  selected_model_reason: string | null;
+  actual_model: string | null;
+  prompt_hash: string | null;
+  memory_pack_hash: string | null;
+  tools_hash: string | null;
+  mounts_hash: string | null;
+  status: AgentRunStatus;
+  current_step_id: string | null;
+  current_phase: string | null;
+  current_action: string | null;
+  failure_type: string | null;
+  failure_subtype: string | null;
+  failure_origin: string | null;
+  failure_retryable: number | null;
+  error_message: string | null;
+  output_digest: string | null;
+  output_preview: string | null;
+  first_output_at: string | null;
+  first_tool_at: string | null;
+  last_event_at: string | null;
+  started_at: string;
+  ended_at: string | null;
+  latency_ms: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentRunStepRecord {
+  id: string;
+  run_id: string;
+  step_index: number;
+  step_type: string;
+  step_name: string;
+  status: AgentRunStatus;
+  summary: string | null;
+  payload_json: string | null;
+  started_at: string;
+  ended_at: string | null;
+  latency_ms: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentRunEventRecord {
+  id: string;
+  run_id: string;
+  step_id: string | null;
+  event_index: number;
+  event_type: string;
+  event_name: string;
+  status: string | null;
+  summary: string | null;
+  payload_json: string | null;
+  started_at: string;
+  ended_at: string | null;
+  latency_ms: number | null;
+  created_at: string;
+}
+
+export interface ActiveAgentRunTrace {
+  runId: string;
+  queryId: string | null;
+  groupJid: string | null;
+  groupFolder: string | null;
+  workflowId: string | null;
+  stageKey: string | null;
+  sessionId: string | null;
+  selectedModel: string | null;
+  actualModel: string | null;
+  status: AgentRunStatus;
+  currentStepId: string | null;
+  currentStepType: string | null;
+  currentStepName: string | null;
+  currentPhase: string | null;
+  currentAction: string | null;
+  promptSummary: string | null;
+  startedAt: string;
+  firstOutputAt: string | null;
+  lastEventAt: string;
+  recentEvents: AgentRunEventRecord[];
+}
+
 export interface StopAgentResult {
   ok: boolean;
   stoppedTaskId?: string | null;

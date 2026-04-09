@@ -1,4 +1,5 @@
 import {
+  ActiveAgentRunTrace,
   AgentStatusInfo,
   Channel,
   OnInboundMessage,
@@ -12,6 +13,7 @@ export interface ChannelOpts {
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
   getAgentStatus?: () => AgentStatusInfo[];
+  getActiveAgentRunTraces?: () => ActiveAgentRunTrace[];
   stopAgent?: (groupJid: string) => Promise<StopAgentResult>;
 }
 

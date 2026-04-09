@@ -68,6 +68,15 @@ export interface ContainerOutput {
   selectedModel?: string;
   runId?: string;
   queryId?: string;
+  event?:
+    | {
+        type: string;
+        name: string;
+        status?: string;
+        summary?: string;
+        payload?: Record<string, unknown>;
+      }
+    | undefined;
 }
 
 interface VolumeMount {

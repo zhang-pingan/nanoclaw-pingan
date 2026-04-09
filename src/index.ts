@@ -40,6 +40,7 @@ import {
   ensureContainerRuntimeRunning,
   PROXY_BIND_HOST,
 } from './container-runtime.js';
+import { agentRunTraceManager } from './agent-run-trace.js';
 import {
   backfillMessageModel,
   clearMessages,
@@ -498,13 +499,68 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
   let outputSentToUser = false;
+  const runId = createExecutionId();
+  const initialQueryId = createExecutionId();
+  const promptHash = crypto.createHash('sha256').update(prompt).digest('hex');
+  const executionContext = resolveExecutionContext(group, missedMessages);
+  agentRunTraceManager.startRun({
+    runId,
+    queryId: initialQueryId,
+    sourceType: 'message',
+    sourceRefId: lastMsg.id,
+    chatJid,
+    groupFolder: group.folder,
+    workflowId: executionContext?.workflowId,
+    stageKey: executionContext?.stageKey,
+    delegationId: executionContext?.delegationId,
+    selectedModel: null,
+    selectedModelReason: null,
+    promptSummary: prompt.slice(0, 140),
+    promptHash,
+  });
+  const inputStepId = agentRunTraceManager.startStep({
+    runId,
+    stepType: 'input',
+    stepName: 'input_received',
+    summary: `Received ${missedMessages.length} pending messages`,
+    payload: {
+      messageIds: missedMessages.map((m) => m.id),
+      messageCount: missedMessages.length,
+    },
+  });
+  agentRunTraceManager.completeStep(runId, inputStepId, 'success');
+  const contextStepId = agentRunTraceManager.startStep({
+    runId,
+    stepType: 'context_build',
+    stepName: 'build_context',
+    summary: 'Built prompt and memory pack',
+    payload: {
+      promptLength: prompt.length,
+      hasMemoryPack: Boolean(memoryPack),
+    },
+  });
+  agentRunTraceManager.completeStep(runId, contextStepId, 'success');
+  const modelStepId = agentRunTraceManager.startStep({
+    runId,
+    stepType: 'model_select',
+    stepName: 'select_model',
+    summary: 'Selecting execution model',
+  });
   const modelSelection = await selectModel({
     prompt,
     isMain: isMainGroup,
   });
-  const executionContext = resolveExecutionContext(group, missedMessages);
-  const runId = createExecutionId();
-  const initialQueryId = createExecutionId();
+  agentRunTraceManager.updateRun(runId, {
+    selected_model: modelSelection.selectedModel,
+    selected_model_reason: modelSelection.reason,
+    current_action: `Using ${modelSelection.selectedModel}`,
+  });
+  agentRunTraceManager.completeStep(
+    runId,
+    modelStepId,
+    'success',
+    `Selected ${modelSelection.selectedModel}`,
+  );
   rememberPendingQueryBatch({
     runId,
     queryId: initialQueryId,
@@ -526,25 +582,109 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     'Selected model for runAgent',
   );
 
+  const executionStepId = agentRunTraceManager.startStep({
+    runId,
+    stepType: 'agent_execution',
+    stepName: 'run_agent',
+    summary: 'Starting agent execution',
+    payload: {
+      queryId: initialQueryId,
+    },
+  });
+  agentRunTraceManager.appendEvent({
+    runId,
+    stepId: executionStepId,
+    eventType: 'phase',
+    eventName: 'phase_waiting_output',
+    status: 'running',
+    summary: 'Waiting for agent output',
+  });
+  let resultDeliveryStepId: string | null = null;
+
   const output = await runAgent(
     group,
     prompt,
     chatJid,
     async (result) => {
+      if (result.newSessionId) {
+        agentRunTraceManager.updateRun(runId, {
+          session_id: result.newSessionId,
+        });
+      }
+      if (result.selectedModel) {
+        agentRunTraceManager.updateRun(runId, {
+          actual_model: result.selectedModel,
+        });
+      }
+      if (result.event) {
+        agentRunTraceManager.appendEvent({
+          runId,
+          stepId: resultDeliveryStepId || executionStepId,
+          eventType: result.event.type,
+          eventName: result.event.name,
+          status: result.event.status ?? null,
+          summary: result.event.summary ?? null,
+          payload: result.event.payload,
+        });
+      }
       // Streaming output callback — called for each agent result
       if (result.result) {
+        if (!resultDeliveryStepId) {
+          agentRunTraceManager.completeStep(
+            runId,
+            executionStepId,
+            'success',
+            'Agent execution produced output',
+          );
+          resultDeliveryStepId = agentRunTraceManager.startStep({
+            runId,
+            stepType: 'result_delivery',
+            stepName: 'deliver_result',
+            summary: 'Delivering agent response',
+          });
+        }
         const raw =
           typeof result.result === 'string'
             ? result.result
             : JSON.stringify(result.result);
         // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
         const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        agentRunTraceManager.appendEvent({
+          runId,
+          stepId: resultDeliveryStepId,
+          eventType: 'output',
+          eventName: 'assistant_output',
+          status: 'success',
+          summary: text ? `Output: ${text.slice(0, 120)}` : 'Received output chunk',
+          payload: {
+            text,
+            rawLength: raw.length,
+          },
+        });
         logger.info(
           { group: group.name },
           `Agent output: ${raw.slice(0, 200)}`,
         );
         if (text) {
+          agentRunTraceManager.appendEvent({
+            runId,
+            stepId: resultDeliveryStepId,
+            eventType: 'lifecycle',
+            eventName: 'channel_send_started',
+            status: 'running',
+            summary: `Sending response to ${channel.name}`,
+            payload: { channel: channel.name },
+          });
           await channel.sendMessage(chatJid, text);
+          agentRunTraceManager.appendEvent({
+            runId,
+            stepId: resultDeliveryStepId,
+            eventType: 'lifecycle',
+            eventName: 'channel_send_finished',
+            status: 'success',
+            summary: `Delivered response to ${channel.name}`,
+            payload: { channel: channel.name },
+          });
           outputSentToUser = true;
         }
         // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -567,13 +707,27 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           },
           'Backfilled actual model after query completion',
         );
+        agentRunTraceManager.updateRun(runId, {
+          actual_model: finalized.actualModel,
+        });
       }
 
-      if (result.status === 'success') {
+      if (result.status === 'success' && !result.event) {
         queue.notifyIdle(chatJid);
       }
 
       if (result.status === 'error') {
+        agentRunTraceManager.appendEvent({
+          runId,
+          stepId: resultDeliveryStepId || executionStepId,
+          eventType: 'error',
+          eventName: 'run_failed',
+          status: 'error',
+          summary: result.error || 'Agent execution failed',
+          payload: {
+            error: result.error || 'Agent execution failed',
+          },
+        });
         hadError = true;
       }
     },
@@ -585,6 +739,26 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+
+  if (!resultDeliveryStepId) {
+    agentRunTraceManager.completeStep(
+      runId,
+      executionStepId,
+      output === 'error' || hadError ? 'error' : 'success',
+      output === 'error' || hadError
+        ? 'Agent execution finished with error'
+        : 'Agent execution finished',
+    );
+  } else {
+    agentRunTraceManager.completeStep(
+      runId,
+      resultDeliveryStepId,
+      output === 'error' || hadError ? 'error' : 'success',
+      output === 'error' || hadError
+        ? 'Result delivery encountered an error'
+        : 'Result delivery finished',
+    );
+  }
 
   // Deferred .claude/ cleanup: safe now that the container has exited
   if (pendingSessionCleanup.has(group.folder)) {
@@ -598,6 +772,18 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   }
 
   if (output === 'error' || hadError) {
+    const errorStepId = agentRunTraceManager.startStep({
+      runId,
+      stepType: 'error',
+      stepName: 'run_error',
+      summary: 'Run failed',
+    });
+    agentRunTraceManager.completeStep(runId, errorStepId, 'error');
+    agentRunTraceManager.finishRun(runId, 'error', {
+      error_message: 'Agent execution failed',
+      failure_type: output === 'error' ? 'container_error' : 'agent_error',
+      output_preview: outputSentToUser ? 'Partial output delivered' : null,
+    });
     forgetPendingQueryBatch(initialQueryId);
     // If we already sent output to the user, don't roll back the cursor —
     // the user got their response and re-processing would send duplicates.
@@ -617,6 +803,24 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     );
     return false;
   }
+
+  const finalizeStepId = agentRunTraceManager.startStep({
+    runId,
+    stepType: 'finalize',
+    stepName: 'finalize_run',
+    summary: 'Finalizing run state',
+  });
+  agentRunTraceManager.completeStep(runId, finalizeStepId, 'success');
+  const finishStepId = agentRunTraceManager.startStep({
+    runId,
+    stepType: 'finish',
+    stepName: 'run_completed',
+    summary: 'Run completed',
+  });
+  agentRunTraceManager.completeStep(runId, finishStepId, 'success');
+  agentRunTraceManager.finishRun(runId, 'success', {
+    output_preview: outputSentToUser ? 'Output delivered to channel' : 'Completed without channel output',
+  });
 
   return true;
 }
@@ -949,6 +1153,17 @@ async function startMessageLoop(): Promise<void> {
               modelReason: pipedSelection.reason,
               channelName: channel.name,
             });
+            agentRunTraceManager.appendEvent({
+              runId,
+              eventType: 'input',
+              eventName: 'piped_message',
+              status: 'success',
+              summary: `Piped ${messagesToSend.length} messages into active run`,
+              payload: {
+                messageIds: messagesToSend.map((m) => m.id),
+                queryId,
+              },
+            });
             logger.debug(
               {
                 chatJid,
@@ -1142,10 +1357,12 @@ async function main(): Promise<void> {
     ) => void;
     registeredGroups: () => Record<string, RegisteredGroup>;
     getAgentStatus?: () => import('./types.js').AgentStatusInfo[];
+    getActiveAgentRunTraces?: () => import('./types.js').ActiveAgentRunTrace[];
     stopAgent?: (
       groupJid: string,
     ) => Promise<import('./types.js').StopAgentResult>;
     onAgentStatusChange?: () => void;
+    onAgentRunTraceChange?: () => void;
   } = {
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage
@@ -1184,6 +1401,7 @@ async function main(): Promise<void> {
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
     getAgentStatus: () => queue.getActiveAgents(),
+    getActiveAgentRunTraces: () => agentRunTraceManager.getActiveRuns(),
     stopAgent: (groupJid: string) => queue.stopAgent(groupJid),
     onAgentStatusChange: () => {
       for (const ch of channels) {
@@ -1194,11 +1412,23 @@ async function main(): Promise<void> {
         }
       }
     },
+    onAgentRunTraceChange: () => {
+      for (const ch of channels) {
+        if (ch.name === 'web' && 'broadcastAgentRunTraces' in ch) {
+          (
+            ch as typeof ch & { broadcastAgentRunTraces: () => void }
+          ).broadcastAgentRunTraces();
+        }
+      }
+    },
   };
 
   // Wire up agent status change → web channel broadcast
   queue.onStatusChange(() => {
     channelOpts.onAgentStatusChange?.();
+  });
+  agentRunTraceManager.onChange(() => {
+    channelOpts.onAgentRunTraceChange?.();
   });
 
   // Create and connect all registered channels.

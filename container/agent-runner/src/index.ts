@@ -17,7 +17,15 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
+import {
+  query,
+  HookCallback,
+  PostToolUseFailureHookInput,
+  PostToolUseHookInput,
+  PreCompactHookInput,
+  PreToolUseHookInput,
+  SyncHookJSONOutput,
+} from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
 
 interface ContainerInput {
@@ -46,6 +54,13 @@ interface ContainerOutput {
   selectedModel?: string;
   runId?: string;
   queryId?: string;
+  event?: {
+    type: string;
+    name: string;
+    status?: string;
+    summary?: string;
+    payload?: Record<string, unknown>;
+  };
 }
 
 interface SessionEntry {
@@ -128,6 +143,368 @@ function writeOutput(output: ContainerOutput): void {
   console.log(OUTPUT_START_MARKER);
   console.log(JSON.stringify(output));
   console.log(OUTPUT_END_MARKER);
+}
+
+function writeEvent(output: NonNullable<ContainerOutput['event']>, meta: {
+  status?: 'success' | 'error';
+  newSessionId?: string;
+  selectedModel?: string;
+  runId?: string;
+  queryId?: string;
+}): void {
+  writeOutput({
+    status: meta.status || 'success',
+    result: null,
+    newSessionId: meta.newSessionId,
+    selectedModel: meta.selectedModel,
+    runId: meta.runId,
+    queryId: meta.queryId,
+    event: output,
+  });
+}
+
+function okHookOutput(): SyncHookJSONOutput {
+  return { continue: true };
+}
+
+function normalizeDisplayPath(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) return 'unknown';
+  return value
+    .replace(/^\/workspace\/group\//, '')
+    .replace(/^\/workspace\/project\//, '')
+    .replace(/^\/workspace\//, '');
+}
+
+function summarizeCommand(command: unknown): string {
+  if (typeof command !== 'string' || command.trim().length === 0) return 'command';
+  const trimmed = command.trim().replace(/\s+/g, ' ');
+  return trimmed.length > 100 ? `${trimmed.slice(0, 97)}...` : trimmed;
+}
+
+function buildStructuredPatchPreview(value: unknown): string[] | undefined {
+  const limit = 40;
+  if (typeof value === 'string') {
+    const lines = value
+      .split('\n')
+      .filter((line) => /^[+-]/.test(line) && !/^\+\+\+|^---/.test(line))
+      .slice(0, limit);
+    return lines.length > 0 ? lines : undefined;
+  }
+  if (!Array.isArray(value)) return undefined;
+  const preview = value
+    .flatMap((chunk) => {
+      if (!chunk || typeof chunk !== 'object') return [];
+      const lines = (chunk as { lines?: unknown }).lines;
+      return Array.isArray(lines) ? lines.filter((line): line is string => typeof line === 'string') : [];
+    })
+    .filter((line) => /^[+-]/.test(line) && !/^\+\+\+|^---/.test(line))
+    .slice(0, limit);
+  return preview.length > 0 ? preview : undefined;
+}
+
+function buildSearchMatchPreview(response: Record<string, unknown>): {
+  contentPreview?: string;
+  filenames?: string[];
+} {
+  const contentPreview =
+    typeof response.content === 'string' && response.content.trim().length > 0
+      ? response.content.slice(0, 1600)
+      : undefined;
+  const filenames = Array.isArray(response.filenames)
+    ? response.filenames
+        .filter((value): value is string => typeof value === 'string')
+        .slice(0, 8)
+    : undefined;
+  return { contentPreview, filenames };
+}
+
+function emitToolLifecycleEvent(
+  event: NonNullable<ContainerOutput['event']>,
+  meta: {
+    newSessionId?: string;
+    selectedModel?: string;
+    runId?: string;
+    queryId?: string;
+  },
+): void {
+  writeEvent(event, {
+    newSessionId: meta.newSessionId,
+    selectedModel: meta.selectedModel,
+    runId: meta.runId,
+    queryId: meta.queryId,
+  });
+}
+
+function createPreToolHook(meta: {
+  getSessionId: () => string | undefined;
+  getSelectedModel: () => string | undefined;
+  runId?: string;
+  queryId?: string;
+}): HookCallback {
+  return async (input): Promise<SyncHookJSONOutput> => {
+    const hook = input as PreToolUseHookInput;
+    const commonMeta = {
+      newSessionId: meta.getSessionId(),
+      selectedModel: meta.getSelectedModel(),
+      runId: meta.runId,
+      queryId: meta.queryId,
+    };
+    emitToolLifecycleEvent(
+      {
+        type: 'tool',
+        name: 'tool_call',
+        status: 'running',
+        summary: `Calling ${hook.tool_name}`,
+        payload: {
+          toolName: hook.tool_name,
+          toolUseId: hook.tool_use_id,
+          input: hook.tool_input as Record<string, unknown>,
+        },
+      },
+      commonMeta,
+    );
+
+    const toolInput = (hook.tool_input || {}) as Record<string, unknown>;
+    if (hook.tool_name === 'Bash') {
+      emitToolLifecycleEvent(
+        {
+          type: 'command',
+          name: 'command_started',
+          status: 'running',
+          summary: `Running ${summarizeCommand(toolInput.command)}`,
+          payload: {
+            command: toolInput.command,
+            description: toolInput.description,
+            timeout: toolInput.timeout,
+            background: toolInput.run_in_background,
+          },
+        },
+        commonMeta,
+      );
+    } else if (hook.tool_name === 'Read') {
+      emitToolLifecycleEvent(
+        {
+          type: 'file',
+          name: 'file_read',
+          status: 'running',
+          summary: `Reading ${normalizeDisplayPath(toolInput.file_path)}`,
+          payload: {
+            path: toolInput.file_path,
+            offset: toolInput.offset,
+            limit: toolInput.limit,
+            pages: toolInput.pages,
+          },
+        },
+        commonMeta,
+      );
+    } else if (hook.tool_name === 'Write') {
+      emitToolLifecycleEvent(
+        {
+          type: 'file',
+          name: 'file_write',
+          status: 'running',
+          summary: `Writing ${normalizeDisplayPath(toolInput.file_path)}`,
+          payload: {
+            path: toolInput.file_path,
+            contentLength:
+              typeof toolInput.content === 'string' ? toolInput.content.length : undefined,
+          },
+        },
+        commonMeta,
+      );
+    } else if (hook.tool_name === 'Edit') {
+      emitToolLifecycleEvent(
+        {
+          type: 'file',
+          name: 'file_edit',
+          status: 'running',
+          summary: `Editing ${normalizeDisplayPath(toolInput.file_path)}`,
+          payload: {
+            path: toolInput.file_path,
+            replaceAll: toolInput.replace_all,
+          },
+        },
+        commonMeta,
+      );
+    } else if (hook.tool_name === 'Glob' || hook.tool_name === 'Grep') {
+      const target = hook.tool_name === 'Glob'
+        ? toolInput.pattern
+        : toolInput.pattern || toolInput.query;
+      emitToolLifecycleEvent(
+        {
+          type: 'file',
+          name: 'file_search',
+          status: 'running',
+          summary: `${hook.tool_name === 'Glob' ? 'Globbing' : 'Searching'} ${String(target || '')}`.trim(),
+          payload: {
+            toolName: hook.tool_name,
+            pattern: toolInput.pattern,
+            path: toolInput.path,
+            query: toolInput.query,
+          },
+        },
+        commonMeta,
+      );
+    }
+
+    return okHookOutput();
+  };
+}
+
+function createPostToolHook(meta: {
+  getSessionId: () => string | undefined;
+  getSelectedModel: () => string | undefined;
+  runId?: string;
+  queryId?: string;
+}): HookCallback {
+  return async (input): Promise<SyncHookJSONOutput> => {
+    const hook = input as PostToolUseHookInput;
+    const commonMeta = {
+      newSessionId: meta.getSessionId(),
+      selectedModel: meta.getSelectedModel(),
+      runId: meta.runId,
+      queryId: meta.queryId,
+    };
+    const toolInput = (hook.tool_input || {}) as Record<string, unknown>;
+    const response = (hook.tool_response || {}) as Record<string, unknown>;
+    emitToolLifecycleEvent(
+      {
+        type: 'tool',
+        name: 'tool_result',
+        status: 'success',
+        summary: `${hook.tool_name} completed`,
+        payload: {
+          toolName: hook.tool_name,
+          toolUseId: hook.tool_use_id,
+        },
+      },
+      commonMeta,
+    );
+
+    if (hook.tool_name === 'Bash') {
+      emitToolLifecycleEvent(
+        {
+          type: 'command',
+          name: 'command_finished',
+          status: 'success',
+          summary: `Finished ${summarizeCommand(toolInput.command)}`,
+          payload: {
+            command: toolInput.command,
+            interrupted: response.interrupted,
+            backgroundTaskId: response.backgroundTaskId,
+            stdoutPreview:
+              typeof response.stdout === 'string'
+                ? response.stdout.slice(0, 240)
+                : undefined,
+            stderrPreview:
+              typeof response.stderr === 'string'
+                ? response.stderr.slice(0, 240)
+                : undefined,
+          },
+        },
+        commonMeta,
+      );
+    } else if (hook.tool_name === 'Read') {
+      emitToolLifecycleEvent(
+        {
+          type: 'file',
+          name: 'file_read_complete',
+          status: 'success',
+          summary: `Read ${normalizeDisplayPath(toolInput.file_path)}`,
+          payload: {
+            path: toolInput.file_path,
+            numLines:
+              typeof response?.file === 'object' &&
+              response.file &&
+              'numLines' in (response.file as Record<string, unknown>)
+                ? (response.file as Record<string, unknown>).numLines
+                : undefined,
+          },
+        },
+        commonMeta,
+      );
+    } else if (hook.tool_name === 'Write' || hook.tool_name === 'Edit') {
+      const patchPreview =
+        buildStructuredPatchPreview(response.structuredPatch) ||
+        buildStructuredPatchPreview(response.gitDiff && (response.gitDiff as Record<string, unknown>).patch);
+      emitToolLifecycleEvent(
+        {
+          type: 'file',
+          name: hook.tool_name === 'Write' ? 'file_write_complete' : 'file_edit_complete',
+          status: 'success',
+          summary: `${hook.tool_name === 'Write' ? 'Wrote' : 'Edited'} ${normalizeDisplayPath(toolInput.file_path || response.filePath)}`,
+          payload: {
+            path: toolInput.file_path || response.filePath,
+            editKind: hook.tool_name === 'Write' ? response.type : 'edit',
+            patchPreview,
+            additions:
+              typeof response.gitDiff === 'object' && response.gitDiff
+                ? (response.gitDiff as Record<string, unknown>).additions
+                : undefined,
+            deletions:
+              typeof response.gitDiff === 'object' && response.gitDiff
+                ? (response.gitDiff as Record<string, unknown>).deletions
+                : undefined,
+          },
+        },
+        commonMeta,
+      );
+    } else if (hook.tool_name === 'Glob' || hook.tool_name === 'Grep') {
+      const { contentPreview, filenames } = buildSearchMatchPreview(response);
+      emitToolLifecycleEvent(
+        {
+          type: 'file',
+          name: 'file_search_complete',
+          status: 'success',
+          summary: `${hook.tool_name} found ${String(response.numFiles ?? response.numMatches ?? 0)} result(s)`,
+          payload: {
+            toolName: hook.tool_name,
+            numFiles: response.numFiles,
+            numMatches: response.numMatches,
+            truncated: response.truncated,
+            filenames,
+            contentPreview,
+          },
+        },
+        commonMeta,
+      );
+    }
+
+    return okHookOutput();
+  };
+}
+
+function createPostToolFailureHook(meta: {
+  getSessionId: () => string | undefined;
+  getSelectedModel: () => string | undefined;
+  runId?: string;
+  queryId?: string;
+}): HookCallback {
+  return async (input): Promise<SyncHookJSONOutput> => {
+    const hook = input as PostToolUseFailureHookInput;
+    emitToolLifecycleEvent(
+      {
+        type: hook.tool_name === 'Bash' ? 'command' : hook.tool_name === 'Read' || hook.tool_name === 'Write' || hook.tool_name === 'Edit' ? 'file' : 'tool',
+        name: hook.tool_name === 'Bash' ? 'command_failed' : 'tool_failed',
+        status: 'error',
+        summary: `${hook.tool_name} failed: ${hook.error}`,
+        payload: {
+          toolName: hook.tool_name,
+          toolUseId: hook.tool_use_id,
+          input: hook.tool_input as Record<string, unknown>,
+          error: hook.error,
+          isInterrupt: hook.is_interrupt,
+        },
+      },
+      {
+        newSessionId: meta.getSessionId(),
+        selectedModel: meta.getSelectedModel(),
+        runId: meta.runId,
+        queryId: meta.queryId,
+      },
+    );
+    return okHookOutput();
+  };
 }
 
 function log(message: string): void {
@@ -578,6 +955,30 @@ function buildQueryOptions(
     },
     hooks: {
       PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
+      PreToolUse: [{
+        hooks: [createPreToolHook({
+          getSessionId: () => overrides.sessionId,
+          getSelectedModel: () => resolvedModel,
+          runId: containerInput.runId,
+          queryId,
+        })],
+      }],
+      PostToolUse: [{
+        hooks: [createPostToolHook({
+          getSessionId: () => overrides.sessionId,
+          getSelectedModel: () => resolvedModel,
+          runId: containerInput.runId,
+          queryId,
+        })],
+      }],
+      PostToolUseFailure: [{
+        hooks: [createPostToolFailureHook({
+          getSessionId: () => overrides.sessionId,
+          getSelectedModel: () => resolvedModel,
+          runId: containerInput.runId,
+          queryId,
+        })],
+      }],
     },
     model: resolvedModel,
   };
@@ -607,11 +1008,47 @@ async function iterateQuery(
     if (message.type === 'system' && message.subtype === 'init') {
       newSessionId = message.session_id;
       log(`Session initialized: ${newSessionId}`);
+      writeEvent(
+        {
+          type: 'lifecycle',
+          name: 'sdk_init',
+          status: 'success',
+          summary: 'Claude SDK session initialized',
+          payload: {
+            sessionId: newSessionId,
+          },
+        },
+        {
+          newSessionId,
+          selectedModel: options.model,
+          runId: identifiers.runId,
+          queryId: identifiers.queryId,
+        },
+      );
     }
 
     if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
       const tn = message as { task_id: string; status: string; summary: string };
       log(`Task notification: task=${tn.task_id} status=${tn.status} summary=${tn.summary}`);
+      writeEvent(
+        {
+          type: 'task',
+          name: 'task_notification',
+          status: tn.status,
+          summary: tn.summary,
+          payload: {
+            taskId: tn.task_id,
+            status: tn.status,
+            summary: tn.summary,
+          },
+        },
+        {
+          newSessionId,
+          selectedModel: options.model,
+          runId: identifiers.runId,
+          queryId: identifiers.queryId,
+        },
+      );
     }
 
     if (message.type === 'result') {
