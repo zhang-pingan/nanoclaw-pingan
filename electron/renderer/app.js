@@ -2256,6 +2256,14 @@ function getTraceRunCollection(scope) {
   return scope === "history" ? traceMonitorHistoryRuns : traceMonitorActiveRuns;
 }
 
+function sortTraceRunsByLatest(runs) {
+  return [...runs].sort((a, b) => {
+    const aTs = parseTimestamp(a.lastEventAt || a.startedAt || a.endedAt) || 0;
+    const bTs = parseTimestamp(b.lastEventAt || b.startedAt || b.endedAt) || 0;
+    return bTs - aTs;
+  });
+}
+
 function getTraceRunListEmptyText(scope) {
   return scope === "history" ? "暂无历史 Agent Trace" : "暂无正在活动的 Agent Trace";
 }
@@ -2654,12 +2662,13 @@ async function loadTraceMonitorData(options) {
     if (!historyRes.ok) throw new Error(`HTTP ${historyRes.status}`);
     const activeData = await activeRes.json();
     const historyData = await historyRes.json();
-    traceMonitorActiveRuns = (activeData.runs || [])
+    traceMonitorActiveRuns = sortTraceRunsByLatest((activeData.runs || [])
       .map((run) => normalizeTraceRun(run, "active"))
-      .filter(Boolean);
-    traceMonitorHistoryRuns = (historyData.runs || [])
+      .filter(Boolean));
+    const activeRunIds = new Set(traceMonitorActiveRuns.map((run) => run.id));
+    traceMonitorHistoryRuns = sortTraceRunsByLatest((historyData.runs || [])
       .map((run) => normalizeTraceRun(run, "history"))
-      .filter(Boolean);
+      .filter((run) => run && !activeRunIds.has(run.id)));
     renderTraceMonitorList();
     if (force || !currentTraceRunId) {
       ensureTraceSelectionVisible(activeTraceMonitorScope);
