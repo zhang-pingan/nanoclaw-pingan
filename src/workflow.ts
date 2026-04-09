@@ -1866,32 +1866,6 @@ export function handleCardAction(action: {
   }
 }
 
-// -------------------------------------------------------
-// list_workflows with card
-// -------------------------------------------------------
-
-/** Send workflow list as a card to the main group. Returns true if card was sent. */
-export function sendWorkflowListCard(sourceJid?: string): boolean {
-  const { sendCard } = getDeps();
-  const groups = getDeps().registeredGroups();
-  const mainJid = findMainJid(groups, sourceJid);
-  if (!mainJid || !sendCard) return false;
-
-  const workflows = getAllWorkflows();
-  if (workflows.length === 0) return false;
-
-  const card = buildWorkflowListCard(workflows);
-  sendCard(mainJid, card).catch((err) => {
-    logger.error({ err }, 'Failed to send workflow list card');
-  });
-  return true;
-}
-
-/** List all active workflows (for MCP tool). */
-export function listWorkflows(): ReturnType<typeof getAllActiveWorkflows> {
-  return getAllActiveWorkflows();
-}
-
 /** Check if workflow engine is enabled. */
 export function isWorkflowEnabled(): boolean {
   return getWorkflowConfigs() !== null;

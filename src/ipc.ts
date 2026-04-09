@@ -26,9 +26,7 @@ import {
 } from './ask-user-question.js';
 import {
   getAvailableWorkflowTypes,
-  listWorkflows,
   onDelegationComplete as onWorkflowDelegationComplete,
-  sendWorkflowListCard,
 } from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
 import {
@@ -2058,52 +2056,6 @@ export async function processTaskIpc(
         logger.error({ err, sourceGroup }, 'memory_resolve_conflict failed');
         writeMemoryResult(sourceGroup, data.requestId, { error: errMsg });
       }
-      break;
-    }
-
-    case 'list_workflows': {
-      if (!isMain) {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized list_workflows attempt blocked',
-        );
-        break;
-      }
-
-      // Try to send as interactive card first (scoped to the requesting channel)
-      const listSourceJid =
-        Object.entries(registeredGroups).find(
-          ([, g]) => g.folder === sourceGroup,
-        )?.[0] || '';
-      const cardSent = sendWorkflowListCard(listSourceJid);
-
-      const workflows = listWorkflows();
-
-      if (data.requestId) {
-        const resultsDir = path.join(
-          DATA_DIR,
-          'ipc',
-          sourceGroup,
-          'workflow-results',
-        );
-        fs.mkdirSync(resultsDir, { recursive: true });
-        const responsePath = path.join(resultsDir, `${data.requestId}.json`);
-        const tempPath = `${responsePath}.tmp`;
-        if (cardSent) {
-          fs.writeFileSync(
-            tempPath,
-            JSON.stringify({ workflows, cardSent: true }),
-          );
-        } else {
-          fs.writeFileSync(tempPath, JSON.stringify({ workflows }));
-        }
-        fs.renameSync(tempPath, responsePath);
-      }
-
-      logger.info(
-        { sourceGroup, count: workflows.length, cardSent },
-        'Workflows listed via IPC',
-      );
       break;
     }
 
