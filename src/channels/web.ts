@@ -1298,12 +1298,21 @@ class WebChannel {
     res: http.ServerResponse,
   ): void {
     const limitRaw = parseInt(reqUrl.searchParams.get('limit') || '50', 10);
+    const offsetRaw = parseInt(reqUrl.searchParams.get('offset') || '0', 10);
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(limitRaw, 1), 200)
       : 50;
-    const runs = listAgentRuns(limit);
+    const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
+    const runs = listAgentRuns(limit, offset);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ runs }));
+    res.end(
+      JSON.stringify({
+        runs,
+        limit,
+        offset,
+        hasMore: runs.length === limit,
+      }),
+    );
   }
 
   private apiGetAgentRun(

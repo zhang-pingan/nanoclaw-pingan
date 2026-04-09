@@ -1398,8 +1398,8 @@ html, body {
 }
 
 .trace-monitor-sidebar {
-  width: 380px;
-  min-width: 380px;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
   border-right: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(16px);
@@ -1638,6 +1638,63 @@ html, body {
   font-size: 11px;
   color: var(--text-muted);
   flex-wrap: wrap;
+}
+
+.trace-monitor-list-footer {
+  padding: 6px 12px 0;
+}
+
+.trace-monitor-list-footer-status {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 10px 12px 14px;
+}
+
+.trace-monitor-history-skeleton {
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trace-monitor-history-skeleton-line {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(226, 232, 240, 0.95) 0%,
+    rgba(241, 245, 249, 1) 50%,
+    rgba(226, 232, 240, 0.95) 100%
+  );
+  background-size: 200% 100%;
+  animation: traceHistorySkeletonShimmer 1.15s linear infinite;
+}
+
+.trace-monitor-history-skeleton-line.title {
+  width: 48%;
+  height: 12px;
+}
+
+.trace-monitor-history-skeleton-line.summary {
+  width: 82%;
+}
+
+.trace-monitor-history-skeleton-line.meta {
+  width: 58%;
+}
+
+@keyframes traceHistorySkeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .trace-monitor-timeline {

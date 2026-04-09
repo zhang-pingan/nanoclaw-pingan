@@ -2968,10 +2968,13 @@ export function getAgentRun(runId: string): AgentRunRecord | undefined {
     | undefined;
 }
 
-export function listAgentRuns(limit: number = 50): AgentRunRecord[] {
+export function listAgentRuns(
+  limit: number = 50,
+  offset: number = 0,
+): AgentRunRecord[] {
   return db
-    .prepare('SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT ?')
-    .all(limit) as AgentRunRecord[];
+    .prepare('SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT ? OFFSET ?')
+    .all(limit, Math.max(offset, 0)) as AgentRunRecord[];
 }
 
 export function createAgentRunStep(record: AgentRunStepRecord): void {

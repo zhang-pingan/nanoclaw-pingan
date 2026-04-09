@@ -180,12 +180,17 @@ var workflowCreateOptionsCache = null;
 var workflowCreateOptionsLoading = null;
 var traceMonitorActiveRuns = [];
 var traceMonitorHistoryRuns = [];
+var traceMonitorHistoryOffset = 0;
+var traceMonitorHistoryHasMore = false;
+var traceMonitorHistoryLoading = false;
 var currentTraceRunId = "";
 var currentTraceRunRecord = null;
 var currentTraceRunSteps = [];
 var currentTraceRunEvents = [];
 var currentTraceRunScope = "active";
 var traceMonitorDetailReloadTimer = null;
+
+var TRACE_HISTORY_PAGE_SIZE = 10;
 
 // --- Command palette definitions ---
 var commands = [
@@ -2264,12 +2269,71 @@ function sortTraceRunsByLatest(runs) {
   });
 }
 
+async function loadTraceHistoryPage(options) {
+  const reset = Boolean(options && options.reset);
+  if (traceMonitorHistoryLoading) return;
+  traceMonitorHistoryLoading = true;
+  if (activePrimaryNavKey === "trace-monitor" && activeTraceMonitorScope === "history") {
+    renderTraceMonitorList();
+  }
+  try {
+    const offset = reset ? 0 : traceMonitorHistoryOffset;
+    const res = await apiFetch(`/api/agent-runs?limit=${TRACE_HISTORY_PAGE_SIZE}&offset=${offset}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const activeRunIds = new Set(traceMonitorActiveRuns.map((run) => run.id));
+    const nextRuns = (data.runs || [])
+      .map((run) => normalizeTraceRun(run, "history"))
+      .filter((run) => run && !activeRunIds.has(run.id));
+    if (reset) {
+      traceMonitorHistoryRuns = sortTraceRunsByLatest(nextRuns);
+    } else {
+      const merged = [...traceMonitorHistoryRuns];
+      const seen = new Set(merged.map((run) => run.id));
+      for (const run of nextRuns) {
+        if (!seen.has(run.id)) {
+          merged.push(run);
+          seen.add(run.id);
+        }
+      }
+      traceMonitorHistoryRuns = sortTraceRunsByLatest(merged);
+    }
+    traceMonitorHistoryOffset = offset + (data.runs || []).length;
+    traceMonitorHistoryHasMore = Boolean(data.hasMore);
+  } finally {
+    traceMonitorHistoryLoading = false;
+  }
+}
+
+async function loadMoreTraceHistory() {
+  if (traceMonitorHistoryLoading || !traceMonitorHistoryHasMore) return;
+  try {
+    await loadTraceHistoryPage({ reset: false });
+    if (activePrimaryNavKey === "trace-monitor" && activeTraceMonitorScope === "history") {
+      renderTraceMonitorList();
+    }
+  } catch (err) {
+    console.error("Failed to load more trace history:", err);
+    showToast("加载更多活动历史失败");
+  }
+}
+
 function getTraceRunListEmptyText(scope) {
   return scope === "history" ? "暂无历史 Agent Trace" : "暂无正在活动的 Agent Trace";
 }
 
 function buildTraceRunSummary(run) {
   return run.currentAction || run.currentStepName || run.currentStepType || run.promptSummary || "等待更多执行数据...";
+}
+
+function renderTraceHistoryLoadingSkeleton() {
+  return `
+    <div class="trace-monitor-history-skeleton" aria-hidden="true">
+      <div class="trace-monitor-history-skeleton-line title"></div>
+      <div class="trace-monitor-history-skeleton-line summary"></div>
+      <div class="trace-monitor-history-skeleton-line meta"></div>
+    </div>
+  `;
 }
 
 function renderTraceMonitorList() {
@@ -2304,6 +2368,23 @@ function renderTraceMonitorList() {
       loadTraceRunDetail(runId, activeTraceMonitorScope);
     });
     traceMonitorList.appendChild(item);
+  }
+  if (activeTraceMonitorScope === "history") {
+    const footer = document.createElement("div");
+    footer.className = "trace-monitor-list-footer";
+    if (traceMonitorHistoryLoading) {
+      footer.innerHTML = renderTraceHistoryLoadingSkeleton();
+    } else {
+      const status = document.createElement("div");
+      status.className = "trace-monitor-list-footer-status";
+      status.textContent = traceMonitorHistoryHasMore
+        ? "继续下滑加载更多"
+        : traceMonitorHistoryRuns.length
+          ? "已加载全部"
+          : "暂无更多";
+      footer.appendChild(status);
+    }
+    traceMonitorList.appendChild(footer);
   }
 }
 
@@ -2633,7 +2714,26 @@ function setTraceMonitorScope(scope) {
   traceMonitorScopeBtns.forEach((btn) => {
     btn.classList.toggle("active", btn.getAttribute("data-trace-scope") === activeTraceMonitorScope);
   });
+  const runs = getTraceRunCollection(activeTraceMonitorScope);
+  const hasSelected = runs.some((run) => run.id === currentTraceRunId);
+  if (!hasSelected) {
+    currentTraceRunId = "";
+    currentTraceRunRecord = null;
+    currentTraceRunSteps = [];
+    currentTraceRunEvents = [];
+  }
+  renderTraceMonitorList();
   ensureTraceSelectionVisible(activeTraceMonitorScope);
+  if (activeTraceMonitorScope === "history" && traceMonitorHistoryRuns.length === 0 && !traceMonitorHistoryLoading) {
+    loadTraceHistoryPage({ reset: true })
+      .then(() => {
+        renderTraceMonitorList();
+        ensureTraceSelectionVisible("history");
+      })
+      .catch((err) => {
+        console.error("Failed to load trace history:", err);
+      });
+  }
 }
 
 function scheduleTraceDetailReload() {
@@ -2654,21 +2754,19 @@ function scheduleTraceDetailReload() {
 async function loadTraceMonitorData(options) {
   const force = Boolean(options && options.force);
   try {
-    const [activeRes, historyRes] = await Promise.all([
-      apiFetch("/api/agent-runs/active"),
-      apiFetch("/api/agent-runs?limit=80"),
-    ]);
+    const activeRes = await apiFetch("/api/agent-runs/active");
     if (!activeRes.ok) throw new Error(`HTTP ${activeRes.status}`);
-    if (!historyRes.ok) throw new Error(`HTTP ${historyRes.status}`);
     const activeData = await activeRes.json();
-    const historyData = await historyRes.json();
     traceMonitorActiveRuns = sortTraceRunsByLatest((activeData.runs || [])
       .map((run) => normalizeTraceRun(run, "active"))
       .filter(Boolean));
-    const activeRunIds = new Set(traceMonitorActiveRuns.map((run) => run.id));
-    traceMonitorHistoryRuns = sortTraceRunsByLatest((historyData.runs || [])
-      .map((run) => normalizeTraceRun(run, "history"))
-      .filter((run) => run && !activeRunIds.has(run.id)));
+    if (force || traceMonitorHistoryRuns.length === 0) {
+      await loadTraceHistoryPage({ reset: true });
+    } else {
+      traceMonitorHistoryRuns = traceMonitorHistoryRuns.filter(
+        (run) => !traceMonitorActiveRuns.some((activeRun) => activeRun.id === run.id),
+      );
+    }
     renderTraceMonitorList();
     if (force || !currentTraceRunId) {
       ensureTraceSelectionVisible(activeTraceMonitorScope);
@@ -5404,6 +5502,18 @@ if (memoryCreateBtn) {
 if (traceMonitorRefreshBtn) {
   traceMonitorRefreshBtn.addEventListener("click", () => {
     loadTraceMonitorData({ force: true });
+  });
+}
+if (traceMonitorList) {
+  traceMonitorList.addEventListener("scroll", () => {
+    if (activePrimaryNavKey !== "trace-monitor" || activeTraceMonitorScope !== "history") return;
+    if (traceMonitorHistoryLoading || !traceMonitorHistoryHasMore) return;
+    const threshold = 80;
+    const distanceToBottom =
+      traceMonitorList.scrollHeight - traceMonitorList.scrollTop - traceMonitorList.clientHeight;
+    if (distanceToBottom <= threshold) {
+      loadMoreTraceHistory();
+    }
   });
 }
 traceMonitorScopeBtns.forEach((btn) => {
