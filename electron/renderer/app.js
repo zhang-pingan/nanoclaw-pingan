@@ -21,6 +21,7 @@ var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
 var workbenchScreen = document.getElementById("workbench-screen");
 var memoryManagementScreen = document.getElementById("memory-management-screen");
+var traceMonitorScreen = document.getElementById("trace-monitor-screen");
 var memoryGroupsList = document.getElementById("memory-groups-list");
 var memoryGroupTitle = document.getElementById("memory-group-title");
 var memoryGroupFolder = document.getElementById("memory-group-folder");
@@ -79,6 +80,15 @@ var openWorkflowsBtn = document.getElementById("open-workflows");
 var closeWorkflowsBtn = document.getElementById("close-workflows");
 var refreshWorkflowsBtn = document.getElementById("refresh-workflows");
 var deleteAllWorkflowsBtn = document.getElementById("delete-all-workflows");
+var traceMonitorList = document.getElementById("trace-monitor-list");
+var traceMonitorRefreshBtn = document.getElementById("trace-monitor-refresh-btn");
+var traceMonitorScopeBtns = Array.from(document.querySelectorAll(".trace-monitor-scope-btn"));
+var traceMonitorDetailEmpty = document.getElementById("trace-monitor-detail-empty");
+var traceMonitorDetail = document.getElementById("trace-monitor-detail");
+var traceMonitorTitle = document.getElementById("trace-monitor-title");
+var traceMonitorMeta = document.getElementById("trace-monitor-meta");
+var traceMonitorSummary = document.getElementById("trace-monitor-summary");
+var traceMonitorTimeline = document.getElementById("trace-monitor-timeline");
 var workbenchSidebar = document.getElementById("workbench-sidebar");
 var workbenchSidebarCollapse = document.getElementById("workbench-sidebar-collapse");
 var workbenchTaskList = document.getElementById("workbench-task-list");
@@ -133,6 +143,7 @@ var agentStatusInterval = null;
 var agentStatusData = [];
 var agentRunTraceByGroup = {};
 var activePrimaryNavKey = "agent-groups";
+var activeTraceMonitorScope = "active";
 var activeMemoryGroupJid = "";
 var memoryEntries = [];
 var memoryQueryText = "";
@@ -167,6 +178,14 @@ var commandCandidates = [];
 var commandInsertPos = null;
 var workflowCreateOptionsCache = null;
 var workflowCreateOptionsLoading = null;
+var traceMonitorActiveRuns = [];
+var traceMonitorHistoryRuns = [];
+var currentTraceRunId = "";
+var currentTraceRunRecord = null;
+var currentTraceRunSteps = [];
+var currentTraceRunEvents = [];
+var currentTraceRunScope = "active";
+var traceMonitorDetailReloadTimer = null;
 
 // --- Command palette definitions ---
 var commands = [
@@ -1026,6 +1045,7 @@ function setPrimaryNav(navKey) {
   const showWorkbench = navKey === "workbench";
   const showWorkspace = navKey === "agent-groups";
   const showMemoryManagement = navKey === "memory-management";
+  const showTraceMonitor = navKey === "trace-monitor";
   if (workbenchScreen) {
     workbenchScreen.classList.toggle("active", showWorkbench);
   }
@@ -1035,6 +1055,9 @@ function setPrimaryNav(navKey) {
   if (memoryManagementScreen) {
     memoryManagementScreen.classList.toggle("active", showMemoryManagement);
   }
+  if (traceMonitorScreen) {
+    traceMonitorScreen.classList.toggle("active", showTraceMonitor);
+  }
   if (showMemoryManagement) {
     renderDoctorPanel();
     renderMemoryList();
@@ -1042,6 +1065,9 @@ function setPrimaryNav(navKey) {
   }
   if (showWorkbench) {
     loadWorkbenchTasks();
+  }
+  if (showTraceMonitor) {
+    loadTraceMonitorData({ force: false });
   }
 }
 
@@ -2162,6 +2188,495 @@ async function loadAgentStatus() {
   } catch (err) {
     console.error("Failed to load agent status:", err);
     agentStatusList.innerHTML = `<div class="agent-status-empty">Failed to load</div>`;
+  }
+}
+
+function formatRelativeTime(ts) {
+  const ms = parseTimestamp(ts);
+  if (!Number.isFinite(ms)) return "--";
+  const delta = Date.now() - ms;
+  const abs = Math.abs(delta);
+  if (abs < 60 * 1000) return "刚刚";
+  if (abs < 60 * 60 * 1000) return `${Math.round(abs / (60 * 1000))} 分钟前`;
+  if (abs < 24 * 60 * 60 * 1000) return `${Math.round(abs / (60 * 60 * 1000))} 小时前`;
+  return `${Math.round(abs / (24 * 60 * 60 * 1000))} 天前`;
+}
+
+function getGroupDisplayNameByJid(groupJid) {
+  if (!groupJid) return "未关联群组";
+  const group = groups.find((item) => item.jid === groupJid);
+  return group?.name || groupJid;
+}
+
+function normalizeTraceRun(run, scope) {
+  if (!run) return null;
+  if (scope === "active") {
+    return {
+      id: run.runId,
+      scope,
+      groupJid: run.groupJid || null,
+      groupFolder: run.groupFolder || null,
+      workflowId: run.workflowId || null,
+      stageKey: run.stageKey || null,
+      selectedModel: run.selectedModel || null,
+      actualModel: run.actualModel || null,
+      status: run.status || "running",
+      currentAction: run.currentAction || null,
+      currentStepType: run.currentStepType || null,
+      currentStepName: run.currentStepName || null,
+      promptSummary: run.promptSummary || null,
+      startedAt: run.startedAt || null,
+      lastEventAt: run.lastEventAt || null,
+      endedAt: null,
+      latencyMs: null,
+    };
+  }
+  return {
+    id: run.run_id || run.id,
+    scope,
+    groupJid: run.chat_jid || null,
+    groupFolder: run.group_folder || null,
+    workflowId: run.workflow_id || null,
+    stageKey: run.stage_key || null,
+    selectedModel: run.selected_model || null,
+    actualModel: run.actual_model || null,
+    status: run.status || "idle",
+    currentAction: run.current_action || null,
+    currentStepType: null,
+    currentStepName: null,
+    promptSummary: run.output_preview || null,
+    startedAt: run.started_at || null,
+    lastEventAt: run.last_event_at || null,
+    endedAt: run.ended_at || null,
+    latencyMs: run.latency_ms || null,
+  };
+}
+
+function getTraceRunCollection(scope) {
+  return scope === "history" ? traceMonitorHistoryRuns : traceMonitorActiveRuns;
+}
+
+function getTraceRunListEmptyText(scope) {
+  return scope === "history" ? "暂无历史 Agent Trace" : "暂无正在活动的 Agent Trace";
+}
+
+function buildTraceRunSummary(run) {
+  return run.currentAction || run.currentStepName || run.currentStepType || run.promptSummary || "等待更多执行数据...";
+}
+
+function renderTraceMonitorList() {
+  if (!traceMonitorList) return;
+  const runs = getTraceRunCollection(activeTraceMonitorScope);
+  if (!runs.length) {
+    traceMonitorList.innerHTML = `<div class="trace-monitor-list-empty">${getTraceRunListEmptyText(activeTraceMonitorScope)}</div>`;
+    return;
+  }
+  traceMonitorList.innerHTML = "";
+  for (const run of runs) {
+    const runId = String(run.id || "");
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `trace-monitor-list-item${runId === currentTraceRunId ? " active" : ""}`;
+    const statusClass = String(run.status || "idle").toLowerCase();
+    const primaryTime = run.startedAt ? formatDateTime(run.startedAt) : "--";
+    const secondaryTime = run.lastEventAt ? formatRelativeTime(run.lastEventAt) : "--";
+    item.innerHTML = `
+      <div class="trace-monitor-list-head">
+        <div class="trace-monitor-list-title">${escapeHtml(getGroupDisplayNameByJid(run.groupJid))}</div>
+        <span class="trace-monitor-status ${escapeHtml(statusClass)}">${escapeHtml(run.status || "unknown")}</span>
+      </div>
+      <div class="trace-monitor-list-summary">${escapeHtml(buildTraceRunSummary(run))}</div>
+      <div class="trace-monitor-list-meta">
+        <span>${escapeHtml(runId.slice(0, 8))}...</span>
+        <span>${escapeHtml(primaryTime)}</span>
+        <span>${escapeHtml(secondaryTime)}</span>
+      </div>
+    `;
+    item.addEventListener("click", () => {
+      loadTraceRunDetail(runId, activeTraceMonitorScope);
+    });
+    traceMonitorList.appendChild(item);
+  }
+}
+
+function renderTraceMonitorDetailEmpty() {
+  currentTraceRunRecord = null;
+  currentTraceRunSteps = [];
+  currentTraceRunEvents = [];
+  if (traceMonitorDetail) traceMonitorDetail.classList.add("hidden");
+  if (traceMonitorDetailEmpty) traceMonitorDetailEmpty.classList.remove("hidden");
+}
+
+function renderTraceSummaryPills(run) {
+  const pills = [];
+  pills.push(`<span class="trace-monitor-pill"><strong>Status</strong>${escapeHtml(run.status || "--")}</span>`);
+  if (run.started_at) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Started</strong>${escapeHtml(formatDateTime(run.started_at))}</span>`);
+  }
+  if (run.ended_at) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Ended</strong>${escapeHtml(formatDateTime(run.ended_at))}</span>`);
+  }
+  if (run.latency_ms || run.latency_ms === 0) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Duration</strong>${escapeHtml(formatDuration(run.latency_ms))}</span>`);
+  }
+  if (run.selected_model) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Selected</strong>${escapeHtml(run.selected_model)}</span>`);
+  }
+  if (run.actual_model) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Actual</strong>${escapeHtml(run.actual_model)}</span>`);
+  }
+  if (run.workflow_id) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Workflow</strong>${escapeHtml(run.workflow_id)}</span>`);
+  }
+  if (run.stage_key) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Stage</strong>${escapeHtml(run.stage_key)}</span>`);
+  }
+  if (run.group_folder) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Folder</strong>${escapeHtml(run.group_folder)}</span>`);
+  }
+  return pills.join("");
+}
+
+function renderTraceMetaPills(run) {
+  const pills = [];
+  pills.push(`<span class="trace-monitor-pill"><strong>Run</strong>${escapeHtml(run.run_id || run.id)}</span>`);
+  pills.push(`<span class="trace-monitor-pill"><strong>Source</strong>${escapeHtml(run.source_type || "--")}</span>`);
+  if (run.chat_jid) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Group</strong>${escapeHtml(getGroupDisplayNameByJid(run.chat_jid))}</span>`);
+  }
+  if (run.current_action) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Action</strong>${escapeHtml(run.current_action)}</span>`);
+  }
+  if (run.error_message) {
+    pills.push(`<span class="trace-monitor-pill"><strong>Error</strong>${escapeHtml(run.error_message)}</span>`);
+  }
+  return pills.join("");
+}
+
+function stringifyTracePayload(payload) {
+  if (!payload) return "";
+  try {
+    return JSON.stringify(payload, null, 2);
+  } catch {
+    return String(payload);
+  }
+}
+
+function classifyTraceTimelineItem(item) {
+  const status = String(item?.status || "").toLowerCase();
+  const stepType = String(item?.step_type || "").toLowerCase();
+  const eventType = String(item?.event_type || "").toLowerCase();
+  const eventName = String(item?.event_name || "").toLowerCase();
+  const payload = "event_type" in item ? parseAgentEventPayload(item) || {} : parseAgentEventPayload({ payload_json: item.payload_json }) || {};
+  const summaryText = String(item?.summary || "").toLowerCase();
+
+  const isError =
+    status === "error" ||
+    status === "failed" ||
+    stepType === "error" ||
+    eventType === "error" ||
+    eventName.includes("error") ||
+    eventName.includes("failed") ||
+    summaryText.includes("error") ||
+    summaryText.includes("failed");
+  if (isError) {
+    return {
+      key: "error",
+      label: "错误事件",
+      className: "error",
+      payload,
+    };
+  }
+
+  const isFileChange =
+    eventName.startsWith("file_") ||
+    Object.prototype.hasOwnProperty.call(payload, "patchPreview") ||
+    Object.prototype.hasOwnProperty.call(payload, "contentPreview") ||
+    Object.prototype.hasOwnProperty.call(payload, "additions") ||
+    Object.prototype.hasOwnProperty.call(payload, "deletions") ||
+    (typeof payload.path === "string" && payload.path.length > 0);
+  if (isFileChange) {
+    return {
+      key: "file",
+      label: "文件改动",
+      className: "file",
+      payload,
+    };
+  }
+
+  const isToolCall =
+    stepType === "tool" ||
+    eventType === "tool" ||
+    eventName.includes("tool") ||
+    eventName.includes("search") ||
+    eventName.includes("grep") ||
+    eventName.includes("apply_patch") ||
+    eventName.includes("write_file") ||
+    eventName.includes("edit_file") ||
+    eventName.includes("exec") ||
+    eventName.includes("command");
+  if (isToolCall) {
+    return {
+      key: "tool",
+      label: "工具调用",
+      className: "tool",
+      payload,
+    };
+  }
+
+  return {
+    key: "general",
+    label: "",
+    className: "general",
+    payload,
+  };
+}
+
+function renderTraceHighlightSummary(items) {
+  const counts = { file: 0, tool: 0, error: 0 };
+  for (const item of items) {
+    if (item.category && counts[item.category.key] !== undefined) {
+      counts[item.category.key] += 1;
+    }
+  }
+  return `
+    <div class="trace-monitor-highlight-strip">
+      <button type="button" class="trace-monitor-highlight-card file" data-trace-jump="file">
+        <span class="trace-monitor-highlight-label">文件改动</span>
+        <strong>${escapeHtml(String(counts.file))}</strong>
+      </button>
+      <button type="button" class="trace-monitor-highlight-card tool" data-trace-jump="tool">
+        <span class="trace-monitor-highlight-label">工具调用</span>
+        <strong>${escapeHtml(String(counts.tool))}</strong>
+      </button>
+      <button type="button" class="trace-monitor-highlight-card error" data-trace-jump="error">
+        <span class="trace-monitor-highlight-label">错误事件</span>
+        <strong>${escapeHtml(String(counts.error))}</strong>
+      </button>
+    </div>
+  `;
+}
+
+function bindTraceHighlightCardJumps() {
+  if (!traceMonitorTimeline) return;
+  const cards = traceMonitorTimeline.querySelectorAll("[data-trace-jump]");
+  cards.forEach((card) => {
+    card.addEventListener("click", () => {
+      const category = card.getAttribute("data-trace-jump");
+      if (!category) return;
+      const target = traceMonitorTimeline.querySelector(`.trace-monitor-timeline-item-${CSS.escape(category)}`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+}
+
+function renderTraceTimeline() {
+  if (!traceMonitorTimeline || !currentTraceRunRecord) return;
+  const timelineItems = [];
+  for (const step of currentTraceRunSteps) {
+    const category = classifyTraceTimelineItem(step);
+    timelineItems.push({
+      kind: "step",
+      sortAt: parseTimestamp(step.started_at) || 0,
+      category,
+      html: renderTraceStepTimelineItem(step, category),
+    });
+  }
+  for (const event of currentTraceRunEvents) {
+    const category = classifyTraceTimelineItem(event);
+    timelineItems.push({
+      kind: "event",
+      sortAt: parseTimestamp(event.created_at || event.started_at) || 0,
+      category,
+      html: renderTraceEventTimelineItem(event, category),
+    });
+  }
+  timelineItems.sort((a, b) => a.sortAt - b.sortAt);
+  if (!timelineItems.length) {
+    traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">当前 Trace 还没有可展示的时间线数据</div>`;
+    return;
+  }
+  traceMonitorTimeline.innerHTML = renderTraceHighlightSummary(timelineItems) + timelineItems.map((item) => item.html).join("");
+  bindTraceHighlightCardJumps();
+}
+
+function renderTraceStepTimelineItem(step, category) {
+  const payload = category?.payload || parseAgentEventPayload({ payload_json: step.payload_json }) || null;
+  const payloadBlock = payload ? `<pre class="trace-monitor-json">${escapeHtml(stringifyTracePayload(payload))}</pre>` : "";
+  return `
+    <div class="trace-monitor-timeline-item step trace-monitor-timeline-item-${escapeHtml(category.className)}">
+      <span class="trace-monitor-timeline-dot"></span>
+      <div class="trace-monitor-timeline-card">
+        <div class="trace-monitor-timeline-head">
+          <div class="trace-monitor-timeline-title">
+            <span class="trace-monitor-timeline-kind">Step</span>
+            <strong>${escapeHtml(step.step_name || step.step_type || "Step")}</strong>
+            ${category.label ? `<span class="trace-monitor-category-badge ${escapeHtml(category.className)}">${escapeHtml(category.label)}</span>` : ""}
+            <span class="trace-monitor-status ${escapeHtml(String(step.status || "idle").toLowerCase())}">${escapeHtml(step.status || "--")}</span>
+          </div>
+          <div class="trace-monitor-timeline-time">
+            <div>${escapeHtml(formatDateTime(step.started_at))}</div>
+            <div>${escapeHtml(step.latency_ms || step.latency_ms === 0 ? formatDuration(step.latency_ms) : "--")}</div>
+          </div>
+        </div>
+        ${step.summary ? `<div class="trace-monitor-timeline-summary">${escapeHtml(step.summary)}</div>` : ""}
+        ${payloadBlock}
+      </div>
+    </div>
+  `;
+}
+
+function renderTraceEventTimelineItem(event, category) {
+  const payload = category?.payload || parseAgentEventPayload(event) || null;
+  const payloadBlock = payload ? `<pre class="trace-monitor-json">${escapeHtml(stringifyTracePayload(payload))}</pre>` : "";
+  return `
+    <div class="trace-monitor-timeline-item event trace-monitor-timeline-item-${escapeHtml(category.className)}">
+      <span class="trace-monitor-timeline-dot"></span>
+      <div class="trace-monitor-timeline-card">
+        <div class="trace-monitor-timeline-head">
+          <div class="trace-monitor-timeline-title">
+            <span class="trace-monitor-timeline-kind">${escapeHtml(event.event_type || "event")}</span>
+            <strong>${escapeHtml(event.summary || event.event_name || "Event")}</strong>
+            ${category.label ? `<span class="trace-monitor-category-badge ${escapeHtml(category.className)}">${escapeHtml(category.label)}</span>` : ""}
+            ${event.status ? `<span class="trace-monitor-status ${escapeHtml(String(event.status).toLowerCase())}">${escapeHtml(event.status)}</span>` : ""}
+          </div>
+          <div class="trace-monitor-timeline-time">
+            <div>${escapeHtml(formatDateTime(event.created_at || event.started_at))}</div>
+            <div>${escapeHtml(event.latency_ms || event.latency_ms === 0 ? formatDuration(event.latency_ms) : "--")}</div>
+          </div>
+        </div>
+        ${renderAgentTraceEvent(event)}
+        ${payloadBlock}
+      </div>
+    </div>
+  `;
+}
+
+function renderTraceRunDetail() {
+  if (!currentTraceRunRecord) {
+    renderTraceMonitorDetailEmpty();
+    return;
+  }
+  if (traceMonitorDetail) traceMonitorDetail.classList.remove("hidden");
+  if (traceMonitorDetailEmpty) traceMonitorDetailEmpty.classList.add("hidden");
+  if (traceMonitorTitle) {
+    traceMonitorTitle.textContent = getGroupDisplayNameByJid(currentTraceRunRecord.chat_jid);
+  }
+  if (traceMonitorMeta) {
+    traceMonitorMeta.innerHTML = renderTraceMetaPills(currentTraceRunRecord);
+  }
+  if (traceMonitorSummary) {
+    traceMonitorSummary.innerHTML = renderTraceSummaryPills(currentTraceRunRecord);
+  }
+  renderTraceTimeline();
+}
+
+async function loadTraceRunDetail(runId, scope) {
+  currentTraceRunId = runId;
+  currentTraceRunScope = scope || activeTraceMonitorScope;
+  renderTraceMonitorList();
+  if (traceMonitorTimeline) {
+    traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">正在加载 Trace 详情...</div>`;
+  }
+  if (traceMonitorDetail) traceMonitorDetail.classList.remove("hidden");
+  if (traceMonitorDetailEmpty) traceMonitorDetailEmpty.classList.add("hidden");
+  try {
+    const [runRes, stepsRes, eventsRes] = await Promise.all([
+      apiFetch(`/api/agent-runs/${encodeURIComponent(runId)}`),
+      apiFetch(`/api/agent-runs/${encodeURIComponent(runId)}/steps`),
+      apiFetch(`/api/agent-runs/${encodeURIComponent(runId)}/events`),
+    ]);
+    if (!runRes.ok) throw new Error(`HTTP ${runRes.status}`);
+    if (!stepsRes.ok) throw new Error(`HTTP ${stepsRes.status}`);
+    if (!eventsRes.ok) throw new Error(`HTTP ${eventsRes.status}`);
+    const runData = await runRes.json();
+    const stepsData = await stepsRes.json();
+    const eventsData = await eventsRes.json();
+    currentTraceRunRecord = runData.run || null;
+    currentTraceRunSteps = Array.isArray(stepsData.steps) ? stepsData.steps : [];
+    currentTraceRunEvents = Array.isArray(eventsData.events) ? eventsData.events : [];
+    renderTraceRunDetail();
+  } catch (err) {
+    console.error("Failed to load trace detail:", err);
+    if (traceMonitorTimeline) {
+      traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">Trace 详情加载失败</div>`;
+    }
+  }
+}
+
+function ensureTraceSelectionVisible(scope) {
+  const runs = getTraceRunCollection(scope);
+  if (!runs.length) {
+    currentTraceRunId = "";
+    renderTraceMonitorDetailEmpty();
+    return;
+  }
+  const hasSelected = runs.some((run) => run.id === currentTraceRunId);
+  if (!hasSelected) {
+    loadTraceRunDetail(runs[0].id, scope);
+    return;
+  }
+  renderTraceMonitorList();
+}
+
+function setTraceMonitorScope(scope) {
+  activeTraceMonitorScope = scope === "history" ? "history" : "active";
+  traceMonitorScopeBtns.forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-trace-scope") === activeTraceMonitorScope);
+  });
+  ensureTraceSelectionVisible(activeTraceMonitorScope);
+}
+
+function scheduleTraceDetailReload() {
+  if (activePrimaryNavKey !== "trace-monitor") return;
+  if (activeTraceMonitorScope !== "active") return;
+  if (!currentTraceRunId) return;
+  const isActiveSelected = traceMonitorActiveRuns.some((run) => run.id === currentTraceRunId);
+  if (!isActiveSelected) return;
+  if (traceMonitorDetailReloadTimer) {
+    clearTimeout(traceMonitorDetailReloadTimer);
+  }
+  traceMonitorDetailReloadTimer = setTimeout(() => {
+    traceMonitorDetailReloadTimer = null;
+    loadTraceRunDetail(currentTraceRunId, "active");
+  }, 350);
+}
+
+async function loadTraceMonitorData(options) {
+  const force = Boolean(options && options.force);
+  try {
+    const [activeRes, historyRes] = await Promise.all([
+      apiFetch("/api/agent-runs/active"),
+      apiFetch("/api/agent-runs?limit=80"),
+    ]);
+    if (!activeRes.ok) throw new Error(`HTTP ${activeRes.status}`);
+    if (!historyRes.ok) throw new Error(`HTTP ${historyRes.status}`);
+    const activeData = await activeRes.json();
+    const historyData = await historyRes.json();
+    traceMonitorActiveRuns = (activeData.runs || [])
+      .map((run) => normalizeTraceRun(run, "active"))
+      .filter(Boolean);
+    traceMonitorHistoryRuns = (historyData.runs || [])
+      .map((run) => normalizeTraceRun(run, "history"))
+      .filter(Boolean);
+    renderTraceMonitorList();
+    if (force || !currentTraceRunId) {
+      ensureTraceSelectionVisible(activeTraceMonitorScope);
+      return;
+    }
+    const runs = getTraceRunCollection(activeTraceMonitorScope);
+    if (runs.some((run) => run.id === currentTraceRunId)) {
+      loadTraceRunDetail(currentTraceRunId, activeTraceMonitorScope);
+    } else {
+      ensureTraceSelectionVisible(activeTraceMonitorScope);
+    }
+  } catch (err) {
+    console.error("Failed to load trace monitor:", err);
+    if (traceMonitorList) {
+      traceMonitorList.innerHTML = `<div class="trace-monitor-list-empty">Trace 列表加载失败</div>`;
+    }
+    renderTraceMonitorDetailEmpty();
   }
 }
 // --- Workflows panel ---
@@ -3888,6 +4403,12 @@ function handleWsMessage(msg) {
     case "groups":
       groups = msg.groups || [];
       renderGroups();
+      if (activePrimaryNavKey === "trace-monitor") {
+        renderTraceMonitorList();
+        if (currentTraceRunRecord) {
+          renderTraceRunDetail();
+        }
+      }
       break;
     case "message": {
       const incoming = {
@@ -3989,8 +4510,17 @@ function handleWsMessage(msg) {
       break;
     case "agent_run_trace":
       updateAgentRunTraces(msg.runs || []);
+      traceMonitorActiveRuns = (msg.runs || [])
+        .map((run) => normalizeTraceRun(run, "active"))
+        .filter(Boolean);
       if (agentStatusPanel.classList.contains("open")) {
         renderAgentStatus(agentStatusData);
+      }
+      if (activePrimaryNavKey === "trace-monitor") {
+        if (activeTraceMonitorScope === "active") {
+          renderTraceMonitorList();
+        }
+        scheduleTraceDetailReload();
       }
       break;
     case "workbench_event":
@@ -4862,6 +5392,17 @@ if (memoryCreateBtn) {
     openCreateMemoryEditor();
   });
 }
+if (traceMonitorRefreshBtn) {
+  traceMonitorRefreshBtn.addEventListener("click", () => {
+    loadTraceMonitorData({ force: true });
+  });
+}
+traceMonitorScopeBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const scope = btn.getAttribute("data-trace-scope") || "active";
+    setTraceMonitorScope(scope);
+  });
+});
 if (memoryRefreshBtn) {
   memoryRefreshBtn.addEventListener("click", () => {
     loadMemories(memorySearchInput?.value || "");

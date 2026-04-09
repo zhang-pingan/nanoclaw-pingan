@@ -44,6 +44,10 @@
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">记忆管理</span>
           </button>
+          <button class="primary-nav-item" data-nav-key="trace-monitor">
+            <span class="primary-nav-dot"></span>
+            <span class="primary-nav-label">Trace监控</span>
+          </button>
         </div>
         <div id="primary-sidebar-tools" class="primary-sidebar-tools">
           <button id="open-schedulers" class="section-header schedulers-btn">
@@ -491,6 +495,53 @@
             </div>
             <div id="memory-list" class="memory-list"></div>
             <div id="memory-empty" class="memory-empty hidden">暂无记忆数据</div>
+          </div>
+        </main>
+      </section>
+
+      <section id="trace-monitor-screen">
+        <aside class="trace-monitor-sidebar">
+          <div class="trace-monitor-sidebar-header">
+            <div>
+              <div class="trace-monitor-kicker">Trace 监控</div>
+              <h2>Agent Trace</h2>
+            </div>
+            <button id="trace-monitor-refresh-btn" class="icon-btn" title="刷新 Trace">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="trace-monitor-scope-tabs">
+            <button type="button" class="trace-monitor-scope-btn active" data-trace-scope="active">活跃agent</button>
+            <button type="button" class="trace-monitor-scope-btn" data-trace-scope="history">agent活动历史</button>
+          </div>
+          <div id="trace-monitor-list" class="trace-monitor-list"></div>
+        </aside>
+
+        <main class="trace-monitor-main">
+          <div id="trace-monitor-detail-empty" class="trace-monitor-detail-empty">
+            <img src="/assets/doraemon-joy.png" alt="Doraemon mascot" />
+            <h3>Trace 监控</h3>
+            <p>左侧选择一个 Agent Trace，按完整时间线查看步骤、事件和输出细节。</p>
+          </div>
+
+          <div id="trace-monitor-detail" class="trace-monitor-detail hidden">
+            <div class="trace-monitor-detail-header">
+              <div class="trace-monitor-detail-heading">
+                <div class="trace-monitor-kicker">Trace 详情</div>
+                <h2 id="trace-monitor-title">Agent Trace</h2>
+                <div id="trace-monitor-meta" class="trace-monitor-meta"></div>
+              </div>
+              <div id="trace-monitor-summary" class="trace-monitor-summary"></div>
+            </div>
+
+            <section class="trace-monitor-panel">
+              <div class="trace-monitor-panel-title">完整时间线</div>
+              <div id="trace-monitor-timeline" class="trace-monitor-timeline"></div>
+            </section>
           </div>
         </main>
       </section>
