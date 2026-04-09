@@ -1792,7 +1792,11 @@ class WebChannel {
       res.end(JSON.stringify({ error: 'Invalid JSON body' }));
       return;
     }
-    const data = body as { task_id?: string; subtask_id?: string };
+    const data = body as {
+      task_id?: string;
+      subtask_id?: string;
+      retry_note?: string;
+    };
     if (!data.task_id || !data.subtask_id) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'task_id and subtask_id required' }));
@@ -1801,6 +1805,7 @@ class WebChannel {
     const result = retryWorkbenchSubtask({
       taskId: data.task_id,
       subtaskId: data.subtask_id,
+      retryNote: data.retry_note,
     });
     if (result.error) {
       res.writeHead(400, { 'Content-Type': 'application/json' });

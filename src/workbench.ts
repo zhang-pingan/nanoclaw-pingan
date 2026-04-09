@@ -3,6 +3,7 @@ import path from 'path';
 
 import { PROJECT_ROOT } from './config.js';
 import {
+  createWorkbenchEvent,
   createWorkbenchComment,
   createWorkbenchContextAsset,
   getWorkbenchActionItem,
@@ -226,6 +227,7 @@ function mapPersistedEvent(item: WorkbenchEventRecord): WorkbenchTimelineEvent {
     id: item.id,
     type:
       item.event_type === 'manual_skip'
+        || item.event_type === 'retry_note'
         ? 'manual'
         : item.event_type === 'workflow_created'
           ? 'lifecycle'
@@ -953,6 +955,7 @@ export function addWorkbenchAsset(input: {
 export function retryWorkbenchSubtask(input: {
   taskId: string;
   subtaskId: string;
+  retryNote?: string;
 }): { error?: string } {
   const detail = getWorkbenchTaskDetail(input.taskId);
   if (!detail) return { error: 'Task not found' };
@@ -970,7 +973,9 @@ export function retryWorkbenchSubtask(input: {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
 
-  const result = retryWorkflowStage(workflowId, subtask.stage_key);
+  const result = retryWorkflowStage(workflowId, subtask.stage_key, {
+    retryNote: input.retryNote,
+  });
   if (result.error) return result;
   updateWorkbenchSubtask(subtask.id, {
     status: 'pending',
@@ -978,6 +983,36 @@ export function retryWorkbenchSubtask(input: {
     finished_at: null,
     updated_at: new Date().toISOString(),
   });
+  const trimmedRetryNote = input.retryNote?.trim();
+  if (trimmedRetryNote) {
+    const createdAt = new Date().toISOString();
+    const eventId = ['wb-event', workflowId, 'retry-note', subtask.id, createdAt].join(
+      '-',
+    );
+    createWorkbenchEvent({
+      id: eventId,
+      task_id: detail.task.id,
+      subtask_id: subtask.id,
+      event_type: 'retry_note',
+      title: `重跑补充信息：${subtask.title}`,
+      body: trimmedRetryNote,
+      raw_ref_type: 'workflow',
+      raw_ref_id: workflowId,
+      created_at: createdAt,
+    });
+    emitWorkbenchEvent({
+      type: 'event_created',
+      taskId: detail.task.id,
+      workflowId,
+      payload: {
+        id: eventId,
+        title: `重跑补充信息：${subtask.title}`,
+        body: trimmedRetryNote,
+        status: 'retry_note',
+        createdAt,
+      },
+    });
+  }
   emitWorkbenchEvent({
     type: 'subtask_updated',
     taskId: detail.task.id,

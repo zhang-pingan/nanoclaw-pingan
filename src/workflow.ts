@@ -525,11 +525,25 @@ function finalizeDelegationTaskContent(
   if (skill !== 'ops-staging-deploy' || !workflow.staging_work_branch) {
     return taskContent;
   }
+
   if (taskContent.includes('预发工作分支：')) {
     return taskContent;
   }
   const suffix = `预发工作分支：${workflow.staging_work_branch}`;
   return taskContent ? `${taskContent}\n${suffix}` : suffix;
+}
+
+function appendRetryNote(taskContent: string, retryNote?: string): string {
+  const trimmedRetryNote = retryNote?.trim();
+  if (!trimmedRetryNote) return taskContent;
+
+  const retrySection = [
+    '[重跑补充信息]',
+    '以下内容由人工在本次重跑前补充，请优先纳入判断：',
+    trimmedRetryNote,
+  ].join('\n');
+
+  return taskContent ? `${taskContent}\n\n${retrySection}` : retrySection;
 }
 
 // -------------------------------------------------------
@@ -1029,6 +1043,9 @@ export function reviseWorkflow(
 export function retryWorkflowStage(
   workflowId: string,
   stageKey: string,
+  extra?: {
+    retryNote?: string;
+  },
 ): { error?: string } {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
@@ -1071,12 +1088,16 @@ export function retryWorkflowStage(
       taskContent,
       workflow,
     );
+    const retriedTaskContent = appendRetryNote(
+      finalTaskContent,
+      extra?.retryNote,
+    );
     const delegationId = delegateTo(
       targetFolder,
       getMainFolder(workflow.source_jid),
       workflowId,
       stateConfig.skill,
-      finalTaskContent,
+      retriedTaskContent,
     );
 
     const fromStatus = workflow.status;

@@ -1258,6 +1258,47 @@ html, body {
   resize: vertical;
 }
 
+.workbench-retry-composer {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(239, 68, 68, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 245, 245, 0.96));
+}
+
+.workbench-retry-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.workbench-retry-composer textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  font: inherit;
+  color: var(--text-primary);
+  resize: vertical;
+}
+
+.workbench-retry-composer textarea:focus {
+  outline: none;
+  border-color: rgba(239, 68, 68, 0.36);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+.workbench-retry-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .app-prompt-overlay {
   position: fixed;
   inset: 0;

@@ -147,6 +147,9 @@ var currentWorkbenchTaskId = "";
 var workbenchSelectedSubtaskId = "";
 var workbenchAnimatedSubtaskKey = "";
 var workbenchFollowCurrentSubtaskOnce = false;
+var workbenchRetryComposerSubtaskId = "";
+var workbenchRetryComposerDraft = "";
+var workbenchRetrySubmitting = false;
 var workbenchDetailLoading = false;
 var workbenchQueuedDetailTaskId = "";
 var workbenchDetailReloadTimer = null;
@@ -2511,6 +2514,7 @@ function renderWorkbenchSubtasks(subtasks) {
   const activeTask = currentWorkbenchDetail && currentWorkbenchDetail.task
     ? currentWorkbenchDetail.task
     : null;
+  const isRetryComposerOpen = workbenchRetryComposerSubtaskId === selected.id;
 
   if (selected.role && !selected.manually_skipped && (selected.status === "failed" || selected.status === "cancelled")) {
     const actions = document.createElement("div");
@@ -2518,8 +2522,8 @@ function renderWorkbenchSubtasks(subtasks) {
     if (selected.status === "failed") {
       const retryBtn = document.createElement("button");
       retryBtn.className = "btn-ghost";
-      retryBtn.textContent = "重跑";
-      retryBtn.addEventListener("click", () => triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, selected.id));
+      retryBtn.textContent = isRetryComposerOpen ? "收起补充" : "重跑";
+      retryBtn.addEventListener("click", () => toggleWorkbenchRetryComposer(selected.id));
       actions.appendChild(retryBtn);
     }
     if (activeTask) {
@@ -2537,6 +2541,51 @@ function renderWorkbenchSubtasks(subtasks) {
       actions.appendChild(skipBtn);
     }
     detailEl.appendChild(actions);
+
+    if (selected.status === "failed" && isRetryComposerOpen) {
+      const retryComposer = document.createElement("div");
+      retryComposer.className = "workbench-retry-composer";
+      retryComposer.innerHTML = `
+        <label class="workbench-retry-label" for="workbench-retry-note">
+          给 agent 补充一些信息，重跑时会一起注入提示词
+        </label>
+        <textarea
+          id="workbench-retry-note"
+          rows="4"
+          placeholder="例如：报错的复现条件、期望修复方式、不能修改的范围、需要重点关注的文件"
+        >${escapeHtml(workbenchRetryComposerDraft)}</textarea>
+        <div class="workbench-retry-actions">
+          <button type="button" class="btn-primary" ${workbenchRetrySubmitting ? "disabled" : ""}>确认重跑</button>
+          <button type="button" class="btn-ghost" data-action="cancel-retry" ${workbenchRetrySubmitting ? "disabled" : ""}>取消</button>
+        </div>
+      `;
+      const retryTextarea = retryComposer.querySelector("#workbench-retry-note");
+      if (retryTextarea) {
+        retryTextarea.addEventListener("input", (event) => {
+          workbenchRetryComposerDraft = event.target.value;
+        });
+      }
+      const retryConfirmBtn = retryComposer.querySelector(".btn-primary");
+      if (retryConfirmBtn) {
+        retryConfirmBtn.addEventListener("click", () =>
+          triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, selected.id, workbenchRetryComposerDraft)
+        );
+      }
+      const retryCancelBtn = retryComposer.querySelector('[data-action="cancel-retry"]');
+      if (retryCancelBtn) {
+        retryCancelBtn.addEventListener("click", () => closeWorkbenchRetryComposer());
+      }
+      detailEl.appendChild(retryComposer);
+      requestAnimationFrame(() => {
+        if (document.activeElement !== retryTextarea) {
+          retryTextarea?.focus();
+          if (typeof retryTextarea?.selectionStart === "number") {
+            const end = retryTextarea.value.length;
+            retryTextarea.setSelectionRange(end, end);
+          }
+        }
+      });
+    }
   }
 
   workbenchSubtasks.appendChild(chainEl);
@@ -2933,17 +2982,43 @@ async function triggerWorkbenchActionItem(taskId, actionItemId, action) {
   }
 }
 
-async function triggerWorkbenchSubtaskRetry(taskId, subtaskId) {
+function toggleWorkbenchRetryComposer(subtaskId) {
+  if (workbenchRetryComposerSubtaskId === subtaskId) {
+    closeWorkbenchRetryComposer();
+    return;
+  }
+  workbenchRetryComposerSubtaskId = subtaskId;
+  workbenchRetryComposerDraft = "";
+  renderWorkbenchSubtasks(currentWorkbenchDetail?.subtasks || []);
+}
+
+function closeWorkbenchRetryComposer() {
+  workbenchRetryComposerSubtaskId = "";
+  workbenchRetryComposerDraft = "";
+  workbenchRetrySubmitting = false;
+  renderWorkbenchSubtasks(currentWorkbenchDetail?.subtasks || []);
+}
+
+async function triggerWorkbenchSubtaskRetry(taskId, subtaskId, retryNote = "") {
+  workbenchRetrySubmitting = true;
+  renderWorkbenchSubtasks(currentWorkbenchDetail?.subtasks || []);
   try {
     const res = await apiFetch("/api/workbench/subtask/retry", {
       method: "POST",
-      body: JSON.stringify({ task_id: taskId, subtask_id: subtaskId }),
+      body: JSON.stringify({
+        task_id: taskId,
+        subtask_id: subtaskId,
+        retry_note: retryNote || undefined,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    closeWorkbenchRetryComposer();
   } catch (err) {
     console.error("Failed to retry subtask:", err);
     alert(err.message || "子任务重跑失败");
+    workbenchRetrySubmitting = false;
+    renderWorkbenchSubtasks(currentWorkbenchDetail?.subtasks || []);
   }
 }
 
