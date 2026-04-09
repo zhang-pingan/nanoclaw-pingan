@@ -109,10 +109,6 @@ function createSchema(database: Database.Database): void {
       requires_trigger INTEGER DEFAULT 1
     );
 
-    DROP TABLE IF EXISTS agent_run_events;
-    DROP TABLE IF EXISTS agent_run_steps;
-    DROP TABLE IF EXISTS agent_runs;
-
     CREATE TABLE IF NOT EXISTS agent_queries (
       id TEXT PRIMARY KEY,
       query_id TEXT NOT NULL UNIQUE,
