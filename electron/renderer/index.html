@@ -85,17 +85,11 @@
         <!-- Sidebar -->
         <aside id="sidebar">
           <div class="sidebar-header">
-            <span class="sidebar-title">MixClaw</span>
-            <button id="sidebar-collapse" class="icon-btn" title="Collapse sidebar">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6"></polyline>
-              </svg>
-            </button>
-          </div>
-
-          <div class="section-header">
-            <span>GROUPS</span>
-            <div class="section-header-actions">
+            <div>
+              <div class="sidebar-kicker">Agent Groups</div>
+              <h2>Agent群组</h2>
+            </div>
+            <div class="sidebar-header-actions">
               <button id="reset-all-sessions" class="icon-btn group-action-btn" title="让所有群组在下一次新建对话时切换到全新 session">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
@@ -108,6 +102,11 @@
                   <polyline points="23 4 23 10 17 10"></polyline>
                   <polyline points="1 20 1 14 7 14"></polyline>
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+              <button id="sidebar-collapse" class="icon-btn" title="Collapse sidebar">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
               </button>
             </div>
@@ -288,7 +287,10 @@
       <section id="workbench-screen">
         <aside id="workbench-sidebar" class="workbench-sidebar">
           <div class="workbench-section-header">
-            <span>任务</span>
+            <div>
+              <div class="workbench-kicker">Workbench</div>
+              <h2>工作台</h2>
+            </div>
             <div class="workbench-section-actions">
               <button id="workbench-refresh-btn" class="icon-btn" title="刷新任务">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -385,7 +387,10 @@
       <section id="memory-management-screen">
         <aside class="memory-sidebar">
           <div class="memory-section-header">
-            <span>GROUPS</span>
+            <div>
+              <div class="memory-kicker">Memory Management</div>
+              <h2>记忆管理</h2>
+            </div>
           </div>
           <div id="memory-groups-list" class="list memory-groups-list"></div>
         </aside>
@@ -913,8 +918,8 @@
         <aside class="trace-monitor-sidebar">
           <div class="trace-monitor-sidebar-header">
             <div>
-              <div class="trace-monitor-kicker">Trace 监控</div>
-              <h2></h2>
+              <div class="trace-monitor-kicker">Trace Monitor</div>
+              <h2>Trace 监控</h2>
             </div>
             <div class="trace-monitor-sidebar-actions">
               <button id="trace-monitor-clear-history-btn" class="icon-btn danger" title="一键删除所有活动历史">
