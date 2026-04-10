@@ -1450,11 +1450,16 @@ html, body {
 .trace-monitor-scope-tabs {
   display: flex;
   gap: 10px;
+  justify-content: center;
+  align-items: center;
   padding: 14px 18px;
   border-bottom: 1px solid var(--stroke-soft);
 }
 
 .trace-monitor-scope-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);

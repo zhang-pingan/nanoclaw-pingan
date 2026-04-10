@@ -2343,7 +2343,7 @@ function getTraceRunListEmptyText(scope) {
   if (scope === "history" && traceMonitorHistoryJustCleared) {
     return "活动历史已清空";
   }
-  return scope === "history" ? "暂无历史 Agent Trace" : "暂无正在活动的 Agent Trace";
+  return scope === "history" ? "暂无历史 Agent Trace" : "暂无活跃 Agent Trace";
 }
 
 function buildTraceRunSummary(run) {
@@ -2620,7 +2620,7 @@ function renderTraceTimeline() {
   }
   timelineItems.sort((a, b) => a.sortAt - b.sortAt);
   if (!timelineItems.length) {
-    traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">当前 Trace 还没有可展示的时间线数据</div>`;
+      traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">当前 Trace 暂无可展示的时间线数据</div>`;
     return;
   }
   traceMonitorTimeline.innerHTML = renderTraceHighlightSummary(timelineItems) + timelineItems.map((item) => item.html).join("");
@@ -2830,7 +2830,7 @@ async function loadTraceMonitorData(options) {
 
 async function clearAllTraceHistory() {
   if (traceMonitorHistoryClearing) return;
-  if (!confirm("确认删除所有 agent 活动历史吗？\n\n当前仍在运行的活跃 Trace 不会被删除。")) return;
+  if (!confirm("确认删除所有 Agent 活动历史吗？\n\n当前仍在运行的活跃 Trace 不会被删除。")) return;
   traceMonitorHistoryClearing = true;
   syncTraceMonitorHeaderActions();
   try {

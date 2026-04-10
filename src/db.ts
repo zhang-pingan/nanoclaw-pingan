@@ -1573,57 +1573,6 @@ export function getAllWorkflows(): Workflow[] {
     .all() as Workflow[];
 }
 
-function getWorkbenchTaskIdsByWorkflow(workflowId: string): string[] {
-  return (
-    db
-      .prepare('SELECT id FROM workbench_tasks WHERE workflow_id = ?')
-      .all(workflowId) as Array<{ id: string }>
-  ).map((row) => row.id);
-}
-
-function deleteWorkflowRelatedRecords(workflowId: string): void {
-  const remove = db.transaction((id: string) => {
-    const taskIds = getWorkbenchTaskIdsByWorkflow(id);
-
-    for (const taskId of taskIds) {
-      db.prepare('DELETE FROM workbench_events WHERE task_id = ?').run(taskId);
-    }
-
-    db.prepare(
-      'DELETE FROM workbench_context_assets WHERE workflow_id = ?',
-    ).run(id);
-    db.prepare('DELETE FROM workbench_comments WHERE workflow_id = ?').run(id);
-    db.prepare('DELETE FROM workbench_action_items WHERE workflow_id = ?').run(
-      id,
-    );
-    db.prepare('DELETE FROM workbench_artifacts WHERE workflow_id = ?').run(id);
-    db.prepare('DELETE FROM workbench_subtasks WHERE workflow_id = ?').run(id);
-    db.prepare('DELETE FROM workbench_tasks WHERE workflow_id = ?').run(id);
-    db.prepare('DELETE FROM delegations WHERE workflow_id = ?').run(id);
-    db.prepare('DELETE FROM workflows WHERE id = ?').run(id);
-  });
-
-  remove(workflowId);
-}
-
-export function deleteWorkflow(id: string): void {
-  deleteWorkflowRelatedRecords(id);
-}
-
-export function deleteAllWorkflows(): void {
-  const workflowIds = (
-    db.prepare('SELECT id FROM workflows').all() as Array<{ id: string }>
-  ).map((row) => row.id);
-
-  const clear = db.transaction((ids: string[]) => {
-    for (const workflowId of ids) {
-      deleteWorkflowRelatedRecords(workflowId);
-    }
-  });
-
-  clear(workflowIds);
-}
-
 export function deleteAllWorkbenchTaskData(): {
   workflows: number;
   delegations: number;
