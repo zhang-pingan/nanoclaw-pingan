@@ -63,11 +63,30 @@ describe('buildMemoryPack', () => {
       ],
       'Please help with payment release',
     );
-    const idxRelevant = pack.indexOf('release strategy for payment service');
-    const idxUnrelated = pack.indexOf('unrelated gardening notes');
-    expect(idxRelevant).toBeGreaterThan(-1);
-    expect(idxUnrelated).toBeGreaterThan(-1);
-    expect(idxRelevant).toBeLessThan(idxUnrelated);
+    expect(pack).toContain('release strategy for payment service');
+    expect(pack).not.toContain('unrelated gardening notes');
+  });
+
+  it('keeps important canonical fallback memories even without lexical match', () => {
+    const pack = buildMemoryPack(
+      [
+        mem({
+          id: 'c1',
+          layer: 'canonical',
+          memory_type: 'rule',
+          content: 'Always confirm before destructive actions',
+        }),
+        mem({
+          id: 'e1',
+          layer: 'episodic',
+          memory_type: 'summary',
+          content: 'Reviewed deployment logs last Thursday',
+        }),
+      ],
+      'Help me summarize the roadmap',
+    );
+    expect(pack).toContain('Always confirm before destructive actions');
+    expect(pack).not.toContain('Reviewed deployment logs last Thursday');
   });
 
   it('respects layer quotas and still keeps canonical entries', () => {
