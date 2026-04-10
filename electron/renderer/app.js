@@ -235,6 +235,8 @@ var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRequestSeq = 0;
 var cardsRegistry = {};
 var currentCardSelection = null;
+var cardsManagementExpandedGroups = {};
+var cardsManagementGroupsInitialized = false;
 var cardsRequestSeq = 0;
 var workflowDefinitionReferenceDetails = {};
 var cardsDragState = null;
@@ -4987,18 +4989,46 @@ function renderCardsList() {
   cardsManagementList.innerHTML = "";
   const workflowTypes = getSortedCardWorkflowTypes();
   if (!workflowTypes.length) {
+    cardsManagementExpandedGroups = {};
+    cardsManagementGroupsInitialized = false;
     cardsManagementList.innerHTML = '<div class="workflow-definition-list-empty">还没有 cards，点击右上角 + 创建第一张 card。</div>';
     return;
+  }
+
+  const nextExpandedGroups = {};
+  workflowTypes.forEach((workflowType) => {
+    if (cardsManagementExpandedGroups[workflowType]) {
+      nextExpandedGroups[workflowType] = true;
+    }
+  });
+  cardsManagementExpandedGroups = nextExpandedGroups;
+
+  if (!cardsManagementGroupsInitialized) {
+    cardsManagementExpandedGroups = { [workflowTypes[0]]: true };
+    cardsManagementGroupsInitialized = true;
   }
 
   workflowTypes.forEach((workflowType) => {
     const group = document.createElement("section");
     group.className = "cards-management-group";
     const cardKeys = Object.keys(cardsRegistry[workflowType] || {}).sort((a, b) => a.localeCompare(b));
-    group.innerHTML = `
-      <div class="cards-management-group-title">${escapeHtml(workflowType)}</div>
-      <div class="cards-management-list-count">${escapeHtml(String(cardKeys.length))} cards</div>
+    const isExpanded = Boolean(cardsManagementExpandedGroups[workflowType]);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = `cards-management-group-toggle${isExpanded ? " expanded" : ""}`;
+    toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+    toggle.innerHTML = `
+      <span class="cards-management-group-title">${escapeHtml(workflowType)}</span>
+      <span class="cards-management-group-chevron">${isExpanded ? "▾" : "▸"}</span>
     `;
+    toggle.addEventListener("click", () => {
+      cardsManagementExpandedGroups[workflowType] = !cardsManagementExpandedGroups[workflowType];
+      renderCardsList();
+    });
+    group.appendChild(toggle);
+
+    const items = document.createElement("div");
+    items.className = `cards-management-group-items${isExpanded ? "" : " hidden"}`;
     cardKeys.forEach((cardKey) => {
       const card = normalizeCardConfig(cardsRegistry[workflowType][cardKey]);
       const item = document.createElement("button");
@@ -5011,20 +5041,15 @@ function renderCardsList() {
             <div class="workflow-definition-list-key">${escapeHtml(cardKey)}</div>
           </div>
         </div>
-        <p class="workflow-definition-list-desc">${escapeHtml(card.body_template || "暂无 body template")}</p>
-        <div class="cards-management-list-meta">
-          <span class="workflow-definition-pill cards-management-pill"><strong>Pattern</strong>${escapeHtml(card.pattern || "--")}</span>
-          <span class="workflow-definition-pill cards-management-pill secondary"><strong>Form</strong>${escapeHtml(card.form ? "yes" : "no")}</span>
-          <span class="workflow-definition-pill cards-management-pill secondary"><strong>Actions</strong>${escapeHtml(String((card.actions || []).length))}</span>
-        </div>
       `;
       item.addEventListener("click", () => {
         currentCardSelection = { workflowType, cardKey };
         renderCardsList();
         renderCardsDetailPane();
       });
-      group.appendChild(item);
+      items.appendChild(item);
     });
+    group.appendChild(items);
     cardsManagementList.appendChild(group);
   });
 }

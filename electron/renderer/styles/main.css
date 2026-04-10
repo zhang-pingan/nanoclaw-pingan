@@ -2369,22 +2369,92 @@ html, body {
 }
 
 .cards-management-group {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-left: 14px;
+}
+
+.cards-management-group::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 30px;
+  bottom: 8px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.28), rgba(16, 185, 129, 0.08));
+}
+
+.cards-management-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(5, 150, 105, 0.12);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.92), rgba(255, 255, 255, 0.88));
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.cards-management-group-toggle:hover {
+  border-color: rgba(5, 150, 105, 0.22);
+  box-shadow: 0 10px 22px rgba(5, 150, 105, 0.08);
 }
 
 .cards-management-group-title {
-  padding: 8px 10px 0;
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  position: relative;
+  font-size: 12px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 800;
   color: #047857;
 }
 
+.cards-management-group-chevron {
+  color: #047857;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.cards-management-group-items {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 18px;
+}
+
+.cards-management-group-items::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 10px;
+  width: 1px;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.cards-management-group-items.hidden {
+  display: none;
+}
+
 .cards-management-list-item {
+  position: relative;
   border-color: rgba(5, 150, 105, 0.14);
+}
+
+.cards-management-list-item::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 22px;
+  width: 12px;
+  height: 1px;
+  background: rgba(16, 185, 129, 0.2);
 }
 
 .cards-management-list-item:hover {
@@ -2413,11 +2483,6 @@ html, body {
 .cards-management-pill.secondary {
   background: rgba(148, 163, 184, 0.12);
   color: var(--text-secondary);
-}
-
-.cards-management-list-count {
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
 .cards-management-list-item .workflow-definition-list-desc {
