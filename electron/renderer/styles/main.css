@@ -409,6 +409,8 @@ html, body {
 .workbench-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
+  --secondary-nav-accent: #0369a1;
+  --secondary-nav-kicker-color: #0284c7;
   border-right: 1px solid transparent;
   background: linear-gradient(180deg, rgba(0, 167, 240, 0.06), rgba(0, 167, 240, 0) 220px), var(--surface);
   display: flex;
@@ -441,7 +443,7 @@ html, body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--text-muted);
+  color: var(--secondary-nav-kicker-color);
   font-weight: 800;
   font-family: var(--font-sans);
 }
@@ -508,11 +510,11 @@ html, body {
 
 .workbench-task-title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text-primary);
   margin-bottom: 8px;
   line-height: 1.3;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
 }
 
 .workbench-task-title-row {
@@ -563,7 +565,7 @@ html, body {
 
 .workbench-task-item.active .workbench-task-title,
 .workbench-task-item.active .workbench-task-snippet {
-  color: var(--accent);
+  color: var(--secondary-nav-accent);
 }
 
 .workbench-task-item.active .workbench-badge {
@@ -1454,6 +1456,8 @@ html, body {
 .workflow-definitions-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
+  --secondary-nav-accent: #b45309;
+  --secondary-nav-kicker-color: #b45309;
   border-right: 1px solid transparent;
   background:
     linear-gradient(180deg, rgba(245, 158, 11, 0.09), rgba(245, 158, 11, 0) 220px),
@@ -1545,8 +1549,14 @@ html, body {
 }
 
 .workflow-definition-list-title {
+  font-size: 13px;
   font-weight: 800;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
+}
+
+.workflow-definition-list-item.active .workflow-definition-list-title {
+  color: var(--secondary-nav-accent);
 }
 
 .workflow-definition-list-key {
@@ -2287,6 +2297,8 @@ html, body {
 }
 
 .cards-management-sidebar {
+  --secondary-nav-accent: #047857;
+  --secondary-nav-kicker-color: #047857;
   background:
     linear-gradient(180deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0) 220px),
     var(--surface);
@@ -2800,6 +2812,8 @@ html, body {
 .trace-monitor-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
+  --secondary-nav-accent: #0369a1;
+  --secondary-nav-kicker-color: #0284c7;
   border-right: 1px solid transparent;
   background: var(--surface);
   backdrop-filter: blur(16px);
@@ -2827,8 +2841,8 @@ html, body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--accent);
-  font-weight: 700;
+  color: var(--secondary-nav-kicker-color);
+  font-weight: 800;
 }
 
 .trace-monitor-sidebar-header h2,
@@ -2857,7 +2871,9 @@ html, body {
   border-radius: 999px;
   padding: 9px 14px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-family: var(--font-sans);
   cursor: pointer;
   transition: all var(--transition);
 }
@@ -2996,8 +3012,13 @@ html, body {
 
 .trace-monitor-list-title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
+}
+
+.trace-monitor-list-item.active .trace-monitor-list-title {
+  color: var(--secondary-nav-accent);
 }
 
 .trace-monitor-status {
@@ -3336,6 +3357,8 @@ html, body {
 .memory-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
+  --secondary-nav-accent: #0369a1;
+  --secondary-nav-kicker-color: #0284c7;
   border-right: 1px solid transparent;
   background: var(--surface);
   display: flex;
@@ -3348,7 +3371,7 @@ html, body {
   border-bottom: 1px solid var(--stroke-soft);
   font-size: 11px;
   font-weight: 800;
-  color: var(--text-muted);
+  color: var(--secondary-nav-kicker-color);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-family: var(--font-sans);
@@ -3912,6 +3935,8 @@ html, body {
 #sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
+  --secondary-nav-accent: #0369a1;
+  --secondary-nav-kicker-color: #0284c7;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -3987,6 +4012,10 @@ html, body {
   color: var(--text-muted);
   font-weight: 800;
   font-family: var(--font-sans);
+}
+
+.section-header > span {
+  color: var(--secondary-nav-kicker-color, var(--text-muted));
 }
 
 .section-header-actions {
@@ -4100,6 +4129,16 @@ html, body {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.list-item.active .item-name {
+  color: var(--secondary-nav-accent, var(--accent));
 }
 
 .list-item .item-badge {
