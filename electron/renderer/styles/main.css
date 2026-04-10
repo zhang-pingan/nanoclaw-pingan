@@ -1497,6 +1497,15 @@ html, body {
   gap: 8px;
 }
 
+#workflow-definitions-screen .workflow-definitions-sidebar-header {
+  align-items: flex-end;
+}
+
+#workflow-definitions-screen .workflow-definitions-sidebar-actions {
+  align-self: flex-end;
+  margin-top: auto;
+}
+
 .workflow-definition-list {
   flex: 1;
   padding: 12px;
