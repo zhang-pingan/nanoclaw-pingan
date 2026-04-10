@@ -419,6 +419,15 @@ class WebChannel {
       if (pathname === '/api/cards' && req.method === 'POST') {
         return this.apiSaveCards(req, res);
       }
+      if (pathname.startsWith('/api/cards/')) {
+        const suffix = pathname.slice('/api/cards/'.length);
+        if (req.method === 'GET') {
+          return this.apiGetCardByPath(suffix, res);
+        }
+        if (req.method === 'POST') {
+          return this.apiSaveSingleCard(suffix, req, res);
+        }
+      }
       if (pathname.startsWith('/api/workflow-definitions/')) {
         const suffix = pathname.slice('/api/workflow-definitions/'.length);
         if (suffix.endsWith('/publish') && req.method === 'POST') {
@@ -1701,14 +1710,7 @@ class WebChannel {
     }
 
     const cards = data.cards as Record<string, Record<string, CardConfig>>;
-    const errors: string[] = [];
-    for (const [workflowType, cardGroup] of Object.entries(cards)) {
-      for (const [cardKey, cardConfig] of Object.entries(cardGroup || {})) {
-        errors.push(
-          ...validateCardConfig(`${workflowType}.${cardKey}`, cardConfig),
-        );
-      }
-    }
+    const errors = this.validateCardRegistry(cards);
     if (errors.length > 0) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: errors.join('; ') }));
@@ -1719,6 +1721,136 @@ class WebChannel {
     loadWorkflowConfigs();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
+  }
+
+  private parseCardRouteSuffix(suffix: string): {
+    workflowType: string;
+    cardKey: string;
+  } | null {
+    const segments = suffix
+      .split('/')
+      .map((part) => decodeURIComponent(part).trim())
+      .filter(Boolean);
+    if (segments.length !== 2) {
+      return null;
+    }
+    return {
+      workflowType: segments[0],
+      cardKey: segments[1],
+    };
+  }
+
+  private validateCardRegistry(
+    cards: Record<string, Record<string, CardConfig>>,
+  ): string[] {
+    const errors: string[] = [];
+    for (const [workflowType, cardGroup] of Object.entries(cards)) {
+      for (const [cardKey, cardConfig] of Object.entries(cardGroup || {})) {
+        errors.push(
+          ...validateCardConfig(`${workflowType}.${cardKey}`, cardConfig),
+        );
+      }
+    }
+    return errors;
+  }
+
+  private async apiGetCardByPath(
+    suffix: string,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const parsed = this.parseCardRouteSuffix(suffix);
+    if (!parsed) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid card route' }));
+      return;
+    }
+
+    const cards = readCardRegistry();
+    const card = cards[parsed.workflowType]?.[parsed.cardKey];
+    if (!card) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'card not found' }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        workflow_type: parsed.workflowType,
+        card_key: parsed.cardKey,
+        card,
+      }),
+    );
+  }
+
+  private async apiSaveSingleCard(
+    suffix: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const parsed = this.parseCardRouteSuffix(suffix);
+    if (!parsed) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid card route' }));
+      return;
+    }
+
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      workflow_type?: string;
+      card_key?: string;
+      card?: CardConfig;
+    };
+    const workflowType = (data.workflow_type || parsed.workflowType || '').trim();
+    const cardKey = (data.card_key || parsed.cardKey || '').trim();
+    if (!workflowType || !cardKey) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({ error: 'workflow_type and card_key are required' }),
+      );
+      return;
+    }
+    if (!data.card || typeof data.card !== 'object') {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'card object required' }));
+      return;
+    }
+
+    const cards = readCardRegistry();
+    const nextCards = {
+      ...cards,
+      [workflowType]: {
+        ...(cards[workflowType] || {}),
+        [cardKey]: data.card,
+      },
+    };
+
+    const errors = this.validateCardRegistry(nextCards);
+    if (errors.length > 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: errors.join('; ') }));
+      return;
+    }
+
+    writeCardRegistry(nextCards);
+    loadWorkflowConfigs();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        workflow_type: workflowType,
+        card_key: cardKey,
+        card: data.card,
+      }),
+    );
   }
 
   private async apiGetWorkbenchTasks(res: http.ServerResponse): Promise<void> {

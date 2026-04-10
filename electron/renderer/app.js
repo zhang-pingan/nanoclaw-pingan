@@ -21,6 +21,7 @@ var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
 var workbenchScreen = document.getElementById("workbench-screen");
 var workflowDefinitionsScreen = document.getElementById("workflow-definitions-screen");
+var cardsManagementScreen = document.getElementById("cards-management-screen");
 var memoryManagementScreen = document.getElementById("memory-management-screen");
 var traceMonitorScreen = document.getElementById("trace-monitor-screen");
 var workflowDefinitionList = document.getElementById("workflow-definition-list");
@@ -67,6 +68,43 @@ var workflowDefinitionDiffSummary = document.getElementById("workflow-definition
 var workflowDefinitionDiff = document.getElementById("workflow-definition-diff");
 var workflowDefinitionSelectedVersionLabel = document.getElementById("workflow-definition-selected-version-label");
 var workflowDefinitionVersionJson = document.getElementById("workflow-definition-version-json");
+var cardsManagementList = document.getElementById("cards-management-list");
+var cardsManagementRefreshBtn = document.getElementById("cards-management-refresh-btn");
+var cardsManagementCreateBtn = document.getElementById("cards-management-create-btn");
+var cardsManagementEmpty = document.getElementById("cards-management-empty");
+var cardsManagementDetail = document.getElementById("cards-management-detail");
+var cardsManagementTitle = document.getElementById("cards-management-title");
+var cardsManagementSummary = document.getElementById("cards-management-summary");
+var cardsManagementMeta = document.getElementById("cards-management-meta");
+var cardsManagementDuplicateBtn = document.getElementById("cards-management-duplicate-btn");
+var cardsManagementDeleteBtn = document.getElementById("cards-management-delete-btn");
+var cardsManagementSaveBtn = document.getElementById("cards-management-save-btn");
+var cardsManagementSaveRegistryBtn = document.getElementById("cards-management-save-registry-btn");
+var cardsManagementWorkflowTypeInput = document.getElementById("cards-management-workflow-type");
+var cardsManagementCardKeyInput = document.getElementById("cards-management-card-key");
+var cardsManagementPatternInput = document.getElementById("cards-management-pattern");
+var cardsManagementHeaderColorInput = document.getElementById("cards-management-header-color");
+var cardsManagementHeaderTitleInput = document.getElementById("cards-management-header-title");
+var cardsManagementBodyTemplateInput = document.getElementById("cards-management-body-template");
+var cardsManagementActionAddBtn = document.getElementById("cards-management-action-add-btn");
+var cardsManagementActions = document.getElementById("cards-management-actions");
+var cardsManagementFormToggleBtn = document.getElementById("cards-management-form-toggle-btn");
+var cardsManagementFormFieldAddBtn = document.getElementById("cards-management-form-field-add-btn");
+var cardsManagementForm = document.getElementById("cards-management-form");
+var cardsManagementFormNameInput = document.getElementById("cards-management-form-name");
+var cardsManagementFormSubmitIdInput = document.getElementById("cards-management-form-submit-id");
+var cardsManagementFormSubmitLabelInput = document.getElementById("cards-management-form-submit-label");
+var cardsManagementFormSubmitTypeInput = document.getElementById("cards-management-form-submit-type");
+var cardsManagementFormFields = document.getElementById("cards-management-form-fields");
+var cardsManagementSectionAddBtn = document.getElementById("cards-management-section-add-btn");
+var cardsManagementSections = document.getElementById("cards-management-sections");
+var cardsManagementValidationSummary = document.getElementById("cards-management-validation-summary");
+var cardsManagementValidation = document.getElementById("cards-management-validation");
+var cardsManagementPreviewPreset = document.getElementById("cards-management-preview-preset");
+var cardsManagementPreviewData = document.getElementById("cards-management-preview-data");
+var cardsManagementPreview = document.getElementById("cards-management-preview");
+var cardsManagementJson = document.getElementById("cards-management-json");
+var cardsManagementReferences = document.getElementById("cards-management-references");
 var memoryGroupsList = document.getElementById("memory-groups-list");
 var memoryGroupTitle = document.getElementById("memory-group-title");
 var memoryGroupFolder = document.getElementById("memory-group-folder");
@@ -195,6 +233,51 @@ var workflowDefinitionSelectedStateKey = "";
 var workflowDefinitionSelectedStatusLabelKey = "";
 var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRequestSeq = 0;
+var cardsRegistry = {};
+var currentCardSelection = null;
+var cardsRequestSeq = 0;
+var workflowDefinitionReferenceDetails = {};
+var cardsDragState = null;
+var cardsPreviewPresets = {
+  default: {
+    id: "WF-2026-001",
+    name: "示例需求：Cards 管理页",
+    service: "nanoclaw-web",
+    deliverable: "workflow/cards-preview.md",
+    work_branch: "feature/cards-web-management",
+    owner: "alice",
+    environment: "staging",
+  },
+  deploy: {
+    id: "WF-DEPLOY-108",
+    name: "预发部署确认",
+    service: "gateway-service",
+    deliverable: "projects/gateway/iteration/deploy-checklist.md",
+    work_branch: "release/pre-2026-04-10",
+    owner: "deploy-bot",
+    environment: "pre",
+  },
+  review: {
+    id: "WF-REVIEW-214",
+    name: "开发回修确认",
+    service: "workflow-engine",
+    deliverable: "projects/workflow/iteration/review-round-2.md",
+    work_branch: "feature/review-loop",
+    owner: "reviewer",
+    environment: "dev",
+    revision_text: "请补充失败回滚说明和状态迁移图。",
+  },
+  testing: {
+    id: "WF-TEST-330",
+    name: "测试 access token 提交",
+    service: "api-platform",
+    deliverable: "projects/api-platform/iteration/testing-brief.md",
+    work_branch: "feature/testing-token",
+    owner: "qa-bot",
+    environment: "staging",
+    access_token: "demo-token-123456",
+  },
+};
 var activeMemoryGroupJid = "";
 var memoryEntries = [];
 var memoryQueryText = "";
@@ -1111,6 +1194,7 @@ function setPrimaryNav(navKey) {
   const showWorkbench = navKey === "workbench";
   const showWorkspace = navKey === "agent-groups";
   const showWorkflowDefinitions = navKey === "workflow-definitions";
+  const showCardsManagement = navKey === "cards-management";
   const showMemoryManagement = navKey === "memory-management";
   const showTraceMonitor = navKey === "trace-monitor";
   if (workbenchScreen) {
@@ -1121,6 +1205,9 @@ function setPrimaryNav(navKey) {
   }
   if (workflowDefinitionsScreen) {
     workflowDefinitionsScreen.classList.toggle("active", showWorkflowDefinitions);
+  }
+  if (cardsManagementScreen) {
+    cardsManagementScreen.classList.toggle("active", showCardsManagement);
   }
   if (memoryManagementScreen) {
     memoryManagementScreen.classList.toggle("active", showMemoryManagement);
@@ -1138,6 +1225,9 @@ function setPrimaryNav(navKey) {
   }
   if (showWorkflowDefinitions) {
     loadWorkflowDefinitions({ preserveSelection: true });
+  }
+  if (showCardsManagement) {
+    loadCardsRegistry({ preserveSelection: true });
   }
   if (showTraceMonitor) {
     loadTraceMonitorData({ force: false });
@@ -2064,6 +2154,69 @@ function getCurrentWorkflowCardRefs() {
   return Object.keys(workflowCards);
 }
 
+function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
+  const items = [];
+  const roles = definition?.roles || {};
+  const states = definition?.states || {};
+  const entryPoints = definition?.entry_points || {};
+  const statusLabels = definition?.status_labels || {};
+  const roleOptions = Object.keys(roles);
+  const stateOptions = Object.keys(states);
+  const workflowCards = Object.keys(workflowDefinitionCardsRegistry?.[bundleKey || ""] || {});
+  const pushItem = (group, message) => {
+    items.push({ group, message });
+  };
+
+  Object.entries(entryPoints).forEach(([entryKey, entry]) => {
+    if (entry?.state && !stateOptions.includes(entry.state)) {
+      pushItem("entry_points", `entry_points.${entryKey}.state 引用了不存在的 state: ${entry.state}`);
+    }
+    if (entry?.deliverable_role && !roleOptions.includes(entry.deliverable_role)) {
+      pushItem("entry_points", `entry_points.${entryKey}.deliverable_role 引用了不存在的 role: ${entry.deliverable_role}`);
+    }
+  });
+
+  Object.entries(states).forEach(([stateKey, state]) => {
+    if (state?.delegate?.role && !roleOptions.includes(state.delegate.role)) {
+      pushItem("states", `states.${stateKey}.delegate.role 引用了不存在的 role: ${state.delegate.role}`);
+    }
+    if (state?.card?.ref && !workflowCards.includes(state.card.ref)) {
+      pushItem("cards", `states.${stateKey}.card.ref 引用了不存在的 card: ${state.card.ref}`);
+    }
+    [
+      ["on_complete.success", state?.on_complete?.success],
+      ["on_complete.failure", state?.on_complete?.failure],
+      ["on_approve", state?.on_approve],
+      ["on_revise", state?.on_revise],
+    ].forEach(([path, transition]) => {
+      if (!transition) return;
+      if (transition.target && !stateOptions.includes(transition.target)) {
+        pushItem("states", `states.${stateKey}.${path}.target 引用了不存在的 state: ${transition.target}`);
+      }
+      if (transition.delegate?.role && !roleOptions.includes(transition.delegate.role)) {
+        pushItem("roles", `states.${stateKey}.${path}.delegate.role 引用了不存在的 role: ${transition.delegate.role}`);
+      }
+      if (transition.card?.ref && !workflowCards.includes(transition.card.ref)) {
+        pushItem("cards", `states.${stateKey}.${path}.card.ref 引用了不存在的 card: ${transition.card.ref}`);
+      }
+    });
+  });
+
+  Object.keys(statusLabels).forEach((stateKey) => {
+    if (!stateOptions.includes(stateKey)) {
+      pushItem("status_labels", `status_labels.${stateKey} 对应的 state 不存在`);
+    }
+  });
+
+  if (!Object.keys(entryPoints).length) {
+    pushItem("entry_points", "entry_points 不能为空");
+  }
+  if (!Object.keys(states).length) {
+    pushItem("states", "states 不能为空");
+  }
+  return items;
+}
+
 function createWorkflowDefinitionStateTemplate(type) {
   if (type === "delegation") {
     return {
@@ -2645,14 +2798,36 @@ function renderWorkflowDefinitionEditor(definition, bundle) {
 function renderWorkflowDefinitionPreview(preview) {
   if (!workflowDefinitionValidation || !workflowDefinitionPreview) return;
   const errors = Array.isArray(preview?.errors) ? preview.errors : [];
+  let localValidationItems = [];
+  try {
+    const payload = getWorkflowDefinitionSavePayload();
+    localValidationItems = collectWorkflowDefinitionValidationItems(payload.definition, payload.key);
+  } catch (err) {
+    localValidationItems = [{ group: "json", message: err instanceof Error ? err.message : String(err) }];
+  }
   const blocks = [];
   if (!preview) {
     blocks.push('<div class="workflow-definition-validation-note">当前没有可预览的 draft / published definition。</div>');
     workflowDefinitionPreview.textContent = "";
   } else {
-    if (errors.length === 0) {
-      blocks.push('<div class="workflow-definition-validation-note">校验通过，可以进行发布。</div>');
+    if (errors.length === 0 && localValidationItems.length === 0) {
+      blocks.push('<div class="workflow-definition-validation-note">发布前校验通过，可以进行发布。</div>');
     } else {
+      if (localValidationItems.length > 0) {
+        const grouped = localValidationItems.reduce((acc, item) => {
+          const key = item.group || "other";
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(item);
+          return acc;
+        }, {});
+        blocks.push(`<div class="workflow-definition-validation-note">发布前校验总览：发现 ${escapeHtml(String(localValidationItems.length))} 个结构问题。</div>`);
+        Object.entries(grouped).forEach(([group, messages]) => {
+          blocks.push(`<div class="workflow-definition-validation-note">分组 ${escapeHtml(group)} · ${escapeHtml(String(messages.length))} 项</div>`);
+          messages.forEach((item, index) => {
+            blocks.push(`<button type="button" class="workflow-definition-validation-error workflow-definition-validation-link" data-workflow-validation-jump="${escapeAttribute(JSON.stringify(item))}">${escapeHtml(item.message)}</button>`);
+          });
+        });
+      }
       errors.forEach((error) => {
         blocks.push(`<div class="workflow-definition-validation-error">${escapeHtml(error)}</div>`);
       });
@@ -2660,6 +2835,16 @@ function renderWorkflowDefinitionPreview(preview) {
     workflowDefinitionPreview.textContent = stringifyPrettyJson(preview.compiled || {});
   }
   workflowDefinitionValidation.innerHTML = blocks.join("");
+  Array.from(workflowDefinitionValidation.querySelectorAll("[data-workflow-validation-jump]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const raw = button.getAttribute("data-workflow-validation-jump") || "";
+      try {
+        jumpToWorkflowValidationItem(JSON.parse(raw));
+      } catch (err) {
+        console.error("Failed to parse workflow validation jump payload:", err);
+      }
+    });
+  });
 }
 
 function renderWorkflowDefinitionDiff(detail) {
@@ -2729,6 +2914,54 @@ function renderWorkflowDefinitionDiff(detail) {
     : '<div class="workflow-definition-diff-empty">draft 与 published 当前完全一致。</div>';
 }
 
+function jumpToWorkflowValidationItem(item) {
+  const message = String(item?.message || "");
+  const stateMatch = message.match(/^states\.([^.]+)/);
+  if (stateMatch) {
+    updateWorkflowDefinitionSelectedState(stateMatch[1]);
+    return;
+  }
+  const entryMatch = message.match(/^entry_points\.([^.]+)/);
+  if (entryMatch) {
+    workflowDefinitionSelectedEntryPointKey = entryMatch[1];
+    renderWorkflowDefinitionEntryPointEditor();
+    focusWorkflowDefinitionJsonField(workflowDefinitionEntryPointsInput, entryMatch[1]);
+    return;
+  }
+  const statusMatch = message.match(/^status_labels\.([^. ]+)/);
+  if (statusMatch) {
+    workflowDefinitionSelectedStatusLabelKey = statusMatch[1];
+    renderWorkflowDefinitionStatusLabelEditor();
+    focusWorkflowDefinitionJsonField(workflowDefinitionStatusLabelsInput, statusMatch[1]);
+    return;
+  }
+  if (String(item?.group || "") === "roles") {
+    const roleMatch = message.match(/role: ([^ ]+)/);
+    if (roleMatch) {
+      workflowDefinitionSelectedRoleKey = roleMatch[1];
+      renderWorkflowDefinitionRoleEditor();
+      focusWorkflowDefinitionJsonField(workflowDefinitionRolesInput, roleMatch[1]);
+      return;
+    }
+  }
+  if (String(item?.group || "") === "cards") {
+    const cardMatch = message.match(/card: ([^ ]+)/);
+    if (cardMatch) {
+      setPrimaryNav("cards-management");
+      currentCardSelection = {
+        workflowType: currentWorkflowDefinitionKey,
+        cardKey: cardMatch[1],
+      };
+      renderCardsList();
+      renderCardsDetailPane();
+      return;
+    }
+  }
+  if (String(item?.group || "") === "json") {
+    workflowDefinitionStatesInput?.focus();
+  }
+}
+
 function focusWorkflowDefinitionStateInEditor(stateKey) {
   if (!workflowDefinitionStatesInput || !stateKey) return;
   const source = workflowDefinitionStatesInput.value || "";
@@ -2761,6 +2994,22 @@ function focusWorkflowDefinitionStateInEditor(stateKey) {
   const lineHeight = 22;
   const lineIndex = countNewlines(source.slice(0, selectionStart));
   workflowDefinitionStatesInput.scrollTop = Math.max(0, lineIndex * lineHeight - lineHeight * 2);
+}
+
+function focusWorkflowDefinitionJsonField(textarea, key) {
+  if (!textarea || !key) return;
+  const source = textarea.value || "";
+  const marker = `"${key}"`;
+  const start = source.indexOf(marker);
+  if (start < 0) {
+    textarea.focus();
+    return;
+  }
+  textarea.focus();
+  textarea.setSelectionRange(start, Math.min(source.length, start + marker.length));
+  const lineHeight = 22;
+  const lineIndex = countNewlines(source.slice(0, start));
+  textarea.scrollTop = Math.max(0, lineIndex * lineHeight - lineHeight * 2);
 }
 
 function buildStateTransitionInspectorHtml(prefix, transition) {
@@ -3709,6 +3958,7 @@ async function loadWorkflowDefinitionDetail(key) {
       throw new Error(data?.error || `HTTP ${res.status}`);
     }
     currentWorkflowDefinitionDetail = data;
+    workflowDefinitionReferenceDetails[safeKey] = data;
     workflowDefinitionSelectedRoleKey = "";
     workflowDefinitionSelectedEntryPointKey = "";
     workflowDefinitionSelectedStateKey = "";
@@ -3955,6 +4205,1378 @@ async function createWorkflowDefinition() {
   } catch (err) {
     console.error("Failed to create workflow definition:", err);
     alert(err instanceof Error ? err.message : "创建流程定义失败");
+  }
+}
+
+function getSortedCardWorkflowTypes() {
+  return Object.keys(cardsRegistry || {}).sort((a, b) => a.localeCompare(b));
+}
+
+function getCurrentCardConfig() {
+  if (!currentCardSelection) return null;
+  return cardsRegistry?.[currentCardSelection.workflowType]?.[currentCardSelection.cardKey] || null;
+}
+
+function createEmptyCardConfig() {
+  return {
+    pattern: "info_actions",
+    header: {
+      title_template: "",
+      color: "blue",
+    },
+    body_template: "",
+    actions: [],
+  };
+}
+
+function normalizeCardConfig(card) {
+  const safe = cloneJson(card || {});
+  return {
+    pattern: safe.pattern || "info_actions",
+    header: {
+      title_template: safe.header?.title_template || "",
+      color: safe.header?.color || "blue",
+    },
+    body_template: safe.body_template || "",
+    actions: Array.isArray(safe.actions) ? safe.actions : [],
+    form: safe.form
+      ? {
+          name: safe.form.name || "",
+          submit_action: {
+            id: safe.form.submit_action?.id || "",
+            label: safe.form.submit_action?.label || "",
+            type: safe.form.submit_action?.type || "",
+          },
+          fields: Array.isArray(safe.form.fields) ? safe.form.fields : [],
+        }
+      : null,
+    sections: Array.isArray(safe.sections) ? safe.sections : [],
+  };
+}
+
+function getCardEditorWorkflowTypeDraft() {
+  return (cardsManagementWorkflowTypeInput?.value || currentCardSelection?.workflowType || "").trim();
+}
+
+function getCardEditorKeyDraft() {
+  return (cardsManagementCardKeyInput?.value || currentCardSelection?.cardKey || "").trim();
+}
+
+function parseCardOptionsText(raw) {
+  return String(raw || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("|");
+      const value = (parts.shift() || "").trim();
+      const label = parts.join("|").trim();
+      return label ? { value, label } : { value };
+    })
+    .filter((item) => item.value);
+}
+
+function parseCardActionJsonText(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return { actions: [], error: null };
+  try {
+    const parsed = JSON.parse(text);
+    return { actions: Array.isArray(parsed) ? parsed : [], error: null };
+  } catch (err) {
+    return { actions: [], error: err instanceof Error ? err.message : "Invalid JSON" };
+  }
+}
+
+function getSelectedCardsPreviewPreset() {
+  const key = cardsManagementPreviewPreset?.value || "default";
+  return cloneJson(cardsPreviewPresets[key] || cardsPreviewPresets.default);
+}
+
+function syncCardsPreviewDataInputFromPreset() {
+  if (!cardsManagementPreviewData) return;
+  cardsManagementPreviewData.value = JSON.stringify(getSelectedCardsPreviewPreset(), null, 2);
+}
+
+function getCardsPreviewData() {
+  const fallback = getSelectedCardsPreviewPreset();
+  const raw = cardsManagementPreviewData?.value || "";
+  const text = raw.trim();
+  if (!text) {
+    return { data: fallback, error: null };
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { data: fallback, error: "Mock Data JSON 必须是对象" };
+    }
+    return { data: parsed, error: null };
+  } catch (err) {
+    return { data: fallback, error: err instanceof Error ? err.message : "Invalid JSON" };
+  }
+}
+
+function renderCardRowEmpty(container, message) {
+  if (!container) return;
+  container.innerHTML = `<div class="cards-management-row-empty">${escapeHtml(message)}</div>`;
+}
+
+function renderCardActionRows(actions) {
+  if (!cardsManagementActions) return;
+  const rows = Array.isArray(actions) ? actions : [];
+  if (!rows.length) {
+    renderCardRowEmpty(cardsManagementActions, "当前没有 actions，可新增按钮动作。");
+    return;
+  }
+  cardsManagementActions.innerHTML = rows
+    .map((action, index) => `
+      <div class="cards-management-row" data-card-action-row="${index}">
+        <div class="cards-management-row-head">
+          <div class="cards-management-row-title">Action ${index + 1}</div>
+          <button type="button" class="btn-ghost" data-card-action-remove="${index}">删除</button>
+        </div>
+        <div class="cards-management-row-grid">
+          <label class="workflow-definition-field">
+            <span>ID</span>
+            <input data-card-action-field="${index}.id" type="text" value="${escapeAttribute(action.id || "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Label</span>
+            <input data-card-action-field="${index}.label" type="text" value="${escapeAttribute(action.label || "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Type</span>
+            <select data-card-action-field="${index}.type">
+              <option value=""${!action.type ? " selected" : ""}>default</option>
+              <option value="primary"${action.type === "primary" ? " selected" : ""}>primary</option>
+              <option value="danger"${action.type === "danger" ? " selected" : ""}>danger</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    `)
+    .join("");
+}
+
+function renderCardFormFields(fields) {
+  if (!cardsManagementFormFields) return;
+  const rows = Array.isArray(fields) ? fields : [];
+  if (!rows.length) {
+    renderCardRowEmpty(cardsManagementFormFields, "当前没有 form fields，可新增输入项。");
+    return;
+  }
+  cardsManagementFormFields.innerHTML = rows
+    .map((field, index) => `
+      <div class="cards-management-row" data-card-form-field-row="${index}">
+        <div class="cards-management-row-head">
+          <div class="cards-management-row-title">Field ${index + 1}</div>
+          <button type="button" class="btn-ghost" data-card-form-field-remove="${index}">删除</button>
+        </div>
+        <div class="cards-management-row-grid">
+          <label class="workflow-definition-field">
+            <span>Name</span>
+            <input data-card-form-field="${index}.name" type="text" value="${escapeAttribute(field.name || "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Label</span>
+            <input data-card-form-field="${index}.label" type="text" value="${escapeAttribute(field.label || "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Type</span>
+            <select data-card-form-field="${index}.type">
+              ${["text", "textarea", "number", "integer", "boolean", "enum"].map((type) => `<option value="${type}"${field.type === type ? " selected" : ""}>${type}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="cards-management-row-grid compact">
+          <label class="workflow-definition-field">
+            <span>Placeholder</span>
+            <input data-card-form-field="${index}.placeholder" type="text" value="${escapeAttribute(field.placeholder || "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Format</span>
+            <select data-card-form-field="${index}.format">
+              <option value=""${!field.format ? " selected" : ""}>none</option>
+              <option value="email"${field.format === "email" ? " selected" : ""}>email</option>
+              <option value="uri"${field.format === "uri" ? " selected" : ""}>uri</option>
+              <option value="date"${field.format === "date" ? " selected" : ""}>date</option>
+              <option value="date-time"${field.format === "date-time" ? " selected" : ""}>date-time</option>
+            </select>
+          </label>
+        </div>
+        <div class="cards-management-row-grid">
+          <label class="workflow-definition-field">
+            <span>Min</span>
+            <input data-card-form-field="${index}.min" type="number" value="${escapeAttribute(field.min ?? "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Max</span>
+            <input data-card-form-field="${index}.max" type="number" value="${escapeAttribute(field.max ?? "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Required</span>
+            <select data-card-form-field="${index}.required">
+              <option value="false"${field.required ? "" : " selected"}>false</option>
+              <option value="true"${field.required ? " selected" : ""}>true</option>
+            </select>
+          </label>
+        </div>
+        <div class="cards-management-row-grid">
+          <label class="workflow-definition-field">
+            <span>Min Length</span>
+            <input data-card-form-field="${index}.min_length" type="number" value="${escapeAttribute(field.min_length ?? "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Max Length</span>
+            <input data-card-form-field="${index}.max_length" type="number" value="${escapeAttribute(field.max_length ?? "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Options</span>
+            <textarea data-card-form-field="${index}.options" rows="3" placeholder="value|label&#10;draft|草稿">${escapeHtml(Array.isArray(field.options) ? field.options.map((option) => option.label ? `${option.value}|${option.label}` : option.value).join("\n") : "")}</textarea>
+          </label>
+        </div>
+      </div>
+    `)
+    .join("");
+}
+
+function renderCardSections(sections) {
+  if (!cardsManagementSections) return;
+  const rows = Array.isArray(sections) ? sections : [];
+  if (!rows.length) {
+    renderCardRowEmpty(cardsManagementSections, "当前没有 sections，只有 pattern=section_list 时才需要。");
+    return;
+  }
+  cardsManagementSections.innerHTML = rows
+    .map((section, index) => `
+      <div class="cards-management-row cards-management-draggable" tabindex="0" draggable="true" data-card-drag-type="section" data-card-drag-index="${index}" data-card-section-row="${index}">
+        <div class="cards-management-row-head">
+          <div class="cards-management-row-title-wrap">
+            <span class="cards-management-drag-handle" title="拖拽排序">::</span>
+            <div class="cards-management-row-title">Section ${index + 1}</div>
+          </div>
+          <div class="cards-management-inline-actions">
+            <button type="button" class="btn-ghost" data-card-section-move="up:${index}">上移</button>
+            <button type="button" class="btn-ghost" data-card-section-move="down:${index}">下移</button>
+            <button type="button" class="btn-ghost" data-card-section-action-add="${index}">新增 section action</button>
+            <button type="button" class="btn-ghost" data-card-section-remove="${index}">删除</button>
+          </div>
+        </div>
+        <label class="workflow-definition-field">
+          <span>Body Template</span>
+          <textarea data-card-section-field="${index}.body_template" rows="4">${escapeHtml(section.body_template || "")}</textarea>
+        </label>
+        <section class="workflow-definition-field workflow-definition-field-block">
+          <div class="cards-management-section-head">
+            <span>Section Actions</span>
+          </div>
+          <div class="cards-management-rows">
+            ${
+              Array.isArray(section.actions) && section.actions.length
+                ? section.actions
+                    .map((action, actionIndex) => `
+                      <div class="cards-management-row cards-management-subrow cards-management-draggable" tabindex="0" draggable="true" data-card-drag-type="section-action" data-card-drag-index="${index}.${actionIndex}" data-card-section-action-row="${index}.${actionIndex}">
+                        <div class="cards-management-row-head">
+                          <div class="cards-management-row-title-wrap">
+                            <span class="cards-management-drag-handle" title="拖拽排序">::</span>
+                            <div class="cards-management-row-title">Action ${actionIndex + 1}</div>
+                          </div>
+                          <div class="cards-management-inline-actions">
+                            <button type="button" class="btn-ghost" data-card-section-action-move="up:${index}.${actionIndex}">上移</button>
+                            <button type="button" class="btn-ghost" data-card-section-action-move="down:${index}.${actionIndex}">下移</button>
+                            <button type="button" class="btn-ghost" data-card-section-action-remove="${index}.${actionIndex}">删除</button>
+                          </div>
+                        </div>
+                        <div class="cards-management-row-grid">
+                          <label class="workflow-definition-field">
+                            <span>ID</span>
+                            <input data-card-section-action-field="${index}.${actionIndex}.id" type="text" value="${escapeAttribute(action.id || "")}" />
+                          </label>
+                          <label class="workflow-definition-field">
+                            <span>Label</span>
+                            <input data-card-section-action-field="${index}.${actionIndex}.label" type="text" value="${escapeAttribute(action.label || "")}" />
+                          </label>
+                          <label class="workflow-definition-field">
+                            <span>Type</span>
+                            <select data-card-section-action-field="${index}.${actionIndex}.type">
+                              <option value=""${!action.type ? " selected" : ""}>default</option>
+                              <option value="primary"${action.type === "primary" ? " selected" : ""}>primary</option>
+                              <option value="danger"${action.type === "danger" ? " selected" : ""}>danger</option>
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                    `)
+                    .join("")
+                : '<div class="cards-management-row-empty">当前 section 没有 actions，可单独新增。</div>'
+            }
+          </div>
+        </section>
+      </div>
+    `)
+    .join("");
+}
+
+function renderCardsEditor(card) {
+  const safe = normalizeCardConfig(card);
+  if (cardsManagementPatternInput) cardsManagementPatternInput.value = safe.pattern || "info_actions";
+  if (cardsManagementHeaderColorInput) cardsManagementHeaderColorInput.value = safe.header.color || "blue";
+  if (cardsManagementHeaderTitleInput) cardsManagementHeaderTitleInput.value = safe.header.title_template || "";
+  if (cardsManagementBodyTemplateInput) cardsManagementBodyTemplateInput.value = safe.body_template || "";
+  if (cardsManagementFormNameInput) cardsManagementFormNameInput.value = safe.form?.name || "";
+  if (cardsManagementFormSubmitIdInput) cardsManagementFormSubmitIdInput.value = safe.form?.submit_action?.id || "";
+  if (cardsManagementFormSubmitLabelInput) cardsManagementFormSubmitLabelInput.value = safe.form?.submit_action?.label || "";
+  if (cardsManagementFormSubmitTypeInput) cardsManagementFormSubmitTypeInput.value = safe.form?.submit_action?.type || "";
+  if (cardsManagementForm) {
+    cardsManagementForm.classList.toggle("hidden", !safe.form);
+  }
+  if (cardsManagementFormFieldAddBtn) {
+    cardsManagementFormFieldAddBtn.disabled = !safe.form;
+  }
+  renderCardActionRows(safe.actions);
+  renderCardFormFields(safe.form?.fields || []);
+  renderCardSections(safe.sections || []);
+}
+
+function getCardActionRowsFromEditor() {
+  if (!cardsManagementActions) return [];
+  return Array.from(cardsManagementActions.querySelectorAll("[data-card-action-row]")).map((row) => {
+    const index = row.getAttribute("data-card-action-row");
+    return {
+      id: (row.querySelector(`[data-card-action-field="${index}.id"]`)?.value || "").trim(),
+      label: (row.querySelector(`[data-card-action-field="${index}.label"]`)?.value || "").trim(),
+      type: (row.querySelector(`[data-card-action-field="${index}.type"]`)?.value || "").trim() || undefined,
+    };
+  });
+}
+
+function getCardFormFieldsFromEditor(validationErrors) {
+  if (!cardsManagementFormFields) return [];
+  return Array.from(cardsManagementFormFields.querySelectorAll("[data-card-form-field-row]")).map((row) => {
+    const index = row.getAttribute("data-card-form-field-row");
+    const type = row.querySelector(`[data-card-form-field="${index}.type"]`)?.value || "text";
+    const field = {
+      name: (row.querySelector(`[data-card-form-field="${index}.name"]`)?.value || "").trim(),
+      label: (row.querySelector(`[data-card-form-field="${index}.label"]`)?.value || "").trim() || undefined,
+      type,
+      placeholder: (row.querySelector(`[data-card-form-field="${index}.placeholder"]`)?.value || "").trim() || undefined,
+      required: (row.querySelector(`[data-card-form-field="${index}.required"]`)?.value || "") === "true" || undefined,
+      format: (row.querySelector(`[data-card-form-field="${index}.format"]`)?.value || "").trim() || undefined,
+    };
+    const min = (row.querySelector(`[data-card-form-field="${index}.min"]`)?.value || "").trim();
+    const max = (row.querySelector(`[data-card-form-field="${index}.max"]`)?.value || "").trim();
+    const minLength = (row.querySelector(`[data-card-form-field="${index}.min_length"]`)?.value || "").trim();
+    const maxLength = (row.querySelector(`[data-card-form-field="${index}.max_length"]`)?.value || "").trim();
+    if (min) field.min = Number(min);
+    if (max) field.max = Number(max);
+    if (minLength) field.min_length = Number(minLength);
+    if (maxLength) field.max_length = Number(maxLength);
+    const options = parseCardOptionsText(row.querySelector(`[data-card-form-field="${index}.options"]`)?.value || "");
+    if (type === "enum") field.options = options;
+    return field;
+  });
+}
+
+function getCardSectionsFromEditor(validationErrors) {
+  if (!cardsManagementSections) return [];
+  return Array.from(cardsManagementSections.querySelectorAll("[data-card-section-row]")).map((row) => {
+    const index = row.getAttribute("data-card-section-row");
+    const bodyTemplate = row.querySelector(`[data-card-section-field="${index}.body_template"]`)?.value || "";
+    const actions = Array.from(row.querySelectorAll(`[data-card-section-action-row^="${index}."]`)).map((actionRow) => {
+      const actionKey = actionRow.getAttribute("data-card-section-action-row");
+      return {
+        id: (actionRow.querySelector(`[data-card-section-action-field="${actionKey}.id"]`)?.value || "").trim(),
+        label: (actionRow.querySelector(`[data-card-section-action-field="${actionKey}.label"]`)?.value || "").trim(),
+        type: (actionRow.querySelector(`[data-card-section-action-field="${actionKey}.type"]`)?.value || "").trim() || undefined,
+      };
+    });
+    return {
+      body_template: bodyTemplate,
+      actions,
+    };
+  });
+}
+
+function validateCardDraft(cardState) {
+  const errors = [];
+  const workflowType = (cardState.workflowType || "").trim();
+  const cardKey = (cardState.cardKey || "").trim();
+  const card = cardState.card || createEmptyCardConfig();
+
+  if (!workflowType) {
+    errors.push("workflow type is required");
+  }
+  if (!cardKey) {
+    errors.push("card key is required");
+  }
+  if (!card.pattern) {
+    errors.push("pattern is required");
+  }
+  if (!String(card.header?.title_template || "").trim()) {
+    errors.push("header.title_template is required");
+  }
+
+  const actionIds = new Set();
+  (card.actions || []).forEach((action, index) => {
+    const actionId = String(action.id || "").trim();
+    if (!actionId) {
+      errors.push(`actions[${index}].id is required`);
+      return;
+    }
+    if (actionIds.has(actionId)) {
+      errors.push(`actions[${index}].id "${actionId}" is duplicated`);
+    }
+    actionIds.add(actionId);
+  });
+
+  if (card.form) {
+    if (!String(card.form.name || "").trim()) {
+      errors.push("form.name is required");
+    }
+    if (!String(card.form.submit_action?.id || "").trim()) {
+      errors.push("form.submit_action.id is required");
+    }
+    const fieldNames = new Set();
+    (card.form.fields || []).forEach((field, index) => {
+      const fieldName = String(field.name || "").trim();
+      if (!fieldName) {
+        errors.push(`form.fields[${index}].name is required`);
+        return;
+      }
+      if (fieldNames.has(fieldName)) {
+        errors.push(`form.fields[${index}].name "${fieldName}" is duplicated`);
+      }
+      fieldNames.add(fieldName);
+      if (field.type === "enum" && (!Array.isArray(field.options) || field.options.length === 0)) {
+        errors.push(`form.fields[${index}] requires options for enum type`);
+      }
+    });
+  }
+
+  if ((card.pattern === "confirm_revise" || card.pattern === "form_submit") && !card.form) {
+    errors.push(`form is required for pattern=${card.pattern}`);
+  }
+  if (card.pattern === "section_list" && (!Array.isArray(card.sections) || card.sections.length === 0)) {
+    errors.push("sections is required for pattern=section_list");
+  }
+
+  return errors;
+}
+
+function createCardPreviewValue(actionId) {
+  return { action: actionId || "preview_action" };
+}
+
+function moveArrayItem(list, fromIndex, toIndex) {
+  if (!Array.isArray(list)) return list;
+  if (
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= list.length ||
+    toIndex >= list.length ||
+    fromIndex === toIndex
+  ) {
+    return list;
+  }
+  const next = list.slice();
+  const removed = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, removed[0]);
+  return next;
+}
+
+function interpolateCardTemplate(template, sampleData) {
+  return String(template || "").replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, function (_, key) {
+    return Object.prototype.hasOwnProperty.call(sampleData, key) ? sampleData[key] : `<${key}>`;
+  });
+}
+
+function buildPreviewCardFromConfig(card, sampleData) {
+  const safe = normalizeCardConfig(card);
+  return {
+    header: {
+      title: interpolateCardTemplate(safe.header.title_template || "Card Preview", sampleData),
+      color: safe.header.color || "blue",
+    },
+    body: interpolateCardTemplate(safe.body_template || "", sampleData),
+    buttons: (safe.actions || []).map((action) => ({
+      label: action.label || action.id || "Action",
+      type: action.type || "default",
+      value: createCardPreviewValue(action.id),
+    })),
+    sections: (safe.sections || []).map((section) => ({
+      body: interpolateCardTemplate(section.body_template || "", sampleData),
+      buttons: (Array.isArray(section.actions) ? section.actions : []).map((action) => ({
+        label: action.label || action.id || "Action",
+        type: action.type || "default",
+        value: createCardPreviewValue(action.id),
+      })),
+    })),
+    form: safe.form
+      ? {
+          inputs: (safe.form.fields || []).map((field) => ({
+            ...field,
+            placeholder: field.placeholder || field.label || field.name,
+          })),
+          submitButton: {
+            label: safe.form.submit_action?.label || safe.form.submit_action?.id || "Submit",
+            type: safe.form.submit_action?.type || "default",
+            value: createCardPreviewValue(safe.form.submit_action?.id),
+          },
+        }
+      : null,
+  };
+}
+
+function readCurrentCardEditorState() {
+  const validationErrors = [];
+  const workflowType = getCardEditorWorkflowTypeDraft();
+  const cardKey = getCardEditorKeyDraft();
+  const card = {
+    pattern: cardsManagementPatternInput?.value || "info_actions",
+    header: {
+      title_template: cardsManagementHeaderTitleInput?.value || "",
+      color: cardsManagementHeaderColorInput?.value || "blue",
+    },
+  };
+  const bodyTemplate = cardsManagementBodyTemplateInput?.value || "";
+  if (bodyTemplate.trim()) {
+    card.body_template = bodyTemplate;
+  }
+  const actions = getCardActionRowsFromEditor();
+  if (actions.length > 0) {
+    card.actions = actions;
+  }
+  const hasForm = cardsManagementForm && !cardsManagementForm.classList.contains("hidden");
+  if (hasForm) {
+    card.form = {
+      name: cardsManagementFormNameInput?.value || "",
+      submit_action: {
+        id: cardsManagementFormSubmitIdInput?.value || "",
+        label: cardsManagementFormSubmitLabelInput?.value || "",
+        type: cardsManagementFormSubmitTypeInput?.value || undefined,
+      },
+      fields: getCardFormFieldsFromEditor(validationErrors),
+    };
+  }
+  const sections = getCardSectionsFromEditor(validationErrors);
+  if (sections.length > 0) {
+    card.sections = sections;
+  }
+  return {
+    workflowType,
+    cardKey,
+    card,
+    validationErrors,
+  };
+}
+
+function syncCurrentCardDraftFromEditor() {
+  if (!currentCardSelection) return null;
+  const state = readCurrentCardEditorState();
+  if (!cardsRegistry[currentCardSelection.workflowType]) {
+    cardsRegistry[currentCardSelection.workflowType] = {};
+  }
+  cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = cloneJson(state.card);
+  workflowDefinitionCardsRegistry = cloneJson(cardsRegistry);
+  return state;
+}
+
+function renderCardsValidation(state) {
+  if (!cardsManagementValidation || !cardsManagementValidationSummary) return;
+  const previewDataState = getCardsPreviewData();
+  const localErrors = [...(state.validationErrors || []), ...validateCardDraft(state)];
+  if (previewDataState.error) {
+    localErrors.push(`preview mock data JSON 无法解析: ${previewDataState.error}`);
+  }
+  cardsManagementValidationSummary.textContent = localErrors.length ? `${localErrors.length} 个问题` : "可保存";
+  cardsManagementValidation.innerHTML = localErrors.length
+    ? localErrors.map((error) => `<div class="workflow-definition-validation-error">${escapeHtml(error)}</div>`).join("")
+    : '<div class="workflow-definition-validation-note">本地 schema 校验通过，可以保存当前 cards registry。</div>';
+}
+
+function renderCardsPreview(state) {
+  if (!cardsManagementPreview) return;
+  cardsManagementPreview.innerHTML = "";
+  const previewDataState = getCardsPreviewData();
+  const previewCard = buildPreviewCardFromConfig(state.card, previewDataState.data);
+  cardsManagementPreview.appendChild(renderCardElement(previewCard, "__preview__"));
+}
+
+function renderCardsRegistryJson(workflowType) {
+  if (!cardsManagementJson) return;
+  const safeWorkflowType = (workflowType || "").trim();
+  const snapshot = safeWorkflowType && cardsRegistry[safeWorkflowType]
+    ? { [safeWorkflowType]: cardsRegistry[safeWorkflowType] }
+    : {};
+  cardsManagementJson.textContent = JSON.stringify(snapshot, null, 2);
+}
+
+function collectCardReferencesFromStateTransitions(stateKey, state, cardRef, refs) {
+  if (state?.card?.ref === cardRef) {
+    refs.push({ stateKey, path: "card.ref", type: state.type || "unknown" });
+  }
+  if (state?.on_complete?.success?.card?.ref === cardRef) {
+    refs.push({ stateKey, path: "on_complete.success.card.ref", type: state.type || "unknown" });
+  }
+  if (state?.on_complete?.failure?.card?.ref === cardRef) {
+    refs.push({ stateKey, path: "on_complete.failure.card.ref", type: state.type || "unknown" });
+  }
+  if (state?.on_approve?.card?.ref === cardRef) {
+    refs.push({ stateKey, path: "on_approve.card.ref", type: state.type || "unknown" });
+  }
+  if (state?.on_revise?.card?.ref === cardRef) {
+    refs.push({ stateKey, path: "on_revise.card.ref", type: state.type || "unknown" });
+  }
+}
+
+function getCardReferenceItems(workflowType, cardKey) {
+  const refs = [];
+  const details = Object.values(workflowDefinitionReferenceDetails || {});
+  details.forEach((detail) => {
+    const bundleKey = detail?.bundle?.key || "";
+    if (bundleKey !== workflowType) return;
+    [
+      { source: "draft", definition: detail?.draft_definition || null },
+      { source: "published", definition: detail?.published_definition || null },
+    ].forEach((entry) => {
+      if (!entry.definition) return;
+      const states = entry.definition.states || {};
+      Object.entries(states).forEach(([stateKey, state]) => {
+        const before = refs.length;
+        collectCardReferencesFromStateTransitions(stateKey, state, cardKey, refs);
+        for (let i = before; i < refs.length; i++) {
+          refs[i].source = entry.source;
+          refs[i].version = entry.definition.version;
+        }
+      });
+    });
+  });
+  const grouped = {};
+  refs.forEach((ref) => {
+    const key = `${ref.stateKey}__${ref.path}`;
+    if (!grouped[key]) {
+      grouped[key] = {
+        stateKey: ref.stateKey,
+        path: ref.path,
+        type: ref.type,
+        sources: [],
+        versions: [],
+      };
+    }
+    grouped[key].sources.push(ref.source);
+    if (ref.version !== undefined && ref.version !== null) grouped[key].versions.push(ref.version);
+  });
+  return Object.values(grouped).map((item) => {
+    const uniqueSources = Array.from(new Set(item.sources));
+    const uniqueVersions = Array.from(new Set(item.versions)).sort((a, b) => b - a);
+    let sourceLabel = uniqueSources[0] || "--";
+    if (uniqueSources.includes("draft") && uniqueSources.includes("published")) {
+      sourceLabel = "both";
+    }
+    return {
+      stateKey: item.stateKey,
+      path: item.path,
+      type: item.type,
+      source: sourceLabel,
+      versions: uniqueVersions,
+      draft_only: sourceLabel === "draft",
+      published_only: sourceLabel === "published",
+      both: sourceLabel === "both",
+    };
+  });
+}
+
+async function jumpToWorkflowDefinitionState(workflowKey, stateKey) {
+  try {
+    setPrimaryNav("workflow-definitions");
+    if (!workflowKey) return;
+    if (currentWorkflowDefinitionKey !== workflowKey) {
+      await loadWorkflowDefinitionDetail(workflowKey);
+    }
+    updateWorkflowDefinitionSelectedState(stateKey);
+    showToast(`已跳转到 ${workflowKey} / ${stateKey}`);
+  } catch (err) {
+    console.error("Failed to jump to workflow definition state:", err);
+    alert(err instanceof Error ? err.message : "跳转到 workflow definition 失败");
+  }
+}
+
+function renderCardsReferences(state) {
+  if (!cardsManagementReferences) return;
+  const refs = getCardReferenceItems(state.workflowType, state.cardKey);
+  if (!refs.length) {
+    cardsManagementReferences.innerHTML =
+      '<div class="cards-management-reference-empty">当前没有 workflow state 引用这张 card。</div>';
+    return;
+  }
+  cardsManagementReferences.innerHTML = refs
+    .map((ref) => `
+      <div class="cards-management-reference-item">
+        <div class="cards-management-reference-title">${escapeHtml(ref.stateKey)}</div>
+        <div class="cards-management-reference-meta">
+          <span class="workflow-definition-pill cards-management-pill"><strong>source</strong>${escapeHtml(ref.source || "--")}${Array.isArray(ref.versions) && ref.versions.length ? ` v${escapeHtml(ref.versions.join("/"))}` : ""}</span>
+          <span class="workflow-definition-pill cards-management-pill secondary"><strong>type</strong>${escapeHtml(ref.type || "--")}</span>
+          <span class="workflow-definition-pill cards-management-pill secondary"><strong>path</strong>${escapeHtml(ref.path)}</span>
+          <button type="button" class="btn-ghost" data-card-reference-jump="${escapeAttribute(state.workflowType)}:${escapeAttribute(ref.stateKey)}">跳转到 state</button>
+        </div>
+      </div>
+    `)
+    .join("");
+  Array.from(cardsManagementReferences.querySelectorAll("[data-card-reference-jump]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const raw = button.getAttribute("data-card-reference-jump") || "";
+      const parts = raw.split(":");
+      await jumpToWorkflowDefinitionState(parts[0] || "", parts.slice(1).join(":") || "");
+    });
+  });
+}
+
+function renderCardsSummaryFromState(state) {
+  if (cardsManagementTitle) {
+    cardsManagementTitle.textContent = state.card.header?.title_template || state.cardKey || "Untitled Card";
+  }
+  if (cardsManagementSummary) {
+    const parts = [
+      state.card.pattern || "info_actions",
+      state.card.form ? "含 form" : "无 form",
+      Array.isArray(state.card.sections) && state.card.sections.length > 0 ? `${state.card.sections.length} sections` : "无 sections",
+    ];
+    cardsManagementSummary.textContent = `编辑 card: ${state.workflowType || "--"} / ${state.cardKey || "--"} · ${parts.join(" · ")}`;
+  }
+  if (cardsManagementMeta) {
+    const meta = [
+      `<span class="workflow-definition-pill workflow-definition-main-pill cards-management-pill"><strong>Workflow</strong>${escapeHtml(state.workflowType || "--")}</span>`,
+      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>Key</strong>${escapeHtml(state.cardKey || "--")}</span>`,
+      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>Pattern</strong>${escapeHtml(state.card.pattern || "--")}</span>`,
+      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>Actions</strong>${escapeHtml(String((state.card.actions || []).length))}</span>`,
+    ];
+    cardsManagementMeta.innerHTML = meta.join("");
+  }
+}
+
+function renderCardsDerivedPanels(state) {
+  renderCardsSummaryFromState(state);
+  renderCardsValidation(state);
+  renderCardsPreview(state);
+  renderCardsRegistryJson(state.workflowType);
+  renderCardsReferences(state);
+  renderCardsList();
+}
+
+function renderCardsDetailPane() {
+  if (!cardsManagementEmpty || !cardsManagementDetail) return;
+  const card = getCurrentCardConfig();
+  if (!currentCardSelection || !card) {
+    cardsManagementEmpty.classList.remove("hidden");
+    cardsManagementDetail.classList.add("hidden");
+    return;
+  }
+  cardsManagementEmpty.classList.add("hidden");
+  cardsManagementDetail.classList.remove("hidden");
+  if (cardsManagementWorkflowTypeInput) cardsManagementWorkflowTypeInput.value = currentCardSelection.workflowType || "";
+  if (cardsManagementCardKeyInput) cardsManagementCardKeyInput.value = currentCardSelection.cardKey || "";
+  if (cardsManagementPreviewData && !cardsManagementPreviewData.value.trim()) {
+    syncCardsPreviewDataInputFromPreset();
+  }
+  renderCardsEditor(card);
+  const state = readCurrentCardEditorState();
+  renderCardsDerivedPanels(state);
+}
+
+function renderCardsList() {
+  if (!cardsManagementList) return;
+  cardsManagementList.innerHTML = "";
+  const workflowTypes = getSortedCardWorkflowTypes();
+  if (!workflowTypes.length) {
+    cardsManagementList.innerHTML = '<div class="workflow-definition-list-empty">还没有 cards，点击右上角 + 创建第一张 card。</div>';
+    return;
+  }
+
+  workflowTypes.forEach((workflowType) => {
+    const group = document.createElement("section");
+    group.className = "cards-management-group";
+    const cardKeys = Object.keys(cardsRegistry[workflowType] || {}).sort((a, b) => a.localeCompare(b));
+    group.innerHTML = `
+      <div class="cards-management-group-title">${escapeHtml(workflowType)}</div>
+      <div class="cards-management-list-count">${escapeHtml(String(cardKeys.length))} cards</div>
+    `;
+    cardKeys.forEach((cardKey) => {
+      const card = normalizeCardConfig(cardsRegistry[workflowType][cardKey]);
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = `workflow-definition-list-item cards-management-list-item${currentCardSelection && currentCardSelection.workflowType === workflowType && currentCardSelection.cardKey === cardKey ? " active" : ""}`;
+      item.innerHTML = `
+        <div class="workflow-definition-list-head">
+          <div>
+            <div class="workflow-definition-list-title">${escapeHtml(card.header.title_template || cardKey)}</div>
+            <div class="workflow-definition-list-key">${escapeHtml(cardKey)}</div>
+          </div>
+        </div>
+        <p class="workflow-definition-list-desc">${escapeHtml(card.body_template || "暂无 body template")}</p>
+        <div class="cards-management-list-meta">
+          <span class="workflow-definition-pill cards-management-pill"><strong>Pattern</strong>${escapeHtml(card.pattern || "--")}</span>
+          <span class="workflow-definition-pill cards-management-pill secondary"><strong>Form</strong>${escapeHtml(card.form ? "yes" : "no")}</span>
+          <span class="workflow-definition-pill cards-management-pill secondary"><strong>Actions</strong>${escapeHtml(String((card.actions || []).length))}</span>
+        </div>
+      `;
+      item.addEventListener("click", () => {
+        currentCardSelection = { workflowType, cardKey };
+        renderCardsList();
+        renderCardsDetailPane();
+      });
+      group.appendChild(item);
+    });
+    cardsManagementList.appendChild(group);
+  });
+}
+
+async function loadCardsRegistry(options = {}) {
+  const preserveSelection = options.preserveSelection !== false;
+  if (cardsManagementRefreshBtn) {
+    cardsManagementRefreshBtn.classList.add("spinning");
+  }
+  const reqSeq = ++cardsRequestSeq;
+  try {
+    const res = await apiFetch("/api/cards");
+    const data = await res.json();
+    if (reqSeq !== cardsRequestSeq) return;
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    cardsRegistry = cloneJson(data.cards || {});
+    workflowDefinitionCardsRegistry = cloneJson(cardsRegistry);
+    if (
+      !preserveSelection ||
+      !currentCardSelection ||
+      !cardsRegistry[currentCardSelection.workflowType] ||
+      !cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey]
+    ) {
+      const firstWorkflowType = getSortedCardWorkflowTypes()[0] || "";
+      const firstCardKey = firstWorkflowType ? Object.keys(cardsRegistry[firstWorkflowType] || {}).sort((a, b) => a.localeCompare(b))[0] || "" : "";
+      currentCardSelection = firstWorkflowType && firstCardKey ? { workflowType: firstWorkflowType, cardKey: firstCardKey } : null;
+    }
+    if (Object.keys(workflowDefinitionReferenceDetails).length === 0) {
+      await loadWorkflowDefinitionReferenceDetails();
+    }
+    renderCardsList();
+    renderCardsDetailPane();
+  } catch (err) {
+    if (reqSeq !== cardsRequestSeq) return;
+    console.error("Failed to load cards registry:", err);
+    cardsRegistry = {};
+    currentCardSelection = null;
+    renderCardsList();
+    renderCardsDetailPane();
+    if (cardsManagementList) {
+      cardsManagementList.innerHTML =
+        `<div class="workflow-definition-list-empty">Cards 加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+    }
+  } finally {
+    if (cardsManagementRefreshBtn) {
+      cardsManagementRefreshBtn.classList.remove("spinning");
+    }
+  }
+}
+
+async function loadWorkflowDefinitionReferenceDetails() {
+  try {
+    const listRes = await apiFetch("/api/workflow-definitions");
+    const listData = await listRes.json();
+    if (!listRes.ok) {
+      throw new Error(listData?.error || `HTTP ${listRes.status}`);
+    }
+    const bundles = Array.isArray(listData.definitions) ? listData.definitions : [];
+    const detailEntries = await Promise.all(
+      bundles.map(async (bundle) => {
+        const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(bundle.key)}`);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || `HTTP ${res.status}`);
+        }
+        return [bundle.key, data];
+      }),
+    );
+    workflowDefinitionReferenceDetails = Object.fromEntries(detailEntries);
+  } catch (err) {
+    console.error("Failed to load workflow definition references:", err);
+    workflowDefinitionReferenceDetails = {};
+  }
+}
+
+function buildCardsSavePayload() {
+  const state = readCurrentCardEditorState();
+  const nextRegistry = cloneJson(cardsRegistry || {});
+  if (!currentCardSelection) {
+    return { cards: nextRegistry, state };
+  }
+  if (nextRegistry[currentCardSelection.workflowType]) {
+    delete nextRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey];
+    if (Object.keys(nextRegistry[currentCardSelection.workflowType]).length === 0) {
+      delete nextRegistry[currentCardSelection.workflowType];
+    }
+  }
+  if (!nextRegistry[state.workflowType]) {
+    nextRegistry[state.workflowType] = {};
+  }
+  nextRegistry[state.workflowType][state.cardKey] = cloneJson(state.card);
+  return { cards: nextRegistry, state };
+}
+
+async function saveCardsRegistry() {
+  try {
+    const payload = buildCardsSavePayload();
+    const validationErrors = [...(payload.state.validationErrors || []), ...validateCardDraft(payload.state)];
+    if (validationErrors.length > 0) {
+      renderCardsValidation(payload.state);
+      alert(validationErrors[0]);
+      return;
+    }
+    const res = await apiFetch("/api/cards", {
+      method: "POST",
+      body: JSON.stringify({ cards: payload.cards }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    cardsRegistry = cloneJson(payload.cards);
+    workflowDefinitionCardsRegistry = cloneJson(payload.cards);
+    currentCardSelection = {
+      workflowType: payload.state.workflowType,
+      cardKey: payload.state.cardKey,
+    };
+    showToast(`已保存 cards registry：${payload.state.workflowType}/${payload.state.cardKey}`);
+    await loadCardsRegistry({ preserveSelection: true });
+  } catch (err) {
+    console.error("Failed to save cards registry:", err);
+    alert(err instanceof Error ? err.message : "保存 cards registry 失败");
+  }
+}
+
+async function saveCurrentCard() {
+  try {
+    const payload = buildCardsSavePayload();
+    const validationErrors = [...(payload.state.validationErrors || []), ...validateCardDraft(payload.state)];
+    if (validationErrors.length > 0) {
+      renderCardsValidation(payload.state);
+      alert(validationErrors[0]);
+      return;
+    }
+    const currentSelection = currentCardSelection;
+    const routeWorkflowType = encodeURIComponent(currentSelection?.workflowType || payload.state.workflowType);
+    const routeCardKey = encodeURIComponent(currentSelection?.cardKey || payload.state.cardKey);
+    const res = await apiFetch(`/api/cards/${routeWorkflowType}/${routeCardKey}`, {
+      method: "POST",
+      body: JSON.stringify({
+        workflow_type: payload.state.workflowType,
+        card_key: payload.state.cardKey,
+        card: payload.state.card,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    cardsRegistry = cloneJson(payload.cards);
+    workflowDefinitionCardsRegistry = cloneJson(payload.cards);
+    currentCardSelection = {
+      workflowType: payload.state.workflowType,
+      cardKey: payload.state.cardKey,
+    };
+    showToast(`已保存当前 card：${payload.state.workflowType}/${payload.state.cardKey}`);
+    await loadCardsRegistry({ preserveSelection: true });
+  } catch (err) {
+    console.error("Failed to save current card:", err);
+    alert(err instanceof Error ? err.message : "保存当前 card 失败");
+  }
+}
+
+async function createCardDraft() {
+  const workflowType = ((await openTextPrompt("输入 workflow type", currentCardSelection?.workflowType || "dev_test", {
+    title: "新建 Card",
+  })) || "").trim();
+  if (!workflowType) return;
+  const cardKey = ((await openTextPrompt("输入 card key", "", {
+    title: "新建 Card",
+  })) || "").trim();
+  if (!cardKey) return;
+  if (!cardsRegistry[workflowType]) {
+    cardsRegistry[workflowType] = {};
+  }
+  if (cardsRegistry[workflowType][cardKey]) {
+    alert(`card "${workflowType}/${cardKey}" 已存在`);
+    return;
+  }
+  cardsRegistry[workflowType][cardKey] = createEmptyCardConfig();
+  currentCardSelection = { workflowType, cardKey };
+  renderCardsList();
+  renderCardsDetailPane();
+  showToast(`已创建 ${workflowType}/${cardKey}`);
+}
+
+async function duplicateCurrentCardDraft() {
+  const current = getCurrentCardConfig();
+  if (!currentCardSelection || !current) {
+    alert("请先选择一个 card");
+    return;
+  }
+  const workflowType = ((await openTextPrompt("复制到 workflow type", currentCardSelection.workflowType, {
+    title: "复制 Card",
+  })) || "").trim();
+  if (!workflowType) return;
+  const cardKey = ((await openTextPrompt("复制后的 card key", `${currentCardSelection.cardKey}_copy`, {
+    title: "复制 Card",
+  })) || "").trim();
+  if (!cardKey) return;
+  if (!cardsRegistry[workflowType]) {
+    cardsRegistry[workflowType] = {};
+  }
+  if (cardsRegistry[workflowType][cardKey]) {
+    alert(`card "${workflowType}/${cardKey}" 已存在`);
+    return;
+  }
+  cardsRegistry[workflowType][cardKey] = cloneJson(current);
+  currentCardSelection = { workflowType, cardKey };
+  renderCardsList();
+  renderCardsDetailPane();
+  showToast(`已复制到 ${workflowType}/${cardKey}`);
+}
+
+function addCardActionRow() {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  card.actions.push({ id: "", label: "", type: "" });
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function toggleCardFormPanel() {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  if (card.form) {
+    card.form = null;
+  } else {
+    card.form = {
+      name: "",
+      submit_action: { id: "", label: "", type: "" },
+      fields: [],
+    };
+  }
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function addCardFormFieldRow() {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  if (!card.form) {
+    card.form = {
+      name: "",
+      submit_action: { id: "", label: "", type: "" },
+      fields: [],
+    };
+  }
+  card.form.fields.push({ name: "", label: "", type: "text" });
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function addCardSectionRow() {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  card.sections.push({ body_template: "", actions: [] });
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function addCardSectionActionRow(sectionIndex) {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  if (!Array.isArray(card.sections)) {
+    card.sections = [];
+  }
+  if (!card.sections[sectionIndex]) {
+    card.sections[sectionIndex] = { body_template: "", actions: [] };
+  }
+  if (!Array.isArray(card.sections[sectionIndex].actions)) {
+    card.sections[sectionIndex].actions = [];
+  }
+  card.sections[sectionIndex].actions.push({ id: "", label: "", type: "" });
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function moveCardSection(direction, sectionIndex) {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  const nextIndex = direction === "up" ? sectionIndex - 1 : sectionIndex + 1;
+  card.sections = moveArrayItem(card.sections || [], sectionIndex, nextIndex);
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function moveCardSectionAction(direction, sectionIndex, actionIndex) {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  if (!card.sections[sectionIndex] || !Array.isArray(card.sections[sectionIndex].actions)) {
+    return;
+  }
+  const nextIndex = direction === "up" ? actionIndex - 1 : actionIndex + 1;
+  card.sections[sectionIndex].actions = moveArrayItem(
+    card.sections[sectionIndex].actions,
+    actionIndex,
+    nextIndex,
+  );
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function reorderCardSection(fromIndex, toIndex) {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  card.sections = moveArrayItem(card.sections || [], fromIndex, toIndex);
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function reorderCardSectionAction(sectionIndex, fromIndex, toIndex) {
+  const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+  if (!card.sections[sectionIndex] || !Array.isArray(card.sections[sectionIndex].actions)) return;
+  card.sections[sectionIndex].actions = moveArrayItem(card.sections[sectionIndex].actions, fromIndex, toIndex);
+  if (currentCardSelection) {
+    cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+  }
+  renderCardsEditor(card);
+  renderCardsDerivedPanels(readCurrentCardEditorState());
+}
+
+function bindCardsDragEvents() {
+  if (!cardsManagementSections) return;
+  cardsManagementSections.addEventListener("dragstart", (event) => {
+    const row = event.target.closest("[data-card-drag-type]");
+    if (!row) return;
+    cardsDragState = {
+      type: row.getAttribute("data-card-drag-type") || "",
+      index: row.getAttribute("data-card-drag-index") || "",
+    };
+    row.classList.add("dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", cardsDragState.index);
+    }
+  });
+  cardsManagementSections.addEventListener("dragover", (event) => {
+    const row = event.target.closest("[data-card-drag-type]");
+    if (!row || !cardsDragState) return;
+    const targetType = row.getAttribute("data-card-drag-type") || "";
+    if (targetType !== cardsDragState.type) return;
+    event.preventDefault();
+    if (cardsDragState.type === "section-action") {
+      const targetIndex = row.getAttribute("data-card-drag-index") || "";
+      if (targetIndex.split(".")[0] !== cardsDragState.index.split(".")[0]) return;
+    }
+    row.classList.add("drag-over");
+  });
+  cardsManagementSections.addEventListener("dragleave", (event) => {
+    const row = event.target.closest("[data-card-drag-type]");
+    if (row) row.classList.remove("drag-over");
+  });
+  cardsManagementSections.addEventListener("drop", (event) => {
+    const row = event.target.closest("[data-card-drag-type]");
+    if (!row || !cardsDragState) return;
+    row.classList.remove("drag-over");
+    const targetType = row.getAttribute("data-card-drag-type") || "";
+    const targetIndex = row.getAttribute("data-card-drag-index") || "";
+    if (targetType !== cardsDragState.type) return;
+    event.preventDefault();
+    if (targetType === "section") {
+      reorderCardSection(Number(cardsDragState.index), Number(targetIndex));
+      return;
+    }
+    if (targetType === "section-action") {
+      const [fromSection, fromAction] = cardsDragState.index.split(".").map(Number);
+      const [toSection, toAction] = targetIndex.split(".").map(Number);
+      if (fromSection !== toSection) return;
+      reorderCardSectionAction(fromSection, fromAction, toAction);
+    }
+  });
+  cardsManagementSections.addEventListener("dragend", () => {
+    cardsDragState = null;
+    Array.from(cardsManagementSections.querySelectorAll(".dragging, .drag-over")).forEach((el) => {
+      el.classList.remove("dragging", "drag-over");
+    });
+  });
+  cardsManagementSections.addEventListener("keydown", (event) => {
+    const row = event.target.closest("[data-card-drag-type]");
+    if (!row) return;
+    const type = row.getAttribute("data-card-drag-type") || "";
+    const index = row.getAttribute("data-card-drag-index") || "";
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const direction = event.key === "ArrowUp" ? "up" : "down";
+    if (type === "section") {
+      moveCardSection(direction, Number(index));
+      showToast(`已通过键盘${direction === "up" ? "上移" : "下移"} section`);
+      return;
+    }
+    if (type === "section-action") {
+      const [sectionIndex, actionIndex] = index.split(".").map(Number);
+      moveCardSectionAction(direction, sectionIndex, actionIndex);
+      showToast(`已通过键盘${direction === "up" ? "上移" : "下移"} action`);
+    }
+  });
+}
+
+async function deleteCurrentCard() {
+  if (!currentCardSelection) {
+    alert("请先选择一个 card");
+    return;
+  }
+  const { workflowType, cardKey } = currentCardSelection;
+  if (!confirm(`确认删除 ${workflowType}/${cardKey} 吗？`)) {
+    return;
+  }
+  try {
+    const nextRegistry = cloneJson(cardsRegistry || {});
+    if (nextRegistry[workflowType]) {
+      delete nextRegistry[workflowType][cardKey];
+      if (Object.keys(nextRegistry[workflowType]).length === 0) {
+        delete nextRegistry[workflowType];
+      }
+    }
+    const res = await apiFetch("/api/cards", {
+      method: "POST",
+      body: JSON.stringify({ cards: nextRegistry }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    cardsRegistry = cloneJson(nextRegistry);
+    workflowDefinitionCardsRegistry = cloneJson(nextRegistry);
+    const firstWorkflowType = getSortedCardWorkflowTypes()[0] || "";
+    const firstCardKey = firstWorkflowType
+      ? Object.keys(cardsRegistry[firstWorkflowType] || {}).sort((a, b) => a.localeCompare(b))[0] || ""
+      : "";
+    currentCardSelection = firstWorkflowType && firstCardKey ? { workflowType: firstWorkflowType, cardKey: firstCardKey } : null;
+    showToast(`已删除 ${workflowType}/${cardKey}`);
+    renderCardsList();
+    renderCardsDetailPane();
+  } catch (err) {
+    console.error("Failed to delete current card:", err);
+    alert(err instanceof Error ? err.message : "删除当前 card 失败");
+  }
+}
+
+function bindCardsRowEvents() {
+  if (cardsManagementActions) {
+    cardsManagementActions.addEventListener("click", (event) => {
+      const removeBtn = event.target.closest("[data-card-action-remove]");
+      if (!removeBtn) return;
+      const index = Number(removeBtn.getAttribute("data-card-action-remove"));
+      const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+      card.actions.splice(index, 1);
+      if (currentCardSelection) {
+        cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+      }
+      renderCardsEditor(card);
+      renderCardsDerivedPanels(readCurrentCardEditorState());
+    });
+    cardsManagementActions.addEventListener("input", () => {
+      const state = syncCurrentCardDraftFromEditor();
+      if (state) renderCardsDerivedPanels(state);
+    });
+  }
+
+  if (cardsManagementFormFields) {
+    cardsManagementFormFields.addEventListener("click", (event) => {
+      const removeBtn = event.target.closest("[data-card-form-field-remove]");
+      if (!removeBtn) return;
+      const index = Number(removeBtn.getAttribute("data-card-form-field-remove"));
+      const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+      if (card.form) {
+        card.form.fields.splice(index, 1);
+      }
+      if (currentCardSelection) {
+        cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+      }
+      renderCardsEditor(card);
+      renderCardsDerivedPanels(readCurrentCardEditorState());
+    });
+    cardsManagementFormFields.addEventListener("input", () => {
+      const state = syncCurrentCardDraftFromEditor();
+      if (state) renderCardsDerivedPanels(state);
+    });
+  }
+
+  if (cardsManagementSections) {
+    cardsManagementSections.addEventListener("click", (event) => {
+      const moveBtn = event.target.closest("[data-card-section-move]");
+      if (moveBtn) {
+        const parts = (moveBtn.getAttribute("data-card-section-move") || "").split(":");
+        moveCardSection(parts[0], Number(parts[1]));
+        return;
+      }
+      const removeBtn = event.target.closest("[data-card-section-remove]");
+      if (removeBtn) {
+        const index = Number(removeBtn.getAttribute("data-card-section-remove"));
+        const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+        card.sections.splice(index, 1);
+        if (currentCardSelection) {
+          cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+        }
+        renderCardsEditor(card);
+        renderCardsDerivedPanels(readCurrentCardEditorState());
+        return;
+      }
+      const addBtn = event.target.closest("[data-card-section-action-add]");
+      if (addBtn) {
+        const index = Number(addBtn.getAttribute("data-card-section-action-add"));
+        addCardSectionActionRow(index);
+        return;
+      }
+      const moveActionBtn = event.target.closest("[data-card-section-action-move]");
+      if (moveActionBtn) {
+        const parts = (moveActionBtn.getAttribute("data-card-section-action-move") || "").split(":");
+        const actionPath = (parts[1] || "").split(".");
+        moveCardSectionAction(parts[0], Number(actionPath[0]), Number(actionPath[1]));
+        return;
+      }
+      const removeActionBtn = event.target.closest("[data-card-section-action-remove]");
+      if (removeActionBtn) {
+        const actionPath = (removeActionBtn.getAttribute("data-card-section-action-remove") || "").split(".");
+        const sectionIndex = Number(actionPath[0]);
+        const actionIndex = Number(actionPath[1]);
+        const card = normalizeCardConfig(getCurrentCardConfig() || createEmptyCardConfig());
+        if (card.sections[sectionIndex] && Array.isArray(card.sections[sectionIndex].actions)) {
+          card.sections[sectionIndex].actions.splice(actionIndex, 1);
+        }
+        if (currentCardSelection) {
+          cardsRegistry[currentCardSelection.workflowType][currentCardSelection.cardKey] = card;
+        }
+        renderCardsEditor(card);
+        renderCardsDerivedPanels(readCurrentCardEditorState());
+      }
+    });
+    cardsManagementSections.addEventListener("input", () => {
+      const state = syncCurrentCardDraftFromEditor();
+      if (state) renderCardsDerivedPanels(state);
+    });
   }
 }
 
@@ -7761,6 +9383,8 @@ initTakeCopterCursor();
 initChatBgParticleNudge();
 bindNotificationClickHandler();
 bindNotificationPermissionPrimer();
+bindCardsRowEvents();
+bindCardsDragEvents();
 window.addEventListener("focus", clearCurrentGroupUnreadIfForeground);
 document.addEventListener("visibilitychange", clearCurrentGroupUnreadIfForeground);
 connectWS();
@@ -7810,6 +9434,91 @@ if (workflowDefinitionRefreshBtn) {
 if (workflowDefinitionCreateBtn) {
   workflowDefinitionCreateBtn.addEventListener("click", async () => {
     await createWorkflowDefinition();
+  });
+}
+if (cardsManagementRefreshBtn) {
+  cardsManagementRefreshBtn.addEventListener("click", async () => {
+    await loadCardsRegistry({ preserveSelection: true });
+  });
+}
+if (cardsManagementCreateBtn) {
+  cardsManagementCreateBtn.addEventListener("click", async () => {
+    await createCardDraft();
+  });
+}
+if (cardsManagementDuplicateBtn) {
+  cardsManagementDuplicateBtn.addEventListener("click", async () => {
+    await duplicateCurrentCardDraft();
+  });
+}
+if (cardsManagementDeleteBtn) {
+  cardsManagementDeleteBtn.addEventListener("click", async () => {
+    await deleteCurrentCard();
+  });
+}
+if (cardsManagementSaveBtn) {
+  cardsManagementSaveBtn.addEventListener("click", async () => {
+    await saveCurrentCard();
+  });
+}
+if (cardsManagementSaveRegistryBtn) {
+  cardsManagementSaveRegistryBtn.addEventListener("click", async () => {
+    await saveCardsRegistry();
+  });
+}
+if (cardsManagementActionAddBtn) {
+  cardsManagementActionAddBtn.addEventListener("click", () => {
+    addCardActionRow();
+  });
+}
+if (cardsManagementFormToggleBtn) {
+  cardsManagementFormToggleBtn.addEventListener("click", () => {
+    toggleCardFormPanel();
+  });
+}
+if (cardsManagementFormFieldAddBtn) {
+  cardsManagementFormFieldAddBtn.addEventListener("click", () => {
+    addCardFormFieldRow();
+  });
+}
+if (cardsManagementSectionAddBtn) {
+  cardsManagementSectionAddBtn.addEventListener("click", () => {
+    addCardSectionRow();
+  });
+}
+[
+  cardsManagementWorkflowTypeInput,
+  cardsManagementCardKeyInput,
+  cardsManagementPatternInput,
+  cardsManagementHeaderColorInput,
+  cardsManagementHeaderTitleInput,
+  cardsManagementBodyTemplateInput,
+  cardsManagementFormNameInput,
+  cardsManagementFormSubmitIdInput,
+  cardsManagementFormSubmitLabelInput,
+  cardsManagementFormSubmitTypeInput,
+].forEach((input) => {
+  if (!input) return;
+  input.addEventListener("input", () => {
+    const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
+    renderCardsDerivedPanels(state);
+  });
+  input.addEventListener("change", () => {
+    const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
+    renderCardsDerivedPanels(state);
+  });
+});
+if (cardsManagementPreviewPreset) {
+  cardsManagementPreviewPreset.addEventListener("change", () => {
+    syncCardsPreviewDataInputFromPreset();
+    const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
+    renderCardsDerivedPanels(state);
+  });
+}
+if (cardsManagementPreviewData) {
+  cardsManagementPreviewData.addEventListener("input", () => {
+    const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
+    renderCardsDerivedPanels(state);
   });
 }
 if (workflowDefinitionSaveBtn) {

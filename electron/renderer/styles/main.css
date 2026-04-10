@@ -1437,6 +1437,20 @@ html, body {
   display: flex;
 }
 
+#cards-management-screen {
+  flex: 1;
+  min-width: 0;
+  display: none;
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 28%),
+    radial-gradient(circle at right center, rgba(59, 130, 246, 0.08), transparent 32%),
+    var(--bg-primary);
+}
+
+#cards-management-screen.active {
+  display: flex;
+}
+
 .workflow-definitions-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
@@ -2187,6 +2201,262 @@ html, body {
   font-size: 12px;
   line-height: 1.6;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.cards-management-sidebar {
+  background:
+    linear-gradient(180deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0) 220px),
+    var(--surface);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7), 0 10px 24px rgba(5, 150, 105, 0.08);
+}
+
+.cards-management-kicker {
+  color: #047857;
+}
+
+.cards-management-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.85fr);
+}
+
+.cards-management-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cards-management-inline-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cards-management-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cards-management-row-empty {
+  padding: 16px;
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.cards-management-row {
+  border: 1px solid rgba(16, 185, 129, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 14px;
+  box-shadow: 0 12px 24px rgba(148, 163, 184, 0.06);
+}
+
+.cards-management-subrow {
+  background: rgba(248, 250, 252, 0.88);
+  box-shadow: none;
+}
+
+.cards-management-draggable {
+  cursor: grab;
+  outline: none;
+}
+
+.cards-management-draggable.dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.cards-management-draggable:focus {
+  border-color: rgba(14, 165, 233, 0.42);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.cards-management-draggable.drag-over {
+  border-color: rgba(16, 185, 129, 0.42);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(255, 255, 255, 0.92));
+}
+
+.cards-management-draggable.drag-over::after {
+  content: "释放后插入到这里";
+  display: block;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cards-management-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cards-management-row-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cards-management-row-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.cards-management-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  user-select: none;
+}
+
+.cards-management-row-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cards-management-row-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cards-management-row .workflow-definition-field-block {
+  margin-top: 12px;
+}
+
+.cards-management-form-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cards-management-preview {
+  min-height: 180px;
+  padding: 10px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(241, 245, 249, 0.92), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.cards-management-preview-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cards-management-preview .interactive-card {
+  pointer-events: none;
+}
+
+.cards-management-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cards-management-group-title {
+  padding: 8px 10px 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: #047857;
+}
+
+.cards-management-list-item {
+  border-color: rgba(5, 150, 105, 0.14);
+}
+
+.cards-management-list-item:hover {
+  border-color: rgba(5, 150, 105, 0.22);
+  box-shadow: 0 12px 24px rgba(5, 150, 105, 0.08);
+}
+
+.cards-management-list-item.active {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.96), rgba(255, 255, 255, 0.9));
+  box-shadow: inset 3px 0 0 #10b981, 0 14px 28px rgba(16, 185, 129, 0.14);
+}
+
+.cards-management-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cards-management-pill {
+  background: rgba(16, 185, 129, 0.12);
+  color: #065f46;
+}
+
+.cards-management-pill.secondary {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-secondary);
+}
+
+.cards-management-list-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cards-management-list-item .workflow-definition-list-desc {
+  margin-bottom: 0;
+}
+
+.cards-management-references {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cards-management-reference-empty {
+  padding: 16px;
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.cards-management-reference-item {
+  padding: 14px;
+  border: 1px solid rgba(16, 185, 129, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.cards-management-reference-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.cards-management-reference-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 #trace-monitor-screen {
@@ -3156,6 +3426,7 @@ html, body {
 @media (max-width: 900px) {
   #workbench-screen.active,
   #workflow-definitions-screen.active,
+  #cards-management-screen.active,
   #memory-management-screen.active,
   #trace-monitor-screen.active {
     flex-direction: column;
@@ -3163,6 +3434,7 @@ html, body {
 
   .workbench-sidebar,
   .workflow-definitions-sidebar,
+  .cards-management-sidebar,
   .memory-sidebar,
   .trace-monitor-sidebar {
     width: 100%;
@@ -3177,6 +3449,10 @@ html, body {
   }
 
   .workflow-definitions-main {
+    padding: 16px;
+  }
+
+  .cards-management-main {
     padding: 16px;
   }
 
@@ -3198,7 +3474,9 @@ html, body {
 
   .workflow-definition-state-editor,
   .workflow-definition-subeditor,
-  .workflow-definition-state-inspector-grid {
+  .workflow-definition-state-inspector-grid,
+  .cards-management-row-grid,
+  .cards-management-row-grid.compact {
     grid-template-columns: 1fr;
   }
 
