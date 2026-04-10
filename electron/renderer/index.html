@@ -747,9 +747,9 @@
                 <p id="cards-management-summary" class="workflow-definition-summary"></p>
                 <div id="cards-management-meta" class="workflow-definition-meta"></div>
               </div>
-              <div class="workflow-definition-hero-actions">
-                <button id="cards-management-save-btn" class="btn-primary">编辑</button>
+              <div class="workflow-definition-hero-actions cards-management-hero-actions">
                 <button id="cards-management-cancel-btn" class="btn-ghost hidden">取消</button>
+                <button id="cards-management-save-btn" class="btn-primary">编辑</button>
               </div>
             </section>
 
@@ -761,15 +761,15 @@
                 </div>
 
                 <div class="workflow-definition-form-grid">
-                  <label class="workflow-definition-field">
+                  <label class="workflow-definition-field" data-card-field-path="workflowType">
                     <span>Workflow Type</span>
                     <input id="cards-management-workflow-type" type="text" placeholder="例如 dev_test" />
                   </label>
-                  <label class="workflow-definition-field">
+                  <label class="workflow-definition-field" data-card-field-path="cardKey">
                     <span>Card Key</span>
                     <input id="cards-management-card-key" type="text" placeholder="例如 deploy_confirm" />
                   </label>
-                  <label class="workflow-definition-field">
+                  <label class="workflow-definition-field" data-card-field-path="pattern">
                     <span>Pattern</span>
                     <select id="cards-management-pattern">
                       <option value="info_actions">info_actions</option>
@@ -791,7 +791,7 @@
                   </label>
                 </div>
 
-                <label class="workflow-definition-field workflow-definition-field-block">
+                <label class="workflow-definition-field workflow-definition-field-block" data-card-field-path="header.title_template">
                   <span>Header Title Template</span>
                   <input id="cards-management-header-title" type="text" placeholder="例如 📋 确认方案后进入开发" />
                 </label>
@@ -804,9 +804,12 @@
                 <section class="workflow-definition-field workflow-definition-field-block">
                   <div class="cards-management-section-head">
                     <span>Actions</span>
-                    <button id="cards-management-action-add-btn" type="button" class="cards-management-icon-btn" title="新增操作" aria-label="新增操作">
-                      <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                    </button>
+                    <div class="cards-management-inline-actions cards-management-toolbar">
+                      <button id="cards-management-action-add-btn" type="button" class="cards-management-icon-btn cards-management-icon-btn-pill" title="新增操作" aria-label="新增操作">
+                        <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                        <span>新增</span>
+                      </button>
+                    </div>
                   </div>
                   <div id="cards-management-actions" class="cards-management-rows"></div>
                 </section>
@@ -814,22 +817,25 @@
                 <section class="workflow-definition-field workflow-definition-field-block">
                   <div class="cards-management-section-head">
                     <span>Form</span>
-                    <div class="cards-management-inline-actions">
-                      <button id="cards-management-form-toggle-btn" type="button" class="cards-management-icon-btn" title="启用或关闭表单" aria-label="启用或关闭表单">
-                        <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18V3z" /><path d="M12 3a9 9 0 0 1 0 18" /></svg>
+                    <div class="cards-management-inline-actions cards-management-toolbar">
+                      <button id="cards-management-form-toggle-btn" type="button" class="cards-management-toggle-btn" title="启用或关闭表单" aria-label="启用或关闭表单" aria-pressed="false">
+                        <span class="cards-management-toggle-track" aria-hidden="true">
+                          <span class="cards-management-toggle-thumb"></span>
+                        </span>
                       </button>
-                      <button id="cards-management-form-field-add-btn" type="button" class="cards-management-icon-btn" title="新增字段" aria-label="新增字段">
+                      <button id="cards-management-form-field-add-btn" type="button" class="cards-management-icon-btn cards-management-icon-btn-pill" title="新增字段" aria-label="新增字段">
                         <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                        <span>字段</span>
                       </button>
                     </div>
                   </div>
                   <div id="cards-management-form" class="cards-management-form-panel hidden">
                     <div class="workflow-definition-form-grid">
-                      <label class="workflow-definition-field">
+                      <label class="workflow-definition-field" data-card-field-path="form.name">
                         <span>Form Name</span>
                         <input id="cards-management-form-name" type="text" placeholder="例如 revision_form" />
                       </label>
-                      <label class="workflow-definition-field">
+                      <label class="workflow-definition-field" data-card-field-path="form.submit_action.id">
                         <span>Submit Action ID</span>
                         <input id="cards-management-form-submit-id" type="text" placeholder="例如 request_revision" />
                       </label>
@@ -853,23 +859,19 @@
                 <section class="workflow-definition-field workflow-definition-field-block">
                   <div class="cards-management-section-head">
                     <span>Sections</span>
-                    <button id="cards-management-section-add-btn" type="button" class="cards-management-icon-btn" title="新增分组" aria-label="新增分组">
-                      <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                    </button>
+                    <div class="cards-management-inline-actions cards-management-toolbar">
+                      <button id="cards-management-section-add-btn" type="button" class="cards-management-icon-btn cards-management-icon-btn-pill" title="新增分组" aria-label="新增分组">
+                        <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                        <span>新增</span>
+                      </button>
+                    </div>
                   </div>
                   <div id="cards-management-sections" class="cards-management-rows"></div>
                 </section>
+
               </section>
 
               <section class="workflow-definition-sidepanels">
-                <section class="workflow-definition-panel">
-                  <div class="workflow-definition-panel-head">
-                    <div class="workflow-definition-panel-title">校验结果</div>
-                    <div id="cards-management-validation-summary" class="workflow-definition-panel-note"></div>
-                  </div>
-                  <div id="cards-management-validation" class="workflow-definition-validation"></div>
-                </section>
-
                 <section class="workflow-definition-panel">
                   <div class="workflow-definition-panel-head">
                     <div class="workflow-definition-panel-title">渲染预览</div>
@@ -885,20 +887,12 @@
                         <option value="testing">测试提交流程</option>
                       </select>
                     </label>
-                    <label class="workflow-definition-field workflow-definition-field-block">
+                    <label class="workflow-definition-field workflow-definition-field-block" data-card-field-path="previewData">
                       <span>Mock Data JSON</span>
                       <textarea id="cards-management-preview-data" rows="8" spellcheck="false"></textarea>
                     </label>
                   </div>
                   <div id="cards-management-preview" class="cards-management-preview"></div>
-                </section>
-
-                <section class="workflow-definition-panel">
-                  <div class="workflow-definition-panel-head">
-                    <div class="workflow-definition-panel-title">Registry JSON</div>
-                    <div class="workflow-definition-panel-note">当前流程类型下的卡片快照</div>
-                  </div>
-                  <pre id="cards-management-json" class="workflow-definition-code-block"></pre>
                 </section>
 
                 <section class="workflow-definition-panel">
