@@ -919,7 +919,8 @@ describe('memory IPC tasks', () => {
       false,
       deps,
     );
-    readMemoryIpcResult(sourceGroup, writeId);
+    const writeRes = readMemoryIpcResult(sourceGroup, writeId);
+    const memoryId = writeRes.memory?.id as string;
 
     // seed one message hit as well
     storeChatMetadata('other@g.us', Date.now().toString());
@@ -950,8 +951,10 @@ describe('memory IPC tasks', () => {
     expect(searchRes.hits.length).toBeGreaterThan(0);
     expect(
       searchRes.hits.some(
-        (h: { kind: string; content: string }) =>
-          h.kind === 'memory' && h.content.includes('branch main'),
+        (h: { kind: string; id?: string; content: string }) =>
+          h.kind === 'memory' &&
+          h.id === memoryId &&
+          h.content.includes('branch main'),
       ),
     ).toBe(true);
   });

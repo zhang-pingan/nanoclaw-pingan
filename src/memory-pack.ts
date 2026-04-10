@@ -4,7 +4,7 @@ export function buildMemoryPack(
   memories: MemoryRecord[],
   prompt: string,
 ): string {
-  const all = memories.filter((m) => m.status !== 'deprecated');
+  const all = memories.filter((m) => m.status === 'active');
   if (all.length === 0) return '';
 
   const terms = new Set(
@@ -73,4 +73,3 @@ export function buildMemoryPack(
     '',
   ].join('\n');
 }
-

@@ -1857,6 +1857,7 @@ export async function processTaskIpc(
         ...(mode === 'hybrid'
           ? memoryResults.map((r) => ({
               kind: 'memory' as const,
+              id: r.id,
               // bm25 smaller is better; invert to positive ranking score.
               score: 1 / (1 + Math.max(0, r.score)),
               layer: r.layer,

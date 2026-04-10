@@ -30,17 +30,19 @@ describe('buildMemoryPack', () => {
     ).toBe('');
   });
 
-  it('includes memory pack wrapper and excludes deprecated memories', () => {
+  it('includes memory pack wrapper and excludes non-active memories', () => {
     const pack = buildMemoryPack(
       [
         mem({ id: 'm1', content: 'active one', layer: 'canonical' }),
         mem({ id: 'm2', content: 'deprecated one', status: 'deprecated' }),
+        mem({ id: 'm3', content: 'conflicted one', status: 'conflicted' }),
       ],
       'active',
     );
     expect(pack).toContain('[MEMORY PACK]');
     expect(pack).toContain('active one');
     expect(pack).not.toContain('deprecated one');
+    expect(pack).not.toContain('conflicted one');
     expect(pack).toContain('[/MEMORY PACK]');
   });
 
@@ -100,4 +102,3 @@ describe('buildMemoryPack', () => {
     expect(pack).toContain(longCanonical);
   });
 });
-
