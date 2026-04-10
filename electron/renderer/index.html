@@ -369,7 +369,7 @@
               <div class="workbench-panel-title">备注评论</div>
               <div class="workbench-comment-composer">
                 <textarea id="workbench-comment-input" rows="3" placeholder="记录补充说明、风险、交接信息"></textarea>
-                <button id="workbench-comment-submit" class="btn-primary">添加备注</button>
+                <button id="workbench-comment-submit" class="btn-primary btn-soft-primary">添加备注</button>
               </div>
               <div id="workbench-comments" class="workbench-timeline"></div>
             </section>
@@ -411,10 +411,10 @@
                 <option value="conflicted">conflicted</option>
                 <option value="deprecated">deprecated</option>
               </select>
-              <button id="memory-doctor-btn" class="btn-primary">Doctor</button>
-              <button id="memory-metrics-btn" class="btn-primary">指标统计</button>
-              <button id="memory-create-btn" class="btn-primary">新增记忆</button>
-              <button id="memory-search-btn" class="btn-primary">搜索</button>
+              <button id="memory-doctor-btn" class="btn-primary btn-soft-primary">Doctor</button>
+              <button id="memory-metrics-btn" class="btn-primary btn-soft-primary">指标统计</button>
+              <button id="memory-create-btn" class="btn-primary btn-soft-primary">新增记忆</button>
+              <button id="memory-search-btn" class="btn-primary btn-soft-primary">搜索</button>
               <button id="memory-refresh-btn" class="icon-btn" title="刷新记忆列表">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"></polyline>
@@ -460,7 +460,7 @@
               </label>
               <div class="memory-editor-actions">
                 <button id="memory-save-btn" class="btn-primary">保存</button>
-                <button id="memory-cancel-btn" class="icon-btn">取消</button>
+                <button id="memory-cancel-btn" class="btn-ghost">取消</button>
               </div>
             </div>
             <div id="memory-doctor-panel" class="memory-doctor-panel hidden">
@@ -545,16 +545,16 @@
           <div id="workflow-definition-detail" class="workflow-definition-detail hidden">
             <section class="workflow-definition-hero">
               <div class="workflow-definition-hero-main">
-                <div class="workflow-definition-kicker">Definition Detail</div>
+                <div class="workflow-definition-kicker">流程详情</div>
                 <h2 id="workflow-definition-title">--</h2>
                 <p id="workflow-definition-summary" class="workflow-definition-summary"></p>
                 <div id="workflow-definition-meta" class="workflow-definition-meta"></div>
               </div>
               <div class="workflow-definition-hero-actions">
-                <button id="workflow-definition-copy-btn" class="btn-ghost">复制 published 到 draft</button>
-                <button id="workflow-definition-copy-version-btn" class="btn-ghost">复制选中版本到 draft</button>
-                <button id="workflow-definition-save-btn" class="btn-primary">保存 draft</button>
-                <button id="workflow-definition-publish-btn" class="btn-primary">发布 draft</button>
+                <button id="workflow-definition-copy-btn" class="btn-ghost">复制已发布版本</button>
+                <button id="workflow-definition-copy-version-btn" class="btn-ghost">复制选中版本</button>
+                <button id="workflow-definition-save-btn" class="btn-ghost workflow-definition-save-btn">保存草稿</button>
+                <button id="workflow-definition-publish-btn" class="btn-primary">发布草稿</button>
               </div>
             </section>
 

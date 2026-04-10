@@ -1675,8 +1675,11 @@ html, body {
   margin-top: auto;
 }
 
-.cards-management-hero-actions .btn-primary,
-.cards-management-hero-actions .btn-ghost {
+.workflow-definition-hero-actions .btn-primary,
+.workflow-definition-hero-actions .btn-ghost,
+.memory-editor-actions .btn-primary,
+.memory-editor-actions .btn-ghost,
+.btn-primary.btn-soft-primary {
   height: 34px;
   padding: 0 14px;
   border-radius: 12px;
@@ -1685,33 +1688,53 @@ html, body {
   box-shadow: none;
 }
 
-.cards-management-hero-actions .btn-primary {
+.workflow-definition-hero-actions .btn-primary,
+.memory-editor-actions .btn-primary,
+.btn-primary.btn-soft-primary {
   border: 1px solid rgba(59, 130, 246, 0.18);
   background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(219, 234, 254, 0.94));
   color: #1d4ed8;
 }
 
-.cards-management-hero-actions .btn-primary:hover {
+.workflow-definition-hero-actions .btn-primary:hover,
+.memory-editor-actions .btn-primary:hover,
+.btn-primary.btn-soft-primary:hover {
   border-color: rgba(37, 99, 235, 0.28);
   background: linear-gradient(180deg, rgba(219, 234, 254, 0.98), rgba(191, 219, 254, 0.92));
   box-shadow: 0 8px 18px rgba(59, 130, 246, 0.14);
   transform: translateY(-1px);
 }
 
-.cards-management-hero-actions .btn-primary:active {
+.workflow-definition-hero-actions .btn-primary:active,
+.memory-editor-actions .btn-primary:active,
+.btn-primary.btn-soft-primary:active {
   transform: translateY(0);
 }
 
-.cards-management-hero-actions .btn-ghost {
+.workflow-definition-hero-actions .btn-ghost,
+.memory-editor-actions .btn-ghost {
   border: 1px solid rgba(244, 114, 182, 0.18);
   background: rgba(253, 242, 248, 0.92);
   color: #be185d;
 }
 
-.cards-management-hero-actions .btn-ghost:hover {
+.workflow-definition-hero-actions .btn-ghost:hover,
+.memory-editor-actions .btn-ghost:hover {
   border-color: rgba(236, 72, 153, 0.26);
   background: rgba(252, 231, 243, 0.98);
   color: #9d174d;
+}
+
+.workflow-definition-hero-actions .workflow-definition-save-btn {
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(239, 246, 255, 0.92);
+  color: #2563eb;
+}
+
+.workflow-definition-hero-actions .workflow-definition-save-btn:hover {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(219, 234, 254, 0.98);
+  color: #1d4ed8;
 }
 
 .workflow-definition-hero-actions .btn-ghost,
