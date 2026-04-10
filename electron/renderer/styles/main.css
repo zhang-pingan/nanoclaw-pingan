@@ -1675,6 +1675,45 @@ html, body {
   margin-top: auto;
 }
 
+.cards-management-hero-actions .btn-primary,
+.cards-management-hero-actions .btn-ghost {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.cards-management-hero-actions .btn-primary {
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(219, 234, 254, 0.94));
+  color: #1d4ed8;
+}
+
+.cards-management-hero-actions .btn-primary:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: linear-gradient(180deg, rgba(219, 234, 254, 0.98), rgba(191, 219, 254, 0.92));
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.14);
+  transform: translateY(-1px);
+}
+
+.cards-management-hero-actions .btn-primary:active {
+  transform: translateY(0);
+}
+
+.cards-management-hero-actions .btn-ghost {
+  border: 1px solid rgba(244, 114, 182, 0.18);
+  background: rgba(253, 242, 248, 0.92);
+  color: #be185d;
+}
+
+.cards-management-hero-actions .btn-ghost:hover {
+  border-color: rgba(236, 72, 153, 0.26);
+  background: rgba(252, 231, 243, 0.98);
+  color: #9d174d;
+}
+
 .workflow-definition-hero-actions .btn-ghost,
 .workflow-definition-hero-actions .btn-primary {
   white-space: nowrap;
