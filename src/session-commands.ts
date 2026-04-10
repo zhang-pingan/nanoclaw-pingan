@@ -12,6 +12,7 @@ export function extractSessionCommand(
   let text = content.trim();
   text = text.replace(triggerPattern, '').trim();
   if (text === '/compact') return '/compact';
+  if (text === '/new') return '/new';
   return null;
 }
 
@@ -39,6 +40,7 @@ export interface SessionCommandDeps {
   ) => Promise<'success' | 'error'>;
   closeStdin: () => void;
   advanceCursor: (timestamp: string) => void;
+  resetSession: () => Promise<void> | void;
   formatMessages: (msgs: NewMessage[], timezone: string) => string;
   /** Whether the denied sender would normally be allowed to interact (for denial messages). */
   canSenderInteract: (msg: NewMessage) => boolean;
@@ -94,15 +96,15 @@ export async function handleSessionCommand(opts: {
     return { handled: true, success: true };
   }
 
-  // AUTHORIZED: process pre-compact messages first, then run the command
+  // AUTHORIZED: process session command
   logger.info({ group: groupName, command }, 'Session command');
 
   const cmdIndex = missedMessages.indexOf(cmdMsg);
-  const preCompactMsgs = missedMessages.slice(0, cmdIndex);
+  const preCommandMsgs = missedMessages.slice(0, cmdIndex);
 
-  // Send pre-compact messages to the agent so they're in the session context.
-  if (preCompactMsgs.length > 0) {
-    const prePrompt = deps.formatMessages(preCompactMsgs, timezone);
+  // /compact should first absorb preceding messages into the current session.
+  if (command === '/compact' && preCommandMsgs.length > 0) {
+    const prePrompt = deps.formatMessages(preCommandMsgs, timezone);
     let hadPreError = false;
     let preOutputSent = false;
 
@@ -131,11 +133,18 @@ export async function handleSessionCommand(opts: {
       if (preOutputSent) {
         // Output was already sent — don't retry or it will duplicate.
         // Advance cursor past pre-compact messages, leave command pending.
-        deps.advanceCursor(preCompactMsgs[preCompactMsgs.length - 1].timestamp);
+        deps.advanceCursor(preCommandMsgs[preCommandMsgs.length - 1].timestamp);
         return { handled: true, success: true };
       }
       return { handled: true, success: false };
     }
+  }
+
+  if (command === '/new') {
+    await deps.resetSession();
+    deps.advanceCursor(cmdMsg.timestamp);
+    await deps.sendMessage('已切换到全新 session，下一条消息将使用干净上下文。');
+    return { handled: true, success: true };
   }
 
   // Forward the literal slash command as the prompt (no XML formatting)

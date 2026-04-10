@@ -15,6 +15,10 @@ export interface ChannelOpts {
   getAgentStatus?: () => AgentStatusInfo[];
   getActiveAgentQueryTraces?: () => ActiveAgentQueryTrace[];
   stopAgent?: (groupJid: string) => Promise<StopAgentResult>;
+  resetSessions?: (scope: {
+    all?: boolean;
+    groupJid?: string;
+  }) => Promise<{ resetCount: number }>;
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;

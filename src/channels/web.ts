@@ -369,6 +369,9 @@ class WebChannel {
       if (pathname === '/api/agent-status/stop' && req.method === 'POST') {
         return this.apiStopAgent(req, res);
       }
+      if (pathname === '/api/sessions/reset' && req.method === 'POST') {
+        return this.apiResetSessions(req, res);
+      }
       if (pathname === '/api/agent-queries/active') {
         return this.apiGetActiveAgentQueries(res);
       }
@@ -1246,6 +1249,50 @@ class WebChannel {
     const agents = this.opts.getAgentStatus?.() ?? [];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ agents }));
+  }
+
+  private async apiResetSessions(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    if (!this.opts.resetSessions) {
+      res.writeHead(501, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Session reset is not available' }));
+      return;
+    }
+
+    const data = body as { scope?: 'all'; jid?: string };
+    if (data.scope === 'all') {
+      const result = await this.opts.resetSessions({ all: true });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (typeof data.jid === 'string' && data.jid) {
+      const registered = this.opts.registeredGroups();
+      if (!registered[data.jid]) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'group not found' }));
+        return;
+      }
+      const result = await this.opts.resetSessions({ groupJid: data.jid });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'scope=all or jid required' }));
   }
 
   private async apiStopAgent(

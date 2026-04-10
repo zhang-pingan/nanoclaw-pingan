@@ -64,6 +64,7 @@ var primaryNav = document.getElementById("primary-nav");
 var primaryNavItems = Array.from(document.querySelectorAll(".primary-nav-item"));
 var groupsList = document.getElementById("groups-list");
 var refreshGroupsBtn = document.getElementById("refresh-groups");
+var resetAllSessionsBtn = document.getElementById("reset-all-sessions");
 var schedulersPanel = document.getElementById("schedulers-panel");
 var schedulersList = document.getElementById("schedulers-list");
 var openSchedulersBtn = document.getElementById("open-schedulers");
@@ -199,6 +200,7 @@ var TRACE_HISTORY_PAGE_SIZE = 10;
 var commands = [
   { name: "/clear", desc: "Clear conversation context" },
   { name: "/compact", desc: "Compact conversation history" },
+  { name: "/new", desc: "Start a fresh session for the next task" },
 ];
 
 const MAIN_GROUP_AVATAR = "/assets/doraemon-face.png";
@@ -1848,6 +1850,39 @@ async function loadGroups() {
     console.error("Failed to load groups:", err);
   }
 }
+
+async function resetAllSessions() {
+  if (!resetAllSessionsBtn) return;
+  const confirmed = window.confirm("这会让所有群组在下一次新建对话时切换到全新 session。当前正在运行的任务不会被打断。继续吗？");
+  if (!confirmed) return;
+
+  resetAllSessionsBtn.classList.add("busy");
+  resetAllSessionsBtn.disabled = true;
+  try {
+    const res = await apiFetch("/api/sessions/reset", {
+      method: "POST",
+      body: JSON.stringify({ scope: "all" }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    const resetCount = Number(data.resetCount || 0);
+    showToast(`已标记 ${resetCount} 个群组使用全新 session`);
+    await loadGroups();
+    if (currentGroupJid) {
+      await loadMessages();
+    }
+  } catch (err) {
+    console.error("Failed to reset sessions:", err);
+    showToast(`切换失败：${err instanceof Error ? err.message : "未知错误"}`);
+  } finally {
+    resetAllSessionsBtn.classList.remove("busy");
+    resetAllSessionsBtn.disabled = false;
+  }
+}
+
 async function loadSchedulers() {
   try {
     const res = await apiFetch("/api/tasks");
@@ -5646,6 +5681,11 @@ refreshGroupsBtn.addEventListener("click", () => {
   warmWorkflowCreateOptions(true);
   if (currentGroupJid) loadMessages();
 });
+if (resetAllSessionsBtn) {
+  resetAllSessionsBtn.addEventListener("click", () => {
+    resetAllSessions();
+  });
+}
 openSchedulersBtn.addEventListener("click", () => {
   if (schedulersPanel.classList.contains("open")) {
     schedulersPanel.classList.remove("open");

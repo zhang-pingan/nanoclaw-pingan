@@ -36,6 +36,10 @@ describe('extractSessionCommand', () => {
     expect(extractSessionCommand('  /compact  ', trigger)).toBe('/compact');
   });
 
+  it('detects /new with trigger prefix', () => {
+    expect(extractSessionCommand('@Andy /new', trigger)).toBe('/new');
+  });
+
   it('is case-sensitive for the command', () => {
     expect(extractSessionCommand('/Compact', trigger)).toBeNull();
   });
@@ -75,6 +79,7 @@ function makeDeps(
     runAgent: vi.fn().mockResolvedValue('success'),
     closeStdin: vi.fn(),
     advanceCursor: vi.fn(),
+    resetSession: vi.fn(),
     formatMessages: vi.fn().mockReturnValue('<formatted>'),
     canSenderInteract: vi.fn().mockReturnValue(true),
     ...overrides,
@@ -193,6 +198,25 @@ describe('handleSessionCommand', () => {
       '/compact',
       expect.any(Function),
     );
+  });
+
+  it('handles authorized /new locally without running the agent', async () => {
+    const deps = makeDeps();
+    const result = await handleSessionCommand({
+      missedMessages: [makeMsg('/new', { is_from_me: true })],
+      isMainGroup: true,
+      groupName: 'test',
+      triggerPattern: trigger,
+      timezone: 'UTC',
+      deps,
+    });
+    expect(result).toEqual({ handled: true, success: true });
+    expect(deps.resetSession).toHaveBeenCalledTimes(1);
+    expect(deps.runAgent).not.toHaveBeenCalled();
+    expect(deps.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('全新 session'),
+    );
+    expect(deps.advanceCursor).toHaveBeenCalledWith('100');
   });
 
   it('reports failure when command-stage runAgent returns error without streamed status', async () => {

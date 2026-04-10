@@ -137,6 +137,57 @@ const activeRunIds = new Map<string, string>();
 const pendingQueryBatches = new Map<string, PendingQueryBatch>();
 const activeMessageQueryTraces = new Map<string, ActiveMessageQueryTraceState>();
 
+function removeSessionDir(groupFolder: string): void {
+  const sessionDir = path.join(DATA_DIR, 'sessions', groupFolder, '.claude');
+  if (fs.existsSync(sessionDir)) {
+    fs.rmSync(sessionDir, { recursive: true });
+  }
+}
+
+function resetGroupSession(
+  groupJid: string,
+  opts: {
+    deleteSessionDir?: boolean;
+  } = {},
+): { reset: boolean } {
+  const group = registeredGroups[groupJid];
+  if (!group) return { reset: false };
+
+  const isActive = queue.isActive(groupJid);
+
+  clearSession(group.folder);
+  delete sessions[group.folder];
+
+  if (opts.deleteSessionDir) {
+    if (isActive) pendingSessionCleanup.add(group.folder);
+    else removeSessionDir(group.folder);
+  }
+
+  return { reset: true };
+}
+
+async function resetSessionsForScope(opts: {
+  all?: boolean;
+  groupJid?: string;
+  deleteSessionDir?: boolean;
+}): Promise<{ resetCount: number }> {
+  const targets = opts.all
+    ? Object.keys(registeredGroups)
+    : opts.groupJid
+      ? [opts.groupJid]
+      : [];
+
+  let resetCount = 0;
+  for (const groupJid of targets) {
+    const result = resetGroupSession(groupJid, {
+      deleteSessionDir: opts.deleteSessionDir,
+    });
+    if (result.reset) resetCount += 1;
+  }
+
+  return { resetCount };
+}
+
 function createExecutionId(): string {
   return crypto.randomUUID();
 }
@@ -511,18 +562,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
       clearMessages(chatJid);
       if (channel.name === 'web') clearWebMessages(chatJid);
-      clearSession(group.folder);
-      // No active container in this path — safe to delete immediately
-      const sessionDir = path.join(
-        DATA_DIR,
-        'sessions',
-        group.folder,
-        '.claude',
-      );
-      if (fs.existsSync(sessionDir)) {
-        fs.rmSync(sessionDir, { recursive: true });
-      }
-      delete sessions[group.folder];
+      resetGroupSession(chatJid, { deleteSessionDir: true });
       await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
       logger.info({ group: group.name }, '/clear: context reset');
     } else {
@@ -566,6 +606,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       advanceCursor: (ts) => {
         lastAgentTimestamp[chatJid] = ts;
         saveState();
+      },
+      resetSession: () => {
+        resetGroupSession(chatJid);
       },
       formatMessages,
       canSenderInteract: (msg) => {
@@ -888,10 +931,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   // Deferred .claude/ cleanup: safe now that the container has exited
   if (pendingSessionCleanup.has(group.folder)) {
     pendingSessionCleanup.delete(group.folder);
-    const sessionDir = path.join(DATA_DIR, 'sessions', group.folder, '.claude');
-    if (fs.existsSync(sessionDir)) {
-      fs.rmSync(sessionDir, { recursive: true });
-    }
+    removeSessionDir(group.folder);
     await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
     logger.info({ group: group.name }, '/clear: deferred cleanup completed');
   }
@@ -1127,7 +1167,14 @@ async function startMessageLoop(): Promise<void> {
             // Only close active container if the sender is authorized — otherwise an
             // untrusted user could kill in-flight work by sending /compact (DoS).
             // closeStdin no-ops internally when no container is active.
-            if (isSessionCommandAllowed(!!loopCmdMsg.is_from_me)) {
+            const command = extractSessionCommand(
+              loopCmdMsg.content,
+              TRIGGER_PATTERN,
+            );
+            if (
+              command === '/compact' &&
+              isSessionCommandAllowed(!!loopCmdMsg.is_from_me)
+            ) {
               queue.closeStdin(chatJid);
             }
             // Enqueue so processGroupMessages handles auth + cursor advancement.
@@ -1167,15 +1214,15 @@ async function startMessageLoop(): Promise<void> {
               queue.closeStdin(chatJid);
               clearMessages(chatJid);
               if (channel.name === 'web') clearWebMessages(chatJid);
-              clearSession(group.folder);
-              delete sessions[group.folder];
+              resetGroupSession(chatJid, {
+                deleteSessionDir: true,
+              });
               lastAgentTimestamp[chatJid] =
                 groupMessages[groupMessages.length - 1].timestamp;
               saveState();
 
               if (queue.isActive(chatJid)) {
                 // Container still running — defer .claude/ removal until exit
-                pendingSessionCleanup.add(group.folder);
                 await channel.sendMessage(chatJid, '数据清理中，请等待');
                 logger.info(
                   { group: group.name },
@@ -1183,15 +1230,6 @@ async function startMessageLoop(): Promise<void> {
                 );
               } else {
                 // No active container — safe to delete immediately
-                const sessionDir = path.join(
-                  DATA_DIR,
-                  'sessions',
-                  group.folder,
-                  '.claude',
-                );
-                if (fs.existsSync(sessionDir)) {
-                  fs.rmSync(sessionDir, { recursive: true });
-                }
                 await channel.sendMessage(
                   chatJid,
                   '数据已清理完毕，可正常发送命令啦',
@@ -1473,6 +1511,10 @@ async function main(): Promise<void> {
     stopAgent?: (
       groupJid: string,
     ) => Promise<import('./types.js').StopAgentResult>;
+    resetSessions?: (scope: {
+      all?: boolean;
+      groupJid?: string;
+    }) => Promise<{ resetCount: number }>;
     onAgentStatusChange?: () => void;
     onAgentQueryTraceChange?: () => void;
   } = {
@@ -1515,6 +1557,11 @@ async function main(): Promise<void> {
     getAgentStatus: () => queue.getActiveAgents(),
     getActiveAgentQueryTraces: () => agentQueryTraceManager.getActiveQueries(),
     stopAgent: (groupJid: string) => queue.stopAgent(groupJid),
+    resetSessions: (scope) =>
+      resetSessionsForScope({
+        all: scope.all,
+        groupJid: scope.groupJid,
+      }),
     onAgentStatusChange: () => {
       for (const ch of channels) {
         if (ch.name === 'web' && 'broadcastAgentStatus' in ch) {

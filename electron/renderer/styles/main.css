@@ -2558,6 +2558,12 @@ html, body {
   font-family: var(--font-sans);
 }
 
+.section-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .section-header button {
   background: none;
   border: none;
@@ -2571,6 +2577,15 @@ html, body {
 
 .section-header button:hover {
   color: var(--accent);
+}
+
+.group-action-btn:hover {
+  color: #c2410c;
+  background: rgba(251, 146, 60, 0.16);
+}
+
+.group-action-btn.busy .icon {
+  animation: iconSpin 900ms linear infinite;
 }
 
 .list {
