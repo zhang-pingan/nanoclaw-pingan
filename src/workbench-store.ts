@@ -106,12 +106,19 @@ function emitActionItemUpdate(
   payload: Record<string, unknown>,
 ): void {
   const pendingSummary = getPendingActionSummary(taskId);
+  const task = getWorkbenchTaskById(taskId);
+  const workflow = getWorkflow(workflowId);
   emitWorkbenchEvent({
     type: 'action_item_updated',
     taskId,
     workflowId,
     payload: {
       ...payload,
+      taskTitle: task?.title || workflow?.name || '',
+      currentStageLabel:
+        workflow && task
+          ? getStatusLabel(workflow.workflow_type, task.current_stage)
+          : '',
       pendingApproval: pendingSummary.pendingApproval,
       pendingActionCount: pendingSummary.pendingActionCount,
     },

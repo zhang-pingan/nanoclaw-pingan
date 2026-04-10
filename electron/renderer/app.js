@@ -3019,8 +3019,14 @@ function showWorkbenchPendingReminder(task, pendingItems) {
   const firstItem = pendingItems[0];
   const itemCountLabel = pendingItems.length > 1 ? `等 ${pendingItems.length} 项待处理` : "有新的待处理项";
   const body = `${firstItem.title || task.current_stage_label || "当前任务"}，${itemCountLabel}`;
-
   showToast(`工作台提醒：${body}`, 3200);
+}
+
+function showWorkbenchPendingSystemNotification(task, pendingItems) {
+  if (!task || !Array.isArray(pendingItems) || pendingItems.length === 0) return;
+  const firstItem = pendingItems[0];
+  const itemCountLabel = pendingItems.length > 1 ? `等 ${pendingItems.length} 项待处理` : "有新的待处理项";
+  const body = `${firstItem.title || task.current_stage_label || "当前任务"}，${itemCountLabel}`;
 
   if (typeof window !== "undefined" && window.nanoclawApp?.notify) {
     window.nanoclawApp.notify(`工作台：${task.title || "任务"}`, body, { taskId: task.id });
@@ -3078,8 +3084,51 @@ function maybeNotifyWorkbenchPending(detail, previousDetail) {
   });
 
   workbenchPendingReminderIdsByTask[taskId] = pendingIds;
-  if (newPendingItems.length > 0) {
+  const shouldShowToast =
+    newPendingItems.length > 0 &&
+    isAppForeground() &&
+    activePrimaryNavKey === "workbench" &&
+    currentWorkbenchTaskId === taskId;
+  if (shouldShowToast) {
     showWorkbenchPendingReminder(detail.task, newPendingItems);
+  }
+}
+
+function maybeNotifyWorkbenchPendingFromRealtimeEvent(event) {
+  if (!event || event.type !== "action_item_updated") return;
+  const payload = event.payload || {};
+  const taskId = event.taskId || "";
+  const itemId = typeof payload.id === "string" ? payload.id : "";
+  if (!taskId || !itemId) return;
+
+  const existingIds = new Set(workbenchPendingReminderIdsByTask[taskId] || []);
+  const nextStatus = typeof payload.status === "string" ? payload.status : "";
+  if (nextStatus === "pending") {
+    const isNewPending = !existingIds.has(itemId);
+    existingIds.add(itemId);
+    workbenchPendingReminderIdsByTask[taskId] = Array.from(existingIds);
+    if (!isNewPending || isAppForeground()) return;
+
+    const existingTask = workbenchTasks.find((item) => item.id === taskId);
+    const task = existingTask || {
+      id: taskId,
+      title: typeof payload.taskTitle === "string" ? payload.taskTitle : "任务",
+      current_stage_label: typeof payload.currentStageLabel === "string" ? payload.currentStageLabel : "",
+    };
+    showWorkbenchPendingSystemNotification(task, [{
+      id: itemId,
+      title: typeof payload.title === "string" ? payload.title : "",
+    }]);
+    return;
+  }
+
+  if (["resolved", "confirmed", "skipped", "cancelled", "expired"].includes(nextStatus)) {
+    existingIds.delete(itemId);
+    if (existingIds.size > 0) {
+      workbenchPendingReminderIdsByTask[taskId] = Array.from(existingIds);
+    } else {
+      delete workbenchPendingReminderIdsByTask[taskId];
+    }
   }
 }
 
@@ -4428,13 +4477,14 @@ function clearCurrentGroupUnreadIfForeground() {
 }
 
 function handleWorkbenchRealtimeEvent(event) {
-  if (!event || activePrimaryNavKey !== "workbench") return;
+  if (!event) return;
   applyWorkbenchRealtimeEvent(event);
 }
 
 function applyWorkbenchRealtimeEvent(event) {
   if (!event) return;
   const payload = event.payload || {};
+  maybeNotifyWorkbenchPendingFromRealtimeEvent(event);
   const taskIdx = workbenchTasks.findIndex((item) => item.id === event.taskId);
 
   if (taskIdx >= 0) {
