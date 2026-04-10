@@ -2121,10 +2121,11 @@ export function createMemory(input: {
     .get(id) as MemoryRecord;
 }
 
-export function searchMemories(
+function searchMemoriesByStatus(
   groupFolder: string,
   query: string,
-  limit: number = 10,
+  limit: number,
+  statusSql: string,
 ): MemorySearchResult[] {
   try {
     return db
@@ -2135,7 +2136,7 @@ export function searchMemories(
       JOIN memories m ON m.rowid = memories_fts.rowid
       WHERE memories_fts MATCH ?
         AND m.group_folder = ?
-        AND m.status != 'deprecated'
+        AND ${statusSql}
       ORDER BY score ASC, m.updated_at DESC
       LIMIT ?
     `,
@@ -2145,6 +2146,27 @@ export function searchMemories(
     logger.error({ err, groupFolder, query }, 'Memory FTS search failed');
     return [];
   }
+}
+
+export function searchMemories(
+  groupFolder: string,
+  query: string,
+  limit: number = 10,
+): MemorySearchResult[] {
+  return searchMemoriesByStatus(
+    groupFolder,
+    query,
+    limit,
+    `m.status != 'deprecated'`,
+  );
+}
+
+export function searchMemoriesActive(
+  groupFolder: string,
+  query: string,
+  limit: number = 10,
+): MemorySearchResult[] {
+  return searchMemoriesByStatus(groupFolder, query, limit, `m.status = 'active'`);
 }
 
 export function listMemories(

@@ -1010,6 +1010,88 @@ describe('memory IPC tasks', () => {
     );
   });
 
+  it('memory_search uses shared synonym expansion for structured memories', async () => {
+    const sourceGroup = 'other-group';
+    const writeId = rid('mw');
+    const searchId = rid('ms');
+
+    await processTaskIpc(
+      {
+        type: 'memory_write',
+        requestId: writeId,
+        content: 'Payment service deploy checklist is required',
+        layer: 'canonical',
+        memory_type: 'rule',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    readMemoryIpcResult(sourceGroup, writeId);
+
+    await processTaskIpc(
+      {
+        type: 'memory_search',
+        requestId: searchId,
+        query: 'payment release',
+        mode: 'hybrid',
+        limit: 10,
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const res = readMemoryIpcResult(sourceGroup, searchId);
+    expect(
+      res.hits.some(
+        (h: { kind: string; content: string }) =>
+          h.kind === 'memory' &&
+          h.content.includes('deploy checklist'),
+      ),
+    ).toBe(true);
+  });
+
+  it('memory_search uses Chinese n-gram fallback for structured memories', async () => {
+    const sourceGroup = 'other-group';
+    const writeId = rid('mw');
+    const searchId = rid('ms');
+
+    await processTaskIpc(
+      {
+        type: 'memory_write',
+        requestId: writeId,
+        content: '支付服务上线前先检查回滚预案',
+        layer: 'canonical',
+        memory_type: 'rule',
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    readMemoryIpcResult(sourceGroup, writeId);
+
+    await processTaskIpc(
+      {
+        type: 'memory_search',
+        requestId: searchId,
+        query: '请帮我整理支付服务上线计划',
+        mode: 'hybrid',
+        limit: 10,
+      },
+      sourceGroup,
+      false,
+      deps,
+    );
+    const res = readMemoryIpcResult(sourceGroup, searchId);
+    expect(
+      res.hits.some(
+        (h: { kind: string; content: string }) =>
+          h.kind === 'memory' &&
+          h.content.includes('支付服务上线前先检查回滚预案'),
+      ),
+    ).toBe(true);
+  });
+
   it('memory_gc with dryRun=false deletes duplicates', async () => {
     const sourceGroup = 'other-group';
     const write1 = rid('mw');

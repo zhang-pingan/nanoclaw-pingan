@@ -42,7 +42,6 @@ import {
   getTaskById,
   recordMemoryMetric,
   resolveConflict,
-  searchMemories,
   searchMessages,
   storeChatMetadata,
   storeMessageDirect,
@@ -52,6 +51,7 @@ import {
 import type { MemoryExtractConfig } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
+import { retrieveStructuredMemories } from './memory-retrieval.js';
 import { InteractiveCard, RegisteredGroup } from './types.js';
 import {
   createWorkbenchInteractionItem,
@@ -1829,10 +1829,10 @@ export async function processTaskIpc(
       );
 
       // Search structured memory store
-      const memoryResults = searchMemories(
+      const memoryResults = retrieveStructuredMemories(
         sourceGroup,
         data.query,
-        Math.max(searchLimit * 2, searchLimit),
+        { limit: Math.max(searchLimit * 2, searchLimit) },
       );
 
       const nowMs = Date.now();
@@ -1858,8 +1858,7 @@ export async function processTaskIpc(
           ? memoryResults.map((r) => ({
               kind: 'memory' as const,
               id: r.id,
-              // bm25 smaller is better; invert to positive ranking score.
-              score: 1 / (1 + Math.max(0, r.score)),
+              score: r.sourceScore,
               layer: r.layer,
               memoryType: r.memory_type,
               content: r.content,

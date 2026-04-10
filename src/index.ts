@@ -50,7 +50,6 @@ import {
   getAllSessions,
   getAllTasks,
   getDelegationsByTarget,
-  listMemories,
   getMessagesSince,
   getNewMessages,
   getRegisteredGroup,
@@ -94,7 +93,7 @@ import {
   RegisteredGroup,
 } from './types.js';
 import { logger } from './logger.js';
-import { buildMemoryPack } from './memory-pack.js';
+import { buildMemoryPackForGroup } from './memory-pack.js';
 import {
   clearModelResolutionsForRun,
   consumeModelResolution,
@@ -641,7 +640,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   }
 
   let prompt = formatMessages(missedMessages, TIMEZONE);
-  const memoryPack = buildMemoryPack(listMemories(group.folder, 600), prompt);
+  const memoryPack = buildMemoryPackForGroup(group.folder, prompt);
   if (memoryPack) {
     prompt = `${memoryPack}${prompt}`;
   }

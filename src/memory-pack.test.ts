@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 
-import { buildMemoryPack } from './memory-pack.js';
+import { _initTestDatabase, createMemory } from './db.js';
+import { buildMemoryPack, buildMemoryPackForGroup } from './memory-pack.js';
 import { MemoryRecord } from './types.js';
 
 function mem(
@@ -20,6 +21,10 @@ function mem(
 }
 
 describe('buildMemoryPack', () => {
+  beforeEach(() => {
+    _initTestDatabase();
+  });
+
   it('returns empty string when no usable memories', () => {
     expect(buildMemoryPack([], 'foo')).toBe('');
     expect(
@@ -47,20 +52,20 @@ describe('buildMemoryPack', () => {
   });
 
   it('prioritizes relevant memories by prompt terms', () => {
-    const now = Date.now().toString();
-    const pack = buildMemoryPack(
-      [
-        mem({
-          id: 'm1',
-          content: 'release strategy for payment service',
-          updated_at: now,
-        }),
-        mem({
-          id: 'm2',
-          content: 'unrelated gardening notes',
-          updated_at: now,
-        }),
-      ],
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'release strategy for payment service',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'unrelated gardening notes',
+    });
+    const pack = buildMemoryPackForGroup(
+      'web_main',
       'Please help with payment release',
     );
     expect(pack).toContain('release strategy for payment service');
@@ -68,21 +73,20 @@ describe('buildMemoryPack', () => {
   });
 
   it('keeps important canonical fallback memories even without lexical match', () => {
-    const pack = buildMemoryPack(
-      [
-        mem({
-          id: 'c1',
-          layer: 'canonical',
-          memory_type: 'rule',
-          content: 'Always confirm before destructive actions',
-        }),
-        mem({
-          id: 'e1',
-          layer: 'episodic',
-          memory_type: 'summary',
-          content: 'Reviewed deployment logs last Thursday',
-        }),
-      ],
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: 'Always confirm before destructive actions',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'episodic',
+      memory_type: 'summary',
+      content: 'Reviewed deployment logs last Thursday',
+    });
+    const pack = buildMemoryPackForGroup(
+      'web_main',
       'Help me summarize the roadmap',
     );
     expect(pack).toContain('Always confirm before destructive actions');
@@ -90,25 +94,45 @@ describe('buildMemoryPack', () => {
   });
 
   it('matches small synonym expansions for pack retrieval', () => {
-    const pack = buildMemoryPack(
-      [
-        mem({
-          id: 'm1',
-          layer: 'canonical',
-          memory_type: 'fact',
-          content: 'Service payment uses deploy checklist before rollout',
-        }),
-        mem({
-          id: 'm2',
-          layer: 'canonical',
-          memory_type: 'fact',
-          content: 'Gardening notes for spring tomatoes',
-        }),
-      ],
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'Service payment uses deploy checklist before rollout',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'Gardening notes for spring tomatoes',
+    });
+    const pack = buildMemoryPackForGroup(
+      'web_main',
       'Help me prepare the payment release',
     );
     expect(pack).toContain('Service payment uses deploy checklist before rollout');
     expect(pack).not.toContain('Gardening notes for spring tomatoes');
+  });
+
+  it('uses Chinese n-gram fallback when full Chinese phrase does not lexically match', () => {
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'rule',
+      content: '支付服务上线前先检查回滚预案',
+    });
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: '园艺手册记录了番茄浇水频率',
+    });
+    const pack = buildMemoryPackForGroup(
+      'web_main',
+      '请帮我整理支付服务上线计划',
+    );
+    expect(pack).toContain('支付服务上线前先检查回滚预案');
+    expect(pack).not.toContain('园艺手册记录了番茄浇水频率');
   });
 
   it('respects layer quotas and still keeps canonical entries', () => {
