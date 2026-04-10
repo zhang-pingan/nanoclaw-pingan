@@ -73,6 +73,7 @@ export interface WorkbenchTaskItem {
   created_at: string;
   updated_at: string;
   pending_approval: boolean;
+  pending_action_count: number;
   active_delegation_id: string;
 }
 
@@ -166,9 +167,13 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const stateConfig = config?.states[workflow.status];
   const statusLabels = getStatusLabelsForType(workflow.workflow_type);
+  const taskId = persisted?.id || workflow.id;
+  const pendingActionCount = listWorkbenchActionItemsByTask(taskId).filter(
+    (item) => item.status === 'pending',
+  ).length;
 
   return {
-    id: persisted?.id || workflow.id,
+    id: taskId,
     title: persisted?.title || workflow.name,
     service: persisted?.service || workflow.service,
     start_from: persisted?.start_from || workflow.start_from,
@@ -188,7 +193,9 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     source_jid: persisted?.source_jid || workflow.source_jid,
     created_at: persisted?.created_at || workflow.created_at,
     updated_at: persisted?.updated_at || workflow.updated_at,
-    pending_approval: stateConfig?.type === 'confirmation',
+    pending_approval:
+      stateConfig?.type === 'confirmation' || pendingActionCount > 0,
+    pending_action_count: pendingActionCount,
     active_delegation_id: workflow.current_delegation_id || '',
   };
 }
@@ -646,7 +653,12 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
           source_jid: item.source_jid,
           created_at: item.created_at,
           updated_at: item.updated_at,
-          pending_approval: false,
+          pending_approval: listWorkbenchActionItemsByTask(item.id).some(
+            (actionItem) => actionItem.status === 'pending',
+          ),
+          pending_action_count: listWorkbenchActionItemsByTask(item.id).filter(
+            (actionItem) => actionItem.status === 'pending',
+          ).length,
           active_delegation_id: '',
         };
       }),

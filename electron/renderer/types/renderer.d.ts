@@ -2,9 +2,9 @@
 
 interface NanoClawAppAPI {
   /** Show a native system notification */
-  notify(title: string, body: string, meta?: { chatJid?: string }): void;
+  notify(title: string, body: string, meta?: { chatJid?: string; taskId?: string }): void;
   /** Listen to notification click events emitted by the main process */
-  onNotificationClick(handler: (payload: { chatJid?: string }) => void): () => void;
+  onNotificationClick(handler: (payload: { chatJid?: string; taskId?: string }) => void): () => void;
   /** Listen to the app shortcut that cycles the primary nav */
   onCyclePrimaryNav(handler: () => void): () => void;
   /** Open a URL in the system browser */

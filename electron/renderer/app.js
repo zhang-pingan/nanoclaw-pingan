@@ -161,6 +161,7 @@ var workbenchRetrySubmitting = false;
 var workbenchDetailLoading = false;
 var workbenchQueuedDetailTaskId = "";
 var workbenchDetailReloadTimer = null;
+var workbenchPendingReminderIdsByTask = {};
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -2916,13 +2917,19 @@ function renderWorkbenchTaskList() {
   }
 
   for (const task of workbenchTasks) {
+    const pendingCount = Number(task.pending_action_count || 0);
+    const hasPending = pendingCount > 0 || Boolean(task.pending_approval);
     const el = document.createElement("div");
-    el.className = `workbench-task-item${task.id === currentWorkbenchTaskId ? " active" : ""}`;
+    el.className = `workbench-task-item${task.id === currentWorkbenchTaskId ? " active" : ""}${hasPending ? " has-pending" : ""}`;
     el.innerHTML = `
-      <div class="workbench-task-title">${escapeHtml(task.title)}</div>
+      <div class="workbench-task-title-row">
+        <div class="workbench-task-title">${escapeHtml(task.title)}</div>
+        ${hasPending ? `<span class="workbench-task-pending-dot" title="有待处理项"></span>` : ""}
+      </div>
       <div class="workbench-task-badges">
         <span class="workbench-badge">${escapeHtml(task.service)}</span>
         <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
+        ${hasPending ? `<span class="workbench-badge workbench-badge-pending">待处理${pendingCount > 0 ? ` ${escapeHtml(String(pendingCount))}` : ""}</span>` : ""}
       </div>
       <div class="workbench-task-snippet">
         当前阶段：${escapeHtml(task.current_stage_label || task.current_stage)}<br />
@@ -2990,9 +2997,111 @@ async function refreshWorkbenchView() {
   }
 }
 
+function getWorkbenchPendingActionItems(detail) {
+  if (!detail || !Array.isArray(detail.action_items)) return [];
+  return detail.action_items.filter((item) => item && item.status === "pending");
+}
+
+function getWorkbenchPendingActionItemId(item) {
+  if (!item) return "";
+  if (typeof item.id === "string" && item.id) return item.id;
+  return [
+    item.item_type || "",
+    item.source_type || "",
+    item.source_ref_id || "",
+    item.title || "",
+    item.created_at || "",
+  ].join(":");
+}
+
+function showWorkbenchPendingReminder(task, pendingItems) {
+  if (!task || !Array.isArray(pendingItems) || pendingItems.length === 0) return;
+  const firstItem = pendingItems[0];
+  const itemCountLabel = pendingItems.length > 1 ? `等 ${pendingItems.length} 项待处理` : "有新的待处理项";
+  const body = `${firstItem.title || task.current_stage_label || "当前任务"}，${itemCountLabel}`;
+
+  showToast(`工作台提醒：${body}`, 3200);
+
+  if (typeof window !== "undefined" && window.nanoclawApp?.notify) {
+    window.nanoclawApp.notify(`工作台：${task.title || "任务"}`, body, { taskId: task.id });
+    return;
+  }
+
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission !== "granted") {
+    ensureBrowserNotificationPermission();
+    return;
+  }
+
+  const notification = new Notification(`工作台：${task.title || "任务"}`, {
+    body,
+    tag: `nanoclaw-workbench-${task.id}`,
+  });
+  notification.onclick = () => {
+    window.focus();
+    setPrimaryNav("workbench");
+    loadWorkbenchTaskDetail(task.id).catch((err) => {
+      console.error("Failed to open workbench task from browser notification click:", err);
+    });
+  };
+}
+
+function maybeNotifyWorkbenchPending(detail, previousDetail) {
+  const taskId = detail && detail.task && detail.task.id;
+  if (!taskId) return;
+
+  const pendingItems = getWorkbenchPendingActionItems(detail);
+  const pendingIds = pendingItems
+    .map((item) => getWorkbenchPendingActionItemId(item))
+    .filter(Boolean);
+
+  if (pendingIds.length === 0) {
+    delete workbenchPendingReminderIdsByTask[taskId];
+    return;
+  }
+
+  const previousTaskId = previousDetail && previousDetail.task && previousDetail.task.id;
+  if (previousTaskId !== taskId) {
+    workbenchPendingReminderIdsByTask[taskId] = pendingIds;
+    return;
+  }
+
+  const previousPendingIds = new Set(
+    getWorkbenchPendingActionItems(previousDetail)
+      .map((item) => getWorkbenchPendingActionItemId(item))
+      .filter(Boolean)
+  );
+  const remindedIds = new Set(workbenchPendingReminderIdsByTask[taskId] || []);
+  const newPendingItems = pendingItems.filter((item) => {
+    const itemId = getWorkbenchPendingActionItemId(item);
+    return itemId && !previousPendingIds.has(itemId) && !remindedIds.has(itemId);
+  });
+
+  workbenchPendingReminderIdsByTask[taskId] = pendingIds;
+  if (newPendingItems.length > 0) {
+    showWorkbenchPendingReminder(detail.task, newPendingItems);
+  }
+}
+
+function syncWorkbenchTaskPendingState(taskId, actionItems) {
+  if (!taskId) return;
+  const taskIdx = workbenchTasks.findIndex((item) => item.id === taskId);
+  if (taskIdx < 0) return;
+  const pendingActionCount = Array.isArray(actionItems)
+    ? actionItems.filter((item) => item && item.status === "pending").length
+    : 0;
+  workbenchTasks[taskIdx] = {
+    ...workbenchTasks[taskIdx],
+    pending_approval: pendingActionCount > 0,
+    pending_action_count: pendingActionCount,
+  };
+  renderWorkbenchTaskList();
+}
+
 function renderWorkbenchTaskDetail(detail) {
   const task = detail.task;
   if (!task) return;
+  const previousDetail = currentWorkbenchDetail;
   currentWorkbenchDetail = detail;
 
   workbenchDetailEmpty.classList.add("hidden");
@@ -3013,6 +3122,8 @@ function renderWorkbenchTaskDetail(detail) {
   renderWorkbenchAssets(detail.assets || []);
   renderWorkbenchComments(detail.comments || []);
   renderWorkbenchTimeline(detail.timeline || []);
+  maybeNotifyWorkbenchPending(detail, previousDetail);
+  syncWorkbenchTaskPendingState(task.id, detail.action_items || []);
 }
 
 function renderWorkbenchActions(task) {
@@ -3433,6 +3544,10 @@ function applyWorkbenchActionItemRealtimeUpdate(payload) {
   }
   const itemId = typeof payload.id === "string" ? payload.id : "";
   if (!itemId) return false;
+  const previousDetail = {
+    task: currentWorkbenchDetail.task,
+    action_items: currentWorkbenchDetail.action_items.map((item) => ({ ...item })),
+  };
 
   const nextStatus = typeof payload.status === "string" ? payload.status : "";
   const existingIdx = currentWorkbenchDetail.action_items.findIndex((item) => item.id === itemId);
@@ -3488,6 +3603,7 @@ function applyWorkbenchActionItemRealtimeUpdate(payload) {
   }
   currentWorkbenchDetail.action_items = sortWorkbenchItemsByCreatedAt(currentWorkbenchDetail.action_items);
   renderWorkbenchActionItems(currentWorkbenchDetail.action_items, currentWorkbenchDetail.task);
+  maybeNotifyWorkbenchPending(currentWorkbenchDetail, previousDetail);
   return true;
 }
 
@@ -4333,6 +4449,16 @@ function applyWorkbenchRealtimeEvent(event) {
         current_stage: payload.currentStage || existing.current_stage,
         current_stage_label: payload.currentStageLabel || existing.current_stage_label,
         updated_at: payload.updatedAt || existing.updated_at,
+        pending_approval: typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : existing.pending_approval,
+        pending_action_count:
+          typeof payload.pendingActionCount === "number" ? payload.pendingActionCount : existing.pending_action_count,
+      };
+    } else if (event.type === "action_item_updated") {
+      workbenchTasks[taskIdx] = {
+        ...existing,
+        pending_approval: typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : existing.pending_approval,
+        pending_action_count:
+          typeof payload.pendingActionCount === "number" ? payload.pendingActionCount : existing.pending_action_count,
       };
     }
     workbenchTasks = sortWorkbenchTaskItems(workbenchTasks);
@@ -4353,7 +4479,8 @@ function applyWorkbenchRealtimeEvent(event) {
       source_jid: payload.sourceJid || "",
       created_at: getPayloadTimestamp(payload),
       updated_at: getPayloadTimestamp(payload),
-      pending_approval: false,
+      pending_approval: Boolean(payload.pendingApproval),
+      pending_action_count: typeof payload.pendingActionCount === "number" ? payload.pendingActionCount : 0,
       active_delegation_id: "",
     });
     workbenchTasks = sortWorkbenchTaskItems(workbenchTasks);
@@ -4370,6 +4497,10 @@ function applyWorkbenchRealtimeEvent(event) {
       current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
       current_stage_label: payload.currentStageLabel || currentWorkbenchDetail.task.current_stage_label,
       updated_at: payload.updatedAt || currentWorkbenchDetail.task.updated_at,
+      pending_approval:
+        typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : currentWorkbenchDetail.task.pending_approval,
+      pending_action_count:
+        typeof payload.pendingActionCount === "number" ? payload.pendingActionCount : currentWorkbenchDetail.task.pending_action_count,
     };
     renderWorkbenchTaskDetail(currentWorkbenchDetail);
   } else if (event.type === "subtask_updated") {
@@ -4632,7 +4763,14 @@ function bindNotificationPermissionPrimer() {
 
 function bindNotificationClickHandler() {
   if (typeof window === "undefined" || !window.nanoclawApp?.onNotificationClick) return;
-  window.nanoclawApp.onNotificationClick(({ chatJid }) => {
+  window.nanoclawApp.onNotificationClick(({ chatJid, taskId }) => {
+    if (typeof taskId === "string" && taskId) {
+      setPrimaryNav("workbench");
+      loadWorkbenchTaskDetail(taskId).catch((err) => {
+        console.error("Failed to switch task from notification click:", err);
+      });
+      return;
+    }
     if (typeof chatJid !== "string" || !chatJid) return;
     if (chatJid === currentGroupJid) {
       clearUnreadForGroup(chatJid);
@@ -5127,7 +5265,7 @@ function showCopyToast() {
   showToast("\u5DF2\u590D\u5236");
 }
 
-function showToast(message) {
+function showToast(message, duration = 1500) {
   let toast = document.getElementById("copy-toast");
   if (!toast) {
     toast = document.createElement("div");
@@ -5139,7 +5277,7 @@ function showToast(message) {
   void toast.offsetWidth;
   toast.classList.add("visible");
   clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => toast.classList.remove("visible"), 1500);
+  toast._timer = setTimeout(() => toast.classList.remove("visible"), duration);
 }
 
 // --- Multi-select ---

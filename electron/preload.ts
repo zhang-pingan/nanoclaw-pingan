@@ -8,13 +8,16 @@ import { contextBridge, BrowserWindow, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('nanoclawApp', {
   // Show a native macOS notification
-  notify: (title: string, body: string, meta?: { chatJid?: string }) => {
+  notify: (title: string, body: string, meta?: { chatJid?: string; taskId?: string }) => {
     ipcRenderer.send('show-notification', { title, body, meta });
   },
 
   // Listen for notification click events from the main process.
-  onNotificationClick: (handler: (payload: { chatJid?: string }) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: { chatJid?: string }) => {
+  onNotificationClick: (handler: (payload: { chatJid?: string; taskId?: string }) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: { chatJid?: string; taskId?: string }
+    ) => {
       handler(payload || {});
     };
     ipcRenderer.on('notification-clicked', listener);

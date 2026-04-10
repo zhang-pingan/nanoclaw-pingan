@@ -15,6 +15,7 @@ interface ShowNotificationPayload {
   body: string;
   meta?: {
     chatJid?: string;
+    taskId?: string;
   };
 }
 
@@ -263,9 +264,14 @@ app.whenReady().then(() => {
     notification.on('click', () => {
       if (mainWindow) {
         bringMainWindowToFront();
-        const chatJid = payload?.meta?.chatJid;
-        if (typeof chatJid === 'string' && chatJid.length > 0) {
-          mainWindow.webContents.send('notification-clicked', { chatJid });
+        const meta = payload?.meta || {};
+        const chatJid = meta.chatJid;
+        const taskId = meta.taskId;
+        if (
+          (typeof chatJid === 'string' && chatJid.length > 0) ||
+          (typeof taskId === 'string' && taskId.length > 0)
+        ) {
+          mainWindow.webContents.send('notification-clicked', { chatJid, taskId });
         }
       }
     });

@@ -515,6 +515,23 @@ html, body {
   letter-spacing: -0.005em;
 }
 
+.workbench-task-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workbench-task-pending-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: #f97316;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
+}
+
 .workbench-task-badges,
 .workbench-task-meta,
 .workbench-task-actions {
@@ -552,6 +569,20 @@ html, body {
 .workbench-task-item.active .workbench-badge {
   background: rgba(14, 165, 233, 0.16);
   color: #0369a1;
+}
+
+.workbench-badge.workbench-badge-pending {
+  background: rgba(249, 115, 22, 0.14);
+  color: #c2410c;
+}
+
+.workbench-task-item.has-pending {
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+.workbench-task-item.active .workbench-badge.workbench-badge-pending {
+  background: rgba(249, 115, 22, 0.18);
+  color: #c2410c;
 }
 
 .workbench-main {

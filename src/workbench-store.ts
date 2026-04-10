@@ -87,16 +87,34 @@ function actionItemId(
   return `wb-action-${workflowId}-${stageKey}-${sourceType}-${sourceRefId}`;
 }
 
+function getPendingActionSummary(taskId: string): {
+  pendingApproval: boolean;
+  pendingActionCount: number;
+} {
+  const pendingActionCount = listWorkbenchActionItemsByTask(taskId).filter(
+    (item) => item.status === 'pending',
+  ).length;
+  return {
+    pendingApproval: pendingActionCount > 0,
+    pendingActionCount,
+  };
+}
+
 function emitActionItemUpdate(
   taskId: string,
   workflowId: string,
   payload: Record<string, unknown>,
 ): void {
+  const pendingSummary = getPendingActionSummary(taskId);
   emitWorkbenchEvent({
     type: 'action_item_updated',
     taskId,
     workflowId,
-    payload,
+    payload: {
+      ...payload,
+      pendingApproval: pendingSummary.pendingApproval,
+      pendingActionCount: pendingSummary.pendingActionCount,
+    },
   });
 }
 
@@ -508,6 +526,8 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
           workflow.workflow_type,
           workflow.status,
         ),
+        pendingApproval: false,
+        pendingActionCount: 0,
       },
     });
   }
@@ -529,6 +549,7 @@ export function syncWorkbenchOnWorkflowUpdated(
   const emitRealtime = options?.emitRealtime !== false;
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const stateConfig = config?.states[workflow.status];
+  const pendingSummary = getPendingActionSummary(task.id);
 
   updateWorkbenchTask(task.id, {
     status: workflow.status,
@@ -553,6 +574,10 @@ export function syncWorkbenchOnWorkflowUpdated(
         ),
         summary: summary !== undefined ? truncate(summary) : task.summary,
         updatedAt: workflow.updated_at,
+        pendingApproval:
+          stateConfig?.type === 'confirmation'
+          || pendingSummary.pendingApproval,
+        pendingActionCount: pendingSummary.pendingActionCount,
       },
     });
   }
@@ -675,6 +700,7 @@ export function syncWorkbenchOnTransition(
     updated_at: workflow.updated_at,
     last_event_at: workflow.updated_at,
   });
+  const pendingSummary = getPendingActionSummary(task.id);
   emitWorkbenchEvent({
     type: 'task_updated',
     taskId: task.id,
@@ -685,6 +711,8 @@ export function syncWorkbenchOnTransition(
       currentStage: toStatus,
       currentStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
       updatedAt: workflow.updated_at,
+      pendingApproval: pendingSummary.pendingApproval,
+      pendingActionCount: pendingSummary.pendingActionCount,
     },
   });
   for (const payload of subtaskEvents) {
