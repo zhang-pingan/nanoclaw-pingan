@@ -75,12 +75,6 @@ var agentStatusList = document.getElementById("agent-status-list");
 var openAgentStatusBtn = document.getElementById("open-agent-status");
 var closeAgentStatusBtn = document.getElementById("close-agent-status");
 var stoppingAgentIds = new Set();
-var workflowsPanel = document.getElementById("workflows-panel");
-var workflowsList = document.getElementById("workflows-list");
-var openWorkflowsBtn = document.getElementById("open-workflows");
-var closeWorkflowsBtn = document.getElementById("close-workflows");
-var refreshWorkflowsBtn = document.getElementById("refresh-workflows");
-var deleteAllWorkflowsBtn = document.getElementById("delete-all-workflows");
 var traceMonitorList = document.getElementById("trace-monitor-list");
 var traceMonitorRefreshBtn = document.getElementById("trace-monitor-refresh-btn");
 var traceMonitorClearHistoryBtn = document.getElementById("trace-monitor-clear-history-btn");
@@ -1094,7 +1088,6 @@ function cyclePrimaryNav(step) {
 
 function openSchedulersPanel() {
   agentStatusPanel.classList.remove("open");
-  workflowsPanel.classList.remove("open");
   if (agentStatusInterval) {
     clearInterval(agentStatusInterval);
     agentStatusInterval = null;
@@ -1105,22 +1098,10 @@ function openSchedulersPanel() {
 
 function openAgentStatusPanel() {
   schedulersPanel.classList.remove("open");
-  workflowsPanel.classList.remove("open");
   agentStatusPanel.classList.add("open");
   loadAgentStatus();
   if (agentStatusInterval) clearInterval(agentStatusInterval);
   agentStatusInterval = setInterval(updateAgentDurations, 1000);
-}
-
-function openWorkflowsPanel() {
-  schedulersPanel.classList.remove("open");
-  agentStatusPanel.classList.remove("open");
-  if (agentStatusInterval) {
-    clearInterval(agentStatusInterval);
-    agentStatusInterval = null;
-  }
-  workflowsPanel.classList.add("open");
-  loadWorkflows();
 }
 
 function renderGroups() {
@@ -2159,7 +2140,7 @@ function renderAgentStatus(agents) {
         ${agent.isTask && agent.runningTaskId ? `<span class="agent-status-task-id">${escapeHtml(agent.runningTaskId.slice(0, 8))}…</span>` : ""}
       </div>
       <div class="agent-status-actions">
-        <button type="button" class="workflow-action-btn stop icon-text-btn agent-stop-btn"${isStopping ? " disabled" : ""}>
+        <button type="button" class="panel-action-btn stop icon-text-btn agent-stop-btn"${isStopping ? " disabled" : ""}>
           ${isStopping ? "Stopping..." : `${SVG.stop} Stop`}
         </button>
       </div>
@@ -2194,7 +2175,6 @@ async function stopAgent(groupJid, btn) {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
     await loadAgentStatus();
-    await loadWorkflows();
     const toastMessage =
       data.cancelledWorkflowIds?.length > 0
         ? `已停止 agent，并取消 ${data.cancelledWorkflowIds.length} 个 workflow`
@@ -2878,136 +2858,7 @@ async function clearAllTraceHistory() {
     syncTraceMonitorHeaderActions();
   }
 }
-// --- Workflows panel ---
 var TERMINAL_STATUSES = ["passed", "ops_failed", "cancelled"];
-
-async function loadWorkflows() {
-  try {
-    const res = await apiFetch("/api/workflows");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    renderWorkflows(data.workflows || []);
-  } catch (err) {
-    console.error("Failed to load workflows:", err);
-    workflowsList.innerHTML = `<div class="workflows-empty">Failed to load workflows</div>`;
-  }
-}
-
-function renderWorkflows(workflows) {
-  workflowsList.innerHTML = "";
-
-  if (workflows.length === 0) {
-    workflowsList.innerHTML = `<div class="workflows-empty">No workflows</div>`;
-    return;
-  }
-
-  for (const wf of workflows) {
-    const isTerminal = TERMINAL_STATUSES.includes(wf.status);
-    const isPaused = wf.status === "paused";
-    const isActive = !isTerminal && !isPaused;
-
-    const statusClass = isTerminal
-      ? "workflow-status-terminal"
-      : isPaused
-        ? "workflow-status-paused"
-        : "workflow-status-active";
-
-    const statusText = isPaused
-      ? "\u23F8 " + wf.status
-      : wf.status;
-
-    const created = new Date(wf.created_at).toLocaleString();
-    const updated = new Date(wf.updated_at).toLocaleString();
-
-    const el = document.createElement("div");
-    el.className = "workflow-item";
-    el.innerHTML = `
-      <div class="workflow-item-header">
-        <span class="workflow-item-name">${escapeHtml(wf.name)}</span>
-        <span class="workflow-item-status ${statusClass}">${escapeHtml(statusText)}</span>
-      </div>
-      <div class="workflow-item-id">${escapeHtml(wf.id)}</div>
-      <div class="workflow-item-meta">
-        <span>\u{1F4E6} ${escapeHtml(wf.service)}</span>
-        ${wf.branch ? `<span>\u{1F33F} ${escapeHtml(wf.branch)}</span>` : ""}
-        ${wf.workflow_type ? `<span>\u{1F4CB} ${escapeHtml(wf.workflow_type)}</span>` : ""}
-        ${wf.round > 0 ? `<span>\u{1F504} Round ${wf.round}</span>` : ""}
-      </div>
-      <div class="workflow-item-meta">
-        <span>Created: ${created}</span>
-        <span>Updated: ${updated}</span>
-      </div>
-      <div class="workflow-item-actions"></div>
-    `;
-
-    const actionsEl = el.querySelector(".workflow-item-actions");
-
-    if (isActive) {
-      // Running workflow: show stop button
-      const stopBtn = document.createElement("button");
-      stopBtn.className = "workflow-action-btn stop icon-text-btn";
-      stopBtn.innerHTML = `${SVG.stop} Stop`;
-      stopBtn.addEventListener("click", () => stopWorkflow(wf.id, el));
-      actionsEl.appendChild(stopBtn);
-    }
-
-    if (isTerminal || isPaused) {
-      // Stopped / terminal workflow: show delete button
-      const deleteBtn = document.createElement("button");
-      deleteBtn.className = "workflow-action-btn delete icon-text-btn";
-      deleteBtn.innerHTML = `${SVG.trash} Delete`;
-      deleteBtn.addEventListener("click", () => deleteWorkflow(wf.id, el));
-      actionsEl.appendChild(deleteBtn);
-    }
-
-    workflowsList.appendChild(el);
-  }
-}
-
-async function stopWorkflow(id, el) {
-  if (!confirm("Stop this workflow?")) return;
-  try {
-    const res = await apiFetch("/api/workflow/stop", {
-      method: "POST",
-      body: JSON.stringify({ id }),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || `HTTP ${res.status}`);
-    }
-    loadWorkflows();
-  } catch (err) {
-    console.error("Failed to stop workflow:", err);
-    alert("Failed to stop workflow: " + err.message);
-  }
-}
-
-async function deleteWorkflow(id, el) {
-  if (!confirm("Delete this workflow?")) return;
-  try {
-    const res = await apiFetch(`/api/workflow?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    el.remove();
-    if (workflowsList.querySelectorAll(".workflow-item").length === 0) {
-      workflowsList.innerHTML = `<div class="workflows-empty">No workflows</div>`;
-    }
-  } catch (err) {
-    console.error("Failed to delete workflow:", err);
-    alert("Failed to delete workflow");
-  }
-}
-
-async function deleteAllWorkflows() {
-  if (!confirm("Delete all workflows?")) return;
-  try {
-    const res = await apiFetch("/api/workflows", { method: "DELETE" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    workflowsList.innerHTML = `<div class="workflows-empty">No workflows</div>`;
-  } catch (err) {
-    console.error("Failed to delete all workflows:", err);
-    alert("Failed to delete all workflows");
-  }
-}
 
 async function loadWorkbenchTasks(preferredTaskId, autoSelect = true, refreshDetail = true) {
   try {
@@ -5715,18 +5566,6 @@ closeAgentStatusBtn.addEventListener("click", () => {
     agentStatusInterval = null;
   }
 });
-openWorkflowsBtn.addEventListener("click", () => {
-  if (workflowsPanel.classList.contains("open")) {
-    workflowsPanel.classList.remove("open");
-    return;
-  }
-  openWorkflowsPanel();
-});
-closeWorkflowsBtn.addEventListener("click", () => {
-  workflowsPanel.classList.remove("open");
-});
-refreshWorkflowsBtn.addEventListener("click", loadWorkflows);
-deleteAllWorkflowsBtn.addEventListener("click", deleteAllWorkflows);
 sendBtn.addEventListener("click", () => {
   sendMessage(messageInput.value);
 });
@@ -5940,15 +5779,6 @@ document.addEventListener("keydown", (e) => {
       openAgentStatusPanel();
     }
     return;
-  }
-  // Cmd/Ctrl+3 — toggle workflows
-  if ((e.metaKey || e.ctrlKey) && e.key === "3") {
-    e.preventDefault();
-    if (workflowsPanel.classList.contains("open")) {
-      workflowsPanel.classList.remove("open");
-    } else {
-      openWorkflowsPanel();
-    }
   }
 });
 
