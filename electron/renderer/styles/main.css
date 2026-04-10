@@ -1506,6 +1506,15 @@ html, body {
   margin-top: auto;
 }
 
+#cards-management-screen .workflow-definitions-sidebar-header {
+  align-items: flex-end;
+}
+
+#cards-management-screen .workflow-definitions-sidebar-actions {
+  align-self: flex-end;
+  margin-top: auto;
+}
+
 .workflow-definition-list {
   flex: 1;
   padding: 12px;
