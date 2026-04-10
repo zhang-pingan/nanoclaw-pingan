@@ -711,17 +711,17 @@
         <aside class="workflow-definitions-sidebar cards-management-sidebar">
           <div class="workflow-definitions-sidebar-header cards-management-sidebar-header">
             <div>
-              <div class="workflow-definitions-kicker cards-management-kicker">Cards Registry</div>
+              <div class="workflow-definitions-kicker cards-management-kicker">卡片列表</div>
             </div>
             <div class="workflow-definitions-sidebar-actions">
-              <button id="cards-management-refresh-btn" class="icon-btn" title="刷新 cards">
+              <button id="cards-management-refresh-btn" class="icon-btn" title="刷新卡片">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"></polyline>
                   <polyline points="1 20 1 14 7 14"></polyline>
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                 </svg>
               </button>
-              <button id="cards-management-create-btn" class="icon-btn" title="新建 card">
+              <button id="cards-management-create-btn" class="icon-btn" title="新建卡片">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 5v14"></path>
                   <path d="M5 12h14"></path>
@@ -735,30 +735,28 @@
         <main class="workflow-definitions-main cards-management-main">
           <div id="cards-management-empty" class="workflow-definition-empty cards-management-empty">
             <img src="/assets/doraemon-joy.png" alt="Doraemon mascot" />
-            <h3>Cards 管理</h3>
-            <p>左侧按 workflow type 选择 card，编辑 pattern、header、actions、form 与 sections。</p>
+            <h3>卡片管理</h3>
+            <p>左侧按流程类型选择卡片，编辑展示样式、按钮、表单与分组内容。</p>
           </div>
 
           <div id="cards-management-detail" class="workflow-definition-detail cards-management-detail hidden">
             <section class="workflow-definition-hero cards-management-hero">
               <div class="workflow-definition-hero-main">
-                <div class="workflow-definition-kicker cards-management-kicker">Card Detail</div>
+                <div class="workflow-definition-kicker cards-management-kicker">卡片详情</div>
                 <h2 id="cards-management-title">--</h2>
                 <p id="cards-management-summary" class="workflow-definition-summary"></p>
                 <div id="cards-management-meta" class="workflow-definition-meta"></div>
               </div>
               <div class="workflow-definition-hero-actions">
-                <button id="cards-management-duplicate-btn" class="btn-ghost">复制当前 card</button>
-                <button id="cards-management-delete-btn" class="btn-ghost danger">删除当前 card</button>
-                <button id="cards-management-save-btn" class="btn-primary">保存当前 card</button>
-                <button id="cards-management-save-registry-btn" class="btn-ghost">保存整个 registry</button>
+                <button id="cards-management-save-btn" class="btn-primary">编辑</button>
+                <button id="cards-management-cancel-btn" class="btn-ghost hidden">取消</button>
               </div>
             </section>
 
             <section class="workflow-definition-grid cards-management-grid">
               <section class="workflow-definition-panel cards-management-editor-panel">
                 <div class="workflow-definition-panel-head">
-                  <div class="workflow-definition-panel-title">Card 编辑器</div>
+                  <div class="workflow-definition-panel-title">卡片编辑器</div>
                   <div class="workflow-definition-panel-note">以表单方式维护 cards.json</div>
                 </div>
 
@@ -806,7 +804,9 @@
                 <section class="workflow-definition-field workflow-definition-field-block">
                   <div class="cards-management-section-head">
                     <span>Actions</span>
-                    <button id="cards-management-action-add-btn" type="button" class="btn-ghost">新增 action</button>
+                    <button id="cards-management-action-add-btn" type="button" class="cards-management-icon-btn" title="新增操作" aria-label="新增操作">
+                      <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    </button>
                   </div>
                   <div id="cards-management-actions" class="cards-management-rows"></div>
                 </section>
@@ -815,8 +815,12 @@
                   <div class="cards-management-section-head">
                     <span>Form</span>
                     <div class="cards-management-inline-actions">
-                      <button id="cards-management-form-toggle-btn" type="button" class="btn-ghost">启用 / 关闭</button>
-                      <button id="cards-management-form-field-add-btn" type="button" class="btn-ghost">新增 field</button>
+                      <button id="cards-management-form-toggle-btn" type="button" class="cards-management-icon-btn" title="启用或关闭表单" aria-label="启用或关闭表单">
+                        <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18V3z" /><path d="M12 3a9 9 0 0 1 0 18" /></svg>
+                      </button>
+                      <button id="cards-management-form-field-add-btn" type="button" class="cards-management-icon-btn" title="新增字段" aria-label="新增字段">
+                        <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                      </button>
                     </div>
                   </div>
                   <div id="cards-management-form" class="cards-management-form-panel hidden">
@@ -849,7 +853,9 @@
                 <section class="workflow-definition-field workflow-definition-field-block">
                   <div class="cards-management-section-head">
                     <span>Sections</span>
-                    <button id="cards-management-section-add-btn" type="button" class="btn-ghost">新增 section</button>
+                    <button id="cards-management-section-add-btn" type="button" class="cards-management-icon-btn" title="新增分组" aria-label="新增分组">
+                      <svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    </button>
                   </div>
                   <div id="cards-management-sections" class="cards-management-rows"></div>
                 </section>
@@ -890,7 +896,7 @@
                 <section class="workflow-definition-panel">
                   <div class="workflow-definition-panel-head">
                     <div class="workflow-definition-panel-title">Registry JSON</div>
-                    <div class="workflow-definition-panel-note">当前 workflow type 下的 cards 快照</div>
+                    <div class="workflow-definition-panel-note">当前流程类型下的卡片快照</div>
                   </div>
                   <pre id="cards-management-json" class="workflow-definition-code-block"></pre>
                 </section>
@@ -898,7 +904,7 @@
                 <section class="workflow-definition-panel">
                   <div class="workflow-definition-panel-head">
                     <div class="workflow-definition-panel-title">引用反查</div>
-                    <div class="workflow-definition-panel-note">展示哪些 workflow states 正在引用当前 card</div>
+                    <div class="workflow-definition-panel-note">展示哪些流程状态正在引用当前卡片</div>
                   </div>
                   <div id="cards-management-references" class="cards-management-references"></div>
                 </section>

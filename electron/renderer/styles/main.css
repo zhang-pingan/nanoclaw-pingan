@@ -2232,6 +2232,61 @@ html, body {
   flex-wrap: wrap;
 }
 
+.cards-management-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(16, 185, 129, 0.16);
+  border-radius: 10px;
+  background: rgba(236, 253, 245, 0.92);
+  color: #047857;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+
+.cards-management-icon {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.cards-management-icon-btn:hover {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(209, 250, 229, 0.96);
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.1);
+  transform: translateY(-1px);
+}
+
+.cards-management-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.cards-management-icon-btn.danger {
+  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(254, 242, 242, 0.96);
+  color: #b91c1c;
+}
+
+.cards-management-icon-btn.danger:hover {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(254, 226, 226, 0.98);
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.12);
+}
+
 .cards-management-rows {
   display: flex;
   flex-direction: column;
@@ -2466,6 +2521,40 @@ html, body {
   border-color: rgba(16, 185, 129, 0.3);
   background: linear-gradient(180deg, rgba(236, 253, 245, 0.96), rgba(255, 255, 255, 0.9));
   box-shadow: inset 3px 0 0 #10b981, 0 14px 28px rgba(16, 185, 129, 0.14);
+}
+
+.cards-management-detail.cards-management-readonly .workflow-definition-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.86));
+}
+
+.cards-management-detail.cards-management-readonly .workflow-definition-field input:disabled,
+.cards-management-detail.cards-management-readonly .workflow-definition-field textarea:disabled,
+.cards-management-detail.cards-management-readonly .workflow-definition-field select:disabled {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(241, 245, 249, 0.78);
+  color: #64748b;
+  box-shadow: none;
+  cursor: default;
+}
+
+.cards-management-detail.cards-management-readonly .cards-management-row,
+.cards-management-detail.cards-management-readonly .workflow-definition-code-block,
+.cards-management-detail.cards-management-readonly .cards-management-preview {
+  opacity: 0.92;
+}
+
+.cards-management-detail.cards-management-readonly .cards-management-drag-handle {
+  opacity: 0.35;
+}
+
+.cards-management-detail.cards-management-readonly .workflow-definition-panel-note::after {
+  content: " · 只读";
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.cards-management-detail.cards-management-readonly button:not(#cards-management-save-btn):not(#cards-management-cancel-btn) {
+  display: none !important;
 }
 
 .cards-management-list-meta {
@@ -6344,8 +6433,8 @@ html, body {
   -webkit-box-orient: vertical;
 }
 
-/* === File Context Menu === */
-.file-context-menu {
+/* === Context Menu === */
+.context-menu {
   position: fixed;
   z-index: 1300;
   min-width: 180px;
@@ -6356,7 +6445,7 @@ html, body {
   padding: 4px 0;
 }
 
-.file-context-item {
+.context-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -6367,11 +6456,11 @@ html, body {
   transition: background var(--transition);
 }
 
-.file-context-item:hover {
+.context-menu-item:hover {
   background: var(--bg-hover);
 }
 
-.file-context-icon {
+.context-menu-icon {
   font-size: 14px;
   width: 20px;
   text-align: center;

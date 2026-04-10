@@ -76,10 +76,8 @@ var cardsManagementDetail = document.getElementById("cards-management-detail");
 var cardsManagementTitle = document.getElementById("cards-management-title");
 var cardsManagementSummary = document.getElementById("cards-management-summary");
 var cardsManagementMeta = document.getElementById("cards-management-meta");
-var cardsManagementDuplicateBtn = document.getElementById("cards-management-duplicate-btn");
-var cardsManagementDeleteBtn = document.getElementById("cards-management-delete-btn");
 var cardsManagementSaveBtn = document.getElementById("cards-management-save-btn");
-var cardsManagementSaveRegistryBtn = document.getElementById("cards-management-save-registry-btn");
+var cardsManagementCancelBtn = document.getElementById("cards-management-cancel-btn");
 var cardsManagementWorkflowTypeInput = document.getElementById("cards-management-workflow-type");
 var cardsManagementCardKeyInput = document.getElementById("cards-management-card-key");
 var cardsManagementPatternInput = document.getElementById("cards-management-pattern");
@@ -237,6 +235,8 @@ var cardsRegistry = {};
 var currentCardSelection = null;
 var cardsManagementExpandedGroups = {};
 var cardsManagementGroupsInitialized = false;
+var cardsManagementEditMode = false;
+var cardsManagementEditSnapshot = null;
 var cardsRequestSeq = 0;
 var workflowDefinitionReferenceDetails = {};
 var cardsDragState = null;
@@ -1097,10 +1097,10 @@ function getFileIcon(ext) {
 // --- File context menu ---
 function showFileContextMenu(e, filePath) {
   // Remove existing menu if any
-  document.querySelector(".file-context-menu")?.remove();
+  document.querySelector(".context-menu")?.remove();
 
   const menu = document.createElement("div");
-  menu.className = "file-context-menu";
+  menu.className = "context-menu";
 
   const items = [
     { label: "打开", icon: "📂", action: () => window.nanoclawApp?.openFile?.(filePath) },
@@ -1111,8 +1111,8 @@ function showFileContextMenu(e, filePath) {
 
   for (const item of items) {
     const el = document.createElement("div");
-    el.className = "file-context-item";
-    el.innerHTML = `<span class="file-context-icon">${item.icon}</span>${escapeHtml(item.label)}`;
+    el.className = "context-menu-item";
+    el.innerHTML = `<span class="context-menu-icon">${item.icon}</span>${escapeHtml(item.label)}`;
     el.addEventListener("click", () => {
       item.action();
       menu.remove();
@@ -1131,6 +1131,63 @@ function showFileContextMenu(e, filePath) {
   if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 8}px`;
 
   // Close on click outside
+  const closeHandler = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener("click", closeHandler);
+    }
+  };
+  requestAnimationFrame(() => document.addEventListener("click", closeHandler));
+}
+
+function showCardsListContextMenu(e, workflowType, cardKey) {
+  document.querySelector(".context-menu")?.remove();
+
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
+
+  const items = [
+    {
+      label: "复制当前卡片",
+      icon: "⎘",
+      action: async () => {
+        currentCardSelection = { workflowType, cardKey };
+        renderCardsList();
+        renderCardsDetailPane();
+        await duplicateCurrentCardDraft();
+      },
+    },
+    {
+      label: "删除当前卡片",
+      icon: "🗑",
+      action: async () => {
+        currentCardSelection = { workflowType, cardKey };
+        renderCardsList();
+        renderCardsDetailPane();
+        await deleteCurrentCard();
+      },
+    },
+  ];
+
+  for (const item of items) {
+    const el = document.createElement("div");
+    el.className = "context-menu-item";
+    el.innerHTML = `<span class="context-menu-icon">${item.icon}</span>${escapeHtml(item.label)}`;
+    el.addEventListener("click", async () => {
+      menu.remove();
+      await item.action();
+    });
+    menu.appendChild(el);
+  }
+
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+  document.body.appendChild(menu);
+
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) menu.style.left = `${window.innerWidth - rect.width - 8}px`;
+  if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 8}px`;
+
   const closeHandler = (ev) => {
     if (!menu.contains(ev.target)) {
       menu.remove();
@@ -4322,6 +4379,16 @@ function renderCardRowEmpty(container, message) {
   container.innerHTML = `<div class="cards-management-row-empty">${escapeHtml(message)}</div>`;
 }
 
+function getCardsManagementIconSvg(name) {
+  const icons = {
+    add: '<svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>',
+    remove: '<svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>',
+    up: '<svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6l-6 6M12 6l6 6M12 6v12" /></svg>',
+    down: '<svg class="cards-management-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 18l-6-6M12 18l6-6M12 6v12" /></svg>',
+  };
+  return icons[name] || "";
+}
+
 function renderCardActionRows(actions) {
   if (!cardsManagementActions) return;
   const rows = Array.isArray(actions) ? actions : [];
@@ -4334,7 +4401,7 @@ function renderCardActionRows(actions) {
       <div class="cards-management-row" data-card-action-row="${index}">
         <div class="cards-management-row-head">
           <div class="cards-management-row-title">Action ${index + 1}</div>
-          <button type="button" class="btn-ghost" data-card-action-remove="${index}">删除</button>
+          <button type="button" class="cards-management-icon-btn danger" data-card-action-remove="${index}" title="删除操作" aria-label="删除操作">${getCardsManagementIconSvg("remove")}</button>
         </div>
         <div class="cards-management-row-grid">
           <label class="workflow-definition-field">
@@ -4371,7 +4438,7 @@ function renderCardFormFields(fields) {
       <div class="cards-management-row" data-card-form-field-row="${index}">
         <div class="cards-management-row-head">
           <div class="cards-management-row-title">Field ${index + 1}</div>
-          <button type="button" class="btn-ghost" data-card-form-field-remove="${index}">删除</button>
+          <button type="button" class="cards-management-icon-btn danger" data-card-form-field-remove="${index}" title="删除字段" aria-label="删除字段">${getCardsManagementIconSvg("remove")}</button>
         </div>
         <div class="cards-management-row-grid">
           <label class="workflow-definition-field">
@@ -4457,10 +4524,10 @@ function renderCardSections(sections) {
             <div class="cards-management-row-title">Section ${index + 1}</div>
           </div>
           <div class="cards-management-inline-actions">
-            <button type="button" class="btn-ghost" data-card-section-move="up:${index}">上移</button>
-            <button type="button" class="btn-ghost" data-card-section-move="down:${index}">下移</button>
-            <button type="button" class="btn-ghost" data-card-section-action-add="${index}">新增 section action</button>
-            <button type="button" class="btn-ghost" data-card-section-remove="${index}">删除</button>
+            <button type="button" class="cards-management-icon-btn" data-card-section-move="up:${index}" title="上移分组" aria-label="上移分组">${getCardsManagementIconSvg("up")}</button>
+            <button type="button" class="cards-management-icon-btn" data-card-section-move="down:${index}" title="下移分组" aria-label="下移分组">${getCardsManagementIconSvg("down")}</button>
+            <button type="button" class="cards-management-icon-btn" data-card-section-action-add="${index}" title="新增分组操作" aria-label="新增分组操作">${getCardsManagementIconSvg("add")}</button>
+            <button type="button" class="cards-management-icon-btn danger" data-card-section-remove="${index}" title="删除分组" aria-label="删除分组">${getCardsManagementIconSvg("remove")}</button>
           </div>
         </div>
         <label class="workflow-definition-field">
@@ -4483,9 +4550,9 @@ function renderCardSections(sections) {
                             <div class="cards-management-row-title">Action ${actionIndex + 1}</div>
                           </div>
                           <div class="cards-management-inline-actions">
-                            <button type="button" class="btn-ghost" data-card-section-action-move="up:${index}.${actionIndex}">上移</button>
-                            <button type="button" class="btn-ghost" data-card-section-action-move="down:${index}.${actionIndex}">下移</button>
-                            <button type="button" class="btn-ghost" data-card-section-action-remove="${index}.${actionIndex}">删除</button>
+                            <button type="button" class="cards-management-icon-btn" data-card-section-action-move="up:${index}.${actionIndex}" title="上移操作" aria-label="上移操作">${getCardsManagementIconSvg("up")}</button>
+                            <button type="button" class="cards-management-icon-btn" data-card-section-action-move="down:${index}.${actionIndex}" title="下移操作" aria-label="下移操作">${getCardsManagementIconSvg("down")}</button>
+                            <button type="button" class="cards-management-icon-btn danger" data-card-section-action-remove="${index}.${actionIndex}" title="删除操作" aria-label="删除操作">${getCardsManagementIconSvg("remove")}</button>
                           </div>
                         </div>
                         <div class="cards-management-row-grid">
@@ -4537,6 +4604,63 @@ function renderCardsEditor(card) {
   renderCardActionRows(safe.actions);
   renderCardFormFields(safe.form?.fields || []);
   renderCardSections(safe.sections || []);
+  updateCardsDetailEditState();
+}
+
+function setCardsManagementEditMode(isEditing) {
+  cardsManagementEditMode = Boolean(isEditing);
+  if (cardsManagementSaveBtn) {
+    cardsManagementSaveBtn.textContent = cardsManagementEditMode ? "保存" : "编辑";
+  }
+  if (cardsManagementCancelBtn) {
+    cardsManagementCancelBtn.classList.toggle("hidden", !cardsManagementEditMode);
+  }
+  updateCardsDetailEditState();
+}
+
+function updateCardsDetailEditState() {
+  if (!cardsManagementDetail) return;
+  cardsManagementDetail.classList.toggle("cards-management-readonly", !cardsManagementEditMode);
+  cardsManagementDetail.classList.toggle("cards-management-editing", cardsManagementEditMode);
+  const editableControls = cardsManagementDetail.querySelectorAll(
+    "input, textarea, select, button"
+  );
+  editableControls.forEach((control) => {
+    if (control === cardsManagementSaveBtn || control === cardsManagementCancelBtn) return;
+    control.disabled = !cardsManagementEditMode;
+  });
+}
+
+function beginCardsEditing() {
+  const current = getCurrentCardConfig();
+  if (!currentCardSelection || !current) {
+    alert("请先选择一个卡片");
+    return;
+  }
+  cardsManagementEditSnapshot = {
+    workflowType: currentCardSelection.workflowType,
+    cardKey: currentCardSelection.cardKey,
+    card: cloneJson(current),
+  };
+  setCardsManagementEditMode(true);
+}
+
+function cancelCardsEditing() {
+  if (
+    cardsManagementEditSnapshot &&
+    cardsManagementEditSnapshot.workflowType &&
+    cardsManagementEditSnapshot.cardKey
+  ) {
+    const { workflowType, cardKey, card } = cardsManagementEditSnapshot;
+    if (!cardsRegistry[workflowType]) {
+      cardsRegistry[workflowType] = {};
+    }
+    cardsRegistry[workflowType][cardKey] = cloneJson(card);
+    workflowDefinitionCardsRegistry = cloneJson(cardsRegistry);
+  }
+  cardsManagementEditSnapshot = null;
+  setCardsManagementEditMode(false);
+  renderCardsDetailPane();
 }
 
 function getCardActionRowsFromEditor() {
@@ -4792,7 +4916,7 @@ function renderCardsValidation(state) {
   cardsManagementValidationSummary.textContent = localErrors.length ? `${localErrors.length} 个问题` : "可保存";
   cardsManagementValidation.innerHTML = localErrors.length
     ? localErrors.map((error) => `<div class="workflow-definition-validation-error">${escapeHtml(error)}</div>`).join("")
-    : '<div class="workflow-definition-validation-note">本地 schema 校验通过，可以保存当前 cards registry。</div>';
+    : '<div class="workflow-definition-validation-note">本地 schema 校验通过，可以保存当前卡片。</div>';
 }
 
 function renderCardsPreview(state) {
@@ -4937,19 +5061,14 @@ function renderCardsSummaryFromState(state) {
     cardsManagementTitle.textContent = state.card.header?.title_template || state.cardKey || "Untitled Card";
   }
   if (cardsManagementSummary) {
-    const parts = [
-      state.card.pattern || "info_actions",
-      state.card.form ? "含 form" : "无 form",
-      Array.isArray(state.card.sections) && state.card.sections.length > 0 ? `${state.card.sections.length} sections` : "无 sections",
-    ];
-    cardsManagementSummary.textContent = `编辑 card: ${state.workflowType || "--"} / ${state.cardKey || "--"} · ${parts.join(" · ")}`;
+    cardsManagementSummary.textContent = "";
   }
   if (cardsManagementMeta) {
     const meta = [
-      `<span class="workflow-definition-pill workflow-definition-main-pill cards-management-pill"><strong>Workflow</strong>${escapeHtml(state.workflowType || "--")}</span>`,
-      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>Key</strong>${escapeHtml(state.cardKey || "--")}</span>`,
-      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>Pattern</strong>${escapeHtml(state.card.pattern || "--")}</span>`,
-      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>Actions</strong>${escapeHtml(String((state.card.actions || []).length))}</span>`,
+      `<span class="workflow-definition-pill workflow-definition-main-pill cards-management-pill"><strong>流程类型</strong>${escapeHtml(state.workflowType || "--")}</span>`,
+      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>卡片标识</strong>${escapeHtml(state.cardKey || "--")}</span>`,
+      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>展示模式</strong>${escapeHtml(state.card.pattern || "--")}</span>`,
+      `<span class="workflow-definition-pill cards-management-pill secondary"><strong>操作数</strong>${escapeHtml(String((state.card.actions || []).length))}</span>`,
     ];
     cardsManagementMeta.innerHTML = meta.join("");
   }
@@ -4968,6 +5087,8 @@ function renderCardsDetailPane() {
   if (!cardsManagementEmpty || !cardsManagementDetail) return;
   const card = getCurrentCardConfig();
   if (!currentCardSelection || !card) {
+    cardsManagementEditSnapshot = null;
+    setCardsManagementEditMode(false);
     cardsManagementEmpty.classList.remove("hidden");
     cardsManagementDetail.classList.add("hidden");
     return;
@@ -4982,6 +5103,7 @@ function renderCardsDetailPane() {
   renderCardsEditor(card);
   const state = readCurrentCardEditorState();
   renderCardsDerivedPanels(state);
+  updateCardsDetailEditState();
 }
 
 function renderCardsList() {
@@ -5043,9 +5165,26 @@ function renderCardsList() {
         </div>
       `;
       item.addEventListener("click", () => {
+        if (cardsManagementEditMode) {
+          cancelCardsEditing();
+        }
         currentCardSelection = { workflowType, cardKey };
+        cardsManagementEditSnapshot = null;
+        setCardsManagementEditMode(false);
         renderCardsList();
         renderCardsDetailPane();
+      });
+      item.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        if (cardsManagementEditMode) {
+          cancelCardsEditing();
+        }
+        currentCardSelection = { workflowType, cardKey };
+        cardsManagementEditSnapshot = null;
+        setCardsManagementEditMode(false);
+        renderCardsList();
+        renderCardsDetailPane();
+        showCardsListContextMenu(e, workflowType, cardKey);
       });
       items.appendChild(item);
     });
@@ -5069,6 +5208,8 @@ async function loadCardsRegistry(options = {}) {
     }
     cardsRegistry = cloneJson(data.cards || {});
     workflowDefinitionCardsRegistry = cloneJson(cardsRegistry);
+    cardsManagementEditSnapshot = null;
+    setCardsManagementEditMode(false);
     if (
       !preserveSelection ||
       !currentCardSelection ||
@@ -5089,6 +5230,8 @@ async function loadCardsRegistry(options = {}) {
     console.error("Failed to load cards registry:", err);
     cardsRegistry = {};
     currentCardSelection = null;
+    cardsManagementEditSnapshot = null;
+    setCardsManagementEditMode(false);
     renderCardsList();
     renderCardsDetailPane();
     if (cardsManagementList) {
@@ -5146,37 +5289,6 @@ function buildCardsSavePayload() {
   return { cards: nextRegistry, state };
 }
 
-async function saveCardsRegistry() {
-  try {
-    const payload = buildCardsSavePayload();
-    const validationErrors = [...(payload.state.validationErrors || []), ...validateCardDraft(payload.state)];
-    if (validationErrors.length > 0) {
-      renderCardsValidation(payload.state);
-      alert(validationErrors[0]);
-      return;
-    }
-    const res = await apiFetch("/api/cards", {
-      method: "POST",
-      body: JSON.stringify({ cards: payload.cards }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error || `HTTP ${res.status}`);
-    }
-    cardsRegistry = cloneJson(payload.cards);
-    workflowDefinitionCardsRegistry = cloneJson(payload.cards);
-    currentCardSelection = {
-      workflowType: payload.state.workflowType,
-      cardKey: payload.state.cardKey,
-    };
-    showToast(`已保存 cards registry：${payload.state.workflowType}/${payload.state.cardKey}`);
-    await loadCardsRegistry({ preserveSelection: true });
-  } catch (err) {
-    console.error("Failed to save cards registry:", err);
-    alert(err instanceof Error ? err.message : "保存 cards registry 失败");
-  }
-}
-
 async function saveCurrentCard() {
   try {
     const payload = buildCardsSavePayload();
@@ -5207,32 +5319,36 @@ async function saveCurrentCard() {
       workflowType: payload.state.workflowType,
       cardKey: payload.state.cardKey,
     };
-    showToast(`已保存当前 card：${payload.state.workflowType}/${payload.state.cardKey}`);
+    cardsManagementEditSnapshot = null;
+    setCardsManagementEditMode(false);
+    showToast(`已保存当前卡片：${payload.state.workflowType}/${payload.state.cardKey}`);
     await loadCardsRegistry({ preserveSelection: true });
   } catch (err) {
     console.error("Failed to save current card:", err);
-    alert(err instanceof Error ? err.message : "保存当前 card 失败");
+    alert(err instanceof Error ? err.message : "保存当前卡片失败");
   }
 }
 
 async function createCardDraft() {
-  const workflowType = ((await openTextPrompt("输入 workflow type", currentCardSelection?.workflowType || "dev_test", {
-    title: "新建 Card",
+  const workflowType = ((await openTextPrompt("输入流程类型", currentCardSelection?.workflowType || "dev_test", {
+    title: "新建卡片",
   })) || "").trim();
   if (!workflowType) return;
-  const cardKey = ((await openTextPrompt("输入 card key", "", {
-    title: "新建 Card",
+  const cardKey = ((await openTextPrompt("输入卡片标识", "", {
+    title: "新建卡片",
   })) || "").trim();
   if (!cardKey) return;
   if (!cardsRegistry[workflowType]) {
     cardsRegistry[workflowType] = {};
   }
   if (cardsRegistry[workflowType][cardKey]) {
-    alert(`card "${workflowType}/${cardKey}" 已存在`);
+    alert(`卡片 "${workflowType}/${cardKey}" 已存在`);
     return;
   }
   cardsRegistry[workflowType][cardKey] = createEmptyCardConfig();
   currentCardSelection = { workflowType, cardKey };
+  cardsManagementEditSnapshot = null;
+  setCardsManagementEditMode(false);
   renderCardsList();
   renderCardsDetailPane();
   showToast(`已创建 ${workflowType}/${cardKey}`);
@@ -5241,26 +5357,28 @@ async function createCardDraft() {
 async function duplicateCurrentCardDraft() {
   const current = getCurrentCardConfig();
   if (!currentCardSelection || !current) {
-    alert("请先选择一个 card");
+    alert("请先选择一个卡片");
     return;
   }
-  const workflowType = ((await openTextPrompt("复制到 workflow type", currentCardSelection.workflowType, {
-    title: "复制 Card",
+  const workflowType = ((await openTextPrompt("复制到流程类型", currentCardSelection.workflowType, {
+    title: "复制卡片",
   })) || "").trim();
   if (!workflowType) return;
-  const cardKey = ((await openTextPrompt("复制后的 card key", `${currentCardSelection.cardKey}_copy`, {
-    title: "复制 Card",
+  const cardKey = ((await openTextPrompt("复制后的卡片标识", `${currentCardSelection.cardKey}_copy`, {
+    title: "复制卡片",
   })) || "").trim();
   if (!cardKey) return;
   if (!cardsRegistry[workflowType]) {
     cardsRegistry[workflowType] = {};
   }
   if (cardsRegistry[workflowType][cardKey]) {
-    alert(`card "${workflowType}/${cardKey}" 已存在`);
+    alert(`卡片 "${workflowType}/${cardKey}" 已存在`);
     return;
   }
   cardsRegistry[workflowType][cardKey] = cloneJson(current);
   currentCardSelection = { workflowType, cardKey };
+  cardsManagementEditSnapshot = null;
+  setCardsManagementEditMode(false);
   renderCardsList();
   renderCardsDetailPane();
   showToast(`已复制到 ${workflowType}/${cardKey}`);
@@ -5393,6 +5511,7 @@ function reorderCardSectionAction(sectionIndex, fromIndex, toIndex) {
 function bindCardsDragEvents() {
   if (!cardsManagementSections) return;
   cardsManagementSections.addEventListener("dragstart", (event) => {
+    if (!cardsManagementEditMode) return;
     const row = event.target.closest("[data-card-drag-type]");
     if (!row) return;
     cardsDragState = {
@@ -5406,6 +5525,7 @@ function bindCardsDragEvents() {
     }
   });
   cardsManagementSections.addEventListener("dragover", (event) => {
+    if (!cardsManagementEditMode) return;
     const row = event.target.closest("[data-card-drag-type]");
     if (!row || !cardsDragState) return;
     const targetType = row.getAttribute("data-card-drag-type") || "";
@@ -5418,10 +5538,12 @@ function bindCardsDragEvents() {
     row.classList.add("drag-over");
   });
   cardsManagementSections.addEventListener("dragleave", (event) => {
+    if (!cardsManagementEditMode) return;
     const row = event.target.closest("[data-card-drag-type]");
     if (row) row.classList.remove("drag-over");
   });
   cardsManagementSections.addEventListener("drop", (event) => {
+    if (!cardsManagementEditMode) return;
     const row = event.target.closest("[data-card-drag-type]");
     if (!row || !cardsDragState) return;
     row.classList.remove("drag-over");
@@ -5441,12 +5563,14 @@ function bindCardsDragEvents() {
     }
   });
   cardsManagementSections.addEventListener("dragend", () => {
+    if (!cardsManagementEditMode) return;
     cardsDragState = null;
     Array.from(cardsManagementSections.querySelectorAll(".dragging, .drag-over")).forEach((el) => {
       el.classList.remove("dragging", "drag-over");
     });
   });
   cardsManagementSections.addEventListener("keydown", (event) => {
+    if (!cardsManagementEditMode) return;
     const row = event.target.closest("[data-card-drag-type]");
     if (!row) return;
     const type = row.getAttribute("data-card-drag-type") || "";
@@ -5499,18 +5623,21 @@ async function deleteCurrentCard() {
       ? Object.keys(cardsRegistry[firstWorkflowType] || {}).sort((a, b) => a.localeCompare(b))[0] || ""
       : "";
     currentCardSelection = firstWorkflowType && firstCardKey ? { workflowType: firstWorkflowType, cardKey: firstCardKey } : null;
+    cardsManagementEditSnapshot = null;
+    setCardsManagementEditMode(false);
     showToast(`已删除 ${workflowType}/${cardKey}`);
     renderCardsList();
     renderCardsDetailPane();
   } catch (err) {
     console.error("Failed to delete current card:", err);
-    alert(err instanceof Error ? err.message : "删除当前 card 失败");
+    alert(err instanceof Error ? err.message : "删除当前卡片失败");
   }
 }
 
 function bindCardsRowEvents() {
   if (cardsManagementActions) {
     cardsManagementActions.addEventListener("click", (event) => {
+      if (!cardsManagementEditMode) return;
       const removeBtn = event.target.closest("[data-card-action-remove]");
       if (!removeBtn) return;
       const index = Number(removeBtn.getAttribute("data-card-action-remove"));
@@ -5523,6 +5650,7 @@ function bindCardsRowEvents() {
       renderCardsDerivedPanels(readCurrentCardEditorState());
     });
     cardsManagementActions.addEventListener("input", () => {
+      if (!cardsManagementEditMode) return;
       const state = syncCurrentCardDraftFromEditor();
       if (state) renderCardsDerivedPanels(state);
     });
@@ -5530,6 +5658,7 @@ function bindCardsRowEvents() {
 
   if (cardsManagementFormFields) {
     cardsManagementFormFields.addEventListener("click", (event) => {
+      if (!cardsManagementEditMode) return;
       const removeBtn = event.target.closest("[data-card-form-field-remove]");
       if (!removeBtn) return;
       const index = Number(removeBtn.getAttribute("data-card-form-field-remove"));
@@ -5544,6 +5673,7 @@ function bindCardsRowEvents() {
       renderCardsDerivedPanels(readCurrentCardEditorState());
     });
     cardsManagementFormFields.addEventListener("input", () => {
+      if (!cardsManagementEditMode) return;
       const state = syncCurrentCardDraftFromEditor();
       if (state) renderCardsDerivedPanels(state);
     });
@@ -5551,6 +5681,7 @@ function bindCardsRowEvents() {
 
   if (cardsManagementSections) {
     cardsManagementSections.addEventListener("click", (event) => {
+      if (!cardsManagementEditMode) return;
       const moveBtn = event.target.closest("[data-card-section-move]");
       if (moveBtn) {
         const parts = (moveBtn.getAttribute("data-card-section-move") || "").split(":");
@@ -5599,6 +5730,7 @@ function bindCardsRowEvents() {
       }
     });
     cardsManagementSections.addEventListener("input", () => {
+      if (!cardsManagementEditMode) return;
       const state = syncCurrentCardDraftFromEditor();
       if (state) renderCardsDerivedPanels(state);
     });
@@ -9471,43 +9603,41 @@ if (cardsManagementCreateBtn) {
     await createCardDraft();
   });
 }
-if (cardsManagementDuplicateBtn) {
-  cardsManagementDuplicateBtn.addEventListener("click", async () => {
-    await duplicateCurrentCardDraft();
-  });
-}
-if (cardsManagementDeleteBtn) {
-  cardsManagementDeleteBtn.addEventListener("click", async () => {
-    await deleteCurrentCard();
-  });
-}
 if (cardsManagementSaveBtn) {
   cardsManagementSaveBtn.addEventListener("click", async () => {
+    if (!cardsManagementEditMode) {
+      beginCardsEditing();
+      return;
+    }
     await saveCurrentCard();
   });
 }
-if (cardsManagementSaveRegistryBtn) {
-  cardsManagementSaveRegistryBtn.addEventListener("click", async () => {
-    await saveCardsRegistry();
+if (cardsManagementCancelBtn) {
+  cardsManagementCancelBtn.addEventListener("click", () => {
+    cancelCardsEditing();
   });
 }
 if (cardsManagementActionAddBtn) {
   cardsManagementActionAddBtn.addEventListener("click", () => {
+    if (!cardsManagementEditMode) return;
     addCardActionRow();
   });
 }
 if (cardsManagementFormToggleBtn) {
   cardsManagementFormToggleBtn.addEventListener("click", () => {
+    if (!cardsManagementEditMode) return;
     toggleCardFormPanel();
   });
 }
 if (cardsManagementFormFieldAddBtn) {
   cardsManagementFormFieldAddBtn.addEventListener("click", () => {
+    if (!cardsManagementEditMode) return;
     addCardFormFieldRow();
   });
 }
 if (cardsManagementSectionAddBtn) {
   cardsManagementSectionAddBtn.addEventListener("click", () => {
+    if (!cardsManagementEditMode) return;
     addCardSectionRow();
   });
 }
@@ -9525,16 +9655,19 @@ if (cardsManagementSectionAddBtn) {
 ].forEach((input) => {
   if (!input) return;
   input.addEventListener("input", () => {
+    if (!cardsManagementEditMode) return;
     const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
     renderCardsDerivedPanels(state);
   });
   input.addEventListener("change", () => {
+    if (!cardsManagementEditMode) return;
     const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
     renderCardsDerivedPanels(state);
   });
 });
 if (cardsManagementPreviewPreset) {
   cardsManagementPreviewPreset.addEventListener("change", () => {
+    if (!cardsManagementEditMode) return;
     syncCardsPreviewDataInputFromPreset();
     const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
     renderCardsDerivedPanels(state);
@@ -9542,6 +9675,7 @@ if (cardsManagementPreviewPreset) {
 }
 if (cardsManagementPreviewData) {
   cardsManagementPreviewData.addEventListener("input", () => {
+    if (!cardsManagementEditMode) return;
     const state = syncCurrentCardDraftFromEditor() || readCurrentCardEditorState();
     renderCardsDerivedPanels(state);
   });
