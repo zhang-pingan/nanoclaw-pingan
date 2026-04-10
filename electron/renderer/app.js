@@ -4784,12 +4784,20 @@ function notifyAgent(msg) {
   });
   notification.onclick = () => {
     window.focus();
-    if (msg.chat_jid && msg.chat_jid !== currentGroupJid) {
-      selectGroup(msg.chat_jid).catch((err) => {
-        console.error("Failed to switch group from browser notification click:", err);
-      });
-    }
+    openAgentGroupFromNotification(msg.chat_jid, "browser");
   };
+}
+
+function openAgentGroupFromNotification(chatJid, source) {
+  if (typeof chatJid !== "string" || !chatJid) return;
+  setPrimaryNav("agent-groups");
+  if (chatJid === currentGroupJid) {
+    clearUnreadForGroup(chatJid);
+    return;
+  }
+  selectGroup(chatJid).catch((err) => {
+    console.error(`Failed to switch group from ${source} notification click:`, err);
+  });
 }
 
 function ensureBrowserNotificationPermission() {
@@ -4821,14 +4829,7 @@ function bindNotificationClickHandler() {
       });
       return;
     }
-    if (typeof chatJid !== "string" || !chatJid) return;
-    if (chatJid === currentGroupJid) {
-      clearUnreadForGroup(chatJid);
-      return;
-    }
-    selectGroup(chatJid).catch((err) => {
-      console.error("Failed to switch group from notification click:", err);
-    });
+    openAgentGroupFromNotification(chatJid, "native");
   });
 }
 async function selectGroup(jid) {
