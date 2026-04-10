@@ -2,12 +2,14 @@
  * Workflow Configuration — types, loader, template renderer, validator.
  *
  * Workflow type definitions live in container/skills/workflows.json.
+ * Card templates live in container/skills/cards.json.
  * The engine (workflow.ts) reads them once at init and drives state
  * transitions generically instead of hard-coding each workflow type.
  */
 import fs from 'fs';
 import path from 'path';
 
+import { CardConfig, validateCardConfig } from './card-config.js';
 import { logger } from './logger.js';
 
 // -------------------------------------------------------
@@ -63,26 +65,16 @@ export interface EntryPointConfig {
   deliverable_role?: string;
 }
 
-export interface CardActionConfig {
-  label: string;
-  type?: 'primary' | 'danger';
-  action: string;
-}
-
-export interface CardConfig {
-  header_template: string;
-  header_color?: string;
-  body_template: string;
-  actions: string[];
-}
-
 export interface WorkflowTypeConfig {
   name: string;
   roles: Record<string, RoleConfig>;
   entry_points: Record<string, EntryPointConfig>;
   states: Record<string, StateConfig>;
   status_labels: Record<string, string>;
-  cards: Record<string, CardConfig>;
+}
+
+interface RawWorkflowTypeConfig extends WorkflowTypeConfig {
+  cards?: Record<string, CardConfig>;
 }
 
 // -------------------------------------------------------
@@ -90,6 +82,7 @@ export interface WorkflowTypeConfig {
 // -------------------------------------------------------
 
 let loadedConfigs: Record<string, WorkflowTypeConfig> | null = null;
+let loadedCards: Record<string, Record<string, CardConfig>> | null = null;
 let lastLoadError: string | null = null;
 
 export function getWorkflowConfigError(): string | null {
@@ -100,25 +93,43 @@ export function loadWorkflowConfigs(): Record<
   string,
   WorkflowTypeConfig
 > | null {
-  const configPath = path.join(
+  const workflowsPath = path.join(
     process.cwd(),
     'container',
     'skills',
     'workflows.json',
   );
+  const cardsPath = path.join(process.cwd(), 'container', 'skills', 'cards.json');
 
-  if (!fs.existsSync(configPath)) {
+  if (!fs.existsSync(workflowsPath)) {
     lastLoadError = 'Workflow 未启用：未找到 container/skills/workflows.json';
     logger.info(lastLoadError);
     return null;
   }
 
-  try {
-    const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    const configs = raw as Record<string, WorkflowTypeConfig>;
+  if (!fs.existsSync(cardsPath)) {
+    lastLoadError = 'Workflow 未启用：未找到 container/skills/cards.json';
+    logger.info(lastLoadError);
+    return null;
+  }
 
-    for (const [typeName, config] of Object.entries(configs)) {
-      const errors = validateConfig(typeName, config);
+  try {
+    const rawWorkflows = JSON.parse(
+      fs.readFileSync(workflowsPath, 'utf-8'),
+    ) as Record<string, RawWorkflowTypeConfig>;
+    const rawCards = JSON.parse(
+      fs.readFileSync(cardsPath, 'utf-8'),
+    ) as Record<string, Record<string, CardConfig>>;
+
+    const configs = rawWorkflows as Record<string, WorkflowTypeConfig>;
+
+    for (const [typeName, rawConfig] of Object.entries(rawWorkflows)) {
+      const config = rawConfig as WorkflowTypeConfig;
+      const errors = validateConfig(
+        typeName,
+        config,
+        rawCards[typeName] || rawConfig.cards || {},
+      );
       if (errors.length > 0) {
         lastLoadError = `Workflow 配置校验失败 (${typeName}): ${errors.join('; ')}`;
         logger.error({ typeName, errors }, 'Workflow config validation failed');
@@ -127,11 +138,12 @@ export function loadWorkflowConfigs(): Record<
     }
 
     loadedConfigs = configs;
+    loadedCards = rawCards;
     lastLoadError = null;
     logger.info({ types: Object.keys(configs) }, 'Workflow configs loaded');
     return configs;
   } catch (err) {
-    lastLoadError = `Workflow 未启用：workflows.json 解析失败 — ${err instanceof Error ? err.message : String(err)}`;
+    lastLoadError = `Workflow 未启用：workflow/cards 配置解析失败 — ${err instanceof Error ? err.message : String(err)}`;
     logger.error({ err }, 'Failed to parse workflows.json');
     return null;
   }
@@ -148,6 +160,19 @@ export function getWorkflowTypeConfig(
   type: string,
 ): WorkflowTypeConfig | undefined {
   return loadedConfigs?.[type];
+}
+
+export function getCardConfigsForType(
+  workflowType: string,
+): Record<string, CardConfig> | undefined {
+  return loadedCards?.[workflowType];
+}
+
+export function getCardConfig(
+  workflowType: string,
+  cardKey: string,
+): CardConfig | undefined {
+  return getCardConfigsForType(workflowType)?.[cardKey];
 }
 
 export function getReachableWorkflowStages(
@@ -241,6 +266,7 @@ export function renderTemplate(
 export function validateConfig(
   typeName: string,
   config: WorkflowTypeConfig,
+  cards: Record<string, CardConfig>,
 ): string[] {
   const errors: string[] = [];
   const stateNames = new Set(Object.keys(config.states));
@@ -300,7 +326,7 @@ export function validateConfig(
       }
     }
     // Check card references
-    if (state.card && !config.cards[state.card]) {
+    if (state.card && !cards[state.card]) {
       errors.push(
         `${typeName}.states.${stateName}.card "${state.card}" not defined in cards`,
       );
@@ -330,23 +356,27 @@ export function validateConfig(
   for (const [stateName, state] of Object.entries(config.states)) {
     if (state.on_complete) {
       for (const [outcome, transition] of Object.entries(state.on_complete)) {
-        if (transition.card && !config.cards[transition.card]) {
+        if (transition.card && !cards[transition.card]) {
           errors.push(
             `${typeName}.states.${stateName}.on_complete.${outcome}.card "${transition.card}" not defined in cards`,
           );
         }
       }
     }
-    if (state.on_approve?.card && !config.cards[state.on_approve.card]) {
+    if (state.on_approve?.card && !cards[state.on_approve.card]) {
       errors.push(
         `${typeName}.states.${stateName}.on_approve.card "${state.on_approve.card}" not defined in cards`,
       );
     }
-    if (state.on_revise?.card && !config.cards[state.on_revise.card]) {
+    if (state.on_revise?.card && !cards[state.on_revise.card]) {
       errors.push(
         `${typeName}.states.${stateName}.on_revise.card "${state.on_revise.card}" not defined in cards`,
       );
     }
+  }
+
+  for (const [cardKey, cardConfig] of Object.entries(cards)) {
+    errors.push(...validateCardConfig(`${typeName}.cards.${cardKey}`, cardConfig));
   }
 
   return errors;

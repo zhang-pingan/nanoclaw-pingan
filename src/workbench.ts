@@ -47,6 +47,7 @@ import {
   skipWorkflowStage,
 } from './workflow.js';
 import {
+  getCardConfig,
   getReachableWorkflowStages,
   getWorkflowTypeConfig,
   renderTemplate,
@@ -491,7 +492,9 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   const stateConfig = config?.states[workflow.status];
   if (!config || !stateConfig || stateConfig.type !== 'confirmation') return [];
 
-  const card = stateConfig.card ? config.cards[stateConfig.card] : undefined;
+  const card = stateConfig.card
+    ? getCardConfig(workflow.workflow_type, stateConfig.card)
+    : undefined;
   const vars = {
     name: workflow.name,
     service: workflow.service,

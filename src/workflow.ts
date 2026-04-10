@@ -2,6 +2,7 @@
  * Workflow Engine for NanoClaw — Configuration-Driven
  *
  * State machine definitions live in container/skills/workflows.json.
+ * Card templates live in container/skills/cards.json.
  * This engine reads them at init and drives transitions generically.
  *
  * Role resolution (no hardcoded group names):
@@ -13,6 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import YAML from 'yaml';
 
+import { buildInteractiveCard } from './card-builder.js';
 import { PROJECT_ROOT } from './config.js';
 import {
   createDelegation,
@@ -35,6 +37,7 @@ import {
   Workflow,
 } from './types.js';
 import {
+  getCardConfig,
   getWorkflowConfigError,
   getWorkflowConfigs,
   getWorkflowTypeConfig,
@@ -1228,48 +1231,6 @@ export function onDelegationComplete(delegationId: string): void {
 // Card helpers — config-driven
 // -------------------------------------------------------
 
-const ACTION_BUTTONS: Record<
-  string,
-  { label: string; type?: 'primary' | 'danger' | 'default' }
-> = {
-  approve: { label: '✅ 确认执行', type: 'primary' },
-  approve_dev: { label: '✅ 进入开发', type: 'primary' },
-  skip: { label: '⏭ 跳过此节点' },
-  pause: { label: '⏸ 暂缓' },
-  cancel: { label: '❌ 取消流程', type: 'danger' },
-  resume: { label: '▶ 继续', type: 'primary' },
-  revise: { label: '✏️ 提交修改' },
-  submit_access_token: { label: '🔐 提交 Token', type: 'primary' },
-};
-
-function getActionButtonLabel(actionName: string, workflow: Workflow): string {
-  switch (workflow.status) {
-    case 'plan_confirm':
-      if (actionName === 'approve_dev') return '✅ 进入开发';
-      if (actionName === 'revise') return '✏️ 返回方案修改';
-      break;
-    case 'plan_examine_confirm':
-      if (actionName === 'approve_dev') return '✅ 继续开发';
-      if (actionName === 'revise') return '✏️ 返回方案修改';
-      break;
-    case 'dev_examine_confirm':
-      if (actionName === 'approve') return '✅ 继续后续流程';
-      if (actionName === 'revise') return '✏️ 返回开发修正';
-      break;
-    case 'awaiting_confirm':
-      if (actionName === 'approve') return '✅ 开始预发部署';
-      break;
-    case 'testing_confirm':
-      if (actionName === 'submit_access_token')
-        return '🔐 提交 Token 并开始测试';
-      if (actionName === 'skip') return '⏭ 跳过鉴权直接测试';
-      break;
-    default:
-      break;
-  }
-  return ACTION_BUTTONS[actionName]?.label || actionName;
-}
-
 function buildConfigCard(
   workflow: Workflow,
   cardKey: string,
@@ -1277,79 +1238,18 @@ function buildConfigCard(
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return null;
 
-  const cardConfig = config.cards[cardKey];
+  const cardConfig = getCardConfig(workflow.workflow_type, cardKey);
   if (!cardConfig) return null;
 
   const vars = buildTemplateVars(workflow);
   const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
   const roleFolders = 'roles' in rolesResult ? rolesResult.roles : {};
 
-  const header = renderTemplate(cardConfig.header_template, vars, roleFolders);
-  const body = renderTemplate(cardConfig.body_template, vars, roleFolders);
-
-  const buttons: CardButton[] = [];
-  let hasRevise = false;
-  for (const actionName of cardConfig.actions) {
-    if (actionName === 'revise') {
-      hasRevise = true;
-      continue;
-    }
-    const btn = ACTION_BUTTONS[actionName];
-    if (btn) {
-      buttons.push({
-        id: actionName,
-        label: getActionButtonLabel(actionName, workflow),
-        type: btn.type,
-        value: { workflow_id: workflow.id, action: actionName },
-      });
-    }
-  }
-
-  const card: InteractiveCard = {
-    header: {
-      title: header,
-      color: (cardConfig.header_color ||
-        'blue') as InteractiveCard['header']['color'],
-    },
-    body,
-    buttons: buttons.length > 0 ? buttons : undefined,
-  };
-
-  if (hasRevise) {
-    if (workflow.status === 'testing_confirm') {
-      card.form = {
-        name: 'access_token_form',
-        inputs: [
-          {
-            name: 'access_token',
-            placeholder: '请输入接口测试所需的 access_token',
-          },
-        ],
-        submitButton: {
-          id: 'submit_access_token',
-          label: '🔐 提交 Token 并开始测试',
-          value: { workflow_id: workflow.id, action: 'submit_access_token' },
-        },
-      };
-    } else {
-      card.form = {
-        name: 'revision_form',
-        inputs: [
-          {
-            name: 'revision_text',
-            placeholder: '如需修改方案，请输入修改意见...',
-          },
-        ],
-        submitButton: {
-          id: 'request_revision',
-          label: '✏️ 提交修改',
-          value: { workflow_id: workflow.id, action: 'request_revision' },
-        },
-      };
-    }
-  }
-
-  return card;
+  return buildInteractiveCard(cardConfig, {
+    workflowId: workflow.id,
+    vars,
+    roleFolders,
+  });
 }
 
 /** Send a card defined in config to the main group (scoped to workflow's source channel). */
@@ -1371,13 +1271,17 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
           'Failed to send workflow card, falling back to text',
         );
         // Fallback: send text notification
-        const config = getWorkflowTypeConfig(workflow.workflow_type);
-        const cardConfig = config?.cards[cardKey];
+        const cardConfig = getCardConfig(workflow.workflow_type, cardKey);
         if (cardConfig) {
-          const vars = buildTemplateVars(workflow);
-          const body = renderTemplate(cardConfig.body_template, vars);
+          const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
+          const roleFolders = 'roles' in rolesResult ? rolesResult.roles : {};
+          const card = buildInteractiveCard(cardConfig, {
+            workflowId: workflow.id,
+            vars: buildTemplateVars(workflow),
+            roleFolders,
+          });
           notifyMain(
-            `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}`,
+            `[流程进展] ${card.header.title}\n\n${card.body || ''}`.trim(),
             workflow.source_jid,
             workflow.id,
           );
@@ -1386,13 +1290,17 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
     }
   } else {
     // Fallback: no card support
-    const config = getWorkflowTypeConfig(workflow.workflow_type);
-    const cardConfig = config?.cards[cardKey];
+    const cardConfig = getCardConfig(workflow.workflow_type, cardKey);
     if (cardConfig) {
-      const vars = buildTemplateVars(workflow);
-      const body = renderTemplate(cardConfig.body_template, vars);
+      const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
+      const roleFolders = 'roles' in rolesResult ? rolesResult.roles : {};
+      const card = buildInteractiveCard(cardConfig, {
+        workflowId: workflow.id,
+        vars: buildTemplateVars(workflow),
+        roleFolders,
+      });
       notifyMain(
-        `[流程进展] ${renderTemplate(cardConfig.header_template, vars)}\n\n${body}\n\n请确认是否继续。`,
+        `${`[流程进展] ${card.header.title}\n\n${card.body || ''}`.trim()}\n\n请确认是否继续。`,
         workflow.source_jid,
         workflow.id,
       );

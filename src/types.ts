@@ -449,7 +449,7 @@ export interface CardButton {
 export interface CardInput {
   name: string;
   placeholder?: string;
-  type?: 'text' | 'number' | 'integer' | 'boolean' | 'enum';
+  type?: 'text' | 'textarea' | 'number' | 'integer' | 'boolean' | 'enum';
   options?: Array<{ value: string; label?: string }>;
   required?: boolean;
   min?: number;

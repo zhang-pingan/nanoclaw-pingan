@@ -694,20 +694,26 @@ function renderCardElement(card, msgId) {
         continue;
       }
 
-      const inputEl = document.createElement("input");
+      const inputEl = input.type === "textarea"
+        ? document.createElement("textarea")
+        : document.createElement("input");
       inputEl.className = "card-input";
       inputEl.name = input.name;
       inputEl.placeholder = input.placeholder || "";
-      if (input.type === "number") inputEl.type = "number";
-      if (input.type === "integer") {
-        inputEl.type = "number";
-        inputEl.step = "1";
+      if (input.type !== "textarea") {
+        if (input.type === "number") inputEl.type = "number";
+        if (input.type === "integer") {
+          inputEl.type = "number";
+          inputEl.step = "1";
+        }
+        if (input.format === "date") inputEl.type = "date";
+        if (input.format === "date-time") inputEl.type = "datetime-local";
+      } else {
+        inputEl.rows = 4;
       }
-      if (input.format === "date") inputEl.type = "date";
-      if (input.format === "date-time") inputEl.type = "datetime-local";
       if (input.required) inputEl.required = true;
-      if (typeof input.min === "number") inputEl.min = String(input.min);
-      if (typeof input.max === "number") inputEl.max = String(input.max);
+      if (typeof input.min === "number" && "min" in inputEl) inputEl.min = String(input.min);
+      if (typeof input.max === "number" && "max" in inputEl) inputEl.max = String(input.max);
       if (typeof input.min_length === "number") inputEl.minLength = input.min_length;
       if (typeof input.max_length === "number") inputEl.maxLength = input.max_length;
       formInputs[input.name] = { el: inputEl, type: input.type || "text", meta: input, container: inputEl };

@@ -32,6 +32,7 @@ import type {
 } from './types.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 import {
+  getCardConfig,
   getReachableWorkflowStages,
   getWorkflowTypeConfig,
   renderTemplate,
@@ -253,7 +254,9 @@ function upsertStageActionItem(workflow: Workflow): void {
   if (!config || !task) return;
   const state = config.states[workflow.status];
   if (!state || state.type !== 'confirmation') return;
-  const card = state.card ? config.cards[state.card] : undefined;
+  const card = state.card
+    ? getCardConfig(workflow.workflow_type, state.card)
+    : undefined;
   const title = config.status_labels[workflow.status] || workflow.status;
   const vars = buildTemplateVars(workflow);
   upsertActionItem({

@@ -246,38 +246,6 @@
       "ops_failed": "❌ 部署失败",
       "cancelled": "🚫 已取消",
       "paused": "⏸ 已中断"
-    },
-    "cards": {
-      "plan_confirm": {
-        "header_template": "📋 确认方案后进入开发",
-        "header_color": "green",
-        "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接进入开发\n2) 提交修改意见，回到 Plan 重新设计",
-        "actions": ["approve_dev", "revise", "cancel"]
-      },
-      "plan_examine_confirm": {
-        "header_template": "📋 确认方案修改或继续开发",
-        "header_color": "orange",
-        "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接继续后续流程（进入开发）\n2) 回到 Plan 修改（可填写补充修改意见）",
-        "actions": ["approve_dev", "revise", "cancel"]
-      },
-      "deploy_confirm": {
-        "header_template": "⏳ 确认预发部署",
-        "header_color": "blue",
-        "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**工作分支**：{{work_branch}}\n**交付文档**：{{deliverable}}\n\n请选择是否开始预发部署。",
-        "actions": ["approve", "pause", "cancel"]
-      },
-      "dev_examine_confirm": {
-        "header_template": "📋 确认回修或继续后续流程",
-        "header_color": "orange",
-        "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**工作分支**：{{work_branch}}\n**交付文档**：{{deliverable}}\n\n请选择：\n1) 直接继续后续流程\n2) 回到开发修正（可填写补充修改意见）",
-        "actions": ["approve", "revise", "cancel"]
-      },
-      "testing_confirm": {
-        "header_template": "🔐 填写 access_token 后开始测试",
-        "header_color": "orange",
-        "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**交付文档**：{{deliverable}}\n\n部署已完成。请先填写接口测试使用的 access_token，系统会在委派测试任务时自动附带该字段。\n\n如本轮测试无需鉴权，也可直接点击“跳过当前节点”。",
-        "actions": ["skip", "pause", "cancel", "revise"]
-      }
     }
   }
 }
