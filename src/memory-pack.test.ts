@@ -89,6 +89,28 @@ describe('buildMemoryPack', () => {
     expect(pack).not.toContain('Reviewed deployment logs last Thursday');
   });
 
+  it('matches small synonym expansions for pack retrieval', () => {
+    const pack = buildMemoryPack(
+      [
+        mem({
+          id: 'm1',
+          layer: 'canonical',
+          memory_type: 'fact',
+          content: 'Service payment uses deploy checklist before rollout',
+        }),
+        mem({
+          id: 'm2',
+          layer: 'canonical',
+          memory_type: 'fact',
+          content: 'Gardening notes for spring tomatoes',
+        }),
+      ],
+      'Help me prepare the payment release',
+    );
+    expect(pack).toContain('Service payment uses deploy checklist before rollout');
+    expect(pack).not.toContain('Gardening notes for spring tomatoes');
+  });
+
   it('respects layer quotas and still keeps canonical entries', () => {
     const longWorking = 'w'.repeat(1200);
     const longCanonical = 'c'.repeat(300);

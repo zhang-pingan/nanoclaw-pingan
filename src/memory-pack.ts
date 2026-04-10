@@ -1,10 +1,41 @@
 import { MemoryRecord } from './types.js';
 
+const SYNONYM_GROUPS = [
+  ['reply', 'respond', 'response', '回答', '回复'],
+  ['delete', 'remove', 'cleanup', '删除', '移除', '清理'],
+  ['release', 'deploy', 'shipment', '发布', '上线', '部署'],
+  ['plan', 'roadmap', '规划', '计划'],
+  ['summary', 'summarize', 'overview', '总结', '概述'],
+  ['bug', 'issue', 'problem', '故障', '问题', '缺陷'],
+] as const;
+
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .split(/[^a-zA-Z0-9\u4e00-\u9fa5]+/)
     .filter((w) => w.length >= 2);
+}
+
+function buildExpandedQueryTerms(prompt: string): Map<string, number> {
+  const directTerms = tokenize(prompt);
+  const weightedTerms = new Map<string, number>();
+
+  for (const term of directTerms) {
+    weightedTerms.set(term, Math.max(weightedTerms.get(term) || 0, 1));
+  }
+
+  for (const group of SYNONYM_GROUPS) {
+    const hasDirectHit = group.some((term) => weightedTerms.has(term));
+    if (!hasDirectHit) continue;
+    for (const synonym of group) {
+      weightedTerms.set(
+        synonym,
+        Math.max(weightedTerms.get(synonym) || 0, weightedTerms.has(synonym) ? 1 : 0.35),
+      );
+    }
+  }
+
+  return weightedTerms;
 }
 
 export function buildMemoryPack(
@@ -14,7 +45,7 @@ export function buildMemoryPack(
   const all = memories.filter((m) => m.status === 'active');
   if (all.length === 0) return '';
 
-  const terms = new Set(tokenize(prompt));
+  const queryTerms = buildExpandedQueryTerms(prompt);
   const now = Date.now();
 
   const layerBaseWeight: Record<MemoryRecord['layer'], number> = {
@@ -56,15 +87,63 @@ export function buildMemoryPack(
     return 0;
   };
 
-  const scored = all
-    .map((m) => {
-      const contentTerms = new Set(tokenize(m.content));
-      const matchedTerms = Array.from(terms).filter((t) => contentTerms.has(t));
-      const matchCount = matchedTerms.length;
-      const overlapRatio = terms.size > 0 ? matchCount / terms.size : 0;
+  const documents = all.map((m) => {
+    const terms = tokenize(m.content);
+    const termCounts = new Map<string, number>();
+    for (const term of terms) {
+      termCounts.set(term, (termCounts.get(term) || 0) + 1);
+    }
+    return {
+      memory: m,
+      terms,
+      termCounts,
+      length: terms.length,
+    };
+  });
+
+  const averageDocLength =
+    documents.reduce((sum, doc) => sum + doc.length, 0) / Math.max(documents.length, 1);
+  const documentFrequency = new Map<string, number>();
+  for (const doc of documents) {
+    for (const term of new Set(doc.terms)) {
+      documentFrequency.set(term, (documentFrequency.get(term) || 0) + 1);
+    }
+  }
+
+  const bm25Score = (termCounts: Map<string, number>, docLength: number): number => {
+    if (queryTerms.size === 0) return 0;
+    const k1 = 1.2;
+    const b = 0.75;
+    let score = 0;
+    for (const [term, queryWeight] of queryTerms.entries()) {
+      const tf = termCounts.get(term) || 0;
+      if (tf === 0) continue;
+      const df = documentFrequency.get(term) || 0;
+      const idf = Math.log(1 + (documents.length - df + 0.5) / (df + 0.5));
+      const denom =
+        tf + k1 * (1 - b + b * (docLength / Math.max(averageDocLength, 1)));
+      score += queryWeight * idf * ((tf * (k1 + 1)) / denom);
+    }
+    return score;
+  };
+
+  const scored = documents
+    .map((doc) => {
+      const contentTerms = new Set(doc.terms);
+      const matchedTerms = Array.from(queryTerms.keys()).filter((t) =>
+        contentTerms.has(t),
+      );
+      const directPromptTerms = new Set(tokenize(prompt));
+      const directMatchCount = Array.from(directPromptTerms).filter((t) =>
+        contentTerms.has(t),
+      ).length;
+      const overlapRatio =
+        queryTerms.size > 0 ? matchedTerms.length / queryTerms.size : 0;
+      const m = doc.memory;
       const score =
-        matchCount * 2.5 +
-        overlapRatio * 2 +
+        bm25Score(doc.termCounts, doc.length) * 3 +
+        directMatchCount * 1.6 +
+        overlapRatio * 1.4 +
         layerBaseWeight[m.layer] +
         typeBaseWeight[m.memory_type] +
         recencyBoost(m.layer, m.updated_at);
@@ -76,11 +155,14 @@ export function buildMemoryPack(
       return {
         ...m,
         _score: score,
-        _matchCount: matchCount,
+        _matchCount: matchedTerms.length,
+        _directMatchCount: directMatchCount,
         _keepAsFallback: keepAsFallback,
       };
     })
-    .filter((m) => m._matchCount > 0 || m._keepAsFallback || terms.size === 0)
+    .filter(
+      (m) => m._matchCount > 0 || m._keepAsFallback || queryTerms.size === 0,
+    )
     .sort(
       (a, b) =>
         b._score - a._score || Number(b.updated_at) - Number(a.updated_at),
