@@ -40,6 +40,10 @@
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">工作台</span>
           </button>
+          <button class="primary-nav-item" data-nav-key="workflow-definitions">
+            <span class="primary-nav-dot"></span>
+            <span class="primary-nav-label">流程定义</span>
+          </button>
           <button class="primary-nav-item" data-nav-key="memory-management">
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">记忆管理</span>
@@ -497,6 +501,204 @@
             </div>
             <div id="memory-list" class="memory-list"></div>
             <div id="memory-empty" class="memory-empty hidden">暂无记忆数据</div>
+          </div>
+        </main>
+      </section>
+
+      <section id="workflow-definitions-screen">
+        <aside class="workflow-definitions-sidebar">
+          <div class="workflow-definitions-sidebar-header">
+            <div>
+              <div class="workflow-definitions-kicker">Workflow Definitions</div>
+              <h2>流程定义</h2>
+            </div>
+            <div class="workflow-definitions-sidebar-actions">
+              <button id="workflow-definition-refresh-btn" class="icon-btn" title="刷新流程定义">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+              <button id="workflow-definition-create-btn" class="icon-btn" title="新建流程定义">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14"></path>
+                  <path d="M5 12h14"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div id="workflow-definition-list" class="workflow-definition-list"></div>
+        </aside>
+
+        <main class="workflow-definitions-main">
+          <div id="workflow-definition-empty" class="workflow-definition-empty">
+            <img src="/assets/doraemon-joy.png" alt="Doraemon mascot" />
+            <h3>流程定义管理</h3>
+            <p>左侧选择一个 workflow definition，查看版本、编辑 draft，并执行发布。</p>
+          </div>
+
+          <div id="workflow-definition-detail" class="workflow-definition-detail hidden">
+            <section class="workflow-definition-hero">
+              <div class="workflow-definition-hero-main">
+                <div class="workflow-definition-kicker">Definition Detail</div>
+                <h2 id="workflow-definition-title">--</h2>
+                <p id="workflow-definition-summary" class="workflow-definition-summary"></p>
+                <div id="workflow-definition-meta" class="workflow-definition-meta"></div>
+              </div>
+              <div class="workflow-definition-hero-actions">
+                <button id="workflow-definition-copy-btn" class="btn-ghost">复制 published 到 draft</button>
+                <button id="workflow-definition-copy-version-btn" class="btn-ghost">复制选中版本到 draft</button>
+                <button id="workflow-definition-save-btn" class="btn-primary">保存 draft</button>
+                <button id="workflow-definition-publish-btn" class="btn-primary">发布 draft</button>
+              </div>
+            </section>
+
+            <section class="workflow-definition-panel">
+              <div class="workflow-definition-panel-head">
+                <div class="workflow-definition-panel-title">版本列表</div>
+                <div id="workflow-definition-version-summary" class="workflow-definition-panel-note"></div>
+              </div>
+              <div id="workflow-definition-versions" class="workflow-definition-versions"></div>
+            </section>
+
+            <section class="workflow-definition-grid">
+              <section class="workflow-definition-panel">
+                <div class="workflow-definition-panel-head">
+                  <div class="workflow-definition-panel-title">Draft 编辑器</div>
+                  <div class="workflow-definition-panel-note">基础字段 + JSON 混合编辑</div>
+                </div>
+                <div class="workflow-definition-form-grid">
+                  <label class="workflow-definition-field">
+                    <span>Bundle Label</span>
+                    <input id="workflow-definition-bundle-label" type="text" placeholder="流程展示名称" />
+                  </label>
+                  <label class="workflow-definition-field">
+                    <span>Key</span>
+                    <input id="workflow-definition-key" type="text" readonly />
+                  </label>
+                  <label class="workflow-definition-field">
+                    <span>Name</span>
+                    <input id="workflow-definition-name" type="text" placeholder="运行时流程名称" />
+                  </label>
+                  <label class="workflow-definition-field">
+                    <span>Draft Version</span>
+                    <input id="workflow-definition-version" type="text" readonly />
+                  </label>
+                </div>
+                <label class="workflow-definition-field workflow-definition-field-block">
+                  <span>Bundle Description</span>
+                  <textarea id="workflow-definition-bundle-description" rows="2" placeholder="列表页展示描述"></textarea>
+                </label>
+                <label class="workflow-definition-field workflow-definition-field-block">
+                  <span>Definition Description</span>
+                  <textarea id="workflow-definition-description" rows="3" placeholder="definition 自身描述"></textarea>
+                </label>
+                <label class="workflow-definition-field workflow-definition-field-block">
+                  <span>Roles</span>
+                  <div class="workflow-definition-subeditor">
+                    <div class="workflow-definition-state-list-wrap">
+                      <div class="workflow-definition-state-list-head">
+                        <span>Role List</span>
+                        <button id="workflow-definition-role-add-btn" type="button" class="btn-ghost">新增</button>
+                      </div>
+                      <div id="workflow-definition-role-list" class="workflow-definition-state-list"></div>
+                    </div>
+                    <div id="workflow-definition-role-inspector" class="workflow-definition-state-inspector">
+                      <div class="workflow-definition-state-inspector-empty">选择一个 role 查看结构化编辑面板。</div>
+                    </div>
+                  </div>
+                  <textarea id="workflow-definition-roles" rows="8" spellcheck="false"></textarea>
+                </label>
+                <label class="workflow-definition-field workflow-definition-field-block">
+                  <span>Entry Points</span>
+                  <div class="workflow-definition-subeditor">
+                    <div class="workflow-definition-state-list-wrap">
+                      <div class="workflow-definition-state-list-head">
+                        <span>Entry Point List</span>
+                        <button id="workflow-definition-entry-point-add-btn" type="button" class="btn-ghost">新增</button>
+                      </div>
+                      <div id="workflow-definition-entry-point-list" class="workflow-definition-state-list"></div>
+                    </div>
+                    <div id="workflow-definition-entry-point-inspector" class="workflow-definition-state-inspector">
+                      <div class="workflow-definition-state-inspector-empty">选择一个 entry point 查看结构化编辑面板。</div>
+                    </div>
+                  </div>
+                  <textarea id="workflow-definition-entry-points" rows="8" spellcheck="false"></textarea>
+                </label>
+                <label class="workflow-definition-field workflow-definition-field-block">
+                  <span>States</span>
+                  <div class="workflow-definition-state-editor">
+                    <div class="workflow-definition-state-list-wrap">
+                      <div class="workflow-definition-state-list-head">
+                        <span>State List</span>
+                        <button id="workflow-definition-state-add-btn" type="button" class="btn-ghost">新增</button>
+                      </div>
+                      <div id="workflow-definition-state-list" class="workflow-definition-state-list"></div>
+                    </div>
+                    <div id="workflow-definition-state-inspector" class="workflow-definition-state-inspector">
+                      <div class="workflow-definition-state-inspector-empty">选择一个 state 查看结构化编辑面板。</div>
+                    </div>
+                  </div>
+                  <textarea id="workflow-definition-states" rows="18" spellcheck="false"></textarea>
+                </label>
+                <label class="workflow-definition-field workflow-definition-field-block">
+                  <span>Status Labels</span>
+                  <div class="workflow-definition-subeditor">
+                    <div class="workflow-definition-state-list-wrap">
+                      <div class="workflow-definition-state-list-head">
+                        <span>Status Label List</span>
+                        <button id="workflow-definition-status-label-add-btn" type="button" class="btn-ghost">新增</button>
+                      </div>
+                      <div id="workflow-definition-status-label-list" class="workflow-definition-state-list"></div>
+                    </div>
+                    <div id="workflow-definition-status-label-inspector" class="workflow-definition-state-inspector">
+                      <div class="workflow-definition-state-inspector-empty">选择一个 status label 查看结构化编辑面板。</div>
+                    </div>
+                  </div>
+                  <textarea id="workflow-definition-status-labels" rows="8" spellcheck="false"></textarea>
+                </label>
+                <label class="workflow-definition-field workflow-definition-field-block">
+                  <span>Metadata</span>
+                  <textarea id="workflow-definition-metadata" rows="6" spellcheck="false"></textarea>
+                </label>
+              </section>
+
+              <section class="workflow-definition-sidepanels">
+                <section class="workflow-definition-panel">
+                  <div class="workflow-definition-panel-head">
+                    <div class="workflow-definition-panel-title">结构视图</div>
+                    <div class="workflow-definition-panel-note">只读状态图摘要</div>
+                  </div>
+                  <div id="workflow-definition-graph" class="workflow-definition-graph"></div>
+                </section>
+
+                <section class="workflow-definition-panel">
+                  <div class="workflow-definition-panel-head">
+                    <div class="workflow-definition-panel-title">Preview / Compile</div>
+                    <div class="workflow-definition-panel-note">当前以后端返回结果为准</div>
+                  </div>
+                  <div id="workflow-definition-validation" class="workflow-definition-validation"></div>
+                  <pre id="workflow-definition-preview" class="workflow-definition-code-block"></pre>
+                </section>
+
+                <section class="workflow-definition-panel">
+                  <div class="workflow-definition-panel-head">
+                    <div class="workflow-definition-panel-title">Draft vs Published</div>
+                    <div id="workflow-definition-diff-summary" class="workflow-definition-panel-note"></div>
+                  </div>
+                  <div id="workflow-definition-diff" class="workflow-definition-diff"></div>
+                </section>
+
+                <section class="workflow-definition-panel">
+                  <div class="workflow-definition-panel-head">
+                    <div class="workflow-definition-panel-title">版本内容</div>
+                    <div id="workflow-definition-selected-version-label" class="workflow-definition-panel-note"></div>
+                  </div>
+                  <pre id="workflow-definition-version-json" class="workflow-definition-code-block"></pre>
+                </section>
+              </section>
+            </section>
           </div>
         </main>
       </section>

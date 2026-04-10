@@ -21,7 +21,7 @@ export interface StructuredMemoryHit extends MemorySearchResult {
   sourceScore: number;
   matchedTerms: string[];
   directMatchCount: number;
-  matchSource?: 'fts' | 'cjk_fallback';
+  matchSource: 'fts' | 'cjk_fallback';
 }
 
 export function tokenizeMemoryQuery(text: string): string[] {
@@ -122,26 +122,27 @@ export function retrieveStructuredMemories(
   const directTerms = new Set(expanded.directTerms);
   const cjkPromptNgrams = extractCjkNgrams(prompt);
 
-  const hits = Array.from(merged.values())
-    .map((result) => {
-      const record = getMemoryById(result.id);
-      if (!record || record.status !== 'active') return null;
-      const contentTerms = new Set(tokenizeMemoryQuery(result.content));
-      const matchedTerms = Array.from(weightedTerms.keys()).filter((term) =>
-        contentTerms.has(term),
-      );
-      const directMatchCount = Array.from(directTerms).filter((term) =>
-        contentTerms.has(term),
-      ).length;
-      return {
-        ...result,
-        sourceScore: normalizeBm25Score(result.score),
-        matchedTerms,
-        directMatchCount,
-        matchSource: 'fts' as const,
-      };
-    })
-    .filter((item): item is StructuredMemoryHit => Boolean(item));
+  const hits: StructuredMemoryHit[] = [];
+  for (const result of merged.values()) {
+    const record = getMemoryById(result.id);
+    if (!record || record.status !== 'active') continue;
+
+    const contentTerms = new Set(tokenizeMemoryQuery(result.content));
+    const matchedTerms = Array.from(weightedTerms.keys()).filter((term) =>
+      contentTerms.has(term),
+    );
+    const directMatchCount = Array.from(directTerms).filter((term) =>
+      contentTerms.has(term),
+    ).length;
+
+    hits.push({
+      ...result,
+      sourceScore: normalizeBm25Score(result.score),
+      matchedTerms,
+      directMatchCount,
+      matchSource: 'fts',
+    });
+  }
 
   if (cjkPromptNgrams.length > 0) {
     const fallbackCandidates = listMemories(groupFolder, 300).filter(
@@ -186,7 +187,7 @@ export function retrieveStructuredMemories(
       (a, b) =>
         b.sourceScore - a.sourceScore ||
         b.directMatchCount - a.directMatchCount ||
-        Number(b.updated_at) - Number(a.updated_at),
+        Date.parse(b.updated_at) - Date.parse(a.updated_at),
     )
     .slice(0, limit);
 }

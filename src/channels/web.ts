@@ -5,6 +5,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 import { AgentStatusInfo } from '../types.js';
 import type { WorkbenchRealtimeEvent } from '../workbench-events.js';
+import { validateCardConfig } from '../card-config.js';
+import type { CardConfig } from '../card-config.js';
+import type { WorkflowDefinition } from '../workflow-definition.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 import { GROUPS_DIR, DATA_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
@@ -36,6 +39,20 @@ import {
   listAgentQuerySteps,
   listAgentQueries,
 } from '../db.js';
+import {
+  getPublishedWorkflowDefinition,
+  getWorkflowDefinitionBundle,
+  listWorkflowDefinitionBundles,
+  publishWorkflowDefinitionVersion,
+  readCardRegistry,
+  saveWorkflowDefinitionDraft,
+  writeCardRegistry,
+} from '../workflow-definition-store.js';
+import {
+  compileWorkflowDefinition,
+  validateWorkflowDefinition,
+} from '../workflow-compiler.js';
+import { loadWorkflowConfigs } from '../workflow-config.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -392,6 +409,28 @@ class WebChannel {
       }
       if (pathname === '/api/workflow/create-options') {
         return this.apiGetWorkflowCreateOptions(res);
+      }
+      if (pathname === '/api/workflow-definitions' && req.method === 'GET') {
+        return this.apiListWorkflowDefinitions(res);
+      }
+      if (pathname === '/api/cards' && req.method === 'GET') {
+        return this.apiGetCards(res);
+      }
+      if (pathname === '/api/cards' && req.method === 'POST') {
+        return this.apiSaveCards(req, res);
+      }
+      if (pathname.startsWith('/api/workflow-definitions/')) {
+        const suffix = pathname.slice('/api/workflow-definitions/'.length);
+        if (suffix.endsWith('/publish') && req.method === 'POST') {
+          const key = suffix.slice(0, -'/publish'.length);
+          return this.apiPublishWorkflowDefinition(key, req, res);
+        }
+        if (req.method === 'GET') {
+          return this.apiGetWorkflowDefinition(suffix, res);
+        }
+        if (req.method === 'POST') {
+          return this.apiSaveWorkflowDefinitionDraft(suffix, req, res);
+        }
       }
       if (pathname === '/api/workbench/tasks') {
         if (req.method === 'DELETE') {
@@ -1518,6 +1557,168 @@ class WebChannel {
         requirements_by_service: requirementsByService,
       }),
     );
+  }
+
+  private async apiListWorkflowDefinitions(
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const bundles = listWorkflowDefinitionBundles();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ definitions: bundles }));
+  }
+
+  private async apiGetWorkflowDefinition(
+    key: string,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const bundle = getWorkflowDefinitionBundle(key);
+    if (!bundle) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Workflow definition not found' }));
+      return;
+    }
+
+    const published = getPublishedWorkflowDefinition(key);
+    const draft =
+      [...bundle.versions]
+        .sort((a, b) => b.version - a.version)
+        .find((version) => version.status === 'draft') || null;
+    const previewSource = draft || published;
+    const preview = previewSource
+      ? {
+          compiled: compileWorkflowDefinition(previewSource),
+          errors: validateWorkflowDefinition(previewSource),
+        }
+      : null;
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        bundle,
+        published_definition: published,
+        draft_definition: draft,
+        preview,
+      }),
+    );
+  }
+
+  private async apiSaveWorkflowDefinitionDraft(
+    key: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      label?: string;
+      description?: string;
+      definition?: Omit<WorkflowDefinition, 'key' | 'status' | 'version'> & {
+        version?: number;
+      };
+    };
+
+    if (!data.definition) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'definition required' }));
+      return;
+    }
+
+    const result = saveWorkflowDefinitionDraft({
+      key,
+      label: data.label,
+      description: data.description,
+      definition: data.definition,
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, definition: result.definition }));
+  }
+
+  private async apiPublishWorkflowDefinition(
+    key: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown = {};
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      // Allow empty body.
+    }
+
+    const data = body as { version?: number };
+    const result = publishWorkflowDefinitionVersion({
+      key,
+      version: data.version,
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+
+    loadWorkflowConfigs();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, definition: result.definition }));
+  }
+
+  private async apiGetCards(res: http.ServerResponse): Promise<void> {
+    const cards = readCardRegistry();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ cards }));
+  }
+
+  private async apiSaveCards(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { cards?: Record<string, Record<string, unknown>> };
+    if (!data.cards || typeof data.cards !== 'object') {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'cards object required' }));
+      return;
+    }
+
+    const cards = data.cards as Record<string, Record<string, CardConfig>>;
+    const errors: string[] = [];
+    for (const [workflowType, cardGroup] of Object.entries(cards)) {
+      for (const [cardKey, cardConfig] of Object.entries(cardGroup || {})) {
+        errors.push(
+          ...validateCardConfig(`${workflowType}.${cardKey}`, cardConfig),
+        );
+      }
+    }
+    if (errors.length > 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: errors.join('; ') }));
+      return;
+    }
+
+    writeCardRegistry(cards);
+    loadWorkflowConfigs();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   private async apiGetWorkbenchTasks(res: http.ServerResponse): Promise<void> {

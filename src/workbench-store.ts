@@ -267,7 +267,7 @@ function upsertStageActionItem(workflow: Workflow): void {
     delegationId: workflow.current_delegation_id || null,
     itemType: 'approval',
     title,
-    body: card ? renderTemplate(card.body_template, vars) : title,
+    body: card?.body_template ? renderTemplate(card.body_template, vars) : title,
     sourceType: 'workflow',
     sourceRefId: workflow.status,
     replyable: false,

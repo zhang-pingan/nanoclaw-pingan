@@ -508,7 +508,7 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
     result_summary: '',
     revision_text: '',
   };
-  const body = card
+  const body = card?.body_template
     ? renderTemplate(card.body_template, vars)
     : `${config.status_labels[workflow.status] || workflow.status} 等待处理`;
 

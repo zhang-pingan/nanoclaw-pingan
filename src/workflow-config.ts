@@ -1,7 +1,8 @@
 /**
  * Workflow Configuration — types, loader, template renderer, validator.
  *
- * Workflow type definitions live in container/skills/workflows.json.
+ * Editable workflow definitions live in container/skills/workflow-definitions.json.
+ * Legacy compiled workflow configs may exist in container/skills/workflows.json.
  * Card templates live in container/skills/cards.json.
  * The engine (workflow.ts) reads them once at init and drives state
  * transitions generically instead of hard-coding each workflow type.
@@ -11,6 +12,12 @@ import path from 'path';
 
 import { CardConfig, validateCardConfig } from './card-config.js';
 import { logger } from './logger.js';
+import { WorkflowDefinition } from './workflow-definition.js';
+import {
+  getPublishedWorkflowDefinitions,
+  normalizeWorkflowDefinitionRegistry,
+} from './workflow-definition-registry.js';
+import { compileWorkflowDefinitions } from './workflow-compiler.js';
 
 // -------------------------------------------------------
 // Config types
@@ -99,6 +106,12 @@ export function loadWorkflowConfigs(): Record<
     'skills',
     'workflows.json',
   );
+  const definitionsPath = path.join(
+    process.cwd(),
+    'container',
+    'skills',
+    'workflow-definitions.json',
+  );
   const cardsPath = path.join(process.cwd(), 'container', 'skills', 'cards.json');
 
   if (!fs.existsSync(workflowsPath)) {
@@ -114,21 +127,47 @@ export function loadWorkflowConfigs(): Record<
   }
 
   try {
-    const rawWorkflows = JSON.parse(
-      fs.readFileSync(workflowsPath, 'utf-8'),
-    ) as Record<string, RawWorkflowTypeConfig>;
     const rawCards = JSON.parse(
       fs.readFileSync(cardsPath, 'utf-8'),
     ) as Record<string, Record<string, CardConfig>>;
 
-    const configs = rawWorkflows as Record<string, WorkflowTypeConfig>;
+    let configs: Record<string, WorkflowTypeConfig>;
+    let legacyRawWorkflows: Record<string, RawWorkflowTypeConfig> | null = null;
 
-    for (const [typeName, rawConfig] of Object.entries(rawWorkflows)) {
-      const config = rawConfig as WorkflowTypeConfig;
+    if (fs.existsSync(definitionsPath)) {
+      const rawDefinitions = JSON.parse(
+        fs.readFileSync(definitionsPath, 'utf-8'),
+      ) as WorkflowDefinition | Record<string, WorkflowDefinition>;
+      const registry = normalizeWorkflowDefinitionRegistry(rawDefinitions);
+      const published = getPublishedWorkflowDefinitions(registry);
+      if (published.errors.length > 0) {
+        lastLoadError = `Workflow definition 发布模型校验失败: ${published.errors.join('; ')}`;
+        logger.error(
+          { errors: published.errors },
+          'Workflow definition publish model validation failed',
+        );
+        return null;
+      }
+      const compiled = compileWorkflowDefinitions(published.definitions);
+      if (compiled.errors.length > 0) {
+        lastLoadError = `Workflow definition 编译失败: ${compiled.errors.join('; ')}`;
+        logger.error({ errors: compiled.errors }, 'Workflow definition compile failed');
+        return null;
+      }
+      configs = compiled.configs as Record<string, WorkflowTypeConfig>;
+    } else {
+      legacyRawWorkflows = JSON.parse(
+        fs.readFileSync(workflowsPath, 'utf-8'),
+      ) as Record<string, RawWorkflowTypeConfig>;
+      configs = legacyRawWorkflows as Record<string, WorkflowTypeConfig>;
+    }
+
+    for (const [typeName, config] of Object.entries(configs)) {
+      const fallbackCards = legacyRawWorkflows?.[typeName]?.cards || {};
       const errors = validateConfig(
         typeName,
         config,
-        rawCards[typeName] || rawConfig.cards || {},
+        rawCards[typeName] || fallbackCards,
       );
       if (errors.length > 0) {
         lastLoadError = `Workflow 配置校验失败 (${typeName}): ${errors.join('; ')}`;

@@ -20,8 +20,53 @@ var LIVE_MESSAGE_BUFFER_LIMIT = 250;
 var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
 var workbenchScreen = document.getElementById("workbench-screen");
+var workflowDefinitionsScreen = document.getElementById("workflow-definitions-screen");
 var memoryManagementScreen = document.getElementById("memory-management-screen");
 var traceMonitorScreen = document.getElementById("trace-monitor-screen");
+var workflowDefinitionList = document.getElementById("workflow-definition-list");
+var workflowDefinitionRefreshBtn = document.getElementById("workflow-definition-refresh-btn");
+var workflowDefinitionCreateBtn = document.getElementById("workflow-definition-create-btn");
+var workflowDefinitionEmpty = document.getElementById("workflow-definition-empty");
+var workflowDefinitionDetail = document.getElementById("workflow-definition-detail");
+var workflowDefinitionTitle = document.getElementById("workflow-definition-title");
+var workflowDefinitionSummary = document.getElementById("workflow-definition-summary");
+var workflowDefinitionMeta = document.getElementById("workflow-definition-meta");
+var workflowDefinitionCopyBtn = document.getElementById("workflow-definition-copy-btn");
+var workflowDefinitionCopyVersionBtn = document.getElementById("workflow-definition-copy-version-btn");
+var workflowDefinitionSaveBtn = document.getElementById("workflow-definition-save-btn");
+var workflowDefinitionPublishBtn = document.getElementById("workflow-definition-publish-btn");
+var workflowDefinitionVersionSummary = document.getElementById("workflow-definition-version-summary");
+var workflowDefinitionVersions = document.getElementById("workflow-definition-versions");
+var workflowDefinitionBundleLabelInput = document.getElementById("workflow-definition-bundle-label");
+var workflowDefinitionKeyInput = document.getElementById("workflow-definition-key");
+var workflowDefinitionNameInput = document.getElementById("workflow-definition-name");
+var workflowDefinitionVersionInput = document.getElementById("workflow-definition-version");
+var workflowDefinitionBundleDescriptionInput = document.getElementById("workflow-definition-bundle-description");
+var workflowDefinitionDescriptionInput = document.getElementById("workflow-definition-description");
+var workflowDefinitionRoleAddBtn = document.getElementById("workflow-definition-role-add-btn");
+var workflowDefinitionRolesInput = document.getElementById("workflow-definition-roles");
+var workflowDefinitionRoleList = document.getElementById("workflow-definition-role-list");
+var workflowDefinitionRoleInspector = document.getElementById("workflow-definition-role-inspector");
+var workflowDefinitionEntryPointAddBtn = document.getElementById("workflow-definition-entry-point-add-btn");
+var workflowDefinitionEntryPointsInput = document.getElementById("workflow-definition-entry-points");
+var workflowDefinitionEntryPointList = document.getElementById("workflow-definition-entry-point-list");
+var workflowDefinitionEntryPointInspector = document.getElementById("workflow-definition-entry-point-inspector");
+var workflowDefinitionStatesInput = document.getElementById("workflow-definition-states");
+var workflowDefinitionStateAddBtn = document.getElementById("workflow-definition-state-add-btn");
+var workflowDefinitionStateList = document.getElementById("workflow-definition-state-list");
+var workflowDefinitionStateInspector = document.getElementById("workflow-definition-state-inspector");
+var workflowDefinitionStatusLabelAddBtn = document.getElementById("workflow-definition-status-label-add-btn");
+var workflowDefinitionStatusLabelsInput = document.getElementById("workflow-definition-status-labels");
+var workflowDefinitionStatusLabelList = document.getElementById("workflow-definition-status-label-list");
+var workflowDefinitionStatusLabelInspector = document.getElementById("workflow-definition-status-label-inspector");
+var workflowDefinitionMetadataInput = document.getElementById("workflow-definition-metadata");
+var workflowDefinitionValidation = document.getElementById("workflow-definition-validation");
+var workflowDefinitionGraph = document.getElementById("workflow-definition-graph");
+var workflowDefinitionPreview = document.getElementById("workflow-definition-preview");
+var workflowDefinitionDiffSummary = document.getElementById("workflow-definition-diff-summary");
+var workflowDefinitionDiff = document.getElementById("workflow-definition-diff");
+var workflowDefinitionSelectedVersionLabel = document.getElementById("workflow-definition-selected-version-label");
+var workflowDefinitionVersionJson = document.getElementById("workflow-definition-version-json");
 var memoryGroupsList = document.getElementById("memory-groups-list");
 var memoryGroupTitle = document.getElementById("memory-group-title");
 var memoryGroupFolder = document.getElementById("memory-group-folder");
@@ -140,6 +185,16 @@ var agentStatusData = [];
 var agentRunTraceByGroup = {};
 var activePrimaryNavKey = "agent-groups";
 var activeTraceMonitorScope = "active";
+var workflowDefinitionBundles = [];
+var currentWorkflowDefinitionKey = "";
+var currentWorkflowDefinitionDetail = null;
+var workflowDefinitionSelectedVersion = null;
+var workflowDefinitionSelectedRoleKey = "";
+var workflowDefinitionSelectedEntryPointKey = "";
+var workflowDefinitionSelectedStateKey = "";
+var workflowDefinitionSelectedStatusLabelKey = "";
+var workflowDefinitionCardsRegistry = {};
+var workflowDefinitionRequestSeq = 0;
 var activeMemoryGroupJid = "";
 var memoryEntries = [];
 var memoryQueryText = "";
@@ -1055,6 +1110,7 @@ function setPrimaryNav(navKey) {
   });
   const showWorkbench = navKey === "workbench";
   const showWorkspace = navKey === "agent-groups";
+  const showWorkflowDefinitions = navKey === "workflow-definitions";
   const showMemoryManagement = navKey === "memory-management";
   const showTraceMonitor = navKey === "trace-monitor";
   if (workbenchScreen) {
@@ -1062,6 +1118,9 @@ function setPrimaryNav(navKey) {
   }
   if (workspace) {
     workspace.classList.toggle("active", showWorkspace);
+  }
+  if (workflowDefinitionsScreen) {
+    workflowDefinitionsScreen.classList.toggle("active", showWorkflowDefinitions);
   }
   if (memoryManagementScreen) {
     memoryManagementScreen.classList.toggle("active", showMemoryManagement);
@@ -1076,6 +1135,9 @@ function setPrimaryNav(navKey) {
   }
   if (showWorkbench) {
     loadWorkbenchTasks();
+  }
+  if (showWorkflowDefinitions) {
+    loadWorkflowDefinitions({ preserveSelection: true });
   }
   if (showTraceMonitor) {
     loadTraceMonitorData({ force: false });
@@ -1745,6 +1807,2154 @@ async function loadMemories(queryOverride) {
     if (reqSeq === memoryRequestSeq && memoryRefreshBtn) {
       memoryRefreshBtn.classList.remove("spinning");
     }
+  }
+}
+
+function stringifyPrettyJson(value) {
+  return JSON.stringify(value === undefined ? null : value, null, 2);
+}
+
+function cloneJson(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function countNewlines(text) {
+  if (!text) return 0;
+  return (text.match(/\n/g) || []).length;
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(String(value ?? "")).replace(/"/g, "&quot;");
+}
+
+function createWorkflowDefinitionTemplate(key, name, description) {
+  return {
+    key,
+    name: name || key,
+    description: description || "",
+    version: 1,
+    status: "draft",
+    roles: {
+      owner: {
+        label: "负责人",
+        channels: {
+          web: "web_main",
+        },
+      },
+    },
+    entry_points: {
+      start: {
+        label: "默认入口",
+        state: "todo",
+      },
+    },
+    states: {
+      todo: {
+        type: "terminal",
+        label: "待配置",
+        description: "创建后请继续完善 roles、entry_points 与 states。",
+      },
+    },
+    status_labels: {
+      todo: "待配置",
+    },
+    metadata: {
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  };
+}
+
+function getWorkflowDefinitionVersionList() {
+  const versions = currentWorkflowDefinitionDetail?.bundle?.versions;
+  if (!Array.isArray(versions)) return [];
+  return [...versions].sort((a, b) => b.version - a.version);
+}
+
+function getEditableWorkflowDefinition() {
+  if (!currentWorkflowDefinitionDetail) return null;
+  return (
+    currentWorkflowDefinitionDetail.draft_definition ||
+    currentWorkflowDefinitionDetail.published_definition ||
+    null
+  );
+}
+
+function getSelectedWorkflowDefinitionVersion() {
+  const versions = getWorkflowDefinitionVersionList();
+  return (
+    versions.find((version) => version.version === workflowDefinitionSelectedVersion) ||
+    versions[0] ||
+    null
+  );
+}
+
+function parseWorkflowDefinitionJsonField(label, rawValue, fallback) {
+  const source = typeof rawValue === "string" ? rawValue.trim() : "";
+  if (!source) {
+    return cloneJson(fallback);
+  }
+  try {
+    return JSON.parse(source);
+  } catch (err) {
+    throw new Error(`${label} JSON 解析失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+function getStatesFromEditor() {
+  if (!workflowDefinitionStatesInput) return {};
+  return parseWorkflowDefinitionJsonField("States", workflowDefinitionStatesInput.value || "{}", {});
+}
+
+function getEntryPointsFromEditor() {
+  if (!workflowDefinitionEntryPointsInput) return {};
+  return parseWorkflowDefinitionJsonField("Entry Points", workflowDefinitionEntryPointsInput.value || "{}", {});
+}
+
+function getStatusLabelsFromEditor() {
+  if (!workflowDefinitionStatusLabelsInput) return {};
+  return parseWorkflowDefinitionJsonField("Status Labels", workflowDefinitionStatusLabelsInput.value || "{}", {});
+}
+
+function getRolesFromEditor() {
+  if (!workflowDefinitionRolesInput) return {};
+  return parseWorkflowDefinitionJsonField("Roles", workflowDefinitionRolesInput.value || "{}", {});
+}
+
+function updateStatesEditor(states) {
+  if (!workflowDefinitionStatesInput) return;
+  workflowDefinitionStatesInput.value = stringifyPrettyJson(states || {});
+}
+
+function updateEntryPointsEditor(entryPoints) {
+  if (!workflowDefinitionEntryPointsInput) return;
+  workflowDefinitionEntryPointsInput.value = stringifyPrettyJson(entryPoints || {});
+}
+
+function updateStatusLabelsEditor(statusLabels) {
+  if (!workflowDefinitionStatusLabelsInput) return;
+  workflowDefinitionStatusLabelsInput.value = stringifyPrettyJson(statusLabels || {});
+}
+
+function updateRolesEditor(roles) {
+  if (!workflowDefinitionRolesInput) return;
+  workflowDefinitionRolesInput.value = stringifyPrettyJson(roles || {});
+}
+
+function collectWorkflowDefinitionRoleReferences(roleKey, states, entryPoints) {
+  const refs = [];
+  Object.entries(entryPoints || {}).forEach(([entryKey, entry]) => {
+    if (entry?.deliverable_role === roleKey) {
+      refs.push(`entry_points.${entryKey}.deliverable_role`);
+    }
+  });
+  Object.entries(states || {}).forEach(([stateKey, state]) => {
+    if (state?.delegate?.role === roleKey) refs.push(`states.${stateKey}.delegate.role`);
+    if (state?.on_complete?.success?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_complete.success.delegate.role`);
+    if (state?.on_complete?.failure?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_complete.failure.delegate.role`);
+    if (state?.on_approve?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_approve.delegate.role`);
+    if (state?.on_revise?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_revise.delegate.role`);
+  });
+  return refs;
+}
+
+function createWorkflowDefinitionRoleTemplate() {
+  return {
+    label: "新角色",
+    description: "",
+    channels: {
+      web: "",
+    },
+  };
+}
+
+function addWorkflowDefinitionRoleChannel(channelKey, initialValue = "") {
+  if (!workflowDefinitionSelectedRoleKey) return;
+  const safeKey = (channelKey || "").trim();
+  const safeValue = String(initialValue || "");
+  const keyPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!safeKey) {
+    throw new Error("channel key 不能为空");
+  }
+  if (!keyPattern.test(safeKey)) {
+    throw new Error("channel key 仅支持字母、数字、_ 和 -");
+  }
+  applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
+    role.channels = role.channels || {};
+    if (Object.prototype.hasOwnProperty.call(role.channels, safeKey)) {
+      throw new Error(`channel "${safeKey}" 已存在`);
+    }
+    role.channels[safeKey] = safeValue;
+    return cleanupStateObject(role);
+  });
+}
+
+function renameWorkflowDefinitionRoleChannel(oldKey, newKey) {
+  if (!workflowDefinitionSelectedRoleKey || !oldKey) return;
+  const safeNewKey = (newKey || "").trim();
+  const keyPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!safeNewKey || safeNewKey === oldKey) return;
+  if (!keyPattern.test(safeNewKey)) {
+    throw new Error("channel key 仅支持字母、数字、_ 和 -");
+  }
+  applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
+    role.channels = role.channels || {};
+    if (!Object.prototype.hasOwnProperty.call(role.channels, oldKey)) {
+      throw new Error(`channel "${oldKey}" 不存在`);
+    }
+    if (Object.prototype.hasOwnProperty.call(role.channels, safeNewKey)) {
+      throw new Error(`channel "${safeNewKey}" 已存在`);
+    }
+    const previousValue = role.channels[oldKey];
+    delete role.channels[oldKey];
+    role.channels[safeNewKey] = previousValue;
+    return cleanupStateObject(role);
+  });
+}
+
+function addWorkflowDefinitionRoleChannelFromInline() {
+  if (!workflowDefinitionRoleInspector) return;
+  const keyInput = workflowDefinitionRoleInspector.querySelector("[data-role-new-channel-key]");
+  const valueInput = workflowDefinitionRoleInspector.querySelector("[data-role-new-channel-value]");
+  try {
+    addWorkflowDefinitionRoleChannel(keyInput?.value || "", valueInput?.value || "");
+    if (keyInput) keyInput.value = "";
+    if (valueInput) valueInput.value = "";
+    showToast("已新增 channel");
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "新增 channel 失败");
+  }
+}
+
+function handleWorkflowDefinitionRoleChannelRename(input) {
+  const oldKey = input.getAttribute("data-role-channel-key-original") || "";
+  const newKey = (input.value || "").trim();
+  if (!oldKey || !newKey || newKey === oldKey) {
+    input.value = oldKey || newKey;
+    return;
+  }
+  try {
+    renameWorkflowDefinitionRoleChannel(oldKey, newKey);
+    input.setAttribute("data-role-channel-key-original", newKey);
+    showToast(`已重命名 channel: ${oldKey} -> ${newKey}`);
+  } catch (err) {
+    input.value = oldKey;
+    alert(err instanceof Error ? err.message : "重命名 channel 失败");
+  }
+}
+
+function deleteWorkflowDefinitionRoleChannel(channelKey) {
+  if (!workflowDefinitionSelectedRoleKey || !channelKey) return;
+  applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
+    role.channels = role.channels || {};
+    delete role.channels[channelKey];
+    return cleanupStateObject(role);
+  });
+}
+
+function createWorkflowDefinitionEntryPointTemplate() {
+  return {
+    label: "新入口",
+    state: workflowDefinitionSelectedStateKey || "",
+  };
+}
+
+function getCurrentWorkflowCardRefs() {
+  const workflowCards = workflowDefinitionCardsRegistry?.[currentWorkflowDefinitionKey] || {};
+  return Object.keys(workflowCards);
+}
+
+function createWorkflowDefinitionStateTemplate(type) {
+  if (type === "delegation") {
+    return {
+      type: "delegation",
+      label: "新状态",
+      delegate: {
+        role: "",
+      },
+      on_complete: {
+        success: {
+          target: "",
+        },
+        failure: {
+          target: "",
+        },
+      },
+    };
+  }
+  if (type === "confirmation") {
+    return {
+      type: "confirmation",
+      label: "新确认状态",
+      card: {
+        ref: "",
+      },
+      on_approve: {
+        target: "",
+      },
+      on_revise: {
+        target: "",
+      },
+    };
+  }
+  return {
+    type,
+    label: "新状态",
+  };
+}
+
+function collectWorkflowDefinitionStateReferences(stateKey, states, entryPoints) {
+  const refs = [];
+  Object.entries(entryPoints || {}).forEach(([entryKey, entry]) => {
+    if (entry?.state === stateKey) {
+      refs.push(`entry_points.${entryKey}`);
+    }
+  });
+  Object.entries(states || {}).forEach(([otherStateKey, state]) => {
+    if (state?.on_complete?.success?.target === stateKey) {
+      refs.push(`states.${otherStateKey}.on_complete.success.target`);
+    }
+    if (state?.on_complete?.failure?.target === stateKey) {
+      refs.push(`states.${otherStateKey}.on_complete.failure.target`);
+    }
+    if (state?.on_approve?.target === stateKey) {
+      refs.push(`states.${otherStateKey}.on_approve.target`);
+    }
+    if (state?.on_revise?.target === stateKey) {
+      refs.push(`states.${otherStateKey}.on_revise.target`);
+    }
+  });
+  return refs;
+}
+
+function applyWorkflowDefinitionStatePatch(stateKey, updater) {
+  if (!stateKey) return;
+  try {
+    const states = getStatesFromEditor();
+    const currentState = cloneJson(states[stateKey] || {});
+    states[stateKey] = updater(currentState) || currentState;
+    updateStatesEditor(states);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) {
+      editable.states = states;
+    }
+    renderWorkflowDefinitionStateEditor(states);
+    renderWorkflowDefinitionGraph({
+      states,
+      entry_points: editable?.entry_points || {},
+    });
+  } catch (err) {
+    console.error("Failed to patch state inspector:", err);
+    showToast(err instanceof Error ? err.message : "State JSON 解析失败", 2200);
+  }
+}
+
+function applyWorkflowDefinitionRolePatch(roleKey, updater) {
+  if (!roleKey) return;
+  try {
+    const roles = getRolesFromEditor();
+    roles[roleKey] = updater(cloneJson(roles[roleKey] || {})) || roles[roleKey];
+    updateRolesEditor(roles);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.roles = roles;
+    renderWorkflowDefinitionRoleEditor(roles);
+    renderWorkflowDefinitionStateEditor();
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Roles JSON 解析失败", 2200);
+  }
+}
+
+function applyWorkflowDefinitionEntryPointPatch(entryKey, updater) {
+  if (!entryKey) return;
+  try {
+    const entryPoints = getEntryPointsFromEditor();
+    entryPoints[entryKey] = updater(cloneJson(entryPoints[entryKey] || {})) || entryPoints[entryKey];
+    updateEntryPointsEditor(entryPoints);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.entry_points = entryPoints;
+    renderWorkflowDefinitionEntryPointEditor(entryPoints);
+    renderWorkflowDefinitionGraph({
+      states: editable?.states || getStatesFromEditor(),
+      entry_points: entryPoints,
+    });
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Entry Points JSON 解析失败", 2200);
+  }
+}
+
+function applyWorkflowDefinitionStatusLabelPatch(stateKey, updater) {
+  if (!stateKey) return;
+  try {
+    const statusLabels = getStatusLabelsFromEditor();
+    statusLabels[stateKey] = updater(statusLabels[stateKey] || "");
+    updateStatusLabelsEditor(statusLabels);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.status_labels = statusLabels;
+    renderWorkflowDefinitionStatusLabelEditor(statusLabels);
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Status Labels JSON 解析失败", 2200);
+  }
+}
+
+function addWorkflowDefinitionState() {
+  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 state key", "") : "";
+  const stateKey = (rawKey || "").trim();
+  if (!stateKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(stateKey)) {
+    alert("state key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  try {
+    const states = getStatesFromEditor();
+    if (states[stateKey]) {
+      alert(`state "${stateKey}" 已存在`);
+      return;
+    }
+    const rawType = typeof window.prompt === "function"
+      ? window.prompt("输入 state type（delegation / confirmation / terminal / system）", "delegation")
+      : "delegation";
+    const type = (rawType || "delegation").trim();
+    if (!["delegation", "confirmation", "terminal", "system"].includes(type)) {
+      alert("state type 不合法");
+      return;
+    }
+    states[stateKey] = createWorkflowDefinitionStateTemplate(type);
+    updateStatesEditor(states);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.states = states;
+    updateWorkflowDefinitionSelectedState(stateKey);
+    showToast(`已新增 state: ${stateKey}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "新增 state 失败");
+  }
+}
+
+function addWorkflowDefinitionRole() {
+  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 role key", "") : "";
+  const roleKey = (rawKey || "").trim();
+  if (!roleKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(roleKey)) {
+    alert("role key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  try {
+    const roles = getRolesFromEditor();
+    if (roles[roleKey]) {
+      alert(`role "${roleKey}" 已存在`);
+      return;
+    }
+    roles[roleKey] = createWorkflowDefinitionRoleTemplate();
+    updateRolesEditor(roles);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.roles = roles;
+    workflowDefinitionSelectedRoleKey = roleKey;
+    renderWorkflowDefinitionRoleEditor(roles);
+    renderWorkflowDefinitionStateEditor();
+    showToast(`已新增 role: ${roleKey}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "新增 role 失败");
+  }
+}
+
+function renameWorkflowDefinitionRole() {
+  if (!workflowDefinitionSelectedRoleKey) return;
+  const oldKey = workflowDefinitionSelectedRoleKey;
+  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 role key", oldKey) : oldKey;
+  const newKey = (rawKey || "").trim();
+  if (!newKey || newKey === oldKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(newKey)) {
+    alert("role key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  try {
+    const roles = getRolesFromEditor();
+    const states = getStatesFromEditor();
+    const entryPoints = getEntryPointsFromEditor();
+    if (roles[newKey]) {
+      alert(`role "${newKey}" 已存在`);
+      return;
+    }
+    const nextRoles = {};
+    Object.entries(roles).forEach(([key, role]) => {
+      nextRoles[key === oldKey ? newKey : key] = role;
+    });
+    Object.values(entryPoints).forEach((entry) => {
+      if (entry?.deliverable_role === oldKey) entry.deliverable_role = newKey;
+    });
+    Object.values(states).forEach((state) => {
+      if (state?.delegate?.role === oldKey) state.delegate.role = newKey;
+      if (state?.on_complete?.success?.delegate?.role === oldKey) state.on_complete.success.delegate.role = newKey;
+      if (state?.on_complete?.failure?.delegate?.role === oldKey) state.on_complete.failure.delegate.role = newKey;
+      if (state?.on_approve?.delegate?.role === oldKey) state.on_approve.delegate.role = newKey;
+      if (state?.on_revise?.delegate?.role === oldKey) state.on_revise.delegate.role = newKey;
+    });
+    updateRolesEditor(nextRoles);
+    updateEntryPointsEditor(entryPoints);
+    updateStatesEditor(states);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) {
+      editable.roles = nextRoles;
+      editable.entry_points = entryPoints;
+      editable.states = states;
+    }
+    workflowDefinitionSelectedRoleKey = newKey;
+    renderWorkflowDefinitionRoleEditor(nextRoles);
+    renderWorkflowDefinitionEntryPointEditor(entryPoints);
+    renderWorkflowDefinitionStateEditor(states);
+    showToast(`已重命名 role: ${oldKey} -> ${newKey}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "重命名 role 失败");
+  }
+}
+
+function deleteWorkflowDefinitionRole() {
+  if (!workflowDefinitionSelectedRoleKey) return;
+  try {
+    const roles = getRolesFromEditor();
+    const states = getStatesFromEditor();
+    const entryPoints = getEntryPointsFromEditor();
+    const refs = collectWorkflowDefinitionRoleReferences(workflowDefinitionSelectedRoleKey, states, entryPoints);
+    if (refs.length > 0) {
+      alert(`该 role 仍被引用，无法删除：\n\n${refs.join("\n")}`);
+      return;
+    }
+    if (!confirm(`确认删除 role "${workflowDefinitionSelectedRoleKey}" 吗？`)) return;
+    delete roles[workflowDefinitionSelectedRoleKey];
+    updateRolesEditor(roles);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.roles = roles;
+    workflowDefinitionSelectedRoleKey = Object.keys(roles)[0] || "";
+    renderWorkflowDefinitionRoleEditor(roles);
+    renderWorkflowDefinitionStateEditor();
+    renderWorkflowDefinitionEntryPointEditor(entryPoints);
+    showToast("已删除 role");
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "删除 role 失败");
+  }
+}
+
+function addWorkflowDefinitionEntryPoint() {
+  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 entry point key", "") : "";
+  const entryKey = (rawKey || "").trim();
+  if (!entryKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(entryKey)) {
+    alert("entry point key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  try {
+    const entryPoints = getEntryPointsFromEditor();
+    if (entryPoints[entryKey]) {
+      alert(`entry point "${entryKey}" 已存在`);
+      return;
+    }
+    entryPoints[entryKey] = createWorkflowDefinitionEntryPointTemplate();
+    updateEntryPointsEditor(entryPoints);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.entry_points = entryPoints;
+    workflowDefinitionSelectedEntryPointKey = entryKey;
+    renderWorkflowDefinitionEntryPointEditor(entryPoints);
+    renderWorkflowDefinitionGraph({
+      states: editable?.states || getStatesFromEditor(),
+      entry_points: entryPoints,
+    });
+    showToast(`已新增 entry point: ${entryKey}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "新增 entry point 失败");
+  }
+}
+
+function renameWorkflowDefinitionEntryPoint() {
+  if (!workflowDefinitionSelectedEntryPointKey) return;
+  const oldKey = workflowDefinitionSelectedEntryPointKey;
+  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 entry point key", oldKey) : oldKey;
+  const newKey = (rawKey || "").trim();
+  if (!newKey || newKey === oldKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(newKey)) {
+    alert("entry point key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  try {
+    const entryPoints = getEntryPointsFromEditor();
+    if (entryPoints[newKey]) {
+      alert(`entry point "${newKey}" 已存在`);
+      return;
+    }
+    const nextEntryPoints = {};
+    Object.entries(entryPoints).forEach(([key, entry]) => {
+      nextEntryPoints[key === oldKey ? newKey : key] = entry;
+    });
+    updateEntryPointsEditor(nextEntryPoints);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.entry_points = nextEntryPoints;
+    workflowDefinitionSelectedEntryPointKey = newKey;
+    renderWorkflowDefinitionEntryPointEditor(nextEntryPoints);
+    renderWorkflowDefinitionGraph({
+      states: editable?.states || getStatesFromEditor(),
+      entry_points: nextEntryPoints,
+    });
+    showToast(`已重命名 entry point: ${oldKey} -> ${newKey}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "重命名 entry point 失败");
+  }
+}
+
+function deleteWorkflowDefinitionEntryPoint() {
+  if (!workflowDefinitionSelectedEntryPointKey) return;
+  try {
+    const entryPoints = getEntryPointsFromEditor();
+    if (!confirm(`确认删除 entry point "${workflowDefinitionSelectedEntryPointKey}" 吗？`)) return;
+    delete entryPoints[workflowDefinitionSelectedEntryPointKey];
+    updateEntryPointsEditor(entryPoints);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.entry_points = entryPoints;
+    workflowDefinitionSelectedEntryPointKey = Object.keys(entryPoints)[0] || "";
+    renderWorkflowDefinitionEntryPointEditor(entryPoints);
+    renderWorkflowDefinitionGraph({
+      states: editable?.states || getStatesFromEditor(),
+      entry_points: entryPoints,
+    });
+    showToast("已删除 entry point");
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "删除 entry point 失败");
+  }
+}
+
+function addWorkflowDefinitionStatusLabel() {
+  const sourceStateKey = workflowDefinitionSelectedStateKey || Object.keys(getStatesFromEditor())[0] || "";
+  const rawKey = typeof window.prompt === "function"
+    ? window.prompt("输入要绑定的 state key", sourceStateKey)
+    : sourceStateKey;
+  const stateKey = (rawKey || "").trim();
+  if (!stateKey) return;
+  try {
+    const statusLabels = getStatusLabelsFromEditor();
+    if (statusLabels[stateKey]) {
+      alert(`status label "${stateKey}" 已存在`);
+      return;
+    }
+    statusLabels[stateKey] = "";
+    updateStatusLabelsEditor(statusLabels);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.status_labels = statusLabels;
+    workflowDefinitionSelectedStatusLabelKey = stateKey;
+    renderWorkflowDefinitionStatusLabelEditor(statusLabels);
+    showToast(`已新增 status label: ${stateKey}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "新增 status label 失败");
+  }
+}
+
+function deleteWorkflowDefinitionStatusLabel() {
+  if (!workflowDefinitionSelectedStatusLabelKey) return;
+  try {
+    const statusLabels = getStatusLabelsFromEditor();
+    if (!confirm(`确认删除 status label "${workflowDefinitionSelectedStatusLabelKey}" 吗？`)) return;
+    delete statusLabels[workflowDefinitionSelectedStatusLabelKey];
+    updateStatusLabelsEditor(statusLabels);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) editable.status_labels = statusLabels;
+    workflowDefinitionSelectedStatusLabelKey = Object.keys(statusLabels)[0] || "";
+    renderWorkflowDefinitionStatusLabelEditor(statusLabels);
+    showToast("已删除 status label");
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "删除 status label 失败");
+  }
+}
+
+function renameWorkflowDefinitionState() {
+  if (!workflowDefinitionSelectedStateKey) return;
+  const oldKey = workflowDefinitionSelectedStateKey;
+  const rawKey = typeof window.prompt === "function"
+    ? window.prompt("输入新的 state key", oldKey)
+    : oldKey;
+  const newKey = (rawKey || "").trim();
+  if (!newKey || newKey === oldKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(newKey)) {
+    alert("state key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  try {
+    const states = getStatesFromEditor();
+    const entryPoints = getEntryPointsFromEditor();
+    const statusLabels = getStatusLabelsFromEditor();
+    if (!states[oldKey]) return;
+    if (states[newKey]) {
+      alert(`state "${newKey}" 已存在`);
+      return;
+    }
+    const nextStates = {};
+    Object.entries(states).forEach(([key, state]) => {
+      const actualKey = key === oldKey ? newKey : key;
+      const clonedState = cloneJson(state);
+      if (clonedState?.on_complete?.success?.target === oldKey) clonedState.on_complete.success.target = newKey;
+      if (clonedState?.on_complete?.failure?.target === oldKey) clonedState.on_complete.failure.target = newKey;
+      if (clonedState?.on_approve?.target === oldKey) clonedState.on_approve.target = newKey;
+      if (clonedState?.on_revise?.target === oldKey) clonedState.on_revise.target = newKey;
+      nextStates[actualKey] = clonedState;
+    });
+    Object.values(entryPoints).forEach((entry) => {
+      if (entry?.state === oldKey) entry.state = newKey;
+    });
+    if (Object.prototype.hasOwnProperty.call(statusLabels, oldKey)) {
+      statusLabels[newKey] = statusLabels[oldKey];
+      delete statusLabels[oldKey];
+    }
+    updateStatesEditor(nextStates);
+    updateEntryPointsEditor(entryPoints);
+    updateStatusLabelsEditor(statusLabels);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) {
+      editable.states = nextStates;
+      editable.entry_points = entryPoints;
+      editable.status_labels = statusLabels;
+    }
+    updateWorkflowDefinitionSelectedState(newKey);
+    showToast(`已重命名 state: ${oldKey} -> ${newKey}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "重命名 state 失败");
+  }
+}
+
+function deleteWorkflowDefinitionState() {
+  if (!workflowDefinitionSelectedStateKey) return;
+  try {
+    const states = getStatesFromEditor();
+    const entryPoints = getEntryPointsFromEditor();
+    const statusLabels = getStatusLabelsFromEditor();
+    const refs = collectWorkflowDefinitionStateReferences(
+      workflowDefinitionSelectedStateKey,
+      states,
+      entryPoints,
+    );
+    if (refs.length > 0) {
+      alert(`该 state 仍被引用，无法删除：\n\n${refs.join("\n")}`);
+      return;
+    }
+    if (!confirm(`确认删除 state "${workflowDefinitionSelectedStateKey}" 吗？`)) {
+      return;
+    }
+    delete states[workflowDefinitionSelectedStateKey];
+    delete statusLabels[workflowDefinitionSelectedStateKey];
+    updateStatesEditor(states);
+    updateStatusLabelsEditor(statusLabels);
+    const editable = getEditableWorkflowDefinition();
+    if (editable) {
+      editable.states = states;
+      editable.status_labels = statusLabels;
+    }
+    workflowDefinitionSelectedStateKey = Object.keys(states)[0] || "";
+    renderWorkflowDefinitionStateEditor(states);
+    renderWorkflowDefinitionGraph({
+      states,
+      entry_points: editable?.entry_points || {},
+    });
+    showToast("已删除 state");
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "删除 state 失败");
+  }
+}
+
+function getWorkflowDefinitionSavePayload() {
+  const key = (workflowDefinitionKeyInput?.value || "").trim();
+  if (!key) {
+    throw new Error("缺少 workflow key");
+  }
+  const name = (workflowDefinitionNameInput?.value || "").trim();
+  if (!name) {
+    throw new Error("Name 不能为空");
+  }
+  const editable = getEditableWorkflowDefinition();
+  const fallback = editable || createWorkflowDefinitionTemplate(key, key, "");
+  return {
+    key,
+    label: (workflowDefinitionBundleLabelInput?.value || "").trim() || name,
+    description: (workflowDefinitionBundleDescriptionInput?.value || "").trim(),
+    definition: {
+      name,
+      description: (workflowDefinitionDescriptionInput?.value || "").trim(),
+      roles: parseWorkflowDefinitionJsonField(
+        "Roles",
+        workflowDefinitionRolesInput?.value || "",
+        fallback.roles || {},
+      ),
+      entry_points: parseWorkflowDefinitionJsonField(
+        "Entry Points",
+        workflowDefinitionEntryPointsInput?.value || "",
+        fallback.entry_points || {},
+      ),
+      states: parseWorkflowDefinitionJsonField(
+        "States",
+        workflowDefinitionStatesInput?.value || "",
+        fallback.states || {},
+      ),
+      status_labels: parseWorkflowDefinitionJsonField(
+        "Status Labels",
+        workflowDefinitionStatusLabelsInput?.value || "",
+        fallback.status_labels || {},
+      ),
+      metadata: parseWorkflowDefinitionJsonField(
+        "Metadata",
+        workflowDefinitionMetadataInput?.value || "",
+        fallback.metadata || {},
+      ),
+    },
+  };
+}
+
+function renderWorkflowDefinitionEditor(definition, bundle) {
+  if (!definition) return;
+  if (workflowDefinitionBundleLabelInput) {
+    workflowDefinitionBundleLabelInput.value = bundle?.label || definition.name || definition.key || "";
+  }
+  if (workflowDefinitionKeyInput) {
+    workflowDefinitionKeyInput.value = definition.key || "";
+  }
+  if (workflowDefinitionNameInput) {
+    workflowDefinitionNameInput.value = definition.name || "";
+  }
+  if (workflowDefinitionVersionInput) {
+    workflowDefinitionVersionInput.value = definition.version ? `v${definition.version}` : "--";
+  }
+  if (workflowDefinitionBundleDescriptionInput) {
+    workflowDefinitionBundleDescriptionInput.value = bundle?.description || definition.description || "";
+  }
+  if (workflowDefinitionDescriptionInput) {
+    workflowDefinitionDescriptionInput.value = definition.description || "";
+  }
+  if (workflowDefinitionRolesInput) {
+    workflowDefinitionRolesInput.value = stringifyPrettyJson(definition.roles || {});
+  }
+  if (workflowDefinitionEntryPointsInput) {
+    workflowDefinitionEntryPointsInput.value = stringifyPrettyJson(definition.entry_points || {});
+  }
+  if (workflowDefinitionStatesInput) {
+    workflowDefinitionStatesInput.value = stringifyPrettyJson(definition.states || {});
+  }
+  if (workflowDefinitionStatusLabelsInput) {
+    workflowDefinitionStatusLabelsInput.value = stringifyPrettyJson(definition.status_labels || {});
+  }
+  if (workflowDefinitionMetadataInput) {
+    workflowDefinitionMetadataInput.value = stringifyPrettyJson(definition.metadata || {});
+  }
+  renderWorkflowDefinitionRoleEditor(definition.roles || {});
+  renderWorkflowDefinitionEntryPointEditor(definition.entry_points || {});
+  renderWorkflowDefinitionStateEditor(definition.states || {});
+  renderWorkflowDefinitionStatusLabelEditor(definition.status_labels || {});
+}
+
+function renderWorkflowDefinitionPreview(preview) {
+  if (!workflowDefinitionValidation || !workflowDefinitionPreview) return;
+  const errors = Array.isArray(preview?.errors) ? preview.errors : [];
+  const blocks = [];
+  if (!preview) {
+    blocks.push('<div class="workflow-definition-validation-note">当前没有可预览的 draft / published definition。</div>');
+    workflowDefinitionPreview.textContent = "";
+  } else {
+    if (errors.length === 0) {
+      blocks.push('<div class="workflow-definition-validation-note">校验通过，可以进行发布。</div>');
+    } else {
+      errors.forEach((error) => {
+        blocks.push(`<div class="workflow-definition-validation-error">${escapeHtml(error)}</div>`);
+      });
+    }
+    workflowDefinitionPreview.textContent = stringifyPrettyJson(preview.compiled || {});
+  }
+  workflowDefinitionValidation.innerHTML = blocks.join("");
+}
+
+function renderWorkflowDefinitionDiff(detail) {
+  if (!workflowDefinitionDiff || !workflowDefinitionDiffSummary) return;
+  const draft = detail?.draft_definition || null;
+  const published = detail?.published_definition || null;
+  if (!draft && !published) {
+    workflowDefinitionDiffSummary.textContent = "暂无可对比版本";
+    workflowDefinitionDiff.innerHTML =
+      '<div class="workflow-definition-diff-empty">当前没有 draft / published 版本可供比较。</div>';
+    return;
+  }
+  if (!draft || !published) {
+    workflowDefinitionDiffSummary.textContent = !draft ? "仅有 published" : "仅有 draft";
+    workflowDefinitionDiff.innerHTML =
+      '<div class="workflow-definition-diff-empty">需要同时存在 draft 和 published 才能生成对比。</div>';
+    return;
+  }
+
+  const left = stringifyPrettyJson(published).split("\n");
+  const right = stringifyPrettyJson(draft).split("\n");
+  const maxLength = Math.max(left.length, right.length);
+  let changedCount = 0;
+  const rows = [];
+
+  for (let i = 0; i < maxLength; i += 1) {
+    const leftLine = left[i];
+    const rightLine = right[i];
+    if (leftLine === rightLine) {
+      rows.push({
+        type: "unchanged",
+        lineNo: i + 1,
+        text: `  ${leftLine ?? ""}`,
+      });
+      continue;
+    }
+    if (leftLine !== undefined) {
+      changedCount += 1;
+      rows.push({
+        type: "removed",
+        lineNo: i + 1,
+        text: `- ${leftLine}`,
+      });
+    }
+    if (rightLine !== undefined) {
+      changedCount += 1;
+      rows.push({
+        type: "added",
+        lineNo: i + 1,
+        text: `+ ${rightLine}`,
+      });
+    }
+  }
+
+  workflowDefinitionDiffSummary.textContent = `published v${published.version} -> draft v${draft.version} · ${changedCount} 处行级变更`;
+  workflowDefinitionDiff.innerHTML = rows.length
+    ? rows
+        .map(
+          (row) => `
+            <div class="workflow-definition-diff-line ${escapeHtml(row.type)}">
+              <span class="workflow-definition-diff-line-no">${escapeHtml(String(row.lineNo))}</span>
+              <span>${escapeHtml(row.text)}</span>
+            </div>
+          `,
+        )
+        .join("")
+    : '<div class="workflow-definition-diff-empty">draft 与 published 当前完全一致。</div>';
+}
+
+function focusWorkflowDefinitionStateInEditor(stateKey) {
+  if (!workflowDefinitionStatesInput || !stateKey) return;
+  const source = workflowDefinitionStatesInput.value || "";
+  const marker = `"${stateKey}"`;
+  const start = source.indexOf(marker);
+  if (start < 0) return;
+
+  let depth = 0;
+  let firstBrace = -1;
+  let end = source.length;
+  for (let i = start; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === "{") {
+      if (firstBrace < 0) firstBrace = i;
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (firstBrace >= 0 && depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+
+  const selectionStart = start;
+  const selectionEnd = Math.max(end, start + marker.length);
+  workflowDefinitionStatesInput.focus();
+  workflowDefinitionStatesInput.setSelectionRange(selectionStart, selectionEnd);
+
+  const lineHeight = 22;
+  const lineIndex = countNewlines(source.slice(0, selectionStart));
+  workflowDefinitionStatesInput.scrollTop = Math.max(0, lineIndex * lineHeight - lineHeight * 2);
+}
+
+function buildStateTransitionInspectorHtml(prefix, transition) {
+  const safe = transition || {};
+  return `
+    <div class="workflow-definition-state-inspector-grid">
+      <label class="workflow-definition-field">
+        <span>Target</span>
+        <input list="workflow-definition-state-options" data-state-field="${escapeAttribute(prefix)}.target" type="text" value="${escapeAttribute(safe.target || "")}" />
+      </label>
+      <label class="workflow-definition-field">
+        <span>Card Ref</span>
+        <input list="workflow-definition-card-options" data-state-field="${escapeAttribute(prefix)}.card.ref" type="text" value="${escapeAttribute(safe.card?.ref || "")}" />
+      </label>
+      <label class="workflow-definition-field">
+        <span>Delegate Role</span>
+        <input list="workflow-definition-role-options" data-state-field="${escapeAttribute(prefix)}.delegate.role" type="text" value="${escapeAttribute(safe.delegate?.role || "")}" />
+      </label>
+      <label class="workflow-definition-field">
+        <span>Delegate Skill</span>
+        <input data-state-field="${escapeAttribute(prefix)}.delegate.skill" type="text" value="${escapeAttribute(safe.delegate?.skill || "")}" />
+      </label>
+    </div>
+    <label class="workflow-definition-field workflow-definition-field-block">
+      <span>Task Template</span>
+      <textarea data-state-field="${escapeAttribute(prefix)}.delegate.task_template" rows="3">${escapeHtml(safe.delegate?.task_template || "")}</textarea>
+    </label>
+    <label class="workflow-definition-field workflow-definition-field-block">
+      <span>Notify Template</span>
+      <textarea data-state-field="${escapeAttribute(prefix)}.notify.template" rows="3">${escapeHtml(safe.notify?.template || "")}</textarea>
+    </label>
+    <label class="workflow-definition-field workflow-definition-field-block">
+      <span>
+        <input data-state-field="${escapeAttribute(prefix)}.effects.increment_round" type="checkbox" ${safe.effects?.increment_round ? "checked" : ""} />
+        Increment Round
+      </span>
+    </label>
+  `;
+}
+
+function setNestedValue(target, path, rawValue, options = {}) {
+  const parts = path.split(".");
+  let cursor = target;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const key = parts[i];
+    if (!cursor[key] || typeof cursor[key] !== "object") {
+      cursor[key] = {};
+    }
+    cursor = cursor[key];
+  }
+  const leaf = parts[parts.length - 1];
+  const value = options.boolean ? Boolean(rawValue) : String(rawValue || "");
+  if (options.boolean) {
+    if (value) cursor[leaf] = true;
+    else delete cursor[leaf];
+  } else if (value) {
+    cursor[leaf] = value;
+  } else {
+    delete cursor[leaf];
+  }
+}
+
+function cleanupStateObject(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  Object.keys(obj).forEach((key) => {
+    const value = obj[key];
+    if (value && typeof value === "object") {
+      cleanupStateObject(value);
+      if (Array.isArray(value) && value.length === 0) {
+        delete obj[key];
+      } else if (!Array.isArray(value) && Object.keys(value).length === 0) {
+        delete obj[key];
+      }
+    } else if (value === "" || value === undefined || value === null) {
+      delete obj[key];
+    }
+  });
+  return obj;
+}
+
+function updateWorkflowDefinitionSelectedState(stateKey) {
+  workflowDefinitionSelectedStateKey = stateKey || "";
+  renderWorkflowDefinitionStateEditor();
+  const graphSource = getEditableWorkflowDefinition() || {};
+  renderWorkflowDefinitionGraph(graphSource);
+  if (workflowDefinitionSelectedStateKey) {
+    focusWorkflowDefinitionStateInEditor(workflowDefinitionSelectedStateKey);
+  }
+}
+
+function bindWorkflowDefinitionStateInspectorEvents() {
+  if (!workflowDefinitionStateInspector) return;
+  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-state-field]")).forEach((el) => {
+    const eventName = el.tagName === "SELECT" ? "change" : el.type === "checkbox" ? "change" : "input";
+    el.addEventListener(eventName, () => {
+      const path = el.getAttribute("data-state-field") || "";
+      if (!path || !workflowDefinitionSelectedStateKey) return;
+      applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
+        if (path === "type") {
+          const nextType = el.value;
+          const nextState = createWorkflowDefinitionStateTemplate(nextType);
+          nextState.label = state.label || nextState.label;
+          if (state.description) nextState.description = state.description;
+          return cleanupStateObject(nextState);
+        }
+        setNestedValue(state, path, el.type === "checkbox" ? el.checked : el.value, {
+          boolean: el.type === "checkbox",
+        });
+        return cleanupStateObject(state);
+      });
+    });
+  });
+  const renameBtn = workflowDefinitionStateInspector.querySelector("[data-state-action='rename']");
+  const deleteBtn = workflowDefinitionStateInspector.querySelector("[data-state-action='delete']");
+  if (renameBtn) {
+    renameBtn.addEventListener("click", () => {
+      renameWorkflowDefinitionState();
+    });
+  }
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", () => {
+      deleteWorkflowDefinitionState();
+    });
+  }
+}
+
+function renderWorkflowDefinitionRoleEditor(rolesArg) {
+  if (!workflowDefinitionRoleList || !workflowDefinitionRoleInspector) return;
+  let roles = rolesArg;
+  try {
+    roles = roles || getRolesFromEditor();
+  } catch (err) {
+    workflowDefinitionRoleList.innerHTML =
+      '<div class="workflow-definition-state-list-empty">Roles JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+    workflowDefinitionRoleInspector.innerHTML =
+      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Roles JSON 解析失败")}</div>`;
+    return;
+  }
+  const roleEntries = Object.entries(roles || {});
+  if (!roleEntries.length) {
+    workflowDefinitionRoleList.innerHTML = '<div class="workflow-definition-state-list-empty">暂无 role，可先新增。</div>';
+    workflowDefinitionRoleInspector.innerHTML =
+      '<div class="workflow-definition-state-inspector-empty">选择一个 role 查看结构化编辑面板。</div>';
+    return;
+  }
+  if (!workflowDefinitionSelectedRoleKey || !roles[workflowDefinitionSelectedRoleKey]) {
+    workflowDefinitionSelectedRoleKey = roleEntries[0][0];
+  }
+  workflowDefinitionRoleList.innerHTML = roleEntries
+    .map(
+      ([roleKey, role]) => `
+        <button type="button" class="workflow-definition-state-list-item${workflowDefinitionSelectedRoleKey === roleKey ? " active" : ""}" data-role-select="${escapeAttribute(roleKey)}">
+          <strong>${escapeHtml(role.label || roleKey)}</strong>
+          <span>${escapeHtml(roleKey)}</span>
+        </button>
+      `,
+    )
+    .join("");
+  Array.from(workflowDefinitionRoleList.querySelectorAll("[data-role-select]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      workflowDefinitionSelectedRoleKey = button.getAttribute("data-role-select") || "";
+      renderWorkflowDefinitionRoleEditor(roles);
+    });
+  });
+  const selectedRole = roles[workflowDefinitionSelectedRoleKey];
+  const channelEntries = Object.entries(selectedRole?.channels || {});
+  workflowDefinitionRoleInspector.innerHTML = `
+    <div class="workflow-definition-state-inspector-head">
+      <span>${escapeHtml(selectedRole.label || workflowDefinitionSelectedRoleKey)} · ${escapeHtml(workflowDefinitionSelectedRoleKey)}</span>
+      <div class="workflow-definition-state-head-actions">
+        <button type="button" class="btn-ghost" data-role-action="rename">重命名</button>
+        <button type="button" class="btn-ghost" data-role-action="delete">删除</button>
+      </div>
+    </div>
+    <div class="workflow-definition-state-inspector-body">
+      <div class="workflow-definition-state-inspector-grid">
+        <label class="workflow-definition-field">
+          <span>Label</span>
+          <input data-role-field="label" type="text" value="${escapeAttribute(selectedRole?.label || "")}" />
+        </label>
+      </div>
+      <label class="workflow-definition-field">
+        <span>Description</span>
+        <textarea data-role-field="description" rows="2">${escapeHtml(selectedRole?.description || "")}</textarea>
+      </label>
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">
+          <span>Channels</span>
+          <span class="workflow-definition-inline-actions">
+            <button type="button" class="btn-ghost" data-role-action="add-channel">新增 Channel</button>
+          </span>
+        </div>
+        ${
+          channelEntries.length
+            ? channelEntries
+                .map(
+                  ([channelKey, value]) => `
+                    <label class="workflow-definition-field workflow-definition-field-block">
+                      <span>Channel</span>
+                      <div class="workflow-definition-inline-actions">
+                        <input
+                          data-role-channel-key="${escapeAttribute(channelKey)}"
+                          data-role-channel-key-original="${escapeAttribute(channelKey)}"
+                          type="text"
+                          value="${escapeAttribute(channelKey)}"
+                        />
+                        <input data-role-channel="${escapeAttribute(channelKey)}" type="text" value="${escapeAttribute(value || "")}" />
+                        <button type="button" class="btn-ghost" data-role-channel-delete="${escapeAttribute(channelKey)}">删除</button>
+                      </div>
+                    </label>
+                  `,
+                )
+                .join("")
+            : '<div class="workflow-definition-state-inspector-empty">当前没有 channel，可在 JSON 中补充。</div>'
+        }
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>新 Channel</span>
+          <div class="workflow-definition-inline-actions grow">
+            <input data-role-new-channel-key type="text" placeholder="channel key" />
+            <input data-role-new-channel-value type="text" placeholder="channel value" />
+            <button type="button" class="btn-ghost" data-role-action="add-channel-inline">添加</button>
+          </div>
+        </label>
+      </section>
+    </div>
+  `;
+  Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-field]")).forEach((el) => {
+    const path = el.getAttribute("data-role-field") || "";
+    el.addEventListener(el.tagName === "TEXTAREA" ? "input" : "input", () => {
+      applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
+        role[path] = el.value || "";
+        return cleanupStateObject(role);
+      });
+    });
+  });
+  Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel]")).forEach((el) => {
+    const channelKey = el.getAttribute("data-role-channel") || "";
+    el.addEventListener("input", () => {
+      applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
+        role.channels = role.channels || {};
+        role.channels[channelKey] = el.value || "";
+        return cleanupStateObject(role);
+      });
+    });
+  });
+  Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel-key]")).forEach((el) => {
+    el.addEventListener("change", () => {
+      handleWorkflowDefinitionRoleChannelRename(el);
+    });
+    el.addEventListener("blur", () => {
+      handleWorkflowDefinitionRoleChannelRename(el);
+    });
+  });
+  const renameBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='rename']");
+  const deleteBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='delete']");
+  const addChannelBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='add-channel']");
+  const addChannelInlineBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='add-channel-inline']");
+  Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel-delete]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      deleteWorkflowDefinitionRoleChannel(button.getAttribute("data-role-channel-delete") || "");
+    });
+  });
+  if (renameBtn) renameBtn.addEventListener("click", () => renameWorkflowDefinitionRole());
+  if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionRole());
+  if (addChannelBtn) addChannelBtn.addEventListener("click", () => {
+    const keyInput = workflowDefinitionRoleInspector.querySelector("[data-role-new-channel-key]");
+    if (keyInput) keyInput.focus();
+  });
+  if (addChannelInlineBtn) addChannelInlineBtn.addEventListener("click", () => addWorkflowDefinitionRoleChannelFromInline());
+}
+
+function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
+  if (!workflowDefinitionEntryPointList || !workflowDefinitionEntryPointInspector) return;
+  let entryPoints = entryPointsArg;
+  try {
+    entryPoints = entryPoints || getEntryPointsFromEditor();
+  } catch (err) {
+    workflowDefinitionEntryPointList.innerHTML =
+      '<div class="workflow-definition-state-list-empty">Entry Points JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+    workflowDefinitionEntryPointInspector.innerHTML =
+      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Entry Points JSON 解析失败")}</div>`;
+    return;
+  }
+  const entryEntries = Object.entries(entryPoints || {});
+  if (!entryEntries.length) {
+    workflowDefinitionEntryPointList.innerHTML = '<div class="workflow-definition-state-list-empty">暂无 entry point，可先新增。</div>';
+    workflowDefinitionEntryPointInspector.innerHTML =
+      '<div class="workflow-definition-state-inspector-empty">选择一个 entry point 查看结构化编辑面板。</div>';
+    return;
+  }
+  if (!workflowDefinitionSelectedEntryPointKey || !entryPoints[workflowDefinitionSelectedEntryPointKey]) {
+    workflowDefinitionSelectedEntryPointKey = entryEntries[0][0];
+  }
+  workflowDefinitionEntryPointList.innerHTML = entryEntries
+    .map(
+      ([entryKey, entry]) => `
+        <button type="button" class="workflow-definition-state-list-item${workflowDefinitionSelectedEntryPointKey === entryKey ? " active" : ""}" data-entry-point-select="${escapeAttribute(entryKey)}">
+          <strong>${escapeHtml(entry.label || entryKey)}</strong>
+          <span>${escapeHtml(entryKey)} · ${escapeHtml(entry.state || "--")}</span>
+        </button>
+      `,
+    )
+    .join("");
+  Array.from(workflowDefinitionEntryPointList.querySelectorAll("[data-entry-point-select]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      workflowDefinitionSelectedEntryPointKey = button.getAttribute("data-entry-point-select") || "";
+      renderWorkflowDefinitionEntryPointEditor(entryPoints);
+    });
+  });
+  const selectedEntry = entryPoints[workflowDefinitionSelectedEntryPointKey];
+  const roleOptions = Object.keys(getRolesFromEditor());
+  const stateOptions = Object.keys(getStatesFromEditor());
+  const warnings = [];
+  if (selectedEntry?.state && !stateOptions.includes(selectedEntry.state)) warnings.push(`state 引用了不存在的 state: ${selectedEntry.state}`);
+  if (selectedEntry?.deliverable_role && !roleOptions.includes(selectedEntry.deliverable_role)) warnings.push(`deliverable_role 引用了不存在的 role: ${selectedEntry.deliverable_role}`);
+  workflowDefinitionEntryPointInspector.innerHTML = `
+    <div class="workflow-definition-state-inspector-head">
+      <span>${escapeHtml(selectedEntry.label || workflowDefinitionSelectedEntryPointKey)} · ${escapeHtml(workflowDefinitionSelectedEntryPointKey)}</span>
+      <div class="workflow-definition-state-head-actions">
+        <button type="button" class="btn-ghost" data-entry-point-action="rename">重命名</button>
+        <button type="button" class="btn-ghost" data-entry-point-action="delete">删除</button>
+      </div>
+    </div>
+    <div class="workflow-definition-state-inspector-body">
+      ${
+        warnings.length
+          ? `<section class="workflow-definition-state-validation">${warnings
+              .map((item) => `<div class="workflow-definition-state-validation-item">${escapeHtml(item)}</div>`)
+              .join("")}</section>`
+          : ""
+      }
+      <div class="workflow-definition-state-inspector-grid">
+        <label class="workflow-definition-field">
+          <span>Label</span>
+          <input data-entry-point-field="label" type="text" value="${escapeAttribute(selectedEntry?.label || "")}" />
+        </label>
+        <label class="workflow-definition-field">
+          <span>State</span>
+          <input list="workflow-definition-state-options-entry" data-entry-point-field="state" type="text" value="${escapeAttribute(selectedEntry?.state || "")}" />
+        </label>
+      </div>
+      <label class="workflow-definition-field">
+        <span>Description</span>
+        <textarea data-entry-point-field="description" rows="2">${escapeHtml(selectedEntry?.description || "")}</textarea>
+      </label>
+      <div class="workflow-definition-state-inspector-grid">
+        <label class="workflow-definition-field">
+          <span>Deliverable Role</span>
+          <input list="workflow-definition-role-options-entry" data-entry-point-field="deliverable_role" type="text" value="${escapeAttribute(selectedEntry?.deliverable_role || "")}" />
+        </label>
+        <label class="workflow-definition-field">
+          <span>
+            <input data-entry-point-field="requires_deliverable" type="checkbox" ${selectedEntry?.requires_deliverable ? "checked" : ""} />
+            Requires Deliverable
+          </span>
+        </label>
+      </div>
+      <datalist id="workflow-definition-state-options-entry">${stateOptions.map((stateKey) => `<option value="${escapeAttribute(stateKey)}"></option>`).join("")}</datalist>
+      <datalist id="workflow-definition-role-options-entry">${roleOptions.map((roleKey) => `<option value="${escapeAttribute(roleKey)}"></option>`).join("")}</datalist>
+    </div>
+  `;
+  Array.from(workflowDefinitionEntryPointInspector.querySelectorAll("[data-entry-point-field]")).forEach((el) => {
+    const path = el.getAttribute("data-entry-point-field") || "";
+    const eventName = el.type === "checkbox" ? "change" : "input";
+    el.addEventListener(eventName, () => {
+      applyWorkflowDefinitionEntryPointPatch(workflowDefinitionSelectedEntryPointKey, (entry) => {
+        if (el.type === "checkbox") {
+          if (el.checked) entry[path] = true;
+          else delete entry[path];
+        } else if (el.value) {
+          entry[path] = el.value;
+        } else {
+          delete entry[path];
+        }
+        return cleanupStateObject(entry);
+      });
+    });
+  });
+  const renameBtn = workflowDefinitionEntryPointInspector.querySelector("[data-entry-point-action='rename']");
+  const deleteBtn = workflowDefinitionEntryPointInspector.querySelector("[data-entry-point-action='delete']");
+  if (renameBtn) renameBtn.addEventListener("click", () => renameWorkflowDefinitionEntryPoint());
+  if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionEntryPoint());
+}
+
+function renderWorkflowDefinitionStatusLabelEditor(statusLabelsArg) {
+  if (!workflowDefinitionStatusLabelList || !workflowDefinitionStatusLabelInspector) return;
+  let statusLabels = statusLabelsArg;
+  try {
+    statusLabels = statusLabels || getStatusLabelsFromEditor();
+  } catch (err) {
+    workflowDefinitionStatusLabelList.innerHTML =
+      '<div class="workflow-definition-state-list-empty">Status Labels JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+    workflowDefinitionStatusLabelInspector.innerHTML =
+      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Status Labels JSON 解析失败")}</div>`;
+    return;
+  }
+  const labelEntries = Object.entries(statusLabels || {});
+  if (!labelEntries.length) {
+    workflowDefinitionStatusLabelList.innerHTML = '<div class="workflow-definition-state-list-empty">暂无 status label，可先新增。</div>';
+    workflowDefinitionStatusLabelInspector.innerHTML =
+      '<div class="workflow-definition-state-inspector-empty">选择一个 status label 查看结构化编辑面板。</div>';
+    return;
+  }
+  if (!workflowDefinitionSelectedStatusLabelKey || !Object.prototype.hasOwnProperty.call(statusLabels, workflowDefinitionSelectedStatusLabelKey)) {
+    workflowDefinitionSelectedStatusLabelKey = labelEntries[0][0];
+  }
+  workflowDefinitionStatusLabelList.innerHTML = labelEntries
+    .map(
+      ([stateKey, value]) => `
+        <button type="button" class="workflow-definition-state-list-item${workflowDefinitionSelectedStatusLabelKey === stateKey ? " active" : ""}" data-status-label-select="${escapeAttribute(stateKey)}">
+          <strong>${escapeHtml(stateKey)}</strong>
+          <span>${escapeHtml(String(value || ""))}</span>
+        </button>
+      `,
+    )
+    .join("");
+  Array.from(workflowDefinitionStatusLabelList.querySelectorAll("[data-status-label-select]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      workflowDefinitionSelectedStatusLabelKey = button.getAttribute("data-status-label-select") || "";
+      renderWorkflowDefinitionStatusLabelEditor(statusLabels);
+    });
+  });
+  const stateOptions = Object.keys(getStatesFromEditor());
+  const missingState = workflowDefinitionSelectedStatusLabelKey && !stateOptions.includes(workflowDefinitionSelectedStatusLabelKey);
+  workflowDefinitionStatusLabelInspector.innerHTML = `
+    <div class="workflow-definition-state-inspector-head">
+      <span>${escapeHtml(workflowDefinitionSelectedStatusLabelKey)}</span>
+      <div class="workflow-definition-state-head-actions">
+        <button type="button" class="btn-ghost" data-status-label-action="delete">删除</button>
+      </div>
+    </div>
+    <div class="workflow-definition-state-inspector-body">
+      ${
+        missingState
+          ? `<section class="workflow-definition-state-validation"><div class="workflow-definition-state-validation-item">当前 status label 对应的 state 不存在：${escapeHtml(workflowDefinitionSelectedStatusLabelKey)}</div></section>`
+          : ""
+      }
+      <label class="workflow-definition-field">
+        <span>Label Text</span>
+        <textarea data-status-label-field="value" rows="3">${escapeHtml(statusLabels[workflowDefinitionSelectedStatusLabelKey] || "")}</textarea>
+      </label>
+    </div>
+  `;
+  const valueInput = workflowDefinitionStatusLabelInspector.querySelector("[data-status-label-field='value']");
+  if (valueInput) {
+    valueInput.addEventListener("input", () => {
+      applyWorkflowDefinitionStatusLabelPatch(workflowDefinitionSelectedStatusLabelKey, () => valueInput.value || "");
+    });
+  }
+  const deleteBtn = workflowDefinitionStatusLabelInspector.querySelector("[data-status-label-action='delete']");
+  if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionStatusLabel());
+}
+
+function renderWorkflowDefinitionStateEditor(statesArg) {
+  if (!workflowDefinitionStateList || !workflowDefinitionStateInspector) return;
+  let states = statesArg;
+  try {
+    states = states || getStatesFromEditor();
+  } catch (err) {
+    workflowDefinitionStateList.innerHTML =
+      '<div class="workflow-definition-state-list-empty">States JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+    workflowDefinitionStateInspector.innerHTML =
+      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(
+        err instanceof Error ? err.message : "States JSON 解析失败",
+      )}</div>`;
+    return;
+  }
+
+  const stateEntries = Object.entries(states || {});
+  if (!stateEntries.length) {
+    workflowDefinitionStateList.innerHTML =
+      '<div class="workflow-definition-state-list-empty">暂无 state，可先在 JSON 里新增。</div>';
+    workflowDefinitionStateInspector.innerHTML =
+      '<div class="workflow-definition-state-inspector-empty">选择一个 state 查看结构化编辑面板。</div>';
+    return;
+  }
+
+  if (!workflowDefinitionSelectedStateKey || !states[workflowDefinitionSelectedStateKey]) {
+    workflowDefinitionSelectedStateKey = stateEntries[0][0];
+  }
+
+  workflowDefinitionStateList.innerHTML = stateEntries
+    .map(
+      ([stateKey, state]) => `
+        <button
+          type="button"
+          class="workflow-definition-state-list-item${workflowDefinitionSelectedStateKey === stateKey ? " active" : ""}"
+          data-state-select="${escapeAttribute(stateKey)}"
+        >
+          <strong>${escapeHtml(state.label || stateKey)}</strong>
+          <span>${escapeHtml(stateKey)} · ${escapeHtml(state.type || "--")}</span>
+        </button>
+      `,
+    )
+    .join("");
+
+  Array.from(workflowDefinitionStateList.querySelectorAll("[data-state-select]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      updateWorkflowDefinitionSelectedState(button.getAttribute("data-state-select") || "");
+    });
+  });
+
+  const selectedState = states[workflowDefinitionSelectedStateKey];
+  if (!selectedState) {
+    workflowDefinitionStateInspector.innerHTML =
+      '<div class="workflow-definition-state-inspector-empty">选择一个 state 查看结构化编辑面板。</div>';
+    return;
+  }
+
+  const roleOptions = Object.keys(getRolesFromEditor());
+  const stateOptions = Object.keys(states);
+  const cardOptions = getCurrentWorkflowCardRefs();
+  const validationItems = [];
+  if (selectedState.type === "delegation") {
+    if (selectedState.delegate?.role && !roleOptions.includes(selectedState.delegate.role)) {
+      validationItems.push(`delegate.role 引用了不存在的 role: ${selectedState.delegate.role}`);
+    }
+    if (selectedState.on_complete?.success?.target && !stateOptions.includes(selectedState.on_complete.success.target)) {
+      validationItems.push(`success.target 引用了不存在的 state: ${selectedState.on_complete.success.target}`);
+    }
+    if (selectedState.on_complete?.failure?.target && !stateOptions.includes(selectedState.on_complete.failure.target)) {
+      validationItems.push(`failure.target 引用了不存在的 state: ${selectedState.on_complete.failure.target}`);
+    }
+    if (
+      selectedState.on_complete?.success?.delegate?.role &&
+      !roleOptions.includes(selectedState.on_complete.success.delegate.role)
+    ) {
+      validationItems.push(`success.delegate.role 引用了不存在的 role: ${selectedState.on_complete.success.delegate.role}`);
+    }
+    if (
+      selectedState.on_complete?.failure?.delegate?.role &&
+      !roleOptions.includes(selectedState.on_complete.failure.delegate.role)
+    ) {
+      validationItems.push(`failure.delegate.role 引用了不存在的 role: ${selectedState.on_complete.failure.delegate.role}`);
+    }
+    if (
+      selectedState.on_complete?.success?.card?.ref &&
+      !cardOptions.includes(selectedState.on_complete.success.card.ref)
+    ) {
+      validationItems.push(`success.card.ref 引用了不存在的 card: ${selectedState.on_complete.success.card.ref}`);
+    }
+    if (
+      selectedState.on_complete?.failure?.card?.ref &&
+      !cardOptions.includes(selectedState.on_complete.failure.card.ref)
+    ) {
+      validationItems.push(`failure.card.ref 引用了不存在的 card: ${selectedState.on_complete.failure.card.ref}`);
+    }
+  }
+  if (selectedState.type === "confirmation") {
+    if (selectedState.card?.ref && !cardOptions.includes(selectedState.card.ref)) {
+      validationItems.push(`card.ref 引用了不存在的 card: ${selectedState.card.ref}`);
+    }
+    if (selectedState.on_approve?.target && !stateOptions.includes(selectedState.on_approve.target)) {
+      validationItems.push(`on_approve.target 引用了不存在的 state: ${selectedState.on_approve.target}`);
+    }
+    if (selectedState.on_revise?.target && !stateOptions.includes(selectedState.on_revise.target)) {
+      validationItems.push(`on_revise.target 引用了不存在的 state: ${selectedState.on_revise.target}`);
+    }
+    if (selectedState.on_approve?.delegate?.role && !roleOptions.includes(selectedState.on_approve.delegate.role)) {
+      validationItems.push(`on_approve.delegate.role 引用了不存在的 role: ${selectedState.on_approve.delegate.role}`);
+    }
+    if (selectedState.on_revise?.delegate?.role && !roleOptions.includes(selectedState.on_revise.delegate.role)) {
+      validationItems.push(`on_revise.delegate.role 引用了不存在的 role: ${selectedState.on_revise.delegate.role}`);
+    }
+    if (selectedState.on_approve?.card?.ref && !cardOptions.includes(selectedState.on_approve.card.ref)) {
+      validationItems.push(`on_approve.card.ref 引用了不存在的 card: ${selectedState.on_approve.card.ref}`);
+    }
+    if (selectedState.on_revise?.card?.ref && !cardOptions.includes(selectedState.on_revise.card.ref)) {
+      validationItems.push(`on_revise.card.ref 引用了不存在的 card: ${selectedState.on_revise.card.ref}`);
+    }
+  }
+
+  let inspectorHtml = `
+    <div class="workflow-definition-state-inspector-head">
+      <span>${escapeHtml(selectedState.label || workflowDefinitionSelectedStateKey)} · ${escapeHtml(workflowDefinitionSelectedStateKey)}</span>
+      <div class="workflow-definition-state-head-actions">
+        <button type="button" class="btn-ghost" data-state-action="rename">重命名</button>
+        <button type="button" class="btn-ghost" data-state-action="delete">删除</button>
+      </div>
+    </div>
+    <div class="workflow-definition-state-inspector-body">
+      <div class="workflow-definition-state-inspector-grid">
+        <label class="workflow-definition-field">
+          <span>Type</span>
+          <select data-state-field="type">
+            <option value="delegation" ${selectedState.type === "delegation" ? "selected" : ""}>delegation</option>
+            <option value="confirmation" ${selectedState.type === "confirmation" ? "selected" : ""}>confirmation</option>
+            <option value="terminal" ${selectedState.type === "terminal" ? "selected" : ""}>terminal</option>
+            <option value="system" ${selectedState.type === "system" ? "selected" : ""}>system</option>
+          </select>
+        </label>
+        <label class="workflow-definition-field">
+          <span>Label</span>
+          <input data-state-field="label" type="text" value="${escapeAttribute(selectedState.label || "")}" />
+        </label>
+      </div>
+      <label class="workflow-definition-field">
+        <span>Description</span>
+        <textarea data-state-field="description" rows="2">${escapeHtml(selectedState.description || "")}</textarea>
+      </label>
+  `;
+
+  if (validationItems.length) {
+    inspectorHtml += `
+      <section class="workflow-definition-state-validation">
+        ${validationItems
+          .map((item) => `<div class="workflow-definition-state-validation-item">${escapeHtml(item)}</div>`)
+          .join("")}
+      </section>
+    `;
+  }
+
+  if (selectedState.type === "delegation") {
+    inspectorHtml += `
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">Delegate</div>
+        <div class="workflow-definition-state-inspector-grid">
+          <label class="workflow-definition-field">
+            <span>Role</span>
+            <input list="workflow-definition-role-options" data-state-field="delegate.role" type="text" value="${escapeAttribute(selectedState.delegate?.role || "")}" />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Skill</span>
+            <input data-state-field="delegate.skill" type="text" value="${escapeAttribute(selectedState.delegate?.skill || "")}" />
+          </label>
+        </div>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>Task Template</span>
+          <textarea data-state-field="delegate.task_template" rows="3">${escapeHtml(selectedState.delegate?.task_template || "")}</textarea>
+        </label>
+      </section>
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">On Complete Success</div>
+        ${buildStateTransitionInspectorHtml("on_complete.success", selectedState.on_complete?.success)}
+      </section>
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">On Complete Failure</div>
+        ${buildStateTransitionInspectorHtml("on_complete.failure", selectedState.on_complete?.failure)}
+      </section>
+    `;
+  } else if (selectedState.type === "confirmation") {
+    inspectorHtml += `
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">Card</div>
+        <label class="workflow-definition-field">
+          <span>Card Ref</span>
+          <input list="workflow-definition-card-options" data-state-field="card.ref" type="text" value="${escapeAttribute(selectedState.card?.ref || "")}" />
+        </label>
+      </section>
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">On Approve</div>
+        ${buildStateTransitionInspectorHtml("on_approve", selectedState.on_approve)}
+      </section>
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">On Revise</div>
+        ${buildStateTransitionInspectorHtml("on_revise", selectedState.on_revise)}
+      </section>
+    `;
+  }
+
+  inspectorHtml += "</div>";
+  workflowDefinitionStateInspector.innerHTML = `
+    ${inspectorHtml}
+    <datalist id="workflow-definition-role-options"></datalist>
+    <datalist id="workflow-definition-state-options"></datalist>
+    <datalist id="workflow-definition-card-options"></datalist>
+  `;
+
+  const roleDatalist = workflowDefinitionStateInspector.querySelector("#workflow-definition-role-options");
+  if (roleDatalist) {
+    roleDatalist.innerHTML = roleOptions
+      .map((role) => `<option value="${escapeAttribute(role)}"></option>`)
+      .join("");
+  }
+  const stateDatalist = workflowDefinitionStateInspector.querySelector("#workflow-definition-state-options");
+  if (stateDatalist) {
+    stateDatalist.innerHTML = stateOptions
+      .map((stateKey) => `<option value="${escapeAttribute(stateKey)}"></option>`)
+      .join("");
+  }
+  const cardDatalist = workflowDefinitionStateInspector.querySelector("#workflow-definition-card-options");
+  if (cardDatalist) {
+    cardDatalist.innerHTML = cardOptions
+      .map((cardKey) => `<option value="${escapeAttribute(cardKey)}"></option>`)
+      .join("");
+  }
+  bindWorkflowDefinitionStateInspectorEvents();
+}
+
+function buildWorkflowTransitionSummary(label, transition) {
+  if (!transition) return "";
+  const lines = [];
+  lines.push(`<div><strong>${escapeHtml(label)}</strong>→ ${escapeHtml(transition.target || "--")}</div>`);
+  if (transition.delegate?.role || transition.delegate?.skill) {
+    lines.push(
+      `<span>delegate: ${escapeHtml(
+        [transition.delegate?.role, transition.delegate?.skill].filter(Boolean).join(" / ") || "--",
+      )}</span>`,
+    );
+  }
+  if (transition.card?.ref) {
+    lines.push(`<span>card: ${escapeHtml(transition.card.ref)}</span>`);
+  }
+  if (transition.notify?.template) {
+    lines.push(`<span>notify: ${escapeHtml(transition.notify.template.slice(0, 72))}</span>`);
+  }
+  if (transition.effects?.increment_round) {
+    lines.push("<span>effects: increment_round</span>");
+  }
+  return `
+    <div class="workflow-definition-graph-transition">
+      ${lines[0]}
+      <div class="workflow-definition-graph-transition-lines">${lines.slice(1).join("")}</div>
+    </div>
+  `;
+}
+
+function renderWorkflowDefinitionGraph(definition) {
+  if (!workflowDefinitionGraph) return;
+  const states = definition?.states || {};
+  const entryStateNames = new Set(
+    Object.values(definition?.entry_points || {})
+      .map((entry) => entry?.state)
+      .filter(Boolean),
+  );
+
+  const stateEntries = Object.entries(states);
+  if (stateEntries.length === 0) {
+    workflowDefinitionGraph.innerHTML =
+      '<div class="workflow-definition-graph-empty">当前 definition 没有 states，可先在编辑器里补充。</div>';
+    return;
+  }
+
+  workflowDefinitionGraph.innerHTML = stateEntries
+    .map(([stateKey, state]) => {
+      const badges = [
+        `<span class="workflow-definition-graph-badge">${escapeHtml(state.type || "--")}</span>`,
+      ];
+      if (entryStateNames.has(stateKey)) {
+        badges.push('<span class="workflow-definition-graph-badge">entry</span>');
+      }
+      const meta = [];
+      if (state.delegate?.role) {
+        meta.push(`<span>role: ${escapeHtml(state.delegate.role)}</span>`);
+      }
+      if (state.delegate?.skill) {
+        meta.push(`<span>skill: ${escapeHtml(state.delegate.skill)}</span>`);
+      }
+      if (state.card?.ref) {
+        meta.push(`<span>card: ${escapeHtml(state.card.ref)}</span>`);
+      }
+
+      const transitions = [];
+      if (state.on_complete?.success) {
+        transitions.push(buildWorkflowTransitionSummary("success", state.on_complete.success));
+      }
+      if (state.on_complete?.failure) {
+        transitions.push(buildWorkflowTransitionSummary("failure", state.on_complete.failure));
+      }
+      if (state.on_approve) {
+        transitions.push(buildWorkflowTransitionSummary("approve", state.on_approve));
+      }
+      if (state.on_revise) {
+        transitions.push(buildWorkflowTransitionSummary("revise", state.on_revise));
+      }
+
+      return `
+        <article
+          class="workflow-definition-graph-node ${escapeHtml(state.type || "unknown")}${entryStateNames.has(stateKey) ? " entry" : ""}${workflowDefinitionSelectedStateKey === stateKey ? " active" : ""}"
+          data-state-key="${escapeHtml(stateKey)}"
+        >
+          <div class="workflow-definition-graph-node-head">
+            <div>
+              <div class="workflow-definition-graph-node-title">${escapeHtml(state.label || stateKey)}</div>
+              <div class="workflow-definition-graph-node-subtitle">${escapeHtml(stateKey)}</div>
+            </div>
+            <div class="workflow-definition-graph-node-badges">${badges.join("")}</div>
+          </div>
+          ${meta.length ? `<div class="workflow-definition-graph-meta">${meta.join("")}</div>` : ""}
+          ${
+            transitions.length
+              ? `<div class="workflow-definition-graph-transitions">${transitions.join("")}</div>`
+              : '<div class="workflow-definition-graph-empty">无后续 transition</div>'
+          }
+        </article>
+      `;
+    })
+    .join("");
+
+  Array.from(workflowDefinitionGraph.querySelectorAll("[data-state-key]")).forEach((node) => {
+    node.addEventListener("click", () => {
+      const stateKey = node.getAttribute("data-state-key") || "";
+      if (!stateKey) return;
+      updateWorkflowDefinitionSelectedState(stateKey);
+    });
+  });
+}
+
+function renderWorkflowDefinitionVersionInspector() {
+  if (!workflowDefinitionSelectedVersionLabel || !workflowDefinitionVersionJson) return;
+  const selected = getSelectedWorkflowDefinitionVersion();
+  if (!selected) {
+    workflowDefinitionSelectedVersionLabel.textContent = "暂无版本";
+    workflowDefinitionVersionJson.textContent = "";
+    return;
+  }
+  workflowDefinitionSelectedVersion = selected.version;
+  workflowDefinitionSelectedVersionLabel.textContent = `v${selected.version} · ${selected.status}`;
+  workflowDefinitionVersionJson.textContent = stringifyPrettyJson(selected);
+}
+
+function renderWorkflowDefinitionVersions() {
+  if (!workflowDefinitionVersions || !workflowDefinitionVersionSummary) return;
+  const versions = getWorkflowDefinitionVersionList();
+  workflowDefinitionVersionSummary.textContent = versions.length
+    ? `共 ${versions.length} 个版本`
+    : "暂无版本";
+  workflowDefinitionVersions.innerHTML = "";
+  if (!versions.length) {
+    workflowDefinitionVersions.innerHTML = '<div class="workflow-definition-list-empty">当前 definition 还没有任何版本。</div>';
+    renderWorkflowDefinitionVersionInspector();
+    return;
+  }
+  versions.forEach((version) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `workflow-definition-version-chip${version.version === workflowDefinitionSelectedVersion ? " active" : ""}`;
+    button.innerHTML = `
+      <strong>v${escapeHtml(String(version.version))}</strong>
+      <span>${escapeHtml(version.status || "unknown")}</span>
+      <span>${escapeHtml(version.name || version.key || "")}</span>
+    `;
+    button.addEventListener("click", () => {
+      workflowDefinitionSelectedVersion = version.version;
+      renderWorkflowDefinitionVersions();
+    });
+    workflowDefinitionVersions.appendChild(button);
+  });
+  renderWorkflowDefinitionVersionInspector();
+}
+
+function renderWorkflowDefinitionDetailPane() {
+  if (!workflowDefinitionEmpty || !workflowDefinitionDetail) return;
+  if (!currentWorkflowDefinitionDetail) {
+    workflowDefinitionEmpty.classList.remove("hidden");
+    workflowDefinitionDetail.classList.add("hidden");
+    return;
+  }
+
+  const detail = currentWorkflowDefinitionDetail;
+  const bundle = detail.bundle || {};
+  const editable = getEditableWorkflowDefinition();
+  const graphSource = editable;
+  workflowDefinitionEmpty.classList.add("hidden");
+  workflowDefinitionDetail.classList.remove("hidden");
+  if (workflowDefinitionTitle) {
+    workflowDefinitionTitle.textContent = bundle.label || editable?.name || bundle.key || "--";
+  }
+  if (workflowDefinitionSummary) {
+    workflowDefinitionSummary.textContent =
+      bundle.description ||
+      editable?.description ||
+      "当前 workflow definition 暂无描述。";
+  }
+  if (workflowDefinitionMeta) {
+    const meta = [];
+    meta.push(`<span class="workflow-definition-pill workflow-definition-main-pill"><strong>Key</strong>${escapeHtml(bundle.key || "")}</span>`);
+    meta.push(
+      `<span class="workflow-definition-pill"><strong>Published</strong>${escapeHtml(detail.published_definition ? `v${detail.published_definition.version}` : "--")}</span>`,
+    );
+    meta.push(
+      `<span class="workflow-definition-pill"><strong>Draft</strong>${escapeHtml(detail.draft_definition ? `v${detail.draft_definition.version}` : "--")}</span>`,
+    );
+    meta.push(
+      `<span class="workflow-definition-pill"><strong>Versions</strong>${escapeHtml(String(Array.isArray(bundle.versions) ? bundle.versions.length : 0))}</span>`,
+    );
+    workflowDefinitionMeta.innerHTML = meta.join("");
+  }
+
+  if (workflowDefinitionCopyBtn) {
+    workflowDefinitionCopyBtn.disabled = !detail.published_definition;
+  }
+  if (workflowDefinitionCopyVersionBtn) {
+    workflowDefinitionCopyVersionBtn.disabled = !getSelectedWorkflowDefinitionVersion();
+  }
+  if (workflowDefinitionPublishBtn) {
+    workflowDefinitionPublishBtn.disabled = !detail.draft_definition;
+  }
+
+  if (editable) {
+    renderWorkflowDefinitionEditor(editable, bundle);
+  }
+  renderWorkflowDefinitionVersions();
+  renderWorkflowDefinitionGraph(graphSource);
+  renderWorkflowDefinitionPreview(detail.preview || null);
+  renderWorkflowDefinitionDiff(detail);
+}
+
+function renderWorkflowDefinitionList() {
+  if (!workflowDefinitionList) return;
+  workflowDefinitionList.innerHTML = "";
+  if (!Array.isArray(workflowDefinitionBundles) || workflowDefinitionBundles.length === 0) {
+    workflowDefinitionList.innerHTML =
+      '<div class="workflow-definition-list-empty">还没有 workflow definitions，点击右上角 + 开始创建。</div>';
+    return;
+  }
+  workflowDefinitionBundles.forEach((bundle) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `workflow-definition-list-item${bundle.key === currentWorkflowDefinitionKey ? " active" : ""}`;
+    item.innerHTML = `
+      <div class="workflow-definition-list-head">
+        <div>
+          <div class="workflow-definition-list-title">${escapeHtml(bundle.label || bundle.key || "")}</div>
+          <div class="workflow-definition-list-key">${escapeHtml(bundle.key || "")}</div>
+        </div>
+      </div>
+      <p class="workflow-definition-list-desc">${escapeHtml(bundle.description || "暂无描述")}</p>
+      <div class="workflow-definition-list-meta">
+        <span class="workflow-definition-pill"><strong>Published</strong>${escapeHtml(bundle.published_version ? `v${bundle.published_version}` : "--")}</span>
+        <span class="workflow-definition-pill"><strong>Draft</strong>${escapeHtml(bundle.draft_version ? `v${bundle.draft_version}` : "--")}</span>
+        <span class="workflow-definition-pill"><strong>Count</strong>${escapeHtml(String(bundle.version_count || 0))}</span>
+      </div>
+    `;
+    item.addEventListener("click", () => {
+      loadWorkflowDefinitionDetail(bundle.key);
+    });
+    workflowDefinitionList.appendChild(item);
+  });
+}
+
+async function loadWorkflowDefinitionDetail(key) {
+  const safeKey = (key || "").trim();
+  if (!safeKey) return;
+  currentWorkflowDefinitionKey = safeKey;
+  renderWorkflowDefinitionList();
+  if (workflowDefinitionPreview) {
+    workflowDefinitionPreview.textContent = "加载中...";
+  }
+  const reqSeq = ++workflowDefinitionRequestSeq;
+  try {
+    const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(safeKey)}`);
+    const data = await res.json();
+    if (reqSeq !== workflowDefinitionRequestSeq) return;
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    currentWorkflowDefinitionDetail = data;
+    workflowDefinitionSelectedRoleKey = "";
+    workflowDefinitionSelectedEntryPointKey = "";
+    workflowDefinitionSelectedStateKey = "";
+    workflowDefinitionSelectedStatusLabelKey = "";
+    const versions = getWorkflowDefinitionVersionList();
+    if (!versions.some((version) => version.version === workflowDefinitionSelectedVersion)) {
+      workflowDefinitionSelectedVersion = versions[0]?.version ?? null;
+    }
+    renderWorkflowDefinitionList();
+    renderWorkflowDefinitionDetailPane();
+  } catch (err) {
+    if (reqSeq !== workflowDefinitionRequestSeq) return;
+    console.error("Failed to load workflow definition detail:", err);
+    currentWorkflowDefinitionDetail = null;
+    renderWorkflowDefinitionDetailPane();
+    alert(err instanceof Error ? err.message : "流程定义详情加载失败");
+  }
+}
+
+async function loadWorkflowDefinitions(options = {}) {
+  const preserveSelection = options.preserveSelection !== false;
+  if (workflowDefinitionRefreshBtn) {
+    workflowDefinitionRefreshBtn.classList.add("spinning");
+  }
+  try {
+    const [definitionsRes, cardsRes] = await Promise.all([
+      apiFetch("/api/workflow-definitions"),
+      apiFetch("/api/cards"),
+    ]);
+    const data = await definitionsRes.json();
+    const cardsData = await cardsRes.json();
+    if (!definitionsRes.ok) {
+      throw new Error(data?.error || `HTTP ${definitionsRes.status}`);
+    }
+    workflowDefinitionCardsRegistry = cardsRes.ok ? cardsData?.cards || {} : {};
+    workflowDefinitionBundles = Array.isArray(data.definitions) ? data.definitions : [];
+    if (!preserveSelection || !workflowDefinitionBundles.some((bundle) => bundle.key === currentWorkflowDefinitionKey)) {
+      currentWorkflowDefinitionKey = workflowDefinitionBundles[0]?.key || "";
+    }
+    renderWorkflowDefinitionList();
+    if (currentWorkflowDefinitionKey) {
+      await loadWorkflowDefinitionDetail(currentWorkflowDefinitionKey);
+    } else {
+      currentWorkflowDefinitionDetail = null;
+      workflowDefinitionSelectedVersion = null;
+      renderWorkflowDefinitionDetailPane();
+    }
+  } catch (err) {
+    console.error("Failed to load workflow definitions:", err);
+    workflowDefinitionBundles = [];
+    currentWorkflowDefinitionDetail = null;
+    renderWorkflowDefinitionList();
+    renderWorkflowDefinitionDetailPane();
+    if (workflowDefinitionList) {
+      workflowDefinitionList.innerHTML =
+        `<div class="workflow-definition-list-empty">流程定义加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+    }
+  } finally {
+    if (workflowDefinitionRefreshBtn) {
+      workflowDefinitionRefreshBtn.classList.remove("spinning");
+    }
+  }
+}
+
+async function saveWorkflowDefinitionDraft() {
+  try {
+    const payload = getWorkflowDefinitionSavePayload();
+    const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(payload.key)}`, {
+      method: "POST",
+      body: JSON.stringify({
+        label: payload.label,
+        description: payload.description,
+        definition: payload.definition,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    showToast(`已保存 ${payload.key} draft`);
+    await loadWorkflowDefinitions({ preserveSelection: true });
+    await loadWorkflowDefinitionDetail(payload.key);
+  } catch (err) {
+    console.error("Failed to save workflow definition draft:", err);
+    alert(err instanceof Error ? err.message : "保存 draft 失败");
+  }
+}
+
+async function publishWorkflowDefinitionDraft() {
+  if (!currentWorkflowDefinitionKey) {
+    alert("请先选择 workflow definition");
+    return;
+  }
+  if (!confirm(`确认发布 ${currentWorkflowDefinitionKey} 的 draft 版本吗？`)) {
+    return;
+  }
+  try {
+    const res = await apiFetch(
+      `/api/workflow-definitions/${encodeURIComponent(currentWorkflowDefinitionKey)}/publish`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    showToast(`已发布 ${currentWorkflowDefinitionKey}`);
+    await loadWorkflowDefinitions({ preserveSelection: true });
+    await loadWorkflowDefinitionDetail(currentWorkflowDefinitionKey);
+  } catch (err) {
+    console.error("Failed to publish workflow definition:", err);
+    alert(err instanceof Error ? err.message : "发布 draft 失败");
+  }
+}
+
+async function copyPublishedWorkflowDefinitionToDraft() {
+  const published = currentWorkflowDefinitionDetail?.published_definition;
+  const bundle = currentWorkflowDefinitionDetail?.bundle;
+  if (!published || !bundle?.key) {
+    alert("当前没有 published version 可复制");
+    return;
+  }
+  try {
+    const nextMetadata = {
+      ...(published.metadata || {}),
+      based_on_version: published.version,
+      updated_at: new Date().toISOString(),
+    };
+    const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(bundle.key)}`, {
+      method: "POST",
+      body: JSON.stringify({
+        label: bundle.label || published.name || bundle.key,
+        description: bundle.description || published.description || "",
+        definition: {
+          name: published.name,
+          description: published.description || "",
+          roles: cloneJson(published.roles || {}),
+          entry_points: cloneJson(published.entry_points || {}),
+          states: cloneJson(published.states || {}),
+          status_labels: cloneJson(published.status_labels || {}),
+          metadata: nextMetadata,
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    showToast("已复制 published 到 draft");
+    await loadWorkflowDefinitions({ preserveSelection: true });
+    await loadWorkflowDefinitionDetail(bundle.key);
+  } catch (err) {
+    console.error("Failed to copy published definition:", err);
+    alert(err instanceof Error ? err.message : "复制 published 失败");
+  }
+}
+
+async function copySelectedWorkflowDefinitionVersionToDraft() {
+  const selected = getSelectedWorkflowDefinitionVersion();
+  const bundle = currentWorkflowDefinitionDetail?.bundle;
+  if (!selected || !bundle?.key) {
+    alert("当前没有可复制的版本");
+    return;
+  }
+  try {
+    const nextMetadata = {
+      ...(selected.metadata || {}),
+      based_on_version: selected.version,
+      updated_at: new Date().toISOString(),
+    };
+    const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(bundle.key)}`, {
+      method: "POST",
+      body: JSON.stringify({
+        label: bundle.label || selected.name || bundle.key,
+        description: bundle.description || selected.description || "",
+        definition: {
+          name: selected.name,
+          description: selected.description || "",
+          roles: cloneJson(selected.roles || {}),
+          entry_points: cloneJson(selected.entry_points || {}),
+          states: cloneJson(selected.states || {}),
+          status_labels: cloneJson(selected.status_labels || {}),
+          metadata: nextMetadata,
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    showToast(`已复制 v${selected.version} 到 draft`);
+    await loadWorkflowDefinitions({ preserveSelection: true });
+    await loadWorkflowDefinitionDetail(bundle.key);
+  } catch (err) {
+    console.error("Failed to copy selected workflow definition version:", err);
+    alert(err instanceof Error ? err.message : "复制选中版本失败");
+  }
+}
+
+async function createWorkflowDefinition() {
+  const rawKey = await openTextPrompt("输入新的 workflow key", "", { title: "新建流程定义" });
+  const key = (rawKey || "").trim();
+  if (!key) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(key)) {
+    alert("workflow key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  if (workflowDefinitionBundles.some((bundle) => bundle.key === key)) {
+    alert(`workflow definition "${key}" 已存在`);
+    return;
+  }
+  const name = ((await openTextPrompt("输入流程名称", key, { title: "新建流程定义" })) || key).trim();
+  const description = (
+    (await openTextPrompt("输入流程描述（可选）", "", { title: "新建流程定义", multiline: true })) ||
+    ""
+  ).trim();
+
+  const template = createWorkflowDefinitionTemplate(key, name, description);
+  try {
+    const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(key)}`, {
+      method: "POST",
+      body: JSON.stringify({
+        label: name,
+        description,
+        definition: {
+          name: template.name,
+          description: template.description,
+          roles: template.roles,
+          entry_points: template.entry_points,
+          states: template.states,
+          status_labels: template.status_labels,
+          metadata: template.metadata,
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    currentWorkflowDefinitionKey = key;
+    workflowDefinitionSelectedVersion = null;
+    showToast(`已创建 ${key}`);
+    await loadWorkflowDefinitions({ preserveSelection: true });
+    await loadWorkflowDefinitionDetail(key);
+  } catch (err) {
+    console.error("Failed to create workflow definition:", err);
+    alert(err instanceof Error ? err.message : "创建流程定义失败");
   }
 }
 
@@ -5590,6 +7800,131 @@ if (workbenchCreateTaskBtn) {
 if (workbenchDeleteAllBtn) {
   workbenchDeleteAllBtn.addEventListener("click", () => {
     deleteAllWorkbenchTaskData();
+  });
+}
+if (workflowDefinitionRefreshBtn) {
+  workflowDefinitionRefreshBtn.addEventListener("click", async () => {
+    await loadWorkflowDefinitions({ preserveSelection: true });
+  });
+}
+if (workflowDefinitionCreateBtn) {
+  workflowDefinitionCreateBtn.addEventListener("click", async () => {
+    await createWorkflowDefinition();
+  });
+}
+if (workflowDefinitionSaveBtn) {
+  workflowDefinitionSaveBtn.addEventListener("click", async () => {
+    await saveWorkflowDefinitionDraft();
+  });
+}
+if (workflowDefinitionPublishBtn) {
+  workflowDefinitionPublishBtn.addEventListener("click", async () => {
+    await publishWorkflowDefinitionDraft();
+  });
+}
+if (workflowDefinitionCopyBtn) {
+  workflowDefinitionCopyBtn.addEventListener("click", async () => {
+    await copyPublishedWorkflowDefinitionToDraft();
+  });
+}
+if (workflowDefinitionCopyVersionBtn) {
+  workflowDefinitionCopyVersionBtn.addEventListener("click", async () => {
+    await copySelectedWorkflowDefinitionVersionToDraft();
+  });
+}
+if (workflowDefinitionStateAddBtn) {
+  workflowDefinitionStateAddBtn.addEventListener("click", () => {
+    addWorkflowDefinitionState();
+  });
+}
+if (workflowDefinitionRoleAddBtn) {
+  workflowDefinitionRoleAddBtn.addEventListener("click", () => {
+    addWorkflowDefinitionRole();
+  });
+}
+if (workflowDefinitionEntryPointAddBtn) {
+  workflowDefinitionEntryPointAddBtn.addEventListener("click", () => {
+    addWorkflowDefinitionEntryPoint();
+  });
+}
+if (workflowDefinitionStatusLabelAddBtn) {
+  workflowDefinitionStatusLabelAddBtn.addEventListener("click", () => {
+    addWorkflowDefinitionStatusLabel();
+  });
+}
+if (workflowDefinitionStatesInput) {
+  workflowDefinitionStatesInput.addEventListener("input", () => {
+    const editable = getEditableWorkflowDefinition();
+    const parsedStates = (() => {
+      try {
+        return getStatesFromEditor();
+      } catch {
+        return editable?.states || {};
+      }
+    })();
+    if (editable) {
+      editable.states = parsedStates;
+    }
+    renderWorkflowDefinitionStateEditor(parsedStates);
+    const graphSource = {
+      states: parsedStates,
+      entry_points: editable?.entry_points || {},
+    };
+    renderWorkflowDefinitionGraph(graphSource);
+  });
+}
+if (workflowDefinitionRolesInput) {
+  workflowDefinitionRolesInput.addEventListener("input", () => {
+    const editable = getEditableWorkflowDefinition();
+    const parsedRoles = (() => {
+      try {
+        return getRolesFromEditor();
+      } catch {
+        return editable?.roles || {};
+      }
+    })();
+    if (editable) editable.roles = parsedRoles;
+    renderWorkflowDefinitionRoleEditor(parsedRoles);
+    renderWorkflowDefinitionStateEditor();
+  });
+}
+if (workflowDefinitionEntryPointsInput) {
+  workflowDefinitionEntryPointsInput.addEventListener("input", () => {
+    const editable = getEditableWorkflowDefinition();
+    const parsedEntryPoints = (() => {
+      try {
+        return getEntryPointsFromEditor();
+      } catch {
+        return editable?.entry_points || {};
+      }
+    })();
+    if (editable) editable.entry_points = parsedEntryPoints;
+    renderWorkflowDefinitionEntryPointEditor(parsedEntryPoints);
+    const parsedStates = (() => {
+      try {
+        return getStatesFromEditor();
+      } catch {
+        return editable?.states || {};
+      }
+    })();
+    renderWorkflowDefinitionGraph({
+      states: parsedStates,
+      entry_points: parsedEntryPoints,
+    });
+  });
+}
+if (workflowDefinitionStatusLabelsInput) {
+  workflowDefinitionStatusLabelsInput.addEventListener("input", () => {
+    const editable = getEditableWorkflowDefinition();
+    const parsedStatusLabels = (() => {
+      try {
+        return getStatusLabelsFromEditor();
+      } catch {
+        return editable?.status_labels || {};
+      }
+    })();
+    if (editable) editable.status_labels = parsedStatusLabels;
+    renderWorkflowDefinitionStatusLabelEditor(parsedStatusLabels);
   });
 }
 if (workbenchCommentSubmit) {
