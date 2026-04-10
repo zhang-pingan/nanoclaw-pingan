@@ -223,14 +223,14 @@ function injectDelegation(
 
   storeChatMetadata(targetJid, now);
 
-  const syntheticContent = `${targetGroup.trigger} [委派任务 | ID:${delegationId} | 来自:主群 | 流程:${workflowId}]\n\n请按照 ${skillName} 技能执行以下任务：\n\n${taskContent}\n\n完成后请调用 complete_delegation 工具报告结果，delegation_id 为 "${delegationId}"。`;
+  const syntheticContent = `${targetGroup.trigger} [委派任务 | ID:${delegationId} | 来自:流程引擎 | 流程:${workflowId}]\n\n请按照 ${skillName} 技能执行以下任务：\n\n${taskContent}\n\n完成后请调用 complete_delegation 工具报告结果，delegation_id 为 "${delegationId}"。`;
   const syntheticId = `wf-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   storeMessageDirect({
     id: syntheticId,
     chat_jid: targetJid,
     sender: 'system',
-    sender_name: '流程委派',
+    sender_name: '流程引擎委派',
     content: syntheticContent,
     timestamp: now,
     is_from_me: true,
