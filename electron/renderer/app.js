@@ -8827,6 +8827,7 @@ function renderWorkbenchSubtasks(subtasks) {
         : item.status === "completed"
           ? "已通过"
           : "待开始";
+    const stepHintIcon = getWorkbenchSubtaskStatusIcon(item.status);
     el.innerHTML = `
       <div class="workbench-subtask-card">
         ${item.status === "current" ? '<span class="workbench-subtask-spotlight"></span>' : ""}
@@ -8836,7 +8837,10 @@ function renderWorkbenchSubtasks(subtasks) {
           ${item.status === "current" ? '<span class="workbench-current-chip">当前</span>' : ""}
           ${item.manually_skipped ? '<span class="workbench-badge">已手动跳过</span>' : ""}
         </div>
-        <div class="workbench-subtask-caption">${escapeHtml(stepHint)}</div>
+        <div class="workbench-subtask-caption">
+          <span class="workbench-subtask-caption-icon" aria-hidden="true">${stepHintIcon}</span>
+          <span>${escapeHtml(stepHint)}</span>
+        </div>
       </div>
       <div class="workbench-subtask-marker">
         <span class="workbench-subtask-dot"></span>
@@ -9007,6 +9011,21 @@ function renderWorkbenchSubtasks(subtasks) {
       left: Math.max(0, targetLeft),
       behavior: "auto",
     });
+  }
+}
+
+function getWorkbenchSubtaskStatusIcon(status) {
+  switch (status) {
+    case "current":
+      return '<svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
+    case "completed":
+      return '<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
+    case "failed":
+      return '<svg viewBox="0 0 24 24"><path d="M7 7l10 10"/><path d="M17 7L7 17"/></svg>';
+    case "cancelled":
+      return '<svg viewBox="0 0 24 24"><path d="M8 8h8v8H8z"/><path d="M12 5v3"/><path d="M12 16v3"/></svg>';
+    default:
+      return '<svg viewBox="0 0 24 24"><path d="M12 8v4"/><path d="M12 16h.01"/></svg>';
   }
 }
 

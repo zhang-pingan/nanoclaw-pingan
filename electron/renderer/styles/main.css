@@ -439,6 +439,10 @@ body.quick-chat-window #app {
   --secondary-nav-surface-soft: rgba(245, 243, 255, 0.96);
   --secondary-nav-border-soft: rgba(196, 181, 253, 0.12);
   --secondary-nav-border-strong: rgba(196, 181, 253, 0.2);
+  --workbench-accent-rgb: 124, 58, 237;
+  --workbench-success-rgb: 5, 150, 105;
+  --workbench-warning-rgb: 217, 119, 6;
+  --workbench-danger-rgb: 220, 38, 38;
   --workbench-tertiary-accent: var(--accent);
   --workbench-tertiary-accent-strong: var(--accent-hover);
   --workbench-tertiary-accent-dim: var(--accent-dim);
@@ -603,8 +607,8 @@ body.quick-chat-window #app {
   flex: 0 0 10px;
   margin-top: 3px;
   border-radius: 999px;
-  background: #f97316;
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
+  background: rgb(var(--workbench-warning-rgb));
+  box-shadow: 0 0 0 4px rgba(var(--workbench-warning-rgb), 0.15);
 }
 
 .workbench-task-badges,
@@ -676,17 +680,17 @@ body.quick-chat-window #app {
 }
 
 .workbench-badge.workbench-badge-pending {
-  background: rgba(249, 115, 22, 0.14);
-  color: #c2410c;
+  background: rgba(var(--workbench-warning-rgb), 0.14);
+  color: rgb(var(--workbench-warning-rgb));
 }
 
 .workbench-task-item.has-pending {
-  border-color: rgba(249, 115, 22, 0.22);
+  border-color: rgba(var(--workbench-warning-rgb), 0.22);
 }
 
 .workbench-task-item.active .workbench-badge.workbench-badge-pending {
-  background: rgba(249, 115, 22, 0.18);
-  color: #c2410c;
+  background: rgba(var(--workbench-warning-rgb), 0.18);
+  color: rgb(var(--workbench-warning-rgb));
 }
 
 .workbench-main {
@@ -711,17 +715,17 @@ body.quick-chat-window #app {
   padding: 28px;
   color: var(--text-secondary);
   text-align: center;
-  border: 1px dashed var(--workbench-tertiary-accent-glow, rgba(79, 110, 247, 0.18));
+  border: 1px dashed rgba(var(--workbench-accent-rgb), 0.18);
   border-radius: 22px;
-  background: linear-gradient(180deg, var(--workbench-tertiary-accent-dim, rgba(79, 110, 247, 0.08)), rgba(255, 255, 255, 0.72));
-  box-shadow: 0 18px 36px var(--workbench-tertiary-accent-dim, rgba(79, 110, 247, 0.08));
+  background: linear-gradient(180deg, rgba(var(--workbench-accent-rgb), 0.08), rgba(255, 255, 255, 0.72));
+  box-shadow: 0 18px 36px rgba(var(--workbench-accent-rgb), 0.08);
 }
 
 .workbench-detail-empty img {
   width: 116px;
   height: 116px;
   object-fit: contain;
-  filter: drop-shadow(0 12px 24px var(--workbench-tertiary-accent-glow, rgba(79, 110, 247, 0.18)));
+  filter: drop-shadow(0 12px 24px rgba(var(--workbench-accent-rgb), 0.18));
 }
 
 .workbench-task-detail {
@@ -813,7 +817,7 @@ body.quick-chat-window #app {
 
 .workbench-task-action-btn {
   position: relative;
-  border: 1px solid rgba(79, 110, 247, 0.14);
+  border: 1px solid rgba(var(--workbench-accent-rgb), 0.14);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.9));
   color: var(--accent-strong);
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.92);
@@ -821,17 +825,17 @@ body.quick-chat-window #app {
 
 .workbench-task-action-btn:hover {
   background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(240, 247, 255, 0.95));
-  box-shadow: 0 14px 26px rgba(79, 110, 247, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  box-shadow: 0 14px 26px rgba(var(--workbench-accent-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
 .workbench-task-action-btn.danger {
-  border-color: rgba(239, 68, 68, 0.18);
-  background: rgba(239, 68, 68, 0.06);
-  color: var(--error);
+  border-color: rgba(var(--workbench-danger-rgb), 0.18);
+  background: rgba(var(--workbench-danger-rgb), 0.06);
+  color: rgb(var(--workbench-danger-rgb));
 }
 
 .workbench-task-action-btn.danger:hover {
-  background: rgba(239, 68, 68, 0.14);
+  background: rgba(var(--workbench-danger-rgb), 0.14);
 }
 
 .workbench-task-action-btn::after {
@@ -904,17 +908,17 @@ body.quick-chat-window #app {
 
 .workbench-artifact-item.is-clickable:hover {
   transform: translateY(-1px);
-  border-color: rgba(79, 110, 247, 0.24);
-  box-shadow: 0 16px 28px rgba(79, 110, 247, 0.1);
+  border-color: rgba(var(--workbench-accent-rgb), 0.24);
+  box-shadow: 0 16px 28px rgba(var(--workbench-accent-rgb), 0.1);
 }
 
 .workbench-subtask-item.current {
-  border-color: rgba(79, 110, 247, 0.28);
-  background: rgba(79, 110, 247, 0.08);
+  border-color: rgba(var(--workbench-accent-rgb), 0.28);
+  background: rgba(var(--workbench-accent-rgb), 0.08);
 }
 
 .workbench-subtask-item.completed {
-  border-color: rgba(52, 211, 153, 0.22);
+  border-color: rgba(var(--workbench-success-rgb), 0.22);
 }
 
 .workbench-subtasks {
@@ -999,8 +1003,8 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-step.active .workbench-subtask-card {
-  border-color: rgba(79, 110, 247, 0.52);
-  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.12), 0 16px 30px rgba(79, 110, 247, 0.08);
+  border-color: rgba(var(--workbench-accent-rgb), 0.52);
+  box-shadow: 0 0 0 3px rgba(var(--workbench-accent-rgb), 0.12), 0 16px 30px rgba(var(--workbench-accent-rgb), 0.08);
 }
 
 .workbench-subtask-step.active.animate-in .workbench-subtask-card {
@@ -1008,11 +1012,11 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-step.active.pending .workbench-subtask-card {
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.08), rgba(248, 250, 252, 0.96));
+  background: linear-gradient(135deg, rgba(var(--workbench-accent-rgb), 0.08), rgba(248, 250, 252, 0.96));
 }
 
 .workbench-subtask-step.active .workbench-subtask-index {
-  background: rgba(79, 110, 247, 0.14);
+  background: rgba(var(--workbench-accent-rgb), 0.14);
   color: var(--accent-strong);
 }
 
@@ -1031,30 +1035,30 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-step.current .workbench-subtask-card {
-  border-color: rgba(79, 110, 247, 0.34);
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.12), rgba(255, 255, 255, 0.98));
-  box-shadow: 0 16px 28px rgba(79, 110, 247, 0.1);
+  border-color: rgba(var(--workbench-accent-rgb), 0.34);
+  background: linear-gradient(135deg, rgba(var(--workbench-accent-rgb), 0.12), rgba(255, 255, 255, 0.98));
+  box-shadow: 0 16px 28px rgba(var(--workbench-accent-rgb), 0.1);
   transform: translateY(-2px) scale(1.03);
   transform-origin: left center;
 }
 
 .workbench-subtask-step.current .workbench-subtask-dot {
-  border-color: rgba(79, 110, 247, 0.92);
-  background: var(--accent);
+  border-color: rgba(var(--workbench-accent-rgb), 0.92);
+  background: rgb(var(--workbench-accent-rgb));
 }
 
 .workbench-subtask-step.current .workbench-subtask-line {
-  background: linear-gradient(90deg, rgba(79, 110, 247, 0.52), rgba(203, 213, 225, 0.35));
+  background: linear-gradient(90deg, rgba(var(--workbench-accent-rgb), 0.52), rgba(203, 213, 225, 0.35));
 }
 
 .workbench-subtask-step.completed .workbench-subtask-card {
-  border-color: rgba(52, 211, 153, 0.3);
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.12), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-success-rgb), 0.3);
+  background: linear-gradient(135deg, rgba(var(--workbench-success-rgb), 0.12), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-step.completed .workbench-subtask-dot {
-  border-color: rgba(16, 185, 129, 0.92);
-  background: rgba(16, 185, 129, 0.92);
+  border-color: rgba(var(--workbench-success-rgb), 0.92);
+  background: rgba(var(--workbench-success-rgb), 0.92);
 }
 
 .workbench-subtask-step.completed .workbench-subtask-dot::after {
@@ -1074,22 +1078,22 @@ body.quick-chat-window #app {
   position: absolute;
   inset: -5px;
   border-radius: 999px;
-  border: 1px solid rgba(79, 110, 247, 0.28);
+  border: 1px solid rgba(var(--workbench-accent-rgb), 0.28);
   animation: workbenchStepPulse 1.8s ease-out infinite;
 }
 
 .workbench-subtask-step.completed .workbench-subtask-line {
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.78), rgba(16, 185, 129, 0.38));
+  background: linear-gradient(90deg, rgba(var(--workbench-success-rgb), 0.78), rgba(var(--workbench-success-rgb), 0.38));
 }
 
 .workbench-subtask-step.failed .workbench-subtask-card {
-  border-color: rgba(239, 68, 68, 0.32);
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-danger-rgb), 0.32);
+  background: linear-gradient(135deg, rgba(var(--workbench-danger-rgb), 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-step.failed .workbench-subtask-dot {
-  border-color: rgba(239, 68, 68, 0.92);
-  background: rgba(239, 68, 68, 0.92);
+  border-color: rgba(var(--workbench-danger-rgb), 0.92);
+  background: rgba(var(--workbench-danger-rgb), 0.92);
 }
 
 .workbench-subtask-step.failed .workbench-subtask-dot::before,
@@ -1113,17 +1117,17 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-step.failed .workbench-subtask-line {
-  background: linear-gradient(90deg, rgba(239, 68, 68, 0.7), rgba(239, 68, 68, 0.24));
+  background: linear-gradient(90deg, rgba(var(--workbench-danger-rgb), 0.7), rgba(var(--workbench-danger-rgb), 0.24));
 }
 
 .workbench-subtask-step.cancelled .workbench-subtask-card {
-  border-color: rgba(245, 158, 11, 0.34);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-warning-rgb), 0.34);
+  background: linear-gradient(135deg, rgba(var(--workbench-warning-rgb), 0.1), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-step.cancelled .workbench-subtask-dot {
-  border-color: rgba(245, 158, 11, 0.92);
-  background: rgba(245, 158, 11, 0.92);
+  border-color: rgba(var(--workbench-warning-rgb), 0.92);
+  background: rgba(var(--workbench-warning-rgb), 0.92);
 }
 
 .workbench-subtask-step.cancelled .workbench-subtask-dot::after {
@@ -1138,7 +1142,7 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-step.cancelled .workbench-subtask-line {
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.72), rgba(245, 158, 11, 0.24));
+  background: linear-gradient(90deg, rgba(var(--workbench-warning-rgb), 0.72), rgba(var(--workbench-warning-rgb), 0.24));
 }
 
 @keyframes workbenchStepPulse {
@@ -1194,7 +1198,7 @@ body.quick-chat-window #app {
   margin-left: 8px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(79, 110, 247, 0.12);
+  background: rgba(var(--workbench-accent-rgb), 0.12);
   color: var(--accent-strong);
   font-size: 11px;
   font-weight: 700;
@@ -1217,22 +1221,66 @@ body.quick-chat-window #app {
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workbench-subtask-caption-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-muted);
+}
+
+.workbench-subtask-caption-icon svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .workbench-subtask-step.current .workbench-subtask-caption {
   color: var(--accent-strong);
 }
 
+.workbench-subtask-step.current .workbench-subtask-caption-icon {
+  background: rgba(var(--workbench-accent-rgb), 0.14);
+  color: rgb(var(--workbench-accent-rgb));
+}
+
 .workbench-subtask-step.failed .workbench-subtask-caption {
-  color: #b91c1c;
+  color: rgb(var(--workbench-danger-rgb));
+}
+
+.workbench-subtask-step.failed .workbench-subtask-caption-icon {
+  background: rgba(var(--workbench-danger-rgb), 0.14);
+  color: rgb(var(--workbench-danger-rgb));
 }
 
 .workbench-subtask-step.cancelled .workbench-subtask-caption {
-  color: #b45309;
+  color: rgb(var(--workbench-warning-rgb));
+}
+
+.workbench-subtask-step.cancelled .workbench-subtask-caption-icon {
+  background: rgba(var(--workbench-warning-rgb), 0.14);
+  color: rgb(var(--workbench-warning-rgb));
 }
 
 .workbench-subtask-step.completed .workbench-subtask-caption {
-  color: #0f766e;
+  color: rgb(var(--workbench-success-rgb));
+}
+
+.workbench-subtask-step.completed .workbench-subtask-caption-icon {
+  background: rgba(var(--workbench-success-rgb), 0.14);
+  color: rgb(var(--workbench-success-rgb));
 }
 
 .workbench-subtask-spotlight {
@@ -1240,8 +1288,8 @@ body.quick-chat-window #app {
   inset: 0 auto auto 0;
   width: 100%;
   height: 3px;
-  background: linear-gradient(90deg, rgba(79, 110, 247, 0.96), rgba(56, 189, 248, 0.72));
-  box-shadow: 0 0 18px rgba(79, 110, 247, 0.4);
+  background: linear-gradient(90deg, rgba(var(--workbench-accent-rgb), 0.96), rgba(168, 85, 247, 0.72));
+  box-shadow: 0 0 18px rgba(var(--workbench-accent-rgb), 0.4);
 }
 
 .workbench-subtask-index,
@@ -1263,31 +1311,31 @@ body.quick-chat-window #app {
 
 .workbench-subtask-step.current .workbench-subtask-index,
 .workbench-subtask-detail-card.current .workbench-subtask-detail-index {
-  background: rgba(79, 110, 247, 0.12);
+  background: rgba(var(--workbench-accent-rgb), 0.12);
   color: var(--accent-strong);
 }
 
 .workbench-subtask-detail-card.pending .workbench-subtask-detail-index {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: rgba(var(--workbench-warning-rgb), 0.12);
+  color: rgb(var(--workbench-warning-rgb));
 }
 
 .workbench-subtask-step.completed .workbench-subtask-index,
 .workbench-subtask-detail-card.completed .workbench-subtask-detail-index {
-  background: rgba(16, 185, 129, 0.12);
-  color: #0f766e;
+  background: rgba(var(--workbench-success-rgb), 0.12);
+  color: rgb(var(--workbench-success-rgb));
 }
 
 .workbench-subtask-step.failed .workbench-subtask-index,
 .workbench-subtask-detail-card.failed .workbench-subtask-detail-index {
-  background: rgba(239, 68, 68, 0.12);
-  color: #b91c1c;
+  background: rgba(var(--workbench-danger-rgb), 0.12);
+  color: rgb(var(--workbench-danger-rgb));
 }
 
 .workbench-subtask-step.cancelled .workbench-subtask-index,
 .workbench-subtask-detail-card.cancelled .workbench-subtask-detail-index {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  background: rgba(var(--workbench-warning-rgb), 0.14);
+  color: rgb(var(--workbench-warning-rgb));
 }
 
 .workbench-subtask-detail-card {
@@ -1302,28 +1350,28 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-detail-card.current {
-  border-color: rgba(79, 110, 247, 0.34);
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.1), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-accent-rgb), 0.34);
+  background: linear-gradient(135deg, rgba(var(--workbench-accent-rgb), 0.1), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-detail-card.pending {
-  border-color: rgba(245, 158, 11, 0.24);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-warning-rgb), 0.24);
+  background: linear-gradient(135deg, rgba(var(--workbench-warning-rgb), 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-detail-card.completed {
-  border-color: rgba(16, 185, 129, 0.24);
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-success-rgb), 0.24);
+  background: linear-gradient(135deg, rgba(var(--workbench-success-rgb), 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-detail-card.failed {
-  border-color: rgba(239, 68, 68, 0.24);
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-danger-rgb), 0.24);
+  background: linear-gradient(135deg, rgba(var(--workbench-danger-rgb), 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-detail-card.cancelled {
-  border-color: rgba(245, 158, 11, 0.24);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.96));
+  border-color: rgba(var(--workbench-warning-rgb), 0.24);
+  background: linear-gradient(135deg, rgba(var(--workbench-warning-rgb), 0.08), rgba(255, 255, 255, 0.96));
 }
 
 .workbench-subtask-detail-card .workbench-item-title {
@@ -1350,18 +1398,18 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-hint.current {
-  border-color: rgba(79, 110, 247, 0.18);
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.08), rgba(255, 255, 255, 0.82));
+  border-color: rgba(var(--workbench-accent-rgb), 0.18);
+  background: linear-gradient(135deg, rgba(var(--workbench-accent-rgb), 0.08), rgba(255, 255, 255, 0.82));
 }
 
 .workbench-subtask-hint.failed {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.84));
+  border-color: rgba(var(--workbench-danger-rgb), 0.2);
+  background: linear-gradient(135deg, rgba(var(--workbench-danger-rgb), 0.08), rgba(255, 255, 255, 0.84));
 }
 
 .workbench-subtask-hint.cancelled {
-  border-color: rgba(245, 158, 11, 0.2);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.84));
+  border-color: rgba(var(--workbench-warning-rgb), 0.2);
+  background: linear-gradient(135deg, rgba(var(--workbench-warning-rgb), 0.08), rgba(255, 255, 255, 0.84));
 }
 
 .workbench-subtask-hint-title {
@@ -1381,7 +1429,7 @@ body.quick-chat-window #app {
 .workbench-approval-item .btn-ghost {
   min-height: 36px;
   padding: 8px 14px;
-  border: 1px solid rgba(79, 110, 247, 0.22);
+  border: 1px solid rgba(var(--workbench-accent-rgb), 0.22);
   background: rgba(255, 255, 255, 0.9);
   color: var(--accent-strong);
   font-size: 13px;
@@ -1391,21 +1439,21 @@ body.quick-chat-window #app {
 
 .workbench-subtask-actions .btn-ghost:hover,
 .workbench-approval-item .btn-ghost:hover {
-  border-color: rgba(79, 110, 247, 0.4);
-  background: rgba(79, 110, 247, 0.1);
+  border-color: rgba(var(--workbench-accent-rgb), 0.4);
+  background: rgba(var(--workbench-accent-rgb), 0.1);
   color: var(--accent-hover);
 }
 
 .workbench-subtask-detail-card.failed .workbench-subtask-actions .btn-ghost {
-  border-color: rgba(239, 68, 68, 0.26);
+  border-color: rgba(var(--workbench-danger-rgb), 0.26);
   background: rgba(255, 255, 255, 0.94);
-  color: #b91c1c;
+  color: rgb(var(--workbench-danger-rgb));
 }
 
 .workbench-subtask-detail-card.failed .workbench-subtask-actions .btn-ghost:hover {
-  border-color: rgba(239, 68, 68, 0.42);
-  background: rgba(239, 68, 68, 0.12);
-  color: #991b1b;
+  border-color: rgba(var(--workbench-danger-rgb), 0.42);
+  background: rgba(var(--workbench-danger-rgb), 0.12);
+  color: rgb(var(--workbench-danger-rgb));
 }
 
 .workbench-approval-item .workbench-task-actions {
@@ -1415,7 +1463,7 @@ body.quick-chat-window #app {
 .workbench-approval-item .btn-primary {
   min-height: 38px;
   padding: 9px 16px;
-  box-shadow: 0 10px 22px rgba(79, 110, 247, 0.22);
+  box-shadow: 0 10px 22px rgba(var(--workbench-accent-rgb), 0.22);
 }
 
 .workbench-comment-composer {
