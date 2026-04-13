@@ -11787,15 +11787,6 @@ function autoResizeInput() {
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px";
 }
 
-function isTextCursorTarget(target) {
-  if (!target || !(target instanceof Element)) return false;
-  return Boolean(
-    target.closest(
-      'textarea, input[type="text"], input[type="search"], input[type="password"], input[type="email"], input[type="url"], input[type="number"], [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]'
-    )
-  );
-}
-
 function initTakeCopterCursor() {
   // Keep the default system cursor in the web client.
   document.body.classList.remove("take-copter-cursor-on", "take-copter-cursor-text");
