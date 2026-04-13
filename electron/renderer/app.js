@@ -11797,57 +11797,9 @@ function isTextCursorTarget(target) {
 }
 
 function initTakeCopterCursor() {
-  if (!window.matchMedia || !window.matchMedia("(pointer:fine)").matches) return;
-  const el = document.createElement("div");
-  el.className = "take-copter-cursor";
-  const glyph = document.createElement("div");
-  glyph.className = "take-copter-cursor-glyph";
-  el.appendChild(glyph);
-  document.body.appendChild(el);
-  document.body.classList.add("take-copter-cursor-on");
-  let isHoveringActionable = false;
-
-  const hoverSelector = 'button, a, [role="button"], .list-item, .primary-nav-item, .icon-btn, .icon-btn-sm, .btn-primary, .btn-ghost, .btn-tool, input[type="button"], input[type="submit"], input[type="checkbox"], input[type="radio"], select, summary';
-
-  function setCursorState(target) {
-    const onText = isTextCursorTarget(target);
-    document.body.classList.toggle("take-copter-cursor-text", onText);
-    if (onText) {
-      el.classList.remove("visible");
-      return;
-    }
-
-    el.classList.add("visible");
-    isHoveringActionable = target instanceof Element && Boolean(target.closest(hoverSelector));
-    el.classList.toggle("hovering", isHoveringActionable);
-  }
-
-  document.addEventListener(
-    "pointermove",
-    (e) => {
-      if (e.pointerType && e.pointerType !== "mouse") return;
-      const x = e.clientX - 16;
-      const y = e.clientY - 9;
-      if (isHoveringActionable) {
-        el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1.04)`;
-      } else {
-        el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(1)`;
-      }
-    },
-    { passive: true }
-  );
-
-  document.addEventListener("mouseover", (e) => {
-    setCursorState(e.target);
-  });
-
-  document.addEventListener("mouseleave", () => {
-    el.classList.remove("visible");
-  });
-
-  window.addEventListener("blur", () => {
-    el.classList.remove("visible");
-  });
+  // Keep the default system cursor in the web client.
+  document.body.classList.remove("take-copter-cursor-on", "take-copter-cursor-text");
+  document.querySelector(".take-copter-cursor")?.remove();
 }
 
 function initChatBgParticleNudge() {

@@ -89,7 +89,12 @@ function createQuickChatWindow(): BrowserWindow {
   });
 
   win.loadURL(QUICK_CHAT_URL);
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    // Prevent Electron from switching the app to UIElement mode, which
+    // makes the Dock icon disappear after the quick chat window is shown.
+    skipTransformProcessType: true,
+  });
 
   win.on('blur', () => {
     if (!isQuitting) {
