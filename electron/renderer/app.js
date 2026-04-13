@@ -9492,34 +9492,74 @@ async function openWorkbenchCreateTaskModal() {
   overlay.id = "workbench-create-overlay";
   overlay.className = "workflow-wizard-overlay";
   overlay.innerHTML = `
-    <div class="workflow-wizard-modal">
-      <div class="workflow-wizard-header">
-        <div class="workflow-wizard-title">新建工作台任务</div>
-        <button type="button" class="icon-btn" id="workbench-create-close" title="关闭">×</button>
+    <div class="workflow-wizard-modal workbench-create-modal">
+      <div class="workflow-wizard-header workbench-create-header">
+        <div class="workflow-wizard-header-copy">
+          <div class="workflow-wizard-kicker">Workbench</div>
+          <div class="workflow-wizard-title-row">
+            <div class="workflow-wizard-title">新建工作台任务</div>
+            <span class="workflow-wizard-header-badge">更精致的任务发起面板</span>
+          </div>
+          <div class="workflow-wizard-header-desc">按流程、入口点与服务维度快速组织任务，右侧会实时显示当前配置摘要与校验状态。</div>
+        </div>
+        <button type="button" class="workflow-wizard-close" id="workbench-create-close" title="关闭" aria-label="关闭">
+          <span aria-hidden="true">×</span>
+        </button>
       </div>
-      <div class="workflow-wizard-body">
-        <div class="workflow-wizard-section">
-          <div class="workflow-wizard-label">1. 流程类型</div>
-          <div id="wb-type-select-wrap" class="workflow-wizard-subsection"></div>
+      <div class="workflow-wizard-body workflow-wizard-body-split">
+        <div class="workflow-wizard-main">
+          <div class="workflow-wizard-section workflow-wizard-section-hero">
+            <div class="workflow-wizard-hero-grid">
+              <div>
+                <div class="workflow-wizard-label">任务创建方式</div>
+                <div class="workflow-wizard-hero-title">从工作台直接发起标准流程</div>
+                <div class="workflow-wizard-hero-copy">适合需求规划、开发、测试等多阶段协作。切换流程后，表单会自动切换对应字段与规则。</div>
+              </div>
+              <div class="workflow-wizard-metrics">
+                <div class="workflow-wizard-metric">
+                  <span>可用流程</span>
+                  <strong>${workflowTypes.length}</strong>
+                </div>
+                <div class="workflow-wizard-metric">
+                  <span>服务数量</span>
+                  <strong>${services.length}</strong>
+                </div>
+                <div class="workflow-wizard-metric">
+                  <span>主群</span>
+                  <strong>${escapeHtml(mainGroup.name || mainGroup.jid || '默认')}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="workflow-wizard-section">
+            <div class="workflow-wizard-label">1. 流程类型</div>
+            <div id="wb-type-select-wrap" class="workflow-wizard-subsection"></div>
+          </div>
+          <div class="workflow-wizard-section">
+            <div class="workflow-wizard-label">2. 入口点</div>
+            <div id="wb-entry-options" class="workflow-wizard-options"></div>
+          </div>
+          <div class="workflow-wizard-section">
+            <div class="workflow-wizard-label">3. 服务名称</div>
+            <div id="wb-service-options" class="workflow-wizard-options"></div>
+          </div>
+          <div id="wb-dynamic-fields"></div>
+        </div>
+        <aside class="workflow-wizard-sidebar-panel">
           <div id="wb-type-summary" class="workflow-wizard-subsection"></div>
-        </div>
-        <div class="workflow-wizard-section">
-          <div class="workflow-wizard-label">2. 入口点</div>
-          <div id="wb-entry-options" class="workflow-wizard-options"></div>
-        </div>
-        <div class="workflow-wizard-section">
-          <div class="workflow-wizard-label">3. 服务名称</div>
-          <div id="wb-service-options" class="workflow-wizard-options"></div>
-        </div>
-        <div id="wb-dynamic-fields"></div>
-        <div class="workflow-wizard-section">
-          <div class="workflow-wizard-label">校验提示</div>
-          <div id="wb-requirement-hint" class="workflow-wizard-hint"></div>
-        </div>
+          <div class="workflow-wizard-section workflow-wizard-summary-card">
+            <div class="workflow-wizard-label">当前配置摘要</div>
+            <div id="wb-selection-summary" class="workflow-wizard-selection-list"></div>
+          </div>
+          <div class="workflow-wizard-section workflow-wizard-validation-card" id="wb-validation-card">
+            <div class="workflow-wizard-label">校验提示</div>
+            <div id="wb-requirement-hint" class="workflow-wizard-hint"></div>
+          </div>
+        </aside>
       </div>
-      <div class="workflow-wizard-footer">
-        <button type="button" id="wb-cancel-btn" class="btn-ghost">取消</button>
-        <button type="button" id="wb-submit-btn" class="btn-primary">创建任务</button>
+      <div class="workflow-wizard-footer workbench-create-footer">
+        <button type="button" id="wb-cancel-btn" class="btn-ghost workflow-wizard-secondary-btn">取消</button>
+        <button type="button" id="wb-submit-btn" class="btn-primary workflow-wizard-submit-btn">创建任务</button>
       </div>
     </div>
   `;
@@ -9532,6 +9572,8 @@ async function openWorkbenchCreateTaskModal() {
   const serviceOptionsEl = overlay.querySelector("#wb-service-options");
   const dynamicFieldsEl = overlay.querySelector("#wb-dynamic-fields");
   const reqHintEl = overlay.querySelector("#wb-requirement-hint");
+  const validationCardEl = overlay.querySelector("#wb-validation-card");
+  const selectionSummaryEl = overlay.querySelector("#wb-selection-summary");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
 
   function closeWorkbenchCreateModal() {
@@ -9707,15 +9749,36 @@ async function openWorkbenchCreateTaskModal() {
     const requiredFile = getRequiredDeliverableFile();
     const deliverableFiles = getRequirementDeliverables(requirementName);
     const deliverableOk = !deliverableRequired || deliverableFiles.includes(requiredFile);
+    let validationTone = "info";
 
     if (!requirementName) {
       reqHintEl.textContent = "请输入或选择一个任务名称";
+      validationTone = "warning";
     } else if (deliverableRequired) {
       reqHintEl.textContent = deliverableOk
         ? `已校验交付物文件：${requiredFile}`
         : `当前入口点要求存在 ${requiredFile}，所选需求暂不满足`;
+      validationTone = deliverableOk ? "success" : "warning";
     } else {
       reqHintEl.textContent = "将使用当前名称创建新的工作流任务";
+      validationTone = "success";
+    }
+
+    validationCardEl.dataset.state = validationTone;
+    if (selectionSummaryEl) {
+      const summaryItems = [
+        { label: "流程", value: getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--" },
+        { label: "入口点", value: state.entryPoint || "--" },
+        { label: "服务", value: state.service || "--" },
+        { label: "任务名称", value: requirementName || "待填写" },
+        { label: "交付物", value: deliverableRequired ? (deliverableOk ? `已满足 ${requiredFile}` : `缺少 ${requiredFile}`) : "当前入口无需交付物" }
+      ];
+      selectionSummaryEl.innerHTML = summaryItems.map((item) => `
+        <div class="workflow-wizard-selection-item">
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${escapeHtml(item.value)}</strong>
+        </div>
+      `).join("");
     }
 
     submitBtn.disabled = !requirementName || !state.entryPoint || !state.service || !deliverableOk;
