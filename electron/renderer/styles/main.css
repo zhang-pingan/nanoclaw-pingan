@@ -505,33 +505,76 @@ body.quick-chat-window #app {
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
 }
 
 .workbench-task-item {
+  position: relative;
   width: calc(100% - 24px);
   margin: 0 12px 10px;
-  border: 1px solid var(--secondary-nav-border-soft);
-  background: rgba(255, 255, 255, 0.78);
-  border-radius: 18px;
-  padding: 14px;
+  border: 1px solid rgba(196, 181, 253, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.82), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 249, 255, 0.88));
+  border-radius: 22px;
+  padding: 14px 14px 15px;
   cursor: pointer;
-  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
-  box-shadow: none;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition), background var(--transition);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.workbench-task-card-glow {
+  position: absolute;
+  inset: -1px;
+  background: radial-gradient(circle at top left, rgba(139, 92, 246, 0.1), transparent 36%);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.workbench-task-topline {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.workbench-task-type-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workbench-task-time {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
 }
 
 .workbench-task-item:hover {
   color: var(--text-primary);
   transform: translateY(-1px);
-  border-color: var(--secondary-nav-border-strong);
-  box-shadow: var(--secondary-nav-item-shadow-hover);
+  border-color: rgba(196, 181, 253, 0.22);
+  box-shadow: 0 20px 36px rgba(139, 92, 246, 0.12);
 }
 
 .workbench-task-item.active {
   transform: translateY(-1px);
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.3);
-  background: linear-gradient(180deg, var(--secondary-nav-surface-soft), rgba(255, 255, 255, 0.9));
-  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), var(--secondary-nav-item-shadow-active);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.74), transparent 34%),
+    linear-gradient(180deg, rgba(245, 243, 255, 0.98), rgba(255, 255, 255, 0.96));
+  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), 0 22px 40px rgba(139, 92, 246, 0.14);
 }
 
 .workbench-task-title {
@@ -569,7 +612,7 @@ body.quick-chat-window #app {
 .workbench-task-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .workbench-badge {
@@ -592,7 +635,7 @@ body.quick-chat-window #app {
 }
 
 .workbench-task-snippet {
-  margin-top: 8px;
+  margin-top: 10px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
@@ -601,6 +644,31 @@ body.quick-chat-window #app {
   overflow: hidden;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+}
+
+.workbench-task-stage-strip {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(196, 181, 253, 0.12);
+}
+
+.workbench-task-stage-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.workbench-task-stage-strip strong {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-primary);
 }
 
 .workbench-task-item.active .workbench-task-title {
@@ -613,7 +681,7 @@ body.quick-chat-window #app {
 }
 
 .workbench-task-item.has-pending {
-  border-color: rgba(249, 115, 22, 0.2);
+  border-color: rgba(249, 115, 22, 0.22);
 }
 
 .workbench-task-item.active .workbench-badge.workbench-badge-pending {

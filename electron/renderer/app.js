@@ -8361,9 +8361,15 @@ function renderWorkbenchTaskList() {
   for (const task of workbenchTasks) {
     const pendingCount = Number(task.pending_action_count || 0);
     const hasPending = pendingCount > 0 || Boolean(task.pending_approval);
+    const updatedAt = task.updated_at || task.created_at || "";
     const el = document.createElement("div");
     el.className = `workbench-task-item${task.id === currentWorkbenchTaskId ? " active" : ""}${hasPending ? " has-pending" : ""}`;
     el.innerHTML = `
+      <div class="workbench-task-card-glow" aria-hidden="true"></div>
+      <div class="workbench-task-topline">
+        <span class="workbench-task-type-chip">${escapeHtml(task.workflow_type || "workflow")}</span>
+        <span class="workbench-task-time">${escapeHtml(updatedAt ? formatDateTime(updatedAt) : "--")}</span>
+      </div>
       <div class="workbench-task-title-row">
         <div class="workbench-task-title">${escapeHtml(task.title)}</div>
         ${hasPending ? `<span class="workbench-task-pending-dot" title="有待处理项"></span>` : ""}
@@ -8373,8 +8379,11 @@ function renderWorkbenchTaskList() {
         <span class="workbench-badge"><strong>状态</strong>${escapeHtml(task.status_label || task.status)}</span>
         ${hasPending ? `<span class="workbench-badge workbench-badge-pending"><strong>待处理</strong>${pendingCount > 0 ? ` ${escapeHtml(String(pendingCount))}` : ""}</span>` : ""}
       </div>
+      <div class="workbench-task-stage-strip">
+        <span class="workbench-task-stage-label">当前阶段</span>
+        <strong>${escapeHtml(task.current_stage_label || task.current_stage)}</strong>
+      </div>
       <div class="workbench-task-snippet">
-        当前阶段：${escapeHtml(task.current_stage_label || task.current_stage)}<br />
         ${(() => {
           const context = getWorkbenchTaskContext(task);
           const branch = typeof context.work_branch === "string" ? context.work_branch.trim() : "";
