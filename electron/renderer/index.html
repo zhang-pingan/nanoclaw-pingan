@@ -615,7 +615,6 @@
                       <div class="workflow-definition-state-inspector-empty">选择一个 role 查看结构化编辑面板。</div>
                     </div>
                   </div>
-                  <textarea id="workflow-definition-roles" rows="8" spellcheck="false"></textarea>
                 </label>
                 <label class="workflow-definition-field workflow-definition-field-block">
                   <span>Entry Points</span>
@@ -631,7 +630,6 @@
                       <div class="workflow-definition-state-inspector-empty">选择一个 entry point 查看结构化编辑面板。</div>
                     </div>
                   </div>
-                  <textarea id="workflow-definition-entry-points" rows="8" spellcheck="false"></textarea>
                 </label>
                 <label class="workflow-definition-field workflow-definition-field-block">
                   <span>States</span>
@@ -647,7 +645,6 @@
                       <div class="workflow-definition-state-inspector-empty">选择一个 state 查看结构化编辑面板。</div>
                     </div>
                   </div>
-                  <textarea id="workflow-definition-states" rows="18" spellcheck="false"></textarea>
                 </label>
                 <label class="workflow-definition-field workflow-definition-field-block">
                   <span>Status Labels</span>
@@ -663,9 +660,8 @@
                       <div class="workflow-definition-state-inspector-empty">选择一个 status label 查看结构化编辑面板。</div>
                     </div>
                   </div>
-                  <textarea id="workflow-definition-status-labels" rows="8" spellcheck="false"></textarea>
                 </label>
-                <label class="workflow-definition-field workflow-definition-field-block">
+                <label class="workflow-definition-field workflow-definition-field-block hidden">
                   <span>Metadata</span>
                   <textarea id="workflow-definition-metadata" rows="6" spellcheck="false"></textarea>
                 </label>
@@ -680,13 +676,12 @@
                   <div id="workflow-definition-graph" class="workflow-definition-graph"></div>
                 </section>
 
-                <section class="workflow-definition-panel">
+                <section id="workflow-definition-validation-panel" class="workflow-definition-panel hidden">
                   <div class="workflow-definition-panel-head">
                     <div class="workflow-definition-panel-title">Preview / Compile</div>
-                    <div class="workflow-definition-panel-note">当前以后端返回结果为准</div>
+                    <div class="workflow-definition-panel-note">仅在发布遇到问题时显示</div>
                   </div>
                   <div id="workflow-definition-validation" class="workflow-definition-validation"></div>
-                  <pre id="workflow-definition-preview" class="workflow-definition-code-block"></pre>
                 </section>
 
               </section>

@@ -61,9 +61,9 @@ var workflowDefinitionStatusLabelsInput = document.getElementById("workflow-defi
 var workflowDefinitionStatusLabelList = document.getElementById("workflow-definition-status-label-list");
 var workflowDefinitionStatusLabelInspector = document.getElementById("workflow-definition-status-label-inspector");
 var workflowDefinitionMetadataInput = document.getElementById("workflow-definition-metadata");
+var workflowDefinitionValidationPanel = document.getElementById("workflow-definition-validation-panel");
 var workflowDefinitionValidation = document.getElementById("workflow-definition-validation");
 var workflowDefinitionGraph = document.getElementById("workflow-definition-graph");
-var workflowDefinitionPreview = document.getElementById("workflow-definition-preview");
 var workflowDefinitionDiffSummary = document.getElementById("workflow-definition-diff-summary");
 var workflowDefinitionDiff = document.getElementById("workflow-definition-diff");
 var workflowDefinitionDiffModal = document.getElementById("workflow-definition-diff-modal");
@@ -2385,7 +2385,7 @@ function applyWorkflowDefinitionStatePatch(stateKey, updater) {
     });
   } catch (err) {
     console.error("Failed to patch state inspector:", err);
-    showToast(err instanceof Error ? err.message : "State JSON 解析失败", 2200);
+    showToast(err instanceof Error ? err.message : "State 配置解析失败", 2200);
   }
 }
 
@@ -2400,7 +2400,7 @@ function applyWorkflowDefinitionRolePatch(roleKey, updater) {
     renderWorkflowDefinitionRoleEditor(roles);
     renderWorkflowDefinitionStateEditor();
   } catch (err) {
-    showToast(err instanceof Error ? err.message : "Roles JSON 解析失败", 2200);
+    showToast(err instanceof Error ? err.message : "Role 配置解析失败", 2200);
   }
 }
 
@@ -2418,7 +2418,7 @@ function applyWorkflowDefinitionEntryPointPatch(entryKey, updater) {
       entry_points: entryPoints,
     });
   } catch (err) {
-    showToast(err instanceof Error ? err.message : "Entry Points JSON 解析失败", 2200);
+    showToast(err instanceof Error ? err.message : "Entry Point 配置解析失败", 2200);
   }
 }
 
@@ -2432,7 +2432,7 @@ function applyWorkflowDefinitionStatusLabelPatch(stateKey, updater) {
     if (editable) editable.status_labels = statusLabels;
     renderWorkflowDefinitionStatusLabelEditor(statusLabels);
   } catch (err) {
-    showToast(err instanceof Error ? err.message : "Status Labels JSON 解析失败", 2200);
+    showToast(err instanceof Error ? err.message : "Status Label 配置解析失败", 2200);
   }
 }
 
@@ -2882,46 +2882,58 @@ function renderWorkflowDefinitionEditor(definition, bundle) {
   renderWorkflowDefinitionStatusLabelEditor(definition.status_labels || {});
 }
 
-function renderWorkflowDefinitionPreview(preview) {
-  if (!workflowDefinitionValidation || !workflowDefinitionPreview) return;
-  const errors = Array.isArray(preview?.errors) ? preview.errors : [];
-  let localValidationItems = [];
-  try {
-    const payload = getWorkflowDefinitionSavePayload();
-    localValidationItems = collectWorkflowDefinitionValidationItems(payload.definition, payload.key);
-  } catch (err) {
-    localValidationItems = [{ group: "json", message: err instanceof Error ? err.message : String(err) }];
+function hideWorkflowDefinitionValidationPanel() {
+  if (workflowDefinitionValidationPanel) {
+    workflowDefinitionValidationPanel.classList.add("hidden");
   }
+  if (workflowDefinitionValidation) {
+    workflowDefinitionValidation.innerHTML = "";
+  }
+}
+
+function renderWorkflowDefinitionValidationPanel(validationState) {
+  if (!workflowDefinitionValidationPanel || !workflowDefinitionValidation) return;
+  const localValidationItems = Array.isArray(validationState?.localValidationItems)
+    ? validationState.localValidationItems
+    : [];
+  const serverErrors = Array.isArray(validationState?.serverErrors)
+    ? validationState.serverErrors
+    : [];
   const blocks = [];
-  if (!preview) {
-    blocks.push('<div class="workflow-definition-validation-note">当前没有可预览的 draft / published definition。</div>');
-    workflowDefinitionPreview.textContent = "";
-  } else {
-    if (errors.length === 0 && localValidationItems.length === 0) {
-      blocks.push('<div class="workflow-definition-validation-note">发布前校验通过，可以进行发布。</div>');
-    } else {
-      if (localValidationItems.length > 0) {
-        const grouped = localValidationItems.reduce((acc, item) => {
-          const key = item.group || "other";
-          if (!acc[key]) acc[key] = [];
-          acc[key].push(item);
-          return acc;
-        }, {});
-        blocks.push(`<div class="workflow-definition-validation-note">发布前校验总览：发现 ${escapeHtml(String(localValidationItems.length))} 个结构问题。</div>`);
-        Object.entries(grouped).forEach(([group, messages]) => {
-          blocks.push(`<div class="workflow-definition-validation-note">分组 ${escapeHtml(group)} · ${escapeHtml(String(messages.length))} 项</div>`);
-          messages.forEach((item, index) => {
-            blocks.push(`<button type="button" class="workflow-definition-validation-error workflow-definition-validation-link" data-workflow-validation-jump="${escapeAttribute(JSON.stringify(item))}">${escapeHtml(item.message)}</button>`);
-          });
-        });
-      }
-      errors.forEach((error) => {
-        blocks.push(`<div class="workflow-definition-validation-error">${escapeHtml(error)}</div>`);
+
+  if (localValidationItems.length > 0) {
+    const grouped = localValidationItems.reduce((acc, item) => {
+      const key = item.group || "other";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    }, {});
+    blocks.push(
+      `<div class="workflow-definition-validation-note">发布前校验发现 ${escapeHtml(String(localValidationItems.length))} 个结构问题。</div>`,
+    );
+    Object.entries(grouped).forEach(([group, messages]) => {
+      blocks.push(
+        `<div class="workflow-definition-validation-note">分组 ${escapeHtml(group)} · ${escapeHtml(String(messages.length))} 项</div>`,
+      );
+      messages.forEach((item) => {
+        blocks.push(
+          `<button type="button" class="workflow-definition-validation-error workflow-definition-validation-link" data-workflow-validation-jump="${escapeAttribute(JSON.stringify(item))}">${escapeHtml(item.message)}</button>`,
+        );
       });
-    }
-    workflowDefinitionPreview.textContent = stringifyPrettyJson(preview.compiled || {});
+    });
   }
+
+  if (serverErrors.length > 0) {
+    blocks.push(
+      `<div class="workflow-definition-validation-note">后端校验返回 ${escapeHtml(String(serverErrors.length))} 个问题。</div>`,
+    );
+    serverErrors.forEach((error) => {
+      blocks.push(`<div class="workflow-definition-validation-error">${escapeHtml(error)}</div>`);
+    });
+  }
+
   workflowDefinitionValidation.innerHTML = blocks.join("");
+  workflowDefinitionValidationPanel.classList.remove("hidden");
   Array.from(workflowDefinitionValidation.querySelectorAll("[data-workflow-validation-jump]")).forEach((button) => {
     button.addEventListener("click", () => {
       const raw = button.getAttribute("data-workflow-validation-jump") || "";
@@ -3287,9 +3299,9 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
     roles = roles || getRolesFromEditor();
   } catch (err) {
     workflowDefinitionRoleList.innerHTML =
-      '<div class="workflow-definition-state-list-empty">Roles JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+      '<div class="workflow-definition-state-list-empty">Role 配置解析失败，暂时无法渲染结构化编辑器。</div>';
     workflowDefinitionRoleInspector.innerHTML =
-      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Roles JSON 解析失败")}</div>`;
+      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Role 配置解析失败")}</div>`;
     return;
   }
   const roleEntries = Object.entries(roles || {});
@@ -3432,9 +3444,9 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
     entryPoints = entryPoints || getEntryPointsFromEditor();
   } catch (err) {
     workflowDefinitionEntryPointList.innerHTML =
-      '<div class="workflow-definition-state-list-empty">Entry Points JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+      '<div class="workflow-definition-state-list-empty">Entry Point 配置解析失败，暂时无法渲染结构化编辑器。</div>';
     workflowDefinitionEntryPointInspector.innerHTML =
-      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Entry Points JSON 解析失败")}</div>`;
+      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Entry Point 配置解析失败")}</div>`;
     return;
   }
   const entryEntries = Object.entries(entryPoints || {});
@@ -3545,9 +3557,9 @@ function renderWorkflowDefinitionStatusLabelEditor(statusLabelsArg) {
     statusLabels = statusLabels || getStatusLabelsFromEditor();
   } catch (err) {
     workflowDefinitionStatusLabelList.innerHTML =
-      '<div class="workflow-definition-state-list-empty">Status Labels JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+      '<div class="workflow-definition-state-list-empty">Status Label 配置解析失败，暂时无法渲染结构化编辑器。</div>';
     workflowDefinitionStatusLabelInspector.innerHTML =
-      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Status Labels JSON 解析失败")}</div>`;
+      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Status Label 配置解析失败")}</div>`;
     return;
   }
   const labelEntries = Object.entries(statusLabels || {});
@@ -3614,10 +3626,10 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
     states = states || getStatesFromEditor();
   } catch (err) {
     workflowDefinitionStateList.innerHTML =
-      '<div class="workflow-definition-state-list-empty">States JSON 解析失败，暂时无法渲染结构化编辑器。</div>';
+      '<div class="workflow-definition-state-list-empty">State 配置解析失败，暂时无法渲染结构化编辑器。</div>';
     workflowDefinitionStateInspector.innerHTML =
       `<div class="workflow-definition-state-inspector-empty">${escapeHtml(
-        err instanceof Error ? err.message : "States JSON 解析失败",
+        err instanceof Error ? err.message : "State 配置解析失败",
       )}</div>`;
     return;
   }
@@ -4197,7 +4209,9 @@ function renderWorkflowDefinitionDetailPane() {
   setWorkflowDefinitionEditorReadonly(!isDraftSelected, selectedVersion);
   renderWorkflowDefinitionVersions();
   renderWorkflowDefinitionGraph(graphSource);
-  renderWorkflowDefinitionPreview(isDraftSelected ? detail.preview || null : null);
+  if (!isDraftSelected) {
+    hideWorkflowDefinitionValidationPanel();
+  }
 }
 
 function renderWorkflowDefinitionList() {
@@ -4238,9 +4252,7 @@ async function loadWorkflowDefinitionDetail(key) {
   if (!safeKey) return;
   currentWorkflowDefinitionKey = safeKey;
   renderWorkflowDefinitionList();
-  if (workflowDefinitionPreview) {
-    workflowDefinitionPreview.textContent = "加载中...";
-  }
+  hideWorkflowDefinitionValidationPanel();
   const reqSeq = ++workflowDefinitionRequestSeq;
   try {
     const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(safeKey)}`);
@@ -4351,23 +4363,69 @@ async function saveWorkflowDefinitionDraft() {
   }
 }
 
+function collectWorkflowDefinitionPublishLocalErrors() {
+  try {
+    const payload = getWorkflowDefinitionSavePayload();
+    return {
+      payload,
+      items: collectWorkflowDefinitionValidationItems(payload.definition, payload.key),
+    };
+  } catch (err) {
+    return {
+      payload: null,
+      items: [{ group: "json", message: err instanceof Error ? err.message : String(err) }],
+    };
+  }
+}
+
 async function publishWorkflowDefinitionDraft() {
   if (!currentWorkflowDefinitionKey) {
     alert("请先选择 workflow definition");
     return;
   }
-  if (!confirm(`确认发布 ${currentWorkflowDefinitionKey} 的 draft 版本吗？`)) {
+  const localValidation = collectWorkflowDefinitionPublishLocalErrors();
+  if (localValidation.items.length > 0) {
+    renderWorkflowDefinitionValidationPanel({
+      localValidationItems: localValidation.items,
+      serverErrors: [],
+    });
     return;
   }
   try {
-    const res = await apiFetch(
+    const payload = localValidation.payload;
+    const saveRes = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(payload.key)}`, {
+      method: "POST",
+      body: JSON.stringify({
+        label: payload.label,
+        description: payload.description,
+        definition: payload.definition,
+      }),
+    });
+    const saveData = await saveRes.json();
+    if (!saveRes.ok) {
+      renderWorkflowDefinitionValidationPanel({
+        localValidationItems: [],
+        serverErrors: [saveData?.error || `HTTP ${saveRes.status}`],
+      });
+      return;
+    }
+
+    const publishRes = await apiFetch(
       `/api/workflow-definitions/${encodeURIComponent(currentWorkflowDefinitionKey)}/publish`,
       { method: "POST", body: JSON.stringify({}) },
     );
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error || `HTTP ${res.status}`);
+    const publishData = await publishRes.json();
+    if (!publishRes.ok) {
+      renderWorkflowDefinitionValidationPanel({
+        localValidationItems: [],
+        serverErrors: String(publishData?.error || `HTTP ${publishRes.status}`)
+          .split(";")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      });
+      return;
     }
+    hideWorkflowDefinitionValidationPanel();
     showToast(`已发布 ${currentWorkflowDefinitionKey}`);
     await loadWorkflowDefinitions({ preserveSelection: true });
     await loadWorkflowDefinitionDetail(currentWorkflowDefinitionKey);
