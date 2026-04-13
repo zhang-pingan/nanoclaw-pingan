@@ -8785,6 +8785,49 @@ function renderWorkbenchSubtasks(subtasks) {
     };
     return statusLabelMap[item.status] || item.status;
   }
+  function getWorkbenchBadgeIcon(kind) {
+    switch (kind) {
+      case "status-current":
+        return '<svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
+      case "status-completed":
+        return '<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
+      case "status-failed":
+        return '<svg viewBox="0 0 24 24"><path d="M7 7l10 10"/><path d="M17 7L7 17"/></svg>';
+      case "status-cancelled":
+        return '<svg viewBox="0 0 24 24"><path d="M8 8h8v8H8z"/></svg>';
+      case "status-pending":
+        return '<svg viewBox="0 0 24 24"><path d="M12 8v4"/><path d="M12 16h.01"/></svg>';
+      case "approval":
+        return '<svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V7z"/></svg>';
+      case "input":
+        return '<svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h7"/></svg>';
+      case "question":
+        return '<svg viewBox="0 0 24 24"><path d="M9.5 9a2.5 2.5 0 1 1 4.3 1.7c-.8.8-1.8 1.4-1.8 2.8"/><path d="M12 17h.01"/></svg>';
+      case "message":
+        return '<svg viewBox="0 0 24 24"><path d="M4 6h16v10H7l-3 3z"/></svg>';
+      case "ready":
+        return '<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
+      case "missing":
+        return '<svg viewBox="0 0 24 24"><path d="M12 8v5"/><path d="M12 16h.01"/></svg>';
+      case "time":
+        return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>';
+      case "artifact":
+        return '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>';
+      case "asset":
+        return '<svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M7 16l4-5 3 3 3-4 3 6"/></svg>';
+      case "timeline-manual":
+        return '<svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
+      case "timeline-approval":
+        return '<svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V7z"/></svg>';
+      case "timeline-flow":
+        return '<svg viewBox="0 0 24 24"><path d="M5 7h6"/><path d="M13 7h6"/><path d="M11 7l2 5-2 5"/></svg>';
+      default:
+        return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>';
+    }
+  }
+  function renderWorkbenchBadge(label, kind = "default") {
+    return `<span class="workbench-badge workbench-badge-${escapeAttribute(kind)}"><span class="workbench-badge-icon" aria-hidden="true">${getWorkbenchBadgeIcon(kind)}</span><span>${escapeHtml(label)}</span></span>`;
+  }
   const displaySubtasks = getDisplaySubtasks(subtasks);
   const currentSubtask = displaySubtasks.find((item) => item.status === "current") || null;
   const persistedSelection = displaySubtasks.find((item) => item.id === workbenchSelectedSubtaskId) || null;
@@ -8907,8 +8950,8 @@ function renderWorkbenchSubtasks(subtasks) {
       <div class="workbench-item-title">
         <span class="workbench-subtask-detail-index">阶段 ${selectedIndex}</span>
         ${escapeHtml(selected.stage_label || selected.title)}
-        <span class="workbench-badge">${escapeHtml(getSubtaskStatusLabel(selected))}</span>
-        ${selected.manually_skipped ? '<span class="workbench-badge">已手动跳过</span>' : ""}
+        ${renderWorkbenchBadge(getSubtaskStatusLabel(selected), `status-${selected.status || "pending"}`)}
+        ${selected.manually_skipped ? renderWorkbenchBadge("已手动跳过", "status-cancelled") : ""}
       </div>
     </div>
     <div class="workbench-item-body">
@@ -9069,10 +9112,17 @@ function renderWorkbenchActionItems(actionItems, task) {
         : item.source_type === "ask_user_question"
           ? "提问"
           : "消息";
+    const badgeKind = item.item_type === "approval"
+      ? "approval"
+      : item.source_type === "request_human_input"
+        ? "input"
+        : item.source_type === "ask_user_question"
+          ? "question"
+          : "message";
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.title)}</div>
-        <span class="workbench-badge">${escapeHtml(badge)}</span>
+        ${renderWorkbenchBadge(badge, badgeKind)}
       </div>
       <div class="workbench-item-body">${escapeHtml(item.body)}</div>
     `;
@@ -9231,7 +9281,7 @@ function renderWorkbenchArtifacts(artifacts) {
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.title)}</div>
-        <span class="workbench-badge">${item.exists ? "ready" : "missing"}</span>
+        ${renderWorkbenchBadge(item.exists ? "ready" : "missing", item.exists ? "ready" : "missing")}
       </div>
       <div class="workbench-item-body">${escapeHtml(item.path)}</div>
     `;
@@ -9267,7 +9317,7 @@ function renderWorkbenchAssets(assets) {
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.title)}</div>
-        <span class="workbench-badge">${escapeHtml(item.asset_type)}</span>
+        ${renderWorkbenchBadge(item.asset_type, "asset")}
       </div>
       <div class="workbench-item-body">${escapeHtml(item.note || item.path || item.url || "")}</div>
     `;
@@ -9292,7 +9342,7 @@ function renderWorkbenchComments(comments) {
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">${escapeHtml(item.author)}</div>
-        <span class="workbench-badge">${escapeHtml(formatDateTime(item.created_at))}</span>
+        ${renderWorkbenchBadge(formatDateTime(item.created_at), "time")}
       </div>
       <div class="workbench-item-body">${escapeHtml(item.content)}</div>
     `;
@@ -9319,13 +9369,22 @@ function renderWorkbenchTimeline(timeline) {
           : item.type === "lifecycle"
             ? "流程"
             : "执行";
+    const eventTypeKind = item.type === "manual"
+      ? "timeline-manual"
+      : item.type === "approval"
+        ? "timeline-approval"
+        : item.type === "lifecycle"
+          ? "timeline-flow"
+          : item.type === "artifact"
+            ? "artifact"
+            : "default";
     el.innerHTML = `
       <div class="workbench-item-row">
         <div class="workbench-item-title">
           ${escapeHtml(item.title)}
-          <span class="workbench-badge">${escapeHtml(eventTypeLabel)}</span>
+          ${renderWorkbenchBadge(eventTypeLabel, eventTypeKind)}
         </div>
-        <span class="workbench-badge">${escapeHtml(formatDateTime(item.created_at))}</span>
+        ${renderWorkbenchBadge(formatDateTime(item.created_at), "time")}
       </div>
       <div class="workbench-item-body">${escapeHtml(item.body || "")}</div>
     `;

@@ -634,6 +634,25 @@ body.quick-chat-window #app {
   line-height: 1.2;
 }
 
+.workbench-badge-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.workbench-badge-icon svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .workbench-badge strong {
   color: var(--text-primary);
 }
@@ -682,6 +701,61 @@ body.quick-chat-window #app {
 .workbench-badge.workbench-badge-pending {
   background: rgba(var(--workbench-warning-rgb), 0.14);
   color: rgb(var(--workbench-warning-rgb));
+}
+
+.workbench-badge-status-current {
+  background: rgba(var(--workbench-accent-rgb), 0.14);
+  color: rgb(var(--workbench-accent-rgb));
+}
+
+.workbench-badge-status-completed,
+.workbench-badge-ready {
+  background: rgba(var(--workbench-success-rgb), 0.14);
+  color: rgb(var(--workbench-success-rgb));
+}
+
+.workbench-badge-status-failed,
+.workbench-badge-missing {
+  background: rgba(var(--workbench-danger-rgb), 0.14);
+  color: rgb(var(--workbench-danger-rgb));
+}
+
+.workbench-badge-status-cancelled,
+.workbench-badge-status-pending,
+.workbench-badge-approval,
+.workbench-badge-question,
+.workbench-badge-input,
+.workbench-badge-message,
+.workbench-badge-timeline-manual,
+.workbench-badge-timeline-approval,
+.workbench-badge-timeline-flow,
+.workbench-badge-artifact,
+.workbench-badge-asset,
+.workbench-badge-time,
+.workbench-badge-default {
+  background: rgba(var(--workbench-warning-rgb), 0.12);
+  color: rgb(var(--workbench-warning-rgb));
+}
+
+.workbench-badge-time,
+.workbench-badge-default {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
+}
+
+.workbench-badge-approval,
+.workbench-badge-timeline-approval {
+  background: rgba(var(--workbench-accent-rgb), 0.12);
+  color: rgb(var(--workbench-accent-rgb));
+}
+
+.workbench-badge-input,
+.workbench-badge-message,
+.workbench-badge-asset,
+.workbench-badge-artifact,
+.workbench-badge-timeline-flow {
+  background: rgba(var(--workbench-accent-rgb), 0.1);
+  color: rgb(var(--workbench-accent-rgb));
 }
 
 .workbench-task-item.has-pending {
