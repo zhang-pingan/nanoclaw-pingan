@@ -5993,6 +5993,60 @@ body.quick-chat-window .quick-chat-input {
   box-shadow: 0 12px 24px rgba(0, 132, 201, 0.18);
 }
 
+.workflow-wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 28px 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0));
+}
+
+.workflow-wizard-step {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-height: 72px;
+  padding: 14px 16px 14px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 132, 201, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+}
+
+.workflow-wizard-step::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(0, 167, 240, 0), rgba(0, 167, 240, 0.65), rgba(7, 193, 96, 0.38));
+  opacity: 0.18;
+}
+
+.workflow-wizard-step.is-active {
+  border-color: rgba(0, 132, 201, 0.24);
+  background: linear-gradient(135deg, rgba(0, 167, 240, 0.12), rgba(255, 255, 255, 0.82));
+  box-shadow: 0 14px 28px rgba(0, 132, 201, 0.1);
+}
+
+.workflow-wizard-step.is-active::after {
+  opacity: 1;
+}
+
+.workflow-wizard-step span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.workflow-wizard-step strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
 .workflow-wizard-body {
   overflow-y: auto;
   padding: 24px 28px 12px;
@@ -6018,6 +6072,7 @@ body.quick-chat-window .quick-chat-input {
   border-radius: 22px;
   padding: 18px;
   box-shadow: 0 18px 36px rgba(7, 15, 31, 0.05);
+  animation: workflowWizardEnter 260ms ease;
 }
 
 .workflow-wizard-section-hero {
@@ -6122,6 +6177,18 @@ body.quick-chat-window .quick-chat-input {
   color: var(--accent);
   box-shadow: 0 12px 24px rgba(0, 132, 201, 0.14);
   font-weight: 700;
+}
+
+.workflow-wizard-option.selected::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(0, 167, 240, 0.14);
+  margin-right: 6px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .workflow-wizard-subsection {
@@ -6237,6 +6304,182 @@ body.quick-chat-window .quick-chat-input {
   word-break: break-word;
 }
 
+.workflow-wizard-file-list {
+  display: grid;
+  gap: 12px;
+}
+
+.workflow-wizard-file-empty {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 132px;
+  border: 1px dashed rgba(0, 132, 201, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(246, 250, 255, 0.92), rgba(255, 255, 255, 0.82));
+  color: var(--text-muted);
+}
+
+.workflow-wizard-file-empty-icon,
+.workflow-wizard-file-card-icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.workflow-wizard-file-empty-icon svg,
+.workflow-wizard-file-card-icon svg,
+.workflow-wizard-file-remove-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workflow-wizard-file-empty-copy {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workflow-wizard-file-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px 14px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 132, 201, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.92));
+  box-shadow: 0 16px 28px rgba(7, 15, 31, 0.05);
+}
+
+.workflow-wizard-file-card-body {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.workflow-wizard-file-card-body span {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.workflow-wizard-file-card-body strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.workflow-wizard-file-remove-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(239, 68, 68, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #dc2626;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 140ms ease, background 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.workflow-wizard-file-remove-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(254, 242, 242, 0.96);
+  border-color: rgba(239, 68, 68, 0.28);
+  box-shadow: 0 12px 22px rgba(220, 38, 38, 0.12);
+}
+
+.workflow-wizard-file-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workflow-wizard-upload-icon-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(0, 132, 201, 0.16);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(0, 167, 240, 0.12), rgba(255, 255, 255, 0.92));
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
+  box-shadow: 0 12px 24px rgba(0, 132, 201, 0.1);
+}
+
+.workflow-wizard-upload-icon-btn::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(8, 21, 48, 0.92);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 12px 24px rgba(8, 21, 48, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.workflow-wizard-upload-icon-btn:hover::after,
+.workflow-wizard-upload-icon-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.workflow-wizard-upload-icon-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(0, 132, 201, 0.28);
+  box-shadow: 0 16px 28px rgba(0, 132, 201, 0.16);
+}
+
+.workflow-wizard-upload-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.workflow-wizard-upload-icon-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workflow-wizard-upload-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 167, 240, 0.2);
+  border-top-color: currentColor;
+  animation: workflowWizardSpin 0.75s linear infinite;
+}
+
 .workflow-wizard-field-help {
   margin-top: 10px;
   font-size: 12px;
@@ -6273,9 +6516,30 @@ body.quick-chat-window .quick-chat-input {
   border-top: 1px solid rgba(0, 132, 201, 0.1);
   padding: 16px 28px 22px;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
   background: rgba(255, 255, 255, 0.82);
+}
+
+.workflow-wizard-footer-meta {
+  margin-right: auto;
+  display: grid;
+  gap: 4px;
+}
+
+.workflow-wizard-footer-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.workflow-wizard-footer-status {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .workflow-wizard-secondary-btn {
@@ -6298,11 +6562,52 @@ body.quick-chat-window .quick-chat-input {
   font-size: 14px;
   font-weight: 800;
   box-shadow: 0 16px 30px rgba(0, 132, 201, 0.24);
+  letter-spacing: 0.02em;
+}
+
+.workflow-wizard-submit-btn:not(:disabled) {
+  animation: workflowWizardPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes workflowWizardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes workflowWizardPulse {
+  0%,
+  100% {
+    box-shadow: 0 16px 30px rgba(0, 132, 201, 0.24);
+  }
+  50% {
+    box-shadow: 0 22px 36px rgba(0, 132, 201, 0.34);
+  }
+}
+
+@keyframes workflowWizardSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 980px) {
   .workflow-wizard-overlay {
     padding: 16px;
+  }
+
+  .workflow-wizard-steps {
+    grid-template-columns: 1fr;
+    padding-left: 18px;
+    padding-right: 18px;
   }
 
   .workflow-wizard-body-split,
@@ -6339,6 +6644,11 @@ body.quick-chat-window .quick-chat-input {
 
   .workflow-wizard-footer {
     flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .workflow-wizard-footer-meta {
+    margin-right: 0;
   }
 
   .workflow-wizard-secondary-btn,

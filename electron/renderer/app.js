@@ -9566,6 +9566,20 @@ async function openWorkbenchCreateTaskModal() {
           <span aria-hidden="true">×</span>
         </button>
       </div>
+      <div class="workflow-wizard-steps" aria-hidden="true">
+        <div class="workflow-wizard-step is-active">
+          <span>01</span>
+          <strong>选择流程</strong>
+        </div>
+        <div class="workflow-wizard-step">
+          <span>02</span>
+          <strong>补充信息</strong>
+        </div>
+        <div class="workflow-wizard-step">
+          <span>03</span>
+          <strong>确认创建</strong>
+        </div>
+      </div>
       <div class="workflow-wizard-body workflow-wizard-body-split">
         <div class="workflow-wizard-main">
           <div class="workflow-wizard-section workflow-wizard-section-hero">
@@ -9618,6 +9632,10 @@ async function openWorkbenchCreateTaskModal() {
         </aside>
       </div>
       <div class="workflow-wizard-footer workbench-create-footer">
+        <div class="workflow-wizard-footer-meta">
+          <div class="workflow-wizard-footer-label">Ready to launch</div>
+          <div id="wb-footer-status" class="workflow-wizard-footer-status">请先完成基础配置</div>
+        </div>
         <button type="button" id="wb-cancel-btn" class="btn-ghost workflow-wizard-secondary-btn">取消</button>
         <button type="button" id="wb-submit-btn" class="btn-primary workflow-wizard-submit-btn">创建任务</button>
       </div>
@@ -9634,6 +9652,7 @@ async function openWorkbenchCreateTaskModal() {
   const reqHintEl = overlay.querySelector("#wb-requirement-hint");
   const validationCardEl = overlay.querySelector("#wb-validation-card");
   const selectionSummaryEl = overlay.querySelector("#wb-selection-summary");
+  const footerStatusEl = overlay.querySelector("#wb-footer-status");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
 
   function closeWorkbenchCreateModal() {
@@ -9871,6 +9890,15 @@ async function openWorkbenchCreateTaskModal() {
     }
 
     validationCardEl.dataset.state = validationTone;
+    const summaryText = !requirementName
+      ? (state.entryPoint === "plan" ? "请补充需求描述后再创建" : "请填写任务名称后再创建")
+      : state.uploadingFiles > 0
+        ? `等待 ${state.uploadingFiles} 个附件上传完成`
+        : deliverableRequired && !deliverableOk
+          ? `缺少必需交付物 ${requiredFile}`
+          : `将向 ${state.service || "--"} 发起 ${state.entryPoint || "--"} 流程`;
+    footerStatusEl.textContent = summaryText;
+    submitBtn.textContent = state.uploadingFiles > 0 ? "上传中..." : "创建任务";
     if (selectionSummaryEl) {
       const summaryItems = [
         { label: "流程", value: getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--" },
@@ -10066,11 +10094,15 @@ async function openWorkbenchCreateTaskModal() {
       } else if (field.type === "file_uploads") {
         const files = Array.isArray(state.formValues[field.key]) ? state.formValues[field.key] : [];
         const toolbar = document.createElement("div");
-        toolbar.className = "workflow-wizard-options compact";
+        toolbar.className = "workflow-wizard-file-toolbar";
         const addBtn = document.createElement("button");
         addBtn.type = "button";
-        addBtn.className = "btn-ghost workflow-wizard-secondary-btn";
-        addBtn.textContent = state.uploadingFiles > 0 ? "上传中..." : "上传文件";
+        addBtn.className = "workflow-wizard-upload-icon-btn";
+        addBtn.title = state.uploadingFiles > 0 ? "附件上传中" : "上传附件";
+        addBtn.setAttribute("aria-label", state.uploadingFiles > 0 ? "附件上传中" : "上传附件");
+        addBtn.innerHTML = state.uploadingFiles > 0
+          ? '<span class="workflow-wizard-upload-spinner" aria-hidden="true"></span>'
+          : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V7"/><path d="M8.5 10.5 12 7l3.5 3.5"/><path d="M5 17.5v.5A2 2 0 0 0 7 20h10a2 2 0 0 0 2-2v-.5"/><path d="M8 20h8"/></svg>';
         addBtn.disabled = state.uploadingFiles > 0;
         addBtn.addEventListener("click", () => {
           const picker = document.createElement("input");
@@ -10102,36 +10134,49 @@ async function openWorkbenchCreateTaskModal() {
         wrap.appendChild(toolbar);
 
         const list = document.createElement("div");
-        list.className = "workflow-wizard-selection-list";
+        list.className = "workflow-wizard-file-list";
         if (files.length === 0) {
-          list.innerHTML = '<div class="workflow-wizard-empty">暂未上传附件</div>';
+          list.innerHTML = `
+            <div class="workflow-wizard-file-empty">
+              <div class="workflow-wizard-file-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+              </div>
+              <div class="workflow-wizard-file-empty-copy">暂未上传附件</div>
+            </div>
+          `;
         } else {
           list.innerHTML = files.map((item, fileIdx) => `
-            <div class="workflow-wizard-selection-item">
-              <span>${escapeHtml(item.name || `附件 ${fileIdx + 1}`)}</span>
-              <strong>${escapeHtml(item.path || "--")}</strong>
+            <div class="workflow-wizard-file-card">
+              <div class="workflow-wizard-file-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+              </div>
+              <div class="workflow-wizard-file-card-body">
+                <span>${escapeHtml(item.name || `附件 ${fileIdx + 1}`)}</span>
+                <strong title="${escapeAttribute(item.path || "--")}">${escapeHtml(item.path || "--")}</strong>
+              </div>
+              <button
+                type="button"
+                class="workflow-wizard-file-remove-btn"
+                data-file-remove-index="${fileIdx}"
+                title="移除附件"
+                aria-label="移除附件 ${escapeAttribute(item.name || `附件 ${fileIdx + 1}`)}"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
+              </button>
             </div>
           `).join("");
         }
         wrap.appendChild(list);
 
-        if (files.length > 0) {
-          const removeWrap = document.createElement("div");
-          removeWrap.className = "workflow-wizard-options compact";
-          files.forEach((item, fileIdx) => {
-            const chip = document.createElement("button");
-            chip.type = "button";
-            chip.className = "btn-ghost";
-            chip.textContent = `移除 ${item.name || `附件 ${fileIdx + 1}`}`;
-            chip.addEventListener("click", () => {
-              const nextFiles = files.filter((_, idx2) => idx2 !== fileIdx);
-              setFieldValue(field.key, nextFiles);
-              refreshWorkbenchCreateModal();
-            });
-            removeWrap.appendChild(chip);
+        list.querySelectorAll("[data-file-remove-index]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const idx = Number(btn.getAttribute("data-file-remove-index"));
+            if (Number.isNaN(idx)) return;
+            const nextFiles = files.filter((_, idx2) => idx2 !== idx);
+            setFieldValue(field.key, nextFiles);
+            refreshWorkbenchCreateModal();
           });
-          wrap.appendChild(removeWrap);
-        }
+        });
       }
 
       if (field.helper_text) {
