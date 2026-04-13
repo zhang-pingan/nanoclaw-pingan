@@ -9655,6 +9655,7 @@ async function openWorkbenchCreateTaskModal() {
   function getRequiredDeliverableFile() {
     const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
     if (!detail?.requires_deliverable) return "";
+    if (detail.deliverable_role === "planner") return "plan.md";
     return `${detail.deliverable_role || "dev"}.md`;
   }
 
@@ -10845,6 +10846,7 @@ async function openWorkflowDefinitionCreateFormPreview() {
   function getRequiredDeliverableFile() {
     const detail = workflowType.entry_points_detail?.[state.entryPoint];
     if (!detail?.requires_deliverable) return "";
+    if (detail.deliverable_role === "planner") return "plan.md";
     return `${detail.deliverable_role || "dev"}.md`;
   }
 
