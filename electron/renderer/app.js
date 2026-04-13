@@ -2404,7 +2404,7 @@ function addWorkflowDefinitionRoleChannelFromButton() {
   }
 }
 
-function handleWorkflowDefinitionRoleChannelRename(input) {
+function handleWorkflowDefinitionRoleChannelRename(input, nextTarget = null) {
   const oldKey = input.getAttribute("data-role-channel-key-original") || "";
   const newKey = (input.value || "").trim();
   if (!oldKey) {
@@ -2419,7 +2419,15 @@ function handleWorkflowDefinitionRoleChannelRename(input) {
   try {
     renameWorkflowDefinitionRoleChannel(oldKey, newKey);
     input.setAttribute("data-role-channel-key-original", newKey);
-    showToast(`已重命名 channel: ${oldKey} -> ${newKey}`);
+    if (
+      nextTarget instanceof Element &&
+      nextTarget.getAttribute("data-role-channel") === oldKey
+    ) {
+      const valueInput = workflowDefinitionRoleInspector?.querySelector(
+        getWorkflowDefinitionInspectorSelector("data-role-channel", newKey),
+      );
+      if (valueInput instanceof HTMLInputElement) valueInput.focus();
+    }
   } catch (err) {
     input.value = isWorkflowDefinitionDraftChannelKey(oldKey) ? "" : oldKey;
     alert(err instanceof Error ? err.message : "重命名 channel 失败");
@@ -3729,11 +3737,8 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
     });
   });
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel-key]")).forEach((el) => {
-    el.addEventListener("change", () => {
-      handleWorkflowDefinitionRoleChannelRename(el);
-    });
-    el.addEventListener("blur", () => {
-      handleWorkflowDefinitionRoleChannelRename(el);
+    el.addEventListener("blur", (event) => {
+      handleWorkflowDefinitionRoleChannelRename(el, event.relatedTarget || null);
     });
   });
   const renameBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='rename']");
