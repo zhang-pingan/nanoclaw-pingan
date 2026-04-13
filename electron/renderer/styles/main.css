@@ -2050,11 +2050,7 @@ body.quick-chat-window .quick-chat-input {
   --tertiary-empty-accent-rgb: 14, 165, 233;
   --tertiary-surface-tint: rgba(14, 165, 233, 0.016);
   --tertiary-surface-tint-strong: rgba(14, 165, 233, 0.028);
-  background:
-    radial-gradient(circle at top left, rgba(125, 211, 252, 0.15), transparent 28%),
-    radial-gradient(circle at top right, rgba(186, 230, 253, 0.1), transparent 30%),
-    linear-gradient(180deg, rgba(14, 165, 233, 0.05), rgba(14, 165, 233, 0.02) 20%, transparent 42%),
-    var(--bg-primary);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.98));
 }
 
 #cards-management-screen.active {
@@ -2419,9 +2415,9 @@ body.quick-chat-window .quick-chat-input {
 
 .workflow-definition-hero,
 .workflow-definition-panel {
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.12);
+  border: 1px solid rgba(180, 83, 9, 0.12);
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.04), rgba(255, 255, 255, 0.9));
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 180, 83, 9), 0.04), rgba(255, 255, 255, 0.9));
   box-shadow: 0 18px 32px rgba(148, 163, 184, 0.08);
 }
 
@@ -2437,7 +2433,7 @@ body.quick-chat-window .quick-chat-input {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: var(--secondary-nav-kicker-color);
+  color: #c2410c;
   font-weight: 800;
   margin-bottom: 8px;
 }
@@ -2473,6 +2469,40 @@ body.quick-chat-window .quick-chat-input {
 
 .cards-management-hero-actions {
   align-self: flex-end;
+}
+
+#cards-management-screen .workflow-definition-hero.cards-management-hero,
+#cards-management-screen .workflow-definition-panel {
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+#cards-management-screen .cards-management-hero .cards-management-kicker {
+  color: #047857;
+}
+
+#cards-management-screen .cards-management-hero-actions .btn-primary {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(209, 250, 229, 0.94));
+  color: #047857;
+}
+
+#cards-management-screen .cards-management-hero-actions .btn-primary:hover {
+  border-color: rgba(5, 150, 105, 0.28);
+  background: linear-gradient(180deg, rgba(209, 250, 229, 0.98), rgba(167, 243, 208, 0.92));
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.14);
+}
+
+#cards-management-screen .cards-management-hero-actions .btn-ghost {
+  border-color: rgba(244, 114, 182, 0.18);
+  background: rgba(253, 242, 248, 0.92);
+  color: #be185d;
+}
+
+#cards-management-screen .cards-management-hero-actions .btn-ghost:hover {
+  border-color: rgba(236, 72, 153, 0.26);
+  background: rgba(252, 231, 243, 0.98);
+  color: #9d174d;
 }
 
 .workflow-definition-hero-actions .btn-primary,
@@ -2599,27 +2629,26 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-version-chip {
   padding: 10px 12px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.16);
-  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.12), rgba(255, 255, 255, 0.94));
+  border: 1px solid rgba(180, 83, 9, 0.16);
+  background: rgba(255, 255, 255, 0.98);
   cursor: pointer;
   appearance: none;
   text-align: left;
   font: inherit;
   min-width: 140px;
-  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
   transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .workflow-definition-version-chip:hover {
   transform: translateY(-1px);
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.26);
+  border-color: rgba(180, 83, 9, 0.26);
   box-shadow: var(--secondary-nav-item-shadow-hover);
 }
 
 .workflow-definition-version-chip.active {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.34);
-  background: linear-gradient(180deg, var(--secondary-nav-surface-soft), rgba(255, 255, 255, 0.88));
-  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), var(--secondary-nav-item-shadow-active);
+  border-color: rgba(217, 119, 6, 0.34);
+  background: linear-gradient(180deg, rgba(255, 237, 213, 0.96), rgba(255, 251, 235, 0.88));
+  box-shadow: inset 3px 0 0 #d97706, var(--secondary-nav-item-shadow-active);
 }
 
 .workflow-definition-version-chip strong {
@@ -2836,21 +2865,21 @@ body.quick-chat-window .quick-chat-input {
   height: 30px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.18);
-  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.12), rgba(255, 255, 255, 0.92));
-  color: var(--secondary-nav-accent);
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.92));
+  color: #c2410c;
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.08);
 }
 
 .workflow-definition-state-list-head .btn-ghost:hover,
 .workflow-definition-state-head-actions .btn-ghost:hover,
 .workflow-definition-inline-actions .btn-ghost:hover {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
-  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.18), rgba(255, 255, 255, 0.94));
-  color: var(--accent-hover);
-  box-shadow: 0 10px 22px rgba(var(--secondary-nav-accent-rgb), 0.12);
+  border-color: rgba(249, 115, 22, 0.28);
+  background: linear-gradient(180deg, rgba(255, 237, 213, 0.98), rgba(255, 247, 237, 0.94));
+  color: #9a3412;
+  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.12);
   transform: translateY(-1px);
 }
 
@@ -2884,23 +2913,21 @@ body.quick-chat-window .quick-chat-input {
   font: inherit;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.12);
-  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.08), rgba(255, 255, 255, 0.92));
-  box-shadow: 0 10px 20px rgba(var(--secondary-nav-accent-rgb), 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(248, 250, 252, 0.9);
   cursor: pointer;
-  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .workflow-definition-state-list-item:hover {
-  transform: translateY(-1px);
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.22);
-  box-shadow: var(--secondary-nav-item-shadow-hover);
+  border-color: rgba(249, 115, 22, 0.22);
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.08);
 }
 
 .workflow-definition-state-list-item.active {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.32);
-  background: linear-gradient(180deg, var(--secondary-nav-surface-soft), rgba(255, 255, 255, 0.9));
-  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), var(--secondary-nav-item-shadow-active);
+  border-color: rgba(249, 115, 22, 0.28);
+  background: rgba(255, 247, 237, 0.92);
+  box-shadow: inset 3px 0 0 #f97316;
 }
 
 .workflow-definition-state-list-item strong {
@@ -2997,10 +3024,6 @@ body.quick-chat-window .quick-chat-input {
   background: rgba(241, 245, 249, 0.9);
 }
 
-#workflow-definition-key {
-  background: rgba(241, 245, 249, 0.9);
-}
-
 .workflow-definition-field.cards-management-field-invalid input:not([type="checkbox"]),
 .workflow-definition-field.cards-management-field-invalid select,
 .workflow-definition-field.cards-management-field-invalid textarea {
@@ -3018,6 +3041,8 @@ body.quick-chat-window .quick-chat-input {
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 14px;
   background: rgba(248, 250, 252, 0.88);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .workflow-definition-checkbox-title {
@@ -3026,6 +3051,7 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-checkbox-control {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -3034,10 +3060,16 @@ body.quick-chat-window .quick-chat-input {
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .workflow-definition-checkbox-control input[type="checkbox"] {
   position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -3090,18 +3122,18 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
-  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(236, 253, 245, 0.96);
 }
 
 .workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch .workflow-definition-switch-track {
-  background: rgba(var(--secondary-nav-accent-rgb), 0.24);
+  background: rgba(16, 185, 129, 0.24);
 }
 
 .workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch .workflow-definition-switch-thumb {
   transform: translateX(14px);
-  background: var(--secondary-nav-accent);
-  box-shadow: 0 2px 10px rgba(var(--secondary-nav-accent-rgb), 0.28);
+  background: #10b981;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.28);
 }
 
 .workflow-definition-choice-grid {
@@ -3421,7 +3453,7 @@ body.quick-chat-window .quick-chat-input {
 .cards-management-toolbar {
   align-items: center;
   padding: 4px;
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.14);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.7);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -3434,10 +3466,10 @@ body.quick-chat-window .quick-chat-input {
   width: 30px;
   height: 30px;
   padding: 0;
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.16);
   border-radius: 10px;
-  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
-  color: var(--secondary-nav-accent);
+  background: rgba(236, 253, 245, 0.92);
+  color: #047857;
   cursor: pointer;
   font-size: 15px;
   font-weight: 800;
@@ -3474,9 +3506,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-icon-btn:hover {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
-  background: rgba(var(--secondary-nav-accent-rgb), 0.14);
-  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.1);
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(209, 250, 229, 0.96);
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.1);
   transform: translateY(-1px);
 }
 
@@ -3514,8 +3546,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-toggle-btn:hover {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
-  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
+  border-color: rgba(16, 185, 129, 0.24);
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.08);
 }
 
 .cards-management-toggle-btn:disabled {
@@ -3547,18 +3579,18 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-toggle-btn.active {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
-  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(236, 253, 245, 0.96);
 }
 
 .cards-management-toggle-btn.active .cards-management-toggle-track {
-  background: rgba(var(--secondary-nav-accent-rgb), 0.24);
+  background: rgba(16, 185, 129, 0.24);
 }
 
 .cards-management-toggle-btn.active .cards-management-toggle-thumb {
   transform: translateX(14px);
-  background: var(--secondary-nav-accent);
-  box-shadow: 0 2px 10px rgba(var(--secondary-nav-accent-rgb), 0.28);
+  background: #10b981;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.28);
 }
 
 .cards-management-rows {
@@ -3577,7 +3609,7 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-row {
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.16);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.78);
   padding: 14px;
@@ -3605,9 +3637,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-draggable.drag-over {
-  border-color: rgba(var(--secondary-nav-accent-rgb), 0.42);
-  box-shadow: 0 0 0 3px rgba(var(--secondary-nav-accent-rgb), 0.12);
-  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.12), rgba(255, 255, 255, 0.92));
+  border-color: rgba(16, 185, 129, 0.42);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(255, 255, 255, 0.92));
 }
 
 .cards-management-draggable.drag-over::after {
@@ -3616,8 +3648,8 @@ body.quick-chat-window .quick-chat-input {
   margin-top: 10px;
   padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(var(--secondary-nav-accent-rgb), 0.08);
-  color: var(--secondary-nav-accent);
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
   font-size: 12px;
   font-weight: 700;
 }
@@ -3649,8 +3681,8 @@ body.quick-chat-window .quick-chat-input {
   width: 26px;
   height: 26px;
   border-radius: 10px;
-  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
-  color: var(--secondary-nav-accent);
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
   font-weight: 800;
   letter-spacing: 0.08em;
   user-select: none;
@@ -3680,9 +3712,7 @@ body.quick-chat-window .quick-chat-input {
   min-height: 180px;
   padding: 10px;
   border-radius: 18px;
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(241, 245, 249, 0.92), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, rgba(241, 245, 249, 0.92), rgba(255, 255, 255, 0.92));
   border: 1px solid rgba(148, 163, 184, 0.18);
 }
 
@@ -3821,7 +3851,7 @@ body.quick-chat-window .quick-chat-input {
 
 .cards-management-detail.cards-management-readonly .cards-management-editor-panel .workflow-definition-panel-note::after {
   content: " · 只读";
-  color: #0f766e;
+  color: #047857;
   font-weight: 700;
 }
 
@@ -3867,7 +3897,7 @@ body.quick-chat-window .quick-chat-input {
 
 .cards-management-reference-item {
   padding: 14px;
-  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.14);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
 }
