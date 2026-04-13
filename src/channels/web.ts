@@ -40,6 +40,7 @@ import {
   listAgentQueries,
 } from '../db.js';
 import {
+  deleteWorkflowDefinitionVersion,
   getPublishedWorkflowDefinition,
   getWorkflowDefinitionBundle,
   listWorkflowDefinitionBundles,
@@ -433,6 +434,10 @@ class WebChannel {
         if (suffix.endsWith('/publish') && req.method === 'POST') {
           const key = suffix.slice(0, -'/publish'.length);
           return this.apiPublishWorkflowDefinition(key, req, res);
+        }
+        if (suffix.endsWith('/version') && req.method === 'DELETE') {
+          const key = suffix.slice(0, -'/version'.length);
+          return this.apiDeleteWorkflowDefinitionVersion(key, req, res);
         }
         if (req.method === 'GET') {
           return this.apiGetWorkflowDefinition(suffix, res);
@@ -1681,6 +1686,40 @@ class WebChannel {
     loadWorkflowConfigs();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, definition: result.definition }));
+  }
+
+  private async apiDeleteWorkflowDefinitionVersion(
+    key: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown = {};
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      // Allow empty body fallback to fail validation below.
+    }
+
+    const data = body as { version?: number };
+    if (!Number.isInteger(data.version) || Number(data.version) <= 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'version required' }));
+      return;
+    }
+
+    const result = deleteWorkflowDefinitionVersion({
+      key,
+      version: Number(data.version),
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+
+    loadWorkflowConfigs();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   private async apiGetCards(res: http.ServerResponse): Promise<void> {

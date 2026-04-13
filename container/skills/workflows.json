@@ -11,7 +11,7 @@
     },
     "entry_points": {
       "plan": { "state": "plan" },
-      "dev": { "state": "dev", "requires_deliverable": true, "deliverable_role": "plan" },
+      "dev": { "state": "dev", "requires_deliverable": true, "deliverable_role": "planner" },
       "testing": { "state": "awaiting_confirm", "requires_deliverable": true }
     },
     "states": {

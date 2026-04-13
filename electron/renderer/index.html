@@ -556,8 +556,6 @@
                 <div id="workflow-definition-meta" class="workflow-definition-meta"></div>
               </div>
               <div class="workflow-definition-hero-actions">
-                <button id="workflow-definition-copy-btn" class="btn-ghost">复制已发布版本</button>
-                <button id="workflow-definition-copy-version-btn" class="btn-ghost">复制选中版本</button>
                 <button id="workflow-definition-save-btn" class="btn-ghost workflow-definition-save-btn">保存草稿</button>
                 <button id="workflow-definition-publish-btn" class="btn-primary">发布草稿</button>
               </div>
@@ -566,12 +564,12 @@
             <section class="workflow-definition-panel">
               <div class="workflow-definition-panel-head">
                 <div class="workflow-definition-panel-title">版本列表</div>
-                <div id="workflow-definition-version-summary" class="workflow-definition-panel-note"></div>
+                <div id="workflow-definition-version-summary" class="workflow-definition-panel-note">右键版本可复制、发布、对比或删除</div>
               </div>
               <div id="workflow-definition-versions" class="workflow-definition-versions"></div>
             </section>
 
-            <section class="workflow-definition-grid">
+            <section id="workflow-definition-editor-grid" class="workflow-definition-grid">
               <section class="workflow-definition-panel">
                 <div class="workflow-definition-panel-head">
                   <div class="workflow-definition-panel-title">Draft 编辑器</div>
@@ -691,23 +689,27 @@
                   <pre id="workflow-definition-preview" class="workflow-definition-code-block"></pre>
                 </section>
 
-                <section class="workflow-definition-panel">
-                  <div class="workflow-definition-panel-head">
-                    <div class="workflow-definition-panel-title">Draft vs Published</div>
-                    <div id="workflow-definition-diff-summary" class="workflow-definition-panel-note"></div>
-                  </div>
-                  <div id="workflow-definition-diff" class="workflow-definition-diff"></div>
-                </section>
-
-                <section class="workflow-definition-panel">
-                  <div class="workflow-definition-panel-head">
-                    <div class="workflow-definition-panel-title">版本内容</div>
-                    <div id="workflow-definition-selected-version-label" class="workflow-definition-panel-note"></div>
-                  </div>
-                  <pre id="workflow-definition-version-json" class="workflow-definition-code-block"></pre>
-                </section>
               </section>
             </section>
+
+            <section id="workflow-definition-readonly-panel" class="workflow-definition-panel hidden">
+              <div class="workflow-definition-panel-head">
+                <div class="workflow-definition-panel-title">版本详情</div>
+                <div id="workflow-definition-readonly-summary" class="workflow-definition-panel-note"></div>
+              </div>
+              <pre id="workflow-definition-readonly-json" class="workflow-definition-code-block"></pre>
+            </section>
+
+            <div id="workflow-definition-diff-modal" class="workflow-definition-diff-modal hidden">
+              <div class="workflow-definition-diff-modal-card">
+                <div class="workflow-definition-panel-head">
+                  <div class="workflow-definition-panel-title">版本差异</div>
+                  <button id="workflow-definition-diff-close-btn" type="button" class="btn-ghost">关闭</button>
+                </div>
+                <div id="workflow-definition-diff-summary" class="workflow-definition-panel-note"></div>
+                <div id="workflow-definition-diff" class="workflow-definition-diff"></div>
+              </div>
+            </div>
           </div>
         </main>
       </section>

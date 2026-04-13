@@ -32,12 +32,14 @@ var workflowDefinitionDetail = document.getElementById("workflow-definition-deta
 var workflowDefinitionTitle = document.getElementById("workflow-definition-title");
 var workflowDefinitionSummary = document.getElementById("workflow-definition-summary");
 var workflowDefinitionMeta = document.getElementById("workflow-definition-meta");
-var workflowDefinitionCopyBtn = document.getElementById("workflow-definition-copy-btn");
-var workflowDefinitionCopyVersionBtn = document.getElementById("workflow-definition-copy-version-btn");
 var workflowDefinitionSaveBtn = document.getElementById("workflow-definition-save-btn");
 var workflowDefinitionPublishBtn = document.getElementById("workflow-definition-publish-btn");
 var workflowDefinitionVersionSummary = document.getElementById("workflow-definition-version-summary");
 var workflowDefinitionVersions = document.getElementById("workflow-definition-versions");
+var workflowDefinitionEditorGrid = document.getElementById("workflow-definition-editor-grid");
+var workflowDefinitionReadonlyPanel = document.getElementById("workflow-definition-readonly-panel");
+var workflowDefinitionReadonlySummary = document.getElementById("workflow-definition-readonly-summary");
+var workflowDefinitionReadonlyJson = document.getElementById("workflow-definition-readonly-json");
 var workflowDefinitionBundleLabelInput = document.getElementById("workflow-definition-bundle-label");
 var workflowDefinitionKeyInput = document.getElementById("workflow-definition-key");
 var workflowDefinitionNameInput = document.getElementById("workflow-definition-name");
@@ -66,8 +68,8 @@ var workflowDefinitionGraph = document.getElementById("workflow-definition-graph
 var workflowDefinitionPreview = document.getElementById("workflow-definition-preview");
 var workflowDefinitionDiffSummary = document.getElementById("workflow-definition-diff-summary");
 var workflowDefinitionDiff = document.getElementById("workflow-definition-diff");
-var workflowDefinitionSelectedVersionLabel = document.getElementById("workflow-definition-selected-version-label");
-var workflowDefinitionVersionJson = document.getElementById("workflow-definition-version-json");
+var workflowDefinitionDiffModal = document.getElementById("workflow-definition-diff-modal");
+var workflowDefinitionDiffCloseBtn = document.getElementById("workflow-definition-diff-close-btn");
 var cardsManagementList = document.getElementById("cards-management-list");
 var cardsManagementRefreshBtn = document.getElementById("cards-management-refresh-btn");
 var cardsManagementCreateBtn = document.getElementById("cards-management-create-btn");
@@ -222,6 +224,7 @@ var workflowDefinitionBundles = [];
 var currentWorkflowDefinitionKey = "";
 var currentWorkflowDefinitionDetail = null;
 var workflowDefinitionSelectedVersion = null;
+var workflowDefinitionDiffFocus = null;
 var workflowDefinitionSelectedRoleKey = "";
 var workflowDefinitionSelectedEntryPointKey = "";
 var workflowDefinitionSelectedStateKey = "";
@@ -2035,6 +2038,10 @@ function getSelectedWorkflowDefinitionVersion() {
   );
 }
 
+function isSelectedWorkflowDefinitionDraft() {
+  return getSelectedWorkflowDefinitionVersion()?.status === "draft";
+}
+
 function parseWorkflowDefinitionJsonField(label, rawValue, fallback) {
   const source = typeof rawValue === "string" ? rawValue.trim() : "";
   if (!source) {
@@ -2905,6 +2912,63 @@ function renderWorkflowDefinitionPreview(preview) {
 
 function renderWorkflowDefinitionDiff(detail) {
   if (!workflowDefinitionDiff || !workflowDefinitionDiffSummary) return;
+  if (workflowDefinitionDiffFocus) {
+    const source = getWorkflowDefinitionVersionByNumber(workflowDefinitionDiffFocus.sourceVersion);
+    const target = getWorkflowDefinitionVersionByNumber(workflowDefinitionDiffFocus.targetVersion);
+    if (source && target) {
+      const left = stringifyPrettyJson(getWorkflowDefinitionDiffComparable(source)).split("\n");
+      const right = stringifyPrettyJson(getWorkflowDefinitionDiffComparable(target)).split("\n");
+      const maxLength = Math.max(left.length, right.length);
+      let changedCount = 0;
+      const rows = [];
+
+      for (let i = 0; i < maxLength; i += 1) {
+        const leftLine = left[i];
+        const rightLine = right[i];
+        if (leftLine === rightLine) {
+          rows.push({
+            type: "unchanged",
+            lineNo: i + 1,
+            text: `  ${leftLine ?? ""}`,
+          });
+          continue;
+        }
+        if (leftLine !== undefined) {
+          changedCount += 1;
+          rows.push({
+            type: "removed",
+            lineNo: i + 1,
+            text: `- ${leftLine}`,
+          });
+        }
+        if (rightLine !== undefined) {
+          changedCount += 1;
+          rows.push({
+            type: "added",
+            lineNo: i + 1,
+            text: `+ ${rightLine}`,
+          });
+        }
+      }
+
+      workflowDefinitionDiffSummary.textContent = `v${source.version} -> v${target.version} · ${changedCount} 处行级变更`;
+      workflowDefinitionDiff.innerHTML = rows.length
+        ? rows
+            .map(
+              (row) => `
+                <div class="workflow-definition-diff-line ${escapeHtml(row.type)}">
+                  <span class="workflow-definition-diff-line-no">${escapeHtml(String(row.lineNo))}</span>
+                  <span>${escapeHtml(row.text)}</span>
+                </div>
+              `,
+            )
+            .join("")
+        : `<div class="workflow-definition-diff-empty">v${source.version} 与 v${target.version} 当前完全一致。</div>`;
+      return;
+    }
+    clearWorkflowDefinitionVersionDiffFocus();
+  }
+
   const draft = detail?.draft_definition || null;
   const published = detail?.published_definition || null;
   if (!draft && !published) {
@@ -2920,8 +2984,8 @@ function renderWorkflowDefinitionDiff(detail) {
     return;
   }
 
-  const left = stringifyPrettyJson(published).split("\n");
-  const right = stringifyPrettyJson(draft).split("\n");
+  const left = stringifyPrettyJson(getWorkflowDefinitionDiffComparable(published)).split("\n");
+  const right = stringifyPrettyJson(getWorkflowDefinitionDiffComparable(draft)).split("\n");
   const maxLength = Math.max(left.length, right.length);
   let changedCount = 0;
   const rows = [];
@@ -3864,29 +3928,181 @@ function renderWorkflowDefinitionGraph(definition) {
   });
 }
 
-function renderWorkflowDefinitionVersionInspector() {
-  if (!workflowDefinitionSelectedVersionLabel || !workflowDefinitionVersionJson) return;
-  const selected = getSelectedWorkflowDefinitionVersion();
-  if (!selected) {
-    workflowDefinitionSelectedVersionLabel.textContent = "暂无版本";
-    workflowDefinitionVersionJson.textContent = "";
+function renderWorkflowDefinitionReadonlyDetail(version) {
+  if (!workflowDefinitionReadonlySummary || !workflowDefinitionReadonlyJson) return;
+  if (!version) {
+    workflowDefinitionReadonlySummary.textContent = "暂无版本详情";
+    workflowDefinitionReadonlyJson.textContent = "";
     return;
   }
-  workflowDefinitionSelectedVersion = selected.version;
-  workflowDefinitionSelectedVersionLabel.textContent = `v${selected.version} · ${selected.status}`;
-  workflowDefinitionVersionJson.textContent = stringifyPrettyJson(selected);
+  const updatedAt = version?.metadata?.updated_at ? ` · 更新于 ${version.metadata.updated_at}` : "";
+  workflowDefinitionReadonlySummary.textContent =
+    `当前选中 v${version.version} · ${getWorkflowDefinitionVersionStatusLabel(version.status)}${updatedAt}`;
+  workflowDefinitionReadonlyJson.textContent = stringifyPrettyJson(version);
+}
+
+function getWorkflowDefinitionDiffComparable(version) {
+  if (!version) return null;
+  const metadata = cloneJson(version.metadata || {});
+  delete metadata.created_at;
+  delete metadata.updated_at;
+  delete metadata.based_on_version;
+  return {
+    name: version.name || "",
+    description: version.description || "",
+    roles: cloneJson(version.roles || {}),
+    entry_points: cloneJson(version.entry_points || {}),
+    states: cloneJson(version.states || {}),
+    status_labels: cloneJson(version.status_labels || {}),
+    metadata,
+  };
+}
+
+function getWorkflowDefinitionVersionStatusLabel(status) {
+  if (status === "published") return "Published";
+  if (status === "draft") return "Draft";
+  if (status === "archived") return "Archived";
+  return status || "Unknown";
+}
+
+function getWorkflowDefinitionVersionByNumber(versionNumber) {
+  return getWorkflowDefinitionVersionList().find((version) => version.version === versionNumber) || null;
+}
+
+function clearWorkflowDefinitionVersionDiffFocus() {
+  workflowDefinitionDiffFocus = null;
+}
+
+function closeWorkflowDefinitionDiffModal() {
+  clearWorkflowDefinitionVersionDiffFocus();
+  if (workflowDefinitionDiffModal) {
+    workflowDefinitionDiffModal.classList.add("hidden");
+  }
+}
+
+function openWorkflowDefinitionDiffModal(sourceVersion, targetVersion) {
+  setWorkflowDefinitionVersionDiffFocus(sourceVersion, targetVersion);
+  renderWorkflowDefinitionDiff(currentWorkflowDefinitionDetail);
+  if (workflowDefinitionDiffModal) {
+    workflowDefinitionDiffModal.classList.remove("hidden");
+  }
+}
+
+function setWorkflowDefinitionVersionDiffFocus(sourceVersion, targetVersion) {
+  if (!sourceVersion || !targetVersion || sourceVersion.version === targetVersion.version) {
+    clearWorkflowDefinitionVersionDiffFocus();
+    return;
+  }
+  workflowDefinitionDiffFocus = {
+    sourceVersion: sourceVersion.version,
+    targetVersion: targetVersion.version,
+  };
+}
+
+function showWorkflowDefinitionVersionContextMenu(e, version) {
+  document.querySelector(".context-menu")?.remove();
+
+  const published = currentWorkflowDefinitionDetail?.published_definition || null;
+  const draft = currentWorkflowDefinitionDetail?.draft_definition || null;
+  const remainingVersions = getWorkflowDefinitionVersionList().filter((item) => item.version !== version.version);
+  const compareTarget =
+    version.status === "published"
+      ? draft && draft.version !== version.version
+        ? draft
+        : null
+      : published && published.version !== version.version
+        ? published
+        : draft && draft.version !== version.version
+          ? draft
+          : null;
+  const canCopy = version.status !== "draft";
+  const canPublish = version.status !== "published";
+  const canDelete =
+    version.status !== "published" &&
+    remainingVersions.length > 0 &&
+    remainingVersions.some((item) => item.status === "published");
+
+  const items = [
+    {
+      label: canCopy ? "复制为 draft" : "当前版本已是 draft",
+      icon: "⎘",
+      disabled: !canCopy,
+      action: async () => {
+        await copySelectedWorkflowDefinitionVersionToDraft(version);
+      },
+    },
+    {
+      label: canPublish ? "发布该版本" : "当前版本已发布",
+      icon: "🚀",
+      disabled: !canPublish,
+      action: async () => {
+        await publishWorkflowDefinitionVersion(version);
+      },
+    },
+    {
+      label: compareTarget
+        ? `查看与 v${compareTarget.version} 的差异`
+        : "当前没有可对比版本",
+      icon: "⇄",
+      disabled: !compareTarget,
+      action: async () => {
+        workflowDefinitionSelectedVersion = version.version;
+        renderWorkflowDefinitionVersions();
+        openWorkflowDefinitionDiffModal(compareTarget, version);
+      },
+    },
+    {
+      label: canDelete ? "删除该版本" : "当前版本不可删除",
+      icon: "🗑",
+      disabled: !canDelete,
+      action: async () => {
+        await deleteWorkflowDefinitionVersion(version);
+      },
+    },
+  ];
+
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
+
+  for (const item of items) {
+    const el = document.createElement("div");
+    el.className = `context-menu-item${item.disabled ? " disabled" : ""}`;
+    el.innerHTML = `<span class="context-menu-icon">${item.icon}</span>${escapeHtml(item.label)}`;
+    if (!item.disabled) {
+      el.addEventListener("click", async () => {
+        menu.remove();
+        await item.action();
+      });
+    }
+    menu.appendChild(el);
+  }
+
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+  document.body.appendChild(menu);
+
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) menu.style.left = `${window.innerWidth - rect.width - 8}px`;
+  if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 8}px`;
+
+  const closeHandler = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener("click", closeHandler);
+    }
+  };
+  requestAnimationFrame(() => document.addEventListener("click", closeHandler));
 }
 
 function renderWorkflowDefinitionVersions() {
   if (!workflowDefinitionVersions || !workflowDefinitionVersionSummary) return;
   const versions = getWorkflowDefinitionVersionList();
   workflowDefinitionVersionSummary.textContent = versions.length
-    ? `共 ${versions.length} 个版本`
+    ? `共 ${versions.length} 个版本 · 右键版本可复制、发布、对比或删除`
     : "暂无版本";
   workflowDefinitionVersions.innerHTML = "";
   if (!versions.length) {
     workflowDefinitionVersions.innerHTML = '<div class="workflow-definition-list-empty">当前 definition 还没有任何版本。</div>';
-    renderWorkflowDefinitionVersionInspector();
     return;
   }
   versions.forEach((version) => {
@@ -3894,17 +4110,27 @@ function renderWorkflowDefinitionVersions() {
     button.type = "button";
     button.className = `workflow-definition-version-chip${version.version === workflowDefinitionSelectedVersion ? " active" : ""}`;
     button.innerHTML = `
-      <strong>v${escapeHtml(String(version.version))}</strong>
-      <span>${escapeHtml(version.status || "unknown")}</span>
+      <div class="workflow-definition-version-chip-head">
+        <strong>v${escapeHtml(String(version.version))}</strong>
+        <span class="workflow-definition-version-status workflow-definition-version-status-${escapeHtml(version.status || "unknown")}">
+          ${escapeHtml(getWorkflowDefinitionVersionStatusLabel(version.status))}
+        </span>
+      </div>
       <span>${escapeHtml(version.name || version.key || "")}</span>
     `;
     button.addEventListener("click", () => {
       workflowDefinitionSelectedVersion = version.version;
-      renderWorkflowDefinitionVersions();
+      clearWorkflowDefinitionVersionDiffFocus();
+      renderWorkflowDefinitionDetailPane();
+    });
+    button.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      workflowDefinitionSelectedVersion = version.version;
+      renderWorkflowDefinitionDetailPane();
+      showWorkflowDefinitionVersionContextMenu(e, version);
     });
     workflowDefinitionVersions.appendChild(button);
   });
-  renderWorkflowDefinitionVersionInspector();
 }
 
 function renderWorkflowDefinitionDetailPane() {
@@ -3917,7 +4143,9 @@ function renderWorkflowDefinitionDetailPane() {
 
   const detail = currentWorkflowDefinitionDetail;
   const bundle = detail.bundle || {};
-  const editable = getEditableWorkflowDefinition();
+  const selectedVersion = getSelectedWorkflowDefinitionVersion();
+  const isDraftSelected = selectedVersion?.status === "draft";
+  const editable = isDraftSelected ? selectedVersion : null;
   const graphSource = editable;
   workflowDefinitionEmpty.classList.add("hidden");
   workflowDefinitionDetail.classList.remove("hidden");
@@ -3945,23 +4173,29 @@ function renderWorkflowDefinitionDetailPane() {
     workflowDefinitionMeta.innerHTML = meta.join("");
   }
 
-  if (workflowDefinitionCopyBtn) {
-    workflowDefinitionCopyBtn.disabled = !detail.published_definition;
-  }
-  if (workflowDefinitionCopyVersionBtn) {
-    workflowDefinitionCopyVersionBtn.disabled = !getSelectedWorkflowDefinitionVersion();
-  }
   if (workflowDefinitionPublishBtn) {
-    workflowDefinitionPublishBtn.disabled = !detail.draft_definition;
+    workflowDefinitionPublishBtn.disabled = !isDraftSelected;
+    workflowDefinitionPublishBtn.classList.toggle("hidden", !isDraftSelected);
+  }
+  if (workflowDefinitionSaveBtn) {
+    workflowDefinitionSaveBtn.classList.toggle("hidden", !isDraftSelected);
+  }
+  if (workflowDefinitionEditorGrid) {
+    workflowDefinitionEditorGrid.classList.toggle("hidden", !isDraftSelected);
+  }
+  if (workflowDefinitionReadonlyPanel) {
+    workflowDefinitionReadonlyPanel.classList.toggle("hidden", !!isDraftSelected);
   }
 
   if (editable) {
     renderWorkflowDefinitionEditor(editable, bundle);
   }
+  renderWorkflowDefinitionReadonlyDetail(isDraftSelected ? null : selectedVersion);
   renderWorkflowDefinitionVersions();
-  renderWorkflowDefinitionGraph(graphSource);
-  renderWorkflowDefinitionPreview(detail.preview || null);
-  renderWorkflowDefinitionDiff(detail);
+  if (isDraftSelected) {
+    renderWorkflowDefinitionGraph(graphSource);
+    renderWorkflowDefinitionPreview(detail.preview || null);
+  }
 }
 
 function renderWorkflowDefinitionList() {
@@ -4015,6 +4249,10 @@ async function loadWorkflowDefinitionDetail(key) {
     }
     currentWorkflowDefinitionDetail = data;
     workflowDefinitionReferenceDetails[safeKey] = data;
+    clearWorkflowDefinitionVersionDiffFocus();
+    if (workflowDefinitionDiffModal) {
+      workflowDefinitionDiffModal.classList.add("hidden");
+    }
     workflowDefinitionSelectedRoleKey = "";
     workflowDefinitionSelectedEntryPointKey = "";
     workflowDefinitionSelectedStateKey = "";
@@ -4060,12 +4298,20 @@ async function loadWorkflowDefinitions(options = {}) {
     } else {
       currentWorkflowDefinitionDetail = null;
       workflowDefinitionSelectedVersion = null;
+      clearWorkflowDefinitionVersionDiffFocus();
+      if (workflowDefinitionDiffModal) {
+        workflowDefinitionDiffModal.classList.add("hidden");
+      }
       renderWorkflowDefinitionDetailPane();
     }
   } catch (err) {
     console.error("Failed to load workflow definitions:", err);
     workflowDefinitionBundles = [];
     currentWorkflowDefinitionDetail = null;
+    clearWorkflowDefinitionVersionDiffFocus();
+    if (workflowDefinitionDiffModal) {
+      workflowDefinitionDiffModal.classList.add("hidden");
+    }
     renderWorkflowDefinitionList();
     renderWorkflowDefinitionDetailPane();
     if (workflowDefinitionList) {
@@ -4129,6 +4375,35 @@ async function publishWorkflowDefinitionDraft() {
   }
 }
 
+async function publishWorkflowDefinitionVersion(version) {
+  const bundleKey = currentWorkflowDefinitionDetail?.bundle?.key;
+  if (!bundleKey || !version?.version) {
+    alert("当前没有可发布的版本");
+    return;
+  }
+  if (!confirm(`确认发布 ${bundleKey} 的 v${version.version} 吗？`)) {
+    return;
+  }
+  try {
+    const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(bundleKey)}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ version: version.version }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    clearWorkflowDefinitionVersionDiffFocus();
+    workflowDefinitionSelectedVersion = data?.definition?.version || version.version;
+    showToast(`已发布 v${version.version}`);
+    await loadWorkflowDefinitions({ preserveSelection: true });
+    await loadWorkflowDefinitionDetail(bundleKey);
+  } catch (err) {
+    console.error("Failed to publish workflow definition version:", err);
+    alert(err instanceof Error ? err.message : "发布版本失败");
+  }
+}
+
 async function copyPublishedWorkflowDefinitionToDraft() {
   const published = currentWorkflowDefinitionDetail?.published_definition;
   const bundle = currentWorkflowDefinitionDetail?.bundle;
@@ -4162,6 +4437,8 @@ async function copyPublishedWorkflowDefinitionToDraft() {
     if (!res.ok) {
       throw new Error(data?.error || `HTTP ${res.status}`);
     }
+    clearWorkflowDefinitionVersionDiffFocus();
+    workflowDefinitionSelectedVersion = data?.definition?.version || published.version;
     showToast("已复制 published 到 draft");
     await loadWorkflowDefinitions({ preserveSelection: true });
     await loadWorkflowDefinitionDetail(bundle.key);
@@ -4171,8 +4448,8 @@ async function copyPublishedWorkflowDefinitionToDraft() {
   }
 }
 
-async function copySelectedWorkflowDefinitionVersionToDraft() {
-  const selected = getSelectedWorkflowDefinitionVersion();
+async function copySelectedWorkflowDefinitionVersionToDraft(selectedVersion) {
+  const selected = selectedVersion || getSelectedWorkflowDefinitionVersion();
   const bundle = currentWorkflowDefinitionDetail?.bundle;
   if (!selected || !bundle?.key) {
     alert("当前没有可复制的版本");
@@ -4204,12 +4481,51 @@ async function copySelectedWorkflowDefinitionVersionToDraft() {
     if (!res.ok) {
       throw new Error(data?.error || `HTTP ${res.status}`);
     }
+    clearWorkflowDefinitionVersionDiffFocus();
+    workflowDefinitionSelectedVersion = data?.definition?.version || null;
     showToast(`已复制 v${selected.version} 到 draft`);
     await loadWorkflowDefinitions({ preserveSelection: true });
     await loadWorkflowDefinitionDetail(bundle.key);
   } catch (err) {
     console.error("Failed to copy selected workflow definition version:", err);
     alert(err instanceof Error ? err.message : "复制选中版本失败");
+  }
+}
+
+async function deleteWorkflowDefinitionVersion(version) {
+  const bundleKey = currentWorkflowDefinitionDetail?.bundle?.key;
+  if (!bundleKey || !version?.version) {
+    alert("当前没有可删除的版本");
+    return;
+  }
+  if (!confirm(`确认删除 ${bundleKey} 的 v${version.version} 吗？`)) {
+    return;
+  }
+  try {
+    const res = await apiFetch(`/api/workflow-definitions/${encodeURIComponent(bundleKey)}/version`, {
+      method: "DELETE",
+      body: JSON.stringify({ version: version.version }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    if (workflowDefinitionSelectedVersion === version.version) {
+      workflowDefinitionSelectedVersion = null;
+    }
+    if (
+      workflowDefinitionDiffFocus &&
+      (workflowDefinitionDiffFocus.sourceVersion === version.version ||
+        workflowDefinitionDiffFocus.targetVersion === version.version)
+    ) {
+      clearWorkflowDefinitionVersionDiffFocus();
+    }
+    showToast(`已删除 v${version.version}`);
+    await loadWorkflowDefinitions({ preserveSelection: true });
+    await loadWorkflowDefinitionDetail(bundleKey);
+  } catch (err) {
+    console.error("Failed to delete workflow definition version:", err);
+    alert(err instanceof Error ? err.message : "删除版本失败");
   }
 }
 
@@ -9711,14 +10027,16 @@ if (workflowDefinitionPublishBtn) {
     await publishWorkflowDefinitionDraft();
   });
 }
-if (workflowDefinitionCopyBtn) {
-  workflowDefinitionCopyBtn.addEventListener("click", async () => {
-    await copyPublishedWorkflowDefinitionToDraft();
+if (workflowDefinitionDiffCloseBtn) {
+  workflowDefinitionDiffCloseBtn.addEventListener("click", () => {
+    closeWorkflowDefinitionDiffModal();
   });
 }
-if (workflowDefinitionCopyVersionBtn) {
-  workflowDefinitionCopyVersionBtn.addEventListener("click", async () => {
-    await copySelectedWorkflowDefinitionVersionToDraft();
+if (workflowDefinitionDiffModal) {
+  workflowDefinitionDiffModal.addEventListener("click", (event) => {
+    if (event.target === workflowDefinitionDiffModal) {
+      closeWorkflowDefinitionDiffModal();
+    }
   });
 }
 if (workflowDefinitionStateAddBtn) {

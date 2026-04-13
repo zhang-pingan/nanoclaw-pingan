@@ -193,3 +193,37 @@ export function publishWorkflowDefinitionVersion(input: {
     definition: bundle.versions.find((version) => version.version === target.version),
   };
 }
+
+export function deleteWorkflowDefinitionVersion(input: {
+  key: string;
+  version: number;
+}): { ok?: true; error?: string } {
+  const registry = readWorkflowDefinitionRegistry();
+  const bundle = registry.definitions[input.key];
+  if (!bundle) {
+    return { error: `Workflow definition "${input.key}" 不存在` };
+  }
+
+  const versions = sortVersions(bundle.versions);
+  const target = versions.find((version) => version.version === input.version);
+  if (!target) {
+    return {
+      error: `Workflow definition "${input.key}" 不存在版本 v${input.version}`,
+    };
+  }
+  if (target.status === 'published') {
+    return { error: '已发布版本不支持直接删除' };
+  }
+
+  const remaining = versions.filter((version) => version.version !== input.version);
+  if (!remaining.length) {
+    return { error: '至少需要保留一个版本' };
+  }
+  if (!remaining.some((version) => version.status === 'published')) {
+    return { error: '删除后将没有 published 版本，无法执行' };
+  }
+
+  bundle.versions = remaining;
+  writeWorkflowDefinitionRegistry(registry);
+  return { ok: true };
+}
