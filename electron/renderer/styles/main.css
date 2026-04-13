@@ -417,7 +417,11 @@ html, body {
   flex: 1;
   min-width: 0;
   display: none;
-  background: linear-gradient(180deg, rgba(79, 110, 247, 0.04), rgba(34, 211, 238, 0.03) 22%, transparent 40%), var(--bg-primary);
+  background:
+    radial-gradient(circle at top left, rgba(196, 181, 253, 0.12), transparent 26%),
+    radial-gradient(circle at top right, rgba(148, 163, 184, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(99, 102, 241, 0.04), rgba(99, 102, 241, 0.015) 20%, transparent 42%),
+    var(--bg-primary);
 }
 
 #workbench-screen.active {
@@ -427,13 +431,13 @@ html, body {
 .workbench-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #0369a1;
-  --secondary-nav-accent-rgb: 3, 105, 161;
-  --secondary-nav-kicker-color: #0284c7;
-  --secondary-nav-line-color: #0ea5e9;
-  --secondary-nav-surface-soft: rgba(240, 249, 255, 0.96);
-  --secondary-nav-border-soft: rgba(14, 165, 233, 0.14);
-  --secondary-nav-border-strong: rgba(14, 165, 233, 0.24);
+  --secondary-nav-accent: #6366f1;
+  --secondary-nav-accent-rgb: 99, 102, 241;
+  --secondary-nav-kicker-color: #6d72f6;
+  --secondary-nav-line-color: #a5b4fc;
+  --secondary-nav-surface-soft: rgba(241, 245, 249, 0.96);
+  --secondary-nav-border-soft: rgba(165, 180, 252, 0.12);
+  --secondary-nav-border-strong: rgba(165, 180, 252, 0.2);
   border-right: 1px solid transparent;
   background: linear-gradient(180deg, rgba(0, 167, 240, 0.06), rgba(0, 167, 240, 0) 220px), var(--surface);
   display: flex;
@@ -609,13 +613,15 @@ html, body {
   text-align: center;
   border: 1px dashed rgba(var(--secondary-nav-accent-rgb, 3, 105, 161), 0.22);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.56);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 15, 118, 110), 0.08), rgba(255, 255, 255, 0.72));
+  box-shadow: 0 18px 36px rgba(var(--secondary-nav-accent-rgb, 15, 118, 110), 0.08);
 }
 
 .workbench-detail-empty img {
   width: 116px;
   height: 116px;
   object-fit: contain;
+  filter: drop-shadow(0 12px 24px rgba(var(--secondary-nav-accent-rgb, 15, 118, 110), 0.14));
 }
 
 .workbench-task-detail {
@@ -626,8 +632,8 @@ html, body {
 
 .workbench-task-header,
 .workbench-panel {
-  border: 1px solid rgba(79, 110, 247, 0.1);
-  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb, 15, 118, 110), 0.12);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 15, 118, 110), 0.04), rgba(255, 255, 255, 0.88));
   border-radius: 20px;
   box-shadow: var(--shadow-sm);
 }
@@ -738,7 +744,7 @@ html, body {
   font-size: 14px;
   font-weight: 700;
   margin-bottom: 14px;
-  color: var(--text-primary);
+  color: var(--secondary-nav-accent, var(--text-primary));
 }
 
 .workbench-inline-actions {
@@ -1424,7 +1430,11 @@ html, body {
   flex: 1;
   min-width: 0;
   display: none;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(circle at top left, rgba(254, 249, 195, 0.24), transparent 28%),
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.16), transparent 30%),
+    linear-gradient(180deg, rgba(234, 179, 8, 0.06), rgba(234, 179, 8, 0.02) 22%, transparent 42%),
+    var(--bg-primary);
 }
 
 #memory-management-screen.active {
@@ -1436,8 +1446,9 @@ html, body {
   min-width: 0;
   display: none;
   background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.1), transparent 28%),
-    radial-gradient(circle at right center, rgba(14, 165, 233, 0.08), transparent 32%),
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(251, 191, 36, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(180, 83, 9, 0.05), rgba(180, 83, 9, 0.02) 20%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -1450,8 +1461,9 @@ html, body {
   min-width: 0;
   display: none;
   background:
-    radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 28%),
-    radial-gradient(circle at right center, rgba(59, 130, 246, 0.08), transparent 32%),
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.11), transparent 28%),
+    radial-gradient(circle at top right, rgba(52, 211, 153, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(4, 120, 87, 0.05), rgba(4, 120, 87, 0.02) 20%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -1465,6 +1477,10 @@ html, body {
   --secondary-nav-accent: #b45309;
   --secondary-nav-accent-rgb: 180, 83, 9;
   --secondary-nav-kicker-color: #b45309;
+  --secondary-nav-line-color: #f59e0b;
+  --secondary-nav-surface-soft: rgba(255, 247, 237, 0.96);
+  --secondary-nav-border-soft: rgba(245, 158, 11, 0.14);
+  --secondary-nav-border-strong: rgba(245, 158, 11, 0.24);
   border-right: 1px solid transparent;
   background:
     linear-gradient(180deg, rgba(245, 158, 11, 0.09), rgba(245, 158, 11, 0) 220px),
@@ -1754,13 +1770,15 @@ html, body {
   color: var(--text-muted);
   border: 1px dashed rgba(var(--secondary-nav-accent-rgb, 180, 83, 9), 0.2);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.56);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 180, 83, 9), 0.08), rgba(255, 255, 255, 0.72));
+  box-shadow: 0 18px 36px rgba(var(--secondary-nav-accent-rgb, 180, 83, 9), 0.08);
 }
 
 .workflow-definition-empty img {
   width: 116px;
   height: 116px;
   object-fit: contain;
+  filter: drop-shadow(0 12px 24px rgba(var(--secondary-nav-accent-rgb, 180, 83, 9), 0.14));
 }
 
 .workflow-definition-detail {
@@ -1773,7 +1791,7 @@ html, body {
 .workflow-definition-panel {
   border: 1px solid rgba(180, 83, 9, 0.12);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.86);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 180, 83, 9), 0.04), rgba(255, 255, 255, 0.9));
   box-shadow: 0 18px 32px rgba(148, 163, 184, 0.08);
 }
 
@@ -1908,7 +1926,7 @@ html, body {
 .workflow-definition-panel-title {
   font-size: 16px;
   font-weight: 800;
-  color: var(--text-primary);
+  color: var(--secondary-nav-accent, var(--text-primary));
 }
 
 .workflow-definition-panel-note {
@@ -2441,6 +2459,10 @@ html, body {
   --secondary-nav-accent: #047857;
   --secondary-nav-accent-rgb: 4, 120, 87;
   --secondary-nav-kicker-color: #047857;
+  --secondary-nav-line-color: #10b981;
+  --secondary-nav-surface-soft: rgba(236, 253, 245, 0.96);
+  --secondary-nav-border-soft: rgba(16, 185, 129, 0.14);
+  --secondary-nav-border-strong: rgba(16, 185, 129, 0.24);
   background:
     linear-gradient(180deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0) 220px),
     var(--surface);
@@ -2942,8 +2964,9 @@ html, body {
   min-width: 0;
   display: none;
   background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(15, 23, 42, 0.03), rgba(15, 23, 42, 0) 220px),
+    radial-gradient(circle at top left, rgba(248, 113, 113, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(239, 68, 68, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(220, 38, 38, 0.05), rgba(220, 38, 38, 0.02) 22%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -2954,13 +2977,13 @@ html, body {
 .trace-monitor-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #0369a1;
-  --secondary-nav-accent-rgb: 3, 105, 161;
-  --secondary-nav-kicker-color: #0284c7;
-  --secondary-nav-line-color: #0ea5e9;
-  --secondary-nav-surface-soft: rgba(240, 249, 255, 0.96);
-  --secondary-nav-border-soft: rgba(14, 165, 233, 0.14);
-  --secondary-nav-border-strong: rgba(14, 165, 233, 0.24);
+  --secondary-nav-accent: #dc2626;
+  --secondary-nav-accent-rgb: 220, 38, 38;
+  --secondary-nav-kicker-color: #dc2626;
+  --secondary-nav-line-color: #f87171;
+  --secondary-nav-surface-soft: rgba(254, 242, 242, 0.96);
+  --secondary-nav-border-soft: rgba(248, 113, 113, 0.14);
+  --secondary-nav-border-strong: rgba(248, 113, 113, 0.24);
   border-right: 1px solid transparent;
   background: var(--surface);
   backdrop-filter: blur(16px);
@@ -3034,13 +3057,15 @@ html, body {
   text-align: center;
   border: 1px dashed rgba(var(--secondary-nav-accent-rgb, 3, 105, 161), 0.22);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.56);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 124, 58, 237), 0.08), rgba(255, 255, 255, 0.72));
+  box-shadow: 0 18px 36px rgba(var(--secondary-nav-accent-rgb, 124, 58, 237), 0.08);
 }
 
 .trace-monitor-detail-empty img {
   width: 116px;
   height: 116px;
   object-fit: contain;
+  filter: drop-shadow(0 12px 24px rgba(var(--secondary-nav-accent-rgb, 124, 58, 237), 0.14));
 }
 
 .trace-monitor-detail {
@@ -3051,8 +3076,8 @@ html, body {
 
 .trace-monitor-detail-header,
 .trace-monitor-panel {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 124, 58, 237), 0.04), rgba(255, 255, 255, 0.88));
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb, 124, 58, 237), 0.12);
   border-radius: 22px;
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.07);
 }
@@ -3094,7 +3119,7 @@ html, body {
 .trace-monitor-panel-title {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--secondary-nav-accent, var(--text-primary));
   margin-bottom: 16px;
 }
 
@@ -3102,7 +3127,7 @@ html, body {
   padding: 20px 18px;
   border: 1px dashed rgba(var(--secondary-nav-accent-rgb, 3, 105, 161), 0.22);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 124, 58, 237), 0.08), rgba(255, 255, 255, 0.76));
   color: var(--text-muted);
   text-align: center;
   font-size: 13px;
@@ -3505,13 +3530,13 @@ html, body {
 .memory-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #0369a1;
-  --secondary-nav-accent-rgb: 3, 105, 161;
-  --secondary-nav-kicker-color: #0284c7;
-  --secondary-nav-line-color: #0ea5e9;
-  --secondary-nav-surface-soft: rgba(240, 249, 255, 0.96);
-  --secondary-nav-border-soft: rgba(14, 165, 233, 0.14);
-  --secondary-nav-border-strong: rgba(14, 165, 233, 0.24);
+  --secondary-nav-accent: #eab308;
+  --secondary-nav-accent-rgb: 234, 179, 8;
+  --secondary-nav-kicker-color: #d4a106;
+  --secondary-nav-line-color: #facc15;
+  --secondary-nav-surface-soft: rgba(254, 252, 232, 0.98);
+  --secondary-nav-border-soft: rgba(250, 204, 21, 0.14);
+  --secondary-nav-border-strong: rgba(250, 204, 21, 0.24);
   border-right: 1px solid transparent;
   background: var(--surface);
   display: flex;
@@ -3534,16 +3559,17 @@ html, body {
 
 .memory-main-header {
   padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(var(--secondary-nav-accent-rgb, 37, 99, 235), 0.14);
   display: flex;
   align-items: center;
   gap: 10px;
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 37, 99, 235), 0.08), rgba(255, 255, 255, 0));
 }
 
 .memory-main-header h2 {
   margin: 0;
   font-size: 20px;
-  color: var(--text-primary);
+  color: var(--secondary-nav-accent, var(--text-primary));
 }
 
 .memory-main-body {
@@ -3766,7 +3792,7 @@ html, body {
   padding: 20px 18px;
   color: var(--text-muted);
   text-align: center;
-  background: rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 37, 99, 235), 0.08), rgba(255, 255, 255, 0.76));
 }
 
 .memory-doctor-panel {
@@ -4077,13 +4103,13 @@ html, body {
 #sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #0369a1;
-  --secondary-nav-accent-rgb: 3, 105, 161;
-  --secondary-nav-kicker-color: #0284c7;
-  --secondary-nav-line-color: #0ea5e9;
-  --secondary-nav-surface-soft: rgba(240, 249, 255, 0.96);
-  --secondary-nav-border-soft: rgba(14, 165, 233, 0.14);
-  --secondary-nav-border-strong: rgba(14, 165, 233, 0.24);
+  --secondary-nav-accent: #0ea5e9;
+  --secondary-nav-accent-rgb: 14, 165, 233;
+  --secondary-nav-kicker-color: #38bdf8;
+  --secondary-nav-line-color: #bae6fd;
+  --secondary-nav-surface-soft: rgba(247, 253, 255, 0.995);
+  --secondary-nav-border-soft: rgba(125, 211, 252, 0.12);
+  --secondary-nav-border-strong: rgba(125, 211, 252, 0.22);
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -7057,6 +7083,17 @@ body::after {
   background: var(--surface);
   border-right-color: transparent;
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.76), 0 10px 24px rgba(0, 124, 190, 0.08);
+}
+
+#sidebar,
+.workbench-sidebar,
+.memory-sidebar,
+.workflow-definitions-sidebar,
+.trace-monitor-sidebar {
+  background:
+    radial-gradient(circle at top left, rgba(var(--secondary-nav-accent-rgb), 0.09), transparent 30%),
+    linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.1) 0%, rgba(var(--secondary-nav-accent-rgb), 0.04) 120px, rgba(var(--secondary-nav-accent-rgb), 0) 240px),
+    var(--surface);
 }
 
 #primary-sidebar {
