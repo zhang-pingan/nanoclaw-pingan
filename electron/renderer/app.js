@@ -9900,6 +9900,8 @@ async function openWorkbenchCreateTaskModal() {
     footerStatusEl.textContent = summaryText;
     submitBtn.textContent = state.uploadingFiles > 0 ? "上传中..." : "创建任务";
     if (selectionSummaryEl) {
+      const summaryTitle = getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--";
+      const summarySubtitle = `${state.service || "--"} · ${state.entryPoint || "--"}`;
       const summaryItems = [
         { label: "流程", value: getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--" },
         { label: "入口点", value: state.entryPoint || "--" },
@@ -9920,12 +9922,23 @@ async function openWorkbenchCreateTaskModal() {
         },
         { label: "交付物", value: deliverableRequired ? (deliverableOk ? `已满足 ${requiredFile}` : `缺少 ${requiredFile}`) : "当前入口无需交付物" }
       ];
-      selectionSummaryEl.innerHTML = summaryItems.map((item) => `
-        <div class="workflow-wizard-selection-item">
-          <span>${escapeHtml(item.label)}</span>
-          <strong>${escapeHtml(item.value)}</strong>
+      selectionSummaryEl.innerHTML = `
+        <div class="workflow-wizard-confirm-card" data-state="${escapeAttribute(validationTone)}">
+          <div class="workflow-wizard-confirm-hero">
+            <div class="workflow-wizard-confirm-kicker">任务确认卡</div>
+            <div class="workflow-wizard-confirm-title">${escapeHtml(summaryTitle)}</div>
+            <div class="workflow-wizard-confirm-subtitle">${escapeHtml(summarySubtitle)}</div>
+          </div>
+          <div class="workflow-wizard-confirm-grid">
+            ${summaryItems.map((item) => `
+              <div class="workflow-wizard-selection-item">
+                <span>${escapeHtml(item.label)}</span>
+                <strong>${escapeHtml(item.value)}</strong>
+              </div>
+            `).join("")}
+          </div>
         </div>
-      `).join("");
+      `;
     }
 
     submitBtn.disabled = !requirementName || !state.entryPoint || !state.service || !deliverableOk || state.uploadingFiles > 0;
@@ -9934,21 +9947,22 @@ async function openWorkbenchCreateTaskModal() {
   function refreshWorkbenchCreateModal() {
     ensureCreateFormDefaults();
     typeSelectWrapEl.innerHTML = "";
-    const typeSelect = document.createElement("select");
-    typeSelect.className = "workflow-wizard-select";
-    workflowTypes.forEach((item) => {
-      const option = document.createElement("option");
-      option.value = item.type;
-      option.textContent = item.name ? `${item.name} (${item.type})` : item.type;
-      option.selected = item.type === state.workflowType;
-      typeSelect.appendChild(option);
-    });
-    typeSelect.addEventListener("change", () => {
-      state.workflowType = typeSelect.value;
-      state.entryPoint = getEntryPoints()[0] || "";
-      refreshWorkbenchCreateModal();
-    });
-    typeSelectWrapEl.appendChild(typeSelect);
+    typeSelectWrapEl.className = "workflow-wizard-segmented-wrap";
+    renderSingleOptions(
+      typeSelectWrapEl,
+      workflowTypes.map((item) => ({
+        value: item.type,
+        label: item.name || item.type,
+        description: item.type !== item.name ? item.type : "",
+      })),
+      state.workflowType,
+      (value) => {
+        state.workflowType = value;
+        state.entryPoint = getEntryPoints()[0] || "";
+        refreshWorkbenchCreateModal();
+      },
+      "segmented"
+    );
 
     const selectedType = getSelectedWorkflowType();
     const roleItems = Object.entries(selectedType.role_channels || {});
@@ -9991,22 +10005,25 @@ async function openWorkbenchCreateTaskModal() {
       entryPoints.map((entry) => ({
         value: entry,
         label: getSelectedWorkflowType().entry_points_detail?.[entry]?.requires_deliverable ? `${entry} (需要交付物)` : entry,
+        description: getSelectedWorkflowType().entry_points_detail?.[entry]?.requires_deliverable ? "需要交付物" : "可直接发起",
       })),
       state.entryPoint,
       (value) => {
         state.entryPoint = value;
         refreshWorkbenchCreateModal();
-      }
+      },
+      "segmented"
     );
 
     renderSingleOptions(
       serviceOptionsEl,
-      services.map((service) => ({ value: service, label: service })),
+      services.map((service) => ({ value: service, label: service, description: "目标服务" })),
       state.service,
       (value) => {
         state.service = value;
         refreshWorkbenchCreateModal();
-      }
+      },
+      "segmented"
     );
 
     const reqs = getRequirements();
@@ -11015,7 +11032,7 @@ function warmWorkflowCreateOptions(forceReload = false) {
   });
 }
 
-function renderSingleOptions(container, options, selected, onPick) {
+function renderSingleOptions(container, options, selected, onPick, variant = "") {
   container.innerHTML = "";
   if (!Array.isArray(options) || options.length === 0) {
     const empty = document.createElement("div");
@@ -11024,11 +11041,23 @@ function renderSingleOptions(container, options, selected, onPick) {
     container.appendChild(empty);
     return;
   }
+  if (variant === "segmented") {
+    container.classList.add("workflow-wizard-segmented");
+  } else {
+    container.classList.remove("workflow-wizard-segmented");
+  }
   options.forEach((opt) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "workflow-wizard-option" + (selected === opt.value ? " selected" : "");
-    btn.textContent = opt.label;
+    btn.className = "workflow-wizard-option" + (selected === opt.value ? " selected" : "") + (variant === "segmented" ? " workflow-wizard-option-segmented" : "");
+    if (variant === "segmented") {
+      btn.innerHTML = `
+        <span class="workflow-wizard-option-title">${escapeHtml(opt.label || opt.value || "")}</span>
+        ${opt.description ? `<span class="workflow-wizard-option-desc">${escapeHtml(opt.description)}</span>` : ""}
+      `;
+    } else {
+      btn.textContent = opt.label;
+    }
     btn.addEventListener("click", () => onPick(opt.value));
     container.appendChild(btn);
   });
