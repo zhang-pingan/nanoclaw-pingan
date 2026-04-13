@@ -8008,7 +8008,10 @@ function renderWorkbenchTaskDetail(detail) {
   workbenchTaskMeta.innerHTML = `
     <span class="workbench-badge">${escapeHtml(task.service)}</span>
     <span class="workbench-badge">${escapeHtml(task.workflow_type)}</span>
-    ${task.branch ? `<span class="workbench-badge">${escapeHtml(task.branch)}</span>` : ""}
+    ${task.main_branch ? `<span class="workbench-badge">主分支：${escapeHtml(task.main_branch)}</span>` : ""}
+    ${task.work_branch ? `<span class="workbench-badge">工作分支：${escapeHtml(task.work_branch)}</span>` : ""}
+    ${task.staging_base_branch ? `<span class="workbench-badge">预发分支：${escapeHtml(task.staging_base_branch)}</span>` : ""}
+    ${task.staging_work_branch ? `<span class="workbench-badge">预发工作分支：${escapeHtml(task.staging_work_branch)}</span>` : ""}
     ${task.round > 0 ? `<span class="workbench-badge">Round ${escapeHtml(String(task.round))}</span>` : ""}
     <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
   `;
@@ -8867,7 +8870,9 @@ async function openWorkbenchCreateTaskModal() {
     requirementPreset: "",
     requirementCustom: "",
     requirementSearch: "",
-    deployBranch: "",
+    mainBranch: "",
+    stagingBaseBranch: "",
+    stagingWorkBranch: "",
     workBranch: "",
   };
 
@@ -8901,12 +8906,20 @@ async function openWorkbenchCreateTaskModal() {
           <div id="wb-requirement-hint" class="workflow-wizard-hint"></div>
         </div>
         <div class="workflow-wizard-section" id="wb-deploy-branch-section">
-          <div class="workflow-wizard-label">5. staging_work_branch（预发工作分支，可选）</div>
+          <div class="workflow-wizard-label">5. main_branch（主分支，可选）</div>
           <div id="wb-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
         </div>
         <div class="workflow-wizard-section" id="wb-work-branch-section">
-          <div class="workflow-wizard-label">6. work_branch（工作分支，可选）</div>
+          <div class="workflow-wizard-label">6. staging_base_branch（预发分支，可选）</div>
           <div id="wb-work-branch-wrap" class="workflow-wizard-subsection"></div>
+        </div>
+        <div class="workflow-wizard-section" id="wb-staging-work-branch-section">
+          <div class="workflow-wizard-label">7. work_branch（工作分支，可选）</div>
+          <div id="wb-staging-work-branch-wrap" class="workflow-wizard-subsection"></div>
+        </div>
+        <div class="workflow-wizard-section" id="wb-main-branch-section">
+          <div class="workflow-wizard-label">8. staging_work_branch（预发工作分支，可选）</div>
+          <div id="wb-main-branch-wrap" class="workflow-wizard-subsection"></div>
         </div>
       </div>
       <div class="workflow-wizard-footer">
@@ -8929,6 +8942,10 @@ async function openWorkbenchCreateTaskModal() {
   const deployBranchWrapEl = overlay.querySelector("#wb-deploy-branch-wrap");
   const workBranchSectionEl = overlay.querySelector("#wb-work-branch-section");
   const workBranchWrapEl = overlay.querySelector("#wb-work-branch-wrap");
+  const stagingWorkBranchSectionEl = overlay.querySelector("#wb-staging-work-branch-section");
+  const stagingWorkBranchWrapEl = overlay.querySelector("#wb-staging-work-branch-wrap");
+  const mainBranchSectionEl = overlay.querySelector("#wb-main-branch-section");
+  const mainBranchWrapEl = overlay.querySelector("#wb-main-branch-wrap");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
 
   function closeWorkbenchCreateModal() {
@@ -9040,38 +9057,56 @@ async function openWorkbenchCreateTaskModal() {
     reqCustomWrapEl.innerHTML = "";
     deployBranchWrapEl.innerHTML = "";
     workBranchWrapEl.innerHTML = "";
+    stagingWorkBranchWrapEl.innerHTML = "";
+    mainBranchWrapEl.innerHTML = "";
 
     const isDevTest = getSelectedWorkflowType().type === "dev_test";
     const isPlanEntry = state.entryPoint === "plan";
-    const showDeployBranch = isDevTest && state.entryPoint === "testing";
-    const showWorkBranch = isDevTest && state.entryPoint === "testing";
+    const showBranchInputs = isDevTest;
 
-    deployBranchSectionEl.style.display = showDeployBranch ? "" : "none";
-    if (showDeployBranch) {
-      const input = document.createElement("input");
-      input.className = "workflow-wizard-input";
-      input.placeholder = "例如：staging-deploy/feature-xxx";
-      input.value = state.deployBranch;
-      input.addEventListener("input", () => {
-        state.deployBranch = input.value;
-      });
-      deployBranchWrapEl.appendChild(input);
-    } else {
-      state.deployBranch = "";
-    }
+    deployBranchSectionEl.style.display = showBranchInputs ? "" : "none";
+    workBranchSectionEl.style.display = showBranchInputs ? "" : "none";
+    stagingWorkBranchSectionEl.style.display = showBranchInputs ? "" : "none";
+    mainBranchSectionEl.style.display = showBranchInputs ? "" : "none";
 
-    workBranchSectionEl.style.display = showWorkBranch ? "" : "none";
-    if (showWorkBranch) {
-      const input = document.createElement("input");
-      input.className = "workflow-wizard-input";
-      input.placeholder = "例如：feature/xxx";
-      input.value = state.workBranch;
-      input.addEventListener("input", () => {
-        state.workBranch = input.value;
+    if (showBranchInputs) {
+      const mainBranchInput = document.createElement("input");
+      mainBranchInput.className = "workflow-wizard-input";
+      mainBranchInput.placeholder = "例如：main";
+      mainBranchInput.value = state.mainBranch;
+      mainBranchInput.addEventListener("input", () => {
+        state.mainBranch = mainBranchInput.value;
       });
-      workBranchWrapEl.appendChild(input);
+      deployBranchWrapEl.appendChild(mainBranchInput);
+      const stagingBaseInput = document.createElement("input");
+      stagingBaseInput.className = "workflow-wizard-input";
+      stagingBaseInput.placeholder = "例如：staging";
+      stagingBaseInput.value = state.stagingBaseBranch;
+      stagingBaseInput.addEventListener("input", () => {
+        state.stagingBaseBranch = stagingBaseInput.value;
+      });
+      workBranchWrapEl.appendChild(stagingBaseInput);
+      const workBranchInput = document.createElement("input");
+      workBranchInput.className = "workflow-wizard-input";
+      workBranchInput.placeholder = "例如：feature/xxx";
+      workBranchInput.value = state.workBranch;
+      workBranchInput.addEventListener("input", () => {
+        state.workBranch = workBranchInput.value;
+      });
+      stagingWorkBranchWrapEl.appendChild(workBranchInput);
+      const stagingWorkInput = document.createElement("input");
+      stagingWorkInput.className = "workflow-wizard-input";
+      stagingWorkInput.placeholder = "例如：staging-deploy/feature-xxx";
+      stagingWorkInput.value = state.stagingWorkBranch;
+      stagingWorkInput.addEventListener("input", () => {
+        state.stagingWorkBranch = stagingWorkInput.value;
+      });
+      mainBranchWrapEl.appendChild(stagingWorkInput);
     } else {
+      state.mainBranch = "";
+      state.stagingBaseBranch = "";
       state.workBranch = "";
+      state.stagingWorkBranch = "";
     }
 
     if (isDevTest) {
@@ -9180,8 +9215,10 @@ async function openWorkbenchCreateTaskModal() {
           start_from: state.entryPoint,
           workflow_type: state.workflowType,
           deliverable: deliverableRequired ? name : void 0,
-          staging_work_branch: state.deployBranch.trim() || void 0,
+          main_branch: state.mainBranch.trim() || void 0,
+          staging_base_branch: state.stagingBaseBranch.trim() || void 0,
           work_branch: state.workBranch.trim() || void 0,
+          staging_work_branch: state.stagingWorkBranch.trim() || void 0,
         }),
       });
       const data = await res.json();
@@ -9351,6 +9388,12 @@ function applyWorkbenchRealtimeEvent(event) {
         status_label: payload.statusLabel || existing.status_label,
         current_stage: payload.currentStage || existing.current_stage,
         current_stage_label: payload.currentStageLabel || existing.current_stage_label,
+        main_branch: typeof payload.mainBranch === "string" ? payload.mainBranch : existing.main_branch,
+        work_branch: typeof payload.workBranch === "string" ? payload.workBranch : existing.work_branch,
+        staging_base_branch:
+          typeof payload.stagingBaseBranch === "string" ? payload.stagingBaseBranch : existing.staging_base_branch,
+        staging_work_branch:
+          typeof payload.stagingWorkBranch === "string" ? payload.stagingWorkBranch : existing.staging_work_branch,
         updated_at: payload.updatedAt || existing.updated_at,
         pending_approval: typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : existing.pending_approval,
         pending_action_count:
@@ -9376,7 +9419,10 @@ function applyWorkbenchRealtimeEvent(event) {
       status_label: payload.statusLabel || payload.status || "created",
       current_stage: payload.currentStage || payload.status || "created",
       current_stage_label: payload.currentStageLabel || payload.currentStage || payload.status || "created",
-      branch: "",
+      main_branch: typeof payload.mainBranch === "string" ? payload.mainBranch : "",
+      work_branch: typeof payload.workBranch === "string" ? payload.workBranch : "",
+      staging_base_branch: typeof payload.stagingBaseBranch === "string" ? payload.stagingBaseBranch : "",
+      staging_work_branch: typeof payload.stagingWorkBranch === "string" ? payload.stagingWorkBranch : "",
       deliverable: "",
       round: 0,
       source_jid: payload.sourceJid || "",
@@ -9399,6 +9445,18 @@ function applyWorkbenchRealtimeEvent(event) {
       status_label: payload.statusLabel || currentWorkbenchDetail.task.status_label,
       current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
       current_stage_label: payload.currentStageLabel || currentWorkbenchDetail.task.current_stage_label,
+      main_branch:
+        typeof payload.mainBranch === "string" ? payload.mainBranch : currentWorkbenchDetail.task.main_branch,
+      work_branch:
+        typeof payload.workBranch === "string" ? payload.workBranch : currentWorkbenchDetail.task.work_branch,
+      staging_base_branch:
+        typeof payload.stagingBaseBranch === "string"
+          ? payload.stagingBaseBranch
+          : currentWorkbenchDetail.task.staging_base_branch,
+      staging_work_branch:
+        typeof payload.stagingWorkBranch === "string"
+          ? payload.stagingWorkBranch
+          : currentWorkbenchDetail.task.staging_work_branch,
       updated_at: payload.updatedAt || currentWorkbenchDetail.task.updated_at,
       pending_approval:
         typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : currentWorkbenchDetail.task.pending_approval,

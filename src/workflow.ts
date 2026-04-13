@@ -59,6 +59,7 @@ import {
 interface DeliverableMetadata {
   fileName: string;
   files: string[];
+  main_branch: string;
   work_branch: string;
   staging_base_branch: string;
   staging_work_branch: string;
@@ -67,6 +68,7 @@ interface DeliverableMetadata {
 interface ParsedDelegationPayload {
   summary?: string;
   deliverable?: string;
+  main_branch?: string;
   work_branch?: string;
   staging_base_branch?: string;
   staging_work_branch?: string;
@@ -373,6 +375,10 @@ function readMetadataFromFile(filePath: string): Partial<DeliverableMetadata> {
   if (!metadata) return {};
 
   return {
+    main_branch:
+      typeof metadata.main_branch === 'string'
+        ? metadata.main_branch.trim()
+        : '',
     work_branch:
       typeof metadata.work_branch === 'string'
         ? metadata.work_branch.trim()
@@ -408,6 +414,7 @@ function readDeliverableDir(
   const metadata: DeliverableMetadata = {
     fileName: dirName,
     files,
+    main_branch: '',
     work_branch: '',
     staging_base_branch: '',
     staging_work_branch: '',
@@ -415,6 +422,7 @@ function readDeliverableDir(
 
   for (const file of files) {
     const parsed = readMetadataFromFile(path.join(delivDir, file));
+    metadata.main_branch ||= parsed.main_branch || '';
     metadata.work_branch ||= parsed.work_branch || '';
     metadata.staging_base_branch ||= parsed.staging_base_branch || '';
     metadata.staging_work_branch ||= parsed.staging_work_branch || '';
@@ -477,6 +485,7 @@ function buildTemplateVars(
   return {
     name: workflow.name,
     service: workflow.service,
+    main_branch: workflow.main_branch || '',
     work_branch: workflow.work_branch || 'N/A',
     id: workflow.id,
     round: workflow.round,
@@ -700,6 +709,7 @@ export interface CreateWorkflowOpts {
   startFrom: string;
   workflowType: string;
   deliverable?: string;
+  mainBranch?: string;
   workBranch?: string;
   stagingBaseBranch?: string;
   stagingWorkBranch?: string;
@@ -763,6 +773,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       name: opts.name,
       service: opts.service,
       start_from: opts.startFrom,
+      main_branch: opts.mainBranch || deliverable.main_branch,
       work_branch: opts.workBranch || deliverable.work_branch,
       deliverable: deliverable.fileName,
       staging_base_branch:
@@ -852,6 +863,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     name: opts.name,
     service: opts.service,
     start_from: opts.startFrom,
+    main_branch: opts.mainBranch || '',
     work_branch: opts.workBranch || '',
     deliverable: '',
     staging_base_branch: opts.stagingBaseBranch || '',
@@ -1207,6 +1219,7 @@ export function onDelegationComplete(delegationId: string): void {
     }
   }
   if (payload.deliverable) workflowUpdates.deliverable = payload.deliverable;
+  if (payload.main_branch) workflowUpdates.main_branch = payload.main_branch;
   if (payload.work_branch) workflowUpdates.work_branch = payload.work_branch;
   if (payload.staging_base_branch) {
     workflowUpdates.staging_base_branch = payload.staging_base_branch;

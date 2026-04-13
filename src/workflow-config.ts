@@ -263,6 +263,7 @@ export function getReachableWorkflowStages(
 export interface TemplateVars {
   name?: string;
   service?: string;
+  main_branch?: string;
   work_branch?: string;
   id?: string;
   round?: number;

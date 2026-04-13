@@ -28,6 +28,7 @@ description: Test implemented features in first-pass or regression mode — anal
    - 接口和数据库变更
    - 文档中的测试要点
    - 如任务中提供了 `access_token`，提取该值，并在后续接口测试中统一拼装为 `Authorization: Bearer {access_token}` 请求头
+   - 优先采用任务消息中明确给出的 `主分支`、`预发分支`、`工作分支`、`预发工作分支`；若文档中的分支信息与消息不一致，以消息为准，并在测试报告中说明
 2. 确认测试文档路径，优先使用任务中明确给出的 `测试文档：xxx`；若未给出，则默认使用 `/workspace/projects/{服务名}/iteration/{文件夹名}/test.md`
 3. 阅读项目代码中对应的变更文件，理解实际实现
 4. 如有不清楚的地方，向用户确认
@@ -94,6 +95,7 @@ description: Test implemented features in first-pass or regression mode — anal
 ---
 service: {服务名}
 deliverable: {日期}_{需求简称}
+main_branch: {主分支}
 work_branch: {工作分支}
 staging_base_branch: {预发分支}
 staging_work_branch: {预发工作分支}
@@ -106,6 +108,7 @@ doc_type: test
 - 需求名称：{名称}
 - 测试日期：{日期}
 - 测试环境：{staging.domain}
+- 主分支：{主分支}
 - 工作分支：{工作分支}
 - 预发分支：{预发分支}
 - 预发工作分支：{预发工作分支}
@@ -150,7 +153,7 @@ doc_type: test
 3. 调用 `complete_delegation` 返回结果：
    - 全部通过：outcome=`success`
    - 全部失败或部分失败：outcome=`failure`
-4. result JSON 应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`test_doc`、`summary`
+4. result JSON 应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`test_doc`、`summary`
    - `deliverable` 是文件夹名，不含 `.md` 后缀
    - `bugs` 中每个对象建议包含：`id`、`title`、`severity`、`related_case`
    - `id` 必须与测试报告中的 BUG 编号一致，例如 `BUG-001`
@@ -166,6 +169,10 @@ doc_type: test
   "blocked": 0,
   "bugs": [],
   "deliverable": "2026-03-20_用户昵称功能",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "staging_base_branch": "staging",
+  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "summary": "共 10 条，通过 10 条，失败 0 条，阻塞 0 条"
 }
@@ -194,6 +201,10 @@ doc_type: test
     }
   ],
   "deliverable": "2026-03-20_用户昵称功能",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "staging_base_branch": "staging",
+  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "summary": "共 10 条，通过 8 条，失败 2 条，阻塞 0 条"
 }
@@ -206,6 +217,7 @@ doc_type: test
 1. 从任务描述中确认：
    - 交付文档 `dev.md`
    - 测试文档 `test.md`
+   - 主分支、预发分支、工作分支、预发工作分支（若消息中提供）
    - 如有提供，读取 `access_token`
    - 如有提供，读取历史测试结果中的 BUG 列表和修复记录
 2. 读取已有 `test.md`，重点提取：

@@ -65,6 +65,7 @@ export interface WorkbenchTaskItem {
   status_label: string;
   current_stage: string;
   current_stage_label: string;
+  main_branch: string;
   work_branch: string;
   staging_base_branch: string;
   staging_work_branch: string;
@@ -186,6 +187,7 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
       statusLabels[persisted?.current_stage || workflow.status] ||
       persisted?.current_stage ||
       workflow.status,
+    main_branch: workflow.main_branch,
     work_branch: workflow.work_branch,
     staging_base_branch: workflow.staging_base_branch,
     staging_work_branch: workflow.staging_work_branch,
@@ -498,6 +500,7 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   const vars = {
     name: workflow.name,
     service: workflow.service,
+    main_branch: workflow.main_branch || '',
     work_branch: workflow.work_branch || 'N/A',
     staging_base_branch: workflow.staging_base_branch || '',
     staging_work_branch: workflow.staging_work_branch || '',
@@ -648,6 +651,7 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
           status_label: item.status,
           current_stage: item.current_stage,
           current_stage_label: item.current_stage,
+          main_branch: '',
           work_branch: '',
           staging_base_branch: '',
           staging_work_branch: '',
@@ -767,6 +771,7 @@ export function createWorkbenchTask(input: {
   startFrom: string;
   workflowType: string;
   deliverable?: string;
+  mainBranch?: string;
   workBranch?: string;
   stagingBaseBranch?: string;
   stagingWorkBranch?: string;
@@ -779,6 +784,7 @@ export function createWorkbenchTask(input: {
     startFrom: input.startFrom,
     workflowType: input.workflowType,
     deliverable: input.deliverable,
+    mainBranch: input.mainBranch,
     workBranch: input.workBranch,
     stagingBaseBranch: input.stagingBaseBranch,
     stagingWorkBranch: input.stagingWorkBranch,

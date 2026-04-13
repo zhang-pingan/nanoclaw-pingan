@@ -23,7 +23,7 @@ description: Design implementation plans for new requirements — analyze code, 
    这些文档由 project-knowledge 技能维护，能帮助你更快理解项目架构。
    如果文档不存在，参考 project-knowledge 技能的行为准则处理。
 3. 阅读项目代码中相关的文件，理解现有实现
-4. 读取 `/workspace/global/services.json` 获取服务的 `default_branch`
+4. 优先从委派消息读取 `主分支：xxx`；若消息未提供，再读取 `/workspace/global/services.json` 获取服务的 `default_branch`
 5. **下游服务联动分析**：如果需求可能涉及下游服务的改动（如修改调用接口的参数、新增对下游的调用、变更交互协议等），检查 `downstream-dependencies.md` 中该下游服务是否有 services.json 映射。如果有映射：
    - 通过 services.json 获取下游服务的 `repo_path`
    - 读取下游服务仓库 `/workspace/repos/{下游repo_path}/` 中的相关代码
@@ -60,6 +60,7 @@ description: Design implementation plans for new requirements — analyze code, 
 ---
 service: {服务名}
 deliverable: {日期}_{需求简称}
+main_branch: {主分支}
 work_branch: feature/{需求名}_{日期}
 doc_type: plan
 ---
@@ -102,6 +103,7 @@ doc_type: plan
   - 下游服务工作分支：feature/{需求名}_{日期}
 
 🌿 工作分支：feature/{需求名}_{日期}
+🌲 主分支：{主分支}
 ```
 
 使用 `mcp__nanoclaw__send_message` 将方案发送给用户。
@@ -118,7 +120,7 @@ doc_type: plan
 
 通过 `complete_delegation` 返回结果：
 - outcome：`success`
-- result：JSON 格式 `{"service":"xx","work_branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
+- result：JSON 格式 `{"service":"xx","main_branch":"main","work_branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
   - **deliverable 是文件夹名**，不含 `.md` 后缀
 
 ## 处理修改意见

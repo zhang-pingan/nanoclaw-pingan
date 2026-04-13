@@ -9,7 +9,7 @@ description: Deploy service branches to staging environment — merge code, trig
 
 当收到预发部署任务时：
 
-1. 读取 `/workspace/global/services.json`，获取对应服务的 `staging.branch` 、 `staging.jenkins_job`、`default_branch`
+1. 优先读取任务消息中的 `主分支`、`工作分支`、`预发分支`、`预发工作分支`；同时读取 `/workspace/global/services.json` 获取对应服务的 `staging.branch`、`staging.jenkins_job`、`default_branch` 作为兜底
 2. 服务仓库目录为 `/workspace/repos/{服务名}/`
 3. 明确以下参数并严格区分：
    - `主分支` = 当前项目的主分支，如果未提供，则使用 `default_branch`
@@ -26,5 +26,5 @@ description: Deploy service branches to staging environment — merge code, trig
 6. 通过 `complete_delegation` 返回结果：
    - outcome：成功传 `success`，失败传 `failure`
    - result：JSON 格式
-     成功：{"service":"xx","work_branch":"feature/xx","staging_base_branch":"staging","staging_work_branch":"staging-deploy/feature-xx","summary":"预发部署完成"}
-     失败：{"service":"xx","work_branch":"feature/xx","staging_base_branch":"staging","staging_work_branch":"staging-deploy/feature-xx","summary":"预发部署失败","error":"conflict in src/xx.ts"}
+     成功：{"service":"xx","main_branch":"main","work_branch":"feature/xx","staging_base_branch":"staging","staging_work_branch":"staging-deploy/feature-xx","summary":"预发部署完成"}
+     失败：{"service":"xx","main_branch":"main","work_branch":"feature/xx","staging_base_branch":"staging","staging_work_branch":"staging-deploy/feature-xx","summary":"预发部署失败","error":"conflict in src/xx.ts"}

@@ -79,7 +79,7 @@
               "delegate": {
                 "role": "planner",
                 "skill": "plan-requirement",
-                "task_template": "请为以下需求设计实现方案：\n\n需求名称：{{name}}\n服务名称：{{service}}"
+                "task_template": "请为以下需求设计实现方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}"
               },
               "on_complete": {
                 "success": {
@@ -87,7 +87,7 @@
                   "delegate": {
                     "role": "plan_examiner",
                     "skill": "plan-examine",
-                    "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                    "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 方案设计完成，已委派 {{role_folder:plan_examiner}} 进行方案审核。"
@@ -107,7 +107,7 @@
               "delegate": {
                 "role": "plan_examiner",
                 "skill": "plan-examine",
-                "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
               },
               "on_complete": {
                 "success": {
@@ -115,7 +115,7 @@
                   "delegate": {
                     "role": "dev",
                     "skill": "dev-requirement",
-                    "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                    "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 方案审核通过，已自动进入开发阶段，已委派 {{role_folder:dev}} 开始执行。"
@@ -143,7 +143,7 @@
                 "delegate": {
                   "role": "dev",
                   "skill": "dev-requirement",
-                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程，已委派 {{role_folder:dev}} 开始开发。"
@@ -154,7 +154,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 已确认回到 Plan 修改，Plan Agent 正在重新设计方案。"
@@ -172,7 +172,7 @@
                 "delegate": {
                   "role": "dev",
                   "skill": "dev-requirement",
-                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 方案已确认，已委派 {{role_folder:dev}} 开始执行。"
@@ -183,7 +183,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 修改意见已提交，Plan Agent 正在重新设计方案。"
@@ -196,7 +196,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "dev-requirement",
-                "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
               },
               "on_complete": {
                 "success": {
@@ -204,7 +204,7 @@
                   "delegate": {
                     "role": "dev_examiner",
                     "skill": "dev-examine",
-                    "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
+                    "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 开发已完成，已委派 {{role_folder:dev_examiner}} 进行开发复核与 Code Review。"
@@ -224,7 +224,7 @@
               "delegate": {
                 "role": "dev_examiner",
                 "skill": "dev-examine",
-                "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
+                "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
               },
               "on_complete": {
                 "success": {
@@ -267,7 +267,7 @@
                 "delegate": {
                   "role": "dev",
                   "skill": "dev-bugfix",
-                  "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}"
+                  "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认回到开发修正，已委派 {{role_folder:dev}} 处理。"
@@ -285,7 +285,7 @@
                 "delegate": {
                   "role": "ops",
                   "skill": "ops-staging-deploy",
-                  "task_template": "请部署以下服务到预发环境：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。"
+                  "task_template": "请部署以下服务到预发环境：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认，正在委派 {{role_folder:ops}} 部署预发环境。"
@@ -328,7 +328,7 @@
                 "delegate": {
                   "role": "test",
                   "skill": "test-requirement",
-                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n交付文档：{{dev_doc}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}"
+                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}"
                 }
               },
               "on_revise": {
@@ -336,7 +336,7 @@
                 "delegate": {
                   "role": "test",
                   "skill": "test-requirement",
-                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n交付文档：{{dev_doc}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\naccess_token: {{access_token}}"
+                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认 access_token，已委派 {{role_folder:test}} 开始测试。"
@@ -362,7 +362,7 @@
                   "delegate": {
                     "role": "dev",
                     "skill": "dev-bugfix",
-                    "task_template": "请修复以下测试发现的问题（Round {{round}}）：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}"
+                    "task_template": "请修复以下测试发现的问题（Round {{round}}）：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 测试发现问题 ❌\n{{result_summary}}\n进入 Round {{round}} 修复流程，已委派 {{role_folder:dev}} 修复。"
@@ -386,7 +386,7 @@
                   "delegate": {
                     "role": "ops",
                     "skill": "ops-staging-deploy",
-                    "task_template": "请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前也必须先把最新工作分支合并进预发工作分支并推送，再执行部署。"
+                    "task_template": "请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前也必须先把最新工作分支合并进预发工作分支并推送，再执行部署。"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) Round {{round}} 修复完成，已委派 {{role_folder:ops}} 重新部署预发。"
@@ -513,7 +513,7 @@
               "delegate": {
                 "role": "planner",
                 "skill": "plan-requirement",
-                "task_template": "请为以下需求设计实现方案：\n\n需求名称：{{name}}\n服务名称：{{service}}"
+                "task_template": "请为以下需求设计实现方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}"
               },
               "on_complete": {
                 "success": {
@@ -521,7 +521,7 @@
                   "delegate": {
                     "role": "plan_examiner",
                     "skill": "plan-examine",
-                    "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                    "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 方案设计完成，已委派 {{role_folder:plan_examiner}} 进行方案审核。"
@@ -541,7 +541,7 @@
               "delegate": {
                 "role": "plan_examiner",
                 "skill": "plan-examine",
-                "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                "task_template": "请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
               },
               "on_complete": {
                 "success": {
@@ -549,7 +549,7 @@
                   "delegate": {
                     "role": "dev",
                     "skill": "dev-requirement",
-                    "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                    "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 方案审核通过，已自动进入开发阶段，已委派 {{role_folder:dev}} 开始执行。"
@@ -577,7 +577,7 @@
                 "delegate": {
                   "role": "dev",
                   "skill": "dev-requirement",
-                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程，已委派 {{role_folder:dev}} 开始开发。"
@@ -588,7 +588,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 已确认回到 Plan 修改，Plan Agent 正在重新设计方案。"
@@ -606,7 +606,7 @@
                 "delegate": {
                   "role": "dev",
                   "skill": "dev-requirement",
-                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                  "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 方案已确认，已委派 {{role_folder:dev}} 开始执行。"
@@ -617,7 +617,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 修改意见已提交，Plan Agent 正在重新设计方案。"
@@ -630,7 +630,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "dev-requirement",
-                "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n方案文件：{{plan_doc}}"
+                "task_template": "请按照方案执行开发：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
               },
               "on_complete": {
                 "success": {
@@ -638,7 +638,7 @@
                   "delegate": {
                     "role": "dev_examiner",
                     "skill": "dev-examine",
-                    "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
+                    "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 开发已完成，已委派 {{role_folder:dev_examiner}} 进行开发复核与 Code Review。"
@@ -658,7 +658,7 @@
               "delegate": {
                 "role": "dev_examiner",
                 "skill": "dev-examine",
-                "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
+                "task_template": "请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}"
               },
               "on_complete": {
                 "success": {
@@ -701,7 +701,7 @@
                 "delegate": {
                   "role": "dev",
                   "skill": "dev-bugfix",
-                  "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}"
+                  "task_template": "请根据开发复核意见修正实现：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认回到开发修正，已委派 {{role_folder:dev}} 处理。"
@@ -719,7 +719,7 @@
                 "delegate": {
                   "role": "ops",
                   "skill": "ops-staging-deploy",
-                  "task_template": "请部署以下服务到预发环境：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。"
+                  "task_template": "请部署以下服务到预发环境：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认，正在委派 {{role_folder:ops}} 部署预发环境。"
@@ -762,7 +762,7 @@
                 "delegate": {
                   "role": "test",
                   "skill": "test-requirement",
-                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n交付文档：{{dev_doc}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}"
+                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}"
                 }
               },
               "on_revise": {
@@ -770,7 +770,7 @@
                 "delegate": {
                   "role": "test",
                   "skill": "test-requirement",
-                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n交付文档：{{dev_doc}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\naccess_token: {{access_token}}"
+                  "task_template": "请对以下需求进行测试：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}"
                 },
                 "notify": {
                   "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认 access_token，已委派 {{role_folder:test}} 开始测试。"
@@ -796,7 +796,7 @@
                   "delegate": {
                     "role": "dev",
                     "skill": "dev-bugfix",
-                    "task_template": "请修复以下测试发现的问题（Round {{round}}）：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}"
+                    "task_template": "请修复以下测试发现的问题（Round {{round}}）：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) 测试发现问题 ❌\n{{result_summary}}\n进入 Round {{round}} 修复流程，已委派 {{role_folder:dev}} 修复。"
@@ -820,7 +820,7 @@
                   "delegate": {
                     "role": "ops",
                     "skill": "ops-staging-deploy",
-                    "task_template": "请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发分支：{{staging_base_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前也必须先把最新工作分支合并进预发工作分支并推送，再执行部署。"
+                    "task_template": "请部署以下服务到预发环境（修复后重新部署）：\n\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前也必须先把最新工作分支合并进预发工作分支并推送，再执行部署。"
                   },
                   "notify": {
                     "template": "[流程进展] 需求「{{name}}」({{id}}) Round {{round}} 修复完成，已委派 {{role_folder:ops}} 重新部署预发。"

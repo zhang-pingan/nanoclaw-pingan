@@ -286,6 +286,7 @@ export interface Workflow {
   name: string;
   service: string;
   start_from: string;
+  main_branch: string;
   work_branch: string;
   deliverable: string;
   staging_base_branch: string;

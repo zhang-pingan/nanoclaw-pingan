@@ -10,6 +10,7 @@ description: Fix bugs in service code on the existing work branch — use the de
 当收到主群委派的 BUG 修复任务时：
 
 1. 确认本次修复使用的工作分支和相关文档参数
+   - 同时读取消息中明确给出的 `主分支：xxx`、`预发分支：xxx`、`预发工作分支：xxx`，后续排查、回写和结果返回都优先沿用消息中的值
    - 优先使用消息中明确给出的 `工作分支：xxx`
    - 若消息中未给出工作分支，则从交付文档中查找 `工作分支：xxx`
    - 交付文档优先读取：`/workspace/projects/{service}/iteration/{deliverable}/dev.md`
@@ -45,9 +46,9 @@ description: Fix bugs in service code on the existing work branch — use the de
 ```
 
 6. 通过 `complete_delegation` 返回修复结果
-   - 成功时需包含：服务名、工作分支、交付目录、测试文档、已修复问题列表、修复概要
+   - 成功时需包含：服务名、主分支、工作分支、预发分支、预发工作分支、交付目录、测试文档、已修复问题列表、修复概要
    - 失败时需明确说明：失败原因、是否因缺少工作分支而中止
-   - 推荐返回字段：`service`、`work_branch`、`deliverable`、`test_doc`、`fixed_bugs`、`summary`
+   - 推荐返回字段：`service`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`deliverable`、`test_doc`、`fixed_bugs`、`summary`
    - `fixed_bugs` 必须与测试报告中的 `BUG ID` 一一对应，不要自行改写 ID
    - `fixed_bugs` 中每个对象建议包含：`id`、`title`、`related_case`、`fix`
    - `fixed_bugs` 只返回本轮实际已完成修复、并已提交到当前工作分支的 BUG
@@ -59,7 +60,10 @@ description: Fix bugs in service code on the existing work branch — use the de
 ```json
 {
   "service": "catstory",
+  "main_branch": "main",
   "work_branch": "feature/user-nickname_20260320",
+  "staging_base_branch": "staging",
+  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
   "deliverable": "2026-03-20_用户昵称功能",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "fixed_bugs": [
@@ -85,7 +89,10 @@ description: Fix bugs in service code on the existing work branch — use the de
 ```json
 {
   "service": "catstory",
+  "main_branch": "main",
   "work_branch": "",
+  "staging_base_branch": "staging",
+  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
   "deliverable": "2026-03-20_用户昵称功能",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "fixed_bugs": [],

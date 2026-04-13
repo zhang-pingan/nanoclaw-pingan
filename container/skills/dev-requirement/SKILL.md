@@ -12,12 +12,15 @@ description: Implement features based on approved plans — read design docs, wr
 ### 步骤 1：阅读方案
 
 1. 从任务描述中获取方案文件路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` 中的方案内容
-2. 读取 `/workspace/global/services.json` 获取服务的 `default_branch`
+2. 优先从任务消息读取 `主分支：xxx`、`工作分支：xxx` 等分支参数；若消息未提供 `主分支`，再读取 `/workspace/global/services.json` 获取服务的 `default_branch`
 3. 如有疑问，使用 `mcp__nanoclaw__send_message` 向用户确认
 
 ### 步骤 2：创建工作分支
 
-基于 `default_branch` 创建工作分支：`feature/{需求名}_{日期}`（如 `feature/user-nickname_20260320`）
+优先使用消息中明确给出的 `工作分支：xxx`。
+
+- 若消息里已有工作分支名，检查该分支是否存在，不存在则新建，并在该分支继续开发，不要自行改名或重建
+- 若消息未提供工作分支，则基于已确认的 `主分支`（缺省可回退到 `default_branch`）创建 `feature/{需求名}_{日期}`（如 `feature/user-nickname_20260320`）
 
 ### 步骤 3：代码实现
 
@@ -33,6 +36,7 @@ description: Implement features based on approved plans — read design docs, wr
 ---
 service: {服务名}
 deliverable: {日期}_{需求简称}
+main_branch: {主分支}
 work_branch: {分支名}
 doc_type: dev
 ---
@@ -86,7 +90,7 @@ doc_type: dev
 1. 将交付文档关键内容通过 `mcp__nanoclaw__send_message` 发送给用户
 2. 通过 `complete_delegation` 返回结果：
    - outcome：`success`
-   - result：JSON 格式 {"service":"xx","work_branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"需求开发完成"}
+   - result：JSON 格式 {"service":"xx","main_branch":"main","work_branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"需求开发完成"}
      - **deliverable 是文件夹名**，不含 `.md` 后缀
 
 ## 工作原则

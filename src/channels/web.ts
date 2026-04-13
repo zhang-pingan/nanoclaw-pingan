@@ -1949,6 +1949,7 @@ class WebChannel {
       start_from?: string;
       workflow_type?: string;
       deliverable?: string;
+      main_branch?: string;
       work_branch?: string;
       staging_base_branch?: string;
       staging_work_branch?: string;
@@ -1979,6 +1980,7 @@ class WebChannel {
       startFrom: data.start_from,
       workflowType: data.workflow_type,
       deliverable: data.deliverable,
+      mainBranch: data.main_branch,
       workBranch: data.work_branch,
       stagingBaseBranch: data.staging_base_branch,
       stagingWorkBranch: data.staging_work_branch,

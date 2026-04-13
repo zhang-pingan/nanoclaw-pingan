@@ -285,6 +285,7 @@ function createSchema(database: Database.Database): void {
       name TEXT NOT NULL,
       service TEXT NOT NULL,
       start_from TEXT NOT NULL DEFAULT 'plan',
+      main_branch TEXT DEFAULT '',
       work_branch TEXT DEFAULT '',
       deliverable TEXT DEFAULT '',
       staging_base_branch TEXT DEFAULT '',
@@ -464,6 +465,15 @@ function createSchema(database: Database.Database): void {
   try {
     database.exec(
       `ALTER TABLE workflows ADD COLUMN work_branch TEXT DEFAULT ''`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  // Add main_branch column to workflows (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN main_branch TEXT DEFAULT ''`,
     );
   } catch {
     /* column already exists */
@@ -1440,13 +1450,14 @@ export function getExpiredPendingAskQuestions(
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, start_from, work_branch, deliverable, staging_base_branch, staging_work_branch, access_token, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, start_from, main_branch, work_branch, deliverable, staging_base_branch, staging_work_branch, access_token, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
     workflow.service,
     workflow.start_from,
+    workflow.main_branch,
     workflow.work_branch,
     workflow.deliverable,
     workflow.staging_base_branch,
@@ -1474,6 +1485,7 @@ export function updateWorkflow(
   updates: Partial<
     Pick<
       Workflow,
+      | 'main_branch'
       | 'work_branch'
       | 'deliverable'
       | 'staging_base_branch'
@@ -1490,6 +1502,10 @@ export function updateWorkflow(
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [Date.now().toString()];
 
+  if (updates.main_branch !== undefined) {
+    fields.push('main_branch = ?');
+    values.push(updates.main_branch);
+  }
   if (updates.work_branch !== undefined) {
     fields.push('work_branch = ?');
     values.push(updates.work_branch);

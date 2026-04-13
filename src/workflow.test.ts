@@ -125,7 +125,7 @@ describe('workflow metadata and branch flow', () => {
     writeDoc(
       '2026-04-08_feature',
       'plan.md',
-      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nwork_branch: feature/test_20260408\nstaging_base_branch: staging\nstaging_work_branch: staging-deploy/feature-test_20260408\ndoc_type: plan\n---\n\n# Plan\n`,
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\nstaging_base_branch: staging\nstaging_work_branch: staging-deploy/feature-test_20260408\ndoc_type: plan\n---\n\n# Plan\n`,
     );
 
     const result = createNewWorkflow({
@@ -139,6 +139,7 @@ describe('workflow metadata and branch flow', () => {
 
     expect(result.error).toBeUndefined();
     const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.main_branch).toBe('main');
     expect(workflow?.work_branch).toBe('feature/test_20260408');
     expect(workflow?.staging_base_branch).toBe('staging');
     expect(workflow?.staging_work_branch).toBe(
@@ -152,6 +153,7 @@ describe('workflow metadata and branch flow', () => {
       name: 'Plan flow',
       service: TEST_SERVICE,
       start_from: 'plan',
+      main_branch: '',
       work_branch: '',
       deliverable: '',
       staging_base_branch: '',
@@ -177,6 +179,7 @@ describe('workflow metadata and branch flow', () => {
       result: JSON.stringify({
         service: TEST_SERVICE,
         deliverable: '2026-04-08_feature',
+        main_branch: 'main',
         work_branch: 'feature/test_20260408',
         summary: '方案已完成',
       }),
@@ -192,6 +195,7 @@ describe('workflow metadata and branch flow', () => {
     const workflow = getWorkflow('wf-plan');
     expect(workflow?.status).toBe('plan_examine');
     expect(workflow?.deliverable).toBe('2026-04-08_feature');
+    expect(workflow?.main_branch).toBe('main');
     expect(workflow?.work_branch).toBe('feature/test_20260408');
 
     const delegations = getDelegationsByWorkflow('wf-plan');
@@ -207,6 +211,7 @@ describe('workflow metadata and branch flow', () => {
       name: 'Ops flow',
       service: TEST_SERVICE,
       start_from: 'testing',
+      main_branch: 'main',
       work_branch: 'feature/test_20260408',
       deliverable: '2026-04-08_feature',
       staging_base_branch: '',
@@ -231,6 +236,7 @@ describe('workflow metadata and branch flow', () => {
       status: 'completed',
       result: JSON.stringify({
         service: TEST_SERVICE,
+        main_branch: 'main',
         work_branch: 'feature/test_20260408',
         staging_base_branch: 'staging',
         staging_work_branch: 'staging-deploy/feature-test_20260408',
@@ -246,6 +252,7 @@ describe('workflow metadata and branch flow', () => {
     onDelegationComplete('del-ops');
     let workflow = getWorkflow('wf-ops');
     expect(workflow?.status).toBe('testing_confirm');
+    expect(workflow?.main_branch).toBe('main');
     expect(workflow?.staging_base_branch).toBe('staging');
     expect(workflow?.staging_work_branch).toBe(
       'staging-deploy/feature-test_20260408',
@@ -258,6 +265,7 @@ describe('workflow metadata and branch flow', () => {
     expect(workflow?.status).toBe('testing');
     const delegations = getDelegationsByWorkflow('wf-ops');
     const testingDelegation = delegations.find((item) => item.id !== 'del-ops');
+    expect(testingDelegation?.task).toContain('主分支：main');
     expect(testingDelegation?.task).toContain(
       '工作分支：feature/test_20260408',
     );
@@ -273,6 +281,7 @@ describe('workflow metadata and branch flow', () => {
       name: 'Fixing failed flow',
       service: TEST_SERVICE,
       start_from: 'testing',
+      main_branch: '',
       work_branch: 'feature/test_20260408',
       deliverable: '2026-04-08_feature',
       staging_base_branch: 'staging',

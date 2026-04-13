@@ -329,6 +329,7 @@ describe('deleteAllWorkbenchTaskData', () => {
       name: 'Task 1',
       service: 'svc-a',
       start_from: 'dev',
+      main_branch: '',
       work_branch: 'feature/task-1',
       staging_base_branch: 'staging',
       deliverable: 'req-1',
