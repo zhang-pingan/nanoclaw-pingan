@@ -9636,8 +9636,20 @@ async function openWorkbenchCreateTaskModal() {
           <div class="workflow-wizard-footer-label">Ready to launch</div>
           <div id="wb-footer-status" class="workflow-wizard-footer-status">请先完成基础配置</div>
         </div>
-        <button type="button" id="wb-cancel-btn" class="btn-ghost workflow-wizard-secondary-btn">取消</button>
-        <button type="button" id="wb-submit-btn" class="btn-primary workflow-wizard-submit-btn">创建任务</button>
+        <div class="workflow-wizard-footer-actions">
+          <button type="button" id="wb-cancel-btn" class="btn-ghost workflow-wizard-secondary-btn">
+            <span class="workflow-wizard-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+            </span>
+            <span>取消</span>
+          </button>
+          <button type="button" id="wb-submit-btn" class="btn-primary workflow-wizard-submit-btn">
+            <span class="workflow-wizard-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+            </span>
+            <span>创建任务</span>
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -9654,6 +9666,7 @@ async function openWorkbenchCreateTaskModal() {
   const selectionSummaryEl = overlay.querySelector("#wb-selection-summary");
   const footerStatusEl = overlay.querySelector("#wb-footer-status");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
+  const submitBtnLabelEl = submitBtn.querySelector("span:last-child");
 
   function closeWorkbenchCreateModal() {
     overlay.remove();
@@ -9898,7 +9911,9 @@ async function openWorkbenchCreateTaskModal() {
           ? `缺少必需交付物 ${requiredFile}`
           : `将向 ${state.service || "--"} 发起 ${state.entryPoint || "--"} 流程`;
     footerStatusEl.textContent = summaryText;
-    submitBtn.textContent = state.uploadingFiles > 0 ? "上传中..." : "创建任务";
+    if (submitBtnLabelEl) {
+      submitBtnLabelEl.textContent = state.uploadingFiles > 0 ? "上传中..." : "创建任务";
+    }
     if (selectionSummaryEl) {
       const summaryTitle = getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--";
       const summarySubtitle = `${state.service || "--"} · ${state.entryPoint || "--"}`;
