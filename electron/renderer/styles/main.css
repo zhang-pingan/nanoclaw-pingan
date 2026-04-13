@@ -4908,6 +4908,10 @@ body.quick-chat-window .quick-chat-input {
   margin-left: auto;
 }
 
+.memory-dialog-close-btn {
+  margin-left: auto;
+}
+
 .memory-doctor-sections {
   display: grid;
   grid-template-columns: 1fr;
@@ -4990,6 +4994,29 @@ body.quick-chat-window .quick-chat-input {
 
 .memory-metrics-header .icon-btn {
   margin-left: auto;
+}
+
+.memory-dialog-close-btn,
+.memory-editor-actions .btn-primary,
+.memory-editor-actions .btn-ghost {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.memory-dialog-close-btn {
+  border: 1px solid rgba(244, 114, 182, 0.18);
+  background: rgba(253, 242, 248, 0.92);
+  color: #be185d;
+}
+
+.memory-dialog-close-btn:hover {
+  border-color: rgba(236, 72, 153, 0.26);
+  background: rgba(252, 231, 243, 0.98);
+  color: #9d174d;
 }
 
 .memory-metrics-total {
