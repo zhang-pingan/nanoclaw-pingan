@@ -2,10 +2,12 @@
 var ws = null;
 var reconnectTimer = null;
 var currentGroupJid = "";
+var isStandaloneQuickChat = new URLSearchParams(window.location.search).get("quick-chat") === "1";
 var browserNotificationPermissionRequested = false;
 var groups = [];
 var messages = [];
 var unreadCounts = {};
+var quickChatDraft = "";
 var replyToMsg = null;
 var hasMoreHistory = true;
 var loadingHistory = false;
@@ -205,6 +207,12 @@ var typingIndicator = document.getElementById("typing-indicator");
 var inputArea = document.getElementById("input-area");
 var messageInput = document.getElementById("message-input");
 var sendBtn = document.getElementById("send-btn");
+var quickChatOverlay = document.getElementById("quick-chat-overlay");
+var quickChatTarget = document.getElementById("quick-chat-target");
+var quickChatInput = document.getElementById("quick-chat-input");
+var quickChatSendBtn = document.getElementById("quick-chat-send");
+var quickChatOpenMainBtn = document.getElementById("quick-chat-open-main");
+var quickChatCloseBtn = document.getElementById("quick-chat-close");
 var attachBtn = document.getElementById("attach-btn");
 var fileInput = document.getElementById("file-input");
 var fileDropZone = document.getElementById("file-drop-zone");
@@ -6580,6 +6588,67 @@ function isCurrentGroupMain() {
   return getCurrentGroup()?.isMain === true;
 }
 
+function getMainGroup() {
+  return groups.find((group) => group.isMain) || null;
+}
+
+function syncQuickChatTarget() {
+  if (!quickChatTarget) return;
+  const mainGroup = getMainGroup();
+  if (!mainGroup) {
+    quickChatTarget.textContent = "未找到主群，请先完成主群初始化。";
+    return;
+  }
+  quickChatTarget.textContent = `发送到 ${mainGroup.name}${mainGroup.folder ? ` · @ ${mainGroup.folder}` : ""}`;
+}
+
+function isQuickChatOpen() {
+  return !!quickChatOverlay && !quickChatOverlay.classList.contains("hidden");
+}
+
+function openQuickChat(options = {}) {
+  if (!quickChatOverlay || !quickChatInput) return;
+  syncQuickChatTarget();
+  if (typeof options.prefill === "string") {
+    quickChatDraft = options.prefill;
+  }
+  quickChatInput.value = quickChatDraft;
+  quickChatOverlay.classList.remove("hidden");
+  quickChatOverlay.setAttribute("aria-hidden", "false");
+  document.body.classList.add("quick-chat-open");
+  requestAnimationFrame(() => {
+    quickChatInput.focus();
+    quickChatInput.setSelectionRange(quickChatInput.value.length, quickChatInput.value.length);
+  });
+}
+
+function closeQuickChat() {
+  if (!quickChatOverlay || !quickChatInput) return;
+  quickChatDraft = quickChatInput.value;
+  if (isStandaloneQuickChat) {
+    window.nanoclawApp?.hideWindow?.();
+    return;
+  }
+  quickChatOverlay.classList.add("hidden");
+  quickChatOverlay.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("quick-chat-open");
+}
+
+function toggleQuickChat() {
+  if (isQuickChatOpen()) {
+    closeQuickChat();
+    return;
+  }
+  openQuickChat();
+}
+
+function initStandaloneQuickChatMode() {
+  if (!isStandaloneQuickChat) return;
+  document.body.classList.add("quick-chat-window", "quick-chat-open");
+  if (mainScreen) mainScreen.classList.add("hidden");
+  openQuickChat();
+}
+
 async function loadGroups() {
   try {
     const res = await apiFetch("/api/groups");
@@ -6587,6 +6656,7 @@ async function loadGroups() {
     const data = await res.json();
     groups = data.groups;
     renderGroups();
+    syncQuickChatTarget();
     if (!groups.some((g) => g.jid === activeMemoryGroupJid)) {
       activeMemoryGroupJid = getDefaultMemoryGroupJid();
     }
@@ -9417,6 +9487,7 @@ function handleWsMessage(msg) {
     case "groups":
       groups = msg.groups || [];
       renderGroups();
+      syncQuickChatTarget();
       if (activePrimaryNavKey === "trace-monitor") {
         renderTraceMonitorList();
         if (currentTraceRunRecord) {
@@ -9635,46 +9706,20 @@ async function selectGroup(jid) {
   await loadMessages();
   sendWs({ type: "select_group", chatJid: jid });
 }
-async function sendMessage(content) {
-  if (!content.trim() && pendingFiles.length === 0) return;
-  if (!currentGroupJid) return;
 
-  // Upload pending files first and prepend their container paths
-  let filePrefix = "";
-  if (pendingFiles.length > 0) {
-    try {
-      filePrefix = await uploadPendingFiles();
-    } catch (err) {
-      showError(`附件上传失败: ${err}`);
-      return;
-    }
-  }
-
-  const fullContent = filePrefix + content.trim();
-  const payload = {
-    type: "message",
-    chatJid: currentGroupJid,
-    content: fullContent,
-  };
-
-  // Include reply reference if set
-  if (replyToMsg) {
-    payload.replyToId = replyToMsg.id;
-  }
-
-  sendWs(payload);
-
+function appendOptimisticMessage(chatJid, content, replyToId = null) {
   const userMsg = {
     id: `opt_${Date.now()}`,
-    chat_jid: currentGroupJid,
+    chat_jid: chatJid,
     sender: "me",
     sender_name: "You",
-    content: fullContent,
+    content,
     timestamp: Date.now().toString(),
     is_from_me: true,
     is_bot_message: false,
-    reply_to_id: replyToMsg ? replyToMsg.id : null
+    reply_to_id: replyToId
   };
+  if (chatJid !== currentGroupJid) return;
   messages.push(userMsg);
   const dropped = trimLiveMessageBuffer();
   if (dropped > 0) {
@@ -9682,11 +9727,71 @@ async function sendMessage(content) {
   } else {
     appendSingleMessage(userMsg);
   }
+}
+
+async function sendMessageToChat(chatJid, content, options = {}) {
+  const trimmed = content.trim();
+  if (!trimmed && (!options.pendingFiles || options.pendingFiles.length === 0)) return false;
+  if (!chatJid) return false;
+
+  // Upload pending files first and prepend their container paths
+  let filePrefix = "";
+  const stagedFiles = Array.isArray(options.pendingFiles) ? options.pendingFiles : pendingFiles;
+  if (stagedFiles.length > 0) {
+    try {
+      filePrefix = await uploadPendingFiles();
+    } catch (err) {
+      showError(`附件上传失败: ${err}`);
+      return false;
+    }
+  }
+
+  const fullContent = filePrefix + trimmed;
+  const payload = {
+    type: "message",
+    chatJid,
+    content: fullContent,
+  };
+
+  // Include reply reference if set
+  const replyToId = options.replyToId === undefined ? (replyToMsg ? replyToMsg.id : null) : options.replyToId;
+  if (replyToId) {
+    payload.replyToId = replyToId;
+  }
+
+  sendWs(payload);
+  if (options.optimistic !== false) {
+    appendOptimisticMessage(chatJid, fullContent, replyToId);
+  }
+  return true;
+}
+
+async function sendMessage(content) {
+  const sent = await sendMessageToChat(currentGroupJid, content);
+  if (!sent) return;
   messageInput.value = "";
   autoResizeInput();
   clearReplyTo();
   hideCommandPalette();
   hideMentionPicker(false);
+}
+
+async function sendQuickChatMessage() {
+  if (!quickChatInput) return;
+  const mainGroup = getMainGroup();
+  if (!mainGroup) {
+    showToast("未找到主群，无法发送", 2200);
+    return;
+  }
+  const sent = await sendMessageToChat(mainGroup.jid, quickChatInput.value, {
+    optimistic: mainGroup.jid === currentGroupJid,
+    replyToId: null,
+  });
+  if (!sent) return;
+  quickChatInput.value = "";
+  quickChatDraft = "";
+  showToast(`已发送到主群 ${mainGroup.name}`, 1800);
+  closeQuickChat();
 }
 
 // --- Reply handling ---
@@ -10330,6 +10435,7 @@ bindNotificationClickHandler();
 bindNotificationPermissionPrimer();
 bindCardsRowEvents();
 bindCardsDragEvents();
+initStandaloneQuickChatMode();
 window.addEventListener("focus", clearCurrentGroupUnreadIfForeground);
 document.addEventListener("visibilitychange", clearCurrentGroupUnreadIfForeground);
 connectWS();
@@ -10343,6 +10449,16 @@ if (primaryNav) {
 if (window.nanoclawApp && typeof window.nanoclawApp.onCyclePrimaryNav === "function") {
   window.nanoclawApp.onCyclePrimaryNav(() => {
     cyclePrimaryNav(1);
+  });
+}
+if (window.nanoclawApp && typeof window.nanoclawApp.onQuickChatOpenMainGroup === "function") {
+  window.nanoclawApp.onQuickChatOpenMainGroup(async () => {
+    const mainGroup = getMainGroup();
+    if (!mainGroup) return;
+    if (activePrimaryNavKey !== "agent-groups") {
+      setPrimaryNav("agent-groups");
+    }
+    await selectGroup(mainGroup.jid);
   });
 }
 primaryNavItems.forEach((item) => {
@@ -10772,6 +10888,54 @@ closeAgentStatusBtn.addEventListener("click", () => {
 sendBtn.addEventListener("click", () => {
   sendMessage(messageInput.value);
 });
+if (quickChatCloseBtn) {
+  quickChatCloseBtn.addEventListener("click", () => {
+    closeQuickChat();
+  });
+}
+if (quickChatSendBtn) {
+  quickChatSendBtn.addEventListener("click", () => {
+    sendQuickChatMessage();
+  });
+}
+if (quickChatOpenMainBtn) {
+  quickChatOpenMainBtn.addEventListener("click", async () => {
+    const mainGroup = getMainGroup();
+    if (!mainGroup) {
+      showToast("未找到主群", 2200);
+      return;
+    }
+    if (isStandaloneQuickChat) {
+      window.nanoclawApp?.openMainGroupFromQuickChat?.();
+      return;
+    }
+    closeQuickChat();
+    await selectGroup(mainGroup.jid);
+  });
+}
+if (quickChatOverlay) {
+  quickChatOverlay.addEventListener("mousedown", (e) => {
+    if (e.target === quickChatOverlay) {
+      closeQuickChat();
+    }
+  });
+}
+if (quickChatInput) {
+  quickChatInput.addEventListener("input", () => {
+    quickChatDraft = quickChatInput.value;
+  });
+  quickChatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeQuickChat();
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendQuickChatMessage();
+    }
+  });
+}
 messageInput.addEventListener("keydown", (e) => {
   // Command palette navigation
   if (commandPalette.classList.contains("visible")) {
@@ -10952,6 +11116,11 @@ copySelectedBtn.addEventListener("click", copySelectedMessages);
 deleteSelectedBtn.addEventListener("click", deleteSelectedMessages);
 cancelSelectBtn.addEventListener("click", exitMultiSelect);
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && isQuickChatOpen()) {
+    e.preventDefault();
+    closeQuickChat();
+    return;
+  }
   if (e.key === "Escape" && mentionPickerVisible) {
     hideMentionPicker();
     return;

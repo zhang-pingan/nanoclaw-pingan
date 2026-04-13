@@ -1025,6 +1025,37 @@
     </div>
   </div>
 
+  <div id="quick-chat-overlay" class="quick-chat-overlay hidden" aria-hidden="true">
+    <div class="quick-chat-panel" role="dialog" aria-modal="true" aria-labelledby="quick-chat-title">
+      <div class="quick-chat-header">
+        <div class="quick-chat-title-wrap">
+          <span class="quick-chat-kicker">Quick Chat</span>
+          <h2 id="quick-chat-title">主群速聊</h2>
+          <p id="quick-chat-target" class="quick-chat-target">正在定位主群…</p>
+        </div>
+        <button id="quick-chat-close" class="icon-btn" title="关闭">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <textarea
+        id="quick-chat-input"
+        class="quick-chat-input"
+        rows="4"
+        placeholder="直接描述你想让主群 agent 帮你做的事，比如：帮我新增一个审批流程，先问我缺哪些字段。"
+      ></textarea>
+      <div class="quick-chat-footer">
+        <span class="quick-chat-hint">快捷键: Command + ~</span>
+        <div class="quick-chat-actions">
+          <button id="quick-chat-open-main" class="btn-ghost" type="button">打开主群</button>
+          <button id="quick-chat-send" class="btn-primary" type="button">发送到主群</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="/dist/app.js"></script>
 </body>
 </html>

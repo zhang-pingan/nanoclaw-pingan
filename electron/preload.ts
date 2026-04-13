@@ -33,6 +33,14 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     return () => ipcRenderer.removeListener('cycle-primary-nav', listener);
   },
 
+  onQuickChatOpenMainGroup: (handler: () => void) => {
+    const listener = () => {
+      handler();
+    };
+    ipcRenderer.on('quick-chat-open-main-group', listener);
+    return () => ipcRenderer.removeListener('quick-chat-open-main-group', listener);
+  },
+
   // Open external URL in system browser
   openExternal: (url: string) => {
     // This would go through IPC in a real implementation
@@ -57,6 +65,14 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
 
   // Platform info
   platform: process.platform,
+
+  showMainWindow: () => {
+    ipcRenderer.send('show-main-window');
+  },
+
+  openMainGroupFromQuickChat: () => {
+    ipcRenderer.send('quick-chat-open-main-group');
+  },
 
   // Quit the app (hide only, not "Quit All")
   hideWindow: () => {

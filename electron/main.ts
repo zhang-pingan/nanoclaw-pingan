@@ -1,12 +1,15 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification, globalShortcut } from 'electron';
 import path from 'path';
 import { execFile } from 'child_process';
 
 const mainDir = __dirname;
+const QUICK_CHAT_SHORTCUT = 'Command+`';
+const QUICK_CHAT_URL = 'http://localhost:3000/?quick-chat=1';
 
 // Track whether we're doing a full quit (Quit All) vs just hiding
 let isQuitting = false;
 let mainWindow: BrowserWindow | null = null;
+let quickChatWindow: BrowserWindow | null = null;
 
 const isMac = process.platform === 'darwin';
 
@@ -30,6 +33,102 @@ function bringMainWindowToFront(): void {
   if (!mainWindow.isVisible()) mainWindow.show();
   mainWindow.moveTop();
   mainWindow.focus();
+}
+
+function bringWindowToFront(win: BrowserWindow | null): void {
+  if (!win) return;
+
+  if (isMac) {
+    app.focus({ steal: true });
+  }
+
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.moveTop();
+  win.focus();
+}
+
+function createQuickChatWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 720,
+    height: 320,
+    minWidth: 640,
+    maxWidth: 840,
+    minHeight: 260,
+    maxHeight: 420,
+    show: false,
+    frame: false,
+    transparent: true,
+    hasShadow: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    movable: true,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    title: 'MixClaw Quick Chat',
+    backgroundColor: '#00000000',
+    vibrancy: isMac ? 'under-window' : undefined,
+    visualEffectState: isMac ? 'active' : undefined,
+    webPreferences: {
+      preload: path.join(mainDir, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  win.loadURL(QUICK_CHAT_URL);
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  win.on('blur', () => {
+    if (!isQuitting) {
+      win.hide();
+    }
+  });
+
+  win.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      win.hide();
+    }
+  });
+
+  win.on('closed', () => {
+    quickChatWindow = null;
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  return win;
+}
+
+function showQuickChatWindow(): void {
+  if (!quickChatWindow) {
+    quickChatWindow = createQuickChatWindow();
+  }
+  quickChatWindow.center();
+  bringWindowToFront(quickChatWindow);
+}
+
+function hideQuickChatWindow(): void {
+  if (quickChatWindow && quickChatWindow.isVisible()) {
+    quickChatWindow.hide();
+  }
+}
+
+function toggleQuickChat(): void {
+  if (quickChatWindow?.isVisible()) {
+    hideQuickChatWindow();
+    return;
+  }
+  showQuickChatWindow();
 }
 
 function createWindow(): void {
@@ -205,6 +304,19 @@ app.on('before-quit', () => {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(buildAppMenu());
   createWindow();
+  globalShortcut.register(QUICK_CHAT_SHORTCUT, () => {
+    toggleQuickChat();
+  });
+
+  ipcMain.on('show-main-window', () => {
+    bringMainWindowToFront();
+  });
+
+  ipcMain.on('quick-chat-open-main-group', () => {
+    bringMainWindowToFront();
+    mainWindow?.webContents.send('quick-chat-open-main-group');
+    hideQuickChatWindow();
+  });
 
   // Handle open-file IPC from renderer
   ipcMain.handle('open-file', async (_event, filePath: string) => {
@@ -277,6 +389,10 @@ app.whenReady().then(() => {
     });
     notification.show();
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 // Quit when all windows are closed (except on macOS)

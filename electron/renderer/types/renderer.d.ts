@@ -7,6 +7,8 @@ interface NanoClawAppAPI {
   onNotificationClick(handler: (payload: { chatJid?: string; taskId?: string }) => void): () => void;
   /** Listen to the app shortcut that cycles the primary nav */
   onCyclePrimaryNav(handler: () => void): () => void;
+  /** Listen for quick-chat actions that should switch the main window to the main group */
+  onQuickChatOpenMainGroup(handler: () => void): () => void;
   /** Open a URL in the system browser */
   openExternal(url: string): void;
   /** Open a local file in the default app */
@@ -17,6 +19,10 @@ interface NanoClawAppAPI {
   showInFolder(filePath: string): Promise<{ ok: boolean; error?: string }>;
   /** Current platform (darwin, win32, linux) */
   platform: string;
+  /** Bring the main application window to the foreground */
+  showMainWindow(): void;
+  /** Ask the main application window to jump to the main group */
+  openMainGroupFromQuickChat(): void;
   /** Hide the window (quit Electron UI, keep NanoClaw running) */
   hideWindow(): void;
 }
