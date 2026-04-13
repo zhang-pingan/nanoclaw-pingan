@@ -732,16 +732,29 @@ body.quick-chat-window #app {
 
 .workbench-task-header,
 .workbench-panel {
-  border: 1px solid var(--workbench-tertiary-accent-dim, rgba(79, 110, 247, 0.08));
-  background: linear-gradient(180deg, var(--workbench-tertiary-accent-dim, rgba(79, 110, 247, 0.08)), rgba(255, 255, 255, 0.88));
-  border-radius: 20px;
-  box-shadow: var(--shadow-sm);
+  position: relative;
+  border: 1px solid rgba(196, 181, 253, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.86), transparent 34%),
+    linear-gradient(180deg, rgba(248, 246, 255, 0.96), rgba(255, 255, 255, 0.94));
+  border-radius: 24px;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.workbench-task-header::before,
+.workbench-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
 }
 
 .workbench-task-header {
   display: flex;
   gap: 18px;
-  padding: 22px 24px;
+  padding: 24px 24px 22px;
 }
 
 .workbench-task-header-main {
@@ -755,32 +768,40 @@ body.quick-chat-window #app {
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 8px;
+  color: #7c3aed;
+  margin-bottom: 10px;
+  font-weight: 800;
 }
 
 .workbench-task-header h2 {
-  font-size: 28px;
-  line-height: 1.1;
-  margin-bottom: 10px;
+  font-size: 30px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
 }
 
 .workbench-task-meta {
   color: var(--text-secondary);
   font-size: 13px;
+  gap: 8px;
 }
 
 .workbench-task-header-footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .workbench-task-actions {
   display: inline-flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
   margin-left: auto;
+  padding: 8px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(244, 249, 255, 0.92), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(196, 181, 253, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 .workbench-subtask-actions {
@@ -793,12 +814,14 @@ body.quick-chat-window #app {
 .workbench-task-action-btn {
   position: relative;
   border: 1px solid rgba(79, 110, 247, 0.14);
-  background: rgba(79, 110, 247, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.9));
   color: var(--accent-strong);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .workbench-task-action-btn:hover {
-  background: rgba(79, 110, 247, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(240, 247, 255, 0.95));
+  box-shadow: 0 14px 26px rgba(79, 110, 247, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
 .workbench-task-action-btn.danger {
@@ -837,14 +860,15 @@ body.quick-chat-window #app {
 }
 
 .workbench-panel {
-  padding: 18px 20px;
+  padding: 20px;
 }
 
 .workbench-panel-title {
-  font-size: 14px;
-  font-weight: 700;
-  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 16px;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .workbench-inline-actions {
@@ -866,10 +890,11 @@ body.quick-chat-window #app {
 .workbench-approval-item,
 .workbench-artifact-item,
 .workbench-event-item {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px 16px;
-  background: rgba(245, 247, 250, 0.8);
+  border: 1px solid rgba(196, 181, 253, 0.12);
+  border-radius: 18px;
+  padding: 15px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 255, 0.9));
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
 }
 
 .workbench-artifact-item.is-clickable {
@@ -879,8 +904,8 @@ body.quick-chat-window #app {
 
 .workbench-artifact-item.is-clickable:hover {
   transform: translateY(-1px);
-  border-color: rgba(79, 110, 247, 0.28);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  border-color: rgba(79, 110, 247, 0.24);
+  box-shadow: 0 16px 28px rgba(79, 110, 247, 0.1);
 }
 
 .workbench-subtask-item.current {
@@ -952,12 +977,12 @@ body.quick-chat-window #app {
 }
 
 .workbench-subtask-card {
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 1px solid rgba(196, 181, 253, 0.12);
+  border-radius: 18px;
   width: 100%;
   min-height: 64px;
-  padding: 14px 16px;
-  background: rgba(245, 247, 250, 0.82);
+  padding: 15px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 255, 0.9));
   transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
   display: flex;
   position: relative;
@@ -975,7 +1000,7 @@ body.quick-chat-window #app {
 
 .workbench-subtask-step.active .workbench-subtask-card {
   border-color: rgba(79, 110, 247, 0.52);
-  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.16);
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.12), 0 16px 30px rgba(79, 110, 247, 0.08);
 }
 
 .workbench-subtask-step.active.animate-in .workbench-subtask-card {
@@ -1007,8 +1032,8 @@ body.quick-chat-window #app {
 
 .workbench-subtask-step.current .workbench-subtask-card {
   border-color: rgba(79, 110, 247, 0.34);
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.12), rgba(255, 255, 255, 0.96));
-  box-shadow: 0 10px 24px rgba(79, 110, 247, 0.08);
+  background: linear-gradient(135deg, rgba(79, 110, 247, 0.12), rgba(255, 255, 255, 0.98));
+  box-shadow: 0 16px 28px rgba(79, 110, 247, 0.1);
   transform: translateY(-2px) scale(1.03);
   transform-origin: left center;
 }
@@ -1398,18 +1423,23 @@ body.quick-chat-window #app {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(248, 246, 255, 0.78), rgba(255, 255, 255, 0.9));
+  border: 1px solid rgba(196, 181, 253, 0.1);
 }
 
 .workbench-comment-composer textarea {
   width: 100%;
   min-height: 92px;
   padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(196, 181, 253, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
   font: inherit;
   color: var(--text-primary);
   resize: vertical;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .workbench-retry-composer {
