@@ -487,17 +487,6 @@ body.quick-chat-window #app {
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.76), 0 14px 30px rgba(109, 92, 255, 0.08);
 }
 
-.workbench-sidebar::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -32px;
-  width: 56px;
-  height: 100%;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(238, 243, 255, 0.96) 0%, rgba(238, 243, 255, 0.48) 52%, rgba(238, 243, 255, 0) 100%);
-}
-
 .workbench-sidebar.collapsed {
   width: var(--sidebar-collapsed-width);
   min-width: var(--sidebar-collapsed-width);
