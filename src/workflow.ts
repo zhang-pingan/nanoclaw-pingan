@@ -47,6 +47,7 @@ import {
   TemplateVars,
   WorkflowTypeConfig,
 } from './workflow-config.js';
+import { WorkflowCreateForm } from './workflow-definition.js';
 import {
   createWorkbenchManualSkipEvent,
   syncWorkbenchOnDelegationCompleted,
@@ -1815,6 +1816,7 @@ export function getAvailableWorkflowTypes(): Array<{
     { requires_deliverable: boolean; deliverable_role?: string }
   >;
   role_channels: Record<string, Record<string, string>>;
+  create_form?: WorkflowCreateForm;
 }> {
   const configs = getWorkflowConfigs();
   if (!configs) return [];
@@ -1835,5 +1837,6 @@ export function getAvailableWorkflowTypes(): Array<{
     role_channels: Object.fromEntries(
       Object.entries(config.roles).map(([role, rc]) => [role, rc.channels]),
     ),
+    create_form: config.create_form,
   }));
 }

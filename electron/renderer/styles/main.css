@@ -5946,6 +5946,84 @@ body.quick-chat-window .quick-chat-input {
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+.workflow-wizard-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  appearance: none;
+}
+
+.workflow-wizard-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.workflow-wizard-flow-summary {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(79, 110, 247, 0.08), rgba(79, 110, 247, 0.02));
+  border: 1px solid rgba(79, 110, 247, 0.18);
+}
+
+.workflow-wizard-flow-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.workflow-wizard-flow-caption {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.workflow-wizard-flow-group {
+  display: grid;
+  gap: 6px;
+}
+
+.workflow-wizard-flow-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.workflow-wizard-flow-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflow-wizard-flow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(79, 110, 247, 0.14);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.workflow-wizard-flow-pill strong {
+  color: var(--text-primary);
+}
+
+.workflow-wizard-field-help {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .workflow-wizard-hint {
   font-size: 12px;
   color: var(--text-muted);

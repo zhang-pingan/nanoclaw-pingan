@@ -12,7 +12,7 @@ import path from 'path';
 
 import { CardConfig, validateCardConfig } from './card-config.js';
 import { logger } from './logger.js';
-import { WorkflowDefinition } from './workflow-definition.js';
+import { WorkflowCreateForm, WorkflowDefinition } from './workflow-definition.js';
 import {
   getPublishedWorkflowDefinitions,
   normalizeWorkflowDefinitionRegistry,
@@ -78,6 +78,7 @@ export interface WorkflowTypeConfig {
   entry_points: Record<string, EntryPointConfig>;
   states: Record<string, StateConfig>;
   status_labels: Record<string, string>;
+  create_form?: WorkflowCreateForm;
 }
 
 interface RawWorkflowTypeConfig extends WorkflowTypeConfig {

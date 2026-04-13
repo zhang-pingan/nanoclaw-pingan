@@ -86,6 +86,33 @@ export interface WorkflowDefinitionMetadata {
   based_on_version?: number;
 }
 
+export interface WorkflowCreateFieldCondition {
+  entry_points?: string[];
+  equals?: Record<string, string | string[]>;
+}
+
+export interface WorkflowCreateFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface WorkflowCreateField {
+  key: string;
+  label: string;
+  type: 'text' | 'choice' | 'requirement_select';
+  placeholder?: string;
+  helper_text?: string;
+  default_value?: string;
+  searchable?: boolean;
+  options?: WorkflowCreateFieldOption[];
+  visible_when?: WorkflowCreateFieldCondition;
+}
+
+export interface WorkflowCreateForm {
+  name_field_keys?: string[];
+  fields: WorkflowCreateField[];
+}
+
 export interface WorkflowDefinition {
   key: string;
   name: string;
@@ -96,6 +123,7 @@ export interface WorkflowDefinition {
   entry_points: Record<string, WorkflowDefinitionEntryPoint>;
   states: Record<string, WorkflowDefinitionState>;
   status_labels: Record<string, string>;
+  create_form?: WorkflowCreateForm;
   metadata?: WorkflowDefinitionMetadata;
 }
 

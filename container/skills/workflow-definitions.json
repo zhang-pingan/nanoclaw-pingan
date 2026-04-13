@@ -440,6 +440,63 @@
               "default",
               "delivery"
             ]
+          },
+          "create_form": {
+            "name_field_keys": [
+              "requirement_custom",
+              "requirement_preset"
+            ],
+            "fields": [
+              {
+                "key": "requirement_custom",
+                "label": "任务名称",
+                "type": "text",
+                "placeholder": "输入新需求名称",
+                "helper_text": "从 Plan 入口创建时，直接录入新的需求名称。",
+                "visible_when": {
+                  "entry_points": [
+                    "plan"
+                  ]
+                }
+              },
+              {
+                "key": "requirement_preset",
+                "label": "任务名称",
+                "type": "requirement_select",
+                "searchable": true,
+                "helper_text": "从 Dev 或 Testing 入口创建时，选择已有需求目录。",
+                "visible_when": {
+                  "entry_points": [
+                    "dev",
+                    "testing"
+                  ]
+                }
+              },
+              {
+                "key": "main_branch",
+                "label": "main_branch（主分支，可选）",
+                "type": "text",
+                "placeholder": "例如：main"
+              },
+              {
+                "key": "staging_base_branch",
+                "label": "staging_base_branch（预发分支，可选）",
+                "type": "text",
+                "placeholder": "例如：staging"
+              },
+              {
+                "key": "work_branch",
+                "label": "work_branch（工作分支，可选）",
+                "type": "text",
+                "placeholder": "例如：feature/xxx"
+              },
+              {
+                "key": "staging_work_branch",
+                "label": "staging_work_branch（预发工作分支，可选）",
+                "type": "text",
+                "placeholder": "例如：staging-deploy/feature-xxx"
+              }
+            ]
           }
         },
         {
@@ -879,7 +936,64 @@
           },
           "key": "dev_test",
           "version": 2,
-          "status": "draft"
+          "status": "draft",
+          "create_form": {
+            "name_field_keys": [
+              "requirement_custom",
+              "requirement_preset"
+            ],
+            "fields": [
+              {
+                "key": "requirement_custom",
+                "label": "任务名称",
+                "type": "text",
+                "placeholder": "输入新需求名称",
+                "helper_text": "从 Plan 入口创建时，直接录入新的需求名称。",
+                "visible_when": {
+                  "entry_points": [
+                    "plan"
+                  ]
+                }
+              },
+              {
+                "key": "requirement_preset",
+                "label": "任务名称",
+                "type": "requirement_select",
+                "searchable": true,
+                "helper_text": "从 Dev 或 Testing 入口创建时，选择已有需求目录。",
+                "visible_when": {
+                  "entry_points": [
+                    "dev",
+                    "testing"
+                  ]
+                }
+              },
+              {
+                "key": "main_branch",
+                "label": "main_branch（主分支，可选）",
+                "type": "text",
+                "placeholder": "例如：main"
+              },
+              {
+                "key": "staging_base_branch",
+                "label": "staging_base_branch（预发分支，可选）",
+                "type": "text",
+                "placeholder": "例如：staging"
+              },
+              {
+                "key": "work_branch",
+                "label": "work_branch（工作分支，可选）",
+                "type": "text",
+                "placeholder": "例如：feature/xxx"
+              },
+              {
+                "key": "staging_work_branch",
+                "label": "staging_work_branch（预发工作分支，可选）",
+                "type": "text",
+                "placeholder": "例如：staging-deploy/feature-xxx"
+              }
+            ]
+          }
         }
       ]
     }

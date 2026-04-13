@@ -1,5 +1,6 @@
 import {
   WorkflowDefinition,
+  WorkflowCreateForm,
   WorkflowDefinitionState,
   WorkflowDefinitionTransition,
 } from './workflow-definition.js';
@@ -41,6 +42,7 @@ export interface CompiledWorkflowConfig {
   >;
   states: Record<string, CompiledWorkflowState>;
   status_labels: Record<string, string>;
+  create_form?: WorkflowCreateForm;
 }
 
 function compileTransition(
@@ -97,6 +99,8 @@ export function validateWorkflowDefinition(
   const errors: string[] = [];
   const stateNames = new Set(Object.keys(definition.states));
   const roleNames = new Set(Object.keys(definition.roles));
+  const entryPointNames = new Set(Object.keys(definition.entry_points));
+  const createFieldKeys = new Set<string>();
 
   if (!definition.key?.trim()) errors.push('definition.key is required');
   if (!definition.name?.trim()) errors.push('definition.name is required');
@@ -106,6 +110,59 @@ export function validateWorkflowDefinition(
       errors.push(
         `${definition.key}.entry_points.${entryKey}.state "${entry.state}" does not exist`,
       );
+    }
+  }
+
+  if (definition.create_form) {
+    if (!Array.isArray(definition.create_form.fields)) {
+      errors.push(`${definition.key}.create_form.fields must be an array`);
+    } else {
+      for (const [index, field] of definition.create_form.fields.entries()) {
+        const fieldPath = `${definition.key}.create_form.fields[${index}]`;
+        if (!field.key?.trim()) {
+          errors.push(`${fieldPath}.key is required`);
+        } else if (createFieldKeys.has(field.key)) {
+          errors.push(`${fieldPath}.key "${field.key}" is duplicated`);
+        } else {
+          createFieldKeys.add(field.key);
+        }
+        if (!field.label?.trim()) {
+          errors.push(`${fieldPath}.label is required`);
+        }
+        if (!['text', 'choice', 'requirement_select'].includes(field.type)) {
+          errors.push(`${fieldPath}.type "${field.type}" is invalid`);
+        }
+        if (field.type === 'choice' && (!Array.isArray(field.options) || field.options.length === 0)) {
+          errors.push(`${fieldPath}.options must contain at least one item for choice fields`);
+        }
+        const visibleWhen = field.visible_when;
+        if (visibleWhen?.entry_points) {
+          for (const entryPoint of visibleWhen.entry_points) {
+            if (!entryPointNames.has(entryPoint)) {
+              errors.push(`${fieldPath}.visible_when.entry_points contains unknown entry point "${entryPoint}"`);
+            }
+          }
+        }
+      }
+      for (const [index, field] of definition.create_form.fields.entries()) {
+        const equals = field.visible_when?.equals || {};
+        for (const depKey of Object.keys(equals)) {
+          if (!createFieldKeys.has(depKey)) {
+            errors.push(
+              `${definition.key}.create_form.fields[${index}].visible_when.equals references unknown field "${depKey}"`,
+            );
+          }
+        }
+      }
+    }
+    if (definition.create_form.name_field_keys) {
+      for (const fieldKey of definition.create_form.name_field_keys) {
+        if (!createFieldKeys.has(fieldKey)) {
+          errors.push(
+            `${definition.key}.create_form.name_field_keys references unknown field "${fieldKey}"`,
+          );
+        }
+      }
     }
   }
 
@@ -190,6 +247,7 @@ export function compileWorkflowDefinition(
       ]),
     ),
     status_labels: definition.status_labels,
+    create_form: definition.create_form,
   };
 }
 

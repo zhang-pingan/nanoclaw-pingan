@@ -2090,6 +2090,17 @@ function createWorkflowDefinitionTemplate(key, name, description) {
     status_labels: {
       todo: "待配置",
     },
+    create_form: {
+      name_field_keys: ["requirement_custom"],
+      fields: [
+        {
+          key: "requirement_custom",
+          label: "任务名称",
+          type: "text",
+          placeholder: "输入任务名称",
+        },
+      ],
+    },
     metadata: {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -2137,6 +2148,7 @@ function buildWorkflowDefinitionJsonDocument(version) {
     entry_points: cloneJson(version.entry_points || {}),
     states: cloneJson(version.states || {}),
     status_labels: cloneJson(version.status_labels || {}),
+    create_form: cloneJson(version.create_form || {}),
     metadata: cloneJson(version.metadata || {}),
   };
 }
@@ -3092,6 +3104,11 @@ function getWorkflowDefinitionSavePayload(forcedMode) {
           JSON.stringify(parsed.status_labels || {}),
           {},
         ),
+        create_form: parseWorkflowDefinitionJsonField(
+          "Create Form",
+          JSON.stringify(parsed.create_form || {}),
+          {},
+        ),
         metadata: parseWorkflowDefinitionJsonField(
           "Metadata",
           JSON.stringify(parsed.metadata || {}),
@@ -3133,6 +3150,7 @@ function getWorkflowDefinitionSavePayload(forcedMode) {
         workflowDefinitionStatusLabelsInput?.value || "",
         fallback.status_labels || {},
       ),
+      create_form: cloneJson(editable?.create_form || fallback.create_form || {}),
       metadata: parseWorkflowDefinitionJsonField(
         "Metadata",
         workflowDefinitionMetadataInput?.value || "",
@@ -4326,6 +4344,7 @@ function getWorkflowDefinitionDiffComparable(version) {
     entry_points: cloneJson(version.entry_points || {}),
     states: cloneJson(version.states || {}),
     status_labels: cloneJson(version.status_labels || {}),
+    create_form: cloneJson(version.create_form || {}),
     metadata,
   };
 }
@@ -8866,14 +8885,8 @@ async function openWorkbenchCreateTaskModal() {
     workflowType: workflowTypes[0].type,
     entryPoint: workflowTypes[0].entry_points[0] || "",
     service: services[0],
-    requirementMode: "preset",
-    requirementPreset: "",
-    requirementCustom: "",
-    requirementSearch: "",
-    mainBranch: "",
-    stagingBaseBranch: "",
-    stagingWorkBranch: "",
-    workBranch: "",
+    fieldSearch: {},
+    formValues: {},
   };
 
   const overlay = document.createElement("div");
@@ -8888,7 +8901,8 @@ async function openWorkbenchCreateTaskModal() {
       <div class="workflow-wizard-body">
         <div class="workflow-wizard-section">
           <div class="workflow-wizard-label">1. 流程类型</div>
-          <div id="wb-type-options" class="workflow-wizard-options"></div>
+          <div id="wb-type-select-wrap" class="workflow-wizard-subsection"></div>
+          <div id="wb-type-summary" class="workflow-wizard-subsection"></div>
         </div>
         <div class="workflow-wizard-section">
           <div class="workflow-wizard-label">2. 入口点</div>
@@ -8898,28 +8912,10 @@ async function openWorkbenchCreateTaskModal() {
           <div class="workflow-wizard-label">3. 服务名称</div>
           <div id="wb-service-options" class="workflow-wizard-options"></div>
         </div>
+        <div id="wb-dynamic-fields"></div>
         <div class="workflow-wizard-section">
-          <div class="workflow-wizard-label">4. 任务名称</div>
-          <div id="wb-requirement-mode" class="workflow-wizard-options compact"></div>
-          <div id="wb-requirement-preset-wrap" class="workflow-wizard-subsection"></div>
-          <div id="wb-requirement-custom-wrap" class="workflow-wizard-subsection"></div>
+          <div class="workflow-wizard-label">校验提示</div>
           <div id="wb-requirement-hint" class="workflow-wizard-hint"></div>
-        </div>
-        <div class="workflow-wizard-section" id="wb-deploy-branch-section">
-          <div class="workflow-wizard-label">5. main_branch（主分支，可选）</div>
-          <div id="wb-deploy-branch-wrap" class="workflow-wizard-subsection"></div>
-        </div>
-        <div class="workflow-wizard-section" id="wb-work-branch-section">
-          <div class="workflow-wizard-label">6. staging_base_branch（预发分支，可选）</div>
-          <div id="wb-work-branch-wrap" class="workflow-wizard-subsection"></div>
-        </div>
-        <div class="workflow-wizard-section" id="wb-staging-work-branch-section">
-          <div class="workflow-wizard-label">7. work_branch（工作分支，可选）</div>
-          <div id="wb-staging-work-branch-wrap" class="workflow-wizard-subsection"></div>
-        </div>
-        <div class="workflow-wizard-section" id="wb-main-branch-section">
-          <div class="workflow-wizard-label">8. staging_work_branch（预发工作分支，可选）</div>
-          <div id="wb-main-branch-wrap" class="workflow-wizard-subsection"></div>
         </div>
       </div>
       <div class="workflow-wizard-footer">
@@ -8931,21 +8927,12 @@ async function openWorkbenchCreateTaskModal() {
 
   document.body.appendChild(overlay);
 
-  const typeOptionsEl = overlay.querySelector("#wb-type-options");
+  const typeSelectWrapEl = overlay.querySelector("#wb-type-select-wrap");
+  const typeSummaryEl = overlay.querySelector("#wb-type-summary");
   const entryOptionsEl = overlay.querySelector("#wb-entry-options");
   const serviceOptionsEl = overlay.querySelector("#wb-service-options");
-  const reqModeEl = overlay.querySelector("#wb-requirement-mode");
-  const reqPresetWrapEl = overlay.querySelector("#wb-requirement-preset-wrap");
-  const reqCustomWrapEl = overlay.querySelector("#wb-requirement-custom-wrap");
+  const dynamicFieldsEl = overlay.querySelector("#wb-dynamic-fields");
   const reqHintEl = overlay.querySelector("#wb-requirement-hint");
-  const deployBranchSectionEl = overlay.querySelector("#wb-deploy-branch-section");
-  const deployBranchWrapEl = overlay.querySelector("#wb-deploy-branch-wrap");
-  const workBranchSectionEl = overlay.querySelector("#wb-work-branch-section");
-  const workBranchWrapEl = overlay.querySelector("#wb-work-branch-wrap");
-  const stagingWorkBranchSectionEl = overlay.querySelector("#wb-staging-work-branch-section");
-  const stagingWorkBranchWrapEl = overlay.querySelector("#wb-staging-work-branch-wrap");
-  const mainBranchSectionEl = overlay.querySelector("#wb-main-branch-section");
-  const mainBranchWrapEl = overlay.querySelector("#wb-main-branch-wrap");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
 
   function closeWorkbenchCreateModal() {
@@ -8965,13 +8952,143 @@ async function openWorkbenchCreateTaskModal() {
     return Array.isArray(rows) ? rows : [];
   }
 
-  function getRequirementName() {
-    const selectedType = getSelectedWorkflowType();
+  function getFallbackCreateForm(selectedType) {
     if (selectedType.type === "dev_test") {
-      if (state.entryPoint === "plan") return state.requirementCustom.trim();
-      return state.requirementPreset;
+      return {
+        name_field_keys: ["requirement_custom", "requirement_preset"],
+        fields: [
+          {
+            key: "requirement_custom",
+            label: "任务名称",
+            type: "text",
+            placeholder: "输入新需求名称",
+            visible_when: { entry_points: ["plan"] },
+          },
+          {
+            key: "requirement_preset",
+            label: "任务名称",
+            type: "requirement_select",
+            searchable: true,
+            visible_when: { entry_points: ["dev", "testing"] },
+          },
+          {
+            key: "main_branch",
+            label: "main_branch（主分支，可选）",
+            type: "text",
+            placeholder: "例如：main",
+          },
+          {
+            key: "staging_base_branch",
+            label: "staging_base_branch（预发分支，可选）",
+            type: "text",
+            placeholder: "例如：staging",
+          },
+          {
+            key: "work_branch",
+            label: "work_branch（工作分支，可选）",
+            type: "text",
+            placeholder: "例如：feature/xxx",
+          },
+          {
+            key: "staging_work_branch",
+            label: "staging_work_branch（预发工作分支，可选）",
+            type: "text",
+            placeholder: "例如：staging-deploy/feature-xxx",
+          },
+        ],
+      };
     }
-    return state.requirementMode === "custom" ? state.requirementCustom.trim() : state.requirementPreset;
+
+    return {
+      name_field_keys: ["requirement_custom", "requirement_preset"],
+      fields: [
+        {
+          key: "requirement_mode",
+          label: "任务来源",
+          type: "choice",
+          default_value: "preset",
+          options: [
+            { value: "preset", label: "已有需求" },
+            { value: "custom", label: "自定义任务" },
+          ],
+        },
+        {
+          key: "requirement_preset",
+          label: "任务名称",
+          type: "requirement_select",
+          visible_when: { equals: { requirement_mode: "preset" } },
+        },
+        {
+          key: "requirement_custom",
+          label: "任务名称",
+          type: "text",
+          placeholder: "输入任务名称",
+          visible_when: { equals: { requirement_mode: "custom" } },
+        },
+      ],
+    };
+  }
+
+  function getCreateForm() {
+    return getSelectedWorkflowType().create_form || getFallbackCreateForm(getSelectedWorkflowType());
+  }
+
+  function ensureCreateFormDefaults() {
+    const form = getCreateForm();
+    (form.fields || []).forEach((field) => {
+      if (state.formValues[field.key] !== void 0) return;
+      if (field.default_value !== void 0) {
+        state.formValues[field.key] = field.default_value;
+        return;
+      }
+      if (field.type === "choice" && Array.isArray(field.options) && field.options.length > 0) {
+        state.formValues[field.key] = field.options[0].value;
+        return;
+      }
+      state.formValues[field.key] = "";
+    });
+  }
+
+  function isFieldVisible(field) {
+    const rule = field.visible_when;
+    if (!rule) return true;
+    if (Array.isArray(rule.entry_points) && rule.entry_points.length > 0 && !rule.entry_points.includes(state.entryPoint)) {
+      return false;
+    }
+    if (rule.equals && typeof rule.equals === "object") {
+      const entries = Object.entries(rule.equals);
+      for (const [depKey, expected] of entries) {
+        const actual = state.formValues[depKey];
+        if (Array.isArray(expected)) {
+          if (!expected.includes(actual)) return false;
+        } else if (actual !== expected) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function getVisibleCreateFields() {
+    ensureCreateFormDefaults();
+    return (getCreateForm().fields || []).filter((field) => isFieldVisible(field));
+  }
+
+  function getTaskName() {
+    const visibleKeys = new Set(getVisibleCreateFields().map((field) => field.key));
+    const candidates = getCreateForm().name_field_keys || ["requirement_custom", "requirement_preset"];
+    for (const key of candidates) {
+      if (!visibleKeys.has(key)) continue;
+      const raw = state.formValues[key];
+      if (typeof raw === "string" && raw.trim()) {
+        return raw.trim();
+      }
+    }
+    return "";
+  }
+
+  function setFieldValue(key, value) {
+    state.formValues[key] = value;
   }
 
   function getRequirementDeliverables(reqName) {
@@ -8986,7 +9103,7 @@ async function openWorkbenchCreateTaskModal() {
   }
 
   function updateValidation() {
-    const requirementName = getRequirementName();
+    const requirementName = getTaskName();
     const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
     const deliverableRequired = !!detail?.requires_deliverable;
     const requiredFile = getRequiredDeliverableFile();
@@ -9007,16 +9124,55 @@ async function openWorkbenchCreateTaskModal() {
   }
 
   function refreshWorkbenchCreateModal() {
-    renderSingleOptions(
-      typeOptionsEl,
-      workflowTypes.map((item) => ({ value: item.type, label: `${item.type} (${item.name})` })),
-      state.workflowType,
-      (value) => {
-        state.workflowType = value;
-        state.entryPoint = getEntryPoints()[0] || "";
-        refreshWorkbenchCreateModal();
-      }
-    );
+    ensureCreateFormDefaults();
+    typeSelectWrapEl.innerHTML = "";
+    const typeSelect = document.createElement("select");
+    typeSelect.className = "workflow-wizard-select";
+    workflowTypes.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.type;
+      option.textContent = item.name ? `${item.name} (${item.type})` : item.type;
+      option.selected = item.type === state.workflowType;
+      typeSelect.appendChild(option);
+    });
+    typeSelect.addEventListener("change", () => {
+      state.workflowType = typeSelect.value;
+      state.entryPoint = getEntryPoints()[0] || "";
+      refreshWorkbenchCreateModal();
+    });
+    typeSelectWrapEl.appendChild(typeSelect);
+
+    const selectedType = getSelectedWorkflowType();
+    const roleItems = Object.entries(selectedType.role_channels || {});
+    const entryItems = Array.isArray(selectedType.entry_points) ? selectedType.entry_points : [];
+    typeSummaryEl.innerHTML = `
+      <div class="workflow-wizard-flow-summary">
+        <div class="workflow-wizard-flow-title">${escapeHtml(selectedType.name || selectedType.type)}</div>
+        <div class="workflow-wizard-flow-caption">选择不同流程后，会切换对应的入口点、任务名称方式与补充字段。</div>
+        <div class="workflow-wizard-flow-group">
+          <span class="workflow-wizard-flow-group-label">可用入口点</span>
+          <div class="workflow-wizard-flow-pills">
+            ${entryItems.length > 0
+              ? entryItems.map((entry) => {
+                  const detail = selectedType.entry_points_detail?.[entry];
+                  return `<span class="workflow-wizard-flow-pill">${escapeHtml(entry)}${detail?.requires_deliverable ? " · 需交付物" : ""}</span>`;
+                }).join("")
+              : '<span class="workflow-wizard-empty">暂无入口点</span>'}
+          </div>
+        </div>
+        <div class="workflow-wizard-flow-group">
+          <span class="workflow-wizard-flow-group-label">流程角色</span>
+          <div class="workflow-wizard-flow-pills">
+            ${roleItems.length > 0
+              ? roleItems.map(([role, channels]) => {
+                  const webChannel = channels?.web || channels?.feishu || Object.values(channels || {})[0] || "--";
+                  return `<span class="workflow-wizard-flow-pill"><strong>${escapeHtml(role)}</strong>${escapeHtml(webChannel)}</span>`;
+                }).join("")
+              : '<span class="workflow-wizard-empty">暂无角色配置</span>'}
+          </div>
+        </div>
+      </div>
+    `;
 
     const entryPoints = getEntryPoints();
     if (!state.entryPoint || !entryPoints.includes(state.entryPoint)) {
@@ -9041,149 +9197,92 @@ async function openWorkbenchCreateTaskModal() {
       state.service,
       (value) => {
         state.service = value;
-        const reqs = getRequirements();
-        state.requirementPreset = reqs[0]?.requirement_name || "";
         refreshWorkbenchCreateModal();
       }
     );
 
     const reqs = getRequirements();
-    if (!state.requirementPreset && reqs.length > 0) {
-      state.requirementPreset = reqs[0].requirement_name;
-    }
+    dynamicFieldsEl.innerHTML = "";
+    const visibleFields = getVisibleCreateFields();
+    visibleFields.forEach((field, idx) => {
+      const section = document.createElement("div");
+      section.className = "workflow-wizard-section";
+      const label = document.createElement("div");
+      label.className = "workflow-wizard-label";
+      label.textContent = `${idx + 4}. ${field.label}`;
+      section.appendChild(label);
 
-    reqModeEl.innerHTML = "";
-    reqPresetWrapEl.innerHTML = "";
-    reqCustomWrapEl.innerHTML = "";
-    deployBranchWrapEl.innerHTML = "";
-    workBranchWrapEl.innerHTML = "";
-    stagingWorkBranchWrapEl.innerHTML = "";
-    mainBranchWrapEl.innerHTML = "";
+      const wrap = document.createElement("div");
+      wrap.className = "workflow-wizard-subsection";
+      section.appendChild(wrap);
 
-    const isDevTest = getSelectedWorkflowType().type === "dev_test";
-    const isPlanEntry = state.entryPoint === "plan";
-    const showBranchInputs = isDevTest;
-
-    deployBranchSectionEl.style.display = showBranchInputs ? "" : "none";
-    workBranchSectionEl.style.display = showBranchInputs ? "" : "none";
-    stagingWorkBranchSectionEl.style.display = showBranchInputs ? "" : "none";
-    mainBranchSectionEl.style.display = showBranchInputs ? "" : "none";
-
-    if (showBranchInputs) {
-      const mainBranchInput = document.createElement("input");
-      mainBranchInput.className = "workflow-wizard-input";
-      mainBranchInput.placeholder = "例如：main";
-      mainBranchInput.value = state.mainBranch;
-      mainBranchInput.addEventListener("input", () => {
-        state.mainBranch = mainBranchInput.value;
-      });
-      deployBranchWrapEl.appendChild(mainBranchInput);
-      const stagingBaseInput = document.createElement("input");
-      stagingBaseInput.className = "workflow-wizard-input";
-      stagingBaseInput.placeholder = "例如：staging";
-      stagingBaseInput.value = state.stagingBaseBranch;
-      stagingBaseInput.addEventListener("input", () => {
-        state.stagingBaseBranch = stagingBaseInput.value;
-      });
-      workBranchWrapEl.appendChild(stagingBaseInput);
-      const workBranchInput = document.createElement("input");
-      workBranchInput.className = "workflow-wizard-input";
-      workBranchInput.placeholder = "例如：feature/xxx";
-      workBranchInput.value = state.workBranch;
-      workBranchInput.addEventListener("input", () => {
-        state.workBranch = workBranchInput.value;
-      });
-      stagingWorkBranchWrapEl.appendChild(workBranchInput);
-      const stagingWorkInput = document.createElement("input");
-      stagingWorkInput.className = "workflow-wizard-input";
-      stagingWorkInput.placeholder = "例如：staging-deploy/feature-xxx";
-      stagingWorkInput.value = state.stagingWorkBranch;
-      stagingWorkInput.addEventListener("input", () => {
-        state.stagingWorkBranch = stagingWorkInput.value;
-      });
-      mainBranchWrapEl.appendChild(stagingWorkInput);
-    } else {
-      state.mainBranch = "";
-      state.stagingBaseBranch = "";
-      state.workBranch = "";
-      state.stagingWorkBranch = "";
-    }
-
-    if (isDevTest) {
-      if (isPlanEntry) {
+      if (field.type === "text") {
         const input = document.createElement("input");
         input.className = "workflow-wizard-input";
-        input.placeholder = "输入新需求名称";
-        input.value = state.requirementCustom;
+        input.placeholder = field.placeholder || "";
+        input.value = state.formValues[field.key] || "";
         input.addEventListener("input", () => {
-          state.requirementCustom = input.value;
+          setFieldValue(field.key, input.value);
           updateValidation();
         });
-        reqCustomWrapEl.appendChild(input);
-      } else {
-        const search = document.createElement("input");
-        search.className = "workflow-wizard-input";
-        search.placeholder = "搜索已有需求";
-        search.value = state.requirementSearch;
-        search.addEventListener("input", () => {
-          state.requirementSearch = search.value;
-          refreshWorkbenchCreateModal();
-        });
-        reqModeEl.appendChild(search);
-
-        const filteredReqs = reqs.filter((item) => !state.requirementSearch || item.requirement_name.includes(state.requirementSearch.trim()));
+        wrap.appendChild(input);
+      } else if (field.type === "choice") {
         const opts = document.createElement("div");
-        opts.className = "workflow-wizard-options";
-        reqPresetWrapEl.appendChild(opts);
+        opts.className = "workflow-wizard-options compact";
+        wrap.appendChild(opts);
         renderSingleOptions(
           opts,
-          filteredReqs.map((item) => ({ value: item.requirement_name, label: item.requirement_name })),
-          state.requirementPreset,
+          Array.isArray(field.options) ? field.options : [],
+          state.formValues[field.key],
           (value) => {
-            state.requirementPreset = value;
+            setFieldValue(field.key, value);
             refreshWorkbenchCreateModal();
           }
         );
-      }
-    } else {
-      renderSingleOptions(
-        reqModeEl,
-        [
-          { value: "preset", label: "已有需求" },
-          { value: "custom", label: "自定义任务" },
-        ],
-        state.requirementMode,
-        (value) => {
-          state.requirementMode = value;
-          refreshWorkbenchCreateModal();
+      } else if (field.type === "requirement_select") {
+        if (!state.formValues[field.key] && reqs.length > 0) {
+          setFieldValue(field.key, reqs[0].requirement_name);
         }
-      );
-
-      if (state.requirementMode === "preset") {
-        const opts = document.createElement("div");
-        opts.className = "workflow-wizard-options";
-        reqPresetWrapEl.appendChild(opts);
+        const searchKey = `${field.key}__search`;
+        if (field.searchable) {
+          const search = document.createElement("input");
+          search.className = "workflow-wizard-input";
+          search.placeholder = "搜索已有需求";
+          search.value = state.fieldSearch[searchKey] || "";
+          search.addEventListener("input", () => {
+            state.fieldSearch[searchKey] = search.value;
+            refreshWorkbenchCreateModal();
+          });
+          wrap.appendChild(search);
+        }
+        const optionsWrap = document.createElement("div");
+        optionsWrap.className = "workflow-wizard-options";
+        if (field.searchable) {
+          optionsWrap.style.marginTop = "8px";
+        }
+        wrap.appendChild(optionsWrap);
+        const keyword = (state.fieldSearch[searchKey] || "").trim();
+        const filteredReqs = reqs.filter((item) => !keyword || item.requirement_name.includes(keyword));
         renderSingleOptions(
-          opts,
-          reqs.map((item) => ({ value: item.requirement_name, label: item.requirement_name })),
-          state.requirementPreset,
+          optionsWrap,
+          filteredReqs.map((item) => ({ value: item.requirement_name, label: item.requirement_name })),
+          state.formValues[field.key],
           (value) => {
-            state.requirementPreset = value;
+            setFieldValue(field.key, value);
             refreshWorkbenchCreateModal();
           }
         );
-      } else {
-        const input = document.createElement("input");
-        input.className = "workflow-wizard-input";
-        input.placeholder = "输入任务名称";
-        input.value = state.requirementCustom;
-        input.addEventListener("input", () => {
-          state.requirementCustom = input.value;
-          updateValidation();
-        });
-        reqCustomWrapEl.appendChild(input);
       }
-    }
+
+      if (field.helper_text) {
+        const helper = document.createElement("div");
+        helper.className = "workflow-wizard-field-help";
+        helper.textContent = field.helper_text;
+        section.appendChild(helper);
+      }
+
+      dynamicFieldsEl.appendChild(section);
+    });
 
     updateValidation();
   }
@@ -9194,7 +9293,7 @@ async function openWorkbenchCreateTaskModal() {
     if (e.target === overlay) closeWorkbenchCreateModal();
   });
   submitBtn.addEventListener("click", async () => {
-    const name = getRequirementName();
+    const name = getTaskName();
     const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
     const deliverableRequired = !!detail?.requires_deliverable;
     const requiredFile = getRequiredDeliverableFile();
@@ -9215,10 +9314,10 @@ async function openWorkbenchCreateTaskModal() {
           start_from: state.entryPoint,
           workflow_type: state.workflowType,
           deliverable: deliverableRequired ? name : void 0,
-          main_branch: state.mainBranch.trim() || void 0,
-          staging_base_branch: state.stagingBaseBranch.trim() || void 0,
-          work_branch: state.workBranch.trim() || void 0,
-          staging_work_branch: state.stagingWorkBranch.trim() || void 0,
+          main_branch: (state.formValues.main_branch || "").trim() || void 0,
+          staging_base_branch: (state.formValues.staging_base_branch || "").trim() || void 0,
+          work_branch: (state.formValues.work_branch || "").trim() || void 0,
+          staging_work_branch: (state.formValues.staging_work_branch || "").trim() || void 0,
         }),
       });
       const data = await res.json();
