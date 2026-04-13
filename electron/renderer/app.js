@@ -34,6 +34,7 @@ var workflowDefinitionDetail = document.getElementById("workflow-definition-deta
 var workflowDefinitionTitle = document.getElementById("workflow-definition-title");
 var workflowDefinitionSummary = document.getElementById("workflow-definition-summary");
 var workflowDefinitionMeta = document.getElementById("workflow-definition-meta");
+var workflowDefinitionPreviewCreateFormBtn = document.getElementById("workflow-definition-preview-create-form-btn");
 var workflowDefinitionSaveBtn = document.getElementById("workflow-definition-save-btn");
 var workflowDefinitionPublishBtn = document.getElementById("workflow-definition-publish-btn");
 var workflowDefinitionVersionSummary = document.getElementById("workflow-definition-version-summary");
@@ -70,6 +71,9 @@ var workflowDefinitionStatusLabelAddBtn = document.getElementById("workflow-defi
 var workflowDefinitionStatusLabelsInput = document.getElementById("workflow-definition-status-labels");
 var workflowDefinitionStatusLabelList = document.getElementById("workflow-definition-status-label-list");
 var workflowDefinitionStatusLabelInspector = document.getElementById("workflow-definition-status-label-inspector");
+var workflowDefinitionCreateFormFieldAddBtn = document.getElementById("workflow-definition-create-form-field-add-btn");
+var workflowDefinitionCreateFormFieldList = document.getElementById("workflow-definition-create-form-field-list");
+var workflowDefinitionCreateFormInspector = document.getElementById("workflow-definition-create-form-inspector");
 var workflowDefinitionMetadataInput = document.getElementById("workflow-definition-metadata");
 var workflowDefinitionValidationPanel = document.getElementById("workflow-definition-validation-panel");
 var workflowDefinitionSidepanels = document.getElementById("workflow-definition-sidepanels");
@@ -246,6 +250,7 @@ var workflowDefinitionSelectedRoleKey = "";
 var workflowDefinitionSelectedEntryPointKey = "";
 var workflowDefinitionSelectedStateKey = "";
 var workflowDefinitionSelectedStatusLabelKey = "";
+var workflowDefinitionSelectedCreateFormFieldKey = "";
 var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRequestSeq = 0;
 var cardsRegistry = {};
@@ -2299,6 +2304,11 @@ function getRolesFromEditor() {
   return parseWorkflowDefinitionJsonField("Roles", workflowDefinitionRolesInput.value || "{}", {});
 }
 
+function getCreateFormFromEditor() {
+  const editable = getEditableWorkflowDefinition();
+  return cloneJson(editable?.create_form || { fields: [], name_field_keys: [] });
+}
+
 function updateStatesEditor(states) {
   if (!workflowDefinitionStatesInput) return;
   workflowDefinitionStatesInput.value = stringifyPrettyJson(states || {});
@@ -2317,6 +2327,11 @@ function updateStatusLabelsEditor(statusLabels) {
 function updateRolesEditor(roles) {
   if (!workflowDefinitionRolesInput) return;
   workflowDefinitionRolesInput.value = stringifyPrettyJson(roles || {});
+}
+
+function updateCreateFormEditor(createForm) {
+  const editable = getEditableWorkflowDefinition();
+  if (editable) editable.create_form = cloneJson(createForm || { fields: [] });
 }
 
 function collectWorkflowDefinitionRoleReferences(roleKey, states, entryPoints) {
@@ -2470,6 +2485,15 @@ function createWorkflowDefinitionEntryPointTemplate() {
   };
 }
 
+function createWorkflowDefinitionCreateFormFieldTemplate() {
+  return {
+    key: "new_field",
+    label: "新字段",
+    type: "text",
+    placeholder: "",
+  };
+}
+
 function getCurrentWorkflowCardRefs() {
   const workflowCards = workflowDefinitionCardsRegistry?.[currentWorkflowDefinitionKey] || {};
   return Object.keys(workflowCards);
@@ -2481,8 +2505,11 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   const states = definition?.states || {};
   const entryPoints = definition?.entry_points || {};
   const statusLabels = definition?.status_labels || {};
+  const createForm = definition?.create_form || {};
+  const createFields = Array.isArray(createForm.fields) ? createForm.fields : [];
   const roleOptions = Object.keys(roles);
   const stateOptions = Object.keys(states);
+  const entryPointOptions = Object.keys(entryPoints);
   const workflowCards = Object.keys(workflowDefinitionCardsRegistry?.[bundleKey || ""] || {});
   const pushItem = (group, message) => {
     items.push({ group, message });
@@ -2526,6 +2553,38 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   Object.keys(statusLabels).forEach((stateKey) => {
     if (!stateOptions.includes(stateKey)) {
       pushItem("status_labels", `status_labels.${stateKey} 对应的 state 不存在`);
+    }
+  });
+
+  const createFieldKeys = new Set();
+  createFields.forEach((field, index) => {
+    const path = `create_form.fields[${index}]`;
+    if (!field?.key) {
+      pushItem("create_form", `${path}.key 不能为空`);
+    } else if (createFieldKeys.has(field.key)) {
+      pushItem("create_form", `${path}.key 重复：${field.key}`);
+    } else {
+      createFieldKeys.add(field.key);
+    }
+    if (Array.isArray(field?.visible_when?.entry_points)) {
+      field.visible_when.entry_points.forEach((entryKey) => {
+        if (!entryPointOptions.includes(entryKey)) {
+          pushItem("create_form", `${path}.visible_when.entry_points 引用了不存在的 entry point: ${entryKey}`);
+        }
+      });
+    }
+    const equals = field?.visible_when?.equals;
+    if (equals && typeof equals === "object") {
+      Object.keys(equals).forEach((depKey) => {
+        if (!createFields.some((item) => item?.key === depKey)) {
+          pushItem("create_form", `${path}.visible_when.equals 引用了不存在的字段: ${depKey}`);
+        }
+      });
+    }
+  });
+  (createForm.name_field_keys || []).forEach((fieldKey) => {
+    if (!createFieldKeys.has(fieldKey)) {
+      pushItem("create_form", `create_form.name_field_keys 引用了不存在的字段: ${fieldKey}`);
     }
   });
 
@@ -2698,6 +2757,498 @@ function applyWorkflowDefinitionStatusLabelPatch(stateKey, updater) {
   } catch (err) {
     showToast(err instanceof Error ? err.message : "Status Label 配置解析失败", 2200);
   }
+}
+
+function applyWorkflowDefinitionCreateFormPatch(updater) {
+  try {
+    const createForm = getCreateFormFromEditor();
+    const nextCreateForm = updater(cloneJson(createForm)) || createForm;
+    if (!Array.isArray(nextCreateForm.fields)) nextCreateForm.fields = [];
+    updateCreateFormEditor(nextCreateForm);
+    renderWorkflowDefinitionCreateFormEditor(nextCreateForm);
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Create Form 配置解析失败", 2200);
+  }
+}
+
+async function addWorkflowDefinitionCreateFormField() {
+  const rawKey = await openTextPrompt("输入新的表单字段 key", "", { title: "新增 Create Form 字段" });
+  const fieldKey = (rawKey || "").trim();
+  if (!fieldKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(fieldKey)) {
+    alert("字段 key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  applyWorkflowDefinitionCreateFormPatch((createForm) => {
+    createForm.fields = Array.isArray(createForm.fields) ? createForm.fields : [];
+    if (createForm.fields.some((field) => field?.key === fieldKey)) {
+      throw new Error(`字段 "${fieldKey}" 已存在`);
+    }
+    const nextField = createWorkflowDefinitionCreateFormFieldTemplate();
+    nextField.key = fieldKey;
+    nextField.label = fieldKey;
+    createForm.fields.push(nextField);
+    workflowDefinitionSelectedCreateFormFieldKey = fieldKey;
+    return createForm;
+  });
+}
+
+async function renameWorkflowDefinitionCreateFormField() {
+  if (!workflowDefinitionSelectedCreateFormFieldKey) return;
+  const oldKey = workflowDefinitionSelectedCreateFormFieldKey;
+  const rawKey = await openTextPrompt("输入新的字段 key", oldKey, { title: "重命名 Create Form 字段" });
+  const newKey = (rawKey || "").trim();
+  if (!newKey || newKey === oldKey) return;
+  if (!/^[a-zA-Z0-9_-]+$/.test(newKey)) {
+    alert("字段 key 仅支持字母、数字、_ 和 -");
+    return;
+  }
+  applyWorkflowDefinitionCreateFormPatch((createForm) => {
+    createForm.fields = Array.isArray(createForm.fields) ? createForm.fields : [];
+    if (createForm.fields.some((field) => field?.key === newKey)) {
+      throw new Error(`字段 "${newKey}" 已存在`);
+    }
+    createForm.fields.forEach((field) => {
+      if (field?.key === oldKey) {
+        field.key = newKey;
+      }
+      const equals = field?.visible_when?.equals;
+      if (equals && typeof equals === "object" && Object.prototype.hasOwnProperty.call(equals, oldKey)) {
+        equals[newKey] = equals[oldKey];
+        delete equals[oldKey];
+      }
+    });
+    if (Array.isArray(createForm.name_field_keys)) {
+      createForm.name_field_keys = createForm.name_field_keys.map((key) => (key === oldKey ? newKey : key));
+    }
+    workflowDefinitionSelectedCreateFormFieldKey = newKey;
+    return createForm;
+  });
+}
+
+async function deleteWorkflowDefinitionCreateFormField() {
+  if (!workflowDefinitionSelectedCreateFormFieldKey) return;
+  const fieldKey = workflowDefinitionSelectedCreateFormFieldKey;
+  if (!(await openConfirmDialog(`确认删除字段 "${fieldKey}" 吗？`, { title: "删除 Create Form 字段" }))) return;
+  applyWorkflowDefinitionCreateFormPatch((createForm) => {
+    createForm.fields = (createForm.fields || []).filter((field) => field?.key !== fieldKey);
+    createForm.fields.forEach((field) => {
+      const equals = field?.visible_when?.equals;
+      if (equals && typeof equals === "object" && Object.prototype.hasOwnProperty.call(equals, fieldKey)) {
+        delete equals[fieldKey];
+        if (!Object.keys(equals).length) delete field.visible_when.equals;
+      }
+    });
+    if (Array.isArray(createForm.name_field_keys)) {
+      createForm.name_field_keys = createForm.name_field_keys.filter((key) => key !== fieldKey);
+    }
+    workflowDefinitionSelectedCreateFormFieldKey = createForm.fields[0]?.key || "";
+    return createForm;
+  });
+}
+
+function renderWorkflowDefinitionCreateFormEditor(createFormArg) {
+  if (!workflowDefinitionCreateFormFieldList || !workflowDefinitionCreateFormInspector) return;
+  const createForm = createFormArg || getCreateFormFromEditor();
+  const fields = Array.isArray(createForm.fields) ? createForm.fields : [];
+  if (!workflowDefinitionSelectedCreateFormFieldKey || !fields.some((field) => field?.key === workflowDefinitionSelectedCreateFormFieldKey)) {
+    workflowDefinitionSelectedCreateFormFieldKey = fields[0]?.key || "";
+  }
+  workflowDefinitionCreateFormFieldList.innerHTML = fields.length
+    ? fields
+        .map((field) => {
+          const key = field?.key || "";
+          const active = workflowDefinitionSelectedCreateFormFieldKey === key;
+          return `
+            <button type="button" class="workflow-definition-state-list-item${active ? " active" : ""}" data-create-form-field-select="${escapeAttribute(key)}">
+              <strong>${escapeHtml(field?.label || key || "未命名字段")}</strong>
+              <span>${escapeHtml(key || "--")} · ${escapeHtml(field?.type || "--")}</span>
+            </button>
+          `;
+        })
+        .join("")
+    : '<div class="workflow-definition-state-list-empty">暂无 create form 字段，可先新增。</div>';
+  Array.from(workflowDefinitionCreateFormFieldList.querySelectorAll("[data-create-form-field-select]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      workflowDefinitionSelectedCreateFormFieldKey = button.getAttribute("data-create-form-field-select") || "";
+      renderWorkflowDefinitionCreateFormEditor(createForm);
+    });
+  });
+
+  const selectedField = fields.find((field) => field?.key === workflowDefinitionSelectedCreateFormFieldKey) || null;
+  const availableEntryPoints = Object.keys(getEntryPointsFromEditor());
+  const availableFieldKeys = fields.map((field) => field?.key).filter(Boolean);
+  const nameFieldKeys = Array.isArray(createForm.name_field_keys) ? createForm.name_field_keys : [];
+  const visibleEqualsEntries = selectedField?.visible_when?.equals && typeof selectedField.visible_when.equals === "object"
+    ? Object.entries(selectedField.visible_when.equals)
+    : [];
+  const optionEntries = Array.isArray(selectedField?.options) ? selectedField.options : [];
+
+  workflowDefinitionCreateFormInspector.innerHTML = `
+    <div class="workflow-definition-state-inspector-head">
+      <span>Create Form</span>
+      ${
+        selectedField
+          ? `<div class="workflow-definition-state-head-actions">
+              <button type="button" class="btn-ghost" data-create-form-action="rename">重命名</button>
+              <button type="button" class="btn-ghost" data-create-form-action="delete">删除</button>
+            </div>`
+          : ""
+      }
+    </div>
+    <div class="workflow-definition-state-inspector-body">
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">
+          <span>Name Field Keys</span>
+        </div>
+        <div class="workflow-definition-choice-grid">
+          ${
+            availableFieldKeys.length
+              ? availableFieldKeys
+                  .map(
+                    (fieldKey) => `
+                      <label class="workflow-definition-choice-chip">
+                        <input
+                          data-create-form-name-field-key="${escapeAttribute(fieldKey)}"
+                          type="checkbox"
+                          ${nameFieldKeys.includes(fieldKey) ? "checked" : ""}
+                        />
+                        <span>${escapeHtml(fieldKey)}</span>
+                      </label>
+                    `,
+                  )
+                  .join("")
+              : '<div class="workflow-definition-state-inspector-empty">先新增字段后，才能选择任务名称来源字段。</div>'
+          }
+        </div>
+      </section>
+      ${
+        selectedField
+          ? `
+            <div class="workflow-definition-state-inspector-grid">
+              <label class="workflow-definition-field">
+                <span>Field Key</span>
+                <input data-create-form-field="key" type="text" value="${escapeAttribute(selectedField.key || "")}" readonly />
+              </label>
+              <label class="workflow-definition-field">
+                <span>Type</span>
+                <select data-create-form-field="type">
+                  ${["text", "choice", "requirement_select"]
+                    .map((type) => `<option value="${type}" ${selectedField.type === type ? "selected" : ""}>${type}</option>`)
+                    .join("")}
+                </select>
+              </label>
+            </div>
+            <div class="workflow-definition-state-inspector-grid">
+              <label class="workflow-definition-field">
+                <span>Label</span>
+                <input data-create-form-field="label" type="text" value="${escapeAttribute(selectedField.label || "")}" />
+              </label>
+              <label class="workflow-definition-field">
+                <span>Default Value</span>
+                <input data-create-form-field="default_value" type="text" value="${escapeAttribute(selectedField.default_value || "")}" />
+              </label>
+            </div>
+            <label class="workflow-definition-field workflow-definition-field-block">
+              <span>Placeholder</span>
+              <input data-create-form-field="placeholder" type="text" value="${escapeAttribute(selectedField.placeholder || "")}" />
+            </label>
+            <label class="workflow-definition-field workflow-definition-field-block">
+              <span>Helper Text</span>
+              <textarea data-create-form-field="helper_text" rows="2">${escapeHtml(selectedField.helper_text || "")}</textarea>
+            </label>
+            <label class="workflow-definition-field workflow-definition-checkbox-field">
+              <span class="workflow-definition-checkbox-title">Searchable</span>
+              <span class="workflow-definition-checkbox-control">
+                <input data-create-form-field="searchable" type="checkbox" ${selectedField.searchable ? "checked" : ""} />
+                <span class="workflow-definition-switch" aria-hidden="true">
+                  <span class="workflow-definition-switch-track"></span>
+                  <span class="workflow-definition-switch-thumb"></span>
+                </span>
+                <span class="workflow-definition-checkbox-text">${selectedField.searchable ? "已启用" : "未启用"}</span>
+              </span>
+            </label>
+            <section class="workflow-definition-state-inspector-section">
+              <div class="workflow-definition-state-inspector-title">
+                <span>Visible Entry Points</span>
+              </div>
+              <div class="workflow-definition-choice-grid">
+                ${
+                  availableEntryPoints.length
+                    ? availableEntryPoints
+                        .map(
+                          (entryKey) => `
+                            <label class="workflow-definition-choice-chip">
+                              <input
+                                data-create-form-visible-entry-point="${escapeAttribute(entryKey)}"
+                                type="checkbox"
+                                ${Array.isArray(selectedField.visible_when?.entry_points) && selectedField.visible_when.entry_points.includes(entryKey) ? "checked" : ""}
+                              />
+                              <span>${escapeHtml(entryKey)}</span>
+                            </label>
+                          `,
+                        )
+                        .join("")
+                    : '<div class="workflow-definition-state-inspector-empty">当前没有可选 entry point。</div>'
+                }
+              </div>
+            </section>
+            <section class="workflow-definition-state-inspector-section">
+              <div class="workflow-definition-state-inspector-title">
+                <span>Visible Equals</span>
+                <span class="workflow-definition-inline-actions">
+                  <button type="button" class="btn-ghost" data-create-form-action="add-equals">新增条件</button>
+                </span>
+              </div>
+              ${
+                visibleEqualsEntries.length
+                  ? visibleEqualsEntries
+                      .map(
+                        ([depKey, expected]) => `
+                          <label class="workflow-definition-field workflow-definition-field-block">
+                            <span>条件</span>
+                            <div class="workflow-definition-inline-actions">
+                              <input
+                                data-create-form-equals-key="${escapeAttribute(depKey)}"
+                                type="text"
+                                value="${escapeAttribute(depKey)}"
+                                placeholder="依赖字段 key"
+                              />
+                              <input
+                                data-create-form-equals-value="${escapeAttribute(depKey)}"
+                                type="text"
+                                value="${escapeAttribute(Array.isArray(expected) ? expected.join(", ") : expected || "")}"
+                                placeholder="期望值，多个值用逗号分隔"
+                              />
+                              <button type="button" class="btn-ghost" data-create-form-equals-delete="${escapeAttribute(depKey)}">删除</button>
+                            </div>
+                          </label>
+                        `,
+                      )
+                      .join("")
+                  : '<div class="workflow-definition-state-inspector-empty">当前没有字段联动条件。</div>'
+              }
+            </section>
+            <section class="workflow-definition-state-inspector-section">
+              <div class="workflow-definition-state-inspector-title">
+                <span>Options</span>
+                <span class="workflow-definition-inline-actions">
+                  <button type="button" class="btn-ghost" data-create-form-action="add-option">新增选项</button>
+                </span>
+              </div>
+              ${
+                optionEntries.length
+                  ? optionEntries
+                      .map(
+                        (option, index) => `
+                          <label class="workflow-definition-field workflow-definition-field-block">
+                            <span>选项 ${index + 1}</span>
+                            <div class="workflow-definition-inline-actions">
+                              <input
+                                data-create-form-option-value="${index}"
+                                type="text"
+                                value="${escapeAttribute(option?.value || "")}"
+                                placeholder="value"
+                              />
+                              <input
+                                data-create-form-option-label="${index}"
+                                type="text"
+                                value="${escapeAttribute(option?.label || "")}"
+                                placeholder="label"
+                              />
+                              <button type="button" class="btn-ghost" data-create-form-option-delete="${index}">删除</button>
+                            </div>
+                          </label>
+                        `,
+                      )
+                      .join("")
+                  : '<div class="workflow-definition-state-inspector-empty">当前没有选项。</div>'
+              }
+            </section>
+            <div class="workflow-definition-panel-note">可引用字段：${escapeHtml(availableFieldKeys.join(", ") || "--")}</div>
+          `
+          : '<div class="workflow-definition-state-inspector-empty">选择一个字段查看结构化编辑面板。</div>'
+      }
+    </div>
+  `;
+
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-name-field-key]")).forEach((input) => {
+    input.addEventListener("change", () => {
+      const fieldKey = input.getAttribute("data-create-form-name-field-key") || "";
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const selectedKeys = Array.isArray(nextCreateForm.name_field_keys) ? [...nextCreateForm.name_field_keys] : [];
+        if (input.checked) {
+          if (!selectedKeys.includes(fieldKey)) selectedKeys.push(fieldKey);
+        } else {
+          const idx = selectedKeys.indexOf(fieldKey);
+          if (idx >= 0) selectedKeys.splice(idx, 1);
+        }
+        nextCreateForm.name_field_keys = selectedKeys;
+        return nextCreateForm;
+      });
+    });
+  });
+
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-field]")).forEach((el) => {
+    const path = el.getAttribute("data-create-form-field") || "";
+    const eventName = el.type === "checkbox" ? "change" : "input";
+    el.addEventListener(eventName, () => {
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        if (!field) return nextCreateForm;
+        if (el.type === "checkbox") {
+          field[path] = !!el.checked;
+        } else if (path === "type") {
+          field.type = el.value || "text";
+        } else if (el.value) {
+          field[path] = el.value;
+        } else {
+          delete field[path];
+        }
+        return nextCreateForm;
+      });
+    });
+  });
+
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-visible-entry-point]")).forEach((input) => {
+    input.addEventListener("change", () => {
+      const entryKey = input.getAttribute("data-create-form-visible-entry-point") || "";
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        if (!field) return nextCreateForm;
+        const entryPoints = Array.isArray(field.visible_when?.entry_points) ? [...field.visible_when.entry_points] : [];
+        const idx = entryPoints.indexOf(entryKey);
+        if (input.checked && idx < 0) entryPoints.push(entryKey);
+        if (!input.checked && idx >= 0) entryPoints.splice(idx, 1);
+        field.visible_when = field.visible_when || {};
+        if (entryPoints.length) field.visible_when.entry_points = entryPoints;
+        else delete field.visible_when.entry_points;
+        if (!Object.keys(field.visible_when).length) delete field.visible_when;
+        return nextCreateForm;
+      });
+    });
+  });
+
+  const renameBtn = workflowDefinitionCreateFormInspector.querySelector("[data-create-form-action='rename']");
+  const deleteBtn = workflowDefinitionCreateFormInspector.querySelector("[data-create-form-action='delete']");
+  const addEqualsBtn = workflowDefinitionCreateFormInspector.querySelector("[data-create-form-action='add-equals']");
+  const addOptionBtn = workflowDefinitionCreateFormInspector.querySelector("[data-create-form-action='add-option']");
+  if (renameBtn) renameBtn.addEventListener("click", () => renameWorkflowDefinitionCreateFormField());
+  if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionCreateFormField());
+  if (addEqualsBtn) {
+    addEqualsBtn.addEventListener("click", () => {
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        if (!field) return nextCreateForm;
+        field.visible_when = field.visible_when || {};
+        field.visible_when.equals = field.visible_when.equals || {};
+        let idx = 1;
+        let key = "field_key";
+        while (Object.prototype.hasOwnProperty.call(field.visible_when.equals, key)) {
+          idx += 1;
+          key = `field_key_${idx}`;
+        }
+        field.visible_when.equals[key] = "";
+        return nextCreateForm;
+      });
+    });
+  }
+  if (addOptionBtn) {
+    addOptionBtn.addEventListener("click", () => {
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        if (!field) return nextCreateForm;
+        field.options = Array.isArray(field.options) ? field.options : [];
+        field.options.push({ value: "", label: "" });
+        return nextCreateForm;
+      });
+    });
+  }
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-equals-key]")).forEach((input) => {
+    input.addEventListener("change", () => {
+      const oldKey = input.getAttribute("data-create-form-equals-key") || "";
+      const newKey = (input.value || "").trim();
+      if (!oldKey || !newKey || oldKey === newKey) {
+        renderWorkflowDefinitionCreateFormEditor(getCreateFormFromEditor());
+        return;
+      }
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        const equals = field?.visible_when?.equals;
+        if (!field || !equals || typeof equals !== "object") return nextCreateForm;
+        if (Object.prototype.hasOwnProperty.call(equals, newKey)) {
+          throw new Error(`条件字段 "${newKey}" 已存在`);
+        }
+        equals[newKey] = equals[oldKey];
+        delete equals[oldKey];
+        return nextCreateForm;
+      });
+    });
+  });
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-equals-value]")).forEach((input) => {
+    input.addEventListener("input", () => {
+      const depKey = input.getAttribute("data-create-form-equals-value") || "";
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        const equals = field?.visible_when?.equals;
+        if (!field || !equals || typeof equals !== "object" || !depKey) return nextCreateForm;
+        const parts = (input.value || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        equals[depKey] = parts.length <= 1 ? parts[0] || "" : parts;
+        return nextCreateForm;
+      });
+    });
+  });
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-equals-delete]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const depKey = button.getAttribute("data-create-form-equals-delete") || "";
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        const equals = field?.visible_when?.equals;
+        if (!field || !equals || typeof equals !== "object" || !depKey) return nextCreateForm;
+        delete equals[depKey];
+        if (!Object.keys(equals).length) delete field.visible_when.equals;
+        if (field.visible_when && !Object.keys(field.visible_when).length) delete field.visible_when;
+        return nextCreateForm;
+      });
+    });
+  });
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-option-value]")).forEach((input) => {
+    input.addEventListener("input", () => {
+      const index = Number(input.getAttribute("data-create-form-option-value"));
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        if (!field || !Array.isArray(field.options) || !field.options[index]) return nextCreateForm;
+        field.options[index].value = input.value || "";
+        return nextCreateForm;
+      });
+    });
+  });
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-option-label]")).forEach((input) => {
+    input.addEventListener("input", () => {
+      const index = Number(input.getAttribute("data-create-form-option-label"));
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        if (!field || !Array.isArray(field.options) || !field.options[index]) return nextCreateForm;
+        field.options[index].label = input.value || "";
+        return nextCreateForm;
+      });
+    });
+  });
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-option-delete]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.getAttribute("data-create-form-option-delete"));
+      applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
+        const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
+        if (!field || !Array.isArray(field.options)) return nextCreateForm;
+        field.options.splice(index, 1);
+        if (!field.options.length) delete field.options;
+        return nextCreateForm;
+      });
+    });
+  });
 }
 
 async function addWorkflowDefinitionState() {
@@ -3199,6 +3750,7 @@ function renderWorkflowDefinitionEditor(definition, bundle) {
   renderWorkflowDefinitionEntryPointEditor(definition.entry_points || {});
   renderWorkflowDefinitionStateEditor(definition.states || {});
   renderWorkflowDefinitionStatusLabelEditor(definition.status_labels || {});
+  renderWorkflowDefinitionCreateFormEditor(definition.create_form || { fields: [] });
 }
 
 function hideWorkflowDefinitionValidationPanel() {
@@ -4570,6 +5122,10 @@ function renderWorkflowDefinitionDetailPane() {
   if (workflowDefinitionPublishBtn) {
     workflowDefinitionPublishBtn.disabled = !canEditCurrentView;
     workflowDefinitionPublishBtn.classList.toggle("hidden", !canEditCurrentView);
+  }
+  if (workflowDefinitionPreviewCreateFormBtn) {
+    workflowDefinitionPreviewCreateFormBtn.disabled = !displayDefinition;
+    workflowDefinitionPreviewCreateFormBtn.classList.toggle("hidden", !displayDefinition);
   }
   if (workflowDefinitionSaveBtn) {
     workflowDefinitionSaveBtn.classList.toggle("hidden", !canEditCurrentView);
@@ -10132,6 +10688,294 @@ function renderSingleOptions(container, options, selected, onPick) {
   });
 }
 
+async function openWorkflowDefinitionCreateFormPreview() {
+  const selectedVersion = getSelectedWorkflowDefinitionVersion();
+  if (!selectedVersion) return;
+
+  let services = ["demo-service"];
+  let requirementsByService = {};
+  try {
+    const optionsData = await loadWorkflowCreateOptions();
+    if (Array.isArray(optionsData.services) && optionsData.services.length > 0) {
+      services = optionsData.services;
+    }
+    requirementsByService = optionsData.requirements_by_service || {};
+  } catch (err) {
+    console.warn("Failed to load create form preview options:", err);
+  }
+
+  const existing = document.getElementById("workflow-definition-create-form-preview-overlay");
+  if (existing) existing.remove();
+
+  const roleChannels = Object.fromEntries(
+    Object.entries(selectedVersion.roles || {}).map(([role, rc]) => [role, rc.channels || {}]),
+  );
+  const workflowType = {
+    type: selectedVersion.key || currentWorkflowDefinitionKey || "preview",
+    name: selectedVersion.name || selectedVersion.key || "预览流程",
+    entry_points: Object.keys(selectedVersion.entry_points || {}),
+    entry_points_detail: Object.fromEntries(
+      Object.entries(selectedVersion.entry_points || {}).map(([name, ep]) => [
+        name,
+        {
+          requires_deliverable: !!ep?.requires_deliverable,
+          deliverable_role: ep?.deliverable_role,
+        },
+      ]),
+    ),
+    role_channels: roleChannels,
+    create_form: cloneJson(selectedVersion.create_form || { fields: [] }),
+  };
+
+  const state = {
+    service: services[0] || "demo-service",
+    entryPoint: workflowType.entry_points[0] || "",
+    fieldSearch: {},
+    formValues: {},
+  };
+
+  const overlay = document.createElement("div");
+  overlay.id = "workflow-definition-create-form-preview-overlay";
+  overlay.className = "workflow-wizard-overlay";
+  overlay.innerHTML = `
+    <div class="workflow-wizard-modal workflow-definition-create-preview-modal">
+      <div class="workflow-wizard-header">
+        <div>
+          <div class="workflow-wizard-title">创建任务表单预览</div>
+          <div class="workflow-definition-panel-note">点击按钮时才生成，基于当前选中的流程定义实时渲染。</div>
+        </div>
+        <button type="button" class="icon-btn" id="workflow-definition-create-form-preview-close" title="关闭">×</button>
+      </div>
+      <div class="workflow-wizard-body">
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">流程类型</div>
+          <div class="workflow-wizard-flow-summary">
+            <div class="workflow-wizard-flow-title">${escapeHtml(workflowType.name)}</div>
+            <div class="workflow-wizard-flow-caption">这是当前流程定义对应的创建任务表单实时预览，不会真正提交任务。</div>
+          </div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">入口点</div>
+          <div id="workflow-definition-create-preview-entry-points" class="workflow-wizard-options"></div>
+        </div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">服务名称</div>
+          <div id="workflow-definition-create-preview-services" class="workflow-wizard-options"></div>
+        </div>
+        <div id="workflow-definition-create-preview-fields"></div>
+        <div class="workflow-wizard-section">
+          <div class="workflow-wizard-label">校验提示</div>
+          <div id="workflow-definition-create-preview-hint" class="workflow-wizard-hint"></div>
+        </div>
+      </div>
+      <div class="workflow-wizard-footer">
+        <button type="button" id="workflow-definition-create-form-preview-cancel" class="btn-ghost">关闭</button>
+        <button type="button" class="btn-primary" disabled>仅预览，不提交</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const entryOptionsEl = overlay.querySelector("#workflow-definition-create-preview-entry-points");
+  const serviceOptionsEl = overlay.querySelector("#workflow-definition-create-preview-services");
+  const fieldsEl = overlay.querySelector("#workflow-definition-create-preview-fields");
+  const hintEl = overlay.querySelector("#workflow-definition-create-preview-hint");
+
+  function closePreview() {
+    overlay.remove();
+  }
+
+  function getRequirements() {
+    const rows = requirementsByService[state.service];
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  function getCreateForm() {
+    return workflowType.create_form || { fields: [] };
+  }
+
+  function ensureDefaults() {
+    (getCreateForm().fields || []).forEach((field) => {
+      if (state.formValues[field.key] !== void 0) return;
+      if (field.default_value !== void 0) {
+        state.formValues[field.key] = field.default_value;
+      } else if (field.type === "choice" && Array.isArray(field.options) && field.options.length > 0) {
+        state.formValues[field.key] = field.options[0].value;
+      } else {
+        state.formValues[field.key] = "";
+      }
+    });
+  }
+
+  function isFieldVisible(field) {
+    const rule = field.visible_when;
+    if (!rule) return true;
+    if (Array.isArray(rule.entry_points) && rule.entry_points.length > 0 && !rule.entry_points.includes(state.entryPoint)) {
+      return false;
+    }
+    if (rule.equals && typeof rule.equals === "object") {
+      for (const [depKey, expected] of Object.entries(rule.equals)) {
+        const actual = state.formValues[depKey];
+        if (Array.isArray(expected)) {
+          if (!expected.includes(actual)) return false;
+        } else if (actual !== expected) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function getVisibleFields() {
+    ensureDefaults();
+    return (getCreateForm().fields || []).filter((field) => isFieldVisible(field));
+  }
+
+  function getTaskName() {
+    const visibleKeys = new Set(getVisibleFields().map((field) => field.key));
+    const candidates = getCreateForm().name_field_keys || [];
+    for (const key of candidates) {
+      if (!visibleKeys.has(key)) continue;
+      const value = state.formValues[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
+  }
+
+  function getRequiredDeliverableFile() {
+    const detail = workflowType.entry_points_detail?.[state.entryPoint];
+    if (!detail?.requires_deliverable) return "";
+    return `${detail.deliverable_role || "dev"}.md`;
+  }
+
+  function getRequirementDeliverables(reqName) {
+    const req = getRequirements().find((item) => item.requirement_name === reqName);
+    return Array.isArray(req?.deliverables) ? req.deliverables : [];
+  }
+
+  function updateHint() {
+    const taskName = getTaskName();
+    const detail = workflowType.entry_points_detail?.[state.entryPoint];
+    const deliverableRequired = !!detail?.requires_deliverable;
+    const requiredFile = getRequiredDeliverableFile();
+    const deliverableOk = !deliverableRequired || getRequirementDeliverables(taskName).includes(requiredFile);
+    if (!taskName) {
+      hintEl.textContent = "请输入或选择一个任务名称";
+    } else if (deliverableRequired) {
+      hintEl.textContent = deliverableOk
+        ? `已命中交付物校验：${requiredFile}`
+        : `当前入口点要求存在 ${requiredFile}，示例服务下的需求暂不满足`;
+    } else {
+      hintEl.textContent = "当前配置下可以创建任务；这里只做 UI 预览。";
+    }
+  }
+
+  function renderPreview() {
+    renderSingleOptions(
+      entryOptionsEl,
+      workflowType.entry_points.map((entry) => ({
+        value: entry,
+        label: workflowType.entry_points_detail?.[entry]?.requires_deliverable ? `${entry} (需要交付物)` : entry,
+      })),
+      state.entryPoint,
+      (value) => {
+        state.entryPoint = value;
+        renderPreview();
+      },
+    );
+
+    renderSingleOptions(
+      serviceOptionsEl,
+      services.map((service) => ({ value: service, label: service })),
+      state.service,
+      (value) => {
+        state.service = value;
+        renderPreview();
+      },
+    );
+
+    const requirements = getRequirements();
+    fieldsEl.innerHTML = "";
+    getVisibleFields().forEach((field, idx) => {
+      const section = document.createElement("div");
+      section.className = "workflow-wizard-section";
+      section.innerHTML = `<div class="workflow-wizard-label">${idx + 1}. ${escapeHtml(field.label || field.key)}</div>`;
+      const wrap = document.createElement("div");
+      wrap.className = "workflow-wizard-subsection";
+      section.appendChild(wrap);
+
+      if (field.type === "text") {
+        const input = document.createElement("input");
+        input.className = "workflow-wizard-input";
+        input.placeholder = field.placeholder || "";
+        input.value = state.formValues[field.key] || "";
+        input.addEventListener("input", () => {
+          state.formValues[field.key] = input.value;
+          updateHint();
+        });
+        wrap.appendChild(input);
+      } else if (field.type === "choice") {
+        const opts = document.createElement("div");
+        opts.className = "workflow-wizard-options compact";
+        wrap.appendChild(opts);
+        renderSingleOptions(opts, field.options || [], state.formValues[field.key], (value) => {
+          state.formValues[field.key] = value;
+          renderPreview();
+        });
+      } else if (field.type === "requirement_select") {
+        const searchKey = `${field.key}__search`;
+        if (field.searchable) {
+          const search = document.createElement("input");
+          search.className = "workflow-wizard-input";
+          search.placeholder = "搜索已有需求";
+          search.value = state.fieldSearch[searchKey] || "";
+          search.addEventListener("input", () => {
+            state.fieldSearch[searchKey] = search.value;
+            renderPreview();
+          });
+          wrap.appendChild(search);
+        }
+        const opts = document.createElement("div");
+        opts.className = "workflow-wizard-options";
+        if (field.searchable) opts.style.marginTop = "8px";
+        wrap.appendChild(opts);
+        const keyword = (state.fieldSearch[searchKey] || "").trim();
+        const filtered = requirements.filter((item) => !keyword || item.requirement_name.includes(keyword));
+        if (!state.formValues[field.key] && filtered[0]) {
+          state.formValues[field.key] = filtered[0].requirement_name;
+        }
+        renderSingleOptions(
+          opts,
+          filtered.map((item) => ({ value: item.requirement_name, label: item.requirement_name })),
+          state.formValues[field.key],
+          (value) => {
+            state.formValues[field.key] = value;
+            renderPreview();
+          },
+        );
+      }
+
+      if (field.helper_text) {
+        const helper = document.createElement("div");
+        helper.className = "workflow-wizard-field-help";
+        helper.textContent = field.helper_text;
+        section.appendChild(helper);
+      }
+      fieldsEl.appendChild(section);
+    });
+
+    updateHint();
+  }
+
+  overlay.querySelector("#workflow-definition-create-form-preview-close").addEventListener("click", closePreview);
+  overlay.querySelector("#workflow-definition-create-form-preview-cancel").addEventListener("click", closePreview);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closePreview();
+  });
+
+  renderPreview();
+}
+
 function navigateCommandPalette(direction) {
   if (!commandOptionsEl || commandCandidates.length === 0) return;
   const items = commandOptionsEl.querySelectorAll(".cmd-item");
@@ -10796,6 +11640,16 @@ if (workflowDefinitionEntryPointAddBtn) {
 if (workflowDefinitionStatusLabelAddBtn) {
   workflowDefinitionStatusLabelAddBtn.addEventListener("click", () => {
     addWorkflowDefinitionStatusLabel();
+  });
+}
+if (workflowDefinitionPreviewCreateFormBtn) {
+  workflowDefinitionPreviewCreateFormBtn.addEventListener("click", () => {
+    openWorkflowDefinitionCreateFormPreview();
+  });
+}
+if (workflowDefinitionCreateFormFieldAddBtn) {
+  workflowDefinitionCreateFormFieldAddBtn.addEventListener("click", () => {
+    addWorkflowDefinitionCreateFormField();
   });
 }
 if (workflowDefinitionStatesInput) {
