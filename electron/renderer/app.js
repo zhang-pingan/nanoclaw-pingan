@@ -8833,6 +8833,33 @@ function renderWorkbenchSubtasks(subtasks) {
     };
     return statusLabelMap[item.status] || item.status;
   }
+  function getSubtaskStatusSummary(item) {
+    if (item.status === "current") {
+      return isAwaitingStage(item) ? "等待确认" : "进行中";
+    }
+    if (item.manually_skipped && item.status === "completed") {
+      return "手动跳过";
+    }
+    if (item.status === "failed") return "待修复";
+    if (item.status === "cancelled") return "已取消";
+    if (item.status === "completed") return "已通过";
+    return "待开始";
+  }
+  function getSubtaskActiveTime(item) {
+    return item.updated_at || item.created_at || "";
+  }
+  function getSubtaskTimeLabel(item) {
+    const activeTime = getSubtaskActiveTime(item);
+    return activeTime ? formatRelativeTime(activeTime) : "等待推进";
+  }
+  function getSubtaskMetaList(item) {
+    const list = [];
+    if (item.role) list.push(`角色 · ${item.role}`);
+    if (item.target_folder) list.push(`群组 · ${item.target_folder}`);
+    const activeTime = getSubtaskActiveTime(item);
+    if (activeTime) list.push(`更新 · ${formatDateTime(activeTime)}`);
+    return list;
+  }
   const displaySubtasks = getDisplaySubtasks(subtasks);
   const currentSubtask = displaySubtasks.find((item) => item.status === "current") || null;
   const persistedSelection = displaySubtasks.find((item) => item.id === workbenchSelectedSubtaskId) || null;
@@ -8876,19 +8903,27 @@ function renderWorkbenchSubtasks(subtasks) {
           ? "已通过"
           : "待开始";
     const stepHintIcon = getWorkbenchSubtaskStatusIcon(item.status);
+    const summaryLabel = getSubtaskStatusSummary(item);
+    const timeLabel = getSubtaskTimeLabel(item);
+    const metaTags = [summaryLabel, timeLabel];
+    if (item.role) metaTags.push(item.role);
     el.innerHTML = `
       <div class="workbench-subtask-card">
         ${item.status === "current" ? '<span class="workbench-subtask-spotlight"></span>' : ""}
-        <div class="workbench-subtask-title">
-          <span class="workbench-subtask-index">0${stepIndex}</span>
-          ${escapeHtml(item.stage_label || item.title)}
+        <div class="workbench-subtask-card-topline">
+          <span class="workbench-subtask-index">${String(stepIndex).padStart(2, "0")}</span>
+          <span class="workbench-subtask-topline-text">${escapeHtml(summaryLabel)}</span>
           ${item.status === "current" ? '<span class="workbench-current-chip">当前</span>' : ""}
-          ${item.manually_skipped ? '<span class="workbench-badge">已手动跳过</span>' : ""}
+        </div>
+        <div class="workbench-subtask-title">${escapeHtml(item.stage_label || item.title)}</div>
+        <div class="workbench-subtask-meta-row">
+          ${metaTags.map((tag) => `<span class="workbench-subtask-meta-pill">${escapeHtml(tag)}</span>`).join("")}
         </div>
         <div class="workbench-subtask-caption">
           <span class="workbench-subtask-caption-icon" aria-hidden="true">${stepHintIcon}</span>
           <span>${escapeHtml(stepHint)}</span>
         </div>
+        ${item.manually_skipped ? '<div class="workbench-subtask-mini-note">人工按成功处理跳过</div>' : ""}
       </div>
       <div class="workbench-subtask-marker">
         <span class="workbench-subtask-dot"></span>
@@ -8948,19 +8983,33 @@ function renderWorkbenchSubtasks(subtasks) {
         </div>
       `
       : "";
+  const selectedMeta = getSubtaskMetaList(selected);
   const detailEl = document.createElement("div");
   detailEl.className = `workbench-subtask-detail-card ${selected.status}${shouldAnimateSelection ? " animate-in" : ""}`;
   detailEl.innerHTML = `
-    <div class="workbench-item-row">
-      <div class="workbench-item-title">
-        <span class="workbench-subtask-detail-index">阶段 ${selectedIndex}</span>
-        ${escapeHtml(selected.stage_label || selected.title)}
-        ${renderWorkbenchBadge(getSubtaskStatusLabel(selected), `status-${selected.status || "pending"}`)}
-        ${selected.manually_skipped ? renderWorkbenchBadge("已手动跳过", "status-cancelled") : ""}
+    <div class="workbench-subtask-detail-hero">
+      <div class="workbench-subtask-detail-hero-main">
+        <div class="workbench-subtask-detail-kicker">Stage ${String(selectedIndex).padStart(2, "0")}</div>
+        <div class="workbench-item-title">
+          <span class="workbench-subtask-detail-index">阶段 ${selectedIndex}</span>
+          ${escapeHtml(selected.stage_label || selected.title)}
+        </div>
+        <div class="workbench-subtask-detail-status-row">
+          ${renderWorkbenchBadge(getSubtaskStatusLabel(selected), `status-${selected.status || "pending"}`)}
+          ${selected.manually_skipped ? renderWorkbenchBadge("已手动跳过", "status-cancelled") : ""}
+          ${selected.stage_key ? renderWorkbenchBadge(selected.stage_key, "message") : ""}
+        </div>
+      </div>
+      <div class="workbench-subtask-detail-aside">
+        <span class="workbench-subtask-detail-time-label">最近动态</span>
+        <strong>${escapeHtml(getSubtaskTimeLabel(selected))}</strong>
+        <span>${escapeHtml(getSubtaskActiveTime(selected) ? formatDateTime(getSubtaskActiveTime(selected)) : "暂无记录")}</span>
       </div>
     </div>
-    <div class="workbench-item-body">
-      ${selected.target_folder ? `执行群组：${escapeHtml(selected.target_folder)}\n` : ""}
+    ${selectedMeta.length > 0
+      ? `<div class="workbench-subtask-detail-meta-grid">${selectedMeta.map((entry) => `<div class="workbench-subtask-detail-meta-item">${escapeHtml(entry)}</div>`).join("")}</div>`
+      : ""}
+    <div class="workbench-item-body workbench-subtask-detail-body">
       ${selectedBody}
     </div>
     ${detailHint}
