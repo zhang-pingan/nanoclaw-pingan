@@ -467,6 +467,68 @@ async function openTextPrompt(message, defaultValue = "", options = {}) {
   });
 }
 
+async function openConfirmDialog(message, options = {}) {
+  const confirmFn = typeof window.confirm === "function" ? window.confirm.bind(window) : null;
+  if (confirmFn) {
+    try {
+      return confirmFn(message);
+    } catch (err) {
+      console.warn("window.confirm unavailable, falling back to custom confirm:", err);
+    }
+  }
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "app-prompt-overlay";
+    overlay.innerHTML = `
+      <div class="app-prompt-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(options.title || "确认")}">
+        <div class="app-prompt-title">${escapeHtml(options.title || "请确认")}</div>
+        <div class="app-prompt-message">${escapeHtml(message)}</div>
+        <div class="app-prompt-actions">
+          <button type="button" class="btn-ghost" data-action="cancel">${escapeHtml(options.cancelText || "取消")}</button>
+          <button type="button" class="btn-primary" data-action="confirm">${escapeHtml(options.confirmText || "确认")}</button>
+        </div>
+      </div>
+    `;
+
+    const confirmBtn = overlay.querySelector('[data-action="confirm"]');
+    const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+    let settled = false;
+
+    function cleanup(value) {
+      if (settled) return;
+      settled = true;
+      overlay.remove();
+      resolve(value);
+    }
+
+    document.body.appendChild(overlay);
+    confirmBtn.focus();
+
+    confirmBtn.addEventListener("click", () => cleanup(true));
+    cancelBtn.addEventListener("click", () => cleanup(false));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) cleanup(false);
+    });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanup(false);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        cleanup(true);
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        cleanup(true);
+      }
+    });
+  });
+}
+
 function formatTime(ts) {
   const d = new Date(parseInt(ts));
   if (Number.isNaN(d.getTime())) return "";
@@ -1696,7 +1758,11 @@ async function runGcByMode(mode) {
       setDoctorLog(`GC 预演完成：无需清理（mode=${mode}）`);
       return;
     }
-    if (!confirm(`GC预演结果：重复=${dup}，过期=${stale}，共=${total}。确认执行真实清理？`)) {
+    if (
+      !(await openConfirmDialog(`GC预演结果：重复=${dup}，过期=${stale}，共=${total}。确认执行真实清理？`, {
+        title: "确认执行 GC",
+      }))
+    ) {
       setDoctorLog("GC 已取消");
       return;
     }
@@ -1847,7 +1913,7 @@ async function saveMemoryEditor() {
 async function deleteMemoryById(memoryId) {
   const group = getActiveMemoryGroup();
   if (!group) return;
-  if (!confirm("确认删除该记忆？")) return;
+  if (!(await openConfirmDialog("确认删除该记忆？", { title: "删除记忆" }))) return;
   try {
     const res = await apiFetch(
       `/api/memory?id=${encodeURIComponent(memoryId)}&folder=${encodeURIComponent(group.folder)}`,
@@ -2260,25 +2326,46 @@ function createWorkflowDefinitionRoleTemplate() {
   };
 }
 
-function addWorkflowDefinitionRoleChannel(channelKey, initialValue = "") {
+const WORKFLOW_DEFINITION_DRAFT_CHANNEL_PREFIX = "__workflow_definition_draft_channel__";
+
+function isWorkflowDefinitionDraftChannelKey(channelKey) {
+  return typeof channelKey === "string" && channelKey.startsWith(WORKFLOW_DEFINITION_DRAFT_CHANNEL_PREFIX);
+}
+
+function getWorkflowDefinitionRoleChannelDisplayKey(channelKey) {
+  return isWorkflowDefinitionDraftChannelKey(channelKey) ? "" : channelKey;
+}
+
+function createWorkflowDefinitionDraftChannelKey(channels) {
+  let index = 1;
+  let draftKey = `${WORKFLOW_DEFINITION_DRAFT_CHANNEL_PREFIX}${index}`;
+  while (Object.prototype.hasOwnProperty.call(channels || {}, draftKey)) {
+    index += 1;
+    draftKey = `${WORKFLOW_DEFINITION_DRAFT_CHANNEL_PREFIX}${index}`;
+  }
+  return draftKey;
+}
+
+function addWorkflowDefinitionRoleChannel(channelKey = "", initialValue = "") {
   if (!workflowDefinitionSelectedRoleKey) return;
-  const safeKey = (channelKey || "").trim();
   const safeValue = String(initialValue || "");
   const keyPattern = /^[a-zA-Z0-9_-]+$/;
-  if (!safeKey) {
-    throw new Error("channel key 不能为空");
-  }
-  if (!keyPattern.test(safeKey)) {
+  const requestedKey = (channelKey || "").trim();
+  if (requestedKey && !keyPattern.test(requestedKey)) {
     throw new Error("channel key 仅支持字母、数字、_ 和 -");
   }
+  let addedKey = "";
   applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
     role.channels = role.channels || {};
-    if (Object.prototype.hasOwnProperty.call(role.channels, safeKey)) {
-      throw new Error(`channel "${safeKey}" 已存在`);
+    const nextKey = requestedKey || createWorkflowDefinitionDraftChannelKey(role.channels);
+    if (requestedKey && Object.prototype.hasOwnProperty.call(role.channels, nextKey)) {
+      throw new Error(`channel "${nextKey}" 已存在`);
     }
-    role.channels[safeKey] = safeValue;
-    return cleanupStateObject(role);
+    role.channels[nextKey] = safeValue;
+    addedKey = nextKey;
+    return cleanupWorkflowDefinitionRoleObject(role);
   });
+  return addedKey;
 }
 
 function renameWorkflowDefinitionRoleChannel(oldKey, newKey) {
@@ -2300,19 +2387,18 @@ function renameWorkflowDefinitionRoleChannel(oldKey, newKey) {
     const previousValue = role.channels[oldKey];
     delete role.channels[oldKey];
     role.channels[safeNewKey] = previousValue;
-    return cleanupStateObject(role);
+    return cleanupWorkflowDefinitionRoleObject(role);
   });
 }
 
-function addWorkflowDefinitionRoleChannelFromInline() {
+function addWorkflowDefinitionRoleChannelFromButton() {
   if (!workflowDefinitionRoleInspector) return;
-  const keyInput = workflowDefinitionRoleInspector.querySelector("[data-role-new-channel-key]");
-  const valueInput = workflowDefinitionRoleInspector.querySelector("[data-role-new-channel-value]");
   try {
-    addWorkflowDefinitionRoleChannel(keyInput?.value || "", valueInput?.value || "");
-    if (keyInput) keyInput.value = "";
-    if (valueInput) valueInput.value = "";
-    showToast("已新增 channel");
+    const addedKey = addWorkflowDefinitionRoleChannel("", "");
+    const keyInput = workflowDefinitionRoleInspector.querySelector(
+      `[data-role-channel-storage-key="${escapeAttribute(addedKey)}"]`,
+    );
+    if (keyInput instanceof HTMLInputElement) keyInput.focus();
   } catch (err) {
     alert(err instanceof Error ? err.message : "新增 channel 失败");
   }
@@ -2321,16 +2407,21 @@ function addWorkflowDefinitionRoleChannelFromInline() {
 function handleWorkflowDefinitionRoleChannelRename(input) {
   const oldKey = input.getAttribute("data-role-channel-key-original") || "";
   const newKey = (input.value || "").trim();
-  if (!oldKey || !newKey || newKey === oldKey) {
-    input.value = oldKey || newKey;
+  if (!oldKey) {
+    input.value = newKey;
     return;
   }
+  if (!newKey) {
+    input.value = isWorkflowDefinitionDraftChannelKey(oldKey) ? "" : oldKey;
+    return;
+  }
+  if (newKey === oldKey) return;
   try {
     renameWorkflowDefinitionRoleChannel(oldKey, newKey);
     input.setAttribute("data-role-channel-key-original", newKey);
     showToast(`已重命名 channel: ${oldKey} -> ${newKey}`);
   } catch (err) {
-    input.value = oldKey;
+    input.value = isWorkflowDefinitionDraftChannelKey(oldKey) ? "" : oldKey;
     alert(err instanceof Error ? err.message : "重命名 channel 失败");
   }
 }
@@ -2340,7 +2431,7 @@ function deleteWorkflowDefinitionRoleChannel(channelKey) {
   applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
     role.channels = role.channels || {};
     delete role.channels[channelKey];
-    return cleanupStateObject(role);
+    return cleanupWorkflowDefinitionRoleObject(role);
   });
 }
 
@@ -2581,8 +2672,8 @@ function applyWorkflowDefinitionStatusLabelPatch(stateKey, updater) {
   }
 }
 
-function addWorkflowDefinitionState() {
-  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 state key", "") : "";
+async function addWorkflowDefinitionState() {
+  const rawKey = await openTextPrompt("输入新的 state key", "", { title: "新增 State" });
   const stateKey = (rawKey || "").trim();
   if (!stateKey) return;
   if (!/^[a-zA-Z0-9_-]+$/.test(stateKey)) {
@@ -2595,9 +2686,11 @@ function addWorkflowDefinitionState() {
       alert(`state "${stateKey}" 已存在`);
       return;
     }
-    const rawType = typeof window.prompt === "function"
-      ? window.prompt("输入 state type（delegation / confirmation / terminal / system）", "delegation")
-      : "delegation";
+    const rawType = await openTextPrompt(
+      "输入 state type（delegation / confirmation / terminal / system）",
+      "delegation",
+      { title: "新增 State" },
+    );
     const type = (rawType || "delegation").trim();
     if (!["delegation", "confirmation", "terminal", "system"].includes(type)) {
       alert("state type 不合法");
@@ -2614,8 +2707,8 @@ function addWorkflowDefinitionState() {
   }
 }
 
-function addWorkflowDefinitionRole() {
-  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 role key", "") : "";
+async function addWorkflowDefinitionRole() {
+  const rawKey = await openTextPrompt("输入新的 role key", "", { title: "新增 Role" });
   const roleKey = (rawKey || "").trim();
   if (!roleKey) return;
   if (!/^[a-zA-Z0-9_-]+$/.test(roleKey)) {
@@ -2641,10 +2734,10 @@ function addWorkflowDefinitionRole() {
   }
 }
 
-function renameWorkflowDefinitionRole() {
+async function renameWorkflowDefinitionRole() {
   if (!workflowDefinitionSelectedRoleKey) return;
   const oldKey = workflowDefinitionSelectedRoleKey;
-  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 role key", oldKey) : oldKey;
+  const rawKey = await openTextPrompt("输入新的 role key", oldKey, { title: "重命名 Role" });
   const newKey = (rawKey || "").trim();
   if (!newKey || newKey === oldKey) return;
   if (!/^[a-zA-Z0-9_-]+$/.test(newKey)) {
@@ -2692,7 +2785,7 @@ function renameWorkflowDefinitionRole() {
   }
 }
 
-function deleteWorkflowDefinitionRole() {
+async function deleteWorkflowDefinitionRole() {
   if (!workflowDefinitionSelectedRoleKey) return;
   try {
     const roles = getRolesFromEditor();
@@ -2703,7 +2796,7 @@ function deleteWorkflowDefinitionRole() {
       alert(`该 role 仍被引用，无法删除：\n\n${refs.join("\n")}`);
       return;
     }
-    if (!confirm(`确认删除 role "${workflowDefinitionSelectedRoleKey}" 吗？`)) return;
+    if (!(await openConfirmDialog(`确认删除 role "${workflowDefinitionSelectedRoleKey}" 吗？`, { title: "删除 Role" }))) return;
     delete roles[workflowDefinitionSelectedRoleKey];
     updateRolesEditor(roles);
     const editable = getEditableWorkflowDefinition();
@@ -2718,8 +2811,8 @@ function deleteWorkflowDefinitionRole() {
   }
 }
 
-function addWorkflowDefinitionEntryPoint() {
-  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 entry point key", "") : "";
+async function addWorkflowDefinitionEntryPoint() {
+  const rawKey = await openTextPrompt("输入新的 entry point key", "", { title: "新增 Entry Point" });
   const entryKey = (rawKey || "").trim();
   if (!entryKey) return;
   if (!/^[a-zA-Z0-9_-]+$/.test(entryKey)) {
@@ -2748,10 +2841,10 @@ function addWorkflowDefinitionEntryPoint() {
   }
 }
 
-function renameWorkflowDefinitionEntryPoint() {
+async function renameWorkflowDefinitionEntryPoint() {
   if (!workflowDefinitionSelectedEntryPointKey) return;
   const oldKey = workflowDefinitionSelectedEntryPointKey;
-  const rawKey = typeof window.prompt === "function" ? window.prompt("输入新的 entry point key", oldKey) : oldKey;
+  const rawKey = await openTextPrompt("输入新的 entry point key", oldKey, { title: "重命名 Entry Point" });
   const newKey = (rawKey || "").trim();
   if (!newKey || newKey === oldKey) return;
   if (!/^[a-zA-Z0-9_-]+$/.test(newKey)) {
@@ -2783,11 +2876,15 @@ function renameWorkflowDefinitionEntryPoint() {
   }
 }
 
-function deleteWorkflowDefinitionEntryPoint() {
+async function deleteWorkflowDefinitionEntryPoint() {
   if (!workflowDefinitionSelectedEntryPointKey) return;
   try {
     const entryPoints = getEntryPointsFromEditor();
-    if (!confirm(`确认删除 entry point "${workflowDefinitionSelectedEntryPointKey}" 吗？`)) return;
+    if (
+      !(await openConfirmDialog(`确认删除 entry point "${workflowDefinitionSelectedEntryPointKey}" 吗？`, {
+        title: "删除 Entry Point",
+      }))
+    ) return;
     delete entryPoints[workflowDefinitionSelectedEntryPointKey];
     updateEntryPointsEditor(entryPoints);
     const editable = getEditableWorkflowDefinition();
@@ -2829,11 +2926,15 @@ function addWorkflowDefinitionStatusLabel() {
   }
 }
 
-function deleteWorkflowDefinitionStatusLabel() {
+async function deleteWorkflowDefinitionStatusLabel() {
   if (!workflowDefinitionSelectedStatusLabelKey) return;
   try {
     const statusLabels = getStatusLabelsFromEditor();
-    if (!confirm(`确认删除 status label "${workflowDefinitionSelectedStatusLabelKey}" 吗？`)) return;
+    if (
+      !(await openConfirmDialog(`确认删除 status label "${workflowDefinitionSelectedStatusLabelKey}" 吗？`, {
+        title: "删除 Status Label",
+      }))
+    ) return;
     delete statusLabels[workflowDefinitionSelectedStatusLabelKey];
     updateStatusLabelsEditor(statusLabels);
     const editable = getEditableWorkflowDefinition();
@@ -2846,12 +2947,10 @@ function deleteWorkflowDefinitionStatusLabel() {
   }
 }
 
-function renameWorkflowDefinitionState() {
+async function renameWorkflowDefinitionState() {
   if (!workflowDefinitionSelectedStateKey) return;
   const oldKey = workflowDefinitionSelectedStateKey;
-  const rawKey = typeof window.prompt === "function"
-    ? window.prompt("输入新的 state key", oldKey)
-    : oldKey;
+  const rawKey = await openTextPrompt("输入新的 state key", oldKey, { title: "重命名 State" });
   const newKey = (rawKey || "").trim();
   if (!newKey || newKey === oldKey) return;
   if (!/^[a-zA-Z0-9_-]+$/.test(newKey)) {
@@ -2900,7 +2999,7 @@ function renameWorkflowDefinitionState() {
   }
 }
 
-function deleteWorkflowDefinitionState() {
+async function deleteWorkflowDefinitionState() {
   if (!workflowDefinitionSelectedStateKey) return;
   try {
     const states = getStatesFromEditor();
@@ -2915,7 +3014,7 @@ function deleteWorkflowDefinitionState() {
       alert(`该 state 仍被引用，无法删除：\n\n${refs.join("\n")}`);
       return;
     }
-    if (!confirm(`确认删除 state "${workflowDefinitionSelectedStateKey}" 吗？`)) {
+    if (!(await openConfirmDialog(`确认删除 state "${workflowDefinitionSelectedStateKey}" 吗？`, { title: "删除 State" }))) {
       return;
     }
     delete states[workflowDefinitionSelectedStateKey];
@@ -3438,6 +3537,19 @@ function cleanupStateObject(obj) {
   return obj;
 }
 
+function cleanupWorkflowDefinitionRoleObject(role) {
+  if (!role || typeof role !== "object") return role;
+  const preservedChannels =
+    role.channels && typeof role.channels === "object" && !Array.isArray(role.channels)
+      ? { ...role.channels }
+      : null;
+  const cleanedRole = cleanupStateObject(role);
+  if (preservedChannels && Object.keys(preservedChannels).length) {
+    cleanedRole.channels = preservedChannels;
+  }
+  return cleanedRole;
+}
+
 function updateWorkflowDefinitionSelectedState(stateKey) {
   workflowDefinitionSelectedStateKey = stateKey || "";
   renderWorkflowDefinitionStateEditor();
@@ -3569,8 +3681,9 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
                         <input
                           data-role-channel-key="${escapeAttribute(channelKey)}"
                           data-role-channel-key-original="${escapeAttribute(channelKey)}"
+                          data-role-channel-storage-key="${escapeAttribute(channelKey)}"
                           type="text"
-                          value="${escapeAttribute(channelKey)}"
+                          value="${escapeAttribute(getWorkflowDefinitionRoleChannelDisplayKey(channelKey))}"
                         />
                         <input data-role-channel="${escapeAttribute(channelKey)}" type="text" value="${escapeAttribute(value || "")}" />
                         <button type="button" class="btn-ghost" data-role-channel-delete="${escapeAttribute(channelKey)}">删除</button>
@@ -3579,16 +3692,8 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
                   `,
                 )
                 .join("")
-            : '<div class="workflow-definition-state-inspector-empty">当前没有 channel，可在 JSON 中补充。</div>'
+            : '<div class="workflow-definition-state-inspector-empty">当前没有 channel，可点击右上角新增 Channel。</div>'
         }
-        <label class="workflow-definition-field workflow-definition-field-block">
-          <span>新 Channel</span>
-          <div class="workflow-definition-inline-actions grow">
-            <input data-role-new-channel-key type="text" placeholder="channel key" />
-            <input data-role-new-channel-value type="text" placeholder="channel value" />
-            <button type="button" class="btn-ghost" data-role-action="add-channel-inline">添加</button>
-          </div>
-        </label>
       </section>
     </div>
   `;
@@ -3598,7 +3703,7 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
       const selection = captureWorkflowDefinitionInspectorSelection(el);
       applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
         role[path] = el.value || "";
-        return cleanupStateObject(role);
+        return cleanupWorkflowDefinitionRoleObject(role);
       });
       restoreWorkflowDefinitionInspectorFocus(
         workflowDefinitionRoleInspector,
@@ -3614,7 +3719,7 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
       applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
         role.channels = role.channels || {};
         role.channels[channelKey] = el.value || "";
-        return cleanupStateObject(role);
+        return cleanupWorkflowDefinitionRoleObject(role);
       });
       restoreWorkflowDefinitionInspectorFocus(
         workflowDefinitionRoleInspector,
@@ -3634,7 +3739,6 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   const renameBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='rename']");
   const deleteBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='delete']");
   const addChannelBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='add-channel']");
-  const addChannelInlineBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='add-channel-inline']");
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel-delete]")).forEach((button) => {
     button.addEventListener("click", () => {
       deleteWorkflowDefinitionRoleChannel(button.getAttribute("data-role-channel-delete") || "");
@@ -3642,11 +3746,7 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   });
   if (renameBtn) renameBtn.addEventListener("click", () => renameWorkflowDefinitionRole());
   if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionRole());
-  if (addChannelBtn) addChannelBtn.addEventListener("click", () => {
-    const keyInput = workflowDefinitionRoleInspector.querySelector("[data-role-new-channel-key]");
-    if (keyInput) keyInput.focus();
-  });
-  if (addChannelInlineBtn) addChannelInlineBtn.addEventListener("click", () => addWorkflowDefinitionRoleChannelFromInline());
+  if (addChannelBtn) addChannelBtn.addEventListener("click", () => addWorkflowDefinitionRoleChannelFromButton());
 }
 
 function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
@@ -4702,7 +4802,7 @@ async function publishWorkflowDefinitionVersion(version) {
     alert("当前没有可发布的版本");
     return;
   }
-  if (!confirm(`确认发布 ${bundleKey} 的 v${version.version} 吗？`)) {
+  if (!(await openConfirmDialog(`确认发布 ${bundleKey} 的 v${version.version} 吗？`, { title: "发布版本" }))) {
     return;
   }
   try {
@@ -4819,7 +4919,7 @@ async function deleteWorkflowDefinitionVersion(version) {
     alert("当前没有可删除的版本");
     return;
   }
-  if (!confirm(`确认删除 ${bundleKey} 的 v${version.version} 吗？`)) {
+  if (!(await openConfirmDialog(`确认删除 ${bundleKey} 的 v${version.version} 吗？`, { title: "删除版本" }))) {
     return;
   }
   try {
@@ -6252,7 +6352,7 @@ async function deleteCurrentCard() {
     return;
   }
   const { workflowType, cardKey } = currentCardSelection;
-  if (!confirm(`确认删除 ${workflowType}/${cardKey} 吗？`)) {
+  if (!(await openConfirmDialog(`确认删除 ${workflowType}/${cardKey} 吗？`, { title: "删除卡片" }))) {
     return;
   }
   try {
@@ -6488,7 +6588,10 @@ async function loadGroups() {
 
 async function resetAllSessions() {
   if (!resetAllSessionsBtn) return;
-  const confirmed = window.confirm("这会让所有群组在下一次新建对话时切换到全新 session。当前正在运行的任务不会被打断。继续吗？");
+  const confirmed = await openConfirmDialog(
+    "这会让所有群组在下一次新建对话时切换到全新 session。当前正在运行的任务不会被打断。继续吗？",
+    { title: "重置 Session" },
+  );
   if (!confirmed) return;
 
   resetAllSessionsBtn.classList.add("busy");
@@ -6575,7 +6678,7 @@ async function loadSchedulers() {
 }
 
 async function deleteSchedulerTask(taskId, el) {
-  if (!confirm("Delete this task?")) return;
+  if (!(await openConfirmDialog("Delete this task?", { title: "Delete Task" }))) return;
   try {
     const res = await apiFetch(`/api/task?id=${encodeURIComponent(taskId)}`, { method: "DELETE" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -6591,7 +6694,7 @@ async function deleteSchedulerTask(taskId, el) {
 }
 
 async function deleteAllSchedulers() {
-  if (!confirm("Delete all scheduled tasks?")) return;
+  if (!(await openConfirmDialog("Delete all scheduled tasks?", { title: "Delete All Tasks" }))) return;
   try {
     const res = await apiFetch("/api/tasks", { method: "DELETE" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -6816,7 +6919,7 @@ async function stopAgent(groupJid, btn) {
       : agent?.isTask
         ? "确认停止这个任务 agent 吗？\n\n对应任务会被标记为暂停。"
         : "确认停止这个 agent 吗？\n\n当前会话会被中止，排队中的消息和任务也会清空。";
-  if (!confirm(confirmMessage)) return;
+  if (!(await openConfirmDialog(confirmMessage, { title: "停止 Agent" }))) return;
   stoppingAgentIds.add(groupJid);
   renderAgentStatus(agentStatusData);
   try {
@@ -7484,7 +7587,11 @@ async function loadTraceMonitorData(options) {
 
 async function clearAllTraceHistory() {
   if (traceMonitorHistoryClearing) return;
-  if (!confirm("确认删除所有 Agent 活动历史吗？\n\n当前仍在运行的活跃 Trace 不会被删除。")) return;
+  if (
+    !(await openConfirmDialog("确认删除所有 Agent 活动历史吗？\n\n当前仍在运行的活跃 Trace 不会被删除。", {
+      title: "删除活动历史",
+    }))
+  ) return;
   traceMonitorHistoryClearing = true;
   syncTraceMonitorHeaderActions();
   try {
@@ -7545,7 +7652,11 @@ async function loadWorkbenchTasks(preferredTaskId, autoSelect = true, refreshDet
 }
 
 async function deleteAllWorkbenchTaskData() {
-  if (!confirm("确认删除所有任务相关数据？这会清空工作台中的任务、阶段、审批和产出记录。")) return;
+  if (
+    !(await openConfirmDialog("确认删除所有任务相关数据？这会清空工作台中的任务、阶段、审批和产出记录。", {
+      title: "删除任务数据",
+    }))
+  ) return;
   try {
     const res = await apiFetch("/api/workbench/tasks", { method: "DELETE" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -8052,8 +8163,12 @@ function renderWorkbenchSubtasks(subtasks) {
       const skipBtn = document.createElement("button");
       skipBtn.className = "btn-ghost";
       skipBtn.textContent = labels.skip || "跳过此节点";
-      skipBtn.addEventListener("click", () => {
-        if (!confirm(`确认按“成功处理”跳过“${selected.stage_label || selected.title}”并直接进入下一步吗？`)) return;
+      skipBtn.addEventListener("click", async () => {
+        if (
+          !(await openConfirmDialog(`确认按“成功处理”跳过“${selected.stage_label || selected.title}”并直接进入下一步吗？`, {
+            title: "跳过节点",
+          }))
+        ) return;
         triggerWorkbenchAction(activeTask.id, "skip", selected.id);
       });
       actions.appendChild(skipBtn);
@@ -8185,8 +8300,8 @@ function renderWorkbenchActionItems(actionItems, task) {
       const skipBtn = document.createElement("button");
       skipBtn.className = "btn-ghost";
       skipBtn.textContent = labels.skip || "跳过此节点";
-      skipBtn.addEventListener("click", () => {
-        if (!confirm(`确认跳过“${item.title}”并进入下一步吗？`)) return;
+      skipBtn.addEventListener("click", async () => {
+        if (!(await openConfirmDialog(`确认跳过“${item.title}”并进入下一步吗？`, { title: "跳过节点" }))) return;
         triggerWorkbenchAction(task.id, "skip");
       });
       actions.appendChild(skipBtn);
@@ -10048,7 +10163,7 @@ async function deleteSelectedMessages() {
   if (!currentGroupJid) return;
   const ids = Array.from(selectedMsgIds);
   if (ids.length === 0) return;
-  if (!confirm(`删除已选的 ${ids.length} 条消息？`)) return;
+  if (!(await openConfirmDialog(`删除已选的 ${ids.length} 条消息？`, { title: "删除消息" }))) return;
 
   try {
     const res = await apiFetch("/api/messages", {
