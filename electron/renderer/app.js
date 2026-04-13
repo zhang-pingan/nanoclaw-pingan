@@ -2519,6 +2519,43 @@ function applyWorkflowDefinitionRolePatch(roleKey, updater) {
   }
 }
 
+function restoreWorkflowDefinitionRoleInspectorFocus(selector, selectionStart, selectionEnd) {
+  if (!selector || !workflowDefinitionRoleInspector) return;
+  const nextField = workflowDefinitionRoleInspector.querySelector(selector);
+  if (!nextField || typeof nextField.focus !== "function") return;
+  nextField.focus();
+  if (
+    typeof selectionStart === "number" &&
+    typeof selectionEnd === "number" &&
+    typeof nextField.setSelectionRange === "function"
+  ) {
+    nextField.setSelectionRange(selectionStart, selectionEnd);
+  }
+}
+
+function getWorkflowDefinitionRoleInspectorSelector(attributeName, attributeValue) {
+  if (!attributeName) return "";
+  const safeValue =
+    typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function"
+      ? CSS.escape(String(attributeValue || ""))
+      : String(attributeValue || "").replace(/["\\]/g, "\\$&");
+  return `[${attributeName}="${safeValue}"]`;
+}
+
+function restoreWorkflowDefinitionInspectorFocus(root, selector, selectionStart, selectionEnd) {
+  if (!root || !selector) return;
+  const nextField = root.querySelector(selector);
+  if (!nextField || typeof nextField.focus !== "function") return;
+  nextField.focus();
+  if (
+    typeof selectionStart === "number" &&
+    typeof selectionEnd === "number" &&
+    typeof nextField.setSelectionRange === "function"
+  ) {
+    nextField.setSelectionRange(selectionStart, selectionEnd);
+  }
+}
+
 function applyWorkflowDefinitionEntryPointPatch(entryKey, updater) {
   if (!entryKey) return;
   try {
@@ -3425,6 +3462,8 @@ function bindWorkflowDefinitionStateInspectorEvents() {
     el.addEventListener(eventName, () => {
       const path = el.getAttribute("data-state-field") || "";
       if (!path || !workflowDefinitionSelectedStateKey) return;
+      const selectionStart = typeof el.selectionStart === "number" ? el.selectionStart : null;
+      const selectionEnd = typeof el.selectionEnd === "number" ? el.selectionEnd : null;
       applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
         if (path === "type") {
           const nextType = el.value;
@@ -3438,6 +3477,14 @@ function bindWorkflowDefinitionStateInspectorEvents() {
         });
         return cleanupStateObject(state);
       });
+      if (el.tagName !== "SELECT" && el.type !== "checkbox" && path !== "type") {
+        restoreWorkflowDefinitionInspectorFocus(
+          workflowDefinitionStateInspector,
+          getWorkflowDefinitionRoleInspectorSelector("data-state-field", path),
+          selectionStart,
+          selectionEnd,
+        );
+      }
     });
   });
   const renameBtn = workflowDefinitionStateInspector.querySelector("[data-state-action='rename']");
@@ -3557,20 +3604,34 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-field]")).forEach((el) => {
     const path = el.getAttribute("data-role-field") || "";
     el.addEventListener(el.tagName === "TEXTAREA" ? "input" : "input", () => {
+      const selectionStart = typeof el.selectionStart === "number" ? el.selectionStart : null;
+      const selectionEnd = typeof el.selectionEnd === "number" ? el.selectionEnd : null;
       applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
         role[path] = el.value || "";
         return cleanupStateObject(role);
       });
+      restoreWorkflowDefinitionRoleInspectorFocus(
+        getWorkflowDefinitionRoleInspectorSelector("data-role-field", path),
+        selectionStart,
+        selectionEnd,
+      );
     });
   });
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel]")).forEach((el) => {
     const channelKey = el.getAttribute("data-role-channel") || "";
     el.addEventListener("input", () => {
+      const selectionStart = typeof el.selectionStart === "number" ? el.selectionStart : null;
+      const selectionEnd = typeof el.selectionEnd === "number" ? el.selectionEnd : null;
       applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
         role.channels = role.channels || {};
         role.channels[channelKey] = el.value || "";
         return cleanupStateObject(role);
       });
+      restoreWorkflowDefinitionRoleInspectorFocus(
+        getWorkflowDefinitionRoleInspectorSelector("data-role-channel", channelKey),
+        selectionStart,
+        selectionEnd,
+      );
     });
   });
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel-key]")).forEach((el) => {
@@ -3693,6 +3754,8 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
     const path = el.getAttribute("data-entry-point-field") || "";
     const eventName = el.type === "checkbox" ? "change" : "input";
     el.addEventListener(eventName, () => {
+      const selectionStart = typeof el.selectionStart === "number" ? el.selectionStart : null;
+      const selectionEnd = typeof el.selectionEnd === "number" ? el.selectionEnd : null;
       applyWorkflowDefinitionEntryPointPatch(workflowDefinitionSelectedEntryPointKey, (entry) => {
         if (el.type === "checkbox") {
           if (el.checked) entry[path] = true;
@@ -3704,6 +3767,14 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
         }
         return cleanupStateObject(entry);
       });
+      if (el.type !== "checkbox") {
+        restoreWorkflowDefinitionInspectorFocus(
+          workflowDefinitionEntryPointInspector,
+          getWorkflowDefinitionRoleInspectorSelector("data-entry-point-field", path),
+          selectionStart,
+          selectionEnd,
+        );
+      }
     });
   });
   const renameBtn = workflowDefinitionEntryPointInspector.querySelector("[data-entry-point-action='rename']");
@@ -3774,7 +3845,15 @@ function renderWorkflowDefinitionStatusLabelEditor(statusLabelsArg) {
   const valueInput = workflowDefinitionStatusLabelInspector.querySelector("[data-status-label-field='value']");
   if (valueInput) {
     valueInput.addEventListener("input", () => {
+      const selectionStart = typeof valueInput.selectionStart === "number" ? valueInput.selectionStart : null;
+      const selectionEnd = typeof valueInput.selectionEnd === "number" ? valueInput.selectionEnd : null;
       applyWorkflowDefinitionStatusLabelPatch(workflowDefinitionSelectedStatusLabelKey, () => valueInput.value || "");
+      restoreWorkflowDefinitionInspectorFocus(
+        workflowDefinitionStatusLabelInspector,
+        getWorkflowDefinitionRoleInspectorSelector("data-status-label-field", "value"),
+        selectionStart,
+        selectionEnd,
+      );
     });
   }
   const deleteBtn = workflowDefinitionStatusLabelInspector.querySelector("[data-status-label-action='delete']");
