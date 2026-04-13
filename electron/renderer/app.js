@@ -1971,12 +1971,15 @@ function renderMemoryList() {
   if (!Array.isArray(visibleMemories) || visibleMemories.length === 0) {
     if (memoryEntries.length > 0 && memoryStatusFilterValue !== "all") {
       memoryEmpty.textContent = `当前筛选（${memoryStatusFilterValue}）下无记忆`;
+      memoryEmpty.classList.remove("hidden");
     } else {
-      memoryEmpty.textContent = memoryQueryText
-        ? `没有匹配“${memoryQueryText}”的记忆`
-        : "当前 Group 暂无记忆";
+      if (memoryQueryText) {
+        memoryEmpty.textContent = `没有匹配“${memoryQueryText}”的记忆`;
+        memoryEmpty.classList.remove("hidden");
+      } else {
+        memoryEmpty.classList.add("hidden");
+      }
     }
-    memoryEmpty.classList.remove("hidden");
     return;
   }
 

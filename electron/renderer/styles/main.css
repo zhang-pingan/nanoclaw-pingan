@@ -4473,12 +4473,77 @@ body.quick-chat-window .quick-chat-input {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
   background:
     linear-gradient(180deg, var(--tertiary-surface-tint), rgba(255, 255, 255, 0) 140px),
     var(--bg);
 }
 
+.doraemon-memory-surface::before,
+.doraemon-memory-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.doraemon-memory-surface::before {
+  background:
+    radial-gradient(44% 34% at 16% 18%, rgba(91, 196, 255, 0.12), transparent 70%),
+    radial-gradient(28% 22% at 82% 26%, rgba(255, 214, 94, 0.08), transparent 72%),
+    radial-gradient(36% 26% at 52% 78%, rgba(120, 208, 255, 0.09), transparent 72%);
+}
+
+.doraemon-memory-surface::after {
+  inset: auto 32px 28px auto;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: url("/assets/doraemon-face.png") center / contain no-repeat;
+  opacity: 0.08;
+}
+
+.memory-background-scene {
+  opacity: 0.52;
+}
+
+.memory-background-scene .cloud-a {
+  top: 7%;
+}
+
+.memory-background-scene .cloud-b {
+  top: 30%;
+}
+
+.memory-background-scene .cloud-c {
+  top: 72%;
+}
+
+.memory-background-scene .copter-a {
+  top: 12%;
+  left: 12%;
+}
+
+.memory-background-scene .copter-b {
+  top: 56%;
+  right: 10%;
+}
+
+.memory-background-scene .bell-a {
+  top: 18%;
+  right: 16%;
+}
+
+.memory-background-scene .bell-b {
+  top: 82%;
+  left: 18%;
+}
+
 .memory-main-header {
+  position: relative;
+  z-index: 1;
   padding: 20px 24px;
   border-bottom: 1px solid rgba(var(--secondary-nav-accent-rgb, 37, 99, 235), 0.14);
   display: flex;
@@ -4494,6 +4559,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .memory-main-body {
+  position: relative;
+  z-index: 1;
   padding: 24px;
   display: flex;
   flex-direction: column;
