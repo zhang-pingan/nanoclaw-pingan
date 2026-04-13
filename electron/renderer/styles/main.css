@@ -432,15 +432,15 @@ body.quick-chat-window #app {
   flex: 1;
   min-width: 0;
   display: none;
-  --secondary-nav-accent: #6d5cff;
-  --secondary-nav-accent-rgb: 109, 92, 255;
-  --secondary-nav-kicker-color: #7a6bff;
-  --secondary-nav-line-color: #d4cbff;
-  --secondary-nav-surface-soft: rgba(243, 241, 255, 0.96);
-  --secondary-nav-border-soft: rgba(212, 203, 255, 0.14);
-  --secondary-nav-border-strong: rgba(212, 203, 255, 0.24);
-  --workbench-accent-rgb: 109, 92, 255;
-  --workbench-accent-soft-rgb: 212, 203, 255;
+  --secondary-nav-accent: #0ea5e9;
+  --secondary-nav-accent-rgb: 14, 165, 233;
+  --secondary-nav-kicker-color: #38bdf8;
+  --secondary-nav-line-color: #bae6fd;
+  --secondary-nav-surface-soft: rgba(247, 253, 255, 0.995);
+  --secondary-nav-border-soft: rgba(125, 211, 252, 0.12);
+  --secondary-nav-border-strong: rgba(125, 211, 252, 0.22);
+  --workbench-accent-rgb: 14, 165, 233;
+  --workbench-accent-soft-rgb: 125, 211, 252;
   --workbench-success-rgb: 5, 150, 105;
   --workbench-warning-rgb: 217, 119, 6;
   --workbench-danger-rgb: 220, 38, 38;
@@ -448,14 +448,14 @@ body.quick-chat-window #app {
   --workbench-tertiary-accent-strong: var(--accent-hover);
   --workbench-tertiary-accent-dim: var(--accent-dim);
   --workbench-tertiary-accent-glow: var(--accent-glow);
-  --tertiary-empty-accent-rgb: 122, 107, 255;
-  --tertiary-surface-tint: rgba(122, 107, 255, 0.018);
-  --tertiary-surface-tint-strong: rgba(122, 107, 255, 0.032);
+  --tertiary-empty-accent-rgb: 14, 165, 233;
+  --tertiary-surface-tint: rgba(14, 165, 233, 0.018);
+  --tertiary-surface-tint-strong: rgba(14, 165, 233, 0.032);
   background:
-    linear-gradient(90deg, rgba(236, 241, 255, 0.92) 0, rgba(240, 245, 255, 0.78) 264px, rgba(245, 248, 255, 0.42) 420px, rgba(245, 248, 255, 0) 560px),
-    radial-gradient(circle at top left, rgba(212, 203, 255, 0.18), transparent 28%),
+    linear-gradient(90deg, rgba(236, 248, 255, 0.92) 0, rgba(240, 250, 255, 0.78) 264px, rgba(245, 251, 255, 0.42) 420px, rgba(245, 251, 255, 0) 560px),
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.18), transparent 28%),
     radial-gradient(circle at 22% 4%, rgba(135, 195, 255, 0.12), transparent 18%),
-    linear-gradient(180deg, rgba(109, 92, 255, 0.03), rgba(109, 92, 255, 0.01) 20%, transparent 42%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.03), rgba(14, 165, 233, 0.01) 20%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -466,25 +466,25 @@ body.quick-chat-window #app {
 .workbench-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #6d5cff;
-  --secondary-nav-accent-rgb: 109, 92, 255;
-  --secondary-nav-kicker-color: #7a6bff;
-  --secondary-nav-line-color: #d4cbff;
-  --secondary-nav-surface-soft: rgba(243, 241, 255, 0.96);
-  --secondary-nav-border-soft: rgba(212, 203, 255, 0.14);
-  --secondary-nav-border-strong: rgba(212, 203, 255, 0.24);
+  --secondary-nav-accent: #0ea5e9;
+  --secondary-nav-accent-rgb: 14, 165, 233;
+  --secondary-nav-kicker-color: #38bdf8;
+  --secondary-nav-line-color: #bae6fd;
+  --secondary-nav-surface-soft: rgba(247, 253, 255, 0.995);
+  --secondary-nav-border-soft: rgba(125, 211, 252, 0.12);
+  --secondary-nav-border-strong: rgba(125, 211, 252, 0.22);
   position: relative;
   border-right: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.08);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 132px),
     radial-gradient(circle at top left, rgba(var(--secondary-nav-accent-rgb), 0.16), transparent 34%),
-    linear-gradient(180deg, rgba(109, 92, 255, 0.08), rgba(109, 92, 255, 0.03) 130px, rgba(109, 92, 255, 0) 260px),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.08), rgba(14, 165, 233, 0.03) 130px, rgba(14, 165, 233, 0) 260px),
     var(--surface);
   display: flex;
   flex-direction: column;
   transition: width var(--transition-slow), min-width var(--transition-slow);
   overflow: hidden;
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.76), 0 14px 30px rgba(109, 92, 255, 0.08);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.76), 0 14px 30px rgba(0, 124, 190, 0.08);
 }
 
 .workbench-sidebar.collapsed {
@@ -1383,7 +1383,7 @@ body.quick-chat-window #app {
   inset: 0 auto auto 0;
   width: 100%;
   height: 3px;
-  background: linear-gradient(90deg, rgba(var(--workbench-accent-rgb), 0.96), rgba(122, 107, 255, 0.74));
+  background: linear-gradient(90deg, rgba(var(--workbench-accent-rgb), 0.96), rgba(56, 189, 248, 0.74));
   box-shadow: 0 0 18px rgba(var(--workbench-accent-rgb), 0.4);
 }
 
@@ -1837,13 +1837,13 @@ body.quick-chat-window .quick-chat-input {
   flex: 1;
   min-width: 0;
   display: none;
-  --tertiary-empty-accent-rgb: 234, 179, 8;
-  --tertiary-surface-tint: rgba(234, 179, 8, 0.016);
-  --tertiary-surface-tint-strong: rgba(234, 179, 8, 0.028);
+  --tertiary-empty-accent-rgb: 14, 165, 233;
+  --tertiary-surface-tint: rgba(14, 165, 233, 0.016);
+  --tertiary-surface-tint-strong: rgba(14, 165, 233, 0.028);
   background:
-    radial-gradient(circle at top left, rgba(254, 249, 195, 0.24), transparent 28%),
-    radial-gradient(circle at top right, rgba(250, 204, 21, 0.16), transparent 30%),
-    linear-gradient(180deg, rgba(234, 179, 8, 0.06), rgba(234, 179, 8, 0.02) 22%, transparent 42%),
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.24), transparent 28%),
+    radial-gradient(circle at top right, rgba(186, 230, 253, 0.16), transparent 30%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.06), rgba(14, 165, 233, 0.02) 22%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -1855,13 +1855,13 @@ body.quick-chat-window .quick-chat-input {
   flex: 1;
   min-width: 0;
   display: none;
-  --tertiary-empty-accent-rgb: 180, 83, 9;
-  --tertiary-surface-tint: rgba(180, 83, 9, 0.016);
-  --tertiary-surface-tint-strong: rgba(180, 83, 9, 0.028);
+  --tertiary-empty-accent-rgb: 14, 165, 233;
+  --tertiary-surface-tint: rgba(14, 165, 233, 0.016);
+  --tertiary-surface-tint-strong: rgba(14, 165, 233, 0.028);
   background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 28%),
-    radial-gradient(circle at top right, rgba(251, 191, 36, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(180, 83, 9, 0.05), rgba(180, 83, 9, 0.02) 20%, transparent 42%),
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(186, 230, 253, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.05), rgba(14, 165, 233, 0.02) 20%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -1873,13 +1873,13 @@ body.quick-chat-window .quick-chat-input {
   flex: 1;
   min-width: 0;
   display: none;
-  --tertiary-empty-accent-rgb: 4, 120, 87;
-  --tertiary-surface-tint: rgba(4, 120, 87, 0.016);
-  --tertiary-surface-tint-strong: rgba(4, 120, 87, 0.028);
+  --tertiary-empty-accent-rgb: 14, 165, 233;
+  --tertiary-surface-tint: rgba(14, 165, 233, 0.016);
+  --tertiary-surface-tint-strong: rgba(14, 165, 233, 0.028);
   background:
-    radial-gradient(circle at top left, rgba(16, 185, 129, 0.11), transparent 28%),
-    radial-gradient(circle at top right, rgba(52, 211, 153, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(4, 120, 87, 0.05), rgba(4, 120, 87, 0.02) 20%, transparent 42%),
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.15), transparent 28%),
+    radial-gradient(circle at top right, rgba(186, 230, 253, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.05), rgba(14, 165, 233, 0.02) 20%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -1890,20 +1890,20 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definitions-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #b45309;
-  --secondary-nav-accent-rgb: 180, 83, 9;
-  --secondary-nav-kicker-color: #b45309;
-  --secondary-nav-line-color: #f59e0b;
-  --secondary-nav-surface-soft: rgba(255, 247, 237, 0.96);
-  --secondary-nav-border-soft: rgba(245, 158, 11, 0.14);
-  --secondary-nav-border-strong: rgba(245, 158, 11, 0.24);
+  --secondary-nav-accent: #0ea5e9;
+  --secondary-nav-accent-rgb: 14, 165, 233;
+  --secondary-nav-kicker-color: #38bdf8;
+  --secondary-nav-line-color: #bae6fd;
+  --secondary-nav-surface-soft: rgba(247, 253, 255, 0.995);
+  --secondary-nav-border-soft: rgba(125, 211, 252, 0.12);
+  --secondary-nav-border-strong: rgba(125, 211, 252, 0.22);
   border-right: 1px solid transparent;
   background:
-    linear-gradient(180deg, rgba(245, 158, 11, 0.09), rgba(245, 158, 11, 0) 220px),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.09), rgba(14, 165, 233, 0) 220px),
     var(--surface);
   display: flex;
   flex-direction: column;
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7), 0 10px 24px rgba(180, 83, 9, 0.08);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7), 0 10px 24px rgba(0, 124, 190, 0.08);
 }
 
 .workflow-definitions-sidebar-actions {
@@ -2116,7 +2116,7 @@ body.quick-chat-window .quick-chat-input {
   width: 100%;
   padding: 14px;
   border-radius: 18px;
-  border: 1px solid rgba(180, 83, 9, 0.12);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.12);
   background: rgba(255, 255, 255, 0.74);
   cursor: pointer;
   appearance: none;
@@ -2127,14 +2127,14 @@ body.quick-chat-window .quick-chat-input {
 
 .workflow-definition-list-item:hover {
   transform: translateY(-1px);
-  border-color: rgba(180, 83, 9, 0.22);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.22);
   box-shadow: var(--secondary-nav-item-shadow-hover);
 }
 
 .workflow-definition-list-item.active {
-  border-color: rgba(217, 119, 6, 0.32);
-  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.9));
-  box-shadow: inset 3px 0 0 #d97706, var(--secondary-nav-item-shadow-active);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.32);
+  background: linear-gradient(180deg, var(--secondary-nav-surface-soft), rgba(255, 255, 255, 0.9));
+  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), var(--secondary-nav-item-shadow-active);
 }
 
 .workflow-definition-list-head {
@@ -2204,8 +2204,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-main-pill {
-  background: rgba(245, 158, 11, 0.16);
-  color: #9a3412;
+  background: rgba(var(--secondary-nav-accent-rgb), 0.14);
+  color: var(--secondary-nav-accent);
 }
 
 .workflow-definitions-main {
@@ -2246,9 +2246,9 @@ body.quick-chat-window .quick-chat-input {
 
 .workflow-definition-hero,
 .workflow-definition-panel {
-  border: 1px solid rgba(180, 83, 9, 0.12);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.12);
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb, 180, 83, 9), 0.04), rgba(255, 255, 255, 0.9));
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.04), rgba(255, 255, 255, 0.9));
   box-shadow: 0 18px 32px rgba(148, 163, 184, 0.08);
 }
 
@@ -2264,7 +2264,7 @@ body.quick-chat-window .quick-chat-input {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: #c2410c;
+  color: var(--secondary-nav-kicker-color);
   font-weight: 800;
   margin-bottom: 8px;
 }
@@ -2426,7 +2426,7 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-version-chip {
   padding: 10px 12px;
   border-radius: 16px;
-  border: 1px solid rgba(180, 83, 9, 0.16);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.16);
   background: rgba(255, 255, 255, 0.98);
   cursor: pointer;
   appearance: none;
@@ -2438,14 +2438,14 @@ body.quick-chat-window .quick-chat-input {
 
 .workflow-definition-version-chip:hover {
   transform: translateY(-1px);
-  border-color: rgba(180, 83, 9, 0.26);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.26);
   box-shadow: var(--secondary-nav-item-shadow-hover);
 }
 
 .workflow-definition-version-chip.active {
-  border-color: rgba(217, 119, 6, 0.34);
-  background: linear-gradient(180deg, rgba(255, 237, 213, 0.96), rgba(255, 251, 235, 0.88));
-  box-shadow: inset 3px 0 0 #d97706, var(--secondary-nav-item-shadow-active);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.34);
+  background: linear-gradient(180deg, var(--secondary-nav-surface-soft), rgba(255, 255, 255, 0.88));
+  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), var(--secondary-nav-item-shadow-active);
 }
 
 .workflow-definition-version-chip strong {
@@ -2662,21 +2662,21 @@ body.quick-chat-window .quick-chat-input {
   height: 30px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid rgba(249, 115, 22, 0.18);
-  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.92));
-  color: #c2410c;
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.18);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.12), rgba(255, 255, 255, 0.92));
+  color: var(--secondary-nav-accent);
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.08);
+  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
 .workflow-definition-state-list-head .btn-ghost:hover,
 .workflow-definition-state-head-actions .btn-ghost:hover,
 .workflow-definition-inline-actions .btn-ghost:hover {
-  border-color: rgba(249, 115, 22, 0.28);
-  background: linear-gradient(180deg, rgba(255, 237, 213, 0.98), rgba(255, 247, 237, 0.94));
-  color: #9a3412;
-  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.12);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.18), rgba(255, 255, 255, 0.94));
+  color: var(--accent-hover);
+  box-shadow: 0 10px 22px rgba(var(--secondary-nav-accent-rgb), 0.12);
   transform: translateY(-1px);
 }
 
@@ -2717,14 +2717,14 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-state-list-item:hover {
-  border-color: rgba(249, 115, 22, 0.22);
-  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.08);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.22);
+  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
 .workflow-definition-state-list-item.active {
-  border-color: rgba(249, 115, 22, 0.28);
-  background: rgba(255, 247, 237, 0.92);
-  box-shadow: inset 3px 0 0 #f97316;
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
+  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color);
 }
 
 .workflow-definition-state-list-item strong {
@@ -2811,8 +2811,8 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-field input:not([type="checkbox"]):focus,
 .workflow-definition-field select:focus,
 .workflow-definition-field textarea:focus {
-  border-color: rgba(249, 115, 22, 0.38);
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.12);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.38);
+  box-shadow: 0 0 0 4px rgba(var(--secondary-nav-accent-rgb), 0.12);
   background: rgba(255, 255, 255, 0.96);
 }
 
@@ -2905,23 +2905,23 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-checkbox-control:hover .workflow-definition-switch {
-  border-color: rgba(16, 185, 129, 0.24);
-  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.08);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
+  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
 .workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch {
-  border-color: rgba(16, 185, 129, 0.24);
-  background: rgba(236, 253, 245, 0.96);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
 }
 
 .workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch .workflow-definition-switch-track {
-  background: rgba(16, 185, 129, 0.24);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.24);
 }
 
 .workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch .workflow-definition-switch-thumb {
   transform: translateX(14px);
-  background: #10b981;
-  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.28);
+  background: var(--secondary-nav-accent);
+  box-shadow: 0 2px 10px rgba(var(--secondary-nav-accent-rgb), 0.28);
 }
 
 .workflow-definition-choice-grid {
@@ -2951,15 +2951,15 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-choice-chip:hover {
-  border-color: rgba(16, 185, 129, 0.24);
-  background: rgba(236, 253, 245, 0.78);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
 .workflow-definition-choice-chip:has(input[type="checkbox"]:checked) {
-  border-color: rgba(16, 185, 129, 0.28);
-  background: rgba(236, 253, 245, 0.96);
-  color: #047857;
-  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.08);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.12);
+  color: var(--secondary-nav-accent);
+  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
 .cards-management-field-error {
@@ -3007,8 +3007,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-graph-node.active {
-  border-color: rgba(249, 115, 22, 0.28);
-  box-shadow: inset 3px 0 0 #f97316, 0 14px 26px rgba(249, 115, 22, 0.12);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
+  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), 0 14px 26px rgba(var(--secondary-nav-accent-rgb), 0.12);
 }
 
 .workflow-definition-graph-node.entry {
@@ -3081,8 +3081,8 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-graph-meta span {
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(245, 158, 11, 0.1);
-  color: #9a3412;
+  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
+  color: var(--secondary-nav-accent);
   font-size: 11px;
   line-height: 1;
 }
@@ -3203,21 +3203,21 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-sidebar {
-  --secondary-nav-accent: #047857;
-  --secondary-nav-accent-rgb: 4, 120, 87;
-  --secondary-nav-kicker-color: #047857;
-  --secondary-nav-line-color: #10b981;
-  --secondary-nav-surface-soft: rgba(236, 253, 245, 0.96);
-  --secondary-nav-border-soft: rgba(16, 185, 129, 0.14);
-  --secondary-nav-border-strong: rgba(16, 185, 129, 0.24);
+  --secondary-nav-accent: #0ea5e9;
+  --secondary-nav-accent-rgb: 14, 165, 233;
+  --secondary-nav-kicker-color: #38bdf8;
+  --secondary-nav-line-color: #bae6fd;
+  --secondary-nav-surface-soft: rgba(247, 253, 255, 0.995);
+  --secondary-nav-border-soft: rgba(125, 211, 252, 0.12);
+  --secondary-nav-border-strong: rgba(125, 211, 252, 0.22);
   background:
-    linear-gradient(180deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0) 220px),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.1), rgba(14, 165, 233, 0) 220px),
     var(--surface);
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7), 0 10px 24px rgba(5, 150, 105, 0.08);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7), 0 10px 24px rgba(0, 124, 190, 0.08);
 }
 
 .cards-management-kicker {
-  color: #047857;
+  color: var(--secondary-nav-kicker-color);
 }
 
 .cards-management-grid {
@@ -3241,7 +3241,7 @@ body.quick-chat-window .quick-chat-input {
 .cards-management-toolbar {
   align-items: center;
   padding: 4px;
-  border: 1px solid rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.14);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.7);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -3254,10 +3254,10 @@ body.quick-chat-window .quick-chat-input {
   width: 30px;
   height: 30px;
   padding: 0;
-  border: 1px solid rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.16);
   border-radius: 10px;
-  background: rgba(236, 253, 245, 0.92);
-  color: #047857;
+  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
+  color: var(--secondary-nav-accent);
   cursor: pointer;
   font-size: 15px;
   font-weight: 800;
@@ -3294,9 +3294,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-icon-btn:hover {
-  border-color: rgba(16, 185, 129, 0.28);
-  background: rgba(209, 250, 229, 0.96);
-  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.1);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.28);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.14);
+  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.1);
   transform: translateY(-1px);
 }
 
@@ -3334,8 +3334,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-toggle-btn:hover {
-  border-color: rgba(16, 185, 129, 0.24);
-  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.08);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
+  box-shadow: 0 8px 18px rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
 .cards-management-toggle-btn:disabled {
@@ -3367,18 +3367,18 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-toggle-btn.active {
-  border-color: rgba(16, 185, 129, 0.24);
-  background: rgba(236, 253, 245, 0.96);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.24);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
 }
 
 .cards-management-toggle-btn.active .cards-management-toggle-track {
-  background: rgba(16, 185, 129, 0.24);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.24);
 }
 
 .cards-management-toggle-btn.active .cards-management-toggle-thumb {
   transform: translateX(14px);
-  background: #10b981;
-  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.28);
+  background: var(--secondary-nav-accent);
+  box-shadow: 0 2px 10px rgba(var(--secondary-nav-accent-rgb), 0.28);
 }
 
 .cards-management-rows {
@@ -3397,7 +3397,7 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-row {
-  border: 1px solid rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.16);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.78);
   padding: 14px;
@@ -3425,9 +3425,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-draggable.drag-over {
-  border-color: rgba(16, 185, 129, 0.42);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
-  background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(255, 255, 255, 0.92));
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.42);
+  box-shadow: 0 0 0 3px rgba(var(--secondary-nav-accent-rgb), 0.12);
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.12), rgba(255, 255, 255, 0.92));
 }
 
 .cards-management-draggable.drag-over::after {
@@ -3436,8 +3436,8 @@ body.quick-chat-window .quick-chat-input {
   margin-top: 10px;
   padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(16, 185, 129, 0.08);
-  color: #047857;
+  background: rgba(var(--secondary-nav-accent-rgb), 0.08);
+  color: var(--secondary-nav-accent);
   font-size: 12px;
   font-weight: 700;
 }
@@ -3469,8 +3469,8 @@ body.quick-chat-window .quick-chat-input {
   width: 26px;
   height: 26px;
   border-radius: 10px;
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
+  background: rgba(var(--secondary-nav-accent-rgb), 0.1);
+  color: var(--secondary-nav-accent);
   font-weight: 800;
   letter-spacing: 0.08em;
   user-select: none;
@@ -3532,7 +3532,7 @@ body.quick-chat-window .quick-chat-input {
   top: 30px;
   bottom: 8px;
   width: 1px;
-  background: linear-gradient(180deg, rgba(16, 185, 129, 0.28), rgba(16, 185, 129, 0.08));
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.28), rgba(var(--secondary-nav-accent-rgb), 0.08));
 }
 
 .cards-management-group-toggle {
@@ -3542,16 +3542,16 @@ body.quick-chat-window .quick-chat-input {
   gap: 12px;
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid rgba(5, 150, 105, 0.12);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.12);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(236, 253, 245, 0.92), rgba(255, 255, 255, 0.88));
+  background: linear-gradient(180deg, rgba(var(--secondary-nav-accent-rgb), 0.1), rgba(255, 255, 255, 0.88));
   cursor: pointer;
   transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .cards-management-group-toggle:hover {
-  border-color: rgba(5, 150, 105, 0.22);
-  box-shadow: 0 10px 22px rgba(5, 150, 105, 0.08);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.22);
+  box-shadow: 0 10px 22px rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
 .cards-management-group-title {
@@ -3560,11 +3560,11 @@ body.quick-chat-window .quick-chat-input {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 800;
-  color: #047857;
+  color: var(--secondary-nav-accent);
 }
 
 .cards-management-group-chevron {
-  color: #047857;
+  color: var(--secondary-nav-accent);
   font-size: 12px;
   line-height: 1;
 }
@@ -3584,7 +3584,7 @@ body.quick-chat-window .quick-chat-input {
   top: 0;
   bottom: 10px;
   width: 1px;
-  background: rgba(16, 185, 129, 0.12);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.12);
 }
 
 .cards-management-group-items.hidden {
@@ -3593,7 +3593,7 @@ body.quick-chat-window .quick-chat-input {
 
 .cards-management-list-item {
   position: relative;
-  border-color: rgba(5, 150, 105, 0.14);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.14);
 }
 
 .cards-management-list-item::before {
@@ -3603,18 +3603,18 @@ body.quick-chat-window .quick-chat-input {
   top: 22px;
   width: 12px;
   height: 1px;
-  background: rgba(16, 185, 129, 0.2);
+  background: rgba(var(--secondary-nav-accent-rgb), 0.2);
 }
 
 .cards-management-list-item:hover {
-  border-color: rgba(5, 150, 105, 0.22);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.22);
   box-shadow: var(--secondary-nav-item-shadow-hover);
 }
 
 .cards-management-list-item.active {
-  border-color: rgba(16, 185, 129, 0.3);
-  background: linear-gradient(180deg, rgba(236, 253, 245, 0.96), rgba(255, 255, 255, 0.9));
-  box-shadow: inset 3px 0 0 #10b981, var(--secondary-nav-item-shadow-active);
+  border-color: rgba(var(--secondary-nav-accent-rgb), 0.3);
+  background: linear-gradient(180deg, var(--secondary-nav-surface-soft), rgba(255, 255, 255, 0.9));
+  box-shadow: inset 3px 0 0 var(--secondary-nav-line-color), var(--secondary-nav-item-shadow-active);
 }
 
 .cards-management-detail.cards-management-readonly .cards-management-editor-panel {
@@ -3657,8 +3657,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .cards-management-pill {
-  background: rgba(16, 185, 129, 0.12);
-  color: #065f46;
+  background: rgba(var(--secondary-nav-accent-rgb), 0.12);
+  color: var(--secondary-nav-accent);
 }
 
 .cards-management-pill.secondary {
@@ -3687,7 +3687,7 @@ body.quick-chat-window .quick-chat-input {
 
 .cards-management-reference-item {
   padding: 14px;
-  border: 1px solid rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(var(--secondary-nav-accent-rgb), 0.14);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
 }
@@ -3710,13 +3710,13 @@ body.quick-chat-window .quick-chat-input {
   flex: 1;
   min-width: 0;
   display: none;
-  --tertiary-empty-accent-rgb: 220, 38, 38;
-  --tertiary-surface-tint: rgba(220, 38, 38, 0.016);
-  --tertiary-surface-tint-strong: rgba(220, 38, 38, 0.028);
+  --tertiary-empty-accent-rgb: 14, 165, 233;
+  --tertiary-surface-tint: rgba(14, 165, 233, 0.016);
+  --tertiary-surface-tint-strong: rgba(14, 165, 233, 0.028);
   background:
-    radial-gradient(circle at top left, rgba(248, 113, 113, 0.14), transparent 28%),
-    radial-gradient(circle at top right, rgba(239, 68, 68, 0.1), transparent 30%),
-    linear-gradient(180deg, rgba(220, 38, 38, 0.05), rgba(220, 38, 38, 0.02) 22%, transparent 42%),
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(186, 230, 253, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.05), rgba(14, 165, 233, 0.02) 22%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -3727,13 +3727,13 @@ body.quick-chat-window .quick-chat-input {
 .trace-monitor-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #dc2626;
-  --secondary-nav-accent-rgb: 220, 38, 38;
-  --secondary-nav-kicker-color: #dc2626;
-  --secondary-nav-line-color: #f87171;
-  --secondary-nav-surface-soft: rgba(254, 242, 242, 0.96);
-  --secondary-nav-border-soft: rgba(248, 113, 113, 0.14);
-  --secondary-nav-border-strong: rgba(248, 113, 113, 0.24);
+  --secondary-nav-accent: #0ea5e9;
+  --secondary-nav-accent-rgb: 14, 165, 233;
+  --secondary-nav-kicker-color: #38bdf8;
+  --secondary-nav-line-color: #bae6fd;
+  --secondary-nav-surface-soft: rgba(247, 253, 255, 0.995);
+  --secondary-nav-border-soft: rgba(125, 211, 252, 0.12);
+  --secondary-nav-border-strong: rgba(125, 211, 252, 0.22);
   border-right: 1px solid transparent;
   background: var(--surface);
   backdrop-filter: blur(16px);
@@ -3816,6 +3816,175 @@ body.quick-chat-window .quick-chat-input {
   height: 116px;
   object-fit: contain;
   filter: drop-shadow(0 12px 24px rgba(var(--secondary-nav-accent-rgb, 124, 58, 237), 0.14));
+}
+
+.doraemon-tertiary-empty {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: rgba(82, 182, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(232, 246, 255, 0.96) 0%, rgba(248, 252, 255, 0.92) 48%, rgba(255, 255, 255, 0.96) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0));
+  box-shadow: 0 18px 36px rgba(0, 132, 201, 0.1);
+}
+
+.doraemon-tertiary-empty::before,
+.doraemon-tertiary-empty::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.doraemon-tertiary-empty::before {
+  background:
+    radial-gradient(44% 34% at 16% 18%, rgba(91, 196, 255, 0.18), transparent 70%),
+    radial-gradient(28% 22% at 82% 26%, rgba(255, 214, 94, 0.12), transparent 72%),
+    radial-gradient(36% 26% at 52% 78%, rgba(120, 208, 255, 0.14), transparent 72%);
+  z-index: 0;
+}
+
+.doraemon-tertiary-empty::after {
+  inset: auto 28px 20px auto;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: url("/assets/doraemon-face.png") center / contain no-repeat;
+  opacity: 0.12;
+  z-index: 0;
+}
+
+.tertiary-empty-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tertiary-empty-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.tertiary-empty-content h3,
+.tertiary-empty-content p {
+  position: relative;
+  z-index: 1;
+}
+
+.tertiary-empty-cloud {
+  position: absolute;
+  display: block;
+  width: 220px;
+  height: 68px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 14px 28px rgba(0, 131, 200, 0.08);
+}
+
+.tertiary-empty-cloud::before,
+.tertiary-empty-cloud::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.tertiary-empty-cloud::before {
+  width: 80px;
+  height: 80px;
+  left: 24px;
+  top: -32px;
+}
+
+.tertiary-empty-cloud::after {
+  width: 102px;
+  height: 102px;
+  right: 34px;
+  top: -46px;
+}
+
+.tertiary-empty-scene .cloud-a {
+  top: 10%;
+  left: -18%;
+  animation: cloudDriftA 24s linear infinite;
+}
+
+.tertiary-empty-scene .cloud-b {
+  top: 32%;
+  left: -24%;
+  transform: scale(0.8);
+  animation: cloudDriftB 32s linear infinite;
+}
+
+.tertiary-empty-scene .cloud-c {
+  top: 68%;
+  left: -16%;
+  transform: scale(0.64);
+  animation: cloudDriftA 28s linear infinite;
+}
+
+.tertiary-empty-copter,
+.tertiary-empty-bell {
+  position: absolute;
+  display: block;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  filter: drop-shadow(0 6px 10px rgba(0, 120, 180, 0.18));
+}
+
+.tertiary-empty-copter::after,
+.tertiary-empty-bell::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  animation: pulseRing 2.4s ease-out infinite;
+}
+
+.tertiary-empty-copter {
+  width: 40px;
+  height: 40px;
+  background-image: url("/assets/take-copter-cursor.svg");
+}
+
+.tertiary-empty-scene .copter-a {
+  top: 16%;
+  left: 14%;
+  animation: copterFloatA 7.2s ease-in-out infinite;
+}
+
+.tertiary-empty-scene .copter-b {
+  top: 60%;
+  right: 14%;
+  animation: copterFloatB 8.4s ease-in-out infinite;
+}
+
+.tertiary-empty-bell {
+  width: 34px;
+  height: 34px;
+  background-image: url("/assets/doraemon-bell.png");
+}
+
+.tertiary-empty-scene .bell-a {
+  top: 24%;
+  right: 18%;
+  animation: bellFloat 6.8s ease-in-out infinite;
+}
+
+.tertiary-empty-scene .bell-b {
+  top: 78%;
+  left: 24%;
+  transform: scale(0.86);
+  animation: bellFloat 7.5s ease-in-out infinite reverse;
 }
 
 .trace-monitor-detail {
@@ -4280,13 +4449,13 @@ body.quick-chat-window .quick-chat-input {
 .memory-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #eab308;
-  --secondary-nav-accent-rgb: 234, 179, 8;
-  --secondary-nav-kicker-color: #d4a106;
-  --secondary-nav-line-color: #facc15;
-  --secondary-nav-surface-soft: rgba(254, 252, 232, 0.98);
-  --secondary-nav-border-soft: rgba(250, 204, 21, 0.14);
-  --secondary-nav-border-strong: rgba(250, 204, 21, 0.24);
+  --secondary-nav-accent: #0ea5e9;
+  --secondary-nav-accent-rgb: 14, 165, 233;
+  --secondary-nav-kicker-color: #38bdf8;
+  --secondary-nav-line-color: #bae6fd;
+  --secondary-nav-surface-soft: rgba(247, 253, 255, 0.995);
+  --secondary-nav-border-soft: rgba(125, 211, 252, 0.12);
+  --secondary-nav-border-strong: rgba(125, 211, 252, 0.22);
   border-right: 1px solid transparent;
   background: var(--surface);
   display: flex;
