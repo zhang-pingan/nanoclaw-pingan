@@ -3496,10 +3496,15 @@ function buildStateTransitionInspectorHtml(prefix, transition) {
       <span>Notify Template</span>
       <textarea data-state-field="${escapeAttribute(prefix)}.notify.template" rows="3">${escapeHtml(safe.notify?.template || "")}</textarea>
     </label>
-    <label class="workflow-definition-field workflow-definition-field-block">
-      <span>
+    <label class="workflow-definition-field workflow-definition-field-block workflow-definition-checkbox-field">
+      <span class="workflow-definition-checkbox-title">Increment Round</span>
+      <span class="workflow-definition-checkbox-control">
         <input data-state-field="${escapeAttribute(prefix)}.effects.increment_round" type="checkbox" ${safe.effects?.increment_round ? "checked" : ""} />
-        Increment Round
+        <span class="workflow-definition-switch" aria-hidden="true">
+          <span class="workflow-definition-switch-track"></span>
+          <span class="workflow-definition-switch-thumb"></span>
+        </span>
+        <span class="workflow-definition-checkbox-text">${safe.effects?.increment_round ? "已启用" : "未启用"}</span>
       </span>
     </label>
   `;
@@ -3833,10 +3838,15 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
           <span>Deliverable Role</span>
           <input list="workflow-definition-role-options-entry" data-entry-point-field="deliverable_role" type="text" value="${escapeAttribute(selectedEntry?.deliverable_role || "")}" />
         </label>
-        <label class="workflow-definition-field">
-          <span>
+        <label class="workflow-definition-field workflow-definition-checkbox-field">
+          <span class="workflow-definition-checkbox-title">Requires Deliverable</span>
+          <span class="workflow-definition-checkbox-control">
             <input data-entry-point-field="requires_deliverable" type="checkbox" ${selectedEntry?.requires_deliverable ? "checked" : ""} />
-            Requires Deliverable
+            <span class="workflow-definition-switch" aria-hidden="true">
+              <span class="workflow-definition-switch-track"></span>
+              <span class="workflow-definition-switch-thumb"></span>
+            </span>
+            <span class="workflow-definition-checkbox-text">${selectedEntry?.requires_deliverable ? "已启用" : "未启用"}</span>
           </span>
         </label>
       </div>

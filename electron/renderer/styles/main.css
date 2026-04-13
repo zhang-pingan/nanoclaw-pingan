@@ -2039,23 +2039,25 @@ html, body {
   padding: 10px 12px;
   border-radius: 16px;
   border: 1px solid rgba(180, 83, 9, 0.16);
-  background: rgba(255, 251, 235, 0.6);
+  background: rgba(255, 255, 255, 0.98);
   cursor: pointer;
   appearance: none;
   text-align: left;
   font: inherit;
   min-width: 140px;
-  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .workflow-definition-version-chip:hover {
   transform: translateY(-1px);
   border-color: rgba(180, 83, 9, 0.26);
+  box-shadow: var(--secondary-nav-item-shadow-hover);
 }
 
 .workflow-definition-version-chip.active {
   border-color: rgba(217, 119, 6, 0.34);
   background: linear-gradient(180deg, rgba(255, 237, 213, 0.96), rgba(255, 251, 235, 0.88));
+  box-shadow: inset 3px 0 0 #d97706, var(--secondary-nav-item-shadow-active);
 }
 
 .workflow-definition-version-chip strong {
@@ -2267,10 +2269,33 @@ html, body {
 }
 
 .workflow-definition-state-list-head .btn-ghost,
-.workflow-definition-state-head-actions .btn-ghost {
-  height: 28px;
-  padding: 0 10px;
+.workflow-definition-state-head-actions .btn-ghost,
+.workflow-definition-inline-actions .btn-ghost {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.92));
+  color: #c2410c;
   font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.08);
+}
+
+.workflow-definition-state-list-head .btn-ghost:hover,
+.workflow-definition-state-head-actions .btn-ghost:hover,
+.workflow-definition-inline-actions .btn-ghost:hover {
+  border-color: rgba(249, 115, 22, 0.28);
+  background: linear-gradient(180deg, rgba(255, 237, 213, 0.98), rgba(255, 247, 237, 0.94));
+  color: #9a3412;
+  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.12);
+  transform: translateY(-1px);
+}
+
+.workflow-definition-state-list-head .btn-ghost:active,
+.workflow-definition-state-head-actions .btn-ghost:active,
+.workflow-definition-inline-actions .btn-ghost:active {
+  transform: translateY(0);
 }
 
 .workflow-definition-state-list {
@@ -2379,7 +2404,7 @@ html, body {
   line-height: 1.5;
 }
 
-.workflow-definition-field input,
+.workflow-definition-field input:not([type="checkbox"]),
 .workflow-definition-field select,
 .workflow-definition-field textarea {
   width: 100%;
@@ -2395,25 +2420,120 @@ html, body {
   transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
-.workflow-definition-field input:focus,
+.workflow-definition-field input:not([type="checkbox"]):focus,
 .workflow-definition-field select:focus,
 .workflow-definition-field textarea:focus {
-  border-color: rgba(217, 119, 6, 0.4);
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+  border-color: rgba(249, 115, 22, 0.38);
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.12);
   background: rgba(255, 255, 255, 0.96);
 }
 
-.workflow-definition-field input[readonly] {
+.workflow-definition-field input:not([type="checkbox"])[readonly] {
   color: var(--text-muted);
   background: rgba(241, 245, 249, 0.9);
 }
 
-.workflow-definition-field.cards-management-field-invalid input,
+.workflow-definition-field.cards-management-field-invalid input:not([type="checkbox"]),
 .workflow-definition-field.cards-management-field-invalid select,
 .workflow-definition-field.cards-management-field-invalid textarea {
   border-color: rgba(239, 68, 68, 0.45);
   background: rgba(254, 242, 242, 0.92);
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.08);
+}
+
+.workflow-definition-checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.workflow-definition-checkbox-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.workflow-definition-checkbox-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workflow-definition-checkbox-control input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.workflow-definition-checkbox-text {
+  min-width: 42px;
+  text-align: right;
+}
+
+.workflow-definition-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.workflow-definition-switch-track {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.32);
+  transition: background 180ms ease;
+}
+
+.workflow-definition-switch-thumb {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.workflow-definition-checkbox-control:hover .workflow-definition-switch {
+  border-color: rgba(16, 185, 129, 0.24);
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.08);
+}
+
+.workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(236, 253, 245, 0.96);
+}
+
+.workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch .workflow-definition-switch-track {
+  background: rgba(16, 185, 129, 0.24);
+}
+
+.workflow-definition-checkbox-control input[type="checkbox"]:checked + .workflow-definition-switch .workflow-definition-switch-thumb {
+  transform: translateX(14px);
+  background: #10b981;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.28);
 }
 
 .cards-management-field-error {
