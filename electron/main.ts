@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification, globalShortcut } from 'electron';
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification, globalShortcut, screen } from 'electron';
 import path from 'path';
 import { execFile } from 'child_process';
 
@@ -46,6 +46,15 @@ function bringWindowToFront(win: BrowserWindow | null): void {
   if (!win.isVisible()) win.show();
   win.moveTop();
   win.focus();
+}
+
+function placeWindowOnPrimaryDisplay(win: BrowserWindow): void {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { x, y, width, height } = primaryDisplay.workArea;
+  const bounds = win.getBounds();
+  const targetX = Math.round(x + (width - bounds.width) / 2);
+  const targetY = Math.round(y + Math.max((height - bounds.height) * 0.18, 28));
+  win.setPosition(targetX, targetY);
 }
 
 function createQuickChatWindow(): BrowserWindow {
@@ -113,7 +122,7 @@ function showQuickChatWindow(): void {
   if (!quickChatWindow) {
     quickChatWindow = createQuickChatWindow();
   }
-  quickChatWindow.center();
+  placeWindowOnPrimaryDisplay(quickChatWindow);
   bringWindowToFront(quickChatWindow);
 }
 
