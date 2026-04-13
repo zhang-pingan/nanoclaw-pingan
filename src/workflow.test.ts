@@ -204,6 +204,8 @@ describe('workflow metadata and branch flow', () => {
         staging_base_branch: '',
         staging_work_branch: '',
         access_token: '',
+        requirement_description: '为用户昵称功能输出完整技术方案。',
+        requirement_files: ['/tmp/plan-input.md'],
       },
       status: 'plan',
       current_delegation_id: 'del-plan',
@@ -256,6 +258,8 @@ describe('workflow metadata and branch flow', () => {
     expect(latest?.task).toContain(
       `方案文件：/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
     );
+    expect(latest?.task).toContain('原始需求描述：为用户昵称功能输出完整技术方案。');
+    expect(latest?.task).toContain('- /tmp/plan-input.md');
   });
 
   it('persists staging branches from ops result and sends them to testing', () => {

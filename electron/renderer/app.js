@@ -194,6 +194,7 @@ var workbenchSubtasks = document.getElementById("workbench-subtasks");
 var workbenchActionItemsPanel = document.getElementById("workbench-action-items-panel");
 var workbenchActionItems = document.getElementById("workbench-action-items");
 var workbenchArtifacts = document.getElementById("workbench-artifacts");
+var workbenchRequirementOrigin = document.getElementById("workbench-requirement-origin");
 var workbenchAssets = document.getElementById("workbench-assets");
 var workbenchAddLinkBtn = document.getElementById("workbench-add-link-btn");
 var workbenchAddFileBtn = document.getElementById("workbench-add-file-btn");
@@ -8638,11 +8639,69 @@ function renderWorkbenchTaskDetail(detail) {
   renderWorkbenchSubtasks(detail.subtasks || []);
   renderWorkbenchActionItems(detail.action_items || [], task);
   renderWorkbenchArtifacts(detail.artifacts || []);
+  renderWorkbenchRequirementOrigin(task, detail.assets || []);
   renderWorkbenchAssets(detail.assets || []);
   renderWorkbenchComments(detail.comments || []);
   renderWorkbenchTimeline(detail.timeline || []);
   maybeNotifyWorkbenchPending(detail, previousDetail);
   syncWorkbenchTaskPendingState(task.id, detail.action_items || []);
+}
+
+function renderWorkbenchRequirementOrigin(task, assets) {
+  if (!workbenchRequirementOrigin) return;
+  const context = getWorkbenchTaskContext(task);
+  const requirementDescription = typeof context.requirement_description === "string"
+    ? context.requirement_description.trim()
+    : "";
+  const requirementFiles = Array.isArray(context.requirement_files)
+    ? context.requirement_files.filter((item) => typeof item === "string" && item.trim())
+    : [];
+  const requirementFileAssets = (Array.isArray(assets) ? assets : []).filter((item) => item.asset_type === "requirement_file");
+
+  if (!requirementDescription && requirementFiles.length === 0 && requirementFileAssets.length === 0) {
+    workbenchRequirementOrigin.innerHTML = `<div class="workbench-empty">暂无原始需求信息</div>`;
+    return;
+  }
+
+  const fileMap = new Map();
+  requirementFiles.forEach((item) => fileMap.set(item, { path: item, title: item }));
+  requirementFileAssets.forEach((item) => {
+    const key = item.path || item.url || item.title;
+    if (!key) return;
+    fileMap.set(key, item);
+  });
+
+  const fileItems = Array.from(fileMap.values());
+  workbenchRequirementOrigin.innerHTML = `
+    <div class="workbench-timeline-item">
+      <div class="workbench-timeline-header">
+        <strong>需求描述</strong>
+      </div>
+      <div class="workbench-timeline-body">${requirementDescription ? escapeHtml(requirementDescription).replace(/\n/g, "<br>") : "未填写"}</div>
+    </div>
+    <div class="workbench-timeline-item">
+      <div class="workbench-timeline-header">
+        <strong>需求附件</strong>
+      </div>
+      <div class="workbench-timeline-body">
+        ${fileItems.length > 0
+          ? fileItems.map((item) => {
+              const href = item.path ? `file://${item.path}` : item.url;
+              const label = item.title || item.path || item.url || "附件";
+              const meta = item.path || item.url || "";
+              return `
+                <div class="workbench-selection-item">
+                  ${href
+                    ? `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`
+                    : `<span>${escapeHtml(label)}</span>`}
+                  ${meta ? `<div class="workbench-text-muted">${escapeHtml(meta)}</div>` : ""}
+                </div>
+              `;
+            }).join("")
+          : "无"}
+      </div>
+    </div>
+  `;
 }
 
 function renderWorkbenchActions(task) {
@@ -9769,6 +9828,13 @@ async function openWorkbenchCreateTaskModal() {
     return Array.isArray(value) ? value : [];
   }
 
+  function summarizeRequirementDescription(text) {
+    const raw = typeof text === "string" ? text.trim() : "";
+    if (!raw) return "待填写";
+    const firstLine = raw.split(/\n+/).find((line) => line.trim()) || raw;
+    return firstLine.length > 48 ? `${firstLine.slice(0, 48)}...` : firstLine;
+  }
+
   function getRequirementDeliverables(reqName) {
     const req = getRequirements().find((item) => item.requirement_name === reqName);
     return Array.isArray(req?.deliverables) ? req.deliverables : [];
@@ -9810,8 +9876,20 @@ async function openWorkbenchCreateTaskModal() {
         { label: "流程", value: getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--" },
         { label: "入口点", value: state.entryPoint || "--" },
         { label: "服务", value: state.service || "--" },
-        { label: state.entryPoint === "plan" ? "需求描述" : "任务名称", value: requirementName || "待填写" },
-        { label: "附件", value: state.entryPoint === "plan" ? `${getRequirementFiles().length} 个` : "--" },
+        {
+          label: state.entryPoint === "plan" ? "需求描述" : "任务名称",
+          value: state.entryPoint === "plan"
+            ? summarizeRequirementDescription(requirementName)
+            : (requirementName || "待填写")
+        },
+        {
+          label: "附件",
+          value: state.entryPoint === "plan"
+            ? (getRequirementFiles().length > 0
+              ? getRequirementFiles().map((item) => item.name || item.path || "未命名附件").join("、")
+              : "无")
+            : "--"
+        },
         { label: "交付物", value: deliverableRequired ? (deliverableOk ? `已满足 ${requiredFile}` : `缺少 ${requiredFile}`) : "当前入口无需交付物" }
       ];
       selectionSummaryEl.innerHTML = summaryItems.map((item) => `
