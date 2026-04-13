@@ -1905,12 +1905,13 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-self: flex-end;
+  margin-top: auto;
   gap: 10px;
 }
 
 .cards-management-hero-actions {
   align-self: flex-end;
-  margin-top: auto;
 }
 
 .workflow-definition-hero-actions .btn-primary,
