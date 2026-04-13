@@ -52,6 +52,7 @@ import {
   getWorkflowTypeConfig,
   renderTemplate,
 } from './workflow-config.js';
+import { WORKFLOW_ARTIFACT_DEFINITIONS } from './workflow-artifacts.js';
 import { syncWorkbenchFromWorkflow } from './workbench-store.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 
@@ -468,14 +469,7 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
     workflow.deliverable,
   );
 
-  const candidates = [
-    { artifact_type: 'plan_doc', title: '方案文档', file: 'plan.md' },
-    { artifact_type: 'dev_doc', title: '开发文档', file: 'dev.md' },
-    { artifact_type: 'test_doc', title: '测试文档', file: 'test.md' },
-    { artifact_type: 'readme', title: '说明文档', file: 'README.md' },
-  ];
-
-  return candidates.map((candidate) => {
+  return WORKFLOW_ARTIFACT_DEFINITIONS.map((candidate) => {
     const fullPath = path.join(baseDir, candidate.file);
     return {
       id: `${workflow.id}-${candidate.file}`,

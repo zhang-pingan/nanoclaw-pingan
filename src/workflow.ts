@@ -48,6 +48,7 @@ import {
   WorkflowTypeConfig,
 } from './workflow-config.js';
 import { WorkflowCreateForm } from './workflow-definition.js';
+import { getDeliverableFileNameForRole } from './workflow-artifacts.js';
 import {
   createWorkbenchManualSkipEvent,
   syncWorkbenchOnDelegationCompleted,
@@ -434,7 +435,7 @@ function readDeliverableDir(
 
 function buildDocPath(
   workflow: Pick<Workflow, 'service' | 'deliverable'>,
-  fileName: 'plan.md' | 'dev.md' | 'test.md',
+  fileName: string,
 ): string {
   return `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/${fileName}`;
 }
@@ -494,9 +495,10 @@ function buildTemplateVars(
     staging_base_branch: workflow.staging_base_branch || '',
     staging_work_branch: workflow.staging_work_branch || '',
     access_token: workflow.access_token || '',
-    plan_doc: buildDocPath(workflow, 'plan.md'),
-    dev_doc: buildDocPath(workflow, 'dev.md'),
-    test_doc: extra?.testDoc || buildDocPath(workflow, 'test.md'),
+    plan_doc: buildDocPath(workflow, getDeliverableFileNameForRole('planner')),
+    dev_doc: buildDocPath(workflow, getDeliverableFileNameForRole('dev')),
+    test_doc:
+      extra?.testDoc || buildDocPath(workflow, getDeliverableFileNameForRole('test')),
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
@@ -512,7 +514,8 @@ function finalizeDelegationTaskContent(
   },
 ): string {
   if (skill === 'dev-bugfix') {
-    const testDoc = extra?.testDoc || buildDocPath(workflow, 'test.md');
+    const testDoc =
+      extra?.testDoc || buildDocPath(workflow, getDeliverableFileNameForRole('test'));
     const testDocLine = `测试文档：${testDoc}`;
     const hasTestDocLine = taskContent.includes('测试文档：');
     let finalContent = hasTestDocLine
@@ -524,7 +527,7 @@ function finalizeDelegationTaskContent(
         '[分支缺失警告]',
         '当前 workflow 未记录明确的工作分支。',
         '请先从以下交付文档确认工作分支后再修复：',
-        buildDocPath(workflow, 'dev.md'),
+        buildDocPath(workflow, getDeliverableFileNameForRole('dev')),
         '本轮修复记录应更新到以下测试文档：',
         testDoc,
         '若仍无法确定，请不要猜测或直接在主干分支修改；请停止修改并反馈失败原因。',
@@ -1813,7 +1816,11 @@ export function getAvailableWorkflowTypes(): Array<{
   entry_points: string[];
   entry_points_detail: Record<
     string,
-    { requires_deliverable: boolean; deliverable_role?: string }
+    {
+      requires_deliverable: boolean;
+      deliverable_role?: string;
+      required_deliverable_file?: string;
+    }
   >;
   role_channels: Record<string, Record<string, string>>;
   create_form?: WorkflowCreateForm;
@@ -1831,6 +1838,9 @@ export function getAvailableWorkflowTypes(): Array<{
         {
           requires_deliverable: ep.requires_deliverable || false,
           deliverable_role: ep.deliverable_role,
+          required_deliverable_file: ep.requires_deliverable
+            ? getDeliverableFileNameForRole(ep.deliverable_role)
+            : undefined,
         },
       ]),
     ),

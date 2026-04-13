@@ -30,6 +30,7 @@ import type {
   Workflow,
   WorkbenchActionItemRecord,
 } from './types.js';
+import { WORKFLOW_ARTIFACT_DEFINITIONS } from './workflow-artifacts.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 import {
   getCardConfig,
@@ -214,24 +215,17 @@ function ensureArtifacts(workflow: Workflow): void {
     'iteration',
     workflow.deliverable,
   );
-  const defs = [
-    { type: 'plan_doc', title: '方案文档', file: 'plan.md', role: 'planner' },
-    { type: 'dev_doc', title: '开发文档', file: 'dev.md', role: 'dev' },
-    { type: 'test_doc', title: '测试文档', file: 'test.md', role: 'test' },
-    { type: 'readme', title: '说明文档', file: 'README.md', role: 'system' },
-  ];
-
-  for (const def of defs) {
+  for (const def of WORKFLOW_ARTIFACT_DEFINITIONS) {
     const fullPath = path.join(baseDir, def.file);
     if (!fs.existsSync(fullPath)) continue;
     createWorkbenchArtifact({
       id: `${task.id}-${def.file}`,
       task_id: task.id,
       workflow_id: workflow.id,
-      artifact_type: def.type,
+      artifact_type: def.artifact_type,
       title: def.title,
       path: path.relative(PROJECT_ROOT, fullPath),
-      source_role: def.role,
+      source_role: def.source_role,
       created_at: workflow.updated_at,
     });
     emitWorkbenchEvent({

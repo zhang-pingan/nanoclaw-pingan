@@ -9654,9 +9654,7 @@ async function openWorkbenchCreateTaskModal() {
 
   function getRequiredDeliverableFile() {
     const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
-    if (!detail?.requires_deliverable) return "";
-    if (detail.deliverable_role === "planner") return "plan.md";
-    return `${detail.deliverable_role || "dev"}.md`;
+    return resolveRequiredDeliverableFile(detail);
   }
 
   function updateValidation() {
@@ -10657,6 +10655,15 @@ function loadWorkflowCreateOptions(forceReload = false) {
   return workflowCreateOptionsLoading;
 }
 
+function resolveRequiredDeliverableFile(detail) {
+  if (!detail?.requires_deliverable) return "";
+  if (typeof detail.required_deliverable_file === "string" && detail.required_deliverable_file.trim()) {
+    return detail.required_deliverable_file.trim();
+  }
+  if (detail.deliverable_role === "planner") return "plan.md";
+  return `${detail.deliverable_role || "dev"}.md`;
+}
+
 function invalidateWorkflowCreateOptionsCache() {
   workflowCreateOptionsCache = null;
 }
@@ -10721,6 +10728,7 @@ async function openWorkflowDefinitionCreateFormPreview() {
         {
           requires_deliverable: !!ep?.requires_deliverable,
           deliverable_role: ep?.deliverable_role,
+          required_deliverable_file: resolveRequiredDeliverableFile(ep),
         },
       ]),
     ),
@@ -10845,9 +10853,7 @@ async function openWorkflowDefinitionCreateFormPreview() {
 
   function getRequiredDeliverableFile() {
     const detail = workflowType.entry_points_detail?.[state.entryPoint];
-    if (!detail?.requires_deliverable) return "";
-    if (detail.deliverable_role === "planner") return "plan.md";
-    return `${detail.deliverable_role || "dev"}.md`;
+    return resolveRequiredDeliverableFile(detail);
   }
 
   function getRequirementDeliverables(reqName) {

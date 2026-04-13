@@ -19,6 +19,7 @@ import type { RegisteredGroup } from './types.js';
 import {
   approveWorkflow,
   createNewWorkflow,
+  getAvailableWorkflowTypes,
   initWorkflow,
   onDelegationComplete,
 } from './workflow.js';
@@ -323,6 +324,22 @@ describe('workflow metadata and branch flow', () => {
     expect(workflow?.status).toBe('fixing');
     expect(workflow?.current_delegation_id).toBe('');
     expect(getDelegationsByWorkflow('wf-fixing-failed')).toHaveLength(1);
+  });
+
+  it('exposes required deliverable file names for entry points', () => {
+    const workflowType = getAvailableWorkflowTypes().find(
+      (item) => item.type === 'dev_test',
+    );
+
+    expect(workflowType?.entry_points_detail.dev).toMatchObject({
+      requires_deliverable: true,
+      deliverable_role: 'planner',
+      required_deliverable_file: 'plan.md',
+    });
+    expect(workflowType?.entry_points_detail.testing).toMatchObject({
+      requires_deliverable: true,
+      required_deliverable_file: 'dev.md',
+    });
   });
 
 });
