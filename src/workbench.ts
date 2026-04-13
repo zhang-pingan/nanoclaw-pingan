@@ -55,6 +55,11 @@ import {
 import { WORKFLOW_ARTIFACT_DEFINITIONS } from './workflow-artifacts.js';
 import { syncWorkbenchFromWorkflow } from './workbench-store.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
+import {
+  getWorkflowContextValue,
+  WORKFLOW_CONTEXT_KEYS,
+  WorkflowContext,
+} from './workflow-context.js';
 
 export interface WorkbenchTaskItem {
   id: string;
@@ -66,11 +71,6 @@ export interface WorkbenchTaskItem {
   status_label: string;
   current_stage: string;
   current_stage_label: string;
-  main_branch: string;
-  work_branch: string;
-  staging_base_branch: string;
-  staging_work_branch: string;
-  deliverable: string;
   round: number;
   source_jid: string;
   created_at: string;
@@ -78,6 +78,7 @@ export interface WorkbenchTaskItem {
   pending_approval: boolean;
   pending_action_count: number;
   active_delegation_id: string;
+  context: Record<string, unknown>;
 }
 
 export interface WorkbenchTimelineEvent {
@@ -188,11 +189,6 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
       statusLabels[persisted?.current_stage || workflow.status] ||
       persisted?.current_stage ||
       workflow.status,
-    main_branch: workflow.main_branch,
-    work_branch: workflow.work_branch,
-    staging_base_branch: workflow.staging_base_branch,
-    staging_work_branch: workflow.staging_work_branch,
-    deliverable: workflow.deliverable,
     round: workflow.round,
     source_jid: persisted?.source_jid || workflow.source_jid,
     created_at: persisted?.created_at || workflow.created_at,
@@ -201,6 +197,7 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
       stateConfig?.type === 'confirmation' || pendingActionCount > 0,
     pending_action_count: pendingActionCount,
     active_delegation_id: workflow.current_delegation_id || '',
+    context: { ...workflow.context },
   };
 }
 
@@ -459,14 +456,18 @@ function buildSubtasks(
 }
 
 function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
-  if (!workflow.service || !workflow.deliverable) return [];
+  const deliverable = getWorkflowContextValue(
+    workflow,
+    WORKFLOW_CONTEXT_KEYS.deliverable,
+  );
+  if (!workflow.service || !deliverable) return [];
 
   const baseDir = path.join(
     PROJECT_ROOT,
     'projects',
     workflow.service,
     'iteration',
-    workflow.deliverable,
+    deliverable,
   );
 
   return WORKFLOW_ARTIFACT_DEFINITIONS.map((candidate) => {
@@ -494,13 +495,25 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   const vars = {
     name: workflow.name,
     service: workflow.service,
-    main_branch: workflow.main_branch || '',
-    work_branch: workflow.work_branch || 'N/A',
-    staging_base_branch: workflow.staging_base_branch || '',
-    staging_work_branch: workflow.staging_work_branch || '',
+    main_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.mainBranch,
+    ),
+    work_branch:
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) || 'N/A',
+    staging_base_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.stagingBaseBranch,
+    ),
+    staging_work_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
+    ),
     id: workflow.id,
     round: workflow.round,
-    deliverable: workflow.deliverable || 'N/A',
+    deliverable:
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable) ||
+      'N/A',
     delegation_result: '',
     result_summary: '',
     revision_text: '',
@@ -645,11 +658,6 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
           status_label: item.status,
           current_stage: item.current_stage,
           current_stage_label: item.current_stage,
-          main_branch: '',
-          work_branch: '',
-          staging_base_branch: '',
-          staging_work_branch: '',
-          deliverable: '',
           round: 0,
           source_jid: item.source_jid,
           created_at: item.created_at,
@@ -661,6 +669,7 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
             (actionItem) => actionItem.status === 'pending',
           ).length,
           active_delegation_id: '',
+          context: {},
         };
       }),
     );
@@ -764,12 +773,7 @@ export function createWorkbenchTask(input: {
   sourceJid: string;
   startFrom: string;
   workflowType: string;
-  deliverable?: string;
-  mainBranch?: string;
-  workBranch?: string;
-  stagingBaseBranch?: string;
-  stagingWorkBranch?: string;
-  accessToken?: string;
+  context?: WorkflowContext;
 }): { workflowId: string; error?: string } {
   return createNewWorkflow({
     name: input.name,
@@ -777,12 +781,30 @@ export function createWorkbenchTask(input: {
     sourceJid: input.sourceJid,
     startFrom: input.startFrom,
     workflowType: input.workflowType,
-    deliverable: input.deliverable,
-    mainBranch: input.mainBranch,
-    workBranch: input.workBranch,
-    stagingBaseBranch: input.stagingBaseBranch,
-    stagingWorkBranch: input.stagingWorkBranch,
-    accessToken: input.accessToken,
+    deliverable:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
+        : undefined,
+    mainBranch:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.mainBranch] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.mainBranch] as string)
+        : undefined,
+    workBranch:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.workBranch] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.workBranch] as string)
+        : undefined,
+    stagingBaseBranch:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] as string)
+        : undefined,
+    stagingWorkBranch:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.stagingWorkBranch] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.stagingWorkBranch] as string)
+        : undefined,
+    accessToken:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.accessToken] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.accessToken] as string)
+        : undefined,
   });
 }
 
@@ -798,7 +820,7 @@ export function runWorkbenchTaskAction(input: {
     | 'submit_access_token';
   subtaskId?: string;
   revisionText?: string;
-  accessToken?: string;
+  context?: WorkflowContext;
 }): { error?: string } {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
@@ -834,10 +856,16 @@ export function runWorkbenchTaskAction(input: {
       return skipWorkflowStage(workflowId, subtask.stage_key);
     }
     case 'submit_access_token':
-      if (!input.accessToken?.trim()) {
+      if (
+        typeof input.context?.[WORKFLOW_CONTEXT_KEYS.accessToken] !== 'string' ||
+        !String(input.context[WORKFLOW_CONTEXT_KEYS.accessToken]).trim()
+      ) {
         return { error: 'access_token required' };
       }
-      return reviseWorkflow(workflowId, input.accessToken.trim());
+      return reviseWorkflow(
+        workflowId,
+        String(input.context[WORKFLOW_CONTEXT_KEYS.accessToken]).trim(),
+      );
     default:
       return { error: `Unsupported action: ${input.action}` };
   }

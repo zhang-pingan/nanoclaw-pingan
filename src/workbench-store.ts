@@ -38,6 +38,11 @@ import {
   getWorkflowTypeConfig,
   renderTemplate,
 } from './workflow-config.js';
+import {
+  getWorkflowContextValue,
+  WORKFLOW_CONTEXT_KEYS,
+  cloneWorkflowContext,
+} from './workflow-context.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -49,13 +54,25 @@ function buildTemplateVars(
   return {
     name: workflow.name,
     service: workflow.service,
-    main_branch: workflow.main_branch || '',
-    work_branch: workflow.work_branch || 'N/A',
-    staging_base_branch: workflow.staging_base_branch || '',
-    staging_work_branch: workflow.staging_work_branch || '',
+    main_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.mainBranch,
+    ),
+    work_branch:
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) || 'N/A',
+    staging_base_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.stagingBaseBranch,
+    ),
+    staging_work_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
+    ),
     id: workflow.id,
     round: workflow.round,
-    deliverable: workflow.deliverable || 'N/A',
+    deliverable:
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable) ||
+      'N/A',
     delegation_result: '',
     result_summary: '',
     revision_text: '',
@@ -204,7 +221,11 @@ function upsertActionItem(params: {
 }
 
 function ensureArtifacts(workflow: Workflow): void {
-  if (!workflow.deliverable || !workflow.service) return;
+  const deliverable = getWorkflowContextValue(
+    workflow,
+    WORKFLOW_CONTEXT_KEYS.deliverable,
+  );
+  if (!deliverable || !workflow.service) return;
   const task = getWorkbenchTaskByWorkflowId(workflow.id);
   if (!task) return;
 
@@ -213,7 +234,7 @@ function ensureArtifacts(workflow: Workflow): void {
     'projects',
     workflow.service,
     'iteration',
-    workflow.deliverable,
+    deliverable,
   );
   for (const def of WORKFLOW_ARTIFACT_DEFINITIONS) {
     const fullPath = path.join(baseDir, def.file);
@@ -533,10 +554,7 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
           workflow.workflow_type,
           workflow.status,
         ),
-        mainBranch: workflow.main_branch || '',
-        workBranch: workflow.work_branch || '',
-        stagingBaseBranch: workflow.staging_base_branch || '',
-        stagingWorkBranch: workflow.staging_work_branch || '',
+        context: cloneWorkflowContext(workflow.context),
         pendingApproval: false,
         pendingActionCount: 0,
       },
@@ -583,6 +601,7 @@ export function syncWorkbenchOnWorkflowUpdated(
           workflow.workflow_type,
           workflow.status,
         ),
+        context: cloneWorkflowContext(workflow.context),
         summary: summary !== undefined ? truncate(summary) : task.summary,
         updatedAt: workflow.updated_at,
         pendingApproval:
@@ -721,10 +740,7 @@ export function syncWorkbenchOnTransition(
       statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
       currentStage: toStatus,
       currentStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
-      mainBranch: workflow.main_branch || '',
-      workBranch: workflow.work_branch || '',
-      stagingBaseBranch: workflow.staging_base_branch || '',
-      stagingWorkBranch: workflow.staging_work_branch || '',
+      context: cloneWorkflowContext(workflow.context),
       updatedAt: workflow.updated_at,
       pendingApproval: pendingSummary.pendingApproval,
       pendingActionCount: pendingSummary.pendingActionCount,

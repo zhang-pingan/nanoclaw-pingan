@@ -57,6 +57,12 @@ import {
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
+import {
+  getWorkflowContextValue,
+  mergeWorkflowContext,
+  WORKFLOW_CONTEXT_KEYS,
+  WorkflowContext,
+} from './workflow-context.js';
 
 interface DeliverableMetadata {
   fileName: string;
@@ -434,10 +440,14 @@ function readDeliverableDir(
 }
 
 function buildDocPath(
-  workflow: Pick<Workflow, 'service' | 'deliverable'>,
+  workflow: Pick<Workflow, 'service' | 'context'>,
   fileName: string,
 ): string {
-  return `/workspace/projects/${workflow.service}/iteration/${workflow.deliverable}/${fileName}`;
+  const deliverable = getWorkflowContextValue(
+    workflow,
+    WORKFLOW_CONTEXT_KEYS.deliverable,
+  );
+  return `/workspace/projects/${workflow.service}/iteration/${deliverable}/${fileName}`;
 }
 
 function parseDelegationPayload(
@@ -487,14 +497,29 @@ function buildTemplateVars(
   return {
     name: workflow.name,
     service: workflow.service,
-    main_branch: workflow.main_branch || '',
-    work_branch: workflow.work_branch || 'N/A',
+    main_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.mainBranch,
+    ),
+    work_branch:
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) || 'N/A',
     id: workflow.id,
     round: workflow.round,
-    deliverable: workflow.deliverable || 'N/A',
-    staging_base_branch: workflow.staging_base_branch || '',
-    staging_work_branch: workflow.staging_work_branch || '',
-    access_token: workflow.access_token || '',
+    deliverable:
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable) ||
+      'N/A',
+    staging_base_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.stagingBaseBranch,
+    ),
+    staging_work_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
+    ),
+    access_token: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.accessToken,
+    ),
     plan_doc: buildDocPath(workflow, getDeliverableFileNameForRole('planner')),
     dev_doc: buildDocPath(workflow, getDeliverableFileNameForRole('dev')),
     test_doc:
@@ -522,7 +547,11 @@ function finalizeDelegationTaskContent(
       ? taskContent
       : `${taskContent}\n${testDocLine}`;
 
-    if (!workflow.work_branch) {
+    const workBranch = getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.workBranch,
+    );
+    if (!workBranch) {
       const warning = [
         '[分支缺失警告]',
         '当前 workflow 未记录明确的工作分支。',
@@ -538,14 +567,18 @@ function finalizeDelegationTaskContent(
     return finalContent;
   }
 
-  if (skill !== 'ops-staging-deploy' || !workflow.staging_work_branch) {
+  const stagingWorkBranch = getWorkflowContextValue(
+    workflow,
+    WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
+  );
+  if (skill !== 'ops-staging-deploy' || !stagingWorkBranch) {
     return taskContent;
   }
 
   if (taskContent.includes('预发工作分支：')) {
     return taskContent;
   }
-  const suffix = `预发工作分支：${workflow.staging_work_branch}`;
+  const suffix = `预发工作分支：${stagingWorkBranch}`;
   return taskContent ? `${taskContent}\n${suffix}` : suffix;
 }
 
@@ -598,9 +631,15 @@ function applyTransition(
   }
 
   if (extra?.accessToken !== undefined) {
-    updates.access_token = extra.accessToken;
+    updates.context = {
+      [WORKFLOW_CONTEXT_KEYS.accessToken]: extra.accessToken,
+    };
   }
   if (extra?.workflowUpdates) {
+    updates.context = mergeWorkflowContext(
+      updates.context || {},
+      extra.workflowUpdates.context,
+    );
     Object.assign(updates, extra.workflowUpdates);
   }
 
@@ -616,6 +655,7 @@ function applyTransition(
     {
       ...workflow,
       ...updates,
+      context: mergeWorkflowContext(workflow.context, updates.context),
       round,
     },
     extra,
@@ -777,14 +817,18 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       name: opts.name,
       service: opts.service,
       start_from: opts.startFrom,
-      main_branch: opts.mainBranch || deliverable.main_branch,
-      work_branch: opts.workBranch || deliverable.work_branch,
-      deliverable: deliverable.fileName,
-      staging_base_branch:
-        opts.stagingBaseBranch || deliverable.staging_base_branch,
-      staging_work_branch:
-        opts.stagingWorkBranch || deliverable.staging_work_branch,
-      access_token: opts.accessToken || '',
+      context: {
+        [WORKFLOW_CONTEXT_KEYS.mainBranch]:
+          opts.mainBranch || deliverable.main_branch,
+        [WORKFLOW_CONTEXT_KEYS.workBranch]:
+          opts.workBranch || deliverable.work_branch,
+        [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable.fileName,
+        [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]:
+          opts.stagingBaseBranch || deliverable.staging_base_branch,
+        [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]:
+          opts.stagingWorkBranch || deliverable.staging_work_branch,
+        [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
+      },
       status: entryPoint.state,
       current_delegation_id: '',
       round: 0,
@@ -867,12 +911,14 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     name: opts.name,
     service: opts.service,
     start_from: opts.startFrom,
-    main_branch: opts.mainBranch || '',
-    work_branch: opts.workBranch || '',
-    deliverable: '',
-    staging_base_branch: opts.stagingBaseBranch || '',
-    staging_work_branch: opts.stagingWorkBranch || '',
-    access_token: opts.accessToken || '',
+    context: {
+      [WORKFLOW_CONTEXT_KEYS.mainBranch]: opts.mainBranch || '',
+      [WORKFLOW_CONTEXT_KEYS.workBranch]: opts.workBranch || '',
+      [WORKFLOW_CONTEXT_KEYS.deliverable]: '',
+      [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]: opts.stagingBaseBranch || '',
+      [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]: opts.stagingWorkBranch || '',
+      [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
+    },
     status: entryPoint.state,
     current_delegation_id: '',
     round: 0,
@@ -1213,6 +1259,7 @@ export function onDelegationComplete(delegationId: string): void {
   let testDoc = '';
   const payload = parseDelegationPayload(delegation.result);
   const workflowUpdates: Parameters<typeof updateWorkflow>[1] = {};
+  const contextUpdates: WorkflowContext = {};
   if (payload.summary) {
     resultSummary = payload.summary;
   } else if (payload.total !== undefined) {
@@ -1222,16 +1269,29 @@ export function onDelegationComplete(delegationId: string): void {
         '\n' + payload.bugs.map((b) => `- ${b.id}: ${b.title}`).join('\n');
     }
   }
-  if (payload.deliverable) workflowUpdates.deliverable = payload.deliverable;
-  if (payload.main_branch) workflowUpdates.main_branch = payload.main_branch;
-  if (payload.work_branch) workflowUpdates.work_branch = payload.work_branch;
+  if (payload.deliverable) {
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.deliverable] = payload.deliverable;
+  }
+  if (payload.main_branch) {
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.mainBranch] = payload.main_branch;
+  }
+  if (payload.work_branch) {
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.workBranch] = payload.work_branch;
+  }
   if (payload.staging_base_branch) {
-    workflowUpdates.staging_base_branch = payload.staging_base_branch;
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] =
+      payload.staging_base_branch;
   }
   if (payload.staging_work_branch) {
-    workflowUpdates.staging_work_branch = payload.staging_work_branch;
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.stagingWorkBranch] =
+      payload.staging_work_branch;
   }
-  if (payload.access_token) workflowUpdates.access_token = payload.access_token;
+  if (payload.access_token) {
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.accessToken] = payload.access_token;
+  }
+  if (Object.keys(contextUpdates).length > 0) {
+    workflowUpdates.context = contextUpdates;
+  }
   if (typeof payload.test_doc === 'string' && payload.test_doc.trim()) {
     testDoc = payload.test_doc.trim();
   }
@@ -1337,8 +1397,13 @@ function buildWorkflowListCard(workflows: Workflow[]): InteractiveCard {
       w.status === 'paused'
         ? `⏸ 已中断（原状态：${labels[w.paused_from || ''] || w.paused_from || '未知'}）`
         : labels[w.status] || w.status;
+    const workBranch = getWorkflowContextValue(w, WORKFLOW_CONTEXT_KEYS.workBranch);
+    const stagingWorkBranch = getWorkflowContextValue(
+      w,
+      WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
+    );
 
-    const body = `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${w.work_branch ? `\n工作分支：${w.work_branch}` : ''}${w.staging_work_branch ? `\n预发工作分支：${w.staging_work_branch}` : ''}`;
+    const body = `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${workBranch ? `\n工作分支：${workBranch}` : ''}${stagingWorkBranch ? `\n预发工作分支：${stagingWorkBranch}` : ''}`;
 
     const buttons: CardButton[] = [];
     const confirmationStates = config ? getConfirmationStates(config) : [];

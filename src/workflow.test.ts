@@ -23,6 +23,7 @@ import {
   initWorkflow,
   onDelegationComplete,
 } from './workflow.js';
+import { getWorkflowContextValue, WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
 const GROUPS: Array<[string, RegisteredGroup]> = [
   [
@@ -140,10 +141,20 @@ describe('workflow metadata and branch flow', () => {
 
     expect(result.error).toBeUndefined();
     const workflow = getWorkflow(result.workflowId);
-    expect(workflow?.main_branch).toBe('main');
-    expect(workflow?.work_branch).toBe('feature/test_20260408');
-    expect(workflow?.staging_base_branch).toBe('staging');
-    expect(workflow?.staging_work_branch).toBe(
+    expect(
+      workflow && getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.mainBranch),
+    ).toBe('main');
+    expect(
+      workflow && getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch),
+    ).toBe('feature/test_20260408');
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.stagingBaseBranch),
+    ).toBe('staging');
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.stagingWorkBranch),
+    ).toBe(
       'staging-deploy/feature-test_20260408',
     );
   });
@@ -154,12 +165,14 @@ describe('workflow metadata and branch flow', () => {
       name: 'Plan flow',
       service: TEST_SERVICE,
       start_from: 'plan',
-      main_branch: '',
-      work_branch: '',
-      deliverable: '',
-      staging_base_branch: '',
-      staging_work_branch: '',
-      access_token: '',
+      context: {
+        main_branch: '',
+        work_branch: '',
+        deliverable: '',
+        staging_base_branch: '',
+        staging_work_branch: '',
+        access_token: '',
+      },
       status: 'plan',
       current_delegation_id: 'del-plan',
       round: 0,
@@ -195,9 +208,16 @@ describe('workflow metadata and branch flow', () => {
 
     const workflow = getWorkflow('wf-plan');
     expect(workflow?.status).toBe('plan_examine');
-    expect(workflow?.deliverable).toBe('2026-04-08_feature');
-    expect(workflow?.main_branch).toBe('main');
-    expect(workflow?.work_branch).toBe('feature/test_20260408');
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable),
+    ).toBe('2026-04-08_feature');
+    expect(
+      workflow && getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.mainBranch),
+    ).toBe('main');
+    expect(
+      workflow && getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch),
+    ).toBe('feature/test_20260408');
 
     const delegations = getDelegationsByWorkflow('wf-plan');
     const latest = delegations.find((item) => item.id !== 'del-plan');
@@ -212,12 +232,14 @@ describe('workflow metadata and branch flow', () => {
       name: 'Ops flow',
       service: TEST_SERVICE,
       start_from: 'testing',
-      main_branch: 'main',
-      work_branch: 'feature/test_20260408',
-      deliverable: '2026-04-08_feature',
-      staging_base_branch: '',
-      staging_work_branch: '',
-      access_token: 'abc123',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/test_20260408',
+        deliverable: '2026-04-08_feature',
+        staging_base_branch: '',
+        staging_work_branch: '',
+        access_token: 'abc123',
+      },
       status: 'ops_deploy',
       current_delegation_id: 'del-ops',
       round: 0,
@@ -253,9 +275,17 @@ describe('workflow metadata and branch flow', () => {
     onDelegationComplete('del-ops');
     let workflow = getWorkflow('wf-ops');
     expect(workflow?.status).toBe('testing_confirm');
-    expect(workflow?.main_branch).toBe('main');
-    expect(workflow?.staging_base_branch).toBe('staging');
-    expect(workflow?.staging_work_branch).toBe(
+    expect(
+      workflow && getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.mainBranch),
+    ).toBe('main');
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.stagingBaseBranch),
+    ).toBe('staging');
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.stagingWorkBranch),
+    ).toBe(
       'staging-deploy/feature-test_20260408',
     );
 
@@ -282,12 +312,14 @@ describe('workflow metadata and branch flow', () => {
       name: 'Fixing failed flow',
       service: TEST_SERVICE,
       start_from: 'testing',
-      main_branch: '',
-      work_branch: 'feature/test_20260408',
-      deliverable: '2026-04-08_feature',
-      staging_base_branch: 'staging',
-      staging_work_branch: 'staging-deploy/feature-test_20260408',
-      access_token: 'abc123',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/test_20260408',
+        deliverable: '2026-04-08_feature',
+        staging_base_branch: 'staging',
+        staging_work_branch: 'staging-deploy/feature-test_20260408',
+        access_token: 'abc123',
+      },
       status: 'fixing',
       current_delegation_id: 'del-fixing',
       round: 2,

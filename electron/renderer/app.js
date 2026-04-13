@@ -267,8 +267,10 @@ var cardsPreviewPresets = {
     id: "WF-2026-001",
     name: "示例需求：Cards 管理页",
     service: "nanoclaw-web",
-    deliverable: "workflow/cards-preview.md",
-    work_branch: "feature/cards-web-management",
+    context: {
+      deliverable: "workflow/cards-preview.md",
+      work_branch: "feature/cards-web-management",
+    },
     owner: "alice",
     environment: "staging",
   },
@@ -276,8 +278,10 @@ var cardsPreviewPresets = {
     id: "WF-DEPLOY-108",
     name: "预发部署确认",
     service: "gateway-service",
-    deliverable: "projects/gateway/iteration/deploy-checklist.md",
-    work_branch: "release/pre-2026-04-10",
+    context: {
+      deliverable: "projects/gateway/iteration/deploy-checklist.md",
+      work_branch: "release/pre-2026-04-10",
+    },
     owner: "deploy-bot",
     environment: "pre",
   },
@@ -285,8 +289,10 @@ var cardsPreviewPresets = {
     id: "WF-REVIEW-214",
     name: "开发回修确认",
     service: "workflow-engine",
-    deliverable: "projects/workflow/iteration/review-round-2.md",
-    work_branch: "feature/review-loop",
+    context: {
+      deliverable: "projects/workflow/iteration/review-round-2.md",
+      work_branch: "feature/review-loop",
+    },
     owner: "reviewer",
     environment: "dev",
     revision_text: "请补充失败回滚说明和状态迁移图。",
@@ -295,15 +301,23 @@ var cardsPreviewPresets = {
     id: "WF-TEST-330",
     name: "测试 access token 提交",
     service: "api-platform",
-    deliverable: "projects/api-platform/iteration/testing-brief.md",
-    work_branch: "feature/testing-token",
+    context: {
+      deliverable: "projects/api-platform/iteration/testing-brief.md",
+      work_branch: "feature/testing-token",
+      access_token: "demo-token-123456",
+    },
     owner: "qa-bot",
     environment: "staging",
-    access_token: "demo-token-123456",
   },
 };
 var activeMemoryGroupJid = "";
 var memoryEntries = [];
+const WORKBENCH_CONTEXT_BADGES = [
+  { key: "main_branch", label: "主分支" },
+  { key: "work_branch", label: "工作分支" },
+  { key: "staging_base_branch", label: "预发分支" },
+  { key: "staging_work_branch", label: "预发工作分支" },
+];
 var memoryQueryText = "";
 var memoryRequestSeq = 0;
 var editingMemoryId = "";
@@ -6188,19 +6202,22 @@ function interpolateCardTemplate(template, sampleData) {
 
 function buildPreviewCardFromConfig(card, sampleData) {
   const safe = normalizeCardConfig(card);
+  const templateData = sampleData && typeof sampleData.context === "object" && !Array.isArray(sampleData.context)
+    ? { ...sampleData.context, ...sampleData }
+    : sampleData;
   return {
     header: {
-      title: interpolateCardTemplate(safe.header.title_template || "Card Preview", sampleData),
+      title: interpolateCardTemplate(safe.header.title_template || "Card Preview", templateData),
       color: safe.header.color || "blue",
     },
-    body: interpolateCardTemplate(safe.body_template || "", sampleData),
+    body: interpolateCardTemplate(safe.body_template || "", templateData),
     buttons: (safe.actions || []).map((action) => ({
       label: action.label || action.id || "Action",
       type: action.type || "default",
       value: createCardPreviewValue(action.id),
     })),
     sections: (safe.sections || []).map((section) => ({
-      body: interpolateCardTemplate(section.body_template || "", sampleData),
+      body: interpolateCardTemplate(section.body_template || "", templateData),
       buttons: (Array.isArray(section.actions) ? section.actions : []).map((action) => ({
         label: action.label || action.id || "Action",
         type: action.type || "default",
@@ -8357,7 +8374,11 @@ function renderWorkbenchTaskList() {
       </div>
       <div class="workbench-task-snippet">
         当前阶段：${escapeHtml(task.current_stage_label || task.current_stage)}<br />
-        ${task.branch ? `分支：${escapeHtml(task.branch)}` : "尚未生成开发分支"}
+        ${(() => {
+          const context = getWorkbenchTaskContext(task);
+          const branch = typeof context.work_branch === "string" ? context.work_branch.trim() : "";
+          return branch ? `分支：${escapeHtml(branch)}` : "尚未生成开发分支";
+        })()}
       </div>
     `;
     el.addEventListener("click", () => loadWorkbenchTaskDetail(task.id));
@@ -8571,6 +8592,31 @@ function syncWorkbenchTaskPendingState(taskId, actionItems) {
   renderWorkbenchTaskList();
 }
 
+function getWorkbenchTaskContext(task) {
+  const context = task && typeof task.context === "object" && !Array.isArray(task.context)
+    ? task.context
+    : {};
+  return context || {};
+}
+
+function mergeWorkbenchTaskContext(existingTask, nextContext) {
+  const existingContext = getWorkbenchTaskContext(existingTask);
+  if (!nextContext || typeof nextContext !== "object" || Array.isArray(nextContext)) {
+    return { ...existingContext };
+  }
+  return { ...existingContext, ...nextContext };
+}
+
+function renderWorkbenchContextBadges(task) {
+  const context = getWorkbenchTaskContext(task);
+  return WORKBENCH_CONTEXT_BADGES
+    .map(({ key, label }) => {
+      const value = typeof context[key] === "string" ? context[key].trim() : "";
+      return value ? `<span class="workbench-badge">${label}：${escapeHtml(value)}</span>` : "";
+    })
+    .join("");
+}
+
 function renderWorkbenchTaskDetail(detail) {
   const task = detail.task;
   if (!task) return;
@@ -8583,10 +8629,7 @@ function renderWorkbenchTaskDetail(detail) {
   workbenchTaskMeta.innerHTML = `
     <span class="workbench-badge">${escapeHtml(task.service)}</span>
     <span class="workbench-badge">${escapeHtml(task.workflow_type)}</span>
-    ${task.main_branch ? `<span class="workbench-badge">主分支：${escapeHtml(task.main_branch)}</span>` : ""}
-    ${task.work_branch ? `<span class="workbench-badge">工作分支：${escapeHtml(task.work_branch)}</span>` : ""}
-    ${task.staging_base_branch ? `<span class="workbench-badge">预发分支：${escapeHtml(task.staging_base_branch)}</span>` : ""}
-    ${task.staging_work_branch ? `<span class="workbench-badge">预发工作分支：${escapeHtml(task.staging_work_branch)}</span>` : ""}
+    ${renderWorkbenchContextBadges(task)}
     ${task.round > 0 ? `<span class="workbench-badge">Round ${escapeHtml(String(task.round))}</span>` : ""}
     <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
   `;
@@ -9239,7 +9282,7 @@ async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
         subtask_id: subtaskId || undefined,
         action,
         revision_text: revisionText,
-        access_token: accessToken,
+        context: accessToken ? { access_token: accessToken } : void 0,
       }),
     });
     const data = await res.json();
@@ -9868,11 +9911,13 @@ async function openWorkbenchCreateTaskModal() {
           source_jid: mainGroup.jid,
           start_from: state.entryPoint,
           workflow_type: state.workflowType,
-          deliverable: deliverableRequired ? name : void 0,
-          main_branch: (state.formValues.main_branch || "").trim() || void 0,
-          staging_base_branch: (state.formValues.staging_base_branch || "").trim() || void 0,
-          work_branch: (state.formValues.work_branch || "").trim() || void 0,
-          staging_work_branch: (state.formValues.staging_work_branch || "").trim() || void 0,
+          context: {
+            deliverable: deliverableRequired ? name : void 0,
+            main_branch: (state.formValues.main_branch || "").trim() || void 0,
+            staging_base_branch: (state.formValues.staging_base_branch || "").trim() || void 0,
+            work_branch: (state.formValues.work_branch || "").trim() || void 0,
+            staging_work_branch: (state.formValues.staging_work_branch || "").trim() || void 0,
+          },
         }),
       });
       const data = await res.json();
@@ -10042,12 +10087,7 @@ function applyWorkbenchRealtimeEvent(event) {
         status_label: payload.statusLabel || existing.status_label,
         current_stage: payload.currentStage || existing.current_stage,
         current_stage_label: payload.currentStageLabel || existing.current_stage_label,
-        main_branch: typeof payload.mainBranch === "string" ? payload.mainBranch : existing.main_branch,
-        work_branch: typeof payload.workBranch === "string" ? payload.workBranch : existing.work_branch,
-        staging_base_branch:
-          typeof payload.stagingBaseBranch === "string" ? payload.stagingBaseBranch : existing.staging_base_branch,
-        staging_work_branch:
-          typeof payload.stagingWorkBranch === "string" ? payload.stagingWorkBranch : existing.staging_work_branch,
+        context: mergeWorkbenchTaskContext(existing, payload.context),
         updated_at: payload.updatedAt || existing.updated_at,
         pending_approval: typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : existing.pending_approval,
         pending_action_count:
@@ -10073,11 +10113,7 @@ function applyWorkbenchRealtimeEvent(event) {
       status_label: payload.statusLabel || payload.status || "created",
       current_stage: payload.currentStage || payload.status || "created",
       current_stage_label: payload.currentStageLabel || payload.currentStage || payload.status || "created",
-      main_branch: typeof payload.mainBranch === "string" ? payload.mainBranch : "",
-      work_branch: typeof payload.workBranch === "string" ? payload.workBranch : "",
-      staging_base_branch: typeof payload.stagingBaseBranch === "string" ? payload.stagingBaseBranch : "",
-      staging_work_branch: typeof payload.stagingWorkBranch === "string" ? payload.stagingWorkBranch : "",
-      deliverable: "",
+      context: mergeWorkbenchTaskContext(null, payload.context),
       round: 0,
       source_jid: payload.sourceJid || "",
       created_at: getPayloadTimestamp(payload),
@@ -10099,18 +10135,7 @@ function applyWorkbenchRealtimeEvent(event) {
       status_label: payload.statusLabel || currentWorkbenchDetail.task.status_label,
       current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
       current_stage_label: payload.currentStageLabel || currentWorkbenchDetail.task.current_stage_label,
-      main_branch:
-        typeof payload.mainBranch === "string" ? payload.mainBranch : currentWorkbenchDetail.task.main_branch,
-      work_branch:
-        typeof payload.workBranch === "string" ? payload.workBranch : currentWorkbenchDetail.task.work_branch,
-      staging_base_branch:
-        typeof payload.stagingBaseBranch === "string"
-          ? payload.stagingBaseBranch
-          : currentWorkbenchDetail.task.staging_base_branch,
-      staging_work_branch:
-        typeof payload.stagingWorkBranch === "string"
-          ? payload.stagingWorkBranch
-          : currentWorkbenchDetail.task.staging_work_branch,
+      context: mergeWorkbenchTaskContext(currentWorkbenchDetail.task, payload.context),
       updated_at: payload.updatedAt || currentWorkbenchDetail.task.updated_at,
       pending_approval:
         typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : currentWorkbenchDetail.task.pending_approval,

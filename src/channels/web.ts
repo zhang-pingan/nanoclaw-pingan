@@ -1948,12 +1948,7 @@ class WebChannel {
       source_jid?: string;
       start_from?: string;
       workflow_type?: string;
-      deliverable?: string;
-      main_branch?: string;
-      work_branch?: string;
-      staging_base_branch?: string;
-      staging_work_branch?: string;
-      access_token?: string;
+      context?: Record<string, unknown>;
     };
 
     if (
@@ -1979,12 +1974,7 @@ class WebChannel {
       sourceJid: data.source_jid,
       startFrom: data.start_from,
       workflowType: data.workflow_type,
-      deliverable: data.deliverable,
-      mainBranch: data.main_branch,
-      workBranch: data.work_branch,
-      stagingBaseBranch: data.staging_base_branch,
-      stagingWorkBranch: data.staging_work_branch,
-      accessToken: data.access_token,
+      context: data.context,
     });
 
     if (result.error) {
@@ -2031,7 +2021,7 @@ class WebChannel {
         | 'skip'
         | 'submit_access_token';
       revision_text?: string;
-      access_token?: string;
+      context?: Record<string, unknown>;
     };
 
     if (!data.task_id || !data.action) {
@@ -2045,7 +2035,7 @@ class WebChannel {
       action: data.action,
       subtaskId: data.subtask_id,
       revisionText: data.revision_text,
-      accessToken: data.access_token,
+      context: data.context,
     });
     if (result.error) {
       res.writeHead(400, { 'Content-Type': 'application/json' });

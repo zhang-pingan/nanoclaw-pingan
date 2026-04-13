@@ -286,12 +286,7 @@ export interface Workflow {
   name: string;
   service: string;
   start_from: string;
-  main_branch: string;
-  work_branch: string;
-  deliverable: string;
-  staging_base_branch: string;
-  staging_work_branch: string;
-  access_token: string;
+  context: Record<string, unknown>;
   status: WorkflowStatus;
   current_delegation_id: string;
   round: number;

@@ -35,6 +35,13 @@ import {
   WorkbenchTaskRecord,
   Workflow,
 } from './types.js';
+import {
+  cloneWorkflowContext,
+  mergeWorkflowContext,
+  parseWorkflowContext,
+  serializeWorkflowContext,
+  WorkflowContext,
+} from './workflow-context.js';
 
 let db: Database.Database;
 
@@ -285,16 +292,13 @@ function createSchema(database: Database.Database): void {
       name TEXT NOT NULL,
       service TEXT NOT NULL,
       start_from TEXT NOT NULL DEFAULT 'plan',
-      main_branch TEXT DEFAULT '',
-      work_branch TEXT DEFAULT '',
-      deliverable TEXT DEFAULT '',
-      staging_base_branch TEXT DEFAULT '',
-      staging_work_branch TEXT DEFAULT '',
-      access_token TEXT DEFAULT '',
+      context_json TEXT NOT NULL DEFAULT '{}',
       status TEXT NOT NULL DEFAULT 'dev',
       current_delegation_id TEXT DEFAULT '',
       round INTEGER DEFAULT 0,
       source_jid TEXT NOT NULL,
+      paused_from TEXT,
+      workflow_type TEXT DEFAULT 'dev_test',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -445,67 +449,6 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
-  // Add paused_from column to workflows (migration for existing DBs)
-  try {
-    database.exec(`ALTER TABLE workflows ADD COLUMN paused_from TEXT`);
-  } catch {
-    /* column already exists */
-  }
-
-  // Add workflow_type column to workflows (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN workflow_type TEXT DEFAULT 'dev_test'`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  // Add work_branch column to workflows (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN work_branch TEXT DEFAULT ''`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  // Add main_branch column to workflows (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN main_branch TEXT DEFAULT ''`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  // Add staging_base_branch column to workflows (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN staging_base_branch TEXT DEFAULT ''`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  // Add staging_work_branch column to workflows (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN staging_work_branch TEXT DEFAULT ''`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
-  // Add access_token column to workflows (migration for existing DBs)
-  try {
-    database.exec(
-      `ALTER TABLE workflows ADD COLUMN access_token TEXT DEFAULT ''`,
-    );
-  } catch {
-    /* column already exists */
-  }
-
   // Add start_from column to workflows (migration for existing DBs)
   try {
     database.exec(
@@ -514,6 +457,24 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* column already exists */
   }
+
+  // Add paused_from column to workflows before schema normalization.
+  try {
+    database.exec(`ALTER TABLE workflows ADD COLUMN paused_from TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
+  // Add workflow_type column to workflows before schema normalization.
+  try {
+    database.exec(
+      `ALTER TABLE workflows ADD COLUMN workflow_type TEXT DEFAULT 'dev_test'`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  normalizeWorkflowSchema(database);
 
   // Add start_from column to workbench_tasks (migration for existing DBs)
   try {
@@ -670,6 +631,140 @@ function createSchema(database: Database.Database): void {
     `);
     logger.info({ memoryCount: memCount.cnt }, 'Memory FTS backfill complete');
   }
+}
+
+function normalizeWorkflowSchema(database: Database.Database): void {
+  const columns = database.pragma('table_info(workflows)') as Array<{
+    name: string;
+  }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+  const hasLegacyContextColumns =
+    columnNames.has('main_branch') ||
+    columnNames.has('work_branch') ||
+    columnNames.has('deliverable') ||
+    columnNames.has('staging_base_branch') ||
+    columnNames.has('staging_work_branch') ||
+    columnNames.has('access_token');
+  const needsContextColumn = !columnNames.has('context_json');
+
+  if (!hasLegacyContextColumns && !needsContextColumn) {
+    return;
+  }
+
+  database.exec(`
+    BEGIN;
+    CREATE TABLE workflows_next (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      service TEXT NOT NULL,
+      start_from TEXT NOT NULL DEFAULT 'plan',
+      context_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'dev',
+      current_delegation_id TEXT DEFAULT '',
+      round INTEGER DEFAULT 0,
+      source_jid TEXT NOT NULL,
+      paused_from TEXT,
+      workflow_type TEXT DEFAULT 'dev_test',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  const selectRows = database.prepare(`
+    SELECT
+      id,
+      name,
+      service,
+      start_from,
+      status,
+      current_delegation_id,
+      round,
+      source_jid,
+      paused_from,
+      workflow_type,
+      created_at,
+      updated_at,
+      ${columnNames.has('context_json') ? 'context_json' : "NULL AS context_json"},
+      ${columnNames.has('main_branch') ? 'main_branch' : "'' AS main_branch"},
+      ${columnNames.has('work_branch') ? 'work_branch' : "'' AS work_branch"},
+      ${columnNames.has('deliverable') ? 'deliverable' : "'' AS deliverable"},
+      ${columnNames.has('staging_base_branch') ? 'staging_base_branch' : "'' AS staging_base_branch"},
+      ${columnNames.has('staging_work_branch') ? 'staging_work_branch' : "'' AS staging_work_branch"},
+      ${columnNames.has('access_token') ? 'access_token' : "'' AS access_token"}
+    FROM workflows
+  `);
+
+  const insertRow = database.prepare(`
+    INSERT INTO workflows_next (
+      id, name, service, start_from, context_json, status,
+      current_delegation_id, round, source_jid, paused_from,
+      workflow_type, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const row of selectRows.all() as Array<Record<string, unknown>>) {
+    const context = mergeWorkflowContext(
+      parseWorkflowContext(
+        typeof row.context_json === 'string' ? row.context_json : undefined,
+      ),
+      {
+        main_branch: row.main_branch,
+        work_branch: row.work_branch,
+        deliverable: row.deliverable,
+        staging_base_branch: row.staging_base_branch,
+        staging_work_branch: row.staging_work_branch,
+        access_token: row.access_token,
+      },
+    );
+    insertRow.run(
+      row.id,
+      row.name,
+      row.service,
+      row.start_from,
+      serializeWorkflowContext(context),
+      row.status,
+      row.current_delegation_id,
+      row.round,
+      row.source_jid,
+      row.paused_from ?? null,
+      row.workflow_type ?? 'dev_test',
+      row.created_at,
+      row.updated_at,
+    );
+  }
+
+  database.exec(`
+    DROP TABLE workflows;
+    ALTER TABLE workflows_next RENAME TO workflows;
+    CREATE INDEX idx_workflows_status ON workflows(status);
+    CREATE INDEX idx_workflows_delegation ON workflows(current_delegation_id);
+    COMMIT;
+  `);
+}
+
+function hydrateWorkflowRow(row: Record<string, unknown> | undefined): Workflow | undefined {
+  if (!row) return undefined;
+  const context = parseWorkflowContext(
+    typeof row.context_json === 'string' ? row.context_json : undefined,
+  );
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    service: String(row.service),
+    start_from: String(row.start_from),
+    context,
+    status: String(row.status),
+    current_delegation_id: String(row.current_delegation_id || ''),
+    round: Number(row.round || 0),
+    source_jid: String(row.source_jid),
+    paused_from:
+      row.paused_from === null || row.paused_from === undefined
+        ? null
+        : String(row.paused_from),
+    workflow_type: String(row.workflow_type || 'dev_test'),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
 }
 
 export function initDatabase(): void {
@@ -1450,19 +1545,14 @@ export function getExpiredPendingAskQuestions(
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, start_from, main_branch, work_branch, deliverable, staging_base_branch, staging_work_branch, access_token, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, start_from, context_json, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
     workflow.service,
     workflow.start_from,
-    workflow.main_branch,
-    workflow.work_branch,
-    workflow.deliverable,
-    workflow.staging_base_branch,
-    workflow.staging_work_branch,
-    workflow.access_token,
+    serializeWorkflowContext(workflow.context),
     workflow.status,
     workflow.current_delegation_id,
     workflow.round,
@@ -1475,9 +1565,11 @@ export function createWorkflow(workflow: Workflow): void {
 }
 
 export function getWorkflow(id: string): Workflow | undefined {
-  return db.prepare('SELECT * FROM workflows WHERE id = ?').get(id) as
-    | Workflow
-    | undefined;
+  return hydrateWorkflowRow(
+    db.prepare('SELECT * FROM workflows WHERE id = ?').get(id) as
+      | Record<string, unknown>
+      | undefined,
+  );
 }
 
 export function updateWorkflow(
@@ -1485,46 +1577,24 @@ export function updateWorkflow(
   updates: Partial<
     Pick<
       Workflow,
-      | 'main_branch'
-      | 'work_branch'
-      | 'deliverable'
-      | 'staging_base_branch'
-      | 'staging_work_branch'
-      | 'access_token'
       | 'status'
       | 'current_delegation_id'
       | 'round'
       | 'paused_from'
       | 'workflow_type'
     >
-  >,
+  > & {
+    context?: WorkflowContext;
+  },
 ): void {
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [Date.now().toString()];
-
-  if (updates.main_branch !== undefined) {
-    fields.push('main_branch = ?');
-    values.push(updates.main_branch);
-  }
-  if (updates.work_branch !== undefined) {
-    fields.push('work_branch = ?');
-    values.push(updates.work_branch);
-  }
-  if (updates.deliverable !== undefined) {
-    fields.push('deliverable = ?');
-    values.push(updates.deliverable);
-  }
-  if (updates.staging_base_branch !== undefined) {
-    fields.push('staging_base_branch = ?');
-    values.push(updates.staging_base_branch);
-  }
-  if (updates.staging_work_branch !== undefined) {
-    fields.push('staging_work_branch = ?');
-    values.push(updates.staging_work_branch);
-  }
-  if (updates.access_token !== undefined) {
-    fields.push('access_token = ?');
-    values.push(updates.access_token);
+  if (updates.context !== undefined) {
+    const currentContext = getWorkflow(id)?.context || {};
+    fields.push('context_json = ?');
+    values.push(
+      serializeWorkflowContext(mergeWorkflowContext(currentContext, updates.context)),
+    );
   }
   if (updates.status !== undefined) {
     fields.push('status = ?');
@@ -1562,9 +1632,11 @@ export function getWorkflowByDelegation(
     return getWorkflow(delegation.workflow_id);
   }
   // Fallback: old records without workflow_id — match via current_delegation_id
-  return db
-    .prepare('SELECT * FROM workflows WHERE current_delegation_id = ?')
-    .get(delegationId) as Workflow | undefined;
+  return hydrateWorkflowRow(
+    db.prepare('SELECT * FROM workflows WHERE current_delegation_id = ?').get(
+      delegationId,
+    ) as Record<string, unknown> | undefined,
+  );
 }
 
 export function getDelegationsByWorkflow(workflowId: string): Delegation[] {
@@ -1576,17 +1648,23 @@ export function getDelegationsByWorkflow(workflowId: string): Delegation[] {
 }
 
 export function getAllActiveWorkflows(): Workflow[] {
-  return db
-    .prepare(
-      `SELECT * FROM workflows WHERE status NOT IN ('passed', 'ops_failed', 'cancelled') ORDER BY created_at DESC`,
-    )
-    .all() as Workflow[];
+  return (
+    db
+      .prepare(
+        `SELECT * FROM workflows WHERE status NOT IN ('passed', 'ops_failed', 'cancelled') ORDER BY created_at DESC`,
+      )
+      .all() as Record<string, unknown>[]
+  )
+    .map((row) => hydrateWorkflowRow(row))
+    .filter((workflow): workflow is Workflow => Boolean(workflow));
 }
 
 export function getAllWorkflows(): Workflow[] {
-  return db
+  return (db
     .prepare(`SELECT * FROM workflows ORDER BY created_at DESC`)
-    .all() as Workflow[];
+    .all() as Record<string, unknown>[])
+    .map((row) => hydrateWorkflowRow(row))
+    .filter((workflow): workflow is Workflow => Boolean(workflow));
 }
 
 export function deleteAllWorkbenchTaskData(): {
