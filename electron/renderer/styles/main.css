@@ -2076,6 +2076,25 @@ html, body {
   color: #475569;
 }
 
+.workflow-definition-detail.workflow-definition-readonly #workflow-definition-editor-grid .workflow-definition-panel:first-child {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.86));
+}
+
+.workflow-definition-detail.workflow-definition-readonly #workflow-definition-editor-grid input:disabled,
+.workflow-definition-detail.workflow-definition-readonly #workflow-definition-editor-grid textarea:disabled,
+.workflow-definition-detail.workflow-definition-readonly #workflow-definition-editor-grid select:disabled {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(241, 245, 249, 0.78);
+  color: #64748b;
+  box-shadow: none;
+  cursor: default;
+}
+
+.workflow-definition-detail.workflow-definition-readonly #workflow-definition-editor-grid button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .workflow-definition-diff-modal {
   position: fixed;
   inset: 0;

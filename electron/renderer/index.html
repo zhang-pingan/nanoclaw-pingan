@@ -572,8 +572,8 @@
             <section id="workflow-definition-editor-grid" class="workflow-definition-grid">
               <section class="workflow-definition-panel">
                 <div class="workflow-definition-panel-head">
-                  <div class="workflow-definition-panel-title">Draft 编辑器</div>
-                  <div class="workflow-definition-panel-note">基础字段 + JSON 混合编辑</div>
+                  <div class="workflow-definition-panel-title">流程定义</div>
+                  <div id="workflow-definition-editor-note" class="workflow-definition-panel-note"></div>
                 </div>
                 <div class="workflow-definition-form-grid">
                   <label class="workflow-definition-field">
@@ -589,7 +589,7 @@
                     <input id="workflow-definition-name" type="text" placeholder="运行时流程名称" />
                   </label>
                   <label class="workflow-definition-field">
-                    <span>Draft Version</span>
+                    <span>Version</span>
                     <input id="workflow-definition-version" type="text" readonly />
                   </label>
                 </div>
@@ -690,14 +690,6 @@
                 </section>
 
               </section>
-            </section>
-
-            <section id="workflow-definition-readonly-panel" class="workflow-definition-panel hidden">
-              <div class="workflow-definition-panel-head">
-                <div class="workflow-definition-panel-title">版本详情</div>
-                <div id="workflow-definition-readonly-summary" class="workflow-definition-panel-note"></div>
-              </div>
-              <pre id="workflow-definition-readonly-json" class="workflow-definition-code-block"></pre>
             </section>
 
             <div id="workflow-definition-diff-modal" class="workflow-definition-diff-modal hidden">
