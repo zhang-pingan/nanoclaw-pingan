@@ -1992,6 +1992,13 @@ html, body {
   margin-bottom: 14px;
 }
 
+.workflow-definition-panel-head-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .workflow-definition-panel-title {
   font-size: 16px;
   font-weight: 800;
@@ -2001,6 +2008,36 @@ html, body {
 .workflow-definition-panel-note {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.workflow-definition-view-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.workflow-definition-view-mode .btn-ghost {
+  min-width: 48px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.workflow-definition-view-mode .btn-ghost.active {
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.1));
+  color: var(--accent-hover);
+  box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.18);
+}
+
+.workflow-definition-version-summary {
+  margin: -2px 0 12px;
 }
 
 .workflow-definition-versions {
@@ -2133,10 +2170,34 @@ html, body {
   align-items: start;
 }
 
+.workflow-definition-grid.workflow-definition-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .workflow-definition-sidepanels {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.workflow-definition-json-editor {
+  width: 100%;
+  min-height: 620px;
+  resize: vertical;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(248, 250, 252, 0.9);
+  color: var(--text-primary);
+  font: 13px/1.65 SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  padding: 16px;
+}
+
+.workflow-definition-json-editor:disabled {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(241, 245, 249, 0.78);
+  color: #64748b;
+  box-shadow: none;
+  cursor: default;
 }
 
 .workflow-definition-form-grid {

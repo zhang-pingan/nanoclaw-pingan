@@ -563,14 +563,21 @@
 
             <section class="workflow-definition-panel">
               <div class="workflow-definition-panel-head">
-                <div class="workflow-definition-panel-title">版本列表</div>
-                <div id="workflow-definition-version-summary" class="workflow-definition-panel-note">右键版本可复制、发布、对比或删除</div>
+                <div class="workflow-definition-panel-head-group">
+                  <div class="workflow-definition-panel-title">版本列表</div>
+                  <div id="workflow-definition-view-mode" class="workflow-definition-view-mode">
+                    <button id="workflow-definition-view-form-btn" type="button" class="btn-ghost">表单</button>
+                    <button id="workflow-definition-view-json-btn" type="button" class="btn-ghost">JSON</button>
+                    <button id="workflow-definition-view-graph-btn" type="button" class="btn-ghost">结构视图</button>
+                  </div>
+                </div>
               </div>
+              <div id="workflow-definition-version-summary" class="workflow-definition-panel-note workflow-definition-version-summary">右键版本可复制、发布、对比或删除</div>
               <div id="workflow-definition-versions" class="workflow-definition-versions"></div>
             </section>
 
             <section id="workflow-definition-editor-grid" class="workflow-definition-grid">
-              <section class="workflow-definition-panel">
+              <section id="workflow-definition-form-panel" class="workflow-definition-panel">
                 <div class="workflow-definition-panel-head">
                   <div class="workflow-definition-panel-title">流程定义</div>
                   <div id="workflow-definition-editor-note" class="workflow-definition-panel-note"></div>
@@ -667,8 +674,8 @@
                 </label>
               </section>
 
-              <section class="workflow-definition-sidepanels">
-                <section class="workflow-definition-panel">
+              <section id="workflow-definition-sidepanels" class="workflow-definition-sidepanels">
+                <section id="workflow-definition-graph-panel" class="workflow-definition-panel">
                   <div class="workflow-definition-panel-head">
                     <div class="workflow-definition-panel-title">结构视图</div>
                     <div class="workflow-definition-panel-note">只读状态图摘要</div>
@@ -686,6 +693,21 @@
 
               </section>
             </section>
+
+            <section id="workflow-definition-json-panel" class="workflow-definition-panel hidden">
+              <div class="workflow-definition-panel-head">
+                <div class="workflow-definition-panel-title">流程定义 JSON</div>
+                <div id="workflow-definition-json-note" class="workflow-definition-panel-note"></div>
+              </div>
+              <textarea id="workflow-definition-json-editor" class="workflow-definition-json-editor" spellcheck="false"></textarea>
+            </section>
+
+            <div class="hidden" aria-hidden="true">
+              <textarea id="workflow-definition-roles" rows="8" spellcheck="false"></textarea>
+              <textarea id="workflow-definition-entry-points" rows="8" spellcheck="false"></textarea>
+              <textarea id="workflow-definition-states" rows="18" spellcheck="false"></textarea>
+              <textarea id="workflow-definition-status-labels" rows="8" spellcheck="false"></textarea>
+            </div>
 
             <div id="workflow-definition-diff-modal" class="workflow-definition-diff-modal hidden">
               <div class="workflow-definition-diff-modal-card">
