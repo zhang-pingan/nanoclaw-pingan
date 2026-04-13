@@ -6943,9 +6943,9 @@ function renderWorkbenchTaskList() {
         ${hasPending ? `<span class="workbench-task-pending-dot" title="有待处理项"></span>` : ""}
       </div>
       <div class="workbench-task-badges">
-        <span class="workbench-badge">${escapeHtml(task.service)}</span>
-        <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
-        ${hasPending ? `<span class="workbench-badge workbench-badge-pending">待处理${pendingCount > 0 ? ` ${escapeHtml(String(pendingCount))}` : ""}</span>` : ""}
+        <span class="workbench-badge"><strong>服务</strong>${escapeHtml(task.service)}</span>
+        <span class="workbench-badge"><strong>状态</strong>${escapeHtml(task.status_label || task.status)}</span>
+        ${hasPending ? `<span class="workbench-badge workbench-badge-pending"><strong>待处理</strong>${pendingCount > 0 ? ` ${escapeHtml(String(pendingCount))}` : ""}</span>` : ""}
       </div>
       <div class="workbench-task-snippet">
         当前阶段：${escapeHtml(task.current_stage_label || task.current_stage)}<br />
