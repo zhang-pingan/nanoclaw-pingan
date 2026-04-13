@@ -417,10 +417,20 @@ html, body {
   flex: 1;
   min-width: 0;
   display: none;
+  --secondary-nav-accent: #7c3aed;
+  --secondary-nav-accent-rgb: 124, 58, 237;
+  --secondary-nav-kicker-color: #8b5cf6;
+  --secondary-nav-line-color: #c4b5fd;
+  --secondary-nav-surface-soft: rgba(245, 243, 255, 0.96);
+  --secondary-nav-border-soft: rgba(196, 181, 253, 0.12);
+  --secondary-nav-border-strong: rgba(196, 181, 253, 0.2);
+  --tertiary-empty-accent-rgb: 168, 85, 247;
+  --tertiary-surface-tint: rgba(168, 85, 247, 0.018);
+  --tertiary-surface-tint-strong: rgba(168, 85, 247, 0.032);
   background:
-    radial-gradient(circle at top left, rgba(196, 181, 253, 0.12), transparent 26%),
-    radial-gradient(circle at top right, rgba(148, 163, 184, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(99, 102, 241, 0.04), rgba(99, 102, 241, 0.015) 20%, transparent 42%),
+    radial-gradient(circle at top left, rgba(221, 214, 254, 0.14), transparent 26%),
+    radial-gradient(circle at top right, rgba(216, 180, 254, 0.09), transparent 30%),
+    linear-gradient(180deg, rgba(168, 85, 247, 0.034), rgba(168, 85, 247, 0.013) 20%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -431,13 +441,13 @@ html, body {
 .workbench-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  --secondary-nav-accent: #6366f1;
-  --secondary-nav-accent-rgb: 99, 102, 241;
-  --secondary-nav-kicker-color: #6d72f6;
-  --secondary-nav-line-color: #a5b4fc;
-  --secondary-nav-surface-soft: rgba(241, 245, 249, 0.96);
-  --secondary-nav-border-soft: rgba(165, 180, 252, 0.12);
-  --secondary-nav-border-strong: rgba(165, 180, 252, 0.2);
+  --secondary-nav-accent: #7c3aed;
+  --secondary-nav-accent-rgb: 124, 58, 237;
+  --secondary-nav-kicker-color: #8b5cf6;
+  --secondary-nav-line-color: #c4b5fd;
+  --secondary-nav-surface-soft: rgba(245, 243, 255, 0.96);
+  --secondary-nav-border-soft: rgba(196, 181, 253, 0.12);
+  --secondary-nav-border-strong: rgba(196, 181, 253, 0.2);
   border-right: 1px solid transparent;
   background: linear-gradient(180deg, rgba(0, 167, 240, 0.06), rgba(0, 167, 240, 0) 220px), var(--surface);
   display: flex;
@@ -597,6 +607,10 @@ html, body {
   min-width: 0;
   overflow: auto;
   padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(221, 214, 254, 0.22), transparent 24%),
+    linear-gradient(180deg, rgba(168, 85, 247, 0.04), rgba(168, 85, 247, 0.012) 18%, transparent 42%),
+    var(--bg-primary);
 }
 
 .workbench-detail-empty {
@@ -1429,6 +1443,9 @@ html, body {
   flex: 1;
   min-width: 0;
   display: none;
+  --tertiary-empty-accent-rgb: 234, 179, 8;
+  --tertiary-surface-tint: rgba(234, 179, 8, 0.016);
+  --tertiary-surface-tint-strong: rgba(234, 179, 8, 0.028);
   background:
     radial-gradient(circle at top left, rgba(254, 249, 195, 0.24), transparent 28%),
     radial-gradient(circle at top right, rgba(250, 204, 21, 0.16), transparent 30%),
@@ -1444,6 +1461,9 @@ html, body {
   flex: 1;
   min-width: 0;
   display: none;
+  --tertiary-empty-accent-rgb: 180, 83, 9;
+  --tertiary-surface-tint: rgba(180, 83, 9, 0.016);
+  --tertiary-surface-tint-strong: rgba(180, 83, 9, 0.028);
   background:
     radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 28%),
     radial-gradient(circle at top right, rgba(251, 191, 36, 0.08), transparent 30%),
@@ -1459,6 +1479,9 @@ html, body {
   flex: 1;
   min-width: 0;
   display: none;
+  --tertiary-empty-accent-rgb: 4, 120, 87;
+  --tertiary-surface-tint: rgba(4, 120, 87, 0.016);
+  --tertiary-surface-tint-strong: rgba(4, 120, 87, 0.028);
   background:
     radial-gradient(circle at top left, rgba(16, 185, 129, 0.11), transparent 28%),
     radial-gradient(circle at top right, rgba(52, 211, 153, 0.08), transparent 30%),
@@ -1643,6 +1666,41 @@ html, body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.88),
     0 4px 10px rgba(var(--secondary-nav-accent-rgb), 0.1);
+}
+
+#workbench-screen .workbench-empty,
+#workbench-screen .workbench-detail-empty,
+#memory-management-screen .memory-empty,
+#workflow-definitions-screen .workflow-definition-list-empty,
+#workflow-definitions-screen .workflow-definition-empty,
+#workflow-definitions-screen .workflow-definition-state-list-empty,
+#workflow-definitions-screen .workflow-definition-state-inspector-empty,
+#workflow-definitions-screen .workflow-definition-graph-empty,
+#workflow-definitions-screen .workflow-definition-diff-empty,
+#cards-management-screen .workflow-definition-empty,
+#cards-management-screen .cards-management-row-empty,
+#cards-management-screen .cards-management-reference-empty,
+#trace-monitor-screen .trace-monitor-detail-empty,
+#trace-monitor-screen .trace-monitor-list-empty {
+  border: 1px dashed rgba(var(--tertiary-empty-accent-rgb), 0.22);
+  background:
+    linear-gradient(180deg, rgba(var(--tertiary-empty-accent-rgb), 0.1), rgba(255, 255, 255, 0.78)),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: 0 14px 32px rgba(var(--tertiary-empty-accent-rgb), 0.08);
+}
+
+#workbench-screen .workbench-task-header,
+#workbench-screen .workbench-panel,
+#memory-management-screen .memory-main-header,
+#memory-management-screen .memory-item,
+#workflow-definitions-screen .workflow-definition-hero,
+#workflow-definitions-screen .workflow-definition-panel,
+#cards-management-screen .workflow-definition-hero,
+#cards-management-screen .workflow-definition-panel,
+#cards-management-screen .cards-management-reference-item,
+#trace-monitor-screen .trace-monitor-detail-header,
+#trace-monitor-screen .trace-monitor-panel {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .workflow-definition-list-empty {
@@ -2083,6 +2141,7 @@ html, body {
 .workflow-definition-state-list-empty,
 .workflow-definition-state-inspector-empty {
   padding: 18px 14px;
+  border-radius: 16px;
   color: var(--text-muted);
   text-align: center;
 }
@@ -2403,8 +2462,7 @@ html, body {
 .workflow-definition-diff-empty {
   padding: 16px;
   border-radius: 14px;
-  background: rgba(15, 23, 42, 0.4);
-  color: #cbd5e1;
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -2962,6 +3020,9 @@ html, body {
   flex: 1;
   min-width: 0;
   display: none;
+  --tertiary-empty-accent-rgb: 220, 38, 38;
+  --tertiary-surface-tint: rgba(220, 38, 38, 0.016);
+  --tertiary-surface-tint-strong: rgba(220, 38, 38, 0.028);
   background:
     radial-gradient(circle at top left, rgba(248, 113, 113, 0.14), transparent 28%),
     radial-gradient(circle at top right, rgba(239, 68, 68, 0.1), transparent 30%),
@@ -3553,7 +3614,9 @@ html, body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background:
+    linear-gradient(180deg, var(--tertiary-surface-tint), rgba(255, 255, 255, 0) 140px),
+    var(--bg);
 }
 
 .memory-main-header {
