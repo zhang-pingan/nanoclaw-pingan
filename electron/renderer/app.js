@@ -9562,8 +9562,10 @@ async function openWorkbenchCreateTaskModal() {
           </div>
           <div class="workflow-wizard-header-desc">按流程、入口点与服务维度快速组织任务，右侧会实时显示当前配置摘要与校验状态。</div>
         </div>
-        <button type="button" class="workflow-wizard-close" id="workbench-create-close" title="关闭" aria-label="关闭">
-          <span aria-hidden="true">×</span>
+        <button type="button" class="workflow-wizard-action-btn workflow-wizard-close" id="workbench-create-close" title="关闭" aria-label="关闭">
+          <span class="workflow-wizard-btn-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M7 7l10 10"/><path d="M17 7L7 17"/></svg>
+          </span>
         </button>
       </div>
       <div class="workflow-wizard-steps" aria-hidden="true">
@@ -9637,13 +9639,13 @@ async function openWorkbenchCreateTaskModal() {
           <div id="wb-footer-status" class="workflow-wizard-footer-status">请先完成基础配置</div>
         </div>
         <div class="workflow-wizard-footer-actions">
-          <button type="button" id="wb-cancel-btn" class="btn-ghost workflow-wizard-secondary-btn">
+          <button type="button" id="wb-cancel-btn" class="btn-ghost workflow-wizard-action-btn workflow-wizard-secondary-btn">
             <span class="workflow-wizard-btn-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
             </span>
             <span>取消</span>
           </button>
-          <button type="button" id="wb-submit-btn" class="btn-primary workflow-wizard-submit-btn">
+          <button type="button" id="wb-submit-btn" class="btn-primary workflow-wizard-action-btn workflow-wizard-submit-btn">
             <span class="workflow-wizard-btn-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
             </span>
