@@ -79,7 +79,7 @@
               "delegate": {
                 "role": "planner",
                 "skill": "plan-requirement",
-                "task_template": "请为以下需求设计实现方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}"
+                "task_template": "请为以下需求设计实现方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}"
               },
               "on_complete": {
                 "success": {
@@ -154,7 +154,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 已确认回到 Plan 修改，Plan Agent 正在重新设计方案。"
@@ -183,7 +183,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 修改意见已提交，Plan Agent 正在重新设计方案。"
@@ -449,10 +449,21 @@
             "fields": [
               {
                 "key": "requirement_custom",
-                "label": "任务名称",
-                "type": "text",
-                "placeholder": "输入新需求名称",
-                "helper_text": "从 Plan 入口创建时，直接录入新的需求名称。",
+                "label": "需求描述",
+                "type": "textarea",
+                "placeholder": "请描述需求背景、目标、范围与限制条件",
+                "helper_text": "从 Plan 入口创建时，直接填写完整需求描述。",
+                "visible_when": {
+                  "entry_points": [
+                    "plan"
+                  ]
+                }
+              },
+              {
+                "key": "requirement_files",
+                "label": "需求附件",
+                "type": "file_uploads",
+                "helper_text": "支持上传多个文件，创建后会把文件地址一起带给 Plan Agent。",
                 "visible_when": {
                   "entry_points": [
                     "plan"
@@ -570,7 +581,7 @@
               "delegate": {
                 "role": "planner",
                 "skill": "plan-requirement",
-                "task_template": "请为以下需求设计实现方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}"
+                "task_template": "请为以下需求设计实现方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}"
               },
               "on_complete": {
                 "success": {
@@ -645,7 +656,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 已确认回到 Plan 修改，Plan Agent 正在重新设计方案。"
@@ -674,7 +685,7 @@
                 "delegate": {
                   "role": "planner",
                   "skill": "plan-requirement",
-                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求名称：{{name}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+                  "task_template": "请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
                 },
                 "notify": {
                   "template": "[方案修改] 需求「{{name}}」({{id}}) 修改意见已提交，Plan Agent 正在重新设计方案。"
@@ -945,10 +956,21 @@
             "fields": [
               {
                 "key": "requirement_custom",
-                "label": "任务名称",
-                "type": "text",
-                "placeholder": "输入新需求名称",
-                "helper_text": "从 Plan 入口创建时，直接录入新的需求名称。",
+                "label": "需求描述",
+                "type": "textarea",
+                "placeholder": "请描述需求背景、目标、范围与限制条件",
+                "helper_text": "从 Plan 入口创建时，直接填写完整需求描述。",
+                "visible_when": {
+                  "entry_points": [
+                    "plan"
+                  ]
+                }
+              },
+              {
+                "key": "requirement_files",
+                "label": "需求附件",
+                "type": "file_uploads",
+                "helper_text": "支持上传多个文件，创建后会把文件地址一起带给 Plan Agent。",
                 "visible_when": {
                   "entry_points": [
                     "plan"

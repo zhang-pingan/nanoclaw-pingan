@@ -21,7 +21,11 @@ import {
   initWorkflow,
   onDelegationComplete,
 } from './workflow.js';
-import { getWorkbenchTaskDetail, listWorkbenchTasks } from './workbench.js';
+import {
+  createWorkbenchTask,
+  getWorkbenchTaskDetail,
+  listWorkbenchTasks,
+} from './workbench.js';
 import {
   createWorkbenchInteractionItem,
   syncWorkbenchOnDelegationCompleted,
@@ -30,6 +34,7 @@ import {
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
+import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
 const MAIN_GROUP: RegisteredGroup = {
   name: 'Main',
@@ -60,6 +65,20 @@ const DEV_GROUP: RegisteredGroup = {
   added_at: '2026-04-07T00:00:00.000Z',
 };
 
+const PLAN_GROUP: RegisteredGroup = {
+  name: 'Plan',
+  folder: 'web_plan',
+  trigger: '/nc',
+  added_at: '2026-04-07T00:00:00.000Z',
+};
+
+const PLAN_EXAMINE_GROUP: RegisteredGroup = {
+  name: 'Plan Examine',
+  folder: 'web_plan_examine',
+  trigger: '/nc',
+  added_at: '2026-04-07T00:00:00.000Z',
+};
+
 beforeEach(() => {
   _initTestDatabase();
   initWorkbenchEvents(() => {});
@@ -67,10 +86,14 @@ beforeEach(() => {
   setRegisteredGroup('ops@g.us', OPS_GROUP);
   setRegisteredGroup('test@g.us', TEST_GROUP);
   setRegisteredGroup('dev@g.us', DEV_GROUP);
+  setRegisteredGroup('plan@g.us', PLAN_GROUP);
+  setRegisteredGroup('plan-examine@g.us', PLAN_EXAMINE_GROUP);
   storeChatMetadata('main@g.us', '2026-04-07T00:00:00.000Z');
   storeChatMetadata('ops@g.us', '2026-04-07T00:00:00.000Z');
   storeChatMetadata('test@g.us', '2026-04-07T00:00:00.000Z');
   storeChatMetadata('dev@g.us', '2026-04-07T00:00:00.000Z');
+  storeChatMetadata('plan@g.us', '2026-04-07T00:00:00.000Z');
+  storeChatMetadata('plan-examine@g.us', '2026-04-07T00:00:00.000Z');
   initWorkflow({
     registeredGroups: () => getAllRegisteredGroups(),
     enqueueMessageCheck: () => {},
@@ -78,6 +101,35 @@ beforeEach(() => {
 });
 
 describe('workbench approval transition sync', () => {
+  it('persists uploaded requirement files as workbench assets when creating a plan task', () => {
+    const result = createWorkbenchTask({
+      name: '新增昵称规则设计',
+      service: 'order-service',
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'dev_test',
+      context: {
+        [WORKFLOW_CONTEXT_KEYS.requirementDescription]:
+          '请为昵称规则改造输出方案。',
+        [WORKFLOW_CONTEXT_KEYS.requirementFiles]: [
+          '/tmp/req-a.md',
+          '/tmp/req-b.png',
+        ],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    const taskRecord = getWorkbenchTaskByWorkflowId(result.workflowId);
+    expect(taskRecord).not.toBeNull();
+
+    const detail = getWorkbenchTaskDetail(taskRecord!.id);
+    expect(detail?.assets.map((item) => item.path)).toEqual([
+      '/tmp/req-b.png',
+      '/tmp/req-a.md',
+    ]);
+    expect(detail?.assets.every((item) => item.asset_type === 'requirement_file')).toBe(true);
+  });
+
   it('marks awaiting_confirm completed and clears pending approval after approve', () => {
     dbCreateWorkflow({
       id: 'wf-predeploy',

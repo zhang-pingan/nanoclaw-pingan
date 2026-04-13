@@ -272,6 +272,8 @@ export interface TemplateVars {
   staging_base_branch?: string;
   staging_work_branch?: string;
   access_token?: string;
+  requirement_description?: string;
+  requirement_files?: string;
   plan_doc?: string;
   dev_doc?: string;
   test_doc?: string;

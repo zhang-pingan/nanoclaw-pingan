@@ -9,6 +9,8 @@ export const WORKFLOW_CONTEXT_KEYS = {
   stagingBaseBranch: 'staging_base_branch',
   stagingWorkBranch: 'staging_work_branch',
   accessToken: 'access_token',
+  requirementDescription: 'requirement_description',
+  requirementFiles: 'requirement_files',
 } as const;
 
 export function cloneWorkflowContext(

@@ -99,7 +99,7 @@ export interface WorkflowCreateFieldOption {
 export interface WorkflowCreateField {
   key: string;
   label: string;
-  type: 'text' | 'choice' | 'requirement_select';
+  type: 'text' | 'textarea' | 'choice' | 'requirement_select' | 'file_uploads';
   placeholder?: string;
   helper_text?: string;
   default_value?: string;

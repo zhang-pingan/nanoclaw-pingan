@@ -775,7 +775,15 @@ export function createWorkbenchTask(input: {
   workflowType: string;
   context?: WorkflowContext;
 }): { workflowId: string; error?: string } {
-  return createNewWorkflow({
+  const requirementFiles = Array.isArray(
+    input.context?.[WORKFLOW_CONTEXT_KEYS.requirementFiles],
+  )
+    ? (input.context?.[WORKFLOW_CONTEXT_KEYS.requirementFiles] as unknown[]).filter(
+        (item): item is string => typeof item === 'string' && item.trim().length > 0,
+      )
+    : [];
+
+  const result = createNewWorkflow({
     name: input.name,
     service: input.service,
     sourceJid: input.sourceJid,
@@ -805,7 +813,38 @@ export function createWorkbenchTask(input: {
       typeof input.context?.[WORKFLOW_CONTEXT_KEYS.accessToken] === 'string'
         ? (input.context[WORKFLOW_CONTEXT_KEYS.accessToken] as string)
         : undefined,
+    requirementDescription:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.requirementDescription] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.requirementDescription] as string)
+        : undefined,
+    requirementFiles,
   });
+
+  if (result.error || requirementFiles.length === 0) {
+    return result;
+  }
+
+  const taskRecord = getWorkbenchTaskByWorkflowId(result.workflowId);
+  if (!taskRecord) {
+    return result;
+  }
+
+  for (const filePath of requirementFiles) {
+    const id = `wb-asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    createWorkbenchContextAsset({
+      id,
+      task_id: taskRecord.id,
+      workflow_id: result.workflowId,
+      asset_type: 'requirement_file',
+      title: path.basename(filePath),
+      path: filePath,
+      url: null,
+      note: 'Plan 入口上传的需求附件',
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  return result;
 }
 
 export function runWorkbenchTaskAction(input: {

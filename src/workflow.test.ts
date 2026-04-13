@@ -159,6 +159,38 @@ describe('workflow metadata and branch flow', () => {
     );
   });
 
+  it('injects requirement description and attachment paths into the plan delegation task', () => {
+    const result = createNewWorkflow({
+      name: '用户昵称支持表情并限制长度',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'dev_test',
+      requirementDescription:
+        '需要支持用户昵称输入表情，昵称最长 20 个可见字符，并兼容历史数据展示。',
+      requirementFiles: [
+        '/tmp/nickname-prd.md',
+        '/tmp/nickname-ui.png',
+      ],
+    });
+
+    expect(result.error).toBeUndefined();
+    const workflow = getWorkflow(result.workflowId);
+    expect(
+      workflow &&
+        getWorkflowContextValue(
+          workflow,
+          WORKFLOW_CONTEXT_KEYS.requirementDescription,
+        ),
+    ).toContain('昵称最长 20 个可见字符');
+
+    const delegations = getDelegationsByWorkflow(result.workflowId);
+    expect(delegations).toHaveLength(1);
+    expect(delegations[0]?.task).toContain('需求描述：需要支持用户昵称输入表情');
+    expect(delegations[0]?.task).toContain('- /tmp/nickname-prd.md');
+    expect(delegations[0]?.task).toContain('- /tmp/nickname-ui.png');
+  });
+
   it('propagates plan result fields into next delegation', () => {
     createWorkflow({
       id: 'wf-plan',

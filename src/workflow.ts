@@ -520,6 +520,20 @@ function buildTemplateVars(
       workflow,
       WORKFLOW_CONTEXT_KEYS.accessToken,
     ),
+    requirement_description: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.requirementDescription,
+    ) || workflow.name,
+    requirement_files: Array.isArray(
+      workflow.context[WORKFLOW_CONTEXT_KEYS.requirementFiles],
+    )
+      ? (
+          workflow.context[WORKFLOW_CONTEXT_KEYS.requirementFiles] as unknown[]
+        )
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map((item) => `- ${item}`)
+          .join('\n') || '无'
+      : '无',
     plan_doc: buildDocPath(workflow, getDeliverableFileNameForRole('planner')),
     dev_doc: buildDocPath(workflow, getDeliverableFileNameForRole('dev')),
     test_doc:
@@ -758,6 +772,8 @@ export interface CreateWorkflowOpts {
   stagingBaseBranch?: string;
   stagingWorkBranch?: string;
   accessToken?: string;
+  requirementDescription?: string;
+  requirementFiles?: string[];
 }
 
 export function createNewWorkflow(opts: CreateWorkflowOpts): {
@@ -918,6 +934,13 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]: opts.stagingBaseBranch || '',
       [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]: opts.stagingWorkBranch || '',
       [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
+      [WORKFLOW_CONTEXT_KEYS.requirementDescription]:
+        opts.requirementDescription || '',
+      [WORKFLOW_CONTEXT_KEYS.requirementFiles]: Array.isArray(opts.requirementFiles)
+        ? opts.requirementFiles.filter(
+            (item) => typeof item === 'string' && item.trim().length > 0,
+          )
+        : [],
     },
     status: entryPoint.state,
     current_delegation_id: '',

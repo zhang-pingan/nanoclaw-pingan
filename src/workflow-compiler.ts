@@ -129,7 +129,7 @@ export function validateWorkflowDefinition(
         if (!field.label?.trim()) {
           errors.push(`${fieldPath}.label is required`);
         }
-        if (!['text', 'choice', 'requirement_select'].includes(field.type)) {
+        if (!['text', 'textarea', 'choice', 'requirement_select', 'file_uploads'].includes(field.type)) {
           errors.push(`${fieldPath}.type "${field.type}" is invalid`);
         }
         if (field.type === 'choice' && (!Array.isArray(field.options) || field.options.length === 0)) {

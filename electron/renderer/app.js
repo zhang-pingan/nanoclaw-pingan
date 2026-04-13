@@ -9486,6 +9486,7 @@ async function openWorkbenchCreateTaskModal() {
     service: services[0],
     fieldSearch: {},
     formValues: {},
+    uploadingFiles: 0,
   };
 
   const overlay = document.createElement("div");
@@ -9600,9 +9601,16 @@ async function openWorkbenchCreateTaskModal() {
         fields: [
           {
             key: "requirement_custom",
-            label: "任务名称",
-            type: "text",
-            placeholder: "输入新需求名称",
+            label: "需求描述",
+            type: "textarea",
+            placeholder: "请描述需求背景、目标、范围与限制条件",
+            visible_when: { entry_points: ["plan"] },
+          },
+          {
+            key: "requirement_files",
+            label: "需求附件",
+            type: "file_uploads",
+            helper_text: "支持上传多个文件，创建后会把文件地址一起带给 Plan Agent。",
             visible_when: { entry_points: ["plan"] },
           },
           {
@@ -9686,6 +9694,10 @@ async function openWorkbenchCreateTaskModal() {
         state.formValues[field.key] = field.options[0].value;
         return;
       }
+      if (field.type === "file_uploads") {
+        state.formValues[field.key] = [];
+        return;
+      }
       state.formValues[field.key] = "";
     });
   }
@@ -9732,6 +9744,31 @@ async function openWorkbenchCreateTaskModal() {
     state.formValues[key] = value;
   }
 
+  async function uploadWorkbenchCreateFiles(files) {
+    if (!files || files.length === 0) return [];
+    state.uploadingFiles += files.length;
+    updateValidation();
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append("file", file));
+      const uploadRes = await fetch(
+        `http://localhost:3000/api/upload?jid=${encodeURIComponent(mainGroup.jid)}`,
+        { method: "POST", body: formData }
+      );
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || `HTTP ${uploadRes.status}`);
+      return Array.isArray(uploadData.files) ? uploadData.files : [];
+    } finally {
+      state.uploadingFiles = Math.max(0, state.uploadingFiles - files.length);
+      updateValidation();
+    }
+  }
+
+  function getRequirementFiles() {
+    const value = state.formValues.requirement_files;
+    return Array.isArray(value) ? value : [];
+  }
+
   function getRequirementDeliverables(reqName) {
     const req = getRequirements().find((item) => item.requirement_name === reqName);
     return Array.isArray(req?.deliverables) ? req.deliverables : [];
@@ -9752,8 +9789,11 @@ async function openWorkbenchCreateTaskModal() {
     let validationTone = "info";
 
     if (!requirementName) {
-      reqHintEl.textContent = "请输入或选择一个任务名称";
+      reqHintEl.textContent = state.entryPoint === "plan" ? "请输入需求描述" : "请输入或选择一个任务名称";
       validationTone = "warning";
+    } else if (state.uploadingFiles > 0) {
+      reqHintEl.textContent = `附件上传中（${state.uploadingFiles}）...`;
+      validationTone = "info";
     } else if (deliverableRequired) {
       reqHintEl.textContent = deliverableOk
         ? `已校验交付物文件：${requiredFile}`
@@ -9770,7 +9810,8 @@ async function openWorkbenchCreateTaskModal() {
         { label: "流程", value: getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--" },
         { label: "入口点", value: state.entryPoint || "--" },
         { label: "服务", value: state.service || "--" },
-        { label: "任务名称", value: requirementName || "待填写" },
+        { label: state.entryPoint === "plan" ? "需求描述" : "任务名称", value: requirementName || "待填写" },
+        { label: "附件", value: state.entryPoint === "plan" ? `${getRequirementFiles().length} 个` : "--" },
         { label: "交付物", value: deliverableRequired ? (deliverableOk ? `已满足 ${requiredFile}` : `缺少 ${requiredFile}`) : "当前入口无需交付物" }
       ];
       selectionSummaryEl.innerHTML = summaryItems.map((item) => `
@@ -9781,7 +9822,7 @@ async function openWorkbenchCreateTaskModal() {
       `).join("");
     }
 
-    submitBtn.disabled = !requirementName || !state.entryPoint || !state.service || !deliverableOk;
+    submitBtn.disabled = !requirementName || !state.entryPoint || !state.service || !deliverableOk || state.uploadingFiles > 0;
   }
 
   function refreshWorkbenchCreateModal() {
@@ -9887,6 +9928,17 @@ async function openWorkbenchCreateTaskModal() {
           updateValidation();
         });
         wrap.appendChild(input);
+      } else if (field.type === "textarea") {
+        const textarea = document.createElement("textarea");
+        textarea.className = "workflow-wizard-input";
+        textarea.placeholder = field.placeholder || "";
+        textarea.rows = 5;
+        textarea.value = state.formValues[field.key] || "";
+        textarea.addEventListener("input", () => {
+          setFieldValue(field.key, textarea.value);
+          updateValidation();
+        });
+        wrap.appendChild(textarea);
       } else if (field.type === "choice") {
         const opts = document.createElement("div");
         opts.className = "workflow-wizard-options compact";
@@ -9933,6 +9985,75 @@ async function openWorkbenchCreateTaskModal() {
             refreshWorkbenchCreateModal();
           }
         );
+      } else if (field.type === "file_uploads") {
+        const files = Array.isArray(state.formValues[field.key]) ? state.formValues[field.key] : [];
+        const toolbar = document.createElement("div");
+        toolbar.className = "workflow-wizard-options compact";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "btn-ghost workflow-wizard-secondary-btn";
+        addBtn.textContent = state.uploadingFiles > 0 ? "上传中..." : "上传文件";
+        addBtn.disabled = state.uploadingFiles > 0;
+        addBtn.addEventListener("click", () => {
+          const picker = document.createElement("input");
+          picker.type = "file";
+          picker.multiple = true;
+          picker.onchange = async () => {
+            const selectedFiles = picker.files ? Array.from(picker.files) : [];
+            if (selectedFiles.length === 0) return;
+            try {
+              const uploadedFiles = await uploadWorkbenchCreateFiles(selectedFiles);
+              setFieldValue(
+                field.key,
+                files.concat(
+                  uploadedFiles.map((item) => ({
+                    name: item.name,
+                    path: item.hostPath,
+                  }))
+                )
+              );
+              refreshWorkbenchCreateModal();
+            } catch (err) {
+              console.error("Failed to upload workbench create files:", err);
+              alert(err.message || "上传附件失败");
+            }
+          };
+          picker.click();
+        });
+        toolbar.appendChild(addBtn);
+        wrap.appendChild(toolbar);
+
+        const list = document.createElement("div");
+        list.className = "workflow-wizard-selection-list";
+        if (files.length === 0) {
+          list.innerHTML = '<div class="workflow-wizard-empty">暂未上传附件</div>';
+        } else {
+          list.innerHTML = files.map((item, fileIdx) => `
+            <div class="workflow-wizard-selection-item">
+              <span>${escapeHtml(item.name || `附件 ${fileIdx + 1}`)}</span>
+              <strong>${escapeHtml(item.path || "--")}</strong>
+            </div>
+          `).join("");
+        }
+        wrap.appendChild(list);
+
+        if (files.length > 0) {
+          const removeWrap = document.createElement("div");
+          removeWrap.className = "workflow-wizard-options compact";
+          files.forEach((item, fileIdx) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "btn-ghost";
+            chip.textContent = `移除 ${item.name || `附件 ${fileIdx + 1}`}`;
+            chip.addEventListener("click", () => {
+              const nextFiles = files.filter((_, idx2) => idx2 !== fileIdx);
+              setFieldValue(field.key, nextFiles);
+              refreshWorkbenchCreateModal();
+            });
+            removeWrap.appendChild(chip);
+          });
+          wrap.appendChild(removeWrap);
+        }
       }
 
       if (field.helper_text) {
@@ -9980,6 +10101,12 @@ async function openWorkbenchCreateTaskModal() {
             staging_base_branch: (state.formValues.staging_base_branch || "").trim() || void 0,
             work_branch: (state.formValues.work_branch || "").trim() || void 0,
             staging_work_branch: (state.formValues.staging_work_branch || "").trim() || void 0,
+            requirement_description: state.entryPoint === "plan" ? name : void 0,
+            requirement_files: state.entryPoint === "plan"
+              ? getRequirementFiles()
+                .map((item) => item.path)
+                .filter((item) => typeof item === "string" && item.trim())
+              : void 0,
           },
         }),
       });
