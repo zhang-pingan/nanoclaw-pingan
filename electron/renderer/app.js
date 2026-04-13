@@ -8696,7 +8696,7 @@ function getWorkbenchBadgeIcon(kind) {
     case "timeline-flow":
       return '<svg viewBox="0 0 24 24"><path d="M5 7h6"/><path d="M13 7h6"/><path d="M11 7l2 5-2 5"/></svg>';
     default:
-      return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>';
+      return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.33 1.7 1.7 0 0 0-1.03 1.55V22a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.57 1.7 1.7 0 0 0-1.87.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .33-1.87 1.7 1.7 0 0 0-1.55-1.03H2a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.57-1.11 1.7 1.7 0 0 0-.33-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.33H8.1a1.7 1.7 0 0 0 1.03-1.55V2a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.11 1.57 1.7 1.7 0 0 0 1.87-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.33 1.87v.08a1.7 1.7 0 0 0 1.55 1.03H22a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.57 1.11z"/></svg>';
   }
 }
 
@@ -8923,7 +8923,6 @@ function renderWorkbenchSubtasks(subtasks) {
           <span class="workbench-subtask-caption-icon" aria-hidden="true">${stepHintIcon}</span>
           <span>${escapeHtml(stepHint)}</span>
         </div>
-        ${item.manually_skipped ? '<div class="workbench-subtask-mini-note">人工按成功处理跳过</div>' : ""}
       </div>
       <div class="workbench-subtask-marker">
         <span class="workbench-subtask-dot"></span>
@@ -8939,8 +8938,11 @@ function renderWorkbenchSubtasks(subtasks) {
 
   const selected = displaySubtasks.find((item) => item.id === selectedId) || displaySubtasks[0];
   const selectedIndex = displaySubtasks.findIndex((item) => item.id === selected.id) + 1;
-  const selectedBody = selected.result
-    ? `结果摘要：${escapeHtml(selected.result)}`
+  const normalizedSelectedResult = typeof selected.result === "string"
+    ? selected.result.replace(/^结果摘要[:：]\s*/u, "").trim()
+    : "";
+  const selectedBody = normalizedSelectedResult
+    ? escapeHtml(normalizedSelectedResult)
     : selected.manually_skipped
       ? "该阶段已由人工按成功处理跳过，流程直接进入下一阶段"
     : selected.status === "current" && isAwaitingStage(selected)
