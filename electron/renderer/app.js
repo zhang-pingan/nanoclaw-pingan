@@ -9769,7 +9769,7 @@ async function openWorkbenchCreateTaskModal() {
             <div class="workflow-wizard-subsection">
               <input
                 id="wb-title-input"
-                class="workflow-definition-text-input"
+                class="workflow-wizard-input"
                 type="text"
                 placeholder="输入任务名称"
                 maxlength="120"
@@ -11378,7 +11378,7 @@ async function openWorkflowDefinitionCreateFormPreview() {
         <div class="workflow-wizard-section">
           <div class="workflow-wizard-label">任务名称</div>
           <div class="workflow-wizard-subsection">
-            <input id="workflow-definition-create-preview-title" class="workflow-definition-text-input" type="text" placeholder="输入任务名称" />
+            <input id="workflow-definition-create-preview-title" class="workflow-wizard-input" type="text" placeholder="输入任务名称" />
           </div>
         </div>
         <div class="workflow-wizard-section">
