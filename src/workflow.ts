@@ -761,7 +761,7 @@ function applyTransition(
 // -------------------------------------------------------
 
 export interface CreateWorkflowOpts {
-  name: string;
+  title: string;
   service: string;
   sourceJid: string;
   startFrom: string;
@@ -774,6 +774,7 @@ export interface CreateWorkflowOpts {
   accessToken?: string;
   requirementDescription?: string;
   requirementFiles?: string[];
+  requirementPreset?: string;
 }
 
 export function createNewWorkflow(opts: CreateWorkflowOpts): {
@@ -830,7 +831,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
     dbCreateWorkflow({
       id: workflowId,
-      name: opts.name,
+      name: opts.title,
       service: opts.service,
       start_from: opts.startFrom,
       context: {
@@ -844,6 +845,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]:
           opts.stagingWorkBranch || deliverable.staging_work_branch,
         [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
+        [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
       },
       status: entryPoint.state,
       current_delegation_id: '',
@@ -910,7 +912,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       }
 
       notifyMain(
-        `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
+        `[流程启动] 需求「${opts.title}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
         opts.sourceJid,
         workflowId,
       );
@@ -924,7 +926,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
   dbCreateWorkflow({
     id: workflowId,
-    name: opts.name,
+    name: opts.title,
     service: opts.service,
     start_from: opts.startFrom,
     context: {
@@ -941,6 +943,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
             (item) => typeof item === 'string' && item.trim().length > 0,
           )
         : [],
+      [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
     },
     status: entryPoint.state,
     current_delegation_id: '',
@@ -997,7 +1000,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     }
 
     notifyMain(
-      `[流程启动] 需求「${opts.name}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
+      `[流程启动] 需求「${opts.title}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
       opts.sourceJid,
       workflowId,
     );

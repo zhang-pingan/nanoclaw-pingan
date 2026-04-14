@@ -11,6 +11,7 @@ export const WORKFLOW_CONTEXT_KEYS = {
   accessToken: 'access_token',
   requirementDescription: 'requirement_description',
   requirementFiles: 'requirement_files',
+  requirementPreset: 'requirement_preset',
 } as const;
 
 export function cloneWorkflowContext(

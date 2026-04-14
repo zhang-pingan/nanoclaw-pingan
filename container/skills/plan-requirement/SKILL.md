@@ -9,7 +9,19 @@ description: Design implementation plans for new requirements — analyze code, 
 
 ## 流程
 
-### 步骤 1：需求分析与提问（必须执行）
+### 步骤 1：确认服务与分支参数
+
+在开始需求分析之前，先确认本次方案设计会用到的关键参数。
+
+1. 优先读取委派消息中的 `服务名称`、`主分支`、`工作分支`、`预发分支`、`预发工作分支`
+2. 同时读取 `/workspace/global/services.json`，获取对应服务的 `default_branch`，必要时也可参考预发相关配置作为兜底信息
+3. 明确以下参数并严格区分：
+   - `服务名称` = 当前需求所属服务；后续读取代码、知识库、保存方案文档时都以该服务为准
+   - `主分支` = 当前服务默认开发基线；若消息未提供，则使用 `default_branch`
+   - `工作分支` = 当前需求计划使用的开发分支；若消息已提供，则直接使用；若消息未提供，则基于主分支新建`feature/{需求名}_{日期}`。
+4. 若 `服务名称` 缺失，或你无法唯一确定 `主分支` / `工作分支` 应该取什么值，必须先向用户确认，再继续后续步骤
+
+### 步骤 2：需求分析与提问（必须执行）
 
 > **强制规则**：在输出最终方案之前，你**必须**先向用户提问确认关键细节。严禁跳过提问直接生成方案。
 
@@ -27,7 +39,7 @@ description: Design implementation plans for new requirements — analyze code, 
    如果文档不存在，参考 project-knowledge 技能的行为准则处理。
 3. 优先阅读需求附件中可直接打开的文件（PRD、原型、接口文档、日志、截图说明等），提炼目标、约束与验收口径
 4. 阅读项目代码中相关的文件，理解现有实现
-5. 优先从委派消息读取 `主分支：xxx`；若消息未提供，再读取 `/workspace/global/services.json` 获取服务的 `default_branch`
+5. 使用步骤 1 已确认的 `服务名称`、`主分支`、`工作分支` 等参数继续分析；不要在本步骤重新发明或改写这些值
 6. **下游服务联动分析**：如果需求可能涉及下游服务的改动（如修改调用接口的参数、新增对下游的调用、变更交互协议等），检查 `downstream-dependencies.md` 中该下游服务是否有 services.json 映射。如果有映射：
    - 通过 services.json 获取下游服务的 `repo_path`
    - 读取下游服务仓库 `/workspace/repos/{下游repo_path}/` 中的相关代码
@@ -54,18 +66,22 @@ description: Design implementation plans for new requirements — analyze code, 
 ```
 
 9. **等待用户回复**（用户消息会自动送达），根据回复继续提问或进入方案生成
-10. 如果用户回复解答了所有疑问，进入步骤 2
+10. 如果用户回复解答了所有疑问，进入步骤 3
 
-### 步骤 2：生成实现方案
+### 步骤 3：生成实现方案
 
 综合需求描述、附件内容与用户确认的信息，生成详细的实现方案：
+
+- 若委派消息中已经明确给出 `工作分支：xxx`，方案文档、正文展示、以及最终返回结果都必须使用该分支；不要自行改名、重建或替换成新的 `feature/...`
+- 只有当委派消息未提供 `工作分支` 时，才基于需求名和日期生成 `feature/{需求名}_{日期}` 作为工作分支
+- 下文模板中的 `{工作分支}` 表示“已确认最终要使用的工作分支”，可能是消息里已有的值，也可能是缺省生成的值
 
 ```
 ---
 service: {服务名}
 deliverable: {日期}_{需求简称}
 main_branch: {主分支}
-work_branch: feature/{需求名}_{日期}
+work_branch: {工作分支}
 doc_type: plan
 ---
 
@@ -108,28 +124,29 @@ doc_type: plan
   - 变更原因：{为什么需要下游配合改动}
   - 涉及文件：{下游服务中需要修改的文件}
   - 改动说明：{具体改动内容}
-  - 下游服务工作分支：feature/{需求名}_{日期}
+  - 下游服务工作分支：{工作分支}
 
-🌿 工作分支：feature/{需求名}_{日期}
+🌿 工作分支：{工作分支}
 🌲 主分支：{主分支}
 ```
 
 使用 `mcp__nanoclaw__send_message` 将方案发送给用户。
 
-### 步骤 3：保存方案文档
+### 步骤 4：保存方案文档
 
 将方案保存到 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/plan.md`。
 
 例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md`
 
-- 文档内容即步骤 2 中的完整方案
+- 文档内容即步骤 3 中的完整方案
 
-### 步骤 4：完成委派
+### 步骤 5：完成委派
 
 通过 `complete_delegation` 返回结果：
 - outcome：`success`
-- result：JSON 格式 `{"service":"xx","main_branch":"main","work_branch":"feature/xx","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
+- result：JSON 格式 `{"service":"xx","main_branch":"main","work_branch":"已确认工作分支","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
   - **deliverable 是文件夹名**，不含 `.md` 后缀
+  - 若委派消息已提供 `工作分支`，这里必须原样返回该值
 
 ## 处理修改意见
 

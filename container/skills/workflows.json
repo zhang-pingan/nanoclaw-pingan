@@ -295,10 +295,6 @@
       "paused": "⏸ 已中断"
     },
     "create_form": {
-      "name_field_keys": [
-        "requirement_custom",
-        "requirement_preset"
-      ],
       "fields": [
         {
           "key": "requirement_custom",
@@ -325,10 +321,10 @@
         },
         {
           "key": "requirement_preset",
-          "label": "任务名称",
+          "label": "关联需求",
           "type": "requirement_select",
           "searchable": true,
-          "helper_text": "从 Dev 或 Testing 入口创建时，选择已有需求目录。",
+          "helper_text": "从 Dev 或 Testing 入口创建时，选择已有需求目录，用于定位交付物与历史文档。",
           "visible_when": {
             "entry_points": [
               "dev",

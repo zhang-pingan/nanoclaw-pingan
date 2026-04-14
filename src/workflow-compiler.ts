@@ -155,15 +155,6 @@ export function validateWorkflowDefinition(
         }
       }
     }
-    if (definition.create_form.name_field_keys) {
-      for (const fieldKey of definition.create_form.name_field_keys) {
-        if (!createFieldKeys.has(fieldKey)) {
-          errors.push(
-            `${definition.key}.create_form.name_field_keys references unknown field "${fieldKey}"`,
-          );
-        }
-      }
-    }
   }
 
   for (const [stateKey, state] of Object.entries(definition.states)) {

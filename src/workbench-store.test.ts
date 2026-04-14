@@ -103,7 +103,7 @@ beforeEach(() => {
 describe('workbench approval transition sync', () => {
   it('persists uploaded requirement files as workbench assets when creating a plan task', () => {
     const result = createWorkbenchTask({
-      name: '新增昵称规则设计',
+      title: '新增昵称规则设计',
       service: 'order-service',
       sourceJid: 'main@g.us',
       startFrom: 'plan',

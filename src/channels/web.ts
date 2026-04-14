@@ -1943,6 +1943,7 @@ class WebChannel {
     }
 
     const data = body as {
+      title?: string;
       name?: string;
       service?: string;
       source_jid?: string;
@@ -1950,9 +1951,10 @@ class WebChannel {
       workflow_type?: string;
       context?: Record<string, unknown>;
     };
+    const title = data.title?.trim() || data.name?.trim();
 
     if (
-      !data.name ||
+      !title ||
       !data.service ||
       !data.source_jid ||
       !data.start_from ||
@@ -1962,14 +1964,14 @@ class WebChannel {
       res.end(
         JSON.stringify({
           error:
-            'name, service, source_jid, start_from, workflow_type required',
+            'title, service, source_jid, start_from, workflow_type required',
         }),
       );
       return;
     }
 
     const result = createWorkbenchTask({
-      name: data.name,
+      title,
       service: data.service,
       sourceJid: data.source_jid,
       startFrom: data.start_from,

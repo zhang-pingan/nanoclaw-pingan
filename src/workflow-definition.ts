@@ -109,7 +109,6 @@ export interface WorkflowCreateField {
 }
 
 export interface WorkflowCreateForm {
-  name_field_keys?: string[];
   fields: WorkflowCreateField[];
 }
 

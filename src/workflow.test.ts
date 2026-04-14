@@ -131,7 +131,7 @@ describe('workflow metadata and branch flow', () => {
     );
 
     const result = createNewWorkflow({
-      name: 'Test feature',
+      title: 'Test feature',
       service: TEST_SERVICE,
       sourceJid: 'main@g.us',
       startFrom: 'dev',
@@ -161,7 +161,7 @@ describe('workflow metadata and branch flow', () => {
 
   it('injects requirement description and attachment paths into the plan delegation task', () => {
     const result = createNewWorkflow({
-      name: '用户昵称支持表情并限制长度',
+      title: '用户昵称支持表情并限制长度',
       service: TEST_SERVICE,
       sourceJid: 'main@g.us',
       startFrom: 'plan',

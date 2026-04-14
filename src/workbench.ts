@@ -768,7 +768,7 @@ export function getWorkbenchTaskDetail(
 }
 
 export function createWorkbenchTask(input: {
-  name: string;
+  title: string;
   service: string;
   sourceJid: string;
   startFrom: string;
@@ -784,7 +784,7 @@ export function createWorkbenchTask(input: {
     : [];
 
   const result = createNewWorkflow({
-    name: input.name,
+    title: input.title,
     service: input.service,
     sourceJid: input.sourceJid,
     startFrom: input.startFrom,
@@ -818,6 +818,10 @@ export function createWorkbenchTask(input: {
         ? (input.context[WORKFLOW_CONTEXT_KEYS.requirementDescription] as string)
         : undefined,
     requirementFiles,
+    requirementPreset:
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.requirementPreset] === 'string'
+        ? (input.context[WORKFLOW_CONTEXT_KEYS.requirementPreset] as string)
+        : undefined,
   });
 
   if (result.error || requirementFiles.length === 0) {
