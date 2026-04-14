@@ -509,7 +509,7 @@ async function callArchiveExtractionWithRetry(
     archiveName,
     sanitizedMessages,
   );
-  const retryDelaysMs = [0, 1200, 3000];
+  const retryDelaysMs = [0, 2000, 5000, 10000, 20000];
   let lastError: unknown;
 
   for (let i = 0; i < retryDelaysMs.length; i += 1) {
@@ -518,7 +518,11 @@ async function callArchiveExtractionWithRetry(
     if (delayMs > 0) await sleep(delayMs);
 
     try {
-      const apiResponse = await callAnthropicMessages(requestPayload);
+      const apiResponse = await callAnthropicMessages(
+        requestPayload,
+        undefined,
+        60000,
+      );
       if (attempt > 1) {
         logger.info(
           {

@@ -252,14 +252,15 @@ export function getCredentialProxyOpenAiCompatConfig(): OpenAiCompatConfig & {
 }
 
 function extractTextFromAnthropicContent(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
   if (!Array.isArray(content)) return '';
 
   return content
     .flatMap((block) => {
       if (!block || typeof block !== 'object') return [];
       const record = block as Record<string, unknown>;
-      if (record.type !== 'text' || typeof record.text !== 'string') return [];
-      return [record.text];
+      if (typeof record.text === 'string') return [record.text];
+      return [];
     })
     .join('\n')
     .trim();
@@ -1042,14 +1043,16 @@ export async function forwardAnthropicRequestToOpenAi(
 export async function callAnthropicMessages(
   input: AnthropicMessagesRequest,
   fetchImpl: FetchLike = fetch,
+  overrideTimeoutMs?: number,
 ): Promise<AnthropicMessagesResponse> {
   const config = getAgentApiConfig();
+  const effectiveTimeoutMs = overrideTimeoutMs ?? config.timeoutMs;
   const normalizedInput: AnthropicMessagesRequest = {
     ...input,
     model: config.model,
   };
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
     if (config.useOpenAiCompat) {
@@ -1113,7 +1116,12 @@ export async function callAnthropicMessages(
       model?: unknown;
     };
     const text = extractTextFromAnthropicContent(raw.content);
-    if (!text) throw new Error('Anthropic API returned no text content');
+    if (!text) {
+      const contentPreview = JSON.stringify(raw.content)?.slice(0, 500) ?? 'undefined';
+      throw new Error(
+        `Anthropic API returned no text content (content=${contentPreview})`,
+      );
+    }
 
     return {
       text,
@@ -1123,7 +1131,7 @@ export async function callAnthropicMessages(
     };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`Anthropic API request timed out after ${config.timeoutMs}ms`);
+      throw new Error(`Anthropic API request timed out after ${effectiveTimeoutMs}ms`);
     }
     throw err;
   } finally {
