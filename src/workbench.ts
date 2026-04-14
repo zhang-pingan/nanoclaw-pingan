@@ -414,8 +414,8 @@ function getStageDefinitions(workflow: Workflow): WorkbenchSubtask[] {
 function summarizeResult(result: string | null): string {
   if (!result) return '';
   const normalized = result.replace(/\s+/g, ' ').trim();
-  return normalized.length > 180
-    ? `${normalized.slice(0, 177)}...`
+  return normalized.length > 1000
+    ? `${normalized.slice(0, 997)}...`
     : normalized;
 }
 

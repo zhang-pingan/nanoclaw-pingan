@@ -329,6 +329,7 @@ var memoryMetricsSummary = null;
 var workbenchTasks = [];
 var currentWorkbenchDetail = null;
 var currentWorkbenchTaskId = "";
+var expandedWorkbenchTimelineIds = /* @__PURE__ */ new Set();
 var workbenchSelectedSubtaskId = "";
 var workbenchAnimatedSubtaskKey = "";
 var workbenchFollowCurrentSubtaskOnce = false;
@@ -8634,6 +8635,9 @@ function renderWorkbenchTaskDetail(detail) {
   const task = detail.task;
   if (!task) return;
   const previousDetail = currentWorkbenchDetail;
+  if (!previousDetail || previousDetail.task?.id !== task.id) {
+    expandedWorkbenchTimelineIds.clear();
+  }
   currentWorkbenchDetail = detail;
 
   workbenchDetailEmpty.classList.add("hidden");
@@ -8695,8 +8699,10 @@ function getWorkbenchBadgeIcon(kind) {
       return '<svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V7z"/></svg>';
     case "timeline-flow":
       return '<svg viewBox="0 0 24 24"><path d="M5 7h6"/><path d="M13 7h6"/><path d="M11 7l2 5-2 5"/></svg>';
-    default:
+    case "timeline-execution":
       return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.33 1.7 1.7 0 0 0-1.03 1.55V22a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.57 1.7 1.7 0 0 0-1.87.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .33-1.87 1.7 1.7 0 0 0-1.55-1.03H2a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.57-1.11 1.7 1.7 0 0 0-.33-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.33H8.1a1.7 1.7 0 0 0 1.03-1.55V2a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.11 1.57 1.7 1.7 0 0 0 1.87-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.33 1.87v.08a1.7 1.7 0 0 0 1.55 1.03H22a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.57 1.11z"/></svg>';
+    default:
+      return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>';
   }
 }
 
@@ -8941,8 +8947,16 @@ function renderWorkbenchSubtasks(subtasks) {
   const normalizedSelectedResult = typeof selected.result === "string"
     ? selected.result.replace(/^结果摘要[:：]\s*/u, "").trim()
     : "";
-  const selectedBody = normalizedSelectedResult
-    ? escapeHtml(normalizedSelectedResult)
+  let formattedSelectedResult = normalizedSelectedResult;
+  if (normalizedSelectedResult) {
+    try {
+      formattedSelectedResult = JSON.stringify(JSON.parse(normalizedSelectedResult), null, 2);
+    } catch {
+      formattedSelectedResult = normalizedSelectedResult;
+    }
+  }
+  const selectedBody = formattedSelectedResult
+    ? escapeHtml(formattedSelectedResult)
     : selected.manually_skipped
       ? "该阶段已由人工按成功处理跳过，流程直接进入下一阶段"
     : selected.status === "current" && isAwaitingStage(selected)
@@ -9011,9 +9025,7 @@ function renderWorkbenchSubtasks(subtasks) {
     ${selectedMeta.length > 0
       ? `<div class="workbench-subtask-detail-meta-grid">${selectedMeta.map((entry) => `<div class="workbench-subtask-detail-meta-item">${escapeHtml(entry)}</div>`).join("")}</div>`
       : ""}
-    <div class="workbench-item-body workbench-subtask-detail-body">
-      ${selectedBody}
-    </div>
+    <div class="workbench-item-body workbench-subtask-detail-body">${selectedBody}</div>
     ${detailHint}
   `;
 
@@ -9415,7 +9427,10 @@ function renderWorkbenchTimeline(timeline) {
   }
   sortedTimeline.forEach((item) => {
     const el = document.createElement("div");
-    el.className = `workbench-event-item ${item.type || ""}`;
+    const itemKey = item.id || `${item.type || "execution"}-${item.created_at || ""}-${item.title || ""}`;
+    const isExpanded = expandedWorkbenchTimelineIds.has(itemKey);
+    el.className = `workbench-event-item workbench-timeline-item ${item.type || ""}${isExpanded ? " expanded" : ""}`;
+    el.setAttribute("data-timeline-id", itemKey);
     const eventTypeLabel = item.type === "manual"
       ? "手动处理"
       : item.type === "approval"
@@ -9433,17 +9448,36 @@ function renderWorkbenchTimeline(timeline) {
           ? "timeline-flow"
           : item.type === "artifact"
             ? "artifact"
-            : "default";
+            : "timeline-execution";
+    const detailBody = item.body && String(item.body).trim() ? escapeHtml(item.body) : "暂无详细信息";
     el.innerHTML = `
-      <div class="workbench-item-row">
-        <div class="workbench-item-title">
-          ${escapeHtml(item.title)}
-          ${renderWorkbenchBadge(eventTypeLabel, eventTypeKind)}
+      <button type="button" class="workbench-timeline-toggle" aria-expanded="${isExpanded ? "true" : "false"}">
+        <div class="workbench-item-row">
+          <div class="workbench-item-title">
+            ${escapeHtml(item.title)}
+            ${renderWorkbenchBadge(eventTypeLabel, eventTypeKind)}
+          </div>
+          <div class="workbench-timeline-meta">
+            ${renderWorkbenchBadge(formatDateTime(item.created_at), "time")}
+            <span class="workbench-timeline-chevron" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
+          </div>
         </div>
-        ${renderWorkbenchBadge(formatDateTime(item.created_at), "time")}
-      </div>
-      <div class="workbench-item-body">${escapeHtml(item.body || "")}</div>
+      </button>
+      <div class="workbench-item-body workbench-timeline-body">${detailBody}</div>
     `;
+    const toggleBtn = el.querySelector(".workbench-timeline-toggle");
+    toggleBtn?.addEventListener("click", () => {
+      const nextExpanded = !el.classList.contains("expanded");
+      el.classList.toggle("expanded", nextExpanded);
+      toggleBtn.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+      if (nextExpanded) {
+        expandedWorkbenchTimelineIds.add(itemKey);
+      } else {
+        expandedWorkbenchTimelineIds.delete(itemKey);
+      }
+    });
     workbenchTimeline.appendChild(el);
   });
 }

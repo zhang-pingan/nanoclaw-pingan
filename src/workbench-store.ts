@@ -915,7 +915,7 @@ export function syncWorkbenchOnDelegationCompleted(
   });
   if (subtask) {
     updateWorkbenchSubtask(subtask.id, {
-      output_summary: truncate(delegation.result),
+      output_summary: truncate(delegation.result, 1000),
       finished_at: delegation.updated_at,
       updated_at: delegation.updated_at,
       status: delegation.outcome === 'failure' ? 'failed' : subtask.status,
@@ -941,7 +941,7 @@ export function syncWorkbenchOnDelegationCompleted(
       delegation.outcome === 'failure'
         ? `委派失败 ${delegation.target_folder}`
         : `委派完成 ${delegation.target_folder}`,
-    body: truncate(delegation.result, 700),
+    body: truncate(delegation.result, 1000),
     raw_ref_type: 'delegation',
     raw_ref_id: delegation.id,
     created_at: delegation.updated_at,
@@ -956,7 +956,7 @@ export function syncWorkbenchOnDelegationCompleted(
         delegation.outcome === 'failure'
           ? `委派失败 ${delegation.target_folder}`
           : `委派完成 ${delegation.target_folder}`,
-      body: truncate(delegation.result, 700),
+      body: truncate(delegation.result, 1000),
       delegationId: delegation.id,
       createdAt: delegation.updated_at,
     },
