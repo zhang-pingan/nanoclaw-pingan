@@ -8715,28 +8715,28 @@ function renderWorkbenchRequirementOrigin(task, assets) {
 
   const fileItems = Array.from(fileMap.values());
   workbenchRequirementOrigin.innerHTML = `
-    <div class="workbench-timeline-item">
-      <div class="workbench-timeline-header">
+    <div class="workbench-origin-item">
+      <div class="workbench-origin-header">
         <strong>需求描述</strong>
       </div>
-      <div class="workbench-timeline-body">${requirementDescription ? escapeHtml(requirementDescription).replace(/\n/g, "<br>") : "未填写"}</div>
+      <div class="workbench-origin-body">${requirementDescription ? escapeHtml(requirementDescription).replace(/\n/g, "<br>") : "未填写"}</div>
     </div>
-    <div class="workbench-timeline-item">
-      <div class="workbench-timeline-header">
+    <div class="workbench-origin-item">
+      <div class="workbench-origin-header">
         <strong>需求附件</strong>
       </div>
-      <div class="workbench-timeline-body">
+      <div class="workbench-origin-body">
         ${fileItems.length > 0
           ? fileItems.map((item) => {
               const href = item.path ? `file://${item.path}` : item.url;
               const label = item.title || item.path || item.url || "附件";
               const meta = item.path || item.url || "";
               return `
-                <div class="workbench-selection-item">
+                <div class="workbench-origin-asset">
                   ${href
                     ? `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`
                     : `<span>${escapeHtml(label)}</span>`}
-                  ${meta ? `<div class="workbench-text-muted">${escapeHtml(meta)}</div>` : ""}
+                  ${meta ? `<div class="workbench-origin-meta">${escapeHtml(meta)}</div>` : ""}
                 </div>
               `;
             }).join("")

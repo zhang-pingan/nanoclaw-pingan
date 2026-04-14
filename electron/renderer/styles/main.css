@@ -987,6 +987,43 @@ body.quick-chat-window #app {
   gap: 14px;
 }
 
+.workbench-origin-item {
+  border: 1px solid rgba(var(--workbench-accent-soft-rgb), 0.22);
+  border-radius: 18px;
+  padding: 15px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 255, 0.9));
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+
+.workbench-origin-header {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.workbench-origin-body {
+  margin-top: 12px;
+  padding: 13px 15px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.workbench-origin-asset + .workbench-origin-asset {
+  margin-top: 12px;
+}
+
+.workbench-origin-meta {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
 .workbench-subtask-item,
 .workbench-approval-item,
 .workbench-artifact-item,
