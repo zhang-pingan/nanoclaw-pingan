@@ -13,7 +13,10 @@ description: Implement features based on approved plans — read design docs, wr
 
 1. 从任务描述中获取方案文件路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` 中的方案内容
 2. 优先从任务消息读取 `主分支：xxx`、`工作分支：xxx` 等分支参数；若消息未提供 `主分支`，再读取 `/workspace/global/services.json` 获取服务的 `default_branch`
-3. 如有疑问，使用 `mcp__nanoclaw__send_message` 向用户确认
+3. 如有疑问，优先使用提问工具向用户确认：
+   - 有明确选项的决策题（如是否兼容旧逻辑、是否允许改接口、是否需要同步调整下游）使用 `mcp__nanoclaw__ask_user_question`
+   - 需要用户补充一段自由描述时，使用 `request_human_input`
+   - `mcp__nanoclaw__send_message` 只用于进度同步或发送结果摘要，不用于阻塞型确认
 
 ### 步骤 2：创建工作分支
 
@@ -102,5 +105,6 @@ doc_type: dev
 ## 工作原则
 
 - *先读代码再说话*：对任何需求，先浏览相关代码，理解现有架构再给建议
+- *澄清优先用提问工具*：凡是“需要用户明确选择/确认后才能继续”的问题，优先使用 `mcp__nanoclaw__ask_user_question` 或 `request_human_input`
 - *最小改动原则*：优先在现有架构上扩展，避免大范围重构
 - *可测试性*：实现时考虑如何验证，交付文档中的测试要点要具体可执行

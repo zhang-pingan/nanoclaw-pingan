@@ -120,7 +120,7 @@ description: Maintain project knowledge base — analyze code repositories, gene
 - 通过域名、服务名、仓库名等信息匹配
 - 记录每个下游依赖是否能对应到 services.json 中的某个服务
 
-如果发现可能的映射关系，通过 `mcp__nanoclaw__send_message` 向用户确认：
+如果发现可能的映射关系，优先通过 `mcp__nanoclaw__ask_user_question` 向用户确认；若只是需要用户补充一段说明，可使用 `request_human_input`：
 
 ```
 🔍 下游服务依赖分析
@@ -134,7 +134,7 @@ description: Maintain project knowledge base — analyze code repositories, gene
 请确认以上映射关系是否正确，或补充修正。
 ```
 
-等待用户回复确认后，将确认后的映射关系写入文档。
+等待用户回复确认后，将确认后的映射关系写入文档；不要仅用 `send_message` 做阻塞型确认。
 
 #### 8.3 生成依赖文档
 
