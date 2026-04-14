@@ -178,6 +178,53 @@ describe('workbench approval transition sync', () => {
     ]);
   });
 
+  it('marks bypassed plan_examine_confirm completed when plan review passes directly to dev', () => {
+    dbCreateWorkflow({
+      id: 'wf-plan-review-pass',
+      name: '方案审核通过',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/plan-review-pass',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_plan_review_pass',
+        staging_work_branch: 'staging-deploy/feature-plan-review-pass',
+        access_token: '',
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'wf-del-plan-review-pass',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-plan-review-pass');
+
+    updateWorkflow('wf-plan-review-pass', {
+      status: 'dev',
+      current_delegation_id: 'wf-del-dev',
+    });
+    syncWorkbenchOnTransition(
+      'wf-plan-review-pass',
+      'plan_examine',
+      'dev',
+      'wf-del-dev',
+    );
+
+    const detail = getWorkbenchTaskDetail('wb-wf-plan-review-pass');
+    expect(detail).not.toBeNull();
+    expect(
+      detail?.subtasks.find((item) => item.stage_key === 'plan_examine_confirm')
+        ?.status,
+    ).toBe('completed');
+    expect(
+      detail?.subtasks.find((item) => item.stage_key === 'dev')?.status,
+    ).toBe('current');
+  });
+
   it('emits task update before subtask updates during approve transition', () => {
     dbCreateWorkflow({
       id: 'wf-approve-event-order',

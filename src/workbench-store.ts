@@ -441,6 +441,34 @@ function ensureSubtasks(workflow: Workflow): void {
   }
 }
 
+function resolveBypassedConfirmationStages(
+  workflow: Workflow,
+  fromStatus: string,
+  toStatus: string,
+): string[] {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return [];
+
+  const fromState = config.states[fromStatus];
+  if (!fromState || fromState.type !== 'delegation' || !fromState.on_complete) {
+    return [];
+  }
+
+  const candidateTargets = new Set<string>();
+  if (fromState.on_complete.success?.target === toStatus) {
+    candidateTargets.add(fromState.on_complete.failure?.target || '');
+  }
+  if (fromState.on_complete.failure?.target === toStatus) {
+    candidateTargets.add(fromState.on_complete.success?.target || '');
+  }
+
+  return Array.from(candidateTargets).filter((stageKey) => {
+    if (!stageKey || stageKey === fromStatus || stageKey === toStatus) return false;
+    const state = config.states[stageKey];
+    return state?.type === 'confirmation' && state.on_approve?.target === toStatus;
+  });
+}
+
 export function createWorkbenchInteractionItem(input: {
   workflowId: string;
   stageKey: string;
@@ -720,6 +748,27 @@ export function syncWorkbenchOnTransition(
       stageKey: toStatus,
       status: nextStatus,
       delegationId: delegationId ?? toSubtask.delegation_id,
+    });
+  }
+
+  for (const stageKey of resolveBypassedConfirmationStages(
+    workflow,
+    fromStatus,
+    toStatus,
+  )) {
+    const confirmationSubtask = getWorkbenchSubtaskByStage(task.id, stageKey);
+    if (!confirmationSubtask || confirmationSubtask.status !== 'pending') {
+      continue;
+    }
+    updateWorkbenchSubtask(confirmationSubtask.id, {
+      status: 'completed',
+      finished_at: workflow.updated_at,
+      updated_at: workflow.updated_at,
+    });
+    subtaskEvents.push({
+      id: confirmationSubtask.id,
+      stageKey,
+      status: 'completed',
     });
   }
 
