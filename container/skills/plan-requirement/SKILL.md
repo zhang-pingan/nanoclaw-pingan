@@ -140,13 +140,18 @@ doc_type: plan
 
 - 文档内容即步骤 3 中的完整方案
 
-### 步骤 5：完成委派
+### 步骤 5：回复委派消息
 
-通过 `complete_delegation` 返回结果：
-- outcome：`success`
-- result：JSON 格式 `{"service":"xx","main_branch":"main","work_branch":"已确认工作分支","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
-  - **deliverable 是文件夹名**，不含 `.md` 后缀
-  - 若委派消息已提供 `工作分支`，这里必须原样返回该值
+1. 无论任务成功还是失败，都必须调用 `complete_delegation` 回复委派结果，不允许只发普通消息后结束
+2. `complete_delegation` 返回结果要求：
+   - 若成功：
+     - outcome：`success`
+     - result：JSON 格式 `{"service":"xx","main_branch":"main","work_branch":"已确认工作分支","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
+   - 若失败：
+     - outcome：`failure`
+     - result：必须清楚说明失败原因、当前进展、阻塞点，以及是否已经产出可用的方案草稿
+   - **deliverable 是文件夹名**，不含 `.md` 后缀
+   - 若委派消息已提供 `工作分支`，成功回传时这里必须原样返回该值
 
 ## 处理修改意见
 
@@ -156,7 +161,7 @@ doc_type: plan
 2. 根据修改意见调整方案
 3. 重新发送更新后的方案给用户
 4. 覆盖保存方案文档
-5. 调用 `complete_delegation` 返回结果
+5. 调用 `complete_delegation` 返回结果；即使本轮修改未完成，也必须按失败结果回复委派，不要只停留在普通消息
 
 ## 工作原则
 

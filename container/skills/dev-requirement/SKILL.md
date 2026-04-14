@@ -85,14 +85,19 @@ doc_type: dev
 - {兼容性注意事项}
 ```
 
-### 步骤 5：完成委派
+### 步骤 5：回复委派消息
 
 1. 将交付文档关键内容通过 `mcp__nanoclaw__send_message` 发送给用户
-2. 通过 `complete_delegation` 返回结果：
-   - outcome：`success`
-   - result：JSON 格式 {"service":"xx","main_branch":"已确认主分支","work_branch":"已确认工作分支","deliverable":"2026-03-20_用户昵称功能","summary":"需求开发完成"}
-     - **deliverable 是文件夹名**，不含 `.md` 后缀
-     - 若任务消息已提供 `主分支`、`工作分支`，这里必须原样返回；不要替换成新的 `feature/...`
+2. 无论任务成功还是失败，都必须调用 `complete_delegation` 回复委派结果
+3. `complete_delegation` 返回结果要求：
+   - 若成功：
+     - outcome：`success`
+     - result：JSON 格式 `{"service":"xx","main_branch":"已确认主分支","work_branch":"已确认工作分支","deliverable":"2026-03-20_用户昵称功能","summary":"需求开发完成"}`
+   - 若失败：
+     - outcome：`failure`
+     - result：必须清楚说明失败原因、当前进展、阻塞点，以及是否已有本地代码 / 文档产出
+   - **deliverable 是文件夹名**，不含 `.md` 后缀
+   - 若任务消息已提供 `主分支`、`工作分支`，成功回传时这里必须原样返回；不要替换成新的 `feature/...`
 
 ## 工作原则
 

@@ -30,6 +30,17 @@ description: Review requirement implementation plans for completeness, feasibili
    - 不通过：存在关键缺陷，必须重做或大改
 4. 对“需修改/缺失”项输出可执行修改建议，要求具体到内容与位置
 5. 使用 `mcp__nanoclaw__send_message` 发送审核结果
+6. 无论审核结论是“通过 / 有条件通过 / 不通过”，都必须调用 `complete_delegation` 回复委派结果，不允许只发普通消息后结束
+
+## 回复委派要求
+
+- 审核通过时：
+  - `outcome`：`success`
+  - `result`：建议使用 JSON，至少包含 `conclusion`、`summary`，可附带 `issues`、`suggestions`
+- 审核为“有条件通过”或“不通过”时：
+  - `outcome`：`failure`
+  - `result`：必须清楚说明审核结论、关键问题、修改建议、复审条件
+- 若委派消息中带有分支信息，回传结果中应保留并核对这些字段，避免丢失上下文
 
 ## 输出格式
 
