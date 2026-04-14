@@ -2139,6 +2139,29 @@ class WebChannel {
         });
       }
     } else {
+      if (
+        (data.action === 'confirm' || data.action === 'skip' || data.action === 'cancel') &&
+        item.source_ref_id &&
+        item.group_folder
+      ) {
+        const groups = this.opts.registeredGroups();
+        const targetEntry = Object.entries(groups).find(
+          ([, group]) => group.folder === item.group_folder,
+        );
+        if (targetEntry) {
+          const [chatJid] = targetEntry;
+          const signal =
+            data.action === 'confirm'
+              ? 'confirmed'
+              : data.action === 'skip'
+                ? 'skip'
+                : 'cancel';
+          this.injectWorkbenchReply(
+            chatJid,
+            `/answer ${item.source_ref_id} ${signal}`,
+          );
+        }
+      }
       const result = runWorkbenchActionItemAction({
         taskId: data.task_id,
         actionItemId: data.action_item_id,

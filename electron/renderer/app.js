@@ -9232,11 +9232,6 @@ function renderWorkbenchActionItems(actionItems, task) {
         skipBtn.textContent = "跳过";
         skipBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "skip"));
         fallbackRow.appendChild(skipBtn);
-        const cancelBtn = document.createElement("button");
-        cancelBtn.className = "btn-ghost btn-sm";
-        cancelBtn.textContent = "取消";
-        cancelBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "cancel"));
-        fallbackRow.appendChild(cancelBtn);
         actions.appendChild(fallbackRow);
       } else {
         if (item.replyable) {
