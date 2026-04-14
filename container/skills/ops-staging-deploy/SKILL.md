@@ -26,5 +26,6 @@ description: Deploy service branches to staging environment — merge code, trig
 6. 通过 `complete_delegation` 返回结果：
    - outcome：成功传 `success`，失败传 `failure`
    - result：JSON 格式
-     成功：{"service":"xx","main_branch":"main","work_branch":"feature/xx","staging_base_branch":"staging","staging_work_branch":"staging-deploy/feature-xx","summary":"预发部署完成"}
-     失败：{"service":"xx","main_branch":"main","work_branch":"feature/xx","staging_base_branch":"staging","staging_work_branch":"staging-deploy/feature-xx","summary":"预发部署失败","error":"conflict in src/xx.ts"}
+     成功：{"service":"xx","main_branch":"已确认主分支","work_branch":"已确认工作分支","staging_base_branch":"已确认预发分支","staging_work_branch":"已确认预发工作分支","summary":"预发部署完成"}
+     失败：{"service":"xx","main_branch":"已确认主分支","work_branch":"已确认工作分支","staging_base_branch":"已确认预发分支","staging_work_branch":"已确认预发工作分支","summary":"预发部署失败","error":"conflict in src/xx.ts"}
+   - 若任务消息已提供上述分支参数，返回结果中必须原样沿用；不要替换成新的 `feature/...` 或 `staging-deploy/...`

@@ -169,10 +169,10 @@ doc_type: test
   "blocked": 0,
   "bugs": [],
   "deliverable": "2026-03-20_用户昵称功能",
-  "main_branch": "main",
-  "work_branch": "feature/user-nickname_20260320",
-  "staging_base_branch": "staging",
-  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
+  "main_branch": "已确认主分支",
+  "work_branch": "已确认工作分支",
+  "staging_base_branch": "已确认预发分支",
+  "staging_work_branch": "已确认预发工作分支",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "summary": "共 10 条，通过 10 条，失败 0 条，阻塞 0 条"
 }
@@ -201,14 +201,16 @@ doc_type: test
     }
   ],
   "deliverable": "2026-03-20_用户昵称功能",
-  "main_branch": "main",
-  "work_branch": "feature/user-nickname_20260320",
-  "staging_base_branch": "staging",
-  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
+  "main_branch": "已确认主分支",
+  "work_branch": "已确认工作分支",
+  "staging_base_branch": "已确认预发分支",
+  "staging_work_branch": "已确认预发工作分支",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "summary": "共 10 条，通过 8 条，失败 2 条，阻塞 0 条"
 }
 ```
+
+返回结果中的 `main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch` 必须沿用当前任务已确认的真实值；若任务消息已提供，则优先原样返回，不要替换成示例里的默认命名。
 
 ## 复测工作流程
 
