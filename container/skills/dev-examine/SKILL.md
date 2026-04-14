@@ -16,18 +16,20 @@ description: Review implemented code against approved plan, perform code review,
 
 ## 复核流程
 
-1. 读取方案文档与开发交付文档，确认目标范围与约束；若委派消息中带有 `主分支`、`预发分支`、`工作分支`、`预发工作分支`，同步核对实现与文档是否使用了正确分支
-2. 对照实现进行一致性检查（功能点、接口、数据结构、异常路径）
-3. 执行代码审查，重点关注：
+1. 从任务描述中获取方案文件路径，方案文档: `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` , 开发交付文档: `/workspace/projects/{服务名}/iteration/{文件夹名}/dev.md`
+   确认目标范围与约束；如果文档缺失则停止进行并使用`complete_delegation` 回传结果（`outcome=failure`）
+2. 根据服务名获取服务配置文件路径`repo_path`，进入仓库目录`/workspace/repos/{repo_path}`，检出并更新`工作分支`
+3. 对照实现进行一致性检查（功能点、接口、数据结构、异常路径）
+4. 执行代码审查，重点关注：
    - 明显逻辑缺陷与边界遗漏
    - 可读性与可维护性问题
    - 潜在性能/安全/兼容性风险
    - 测试覆盖是否支撑改动范围
-4. 给出复核结论：
+5. 给出复核结论：
    - 通过：可进入部署确认
    - 不通过：需修复后再复核
-5. 输出可执行修复建议（尽量定位到文件/模块/问题点）
-6. 使用 `complete_delegation` 回传结果（`outcome=success` 或 `outcome=failure`）
+6. 输出可执行修复建议（尽量定位到文件/模块/问题点）
+7. 使用 `complete_delegation` 回传结果（`outcome=success` 或 `outcome=failure`）
 
 ## 输出格式
 
