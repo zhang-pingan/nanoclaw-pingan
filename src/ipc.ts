@@ -1422,6 +1422,7 @@ export async function processTaskIpc(
           extra: {
             request_id: data.requestId,
             question_count: normalized.questions.length,
+            questions: normalized.questions,
           },
         });
       }

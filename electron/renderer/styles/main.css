@@ -1826,6 +1826,29 @@ body.quick-chat-window #app {
   box-shadow: 0 10px 22px rgba(var(--workbench-accent-rgb), 0.22);
 }
 
+.workbench-ask-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.workbench-ask-fallback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(var(--workbench-accent-soft-rgb), 0.12);
+}
+
+.workbench-ask-fallback .btn-sm {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 .workbench-comment-composer {
   display: flex;
   flex-direction: column;
