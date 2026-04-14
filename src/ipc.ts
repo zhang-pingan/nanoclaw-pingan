@@ -111,6 +111,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
       await expirePendingAskQuestions({
         registeredGroups,
         sendMessage: deps.sendMessage,
+        onDelegationComplete: onWorkflowDelegationComplete,
       });
     } catch (err) {
       logger.warn({ err }, 'Failed to expire pending ask questions');

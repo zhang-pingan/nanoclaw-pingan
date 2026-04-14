@@ -5,8 +5,11 @@ import { DATA_DIR } from './config.js';
 import {
   createAskQuestion,
   getAskQuestion,
+  getDelegation,
   getExpiredPendingAskQuestions,
+  listWorkbenchActionItemsBySource,
   updateAskQuestion,
+  updateDelegation,
 } from './db.js';
 import { logger } from './logger.js';
 import {
@@ -996,6 +999,7 @@ export async function handleAskQuestionResponse(params: {
 export async function expirePendingAskQuestions(params: {
   registeredGroups: Record<string, RegisteredGroup>;
   sendMessage?: (jid: string, text: string) => Promise<void>;
+  onDelegationComplete?: (delegationId: string) => void;
 }): Promise<void> {
   const now = nowIso();
   const expired = getExpiredPendingAskQuestions(now);
@@ -1014,14 +1018,46 @@ export async function expirePendingAskQuestions(params: {
       responder: null,
     });
     const payload = parsePayload(rec.payload_json);
+    const sourceType =
+      payload?.metadata?.source_type === 'request_human_input'
+        ? 'request_human_input'
+        : 'ask_user_question';
     updateWorkbenchInteractionItemStatus({
-      sourceType:
-        payload?.metadata?.source_type === 'request_human_input'
-          ? 'request_human_input'
-          : 'ask_user_question',
+      sourceType,
       sourceRefId: rec.id,
       status: 'expired',
     });
+
+    // Auto-complete pending delegation when ask_user_question times out
+    if (params.onDelegationComplete) {
+      const actionItems = listWorkbenchActionItemsBySource(sourceType, rec.id);
+      for (const item of actionItems) {
+        if (item.delegation_id) {
+          const delegation = getDelegation(item.delegation_id);
+          if (delegation && delegation.status === 'pending') {
+            logger.info(
+              { delegationId: item.delegation_id, requestId: rec.id },
+              'Ask question timed out — auto-completing delegation',
+            );
+            updateDelegation(item.delegation_id, {
+              status: 'completed',
+              result: `问题超时未获得用户回复，已停止（requestId=${rec.id}）`,
+              outcome: 'failure',
+            });
+            try {
+              params.onDelegationComplete(item.delegation_id);
+            } catch (err) {
+              logger.error(
+                { err, delegationId: item.delegation_id },
+                'Auto delegation complete hook failed',
+              );
+            }
+          }
+          break;
+        }
+      }
+    }
+
     if (params.sendMessage) {
       const chatJid =
         findChatJidByGroupFolder(rec.group_folder, params.registeredGroups) ||
