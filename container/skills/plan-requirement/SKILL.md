@@ -45,12 +45,12 @@ description: Design implementation plans for new requirements — analyze code, 
    - 读取下游服务仓库 `/workspace/repos/{下游repo_path}/` 中的相关代码
    - 如果下游服务也有项目知识库（`/workspace/projects/{下游服务名}/docs/`），一并阅读其 overview.md 和相关领域文档
    - 在后续方案中同时覆盖本服务和下游服务的改动点
-7. 梳理出需要和用户确认的问题，例如：
+7. 梳理出需要和用户确认的问题，任何不确认的点都要和用户询问确认，例如：
    - 需求中含糊或可多种解读的部分
    - 涉及多种技术方案时的选择偏好
    - 是否有遗漏的边界情况或约束条件
    - 对现有功能的兼容性要求
-   - 是否需要下游服务配合改动（如果步骤 5 发现了关联）
+   - 是否需要下游服务配合改动（如果步骤 5 发现了关联）等
 8. 使用 `mcp__nanoclaw__send_message` 将问题发送给用户，格式：
 
 ```
