@@ -495,13 +495,13 @@
                 "key": "work_branch",
                 "label": "work_branch（工作分支，可选）",
                 "type": "text",
-                "placeholder": "例如：feature/xxx"
+                "placeholder": "填写实际工作分支，如 erp_manhua 或 feature/xxx"
               },
               {
                 "key": "staging_work_branch",
                 "label": "staging_work_branch（预发工作分支，可选）",
                 "type": "text",
-                "placeholder": "例如：staging-deploy/feature-xxx"
+                "placeholder": "填写实际预发工作分支，如 erp_manhua 或 staging-deploy/feature-xxx"
               }
             ]
           }
@@ -998,13 +998,13 @@
                 "key": "work_branch",
                 "label": "work_branch（工作分支，可选）",
                 "type": "text",
-                "placeholder": "例如：feature/xxx"
+                "placeholder": "填写实际工作分支，如 erp_manhua 或 feature/xxx"
               },
               {
                 "key": "staging_work_branch",
                 "label": "staging_work_branch（预发工作分支，可选）",
                 "type": "text",
-                "placeholder": "例如：staging-deploy/feature-xxx"
+                "placeholder": "填写实际预发工作分支，如 erp_manhua 或 staging-deploy/feature-xxx"
               }
             ]
           }
