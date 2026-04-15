@@ -160,7 +160,7 @@ describe('workbench approval transition sync', () => {
 
     const detail = getWorkbenchTaskDetail('wb-wf-predeploy');
     expect(detail).not.toBeNull();
-    expect(detail?.task.current_stage).toBe('ops_deploy');
+    expect(detail?.task.workflow_stage).toBe('ops_deploy');
     expect(detail?.task.task_state).toBe('running');
     expect(detail?.action_items).toHaveLength(0);
     expect(
@@ -254,7 +254,7 @@ describe('workbench approval transition sync', () => {
     const emittedEvents: string[] = [];
     initWorkbenchEvents((event) => {
       emittedEvents.push(
-        `${event.type}:${String(event.payload.currentStage || event.payload.stageKey || '')}`,
+        `${event.type}:${String(event.payload.workflowStage || event.payload.stageKey || '')}`,
       );
     });
 
@@ -314,10 +314,10 @@ describe('workbench approval transition sync', () => {
     const result = approveWorkflow('wf-realtime-labels');
     expect(result.error).toBeUndefined();
     expect(events).not.toHaveLength(0);
-    expect(events[0]?.status).toBe('testing');
+    expect(events[0]?.workflowStatus).toBe('testing');
     expect(events[0]?.workflowStatusLabel).toBe('🧪 测试中');
     expect(events[0]?.taskState).toBe('running');
-    expect(events[0]?.currentStage).toBe('testing');
+    expect(events[0]?.workflowStage).toBe('testing');
     expect(events[0]?.workflowStageLabel).toBe('🧪 测试中');
   });
 
@@ -349,7 +349,7 @@ describe('workbench approval transition sync', () => {
 
     const detail = getWorkbenchTaskDetail('wb-wf-terminal-flags');
     expect(detail).not.toBeNull();
-    expect(detail?.task.status).toBe('passed');
+    expect(detail?.task.workflow_status).toBe('passed');
     expect(detail?.task.task_state).toBe('success');
   });
 
@@ -842,7 +842,7 @@ describe('workbench approval transition sync', () => {
 
     const detail = getWorkbenchTaskDetail(task!.id);
     expect(detail).not.toBeNull();
-    expect(detail?.task.status).toBe('cancelled');
+    expect(detail?.task.workflow_status).toBe('cancelled');
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'fixing')?.status,
     ).toBe('cancelled');

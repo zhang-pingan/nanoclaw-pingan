@@ -8395,12 +8395,12 @@ function getWorkbenchTaskStateLabel(taskState) {
 
 function getWorkbenchWorkflowStatusLabel(task) {
   if (!task) return "";
-  return task.workflow_status_label || task.status || "";
+  return task.workflow_status_label || task.workflow_status || "";
 }
 
 function getWorkbenchWorkflowStageLabel(task) {
   if (!task) return "";
-  return task.workflow_stage_label || task.current_stage || "";
+  return task.workflow_stage_label || task.workflow_stage || "";
 }
 
 function sortWorkbenchTaskItems(tasks) {
@@ -8777,12 +8777,12 @@ function renderWorkbenchRequirementOrigin(task, assets) {
 function renderWorkbenchActions(task) {
   workbenchTaskActions.innerHTML = "";
   const buttons = [];
-  if (task.status === "paused") {
+  if (task.workflow_status === "paused") {
     buttons.push({ title: "恢复任务", action: "resume", icon: SVG.play });
-  } else if (!TERMINAL_STATUSES.includes(task.status)) {
+  } else if (!TERMINAL_STATUSES.includes(task.workflow_status)) {
     buttons.push({ title: "暂停任务", action: "pause", icon: SVG.pause });
   }
-  if (!TERMINAL_STATUSES.includes(task.status)) {
+  if (!TERMINAL_STATUSES.includes(task.workflow_status)) {
     buttons.push({ title: "取消任务", action: "cancel", icon: SVG.trash, danger: true });
   }
 
@@ -8812,7 +8812,7 @@ function renderWorkbenchSubtasks(subtasks) {
     }
 
     const taskCurrentStage = currentWorkbenchDetail && currentWorkbenchDetail.task
-      ? currentWorkbenchDetail.task.current_stage
+      ? currentWorkbenchDetail.task.workflow_stage
       : "";
     const preferredCurrent = currentItems.find((item) => item.stage_key === taskCurrentStage)
       || currentItems[currentItems.length - 1];
@@ -9148,7 +9148,7 @@ function getWorkbenchSubtaskStatusIcon(status) {
 }
 
 function getWorkbenchApprovalLabels(task, approval) {
-  const approvalType = approval.approval_type || task.status;
+  const approvalType = approval.approval_type || task.workflow_status;
   switch (approvalType) {
     case "plan_confirm":
       return { approve: "进入开发", revise: "返回方案修改", skip: "跳过此节点" };
@@ -9205,7 +9205,7 @@ function renderWorkbenchActionItems(actionItems, task) {
     actions.className = "workbench-task-actions";
     if (item.item_type === "approval") {
       const labels = getWorkbenchApprovalLabels(task, {
-        approval_type: item.stage_key || task.status,
+        approval_type: item.stage_key || task.workflow_status,
         action_mode: item.action_mode || "approve_only",
       });
       if (item.action_mode !== "input_required") {
@@ -10726,11 +10726,11 @@ function applyWorkbenchRealtimeEvent(event) {
     } else if (event.type === "task_updated") {
       workbenchTasks[taskIdx] = {
         ...existing,
-        status: payload.status || existing.status,
+        workflow_status: payload.workflowStatus || existing.workflow_status,
         workflow_status_label:
           payload.workflowStatusLabel || existing.workflow_status_label,
         task_state: typeof payload.taskState === "string" ? payload.taskState : existing.task_state,
-        current_stage: payload.currentStage || existing.current_stage,
+        workflow_stage: payload.workflowStage || existing.workflow_stage,
         workflow_stage_label:
           payload.workflowStageLabel || existing.workflow_stage_label,
         context: mergeWorkbenchTaskContext(existing, payload.context),
@@ -10755,12 +10755,12 @@ function applyWorkbenchRealtimeEvent(event) {
       title: payload.title || "新任务",
       service: payload.service || "",
       workflow_type: payload.workflowType || "",
-      status: payload.status || "created",
-      workflow_status_label: payload.workflowStatusLabel || payload.status || "created",
+      workflow_status: payload.workflowStatus || "created",
+      workflow_status_label: payload.workflowStatusLabel || payload.workflowStatus || "created",
       task_state: typeof payload.taskState === "string" ? payload.taskState : "running",
-      current_stage: payload.currentStage || payload.status || "created",
+      workflow_stage: payload.workflowStage || payload.workflowStatus || "created",
       workflow_stage_label:
-        payload.workflowStageLabel || payload.currentStage || payload.status || "created",
+        payload.workflowStageLabel || payload.workflowStage || payload.workflowStatus || "created",
       context: mergeWorkbenchTaskContext(null, payload.context),
       round: 0,
       source_jid: payload.sourceJid || "",
@@ -10779,12 +10779,14 @@ function applyWorkbenchRealtimeEvent(event) {
   if (event.type === "task_updated") {
     currentWorkbenchDetail.task = {
       ...currentWorkbenchDetail.task,
-      status: payload.status || currentWorkbenchDetail.task.status,
+      workflow_status:
+        payload.workflowStatus || currentWorkbenchDetail.task.workflow_status,
       workflow_status_label:
         payload.workflowStatusLabel || currentWorkbenchDetail.task.workflow_status_label,
       task_state:
         typeof payload.taskState === "string" ? payload.taskState : currentWorkbenchDetail.task.task_state,
-      current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
+      workflow_stage:
+        payload.workflowStage || currentWorkbenchDetail.task.workflow_stage,
       workflow_stage_label:
         payload.workflowStageLabel || currentWorkbenchDetail.task.workflow_stage_label,
       context: mergeWorkbenchTaskContext(currentWorkbenchDetail.task, payload.context),

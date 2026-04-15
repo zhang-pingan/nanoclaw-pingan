@@ -24,6 +24,14 @@ When querying workbench tasks, prefer the new explicit filters instead of the ol
 - Use `keyword` for fuzzy matching by title, service, workflow type, or labels
 - Use `include_terminal: true` when you need completed/failed/cancelled tasks too
 
+Returned task objects use the unified field names:
+
+- `workflow_status`: 流程状态键
+- `workflow_status_label`: 流程状态文案
+- `workflow_stage`: 当前流程阶段键
+- `workflow_stage_label`: 当前流程阶段文案
+- `task_state`: 任务聚合态
+
 Examples:
 
 ```json
@@ -34,7 +42,7 @@ query_workbench_tasks({ "task_id": "wb-wf-xxxx" })
 ```
 
 Compatibility note:
-- `status` is still supported for backward compatibility, but it is ambiguous because it may match task state, workflow status, or current stage
+- `status` is still supported for backward compatibility, but it is ambiguous because it may match task state, workflow status, or workflow stage
 - Prefer `task_state` and `workflow_status` in all new queries
 
 ## Communication

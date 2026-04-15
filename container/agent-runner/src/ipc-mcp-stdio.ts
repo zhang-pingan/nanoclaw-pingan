@@ -344,7 +344,7 @@ server.tool(
 
 server.tool(
   'query_workbench_tasks',
-  '主群专用：查询工作台任务状态。可按 task_id 精确查询，也可按关键词/状态筛选当前任务。',
+  '主群专用：查询工作台任务。返回统一字段 `workflow_status` / `workflow_status_label` / `workflow_stage` / `workflow_stage_label` / `task_state`；可按 task_id 精确查询，也可按关键词与显式筛选条件检索。',
   {
     task_id: z
       .string()
@@ -353,11 +353,11 @@ server.tool(
     keyword: z
       .string()
       .optional()
-      .describe('按标题、服务名、流程类型、状态等模糊搜索'),
+      .describe('按标题、服务名、流程类型、任务态、流程状态文案、当前阶段文案等模糊搜索'),
     status: z
       .string()
       .optional()
-      .describe('兼容旧参数：同时匹配任务状态、流程状态或当前阶段'),
+      .describe('兼容旧参数：同时匹配 task_state、workflow_status 或 workflow_stage；新调用建议改用 task_state / workflow_status'),
     task_state: z
       .enum(['running', 'success', 'failed', 'cancelled'])
       .optional()
@@ -365,7 +365,7 @@ server.tool(
     workflow_status: z
       .string()
       .optional()
-      .describe('按流程状态或当前阶段精确筛选，例如 "plan_review"'),
+      .describe('按 workflow_status 或 workflow_stage 精确筛选，例如 "plan_review"、"dev"、"testing"'),
     include_terminal: z
       .boolean()
       .optional()
@@ -422,9 +422,11 @@ server.tool(
         id: string;
         title: string;
         service: string;
+        workflow_status: string;
         task_state: 'running' | 'success' | 'failed' | 'cancelled';
-        status_label: string;
-        current_stage_label: string;
+        workflow_status_label: string;
+        workflow_stage: string;
+        workflow_stage_label: string;
         pending_action_count: number;
         active_delegation_id: string;
         updated_at: string;
@@ -434,9 +436,11 @@ server.tool(
           id: string;
           title: string;
           service: string;
+          workflow_status: string;
           task_state: 'running' | 'success' | 'failed' | 'cancelled';
-          status_label: string;
-          current_stage_label: string;
+          workflow_status_label: string;
+          workflow_stage: string;
+          workflow_stage_label: string;
           pending_action_count: number;
           active_delegation_id: string;
           updated_at: string;
@@ -499,7 +503,7 @@ server.tool(
     lines.push(`匹配到 ${result.matched_count || tasks.length} 个工作台任务：`);
     for (const task of tasks) {
       lines.push(
-        `- [${task.id}] ${task.title} | 服务:${task.service} | 任务状态:${task.task_state} | 流程状态:${task.status_label} | 当前阶段:${task.current_stage_label} | 待处理:${task.pending_action_count} | 更新时间:${task.updated_at}${task.active_delegation_id ? ` | 委派:${task.active_delegation_id}` : ''}`,
+        `- [${task.id}] ${task.title} | 服务:${task.service} | 任务状态:${task.task_state} | 流程状态:${task.workflow_status_label} | 当前阶段:${task.workflow_stage_label} | 待处理:${task.pending_action_count} | 更新时间:${task.updated_at}${task.active_delegation_id ? ` | 委派:${task.active_delegation_id}` : ''}`,
       );
     }
 
@@ -507,7 +511,7 @@ server.tool(
       const detail = result.detail;
       lines.push('');
       lines.push(
-        `详情: [${detail.task.id}] ${detail.task.title} | 任务状态:${detail.task.task_state} | 流程状态:${detail.task.status_label} | 当前阶段:${detail.task.current_stage_label}`,
+        `详情: [${detail.task.id}] ${detail.task.title} | 任务状态:${detail.task.task_state} | 流程状态:${detail.task.workflow_status_label} | 当前阶段:${detail.task.workflow_stage_label}`,
       );
       if (Array.isArray(detail.subtasks) && detail.subtasks.length > 0) {
         lines.push('子任务:');

@@ -601,13 +601,13 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
         title: workflow.name,
         service: workflow.service,
         workflowType: workflow.workflow_type,
-        status: workflow.status,
+        workflowStatus: workflow.status,
         workflowStatusLabel: getStatusLabel(
           workflow.workflow_type,
           workflow.status,
         ),
         taskState: getTaskState(workflow.workflow_type, workflow.status),
-        currentStage: workflow.status,
+        workflowStage: workflow.status,
         workflowStageLabel: getStatusLabel(
           workflow.workflow_type,
           workflow.status,
@@ -652,13 +652,13 @@ export function syncWorkbenchOnWorkflowUpdated(
       taskId: task.id,
       workflowId,
       payload: {
-        status: workflow.status,
+        workflowStatus: workflow.status,
         workflowStatusLabel: getStatusLabel(
           workflow.workflow_type,
           workflow.status,
         ),
         taskState: getTaskState(workflow.workflow_type, workflow.status),
-        currentStage: workflow.status,
+        workflowStage: workflow.status,
         workflowStageLabel: getStatusLabel(
           workflow.workflow_type,
           workflow.status,
@@ -819,13 +819,13 @@ export function syncWorkbenchOnTransition(
     taskId: task.id,
     workflowId,
     payload: {
-      status: workflow.status,
+      workflowStatus: workflow.status,
       workflowStatusLabel: getStatusLabel(
         workflow.workflow_type,
         workflow.status,
       ),
       taskState: getTaskState(workflow.workflow_type, workflow.status),
-      currentStage: toStatus,
+      workflowStage: toStatus,
       workflowStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
       context: cloneWorkflowContext(workflow.context),
       updatedAt: workflow.updated_at,

@@ -68,13 +68,13 @@ export interface WorkbenchTaskItem {
   start_from: string;
   workflow_type: string;
   /** Raw workflow stage/status from the workflow engine, e.g. dev/testing/cancelled. */
-  status: string;
+  workflow_status: string;
   /** Human-readable label for the workflow status shown in UI. */
   workflow_status_label: string;
   /** Aggregated task state used for filtering and high-level task outcome display. */
   task_state: 'running' | 'success' | 'failed' | 'cancelled';
   /** Current workflow stage key, usually aligned with status for active tasks. */
-  current_stage: string;
+  workflow_stage: string;
   /** Human-readable label for the current workflow stage. */
   workflow_stage_label: string;
   round: number;
@@ -214,10 +214,10 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     service: persisted?.service || workflow.service,
     start_from: persisted?.start_from || workflow.start_from,
     workflow_type: persisted?.workflow_type || workflow.workflow_type,
-    status: persisted?.status || workflow.status,
+    workflow_status: persisted?.status || workflow.status,
     workflow_status_label: statusLabels[workflow.status] || workflow.status,
     task_state: getTaskState(workflow.workflow_type, workflow.status),
-    current_stage: persisted?.current_stage || workflow.status,
+    workflow_stage: persisted?.current_stage || workflow.status,
     workflow_stage_label:
       statusLabels[persisted?.current_stage || workflow.status] ||
       persisted?.current_stage ||
@@ -687,10 +687,10 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
           service: item.service,
           start_from: item.start_from,
           workflow_type: item.workflow_type,
-          status: item.status,
+          workflow_status: item.status,
           workflow_status_label: item.status,
           task_state: getTaskState(item.workflow_type, item.status),
-          current_stage: item.current_stage,
+          workflow_stage: item.current_stage,
           workflow_stage_label: item.current_stage,
           round: 0,
           source_jid: item.source_jid,

@@ -33,10 +33,10 @@ export interface WorkbenchStatusQueryResult {
     service: string;
     start_from: string;
     workflow_type: string;
-    status: string;
+    workflow_status: string;
     workflow_status_label: string;
     task_state: 'running' | 'success' | 'failed' | 'cancelled';
-    current_stage: string;
+    workflow_stage: string;
     workflow_stage_label: string;
     pending_approval: boolean;
     pending_action_count: number;
@@ -113,10 +113,10 @@ function toSummary(task: ReturnType<typeof listWorkbenchTasks>[number]) {
     service: task.service,
     start_from: task.start_from,
     workflow_type: task.workflow_type,
-    status: task.status,
+    workflow_status: task.workflow_status,
     workflow_status_label: task.workflow_status_label,
     task_state: task.task_state,
-    current_stage: task.current_stage,
+    workflow_stage: task.workflow_stage,
     workflow_stage_label: task.workflow_stage_label,
     pending_approval: task.pending_approval,
     pending_action_count: task.pending_action_count,
@@ -226,8 +226,8 @@ export function queryWorkbenchTaskStatuses(
   if (status) {
     tasks = tasks.filter(
       (item) =>
-        item.status.toLowerCase() === status ||
-        item.current_stage.toLowerCase() === status ||
+        item.workflow_status.toLowerCase() === status ||
+        item.workflow_stage.toLowerCase() === status ||
         item.task_state.toLowerCase() === status,
     );
   }
@@ -237,8 +237,8 @@ export function queryWorkbenchTaskStatuses(
   if (workflowStatus) {
     tasks = tasks.filter(
       (item) =>
-        item.status.toLowerCase() === workflowStatus ||
-        item.current_stage.toLowerCase() === workflowStatus,
+        item.workflow_status.toLowerCase() === workflowStatus ||
+        item.workflow_stage.toLowerCase() === workflowStatus,
     );
   }
   if (keyword) {
@@ -249,10 +249,10 @@ export function queryWorkbenchTaskStatuses(
         item.service,
         item.start_from,
         item.workflow_type,
-        item.status,
+        item.workflow_status,
         item.workflow_status_label,
         item.task_state,
-        item.current_stage,
+        item.workflow_stage,
         item.workflow_stage_label,
       ].some((field) => includesInsensitive(field, keyword)),
     );
