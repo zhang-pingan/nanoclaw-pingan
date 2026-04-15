@@ -253,6 +253,7 @@ class FeishuChannel implements Channel {
       }
       formElements.push({
         tag: 'button',
+        name: card.form.submitButton.id,
         text: { tag: 'plain_text', content: card.form.submitButton.label },
         value: card.form.submitButton.value,
       });
