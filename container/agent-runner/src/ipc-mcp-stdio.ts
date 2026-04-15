@@ -37,6 +37,23 @@ function writeIpcFile(dir: string, data: object): string {
   return filename;
 }
 
+async function waitForIpcResult<T>(
+  resultPath: string,
+  maxWaitMs = 10000,
+  pollMs = 300,
+): Promise<T | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < maxWaitMs) {
+    if (fs.existsSync(resultPath)) {
+      const raw = fs.readFileSync(resultPath, 'utf-8');
+      fs.unlinkSync(resultPath);
+      return JSON.parse(raw) as T;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  return null;
+}
+
 const server = new McpServer({
   name: 'nanoclaw',
   version: '1.0.0',
@@ -322,6 +339,211 @@ server.tool(
         ],
       };
     }
+  },
+);
+
+server.tool(
+  'query_workbench_tasks',
+  '主群专用：查询工作台任务状态。可按 task_id 精确查询，也可按关键词/状态筛选当前任务。',
+  {
+    task_id: z
+      .string()
+      .optional()
+      .describe('工作台任务 ID，例如 "wb-wf-..."。传入后返回该任务详情。'),
+    keyword: z
+      .string()
+      .optional()
+      .describe('按标题、服务名、流程类型、状态等模糊搜索'),
+    status: z
+      .string()
+      .optional()
+      .describe('兼容旧参数：同时匹配任务状态、流程状态或当前阶段'),
+    task_state: z
+      .enum(['running', 'success', 'failed', 'cancelled'])
+      .optional()
+      .describe('按任务状态精确筛选'),
+    workflow_status: z
+      .string()
+      .optional()
+      .describe('按流程状态或当前阶段精确筛选，例如 "plan_review"'),
+    include_terminal: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('是否包含已结束任务，默认 false'),
+    include_detail: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('当筛选结果仅 1 条时，是否返回该任务的子任务/待办/时间线摘要'),
+    limit: z
+      .number()
+      .optional()
+      .default(10)
+      .describe('最多返回多少条任务，1-20，默认 10'),
+  },
+  async (args) => {
+    if (!isMain) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Only the main group can query workbench tasks.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const requestId = `wbq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'query_workbench_tasks',
+      requestId,
+      task_id: args.task_id,
+      keyword: args.keyword,
+      status: args.status,
+      task_state: args.task_state,
+      workflow_status: args.workflow_status,
+      include_terminal: args.include_terminal === true,
+      include_detail: args.include_detail === true || !!args.task_id,
+      limit: args.limit || 10,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resultPath = path.join(
+      IPC_DIR,
+      'workbench-results',
+      `${requestId}.json`,
+    );
+    const result = await waitForIpcResult<{
+      error?: string;
+      matched_count?: number;
+      tasks?: Array<{
+        id: string;
+        title: string;
+        service: string;
+        task_state: 'running' | 'success' | 'failed' | 'cancelled';
+        status_label: string;
+        current_stage_label: string;
+        pending_action_count: number;
+        active_delegation_id: string;
+        updated_at: string;
+      }>;
+      detail?: {
+        task: {
+          id: string;
+          title: string;
+          service: string;
+          task_state: 'running' | 'success' | 'failed' | 'cancelled';
+          status_label: string;
+          current_stage_label: string;
+          pending_action_count: number;
+          active_delegation_id: string;
+          updated_at: string;
+        };
+        subtasks?: Array<{
+          title: string;
+          status: string;
+          stage_label: string;
+          role?: string;
+          target_folder?: string;
+        }>;
+        action_items?: Array<{
+          title: string;
+          status: string;
+          item_type: string;
+          source_type: string;
+        }>;
+        timeline?: Array<{
+          created_at: string;
+          title: string;
+          type: string;
+        }>;
+        artifacts?: Array<{
+          title: string;
+          artifact_type: string;
+          path: string;
+          exists: boolean;
+        }>;
+      };
+    }>(resultPath);
+
+    if (!result) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `query_workbench_tasks timed out waiting for response (requestId=${requestId}).`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    if (result.error) {
+      return {
+        content: [{ type: 'text' as const, text: result.error }],
+        isError: true,
+      };
+    }
+
+    const tasks = Array.isArray(result.tasks) ? result.tasks : [];
+    if (tasks.length === 0) {
+      return {
+        content: [
+          { type: 'text' as const, text: '没有找到匹配的工作台任务。' },
+        ],
+      };
+    }
+
+    const lines: string[] = [];
+    lines.push(`匹配到 ${result.matched_count || tasks.length} 个工作台任务：`);
+    for (const task of tasks) {
+      lines.push(
+        `- [${task.id}] ${task.title} | 服务:${task.service} | 任务状态:${task.task_state} | 流程状态:${task.status_label} | 当前阶段:${task.current_stage_label} | 待处理:${task.pending_action_count} | 更新时间:${task.updated_at}${task.active_delegation_id ? ` | 委派:${task.active_delegation_id}` : ''}`,
+      );
+    }
+
+    if (result.detail) {
+      const detail = result.detail;
+      lines.push('');
+      lines.push(
+        `详情: [${detail.task.id}] ${detail.task.title} | 任务状态:${detail.task.task_state} | 流程状态:${detail.task.status_label} | 当前阶段:${detail.task.current_stage_label}`,
+      );
+      if (Array.isArray(detail.subtasks) && detail.subtasks.length > 0) {
+        lines.push('子任务:');
+        for (const item of detail.subtasks.slice(0, 8)) {
+          lines.push(
+            `- ${item.stage_label} / ${item.title} | ${item.status}${item.role ? ` | 角色:${item.role}` : ''}${item.target_folder ? ` | 目标群:${item.target_folder}` : ''}`,
+          );
+        }
+      }
+      if (Array.isArray(detail.action_items) && detail.action_items.length > 0) {
+        lines.push('待处理事项:');
+        for (const item of detail.action_items.slice(0, 5)) {
+          lines.push(
+            `- ${item.title} | ${item.item_type}/${item.source_type} | ${item.status}`,
+          );
+        }
+      }
+      if (Array.isArray(detail.timeline) && detail.timeline.length > 0) {
+        lines.push('最近时间线:');
+        for (const item of detail.timeline.slice(0, 5)) {
+          lines.push(`- ${item.created_at} | ${item.type} | ${item.title}`);
+        }
+      }
+      if (Array.isArray(detail.artifacts) && detail.artifacts.length > 0) {
+        lines.push('产物:');
+        for (const item of detail.artifacts.slice(0, 5)) {
+          lines.push(
+            `- ${item.title} | ${item.artifact_type} | ${item.exists ? 'exists' : 'missing'} | ${item.path}`,
+          );
+        }
+      }
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: lines.join('\n') }],
+    };
   },
 );
 

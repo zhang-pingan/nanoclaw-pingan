@@ -161,6 +161,7 @@ describe('workbench approval transition sync', () => {
     const detail = getWorkbenchTaskDetail('wb-wf-predeploy');
     expect(detail).not.toBeNull();
     expect(detail?.task.current_stage).toBe('ops_deploy');
+    expect(detail?.task.task_state).toBe('running');
     expect(detail?.action_items).toHaveLength(0);
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'awaiting_confirm')
@@ -315,8 +316,41 @@ describe('workbench approval transition sync', () => {
     expect(events).not.toHaveLength(0);
     expect(events[0]?.status).toBe('testing');
     expect(events[0]?.statusLabel).toBe('🧪 测试中');
+    expect(events[0]?.taskState).toBe('running');
     expect(events[0]?.currentStage).toBe('testing');
     expect(events[0]?.currentStageLabel).toBe('🧪 测试中');
+  });
+
+  it('exposes task_state for passed workflows', () => {
+    dbCreateWorkflow({
+      id: 'wf-terminal-flags',
+      name: '终态标记',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/terminal-flags',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_terminal_flags',
+        staging_work_branch: 'staging-deploy/feature-terminal-flags',
+        access_token: '',
+      },
+      status: 'passed',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+
+    syncWorkbenchOnWorkflowCreated('wf-terminal-flags');
+
+    const detail = getWorkbenchTaskDetail('wb-wf-terminal-flags');
+    expect(detail).not.toBeNull();
+    expect(detail?.task.status).toBe('passed');
+    expect(detail?.task.task_state).toBe('success');
   });
 
   it('does not duplicate the same transition event when re-synced', () => {

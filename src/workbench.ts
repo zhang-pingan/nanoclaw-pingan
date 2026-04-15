@@ -67,9 +67,15 @@ export interface WorkbenchTaskItem {
   service: string;
   start_from: string;
   workflow_type: string;
+  /** Raw workflow stage/status from the workflow engine, e.g. dev/testing/cancelled. */
   status: string;
+  /** Human-readable label for the workflow status shown in UI. */
   status_label: string;
+  /** Aggregated task state used for filtering and high-level task outcome display. */
+  task_state: 'running' | 'success' | 'failed' | 'cancelled';
+  /** Current workflow stage key, usually aligned with status for active tasks. */
   current_stage: string;
+  /** Human-readable label for the current workflow stage. */
   current_stage_label: string;
   round: number;
   source_jid: string;
@@ -166,6 +172,32 @@ export interface WorkbenchTaskDetail {
   }>;
 }
 
+function isTerminalWorkflowStatus(
+  workflowType: string,
+  status: string,
+): boolean {
+  const config = getWorkflowTypeConfig(workflowType);
+  return config?.states[status]?.type === 'terminal';
+}
+
+function isCompletedWorkflowStatus(
+  workflowType: string,
+  status: string,
+): boolean {
+  if (!isTerminalWorkflowStatus(workflowType, status)) return false;
+  return /(?:^|_)(passed|completed|done|success)(?:_|$)/.test(status);
+}
+
+function getTaskState(
+  workflowType: string,
+  status: string,
+): 'running' | 'success' | 'failed' | 'cancelled' {
+  if (!isTerminalWorkflowStatus(workflowType, status)) return 'running';
+  if (status === 'cancelled') return 'cancelled';
+  if (isCompletedWorkflowStatus(workflowType, status)) return 'success';
+  return 'failed';
+}
+
 function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
   const persisted = getWorkbenchTaskByWorkflowId(workflow.id);
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -184,6 +216,7 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     workflow_type: persisted?.workflow_type || workflow.workflow_type,
     status: persisted?.status || workflow.status,
     status_label: statusLabels[workflow.status] || workflow.status,
+    task_state: getTaskState(workflow.workflow_type, workflow.status),
     current_stage: persisted?.current_stage || workflow.status,
     current_stage_label:
       statusLabels[persisted?.current_stage || workflow.status] ||
@@ -656,6 +689,7 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
           workflow_type: item.workflow_type,
           status: item.status,
           status_label: item.status,
+          task_state: getTaskState(item.workflow_type, item.status),
           current_stage: item.current_stage,
           current_stage_label: item.current_stage,
           round: 0,

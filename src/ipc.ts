@@ -53,6 +53,7 @@ import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { retrieveStructuredMemories } from './memory-retrieval.js';
 import { InteractiveCard, RegisteredGroup } from './types.js';
+import { queryWorkbenchTaskStatuses } from './workbench-query.js';
 import {
   createWorkbenchInteractionItem,
   updateWorkbenchInteractionItemStatus,
@@ -822,6 +823,13 @@ export async function processTaskIpc(
     limit?: number;
     mode?: string;
     requestId?: string;
+    task_id?: string;
+    include_terminal?: boolean;
+    include_detail?: boolean;
+    status?: string;
+    task_state?: 'running' | 'success' | 'failed' | 'cancelled';
+    workflow_status?: string;
+    keyword?: string;
     // For memory
     content?: string;
     layer?: 'working' | 'episodic' | 'canonical';
@@ -881,6 +889,23 @@ export async function processTaskIpc(
     payload: object,
   ) => {
     const resultsDir = path.join(DATA_DIR, 'ipc', groupFolder, 'ask-results');
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
+  const writeWorkbenchResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'workbench-results',
+    );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
     const tempPath = `${responsePath}.tmp`;
@@ -1906,6 +1931,54 @@ export async function processTaskIpc(
         'memory_search completed',
       );
       recordMemoryMetric(sourceGroup, `search:${mode}`, `q=${data.query}`);
+      break;
+    }
+
+    case 'query_workbench_tasks': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn({ sourceGroup }, 'query_workbench_tasks missing requestId');
+        break;
+      }
+      if (!isMain) {
+        writeWorkbenchResult(sourceGroup, data.requestId, {
+          error: 'only the main group can query workbench tasks',
+        });
+        logger.warn(
+          { sourceGroup, requestId: data.requestId },
+          'Unauthorized query_workbench_tasks attempt blocked',
+        );
+        break;
+      }
+
+      const result = queryWorkbenchTaskStatuses({
+        task_id: typeof data.task_id === 'string' ? data.task_id : undefined,
+        keyword: typeof data.keyword === 'string' ? data.keyword : undefined,
+        status: typeof data.status === 'string' ? data.status : undefined,
+        task_state:
+          typeof data.task_state === 'string' ? data.task_state : undefined,
+        workflow_status:
+          typeof data.workflow_status === 'string'
+            ? data.workflow_status
+            : undefined,
+        include_terminal: data.include_terminal === true,
+        include_detail: data.include_detail === true,
+        limit: typeof data.limit === 'number' ? data.limit : undefined,
+      });
+
+      writeWorkbenchResult(sourceGroup, data.requestId, result);
+      logger.info(
+        {
+          sourceGroup,
+          requestId: data.requestId,
+          matchedCount: result.matched_count,
+          taskId: data.task_id,
+          keyword: data.keyword,
+          status: data.status,
+          taskState: data.task_state,
+          workflowStatus: data.workflow_status,
+        },
+        'query_workbench_tasks completed',
+      );
       break;
     }
 

@@ -8359,7 +8359,8 @@ function renderWorkbenchTaskList() {
       </div>
       <div class="workbench-task-badges">
         <span class="workbench-badge"><strong>服务</strong>${escapeHtml(task.service)}</span>
-        <span class="workbench-badge"><strong>状态</strong>${escapeHtml(task.status_label || task.status)}</span>
+        <span class="workbench-badge"><strong>流程状态</strong>${escapeHtml(task.status_label || task.status)}</span>
+        <span class="workbench-badge"><strong>任务态</strong>${escapeHtml(getWorkbenchTaskStateLabel(task.task_state))}</span>
         ${hasPending ? `<span class="workbench-badge workbench-badge-pending"><strong>待处理</strong>${pendingCount > 0 ? ` ${escapeHtml(String(pendingCount))}` : ""}</span>` : ""}
       </div>
       <div class="workbench-task-stage-strip">
@@ -8376,6 +8377,19 @@ function renderWorkbenchTaskList() {
     `;
     el.addEventListener("click", () => loadWorkbenchTaskDetail(task.id));
     workbenchTaskList.appendChild(el);
+  }
+}
+
+function getWorkbenchTaskStateLabel(taskState) {
+  switch (taskState) {
+    case "success":
+      return "成功";
+    case "failed":
+      return "失败";
+    case "cancelled":
+      return "已取消";
+    default:
+      return "进行中";
   }
 }
 
@@ -8627,7 +8641,8 @@ function renderWorkbenchTaskDetail(detail) {
     <span class="workbench-badge">${escapeHtml(task.workflow_type)}</span>
     ${renderWorkbenchContextBadges(task)}
     ${task.round > 0 ? `<span class="workbench-badge">Round ${escapeHtml(String(task.round))}</span>` : ""}
-    <span class="workbench-badge">${escapeHtml(task.status_label || task.status)}</span>
+    <span class="workbench-badge"><strong>流程状态</strong>${escapeHtml(task.status_label || task.status)}</span>
+    <span class="workbench-badge"><strong>任务态</strong>${escapeHtml(getWorkbenchTaskStateLabel(task.task_state))}</span>
   `;
 
   renderWorkbenchActions(task);
@@ -10700,6 +10715,7 @@ function applyWorkbenchRealtimeEvent(event) {
         ...existing,
         status: payload.status || existing.status,
         status_label: payload.statusLabel || existing.status_label,
+        task_state: typeof payload.taskState === "string" ? payload.taskState : existing.task_state,
         current_stage: payload.currentStage || existing.current_stage,
         current_stage_label: payload.currentStageLabel || existing.current_stage_label,
         context: mergeWorkbenchTaskContext(existing, payload.context),
@@ -10726,6 +10742,7 @@ function applyWorkbenchRealtimeEvent(event) {
       workflow_type: payload.workflowType || "",
       status: payload.status || "created",
       status_label: payload.statusLabel || payload.status || "created",
+      task_state: typeof payload.taskState === "string" ? payload.taskState : "running",
       current_stage: payload.currentStage || payload.status || "created",
       current_stage_label: payload.currentStageLabel || payload.currentStage || payload.status || "created",
       context: mergeWorkbenchTaskContext(null, payload.context),
@@ -10748,6 +10765,8 @@ function applyWorkbenchRealtimeEvent(event) {
       ...currentWorkbenchDetail.task,
       status: payload.status || currentWorkbenchDetail.task.status,
       status_label: payload.statusLabel || currentWorkbenchDetail.task.status_label,
+      task_state:
+        typeof payload.taskState === "string" ? payload.taskState : currentWorkbenchDetail.task.task_state,
       current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
       current_stage_label: payload.currentStageLabel || currentWorkbenchDetail.task.current_stage_label,
       context: mergeWorkbenchTaskContext(currentWorkbenchDetail.task, payload.context),

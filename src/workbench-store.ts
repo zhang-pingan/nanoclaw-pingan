@@ -150,6 +150,32 @@ function getStatusLabel(workflowType: string, stageKey: string): string {
   return config?.status_labels[stageKey] || stageKey;
 }
 
+function isTerminalWorkflowStatus(
+  workflowType: string,
+  status: string,
+): boolean {
+  const config = getWorkflowTypeConfig(workflowType);
+  return config?.states[status]?.type === 'terminal';
+}
+
+function isCompletedWorkflowStatus(
+  workflowType: string,
+  status: string,
+): boolean {
+  if (!isTerminalWorkflowStatus(workflowType, status)) return false;
+  return /(?:^|_)(passed|completed|done|success)(?:_|$)/.test(status);
+}
+
+function getTaskState(
+  workflowType: string,
+  status: string,
+): 'running' | 'success' | 'failed' | 'cancelled' {
+  if (!isTerminalWorkflowStatus(workflowType, status)) return 'running';
+  if (status === 'cancelled') return 'cancelled';
+  if (isCompletedWorkflowStatus(workflowType, status)) return 'success';
+  return 'failed';
+}
+
 function resolveSubtaskForDelegation(params: {
   taskId: string;
   workflow: Workflow;
@@ -577,6 +603,7 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
         workflowType: workflow.workflow_type,
         status: workflow.status,
         statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
+        taskState: getTaskState(workflow.workflow_type, workflow.status),
         currentStage: workflow.status,
         currentStageLabel: getStatusLabel(
           workflow.workflow_type,
@@ -624,6 +651,7 @@ export function syncWorkbenchOnWorkflowUpdated(
       payload: {
         status: workflow.status,
         statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
+        taskState: getTaskState(workflow.workflow_type, workflow.status),
         currentStage: workflow.status,
         currentStageLabel: getStatusLabel(
           workflow.workflow_type,
@@ -787,6 +815,7 @@ export function syncWorkbenchOnTransition(
     payload: {
       status: workflow.status,
       statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
+      taskState: getTaskState(workflow.workflow_type, workflow.status),
       currentStage: toStatus,
       currentStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
       context: cloneWorkflowContext(workflow.context),
