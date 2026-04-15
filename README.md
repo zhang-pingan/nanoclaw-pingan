@@ -206,6 +206,25 @@ Note: The model must support the Anthropic API format for best compatibility.
 
 Ask Claude Code. "Why isn't the scheduler running?" "What's in the recent logs?" "Why did this message not get a response?" That's the AI-native approach that underlies NanoClaw.
 
+**Can I mirror pending workbench items to a mobile-friendly group?**
+
+Yes. Set this in your `.env`:
+
+```bash
+WORKBENCH_BROADCAST_TARGETS=feishu_ops,feishu:oc_xxxxx
+```
+
+Notes:
+- This is additive broadcast only; it does not replace the original workbench delivery path
+- Existing web / main / workflow notifications stay unchanged
+- Targets can be any registered group and may be specified by:
+  - group JID
+  - group folder
+  - exact group name
+- Multiple targets are supported via comma-separated values
+- Broadcast groups can live on non-web channels such as Feishu
+- In broadcast groups, users can handle mirrored cards and can also reply with `/answer <requestId> ...` for question-style pending items
+
 **Why isn't the setup working for me?**
 
 If you have issues, during setup, Claude will try to dynamically fix them. If that doesn't work, run `claude`, then run `/debug`. If Claude finds an issue that is likely affecting other users, open a PR to modify the setup SKILL.md.
