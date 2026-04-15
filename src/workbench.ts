@@ -70,13 +70,13 @@ export interface WorkbenchTaskItem {
   /** Raw workflow stage/status from the workflow engine, e.g. dev/testing/cancelled. */
   status: string;
   /** Human-readable label for the workflow status shown in UI. */
-  status_label: string;
+  workflow_status_label: string;
   /** Aggregated task state used for filtering and high-level task outcome display. */
   task_state: 'running' | 'success' | 'failed' | 'cancelled';
   /** Current workflow stage key, usually aligned with status for active tasks. */
   current_stage: string;
   /** Human-readable label for the current workflow stage. */
-  current_stage_label: string;
+  workflow_stage_label: string;
   round: number;
   source_jid: string;
   created_at: string;
@@ -215,10 +215,10 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     start_from: persisted?.start_from || workflow.start_from,
     workflow_type: persisted?.workflow_type || workflow.workflow_type,
     status: persisted?.status || workflow.status,
-    status_label: statusLabels[workflow.status] || workflow.status,
+    workflow_status_label: statusLabels[workflow.status] || workflow.status,
     task_state: getTaskState(workflow.workflow_type, workflow.status),
     current_stage: persisted?.current_stage || workflow.status,
-    current_stage_label:
+    workflow_stage_label:
       statusLabels[persisted?.current_stage || workflow.status] ||
       persisted?.current_stage ||
       workflow.status,
@@ -688,10 +688,10 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
           start_from: item.start_from,
           workflow_type: item.workflow_type,
           status: item.status,
-          status_label: item.status,
+          workflow_status_label: item.status,
           task_state: getTaskState(item.workflow_type, item.status),
           current_stage: item.current_stage,
-          current_stage_label: item.current_stage,
+          workflow_stage_label: item.current_stage,
           round: 0,
           source_jid: item.source_jid,
           created_at: item.created_at,

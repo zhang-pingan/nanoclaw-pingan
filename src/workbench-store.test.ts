@@ -315,10 +315,10 @@ describe('workbench approval transition sync', () => {
     expect(result.error).toBeUndefined();
     expect(events).not.toHaveLength(0);
     expect(events[0]?.status).toBe('testing');
-    expect(events[0]?.statusLabel).toBe('🧪 测试中');
+    expect(events[0]?.workflowStatusLabel).toBe('🧪 测试中');
     expect(events[0]?.taskState).toBe('running');
     expect(events[0]?.currentStage).toBe('testing');
-    expect(events[0]?.currentStageLabel).toBe('🧪 测试中');
+    expect(events[0]?.workflowStageLabel).toBe('🧪 测试中');
   });
 
   it('exposes task_state for passed workflows', () => {

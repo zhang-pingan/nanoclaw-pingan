@@ -34,10 +34,10 @@ export interface WorkbenchStatusQueryResult {
     start_from: string;
     workflow_type: string;
     status: string;
-    status_label: string;
+    workflow_status_label: string;
     task_state: 'running' | 'success' | 'failed' | 'cancelled';
     current_stage: string;
-    current_stage_label: string;
+    workflow_stage_label: string;
     pending_approval: boolean;
     pending_action_count: number;
     active_delegation_id: string;
@@ -114,10 +114,10 @@ function toSummary(task: ReturnType<typeof listWorkbenchTasks>[number]) {
     start_from: task.start_from,
     workflow_type: task.workflow_type,
     status: task.status,
-    status_label: task.status_label,
+    workflow_status_label: task.workflow_status_label,
     task_state: task.task_state,
     current_stage: task.current_stage,
-    current_stage_label: task.current_stage_label,
+    workflow_stage_label: task.workflow_stage_label,
     pending_approval: task.pending_approval,
     pending_action_count: task.pending_action_count,
     active_delegation_id: task.active_delegation_id,
@@ -250,10 +250,10 @@ export function queryWorkbenchTaskStatuses(
         item.start_from,
         item.workflow_type,
         item.status,
-        item.status_label,
+        item.workflow_status_label,
         item.task_state,
         item.current_stage,
-        item.current_stage_label,
+        item.workflow_stage_label,
       ].some((field) => includesInsensitive(field, keyword)),
     );
   }

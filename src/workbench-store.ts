@@ -135,7 +135,7 @@ function emitActionItemUpdate(
     payload: {
       ...payload,
       taskTitle: task?.title || workflow?.name || '',
-      currentStageLabel:
+      workflowStageLabel:
         workflow && task
           ? getStatusLabel(workflow.workflow_type, task.current_stage)
           : '',
@@ -602,10 +602,13 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
         service: workflow.service,
         workflowType: workflow.workflow_type,
         status: workflow.status,
-        statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
+        workflowStatusLabel: getStatusLabel(
+          workflow.workflow_type,
+          workflow.status,
+        ),
         taskState: getTaskState(workflow.workflow_type, workflow.status),
         currentStage: workflow.status,
-        currentStageLabel: getStatusLabel(
+        workflowStageLabel: getStatusLabel(
           workflow.workflow_type,
           workflow.status,
         ),
@@ -650,10 +653,13 @@ export function syncWorkbenchOnWorkflowUpdated(
       workflowId,
       payload: {
         status: workflow.status,
-        statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
+        workflowStatusLabel: getStatusLabel(
+          workflow.workflow_type,
+          workflow.status,
+        ),
         taskState: getTaskState(workflow.workflow_type, workflow.status),
         currentStage: workflow.status,
-        currentStageLabel: getStatusLabel(
+        workflowStageLabel: getStatusLabel(
           workflow.workflow_type,
           workflow.status,
         ),
@@ -814,10 +820,13 @@ export function syncWorkbenchOnTransition(
     workflowId,
     payload: {
       status: workflow.status,
-      statusLabel: getStatusLabel(workflow.workflow_type, workflow.status),
+      workflowStatusLabel: getStatusLabel(
+        workflow.workflow_type,
+        workflow.status,
+      ),
       taskState: getTaskState(workflow.workflow_type, workflow.status),
       currentStage: toStatus,
-      currentStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
+      workflowStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
       context: cloneWorkflowContext(workflow.context),
       updatedAt: workflow.updated_at,
       pendingApproval: pendingSummary.pendingApproval,

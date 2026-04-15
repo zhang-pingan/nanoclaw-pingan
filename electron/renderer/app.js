@@ -8359,13 +8359,13 @@ function renderWorkbenchTaskList() {
       </div>
       <div class="workbench-task-badges">
         <span class="workbench-badge"><strong>服务</strong>${escapeHtml(task.service)}</span>
-        <span class="workbench-badge"><strong>流程状态</strong>${escapeHtml(task.status_label || task.status)}</span>
+        <span class="workbench-badge"><strong>流程状态</strong>${escapeHtml(getWorkbenchWorkflowStatusLabel(task))}</span>
         <span class="workbench-badge"><strong>任务态</strong>${escapeHtml(getWorkbenchTaskStateLabel(task.task_state))}</span>
         ${hasPending ? `<span class="workbench-badge workbench-badge-pending"><strong>待处理</strong>${pendingCount > 0 ? ` ${escapeHtml(String(pendingCount))}` : ""}</span>` : ""}
       </div>
       <div class="workbench-task-stage-strip">
         <span class="workbench-task-stage-label">当前阶段</span>
-        <strong>${escapeHtml(task.current_stage_label || task.current_stage)}</strong>
+        <strong>${escapeHtml(getWorkbenchWorkflowStageLabel(task))}</strong>
       </div>
       <div class="workbench-task-snippet">
         ${(() => {
@@ -8391,6 +8391,16 @@ function getWorkbenchTaskStateLabel(taskState) {
     default:
       return "进行中";
   }
+}
+
+function getWorkbenchWorkflowStatusLabel(task) {
+  if (!task) return "";
+  return task.workflow_status_label || task.status || "";
+}
+
+function getWorkbenchWorkflowStageLabel(task) {
+  if (!task) return "";
+  return task.workflow_stage_label || task.current_stage || "";
 }
 
 function sortWorkbenchTaskItems(tasks) {
@@ -8470,7 +8480,7 @@ function showWorkbenchPendingReminder(task, pendingItems) {
   if (!task || !Array.isArray(pendingItems) || pendingItems.length === 0) return;
   const firstItem = pendingItems[0];
   const itemCountLabel = pendingItems.length > 1 ? `等 ${pendingItems.length} 项待处理` : "有新的待处理项";
-  const body = `${firstItem.title || task.current_stage_label || "当前任务"}，${itemCountLabel}`;
+  const body = `${firstItem.title || getWorkbenchWorkflowStageLabel(task) || "当前任务"}，${itemCountLabel}`;
   showToast(`工作台提醒：${body}`, 3200);
 }
 
@@ -8478,7 +8488,7 @@ function showWorkbenchPendingSystemNotification(task, pendingItems) {
   if (!task || !Array.isArray(pendingItems) || pendingItems.length === 0) return;
   const firstItem = pendingItems[0];
   const itemCountLabel = pendingItems.length > 1 ? `等 ${pendingItems.length} 项待处理` : "有新的待处理项";
-  const body = `${firstItem.title || task.current_stage_label || "当前任务"}，${itemCountLabel}`;
+  const body = `${firstItem.title || getWorkbenchWorkflowStageLabel(task) || "当前任务"}，${itemCountLabel}`;
 
   if (typeof window !== "undefined" && window.nanoclawApp?.notify) {
     window.nanoclawApp.notify(`工作台：${task.title || "任务"}`, body, { taskId: task.id });
@@ -8565,7 +8575,10 @@ function maybeNotifyWorkbenchPendingFromRealtimeEvent(event) {
     const task = existingTask || {
       id: taskId,
       title: typeof payload.taskTitle === "string" ? payload.taskTitle : "任务",
-      current_stage_label: typeof payload.currentStageLabel === "string" ? payload.currentStageLabel : "",
+      workflow_stage_label:
+        typeof payload.workflowStageLabel === "string"
+          ? payload.workflowStageLabel
+          : "",
     };
     showWorkbenchPendingSystemNotification(task, [{
       id: itemId,
@@ -8641,7 +8654,7 @@ function renderWorkbenchTaskDetail(detail) {
     <span class="workbench-badge">${escapeHtml(task.workflow_type)}</span>
     ${renderWorkbenchContextBadges(task)}
     ${task.round > 0 ? `<span class="workbench-badge">Round ${escapeHtml(String(task.round))}</span>` : ""}
-    <span class="workbench-badge"><strong>流程状态</strong>${escapeHtml(task.status_label || task.status)}</span>
+    <span class="workbench-badge"><strong>流程状态</strong>${escapeHtml(getWorkbenchWorkflowStatusLabel(task))}</span>
     <span class="workbench-badge"><strong>任务态</strong>${escapeHtml(getWorkbenchTaskStateLabel(task.task_state))}</span>
   `;
 
@@ -10714,10 +10727,12 @@ function applyWorkbenchRealtimeEvent(event) {
       workbenchTasks[taskIdx] = {
         ...existing,
         status: payload.status || existing.status,
-        status_label: payload.statusLabel || existing.status_label,
+        workflow_status_label:
+          payload.workflowStatusLabel || existing.workflow_status_label,
         task_state: typeof payload.taskState === "string" ? payload.taskState : existing.task_state,
         current_stage: payload.currentStage || existing.current_stage,
-        current_stage_label: payload.currentStageLabel || existing.current_stage_label,
+        workflow_stage_label:
+          payload.workflowStageLabel || existing.workflow_stage_label,
         context: mergeWorkbenchTaskContext(existing, payload.context),
         updated_at: payload.updatedAt || existing.updated_at,
         pending_approval: typeof payload.pendingApproval === "boolean" ? payload.pendingApproval : existing.pending_approval,
@@ -10741,10 +10756,11 @@ function applyWorkbenchRealtimeEvent(event) {
       service: payload.service || "",
       workflow_type: payload.workflowType || "",
       status: payload.status || "created",
-      status_label: payload.statusLabel || payload.status || "created",
+      workflow_status_label: payload.workflowStatusLabel || payload.status || "created",
       task_state: typeof payload.taskState === "string" ? payload.taskState : "running",
       current_stage: payload.currentStage || payload.status || "created",
-      current_stage_label: payload.currentStageLabel || payload.currentStage || payload.status || "created",
+      workflow_stage_label:
+        payload.workflowStageLabel || payload.currentStage || payload.status || "created",
       context: mergeWorkbenchTaskContext(null, payload.context),
       round: 0,
       source_jid: payload.sourceJid || "",
@@ -10764,11 +10780,13 @@ function applyWorkbenchRealtimeEvent(event) {
     currentWorkbenchDetail.task = {
       ...currentWorkbenchDetail.task,
       status: payload.status || currentWorkbenchDetail.task.status,
-      status_label: payload.statusLabel || currentWorkbenchDetail.task.status_label,
+      workflow_status_label:
+        payload.workflowStatusLabel || currentWorkbenchDetail.task.workflow_status_label,
       task_state:
         typeof payload.taskState === "string" ? payload.taskState : currentWorkbenchDetail.task.task_state,
       current_stage: payload.currentStage || currentWorkbenchDetail.task.current_stage,
-      current_stage_label: payload.currentStageLabel || currentWorkbenchDetail.task.current_stage_label,
+      workflow_stage_label:
+        payload.workflowStageLabel || currentWorkbenchDetail.task.workflow_stage_label,
       context: mergeWorkbenchTaskContext(currentWorkbenchDetail.task, payload.context),
       updated_at: payload.updatedAt || currentWorkbenchDetail.task.updated_at,
       pending_approval:
