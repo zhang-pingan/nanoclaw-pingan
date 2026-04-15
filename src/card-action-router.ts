@@ -7,6 +7,10 @@ import {
 import { logger } from './logger.js';
 import { CardActionHandler, InteractiveCard, RegisteredGroup } from './types.js';
 import { handleCardAction as handleWorkflowCardAction } from './workflow.js';
+import {
+  handleWorkbenchBroadcastCardAction,
+  logWorkbenchBroadcastActionFailure,
+} from './workbench-broadcast-actions.js';
 
 const ASK_ACTION_DEDUPE_WINDOW_MS = 15_000;
 const recentAskActionFingerprints = new Map<string, number>();
@@ -54,6 +58,20 @@ export function createCardActionHandler(deps: {
   sendMessage: (jid: string, text: string) => Promise<void>;
 }): CardActionHandler {
   return (action) => {
+    if (action.action.startsWith('wb_broadcast_')) {
+      void handleWorkbenchBroadcastCardAction({
+        action: action.action,
+        formValue: action.form_value,
+        registeredGroups: deps.registeredGroups(),
+        sendCard: deps.sendCard,
+        sendMessage: deps.sendMessage,
+        userId: action.user_id || 'unknown',
+      }).catch((err) => {
+        logWorkbenchBroadcastActionFailure(action.action, err);
+      });
+      return;
+    }
+
     if (action.action !== ASK_ACTION_ANSWER && action.action !== ASK_ACTION_SKIP) {
       handleWorkflowCardAction(action);
       return;

@@ -68,6 +68,8 @@ import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { initWorkflow } from './workflow.js';
 import { initWorkbenchEvents } from './workbench-events.js';
+import { WorkbenchBroadcastService } from './workbench-broadcast.js';
+import { resolveAskAnswerGroupFolder } from './workbench-broadcast-actions.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -410,9 +412,15 @@ async function handleAskAnswerCommand(opts: {
     return true;
   }
 
+  const effectiveGroupFolder = resolveAskAnswerGroupFolder({
+    requestId: parsed.requestId,
+    currentGroupFolder: group.folder,
+    registeredGroups,
+  });
+
   const result = await handleAskQuestionResponse({
     requestId: parsed.requestId,
-    groupFolder: group.folder,
+    groupFolder: effectiveGroupFolder,
     userId: cmdMsg.sender || 'unknown',
     answer: parsed.answer,
     skip: parsed.answer.toLowerCase() === 'skip',
@@ -433,7 +441,7 @@ async function handleAskAnswerCommand(opts: {
   if (!result.ok && !result.completed) {
     await dispatchCurrentAskQuestion({
       requestId: parsed.requestId,
-      groupFolder: group.folder,
+      groupFolder: effectiveGroupFolder,
       validationError: result.userMessage,
       validationErrors: result.validationErrors,
       registeredGroups,
@@ -1718,6 +1726,15 @@ async function main(): Promise<void> {
     enqueueMessageCheck: (jid) => queue.enqueueMessageCheck(jid),
     sendCard: sendCardFn,
   });
+  const workbenchBroadcast = new WorkbenchBroadcastService({
+    registeredGroups: () => registeredGroups,
+    sendCard: sendCardFn,
+    sendMessage: async (jid, text) => {
+      const ch = findChannel(channels, jid);
+      if (!ch) return;
+      await ch.sendMessage(jid, text);
+    },
+  });
   initWorkbenchEvents((event) => {
     for (const ch of channels) {
       if (ch.name === 'web' && 'broadcastWorkbenchEvent' in ch) {
@@ -1728,6 +1745,7 @@ async function main(): Promise<void> {
         ).broadcastWorkbenchEvent(event);
       }
     }
+    void workbenchBroadcast.handleEvent(event);
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

@@ -11,6 +11,7 @@ const envConfig = readEnvFile([
   'ASSISTANT_HAS_OWN_NUMBER',
   'REPOS_DIR',
   'SSH_KEY_PATH',
+  'WORKBENCH_BROADCAST_TARGETS',
 ]);
 
 export const ASSISTANT_NAME =
@@ -88,3 +89,15 @@ export const TRIGGER_PATTERN = new RegExp(
 // Uses system timezone by default
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+function parseCsvList(value?: string): string[] {
+  return (value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export const WORKBENCH_BROADCAST_TARGETS = parseCsvList(
+  process.env.WORKBENCH_BROADCAST_TARGETS ||
+    envConfig.WORKBENCH_BROADCAST_TARGETS,
+);

@@ -175,6 +175,25 @@ ANTHROPIC_AUTH_TOKEN=your-token-here
 
 问 Claude Code。"为什么计划任务没有运行？" "最近的日志里有什么？" "为什么这条消息没有得到回应？" 这就是 AI 原生的方法。
 
+**我可以把工作台待处理额外广播到手机能处理的群吗？**
+
+可以。在 `.env` 中设置：
+
+```bash
+WORKBENCH_BROADCAST_TARGETS=feishu_ops,feishu:oc_xxxxx
+```
+
+说明：
+- 这是“额外广播”，不会替换原有工作台推送链路
+- 原来的 web / 主群 / 流程通知保持不变
+- 目标可以是任意已注册群，支持填：
+  - 群 JID
+  - group folder
+  - 精确群名
+- 可配置多个目标，使用逗号分隔
+- 广播群可以是飞书等非 web 渠道
+- 在广播群里，用户可以直接处理镜像出来的待办卡片；对于问答型待办，也可以使用 `/answer <requestId> ...`
+
 **为什么我的安装不成功？**
 
 如果遇到问题，安装过程中 Claude 会尝试动态修复。如果问题仍然存在，运行 `claude`，然后运行 `/debug`。如果 Claude 发现一个可能影响其他用户的问题，请开一个 PR 来修改 setup SKILL.md。
