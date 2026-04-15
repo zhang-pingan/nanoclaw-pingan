@@ -12,6 +12,7 @@ export interface ChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  enqueueMessageCheck?: (groupJid: string) => void;
   getAgentStatus?: () => AgentStatusInfo[];
   getActiveAgentQueryTraces?: () => ActiveAgentQueryTrace[];
   stopAgent?: (groupJid: string) => Promise<StopAgentResult>;

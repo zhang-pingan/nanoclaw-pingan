@@ -7,6 +7,7 @@ import {
 } from './workbench-broadcast-config.js';
 import {
   buildWorkbenchBroadcastCard,
+  buildWorkbenchBroadcastFallbackText,
   buildWorkbenchBroadcastResolvedText,
 } from './workbench-broadcast-render.js';
 
@@ -75,6 +76,24 @@ export class WorkbenchBroadcastService {
           { err, taskId, actionItemId, jid },
           'Failed to broadcast pending workbench action item',
         );
+        const fallbackText = buildWorkbenchBroadcastFallbackText({
+          taskId,
+          actionItemId,
+        });
+        if (!fallbackText) continue;
+        try {
+          await this.deps.sendMessage(jid, fallbackText);
+          sentTargets.add(jid);
+          logger.info(
+            { taskId, actionItemId, jid },
+            'Broadcast pending workbench action item downgraded to text message',
+          );
+        } catch (fallbackErr) {
+          logger.warn(
+            { err: fallbackErr, taskId, actionItemId, jid },
+            'Failed to broadcast pending workbench action item fallback text',
+          );
+        }
       }
     }
 

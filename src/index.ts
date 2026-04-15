@@ -1513,6 +1513,7 @@ async function main(): Promise<void> {
       isGroup?: boolean,
     ) => void;
     registeredGroups: () => Record<string, RegisteredGroup>;
+    enqueueMessageCheck?: (groupJid: string) => void;
     getAgentStatus?: () => import('./types.js').AgentStatusInfo[];
     getActiveAgentQueryTraces?: () => import('./types.js').ActiveAgentQueryTrace[];
     stopAgent?: (
@@ -1561,6 +1562,7 @@ async function main(): Promise<void> {
       isGroup?: boolean,
     ) => storeChatMetadata(chatJid, timestamp, name, channel, isGroup),
     registeredGroups: () => registeredGroups,
+    enqueueMessageCheck: (jid: string) => queue.enqueueMessageCheck(jid),
     getAgentStatus: () => queue.getActiveAgents(),
     getActiveAgentQueryTraces: () => agentQueryTraceManager.getActiveQueries(),
     stopAgent: (groupJid: string) => queue.stopAgent(groupJid),

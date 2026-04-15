@@ -8333,6 +8333,85 @@ async function deleteAllWorkbenchTaskData() {
   }
 }
 
+async function deleteWorkbenchTask(task) {
+  if (!task?.id) {
+    alert("缺少任务 ID");
+    return;
+  }
+  if (!(await openConfirmDialog(`确认删除任务「${task.title || task.id}」吗？`, {
+    title: "删除任务",
+  }))) {
+    return;
+  }
+  try {
+    const preferredTaskId = currentWorkbenchTaskId === task.id ? "" : currentWorkbenchTaskId;
+    const res = await apiFetch(`/api/workbench/task?id=${encodeURIComponent(task.id)}`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    showToast(`已删除任务：${task.title || task.id}`);
+    await loadWorkbenchTasks(preferredTaskId, true, true);
+  } catch (err) {
+    console.error("Failed to delete workbench task:", err);
+    alert(err instanceof Error ? err.message : "删除任务失败");
+  }
+}
+
+function showWorkbenchTaskContextMenu(e, task) {
+  document.querySelector(".context-menu")?.remove();
+
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
+
+  const items = [
+    {
+      label: "复制任务 ID",
+      icon: "📋",
+      action: async () => {
+        await navigator.clipboard?.writeText(task.id || "");
+        showToast(`已复制任务 ID：${task.id || "--"}`);
+      },
+    },
+    {
+      label: "删除该任务",
+      icon: "🗑",
+      action: async () => {
+        await deleteWorkbenchTask(task);
+      },
+    },
+  ];
+
+  for (const item of items) {
+    const el = document.createElement("div");
+    el.className = "context-menu-item";
+    el.innerHTML = `<span class="context-menu-icon">${item.icon}</span>${escapeHtml(item.label)}`;
+    el.addEventListener("click", async () => {
+      menu.remove();
+      await item.action();
+    });
+    menu.appendChild(el);
+  }
+
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top = `${e.clientY}px`;
+  document.body.appendChild(menu);
+
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) menu.style.left = `${window.innerWidth - rect.width - 8}px`;
+  if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 8}px`;
+
+  const closeHandler = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener("click", closeHandler);
+    }
+  };
+  requestAnimationFrame(() => document.addEventListener("click", closeHandler));
+}
+
 function renderWorkbenchTaskList() {
   workbenchTasks = sortWorkbenchTaskItems(workbenchTasks);
   workbenchTaskList.innerHTML = "";
@@ -8376,6 +8455,10 @@ function renderWorkbenchTaskList() {
       </div>
     `;
     el.addEventListener("click", () => loadWorkbenchTaskDetail(task.id));
+    el.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      showWorkbenchTaskContextMenu(event, task);
+    });
     workbenchTaskList.appendChild(el);
   }
 }
@@ -9210,13 +9293,13 @@ function renderWorkbenchActionItems(actionItems, task) {
       });
       if (item.action_mode !== "input_required") {
         const approveBtn = document.createElement("button");
-        approveBtn.className = "btn-primary";
+        approveBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-primary";
         approveBtn.textContent = labels.approve;
         approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
         actions.appendChild(approveBtn);
       }
       const skipBtn = document.createElement("button");
-      skipBtn.className = "btn-ghost";
+      skipBtn.className = "btn-ghost workbench-action-btn";
       skipBtn.textContent = labels.skip || "跳过此节点";
       skipBtn.addEventListener("click", async () => {
         if (!(await openConfirmDialog(`确认跳过“${item.title}”并进入下一步吗？`, { title: "跳过节点" }))) return;
@@ -9225,7 +9308,9 @@ function renderWorkbenchActionItems(actionItems, task) {
       actions.appendChild(skipBtn);
       if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
         const reviseBtn = document.createElement("button");
-        reviseBtn.className = item.action_mode === "input_required" ? "btn-primary" : "btn-ghost";
+        reviseBtn.className = item.action_mode === "input_required"
+          ? "btn-ghost workbench-action-btn workbench-action-btn-primary"
+          : "btn-ghost workbench-action-btn";
         reviseBtn.textContent = labels.revise || "驳回并修改";
         reviseBtn.addEventListener("click", () =>
           triggerWorkbenchAction(task.id, item.action_mode === "input_required" ? "submit_access_token" : "revise")
@@ -9233,15 +9318,16 @@ function renderWorkbenchActionItems(actionItems, task) {
         actions.appendChild(reviseBtn);
       }
     } else {
-      const askOptions = item.source_type === "ask_user_question"
-        && Array.isArray(item.extra?.questions)
-        && item.extra.questions[0]?.options;
+      const askQuestion = item.source_type === "ask_user_question"
+        ? item.extra?.current_question || item.extra?.questions?.[0]
+        : null;
+      const askOptions = askQuestion?.options;
       if (Array.isArray(askOptions) && askOptions.length > 0) {
         const optionsRow = document.createElement("div");
         optionsRow.className = "workbench-ask-options";
         askOptions.forEach((opt) => {
           const optBtn = document.createElement("button");
-          optBtn.className = "btn-primary";
+          optBtn.className = "btn-ghost workbench-action-btn workbench-ask-btn";
           optBtn.textContent = opt.label;
           if (opt.description) optBtn.title = opt.description;
           optBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "reply", opt.label));
@@ -9251,12 +9337,12 @@ function renderWorkbenchActionItems(actionItems, task) {
         const fallbackRow = document.createElement("div");
         fallbackRow.className = "workbench-ask-fallback";
         const replyBtn = document.createElement("button");
-        replyBtn.className = "btn-ghost btn-sm";
+        replyBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-primary";
         replyBtn.textContent = "自定义回复";
         replyBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "reply"));
         fallbackRow.appendChild(replyBtn);
         const skipBtn = document.createElement("button");
-        skipBtn.className = "btn-ghost btn-sm";
+        skipBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-muted";
         skipBtn.textContent = "跳过";
         skipBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "skip"));
         fallbackRow.appendChild(skipBtn);
@@ -9264,23 +9350,23 @@ function renderWorkbenchActionItems(actionItems, task) {
       } else {
         if (item.replyable) {
           const replyBtn = document.createElement("button");
-          replyBtn.className = "btn-primary";
+          replyBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-primary";
           replyBtn.textContent = "回复";
           replyBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "reply"));
           actions.appendChild(replyBtn);
         }
         const approveBtn = document.createElement("button");
-        approveBtn.className = "btn-ghost";
+        approveBtn.className = "btn-ghost workbench-action-btn";
         approveBtn.textContent = "确认";
         approveBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "confirm"));
         actions.appendChild(approveBtn);
         const skipBtn = document.createElement("button");
-        skipBtn.className = "btn-ghost";
+        skipBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-muted";
         skipBtn.textContent = "跳过";
         skipBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "skip"));
         actions.appendChild(skipBtn);
         const cancelBtn = document.createElement("button");
-        cancelBtn.className = "btn-ghost";
+        cancelBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-danger";
         cancelBtn.textContent = "取消";
         cancelBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "cancel"));
         actions.appendChild(cancelBtn);
@@ -9344,6 +9430,7 @@ function applyWorkbenchActionItemRealtimeUpdate(payload) {
         replyable: Boolean(payload.replyable),
         action_mode: typeof payload.actionMode === "string" ? payload.actionMode : undefined,
         created_at: typeof payload.createdAt === "string" ? payload.createdAt : new Date().toISOString(),
+        extra: payload.extra && typeof payload.extra === "object" ? payload.extra : undefined,
       };
 
   if (typeof payload.title === "string") nextItem.title = payload.title;
@@ -9359,6 +9446,7 @@ function applyWorkbenchActionItemRealtimeUpdate(payload) {
   }
   if (typeof payload.sourceType === "string") nextItem.source_type = payload.sourceType;
   if (typeof payload.createdAt === "string") nextItem.created_at = payload.createdAt;
+  if (payload.extra && typeof payload.extra === "object") nextItem.extra = payload.extra;
   nextItem.status = "pending";
 
   if (existingIdx >= 0) {

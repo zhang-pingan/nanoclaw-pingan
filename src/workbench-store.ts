@@ -561,6 +561,40 @@ export function updateWorkbenchInteractionItemStatus(input: {
   }
 }
 
+export function syncWorkbenchInteractionItem(input: {
+  sourceType: 'request_human_input' | 'ask_user_question' | 'send_message';
+  sourceRefId: string;
+  body?: string | null;
+  replyable?: boolean;
+  extra?: Record<string, unknown>;
+}): void {
+  const now = nowIso();
+  const items = listWorkbenchActionItemsBySource(
+    input.sourceType,
+    input.sourceRefId,
+  );
+  for (const item of items) {
+    updateWorkbenchActionItem(item.id, {
+      body: input.body ?? item.body,
+      replyable:
+        input.replyable !== undefined ? Number(input.replyable) : item.replyable,
+      updated_at: now,
+      extra_json:
+        input.extra !== undefined
+          ? JSON.stringify(input.extra)
+          : item.extra_json,
+    });
+    emitActionItemUpdate(item.task_id, item.workflow_id, {
+      id: item.id,
+      status: item.status,
+      body: input.body ?? item.body ?? '',
+      replyable:
+        input.replyable !== undefined ? input.replyable : item.replyable === 1,
+      extra: input.extra,
+    });
+  }
+}
+
 export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
   const workflow = getWorkflow(workflowId);
   if (!workflow) return;

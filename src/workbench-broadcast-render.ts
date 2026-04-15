@@ -28,6 +28,44 @@ export function buildWorkbenchBroadcastResolvedText(input: {
   ].join('\n');
 }
 
+export function buildWorkbenchBroadcastFallbackText(input: {
+  taskId: string;
+  actionItemId: string;
+}): string | null {
+  const detail = getWorkbenchTaskDetail(input.taskId);
+  if (!detail) return null;
+
+  const item = detail.action_items.find((entry) => entry.id === input.actionItemId);
+  if (!item || item.status !== 'pending') return null;
+
+  const lines = [
+    `【${item.title}】`,
+    `任务: ${detail.task.title}`,
+    `服务: ${detail.task.service}`,
+    `任务状态: ${detail.task.task_state}`,
+    `流程状态: ${detail.task.workflow_status_label}`,
+    `当前阶段: ${detail.task.workflow_stage_label}`,
+    item.body ? `说明: ${item.body}` : '',
+    `待办ID: ${item.id}`,
+    '卡片发送失败，已自动降级为文本消息。',
+  ].filter(Boolean);
+
+  if (
+    (item.source_type === 'ask_user_question' ||
+      item.source_type === 'request_human_input') &&
+    item.source_ref_id
+  ) {
+    lines.push(`可在广播群回复: /answer ${item.source_ref_id} <你的答复>`);
+    lines.push(`如需跳过，可回复: /answer ${item.source_ref_id} --skip`);
+  } else if (item.source_type === 'workflow') {
+    lines.push('请到工作台或支持卡片操作的群里处理该待办。');
+  } else if (item.source_type === 'send_message') {
+    lines.push('该待办需要人工确认后在工作台中处理。');
+  }
+
+  return lines.join('\n');
+}
+
 export function buildWorkbenchBroadcastCard(input: {
   taskId: string;
   actionItemId: string;

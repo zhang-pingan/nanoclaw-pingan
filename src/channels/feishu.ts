@@ -251,12 +251,21 @@ class FeishuChannel implements Channel {
           placeholder: { tag: 'plain_text', content: input.placeholder || '' },
         });
       }
-      formElements.push({
+      const submitButton: Record<string, unknown> = {
         tag: 'button',
         name: card.form.submitButton.id,
         text: { tag: 'plain_text', content: card.form.submitButton.label },
         value: card.form.submitButton.value,
-      });
+        // Feishu treats only explicit submit-behavior buttons as valid form submitters.
+        behaviors: [{ type: 'submit' }],
+      };
+      if (
+        card.form.submitButton.type &&
+        card.form.submitButton.type !== 'default'
+      ) {
+        submitButton.type = card.form.submitButton.type;
+      }
+      formElements.push(submitButton);
       elements.push({
         tag: 'form',
         name: card.form.name,

@@ -10,9 +10,11 @@ import {
   _initTestDatabase,
   createDelegation,
   createTask,
+  createWorkflow,
   getAllTasks,
   getAskQuestion,
   listMemories,
+  listWorkbenchActionItemsBySource,
   getMessagesSince,
   getRegisteredGroup,
   getTaskById,
@@ -26,6 +28,8 @@ import { callAnthropicMessages } from './agent-api.js';
 import { processTaskIpc, IpcDeps } from './ipc.js';
 import { RegisteredGroup } from './types.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
+import { initWorkflow } from './workflow.js';
+import { syncWorkbenchOnWorkflowCreated } from './workbench-store.js';
 
 // Set up registered groups used across tests
 const MAIN_GROUP: RegisteredGroup = {
@@ -839,6 +843,91 @@ describe('ask_user_question', () => {
     expect(res.answers.deploy.env).toBe('prod');
     expect(res.answers.deploy.replicas).toBe(3);
     expect(res.answers.deploy.dry_run).toBe(false);
+  });
+
+  it('keeps workbench ask options aligned with the current question', async () => {
+    initWorkflow({
+      registeredGroups: () => groups,
+      enqueueMessageCheck: () => {},
+    });
+    createWorkflow({
+      id: 'wf-ask-workbench-sync',
+      name: '工作台提问同步',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/ask-sync',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-15_ask_sync',
+        staging_work_branch: 'staging-deploy/feature-ask-sync',
+        access_token: '',
+      },
+      status: 'testing',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-15T00:00:00.000Z',
+      updated_at: '2026-04-15T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-ask-workbench-sync');
+
+    const requestId = rid('aq');
+    await processTaskIpc(
+      {
+        type: 'ask_user_question',
+        requestId,
+        workflowId: 'wf-ask-workbench-sync',
+        stageKey: 'testing',
+        questions: [
+          {
+            id: 'env',
+            question: '请选择环境',
+            options: [{ label: '测试' }, { label: '预发' }],
+          },
+          {
+            id: 'strategy',
+            question: '请选择发布策略',
+            options: [{ label: '灰度' }, { label: '全量' }],
+          },
+        ],
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    let item = listWorkbenchActionItemsBySource('ask_user_question', requestId)[0];
+    let extra = item?.extra_json ? JSON.parse(item.extra_json) : undefined;
+    expect(item?.body).toBe('请选择环境');
+    expect(extra?.current_index).toBe(0);
+    expect(extra?.current_question).toMatchObject({
+      id: 'env',
+      options: [{ label: '测试' }, { label: '预发' }],
+    });
+
+    const answered = await handleAskQuestionResponse({
+      requestId,
+      groupFolder: 'other-group',
+      userId: 'user-1',
+      answer: '测试',
+      registeredGroups: groups,
+      sendMessage: deps.sendMessage,
+      sendCard: deps.sendCard,
+    });
+    expect(answered.ok).toBe(true);
+    expect(answered.completed).toBe(false);
+
+    item = listWorkbenchActionItemsBySource('ask_user_question', requestId)[0];
+    extra = item?.extra_json ? JSON.parse(item.extra_json) : undefined;
+    expect(item?.body).toBe('请选择发布策略');
+    expect(extra?.current_index).toBe(1);
+    expect(extra?.current_question).toMatchObject({
+      id: 'strategy',
+      options: [{ label: '灰度' }, { label: '全量' }],
+    });
   });
 });
 

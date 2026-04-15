@@ -1721,6 +1721,74 @@ export function deleteAllWorkbenchTaskData(): {
   return summary;
 }
 
+export function deleteWorkbenchTaskData(taskId: string): {
+  workflow_id: string;
+  workflows: number;
+  delegations: number;
+  workbench_tasks: number;
+  workbench_subtasks: number;
+  workbench_events: number;
+  workbench_artifacts: number;
+  workbench_action_items: number;
+  workbench_comments: number;
+  workbench_context_assets: number;
+} | null {
+  const task = getWorkbenchTaskById(taskId);
+  if (!task) return null;
+
+  const count = (sql: string, ...params: unknown[]) =>
+    (db.prepare(sql).get(...params) as { count: number }).count;
+
+  const summary = {
+    workflow_id: task.workflow_id,
+    workflows: count('SELECT COUNT(*) AS count FROM workflows WHERE id = ?', task.workflow_id),
+    delegations: count(
+      'SELECT COUNT(*) AS count FROM delegations WHERE workflow_id = ?',
+      task.workflow_id,
+    ),
+    workbench_tasks: count('SELECT COUNT(*) AS count FROM workbench_tasks WHERE id = ?', task.id),
+    workbench_subtasks: count(
+      'SELECT COUNT(*) AS count FROM workbench_subtasks WHERE task_id = ?',
+      task.id,
+    ),
+    workbench_events: count(
+      'SELECT COUNT(*) AS count FROM workbench_events WHERE task_id = ?',
+      task.id,
+    ),
+    workbench_artifacts: count(
+      'SELECT COUNT(*) AS count FROM workbench_artifacts WHERE task_id = ?',
+      task.id,
+    ),
+    workbench_action_items: count(
+      'SELECT COUNT(*) AS count FROM workbench_action_items WHERE task_id = ?',
+      task.id,
+    ),
+    workbench_comments: count(
+      'SELECT COUNT(*) AS count FROM workbench_comments WHERE task_id = ?',
+      task.id,
+    ),
+    workbench_context_assets: count(
+      'SELECT COUNT(*) AS count FROM workbench_context_assets WHERE task_id = ?',
+      task.id,
+    ),
+  };
+
+  const clear = db.transaction(() => {
+    db.prepare('DELETE FROM workbench_context_assets WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_comments WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_action_items WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_artifacts WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_events WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_subtasks WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_tasks WHERE id = ?').run(task.id);
+    db.prepare('DELETE FROM delegations WHERE workflow_id = ?').run(task.workflow_id);
+    db.prepare('DELETE FROM workflows WHERE id = ?').run(task.workflow_id);
+  });
+
+  clear();
+  return summary;
+}
+
 // --- Workbench accessors ---
 
 export function createWorkbenchTask(record: WorkbenchTaskRecord): void {
@@ -2079,7 +2147,7 @@ export function updateWorkbenchActionItem(
   }
   if (updates.replyable !== undefined) {
     fields.push('replyable = ?');
-    values.push(updates.replyable);
+    values.push(updates.replyable ? 1 : 0);
   }
   if (updates.updated_at !== undefined) {
     fields.push('updated_at = ?');

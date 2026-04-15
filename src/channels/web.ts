@@ -33,6 +33,7 @@ import {
   runWorkbenchTaskAction,
 } from '../workbench.js';
 import {
+  deleteWorkbenchTaskData,
   deleteHistoricalAgentQueries,
   getAgentQuery,
   listAgentQueryEvents,
@@ -454,6 +455,9 @@ class WebChannel {
       }
       if (pathname === '/api/workbench/task' && req.method === 'GET') {
         return this.apiGetWorkbenchTask(reqUrl, res);
+      }
+      if (pathname === '/api/workbench/task' && req.method === 'DELETE') {
+        return this.apiDeleteWorkbenchTask(reqUrl, res);
       }
       if (pathname === '/api/workbench/task' && req.method === 'POST') {
         return this.apiCreateWorkbenchTask(req, res);
@@ -1907,6 +1911,28 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true, deleted }));
   }
 
+  private async apiDeleteWorkbenchTask(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const id = reqUrl.searchParams.get('id') || '';
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing task id' }));
+      return;
+    }
+
+    const deleted = deleteWorkbenchTaskData(id);
+    if (!deleted) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Task not found' }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, deleted }));
+  }
+
   private async apiGetWorkbenchTask(
     reqUrl: URL,
     res: http.ServerResponse,
@@ -2131,6 +2157,7 @@ class WebChannel {
           ? `/answer ${item.source_ref_id} ${replyText}`
           : replyText;
       this.injectWorkbenchReply(chatJid, content);
+      this.opts.enqueueMessageCheck?.(chatJid);
       if (item.source_type === 'send_message') {
         runWorkbenchActionItemAction({
           taskId: data.task_id,
@@ -2160,6 +2187,7 @@ class WebChannel {
             chatJid,
             `/answer ${item.source_ref_id} ${signal}`,
           );
+          this.opts.enqueueMessageCheck?.(chatJid);
         }
       }
       const result = runWorkbenchActionItemAction({

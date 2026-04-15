@@ -20,7 +20,10 @@ import {
   InteractiveCard,
   RegisteredGroup,
 } from './types.js';
-import { updateWorkbenchInteractionItemStatus } from './workbench-store.js';
+import {
+  syncWorkbenchInteractionItem,
+  updateWorkbenchInteractionItemStatus,
+} from './workbench-store.js';
 
 export const ASK_ACTION_ANSWER = 'ask_question_answer';
 export const ASK_ACTION_SKIP = 'ask_question_skip';
@@ -772,6 +775,25 @@ export async function dispatchCurrentAskQuestion(params: {
   if (!payload) return { ok: false, message: 'invalid ask payload' };
   const q = payload.questions[rec.current_index];
   if (!q) return { ok: false, message: 'invalid question index' };
+
+  const workbenchSourceType =
+    payload.metadata?.source_type === 'request_human_input'
+      ? 'request_human_input'
+      : 'ask_user_question';
+  syncWorkbenchInteractionItem({
+    sourceType: workbenchSourceType,
+    sourceRefId: params.requestId,
+    body: q.question,
+    replyable: true,
+    extra: {
+      request_id: params.requestId,
+      question_count: payload.questions.length,
+      questions: payload.questions,
+      current_index: rec.current_index,
+      current_question: q,
+      validation_error: params.validationError || null,
+    },
+  });
 
   const chatJid = findChatJidByGroupFolder(
     params.groupFolder,
