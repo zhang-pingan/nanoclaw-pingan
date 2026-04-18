@@ -58,10 +58,7 @@ let groups: Record<string, RegisteredGroup>;
 let deps: IpcDeps;
 const callAnthropicMessagesMock = vi.mocked(callAnthropicMessages);
 
-function readMemoryIpcResult(
-  sourceGroup: string,
-  requestId: string,
-): any {
+function readMemoryIpcResult(sourceGroup: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
@@ -75,15 +72,26 @@ function readMemoryIpcResult(
   return data;
 }
 
-function readAskIpcResult(
-  sourceGroup: string,
-  requestId: string,
-): any {
+function readAskIpcResult(sourceGroup: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
     'ipc',
     sourceGroup,
     'ask-results',
+    `${requestId}.json`,
+  );
+  expect(fs.existsSync(p)).toBe(true);
+  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+  fs.unlinkSync(p);
+  return data;
+}
+
+function readHostScriptIpcResult(sourceGroup: string, requestId: string): any {
+  const p = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    'host-script-results',
     `${requestId}.json`,
   );
   expect(fs.existsSync(p)).toBe(true);
@@ -778,7 +786,9 @@ describe('ask_user_question', () => {
       {
         type: 'ask_user_question',
         requestId,
-        questions: [{ id: 'q1', question: 'bad', options: [{ label: 'only-one' }] }],
+        questions: [
+          { id: 'q1', question: 'bad', options: [{ label: 'only-one' }] },
+        ],
       },
       'other-group',
       false,
@@ -803,7 +813,14 @@ describe('ask_user_question', () => {
             question: '填写部署参数',
             fields: [
               { id: 'env', label: '环境', type: 'string', required: true },
-              { id: 'replicas', label: '副本数', type: 'integer', min: 1, max: 5, required: true },
+              {
+                id: 'replicas',
+                label: '副本数',
+                type: 'integer',
+                min: 1,
+                max: 5,
+                required: true,
+              },
               { id: 'dry_run', label: '仅演练', type: 'boolean' },
             ],
           },
@@ -899,7 +916,10 @@ describe('ask_user_question', () => {
       deps,
     );
 
-    let item = listWorkbenchActionItemsBySource('ask_user_question', requestId)[0];
+    let item = listWorkbenchActionItemsBySource(
+      'ask_user_question',
+      requestId,
+    )[0];
     let extra = item?.extra_json ? JSON.parse(item.extra_json) : undefined;
     expect(item?.body).toBe('请选择环境');
     expect(extra?.current_index).toBe(0);
@@ -987,7 +1007,9 @@ describe('memory IPC tasks', () => {
     expect(deleteRes.deleted).toBe(true);
     expect(deleteRes.memoryId).toBe(memoryId);
 
-    const remains = listMemories(sourceGroup, 50).filter((m) => m.id === memoryId);
+    const remains = listMemories(sourceGroup, 50).filter(
+      (m) => m.id === memoryId,
+    );
     expect(remains.length).toBe(0);
   });
 
@@ -1134,8 +1156,7 @@ describe('memory IPC tasks', () => {
     expect(
       res.hits.some(
         (h: { kind: string; content: string }) =>
-          h.kind === 'memory' &&
-          h.content.includes('deploy checklist'),
+          h.kind === 'memory' && h.content.includes('deploy checklist'),
       ),
     ).toBe(true);
   });
@@ -1314,14 +1335,16 @@ describe('memory IPC tasks', () => {
       ),
     ).toBe(true);
     expect(
-      archiveMemories.every((m) =>
-        typeof m.metadata === 'string' && m.metadata.includes(archiveFile),
+      archiveMemories.every(
+        (m) =>
+          typeof m.metadata === 'string' && m.metadata.includes(archiveFile),
       ),
     ).toBe(true);
     expect(
-      archiveMemories.every((m) =>
-        typeof m.metadata === 'string' &&
-        m.metadata.includes('"extraction_mode":"agent_api"'),
+      archiveMemories.every(
+        (m) =>
+          typeof m.metadata === 'string' &&
+          m.metadata.includes('"extraction_mode":"agent_api"'),
       ),
     ).toBe(true);
   });
@@ -1478,7 +1501,9 @@ describe('memory IPC tasks', () => {
     const memories = listMemories(sourceGroup, 50).filter(
       (m) => m.source === 'archive' && m.metadata?.includes(archiveFile),
     );
-    const canonicalCount = memories.filter((m) => m.layer === 'canonical').length;
+    const canonicalCount = memories.filter(
+      (m) => m.layer === 'canonical',
+    ).length;
     const workingCount = memories.filter((m) => m.layer === 'working').length;
     expect(canonicalCount).toBe(0);
     expect(workingCount).toBeLessThanOrEqual(1);
@@ -1525,7 +1550,6 @@ describe('memory IPC tasks', () => {
     const gcRes = readMemoryIpcResult(sourceGroup, gcId);
     expect(gcRes.result).toBeTruthy();
     expect(gcRes.result.dryRun).toBe(true);
-
   });
 
   it('handles concurrent memory writes without result file collisions', async () => {
@@ -1605,7 +1629,6 @@ describe('memory IPC tasks', () => {
       expect(res.hits.length).toBeGreaterThan(0);
     }
   });
-
 });
 
 // --- complete_delegation requester auto-copy ---
@@ -1650,8 +1673,12 @@ describe('complete_delegation requester auto-copy', () => {
     const requesterMsgs = getMessagesSince('other@g.us', '0', 'Andy');
     expect(sourceMsgs).toHaveLength(1);
     expect(requesterMsgs).toHaveLength(1);
-    expect(sourceMsgs[0].content).toContain('[委派结果 | 来自:Third | ID:del-auto-copy]');
-    expect(requesterMsgs[0].content).toContain('[委派结果抄送 | 来自:Third | ID:del-auto-copy]');
+    expect(sourceMsgs[0].content).toContain(
+      '[委派结果 | 来自:Third | ID:del-auto-copy]',
+    );
+    expect(requesterMsgs[0].content).toContain(
+      '[委派结果抄送 | 来自:Third | ID:del-auto-copy]',
+    );
     expect(sourceMsgs[0].content).not.toContain('请将此结果转发给请求方');
     expect(enqueued.sort()).toEqual(['main@g.us', 'other@g.us'].sort());
   });
@@ -1692,7 +1719,9 @@ describe('complete_delegation requester auto-copy', () => {
 
     const sourceMsgs = getMessagesSince('main@g.us', '0', 'Andy');
     expect(sourceMsgs).toHaveLength(1);
-    expect(sourceMsgs[0].content).toContain('[委派结果 | 来自:Third | ID:del-no-dup]');
+    expect(sourceMsgs[0].content).toContain(
+      '[委派结果 | 来自:Third | ID:del-no-dup]',
+    );
     expect(enqueued).toEqual(['main@g.us']);
   });
 });
@@ -1761,5 +1790,42 @@ describe('request_delegation target parsing', () => {
     expect(msgs[0].content).toContain('请协助处理客户问题');
     expect(msgs[0].content).toContain('folder="missing-group"');
     expect(msgs[0].content).toContain('未找到该 folder 对应的注册群');
+  });
+});
+
+describe('run_local_host_script authorization', () => {
+  it('main group can run a script under local/shell', async () => {
+    const requestId = rid('hostscript');
+    const filename = `__nanoclaw-test-${Date.now()}.sh`;
+    const hostPath = path.join(process.cwd(), 'local', 'shell', filename);
+
+    fs.writeFileSync(
+      hostPath,
+      '#!/bin/sh\nprintf "host-script-ok:%s\\n" "$1"\n',
+      'utf8',
+    );
+    fs.chmodSync(hostPath, 0o755);
+
+    try {
+      await processTaskIpc(
+        {
+          type: 'run_local_host_script',
+          requestId,
+          scriptPath: `/workspace/project/local/shell/${filename}`,
+          args: ['main'],
+        },
+        'whatsapp_main',
+        true,
+        deps,
+      );
+    } finally {
+      fs.unlinkSync(hostPath);
+    }
+
+    const result = readHostScriptIpcResult('whatsapp_main', requestId);
+    expect(result.status).toBe('success');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('host-script-ok:main');
+    expect(result.scriptPath).toContain(`/local/shell/${filename}`);
   });
 });

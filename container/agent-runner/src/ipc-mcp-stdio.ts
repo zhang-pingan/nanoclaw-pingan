@@ -353,11 +353,15 @@ server.tool(
     keyword: z
       .string()
       .optional()
-      .describe('按标题、服务名、流程类型、任务态、流程状态文案、当前阶段文案等模糊搜索'),
+      .describe(
+        '按标题、服务名、流程类型、任务态、流程状态文案、当前阶段文案等模糊搜索',
+      ),
     status: z
       .string()
       .optional()
-      .describe('兼容旧参数：同时匹配 task_state、workflow_status 或 workflow_stage；新调用建议改用 task_state / workflow_status'),
+      .describe(
+        '兼容旧参数：同时匹配 task_state、workflow_status 或 workflow_stage；新调用建议改用 task_state / workflow_status',
+      ),
     task_state: z
       .enum(['running', 'success', 'failed', 'cancelled'])
       .optional()
@@ -365,7 +369,9 @@ server.tool(
     workflow_status: z
       .string()
       .optional()
-      .describe('按 workflow_status 或 workflow_stage 精确筛选，例如 "plan_review"、"dev"、"testing"'),
+      .describe(
+        '按 workflow_status 或 workflow_stage 精确筛选，例如 "plan_review"、"dev"、"testing"',
+      ),
     include_terminal: z
       .boolean()
       .optional()
@@ -521,7 +527,10 @@ server.tool(
           );
         }
       }
-      if (Array.isArray(detail.action_items) && detail.action_items.length > 0) {
+      if (
+        Array.isArray(detail.action_items) &&
+        detail.action_items.length > 0
+      ) {
         lines.push('待处理事项:');
         for (const item of detail.action_items.slice(0, 5)) {
           lines.push(
@@ -1669,6 +1678,79 @@ server.tool(
     }
   },
 );
+
+if (isMain) {
+  server.tool(
+    'run_local_host_script',
+    '执行宿主机 local/shell 目录下的脚本。script_path 必须是 /workspace/project/local/shell/ 下的绝对容器路径。',
+    {
+      script_path: z
+        .string()
+        .describe(
+          '容器内脚本绝对路径，例如 /workspace/project/local/shell/restart.sh',
+        ),
+      args: z.array(z.string()).optional().describe('传给脚本的参数列表'),
+    },
+    async (args) => {
+      const requestId = `hostscript-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      writeIpcFile(TASKS_DIR, {
+        type: 'run_local_host_script',
+        requestId,
+        scriptPath: args.script_path,
+        args: args.args || [],
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      });
+
+      const resultsDir = path.join(IPC_DIR, 'host-script-results');
+      const resultPath = path.join(resultsDir, `${requestId}.json`);
+      const result = await waitForIpcResult<{
+        status?: 'success' | 'error';
+        exitCode?: number | null;
+        stdout?: string;
+        stderr?: string;
+        durationMs?: number;
+        scriptPath?: string;
+        error?: string;
+      }>(resultPath, 605000, 300);
+
+      if (!result) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `run_local_host_script timed out waiting for response (requestId=${requestId}).`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const stdout =
+        typeof result.stdout === 'string' ? result.stdout.trim() : '';
+      const stderr =
+        typeof result.stderr === 'string' ? result.stderr.trim() : '';
+      const parts = [
+        `script=${result.scriptPath || args.script_path}`,
+        `exitCode=${result.exitCode ?? 'null'}`,
+        `durationMs=${result.durationMs ?? 0}`,
+      ];
+      if (stdout) parts.push(`stdout:\n${stdout}`);
+      if (stderr) parts.push(`stderr:\n${stderr}`);
+      if (result.error) parts.push(`error=${result.error}`);
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: parts.join('\n\n'),
+          },
+        ],
+        isError: result.status !== 'success',
+      };
+    },
+  );
+}
 
 server.tool(
   'reload_tools',

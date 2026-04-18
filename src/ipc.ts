@@ -24,9 +24,7 @@ import {
   expirePendingAskQuestions,
   normalizeAskQuestions,
 } from './ask-user-question.js';
-import {
-  onDelegationComplete as onWorkflowDelegationComplete,
-} from './workflow.js';
+import { onDelegationComplete as onWorkflowDelegationComplete } from './workflow.js';
 import { AvailableGroup } from './container-runner.js';
 import {
   createDelegation,
@@ -58,6 +56,7 @@ import {
   createWorkbenchInteractionItem,
   updateWorkbenchInteractionItemStatus,
 } from './workbench-store.js';
+import { runLocalHostScript } from './host-script-runner.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -464,9 +463,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function summarizeArchiveMessages(
-  messages: ExtractedArchiveMessage[],
-): Array<{
+function summarizeArchiveMessages(messages: ExtractedArchiveMessage[]): Array<{
   index: number;
   sender: ExtractedArchiveMessage['sender'];
   preview: string;
@@ -860,6 +857,8 @@ export async function processTaskIpc(
     stageKey?: string;
     sourceType?: string;
     sourceRefId?: string;
+    scriptPath?: string;
+    args?: unknown;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -905,6 +904,23 @@ export async function processTaskIpc(
       'ipc',
       groupFolder,
       'workbench-results',
+    );
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
+  const writeHostScriptResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'host-script-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
@@ -2156,6 +2172,89 @@ export async function processTaskIpc(
         logger.warn(
           { chatJid: data.chatJid, sourceGroup },
           'Unauthorized reload_container attempt blocked',
+        );
+      }
+      break;
+    }
+
+    case 'run_local_host_script': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn({ sourceGroup }, 'run_local_host_script missing requestId');
+        break;
+      }
+      if (
+        typeof data.scriptPath !== 'string' ||
+        data.scriptPath.trim().length === 0
+      ) {
+        writeHostScriptResult(sourceGroup, data.requestId, {
+          status: 'error',
+          exitCode: null,
+          stdout: '',
+          stderr: '',
+          durationMs: 0,
+          error: 'scriptPath is required',
+        });
+        logger.warn(
+          { sourceGroup, requestId: data.requestId },
+          'run_local_host_script missing scriptPath',
+        );
+        break;
+      }
+      if (
+        data.args != null &&
+        (!Array.isArray(data.args) ||
+          data.args.some((value) => typeof value !== 'string'))
+      ) {
+        writeHostScriptResult(sourceGroup, data.requestId, {
+          status: 'error',
+          exitCode: null,
+          stdout: '',
+          stderr: '',
+          durationMs: 0,
+          error: 'args must be an array of strings',
+        });
+        logger.warn(
+          { sourceGroup, requestId: data.requestId, args: data.args },
+          'run_local_host_script received invalid args',
+        );
+        break;
+      }
+
+      try {
+        const result = await runLocalHostScript(
+          data.scriptPath,
+          (data.args as string[] | undefined) || [],
+        );
+        writeHostScriptResult(sourceGroup, data.requestId, result);
+        logger.info(
+          {
+            sourceGroup,
+            requestId: data.requestId,
+            scriptPath: data.scriptPath,
+            status: result.status,
+            exitCode: result.exitCode,
+            durationMs: result.durationMs,
+          },
+          'run_local_host_script completed',
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        writeHostScriptResult(sourceGroup, data.requestId, {
+          status: 'error',
+          exitCode: null,
+          stdout: '',
+          stderr: '',
+          durationMs: 0,
+          error: errMsg,
+        });
+        logger.error(
+          {
+            err,
+            sourceGroup,
+            requestId: data.requestId,
+            scriptPath: data.scriptPath,
+          },
+          'run_local_host_script failed',
         );
       }
       break;
