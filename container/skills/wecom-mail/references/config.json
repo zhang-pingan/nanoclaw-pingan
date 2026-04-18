@@ -1,0 +1,18 @@
+{
+  "smtp": {
+    "host": "smtp.exmail.qq.com",
+    "port": 465,
+    "secure": true,
+    "user": "bot@example.com",
+    "pass": "replace-with-your-smtp-password"
+  },
+  "from": {
+    "address": "bot@example.com",
+    "name": "NanoClaw"
+  },
+  "reply_to": "reply@example.com",
+  "defaults": {
+    "cc": ["audit@example.com"],
+    "bcc": []
+  }
+}

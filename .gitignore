@@ -40,6 +40,8 @@ groups/global/*
 
 agents-sdk-docs
 
+temp/
+
 .claude/settings.local.json
 
 local
