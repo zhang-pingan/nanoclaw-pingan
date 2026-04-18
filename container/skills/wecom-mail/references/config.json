@@ -3,16 +3,16 @@
     "host": "smtp.exmail.qq.com",
     "port": 465,
     "secure": true,
-    "user": "bot@example.com",
-    "pass": "replace-with-your-smtp-password"
+    "user": "di.zhang@chelaile.net.cn",
+    "pass": "zd123456ZD"
   },
   "from": {
-    "address": "bot@example.com",
-    "name": "NanoClaw"
+    "address": "di.zhang@chelaile.net.cn",
+    "name": "张頔"
   },
-  "reply_to": "reply@example.com",
+  "reply_to": "michael.chen@chelaile.net.cn",
   "defaults": {
-    "cc": ["audit@example.com"],
+    "cc": ["work.daily@chelaile.net.cn"],
     "bcc": []
   }
 }
