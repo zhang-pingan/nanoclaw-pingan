@@ -2457,6 +2457,13 @@ body.quick-chat-window .quick-chat-input {
   align-items: center;
 }
 
+.today-plan-board-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 .today-plan-empty {
   min-height: 420px;
   display: flex;
@@ -2562,7 +2569,7 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-item-header {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-start;
   margin-bottom: 14px;
 }
@@ -2571,10 +2578,10 @@ body.quick-chat-window .quick-chat-input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 12px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--today-plan-accent);
   background: rgba(var(--today-plan-accent-rgb), 0.12);
@@ -2582,14 +2589,22 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-item-header-main {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.today-plan-item-fields {
+  flex: 1;
+  min-width: 0;
 }
 
 .today-plan-item-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .today-plan-item-readonly-note {
@@ -2619,6 +2634,14 @@ body.quick-chat-window .quick-chat-input {
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
+.today-plan-input,
+.today-plan-textarea,
+.today-plan-static-title,
+.today-plan-static-detail {
+  border-radius: 14px;
+  padding: 11px 13px;
+}
+
 .today-plan-input:focus,
 .today-plan-textarea:focus,
 .today-plan-select:focus,
@@ -2629,14 +2652,14 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-input {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .today-plan-textarea {
-  min-height: 96px;
+  min-height: 132px;
   resize: vertical;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   line-height: 1.6;
 }
 
@@ -2652,13 +2675,50 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-static-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .today-plan-static-detail {
-  margin-bottom: 14px;
+  min-height: 132px;
+  margin-bottom: 16px;
   color: var(--text-secondary);
+}
+
+.today-plan-board-icon-btn,
+.today-plan-item-icon-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(15, 118, 110, 0.78);
+}
+
+.today-plan-board-icon-btn .icon,
+.today-plan-item-icon-btn .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.today-plan-board-icon-btn:hover,
+.today-plan-item-icon-btn:hover {
+  background: rgba(236, 253, 250, 0.96);
+  border-color: rgba(var(--today-plan-accent-rgb), 0.24);
+  color: var(--today-plan-accent);
+}
+
+.today-plan-item-icon-btn.danger {
+  border-color: rgba(239, 68, 68, 0.14);
+  background: rgba(254, 242, 242, 0.94);
+  color: rgba(220, 38, 38, 0.84);
+}
+
+.today-plan-item-icon-btn.danger:hover {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(254, 226, 226, 0.98);
+  color: #dc2626;
 }
 
 .today-plan-association-summary {

@@ -12587,6 +12587,29 @@ function renderTodayPlanTaskActions(task, options = {}) {
   `;
 }
 
+function renderTodayPlanItemActionIcon(kind) {
+  if (kind === "associations") {
+    return `
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+      </svg>
+    `;
+  }
+  if (kind === "delete") {
+    return `
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 6h18"></path>
+        <path d="M8 6V4h8v2"></path>
+        <path d="M19 6l-1 14H6L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+      </svg>
+    `;
+  }
+  return "";
+}
+
 function renderTodayPlanItemCard(item, index, options = {}) {
   const readonly = Boolean(options.readonly);
   const readonlyLabel = options.readonlyLabel || "只读";
@@ -12613,8 +12636,12 @@ function renderTodayPlanItemCard(item, index, options = {}) {
         </div>
         <div class="today-plan-item-actions">
           ${readonly ? `<span class="today-plan-item-readonly-note">${escapeHtml(readonlyLabel)}</span>` : `
-            <button type="button" class="btn-ghost" data-today-plan-edit="associations" data-today-plan-item-id="${escapeAttribute(item.id)}">关联信息</button>
-            <button type="button" class="btn-ghost" data-today-plan-delete="${escapeAttribute(item.id)}">删除</button>
+            <button type="button" class="icon-btn today-plan-item-icon-btn" data-today-plan-edit="associations" data-today-plan-item-id="${escapeAttribute(item.id)}" title="关联信息" aria-label="关联信息">
+              ${renderTodayPlanItemActionIcon("associations")}
+            </button>
+            <button type="button" class="icon-btn today-plan-item-icon-btn danger" data-today-plan-delete="${escapeAttribute(item.id)}" title="删除计划项" aria-label="删除计划项">
+              ${renderTodayPlanItemActionIcon("delete")}
+            </button>
           `}
         </div>
       </div>
@@ -12910,6 +12937,7 @@ function renderTodayPlanScreen() {
     todayPlanEmpty.classList.toggle("hidden", hasPlan);
   }
   if (todayPlanAddItemBtn) {
+    todayPlanAddItemBtn.classList.toggle("hidden", !editable);
     todayPlanAddItemBtn.disabled = !editable;
   }
   if (todayPlanSendMailBtn) {
