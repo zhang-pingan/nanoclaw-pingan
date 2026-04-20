@@ -189,13 +189,21 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
-  // Intercept Cmd+Q in the renderer so it cycles the primary nav instead of quitting the app.
+  // Intercept app-level shortcuts and forward them into the renderer.
   mainWindow.webContents.on('before-input-event', (event, input) => {
     const isCyclePrimaryNavShortcut = isMac && input.type === 'keyDown' && input.meta && !input.control && !input.alt && !input.shift && input.key.toLowerCase() === 'q';
-    if (!isCyclePrimaryNavShortcut) return;
+    const isToggleTodayPlanShortcut = isMac && input.type === 'keyDown' && input.meta && !input.control && !input.alt && !input.shift && input.key.toLowerCase() === 'w';
 
-    event.preventDefault();
-    mainWindow?.webContents.send('cycle-primary-nav');
+    if (isCyclePrimaryNavShortcut) {
+      event.preventDefault();
+      mainWindow?.webContents.send('cycle-primary-nav');
+      return;
+    }
+
+    if (isToggleTodayPlanShortcut) {
+      event.preventDefault();
+      mainWindow?.webContents.send('toggle-today-plan');
+    }
   });
 }
 function buildAppMenu(): Menu {

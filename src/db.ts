@@ -25,7 +25,10 @@ import {
   NewMessage,
   RegisteredGroup,
   ScheduledTask,
+  StoredChatMessageRecord,
   TaskRunLog,
+  TodayPlanItemRecord,
+  TodayPlanRecord,
   WorkbenchActionItemRecord,
   WorkbenchArtifactRecord,
   WorkbenchCommentRecord,
@@ -416,6 +419,36 @@ function createSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_workbench_assets_task ON workbench_context_assets(task_id, created_at);
   `);
 
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS today_plans (
+      id TEXT PRIMARY KEY,
+      plan_date TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      completed_at TEXT,
+      continued_from_plan_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_today_plans_date
+      ON today_plans(plan_date DESC, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_today_plans_status
+      ON today_plans(status, plan_date DESC, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS today_plan_items (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      detail TEXT,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      associations_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_today_plan_items_plan
+      ON today_plan_items(plan_id, order_index ASC, created_at ASC);
+  `);
+
   // Add ask_questions table if it doesn't exist (human-in-the-loop questions)
   database.exec(`
     CREATE TABLE IF NOT EXISTS ask_questions (
@@ -475,6 +508,37 @@ function createSchema(database: Database.Database): void {
   }
 
   normalizeWorkflowSchema(database);
+
+  try {
+    database.exec(
+      `ALTER TABLE today_plans ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  try {
+    database.exec(`ALTER TABLE today_plans ADD COLUMN completed_at TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
+  try {
+    database.exec(
+      `ALTER TABLE today_plans ADD COLUMN continued_from_plan_id TEXT`,
+    );
+  } catch {
+    /* column already exists */
+  }
+
+  try {
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_today_plans_status
+       ON today_plans(status, plan_date DESC, updated_at DESC)`,
+    );
+  } catch {
+    /* ignore */
+  }
 
   // Add start_from column to workbench_tasks (migration for existing DBs)
   try {
@@ -1076,6 +1140,53 @@ export function getMessagesSince(
   return db
     .prepare(sql)
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`, limit) as NewMessage[];
+}
+
+export function listStoredMessagesByChat(
+  chatJid: string,
+  limit: number = 1000,
+): StoredChatMessageRecord[] {
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.trunc(limit))
+    : 1000;
+  return db
+    .prepare(
+      `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             workflow_id
+        FROM messages
+       WHERE chat_jid = ?
+       ORDER BY rowid DESC
+       LIMIT ?
+    `,
+    )
+    .all(chatJid, normalizedLimit) as StoredChatMessageRecord[];
+}
+
+export function listStoredMessagesByWorkflow(
+  chatJid: string,
+  workflowId: string,
+  limit: number = 1000,
+): StoredChatMessageRecord[] {
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.trunc(limit))
+    : 1000;
+  return db
+    .prepare(
+      `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             workflow_id
+        FROM messages
+       WHERE chat_jid = ? AND workflow_id = ?
+       ORDER BY rowid DESC
+       LIMIT ?
+    `,
+    )
+    .all(chatJid, workflowId, normalizedLimit) as StoredChatMessageRecord[];
 }
 
 export function createTask(
@@ -2248,6 +2359,213 @@ export function listWorkbenchContextAssetsByTask(
       'SELECT * FROM workbench_context_assets WHERE task_id = ? ORDER BY created_at DESC',
     )
     .all(taskId) as WorkbenchContextAssetRecord[];
+}
+
+// --- Today plan accessors ---
+
+export function createTodayPlan(input: {
+  plan_date: string;
+  title: string;
+  status?: TodayPlanRecord['status'];
+  completed_at?: string | null;
+  continued_from_plan_id?: string | null;
+}): TodayPlanRecord {
+  const now = Date.now().toString();
+  const id = `today-plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(
+    `INSERT INTO today_plans (
+      id, plan_date, title, status, completed_at, continued_from_plan_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    input.plan_date,
+    input.title.trim(),
+    input.status || 'active',
+    input.completed_at ?? null,
+    input.continued_from_plan_id ?? null,
+    now,
+    now,
+  );
+  return db
+    .prepare('SELECT * FROM today_plans WHERE id = ?')
+    .get(id) as TodayPlanRecord;
+}
+
+export function getTodayPlanById(id: string): TodayPlanRecord | undefined {
+  return db
+    .prepare('SELECT * FROM today_plans WHERE id = ?')
+    .get(id) as TodayPlanRecord | undefined;
+}
+
+export function getTodayPlanByDate(
+  planDate: string,
+): TodayPlanRecord | undefined {
+  return db
+    .prepare('SELECT * FROM today_plans WHERE plan_date = ?')
+    .get(planDate) as TodayPlanRecord | undefined;
+}
+
+export function listTodayPlans(input: {
+  before_date?: string;
+  limit?: number;
+} = {}): TodayPlanRecord[] {
+  const limit = Number.isFinite(input.limit)
+    ? Math.max(1, Math.trunc(input.limit as number))
+    : 30;
+  if (input.before_date) {
+    return db
+      .prepare(
+        `SELECT * FROM today_plans
+         WHERE plan_date < ?
+         ORDER BY plan_date DESC, updated_at DESC
+         LIMIT ?`,
+      )
+      .all(input.before_date, limit) as TodayPlanRecord[];
+  }
+  return db
+    .prepare(
+      `SELECT * FROM today_plans
+       ORDER BY plan_date DESC, updated_at DESC
+       LIMIT ?`,
+    )
+    .all(limit) as TodayPlanRecord[];
+}
+
+export function updateTodayPlan(
+  id: string,
+  updates: Partial<
+    Pick<
+      TodayPlanRecord,
+      'title' | 'status' | 'completed_at' | 'continued_from_plan_id' | 'updated_at'
+    >
+  >,
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.title !== undefined) {
+    fields.push('title = ?');
+    values.push(updates.title.trim());
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.completed_at !== undefined) {
+    fields.push('completed_at = ?');
+    values.push(updates.completed_at);
+  }
+  if (updates.continued_from_plan_id !== undefined) {
+    fields.push('continued_from_plan_id = ?');
+    values.push(updates.continued_from_plan_id);
+  }
+  if (updates.updated_at !== undefined) {
+    fields.push('updated_at = ?');
+    values.push(updates.updated_at);
+  }
+
+  if (fields.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE today_plans SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+}
+
+export function createTodayPlanItem(input: {
+  plan_id: string;
+  title: string;
+  detail?: string | null;
+  order_index?: number;
+  associations_json?: string | null;
+}): TodayPlanItemRecord {
+  const now = Date.now().toString();
+  const id = `today-plan-item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const maxRow = db
+    .prepare(
+      'SELECT COALESCE(MAX(order_index), -1) AS max_order FROM today_plan_items WHERE plan_id = ?',
+    )
+    .get(input.plan_id) as { max_order: number };
+  const orderIndex =
+    input.order_index !== undefined ? input.order_index : maxRow.max_order + 1;
+  db.prepare(
+    `INSERT INTO today_plan_items (
+      id, plan_id, title, detail, order_index, associations_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    input.plan_id,
+    input.title.trim(),
+    input.detail ?? null,
+    orderIndex,
+    input.associations_json ?? null,
+    now,
+    now,
+  );
+  return db
+    .prepare('SELECT * FROM today_plan_items WHERE id = ?')
+    .get(id) as TodayPlanItemRecord;
+}
+
+export function getTodayPlanItemById(
+  id: string,
+): TodayPlanItemRecord | undefined {
+  return db
+    .prepare('SELECT * FROM today_plan_items WHERE id = ?')
+    .get(id) as TodayPlanItemRecord | undefined;
+}
+
+export function listTodayPlanItems(planId: string): TodayPlanItemRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM today_plan_items
+       WHERE plan_id = ?
+       ORDER BY order_index ASC, created_at ASC`,
+    )
+    .all(planId) as TodayPlanItemRecord[];
+}
+
+export function updateTodayPlanItem(
+  id: string,
+  updates: Partial<
+    Pick<
+      TodayPlanItemRecord,
+      'title' | 'detail' | 'order_index' | 'associations_json' | 'updated_at'
+    >
+  >,
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.title !== undefined) {
+    fields.push('title = ?');
+    values.push(updates.title.trim());
+  }
+  if (updates.detail !== undefined) {
+    fields.push('detail = ?');
+    values.push(updates.detail);
+  }
+  if (updates.order_index !== undefined) {
+    fields.push('order_index = ?');
+    values.push(updates.order_index);
+  }
+  if (updates.associations_json !== undefined) {
+    fields.push('associations_json = ?');
+    values.push(updates.associations_json);
+  }
+  if (updates.updated_at !== undefined) {
+    fields.push('updated_at = ?');
+    values.push(updates.updated_at);
+  }
+
+  if (fields.length === 0) return;
+  values.push(id);
+  db.prepare(
+    `UPDATE today_plan_items SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
+}
+
+export function deleteTodayPlanItem(id: string): number {
+  return db.prepare('DELETE FROM today_plan_items WHERE id = ?').run(id).changes;
 }
 
 // --- Structured memory accessors ---

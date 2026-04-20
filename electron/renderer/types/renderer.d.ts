@@ -7,6 +7,8 @@ interface NanoClawAppAPI {
   onNotificationClick(handler: (payload: { chatJid?: string; taskId?: string }) => void): () => void;
   /** Listen to the app shortcut that cycles the primary nav */
   onCyclePrimaryNav(handler: () => void): () => void;
+  /** Listen to the app shortcut that toggles the Today Plan screen */
+  onToggleTodayPlan(handler: () => void): () => void;
   /** Listen for quick-chat actions that should switch the main window to the main group */
   onQuickChatOpenMainGroup(handler: () => void): () => void;
   /** Open a URL in the system browser */

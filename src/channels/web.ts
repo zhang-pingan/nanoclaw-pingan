@@ -55,6 +55,22 @@ import {
   validateWorkflowDefinition,
 } from '../workflow-compiler.js';
 import { loadWorkflowConfigs } from '../workflow-config.js';
+import {
+  buildTodayPlanMailPrompt,
+  completeTodayPlan,
+  createOrContinueTodayPlan,
+  createTodayPlanItemForPlan,
+  getTodayPlanChatConversationDetail,
+  getTodayPlanDetail,
+  getTodayPlanOverview,
+  getTodayPlanServiceCommitDiff,
+  getTodayPlanDateKey,
+  listTodayPlanChatConversations,
+  listTodayPlanServiceBranches,
+  listTodayPlanServices,
+  patchTodayPlanItem,
+  removeTodayPlanItem,
+} from '../today-plan.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -479,6 +495,60 @@ class WebChannel {
         req.method === 'POST'
       ) {
         return this.apiWorkbenchSubtaskRetry(req, res);
+      }
+      if (pathname === '/api/today-plans/overview' && req.method === 'GET') {
+        return this.apiGetTodayPlanOverview(reqUrl, res);
+      }
+      if (pathname === '/api/today-plan' && req.method === 'GET') {
+        return this.apiGetTodayPlan(reqUrl, res);
+      }
+      if (pathname === '/api/today-plan' && req.method === 'POST') {
+        return this.apiCreateTodayPlan(req, res);
+      }
+      if (
+        pathname === '/api/today-plan/complete' &&
+        req.method === 'POST'
+      ) {
+        return this.apiCompleteTodayPlan(req, res);
+      }
+      if (pathname === '/api/today-plan/item' && req.method === 'POST') {
+        return this.apiCreateTodayPlanItem(req, res);
+      }
+      if (pathname === '/api/today-plan/item' && req.method === 'PATCH') {
+        return this.apiPatchTodayPlanItem(req, res);
+      }
+      if (pathname === '/api/today-plan/item' && req.method === 'DELETE') {
+        return this.apiDeleteTodayPlanItem(req, res);
+      }
+      if (pathname === '/api/today-plan/chat/options' && req.method === 'GET') {
+        return this.apiGetTodayPlanChatOptions(reqUrl, res);
+      }
+      if (
+        pathname === '/api/today-plan/chat/conversation' &&
+        req.method === 'GET'
+      ) {
+        return this.apiGetTodayPlanChatConversation(reqUrl, res);
+      }
+      if (pathname === '/api/today-plan/services' && req.method === 'GET') {
+        return this.apiGetTodayPlanServices(res);
+      }
+      if (
+        pathname === '/api/today-plan/service/branches' &&
+        req.method === 'GET'
+      ) {
+        return this.apiGetTodayPlanServiceBranches(reqUrl, res);
+      }
+      if (
+        pathname === '/api/today-plan/service/commit' &&
+        req.method === 'GET'
+      ) {
+        return this.apiGetTodayPlanServiceCommit(reqUrl, res);
+      }
+      if (
+        pathname === '/api/today-plan/mail/send' &&
+        req.method === 'POST'
+      ) {
+        return this.apiSendTodayPlanMail(req, res);
       }
       if (pathname === '/api/card-action' && req.method === 'POST') {
         return this.apiCardAction(req, res);
@@ -2076,6 +2146,403 @@ class WebChannel {
     res.end(JSON.stringify({ ok: true, task: detail?.task || null }));
   }
 
+  private findPreferredMainGroupJid(): string | null {
+    const groups = this.opts.registeredGroups();
+    const webMain = Object.entries(groups).find(
+      ([jid, group]) => jid.startsWith('web:') && group.isMain,
+    );
+    if (webMain) return webMain[0];
+
+    const anyMain = Object.entries(groups).find(([, group]) => group.isMain);
+    return anyMain ? anyMain[0] : null;
+  }
+
+  private async apiGetTodayPlanOverview(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const planDate = reqUrl.searchParams.get('date') || getTodayPlanDateKey();
+    const overview = getTodayPlanOverview(planDate);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(overview));
+  }
+
+  private async apiGetTodayPlan(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const planId = reqUrl.searchParams.get('id') || '';
+    const planDate = reqUrl.searchParams.get('date') || '';
+    const detail = getTodayPlanDetail({
+      planId: planId || undefined,
+      planDate: !planId ? planDate || getTodayPlanDateKey() : undefined,
+      groups: this.opts.registeredGroups(),
+    });
+    if (!detail) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Today plan not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(detail));
+  }
+
+  private async apiCreateTodayPlan(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      plan_date?: string;
+      continue_from_plan_id?: string;
+    };
+    try {
+      const plan = createOrContinueTodayPlan({
+        planDate: data.plan_date || getTodayPlanDateKey(),
+        continueFromPlanId: data.continue_from_plan_id || undefined,
+      });
+      const detail = getTodayPlanDetail({
+        planId: plan.id,
+        groups: this.opts.registeredGroups(),
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, plan, detail }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private async apiCompleteTodayPlan(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { plan_id?: string };
+    if (!data.plan_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'plan_id required' }));
+      return;
+    }
+
+    const plan = completeTodayPlan(data.plan_id);
+    if (!plan) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Today plan not found' }));
+      return;
+    }
+
+    const detail = getTodayPlanDetail({
+      planId: plan.id,
+      groups: this.opts.registeredGroups(),
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, plan, detail }));
+  }
+
+  private async apiCreateTodayPlanItem(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { plan_id?: string };
+    if (!data.plan_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'plan_id required' }));
+      return;
+    }
+
+    try {
+      const item = createTodayPlanItemForPlan(data.plan_id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, item }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private async apiPatchTodayPlanItem(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      item_id?: string;
+      title?: string;
+      detail?: string;
+      order_index?: number;
+      associations?: {
+        workbench_task_ids?: string[];
+        chat_selections?: Array<{
+          group_jid: string;
+          conversation_ids: string[];
+        }>;
+        services?: Array<{
+          service: string;
+          branches: string[];
+        }>;
+      };
+    };
+    if (!data.item_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'item_id required' }));
+      return;
+    }
+
+    try {
+      const item = patchTodayPlanItem({
+        itemId: data.item_id,
+        title: data.title,
+        detail: data.detail,
+        order_index: data.order_index,
+        associations: data.associations
+          ? {
+              workbench_task_ids: Array.isArray(data.associations.workbench_task_ids)
+                ? data.associations.workbench_task_ids
+                : [],
+              chat_selections: Array.isArray(data.associations.chat_selections)
+                ? data.associations.chat_selections
+                : [],
+              services: Array.isArray(data.associations.services)
+                ? data.associations.services
+                : [],
+            }
+          : undefined,
+      });
+      if (!item) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Today plan item not found' }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, item }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private async apiDeleteTodayPlanItem(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { item_id?: string };
+    if (!data.item_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'item_id required' }));
+      return;
+    }
+
+    try {
+      const deleted = removeTodayPlanItem(data.item_id);
+      if (!deleted) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Today plan item not found' }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, deleted }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private async apiGetTodayPlanChatOptions(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const jid = reqUrl.searchParams.get('jid') || '';
+    if (!jid) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'jid required' }));
+      return;
+    }
+
+    const conversations = listTodayPlanChatConversations(jid);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ jid, conversations }));
+  }
+
+  private async apiGetTodayPlanChatConversation(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const jid = reqUrl.searchParams.get('jid') || '';
+    const conversationId = reqUrl.searchParams.get('conversation_id') || '';
+    if (!jid || !conversationId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({ error: 'jid and conversation_id required' }),
+      );
+      return;
+    }
+
+    const conversation = getTodayPlanChatConversationDetail({
+      chatJid: jid,
+      conversationId,
+    });
+    if (!conversation) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Conversation not found' }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ conversation }));
+  }
+
+  private async apiGetTodayPlanServices(
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const services = listTodayPlanServices();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ services }));
+  }
+
+  private async apiGetTodayPlanServiceBranches(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const service = reqUrl.searchParams.get('service') || '';
+    if (!service) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'service required' }));
+      return;
+    }
+
+    const branches = listTodayPlanServiceBranches(service);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ service, branches }));
+  }
+
+  private async apiGetTodayPlanServiceCommit(
+    reqUrl: URL,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const service = reqUrl.searchParams.get('service') || '';
+    const commit = reqUrl.searchParams.get('commit') || '';
+    if (!service || !commit) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'service and commit required' }));
+      return;
+    }
+
+    const detail = getTodayPlanServiceCommitDiff({ service, commit });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(detail));
+  }
+
+  private async apiSendTodayPlanMail(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { plan_id?: string };
+    if (!data.plan_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'plan_id required' }));
+      return;
+    }
+
+    const payload = buildTodayPlanMailPrompt({
+      planId: data.plan_id,
+      groups: this.opts.registeredGroups(),
+    });
+    if (!payload) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Today plan not found' }));
+      return;
+    }
+
+    const targetJid = this.findPreferredMainGroupJid();
+    if (!targetJid) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Main group not found' }));
+      return;
+    }
+
+    this.injectWorkbenchReply(targetJid, payload.prompt);
+    this.opts.enqueueMessageCheck?.(targetJid);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        target_jid: targetJid,
+        subject: payload.subject,
+      }),
+    );
+  }
+
   private injectWorkbenchReply(chatJid: string, content: string): void {
     const now = Date.now();
     const groups = this.opts.registeredGroups();
@@ -2093,6 +2560,13 @@ class WebChannel {
       model: null,
     };
     this.opts.onMessage(chatJid, msg);
+    if (this.ownsJid(chatJid)) {
+      storeWebMessage({
+        ...msg,
+        content,
+        model: null,
+      });
+    }
   }
 
   private async apiWorkbenchActionItem(

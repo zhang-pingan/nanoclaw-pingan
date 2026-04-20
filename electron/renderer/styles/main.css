@@ -2213,6 +2213,899 @@ body.quick-chat-window .quick-chat-input {
     rgba(255, 255, 255, 0.72);
 }
 
+#today-plan-screen {
+  flex: 1;
+  min-width: 0;
+  display: none;
+  --today-plan-accent-rgb: 15, 118, 110;
+  --today-plan-accent: #0f766e;
+  --today-plan-soft-rgb: 45, 212, 191;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.18), transparent 26%),
+    radial-gradient(circle at 82% 4%, rgba(94, 234, 212, 0.18), transparent 18%),
+    linear-gradient(180deg, rgba(15, 118, 110, 0.08), rgba(15, 118, 110, 0.02) 26%, transparent 46%),
+    linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(247, 255, 252, 0.88) 38%, rgba(255, 255, 255, 0.98) 100%),
+    var(--bg-primary);
+}
+
+#today-plan-screen.active {
+  display: flex;
+}
+
+.today-plan-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 24px 28px 28px;
+  gap: 22px;
+}
+
+.today-plan-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.today-plan-hero-main,
+.today-plan-hero-side,
+.today-plan-board,
+.today-plan-delivery-card {
+  position: relative;
+  border-radius: 28px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 255, 252, 0.9)),
+    rgba(255, 255, 255, 0.96);
+  box-shadow: 0 28px 54px rgba(15, 23, 42, 0.08);
+}
+
+.today-plan-hero-main {
+  padding: 28px 30px;
+  overflow: hidden;
+}
+
+.today-plan-hero-main::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 80% 18%, rgba(var(--today-plan-soft-rgb), 0.2), transparent 18%),
+    radial-gradient(circle at 12% 12%, rgba(var(--today-plan-accent-rgb), 0.13), transparent 26%);
+  pointer-events: none;
+}
+
+.today-plan-hero-side {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 253, 250, 0.9)),
+    rgba(255, 255, 255, 0.96);
+}
+
+.today-plan-page-actions,
+.today-plan-main-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.today-plan-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(var(--today-plan-accent-rgb), 0.9);
+}
+
+.today-plan-hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 8px;
+}
+
+.today-plan-hero-title-row h2 {
+  margin: 0;
+  font-size: 36px;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  position: relative;
+  z-index: 1;
+}
+
+.today-plan-status-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(var(--today-plan-accent-rgb), 0.12);
+  color: var(--today-plan-accent);
+  font-size: 13px;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+}
+
+.today-plan-status-badge.history {
+  background: rgba(20, 83, 45, 0.1);
+  color: #166534;
+}
+
+.today-plan-status-badge.completed {
+  background: rgba(22, 163, 74, 0.14);
+  color: #166534;
+}
+
+.today-plan-status-badge.empty {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-muted);
+}
+
+.today-plan-subtitle {
+  color: var(--text-muted);
+  max-width: 760px;
+  line-height: 1.7;
+  font-size: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.today-plan-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.today-plan-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.today-plan-overview-summary {
+  display: block;
+}
+
+.today-plan-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.today-plan-overview-card {
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 255, 252, 0.88)),
+    rgba(255, 255, 255, 0.9);
+}
+
+.today-plan-overview-card span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.today-plan-overview-card strong {
+  display: block;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.today-plan-overview-card small {
+  display: block;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-size: 12px;
+}
+
+.today-plan-delivery-card {
+  padding: 18px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.today-plan-board {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.today-plan-board-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.today-plan-empty {
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.today-plan-empty-card {
+  width: min(820px, 100%);
+  border-radius: 28px;
+  padding: 28px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(242, 255, 252, 0.9)),
+    rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
+}
+
+.today-plan-empty-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(var(--today-plan-accent-rgb), 0.92);
+  margin-bottom: 10px;
+}
+
+.today-plan-empty-card h3 {
+  margin: 0 0 10px;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+}
+
+.today-plan-empty-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.today-plan-empty-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 22px 0;
+}
+
+.today-plan-empty-step {
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.today-plan-empty-step strong {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(var(--today-plan-accent-rgb), 0.1);
+  color: var(--today-plan-accent);
+  margin-bottom: 12px;
+}
+
+.today-plan-empty-step span,
+.today-plan-empty-step small {
+  display: block;
+}
+
+.today-plan-empty-step span {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.today-plan-empty-step small {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.today-plan-content {
+  display: block;
+}
+
+.today-plan-items {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.today-plan-item-card,
+.today-plan-surface-panel {
+  position: relative;
+  border-radius: 26px;
+  padding: 22px 24px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 255, 252, 0.9)),
+    rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 46px rgba(15, 23, 42, 0.08);
+}
+
+.today-plan-item-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.today-plan-item-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--today-plan-accent);
+  background: rgba(var(--today-plan-accent-rgb), 0.12);
+}
+
+.today-plan-item-header-main {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+}
+
+.today-plan-item-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.today-plan-item-readonly-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.today-plan-input,
+.today-plan-textarea,
+.today-plan-select,
+.today-plan-association-search {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.14);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text-primary);
+  padding: 13px 15px;
+  font: inherit;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.today-plan-input:focus,
+.today-plan-textarea:focus,
+.today-plan-select:focus,
+.today-plan-association-search:focus {
+  outline: none;
+  border-color: rgba(var(--today-plan-accent-rgb), 0.34);
+  box-shadow: 0 0 0 4px rgba(var(--today-plan-accent-rgb), 0.12);
+}
+
+.today-plan-input {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.today-plan-textarea {
+  min-height: 96px;
+  resize: vertical;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.today-plan-static-title,
+.today-plan-static-detail {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  padding: 13px 15px;
+  line-height: 1.7;
+}
+
+.today-plan-static-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.today-plan-static-detail {
+  margin-bottom: 14px;
+  color: var(--text-secondary);
+}
+
+.today-plan-association-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.today-plan-section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.today-plan-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.today-plan-summary-pill {
+  border-radius: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 250, 0.88)),
+    rgba(245, 255, 252, 0.92);
+}
+
+.today-plan-summary-pill strong {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.today-plan-summary-pill span {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.today-plan-section {
+  margin-top: 16px;
+  border-top: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  padding-top: 16px;
+}
+
+.today-plan-section:first-of-type {
+  margin-top: 0;
+}
+
+.today-plan-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.today-plan-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.today-plan-section-subtitle {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.today-plan-empty-inline {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px dashed rgba(var(--today-plan-accent-rgb), 0.18);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.today-plan-task-block,
+.today-plan-chat-block,
+.today-plan-service-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.today-plan-task-card,
+.today-plan-chat-card,
+.today-plan-service-card,
+.today-plan-conversation-card {
+  border-radius: 20px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 255, 252, 0.88)),
+    rgba(255, 255, 255, 0.9);
+  padding: 16px 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.today-plan-task-head,
+.today-plan-chat-head,
+.today-plan-service-head,
+.today-plan-conversation-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.today-plan-task-title,
+.today-plan-chat-title,
+.today-plan-service-title,
+.today-plan-conversation-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.today-plan-meta-row,
+.today-plan-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.today-plan-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: rgba(var(--today-plan-accent-rgb), 0.08);
+}
+
+.today-plan-description,
+.today-plan-chat-message-body {
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.today-plan-action-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.today-plan-action-item {
+  border-radius: 18px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(240, 253, 250, 0.88)),
+    rgba(244, 255, 252, 0.92);
+  padding: 14px 16px;
+}
+
+.today-plan-action-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.today-plan-action-item-actions,
+.today-plan-branch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.today-plan-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.today-plan-chat-message {
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.today-plan-chat-message-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.today-plan-branch-list,
+.today-plan-commit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.today-plan-branch-card,
+.today-plan-commit-card {
+  border-radius: 18px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 255, 253, 0.9)),
+    rgba(255, 255, 255, 0.92);
+  padding: 14px 16px;
+}
+
+.today-plan-commit-card {
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.today-plan-commit-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--today-plan-accent-rgb), 0.28);
+  box-shadow: 0 16px 28px rgba(var(--today-plan-accent-rgb), 0.1);
+}
+
+.today-plan-commit-subject {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.today-plan-commit-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.today-plan-switcher-modal,
+.today-plan-association-overlay,
+.today-plan-commit-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+.today-plan-switcher-mask,
+.today-plan-association-mask,
+.today-plan-commit-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: blur(10px);
+}
+
+.today-plan-switcher-window,
+.today-plan-association-dialog,
+.today-plan-commit-window {
+  position: relative;
+  z-index: 1;
+  width: min(1200px, calc(100vw - 48px));
+  max-height: calc(100vh - 56px);
+  margin: 28px auto;
+  border-radius: 28px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 255, 252, 0.94)),
+    rgba(255, 255, 255, 0.96);
+  box-shadow: 0 34px 68px rgba(15, 23, 42, 0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.today-plan-switcher-window {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.today-plan-switcher-header,
+.today-plan-association-header,
+.today-plan-commit-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+}
+
+.today-plan-switcher-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px 24px;
+  overflow: auto;
+}
+
+.today-plan-switcher-item {
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(243, 255, 252, 0.9)),
+    rgba(255, 255, 255, 0.92);
+  padding: 16px 18px;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.today-plan-switcher-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--today-plan-accent-rgb), 0.24);
+  box-shadow: 0 18px 30px rgba(15, 118, 110, 0.08);
+}
+
+.today-plan-switcher-item.active {
+  border-color: rgba(var(--today-plan-accent-rgb), 0.28);
+  box-shadow: 0 18px 30px rgba(15, 118, 110, 0.1);
+}
+
+.today-plan-switcher-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.today-plan-switcher-date {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.today-plan-switcher-title {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.today-plan-association-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px 24px;
+  overflow: auto;
+}
+
+.today-plan-association-column {
+  min-width: 0;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background: rgba(255, 255, 255, 0.84);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 320px;
+}
+
+.today-plan-association-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.today-plan-association-list,
+.today-plan-conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+}
+
+.today-plan-option-card {
+  border-radius: 16px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background: rgba(243, 255, 252, 0.82);
+  padding: 12px 14px;
+}
+
+.today-plan-checkbox-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.today-plan-checkbox-row input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--today-plan-accent);
+}
+
+.today-plan-option-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.today-plan-option-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.today-plan-association-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 24px;
+  border-top: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+}
+
+.today-plan-commit-window {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.today-plan-commit-meta {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.today-plan-commit-diff {
+  margin: 0;
+  padding: 18px 24px 24px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.today-plan-diff-line {
+  display: block;
+}
+
+.today-plan-diff-line.add {
+  background: rgba(34, 197, 94, 0.18);
+  color: #bbf7d0;
+}
+
+.today-plan-diff-line.del {
+  background: rgba(248, 113, 113, 0.16);
+  color: #fecaca;
+}
+
+.today-plan-diff-line.meta {
+  color: #7dd3fc;
+}
+
 #memory-management-screen {
   flex: 1;
   min-width: 0;
@@ -5521,6 +6414,7 @@ body.quick-chat-window .quick-chat-input {
   }
 
   #workbench-screen.active,
+  #today-plan-screen.active,
   #workflow-definitions-screen.active,
   #cards-management-screen.active,
   #memory-management-screen.active,
@@ -5529,6 +6423,7 @@ body.quick-chat-window .quick-chat-input {
   }
 
   .workbench-sidebar,
+  .today-plan-sidebar,
   .workflow-definitions-sidebar,
   .cards-management-sidebar,
   .memory-sidebar,
@@ -5542,6 +6437,15 @@ body.quick-chat-window .quick-chat-input {
 
   .workbench-main {
     padding: 16px;
+  }
+
+  .today-plan-main {
+    padding: 16px;
+  }
+
+  .today-plan-shell {
+    padding: 16px;
+    gap: 16px;
   }
 
   .workflow-definitions-main {
@@ -5562,6 +6466,42 @@ body.quick-chat-window .quick-chat-input {
   .workflow-definition-hero-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .today-plan-hero,
+  .today-plan-overview-grid,
+  .today-plan-empty-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .today-plan-hero-side,
+  .today-plan-board,
+  .today-plan-empty-card {
+    padding: 18px;
+  }
+
+  .today-plan-main-header,
+  .today-plan-item-header,
+  .today-plan-task-head,
+  .today-plan-chat-head,
+  .today-plan-service-head,
+  .today-plan-conversation-head,
+  .today-plan-switcher-header,
+  .today-plan-association-header,
+  .today-plan-commit-header {
+    flex-direction: column;
+  }
+
+  .today-plan-association-summary,
+  .today-plan-association-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .today-plan-association-dialog,
+  .today-plan-commit-window {
+    width: min(100vw - 24px, 1120px);
+    margin: 12px auto;
+    max-height: calc(100vh - 24px);
   }
 
   .workflow-definition-form-grid {

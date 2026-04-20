@@ -400,6 +400,136 @@
         </main>
       </section>
 
+      <section id="today-plan-screen">
+        <main class="today-plan-shell">
+          <section class="today-plan-hero">
+            <div class="today-plan-hero-main">
+              <div class="today-plan-kicker">Today Plan</div>
+              <div class="today-plan-hero-title-row">
+                <h2 id="today-plan-title">今日计划</h2>
+                <span id="today-plan-plan-status" class="today-plan-status-badge">待创建</span>
+              </div>
+              <div id="today-plan-subtitle" class="today-plan-subtitle">聚合工作台任务、群聊会话与服务分支变更。</div>
+              <div id="today-plan-hero-meta" class="today-plan-hero-meta">
+                <span class="today-plan-meta-chip">⌘W 快速切换</span>
+                <span class="today-plan-meta-chip">仅保留单主页面视图</span>
+              </div>
+            </div>
+
+            <aside class="today-plan-hero-side">
+              <div class="today-plan-page-actions">
+                <button id="today-plan-refresh-btn" class="icon-btn" title="刷新今日计划">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                </button>
+                <button id="today-plan-view-history-btn" class="btn-primary btn-soft-primary">查看往日计划</button>
+                <button id="today-plan-continue-plan-btn" class="btn-primary btn-soft-primary">继续往日计划</button>
+                <button id="today-plan-create-today-btn" class="btn-primary btn-soft-primary">创建今日计划</button>
+              </div>
+
+              <div id="today-plan-overview-summary" class="today-plan-overview-summary"></div>
+
+              <div class="today-plan-delivery-card">
+                <div>
+                  <div class="today-plan-section-title">执行动作</div>
+                  <div class="today-plan-section-subtitle">维护计划项后，按聚合结果生成并发送计划邮件。</div>
+                </div>
+                <div class="today-plan-main-actions">
+                  <button id="today-plan-add-item-btn" class="btn-primary btn-soft-primary">新增计划项</button>
+                  <button id="today-plan-send-mail-btn" class="btn-primary btn-soft-primary">发送计划邮件</button>
+                  <button id="today-plan-complete-btn" class="btn-primary btn-soft-primary">完成今日计划</button>
+                </div>
+              </div>
+            </aside>
+          </section>
+
+          <section class="today-plan-board">
+            <div class="today-plan-board-head">
+              <div>
+                <div class="today-plan-section-title">计划清单</div>
+                <div id="today-plan-section-meta" class="today-plan-section-subtitle">按计划项组织工作台任务、群聊会话与服务提交。</div>
+              </div>
+            </div>
+
+            <div id="today-plan-empty" class="today-plan-empty">
+              <div class="today-plan-empty-card">
+                <div class="today-plan-empty-kicker">Start from Today</div>
+                <h3>还没有今日计划</h3>
+                <p>先创建一份今日计划，再把任务、群聊会话和服务分支按计划项挂进来。</p>
+                <div class="today-plan-empty-grid">
+                  <div class="today-plan-empty-step">
+                    <strong>01</strong>
+                    <span>创建当天计划</span>
+                    <small>进入页面优先处理今天，如果今天为空，就在这里开始。</small>
+                  </div>
+                  <div class="today-plan-empty-step">
+                    <strong>02</strong>
+                    <span>按条目组织上下文</span>
+                    <small>每条计划项都可以独立挂任务、群聊和服务分支。</small>
+                  </div>
+                  <div class="today-plan-empty-step">
+                    <strong>03</strong>
+                    <span>统一聚合发送</span>
+                    <small>系统自动汇总后投递主群，再走企业微信邮件技能。</small>
+                  </div>
+                </div>
+                <div class="today-plan-main-actions">
+                  <button id="today-plan-empty-create-btn" class="btn-primary btn-soft-primary">创建今日计划</button>
+                  <button id="today-plan-empty-continue-btn" class="btn-primary btn-soft-primary">继续往日计划</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="today-plan-content" class="today-plan-content hidden">
+              <div id="today-plan-items" class="today-plan-items"></div>
+            </div>
+          </section>
+        </main>
+
+        <div id="today-plan-history-modal" class="today-plan-switcher-modal hidden">
+          <div id="today-plan-history-mask" class="today-plan-switcher-mask"></div>
+          <div class="today-plan-switcher-window">
+            <div class="today-plan-switcher-header">
+              <div>
+                <div class="today-plan-kicker">Plan History</div>
+                <h3 id="today-plan-history-modal-title">查看往日计划</h3>
+                <div id="today-plan-history-modal-subtitle" class="today-plan-subtitle">从列表中选择一份往日计划，打开只读详情页。</div>
+              </div>
+              <button id="today-plan-history-close-btn" class="icon-btn" title="关闭">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <div id="today-plan-history-list" class="today-plan-switcher-list"></div>
+          </div>
+        </div>
+
+        <div id="today-plan-commit-modal" class="today-plan-commit-modal hidden">
+          <div id="today-plan-commit-mask" class="today-plan-commit-mask"></div>
+          <div class="today-plan-commit-window">
+            <div class="today-plan-commit-header">
+              <div>
+                <div class="today-plan-kicker">Commit Diff</div>
+                <h3 id="today-plan-commit-title">提交详情</h3>
+                <div id="today-plan-commit-meta" class="today-plan-commit-meta"></div>
+              </div>
+              <button id="today-plan-commit-close-btn" class="icon-btn" title="关闭">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <pre id="today-plan-commit-diff" class="today-plan-commit-diff"></pre>
+          </div>
+        </div>
+      </section>
+
       <section id="memory-management-screen">
         <aside class="memory-sidebar">
           <div class="memory-section-header">

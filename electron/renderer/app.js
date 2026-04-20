@@ -22,6 +22,7 @@ var LIVE_MESSAGE_BUFFER_LIMIT = 250;
 var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
 var workbenchScreen = document.getElementById("workbench-screen");
+var todayPlanScreen = document.getElementById("today-plan-screen");
 var workflowDefinitionsScreen = document.getElementById("workflow-definitions-screen");
 var cardsManagementScreen = document.getElementById("cards-management-screen");
 var memoryManagementScreen = document.getElementById("memory-management-screen");
@@ -202,6 +203,36 @@ var workbenchComments = document.getElementById("workbench-comments");
 var workbenchCommentInput = document.getElementById("workbench-comment-input");
 var workbenchCommentSubmit = document.getElementById("workbench-comment-submit");
 var workbenchTimeline = document.getElementById("workbench-timeline");
+var todayPlanRefreshBtn = document.getElementById("today-plan-refresh-btn");
+var todayPlanViewHistoryBtn = document.getElementById("today-plan-view-history-btn");
+var todayPlanContinuePlanBtn = document.getElementById("today-plan-continue-plan-btn");
+var todayPlanCreateTodayBtn = document.getElementById("today-plan-create-today-btn");
+var todayPlanTitleEl = document.getElementById("today-plan-title");
+var todayPlanPlanStatus = document.getElementById("today-plan-plan-status");
+var todayPlanSubtitleEl = document.getElementById("today-plan-subtitle");
+var todayPlanHeroMeta = document.getElementById("today-plan-hero-meta");
+var todayPlanOverviewSummary = document.getElementById("today-plan-overview-summary");
+var todayPlanSectionMeta = document.getElementById("today-plan-section-meta");
+var todayPlanAddItemBtn = document.getElementById("today-plan-add-item-btn");
+var todayPlanSendMailBtn = document.getElementById("today-plan-send-mail-btn");
+var todayPlanCompleteBtn = document.getElementById("today-plan-complete-btn");
+var todayPlanEmpty = document.getElementById("today-plan-empty");
+var todayPlanEmptyCreateBtn = document.getElementById("today-plan-empty-create-btn");
+var todayPlanEmptyContinueBtn = document.getElementById("today-plan-empty-continue-btn");
+var todayPlanContent = document.getElementById("today-plan-content");
+var todayPlanItems = document.getElementById("today-plan-items");
+var todayPlanHistoryModal = document.getElementById("today-plan-history-modal");
+var todayPlanHistoryMask = document.getElementById("today-plan-history-mask");
+var todayPlanHistoryCloseBtn = document.getElementById("today-plan-history-close-btn");
+var todayPlanHistoryModalTitle = document.getElementById("today-plan-history-modal-title");
+var todayPlanHistoryModalSubtitle = document.getElementById("today-plan-history-modal-subtitle");
+var todayPlanHistoryList = document.getElementById("today-plan-history-list");
+var todayPlanCommitModal = document.getElementById("today-plan-commit-modal");
+var todayPlanCommitMask = document.getElementById("today-plan-commit-mask");
+var todayPlanCommitCloseBtn = document.getElementById("today-plan-commit-close-btn");
+var todayPlanCommitTitle = document.getElementById("today-plan-commit-title");
+var todayPlanCommitMeta = document.getElementById("today-plan-commit-meta");
+var todayPlanCommitDiff = document.getElementById("today-plan-commit-diff");
 var connectionStatus = document.getElementById("connection-status");
 var chatHeader = document.getElementById("chat-header");
 var chatGroupName = document.getElementById("chat-group-name");
@@ -240,6 +271,15 @@ var agentStatusInterval = null;
 var agentStatusData = [];
 var agentRunTraceByGroup = {};
 var activePrimaryNavKey = "agent-groups";
+var todayPlanVisible = false;
+var todayPlanOverview = null;
+var currentTodayPlan = null;
+var currentTodayPlanId = "";
+var todayPlanPendingPatches = {};
+var todayPlanSaveTimers = {};
+var todayPlanAssociationOverlay = null;
+var todayPlanAssociationState = null;
+var todayPlanHistoryModalMode = "view";
 var activeTraceMonitorScope = "active";
 var workflowDefinitionBundles = [];
 var currentWorkflowDefinitionKey = "";
@@ -1345,18 +1385,17 @@ function setConnectionStatus(status) {
   label.textContent = status === "connected" ? "Connected" : status === "connecting" ? "Connecting..." : "Disconnected";
 }
 
-function setPrimaryNav(navKey) {
-  if (navKey === null || navKey === void 0) return;
-  activePrimaryNavKey = navKey;
-  primaryNavItems.forEach((item) => {
-    item.classList.toggle("active", item.getAttribute("data-nav-key") === navKey);
-  });
-  const showWorkbench = navKey === "workbench";
-  const showWorkspace = navKey === "agent-groups";
-  const showWorkflowDefinitions = navKey === "workflow-definitions";
-  const showCardsManagement = navKey === "cards-management";
-  const showMemoryManagement = navKey === "memory-management";
-  const showTraceMonitor = navKey === "trace-monitor";
+function applyScreenVisibility() {
+  const showTodayPlan = todayPlanVisible;
+  const showWorkbench = !showTodayPlan && activePrimaryNavKey === "workbench";
+  const showWorkspace = !showTodayPlan && activePrimaryNavKey === "agent-groups";
+  const showWorkflowDefinitions = !showTodayPlan && activePrimaryNavKey === "workflow-definitions";
+  const showCardsManagement = !showTodayPlan && activePrimaryNavKey === "cards-management";
+  const showMemoryManagement = !showTodayPlan && activePrimaryNavKey === "memory-management";
+  const showTraceMonitor = !showTodayPlan && activePrimaryNavKey === "trace-monitor";
+  if (todayPlanScreen) {
+    todayPlanScreen.classList.toggle("active", showTodayPlan);
+  }
   if (workbenchScreen) {
     workbenchScreen.classList.toggle("active", showWorkbench);
   }
@@ -1375,22 +1414,40 @@ function setPrimaryNav(navKey) {
   if (traceMonitorScreen) {
     traceMonitorScreen.classList.toggle("active", showTraceMonitor);
   }
-  if (showMemoryManagement) {
+}
+
+function setPrimaryNav(navKey) {
+  if (navKey === null || navKey === void 0) return;
+  activePrimaryNavKey = navKey;
+  todayPlanVisible = false;
+  primaryNavItems.forEach((item) => {
+    item.classList.toggle("active", item.getAttribute("data-nav-key") === navKey);
+  });
+  applyScreenVisibility();
+  if (navKey === "memory-management") {
     renderDoctorPanel();
     renderMemoryList();
     loadMemories();
   }
-  if (showWorkbench) {
+  if (navKey === "workbench") {
     loadWorkbenchTasks();
   }
-  if (showWorkflowDefinitions) {
+  if (navKey === "workflow-definitions") {
     loadWorkflowDefinitions({ preserveSelection: true });
   }
-  if (showCardsManagement) {
+  if (navKey === "cards-management") {
     loadCardsRegistry({ preserveSelection: true });
   }
-  if (showTraceMonitor) {
+  if (navKey === "trace-monitor") {
     loadTraceMonitorData({ force: false });
+  }
+}
+
+function toggleTodayPlanScreen() {
+  todayPlanVisible = !todayPlanVisible;
+  applyScreenVisibility();
+  if (todayPlanVisible) {
+    loadTodayPlanOverview({ forceOpenToday: true, showEmptyWhenNoToday: true });
   }
 }
 
@@ -12194,6 +12251,1298 @@ function initChatBgParticleNudge() {
   });
 }
 
+function getTodayPlanLocalDateKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayPlanDefaultAssociations() {
+  return {
+    workbench_task_ids: [],
+    chat_selections: [],
+    services: [],
+  };
+}
+
+function normalizeTodayPlanAssociations(associations) {
+  const source = associations && typeof associations === "object" ? associations : {};
+  const workbenchTaskIds = Array.isArray(source.workbench_task_ids)
+    ? Array.from(new Set(source.workbench_task_ids.filter((item) => typeof item === "string" && item.trim())))
+    : [];
+  const chatSelections = Array.isArray(source.chat_selections)
+    ? source.chat_selections
+      .filter((item) => item && typeof item.group_jid === "string" && Array.isArray(item.conversation_ids))
+      .map((item) => ({
+        group_jid: item.group_jid,
+        conversation_ids: Array.from(new Set(item.conversation_ids.filter((entry) => typeof entry === "string" && entry.trim()))),
+      }))
+      .filter((item) => item.conversation_ids.length > 0)
+    : [];
+  const services = Array.isArray(source.services)
+    ? source.services
+      .filter((item) => item && typeof item.service === "string" && Array.isArray(item.branches))
+      .map((item) => ({
+        service: item.service,
+        branches: Array.from(new Set(item.branches.filter((entry) => typeof entry === "string" && entry.trim()))),
+      }))
+      .filter((item) => item.branches.length > 0)
+    : [];
+  return {
+    workbench_task_ids: workbenchTaskIds,
+    chat_selections: chatSelections,
+    services,
+  };
+}
+
+function cloneTodayPlanAssociations(associations) {
+  return normalizeTodayPlanAssociations(JSON.parse(JSON.stringify(associations || getTodayPlanDefaultAssociations())));
+}
+
+function getTodayPlanItem(itemId) {
+  if (!currentTodayPlan || !Array.isArray(currentTodayPlan.items)) return null;
+  return currentTodayPlan.items.find((item) => item.id === itemId) || null;
+}
+
+function updateTodayPlanLocalItem(itemId, patch) {
+  if (!currentTodayPlan || !Array.isArray(currentTodayPlan.items)) return;
+  const index = currentTodayPlan.items.findIndex((item) => item.id === itemId);
+  if (index < 0) return;
+  currentTodayPlan.items[index] = {
+    ...currentTodayPlan.items[index],
+    ...patch,
+  };
+}
+
+function getTodayPlanHistoryRows() {
+  const rows = Array.isArray(todayPlanOverview && todayPlanOverview.history)
+    ? todayPlanOverview.history
+    : [];
+  return rows.filter((item, index) => rows.findIndex((entry) => entry.id === item.id) === index);
+}
+
+function getTodayPlanResolvedStatus(plan) {
+  if (!plan || typeof plan !== "object") return "";
+  if (plan.status === "completed" || plan.status === "continued") {
+    return plan.status;
+  }
+  return "active";
+}
+
+function getTodayPlanPlanStatusText(plan) {
+  if (!plan) return "待创建";
+  const status = getTodayPlanResolvedStatus(plan);
+  if (status === "completed") {
+    return plan.plan_date === getTodayPlanLocalDateKey() ? "今日已完成" : "往日已完成";
+  }
+  if (status === "continued") {
+    return "已承接";
+  }
+  return plan.plan_date === getTodayPlanLocalDateKey() ? "今日进行中" : "往日未完成";
+}
+
+function getTodayPlanPlanStatusClass(plan) {
+  if (!plan) return "empty";
+  const status = getTodayPlanResolvedStatus(plan);
+  if (status === "completed") return "completed";
+  if (status === "continued" || plan.plan_date !== getTodayPlanLocalDateKey()) return "history";
+  return "";
+}
+
+function isTodayPlanEditableDetail(detail) {
+  return Boolean(
+    detail &&
+    detail.plan &&
+    detail.plan.plan_date === getTodayPlanLocalDateKey() &&
+    getTodayPlanResolvedStatus(detail.plan) === "active"
+  );
+}
+
+function getTodayPlanAggregateMetrics(detail) {
+  const collections = [];
+  if (detail && Array.isArray(detail.items)) {
+    collections.push(detail.items);
+  }
+  if (detail && detail.continued_from && Array.isArray(detail.continued_from.items)) {
+    collections.push(detail.continued_from.items);
+  }
+  let taskCount = 0;
+  let chatCount = 0;
+  let serviceCount = 0;
+  let actionItemCount = 0;
+  let itemCount = 0;
+
+  collections.forEach((items) => {
+    itemCount += items.length;
+    items.forEach((item) => {
+      const relatedTasks = Array.isArray(item.related_tasks) ? item.related_tasks : [];
+      const relatedChats = Array.isArray(item.related_chats) ? item.related_chats : [];
+      const relatedServices = Array.isArray(item.related_services) ? item.related_services : [];
+      taskCount += relatedTasks.length;
+      chatCount += relatedChats.reduce((sum, group) => sum + (Array.isArray(group.conversations) ? group.conversations.length : 0), 0);
+      serviceCount += relatedServices.length;
+      relatedTasks.forEach((task) => {
+        actionItemCount += Array.isArray(task.action_items) ? task.action_items.length : 0;
+      });
+    });
+  });
+
+  return {
+    itemCount,
+    taskCount,
+    chatCount,
+    serviceCount,
+    actionItemCount,
+  };
+}
+
+function closeTodayPlanHistoryModal() {
+  if (todayPlanHistoryModal) {
+    todayPlanHistoryModal.classList.add("hidden");
+  }
+}
+
+function renderTodayPlanHistoryList() {
+  if (!todayPlanHistoryList) return;
+  const mode = todayPlanHistoryModalMode === "continue" ? "continue" : "view";
+  const rows = mode === "continue"
+    ? getTodayPlanHistoryRows().filter((plan) => getTodayPlanResolvedStatus(plan) === "active")
+    : getTodayPlanHistoryRows();
+
+  if (todayPlanHistoryModalTitle) {
+    todayPlanHistoryModalTitle.textContent = mode === "continue" ? "继续往日计划" : "查看往日计划";
+  }
+  if (todayPlanHistoryModalSubtitle) {
+    todayPlanHistoryModalSubtitle.textContent = mode === "continue"
+      ? "仅展示未完成态的往日计划。选择后会创建今日计划，并以只读方式展示其已关联内容。"
+      : "从列表中选择一份往日计划，打开只读详情页。";
+  }
+
+  if (rows.length === 0) {
+    todayPlanHistoryList.innerHTML = `<div class="today-plan-empty-inline">${mode === "continue" ? "当前没有可继续的未完成往日计划。" : "还没有任何往日计划记录。"}</div>`;
+    return;
+  }
+
+  todayPlanHistoryList.innerHTML = rows.map((plan) => {
+    const isActive = currentTodayPlanId === plan.id;
+    const planType = getTodayPlanPlanStatusText(plan);
+    return `
+      <button type="button" class="today-plan-switcher-item${isActive ? " active" : ""}" data-today-plan-id="${escapeAttribute(plan.id)}">
+        <div class="today-plan-switcher-item-head">
+          <div class="today-plan-switcher-date">${escapeHtml(plan.plan_date || "--")}</div>
+          <span class="today-plan-meta-chip">${escapeHtml(planType)}</span>
+        </div>
+        <div class="today-plan-switcher-title">${escapeHtml(plan.title || planType)}</div>
+      </button>
+    `;
+  }).join("");
+
+  Array.from(todayPlanHistoryList.querySelectorAll("[data-today-plan-id]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const planId = button.getAttribute("data-today-plan-id") || "";
+      if (!planId) return;
+      if (mode === "continue") {
+        await continueTodayPlanFromHistory(planId);
+        return;
+      }
+      closeTodayPlanHistoryModal();
+      await loadTodayPlan(planId);
+    });
+  });
+}
+
+function openTodayPlanHistoryModal(mode = "view") {
+  todayPlanHistoryModalMode = mode === "continue" ? "continue" : "view";
+  renderTodayPlanHistoryList();
+  if (todayPlanHistoryModal) {
+    todayPlanHistoryModal.classList.remove("hidden");
+  }
+}
+
+function renderTodayPlanOverviewSummary() {
+  const detail = currentTodayPlan && currentTodayPlan.plan ? currentTodayPlan : null;
+  const metrics = getTodayPlanAggregateMetrics(detail);
+  const hasPlan = Boolean(detail);
+  const hasTodayPlan = Boolean(todayPlanOverview && todayPlanOverview.today);
+  const historyRows = getTodayPlanHistoryRows();
+  const planStatus = getTodayPlanPlanStatusText(hasPlan ? detail.plan : null);
+  const editable = isTodayPlanEditableDetail(detail);
+
+  if (todayPlanPlanStatus) {
+    todayPlanPlanStatus.textContent = planStatus;
+    todayPlanPlanStatus.className = `today-plan-status-badge${planStatus ? ` ${getTodayPlanPlanStatusClass(hasPlan ? detail.plan : null)}` : ""}`;
+  }
+
+  if (todayPlanHeroMeta) {
+    const chips = [
+      `<span class="today-plan-meta-chip">⌘W 快速切换</span>`,
+      `<span class="today-plan-meta-chip">${hasPlan ? escapeHtml(detail.plan.plan_date || "--") : "仅展示今日入口"}</span>`,
+    ];
+    if (detail && detail.continued_from && detail.continued_from.plan) {
+      chips.push(`<span class="today-plan-meta-chip">承接自 ${escapeHtml(detail.continued_from.plan.plan_date || "--")}</span>`);
+    }
+    todayPlanHeroMeta.innerHTML = chips.join("");
+  }
+
+  if (todayPlanOverviewSummary) {
+    todayPlanOverviewSummary.innerHTML = `
+      <div class="today-plan-overview-grid">
+        <div class="today-plan-overview-card">
+          <span>当前视图</span>
+          <strong>${escapeHtml(planStatus)}</strong>
+          <small>${escapeHtml(hasPlan ? (detail.plan.plan_date || "--") : "创建后开始维护")}</small>
+        </div>
+        <div class="today-plan-overview-card">
+          <span>${detail && detail.continued_from ? "可见计划项" : "计划项"}</span>
+          <strong>${escapeHtml(String(metrics.itemCount))}</strong>
+          <small>${escapeHtml(editable ? "包含今日计划与承接内容" : "当前详情页展示条目数")}</small>
+        </div>
+        <div class="today-plan-overview-card">
+          <span>任务 / 待处理</span>
+          <strong>${escapeHtml(String(metrics.taskCount))}</strong>
+          <small>待处理 ${escapeHtml(String(metrics.actionItemCount))} 项</small>
+        </div>
+        <div class="today-plan-overview-card">
+          <span>${detail && detail.continued_from ? "承接来源" : "会话 / 服务"}</span>
+          <strong>${escapeHtml(detail && detail.continued_from ? (detail.continued_from.plan.plan_date || "--") : `${metrics.chatCount} / ${metrics.serviceCount}`)}</strong>
+          <small>${escapeHtml(detail && detail.continued_from ? "往日计划内容为只读展示" : "群聊会话 / 服务分支")}</small>
+        </div>
+      </div>
+    `;
+  }
+
+  if (todayPlanViewHistoryBtn) {
+    todayPlanViewHistoryBtn.disabled = false;
+  }
+  if (todayPlanContinuePlanBtn) {
+    todayPlanContinuePlanBtn.classList.toggle("hidden", hasTodayPlan);
+    todayPlanContinuePlanBtn.disabled = false;
+  }
+}
+
+function renderTodayPlanMessageBody(message) {
+  if (!message) return "";
+  if (message.is_bot_message) {
+    return renderMarkdown(message.content || "");
+  }
+  return escapeHtml(message.content || "").replace(/\n/g, "<br>");
+}
+
+function renderTodayPlanTaskActions(task, options = {}) {
+  if (!task || !Array.isArray(task.action_items) || task.action_items.length === 0) {
+    return '<div class="today-plan-empty-inline">当前没有待处理项</div>';
+  }
+  const readonly = Boolean(options.readonly);
+  return `
+    <div class="today-plan-action-items">
+      ${task.action_items.map((item) => {
+        const actionButtons = [];
+        if (!readonly && item.item_type === "approval") {
+          const labels = getWorkbenchApprovalLabels(task.task, {
+            approval_type: item.stage_key || task.task.workflow_status,
+            action_mode: item.action_mode || "approve_only",
+          });
+          if (item.action_mode !== "input_required") {
+            actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-task-action="${escapeAttribute(task.task_id)}" data-today-plan-task-op="approve" data-today-plan-task-op-title="${escapeAttribute(item.title || task.title || "当前节点")}">${escapeHtml(labels.approve || "通过")}</button>`);
+          }
+          actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-task-action="${escapeAttribute(task.task_id)}" data-today-plan-task-op="skip" data-today-plan-task-op-title="${escapeAttribute(item.title || task.title || "当前节点")}">${escapeHtml(labels.skip || "跳过此节点")}</button>`);
+          if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
+            const actionName = item.action_mode === "input_required" ? "submit_access_token" : "revise";
+            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-task-action="${escapeAttribute(task.task_id)}" data-today-plan-task-op="${escapeAttribute(actionName)}" data-today-plan-task-op-title="${escapeAttribute(item.title || task.title || "当前节点")}">${escapeHtml(labels.revise || "驳回并修改")}</button>`);
+          }
+        } else if (!readonly) {
+          const askQuestion = item.source_type === "ask_user_question"
+            ? item.extra && (item.extra.current_question || (Array.isArray(item.extra.questions) ? item.extra.questions[0] : null))
+            : null;
+          const askOptions = askQuestion && Array.isArray(askQuestion.options) ? askQuestion.options : null;
+          if (Array.isArray(askOptions) && askOptions.length > 0) {
+            askOptions.forEach((opt) => {
+              actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="reply" data-today-plan-prefill="${escapeAttribute(opt.label || "")}">${escapeHtml(opt.label || "回复")}</button>`);
+            });
+            actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="reply">自定义回复</button>`);
+            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="skip">跳过</button>`);
+          } else {
+            if (item.replyable) {
+              actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="reply">回复</button>`);
+            }
+            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="confirm">确认</button>`);
+            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="skip">跳过</button>`);
+            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="cancel">取消</button>`);
+          }
+        }
+        return `
+          <div class="today-plan-action-item">
+            <div class="today-plan-action-item-head">
+              <div class="today-plan-option-title">${escapeHtml(item.title || "待处理项")}</div>
+              <div class="today-plan-meta-pill">${escapeHtml(item.status || "pending")}</div>
+            </div>
+            <div class="today-plan-description">${escapeHtml(item.body || "暂无描述")}</div>
+            ${readonly ? "" : `<div class="today-plan-action-item-actions">${actionButtons.join("")}</div>`}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderTodayPlanItemCard(item, index, options = {}) {
+  const readonly = Boolean(options.readonly);
+  const readonlyLabel = options.readonlyLabel || "只读";
+  const taskCount = Array.isArray(item.related_tasks) ? item.related_tasks.length : 0;
+  const chatCount = Array.isArray(item.related_chats)
+    ? item.related_chats.reduce((sum, group) => sum + (Array.isArray(group.conversations) ? group.conversations.length : 0), 0)
+    : 0;
+  const serviceCount = Array.isArray(item.related_services) ? item.related_services.length : 0;
+  const titleField = readonly
+    ? `<div class="today-plan-static-title">${escapeHtml(item.title || "未命名计划")}</div>`
+    : `<input class="today-plan-input" data-today-plan-field="title" value="${escapeAttribute(item.title || "")}" placeholder="例如：完成支付链路自测与联调安排" />`;
+  const detailField = readonly
+    ? `<div class="today-plan-static-detail">${escapeHtml(item.detail || "暂无补充说明").replace(/\n/g, "<br>")}</div>`
+    : `<textarea class="today-plan-textarea" data-today-plan-field="detail" placeholder="补充这条计划的目标、范围、交付预期和风险">${escapeHtml(item.detail || "")}</textarea>`;
+
+  return `
+    <div class="today-plan-item-card" data-today-plan-item="${escapeAttribute(item.id)}" data-today-plan-readonly="${readonly ? "1" : "0"}">
+      <div class="today-plan-item-header">
+        <div class="today-plan-item-header-main">
+          <span class="today-plan-item-order">${escapeHtml(String(index + 1).padStart(2, "0"))}</span>
+          <div class="today-plan-item-fields">
+            ${titleField}
+          </div>
+        </div>
+        <div class="today-plan-item-actions">
+          ${readonly ? `<span class="today-plan-item-readonly-note">${escapeHtml(readonlyLabel)}</span>` : `
+            <button type="button" class="btn-ghost" data-today-plan-edit="associations" data-today-plan-item-id="${escapeAttribute(item.id)}">关联信息</button>
+            <button type="button" class="btn-ghost" data-today-plan-delete="${escapeAttribute(item.id)}">删除</button>
+          `}
+        </div>
+      </div>
+      ${detailField}
+
+      <div class="today-plan-association-summary">
+        <div class="today-plan-summary-pill">
+          <strong>工作台任务</strong>
+          <span>${escapeHtml(String(taskCount))}</span>
+        </div>
+        <div class="today-plan-summary-pill">
+          <strong>群聊会话</strong>
+          <span>${escapeHtml(String(chatCount))}</span>
+        </div>
+        <div class="today-plan-summary-pill">
+          <strong>服务分支</strong>
+          <span>${escapeHtml(String(serviceCount))}</span>
+        </div>
+      </div>
+
+      <section class="today-plan-section">
+        <div class="today-plan-section-header">
+          <div>
+            <div class="today-plan-section-title">关联工作台任务</div>
+            <div class="today-plan-section-subtitle">${readonly ? "只读展示当前任务节点与待处理项。" : "展示当前节点，并可直接处理待处理项。"}</div>
+          </div>
+        </div>
+        ${taskCount === 0 ? '<div class="today-plan-empty-inline">未关联工作台任务</div>' : `
+          <div class="today-plan-task-block">
+            ${item.related_tasks.map((task) => `
+              <div class="today-plan-task-card">
+                <div class="today-plan-task-head">
+                  <div>
+                    <div class="today-plan-task-title">${escapeHtml(task.title || task.task_id)}</div>
+                    <div class="today-plan-pill-row">
+                      <span class="today-plan-meta-pill">${escapeHtml(task.service || "未设置服务")}</span>
+                      <span class="today-plan-meta-pill">当前节点：${escapeHtml(task.workflow_stage_label || "--")}</span>
+                      <span class="today-plan-meta-pill">流程状态：${escapeHtml(task.workflow_status_label || "--")}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="today-plan-description">${escapeHtml(task.description || "暂无任务描述")}</div>
+                ${renderTodayPlanTaskActions(task, { readonly })}
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </section>
+
+      <section class="today-plan-section">
+        <div class="today-plan-section-header">
+          <div>
+            <div class="today-plan-section-title">关联群聊会话</div>
+            <div class="today-plan-section-subtitle">按群展示所选会话与聊天内容。</div>
+          </div>
+        </div>
+        ${chatCount === 0 ? '<div class="today-plan-empty-inline">未关联群聊会话</div>' : `
+          <div class="today-plan-chat-block">
+            ${item.related_chats.map((group) => `
+              <div class="today-plan-chat-card">
+                <div class="today-plan-chat-head">
+                  <div>
+                    <div class="today-plan-chat-title">${escapeHtml(group.group_name || group.group_jid)}</div>
+                    <div class="today-plan-pill-row">
+                      <span class="today-plan-meta-pill">${escapeHtml(String((group.conversations || []).length))} 个会话</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="today-plan-conversation-list">
+                  ${(group.conversations || []).map((conversation) => `
+                    <div class="today-plan-conversation-card">
+                      <div class="today-plan-conversation-head">
+                        <div>
+                          <div class="today-plan-conversation-title">${escapeHtml(conversation.title || "未命名会话")}</div>
+                          <div class="today-plan-pill-row">
+                            <span class="today-plan-meta-pill">${escapeHtml(formatDateTime(conversation.started_at || ""))}</span>
+                            <span class="today-plan-meta-pill">${escapeHtml(String(conversation.message_count || 0))} 条消息</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="today-plan-description">${escapeHtml(conversation.preview || "无摘要")}</div>
+                      <div class="today-plan-chat-messages">
+                        ${(conversation.messages || []).map((message) => `
+                          <div class="today-plan-chat-message">
+                            <div class="today-plan-chat-message-head">
+                              <span>${escapeHtml(message.sender_name || message.sender || "未知")}</span>
+                              <span>${escapeHtml(formatDateTime(message.timestamp || ""))}</span>
+                            </div>
+                            <div class="today-plan-chat-message-body">${renderTodayPlanMessageBody(message)}</div>
+                          </div>
+                        `).join("")}
+                      </div>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </section>
+
+      <section class="today-plan-section">
+        <div class="today-plan-section-header">
+          <div>
+            <div class="today-plan-section-title">关联服务与分支</div>
+            <div class="today-plan-section-subtitle">包含手动选择的服务，以及由工作台任务自动带出的工作分支。</div>
+          </div>
+        </div>
+        ${serviceCount === 0 ? '<div class="today-plan-empty-inline">未关联服务分支</div>' : `
+          <div class="today-plan-service-block">
+            ${item.related_services.map((service) => `
+              <div class="today-plan-service-card">
+                <div class="today-plan-service-head">
+                  <div>
+                    <div class="today-plan-service-title">${escapeHtml(service.service || "未命名服务")}</div>
+                    <div class="today-plan-pill-row">
+                      <span class="today-plan-meta-pill">${escapeHtml(service.repo_path || "未配置仓库路径")}</span>
+                      <span class="today-plan-meta-pill">${service.repo_exists ? "仓库可读" : "仓库不存在"}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="today-plan-branch-list">
+                  ${(service.branches || []).map((branch) => `
+                    <div class="today-plan-branch-card">
+                      <div class="today-plan-service-head">
+                        <div>
+                          <div class="today-plan-service-title">${escapeHtml(branch.name || "--")}</div>
+                          <div class="today-plan-pill-row">
+                            <span class="today-plan-meta-pill">来源：${escapeHtml(branch.source || "manual")}</span>
+                            ${branch.ref ? `<span class="today-plan-meta-pill">${escapeHtml(branch.ref)}</span>` : ""}
+                          </div>
+                        </div>
+                      </div>
+                      ${(branch.commits || []).length === 0 ? `<div class="today-plan-empty-inline">${escapeHtml(branch.error || "当天没有 commit")}</div>` : `
+                        <div class="today-plan-commit-list">
+                          ${(branch.commits || []).map((commit) => `
+                            <button type="button" class="today-plan-commit-card" data-today-plan-commit="${escapeAttribute(commit.hash)}" data-today-plan-service="${escapeAttribute(service.service)}">
+                              <div class="today-plan-commit-subject">${escapeHtml(commit.subject || commit.short_hash)}</div>
+                              <div class="today-plan-commit-meta-row">
+                                <span>${escapeHtml(commit.short_hash || "")}</span>
+                                <span>${escapeHtml(commit.author || "")}</span>
+                                <span>${escapeHtml(formatDateTime(commit.committed_at || ""))}</span>
+                              </div>
+                            </button>
+                          `).join("")}
+                        </div>
+                      `}
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </section>
+    </div>
+  `;
+}
+
+function bindEditableTodayPlanItemInteractions() {
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-field]")).forEach((field) => {
+    const card = field.closest("[data-today-plan-item]");
+    if (!card) return;
+    const itemId = card.getAttribute("data-today-plan-item") || "";
+    const key = field.getAttribute("data-today-plan-field") || "";
+    field.addEventListener("input", () => {
+      const patch = {};
+      patch[key] = field.value;
+      updateTodayPlanLocalItem(itemId, patch);
+      queueTodayPlanItemPatch(itemId, patch);
+    });
+    field.addEventListener("blur", () => {
+      const patch = {};
+      patch[key] = field.value;
+      queueTodayPlanItemPatch(itemId, patch, true);
+    });
+  });
+
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-delete]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const itemId = button.getAttribute("data-today-plan-delete") || "";
+      if (!itemId) return;
+      await deleteTodayPlanItemEntry(itemId);
+    });
+  });
+
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-edit='associations']")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const itemId = button.getAttribute("data-today-plan-item-id") || "";
+      if (!itemId) return;
+      await openTodayPlanAssociationDialog(itemId);
+    });
+  });
+
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-action-item]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const taskId = button.getAttribute("data-today-plan-task") || "";
+      const actionItemId = button.getAttribute("data-today-plan-action-item") || "";
+      const action = button.getAttribute("data-today-plan-action") || "";
+      const prefillText = button.getAttribute("data-today-plan-prefill") || "";
+      if (!taskId || !actionItemId || !action) return;
+      await triggerWorkbenchActionItem(taskId, actionItemId, action, prefillText || undefined);
+      if (currentTodayPlanId) {
+        await loadTodayPlan(currentTodayPlanId);
+      }
+    });
+  });
+
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-task-action]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const taskId = button.getAttribute("data-today-plan-task-action") || "";
+      const action = button.getAttribute("data-today-plan-task-op") || "";
+      const actionTitle = button.getAttribute("data-today-plan-task-op-title") || "当前节点";
+      if (!taskId || !action) return;
+      if (action === "skip") {
+        if (!(await openConfirmDialog(`确认跳过「${actionTitle}」并进入下一步吗？`, { title: "跳过节点" }))) return;
+      }
+      await triggerWorkbenchAction(taskId, action);
+      if (currentTodayPlanId) {
+        await loadTodayPlan(currentTodayPlanId);
+      }
+    });
+  });
+}
+
+function bindTodayPlanCommitInteractions() {
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-commit]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const service = button.getAttribute("data-today-plan-service") || "";
+      const commit = button.getAttribute("data-today-plan-commit") || "";
+      if (!service || !commit) return;
+      await openTodayPlanCommitDialog(service, commit);
+    });
+  });
+}
+
+function renderTodayPlanItems() {
+  if (!todayPlanItems || !currentTodayPlan || !Array.isArray(currentTodayPlan.items)) return;
+  const editable = isTodayPlanEditableDetail(currentTodayPlan);
+  const currentItems = Array.isArray(currentTodayPlan.items) ? currentTodayPlan.items : [];
+  const continuedFrom = currentTodayPlan.continued_from || null;
+  const sections = [];
+
+  if (continuedFrom) {
+    sections.push(`
+      <section class="today-plan-section-block">
+        <div class="today-plan-section-header">
+          <div>
+            <div class="today-plan-section-title">承接往日计划</div>
+            <div class="today-plan-section-subtitle">来源：${escapeHtml(continuedFrom.plan.plan_date || "--")} · ${escapeHtml(getTodayPlanPlanStatusText(continuedFrom.plan))} · 以下内容均为只读展示。</div>
+          </div>
+        </div>
+        ${continuedFrom.items.length === 0
+          ? '<div class="today-plan-empty-inline">该往日计划没有可展示的计划项。</div>'
+          : `<div class="today-plan-section-stack">${continuedFrom.items.map((item, index) => renderTodayPlanItemCard(item, index, { readonly: true, readonlyLabel: "承接内容只读" })).join("")}</div>`}
+      </section>
+    `);
+  }
+
+  sections.push(`
+    <section class="today-plan-section-block">
+      <div class="today-plan-section-header">
+        <div>
+          <div class="today-plan-section-title">${editable ? "今日计划项" : "计划详情"}</div>
+          <div class="today-plan-section-subtitle">${editable ? "维护今天的计划项；每条都可以继续新增、编辑、关联和发送邮件前汇总。" : "当前页面为只读详情，不可编辑、删除、关联或处理待处理项。"}</div>
+        </div>
+      </div>
+      ${currentItems.length === 0
+        ? `<div class="today-plan-empty-inline">${editable ? "先新增一条计划项，再把工作台任务、群聊和服务分支挂上来。" : "当前计划没有计划项。"}</div>`
+        : `<div class="today-plan-section-stack">${currentItems.map((item, index) => renderTodayPlanItemCard(item, index, { readonly: !editable, readonlyLabel: "历史计划只读" })).join("")}</div>`}
+    </section>
+  `);
+
+  todayPlanItems.innerHTML = sections.join("");
+  if (editable) {
+    bindEditableTodayPlanItemInteractions();
+  }
+  bindTodayPlanCommitInteractions();
+}
+
+function renderTodayPlanScreen() {
+  renderTodayPlanHistoryList();
+  const detail = currentTodayPlan && currentTodayPlan.plan ? currentTodayPlan : null;
+  const hasPlan = Boolean(detail);
+  const hasTodayPlan = Boolean(todayPlanOverview && todayPlanOverview.today);
+  const editable = isTodayPlanEditableDetail(detail);
+  const currentTodayId = todayPlanOverview && todayPlanOverview.today ? todayPlanOverview.today.id : "";
+
+  if (todayPlanContent) {
+    todayPlanContent.classList.toggle("hidden", !hasPlan);
+  }
+  if (todayPlanEmpty) {
+    todayPlanEmpty.classList.toggle("hidden", hasPlan);
+  }
+  if (todayPlanAddItemBtn) {
+    todayPlanAddItemBtn.disabled = !editable;
+  }
+  if (todayPlanSendMailBtn) {
+    todayPlanSendMailBtn.disabled = !editable;
+  }
+  if (todayPlanCompleteBtn) {
+    todayPlanCompleteBtn.classList.toggle("hidden", !hasPlan || !detail || detail.plan.plan_date !== getTodayPlanLocalDateKey());
+    todayPlanCompleteBtn.disabled = !editable;
+    todayPlanCompleteBtn.textContent = detail && detail.plan.status === "completed" ? "今日计划已完成" : "完成今日计划";
+  }
+  if (todayPlanCreateTodayBtn) {
+    todayPlanCreateTodayBtn.classList.toggle("hidden", hasTodayPlan && currentTodayId === currentTodayPlanId);
+    if (!hasTodayPlan) {
+      todayPlanCreateTodayBtn.disabled = false;
+      todayPlanCreateTodayBtn.textContent = "创建今日计划";
+    } else {
+      todayPlanCreateTodayBtn.disabled = false;
+      todayPlanCreateTodayBtn.textContent = "打开今日计划";
+    }
+  }
+  if (todayPlanEmptyContinueBtn) {
+    todayPlanEmptyContinueBtn.classList.toggle("hidden", hasTodayPlan);
+    todayPlanEmptyContinueBtn.disabled = false;
+  }
+
+  renderTodayPlanOverviewSummary();
+  if (!hasPlan) {
+    if (todayPlanTitleEl) todayPlanTitleEl.textContent = "今日计划";
+    if (todayPlanSubtitleEl) todayPlanSubtitleEl.textContent = "今天还没有创建计划。你可以直接创建今日计划，或从往日计划中查看详情、继续未完成计划。";
+    if (todayPlanSectionMeta) todayPlanSectionMeta.textContent = "先创建今日计划，再把任务、群聊会话和服务分支按计划项组织起来。";
+    if (todayPlanItems) todayPlanItems.innerHTML = "";
+    return;
+  }
+
+  if (todayPlanTitleEl) {
+    todayPlanTitleEl.textContent = detail.plan.plan_date === getTodayPlanLocalDateKey() ? "今日计划" : `${detail.plan.plan_date || ""} 计划`;
+  }
+  if (todayPlanSubtitleEl) {
+    const currentCount = Array.isArray(detail.items) ? detail.items.length : 0;
+    const linkText = detail.continued_from ? ` · 承接自 ${detail.continued_from.plan.plan_date}` : "";
+    todayPlanSubtitleEl.textContent = `${detail.plan.title || "今日计划"} · 共 ${currentCount} 条当前计划项${linkText}`;
+  }
+  if (todayPlanSectionMeta) {
+    const metrics = getTodayPlanAggregateMetrics(detail);
+    todayPlanSectionMeta.textContent = `${metrics.itemCount} 条可见计划项 · ${metrics.taskCount} 个任务 · ${metrics.chatCount} 个会话 · ${metrics.serviceCount} 个服务`;
+  }
+  renderTodayPlanItems();
+}
+
+async function openOrCreateTodayPlanEntry() {
+  const todayId = todayPlanOverview && todayPlanOverview.today ? todayPlanOverview.today.id : "";
+  if (todayId) {
+    await loadTodayPlan(todayId);
+    return;
+  }
+  await createTodayPlanNow();
+}
+
+async function continueTodayPlanFromHistory(planId) {
+  if (!planId) return;
+  try {
+    const res = await apiFetch("/api/today-plan", {
+      method: "POST",
+      body: JSON.stringify({
+        plan_date: getTodayPlanLocalDateKey(),
+        continue_from_plan_id: planId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    closeTodayPlanHistoryModal();
+    todayPlanOverview = todayPlanOverview || { today: null, history: [] };
+    todayPlanOverview.today = data.plan || null;
+    currentTodayPlan = data.detail || null;
+    currentTodayPlanId = data.plan && data.plan.id ? data.plan.id : "";
+    await loadTodayPlanOverview({ forceOpenToday: true });
+  } catch (err) {
+    console.error("Failed to continue history today plan:", err);
+    alert(err.message || "继续往日计划失败");
+  }
+}
+
+async function completeCurrentTodayPlan() {
+  if (!currentTodayPlanId) return;
+  if (!(await openConfirmDialog("确认将这份今日计划标记为已完成吗？完成后将切换为只读状态。", { title: "完成今日计划" }))) return;
+  try {
+    const res = await apiFetch("/api/today-plan/complete", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: currentTodayPlanId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    currentTodayPlan = data.detail || null;
+    if (todayPlanOverview && todayPlanOverview.today && todayPlanOverview.today.id === currentTodayPlanId) {
+      todayPlanOverview.today = data.plan || todayPlanOverview.today;
+    }
+    renderTodayPlanScreen();
+  } catch (err) {
+    console.error("Failed to complete today plan:", err);
+    alert(err.message || "完成今日计划失败");
+  }
+}
+
+async function loadTodayPlan(planId) {
+  if (!planId) return;
+  try {
+    const res = await apiFetch(`/api/today-plan?id=${encodeURIComponent(planId)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    currentTodayPlan = data;
+    currentTodayPlanId = data.plan && data.plan.id ? data.plan.id : planId;
+    renderTodayPlanScreen();
+  } catch (err) {
+    console.error("Failed to load today plan:", err);
+    currentTodayPlan = null;
+    currentTodayPlanId = "";
+    renderTodayPlanScreen();
+    alert(err.message || "加载今日计划失败");
+  }
+}
+
+async function loadTodayPlanOverview(options = {}) {
+  try {
+    const todayKey = getTodayPlanLocalDateKey();
+    const res = await apiFetch(`/api/today-plans/overview?date=${encodeURIComponent(todayKey)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    todayPlanOverview = data;
+    if (data.today && options.forceOpenToday) {
+      await loadTodayPlan(data.today.id);
+      return;
+    }
+    if (options.showEmptyWhenNoToday && !data.today) {
+      currentTodayPlan = null;
+      currentTodayPlanId = "";
+      renderTodayPlanScreen();
+      return;
+    }
+    if (!currentTodayPlanId && data.today) {
+      await loadTodayPlan(data.today.id);
+      return;
+    }
+    if (currentTodayPlanId) {
+      await loadTodayPlan(currentTodayPlanId);
+      return;
+    }
+    renderTodayPlanScreen();
+  } catch (err) {
+    console.error("Failed to load today plan overview:", err);
+    todayPlanOverview = { today: null, history: [] };
+    currentTodayPlan = null;
+    currentTodayPlanId = "";
+    renderTodayPlanScreen();
+  }
+}
+
+async function createTodayPlanNow() {
+  try {
+    const res = await apiFetch("/api/today-plan", {
+      method: "POST",
+      body: JSON.stringify({ plan_date: getTodayPlanLocalDateKey() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    todayPlanOverview = todayPlanOverview || { today: null, history: [] };
+    if (data.plan) {
+      todayPlanOverview.today = data.plan;
+      currentTodayPlanId = data.plan.id;
+    }
+    currentTodayPlan = data.detail || null;
+    renderTodayPlanScreen();
+    await loadTodayPlanOverview({ forceOpenToday: true });
+  } catch (err) {
+    console.error("Failed to create today plan:", err);
+    alert(err.message || "创建今日计划失败");
+  }
+}
+
+async function createTodayPlanItemEntry() {
+  if (!currentTodayPlanId) {
+    await createTodayPlanNow();
+    if (!currentTodayPlanId) return;
+  }
+  try {
+    const res = await apiFetch("/api/today-plan/item", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: currentTodayPlanId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await loadTodayPlan(currentTodayPlanId);
+  } catch (err) {
+    console.error("Failed to create today plan item:", err);
+    alert(err.message || "新增计划项失败");
+  }
+}
+
+async function flushTodayPlanItemPatch(itemId) {
+  const patch = todayPlanPendingPatches[itemId];
+  if (!patch) return;
+  delete todayPlanPendingPatches[itemId];
+  if (todayPlanSaveTimers[itemId]) {
+    clearTimeout(todayPlanSaveTimers[itemId]);
+    delete todayPlanSaveTimers[itemId];
+  }
+  try {
+    const res = await apiFetch("/api/today-plan/item", {
+      method: "PATCH",
+      body: JSON.stringify({
+        item_id: itemId,
+        ...patch,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (data.item) {
+      updateTodayPlanLocalItem(itemId, data.item);
+    }
+  } catch (err) {
+    console.error("Failed to save today plan item:", err);
+    alert(err.message || "保存计划项失败");
+  }
+}
+
+function clearQueuedTodayPlanItemPatch(itemId) {
+  delete todayPlanPendingPatches[itemId];
+  if (todayPlanSaveTimers[itemId]) {
+    clearTimeout(todayPlanSaveTimers[itemId]);
+    delete todayPlanSaveTimers[itemId];
+  }
+}
+
+function queueTodayPlanItemPatch(itemId, patch, immediate = false) {
+  todayPlanPendingPatches[itemId] = {
+    ...(todayPlanPendingPatches[itemId] || {}),
+    ...patch,
+  };
+  if (todayPlanSaveTimers[itemId]) {
+    clearTimeout(todayPlanSaveTimers[itemId]);
+  }
+  if (immediate) {
+    flushTodayPlanItemPatch(itemId);
+    return;
+  }
+  todayPlanSaveTimers[itemId] = setTimeout(() => {
+    flushTodayPlanItemPatch(itemId);
+  }, 320);
+}
+
+async function deleteTodayPlanItemEntry(itemId) {
+  const item = getTodayPlanItem(itemId);
+  if (!(await openConfirmDialog(`确认删除计划项「${item?.title || "未命名计划"}」吗？`, { title: "删除计划项" }))) return;
+  clearQueuedTodayPlanItemPatch(itemId);
+  try {
+    const res = await apiFetch("/api/today-plan/item", {
+      method: "DELETE",
+      body: JSON.stringify({ item_id: itemId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (currentTodayPlanId) {
+      await loadTodayPlan(currentTodayPlanId);
+    }
+  } catch (err) {
+    console.error("Failed to delete today plan item:", err);
+    alert(err.message || "删除计划项失败");
+  }
+}
+
+function closeTodayPlanAssociationDialog() {
+  if (todayPlanAssociationOverlay) {
+    todayPlanAssociationOverlay.remove();
+    todayPlanAssociationOverlay = null;
+    todayPlanAssociationState = null;
+  }
+}
+
+async function ensureTodayPlanServiceBranchesLoaded(state, service) {
+  if (state.branchesByService[service] || state.loadingBranches[service]) return;
+  state.loadingBranches[service] = true;
+  renderTodayPlanAssociationDialog();
+  try {
+    const res = await apiFetch(`/api/today-plan/service/branches?service=${encodeURIComponent(service)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    state.branchesByService[service] = Array.isArray(data.branches) ? data.branches : [];
+  } catch (err) {
+    console.error("Failed to load today plan service branches:", err);
+    state.branchesByService[service] = [];
+  } finally {
+    state.loadingBranches[service] = false;
+    renderTodayPlanAssociationDialog();
+  }
+}
+
+function getTodayPlanAssociationServiceEntry(state, service) {
+  return state.associations.services.find((item) => item.service === service) || null;
+}
+
+function updateTodayPlanChatSelection(state, groupJid, conversationId, checked) {
+  let groupEntry = state.associations.chat_selections.find((item) => item.group_jid === groupJid) || null;
+  if (!groupEntry && checked) {
+    groupEntry = {
+      group_jid: groupJid,
+      conversation_ids: [],
+    };
+    state.associations.chat_selections.push(groupEntry);
+  }
+  if (!groupEntry) return;
+  if (checked) {
+    if (!groupEntry.conversation_ids.includes(conversationId)) {
+      groupEntry.conversation_ids.push(conversationId);
+    }
+  } else {
+    groupEntry.conversation_ids = groupEntry.conversation_ids.filter((id) => id !== conversationId);
+    if (groupEntry.conversation_ids.length === 0) {
+      state.associations.chat_selections = state.associations.chat_selections.filter((item) => item.group_jid !== groupJid);
+    }
+  }
+}
+
+function renderTodayPlanAssociationDialog() {
+  const state = todayPlanAssociationState;
+  if (!state || !todayPlanAssociationOverlay) return;
+  const dialog = todayPlanAssociationOverlay.querySelector(".today-plan-association-dialog");
+  if (!dialog) return;
+
+  dialog.innerHTML = `
+    <div class="today-plan-association-header">
+      <div>
+        <div class="today-plan-kicker">Associations</div>
+        <h3>编辑关联信息</h3>
+        <div class="today-plan-subtitle">勾选工作台任务、群聊会话与服务分支。工作台任务关联后会自动带出对应服务与工作分支。</div>
+      </div>
+      <button type="button" class="icon-btn" data-today-plan-close-associations title="关闭">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="today-plan-association-grid">
+      <section class="today-plan-association-column">
+        <div class="today-plan-association-title">工作台任务</div>
+        <div class="today-plan-option-desc">多选后会在计划页展示当前节点和待处理项。</div>
+        <div class="today-plan-association-list">
+          ${(state.workbenchTasks || []).map((task) => `
+            <label class="today-plan-option-card today-plan-checkbox-row">
+              <input type="checkbox" data-today-plan-association="task" value="${escapeAttribute(task.id)}" ${state.associations.workbench_task_ids.includes(task.id) ? "checked" : ""} />
+              <div>
+                <div class="today-plan-option-title">${escapeHtml(task.title || task.id)}</div>
+                <div class="today-plan-option-desc">${escapeHtml(task.service || "--")} · ${escapeHtml(task.workflow_stage_label || task.workflow_status_label || "--")}</div>
+              </div>
+            </label>
+          `).join("") || '<div class="today-plan-empty-inline">暂无工作台任务</div>'}
+        </div>
+      </section>
+      <section class="today-plan-association-column">
+        <div class="today-plan-association-title">群聊会话</div>
+        <div class="today-plan-option-desc">可以在多个群里分别勾选多个会话。</div>
+        <div class="today-plan-conversation-list">
+          ${(state.groups || []).map((group) => {
+            const selectedGroup = state.associations.chat_selections.find((item) => item.group_jid === group.jid) || null;
+            const conversations = state.conversationsByGroup[group.jid] || [];
+            return `
+              <div class="today-plan-option-card">
+                <div class="today-plan-option-title">${escapeHtml(group.name || group.jid)}</div>
+                <div class="today-plan-option-desc">${escapeHtml(group.folder || "")}</div>
+                <div class="today-plan-conversation-list">
+                  ${conversations.map((conversation) => `
+                    <label class="today-plan-checkbox-row">
+                      <input
+                        type="checkbox"
+                        data-today-plan-association="conversation"
+                        data-group-jid="${escapeAttribute(group.jid)}"
+                        value="${escapeAttribute(conversation.id)}"
+                        ${selectedGroup && selectedGroup.conversation_ids.includes(conversation.id) ? "checked" : ""}
+                      />
+                      <div>
+                        <div class="today-plan-option-title">${escapeHtml(conversation.title || "未命名会话")}</div>
+                        <div class="today-plan-option-desc">${escapeHtml(conversation.preview || "无摘要")} · ${escapeHtml(String(conversation.message_count || 0))} 条</div>
+                      </div>
+                    </label>
+                  `).join("") || '<div class="today-plan-empty-inline">暂无可选会话</div>'}
+                </div>
+              </div>
+            `;
+          }).join("") || '<div class="today-plan-empty-inline">暂无可选群聊</div>'}
+        </div>
+      </section>
+      <section class="today-plan-association-column">
+        <div class="today-plan-association-title">服务与分支</div>
+        <div class="today-plan-option-desc">先选择服务，再为每个服务勾选一个或多个分支。</div>
+        <div class="today-plan-association-list">
+          ${(state.serviceOptions || []).map((service) => {
+            const selected = getTodayPlanAssociationServiceEntry(state, service.service);
+            const branches = state.branchesByService[service.service] || [];
+            const loading = Boolean(state.loadingBranches[service.service]);
+            return `
+              <div class="today-plan-option-card">
+                <label class="today-plan-checkbox-row">
+                  <input type="checkbox" data-today-plan-association="service" value="${escapeAttribute(service.service)}" ${selected ? "checked" : ""} />
+                  <div>
+                    <div class="today-plan-option-title">${escapeHtml(service.service)}</div>
+                    <div class="today-plan-option-desc">${escapeHtml(service.repo_path || "未配置仓库路径")}</div>
+                  </div>
+                </label>
+                ${selected ? `
+                  <div class="today-plan-conversation-list">
+                    ${loading ? '<div class="today-plan-empty-inline">正在加载分支...</div>' : branches.length > 0 ? branches.map((branch) => `
+                      <label class="today-plan-checkbox-row">
+                        <input type="checkbox" data-today-plan-association="branch" data-service-name="${escapeAttribute(service.service)}" value="${escapeAttribute(branch.name)}" ${selected.branches.includes(branch.name) ? "checked" : ""} />
+                        <div>
+                          <div class="today-plan-option-title">${escapeHtml(branch.name)}</div>
+                          <div class="today-plan-option-desc">${branch.current ? "当前分支" : branch.source === "remote" ? "远端分支" : "本地分支"}${branch.default_branch ? " · 默认分支" : ""}${branch.staging_branch ? " · 预发分支" : ""}</div>
+                        </div>
+                      </label>
+                    `).join("") : '<div class="today-plan-empty-inline">没有可用分支</div>'}
+                  </div>
+                ` : ""}
+              </div>
+            `;
+          }).join("") || '<div class="today-plan-empty-inline">暂无服务配置</div>'}
+        </div>
+      </section>
+    </div>
+    <div class="today-plan-association-footer">
+      <button type="button" class="btn-ghost" data-today-plan-close-associations>取消</button>
+      <button type="button" class="btn-primary" data-today-plan-save-associations>保存关联</button>
+    </div>
+  `;
+
+  Array.from(dialog.querySelectorAll("[data-today-plan-close-associations]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      closeTodayPlanAssociationDialog();
+    });
+  });
+
+  Array.from(dialog.querySelectorAll('[data-today-plan-association="task"]')).forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const taskId = checkbox.value;
+      if (checkbox.checked) {
+        if (!state.associations.workbench_task_ids.includes(taskId)) {
+          state.associations.workbench_task_ids.push(taskId);
+        }
+      } else {
+        state.associations.workbench_task_ids = state.associations.workbench_task_ids.filter((id) => id !== taskId);
+      }
+    });
+  });
+
+  Array.from(dialog.querySelectorAll('[data-today-plan-association="conversation"]')).forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const groupJid = checkbox.getAttribute("data-group-jid") || "";
+      const conversationId = checkbox.value;
+      updateTodayPlanChatSelection(state, groupJid, conversationId, checkbox.checked);
+    });
+  });
+
+  Array.from(dialog.querySelectorAll('[data-today-plan-association="service"]')).forEach((checkbox) => {
+    checkbox.addEventListener("change", async () => {
+      const serviceName = checkbox.value;
+      if (checkbox.checked) {
+        if (!getTodayPlanAssociationServiceEntry(state, serviceName)) {
+          state.associations.services.push({ service: serviceName, branches: [] });
+        }
+        await ensureTodayPlanServiceBranchesLoaded(state, serviceName);
+      } else {
+        state.associations.services = state.associations.services.filter((item) => item.service !== serviceName);
+        renderTodayPlanAssociationDialog();
+      }
+    });
+  });
+
+  Array.from(dialog.querySelectorAll('[data-today-plan-association="branch"]')).forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const serviceName = checkbox.getAttribute("data-service-name") || "";
+      const serviceEntry = getTodayPlanAssociationServiceEntry(state, serviceName);
+      if (!serviceEntry) return;
+      if (checkbox.checked) {
+        if (!serviceEntry.branches.includes(checkbox.value)) {
+          serviceEntry.branches.push(checkbox.value);
+        }
+      } else {
+        serviceEntry.branches = serviceEntry.branches.filter((branch) => branch !== checkbox.value);
+      }
+    });
+  });
+
+  const saveBtn = dialog.querySelector("[data-today-plan-save-associations]");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      try {
+        const res = await apiFetch("/api/today-plan/item", {
+          method: "PATCH",
+          body: JSON.stringify({
+            item_id: state.itemId,
+            associations: state.associations,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        closeTodayPlanAssociationDialog();
+        if (currentTodayPlanId) {
+          await loadTodayPlan(currentTodayPlanId);
+        }
+      } catch (err) {
+        console.error("Failed to save today plan associations:", err);
+        alert(err.message || "保存关联失败");
+      }
+    });
+  }
+}
+
+async function openTodayPlanAssociationDialog(itemId) {
+  const item = getTodayPlanItem(itemId);
+  if (!item) return;
+  closeTodayPlanAssociationDialog();
+  try {
+    const [taskRes, serviceRes] = await Promise.all([
+      apiFetch("/api/workbench/tasks"),
+      apiFetch("/api/today-plan/services"),
+    ]);
+    const taskData = await taskRes.json();
+    const serviceData = await serviceRes.json();
+    if (!taskRes.ok) throw new Error(taskData.error || `HTTP ${taskRes.status}`);
+    if (!serviceRes.ok) throw new Error(serviceData.error || `HTTP ${serviceRes.status}`);
+
+    const conversationsByGroup = {};
+
+    await Promise.all((groups || []).map(async (group) => {
+      try {
+        const res = await apiFetch(`/api/today-plan/chat/options?jid=${encodeURIComponent(group.jid)}`);
+        const data = await res.json();
+        conversationsByGroup[group.jid] = Array.isArray(data.conversations) ? data.conversations : [];
+      } catch (err) {
+        console.error("Failed to load today plan chat options:", err);
+        conversationsByGroup[group.jid] = [];
+      }
+    }));
+
+    todayPlanAssociationState = {
+      itemId,
+      groups: Array.isArray(groups) ? groups : [],
+      workbenchTasks: Array.isArray(taskData.tasks) ? taskData.tasks : [],
+      serviceOptions: Array.isArray(serviceData.services) ? serviceData.services : [],
+      conversationsByGroup,
+      branchesByService: {},
+      loadingBranches: {},
+      associations: cloneTodayPlanAssociations(item.associations),
+    };
+
+    todayPlanAssociationOverlay = document.createElement("div");
+    todayPlanAssociationOverlay.className = "today-plan-association-overlay";
+    todayPlanAssociationOverlay.innerHTML = `
+      <div class="today-plan-association-mask"></div>
+      <div class="today-plan-association-dialog"></div>
+    `;
+    todayPlanAssociationOverlay.querySelector(".today-plan-association-mask").addEventListener("click", () => {
+      closeTodayPlanAssociationDialog();
+    });
+    document.body.appendChild(todayPlanAssociationOverlay);
+
+    const selectedServices = todayPlanAssociationState.associations.services.map((item2) => item2.service);
+    await Promise.all(selectedServices.map((service) => ensureTodayPlanServiceBranchesLoaded(todayPlanAssociationState, service)));
+    renderTodayPlanAssociationDialog();
+  } catch (err) {
+    console.error("Failed to open today plan association dialog:", err);
+    alert(err.message || "加载关联信息失败");
+  }
+}
+
+function closeTodayPlanCommitDialog() {
+  if (todayPlanCommitModal) {
+    todayPlanCommitModal.classList.add("hidden");
+  }
+  if (todayPlanCommitTitle) todayPlanCommitTitle.textContent = "提交详情";
+  if (todayPlanCommitMeta) todayPlanCommitMeta.textContent = "";
+  if (todayPlanCommitDiff) todayPlanCommitDiff.textContent = "";
+}
+
+function renderTodayPlanCommitDiff(diffText) {
+  if (!todayPlanCommitDiff) return;
+  const html = (diffText || "").split("\n").map((line) => {
+    const klass = line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : line.startsWith("@@") || line.startsWith("diff --git") || line.startsWith("index ") ? "meta" : "";
+    return `<span class="today-plan-diff-line${klass ? ` ${klass}` : ""}">${escapeHtml(line)}</span>`;
+  }).join("");
+  todayPlanCommitDiff.innerHTML = html || escapeHtml("当前 commit 没有可展示的 diff。");
+}
+
+async function openTodayPlanCommitDialog(service, commit) {
+  try {
+    const res = await apiFetch(`/api/today-plan/service/commit?service=${encodeURIComponent(service)}&commit=${encodeURIComponent(commit)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (todayPlanCommitTitle) {
+      todayPlanCommitTitle.textContent = data.commit && data.commit.subject ? data.commit.subject : commit;
+    }
+    if (todayPlanCommitMeta) {
+      const meta = [];
+      if (data.service) meta.push(data.service);
+      if (data.commit && data.commit.hash) meta.push(data.commit.hash);
+      if (data.commit && data.commit.author) meta.push(data.commit.author);
+      if (data.commit && data.commit.committed_at) meta.push(formatDateTime(data.commit.committed_at));
+      todayPlanCommitMeta.textContent = meta.join(" · ");
+    }
+    renderTodayPlanCommitDiff(data.diff || data.error || "");
+    if (todayPlanCommitModal) {
+      todayPlanCommitModal.classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error("Failed to load today plan commit diff:", err);
+    alert(err.message || "加载 commit diff 失败");
+  }
+}
+
+async function sendTodayPlanMail() {
+  if (!currentTodayPlanId) return;
+  if (!(await openConfirmDialog("确认发送今日计划邮件吗？系统会先聚合计划数据，再把总结任务投递到主群。", { title: "发送计划邮件" }))) return;
+  try {
+    const res = await apiFetch("/api/today-plan/mail/send", {
+      method: "POST",
+      body: JSON.stringify({ plan_id: currentTodayPlanId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    alert(`已投递到主群：${data.target_jid || "--"}\n邮件主题：${data.subject || "--"}`);
+  } catch (err) {
+    console.error("Failed to send today plan mail:", err);
+    alert(err.message || "发送计划邮件失败");
+  }
+}
+
 // Auto-start on page load
 initTakeCopterCursor();
 initChatBgParticleNudge();
@@ -12217,6 +13566,11 @@ if (window.nanoclawApp && typeof window.nanoclawApp.onCyclePrimaryNav === "funct
     cyclePrimaryNav(1);
   });
 }
+if (window.nanoclawApp && typeof window.nanoclawApp.onToggleTodayPlan === "function") {
+  window.nanoclawApp.onToggleTodayPlan(() => {
+    toggleTodayPlanScreen();
+  });
+}
 if (window.nanoclawApp && typeof window.nanoclawApp.onQuickChatOpenMainGroup === "function") {
   window.nanoclawApp.onQuickChatOpenMainGroup(async () => {
     const mainGroup = getMainGroup();
@@ -12233,6 +13587,71 @@ primaryNavItems.forEach((item) => {
     setPrimaryNav(navKey);
   });
 });
+if (todayPlanRefreshBtn) {
+  todayPlanRefreshBtn.addEventListener("click", async () => {
+    await loadTodayPlanOverview({ forceOpenToday: !currentTodayPlanId });
+  });
+}
+if (todayPlanViewHistoryBtn) {
+  todayPlanViewHistoryBtn.addEventListener("click", () => {
+    openTodayPlanHistoryModal("view");
+  });
+}
+if (todayPlanContinuePlanBtn) {
+  todayPlanContinuePlanBtn.addEventListener("click", () => {
+    openTodayPlanHistoryModal("continue");
+  });
+}
+if (todayPlanCreateTodayBtn) {
+  todayPlanCreateTodayBtn.addEventListener("click", async () => {
+    await openOrCreateTodayPlanEntry();
+  });
+}
+if (todayPlanEmptyCreateBtn) {
+  todayPlanEmptyCreateBtn.addEventListener("click", async () => {
+    await openOrCreateTodayPlanEntry();
+  });
+}
+if (todayPlanEmptyContinueBtn) {
+  todayPlanEmptyContinueBtn.addEventListener("click", () => {
+    openTodayPlanHistoryModal("continue");
+  });
+}
+if (todayPlanAddItemBtn) {
+  todayPlanAddItemBtn.addEventListener("click", async () => {
+    await createTodayPlanItemEntry();
+  });
+}
+if (todayPlanSendMailBtn) {
+  todayPlanSendMailBtn.addEventListener("click", async () => {
+    await sendTodayPlanMail();
+  });
+}
+if (todayPlanCompleteBtn) {
+  todayPlanCompleteBtn.addEventListener("click", async () => {
+    await completeCurrentTodayPlan();
+  });
+}
+if (todayPlanCommitCloseBtn) {
+  todayPlanCommitCloseBtn.addEventListener("click", () => {
+    closeTodayPlanCommitDialog();
+  });
+}
+if (todayPlanCommitMask) {
+  todayPlanCommitMask.addEventListener("click", () => {
+    closeTodayPlanCommitDialog();
+  });
+}
+if (todayPlanHistoryCloseBtn) {
+  todayPlanHistoryCloseBtn.addEventListener("click", () => {
+    closeTodayPlanHistoryModal();
+  });
+}
+if (todayPlanHistoryMask) {
+  todayPlanHistoryMask.addEventListener("click", () => {
+    closeTodayPlanHistoryModal();
+  });
+}
 if (workbenchRefreshBtn) {
   workbenchRefreshBtn.addEventListener("click", async () => {
     await refreshWorkbenchView();
@@ -12892,9 +14311,29 @@ copySelectedBtn.addEventListener("click", copySelectedMessages);
 deleteSelectedBtn.addEventListener("click", deleteSelectedMessages);
 cancelSelectBtn.addEventListener("click", exitMultiSelect);
 document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && String(e.key || "").toLowerCase() === "w") {
+    e.preventDefault();
+    toggleTodayPlanScreen();
+    return;
+  }
   if (e.key === "Escape" && isQuickChatOpen()) {
     e.preventDefault();
     closeQuickChat();
+    return;
+  }
+  if (e.key === "Escape" && todayPlanHistoryModal && !todayPlanHistoryModal.classList.contains("hidden")) {
+    e.preventDefault();
+    closeTodayPlanHistoryModal();
+    return;
+  }
+  if (e.key === "Escape" && todayPlanAssociationOverlay) {
+    e.preventDefault();
+    closeTodayPlanAssociationDialog();
+    return;
+  }
+  if (e.key === "Escape" && todayPlanCommitModal && !todayPlanCommitModal.classList.contains("hidden")) {
+    e.preventDefault();
+    closeTodayPlanCommitDialog();
     return;
   }
   if (e.key === "Escape" && mentionPickerVisible) {

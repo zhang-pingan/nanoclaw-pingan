@@ -395,6 +395,40 @@ export interface WorkbenchContextAssetRecord {
   created_at: string;
 }
 
+export interface TodayPlanRecord {
+  id: string;
+  plan_date: string;
+  title: string;
+  status: 'active' | 'completed' | 'continued';
+  completed_at: string | null;
+  continued_from_plan_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TodayPlanItemRecord {
+  id: string;
+  plan_id: string;
+  title: string;
+  detail: string | null;
+  order_index: number;
+  associations_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StoredChatMessageRecord {
+  id: string;
+  chat_jid: string;
+  sender: string;
+  sender_name: string;
+  content: string;
+  timestamp: string;
+  is_from_me: number;
+  is_bot_message: number;
+  workflow_id: string | null;
+}
+
 export interface MemoryRecord {
   id: string;
   group_folder: string;

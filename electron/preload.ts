@@ -33,6 +33,14 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     return () => ipcRenderer.removeListener('cycle-primary-nav', listener);
   },
 
+  onToggleTodayPlan: (handler: () => void) => {
+    const listener = () => {
+      handler();
+    };
+    ipcRenderer.on('toggle-today-plan', listener);
+    return () => ipcRenderer.removeListener('toggle-today-plan', listener);
+  },
+
   onQuickChatOpenMainGroup: (handler: () => void) => {
     const listener = () => {
       handler();
