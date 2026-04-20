@@ -3283,16 +3283,6 @@ body.quick-chat-window .quick-chat-input {
     0 18px 32px rgba(37, 99, 235, 0.16);
 }
 
-.today-plan-chat-picker-message.selected::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  background: linear-gradient(180deg, rgba(var(--today-plan-accent-rgb), 0.96), rgba(6, 182, 212, 0.92));
-}
-
 .today-plan-chat-picker-message.from-me {
   border-color: rgba(37, 99, 235, 0.14);
   background:
