@@ -12802,6 +12802,12 @@ function renderTodayPlanItemCard(item, index, options = {}) {
 }
 
 function bindEditableTodayPlanItemInteractions() {
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-add-item-trigger]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      await createTodayPlanItemEntry();
+    });
+  });
+
   Array.from(todayPlanItems.querySelectorAll("[data-today-plan-field]")).forEach((field) => {
     const card = field.closest("[data-today-plan-item]");
     if (!card) return;
@@ -12908,6 +12914,16 @@ function renderTodayPlanItems() {
           <div class="today-plan-section-title">${editable ? "今日计划项" : "计划详情"}</div>
           <div class="today-plan-section-subtitle">${editable ? "维护今天的计划项；每条都可以继续新增、编辑、关联和发送邮件前汇总。" : "当前页面为只读详情，不可编辑、删除、关联或处理待处理项。"}</div>
         </div>
+        ${editable ? `
+          <div class="today-plan-section-actions">
+            <button type="button" class="icon-btn today-plan-board-icon-btn" data-today-plan-add-item-trigger="1" title="新增计划项" aria-label="新增计划项">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+            </button>
+          </div>
+        ` : ""}
       </div>
       ${currentItems.length === 0
         ? `<div class="today-plan-empty-inline">${editable ? "先新增一条计划项，再把工作台任务、群聊和服务分支挂上来。" : "当前计划没有计划项。"}</div>`
@@ -12935,10 +12951,6 @@ function renderTodayPlanScreen() {
   }
   if (todayPlanEmpty) {
     todayPlanEmpty.classList.toggle("hidden", hasPlan);
-  }
-  if (todayPlanAddItemBtn) {
-    todayPlanAddItemBtn.classList.toggle("hidden", !editable);
-    todayPlanAddItemBtn.disabled = !editable;
   }
   if (todayPlanSendMailBtn) {
     todayPlanSendMailBtn.disabled = !editable;

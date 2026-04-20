@@ -602,6 +602,10 @@ function resolveBranchRef(repoPath: string, branch: string): string | null {
   return null;
 }
 
+function isMeaningfulCommitSubject(subject: string): boolean {
+  return Array.from((subject || '').trim()).length >= 3;
+}
+
 export function listTodayPlanServices(): TodayPlanServiceOption[] {
   const registry = getServiceRegistry();
   return Object.keys(registry)
@@ -727,7 +731,8 @@ export function listTodayPlanServiceCommits(input: {
           committed_at: committedAt,
           subject,
         };
-      });
+      })
+      .filter((commit) => isMeaningfulCommitSubject(commit.subject));
     branchDetails.push(detail);
   }
 

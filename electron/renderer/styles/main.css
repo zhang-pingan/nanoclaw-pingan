@@ -2462,6 +2462,15 @@ body.quick-chat-window .quick-chat-input {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+.today-plan-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .today-plan-empty {
