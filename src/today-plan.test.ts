@@ -205,16 +205,15 @@ describe('today-plan', () => {
     const payload = buildTodayPlanMailPrompt({
       planId: plan.id,
       groups: {},
+      name: '张頔',
     });
 
     expect(payload).toBeTruthy();
-    expect(payload?.subject).toBe('2026-04-20 今日计划');
+    expect(payload?.subject).toBe('日报-张頔-2026-04-20');
     expect(payload?.prompt).toContain('# 邮件正文模板');
-    expect(payload?.prompt).toContain('以下是 2026-04-20 的今日计划：');
-    expect(payload?.prompt).toContain('一、今日计划概览');
-    expect(payload?.prompt).toContain('二、计划明细');
-    expect(payload?.prompt).toContain('三、汇总风险');
-    expect(payload?.prompt).toContain('四、需要同步/关注');
+    expect(payload?.prompt).toContain('1. <计划标题 1>');
+    expect(payload?.prompt).toContain('- 根据`关联任务`、`关联群聊`、`关联服务分支` 信息汇总实际执行项列表');
+    expect(payload?.prompt).toContain('2. <计划标题 2>');
     expect(payload?.prompt).toContain('不要保留尖括号占位符');
     expect(payload?.prompt).toContain('## 计划 1: 推进今日开发');
     expect(payload?.prompt).toContain('计划内容：完成聚合页与发送链路梳理');

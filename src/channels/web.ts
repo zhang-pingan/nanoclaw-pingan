@@ -2476,16 +2476,18 @@ class WebChannel {
       return;
     }
 
-    const data = body as { plan_id?: string };
-    if (!data.plan_id) {
+    const data = body as { plan_id?: string; name?: string };
+    const name = typeof data.name === 'string' ? data.name.trim() : '';
+    if (!data.plan_id || !name) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'plan_id required' }));
+      res.end(JSON.stringify({ error: 'plan_id and name required' }));
       return;
     }
 
     const payload = buildTodayPlanMailPrompt({
       planId: data.plan_id,
       groups: this.opts.registeredGroups(),
+      name,
     });
     if (!payload) {
       res.writeHead(404, { 'Content-Type': 'application/json' });

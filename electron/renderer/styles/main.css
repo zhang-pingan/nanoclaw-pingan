@@ -3279,8 +3279,8 @@ body.quick-chat-window .quick-chat-input {
     linear-gradient(180deg, rgba(216, 254, 240, 0.98), rgba(255, 255, 255, 0.95)),
     rgba(220, 252, 231, 0.96);
   box-shadow:
-    0 0 0 2px rgba(var(--today-plan-accent-rgb), 0.14),
-    0 18px 32px rgba(15, 118, 110, 0.16);
+    0 0 0 2px rgba(37, 99, 235, 0.26),
+    0 18px 32px rgba(37, 99, 235, 0.16);
 }
 
 .today-plan-chat-picker-message.selected::before {
@@ -3310,8 +3310,8 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-chat-picker-message.selected.from-me,
 .today-plan-chat-picker-message.selected.bot {
   box-shadow:
-    0 0 0 2px rgba(15, 23, 42, 0.08),
-    0 18px 32px rgba(15, 23, 42, 0.14);
+    0 0 0 2px rgba(37, 99, 235, 0.26),
+    0 18px 32px rgba(37, 99, 235, 0.16);
 }
 
 .today-plan-chat-picker-check {

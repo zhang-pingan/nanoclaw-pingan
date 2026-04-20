@@ -13667,11 +13667,20 @@ async function openTodayPlanCommitDialog(service, commit) {
 
 async function sendTodayPlanMail() {
   if (!currentTodayPlanId) return;
-  if (!(await openConfirmDialog("确认发送今日计划邮件吗？系统会先聚合计划数据，再把总结任务投递到主群。", { title: "发送计划邮件" }))) return;
+  const rawName = await openTextPrompt("请输入邮件主题中的姓名。", "", {
+    title: "发送计划邮件",
+    placeholder: "例如：张頔",
+  });
+  if (rawName === null) return;
+  const name = String(rawName || "").trim();
+  if (!name) {
+    alert("请输入姓名");
+    return;
+  }
   try {
     const res = await apiFetch("/api/today-plan/mail/send", {
       method: "POST",
-      body: JSON.stringify({ plan_id: currentTodayPlanId }),
+      body: JSON.stringify({ plan_id: currentTodayPlanId, name }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
