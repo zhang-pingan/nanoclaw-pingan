@@ -432,8 +432,6 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_today_plans_date
       ON today_plans(plan_date DESC, updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_today_plans_status
-      ON today_plans(status, plan_date DESC, updated_at DESC);
 
     CREATE TABLE IF NOT EXISTS today_plan_items (
       id TEXT PRIMARY KEY,

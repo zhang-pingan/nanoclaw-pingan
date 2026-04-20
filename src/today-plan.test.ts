@@ -6,7 +6,6 @@ import {
   createWorkflow,
   getTodayPlanById,
   storeChatMetadata,
-  storeMessageDirect,
 } from './db.js';
 import {
   completeTodayPlan,
@@ -17,10 +16,12 @@ import {
   listTodayPlanChatMessages,
   patchTodayPlanItem,
 } from './today-plan.js';
+import { _initTestWebDb, storeWebMessage } from './web-db.js';
 
 describe('today-plan', () => {
   beforeEach(() => {
     _initTestDatabase();
+    _initTestWebDb();
   });
 
   it('reuses the same today plan for the same date', () => {
@@ -34,7 +35,7 @@ describe('today-plan', () => {
 
   it('lists only the latest 200 messages from the plan date', () => {
     storeChatMetadata('web:main', String(Date.parse('2026-04-20T08:00:00.000Z')), 'Main Group', 'web', true);
-    storeMessageDirect({
+    storeWebMessage({
       id: 'old-day',
       chat_jid: 'web:main',
       sender: 'alice',
@@ -46,7 +47,7 @@ describe('today-plan', () => {
 
     const baseTimestamp = Date.parse('2026-04-20T08:00:00.000Z');
     for (let index = 0; index < 205; index += 1) {
-      storeMessageDirect({
+      storeWebMessage({
         id: `msg-${index}`,
         chat_jid: 'web:main',
         sender: index % 2 === 0 ? 'alice' : 'bob',

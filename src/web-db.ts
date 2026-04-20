@@ -7,6 +7,11 @@ import { logger } from './logger.js';
 
 let db: Database.Database;
 
+function ensureWebDbInitialized(): void {
+  if (db) return;
+  initWebDb();
+}
+
 export interface WebMessage {
   id: string;
   chat_jid: string;
@@ -111,6 +116,7 @@ export function storeWebMessage(msg: {
   workflow_id?: string | null;
   file_path?: string | null;
 }): void {
+  ensureWebDbInitialized();
   const isBotMessage = msg.is_bot_message ? 1 : 0;
 
   db.prepare(`
@@ -156,6 +162,7 @@ export function backfillWebMessageModel(
   model: string,
   modelReason: string,
 ): number {
+  ensureWebDbInitialized();
   if (!chatJid || !model || !modelReason || messageIds.length === 0) return 0;
 
   const dedupedIds = Array.from(new Set(messageIds.filter(Boolean)));
@@ -187,6 +194,7 @@ export function getWebMessages(
   sinceTimestamp: string = '0',
   limit: number = 200,
 ): WebMessage[] {
+  ensureWebDbInitialized();
   return db
     .prepare(
       `
@@ -210,6 +218,7 @@ export function getWebMessagesBefore(
   beforeTimestamp: string,
   limit: number = 50,
 ): WebMessage[] {
+  ensureWebDbInitialized();
   return db
     .prepare(
       `
@@ -228,10 +237,12 @@ export function getWebMessagesBefore(
 }
 
 export function clearWebMessages(chatJid: string): void {
+  ensureWebDbInitialized();
   db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
 }
 
 export function deleteWebMessagesByIds(chatJid: string, messageIds: string[]): number {
+  ensureWebDbInitialized();
   if (!chatJid || messageIds.length === 0) return 0;
   const del = db.prepare('DELETE FROM messages WHERE chat_jid = ? AND id = ?');
   const tx = db.transaction((ids: string[]) => {
@@ -243,4 +254,52 @@ export function deleteWebMessagesByIds(chatJid: string, messageIds: string[]): n
     return deleted;
   });
   return tx(messageIds);
+}
+
+export function listWebMessagesByChat(
+  chatJid: string,
+  limit: number = 1000,
+): WebMessage[] {
+  ensureWebDbInitialized();
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.trunc(limit))
+    : 1000;
+  return db
+    .prepare(
+      `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             reply_to_id, model, model_reason, workflow_id, file_path
+        FROM messages
+       WHERE chat_jid = ?
+       ORDER BY timestamp DESC
+       LIMIT ?
+    `,
+    )
+    .all(chatJid, normalizedLimit) as WebMessage[];
+}
+
+export function listWebMessagesByIds(
+  chatJid: string,
+  ids: string[],
+): WebMessage[] {
+  ensureWebDbInitialized();
+  const normalizedIds = Array.from(
+    new Set(ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
+  );
+  if (normalizedIds.length === 0) return [];
+  const placeholders = normalizedIds.map(() => '?').join(', ');
+  return db
+    .prepare(
+      `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             reply_to_id, model, model_reason, workflow_id, file_path
+        FROM messages
+       WHERE chat_jid = ? AND id IN (${placeholders})
+    `,
+    )
+    .all(chatJid, ...normalizedIds) as WebMessage[];
 }

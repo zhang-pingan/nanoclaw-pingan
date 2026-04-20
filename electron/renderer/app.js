@@ -12539,6 +12539,14 @@ function renderTodayPlanMessageBody(message) {
   return escapeHtml(message.content || "").replace(/\n/g, "<br>");
 }
 
+function renderTodayPlanReplyQuote(message) {
+  if (!message || !message.reply_to_id) return "";
+  const preview = typeof message.reply_preview === "string" && message.reply_preview.trim()
+    ? message.reply_preview.trim()
+    : "原消息不可用";
+  return `<div class="msg-reply-quote" data-reply-id="${escapeAttribute(message.reply_to_id)}">${escapeHtml(preview)}</div>`;
+}
+
 function renderTodayPlanTaskActions(task, options = {}) {
   if (!task || !Array.isArray(task.action_items) || task.action_items.length === 0) {
     return '<div class="today-plan-empty-inline">当前没有待处理项</div>';
@@ -12726,6 +12734,7 @@ function renderTodayPlanItemCard(item, index, options = {}) {
                         <span>${escapeHtml(message.sender_name || message.sender || "未知")}</span>
                         <span>${escapeHtml(formatDateTime(message.timestamp || ""))}</span>
                       </div>
+                      ${renderTodayPlanReplyQuote(message)}
                       <div class="today-plan-chat-message-body">${renderTodayPlanMessageBody(message)}</div>
                     </div>
                   `).join("")}
@@ -13274,9 +13283,8 @@ function renderTodayPlanAssociationDialog() {
     const messages = state.chatMessagesByGroup[group.jid] || [];
     return Array.isArray(messages) && messages.length > 0;
   });
-  if ((!state.activeChatGroupJid || !chatGroups.some((group) => group.jid === state.activeChatGroupJid)) && chatGroups.length > 0) {
-    const selectedGroup = chatGroups.find((group) => getTodayPlanAssociationChatSelectionCount(getTodayPlanAssociationChatEntry(state, group.jid)) > 0) || null;
-    state.activeChatGroupJid = selectedGroup ? selectedGroup.jid : chatGroups[0].jid;
+  if (state.activeChatGroupJid && !chatGroups.some((group) => group.jid === state.activeChatGroupJid)) {
+    state.activeChatGroupJid = null;
   }
   const activeChatGroup = chatGroups.find((group) => group.jid === state.activeChatGroupJid) || null;
   const activeChatMessages = activeChatGroup ? (state.chatMessagesByGroup[activeChatGroup.jid] || []) : [];
@@ -13377,7 +13385,7 @@ function renderTodayPlanAssociationDialog() {
       <button type="button" class="btn-primary" data-today-plan-save-associations>保存关联</button>
     </div>
     ${activeChatGroup ? `
-      <div class="today-plan-chat-picker">
+      <div class="today-plan-chat-picker" data-today-plan-chat-picker-overlay="1">
         <div class="today-plan-chat-picker-window">
           <div class="today-plan-chat-picker-header">
             <div>
@@ -13402,13 +13410,14 @@ function renderTodayPlanAssociationDialog() {
               return `
                 <button type="button" class="today-plan-chat-picker-message${selected ? " selected" : ""}${message.is_from_me ? " from-me" : ""}${message.is_bot_message ? " bot" : ""}" data-today-plan-chat-message="${escapeAttribute(message.id)}" data-group-jid="${escapeAttribute(activeChatGroup.jid)}">
                   <span class="today-plan-chat-picker-check">${selected ? "✓" : ""}</span>
-                  <div class="today-plan-chat-picker-content">
-                    <div class="today-plan-chat-picker-meta">
-                      <span>${escapeHtml(message.sender_name || message.sender || "未知")}</span>
-                      <span>${escapeHtml(formatDateTime(message.timestamp || ""))}</span>
+                    <div class="today-plan-chat-picker-content">
+                      <div class="today-plan-chat-picker-meta">
+                        <span>${escapeHtml(message.sender_name || message.sender || "未知")}</span>
+                        <span>${escapeHtml(formatDateTime(message.timestamp || ""))}</span>
+                      </div>
+                      ${renderTodayPlanReplyQuote(message)}
+                      <div class="today-plan-chat-picker-body">${renderTodayPlanMessageBody(message)}</div>
                     </div>
-                    <div class="today-plan-chat-picker-body">${renderTodayPlanMessageBody(message)}</div>
-                  </div>
                 </button>
               `;
             }).join("") || '<div class="today-plan-empty-inline">今天没有可选择的消息。</div>'}
@@ -13439,14 +13448,22 @@ function renderTodayPlanAssociationDialog() {
 
   Array.from(dialog.querySelectorAll("[data-today-plan-open-chat-group]")).forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeChatGroupJid = button.getAttribute("data-today-plan-open-chat-group") || "";
+      state.activeChatGroupJid = button.getAttribute("data-today-plan-open-chat-group") || null;
       renderTodayPlanAssociationDialog();
     });
   });
 
   Array.from(dialog.querySelectorAll("[data-today-plan-close-chat-picker]")).forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeChatGroupJid = "";
+      state.activeChatGroupJid = null;
+      renderTodayPlanAssociationDialog();
+    });
+  });
+
+  Array.from(dialog.querySelectorAll("[data-today-plan-chat-picker-overlay]")).forEach((overlay) => {
+    overlay.addEventListener("click", (event) => {
+      if (event.target !== overlay) return;
+      state.activeChatGroupJid = null;
       renderTodayPlanAssociationDialog();
     });
   });
@@ -13580,7 +13597,7 @@ async function openTodayPlanAssociationDialog(itemId) {
       chatMessagesByGroup,
       branchesByService: {},
       loadingBranches: {},
-      activeChatGroupJid: "",
+      activeChatGroupJid: null,
       associations: cloneTodayPlanAssociations(item.associations),
     };
 

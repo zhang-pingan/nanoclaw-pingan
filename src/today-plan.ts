@@ -24,6 +24,11 @@ import {
   type TodayPlanItemRecord,
   type TodayPlanRecord,
 } from './types.js';
+import {
+  listWebMessagesByChat,
+  listWebMessagesByIds,
+  type WebMessage,
+} from './web-db.js';
 import { getWorkbenchTaskDetail, type WorkbenchTaskDetail } from './workbench.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
@@ -60,6 +65,8 @@ export interface TodayPlanConversationMessage {
   is_from_me: boolean;
   is_bot_message: boolean;
   workflow_id: string | null;
+  reply_to_id?: string | null;
+  reply_preview?: string | null;
 }
 
 export interface TodayPlanChatGroupDetail {
@@ -210,8 +217,46 @@ function toConversationMessage(
   };
 }
 
+function buildWebReplyPreviewMap(messages: WebMessage[]): Map<string, string> {
+  const previewById = new Map<string, string>();
+  for (const message of messages) {
+    if (!message?.id) continue;
+    const normalized = (message.content || '').replace(/\s+/g, ' ').trim();
+    previewById.set(message.id, truncateText(normalized || '无内容', 80));
+  }
+  return previewById;
+}
+
+function toWebConversationMessages(
+  messages: WebMessage[],
+  replySourceMessages: WebMessage[] = [],
+): TodayPlanConversationMessage[] {
+  const replyPreviewById = buildWebReplyPreviewMap([
+    ...replySourceMessages,
+    ...messages,
+  ]);
+  return messages.map((message) => ({
+    id: message.id,
+    sender: message.sender,
+    sender_name: message.sender_name,
+    content: message.content,
+    timestamp: message.timestamp,
+    is_from_me: Boolean(message.is_from_me),
+    is_bot_message: Boolean(message.is_bot_message),
+    workflow_id: message.workflow_id || null,
+    reply_to_id: message.reply_to_id || null,
+    reply_preview: message.reply_to_id
+      ? replyPreviewById.get(message.reply_to_id) || null
+      : null,
+  }));
+}
+
+function isWebChatJid(chatJid: string): boolean {
+  return typeof chatJid === 'string' && chatJid.startsWith('web:');
+}
+
 function isMessageOnPlanDate(
-  message: StoredChatMessageRecord,
+  message: Pick<StoredChatMessageRecord, 'timestamp'> | Pick<WebMessage, 'timestamp'>,
   planDate: string,
 ): boolean {
   const timestamp = toMessageTimestamp(message.timestamp);
@@ -680,6 +725,14 @@ export function listTodayPlanChatMessages(
   chatJid: string,
   planDate: string = getTodayPlanDateKey(),
 ): TodayPlanConversationMessage[] {
+  if (isWebChatJid(chatJid)) {
+    const messages = listWebMessagesByChat(chatJid, 2000)
+      .filter((message) => isMessageOnPlanDate(message, planDate))
+      .sort((a, b) => toMessageTimestamp(b.timestamp) - toMessageTimestamp(a.timestamp))
+      .slice(0, 200);
+    return dedupeAndSortChatMessages(toWebConversationMessages(messages));
+  }
+
   const messages = listStoredMessagesByChat(chatJid, 2000)
     .filter((message) => isMessageOnPlanDate(message, planDate))
     .sort((a, b) => toMessageTimestamp(b.timestamp) - toMessageTimestamp(a.timestamp))
@@ -691,6 +744,27 @@ export function listTodayPlanChatMessages(
 function getTodayPlanChatMessagesBySelection(
   selection: TodayPlanChatSelection,
 ): TodayPlanConversationMessage[] {
+  if (isWebChatJid(selection.group_jid)) {
+    const directMessages = listWebMessagesByIds(
+      selection.group_jid,
+      selection.message_ids,
+    );
+    const replySourceIds = Array.from(
+      new Set(
+        directMessages
+          .map((message) => message.reply_to_id || '')
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0),
+      ),
+    );
+    const replySourceMessages =
+      replySourceIds.length > 0
+        ? listWebMessagesByIds(selection.group_jid, replySourceIds)
+        : [];
+    return dedupeAndSortChatMessages(
+      toWebConversationMessages(directMessages, replySourceMessages),
+    );
+  }
+
   const directMessages =
     Array.isArray(selection.message_ids) && selection.message_ids.length > 0
       ? listStoredMessagesByIds(selection.group_jid, selection.message_ids).map(
