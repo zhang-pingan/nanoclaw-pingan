@@ -18,11 +18,9 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>{{HOME}}/.local/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/usr/local/bin:/usr/bin:/bin:{{HOME}}/.local/bin</string>
         <key>HOME</key>
         <string>{{HOME}}</string>
-        <key>ASSISTANT_NAME</key>
-        <string>Andy</string>
     </dict>
     <key>StandardOutPath</key>
     <string>{{PROJECT_ROOT}}/logs/nanoclaw.log</string>

@@ -19,6 +19,7 @@ import {
   isWSL,
 } from './platform.js';
 import { emitStatus } from './status.js';
+import { renderLaunchdPlist } from './launchd.js';
 
 export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
@@ -81,36 +82,7 @@ function setupLaunchd(
   );
   fs.mkdirSync(path.dirname(plistPath), { recursive: true });
 
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.nanoclaw</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${nodePath}</string>
-        <string>${projectRoot}/dist/index.js</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>${projectRoot}</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin</string>
-        <key>HOME</key>
-        <string>${homeDir}</string>
-    </dict>
-    <key>StandardOutPath</key>
-    <string>${projectRoot}/logs/nanoclaw.log</string>
-    <key>StandardErrorPath</key>
-    <string>${projectRoot}/logs/nanoclaw.error.log</string>
-</dict>
-</plist>`;
+  const plist = renderLaunchdPlist(projectRoot, nodePath, homeDir);
 
   fs.writeFileSync(plistPath, plist);
   logger.info({ plistPath }, 'Wrote launchd plist');
