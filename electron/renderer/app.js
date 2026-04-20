@@ -12274,12 +12274,12 @@ function normalizeTodayPlanAssociations(associations) {
     : [];
   const chatSelections = Array.isArray(source.chat_selections)
     ? source.chat_selections
-      .filter((item) => item && typeof item.group_jid === "string" && Array.isArray(item.conversation_ids))
+      .filter((item) => item && typeof item.group_jid === "string" && Array.isArray(item.message_ids))
       .map((item) => ({
         group_jid: item.group_jid,
-        conversation_ids: Array.from(new Set(item.conversation_ids.filter((entry) => typeof entry === "string" && entry.trim()))),
+        message_ids: Array.from(new Set((Array.isArray(item.message_ids) ? item.message_ids : []).filter((entry) => typeof entry === "string" && entry.trim()))),
       }))
-      .filter((item) => item.conversation_ids.length > 0)
+      .filter((item) => item.message_ids.length > 0)
     : [];
   const services = Array.isArray(source.services)
     ? source.services
@@ -12299,6 +12299,15 @@ function normalizeTodayPlanAssociations(associations) {
 
 function cloneTodayPlanAssociations(associations) {
   return normalizeTodayPlanAssociations(JSON.parse(JSON.stringify(associations || getTodayPlanDefaultAssociations())));
+}
+
+function getTodayPlanAssociationChatEntry(state, groupJid) {
+  return state.associations.chat_selections.find((item) => item.group_jid === groupJid) || null;
+}
+
+function getTodayPlanAssociationChatSelectionCount(entry) {
+  if (!entry) return 0;
+  return Array.isArray(entry.message_ids) ? entry.message_ids.length : 0;
 }
 
 function getTodayPlanItem(itemId) {
@@ -12381,7 +12390,7 @@ function getTodayPlanAggregateMetrics(detail) {
       const relatedChats = Array.isArray(item.related_chats) ? item.related_chats : [];
       const relatedServices = Array.isArray(item.related_services) ? item.related_services : [];
       taskCount += relatedTasks.length;
-      chatCount += relatedChats.reduce((sum, group) => sum + (Array.isArray(group.conversations) ? group.conversations.length : 0), 0);
+      chatCount += relatedChats.reduce((sum, group) => sum + (Array.isArray(group.messages) ? group.messages.length : 0), 0);
       serviceCount += relatedServices.length;
       relatedTasks.forEach((task) => {
         actionItemCount += Array.isArray(task.action_items) ? task.action_items.length : 0;
@@ -12505,9 +12514,9 @@ function renderTodayPlanOverviewSummary() {
           <small>待处理 ${escapeHtml(String(metrics.actionItemCount))} 项</small>
         </div>
         <div class="today-plan-overview-card">
-          <span>${detail && detail.continued_from ? "承接来源" : "会话 / 服务"}</span>
+          <span>${detail && detail.continued_from ? "承接来源" : "消息 / 服务"}</span>
           <strong>${escapeHtml(detail && detail.continued_from ? (detail.continued_from.plan.plan_date || "--") : `${metrics.chatCount} / ${metrics.serviceCount}`)}</strong>
-          <small>${escapeHtml(detail && detail.continued_from ? "往日计划内容为只读展示" : "群聊会话 / 服务分支")}</small>
+          <small>${escapeHtml(detail && detail.continued_from ? "往日计划内容为只读展示" : "群聊消息 / 服务分支")}</small>
         </div>
       </div>
     `;
@@ -12615,7 +12624,7 @@ function renderTodayPlanItemCard(item, index, options = {}) {
   const readonlyLabel = options.readonlyLabel || "只读";
   const taskCount = Array.isArray(item.related_tasks) ? item.related_tasks.length : 0;
   const chatCount = Array.isArray(item.related_chats)
-    ? item.related_chats.reduce((sum, group) => sum + (Array.isArray(group.conversations) ? group.conversations.length : 0), 0)
+    ? item.related_chats.reduce((sum, group) => sum + (Array.isArray(group.messages) ? group.messages.length : 0), 0)
     : 0;
   const serviceCount = Array.isArray(item.related_services) ? item.related_services.length : 0;
   const titleField = readonly
@@ -12653,7 +12662,7 @@ function renderTodayPlanItemCard(item, index, options = {}) {
           <span>${escapeHtml(String(taskCount))}</span>
         </div>
         <div class="today-plan-summary-pill">
-          <strong>群聊会话</strong>
+          <strong>群聊消息</strong>
           <span>${escapeHtml(String(chatCount))}</span>
         </div>
         <div class="today-plan-summary-pill">
@@ -12694,11 +12703,11 @@ function renderTodayPlanItemCard(item, index, options = {}) {
       <section class="today-plan-section">
         <div class="today-plan-section-header">
           <div>
-            <div class="today-plan-section-title">关联群聊会话</div>
-            <div class="today-plan-section-subtitle">按群展示所选会话与聊天内容。</div>
+            <div class="today-plan-section-title">关联群聊消息</div>
+            <div class="today-plan-section-subtitle">按群展示今天被选中的消息内容。</div>
           </div>
         </div>
-        ${chatCount === 0 ? '<div class="today-plan-empty-inline">未关联群聊会话</div>' : `
+        ${chatCount === 0 ? '<div class="today-plan-empty-inline">未关联群聊消息</div>' : `
           <div class="today-plan-chat-block">
             ${item.related_chats.map((group) => `
               <div class="today-plan-chat-card">
@@ -12706,34 +12715,18 @@ function renderTodayPlanItemCard(item, index, options = {}) {
                   <div>
                     <div class="today-plan-chat-title">${escapeHtml(group.group_name || group.group_jid)}</div>
                     <div class="today-plan-pill-row">
-                      <span class="today-plan-meta-pill">${escapeHtml(String((group.conversations || []).length))} 个会话</span>
+                      <span class="today-plan-meta-pill">${escapeHtml(String((group.messages || []).length))} 条消息</span>
                     </div>
                   </div>
                 </div>
-                <div class="today-plan-conversation-list">
-                  ${(group.conversations || []).map((conversation) => `
-                    <div class="today-plan-conversation-card">
-                      <div class="today-plan-conversation-head">
-                        <div>
-                          <div class="today-plan-conversation-title">${escapeHtml(conversation.title || "未命名会话")}</div>
-                          <div class="today-plan-pill-row">
-                            <span class="today-plan-meta-pill">${escapeHtml(formatDateTime(conversation.started_at || ""))}</span>
-                            <span class="today-plan-meta-pill">${escapeHtml(String(conversation.message_count || 0))} 条消息</span>
-                          </div>
-                        </div>
+                <div class="today-plan-chat-messages">
+                  ${(group.messages || []).map((message) => `
+                    <div class="today-plan-chat-message${message.is_from_me ? " from-me" : ""}${message.is_bot_message ? " bot" : ""}">
+                      <div class="today-plan-chat-message-head">
+                        <span>${escapeHtml(message.sender_name || message.sender || "未知")}</span>
+                        <span>${escapeHtml(formatDateTime(message.timestamp || ""))}</span>
                       </div>
-                      <div class="today-plan-description">${escapeHtml(conversation.preview || "无摘要")}</div>
-                      <div class="today-plan-chat-messages">
-                        ${(conversation.messages || []).map((message) => `
-                          <div class="today-plan-chat-message">
-                            <div class="today-plan-chat-message-head">
-                              <span>${escapeHtml(message.sender_name || message.sender || "未知")}</span>
-                              <span>${escapeHtml(formatDateTime(message.timestamp || ""))}</span>
-                            </div>
-                            <div class="today-plan-chat-message-body">${renderTodayPlanMessageBody(message)}</div>
-                          </div>
-                        `).join("")}
-                      </div>
+                      <div class="today-plan-chat-message-body">${renderTodayPlanMessageBody(message)}</div>
                     </div>
                   `).join("")}
                 </div>
@@ -12926,7 +12919,7 @@ function renderTodayPlanItems() {
         ` : ""}
       </div>
       ${currentItems.length === 0
-        ? `<div class="today-plan-empty-inline">${editable ? "先新增一条计划项，再把工作台任务、群聊和服务分支挂上来。" : "当前计划没有计划项。"}</div>`
+        ? `<div class="today-plan-empty-inline">${editable ? "先新增一条计划项，再把工作台任务、群聊消息和服务分支挂上来。" : "当前计划没有计划项。"}</div>`
         : `<div class="today-plan-section-stack">${currentItems.map((item, index) => renderTodayPlanItemCard(item, index, { readonly: !editable, readonlyLabel: "历史计划只读" })).join("")}</div>`}
     </section>
   `);
@@ -12979,7 +12972,7 @@ function renderTodayPlanScreen() {
   if (!hasPlan) {
     if (todayPlanTitleEl) todayPlanTitleEl.textContent = "今日计划";
     if (todayPlanSubtitleEl) todayPlanSubtitleEl.textContent = "今天还没有创建计划。你可以直接创建今日计划，或从往日计划中查看详情、继续未完成计划。";
-    if (todayPlanSectionMeta) todayPlanSectionMeta.textContent = "先创建今日计划，再把任务、群聊会话和服务分支按计划项组织起来。";
+    if (todayPlanSectionMeta) todayPlanSectionMeta.textContent = "先创建今日计划，再把任务、群聊消息和服务分支按计划项组织起来。";
     if (todayPlanItems) todayPlanItems.innerHTML = "";
     return;
   }
@@ -12994,7 +12987,7 @@ function renderTodayPlanScreen() {
   }
   if (todayPlanSectionMeta) {
     const metrics = getTodayPlanAggregateMetrics(detail);
-    todayPlanSectionMeta.textContent = `${metrics.itemCount} 条可见计划项 · ${metrics.taskCount} 个任务 · ${metrics.chatCount} 个会话 · ${metrics.serviceCount} 个服务`;
+    todayPlanSectionMeta.textContent = `${metrics.itemCount} 条可见计划项 · ${metrics.taskCount} 个任务 · ${metrics.chatCount} 条消息 · ${metrics.serviceCount} 个服务`;
   }
   renderTodayPlanItems();
 }
@@ -13249,23 +13242,24 @@ function getTodayPlanAssociationServiceEntry(state, service) {
   return state.associations.services.find((item) => item.service === service) || null;
 }
 
-function updateTodayPlanChatSelection(state, groupJid, conversationId, checked) {
-  let groupEntry = state.associations.chat_selections.find((item) => item.group_jid === groupJid) || null;
+function updateTodayPlanChatSelection(state, groupJid, messageId, checked) {
+  let groupEntry = getTodayPlanAssociationChatEntry(state, groupJid);
   if (!groupEntry && checked) {
     groupEntry = {
       group_jid: groupJid,
-      conversation_ids: [],
+      message_ids: [],
     };
     state.associations.chat_selections.push(groupEntry);
   }
   if (!groupEntry) return;
+  groupEntry.message_ids = Array.isArray(groupEntry.message_ids) ? groupEntry.message_ids : [];
   if (checked) {
-    if (!groupEntry.conversation_ids.includes(conversationId)) {
-      groupEntry.conversation_ids.push(conversationId);
+    if (!groupEntry.message_ids.includes(messageId)) {
+      groupEntry.message_ids.push(messageId);
     }
   } else {
-    groupEntry.conversation_ids = groupEntry.conversation_ids.filter((id) => id !== conversationId);
-    if (groupEntry.conversation_ids.length === 0) {
+    groupEntry.message_ids = groupEntry.message_ids.filter((id) => id !== messageId);
+    if (groupEntry.message_ids.length === 0) {
       state.associations.chat_selections = state.associations.chat_selections.filter((item) => item.group_jid !== groupJid);
     }
   }
@@ -13276,13 +13270,25 @@ function renderTodayPlanAssociationDialog() {
   if (!state || !todayPlanAssociationOverlay) return;
   const dialog = todayPlanAssociationOverlay.querySelector(".today-plan-association-dialog");
   if (!dialog) return;
+  const chatGroups = (state.groups || []).filter((group) => {
+    const messages = state.chatMessagesByGroup[group.jid] || [];
+    return Array.isArray(messages) && messages.length > 0;
+  });
+  if ((!state.activeChatGroupJid || !chatGroups.some((group) => group.jid === state.activeChatGroupJid)) && chatGroups.length > 0) {
+    const selectedGroup = chatGroups.find((group) => getTodayPlanAssociationChatSelectionCount(getTodayPlanAssociationChatEntry(state, group.jid)) > 0) || null;
+    state.activeChatGroupJid = selectedGroup ? selectedGroup.jid : chatGroups[0].jid;
+  }
+  const activeChatGroup = chatGroups.find((group) => group.jid === state.activeChatGroupJid) || null;
+  const activeChatMessages = activeChatGroup ? (state.chatMessagesByGroup[activeChatGroup.jid] || []) : [];
+  const activeChatSelection = activeChatGroup ? getTodayPlanAssociationChatEntry(state, activeChatGroup.jid) : null;
+  const activeChatSelectedIds = new Set(activeChatSelection && Array.isArray(activeChatSelection.message_ids) ? activeChatSelection.message_ids : []);
 
   dialog.innerHTML = `
     <div class="today-plan-association-header">
       <div>
         <div class="today-plan-kicker">Associations</div>
         <h3>编辑关联信息</h3>
-        <div class="today-plan-subtitle">勾选工作台任务、群聊会话与服务分支。工作台任务关联后会自动带出对应服务与工作分支。</div>
+        <div class="today-plan-subtitle">勾选工作台任务、群聊消息与服务分支。工作台任务关联后会自动带出对应服务与工作分支。</div>
       </div>
       <button type="button" class="icon-btn" data-today-plan-close-associations title="关闭">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -13308,36 +13314,26 @@ function renderTodayPlanAssociationDialog() {
         </div>
       </section>
       <section class="today-plan-association-column">
-        <div class="today-plan-association-title">群聊会话</div>
-        <div class="today-plan-option-desc">可以在多个群里分别勾选多个会话。</div>
-        <div class="today-plan-conversation-list">
-          ${(state.groups || []).map((group) => {
-            const selectedGroup = state.associations.chat_selections.find((item) => item.group_jid === group.jid) || null;
-            const conversations = state.conversationsByGroup[group.jid] || [];
+        <div class="today-plan-association-title">群聊消息</div>
+        <div class="today-plan-option-desc">仅展示每个群今天最新的 200 条消息；点击群聊后在对话框中多选消息。</div>
+        <div class="today-plan-association-list">
+          ${chatGroups.map((group) => {
+            const selectedCount = getTodayPlanAssociationChatSelectionCount(getTodayPlanAssociationChatEntry(state, group.jid));
+            const messages = state.chatMessagesByGroup[group.jid] || [];
+            const active = activeChatGroup && activeChatGroup.jid === group.jid;
+            const latestMessage = messages[messages.length - 1] || null;
             return `
-              <div class="today-plan-option-card">
+              <button type="button" class="today-plan-option-card today-plan-chat-group-btn${active ? " active" : ""}" data-today-plan-open-chat-group="${escapeAttribute(group.jid)}">
                 <div class="today-plan-option-title">${escapeHtml(group.name || group.jid)}</div>
                 <div class="today-plan-option-desc">${escapeHtml(group.folder || "")}</div>
-                <div class="today-plan-conversation-list">
-                  ${conversations.map((conversation) => `
-                    <label class="today-plan-checkbox-row">
-                      <input
-                        type="checkbox"
-                        data-today-plan-association="conversation"
-                        data-group-jid="${escapeAttribute(group.jid)}"
-                        value="${escapeAttribute(conversation.id)}"
-                        ${selectedGroup && selectedGroup.conversation_ids.includes(conversation.id) ? "checked" : ""}
-                      />
-                      <div>
-                        <div class="today-plan-option-title">${escapeHtml(conversation.title || "未命名会话")}</div>
-                        <div class="today-plan-option-desc">${escapeHtml(conversation.preview || "无摘要")} · ${escapeHtml(String(conversation.message_count || 0))} 条</div>
-                      </div>
-                    </label>
-                  `).join("") || '<div class="today-plan-empty-inline">暂无可选会话</div>'}
+                <div class="today-plan-pill-row">
+                  <span class="today-plan-meta-pill">今日 ${escapeHtml(String(messages.length))} 条</span>
+                  <span class="today-plan-meta-pill">已选 ${escapeHtml(String(selectedCount))} 条</span>
                 </div>
-              </div>
+                ${latestMessage ? `<div class="today-plan-description">${escapeHtml((latestMessage.content || "").replace(/\s+/g, " ").trim() || "无内容")}</div>` : ""}
+              </button>
             `;
-          }).join("") || '<div class="today-plan-empty-inline">暂无可选群聊</div>'}
+          }).join("") || '<div class="today-plan-empty-inline">今天没有可关联的群聊消息。</div>'}
         </div>
       </section>
       <section class="today-plan-association-column">
@@ -13380,6 +13376,46 @@ function renderTodayPlanAssociationDialog() {
       <button type="button" class="btn-ghost" data-today-plan-close-associations>取消</button>
       <button type="button" class="btn-primary" data-today-plan-save-associations>保存关联</button>
     </div>
+    ${activeChatGroup ? `
+      <div class="today-plan-chat-picker">
+        <div class="today-plan-chat-picker-window">
+          <div class="today-plan-chat-picker-header">
+            <div>
+              <div class="today-plan-kicker">Chat Picker</div>
+              <div class="today-plan-section-title">${escapeHtml(activeChatGroup.name || activeChatGroup.jid)}</div>
+              <div class="today-plan-section-subtitle">今天最新 ${escapeHtml(String(activeChatMessages.length))} 条消息 · 已选 ${escapeHtml(String(activeChatSelectedIds.size))} 条</div>
+            </div>
+            <button type="button" class="icon-btn" data-today-plan-close-chat-picker title="关闭" aria-label="关闭">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="today-plan-chat-picker-toolbar">
+            <div class="today-plan-option-desc">点击消息即可选择或取消。仅保存你勾选的消息，不做会话聚合。</div>
+            <button type="button" class="btn-ghost" data-today-plan-clear-chat-selection="${escapeAttribute(activeChatGroup.jid)}" ${activeChatSelectedIds.size === 0 ? "disabled" : ""}>清空已选</button>
+          </div>
+          <div class="today-plan-chat-picker-list">
+            ${activeChatMessages.map((message) => {
+              const selected = activeChatSelectedIds.has(message.id);
+              return `
+                <button type="button" class="today-plan-chat-picker-message${selected ? " selected" : ""}${message.is_from_me ? " from-me" : ""}${message.is_bot_message ? " bot" : ""}" data-today-plan-chat-message="${escapeAttribute(message.id)}" data-group-jid="${escapeAttribute(activeChatGroup.jid)}">
+                  <span class="today-plan-chat-picker-check">${selected ? "✓" : ""}</span>
+                  <div class="today-plan-chat-picker-content">
+                    <div class="today-plan-chat-picker-meta">
+                      <span>${escapeHtml(message.sender_name || message.sender || "未知")}</span>
+                      <span>${escapeHtml(formatDateTime(message.timestamp || ""))}</span>
+                    </div>
+                    <div class="today-plan-chat-picker-body">${renderTodayPlanMessageBody(message)}</div>
+                  </div>
+                </button>
+              `;
+            }).join("") || '<div class="today-plan-empty-inline">今天没有可选择的消息。</div>'}
+          </div>
+        </div>
+      </div>
+    ` : ""}
   `;
 
   Array.from(dialog.querySelectorAll("[data-today-plan-close-associations]")).forEach((button) => {
@@ -13401,11 +13437,38 @@ function renderTodayPlanAssociationDialog() {
     });
   });
 
-  Array.from(dialog.querySelectorAll('[data-today-plan-association="conversation"]')).forEach((checkbox) => {
-    checkbox.addEventListener("change", () => {
-      const groupJid = checkbox.getAttribute("data-group-jid") || "";
-      const conversationId = checkbox.value;
-      updateTodayPlanChatSelection(state, groupJid, conversationId, checkbox.checked);
+  Array.from(dialog.querySelectorAll("[data-today-plan-open-chat-group]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeChatGroupJid = button.getAttribute("data-today-plan-open-chat-group") || "";
+      renderTodayPlanAssociationDialog();
+    });
+  });
+
+  Array.from(dialog.querySelectorAll("[data-today-plan-close-chat-picker]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeChatGroupJid = "";
+      renderTodayPlanAssociationDialog();
+    });
+  });
+
+  Array.from(dialog.querySelectorAll("[data-today-plan-chat-message]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const groupJid = button.getAttribute("data-group-jid") || "";
+      const messageId = button.getAttribute("data-today-plan-chat-message") || "";
+      if (!groupJid || !messageId) return;
+      const selection = getTodayPlanAssociationChatEntry(state, groupJid);
+      const selected = Boolean(selection && Array.isArray(selection.message_ids) && selection.message_ids.includes(messageId));
+      updateTodayPlanChatSelection(state, groupJid, messageId, !selected);
+      renderTodayPlanAssociationDialog();
+    });
+  });
+
+  Array.from(dialog.querySelectorAll("[data-today-plan-clear-chat-selection]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const groupJid = button.getAttribute("data-today-plan-clear-chat-selection") || "";
+      if (!groupJid) return;
+      state.associations.chat_selections = state.associations.chat_selections.filter((item) => item.group_jid !== groupJid);
+      renderTodayPlanAssociationDialog();
     });
   });
 
@@ -13478,27 +13541,46 @@ async function openTodayPlanAssociationDialog(itemId) {
     if (!taskRes.ok) throw new Error(taskData.error || `HTTP ${taskRes.status}`);
     if (!serviceRes.ok) throw new Error(serviceData.error || `HTTP ${serviceRes.status}`);
 
-    const conversationsByGroup = {};
+    const chatMessagesByGroup = {};
+    const groupsWithMessages = [];
 
     await Promise.all((groups || []).map(async (group) => {
       try {
         const res = await apiFetch(`/api/today-plan/chat/options?jid=${encodeURIComponent(group.jid)}`);
         const data = await res.json();
-        conversationsByGroup[group.jid] = Array.isArray(data.conversations) ? data.conversations : [];
+        chatMessagesByGroup[group.jid] = Array.isArray(data.messages) ? data.messages : [];
+        if (chatMessagesByGroup[group.jid].length > 0) {
+          groupsWithMessages.push(group);
+        }
       } catch (err) {
         console.error("Failed to load today plan chat options:", err);
-        conversationsByGroup[group.jid] = [];
+        chatMessagesByGroup[group.jid] = [];
       }
     }));
 
+    groupsWithMessages.sort((left, right) => {
+      const leftMessages = chatMessagesByGroup[left.jid] || [];
+      const rightMessages = chatMessagesByGroup[right.jid] || [];
+      const leftLatest = leftMessages[leftMessages.length - 1];
+      const rightLatest = rightMessages[rightMessages.length - 1];
+      const leftRaw = (leftLatest && leftLatest.timestamp) || "";
+      const rightRaw = (rightLatest && rightLatest.timestamp) || "";
+      const leftNumeric = Number(leftRaw);
+      const rightNumeric = Number(rightRaw);
+      const leftTimestamp = Number.isFinite(leftNumeric) && leftNumeric > 0 ? leftNumeric : (Date.parse(leftRaw) || 0);
+      const rightTimestamp = Number.isFinite(rightNumeric) && rightNumeric > 0 ? rightNumeric : (Date.parse(rightRaw) || 0);
+      return rightTimestamp - leftTimestamp;
+    });
+
     todayPlanAssociationState = {
       itemId,
-      groups: Array.isArray(groups) ? groups : [],
+      groups: groupsWithMessages,
       workbenchTasks: Array.isArray(taskData.tasks) ? taskData.tasks : [],
       serviceOptions: Array.isArray(serviceData.services) ? serviceData.services : [],
-      conversationsByGroup,
+      chatMessagesByGroup,
       branchesByService: {},
       loadingBranches: {},
+      activeChatGroupJid: "",
       associations: cloneTodayPlanAssociations(item.associations),
     };
 

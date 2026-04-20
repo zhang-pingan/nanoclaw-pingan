@@ -10,9 +10,8 @@ import {
   getTodayPlanByDate,
   getTodayPlanById,
   getTodayPlanItemById,
-  getWorkflow,
   listStoredMessagesByChat,
-  listStoredMessagesByWorkflow,
+  listStoredMessagesByIds,
   listTodayPlanItems,
   listTodayPlans,
   updateTodayPlan,
@@ -38,7 +37,7 @@ interface ServiceConfig {
 
 export interface TodayPlanChatSelection {
   group_jid: string;
-  conversation_ids: string[];
+  message_ids: string[];
 }
 
 export interface TodayPlanServiceSelection {
@@ -63,19 +62,10 @@ export interface TodayPlanConversationMessage {
   workflow_id: string | null;
 }
 
-export interface TodayPlanConversationSummary {
-  id: string;
-  title: string;
-  preview: string;
-  started_at: string;
-  ended_at: string;
+export interface TodayPlanChatGroupDetail {
+  group_jid: string;
+  group_name: string;
   message_count: number;
-  workflow_id: string | null;
-}
-
-export interface TodayPlanConversationDetail
-  extends TodayPlanConversationSummary {
-  chat_jid: string;
   messages: TodayPlanConversationMessage[];
 }
 
@@ -121,11 +111,7 @@ export interface TodayPlanItemDetail {
   order_index: number;
   associations: TodayPlanAssociations;
   related_tasks: TodayPlanTaskAssociationDetail[];
-  related_chats: Array<{
-    group_jid: string;
-    group_name: string;
-    conversations: TodayPlanConversationDetail[];
-  }>;
+  related_chats: TodayPlanChatGroupDetail[];
   related_services: TodayPlanServiceDetail[];
   created_at: string;
   updated_at: string;
@@ -224,6 +210,28 @@ function toConversationMessage(
   };
 }
 
+function isMessageOnPlanDate(
+  message: StoredChatMessageRecord,
+  planDate: string,
+): boolean {
+  const timestamp = toMessageTimestamp(message.timestamp);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return false;
+  return getTodayPlanDateKey(new Date(timestamp)) === planDate;
+}
+
+function dedupeAndSortChatMessages(
+  messages: TodayPlanConversationMessage[],
+): TodayPlanConversationMessage[] {
+  const byId = new Map<string, TodayPlanConversationMessage>();
+  for (const message of messages) {
+    if (!message?.id) continue;
+    byId.set(message.id, message);
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) => toMessageTimestamp(a.timestamp) - toMessageTimestamp(b.timestamp),
+  );
+}
+
 function normalizeAssociations(
   raw: string | null | undefined,
 ): TodayPlanAssociations {
@@ -253,20 +261,20 @@ function normalizeAssociations(
             (item): item is TodayPlanChatSelection =>
               Boolean(item) &&
               typeof item.group_jid === 'string' &&
-              Array.isArray(item.conversation_ids),
+              Array.isArray(item.message_ids),
           )
           .map((item) => ({
             group_jid: item.group_jid,
-            conversation_ids: Array.from(
+            message_ids: Array.from(
               new Set(
-                item.conversation_ids.filter(
+                (Array.isArray(item.message_ids) ? item.message_ids : []).filter(
                   (entry): entry is string =>
                     typeof entry === 'string' && entry.trim().length > 0,
                 ),
               ),
             ),
           }))
-          .filter((item) => item.conversation_ids.length > 0)
+          .filter((item) => item.message_ids.length > 0)
       : [];
     const services = Array.isArray(parsed.services)
       ? parsed.services
@@ -309,138 +317,13 @@ function serializeAssociations(input: TodayPlanAssociations): string {
     workbench_task_ids: Array.from(new Set(input.workbench_task_ids)),
     chat_selections: input.chat_selections.map((item) => ({
       group_jid: item.group_jid,
-      conversation_ids: Array.from(new Set(item.conversation_ids)),
+      message_ids: Array.from(new Set(item.message_ids || [])),
     })),
     services: input.services.map((item) => ({
       service: item.service,
       branches: Array.from(new Set(item.branches)),
     })),
   });
-}
-
-function buildWindowConversationId(
-  startTimestamp: string,
-  endTimestamp: string,
-): string {
-  return `window:${encodeURIComponent(startTimestamp)}:${encodeURIComponent(endTimestamp)}`;
-}
-
-function parseWindowConversationId(conversationId: string): {
-  startTimestamp: string;
-  endTimestamp: string;
-} | null {
-  if (!conversationId.startsWith('window:')) return null;
-  const parts = conversationId.split(':');
-  if (parts.length < 3) return null;
-  return {
-    startTimestamp: decodeURIComponent(parts[1] || ''),
-    endTimestamp: decodeURIComponent(parts.slice(2).join(':') || ''),
-  };
-}
-
-function buildWorkflowConversationId(workflowId: string): string {
-  return `wf:${encodeURIComponent(workflowId)}`;
-}
-
-function parseWorkflowConversationId(conversationId: string): string | null {
-  if (!conversationId.startsWith('wf:')) return null;
-  return decodeURIComponent(conversationId.slice(3) || '');
-}
-
-function buildConversationPreview(messages: StoredChatMessageRecord[]): string {
-  const previewSource =
-    messages.find(
-      (item) => typeof item.content === 'string' && item.content.trim().length > 0,
-    ) || messages[0];
-  return previewSource
-    ? truncateText(previewSource.content.replace(/\s+/g, ' ').trim(), 80)
-    : '';
-}
-
-function resolveConversationTitle(
-  messages: StoredChatMessageRecord[],
-  workflowId: string | null,
-): string {
-  if (workflowId) {
-    const workflow = getWorkflow(workflowId);
-    if (workflow?.name) return workflow.name;
-  }
-  const preview = buildConversationPreview(messages);
-  return preview || '未命名会话';
-}
-
-export function summarizeTodayPlanConversations(
-  messages: StoredChatMessageRecord[],
-): TodayPlanConversationSummary[] {
-  if (messages.length === 0) return [];
-
-  const normalized = sortMessagesChronologically(messages);
-  const workflowBuckets = new Map<string, StoredChatMessageRecord[]>();
-  const windowBuckets: StoredChatMessageRecord[][] = [];
-  let currentWindow: StoredChatMessageRecord[] = [];
-
-  for (const message of normalized) {
-    const workflowId = (message.workflow_id || '').trim();
-    if (workflowId) {
-      const existing = workflowBuckets.get(workflowId) || [];
-      existing.push(message);
-      workflowBuckets.set(workflowId, existing);
-      continue;
-    }
-
-    if (currentWindow.length === 0) {
-      currentWindow.push(message);
-      continue;
-    }
-
-    const previous = currentWindow[currentWindow.length - 1];
-    const gap = toMessageTimestamp(message.timestamp) - toMessageTimestamp(previous.timestamp);
-    if (gap > 45 * 60 * 1000) {
-      windowBuckets.push(currentWindow);
-      currentWindow = [message];
-      continue;
-    }
-
-    currentWindow.push(message);
-  }
-
-  if (currentWindow.length > 0) {
-    windowBuckets.push(currentWindow);
-  }
-
-  const summaries: TodayPlanConversationSummary[] = [];
-
-  for (const [workflowId, bucket] of workflowBuckets) {
-    const first = bucket[0];
-    const last = bucket[bucket.length - 1];
-    summaries.push({
-      id: buildWorkflowConversationId(workflowId),
-      title: resolveConversationTitle(bucket, workflowId),
-      preview: buildConversationPreview(bucket),
-      started_at: first.timestamp,
-      ended_at: last.timestamp,
-      message_count: bucket.length,
-      workflow_id: workflowId,
-    });
-  }
-
-  for (const bucket of windowBuckets) {
-    const first = bucket[0];
-    const last = bucket[bucket.length - 1];
-    summaries.push({
-      id: buildWindowConversationId(first.timestamp, last.timestamp),
-      title: resolveConversationTitle(bucket, null),
-      preview: buildConversationPreview(bucket),
-      started_at: first.timestamp,
-      ended_at: last.timestamp,
-      message_count: bucket.length,
-      workflow_id: null,
-    });
-  }
-
-  return summaries.sort(
-    (a, b) => toMessageTimestamp(b.ended_at) - toMessageTimestamp(a.ended_at),
-  );
 }
 
 export function getTodayPlanOverview(planDate: string = getTodayPlanDateKey()) {
@@ -793,48 +676,28 @@ export function getTodayPlanServiceCommitDiff(input: {
   }
 }
 
-export function listTodayPlanChatConversations(
+export function listTodayPlanChatMessages(
   chatJid: string,
-): TodayPlanConversationSummary[] {
-  const messages = listStoredMessagesByChat(chatJid, 1200);
-  return summarizeTodayPlanConversations(messages).slice(0, 30);
+  planDate: string = getTodayPlanDateKey(),
+): TodayPlanConversationMessage[] {
+  const messages = listStoredMessagesByChat(chatJid, 2000)
+    .filter((message) => isMessageOnPlanDate(message, planDate))
+    .sort((a, b) => toMessageTimestamp(b.timestamp) - toMessageTimestamp(a.timestamp))
+    .slice(0, 200)
+    .map(toConversationMessage);
+  return dedupeAndSortChatMessages(messages);
 }
 
-export function getTodayPlanChatConversationDetail(input: {
-  chatJid: string;
-  conversationId: string;
-}): TodayPlanConversationDetail | null {
-  const workflowId = parseWorkflowConversationId(input.conversationId);
-  let messages: StoredChatMessageRecord[] = [];
-
-  if (workflowId) {
-    messages = listStoredMessagesByWorkflow(input.chatJid, workflowId, 1200);
-  } else {
-    const windowRange = parseWindowConversationId(input.conversationId);
-    if (!windowRange) return null;
-    messages = listStoredMessagesByChat(input.chatJid, 2000).filter((message) => {
-      const timestamp = toMessageTimestamp(message.timestamp);
-      return (
-        timestamp >= toMessageTimestamp(windowRange.startTimestamp) &&
-        timestamp <= toMessageTimestamp(windowRange.endTimestamp)
-      );
-    });
-  }
-
-  if (messages.length === 0) return null;
-
-  const normalized = sortMessagesChronologically(messages);
-  const summary =
-    summarizeTodayPlanConversations(normalized).find(
-      (item) => item.id === input.conversationId,
-    ) || null;
-  if (!summary) return null;
-
-  return {
-    ...summary,
-    chat_jid: input.chatJid,
-    messages: normalized.map(toConversationMessage),
-  };
+function getTodayPlanChatMessagesBySelection(
+  selection: TodayPlanChatSelection,
+): TodayPlanConversationMessage[] {
+  const directMessages =
+    Array.isArray(selection.message_ids) && selection.message_ids.length > 0
+      ? listStoredMessagesByIds(selection.group_jid, selection.message_ids).map(
+          toConversationMessage,
+        )
+      : [];
+  return dedupeAndSortChatMessages(directMessages);
 }
 
 function mergeServiceSelections(input: {
@@ -906,34 +769,17 @@ function buildTodayPlanItemDetail(input: {
   );
   const relatedChats = associations.chat_selections
     .map((selection) => {
-      const conversations = selection.conversation_ids
-        .map((conversationId) =>
-          getTodayPlanChatConversationDetail({
-            chatJid: selection.group_jid,
-            conversationId,
-          }),
-        )
-        .filter(
-          (conversation): conversation is TodayPlanConversationDetail =>
-            Boolean(conversation),
-        );
-      if (conversations.length === 0) return null;
+      const messages = getTodayPlanChatMessagesBySelection(selection);
+      if (messages.length === 0) return null;
       return {
         group_jid: selection.group_jid,
         group_name:
           input.groups[selection.group_jid]?.name || selection.group_jid,
-        conversations,
+        message_count: messages.length,
+        messages,
       };
     })
-    .filter(
-      (
-        item,
-      ): item is {
-        group_jid: string;
-        group_name: string;
-        conversations: TodayPlanConversationDetail[];
-      } => Boolean(item),
-    );
+    .filter((item): item is TodayPlanChatGroupDetail => Boolean(item));
   const relatedServices = mergeServiceSelections({
     manual: associations.services,
     tasks: taskDetails,
@@ -1055,20 +901,19 @@ export function removeTodayPlanItem(itemId: string): number {
   return deleteTodayPlanItem(itemId);
 }
 
-function formatConversationForMail(conversation: TodayPlanConversationDetail): string {
-  const lines = conversation.messages.slice(0, 120).map((message) => {
+function formatChatGroupForMail(group: TodayPlanChatGroupDetail): string {
+  const lines = group.messages.slice(0, 120).map((message) => {
     const sender = message.sender_name || message.sender || '未知';
     const content = truncateText(message.content.replace(/\s+/g, ' ').trim(), 240);
     return `- [${message.timestamp}] ${sender}: ${content}`;
   });
   const suffix =
-    conversation.messages.length > 120
-      ? `\n- ... 其余 ${conversation.messages.length - 120} 条消息已省略`
+    group.messages.length > 120
+      ? `\n- ... 其余 ${group.messages.length - 120} 条消息已省略`
       : '';
   return [
-    `会话：${conversation.title}`,
-    `摘要：${conversation.preview || '无'}`,
-    `消息数：${conversation.message_count}`,
+    `群聊：${group.group_name}`,
+    `消息数：${group.message_count}`,
     ...lines,
   ].join('\n') + suffix;
 }
@@ -1141,10 +986,9 @@ export function buildTodayPlanMailPrompt(input: {
         }
 
         if (item.related_chats.length > 0) {
-          sections.push('### 关联群聊会话');
+          sections.push('### 关联群聊消息');
           for (const group of item.related_chats) {
-            sections.push(`群聊：${group.group_name}`);
-            sections.push(group.conversations.map(formatConversationForMail).join('\n\n'));
+            sections.push(formatChatGroupForMail(group));
           }
         }
 

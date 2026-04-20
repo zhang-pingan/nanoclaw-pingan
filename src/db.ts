@@ -1189,6 +1189,29 @@ export function listStoredMessagesByWorkflow(
     .all(chatJid, workflowId, normalizedLimit) as StoredChatMessageRecord[];
 }
 
+export function listStoredMessagesByIds(
+  chatJid: string,
+  ids: string[],
+): StoredChatMessageRecord[] {
+  const normalizedIds = Array.from(
+    new Set(ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
+  );
+  if (normalizedIds.length === 0) return [];
+  const placeholders = normalizedIds.map(() => '?').join(', ');
+  return db
+    .prepare(
+      `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             workflow_id
+        FROM messages
+       WHERE chat_jid = ? AND id IN (${placeholders})
+      `,
+    )
+    .all(chatJid, ...normalizedIds) as StoredChatMessageRecord[];
+}
+
 export function createTask(
   task: Omit<ScheduledTask, 'last_run' | 'last_result'>,
 ): void {

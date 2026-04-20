@@ -5,6 +5,8 @@ import {
   createWorkbenchTask,
   createWorkflow,
   getTodayPlanById,
+  storeChatMetadata,
+  storeMessageDirect,
 } from './db.js';
 import {
   completeTodayPlan,
@@ -12,8 +14,8 @@ import {
   createTodayPlanItemForPlan,
   ensureTodayPlan,
   getTodayPlanDetail,
+  listTodayPlanChatMessages,
   patchTodayPlanItem,
-  summarizeTodayPlanConversations,
 } from './today-plan.js';
 
 describe('today-plan', () => {
@@ -30,70 +32,36 @@ describe('today-plan', () => {
     expect(first.status).toBe('active');
   });
 
-  it('groups workflow messages and idle windows into conversations', () => {
-    const summaries = summarizeTodayPlanConversations([
-      {
-        id: 'm1',
-        chat_jid: 'web:main',
-        sender: 'system',
-        sender_name: 'System',
-        content: 'workflow start',
-        timestamp: '1713571200000',
-        is_from_me: 1,
-        is_bot_message: 0,
-        workflow_id: 'wf-1',
-      },
-      {
-        id: 'm2',
-        chat_jid: 'web:main',
-        sender: 'system',
-        sender_name: 'System',
-        content: 'workflow end',
-        timestamp: '1713571500000',
-        is_from_me: 1,
-        is_bot_message: 0,
-        workflow_id: 'wf-1',
-      },
-      {
-        id: 'm3',
-        chat_jid: 'web:main',
-        sender: 'alice',
-        sender_name: 'Alice',
-        content: 'sync later',
-        timestamp: '1713571800000',
-        is_from_me: 0,
-        is_bot_message: 0,
-        workflow_id: null,
-      },
-      {
-        id: 'm4',
-        chat_jid: 'web:main',
-        sender: 'bob',
-        sender_name: 'Bob',
-        content: 'ok',
-        timestamp: '1713572100000',
-        is_from_me: 0,
-        is_bot_message: 0,
-        workflow_id: null,
-      },
-      {
-        id: 'm5',
-        chat_jid: 'web:main',
-        sender: 'alice',
-        sender_name: 'Alice',
-        content: 'new topic',
-        timestamp: '1713576000000',
-        is_from_me: 0,
-        is_bot_message: 0,
-        workflow_id: null,
-      },
-    ]);
+  it('lists only the latest 200 messages from the plan date', () => {
+    storeChatMetadata('web:main', String(Date.parse('2026-04-20T08:00:00.000Z')), 'Main Group', 'web', true);
+    storeMessageDirect({
+      id: 'old-day',
+      chat_jid: 'web:main',
+      sender: 'alice',
+      sender_name: 'Alice',
+      content: 'yesterday',
+      timestamp: String(Date.parse('2026-04-19T12:00:00.000Z')),
+      is_from_me: false,
+    });
 
-    expect(summaries).toHaveLength(3);
-    expect(summaries.find((item) => item.workflow_id === 'wf-1')).toBeTruthy();
-    expect(
-      summaries.filter((item) => item.workflow_id === null).map((item) => item.message_count),
-    ).toEqual([1, 2]);
+    const baseTimestamp = Date.parse('2026-04-20T08:00:00.000Z');
+    for (let index = 0; index < 205; index += 1) {
+      storeMessageDirect({
+        id: `msg-${index}`,
+        chat_jid: 'web:main',
+        sender: index % 2 === 0 ? 'alice' : 'bob',
+        sender_name: index % 2 === 0 ? 'Alice' : 'Bob',
+        content: `message ${index}`,
+        timestamp: String(baseTimestamp + index * 60_000),
+        is_from_me: false,
+      });
+    }
+
+    const messages = listTodayPlanChatMessages('web:main', '2026-04-20');
+    expect(messages).toHaveLength(200);
+    expect(messages[0]?.id).toBe('msg-5');
+    expect(messages[messages.length - 1]?.id).toBe('msg-204');
+    expect(messages.some((message) => message.id === 'old-day')).toBe(false);
   });
 
   it('auto-associates workbench task service and work branch into today plan detail', () => {

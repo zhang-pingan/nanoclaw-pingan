@@ -60,12 +60,11 @@ import {
   completeTodayPlan,
   createOrContinueTodayPlan,
   createTodayPlanItemForPlan,
-  getTodayPlanChatConversationDetail,
   getTodayPlanDetail,
   getTodayPlanOverview,
   getTodayPlanServiceCommitDiff,
   getTodayPlanDateKey,
-  listTodayPlanChatConversations,
+  listTodayPlanChatMessages,
   listTodayPlanServiceBranches,
   listTodayPlanServices,
   patchTodayPlanItem,
@@ -522,12 +521,6 @@ class WebChannel {
       }
       if (pathname === '/api/today-plan/chat/options' && req.method === 'GET') {
         return this.apiGetTodayPlanChatOptions(reqUrl, res);
-      }
-      if (
-        pathname === '/api/today-plan/chat/conversation' &&
-        req.method === 'GET'
-      ) {
-        return this.apiGetTodayPlanChatConversation(reqUrl, res);
       }
       if (pathname === '/api/today-plan/services' && req.method === 'GET') {
         return this.apiGetTodayPlanServices(res);
@@ -2316,7 +2309,7 @@ class WebChannel {
         workbench_task_ids?: string[];
         chat_selections?: Array<{
           group_jid: string;
-          conversation_ids: string[];
+          message_ids?: string[];
         }>;
         services?: Array<{
           service: string;
@@ -2342,7 +2335,12 @@ class WebChannel {
                 ? data.associations.workbench_task_ids
                 : [],
               chat_selections: Array.isArray(data.associations.chat_selections)
-                ? data.associations.chat_selections
+                ? data.associations.chat_selections.map((selection) => ({
+                    group_jid: selection.group_jid,
+                    message_ids: Array.isArray(selection.message_ids)
+                      ? selection.message_ids
+                      : [],
+                  }))
                 : [],
               services: Array.isArray(data.associations.services)
                 ? data.associations.services
@@ -2419,37 +2417,9 @@ class WebChannel {
       return;
     }
 
-    const conversations = listTodayPlanChatConversations(jid);
+    const messages = listTodayPlanChatMessages(jid);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ jid, conversations }));
-  }
-
-  private async apiGetTodayPlanChatConversation(
-    reqUrl: URL,
-    res: http.ServerResponse,
-  ): Promise<void> {
-    const jid = reqUrl.searchParams.get('jid') || '';
-    const conversationId = reqUrl.searchParams.get('conversation_id') || '';
-    if (!jid || !conversationId) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({ error: 'jid and conversation_id required' }),
-      );
-      return;
-    }
-
-    const conversation = getTodayPlanChatConversationDetail({
-      chatJid: jid,
-      conversationId,
-    });
-    if (!conversation) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Conversation not found' }));
-      return;
-    }
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ conversation }));
+    res.end(JSON.stringify({ jid, messages }));
   }
 
   private async apiGetTodayPlanServices(
