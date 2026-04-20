@@ -1035,6 +1035,36 @@ function formatServiceForMail(service: TodayPlanServiceDetail): string {
   ].join('\n');
 }
 
+function buildTodayPlanMailTemplate(planDate: string): string {
+  return [
+    `以下是 ${planDate} 的今日计划：`,
+    '',
+    '一、今日计划概览',
+    '- 总计划数：<根据计划项数量填写；如果没有计划则写 0>',
+    '- 核心事项：<概括今天最重要的 2-4 项工作；如果没有则写 无>',
+    '',
+    '二、计划明细',
+    '1. <计划标题 1>',
+    '- 计划内容：<概括该计划的目标、范围和预期产出；如果没有则写 无>',
+    '- 关联任务：<概括任务标题、当前节点、待处理项；如果没有则写 无>',
+    '- 关联群聊：<概括群名、关键信息和当前结论；如果没有则写 无>',
+    '- 关联服务分支：<概括服务、分支、当日提交和异常；如果没有则写 无>',
+    '- 风险与待处理项：<提炼这条计划的风险、阻塞或待确认事项；如果没有则写 无>',
+    '',
+    '2. <计划标题 2>',
+    '- 按实际计划数量继续展开；如果只有一条计划，则不要保留这一条示例。',
+    '',
+    '三、汇总风险',
+    '- <汇总所有待处理项、仓库/分支异常、阻塞信息；如果没有则写 无>',
+    '',
+    '四、需要同步/关注',
+    '- <提炼需要团队知悉或后续跟进的事项；如果没有则写 暂无>',
+    '',
+    '此致',
+    '敬礼',
+  ].join('\n');
+}
+
 export function buildTodayPlanMailPrompt(input: {
   planId: string;
   groups: Record<string, RegisteredGroup>;
@@ -1078,6 +1108,7 @@ export function buildTodayPlanMailPrompt(input: {
     : ['## 今日计划为空\n请在邮件中明确说明当前没有具体计划项。'];
 
   const subject = `${detail.plan.plan_date} 今日计划`;
+  const mailTemplate = buildTodayPlanMailTemplate(detail.plan.plan_date);
   const prompt = [
     `请基于下面这份由程序聚合的结构化信息，总结 ${detail.plan.plan_date} 的今日计划，并直接使用 \`container/skills/wecom-mail\` 技能发送邮件。`,
     '用户已经在 GUI 中点击了“发送计划邮件”，可以视为已确认发送，不需要再次询问是否发送。',
@@ -1087,6 +1118,10 @@ export function buildTodayPlanMailPrompt(input: {
     '2. 总结时先概括每条计划，再补充每条计划关联的任务、群聊、服务分支提交信息。',
     '3. 如果存在待处理项或仓库/分支异常，请在邮件中明确标注风险。',
     '4. 发信时优先使用 wecom-mail skill 的默认配置。',
+    '5. 邮件正文请严格使用下面的纯文本模板输出，不要保留尖括号占位符，不要输出代码块。',
+    '',
+    '# 邮件正文模板',
+    mailTemplate,
     '',
     '# 结构化信息',
     ...blocks,
