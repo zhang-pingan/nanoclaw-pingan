@@ -56,7 +56,6 @@ import {
 } from '../workflow-compiler.js';
 import { loadWorkflowConfigs } from '../workflow-config.js';
 import {
-  buildTodayPlanMailPrompt,
   completeTodayPlan,
   createOrContinueTodayPlan,
   createTodayPlanItemForPlan,
@@ -70,6 +69,10 @@ import {
   patchTodayPlanItem,
   removeTodayPlanItem,
 } from '../today-plan.js';
+import {
+  confirmTodayPlanMailDraft,
+  prepareTodayPlanMailDraft,
+} from '../today-plan-mail.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -538,10 +541,16 @@ class WebChannel {
         return this.apiGetTodayPlanServiceCommit(reqUrl, res);
       }
       if (
-        pathname === '/api/today-plan/mail/send' &&
+        pathname === '/api/today-plan/mail/prepare' &&
         req.method === 'POST'
       ) {
-        return this.apiSendTodayPlanMail(req, res);
+        return this.apiPrepareTodayPlanMailDraft(req, res);
+      }
+      if (
+        pathname === '/api/today-plan/mail/confirm' &&
+        req.method === 'POST'
+      ) {
+        return this.apiConfirmTodayPlanMailDraft(req, res);
       }
       if (pathname === '/api/card-action' && req.method === 'POST') {
         return this.apiCardAction(req, res);
@@ -2463,7 +2472,7 @@ class WebChannel {
     res.end(JSON.stringify(detail));
   }
 
-  private async apiSendTodayPlanMail(
+  private async apiPrepareTodayPlanMailDraft(
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ): Promise<void> {
@@ -2476,7 +2485,7 @@ class WebChannel {
       return;
     }
 
-    const data = body as { plan_id?: string; name?: string };
+    const data = body as { plan_id?: string; name?: string; to?: string[]; cc?: string[] };
     const name = typeof data.name === 'string' ? data.name.trim() : '';
     if (!data.plan_id || !name) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2484,35 +2493,56 @@ class WebChannel {
       return;
     }
 
-    const payload = buildTodayPlanMailPrompt({
-      planId: data.plan_id,
-      groups: this.opts.registeredGroups(),
-      name,
-    });
-    if (!payload) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Today plan not found' }));
-      return;
+    try {
+      const draft = await prepareTodayPlanMailDraft({
+        planId: data.plan_id,
+        groups: this.opts.registeredGroups(),
+        name,
+        to: Array.isArray(data.to) ? data.to : [],
+        cc: Array.isArray(data.cc) ? data.cc : [],
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, draft }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = /not found/i.test(message) ? 404 : 400;
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
     }
+  }
 
-    const targetJid = this.findPreferredMainGroupJid();
-    if (!targetJid) {
+  private async apiConfirmTodayPlanMailDraft(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Main group not found' }));
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
       return;
     }
 
-    this.injectWorkbenchReply(targetJid, payload.prompt);
-    this.opts.enqueueMessageCheck?.(targetJid);
+    const data = body as { draft_id?: string };
+    if (!data.draft_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'draft_id required' }));
+      return;
+    }
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(
-      JSON.stringify({
-        ok: true,
-        target_jid: targetJid,
-        subject: payload.subject,
-      }),
-    );
+    try {
+      const draft = await confirmTodayPlanMailDraft({
+        draftId: data.draft_id,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, draft }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = /not found/i.test(message) ? 404 : 400;
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
+    }
   }
 
   private injectWorkbenchReply(chatJid: string, content: string): void {

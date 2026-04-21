@@ -417,6 +417,32 @@ export interface TodayPlanItemRecord {
   updated_at: string;
 }
 
+export interface TodayPlanMailDraftRecord {
+  id: string;
+  plan_id: string;
+  plan_date: string;
+  sender_name: string;
+  subject: string;
+  body: string | null;
+  to_json: string | null;
+  cc_json: string | null;
+  bcc_json: string | null;
+  attachments_json: string | null;
+  status:
+    | 'drafting'
+    | 'pending_confirm'
+    | 'sending'
+    | 'sent'
+    | 'failed'
+    | 'cancelled';
+  error_message: string | null;
+  prepared_at: string | null;
+  confirmed_at: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface StoredChatMessageRecord {
   id: string;
   chat_jid: string;

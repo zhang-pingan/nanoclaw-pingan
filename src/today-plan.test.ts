@@ -211,10 +211,12 @@ describe('today-plan', () => {
     expect(payload).toBeTruthy();
     expect(payload?.subject).toBe('日报-张頔-2026-04-20');
     expect(payload?.prompt).toContain('# 邮件正文模板');
+    expect(payload?.prompt).toContain('只输出邮件正文');
     expect(payload?.prompt).toContain('1. <计划标题 1>');
     expect(payload?.prompt).toContain('- 根据`关联任务`、`关联群聊`、`关联服务分支` 信息汇总实际执行项列表');
     expect(payload?.prompt).toContain('2. <计划标题 2>');
     expect(payload?.prompt).toContain('不要保留尖括号占位符');
+    expect(payload?.prompt).not.toContain('wecom-mail');
     expect(payload?.prompt).toContain('## 计划 1: 推进今日开发');
     expect(payload?.prompt).toContain('计划内容：完成聚合页与发送链路梳理');
   });

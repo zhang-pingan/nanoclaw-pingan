@@ -27,9 +27,10 @@ import {
   ScheduledTask,
   StoredChatMessageRecord,
   TaskRunLog,
-  TodayPlanItemRecord,
-  TodayPlanRecord,
-  WorkbenchActionItemRecord,
+    TodayPlanItemRecord,
+    TodayPlanMailDraftRecord,
+    TodayPlanRecord,
+    WorkbenchActionItemRecord,
   WorkbenchArtifactRecord,
   WorkbenchCommentRecord,
   WorkbenchContextAssetRecord,
@@ -445,6 +446,30 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_today_plan_items_plan
       ON today_plan_items(plan_id, order_index ASC, created_at ASC);
+
+    CREATE TABLE IF NOT EXISTS today_plan_mail_drafts (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL,
+      plan_date TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT,
+      to_json TEXT,
+      cc_json TEXT,
+      bcc_json TEXT,
+      attachments_json TEXT,
+      status TEXT NOT NULL DEFAULT 'drafting',
+      error_message TEXT,
+      prepared_at TEXT,
+      confirmed_at TEXT,
+      sent_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_today_plan_mail_drafts_plan
+      ON today_plan_mail_drafts(plan_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_today_plan_mail_drafts_status
+      ON today_plan_mail_drafts(status, updated_at DESC);
   `);
 
   // Add ask_questions table if it doesn't exist (human-in-the-loop questions)
@@ -2587,6 +2612,170 @@ export function updateTodayPlanItem(
 
 export function deleteTodayPlanItem(id: string): number {
   return db.prepare('DELETE FROM today_plan_items WHERE id = ?').run(id).changes;
+}
+
+export function createTodayPlanMailDraft(input: {
+  plan_id: string;
+  plan_date: string;
+  sender_name: string;
+  subject: string;
+  body?: string | null;
+  to_json?: string | null;
+  cc_json?: string | null;
+  bcc_json?: string | null;
+  attachments_json?: string | null;
+  status?: TodayPlanMailDraftRecord['status'];
+  error_message?: string | null;
+  prepared_at?: string | null;
+  confirmed_at?: string | null;
+  sent_at?: string | null;
+}): TodayPlanMailDraftRecord {
+  const now = Date.now().toString();
+  const id = `today-plan-mail-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(
+    `INSERT INTO today_plan_mail_drafts (
+      id, plan_id, plan_date, sender_name, subject, body, to_json, cc_json, bcc_json,
+      attachments_json, status, error_message, prepared_at, confirmed_at, sent_at,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    input.plan_id,
+    input.plan_date,
+    input.sender_name.trim(),
+    input.subject.trim(),
+    input.body ?? null,
+    input.to_json ?? null,
+    input.cc_json ?? null,
+    input.bcc_json ?? null,
+    input.attachments_json ?? null,
+    input.status || 'drafting',
+    input.error_message ?? null,
+    input.prepared_at ?? null,
+    input.confirmed_at ?? null,
+    input.sent_at ?? null,
+    now,
+    now,
+  );
+  return db
+    .prepare('SELECT * FROM today_plan_mail_drafts WHERE id = ?')
+    .get(id) as TodayPlanMailDraftRecord;
+}
+
+export function getTodayPlanMailDraftById(
+  id: string,
+): TodayPlanMailDraftRecord | undefined {
+  return db
+    .prepare('SELECT * FROM today_plan_mail_drafts WHERE id = ?')
+    .get(id) as TodayPlanMailDraftRecord | undefined;
+}
+
+export function listTodayPlanMailDraftsByPlan(
+  planId: string,
+): TodayPlanMailDraftRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM today_plan_mail_drafts
+       WHERE plan_id = ?
+       ORDER BY created_at DESC`,
+    )
+    .all(planId) as TodayPlanMailDraftRecord[];
+}
+
+export function updateTodayPlanMailDraft(
+  id: string,
+  updates: Partial<
+    Pick<
+      TodayPlanMailDraftRecord,
+      | 'sender_name'
+      | 'subject'
+      | 'body'
+      | 'to_json'
+      | 'cc_json'
+      | 'bcc_json'
+      | 'attachments_json'
+      | 'status'
+      | 'error_message'
+      | 'prepared_at'
+      | 'confirmed_at'
+      | 'sent_at'
+      | 'updated_at'
+    >
+  >,
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.sender_name !== undefined) {
+    fields.push('sender_name = ?');
+    values.push(updates.sender_name.trim());
+  }
+  if (updates.subject !== undefined) {
+    fields.push('subject = ?');
+    values.push(updates.subject.trim());
+  }
+  if (updates.body !== undefined) {
+    fields.push('body = ?');
+    values.push(updates.body);
+  }
+  if (updates.to_json !== undefined) {
+    fields.push('to_json = ?');
+    values.push(updates.to_json);
+  }
+  if (updates.cc_json !== undefined) {
+    fields.push('cc_json = ?');
+    values.push(updates.cc_json);
+  }
+  if (updates.bcc_json !== undefined) {
+    fields.push('bcc_json = ?');
+    values.push(updates.bcc_json);
+  }
+  if (updates.attachments_json !== undefined) {
+    fields.push('attachments_json = ?');
+    values.push(updates.attachments_json);
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+  }
+  if (updates.error_message !== undefined) {
+    fields.push('error_message = ?');
+    values.push(updates.error_message);
+  }
+  if (updates.prepared_at !== undefined) {
+    fields.push('prepared_at = ?');
+    values.push(updates.prepared_at);
+  }
+  if (updates.confirmed_at !== undefined) {
+    fields.push('confirmed_at = ?');
+    values.push(updates.confirmed_at);
+  }
+  if (updates.sent_at !== undefined) {
+    fields.push('sent_at = ?');
+    values.push(updates.sent_at);
+  }
+  if (updates.updated_at !== undefined) {
+    fields.push('updated_at = ?');
+    values.push(updates.updated_at);
+  }
+
+  if (fields.length === 0) return;
+  values.push(id);
+  db.prepare(
+    `UPDATE today_plan_mail_drafts SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
+}
+
+export function cancelPendingTodayPlanMailDrafts(planId: string): number {
+  const now = Date.now().toString();
+  return db
+    .prepare(
+      `UPDATE today_plan_mail_drafts
+       SET status = 'cancelled', updated_at = ?
+       WHERE plan_id = ?
+         AND status IN ('drafting', 'pending_confirm', 'failed')`,
+    )
+    .run(now, planId).changes;
 }
 
 // --- Structured memory accessors ---
