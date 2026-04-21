@@ -332,12 +332,25 @@ function resolveCurrentStageActionItems(
 ): void {
   const task = getWorkbenchTaskById(taskId);
   if (!task) return;
+  const currentStageItems = listWorkbenchActionItemsByTask(taskId).filter(
+    (item) =>
+      item.stage_key === task.current_stage
+      && (item.status === 'pending' || item.status === 'confirmed'),
+  );
+  if (currentStageItems.length === 0) return;
   resolveWorkbenchActionItemsByStage(
     task.workflow_id,
     task.current_stage,
     'resolved',
     resolvedAt,
   );
+  for (const item of currentStageItems) {
+    emitActionItemUpdate(taskId, task.workflow_id, {
+      id: item.id,
+      status: 'resolved',
+      resolvedAt,
+    });
+  }
 }
 
 function resolveStaleStageActionItems(

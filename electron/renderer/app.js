@@ -10035,7 +10035,21 @@ async function triggerWorkbenchActionItem(taskId, actionItemId, action, prefillT
     await loadWorkbenchTaskDetail(taskId);
   } catch (err) {
     console.error("Failed to handle workbench action item:", err);
-    alert(err.message || "待处理项操作失败");
+    const message = err instanceof Error ? err.message : "待处理项操作失败";
+    if (/Action item not found/i.test(message)) {
+      try {
+        await loadWorkbenchTaskDetail(taskId);
+      } catch (reloadErr) {
+        console.error("Failed to reload stale workbench detail:", reloadErr);
+      }
+      showToast("待处理项已失效，已刷新工作台", 2200);
+      return;
+    }
+    if (typeof window !== "undefined" && typeof window.alert === "function" && !shouldUseCustomAppDialogs()) {
+      window.alert(message);
+      return;
+    }
+    showToast(message, 2200);
   }
 }
 

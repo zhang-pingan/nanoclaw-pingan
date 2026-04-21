@@ -279,6 +279,74 @@ describe('workbench approval transition sync', () => {
     ).toHaveLength(1);
   });
 
+  it('emits action_item_updated when a transition resolves current-stage interaction items', () => {
+    dbCreateWorkflow({
+      id: 'wf-transition-clears-interaction',
+      name: '阶段切换清理互动项',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/transition-clears-interaction',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_transition_clears_interaction',
+        staging_work_branch: 'staging-deploy/feature-transition-clears-interaction',
+        access_token: '',
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'wf-del-transition-plan',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-transition-clears-interaction');
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-transition-clears-interaction',
+      stageKey: 'plan_examine',
+      delegationId: 'wf-del-transition-plan',
+      groupFolder: 'web_plan_examine',
+      sourceType: 'send_message',
+      sourceRefId: 'msg-transition-plan',
+      title: 'Andy 消息',
+      body: '请人工确认是否继续',
+      createdAt: '2026-04-07T00:01:00.000Z',
+    });
+
+    const emittedEvents: Array<Record<string, unknown>> = [];
+    initWorkbenchEvents((event) => {
+      if (event.type === 'action_item_updated') {
+        emittedEvents.push(event.payload);
+      }
+    });
+
+    updateWorkflow('wf-transition-clears-interaction', {
+      status: 'plan_examine_confirm',
+      current_delegation_id: '',
+    });
+    syncWorkbenchOnTransition(
+      'wf-transition-clears-interaction',
+      'plan_examine',
+      'plan_examine_confirm',
+    );
+
+    expect(
+      getWorkbenchActionItem(
+        'wb-action-wf-transition-clears-interaction-plan_examine-send_message-msg-transition-plan',
+      )?.status,
+    ).toBe('resolved');
+    expect(emittedEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'wb-action-wf-transition-clears-interaction-plan_examine-send_message-msg-transition-plan',
+          status: 'resolved',
+        }),
+      ]),
+    );
+  });
+
   it('emits human-readable labels in realtime task updates', () => {
     dbCreateWorkflow({
       id: 'wf-realtime-labels',
