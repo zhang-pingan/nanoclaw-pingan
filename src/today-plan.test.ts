@@ -8,6 +8,7 @@ import {
   storeChatMetadata,
 } from './db.js';
 import {
+  buildTodayPlanCurrentProjectService,
   buildTodayPlanMailPrompt,
   completeTodayPlan,
   createOrContinueTodayPlan,
@@ -15,6 +16,7 @@ import {
   ensureTodayPlan,
   getTodayPlanDetail,
   listTodayPlanChatMessages,
+  mergeTodayPlanServiceRegistry,
   parseTodayPlanServiceBranchOptions,
   patchTodayPlanItem,
 } from './today-plan.js';
@@ -96,6 +98,41 @@ describe('today-plan', () => {
       name: 'erp',
       source: 'remote',
       staging_branch: true,
+    });
+  });
+
+  it('adds the current project as an implicit today plan service', () => {
+    const currentProject = buildTodayPlanCurrentProjectService({
+      projectRoot: '/Users/chelaile/IdeaProjects/nanoclaw',
+      reposDir: '/Users/chelaile/IdeaProjects',
+    });
+
+    expect(currentProject).toEqual({
+      service: 'nanoclaw',
+      config: {
+        repo_path: 'nanoclaw',
+        default_branch: '',
+      },
+    });
+  });
+
+  it('does not override explicit service config when merging today plan services', () => {
+    const registry = mergeTodayPlanServiceRegistry({
+      registry: {
+        nanoclaw: {
+          repo_path: 'custom/nanoclaw',
+          default_branch: 'release',
+        },
+      },
+      projectRoot: '/Users/chelaile/IdeaProjects/nanoclaw',
+      reposDir: '/Users/chelaile/IdeaProjects',
+    });
+
+    expect(registry).toEqual({
+      nanoclaw: {
+        repo_path: 'custom/nanoclaw',
+        default_branch: 'release',
+      },
     });
   });
 

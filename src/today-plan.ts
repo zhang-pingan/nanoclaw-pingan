@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { GROUPS_DIR, REPOS_DIR } from './config.js';
+import { GROUPS_DIR, PROJECT_ROOT, REPOS_DIR } from './config.js';
 import {
   createTodayPlan,
   createTodayPlanItem,
@@ -32,7 +32,7 @@ import {
 import { getWorkbenchTaskDetail, type WorkbenchTaskDetail } from './workbench.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
-interface ServiceConfig {
+export interface ServiceConfig {
   repo_path?: string;
   default_branch?: string;
   staging?: {
@@ -472,6 +472,70 @@ function getTaskWorkBranch(detail: WorkbenchTaskDetail): string {
   return branch.trim();
 }
 
+function resolveRepoPathFromConfig(
+  config: ServiceConfig | null | undefined,
+): string | null {
+  const repoPath =
+    typeof config?.repo_path === 'string' ? config.repo_path.trim() : '';
+  if (!repoPath) return null;
+  return path.isAbsolute(repoPath) ? repoPath : path.join(REPOS_DIR, repoPath);
+}
+
+export function buildTodayPlanCurrentProjectService(input: {
+  projectRoot: string;
+  reposDir: string;
+  serviceName?: string;
+  defaultBranch?: string;
+}): {
+  service: string;
+  config: ServiceConfig;
+} | null {
+  const projectRoot =
+    typeof input.projectRoot === 'string' ? input.projectRoot.trim() : '';
+  const reposDir =
+    typeof input.reposDir === 'string' ? input.reposDir.trim() : '';
+  if (!projectRoot || !reposDir) return null;
+
+  const service = (input.serviceName || path.basename(projectRoot)).trim();
+  if (!service) return null;
+
+  const relativeRepoPath = path.relative(reposDir, projectRoot);
+  const repoPath =
+    relativeRepoPath &&
+    !relativeRepoPath.startsWith('..') &&
+    !path.isAbsolute(relativeRepoPath)
+      ? relativeRepoPath
+      : projectRoot;
+
+  return {
+    service,
+    config: {
+      repo_path: repoPath,
+      default_branch: (input.defaultBranch || '').trim(),
+    },
+  };
+}
+
+export function mergeTodayPlanServiceRegistry(input: {
+  registry: Record<string, ServiceConfig>;
+  projectRoot: string;
+  reposDir: string;
+  serviceName?: string;
+  defaultBranch?: string;
+}): Record<string, ServiceConfig> {
+  const merged = { ...input.registry };
+  const currentProject = buildTodayPlanCurrentProjectService({
+    projectRoot: input.projectRoot,
+    reposDir: input.reposDir,
+    serviceName: input.serviceName,
+    defaultBranch: input.defaultBranch,
+  });
+  if (currentProject && !merged[currentProject.service]) {
+    merged[currentProject.service] = currentProject.config;
+  }
+  return merged;
+}
+
 function getServiceRegistry(): Record<string, ServiceConfig> {
   const servicesPath = path.join(GROUPS_DIR, 'global', 'services.json');
   if (!fs.existsSync(servicesPath)) return {};
@@ -486,11 +550,18 @@ function getServiceRegistry(): Record<string, ServiceConfig> {
   }
 }
 
+function getTodayPlanServiceRegistry(): Record<string, ServiceConfig> {
+  return mergeTodayPlanServiceRegistry({
+    registry: getServiceRegistry(),
+    projectRoot: PROJECT_ROOT,
+    reposDir: REPOS_DIR,
+  });
+}
+
 function resolveRepoPath(service: string): string | null {
-  const registry = getServiceRegistry();
+  const registry = getTodayPlanServiceRegistry();
   const config = registry[service];
-  if (!config?.repo_path) return null;
-  return path.join(REPOS_DIR, config.repo_path);
+  return resolveRepoPathFromConfig(config);
 }
 
 function runGit(repoPath: string, args: string[]): string {
@@ -534,12 +605,12 @@ function isMeaningfulCommitSubject(subject: string): boolean {
 }
 
 export function listTodayPlanServices(): TodayPlanServiceOption[] {
-  const registry = getServiceRegistry();
+  const registry = getTodayPlanServiceRegistry();
   return Object.keys(registry)
     .sort((a, b) => a.localeCompare(b, 'zh-CN'))
     .map((service) => {
       const config = registry[service];
-      const repoPath = config.repo_path ? path.join(REPOS_DIR, config.repo_path) : null;
+      const repoPath = resolveRepoPathFromConfig(config);
       return {
         service,
         repo_path: config.repo_path || null,
@@ -590,7 +661,7 @@ export function parseTodayPlanServiceBranchOptions(input: {
 export function listTodayPlanServiceBranches(
   service: string,
 ): TodayPlanServiceBranchOption[] {
-  const registry = getServiceRegistry();
+  const registry = getTodayPlanServiceRegistry();
   const config = registry[service];
   const repoPath = resolveRepoPath(service);
   if (!config || !repoPath || !fs.existsSync(repoPath)) return [];

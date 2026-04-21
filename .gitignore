@@ -44,5 +44,7 @@ temp/
 
 .claude/settings.local.json
 
-local
 projects
+
+local/shell/cloudflare/.runtime
+local/shell/electron/.runtime
