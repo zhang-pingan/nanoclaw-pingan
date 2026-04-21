@@ -2767,15 +2767,13 @@ export function updateTodayPlanMailDraft(
 }
 
 export function cancelPendingTodayPlanMailDrafts(planId: string): number {
-  const now = Date.now().toString();
   return db
     .prepare(
-      `UPDATE today_plan_mail_drafts
-       SET status = 'cancelled', updated_at = ?
+      `DELETE FROM today_plan_mail_drafts
        WHERE plan_id = ?
          AND status IN ('drafting', 'pending_confirm', 'failed')`,
     )
-    .run(now, planId).changes;
+    .run(planId).changes;
 }
 
 // --- Structured memory accessors ---

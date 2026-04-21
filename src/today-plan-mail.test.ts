@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { _initTestDatabase } from './db.js';
+import { _initTestDatabase, listTodayPlanMailDraftsByPlan } from './db.js';
 import type { MailProfile } from './mail.js';
 import {
   confirmTodayPlanMailDraft,
@@ -107,6 +107,53 @@ describe('today-plan-mail', () => {
     expect(draft.to).toEqual(['owner@example.com', 'reviewer@example.com']);
     expect(draft.cc).toEqual(['leader@example.com']);
     expect(draft.bcc).toEqual([]);
+  });
+
+  it('deletes the previous draft instead of marking it cancelled when preparing again', async () => {
+    const plan = ensureTodayPlan('2026-04-21');
+    const item = createTodayPlanItemForPlan(plan.id);
+    patchTodayPlanItem({
+      itemId: item.id,
+      title: '推进今日开发',
+      detail: '完成计划邮件闭环设计',
+      associations: {
+        workbench_task_ids: [],
+        chat_selections: [],
+        services: [],
+      },
+    });
+
+    const firstDraft = await prepareTodayPlanMailDraft(
+      {
+        planId: plan.id,
+        groups: {},
+        name: '张頔',
+      },
+      {
+        loadProfile: buildMailProfile,
+        summarizeBody: async () =>
+          '1. 推进今日开发\n- 第一次生成的草稿正文',
+      },
+    );
+
+    const secondDraft = await prepareTodayPlanMailDraft(
+      {
+        planId: plan.id,
+        groups: {},
+        name: '张頔',
+      },
+      {
+        loadProfile: buildMailProfile,
+        summarizeBody: async () =>
+          '1. 推进今日开发\n- 第二次生成的草稿正文',
+      },
+    );
+
+    expect(secondDraft.id).not.toBe(firstDraft.id);
+    expect(getTodayPlanMailDraftDetail(firstDraft.id)).toBeNull();
+    expect(listTodayPlanMailDraftsByPlan(plan.id).map((item) => item.id)).toEqual([
+      secondDraft.id,
+    ]);
   });
 
   it('confirms and sends a prepared draft without re-summarizing', async () => {
