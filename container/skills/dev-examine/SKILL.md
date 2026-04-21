@@ -29,7 +29,7 @@ description: Review implemented code against approved plan, perform code review,
    - 通过：可进入部署确认
    - 不通过：需修复后再复核
 6. 输出可执行修复建议（尽量定位到文件/模块/问题点）
-7. 使用 `complete_delegation` 回传结果（`outcome=success` 或 `outcome=failure`）
+7. 使用 `complete_delegation` 回传结果，如果通过回复`success`,不通过返回`failure`（`outcome=success` 或 `outcome=failure`）
 
 ## 输出格式
 
