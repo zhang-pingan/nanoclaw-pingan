@@ -620,7 +620,7 @@ async function openTodayPlanMailComposeDialog(values = {}) {
     overlay.innerHTML = `
       <div class="app-prompt-dialog today-plan-mail-compose-dialog" role="dialog" aria-modal="true" aria-label="填写计划邮件信息">
         <div class="app-prompt-title">填写计划邮件信息</div>
-        <div class="app-prompt-message">`name` 为必填。`收件人`、`抄送人` 可选，留空时分别读取邮件配置中的默认值。</div>
+        <div class="app-prompt-message"><code>name</code> 为必填。<code>收件人</code>、<code>抄送人</code> 可选，留空时分别读取邮件配置中的默认值。</div>
         <div class="today-plan-mail-compose-grid">
           <label class="today-plan-mail-compose-field">
             <span class="today-plan-mail-compose-label">姓名</span>

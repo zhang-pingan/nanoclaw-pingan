@@ -1,5 +1,5 @@
 {
-  "global": ["agent-browser", "wecom-mail"],
+  "global": ["agent-browser"],
   "feishu_dev": ["dev-requirement", "dev-bugfix"],
   "feishu_dev_examine": ["dev-examine"],
   "feishu_plan": ["plan-requirement"],
