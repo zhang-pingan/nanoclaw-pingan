@@ -1178,7 +1178,6 @@ export function buildTodayPlanMailPrompt(input: {
   const mailTemplate = buildTodayPlanMailTemplate();
   const prompt = [
     `请基于下面这份由程序聚合的结构化信息，为 ${detail.plan.plan_date} 生成一封纯文本计划邮件正文。`,
-    `邮件主题固定为：${subject}。这行仅供参考，不要在输出里重复主题。`,
     '要求：',
     '1. 仅依据下面提供的信息进行总结，不要自行编造。',
     '2. 你只输出邮件正文，不要输出主题、收件人、抄送、解释、前后缀说明。',
