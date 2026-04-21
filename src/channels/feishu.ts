@@ -126,7 +126,7 @@ class FeishuChannel implements Channel {
             }
             // Card action callbacks need synchronous response with updated card
             if (eventType === 'card.action.trigger') {
-              this.handleCardActionEvent(payload, res);
+              void this.handleCardActionEvent(payload, res);
               return;
             }
 
@@ -309,13 +309,11 @@ class FeishuChannel implements Channel {
     };
   }
 
-  async sendCard(jid: string, card: InteractiveCard): Promise<string | undefined> {
+  private buildFeishuCardContent(
+    card: InteractiveCard,
+  ): Record<string, unknown> {
     const feishuCard = this.convertToFeishuCard(card);
-    const token = await this.getTenantAccessToken();
-    const actualJid = jid.startsWith('feishu:') ? jid.slice(7) : jid;
-    const receiveIdType = actualJid.startsWith('ou_') ? 'user_id' : 'chat_id';
-
-    const cardContent = {
+    return {
       config: { wide_screen_mode: true },
       header: {
         title: { tag: 'plain_text', content: feishuCard.header.title },
@@ -323,6 +321,16 @@ class FeishuChannel implements Channel {
       },
       elements: feishuCard.elements,
     };
+  }
+
+  async sendCard(
+    jid: string,
+    card: InteractiveCard,
+  ): Promise<string | undefined> {
+    const token = await this.getTenantAccessToken();
+    const actualJid = jid.startsWith('feishu:') ? jid.slice(7) : jid;
+    const receiveIdType = actualJid.startsWith('ou_') ? 'user_id' : 'chat_id';
+    const cardContent = this.buildFeishuCardContent(card);
 
     const response = await axios.post(
       `${FEISHU_API_BASE}/im/v1/messages?receive_id_type=${receiveIdType}`,
@@ -346,15 +354,74 @@ class FeishuChannel implements Channel {
     return response.data?.data?.message_id;
   }
 
+  private extractCardUpdateToken(payload: any): string | null {
+    const candidates = [
+      payload?.event?.token,
+      payload?.event?.context?.token,
+      payload?.event?.action?.token,
+      payload?.action?.token,
+      payload?.token,
+      payload?.header?.token,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim().startsWith('c-')) {
+        return candidate.trim();
+      }
+    }
+
+    return null;
+  }
+
+  private async updateDelayedCard(input: {
+    token: string;
+    openId?: string;
+    card: InteractiveCard;
+  }): Promise<void> {
+    const tenantAccessToken = await this.getTenantAccessToken();
+    const body: Record<string, unknown> = {
+      token: input.token,
+      card: this.buildFeishuCardContent(input.card),
+    };
+    if (input.openId) body.open_ids = [input.openId];
+
+    const response = await axios.post(
+      `${FEISHU_API_BASE}/interactive/v1/card/update`,
+      body,
+      {
+        headers: { Authorization: `Bearer ${tenantAccessToken}` },
+      },
+    );
+
+    if (response.data?.code !== 0) {
+      throw new Error(
+        `Feishu delayed card update failed: code=${response.data?.code} msg=${response.data?.msg}`,
+      );
+    }
+  }
+
   private static readonly FILE_TYPE_MAP: Record<string, string> = {
-    pdf: 'pdf', doc: 'doc', docx: 'doc',
-    xls: 'xls', xlsx: 'xls',
-    ppt: 'ppt', pptx: 'ppt',
-    mp4: 'mp4', opus: 'opus', ogg: 'opus',
+    pdf: 'pdf',
+    doc: 'doc',
+    docx: 'doc',
+    xls: 'xls',
+    xlsx: 'xls',
+    ppt: 'ppt',
+    pptx: 'ppt',
+    mp4: 'mp4',
+    opus: 'opus',
+    ogg: 'opus',
   };
 
   private static readonly IMAGE_EXTS = new Set([
-    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp', 'ico',
+    'png',
+    'jpg',
+    'jpeg',
+    'gif',
+    'bmp',
+    'tiff',
+    'webp',
+    'ico',
   ]);
 
   private async uploadImage(filePath: string): Promise<string> {
@@ -363,11 +430,9 @@ class FeishuChannel implements Channel {
     form.append('image_type', 'message');
     form.append('image', fs.createReadStream(filePath));
 
-    const response = await axios.post(
-      `${FEISHU_API_BASE}/im/v1/images`,
-      form,
-      { headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() } },
-    );
+    const response = await axios.post(`${FEISHU_API_BASE}/im/v1/images`, form, {
+      headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() },
+    });
 
     if (response.data?.code !== 0) {
       throw new Error(
@@ -377,18 +442,19 @@ class FeishuChannel implements Channel {
     return response.data.data.image_key;
   }
 
-  private async uploadFile(filePath: string, fileType: string): Promise<string> {
+  private async uploadFile(
+    filePath: string,
+    fileType: string,
+  ): Promise<string> {
     const token = await this.getTenantAccessToken();
     const form = new FormData();
     form.append('file_type', fileType);
     form.append('file_name', path.basename(filePath));
     form.append('file', fs.createReadStream(filePath));
 
-    const response = await axios.post(
-      `${FEISHU_API_BASE}/im/v1/files`,
-      form,
-      { headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() } },
-    );
+    const response = await axios.post(`${FEISHU_API_BASE}/im/v1/files`, form, {
+      headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() },
+    });
 
     if (response.data?.code !== 0) {
       throw new Error(
@@ -398,7 +464,11 @@ class FeishuChannel implements Channel {
     return response.data.data.file_key;
   }
 
-  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+  async sendFile(
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
     const token = await this.getTenantAccessToken();
     const actualJid = jid.startsWith('feishu:') ? jid.slice(7) : jid;
     const receiveIdType = actualJid.startsWith('ou_') ? 'user_id' : 'chat_id';
@@ -640,34 +710,79 @@ class FeishuChannel implements Channel {
   }
 
   // Handle card action callback from Feishu
-  private handleCardActionEvent(payload: any, res: http.ServerResponse): void {
+  private async handleCardActionEvent(
+    payload: any,
+    res: http.ServerResponse,
+  ): Promise<void> {
     const action = payload.event?.action;
     const value = action?.value as
       | { workflow_id?: string; action?: string; group_folder?: string }
       | undefined;
     const userId = payload.event?.operator?.user_id || '';
+    const operatorOpenId = payload.event?.operator?.open_id || '';
     const messageId = payload.event?.context?.open_message_id || '';
 
     const formValue = action?.form_value as Record<string, string> | undefined;
 
-    if ((value?.workflow_id || value?.group_folder) && value?.action && this.onCardAction) {
-      const mergedFormValue = {
-        ...(value || {}),
-        ...(formValue || {}),
-      };
-      this.onCardAction({
-        action: value.action,
-        user_id: userId,
-        message_id: messageId,
-        group_folder: value.group_folder,
-        workflow_id: value.workflow_id,
-        form_value: mergedFormValue,
-      });
-    }
+    try {
+      let result:
+        | Awaited<ReturnType<NonNullable<typeof this.onCardAction>>>
+        | undefined;
+      if (
+        (value?.workflow_id || value?.group_folder) &&
+        value?.action &&
+        this.onCardAction
+      ) {
+        const mergedFormValue = {
+          ...(value || {}),
+          ...(formValue || {}),
+        };
+        result = await this.onCardAction({
+          action: value.action,
+          user_id: userId,
+          message_id: messageId,
+          group_folder: value.group_folder,
+          workflow_id: value.workflow_id,
+          form_value: mergedFormValue,
+        });
+      }
 
-    // Return empty JSON to acknowledge (card update handled separately)
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({}));
+      const responseBody = result?.toast
+        ? {
+            toast: result.toast,
+          }
+        : {};
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(responseBody));
+
+      const updateToken = this.extractCardUpdateToken(payload);
+      if (result?.replacementCard && updateToken) {
+        void this.updateDelayedCard({
+          token: updateToken,
+          openId: operatorOpenId || undefined,
+          card: result.replacementCard,
+        }).catch((err) => {
+          logger.warn(
+            { err, messageId, action: value?.action, updateToken },
+            'Failed to perform delayed Feishu card update',
+          );
+        });
+      }
+    } catch (err) {
+      logger.warn(
+        { err, action: value?.action, messageId },
+        'Feishu card action callback failed',
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          toast: {
+            type: 'error',
+            content: '操作失败，请稍后重试。',
+          },
+        }),
+      );
+    }
   }
 
   // Handle inbound messages from Feishu webhook

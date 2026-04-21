@@ -485,6 +485,16 @@ export interface FeishuCard {
   elements: unknown[];
 }
 
+export interface CardActionToast {
+  type: 'success' | 'info' | 'error';
+  content: string;
+}
+
+export interface CardActionResult {
+  toast?: CardActionToast;
+  replacementCard?: InteractiveCard;
+}
+
 // --- InteractiveCard: channel-agnostic card format ---
 
 export type CardHeaderColor =
@@ -542,7 +552,7 @@ export type CardActionHandler = (action: {
   group_folder?: string; // Plan confirmation primary key
   workflow_id?: string; // Workflow operations primary key (approve/pause/resume)
   form_value?: Record<string, string>;
-}) => void;
+}) => void | CardActionResult | Promise<void | CardActionResult>;
 
 export interface Channel {
   name: string;

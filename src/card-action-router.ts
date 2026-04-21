@@ -5,7 +5,11 @@ import {
   handleAskQuestionResponse,
 } from './ask-user-question.js';
 import { logger } from './logger.js';
-import { CardActionHandler, InteractiveCard, RegisteredGroup } from './types.js';
+import {
+  CardActionHandler,
+  InteractiveCard,
+  RegisteredGroup,
+} from './types.js';
 import { handleCardAction as handleWorkflowCardAction } from './workflow.js';
 import {
   handleWorkbenchBroadcastCardAction,
@@ -54,25 +58,38 @@ function askActionFingerprint(action: {
 
 export function createCardActionHandler(deps: {
   registeredGroups: () => Record<string, RegisteredGroup>;
-  sendCard?: (jid: string, card: InteractiveCard) => Promise<string | undefined>;
+  sendCard?: (
+    jid: string,
+    card: InteractiveCard,
+  ) => Promise<string | undefined>;
   sendMessage: (jid: string, text: string) => Promise<void>;
 }): CardActionHandler {
-  return (action) => {
+  return async (action) => {
     if (action.action.startsWith('wb_broadcast_')) {
-      void handleWorkbenchBroadcastCardAction({
-        action: action.action,
-        formValue: action.form_value,
-        registeredGroups: deps.registeredGroups(),
-        sendCard: deps.sendCard,
-        sendMessage: deps.sendMessage,
-        userId: action.user_id || 'unknown',
-      }).catch((err) => {
+      try {
+        return await handleWorkbenchBroadcastCardAction({
+          action: action.action,
+          formValue: action.form_value,
+          registeredGroups: deps.registeredGroups(),
+          sendCard: deps.sendCard,
+          sendMessage: deps.sendMessage,
+          userId: action.user_id || 'unknown',
+        });
+      } catch (err) {
         logWorkbenchBroadcastActionFailure(action.action, err);
-      });
-      return;
+        return {
+          toast: {
+            type: 'error' as const,
+            content: '处理工作台广播卡片失败，请稍后重试。',
+          },
+        };
+      }
     }
 
-    if (action.action !== ASK_ACTION_ANSWER && action.action !== ASK_ACTION_SKIP) {
+    if (
+      action.action !== ASK_ACTION_ANSWER &&
+      action.action !== ASK_ACTION_SKIP
+    ) {
       handleWorkflowCardAction(action);
       return;
     }
@@ -80,7 +97,10 @@ export function createCardActionHandler(deps: {
     const requestId = action.form_value?.request_id;
     const groupFolder = action.group_folder || action.form_value?.group_folder;
     if (!requestId || !groupFolder) {
-      logger.warn({ action }, 'ask_question card action missing request_id/group_folder');
+      logger.warn(
+        { action },
+        'ask_question card action missing request_id/group_folder',
+      );
       return;
     }
 
@@ -95,7 +115,12 @@ export function createCardActionHandler(deps: {
     });
     if (recentAskActionFingerprints.has(fp)) {
       logger.info(
-        { requestId, groupFolder, userId: action.user_id, messageId: action.message_id },
+        {
+          requestId,
+          groupFolder,
+          userId: action.user_id,
+          messageId: action.message_id,
+        },
         'Duplicate ask card action ignored by dedupe window',
       );
       return;
@@ -105,10 +130,17 @@ export function createCardActionHandler(deps: {
     const answer = action.form_value?.answer;
     const formValues = action.form_value
       ? Object.fromEntries(
-        Object.entries(action.form_value).filter(
-          ([k]) => !['action', 'group_folder', 'request_id', 'question_id', 'answer'].includes(k),
-        ),
-      )
+          Object.entries(action.form_value).filter(
+            ([k]) =>
+              ![
+                'action',
+                'group_folder',
+                'request_id',
+                'question_id',
+                'answer',
+              ].includes(k),
+          ),
+        )
       : undefined;
     const registeredGroups = deps.registeredGroups();
     const chatJid = findChatJidByGroupFolder(groupFolder, registeredGroups);

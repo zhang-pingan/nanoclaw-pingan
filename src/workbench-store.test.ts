@@ -128,7 +128,9 @@ describe('workbench approval transition sync', () => {
       '/tmp/req-b.png',
       '/tmp/req-a.md',
     ]);
-    expect(detail?.assets.every((item) => item.asset_type === 'requirement_file')).toBe(true);
+    expect(
+      detail?.assets.every((item) => item.asset_type === 'requirement_file'),
+    ).toBe(true);
   });
 
   it('marks awaiting_confirm completed and clears pending approval after approve', () => {
@@ -253,14 +255,15 @@ describe('workbench approval transition sync', () => {
     syncWorkbenchOnWorkflowCreated('wf-broadcast-readonly-detail');
 
     const taskId = 'wb-wf-broadcast-readonly-detail';
-    const actionItemId = 'wb-action-wf-broadcast-readonly-detail-plan_examine_confirm';
+    const actionItemId =
+      'wb-action-wf-broadcast-readonly-detail-plan_examine_confirm';
     let nestedPendingEvents = 0;
 
     initWorkbenchEvents((event) => {
       if (
-        event.type === 'action_item_updated'
-        && event.payload.id === actionItemId
-        && event.payload.status === 'pending'
+        event.type === 'action_item_updated' &&
+        event.payload.id === actionItemId &&
+        event.payload.status === 'pending'
       ) {
         nestedPendingEvents += 1;
       }
@@ -269,7 +272,112 @@ describe('workbench approval transition sync', () => {
     const card = buildWorkbenchBroadcastCard({ taskId, actionItemId });
 
     expect(card?.header.title).toContain('确认方案修改或继续开发');
+    expect(card?.buttons?.map((button) => button.label)).toEqual([
+      '继续开发',
+      '跳过此节点',
+    ]);
+    expect(card?.form?.submitButton.label).toBe('返回方案修改');
     expect(nestedPendingEvents).toBe(0);
+  });
+
+  it('uses the same testing_confirm labels in broadcast cards as workbench actions', () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-testing-confirm',
+      name: '广播测试确认',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/broadcast-testing-confirm',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_testing_confirm',
+        staging_work_branch: 'staging-deploy/feature-broadcast-testing-confirm',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-testing-confirm');
+
+    const card = buildWorkbenchBroadcastCard({
+      taskId: 'wb-wf-broadcast-testing-confirm',
+      actionItemId: 'wb-action-wf-broadcast-testing-confirm-testing_confirm',
+    });
+
+    expect(card?.buttons?.map((button) => button.label)).toEqual([
+      '跳过鉴权直接测试',
+    ]);
+    expect(card?.form?.submitButton.label).toBe('填写 access_token 并开始测试');
+  });
+
+  it('renders ask-question option buttons in broadcast cards', () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-ask-options',
+      name: '广播问答选项',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/broadcast-ask-options',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_ask_options',
+        staging_work_branch: 'staging-deploy/feature-broadcast-ask-options',
+        access_token: '',
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'wf-del-broadcast-ask-options',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-ask-options');
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-broadcast-ask-options',
+      stageKey: 'plan_examine',
+      delegationId: 'wf-del-broadcast-ask-options',
+      groupFolder: 'web_plan_examine',
+      sourceType: 'ask_user_question',
+      sourceRefId: 'ask-broadcast-ask-options',
+      title: '请选择处理方式',
+      body: '请选择处理方式',
+      extra: {
+        current_question: {
+          id: 'q-broadcast-ask-options',
+          question: '请选择处理方式',
+          options: [
+            { label: '继续' },
+            { label: '回滚', description: '回退到上一轮方案' },
+          ],
+        },
+      },
+    });
+
+    const detail = getWorkbenchTaskDetail('wb-wf-broadcast-ask-options');
+    const actionItemId = detail?.action_items.find(
+      (item) => item.source_ref_id === 'ask-broadcast-ask-options',
+    )?.id;
+    expect(actionItemId).toBeTruthy();
+
+    const card = buildWorkbenchBroadcastCard({
+      taskId: 'wb-wf-broadcast-ask-options',
+      actionItemId: actionItemId!,
+    });
+
+    expect(card?.buttons?.map((button) => button.label)).toEqual([
+      '继续',
+      '回滚',
+      '跳过',
+    ]);
+    expect(card?.form?.submitButton.label).toBe('提交自定义答复');
   });
 
   it('emits task update before subtask updates during approve transition', () => {
@@ -336,7 +444,8 @@ describe('workbench approval transition sync', () => {
         work_branch: 'feature/transition-clears-interaction',
         staging_base_branch: 'staging',
         deliverable: '2026-04-07_transition_clears_interaction',
-        staging_work_branch: 'staging-deploy/feature-transition-clears-interaction',
+        staging_work_branch:
+          'staging-deploy/feature-transition-clears-interaction',
         access_token: '',
       },
       status: 'plan_examine',
