@@ -255,9 +255,6 @@ class FeishuChannel implements Channel {
         tag: 'button',
         name: card.form.submitButton.id,
         text: { tag: 'plain_text', content: card.form.submitButton.label },
-        value: card.form.submitButton.value,
-        // Feishu treats only explicit submit-behavior buttons as valid form submitters.
-        behaviors: [{ type: 'submit' }],
       };
       if (
         card.form.submitButton.type &&
@@ -269,6 +266,7 @@ class FeishuChannel implements Channel {
       elements.push({
         tag: 'form',
         name: card.form.name,
+        value: card.form.submitButton.value,
         elements: formElements,
       });
     }
@@ -728,11 +726,7 @@ class FeishuChannel implements Channel {
       let result:
         | Awaited<ReturnType<NonNullable<typeof this.onCardAction>>>
         | undefined;
-      if (
-        (value?.workflow_id || value?.group_folder) &&
-        value?.action &&
-        this.onCardAction
-      ) {
+      if (value?.action && this.onCardAction) {
         const mergedFormValue = {
           ...(value || {}),
           ...(formValue || {}),
