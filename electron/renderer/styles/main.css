@@ -2182,10 +2182,48 @@ body.quick-chat-window .quick-chat-input {
   width: min(720px, calc(100vw - 40px));
 }
 
+.today-plan-mail-dialog-status {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.today-plan-mail-dialog-status.is-pending {
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.12);
+}
+
+.today-plan-mail-dialog-status.is-pending::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: today-plan-mail-status-pulse 1.1s ease-in-out infinite;
+}
+
+.today-plan-mail-dialog-status.is-error {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.14);
+}
+
 .today-plan-mail-compose-grid {
   margin-top: 14px;
   display: grid;
   gap: 14px;
+}
+
+.today-plan-mail-compose-grid.is-busy {
+  opacity: 0.72;
 }
 
 .today-plan-mail-compose-field {
@@ -2260,6 +2298,19 @@ body.quick-chat-window .quick-chat-input {
   min-height: 280px;
   margin-top: 10px;
   font-family: ui-monospace, "SFMono-Regular", "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+@keyframes today-plan-mail-status-pulse {
+  0%,
+  100% {
+    opacity: 0.24;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 0.52;
+    transform: scale(1);
+  }
 }
 
 .app-prompt-input {

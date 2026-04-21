@@ -613,40 +613,31 @@ function parseTodayPlanMailRecipientsInput(value) {
     .filter(Boolean);
 }
 
-async function openTodayPlanMailComposeDialog(values = {}) {
+function renderTodayPlanMailDialogStatusMarkup(message, tone = "pending") {
+  if (!message) return "";
+  const toneClass = tone === "error" ? "is-error" : "is-pending";
+  const role = tone === "error" ? "alert" : "status";
+  return `<div class="today-plan-mail-dialog-status ${toneClass}" role="${role}">${escapeHtml(message)}</div>`;
+}
+
+async function openTodayPlanMailSendDialog(values = {}, options = {}) {
+  const prepareDraft = typeof options.prepareDraft === "function" ? options.prepareDraft : null;
+  const confirmDraft = typeof options.confirmDraft === "function" ? options.confirmDraft : null;
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "app-prompt-overlay";
-    overlay.innerHTML = `
-      <div class="app-prompt-dialog today-plan-mail-compose-dialog" role="dialog" aria-modal="true" aria-label="填写计划邮件信息">
-        <div class="app-prompt-title">填写计划邮件信息</div>
-        <div class="app-prompt-message"><code>name</code> 为必填。<code>收件人</code>、<code>抄送人</code> 可选，留空时分别读取邮件配置中的默认值。</div>
-        <div class="today-plan-mail-compose-grid">
-          <label class="today-plan-mail-compose-field">
-            <span class="today-plan-mail-compose-label">姓名</span>
-            <input class="today-plan-mail-compose-input" data-field="name" type="text" placeholder="例如：张頔" value="${escapeAttribute(values.name || "")}" />
-          </label>
-          <label class="today-plan-mail-compose-field">
-            <span class="today-plan-mail-compose-label">收件人</span>
-            <textarea class="app-prompt-input today-plan-mail-compose-textarea" data-field="to" rows="3" placeholder="多个地址用逗号或换行分隔；留空时使用配置默认值">${escapeHtml(values.to || "")}</textarea>
-          </label>
-          <label class="today-plan-mail-compose-field">
-            <span class="today-plan-mail-compose-label">抄送人</span>
-            <textarea class="app-prompt-input today-plan-mail-compose-textarea" data-field="cc" rows="3" placeholder="多个地址用逗号或换行分隔；留空时使用配置默认值">${escapeHtml(values.cc || "")}</textarea>
-          </label>
-        </div>
-        <div class="app-prompt-actions">
-          <button type="button" class="btn-ghost" data-action="cancel">取消</button>
-          <button type="button" class="btn-primary" data-action="confirm">生成预览</button>
-        </div>
-      </div>
-    `;
-
-    const nameInput = overlay.querySelector('[data-field="name"]');
-    const toInput = overlay.querySelector('[data-field="to"]');
-    const ccInput = overlay.querySelector('[data-field="cc"]');
-    const confirmBtn = overlay.querySelector('[data-action="confirm"]');
-    const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+    const state = {
+      step: "compose",
+      busy: false,
+      statusMessage: "",
+      errorMessage: "",
+      values: {
+        name: String(values.name || "").trim(),
+        to: String(values.to || "").trim(),
+        cc: String(values.cc || "").trim(),
+      },
+      draft: null,
+    };
     let settled = false;
 
     function cleanup(value) {
@@ -656,109 +647,217 @@ async function openTodayPlanMailComposeDialog(values = {}) {
       resolve(value);
     }
 
-    function submit() {
-      const name = String(nameInput.value || "").trim();
-      if (!name) {
+    function readComposeInputs() {
+      const nameInput = overlay.querySelector('[data-field="name"]');
+      const toInput = overlay.querySelector('[data-field="to"]');
+      const ccInput = overlay.querySelector('[data-field="cc"]');
+      return { nameInput, toInput, ccInput };
+    }
+
+    function syncComposeValues() {
+      const { nameInput, toInput, ccInput } = readComposeInputs();
+      state.values = {
+        name: String(nameInput && nameInput.value ? nameInput.value : "").trim(),
+        to: String(toInput && toInput.value ? toInput.value : "").trim(),
+        cc: String(ccInput && ccInput.value ? ccInput.value : "").trim(),
+      };
+      return { nameInput };
+    }
+
+    async function submitCompose() {
+      if (state.busy) return;
+      const { nameInput } = syncComposeValues();
+      if (!state.values.name) {
         alert("请输入姓名");
-        nameInput.focus();
+        if (nameInput) nameInput.focus();
         return;
       }
-      cleanup({
-        name,
-        to: String(toInput.value || "").trim(),
-        cc: String(ccInput.value || "").trim(),
-      });
+      if (!prepareDraft) {
+        cleanup({ formData: { ...state.values }, draft: null });
+        return;
+      }
+      state.busy = true;
+      state.errorMessage = "";
+      state.statusMessage = "正在生成预览，请稍候...";
+      render();
+      try {
+        const draft = await prepareDraft({ ...state.values });
+        if (!draft || !draft.id) throw new Error("未生成待发送草稿");
+        state.draft = draft;
+        state.step = "preview";
+        state.busy = false;
+        state.statusMessage = "";
+        state.errorMessage = "";
+        render();
+      } catch (err) {
+        state.busy = false;
+        state.statusMessage = "";
+        state.errorMessage = err instanceof Error ? err.message : String(err);
+        render();
+      }
+    }
+
+    async function submitConfirm() {
+      if (state.busy || !state.draft) return;
+      if (!confirmDraft) {
+        cleanup({ formData: { ...state.values }, draft: state.draft });
+        return;
+      }
+      state.busy = true;
+      state.errorMessage = "";
+      state.statusMessage = "正在发送邮件，请稍候...";
+      render();
+      try {
+        const sentDraft = await confirmDraft(state.draft);
+        cleanup({
+          formData: { ...state.values },
+          draft: sentDraft || state.draft,
+        });
+      } catch (err) {
+        state.busy = false;
+        state.statusMessage = "";
+        state.errorMessage = err instanceof Error ? err.message : String(err);
+        render();
+      }
+    }
+
+    function renderCompose() {
+      const statusMarkup = state.errorMessage
+        ? renderTodayPlanMailDialogStatusMarkup(state.errorMessage, "error")
+        : renderTodayPlanMailDialogStatusMarkup(state.statusMessage, "pending");
+      overlay.innerHTML = `
+        <div class="app-prompt-dialog today-plan-mail-compose-dialog" role="dialog" aria-modal="true" aria-label="填写计划邮件信息">
+          <div class="app-prompt-title">填写计划邮件信息</div>
+          <div class="app-prompt-message"><code>name</code> 为必填。<code>收件人</code>、<code>抄送人</code> 可选，留空时分别读取邮件配置中的默认值。</div>
+          ${statusMarkup}
+          <div class="today-plan-mail-compose-grid${state.busy ? " is-busy" : ""}">
+            <label class="today-plan-mail-compose-field">
+              <span class="today-plan-mail-compose-label">姓名</span>
+              <input class="today-plan-mail-compose-input" data-field="name" type="text" placeholder="例如：张頔" value="${escapeAttribute(state.values.name || "")}" ${state.busy ? "disabled" : ""} />
+            </label>
+            <label class="today-plan-mail-compose-field">
+              <span class="today-plan-mail-compose-label">收件人</span>
+              <textarea class="app-prompt-input today-plan-mail-compose-textarea" data-field="to" rows="3" placeholder="多个地址用逗号或换行分隔；留空时使用配置默认值" ${state.busy ? "disabled" : ""}>${escapeHtml(state.values.to || "")}</textarea>
+            </label>
+            <label class="today-plan-mail-compose-field">
+              <span class="today-plan-mail-compose-label">抄送人</span>
+              <textarea class="app-prompt-input today-plan-mail-compose-textarea" data-field="cc" rows="3" placeholder="多个地址用逗号或换行分隔；留空时使用配置默认值" ${state.busy ? "disabled" : ""}>${escapeHtml(state.values.cc || "")}</textarea>
+            </label>
+          </div>
+          <div class="app-prompt-actions">
+            <button type="button" class="btn-ghost" data-action="cancel" ${state.busy ? "disabled" : ""}>取消</button>
+            <button type="button" class="btn-primary" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "生成中..." : "生成预览"}</button>
+          </div>
+        </div>
+      `;
+
+      const { nameInput } = readComposeInputs();
+      const confirmBtn = overlay.querySelector('[data-action="confirm"]');
+      const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+      if (!state.busy && nameInput) {
+        nameInput.focus();
+        nameInput.setSelectionRange(0, nameInput.value.length);
+      }
+      if (confirmBtn) {
+        confirmBtn.addEventListener("click", () => {
+          void submitCompose();
+        });
+      }
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", () => {
+          if (state.busy) return;
+          cleanup(null);
+        });
+      }
+    }
+
+    function renderPreview() {
+      const draft = state.draft || {};
+      const statusMarkup = state.errorMessage
+        ? renderTodayPlanMailDialogStatusMarkup(state.errorMessage, "error")
+        : renderTodayPlanMailDialogStatusMarkup(state.statusMessage, "pending");
+      overlay.innerHTML = `
+        <div class="app-prompt-dialog today-plan-mail-preview-dialog" role="dialog" aria-modal="true" aria-label="确认发送计划邮件">
+          <div class="app-prompt-title">确认发送计划邮件</div>
+          <div class="app-prompt-message">预览已生成，确认收件人与正文后再发送。</div>
+          ${statusMarkup}
+          <div class="today-plan-mail-preview-grid">
+            <div class="today-plan-mail-preview-item">
+              <div class="today-plan-mail-preview-label">主题</div>
+              <div class="today-plan-mail-preview-value">${escapeHtml(draft.subject || "--")}</div>
+            </div>
+            <div class="today-plan-mail-preview-item">
+              <div class="today-plan-mail-preview-label">收件人</div>
+              <div class="today-plan-mail-preview-value">${escapeHtml(formatTodayPlanMailRecipients(draft.to))}</div>
+            </div>
+            <div class="today-plan-mail-preview-item">
+              <div class="today-plan-mail-preview-label">抄送</div>
+              <div class="today-plan-mail-preview-value">${escapeHtml(formatTodayPlanMailRecipients(draft.cc))}</div>
+            </div>
+            <div class="today-plan-mail-preview-item">
+              <div class="today-plan-mail-preview-label">密送</div>
+              <div class="today-plan-mail-preview-value">${escapeHtml(formatTodayPlanMailRecipients(draft.bcc))}</div>
+            </div>
+          </div>
+          <div class="today-plan-mail-preview-label today-plan-mail-preview-body-label">正文</div>
+          <textarea class="app-prompt-input today-plan-mail-preview-body" readonly></textarea>
+          <div class="app-prompt-actions">
+            <button type="button" class="btn-ghost" data-action="back" ${state.busy ? "disabled" : ""}>返回修改</button>
+            <button type="button" class="btn-primary" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "发送中..." : "确认发送"}</button>
+          </div>
+        </div>
+      `;
+
+      const bodyEl = overlay.querySelector(".today-plan-mail-preview-body");
+      const confirmBtn = overlay.querySelector('[data-action="confirm"]');
+      const backBtn = overlay.querySelector('[data-action="back"]');
+      if (bodyEl) bodyEl.value = draft.body || "";
+      if (!state.busy && confirmBtn) confirmBtn.focus();
+      if (backBtn) {
+        backBtn.addEventListener("click", () => {
+          if (state.busy) return;
+          state.step = "compose";
+          state.statusMessage = "";
+          state.errorMessage = "";
+          render();
+        });
+      }
+      if (confirmBtn) {
+        confirmBtn.addEventListener("click", () => {
+          void submitConfirm();
+        });
+      }
+    }
+
+    function render() {
+      if (state.step === "preview") {
+        renderPreview();
+        return;
+      }
+      renderCompose();
     }
 
     document.body.appendChild(overlay);
-    nameInput.focus();
-    nameInput.setSelectionRange(0, nameInput.value.length);
-
-    confirmBtn.addEventListener("click", submit);
-    cancelBtn.addEventListener("click", () => cleanup(null));
     overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) cleanup(null);
+      if (event.target === overlay && !state.busy) cleanup(null);
     });
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        if (state.busy) return;
         event.preventDefault();
         cleanup(null);
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
-        submit();
+        if (state.step === "preview") {
+          void submitConfirm();
+          return;
+        }
+        void submitCompose();
       }
     });
-  });
-}
-
-async function openTodayPlanMailDraftPreviewDialog(draft) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className = "app-prompt-overlay";
-    overlay.innerHTML = `
-      <div class="app-prompt-dialog today-plan-mail-preview-dialog" role="dialog" aria-modal="true" aria-label="确认发送计划邮件">
-        <div class="app-prompt-title">确认发送计划邮件</div>
-        <div class="today-plan-mail-preview-grid">
-          <div class="today-plan-mail-preview-item">
-            <div class="today-plan-mail-preview-label">主题</div>
-            <div class="today-plan-mail-preview-value">${escapeHtml(draft && draft.subject ? draft.subject : "--")}</div>
-          </div>
-          <div class="today-plan-mail-preview-item">
-            <div class="today-plan-mail-preview-label">收件人</div>
-            <div class="today-plan-mail-preview-value">${escapeHtml(formatTodayPlanMailRecipients(draft && draft.to))}</div>
-          </div>
-          <div class="today-plan-mail-preview-item">
-            <div class="today-plan-mail-preview-label">抄送</div>
-            <div class="today-plan-mail-preview-value">${escapeHtml(formatTodayPlanMailRecipients(draft && draft.cc))}</div>
-          </div>
-          <div class="today-plan-mail-preview-item">
-            <div class="today-plan-mail-preview-label">密送</div>
-            <div class="today-plan-mail-preview-value">${escapeHtml(formatTodayPlanMailRecipients(draft && draft.bcc))}</div>
-          </div>
-        </div>
-        <div class="today-plan-mail-preview-label today-plan-mail-preview-body-label">正文</div>
-        <textarea class="app-prompt-input today-plan-mail-preview-body" readonly></textarea>
-        <div class="app-prompt-actions">
-          <button type="button" class="btn-ghost" data-action="cancel">取消</button>
-          <button type="button" class="btn-primary" data-action="confirm">确认发送</button>
-        </div>
-      </div>
-    `;
-
-    const bodyEl = overlay.querySelector(".today-plan-mail-preview-body");
-    const confirmBtn = overlay.querySelector('[data-action="confirm"]');
-    const cancelBtn = overlay.querySelector('[data-action="cancel"]');
-    let settled = false;
-
-    function cleanup(value) {
-      if (settled) return;
-      settled = true;
-      overlay.remove();
-      resolve(value);
-    }
-
-    bodyEl.value = draft && draft.body ? draft.body : "";
-    document.body.appendChild(overlay);
-    confirmBtn.focus();
-
-    confirmBtn.addEventListener("click", () => cleanup(true));
-    cancelBtn.addEventListener("click", () => cleanup(false));
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) cleanup(false);
-    });
-    overlay.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        cleanup(false);
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        cleanup(true);
-      }
-    });
+    render();
   });
 }
 
@@ -13841,38 +13940,43 @@ async function openTodayPlanCommitDialog(service, commit) {
 
 async function sendTodayPlanMail() {
   if (!currentTodayPlanId) return;
-  const formData = await openTodayPlanMailComposeDialog({
-    name: todayPlanMailSenderName || "",
-    to: todayPlanMailToText || "",
-    cc: todayPlanMailCcText || "",
-  });
-  if (!formData) return;
-  const name = String(formData.name || "").trim();
-  const to = parseTodayPlanMailRecipientsInput(formData.to);
-  const cc = parseTodayPlanMailRecipientsInput(formData.cc);
-  todayPlanMailSenderName = name;
-  todayPlanMailToText = String(formData.to || "").trim();
-  todayPlanMailCcText = String(formData.cc || "").trim();
   try {
-    const prepareRes = await apiFetch("/api/today-plan/mail/prepare", {
-      method: "POST",
-      body: JSON.stringify({ plan_id: currentTodayPlanId, name, to, cc }),
+    const result = await openTodayPlanMailSendDialog({
+      name: todayPlanMailSenderName || "",
+      to: todayPlanMailToText || "",
+      cc: todayPlanMailCcText || "",
+    }, {
+      prepareDraft: async (formData) => {
+        const name = String(formData.name || "").trim();
+        const toText = String(formData.to || "").trim();
+        const ccText = String(formData.cc || "").trim();
+        const to = parseTodayPlanMailRecipientsInput(toText);
+        const cc = parseTodayPlanMailRecipientsInput(ccText);
+        todayPlanMailSenderName = name;
+        todayPlanMailToText = toText;
+        todayPlanMailCcText = ccText;
+        const prepareRes = await apiFetch("/api/today-plan/mail/prepare", {
+          method: "POST",
+          body: JSON.stringify({ plan_id: currentTodayPlanId, name, to, cc }),
+        });
+        const prepareData = await prepareRes.json();
+        if (!prepareRes.ok) throw new Error(prepareData.error || `HTTP ${prepareRes.status}`);
+        return prepareData.draft || null;
+      },
+      confirmDraft: async (draft) => {
+        const confirmRes = await apiFetch("/api/today-plan/mail/confirm", {
+          method: "POST",
+          body: JSON.stringify({ draft_id: draft.id }),
+        });
+        const confirmData = await confirmRes.json();
+        if (!confirmRes.ok) throw new Error(confirmData.error || `HTTP ${confirmRes.status}`);
+        return confirmData.draft || draft;
+      },
     });
-    const prepareData = await prepareRes.json();
-    if (!prepareRes.ok) throw new Error(prepareData.error || `HTTP ${prepareRes.status}`);
-    const draft = prepareData.draft || null;
-    if (!draft || !draft.id) throw new Error("未生成待发送草稿");
-    const confirmed = await openTodayPlanMailDraftPreviewDialog(draft);
-    if (!confirmed) return;
-
-    const confirmRes = await apiFetch("/api/today-plan/mail/confirm", {
-      method: "POST",
-      body: JSON.stringify({ draft_id: draft.id }),
-    });
-    const confirmData = await confirmRes.json();
-    if (!confirmRes.ok) throw new Error(confirmData.error || `HTTP ${confirmRes.status}`);
-    const sentDraft = confirmData.draft || {};
-    alert(`邮件已发送\n主题：${sentDraft.subject || "--"}\n收件人：${formatTodayPlanMailRecipients(sentDraft.to)}`);
+    if (!result || !result.draft) return;
+    const sentDraft = result.draft || {};
+    const recipientCount = Array.isArray(sentDraft.to) ? sentDraft.to.length : 0;
+    showToast(recipientCount > 0 ? `计划邮件已发送 · ${recipientCount} 位收件人` : "计划邮件已发送", 2200);
   } catch (err) {
     console.error("Failed to send today plan mail:", err);
     alert(err.message || "发送计划邮件失败");
