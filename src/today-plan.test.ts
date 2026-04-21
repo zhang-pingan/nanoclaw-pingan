@@ -15,6 +15,7 @@ import {
   ensureTodayPlan,
   getTodayPlanDetail,
   listTodayPlanChatMessages,
+  parseTodayPlanServiceBranchOptions,
   patchTodayPlanItem,
 } from './today-plan.js';
 import { _initTestWebDb, storeWebMessage } from './web-db.js';
@@ -64,6 +65,38 @@ describe('today-plan', () => {
     expect(messages[0]?.id).toBe('msg-5');
     expect(messages[messages.length - 1]?.id).toBe('msg-204');
     expect(messages.some((message) => message.id === 'old-day')).toBe(false);
+  });
+
+  it('skips remote HEAD when building service branch options', () => {
+    const branches = parseTodayPlanServiceBranchOptions({
+      rows: [
+        'refs/heads/master\tmaster\t*',
+        'refs/remotes/origin/HEAD\torigin\t',
+        'refs/remotes/origin/master\torigin/master\t',
+        'refs/remotes/origin/erp\torigin/erp\t',
+      ],
+      config: {
+        default_branch: 'master',
+        staging: {
+          branch: 'erp',
+        },
+      },
+    });
+
+    expect(branches).toHaveLength(2);
+    expect(branches.map((branch) => branch.name)).toEqual(['master', 'erp']);
+    expect(branches.find((branch) => branch.name === 'origin')).toBeUndefined();
+    expect(branches[0]).toMatchObject({
+      name: 'master',
+      source: 'local',
+      current: true,
+      default_branch: true,
+    });
+    expect(branches[1]).toMatchObject({
+      name: 'erp',
+      source: 'remote',
+      staging_branch: true,
+    });
   });
 
   it('auto-associates workbench task service and work branch into today plan detail', () => {

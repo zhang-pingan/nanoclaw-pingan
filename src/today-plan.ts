@@ -550,6 +550,43 @@ export function listTodayPlanServices(): TodayPlanServiceOption[] {
     });
 }
 
+export function parseTodayPlanServiceBranchOptions(input: {
+  rows: string[];
+  config: ServiceConfig;
+}): TodayPlanServiceBranchOption[] {
+  const branchMap = new Map<string, TodayPlanServiceBranchOption>();
+
+  for (const row of input.rows) {
+    const [fullRefName, shortRefName, headMark] = row.split('\t');
+    if (!fullRefName || !shortRefName) continue;
+    if (fullRefName === 'refs/remotes/origin/HEAD') continue;
+
+    const isRemote = fullRefName.startsWith('refs/remotes/origin/');
+    const branchName = isRemote
+      ? shortRefName.slice('origin/'.length)
+      : shortRefName;
+    if (!branchName) continue;
+
+    const existing = branchMap.get(branchName);
+    if (existing && existing.source === 'local') continue;
+
+    branchMap.set(branchName, {
+      name: branchName,
+      source: isRemote ? 'remote' : 'local',
+      current: headMark === '*',
+      default_branch: branchName === (input.config.default_branch || ''),
+      staging_branch: branchName === (input.config.staging?.branch || ''),
+    });
+  }
+
+  return Array.from(branchMap.values()).sort((a, b) => {
+    if (a.current !== b.current) return a.current ? -1 : 1;
+    if (a.default_branch !== b.default_branch) return a.default_branch ? -1 : 1;
+    if (a.staging_branch !== b.staging_branch) return a.staging_branch ? -1 : 1;
+    return a.name.localeCompare(b.name, 'zh-CN');
+  });
+}
+
 export function listTodayPlanServiceBranches(
   service: string,
 ): TodayPlanServiceBranchOption[] {
@@ -560,39 +597,18 @@ export function listTodayPlanServiceBranches(
 
   const result = safeRunGit(repoPath, [
     'for-each-ref',
-    '--format=%(refname:short)\t%(HEAD)',
+    '--format=%(refname)\t%(refname:short)\t%(HEAD)',
     'refs/heads',
     'refs/remotes/origin',
   ]);
   if (!result.ok || !result.output) return [];
 
-  const rows = result.output
+  return parseTodayPlanServiceBranchOptions({
+    rows: result.output
     .split('\n')
     .map((line) => line.trim())
-    .filter(Boolean);
-  const branchMap = new Map<string, TodayPlanServiceBranchOption>();
-
-  for (const row of rows) {
-    const [refName, headMark] = row.split('\t');
-    if (!refName || refName === 'origin/HEAD') continue;
-    const isRemote = refName.startsWith('origin/');
-    const branchName = isRemote ? refName.slice('origin/'.length) : refName;
-    const existing = branchMap.get(branchName);
-    if (existing && existing.source === 'local') continue;
-    branchMap.set(branchName, {
-      name: branchName,
-      source: isRemote ? 'remote' : 'local',
-      current: headMark === '*',
-      default_branch: branchName === (config.default_branch || ''),
-      staging_branch: branchName === (config.staging?.branch || ''),
-    });
-  }
-
-  return Array.from(branchMap.values()).sort((a, b) => {
-    if (a.current !== b.current) return a.current ? -1 : 1;
-    if (a.default_branch !== b.default_branch) return a.default_branch ? -1 : 1;
-    if (a.staging_branch !== b.staging_branch) return a.staging_branch ? -1 : 1;
-    return a.name.localeCompare(b.name, 'zh-CN');
+    .filter(Boolean),
+    config,
   });
 }
 
