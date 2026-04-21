@@ -31,7 +31,7 @@ description: Implement features based on approved plans — read design docs, wr
 
 ### 步骤 3：代码实现
 
-严格按照方案逐步修改代码，完成后提交并 push 工作分支。
+严格按照方案逐步修改代码，完成后提交(**commit message 使用中文**)并 push `工作分支`。
 
 ### 步骤 4：生成交付文档
 
