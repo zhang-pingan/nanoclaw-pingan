@@ -73,6 +73,10 @@ import {
   confirmTodayPlanMailDraft,
   prepareTodayPlanMailDraft,
 } from '../today-plan-mail.js';
+import {
+  dispatchCurrentAskQuestion,
+  handleAskQuestionResponse,
+} from '../ask-user-question.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -2639,13 +2643,44 @@ class WebChannel {
         return;
       }
       const [chatJid] = targetEntry;
-      const content =
-        item.source_type === 'ask_user_question' ||
-        item.source_type === 'request_human_input'
-          ? `/answer ${item.source_ref_id} ${replyText}`
-          : replyText;
-      this.injectWorkbenchReply(chatJid, content);
-      this.opts.enqueueMessageCheck?.(chatJid);
+
+      if (
+        (item.source_type === 'ask_user_question' ||
+          item.source_type === 'request_human_input') &&
+        item.source_ref_id &&
+        item.group_folder
+      ) {
+        const groups = this.opts.registeredGroups();
+        const result = await handleAskQuestionResponse({
+          requestId: item.source_ref_id,
+          groupFolder: item.group_folder,
+          userId: 'web_user',
+          answer: replyText,
+          registeredGroups: groups,
+          sendMessage: async () => {},
+        });
+
+        if (!result.ok && !result.completed) {
+          await dispatchCurrentAskQuestion({
+            requestId: item.source_ref_id,
+            groupFolder: item.group_folder,
+            validationError: result.userMessage,
+            validationErrors: result.validationErrors,
+            registeredGroups: groups,
+            sendMessage: async () => {},
+          });
+        }
+
+        if (!result.ok) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: result.userMessage }));
+          return;
+        }
+      } else {
+        this.injectWorkbenchReply(chatJid, replyText);
+        this.opts.enqueueMessageCheck?.(chatJid);
+      }
+
       if (item.source_type === 'send_message') {
         runWorkbenchActionItemAction({
           taskId: data.task_id,

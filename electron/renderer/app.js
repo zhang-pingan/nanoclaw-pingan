@@ -474,8 +474,16 @@ function apiFetch(path, options) {
   return fetch(`http://localhost:3000${path}`, { ...options, headers });
 }
 
+function shouldUseCustomAppDialogs() {
+  return typeof window !== "undefined" && Boolean(window.nanoclawApp);
+}
+
 async function openTextPrompt(message, defaultValue = "", options = {}) {
-  const promptFn = typeof window.prompt === "function" ? window.prompt.bind(window) : null;
+  const promptFn = shouldUseCustomAppDialogs()
+    ? null
+    : typeof window.prompt === "function"
+      ? window.prompt.bind(window)
+      : null;
   if (promptFn) {
     try {
       return promptFn(message, defaultValue);
@@ -541,7 +549,11 @@ async function openTextPrompt(message, defaultValue = "", options = {}) {
 }
 
 async function openConfirmDialog(message, options = {}) {
-  const confirmFn = typeof window.confirm === "function" ? window.confirm.bind(window) : null;
+  const confirmFn = shouldUseCustomAppDialogs()
+    ? null
+    : typeof window.confirm === "function"
+      ? window.confirm.bind(window)
+      : null;
   if (confirmFn) {
     try {
       return confirmFn(message);
@@ -3814,11 +3826,11 @@ async function deleteWorkflowDefinitionEntryPoint() {
   }
 }
 
-function addWorkflowDefinitionStatusLabel() {
+async function addWorkflowDefinitionStatusLabel() {
   const sourceStateKey = workflowDefinitionSelectedStateKey || Object.keys(getStatesFromEditor())[0] || "";
-  const rawKey = typeof window.prompt === "function"
-    ? window.prompt("输入要绑定的 state key", sourceStateKey)
-    : sourceStateKey;
+  const rawKey = await openTextPrompt("输入要绑定的 state key", sourceStateKey, {
+    title: "新增 Status Label",
+  });
   const stateKey = (rawKey || "").trim();
   if (!stateKey) return;
   try {
