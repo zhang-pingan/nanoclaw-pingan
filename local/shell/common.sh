@@ -8,6 +8,7 @@ LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_PLIST="$LAUNCH_AGENT_DIR/$LAUNCHD_LABEL.plist"
 LAUNCH_AGENT_TEMPLATE="$ROOT_DIR/launchd/$LAUNCHD_LABEL.plist"
 LAUNCH_AGENT_PLIST_CHANGED=0
+BACKEND_ENTRY="$ROOT_DIR/dist/index.js"
 
 ensure_logs_dir() {
   mkdir -p "$ROOT_DIR/logs"
@@ -150,6 +151,10 @@ start_nanoclaw_service() {
 restart_nanoclaw_service() {
   install_launch_agent_plist
 
+  if stop_running_direct_nanoclaw; then
+    echo "direct nanoclaw process stopped"
+  fi
+
   if is_launch_agent_loaded; then
     if [ "$LAUNCH_AGENT_PLIST_CHANGED" -eq 1 ]; then
       bootout_launch_agent
@@ -176,4 +181,57 @@ stop_nanoclaw_service() {
 
   bootout_launch_agent
   echo "launch agent stopped"
+}
+
+is_direct_nanoclaw_pid() {
+  local pid="$1"
+  local command
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    return 1
+  fi
+
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [ -n "$command" ] && [[ "$command" == *"$BACKEND_ENTRY"* ]]
+}
+
+find_running_direct_nanoclaw_pid() {
+  local pid
+
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
+    if is_direct_nanoclaw_pid "$pid"; then
+      echo "$pid"
+      return 0
+    fi
+  done < <(pgrep -f "$BACKEND_ENTRY" 2>/dev/null || true)
+
+  return 1
+}
+
+wait_for_nanoclaw_process_exit() {
+  local pid="$1"
+  local retries=10
+
+  while kill -0 "$pid" 2>/dev/null; do
+    retries=$((retries - 1))
+    if [ "$retries" -le 0 ]; then
+      kill -9 "$pid" 2>/dev/null || true
+      break
+    fi
+    sleep 1
+  done
+}
+
+stop_running_direct_nanoclaw() {
+  local stopped=1
+  local pid
+
+  while pid="$(find_running_direct_nanoclaw_pid)"; do
+    kill "$pid" 2>/dev/null || true
+    wait_for_nanoclaw_process_exit "$pid"
+    stopped=0
+  done
+
+  return "$stopped"
 }
