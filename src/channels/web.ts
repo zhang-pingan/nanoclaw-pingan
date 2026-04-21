@@ -2524,7 +2524,14 @@ class WebChannel {
       return;
     }
 
-    const data = body as { draft_id?: string };
+    const data = body as {
+      draft_id?: string;
+      subject?: string;
+      body?: string;
+      to?: string[];
+      cc?: string[];
+      bcc?: string[];
+    };
     if (!data.draft_id) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'draft_id required' }));
@@ -2534,6 +2541,11 @@ class WebChannel {
     try {
       const draft = await confirmTodayPlanMailDraft({
         draftId: data.draft_id,
+        subject: typeof data.subject === 'string' ? data.subject : undefined,
+        body: typeof data.body === 'string' ? data.body : undefined,
+        to: Array.isArray(data.to) ? data.to : undefined,
+        cc: Array.isArray(data.cc) ? data.cc : undefined,
+        bcc: Array.isArray(data.bcc) ? data.bcc : undefined,
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, draft }));

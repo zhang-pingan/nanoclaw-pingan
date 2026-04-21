@@ -102,6 +102,10 @@ function normalizeGeneratedBody(text: string): string {
   return body.trim();
 }
 
+function normalizeEditableBody(text: string): string {
+  return text.replace(/\r\n/g, '\n').trim();
+}
+
 async function summarizeTodayPlanMailBody(prompt: string): Promise<string> {
   const response = await callAnthropicMessages({
     messages: [{ role: 'user', content: prompt }],
@@ -194,7 +198,14 @@ export async function prepareTodayPlanMailDraft(
 }
 
 export async function confirmTodayPlanMailDraft(
-  input: { draftId: string },
+  input: {
+    draftId: string;
+    subject?: string;
+    body?: string;
+    to?: string[];
+    cc?: string[];
+    bcc?: string[];
+  },
   deps: ConfirmTodayPlanMailDraftDeps = {},
 ): Promise<TodayPlanMailDraftDetail> {
   const record = getTodayPlanMailDraftById(input.draftId);
@@ -205,8 +216,21 @@ export async function confirmTodayPlanMailDraft(
   }
 
   const draft = toDraftDetail(record);
-  if (!draft.body.trim()) throw new Error('邮件正文为空，无法发送');
-  if (draft.to.length === 0) throw new Error('邮件收件人为空，无法发送');
+  const nextDraft: TodayPlanMailDraftDetail = {
+    ...draft,
+    subject:
+      input.subject !== undefined ? String(input.subject).trim() : draft.subject,
+    body:
+      input.body !== undefined
+        ? normalizeEditableBody(String(input.body))
+        : draft.body,
+    to: input.to !== undefined ? uniqueTrimmed(input.to) : draft.to,
+    cc: input.cc !== undefined ? uniqueTrimmed(input.cc) : draft.cc,
+    bcc: input.bcc !== undefined ? uniqueTrimmed(input.bcc) : draft.bcc,
+  };
+  if (!nextDraft.subject.trim()) throw new Error('邮件主题不能为空');
+  if (!nextDraft.body.trim()) throw new Error('邮件正文为空，无法发送');
+  if (nextDraft.to.length === 0) throw new Error('邮件收件人为空，无法发送');
 
   const loadProfileFn = deps.loadProfile || loadMailProfile;
   const sendMailFn = deps.sendMail || sendMail;
@@ -214,6 +238,11 @@ export async function confirmTodayPlanMailDraft(
   const confirmedAt = now();
 
   updateTodayPlanMailDraft(draft.id, {
+    subject: nextDraft.subject,
+    body: nextDraft.body,
+    to_json: stringifyAddressList(nextDraft.to),
+    cc_json: stringifyAddressList(nextDraft.cc),
+    bcc_json: stringifyAddressList(nextDraft.bcc),
     status: 'sending',
     confirmed_at: confirmedAt,
     error_message: null,
@@ -224,12 +253,12 @@ export async function confirmTodayPlanMailDraft(
     const profile = loadProfileFn();
     await sendMailFn(
       {
-        to: draft.to,
-        cc: draft.cc,
-        bcc: draft.bcc,
-        subject: draft.subject,
-        body: draft.body,
-        attachments: draft.attachments,
+        to: nextDraft.to,
+        cc: nextDraft.cc,
+        bcc: nextDraft.bcc,
+        subject: nextDraft.subject,
+        body: nextDraft.body,
+        attachments: nextDraft.attachments,
       },
       profile,
     );

@@ -2182,6 +2182,18 @@ body.quick-chat-window .quick-chat-input {
   width: min(720px, calc(100vw - 40px));
 }
 
+.today-plan-mail-dialog-actions {
+  margin-top: 18px;
+}
+
+.today-plan-mail-dialog-primary-btn {
+  min-width: 108px;
+}
+
+.today-plan-mail-dialog-secondary-btn {
+  min-width: 108px;
+}
+
 .today-plan-mail-dialog-status {
   margin-top: 14px;
   display: flex;

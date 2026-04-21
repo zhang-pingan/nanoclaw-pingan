@@ -664,6 +664,16 @@ async function openTodayPlanMailSendDialog(values = {}, options = {}) {
       return { nameInput };
     }
 
+    function syncPreviewValues() {
+      if (!state.draft) return {};
+      const bodyInput = overlay.querySelector('[data-preview-field="body"]');
+      state.draft = {
+        ...state.draft,
+        body: String(bodyInput && bodyInput.value ? bodyInput.value : "").replace(/\r\n/g, "\n"),
+      };
+      return { bodyInput };
+    }
+
     async function submitCompose() {
       if (state.busy) return;
       const { nameInput } = syncComposeValues();
@@ -699,6 +709,7 @@ async function openTodayPlanMailSendDialog(values = {}, options = {}) {
 
     async function submitConfirm() {
       if (state.busy || !state.draft) return;
+      syncPreviewValues();
       if (!confirmDraft) {
         cleanup({ formData: { ...state.values }, draft: state.draft });
         return;
@@ -744,9 +755,9 @@ async function openTodayPlanMailSendDialog(values = {}, options = {}) {
               <textarea class="app-prompt-input today-plan-mail-compose-textarea" data-field="cc" rows="3" placeholder="多个地址用逗号或换行分隔；留空时使用配置默认值" ${state.busy ? "disabled" : ""}>${escapeHtml(state.values.cc || "")}</textarea>
             </label>
           </div>
-          <div class="app-prompt-actions">
-            <button type="button" class="btn-ghost" data-action="cancel" ${state.busy ? "disabled" : ""}>取消</button>
-            <button type="button" class="btn-primary" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "生成中..." : "生成预览"}</button>
+          <div class="app-prompt-actions today-plan-mail-dialog-actions">
+            <button type="button" class="btn-primary btn-soft-primary today-plan-action-btn today-plan-btn-view today-plan-mail-dialog-secondary-btn" data-action="cancel" ${state.busy ? "disabled" : ""}>取消</button>
+            <button type="button" class="btn-primary btn-soft-primary today-plan-action-btn today-plan-btn-create today-plan-mail-dialog-primary-btn" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "生成中..." : "生成预览"}</button>
           </div>
         </div>
       `;
@@ -779,7 +790,7 @@ async function openTodayPlanMailSendDialog(values = {}, options = {}) {
       overlay.innerHTML = `
         <div class="app-prompt-dialog today-plan-mail-preview-dialog" role="dialog" aria-modal="true" aria-label="确认发送计划邮件">
           <div class="app-prompt-title">确认发送计划邮件</div>
-          <div class="app-prompt-message">预览已生成，确认收件人与正文后再发送。</div>
+          <div class="app-prompt-message">预览已生成，可直接修改正文；确认后按当前内容发送。</div>
           ${statusMarkup}
           <div class="today-plan-mail-preview-grid">
             <div class="today-plan-mail-preview-item">
@@ -799,23 +810,28 @@ async function openTodayPlanMailSendDialog(values = {}, options = {}) {
               <div class="today-plan-mail-preview-value">${escapeHtml(formatTodayPlanMailRecipients(draft.bcc))}</div>
             </div>
           </div>
-          <div class="today-plan-mail-preview-label today-plan-mail-preview-body-label">正文</div>
-          <textarea class="app-prompt-input today-plan-mail-preview-body" readonly></textarea>
-          <div class="app-prompt-actions">
-            <button type="button" class="btn-ghost" data-action="back" ${state.busy ? "disabled" : ""}>返回修改</button>
-            <button type="button" class="btn-primary" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "发送中..." : "确认发送"}</button>
+          <label class="today-plan-mail-preview-label today-plan-mail-preview-body-label" for="today-plan-mail-preview-body">正文</label>
+          <textarea id="today-plan-mail-preview-body" class="app-prompt-input today-plan-mail-preview-body" data-preview-field="body" ${state.busy ? "disabled" : ""}></textarea>
+          <div class="app-prompt-actions today-plan-mail-dialog-actions">
+            <button type="button" class="btn-primary btn-soft-primary today-plan-action-btn today-plan-btn-view today-plan-mail-dialog-secondary-btn" data-action="back" ${state.busy ? "disabled" : ""}>返回修改</button>
+            <button type="button" class="btn-primary btn-soft-primary today-plan-action-btn today-plan-btn-send today-plan-mail-dialog-primary-btn" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "发送中..." : "确认发送"}</button>
           </div>
         </div>
       `;
 
-      const bodyEl = overlay.querySelector(".today-plan-mail-preview-body");
+      const bodyInput = overlay.querySelector('[data-preview-field="body"]');
       const confirmBtn = overlay.querySelector('[data-action="confirm"]');
       const backBtn = overlay.querySelector('[data-action="back"]');
-      if (bodyEl) bodyEl.value = draft.body || "";
-      if (!state.busy && confirmBtn) confirmBtn.focus();
+      if (!state.busy && bodyInput) {
+        bodyInput.focus();
+        bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
+      } else if (!state.busy && confirmBtn) {
+        confirmBtn.focus();
+      }
       if (backBtn) {
         backBtn.addEventListener("click", () => {
           if (state.busy) return;
+          syncPreviewValues();
           state.step = "compose";
           state.statusMessage = "";
           state.errorMessage = "";
@@ -827,6 +843,7 @@ async function openTodayPlanMailSendDialog(values = {}, options = {}) {
           void submitConfirm();
         });
       }
+      if (bodyInput) bodyInput.value = draft.body || "";
     }
 
     function render() {
@@ -13966,7 +13983,14 @@ async function sendTodayPlanMail() {
       confirmDraft: async (draft) => {
         const confirmRes = await apiFetch("/api/today-plan/mail/confirm", {
           method: "POST",
-          body: JSON.stringify({ draft_id: draft.id }),
+          body: JSON.stringify({
+            draft_id: draft.id,
+            subject: draft.subject,
+            body: draft.body,
+            to: Array.isArray(draft.to) ? draft.to : [],
+            cc: Array.isArray(draft.cc) ? draft.cc : [],
+            bcc: Array.isArray(draft.bcc) ? draft.bcc : [],
+          }),
         });
         const confirmData = await confirmRes.json();
         if (!confirmRes.ok) throw new Error(confirmData.error || `HTTP ${confirmRes.status}`);
