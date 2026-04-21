@@ -15,7 +15,7 @@ export function buildWorkbenchBroadcastResolvedText(input: {
   actionItemId: string;
   nextStatus: string;
 }): string | null {
-  const detail = getWorkbenchTaskDetail(input.taskId);
+  const detail = getWorkbenchTaskDetail(input.taskId, { sync: false });
   if (!detail) return null;
   return [
     '工作台待办已更新',
@@ -32,7 +32,7 @@ export function buildWorkbenchBroadcastFallbackText(input: {
   taskId: string;
   actionItemId: string;
 }): string | null {
-  const detail = getWorkbenchTaskDetail(input.taskId);
+  const detail = getWorkbenchTaskDetail(input.taskId, { sync: false });
   if (!detail) return null;
 
   const item = detail.action_items.find((entry) => entry.id === input.actionItemId);
@@ -70,7 +70,7 @@ export function buildWorkbenchBroadcastCard(input: {
   taskId: string;
   actionItemId: string;
 }): InteractiveCard | null {
-  const detail = getWorkbenchTaskDetail(input.taskId);
+  const detail = getWorkbenchTaskDetail(input.taskId, { sync: false });
   if (!detail) return null;
 
   const item = detail.action_items.find((entry) => entry.id === input.actionItemId);

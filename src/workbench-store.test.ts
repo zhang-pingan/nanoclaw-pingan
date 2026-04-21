@@ -34,6 +34,7 @@ import {
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
+import { buildWorkbenchBroadcastCard } from './workbench-broadcast-render.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
 const MAIN_GROUP: RegisteredGroup = {
@@ -224,6 +225,51 @@ describe('workbench approval transition sync', () => {
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'dev')?.status,
     ).toBe('current');
+  });
+
+  it('does not emit nested action item updates while rendering broadcast cards', () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-readonly-detail',
+      name: '广播卡片只读详情',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/broadcast-readonly',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_readonly',
+        staging_work_branch: 'staging-deploy/feature-broadcast-readonly',
+        access_token: '',
+      },
+      status: 'plan_examine_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-readonly-detail');
+
+    const taskId = 'wb-wf-broadcast-readonly-detail';
+    const actionItemId = 'wb-action-wf-broadcast-readonly-detail-plan_examine_confirm';
+    let nestedPendingEvents = 0;
+
+    initWorkbenchEvents((event) => {
+      if (
+        event.type === 'action_item_updated'
+        && event.payload.id === actionItemId
+        && event.payload.status === 'pending'
+      ) {
+        nestedPendingEvents += 1;
+      }
+    });
+
+    const card = buildWorkbenchBroadcastCard({ taskId, actionItemId });
+
+    expect(card?.header.title).toContain('确认方案修改或继续开发');
+    expect(nestedPendingEvents).toBe(0);
   });
 
   it('emits task update before subtask updates during approve transition', () => {

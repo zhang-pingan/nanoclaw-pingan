@@ -735,15 +735,25 @@ function resolveWorkbenchWorkflowId(taskId: string): string | null {
   return null;
 }
 
-function getWorkbenchTaskRecord(taskId: string): WorkbenchTaskRecord | null {
+function getWorkbenchTaskRecord(
+  taskId: string,
+  options?: {
+    sync?: boolean;
+  },
+): WorkbenchTaskRecord | null {
   const workflowId = resolveWorkbenchWorkflowId(taskId);
   if (!workflowId) return null;
-  syncWorkbenchFromWorkflow(workflowId);
+  if (options?.sync !== false) {
+    syncWorkbenchFromWorkflow(workflowId);
+  }
   return getWorkbenchTaskByWorkflowId(workflowId) || null;
 }
 
 export function getWorkbenchTaskDetail(
   taskId: string,
+  options?: {
+    sync?: boolean;
+  },
 ): WorkbenchTaskDetail | null {
   const workflowId = resolveWorkbenchWorkflowId(taskId);
   if (!workflowId) return null;
@@ -751,7 +761,7 @@ export function getWorkbenchTaskDetail(
   const workflow = getWorkflow(workflowId);
   if (!workflow) return null;
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  const task = getWorkbenchTaskRecord(taskId);
+  const task = getWorkbenchTaskRecord(taskId, options);
   if (task) {
     const events = listWorkbenchEventsByTask(task.id);
     const manuallySkippedSubtaskIds = new Set(
