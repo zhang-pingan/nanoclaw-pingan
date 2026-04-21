@@ -3240,6 +3240,61 @@ body.quick-chat-window .quick-chat-input {
   padding: 12px 14px;
 }
 
+.today-plan-service-option-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.today-plan-service-option-card.active {
+  border-color: rgba(var(--today-plan-accent-rgb), 0.22);
+  box-shadow: 0 16px 30px rgba(var(--today-plan-accent-rgb), 0.08);
+}
+
+.today-plan-service-option-head {
+  align-items: center;
+}
+
+.today-plan-service-option-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.today-plan-service-branch-panel {
+  margin-left: 30px;
+  border-radius: 14px;
+  border: 1px dashed rgba(var(--today-plan-accent-rgb), 0.22);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.7), rgba(255, 255, 255, 0.88));
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.today-plan-service-branch-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.today-plan-service-branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.today-plan-service-branch-row {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  background: rgba(255, 255, 255, 0.82);
+}
+
 .today-plan-chat-group-btn {
   width: 100%;
   appearance: none;
@@ -6990,10 +7045,20 @@ body.quick-chat-window .quick-chat-input {
     max-height: 100%;
   }
 
+  .today-plan-service-option-head,
   .today-plan-chat-picker-header,
   .today-plan-chat-picker-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .today-plan-service-branch-panel {
+    margin-left: 0;
+  }
+
+  .today-plan-service-branch-summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .workflow-definition-form-grid {

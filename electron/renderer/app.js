@@ -12451,7 +12451,6 @@ function normalizeTodayPlanAssociations(associations) {
         service: item.service,
         branches: Array.from(new Set(item.branches.filter((entry) => typeof entry === "string" && entry.trim()))),
       }))
-      .filter((item) => item.branches.length > 0)
     : [];
   return {
     workbench_task_ids: workbenchTaskIds,
@@ -13515,26 +13514,36 @@ function renderTodayPlanAssociationDialog() {
             const selected = getTodayPlanAssociationServiceEntry(state, service.service);
             const branches = state.branchesByService[service.service] || [];
             const loading = Boolean(state.loadingBranches[service.service]);
+            const selectedBranchCount = selected && Array.isArray(selected.branches) ? selected.branches.length : 0;
             return `
-              <div class="today-plan-option-card">
-                <label class="today-plan-checkbox-row">
+              <div class="today-plan-option-card today-plan-service-option-card${selected ? " active" : ""}">
+                <label class="today-plan-checkbox-row today-plan-service-option-head">
                   <input type="checkbox" data-today-plan-association="service" value="${escapeAttribute(service.service)}" ${selected ? "checked" : ""} />
-                  <div>
+                  <div class="today-plan-service-option-main">
                     <div class="today-plan-option-title">${escapeHtml(service.service)}</div>
                     <div class="today-plan-option-desc">${escapeHtml(service.repo_path || "未配置仓库路径")}</div>
                   </div>
+                  ${selected ? `<span class="today-plan-meta-pill">已选 ${escapeHtml(String(selectedBranchCount))} 个分支</span>` : ""}
                 </label>
                 ${selected ? `
-                  <div class="today-plan-conversation-list">
-                    ${loading ? '<div class="today-plan-empty-inline">正在加载分支...</div>' : branches.length > 0 ? branches.map((branch) => `
-                      <label class="today-plan-checkbox-row">
+                  <div class="today-plan-service-branch-panel">
+                    <div class="today-plan-service-branch-summary">
+                      <span>分支选择</span>
+                      <span>${loading ? "加载中" : `共 ${escapeHtml(String(branches.length))} 个`}</span>
+                    </div>
+                    ${loading ? '<div class="today-plan-empty-inline">正在加载分支...</div>' : branches.length > 0 ? `
+                      <div class="today-plan-service-branch-list">
+                        ${branches.map((branch) => `
+                      <label class="today-plan-checkbox-row today-plan-service-branch-row">
                         <input type="checkbox" data-today-plan-association="branch" data-service-name="${escapeAttribute(service.service)}" value="${escapeAttribute(branch.name)}" ${selected.branches.includes(branch.name) ? "checked" : ""} />
                         <div>
                           <div class="today-plan-option-title">${escapeHtml(branch.name)}</div>
                           <div class="today-plan-option-desc">${branch.current ? "当前分支" : branch.source === "remote" ? "远端分支" : "本地分支"}${branch.default_branch ? " · 默认分支" : ""}${branch.staging_branch ? " · 预发分支" : ""}</div>
                         </div>
                       </label>
-                    `).join("") : '<div class="today-plan-empty-inline">没有可用分支</div>'}
+                        `).join("")}
+                      </div>
+                    ` : '<div class="today-plan-empty-inline">没有可用分支</div>'}
                   </div>
                 ` : ""}
               </div>
@@ -13659,6 +13668,7 @@ function renderTodayPlanAssociationDialog() {
         if (!getTodayPlanAssociationServiceEntry(state, serviceName)) {
           state.associations.services.push({ service: serviceName, branches: [] });
         }
+        renderTodayPlanAssociationDialog();
         await ensureTodayPlanServiceBranchesLoaded(state, serviceName);
       } else {
         state.associations.services = state.associations.services.filter((item) => item.service !== serviceName);
@@ -13679,6 +13689,7 @@ function renderTodayPlanAssociationDialog() {
       } else {
         serviceEntry.branches = serviceEntry.branches.filter((branch) => branch !== checkbox.value);
       }
+      renderTodayPlanAssociationDialog();
     });
   });
 

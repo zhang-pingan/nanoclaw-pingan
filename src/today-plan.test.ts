@@ -143,6 +143,45 @@ describe('today-plan', () => {
     );
   });
 
+  it('keeps manually selected services even before a branch is chosen', () => {
+    const plan = ensureTodayPlan('2026-04-20');
+    const item = createTodayPlanItemForPlan(plan.id);
+    patchTodayPlanItem({
+      itemId: item.id,
+      title: '先占位服务',
+      associations: {
+        workbench_task_ids: [],
+        chat_selections: [],
+        services: [
+          {
+            service: 'catstory',
+            branches: [],
+          },
+        ],
+      },
+    });
+
+    const detail = getTodayPlanDetail({
+      planId: plan.id,
+      groups: {},
+    });
+
+    expect(detail).toBeTruthy();
+    if (!detail) {
+      throw new Error('expected today plan detail to exist');
+    }
+    expect(detail.items).toHaveLength(1);
+    expect(detail.items[0].associations.services).toEqual([
+      {
+        service: 'catstory',
+        branches: [],
+      },
+    ]);
+    expect(detail.items[0].related_services).toHaveLength(1);
+    expect(detail.items[0].related_services[0].service).toBe('catstory');
+    expect(detail.items[0].related_services[0].branches).toEqual([]);
+  });
+
   it('continues unfinished past plan into today plan detail', () => {
     const oldPlan = ensureTodayPlan('2026-04-19');
     const oldItem = createTodayPlanItemForPlan(oldPlan.id);

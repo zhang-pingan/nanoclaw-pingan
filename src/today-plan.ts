@@ -340,7 +340,6 @@ function normalizeAssociations(
               ),
             ),
           }))
-          .filter((item) => item.branches.length > 0)
       : [];
 
     return {
