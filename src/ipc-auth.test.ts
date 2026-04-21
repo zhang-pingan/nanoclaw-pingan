@@ -778,6 +778,24 @@ describe('ask_user_question', () => {
     expect(rec?.group_folder).toBe('other-group');
     expect(sentCards.length).toBe(1);
     expect(sentCards[0].jid).toBe('other@g.us');
+    expect(sentCards[0].card).toMatchObject({
+      buttons: [
+        { label: 'prod' },
+        { label: 'staging' },
+        { label: '跳过' },
+      ],
+      form: {
+        inputs: [
+          {
+            name: 'answer',
+            type: 'textarea',
+          },
+        ],
+        submitButton: {
+          label: '提交自定义答复',
+        },
+      },
+    });
   });
 
   it('writes rejected ask-result when payload is invalid', async () => {
@@ -860,6 +878,100 @@ describe('ask_user_question', () => {
     expect(res.answers.deploy.env).toBe('prod');
     expect(res.answers.deploy.replicas).toBe(3);
     expect(res.answers.deploy.dry_run).toBe(false);
+  });
+
+  it('accepts custom text for option questions', async () => {
+    const requestId = rid('aq');
+    await processTaskIpc(
+      {
+        type: 'ask_user_question',
+        requestId,
+        questions: [
+          {
+            id: 'env',
+            question: 'Choose env?',
+            options: [{ label: 'prod' }, { label: 'staging' }],
+          },
+        ],
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const valid = await handleAskQuestionResponse({
+      requestId,
+      groupFolder: 'other-group',
+      userId: 'user-1',
+      answer: 'canary',
+      registeredGroups: groups,
+      sendMessage: deps.sendMessage,
+      sendCard: deps.sendCard,
+    });
+    expect(valid.ok).toBe(true);
+    expect(valid.completed).toBe(true);
+
+    const res = readAskIpcResult('other-group', requestId);
+    expect(res.status).toBe('answered');
+    expect(res.answers.env).toBe('canary');
+  });
+
+  it('accepts mixed option and custom text for multi-select questions', async () => {
+    const sentCards: Array<{ jid: string; card: unknown }> = [];
+    deps.sendCard = async (jid, card) => {
+      sentCards.push({ jid, card });
+      return 'card-1';
+    };
+
+    const requestId = rid('aq');
+    await processTaskIpc(
+      {
+        type: 'ask_user_question',
+        requestId,
+        questions: [
+          {
+            id: 'checks',
+            question: '选择发布前检查项',
+            options: [{ label: '回归' }, { label: '冒烟' }],
+            multi_select: true,
+          },
+        ],
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    expect(sentCards[0].card).toMatchObject({
+      buttons: [{ label: '跳过' }],
+      form: {
+        inputs: [
+          {
+            name: 'answer',
+            type: 'textarea',
+          },
+        ],
+        submitButton: {
+          label: '提交答复',
+        },
+      },
+    });
+
+    const valid = await handleAskQuestionResponse({
+      requestId,
+      groupFolder: 'other-group',
+      userId: 'user-1',
+      answer: '1, 额外巡检',
+      registeredGroups: groups,
+      sendMessage: deps.sendMessage,
+      sendCard: deps.sendCard,
+    });
+    expect(valid.ok).toBe(true);
+    expect(valid.completed).toBe(true);
+
+    const res = readAskIpcResult('other-group', requestId);
+    expect(res.status).toBe('answered');
+    expect(res.answers.checks).toEqual(['回归', '额外巡检']);
   });
 
   it('keeps workbench ask options aligned with the current question', async () => {

@@ -29,10 +29,15 @@ describe('agent-api', () => {
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        model: 'claude-test',
-        content: [{ type: 'text', text: '{"ok":true}' }],
-      }),
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-type' ? 'application/json' : null,
+      },
+      text: async () =>
+        JSON.stringify({
+          model: 'claude-test',
+          content: [{ type: 'text', text: '{"ok":true}' }],
+        }),
     });
 
     const res = await callAnthropicMessages(
@@ -57,6 +62,7 @@ describe('agent-api', () => {
       model: 'claude-test',
       system: 'system prompt',
       messages: [{ role: 'user', content: 'hello' }],
+      stream: true,
     });
     expect(res).toEqual({
       text: '{"ok":true}',
@@ -92,6 +98,7 @@ describe('agent-api', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 502,
+      text: async () => 'bad gateway',
     });
 
     await expect(
@@ -102,6 +109,74 @@ describe('agent-api', () => {
         fetchMock as unknown as typeof fetch,
       ),
     ).rejects.toThrow('Anthropic API request failed with status 502');
+  });
+
+  it('aggregates anthropic sse responses for non-stream callers', async () => {
+    readEnvFileMock.mockReturnValue({
+      NANOCLAW_AGENT_API_API_KEY: 'sk-test',
+      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test/api/',
+      NANOCLAW_AGENT_API_MODEL: 'claude-test',
+      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-type' ? 'text/event-stream' : null,
+      },
+      text: async () =>
+        [
+          'event: message_start',
+          'data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","model":"claude-test","content":[],"stop_reason":null,"stop_sequence":null}}',
+          '',
+          'event: content_block_start',
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"ok\\":"}}',
+          '',
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"true}"}}',
+          '',
+          'event: content_block_stop',
+          'data: {"type":"content_block_stop","index":0}',
+          '',
+          'event: message_delta',
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":4}}',
+          '',
+          'event: message_stop',
+          'data: {"type":"message_stop"}',
+          '',
+        ].join('\n'),
+    });
+
+    const res = await callAnthropicMessages(
+      {
+        system: 'system prompt',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      model: 'claude-test',
+      stream: true,
+    });
+    expect(res).toEqual({
+      text: '{"ok":true}',
+      raw: {
+        id: 'msg_123',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-test',
+        content: [{ type: 'text', text: '{"ok":true}' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { output_tokens: 4 },
+      },
+      model: 'claude-test',
+    });
   });
 
   it('routes callAnthropicMessages through the compat helper when enabled', async () => {

@@ -13,7 +13,11 @@ description: Implement features based on approved plans — read design docs, wr
 
 1. 从任务描述中获取方案文件路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` 中的方案内容
 2. 优先从任务消息读取 `主分支：xxx`、`工作分支：xxx` 等分支参数；若消息未提供 `主分支`，再读取 `/workspace/global/services.json` 获取服务的 `default_branch`
-3. 如有疑问，优先使用提问工具向用户确认：
+3. 读取 `/workspace/global/services.json` 中对应服务的 `repo_path`，进入真实代码仓库 `/workspace/repos/{repo_path}`：
+   - `/workspace/projects/{服务名}` 只是项目知识库、方案和交付文档目录，正常情况下只有 `docs`、`iteration` 等内容，**不是** git 仓库，不要在这里执行 `git status`、建分支或修改业务代码
+   - 开发、提交、push、代码搜索、测试执行都必须在 `/workspace/repos/{repo_path}` 下进行
+   - 若 `/workspace/repos/{repo_path}` 不存在，才视为“代码仓库未挂载/不可用”的真实阻塞；此时不要臆断为 `projects` 目录缺代码，而应通过 `complete_delegation` 返回失败，明确说明缺失的仓库路径、当前已确认的服务名与 `repo_path`
+4. 如有疑问，优先使用提问工具向用户确认：
    - 有明确选项的决策题（如是否兼容旧逻辑、是否允许改接口、是否需要同步调整下游）使用 `mcp__nanoclaw__ask_user_question`
    - 需要用户补充一段自由描述时，使用 `request_human_input`
    - `mcp__nanoclaw__send_message` 只用于进度同步或发送结果摘要，不用于阻塞型确认
@@ -22,8 +26,8 @@ description: Implement features based on approved plans — read design docs, wr
 
 优先使用消息中明确给出的 `工作分支：xxx`。
 
-- 若消息里已有工作分支名，检查该分支是否存在，不存在则新建，并在该分支继续开发，不要自行改名或重建
-- 若消息未提供工作分支，则基于已确认的 `主分支`（缺省可回退到 `default_branch`）创建 `feature/{需求名}_{日期}`（如 `feature/user-nickname_20260320`）
+- 若消息里已有工作分支名，在 `/workspace/repos/{repo_path}` 中检查该分支是否存在，不存在则新建，并在该分支继续开发，不要自行改名或重建
+- 若消息未提供工作分支，则在 `/workspace/repos/{repo_path}` 中基于已确认的 `主分支`（缺省可回退到 `default_branch`）创建 `feature/{需求名}_{日期}`（如 `feature/user-nickname_20260320`）
 
 ### 步骤 3：代码实现
 

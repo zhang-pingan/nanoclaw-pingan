@@ -109,6 +109,29 @@ function formatFieldLine(field: AskQuestionField): string {
   return `- ${field.label} (${field.id})${type}${req}${desc}${enumHint}`;
 }
 
+function formatQuestionOptionLine(
+  option: AskQuestionOption,
+  index: number,
+): string {
+  const desc = option.description ? ` - ${option.description}` : '';
+  return `${index + 1}. ${option.label}${desc}`;
+}
+
+function buildOptionQuestionBody(question: AskQuestionItem): string {
+  const lines = [
+    question.question,
+    '',
+    ...((question.options || []).map(formatQuestionOptionLine)),
+    '',
+  ];
+  if (question.multi_select) {
+    lines.push('可输入多个选项或自定义文本，使用逗号分隔。');
+  } else {
+    lines.push('可直接选择选项，也可填写自定义答复。');
+  }
+  return lines.join('\n');
+}
+
 function renderFallbackQuestionText(
   requestId: string,
   question: AskQuestionItem,
@@ -150,12 +173,11 @@ function renderFallbackQuestionText(
     '',
     ...errorLines,
     ...fieldErrorLines,
-    ...((question.options || []).map((opt, i) => {
-      const desc = opt.description ? ` - ${opt.description}` : '';
-      return `${i + 1}. ${opt.label}${desc}`;
-    })),
+    ...((question.options || []).map(formatQuestionOptionLine)),
     '',
-    `请回复: /answer ${requestId} <选项序号或选项文本>`,
+    question.multi_select
+      ? `请回复: /answer ${requestId} <多个选项或自定义文本，逗号分隔>`
+      : `请回复: /answer ${requestId} <选项序号 / 选项文本 / 自定义文本>`,
     `如需跳过: /answer ${requestId} skip`,
   ];
   return lines.join('\n');
@@ -254,9 +276,49 @@ function buildQuestionCard(
     };
   }
 
+  if (question.multi_select) {
+    return {
+      header: { title: `问题 ${index + 1}/${total}`, color: 'blue' },
+      body: withValidationError(buildOptionQuestionBody(question), validationError),
+      buttons: [
+        {
+          id: `skip-${index}`,
+          label: '跳过',
+          value: {
+            action: ASK_ACTION_SKIP,
+            group_folder: groupFolder,
+            request_id: requestId,
+          },
+        },
+      ],
+      form: {
+        name: `ask-options-form-${requestId}-${question.id}`,
+        inputs: [
+          {
+            name: 'answer',
+            type: 'textarea',
+            placeholder: '输入多个选项或自定义文本，逗号分隔',
+            required: true,
+          },
+        ],
+        submitButton: {
+          id: `submit-${index}`,
+          label: '提交答复',
+          type: 'primary',
+          value: {
+            action: ASK_ACTION_ANSWER,
+            group_folder: groupFolder,
+            request_id: requestId,
+            question_id: question.id,
+          },
+        },
+      },
+    };
+  }
+
   return {
     header: { title: `问题 ${index + 1}/${total}`, color: 'blue' },
-    body: withValidationError(question.question, validationError),
+    body: withValidationError(buildOptionQuestionBody(question), validationError),
     buttons: [
       ...((question.options || []).map((opt, idx) => ({
         id: `answer-${index}-${idx}`,
@@ -279,6 +341,28 @@ function buildQuestionCard(
         },
       },
     ],
+    form: {
+      name: `ask-options-form-${requestId}-${question.id}`,
+      inputs: [
+        {
+          name: 'answer',
+          type: 'textarea',
+          placeholder: '输入自定义答复',
+          required: true,
+        },
+      ],
+      submitButton: {
+        id: `submit-${index}`,
+        label: '提交自定义答复',
+        type: 'primary',
+        value: {
+          action: ASK_ACTION_ANSWER,
+          group_folder: groupFolder,
+          request_id: requestId,
+          question_id: question.id,
+        },
+      },
+    },
   };
 }
 
@@ -313,18 +397,13 @@ function resolveOptionAnswer(
     if (tokens.length === 0) return { ok: false, error: '至少选择一个选项。' };
     const selected: string[] = [];
     for (const token of tokens) {
-      const v = findByToken(token);
-      if (!v) return { ok: false, error: `无效选项: ${token}` };
+      const v = findByToken(token) || token;
       if (!selected.includes(v)) selected.push(v);
     }
     return { ok: true, value: selected };
   }
 
-  const resolved = findByToken(text);
-  if (!resolved) {
-    return { ok: false, error: '答案无效，请回复选项序号或完整选项文本。' };
-  }
-  return { ok: true, value: resolved };
+  return { ok: true, value: findByToken(text) || text };
 }
 
 function parseAnswerPairs(answerText: string): Record<string, string> | null {

@@ -474,6 +474,29 @@ function parseSseEvents(payload: string): ParsedSseEvent[] {
   return events;
 }
 
+function looksLikeSsePayload(
+  contentType: string | null | undefined,
+  payload: string,
+): boolean {
+  const normalizedType = (contentType || '').toLowerCase();
+  if (normalizedType.includes('text/event-stream')) return true;
+  const trimmed = payload.trimStart();
+  return trimmed.startsWith('event:') || trimmed.startsWith('data:');
+}
+
+async function readResponseText(response: {
+  text?: (() => Promise<string>) | undefined;
+  json?: (() => Promise<unknown>) | undefined;
+}): Promise<string> {
+  if (typeof response.text === 'function') {
+    return response.text();
+  }
+  if (typeof response.json === 'function') {
+    return JSON.stringify(await response.json());
+  }
+  return '';
+}
+
 function formatSseEvent(event: string, data: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
@@ -505,6 +528,159 @@ function extractTextFromBlocks(content: AnthropicContentBlock[]): string {
     .flatMap((block) => (block.type === 'text' ? [block.text] : []))
     .join('\n')
     .trim();
+}
+
+function aggregateAnthropicSseResponse(
+  ssePayload: string,
+  fallbackModel: string,
+): AnthropicMessagesResponse {
+  const events = parseSseEvents(ssePayload);
+  let model = fallbackModel;
+  let stopReason = 'end_turn';
+  let messageStart: Record<string, unknown> | null = null;
+  let latestUsage: Record<string, unknown> | null = null;
+  const blocks: StreamBlockState[] = [];
+
+  for (const event of events) {
+    if (event.data === '[DONE]') continue;
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(event.data) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+
+    const parsedType =
+      typeof parsed.type === 'string' && parsed.type.trim()
+        ? parsed.type
+        : event.event;
+
+    if (parsedType === 'message_start') {
+      const message = parsed.message;
+      if (!message || typeof message !== 'object') continue;
+      messageStart = message as Record<string, unknown>;
+      if (
+        typeof messageStart.model === 'string' &&
+        messageStart.model.trim()
+      ) {
+        model = messageStart.model;
+      }
+      if (messageStart.usage && typeof messageStart.usage === 'object') {
+        latestUsage = messageStart.usage as Record<string, unknown>;
+      }
+      continue;
+    }
+
+    if (parsedType === 'content_block_start') {
+      const index =
+        typeof parsed.index === 'number' && parsed.index >= 0
+          ? Number(parsed.index)
+          : blocks.length;
+      const contentBlock = parsed.content_block;
+      if (!contentBlock || typeof contentBlock !== 'object') continue;
+      const contentBlockRecord = contentBlock as Record<string, unknown>;
+      if (contentBlockRecord.type === 'tool_use') {
+        const block = ensureStreamBlock(blocks, index, 'tool_use');
+        if (typeof contentBlockRecord.id === 'string') {
+          block.id = contentBlockRecord.id;
+        }
+        if (typeof contentBlockRecord.name === 'string') {
+          block.name = contentBlockRecord.name;
+        }
+      } else {
+        ensureStreamBlock(blocks, index, 'text');
+      }
+      continue;
+    }
+
+    if (parsedType === 'content_block_delta') {
+      const index =
+        typeof parsed.index === 'number' && parsed.index >= 0
+          ? Number(parsed.index)
+          : 0;
+      const delta = parsed.delta;
+      if (!delta || typeof delta !== 'object') continue;
+      const deltaRecord = delta as Record<string, unknown>;
+      if (
+        deltaRecord.type === 'text_delta' &&
+        typeof deltaRecord.text === 'string'
+      ) {
+        const block = ensureStreamBlock(blocks, index, 'text');
+        block.text += deltaRecord.text;
+      } else if (
+        deltaRecord.type === 'input_json_delta' &&
+        typeof deltaRecord.partial_json === 'string'
+      ) {
+        const block = ensureStreamBlock(blocks, index, 'tool_use');
+        block.inputJson += deltaRecord.partial_json;
+      }
+      continue;
+    }
+
+    if (parsedType === 'message_delta') {
+      const delta = parsed.delta;
+      if (delta && typeof delta === 'object') {
+        const stop = (delta as Record<string, unknown>).stop_reason;
+        if (typeof stop === 'string' && stop.trim()) {
+          stopReason = stop;
+        }
+      }
+      if (parsed.usage && typeof parsed.usage === 'object') {
+        latestUsage = parsed.usage as Record<string, unknown>;
+      }
+    }
+  }
+
+  const content: AnthropicContentBlock[] = blocks.flatMap<AnthropicContentBlock>(
+    (block) => {
+      if (block.type === 'tool_use') {
+        return [
+          {
+            type: 'tool_use' as const,
+            id:
+              block.id ||
+              `toolu_anthropic_${Math.random().toString(36).slice(2, 10)}`,
+            name: block.name || 'unknown_tool',
+            input: block.inputJson
+              ? parseJsonObjectOrDefault(block.inputJson)
+              : {},
+          },
+        ];
+      }
+      if (!block.text) return [];
+      return [{ type: 'text' as const, text: block.text }];
+    },
+  );
+
+  const text = extractTextFromBlocks(content);
+  if (!text) {
+    const contentPreview = JSON.stringify(content)?.slice(0, 500) ?? 'undefined';
+    throw new Error(
+      `Anthropic API returned no text content (content=${contentPreview})`,
+    );
+  }
+
+  const raw: Record<string, unknown> = {
+    ...(messageStart || {}),
+    id:
+      messageStart && typeof messageStart.id === 'string'
+        ? messageStart.id
+        : 'msg_anthropic_stream',
+    type: 'message',
+    role: 'assistant',
+    model,
+    content,
+    stop_reason: stopReason,
+    stop_sequence: null,
+  };
+  if (latestUsage) raw.usage = latestUsage;
+
+  return {
+    text,
+    raw,
+    model,
+  };
 }
 
 function ensureStreamBlock(
@@ -1097,12 +1273,13 @@ export async function callAnthropicMessages(
         temperature: normalizedInput.temperature ?? 0,
         system: normalizedInput.system,
         messages: normalizedInput.messages,
+        stream: true,
       }),
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      const responseBody = await response.text().catch(() => '');
+      const responseBody = await readResponseText(response).catch(() => '');
       const bodySuffix = responseBody
         ? ` body=${responseBody.slice(0, 2000)}`
         : '';
@@ -1111,7 +1288,16 @@ export async function callAnthropicMessages(
       );
     }
 
-    const raw = (await response.json()) as {
+    const responseBody = await readResponseText(response);
+    const contentType = response.headers?.get?.('content-type');
+    if (looksLikeSsePayload(contentType, responseBody)) {
+      return aggregateAnthropicSseResponse(
+        responseBody,
+        input.model || config.model,
+      );
+    }
+
+    const raw = JSON.parse(responseBody) as {
       content?: unknown;
       model?: unknown;
     };

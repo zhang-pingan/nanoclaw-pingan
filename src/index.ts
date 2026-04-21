@@ -407,7 +407,7 @@ async function handleAskAnswerCommand(opts: {
   if (!parsed.answer) {
     await channel.sendMessage(
       chatJid,
-      '用法: /answer <requestId> <选项/文本>；表单可用 JSON 或 key=value；跳过请用 /answer <requestId> skip',
+      '用法: /answer <requestId> <选项/自定义文本>；表单可用 JSON 或 key=value；跳过请用 /answer <requestId> skip',
     );
     return true;
   }
