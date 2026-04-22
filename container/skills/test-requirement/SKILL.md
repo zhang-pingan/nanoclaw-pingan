@@ -79,7 +79,7 @@ description: Test implemented features in first-pass or regression mode — anal
 
 1. 按用例逐条执行，综合以下手段验证：
    - *代码审查*：阅读变更代码确认逻辑正确性
-   - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求和响应；若接口需要登录鉴权，优先使用任务中提供的 `access_token`，并显式拼装 `Authorization: Bearer {access_token}` 请求头
+   - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求和响应；若接口需要登录鉴权，优先使用任务中提供的 `access_token`，并显式拼装 `Authorization: Bearer {access_token}` 请求头。
    - *日志验证*：SSH 到 `staging.log_hosts`，查看 `staging.logs_info` 和 `staging.logs_error`
    - *数据库验证*：通过 MySQL 代理查询 `staging.mysql` 预发数据库，验证数据变更是否符合预期，注意预发表后缀加 `_gray`
 2. 对每条用例记录结果，在 `[ ]` 框内直接标记：
@@ -88,6 +88,7 @@ description: Test implemented features in first-pass or regression mode — anal
    - 阻塞：`[-]`
 3. 发现问题时，附上日志片段或数据库查询结果作为证据
 4. 如果是缺失鉴权、业务id等非代码bug，使用 `request_human_input` 获取用户反馈后继续进行测试
+5. 接口测试对于返回不报错，但某些预期应该有值但字段值为空的情况，不能全部视为通过，自行判断哪些字段是预期有值的情况；如果实在不确认的情况下使用`ask_user_question` 询问用户
 
 ### 4. 测试报告
 
