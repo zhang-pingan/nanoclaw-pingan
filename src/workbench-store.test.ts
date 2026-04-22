@@ -25,6 +25,7 @@ import {
   createWorkbenchTask,
   getWorkbenchTaskDetail,
   listWorkbenchTasks,
+  retryWorkbenchSubtask,
 } from './workbench.js';
 import {
   createWorkbenchInteractionItem,
@@ -816,6 +817,97 @@ describe('workbench approval transition sync', () => {
         item.title.includes('修复中 -> 修复中'),
       ),
     ).toBe(false);
+  });
+
+  it('allows returning from a completed confirmation subtask to that node', () => {
+    dbCreateWorkflow({
+      id: 'wf-return-confirmation-stage',
+      name: '回到确认节点',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/return-confirmation',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_return_confirmation',
+        staging_work_branch: 'staging-deploy/feature-return-confirmation',
+        access_token: '',
+      },
+      status: 'ops_deploy',
+      current_delegation_id: 'wf-del-ops-return-1',
+      round: 1,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-return-confirmation-stage');
+
+    updateWorkflow('wf-return-confirmation-stage', {
+      status: 'testing_confirm',
+      current_delegation_id: '',
+    });
+    syncWorkbenchOnTransition(
+      'wf-return-confirmation-stage',
+      'ops_deploy',
+      'testing_confirm',
+      'wf-del-ops-return-1',
+    );
+
+    updateWorkflow('wf-return-confirmation-stage', {
+      status: 'testing',
+      current_delegation_id: 'wf-del-test-return-1',
+    });
+    syncWorkbenchOnTransition(
+      'wf-return-confirmation-stage',
+      'testing_confirm',
+      'testing',
+      'wf-del-test-return-1',
+    );
+
+    updateWorkflow('wf-return-confirmation-stage', {
+      status: 'fixing',
+      current_delegation_id: 'wf-del-fixing-return-1',
+    });
+    syncWorkbenchOnTransition(
+      'wf-return-confirmation-stage',
+      'testing',
+      'fixing',
+      'wf-del-fixing-return-1',
+    );
+
+    const task = getWorkbenchTaskByWorkflowId('wf-return-confirmation-stage');
+    expect(task).not.toBeNull();
+    const detailBefore = getWorkbenchTaskDetail(task!.id);
+    const completedConfirmation = detailBefore?.subtasks.find(
+      (item) => item.stage_key === 'testing_confirm' && item.status === 'completed',
+    );
+    expect(completedConfirmation?.stage_type).toBe('confirmation');
+
+    const result = retryWorkbenchSubtask({
+      taskId: task!.id,
+      subtaskId: completedConfirmation!.id,
+    });
+    expect(result.error).toBeUndefined();
+
+    const detail = getWorkbenchTaskDetail(task!.id);
+    expect(detail).not.toBeNull();
+    expect(detail?.task.workflow_stage).toBe('testing_confirm');
+    expect(
+      detail?.action_items.map((item) => `${item.stage_key}:${item.status}`),
+    ).toEqual(['testing_confirm:pending']);
+
+    const confirmationSubtasks =
+      detail?.subtasks.filter((item) => item.stage_key === 'testing_confirm') || [];
+    expect(confirmationSubtasks).toHaveLength(2);
+    expect(confirmationSubtasks.map((item) => item.status)).toEqual([
+      'completed',
+      'current',
+    ]);
+    expect(
+      confirmationSubtasks.every((item) => item.stage_type === 'confirmation'),
+    ).toBe(true);
   });
 
   it('keeps historical delegation data on the correct re-entry subtask', () => {

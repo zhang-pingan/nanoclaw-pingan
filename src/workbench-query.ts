@@ -51,6 +51,7 @@ export interface WorkbenchStatusQueryResult {
       title: string;
       stage_key: string;
       stage_label: string;
+      stage_type: string;
       status: string;
       role?: string;
       skill?: string;
@@ -181,6 +182,7 @@ export function queryWorkbenchTaskStatuses(
           title: item.title,
           stage_key: item.stage_key,
           stage_label: item.stage_label,
+          stage_type: item.stage_type,
           status: item.status,
           role: item.role,
           skill: item.skill,

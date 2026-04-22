@@ -9259,7 +9259,8 @@ function renderWorkbenchSubtasks(subtasks) {
     });
   }
   function isAwaitingStage(item) {
-    return typeof item.stage_key === "string" && item.stage_key.startsWith("awaiting_");
+    return item.stage_type === "confirmation"
+      || (typeof item.stage_key === "string" && item.stage_key.startsWith("awaiting_"));
   }
   function getSubtaskStatusLabel(item) {
     if (item.status === "current" && isAwaitingStage(item)) {
@@ -9471,18 +9472,42 @@ function renderWorkbenchSubtasks(subtasks) {
     ? currentWorkbenchDetail.task
     : null;
   const isRetryComposerOpen = workbenchRetryComposerSubtaskId === selected.id;
+  const canRetryDelegation =
+    selected.stage_type === "delegation"
+    && !selected.manually_skipped
+    && (selected.status === "failed" || selected.status === "cancelled");
+  const canReturnConfirmation =
+    selected.stage_type === "confirmation"
+    && !selected.manually_skipped
+    && selected.status === "completed";
 
-  if (selected.role && !selected.manually_skipped && (selected.status === "failed" || selected.status === "cancelled")) {
+  if (canRetryDelegation || canReturnConfirmation) {
     const actions = document.createElement("div");
     actions.className = "workbench-subtask-actions";
-    if (selected.status === "failed") {
+    if (selected.stage_type === "delegation" && selected.status === "failed") {
       const retryBtn = document.createElement("button");
       retryBtn.className = "btn-ghost";
       retryBtn.textContent = isRetryComposerOpen ? "收起补充" : "重跑";
       retryBtn.addEventListener("click", () => toggleWorkbenchRetryComposer(selected.id));
       actions.appendChild(retryBtn);
     }
-    if (activeTask) {
+    if (canReturnConfirmation && activeTask) {
+      const returnBtn = document.createElement("button");
+      returnBtn.className = "btn-ghost";
+      returnBtn.textContent = "回到此节点";
+      returnBtn.addEventListener("click", async () => {
+        if (
+          !(await openConfirmDialog(`确认回到“${selected.stage_label || selected.title}”并重新处理该确认节点吗？`, {
+            title: "回到确认节点",
+          }))
+        ) return;
+        triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, selected.id, "", {
+          reloadAfterSuccess: true,
+        });
+      });
+      actions.appendChild(returnBtn);
+    }
+    if (canRetryDelegation && activeTask) {
       const labels = getWorkbenchApprovalLabels(activeTask, {
         approval_type: selected.stage_key,
         action_mode: "approve_only",
@@ -9502,7 +9527,7 @@ function renderWorkbenchSubtasks(subtasks) {
     }
     detailEl.appendChild(actions);
 
-    if (selected.status === "failed" && isRetryComposerOpen) {
+    if (selected.stage_type === "delegation" && selected.status === "failed" && isRetryComposerOpen) {
       const retryComposer = document.createElement("div");
       retryComposer.className = "workbench-retry-composer";
       retryComposer.innerHTML = `
@@ -10070,7 +10095,7 @@ function closeWorkbenchRetryComposer() {
   renderWorkbenchSubtasks(currentWorkbenchDetail?.subtasks || []);
 }
 
-async function triggerWorkbenchSubtaskRetry(taskId, subtaskId, retryNote = "") {
+async function triggerWorkbenchSubtaskRetry(taskId, subtaskId, retryNote = "", options = {}) {
   workbenchRetrySubmitting = true;
   renderWorkbenchSubtasks(currentWorkbenchDetail?.subtasks || []);
   try {
@@ -10084,6 +10109,13 @@ async function triggerWorkbenchSubtaskRetry(taskId, subtaskId, retryNote = "") {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (options.reloadAfterSuccess) {
+      workbenchSelectedSubtaskId = "";
+      workbenchFollowCurrentSubtaskOnce = true;
+      closeWorkbenchRetryComposer();
+      await loadWorkbenchTasks(taskId);
+      return;
+    }
     closeWorkbenchRetryComposer();
   } catch (err) {
     console.error("Failed to retry subtask:", err);
@@ -11258,6 +11290,8 @@ function applyWorkbenchRealtimeEvent(event) {
       }
       if (payload.groupFolder) subtask.target_folder = payload.groupFolder;
       renderWorkbenchSubtasks(currentWorkbenchDetail.subtasks);
+    } else {
+      scheduleWorkbenchTaskDetailReload(currentWorkbenchTaskId);
     }
   } else if (event.type === "event_created") {
     const nextId = payload.id || `rt-${Date.now()}`;

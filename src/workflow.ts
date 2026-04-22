@@ -1131,6 +1131,58 @@ export function reviseWorkflow(
   return {};
 }
 
+export function returnWorkflowToConfirmationStage(
+  workflowId: string,
+  stageKey: string,
+): { error?: string } {
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: `流程 ${workflowId} 不存在` };
+  if (workflow.status === 'paused') {
+    return { error: `流程 ${workflowId} 当前已暂停，请先恢复后再回到确认节点` };
+  }
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config)
+    return { error: `未知的流程类型: ${workflow.workflow_type}` };
+
+  const stateConfig = config.states[stageKey];
+  if (!stateConfig) {
+    return { error: `阶段 ${stageKey} 不存在` };
+  }
+  if (stateConfig.type !== 'confirmation') {
+    return { error: `阶段 ${stageKey} 不是确认节点` };
+  }
+  if (workflow.status === stageKey) {
+    return { error: `流程 ${workflowId} 当前已在阶段 ${stageKey}` };
+  }
+
+  const fromStatus = workflow.status;
+  updateWorkflow(workflowId, {
+    status: stageKey,
+    current_delegation_id: '',
+    paused_from: null,
+  });
+  syncWorkbenchOnTransition(workflowId, fromStatus, stageKey);
+  syncWorkbenchOnWorkflowUpdated(
+    workflowId,
+    `已回到阶段 ${config.status_labels[stageKey] || stageKey}`,
+    { emitRealtime: false },
+  );
+
+  const updatedWorkflow = getWorkflow(workflowId);
+  if (!updatedWorkflow) return {};
+
+  notifyMain(
+    `[流程回退] 需求「${updatedWorkflow.name}」(${workflowId}) 已回到阶段 ${config.status_labels[stageKey] || stageKey}，请重新确认。`,
+    updatedWorkflow.source_jid,
+    workflowId,
+  );
+  if (stateConfig.card) {
+    sendConfigCard(updatedWorkflow, stateConfig.card);
+  }
+  return {};
+}
+
 export function retryWorkflowStage(
   workflowId: string,
   stageKey: string,

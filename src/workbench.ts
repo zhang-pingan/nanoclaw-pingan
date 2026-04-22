@@ -41,6 +41,7 @@ import {
   getStatusLabelsForType,
   pauseWorkflow,
   resumeWorkflow,
+  returnWorkflowToConfirmationStage,
   retryWorkflowStage,
   reviseWorkflow,
   skipWorkflow,
@@ -101,6 +102,7 @@ export interface WorkbenchSubtask {
   title: string;
   stage_key: string;
   stage_label: string;
+  stage_type: 'delegation' | 'confirmation';
   status: 'completed' | 'current' | 'pending' | 'failed' | 'cancelled';
   manually_skipped?: boolean;
   role?: string;
@@ -236,13 +238,16 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
 
 function mapPersistedSubtask(
   item: WorkbenchSubtaskRecord,
+  workflowType: string,
   manuallySkippedSubtaskIds?: Set<string>,
 ): WorkbenchSubtask {
+  const stageType = getWorkflowTypeConfig(workflowType)?.states[item.stage_key]?.type;
   return {
     id: item.id,
     title: item.title,
     stage_key: item.stage_key,
     stage_label: item.title,
+    stage_type: stageType === 'confirmation' ? 'confirmation' : 'delegation',
     status:
       item.status === 'completed'
         ? 'completed'
@@ -438,6 +443,7 @@ function getStageDefinitions(workflow: Workflow): WorkbenchSubtask[] {
       title: state.role || key,
       stage_key: key,
       stage_label: config.status_labels[key] || key,
+      stage_type: state.type === 'confirmation' ? 'confirmation' : 'delegation',
       status: 'pending' as const,
       role: state.role,
       skill: state.skill,
@@ -776,7 +782,13 @@ export function getWorkbenchTaskDetail(
         workflow,
         listWorkbenchSubtasksByTask(task.id)
           .filter((item) => visibleStageKeys.has(item.stage_key))
-          .map((item) => mapPersistedSubtask(item, manuallySkippedSubtaskIds)),
+          .map((item) =>
+            mapPersistedSubtask(
+              item,
+              workflow.workflow_type,
+              manuallySkippedSubtaskIds,
+            ),
+          ),
       ),
       timeline: sortTimelineEvents(events.map(mapPersistedEvent)),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(
@@ -1097,11 +1109,28 @@ export function retryWorkbenchSubtask(input: {
     (item) => item.id === input.subtaskId,
   );
   if (!subtask) return { error: 'Subtask not found' };
-  if (subtask.status !== 'failed')
-    return { error: 'Only failed subtasks can be retried' };
 
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: 'Task not found' };
+  const stateConfig = getWorkflowTypeConfig(workflow.workflow_type)?.states[
+    subtask.stage_key
+  ];
+  if (!stateConfig) return { error: 'Stage not found' };
+
+  if (stateConfig.type === 'confirmation') {
+    if (subtask.status !== 'completed') {
+      return {
+        error: 'Only completed confirmation subtasks can return to the node',
+      };
+    }
+    return returnWorkflowToConfirmationStage(workflowId, subtask.stage_key);
+  }
+
+  if (subtask.status !== 'failed') {
+    return { error: 'Only failed delegation subtasks can be retried' };
+  }
 
   const result = retryWorkflowStage(workflowId, subtask.stage_key, {
     retryNote: input.retryNote,
