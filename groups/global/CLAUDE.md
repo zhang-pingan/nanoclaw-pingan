@@ -47,6 +47,16 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.
 
+## Service Repos
+
+For groups that have service access:
+
+- Read `/workspace/global/services.json` to find the service's `repo_path`
+- Business code repositories are mounted at `/workspace/repos/{repo_path}/`
+- Example: service `catstory` with `repo_path: "catstory"` is mounted at `/workspace/repos/catstory/`
+- `/workspace/projects/{service}/` is for project knowledge, plans, and deliverables; it is not the git repository
+- Before claiming a repo is unavailable or not mounted, actually check whether `/workspace/repos/{repo_path}/` exists
+
 ## Memory
 
 ### Structured Persistent Memory (primary path)
