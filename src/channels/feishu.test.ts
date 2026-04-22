@@ -236,4 +236,46 @@ describe('FeishuChannel card action callbacks', () => {
       },
     });
   });
+
+  it('infers workflow broadcast submit action from compact task-based form names', async () => {
+    const channel = createChannel();
+    const onCardAction = vi.fn(async () => ({
+      toast: { type: 'success' as const, content: 'ok' },
+    }));
+    channel.onCardAction = onCardAction;
+
+    const res = {
+      writeHead: vi.fn(),
+      end: vi.fn(),
+    };
+
+    await (channel as any).handleCardActionEvent(
+      {
+        event: {
+          operator: { user_id: 'user-4' },
+          context: { open_message_id: 'msg-4' },
+          action: {
+            name: 'wb-su-task-1',
+            form_value: {
+              access_token: 'demo-token',
+            },
+          },
+        },
+      },
+      res,
+    );
+
+    expect(onCardAction).toHaveBeenCalledWith({
+      action: 'wb_broadcast_submit_access_token',
+      user_id: 'user-4',
+      message_id: 'msg-4',
+      group_folder: undefined,
+      workflow_id: undefined,
+      form_value: {
+        action: 'wb_broadcast_submit_access_token',
+        task_id: 'task-1',
+        access_token: 'demo-token',
+      },
+    });
+  });
 });

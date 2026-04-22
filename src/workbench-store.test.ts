@@ -316,6 +316,10 @@ describe('workbench approval transition sync', () => {
     expect(card?.buttons?.map((button) => button.label)).toEqual([
       '跳过鉴权直接测试',
     ]);
+    expect(card?.form?.name).toBe('wb-su-wb-wf-broadcast-testing-confirm');
+    expect(card?.form?.submitButton.id).toBe(
+      'wb-su-wb-wf-broadcast-testing-confirm',
+    );
     expect(card?.form?.submitButton.label).toBe('填写 access_token 并开始测试');
   });
 
@@ -432,8 +436,14 @@ describe('workbench approval transition sync', () => {
       'wb-reply-ask-broadcast-ask-options',
     );
     expect(card?.form?.submitButton.label).toBe('提交自定义答复');
-    expect(card?.form?.submitButton.value).toMatchObject({
+    expect(card?.form?.submitButton.value).toEqual({
+      action: 'wb_broadcast_reply',
       request_id: 'ask-broadcast-ask-options',
+    });
+    expect(card?.buttons?.[0]?.value).toEqual({
+      action: 'wb_broadcast_reply',
+      request_id: 'ask-broadcast-ask-options',
+      answer: '继续',
     });
   });
 
@@ -518,6 +528,65 @@ describe('workbench approval transition sync', () => {
       type: 'success',
       content: '答案已提交，感谢。',
     });
+  });
+
+  it('uses source_ref_id for send-message broadcast actions to keep payloads short', () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-send-message',
+      name: '广播消息确认',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/broadcast-send-message',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_send_message',
+        staging_work_branch: 'staging-deploy/feature-broadcast-send-message',
+        access_token: '',
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'wf-del-broadcast-send-message',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-send-message');
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-broadcast-send-message',
+      stageKey: 'plan_examine',
+      delegationId: 'wf-del-broadcast-send-message',
+      groupFolder: 'web_plan_examine',
+      sourceType: 'send_message',
+      sourceRefId: 'msg-broadcast-send-message',
+      title: '通知确认',
+      body: '请阅读通知',
+    });
+
+    const detail = getWorkbenchTaskDetail('wb-wf-broadcast-send-message');
+    const actionItemId = detail?.action_items.find(
+      (item) => item.source_ref_id === 'msg-broadcast-send-message',
+    )?.id;
+    expect(actionItemId).toBeTruthy();
+
+    const card = buildWorkbenchBroadcastCard({
+      taskId: 'wb-wf-broadcast-send-message',
+      actionItemId: actionItemId!,
+    });
+
+    expect(card?.buttons).toEqual([
+      {
+        id: `${actionItemId}-resolve`,
+        label: '标记已读',
+        value: {
+          action: 'wb_broadcast_resolve',
+          source_type: 'send_message',
+          source_ref_id: 'msg-broadcast-send-message',
+        },
+      },
+    ]);
   });
 
   it('emits task update before subtask updates during approve transition', () => {

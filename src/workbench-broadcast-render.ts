@@ -113,15 +113,19 @@ function buildAskQuestionButtons(input: {
   requestId?: string;
   question: AskQuestionItem | null;
 }): CardButton[] {
+  const skipValue: Record<string, string> = {
+    action: 'wb_broadcast_skip_reply',
+  };
+  if (input.requestId) {
+    skipValue.request_id = input.requestId;
+  } else {
+    skipValue.task_id = input.taskId;
+    skipValue.action_item_id = input.actionItemId;
+  }
   const skipButton: CardButton = {
     id: `${input.itemId}-skip`,
     label: '跳过',
-    value: {
-      action: 'wb_broadcast_skip_reply',
-      task_id: input.taskId,
-      action_item_id: input.actionItemId,
-      ...(input.requestId ? { request_id: input.requestId } : {}),
-    },
+    value: skipValue,
   };
 
   if (
@@ -138,13 +142,19 @@ function buildAskQuestionButtons(input: {
     ...input.question.options.map((opt, index) => ({
       id: `${input.itemId}-answer-${index}`,
       label: opt.label,
-      value: {
-        action: 'wb_broadcast_reply',
-        task_id: input.taskId,
-        action_item_id: input.actionItemId,
-        answer: opt.label,
-        ...(input.requestId ? { request_id: input.requestId } : {}),
-      },
+      value: (() => {
+        const value: Record<string, string> = {
+          action: 'wb_broadcast_reply',
+          answer: opt.label,
+        };
+        if (input.requestId) {
+          value.request_id = input.requestId;
+        } else {
+          value.task_id = input.taskId;
+          value.action_item_id = input.actionItemId;
+        }
+        return value;
+      })(),
     })),
     skipButton,
   ];
@@ -158,6 +168,15 @@ function buildAskQuestionForm(input: {
   question: AskQuestionItem | null;
 }): InteractiveCard['form'] {
   const formToken = input.requestId || input.itemId;
+  const submitValue: Record<string, string> = {
+    action: 'wb_broadcast_reply',
+  };
+  if (input.requestId) {
+    submitValue.request_id = input.requestId;
+  } else {
+    submitValue.task_id = input.taskId;
+    submitValue.action_item_id = input.actionItemId;
+  }
   if (input.question && isAskFormQuestion(input.question)) {
     return {
       name: `wb-reply-${formToken}`,
@@ -180,12 +199,7 @@ function buildAskQuestionForm(input: {
         id: `wb-reply-${formToken}`,
         label: '提交',
         type: 'primary',
-        value: {
-          action: 'wb_broadcast_reply',
-          task_id: input.taskId,
-          action_item_id: input.actionItemId,
-          ...(input.requestId ? { request_id: input.requestId } : {}),
-        },
+        value: submitValue,
       },
     };
   }
@@ -205,12 +219,7 @@ function buildAskQuestionForm(input: {
         id: `wb-reply-${formToken}`,
         label: '提交答复',
         type: 'primary',
-        value: {
-          action: 'wb_broadcast_reply',
-          task_id: input.taskId,
-          action_item_id: input.actionItemId,
-          ...(input.requestId ? { request_id: input.requestId } : {}),
-        },
+        value: submitValue,
       },
     };
   }
@@ -239,12 +248,7 @@ function buildAskQuestionForm(input: {
           ? '提交自定义答复'
           : '提交答复',
       type: 'primary',
-      value: {
-        action: 'wb_broadcast_reply',
-        task_id: input.taskId,
-        action_item_id: input.actionItemId,
-        ...(input.requestId ? { request_id: input.requestId } : {}),
-      },
+      value: submitValue,
     },
   };
 }
@@ -340,6 +344,7 @@ export function buildWorkbenchBroadcastCard(input: {
   };
 
   if (item.source_type === 'workflow') {
+    const compactTaskToken = detail.task.id;
     const labels = getWorkbenchApprovalLabels({
       approvalType: item.stage_key || detail.task.workflow_status,
       actionMode: item.action_mode,
@@ -368,7 +373,7 @@ export function buildWorkbenchBroadcastCard(input: {
     });
     if (item.action_mode === 'approve_or_revise') {
       card.form = {
-        name: `wb-revise-${item.id}`,
+        name: `wb-rv-${compactTaskToken}`,
         inputs: [
           {
             name: 'revision_text',
@@ -378,7 +383,7 @@ export function buildWorkbenchBroadcastCard(input: {
           },
         ],
         submitButton: {
-          id: `${item.id}-revise`,
+          id: `wb-rv-${compactTaskToken}`,
           label: labels.revise || '返回方案修改',
           value: {
             action: 'wb_broadcast_revise',
@@ -389,7 +394,7 @@ export function buildWorkbenchBroadcastCard(input: {
       };
     } else if (item.action_mode === 'input_required') {
       card.form = {
-        name: `wb-submit-${item.id}`,
+        name: `wb-su-${compactTaskToken}`,
         inputs: [
           {
             name: 'access_token',
@@ -399,7 +404,7 @@ export function buildWorkbenchBroadcastCard(input: {
           },
         ],
         submitButton: {
-          id: `${item.id}-submit-access-token`,
+          id: `wb-su-${compactTaskToken}`,
           label: labels.revise || '填写 access_token 并开始测试',
           type: 'primary',
           value: {
@@ -442,11 +447,17 @@ export function buildWorkbenchBroadcastCard(input: {
       {
         id: `${item.id}-resolve`,
         label: '标记已读',
-        value: {
-          action: 'wb_broadcast_resolve',
-          task_id: detail.task.id,
-          action_item_id: item.id,
-        },
+        value: item.source_ref_id
+          ? {
+              action: 'wb_broadcast_resolve',
+              source_type: 'send_message',
+              source_ref_id: item.source_ref_id,
+            }
+          : {
+              action: 'wb_broadcast_resolve',
+              task_id: detail.task.id,
+              action_item_id: item.id,
+            },
       },
     ];
     return card;

@@ -13,7 +13,11 @@ import {
   OnChatMetadata,
   RegisteredGroup,
 } from '../types.js';
-import { getWorkbenchActionItem, listWorkbenchActionItemsBySource } from '../db.js';
+import {
+  getWorkbenchActionItem,
+  listWorkbenchActionItemsBySource,
+  listWorkbenchActionItemsByTask,
+} from '../db.js';
 import { GROUPS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
@@ -417,6 +421,28 @@ class FeishuChannel implements Channel {
   private inferActionValueFromActionName(
     actionName: string,
   ): Record<string, string> | undefined {
+    const workflowRevisePrefix = 'wb-rv-';
+    if (
+      actionName.startsWith(workflowRevisePrefix) &&
+      actionName.length > workflowRevisePrefix.length
+    ) {
+      return {
+        action: 'wb_broadcast_revise',
+        task_id: actionName.slice(workflowRevisePrefix.length),
+      };
+    }
+
+    const workflowSubmitPrefix = 'wb-su-';
+    if (
+      actionName.startsWith(workflowSubmitPrefix) &&
+      actionName.length > workflowSubmitPrefix.length
+    ) {
+      return {
+        action: 'wb_broadcast_submit_access_token',
+        task_id: actionName.slice(workflowSubmitPrefix.length),
+      };
+    }
+
     const askReplyPrefix = 'wb-reply-';
     if (
       actionName.startsWith(askReplyPrefix) &&
@@ -465,6 +491,21 @@ class FeishuChannel implements Channel {
       }
     }
     return null;
+  }
+
+  private resolvePendingWorkflowActionItemByTaskId(taskId: string): {
+    actionItemId: string;
+  } | null {
+    const items = listWorkbenchActionItemsByTask(taskId);
+    const item =
+      items.find(
+        (entry) => entry.source_type === 'workflow' && entry.status === 'pending',
+      ) ||
+      items.find((entry) => entry.source_type === 'workflow');
+    if (!item) return null;
+    return {
+      actionItemId: item.id,
+    };
   }
 
   private async updateDelayedCard(input: {
@@ -854,6 +895,26 @@ class FeishuChannel implements Channel {
             logger.debug(
               { err, requestId: mergedFormValue.request_id },
               'Failed to resolve action item for Feishu ask reply fallback',
+            );
+          }
+        }
+        if (
+          !mergedFormValue.action_item_id &&
+          typeof mergedFormValue.task_id === 'string' &&
+          (resolvedValue.action === 'wb_broadcast_revise' ||
+            resolvedValue.action === 'wb_broadcast_submit_access_token')
+        ) {
+          try {
+            const resolvedItem = this.resolvePendingWorkflowActionItemByTaskId(
+              mergedFormValue.task_id,
+            );
+            if (resolvedItem?.actionItemId) {
+              mergedFormValue.action_item_id = resolvedItem.actionItemId;
+            }
+          } catch (err) {
+            logger.debug(
+              { err, taskId: mergedFormValue.task_id, action: resolvedValue.action },
+              'Failed to resolve workflow action item for Feishu form fallback',
             );
           }
         }

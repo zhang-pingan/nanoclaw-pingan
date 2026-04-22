@@ -93,6 +93,18 @@ function resolveAskActionItemByRequestId(requestId?: string) {
   return undefined;
 }
 
+function resolveActionItemBySource(input: {
+  sourceType?: string;
+  sourceRefId?: string;
+}) {
+  if (!input.sourceType || !input.sourceRefId) return undefined;
+  const items = listWorkbenchActionItemsBySource(
+    input.sourceType,
+    input.sourceRefId,
+  );
+  return items.find((entry) => entry.status === 'pending') || items[0];
+}
+
 export async function handleWorkbenchBroadcastCardAction(input: {
   action: string;
   formValue?: Record<string, string>;
@@ -107,10 +119,18 @@ export async function handleWorkbenchBroadcastCardAction(input: {
   const resolvedAskItem = resolveAskActionItemByRequestId(
     input.formValue?.request_id,
   );
-  const actionItemId = input.formValue?.action_item_id || resolvedAskItem?.id;
+  const resolvedSourceItem = resolveActionItemBySource({
+    sourceType: input.formValue?.source_type,
+    sourceRefId: input.formValue?.source_ref_id,
+  });
+  const actionItemId =
+    input.formValue?.action_item_id ||
+    resolvedAskItem?.id ||
+    resolvedSourceItem?.id;
   const taskId =
     input.formValue?.task_id ||
     resolvedAskItem?.task_id ||
+    resolvedSourceItem?.task_id ||
     (actionItemId ? getWorkbenchActionItem(actionItemId)?.task_id : undefined);
   if (!taskId || !actionItemId)
     return errorResult('缺少待办标识，无法处理该卡片。');
@@ -188,6 +208,9 @@ export async function handleWorkbenchBroadcastCardAction(input: {
                     'action',
                     'task_id',
                     'action_item_id',
+                    'request_id',
+                    'source_type',
+                    'source_ref_id',
                     'reply_text',
                     'answer',
                   ].includes(key),
@@ -218,7 +241,7 @@ export async function handleWorkbenchBroadcastCardAction(input: {
       );
     }
     case 'wb_broadcast_resolve': {
-      const item = getWorkbenchActionItem(actionItemId);
+      const item = resolvedSourceItem || getWorkbenchActionItem(actionItemId);
       if (!item) return errorResult('待办不存在，无法标记已读。');
       const result = runWorkbenchActionItemAction({
         taskId,
