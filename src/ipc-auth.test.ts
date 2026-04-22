@@ -779,11 +779,7 @@ describe('ask_user_question', () => {
     expect(sentCards.length).toBe(1);
     expect(sentCards[0].jid).toBe('other@g.us');
     expect(sentCards[0].card).toMatchObject({
-      buttons: [
-        { label: 'prod' },
-        { label: 'staging' },
-        { label: '跳过' },
-      ],
+      buttons: [{ label: 'prod' }, { label: 'staging' }, { label: '跳过' }],
       form: {
         inputs: [
           {
@@ -1457,6 +1453,195 @@ describe('memory IPC tasks', () => {
         (m) =>
           typeof m.metadata === 'string' &&
           m.metadata.includes('"extraction_mode":"agent_api"'),
+      ),
+    ).toBe(true);
+  });
+
+  it('memory_extract_from_archive includes multi-line message details in the extraction payload', async () => {
+    const sourceGroup = 'other-group';
+    const conversationsDir = path.join(
+      process.cwd(),
+      'groups',
+      sourceGroup,
+      'conversations',
+    );
+    fs.mkdirSync(conversationsDir, { recursive: true });
+    const archiveFile = `2026-04-01-${Date.now()}-multiline.md`;
+    const archivePath = path.join(conversationsDir, archiveFile);
+    fs.writeFileSync(
+      archivePath,
+      [
+        '**Andy**: 已完成委派开发并回传结果。',
+        '',
+        '本次实际交付：',
+        '• 分支：pre_manhua',
+        '• 提交：2c5ef9a',
+        '• 交付文档：/workspace/projects/catstory/iteration/demo/dev.md',
+      ].join('\n'),
+      'utf-8',
+    );
+    callAnthropicMessagesMock.mockResolvedValue({
+      model: 'claude-test',
+      raw: {},
+      text: JSON.stringify({ memories: [] }),
+    });
+
+    try {
+      await processTaskIpc(
+        {
+          type: 'memory_extract_from_archive',
+          archiveFile,
+          archiveHash: 'multi-line',
+          round: 1,
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+    } finally {
+      fs.unlinkSync(archivePath);
+    }
+
+    expect(callAnthropicMessagesMock).toHaveBeenCalledTimes(1);
+    const requestPayload = callAnthropicMessagesMock.mock.calls[0]?.[0] as
+      | { messages?: Array<{ content?: string }> }
+      | undefined;
+    const serialized = requestPayload?.messages?.[0]?.content || '';
+    expect(serialized).toContain('分支：pre_manhua');
+    expect(serialized).toContain('提交：2c5ef9a');
+    expect(serialized).toContain(
+      '交付文档：/workspace/projects/catstory/iteration/demo/dev.md',
+    );
+  });
+
+  it('memory_extract_from_archive rejects generic completion boilerplate memories', async () => {
+    const sourceGroup = 'other-group';
+    const conversationsDir = path.join(
+      process.cwd(),
+      'groups',
+      sourceGroup,
+      'conversations',
+    );
+    fs.mkdirSync(conversationsDir, { recursive: true });
+    const archiveFile = `2026-04-01-${Date.now()}-boilerplate.md`;
+    const archivePath = path.join(conversationsDir, archiveFile);
+    fs.writeFileSync(
+      archivePath,
+      ['**Andy**: 已完成一次委派测试并回传结果。'].join('\n'),
+      'utf-8',
+    );
+    callAnthropicMessagesMock.mockResolvedValue({
+      model: 'claude-test',
+      raw: {},
+      text: JSON.stringify({
+        memories: [
+          {
+            layer: 'episodic',
+            memory_type: 'summary',
+            content: '已完成一次委派测试并回传结果。',
+            reason: '消息明确说明一项任务已经完成并给出了结果回传。',
+            confidence: 0.97,
+            source_indexes: [0],
+          },
+        ],
+      }),
+    });
+
+    try {
+      await processTaskIpc(
+        {
+          type: 'memory_extract_from_archive',
+          archiveFile,
+          archiveHash: 'boilerplate',
+          round: 1,
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+    } finally {
+      fs.unlinkSync(archivePath);
+    }
+
+    const archiveMemories = listMemories(sourceGroup, 50).filter(
+      (m) =>
+        m.source === 'archive' &&
+        typeof m.metadata === 'string' &&
+        m.metadata.includes(archiveFile),
+    );
+    expect(archiveMemories).toHaveLength(0);
+  });
+
+  it('memory_extract_from_archive keeps concrete episodic outcomes with actionable detail', async () => {
+    const sourceGroup = 'other-group';
+    const conversationsDir = path.join(
+      process.cwd(),
+      'groups',
+      sourceGroup,
+      'conversations',
+    );
+    fs.mkdirSync(conversationsDir, { recursive: true });
+    const archiveFile = `2026-04-01-${Date.now()}-concrete-outcome.md`;
+    const archivePath = path.join(conversationsDir, archiveFile);
+    fs.writeFileSync(
+      archivePath,
+      [
+        '**Andy**: 已按委派要求执行并回传结果。',
+        '',
+        '排查结果：',
+        '• catstory 预发部署成功',
+        '• Jenkins Build #63 结果为 SUCCESS',
+        '• 主群已收到阶段性汇报',
+      ].join('\n'),
+      'utf-8',
+    );
+    callAnthropicMessagesMock.mockResolvedValue({
+      model: 'claude-test',
+      raw: {},
+      text: JSON.stringify({
+        memories: [
+          {
+            layer: 'episodic',
+            memory_type: 'summary',
+            content:
+              'catstory 预发部署成功，Jenkins Build #63 结果为 SUCCESS。',
+            reason: '消息明确给出了具体服务、部署结果和构建编号。',
+            confidence: 0.91,
+            source_indexes: [0],
+          },
+        ],
+      }),
+    });
+
+    try {
+      await processTaskIpc(
+        {
+          type: 'memory_extract_from_archive',
+          archiveFile,
+          archiveHash: 'concrete-outcome',
+          round: 1,
+        },
+        sourceGroup,
+        false,
+        deps,
+      );
+    } finally {
+      fs.unlinkSync(archivePath);
+    }
+
+    const archiveMemories = listMemories(sourceGroup, 50).filter(
+      (m) =>
+        m.source === 'archive' &&
+        typeof m.metadata === 'string' &&
+        m.metadata.includes(archiveFile),
+    );
+    expect(
+      archiveMemories.some(
+        (m) =>
+          m.layer === 'episodic' &&
+          m.memory_type === 'summary' &&
+          m.content ===
+            'catstory 预发部署成功，Jenkins Build #63 结果为 SUCCESS。',
       ),
     ).toBe(true);
   });

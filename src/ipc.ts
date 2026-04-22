@@ -413,25 +413,79 @@ function normalizeMemoryCandidateContent(content: string): string {
   return content.replace(/\s+/g, ' ').trim();
 }
 
+function stripLowValueProcessPhrases(content: string): string {
+  return normalizeMemoryCandidateContent(content)
+    .toLowerCase()
+    .replace(/最近一次归档中[，,:：]?\s*/g, ' ')
+    .replace(
+      /(?:已|已经)完成(?:一次|一轮|本轮)?(?:委派)?(?:测试|开发|复测|复核|审核|部署|处理|修复|排查)?并(?:已)?回传结果/g,
+      ' ',
+    )
+    .replace(/已按(?:委派要求|要求)?执行并回传结果/g, ' ')
+    .replace(/(?:开发|测试|复核|部署)?委派已完成并已回传结果/g, ' ')
+    .replace(/(?:以及|并且|且)?(?:一轮|本轮)?复测并回传结果/g, ' ')
+    .replace(/(?:回传结果|回复委派|委派结果)/g, ' ')
+    .replace(/[，。！？；：,.!?;:、"'`“”‘’()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isLowValueProcessSummaryText(content: string): boolean {
+  const normalized = normalizeMemoryCandidateContent(content);
+  if (!normalized) return true;
+  if (
+    !/(完成|回传结果|委派|复测|复核|审核|部署|开发|测试|排查)/.test(normalized)
+  ) {
+    return false;
+  }
+  const stripped = stripLowValueProcessPhrases(normalized).replace(/\s+/g, '');
+  return stripped.length <= 8;
+}
+
 function parseArchiveMarkdownMessages(
   markdown: string,
 ): ExtractedArchiveMessage[] {
   const lines = markdown.split('\n');
   const messages: ExtractedArchiveMessage[] = [];
-  const lineRe = /^\*\*([^*]+)\*\*:\s*(.+)\s*$/;
-  for (const line of lines) {
-    const m = line.match(lineRe);
-    if (!m) continue;
-    const rawSender = m[1].trim();
-    const content = m[2].trim();
-    if (!rawSender || !content) continue;
+  const lineRe = /^\*\*([^*]+)\*\*:\s*(.*)\s*$/;
+  let current: {
+    rawSender: string;
+    sender: ExtractedArchiveMessage['sender'];
+    lines: string[];
+  } | null = null;
+
+  const flushCurrent = () => {
+    if (!current) return;
+    const content = current.lines.join('\n').trim();
+    if (!current.rawSender || !content) {
+      current = null;
+      return;
+    }
     messages.push({
       index: messages.length,
-      sender: normalizeArchiveSender(rawSender),
-      raw_sender: rawSender,
+      sender: current.sender,
+      raw_sender: current.rawSender,
       content,
     });
+    current = null;
+  };
+
+  for (const line of lines) {
+    const m = line.match(lineRe);
+    if (m) {
+      flushCurrent();
+      const rawSender = m[1].trim();
+      current = {
+        rawSender,
+        sender: normalizeArchiveSender(rawSender),
+        lines: [m[2]],
+      };
+      continue;
+    }
+    if (!current) continue;
+    current.lines.push(line);
   }
+  flushCurrent();
   return messages;
 }
 
@@ -565,6 +619,9 @@ function buildArchiveExtractionSystemPrompt(): string {
     'Extraction policy: canonical is for durable user preferences, long-term rules, and stable facts.',
     'Extraction policy: working is for explicit current tasks, short-term goals, or immediate context mentioned by the user in the latest conversation.',
     'Extraction policy: episodic is for clearly completed outcomes or recent event summaries only when completion is explicit.',
+    'For episodic memories, keep only concrete outcomes with specific deliverables, blockers, causes, IDs, branches, builds, documents, APIs, or other actionable details.',
+    'Never extract generic workflow boilerplate such as "已完成委派测试并回传结果", "已完成复核并回传结果", "已按委派要求执行并回传结果", or similar handoff/completion chatter.',
+    'If a message starts with a generic completion sentence but later includes concrete details, extract the concrete details instead of the generic lead-in.',
     'If the user clearly asks the assistant to do something in the current conversation, prefer outputting one working summary memory for that task.',
     'When both a long-term preference and a current task are present, output both instead of choosing only one.',
     'Do not quote raw noisy text. Rewrite memories into clean, compact statements.',
@@ -659,6 +716,22 @@ function validateArchiveMemoryCandidates(
     );
     if (sourceIndexes.length === 0) continue;
     if (!confidencePasses(candidate, cfg)) continue;
+    const sourceMessages = sourceIndexes
+      .map((idx) => messages.find((message) => message.index === idx))
+      .filter(
+        (message): message is ExtractedArchiveMessage => message !== undefined,
+      );
+    if (
+      candidate.layer !== 'canonical' &&
+      candidate.memory_type === 'summary' &&
+      (isLowValueProcessSummaryText(content) ||
+        (sourceMessages.length > 0 &&
+          sourceMessages.every((message) =>
+            isLowValueProcessSummaryText(message.content),
+          )))
+    ) {
+      continue;
+    }
 
     const key = `${candidate.layer}|${candidate.memory_type}|${content.toLowerCase()}`;
     if (deduped.has(key)) continue;
