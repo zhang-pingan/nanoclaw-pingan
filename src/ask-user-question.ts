@@ -227,6 +227,7 @@ function buildQuestionCard(
   validationError?: string,
   validationErrors?: Record<string, string>,
 ): InteractiveCard {
+  const formNameBase = `ask-${requestId}-${index}`;
   if (isFormQuestion(question)) {
     const fields = question.fields || [];
     return {
@@ -244,7 +245,7 @@ function buildQuestionCard(
         },
       ],
       form: {
-        name: `ask-form-${requestId}-${question.id}`,
+        name: `${formNameBase}-form`,
         inputs: fields.map((f) => ({
           name: f.id,
           placeholder: fieldPlaceholder(f),
@@ -292,7 +293,7 @@ function buildQuestionCard(
         },
       ],
       form: {
-        name: `ask-options-form-${requestId}-${question.id}`,
+        name: `${formNameBase}-options`,
         inputs: [
           {
             name: 'answer',
@@ -342,7 +343,7 @@ function buildQuestionCard(
       },
     ],
     form: {
-      name: `ask-options-form-${requestId}-${question.id}`,
+      name: `${formNameBase}-options`,
       inputs: [
         {
           name: 'answer',

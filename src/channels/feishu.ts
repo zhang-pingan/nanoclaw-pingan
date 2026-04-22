@@ -13,6 +13,7 @@ import {
   OnChatMetadata,
   RegisteredGroup,
 } from '../types.js';
+import { getWorkbenchActionItem, listWorkbenchActionItemsBySource } from '../db.js';
 import { GROUPS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
@@ -245,16 +246,59 @@ class FeishuChannel implements Channel {
       elements.push({ tag: 'hr' });
       const formElements: unknown[] = [];
       for (const input of card.form.inputs) {
-        formElements.push({
+        const label = input.placeholder || input.name;
+        if (
+          (input.type === 'enum' || input.type === 'boolean') &&
+          (input.options?.length || input.type === 'boolean')
+        ) {
+          const options =
+            input.options && input.options.length > 0
+              ? input.options
+              : [
+                  { value: 'true', label: '是' },
+                  { value: 'false', label: '否' },
+                ];
+          const selectElement: Record<string, unknown> = {
+            tag: 'select_static',
+            name: input.name,
+            label: { tag: 'plain_text', content: label },
+            label_position: 'left',
+            placeholder: {
+              tag: 'plain_text',
+              content: input.placeholder || '请选择',
+            },
+            options: options.map((option) => ({
+              text: {
+                tag: 'plain_text',
+                content: option.label || option.value,
+              },
+              value: option.value,
+            })),
+          };
+          if (input.required) selectElement.required = true;
+          formElements.push(selectElement);
+          continue;
+        }
+
+        const inputElement: Record<string, unknown> = {
           tag: 'input',
           name: input.name,
+          label: { tag: 'plain_text', content: label },
+          label_position: 'left',
           placeholder: { tag: 'plain_text', content: input.placeholder || '' },
-        });
+        };
+        if (input.required) inputElement.required = true;
+        if (typeof input.max_length === 'number') {
+          inputElement.max_length = input.max_length;
+        }
+        formElements.push(inputElement);
       }
       const submitButton: Record<string, unknown> = {
         tag: 'button',
         name: card.form.submitButton.id,
         text: { tag: 'plain_text', content: card.form.submitButton.label },
+        action_type: 'form_submit',
+        value: card.form.submitButton.value,
       };
       if (
         card.form.submitButton.type &&
@@ -266,7 +310,6 @@ class FeishuChannel implements Channel {
       elements.push({
         tag: 'form',
         name: card.form.name,
-        value: card.form.submitButton.value,
         elements: formElements,
       });
     }
@@ -368,6 +411,59 @@ class FeishuChannel implements Channel {
       }
     }
 
+    return null;
+  }
+
+  private inferActionValueFromActionName(
+    actionName: string,
+  ): Record<string, string> | undefined {
+    const askReplyPrefix = 'wb-reply-';
+    if (
+      actionName.startsWith(askReplyPrefix) &&
+      actionName.length > askReplyPrefix.length
+    ) {
+      return {
+        action: 'wb_broadcast_reply',
+        request_id: actionName.slice(askReplyPrefix.length),
+      };
+    }
+
+    const suffixMap: Array<[string, string]> = [
+      ['-submit-access-token', 'wb_broadcast_submit_access_token'],
+      ['-revise', 'wb_broadcast_revise'],
+      ['-reply', 'wb_broadcast_reply'],
+    ];
+
+    for (const [suffix, action] of suffixMap) {
+      if (!actionName.endsWith(suffix) || actionName.length <= suffix.length) {
+        continue;
+      }
+      return {
+        action,
+        action_item_id: actionName.slice(0, -suffix.length),
+      };
+    }
+
+    return undefined;
+  }
+
+  private resolveAskActionItemByRequestId(requestId: string): {
+    actionItemId: string;
+    taskId?: string;
+  } | null {
+    for (const sourceType of [
+      'ask_user_question',
+      'request_human_input',
+    ] as const) {
+      const items = listWorkbenchActionItemsBySource(sourceType, requestId);
+      const item = items.find((entry) => entry.status === 'pending') || items[0];
+      if (item) {
+        return {
+          actionItemId: item.id,
+          taskId: item.task_id,
+        };
+      }
+    }
     return null;
   }
 
@@ -713,9 +809,14 @@ class FeishuChannel implements Channel {
     res: http.ServerResponse,
   ): Promise<void> {
     const action = payload.event?.action;
+    const actionName =
+      typeof action?.name === 'string' ? action.name.trim() : '';
     const value = action?.value as
       | { workflow_id?: string; action?: string; group_folder?: string }
       | undefined;
+    const inferredValue = this.inferActionValueFromActionName(actionName);
+    const resolvedValue =
+      value && typeof value.action === 'string' ? value : inferredValue;
     const userId = payload.event?.operator?.user_id || '';
     const operatorOpenId = payload.event?.operator?.open_id || '';
     const messageId = payload.event?.context?.open_message_id || '';
@@ -726,17 +827,58 @@ class FeishuChannel implements Channel {
       let result:
         | Awaited<ReturnType<NonNullable<typeof this.onCardAction>>>
         | undefined;
-      if (value?.action && this.onCardAction) {
-        const mergedFormValue = {
-          ...(value || {}),
+      if (resolvedValue?.action && this.onCardAction) {
+        const mergedFormValue: Record<string, string> = {
           ...(formValue || {}),
         };
+        for (const [key, candidate] of Object.entries(resolvedValue)) {
+          if (typeof candidate === 'string' && candidate) {
+            mergedFormValue[key] = candidate;
+          }
+        }
+        if (
+          !mergedFormValue.action_item_id &&
+          typeof mergedFormValue.request_id === 'string'
+        ) {
+          try {
+            const resolvedItem = this.resolveAskActionItemByRequestId(
+              mergedFormValue.request_id,
+            );
+            if (resolvedItem?.actionItemId) {
+              mergedFormValue.action_item_id = resolvedItem.actionItemId;
+            }
+            if (!mergedFormValue.task_id && resolvedItem?.taskId) {
+              mergedFormValue.task_id = resolvedItem.taskId;
+            }
+          } catch (err) {
+            logger.debug(
+              { err, requestId: mergedFormValue.request_id },
+              'Failed to resolve action item for Feishu ask reply fallback',
+            );
+          }
+        }
+        if (
+          !mergedFormValue.task_id &&
+          typeof mergedFormValue.action_item_id === 'string'
+        ) {
+          try {
+            const item = getWorkbenchActionItem(mergedFormValue.action_item_id);
+            if (item?.task_id) {
+              mergedFormValue.task_id = item.task_id;
+            }
+          } catch (err) {
+            logger.debug(
+              { err, actionItemId: mergedFormValue.action_item_id },
+              'Failed to resolve task_id for Feishu card action fallback',
+            );
+          }
+        }
         result = await this.onCardAction({
-          action: value.action,
+          action: resolvedValue.action,
           user_id: userId,
           message_id: messageId,
-          group_folder: value.group_folder,
-          workflow_id: value.workflow_id,
+          group_folder: resolvedValue.group_folder,
+          workflow_id: resolvedValue.workflow_id,
           form_value: mergedFormValue,
         });
       }
@@ -757,14 +899,14 @@ class FeishuChannel implements Channel {
           card: result.replacementCard,
         }).catch((err) => {
           logger.warn(
-            { err, messageId, action: value?.action, updateToken },
+            { err, messageId, action: resolvedValue?.action, updateToken },
             'Failed to perform delayed Feishu card update',
           );
         });
       }
     } catch (err) {
       logger.warn(
-        { err, action: value?.action, messageId },
+        { err, action: resolvedValue?.action, messageId },
         'Feishu card action callback failed',
       );
       res.writeHead(200, { 'Content-Type': 'application/json' });

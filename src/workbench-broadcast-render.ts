@@ -110,6 +110,7 @@ function buildAskQuestionButtons(input: {
   itemId: string;
   taskId: string;
   actionItemId: string;
+  requestId?: string;
   question: AskQuestionItem | null;
 }): CardButton[] {
   const skipButton: CardButton = {
@@ -119,6 +120,7 @@ function buildAskQuestionButtons(input: {
       action: 'wb_broadcast_skip_reply',
       task_id: input.taskId,
       action_item_id: input.actionItemId,
+      ...(input.requestId ? { request_id: input.requestId } : {}),
     },
   };
 
@@ -141,6 +143,7 @@ function buildAskQuestionButtons(input: {
         task_id: input.taskId,
         action_item_id: input.actionItemId,
         answer: opt.label,
+        ...(input.requestId ? { request_id: input.requestId } : {}),
       },
     })),
     skipButton,
@@ -151,11 +154,13 @@ function buildAskQuestionForm(input: {
   itemId: string;
   taskId: string;
   actionItemId: string;
+  requestId?: string;
   question: AskQuestionItem | null;
 }): InteractiveCard['form'] {
+  const formToken = input.requestId || input.itemId;
   if (input.question && isAskFormQuestion(input.question)) {
     return {
-      name: `wb-reply-${input.itemId}`,
+      name: `wb-reply-${formToken}`,
       inputs: (input.question.fields || []).map((field) => ({
         name: field.id,
         placeholder: askFieldPlaceholder(field),
@@ -172,13 +177,14 @@ function buildAskQuestionForm(input: {
         format: field.format,
       })),
       submitButton: {
-        id: `${input.itemId}-reply`,
+        id: `wb-reply-${formToken}`,
         label: '提交',
         type: 'primary',
         value: {
           action: 'wb_broadcast_reply',
           task_id: input.taskId,
           action_item_id: input.actionItemId,
+          ...(input.requestId ? { request_id: input.requestId } : {}),
         },
       },
     };
@@ -186,7 +192,7 @@ function buildAskQuestionForm(input: {
 
   if (input.question?.multi_select) {
     return {
-      name: `wb-reply-${input.itemId}`,
+      name: `wb-reply-${formToken}`,
       inputs: [
         {
           name: 'reply_text',
@@ -196,20 +202,21 @@ function buildAskQuestionForm(input: {
         },
       ],
       submitButton: {
-        id: `${input.itemId}-reply`,
+        id: `wb-reply-${formToken}`,
         label: '提交答复',
         type: 'primary',
         value: {
           action: 'wb_broadcast_reply',
           task_id: input.taskId,
           action_item_id: input.actionItemId,
+          ...(input.requestId ? { request_id: input.requestId } : {}),
         },
       },
     };
   }
 
   return {
-    name: `wb-reply-${input.itemId}`,
+    name: `wb-reply-${formToken}`,
     inputs: [
       {
         name: 'reply_text',
@@ -224,7 +231,7 @@ function buildAskQuestionForm(input: {
       },
     ],
     submitButton: {
-      id: `${input.itemId}-reply`,
+      id: `wb-reply-${formToken}`,
       label:
         input.question &&
         Array.isArray(input.question.options) &&
@@ -236,6 +243,7 @@ function buildAskQuestionForm(input: {
         action: 'wb_broadcast_reply',
         task_id: input.taskId,
         action_item_id: input.actionItemId,
+        ...(input.requestId ? { request_id: input.requestId } : {}),
       },
     },
   };
@@ -410,17 +418,20 @@ export function buildWorkbenchBroadcastCard(input: {
     item.source_type === 'ask_user_question' ||
     item.source_type === 'request_human_input'
   ) {
+    const requestId = item.source_ref_id || undefined;
     const question = getCurrentAskQuestion(item);
     card.form = buildAskQuestionForm({
       itemId: item.id,
       taskId: detail.task.id,
       actionItemId: item.id,
+      requestId,
       question,
     });
     card.buttons = buildAskQuestionButtons({
       itemId: item.id,
       taskId: detail.task.id,
       actionItemId: item.id,
+      requestId,
       question,
     });
     return card;

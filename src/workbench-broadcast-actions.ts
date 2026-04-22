@@ -1,4 +1,8 @@
-import { getAskQuestion, getWorkbenchActionItem } from './db.js';
+import {
+  getAskQuestion,
+  getWorkbenchActionItem,
+  listWorkbenchActionItemsBySource,
+} from './db.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
 import { logger } from './logger.js';
 import type {
@@ -76,6 +80,19 @@ export function resolveAskAnswerGroupFolder(input: {
   );
 }
 
+function resolveAskActionItemByRequestId(requestId?: string) {
+  if (!requestId) return undefined;
+  for (const sourceType of [
+    'ask_user_question',
+    'request_human_input',
+  ] as const) {
+    const items = listWorkbenchActionItemsBySource(sourceType, requestId);
+    const item = items.find((entry) => entry.status === 'pending') || items[0];
+    if (item) return item;
+  }
+  return undefined;
+}
+
 export async function handleWorkbenchBroadcastCardAction(input: {
   action: string;
   formValue?: Record<string, string>;
@@ -87,8 +104,14 @@ export async function handleWorkbenchBroadcastCardAction(input: {
   sendMessage: (jid: string, text: string) => Promise<void>;
   userId: string;
 }): Promise<WorkbenchBroadcastCardActionResult> {
-  const taskId = input.formValue?.task_id;
-  const actionItemId = input.formValue?.action_item_id;
+  const resolvedAskItem = resolveAskActionItemByRequestId(
+    input.formValue?.request_id,
+  );
+  const actionItemId = input.formValue?.action_item_id || resolvedAskItem?.id;
+  const taskId =
+    input.formValue?.task_id ||
+    resolvedAskItem?.task_id ||
+    (actionItemId ? getWorkbenchActionItem(actionItemId)?.task_id : undefined);
   if (!taskId || !actionItemId)
     return errorResult('缺少待办标识，无法处理该卡片。');
 
@@ -146,7 +169,7 @@ export async function handleWorkbenchBroadcastCardAction(input: {
     }
     case 'wb_broadcast_reply':
     case 'wb_broadcast_skip_reply': {
-      const item = getWorkbenchActionItem(actionItemId);
+      const item = resolvedAskItem || getWorkbenchActionItem(actionItemId);
       if (!item?.source_ref_id || !item.group_folder) {
         return errorResult('未找到原始问答请求，无法继续处理。');
       }

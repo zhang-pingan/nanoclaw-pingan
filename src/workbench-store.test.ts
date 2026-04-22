@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { initWorkbenchEvents } from './workbench-events.js';
 import {
   _initTestDatabase,
+  createAskQuestion,
   createDelegation,
   createWorkflow as dbCreateWorkflow,
   getAllRegisteredGroups,
@@ -36,6 +37,7 @@ import {
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
 import { buildWorkbenchBroadcastCard } from './workbench-broadcast-render.js';
+import { handleWorkbenchBroadcastCardAction } from './workbench-broadcast-actions.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
 const MAIN_GROUP: RegisteredGroup = {
@@ -317,6 +319,53 @@ describe('workbench approval transition sync', () => {
     expect(card?.form?.submitButton.label).toBe('填写 access_token 并开始测试');
   });
 
+  it('accepts testing_confirm submit actions when Feishu only returns action_item_id', async () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-testing-confirm-feishu-fallback',
+      name: '广播测试确认飞书回调兜底',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/broadcast-testing-confirm-feishu-fallback',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_testing_confirm_feishu_fallback',
+        staging_work_branch:
+          'staging-deploy/feature-broadcast-testing-confirm-feishu-fallback',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated(
+      'wf-broadcast-testing-confirm-feishu-fallback',
+    );
+
+    const result = await handleWorkbenchBroadcastCardAction({
+      action: 'wb_broadcast_submit_access_token',
+      formValue: {
+        action_item_id:
+          'wb-action-wf-broadcast-testing-confirm-feishu-fallback-testing_confirm',
+        access_token: 'demo-token',
+      },
+      registeredGroups: getAllRegisteredGroups(),
+      sendMessage: async () => {},
+      userId: 'user-1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.toast).toEqual({
+      type: 'success',
+      content: '已提交 access_token，正在开始测试。',
+    });
+  });
+
   it('renders ask-question option buttons in broadcast cards', () => {
     dbCreateWorkflow({
       id: 'wf-broadcast-ask-options',
@@ -378,7 +427,97 @@ describe('workbench approval transition sync', () => {
       '回滚',
       '跳过',
     ]);
+    expect(card?.form?.name).toBe('wb-reply-ask-broadcast-ask-options');
+    expect(card?.form?.submitButton.id).toBe(
+      'wb-reply-ask-broadcast-ask-options',
+    );
     expect(card?.form?.submitButton.label).toBe('提交自定义答复');
+    expect(card?.form?.submitButton.value).toMatchObject({
+      request_id: 'ask-broadcast-ask-options',
+    });
+  });
+
+  it('resolves ask-question broadcast replies by request_id when action_item_id is absent', async () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-ask-reply-request-id',
+      name: '广播问答回调 request_id 兜底',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/broadcast-ask-reply-request-id',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_ask_reply_request_id',
+        staging_work_branch:
+          'staging-deploy/feature-broadcast-ask-reply-request-id',
+        access_token: '',
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'wf-del-broadcast-ask-reply-request-id',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-ask-reply-request-id');
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-broadcast-ask-reply-request-id',
+      stageKey: 'plan_examine',
+      delegationId: 'wf-del-broadcast-ask-reply-request-id',
+      groupFolder: 'web_plan_examine',
+      sourceType: 'ask_user_question',
+      sourceRefId: 'aq-broadcast-reply-request-id',
+      title: '请选择处理方式',
+      body: '请选择处理方式',
+      extra: {
+        current_question: {
+          id: 'q-broadcast-ask-reply-request-id',
+          question: '请选择处理方式',
+          options: [{ label: '继续' }],
+        },
+      },
+    });
+    createAskQuestion({
+      id: 'aq-broadcast-reply-request-id',
+      group_folder: 'web_plan_examine',
+      chat_jid: 'plan-examine@g.us',
+      status: 'pending',
+      payload_json: JSON.stringify({
+        questions: [
+          {
+            id: 'q-broadcast-ask-reply-request-id',
+            question: '请选择处理方式',
+            options: [{ label: '继续' }],
+          },
+        ],
+        metadata: { source_type: 'ask_user_question' },
+      }),
+      answers_json: null,
+      current_index: 0,
+      created_at: '2026-04-07T00:00:00.000Z',
+      expires_at: '2026-05-08T00:00:00.000Z',
+      answered_at: null,
+      responder_user_id: null,
+    });
+
+    const result = await handleWorkbenchBroadcastCardAction({
+      action: 'wb_broadcast_reply',
+      formValue: {
+        request_id: 'aq-broadcast-reply-request-id',
+        answer: '继续',
+      },
+      registeredGroups: getAllRegisteredGroups(),
+      sendMessage: async () => {},
+      userId: 'user-1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.toast).toEqual({
+      type: 'success',
+      content: '答案已提交，感谢。',
+    });
   });
 
   it('emits task update before subtask updates during approve transition', () => {
