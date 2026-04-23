@@ -156,13 +156,17 @@ doc_type: test
 1. 保存报告后，在群内发送测试概况和失败用例摘要
 2. 如果存在失败用例，告知用户：“共发现 {N} 个问题，详见测试报告。建议将问题反馈给开发群进行修复。”
 3. 调用 `complete_delegation` 返回结果：
-   - 全部通过：outcome=`success`
-   - 全部失败或部分失败：outcome=`failure`
-4. result JSON 应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`test_doc`、`summary`
+   - 测试已执行完成并得出业务结论时，统一使用 `outcome=success`
+   - `outcome=failure` 只用于执行层失败或阻塞，例如：缺少关键鉴权信息且无法继续、预发环境不可用、工具异常、测试报告无法形成
+4. result JSON 应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`test_doc`、`verdict`、`summary`、`findings`、`evidence`
    - `deliverable` 是文件夹名，不含 `.md` 后缀
    - `bugs` 中每个对象建议包含：`id`、`title`、`severity`、`related_case`
    - `id` 必须与测试报告中的 BUG 编号一致，例如 `BUG-001`
    - `related_case` 建议填写对应测试用例编号，例如 `TC-001`
+   - `severity` 使用 `critical | high | medium | low`
+   - 全部通过时使用 `verdict=passed`
+   - 只要存在失败用例或 bug，使用 `verdict=failed`
+   - 信息不足、环境阻塞但已经形成结构化阶段结论时，使用 `verdict=pending`
 
 全部通过返回示例：
 
@@ -179,7 +183,16 @@ doc_type: test
   "staging_base_branch": "已确认预发分支",
   "staging_work_branch": "已确认预发工作分支",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
-  "summary": "共 10 条，通过 10 条，失败 0 条，阻塞 0 条"
+  "verdict": "passed",
+  "summary": "共 10 条，通过 10 条，失败 0 条，阻塞 0 条",
+  "findings": [],
+  "evidence": [
+    {
+      "type": "artifact",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "summary": "已写入测试报告"
+    }
+  ]
 }
 ```
 
@@ -195,13 +208,13 @@ doc_type: test
     {
       "id": "BUG-001",
       "title": "昵称长度超限时接口未返回预期错误",
-      "severity": "严重",
+      "severity": "high",
       "related_case": "TC-001"
     },
     {
       "id": "BUG-002",
       "title": "未登录访问资料接口返回 500",
-      "severity": "一般",
+      "severity": "medium",
       "related_case": "TC-004"
     }
   ],
@@ -211,7 +224,25 @@ doc_type: test
   "staging_base_branch": "已确认预发分支",
   "staging_work_branch": "已确认预发工作分支",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
-  "summary": "共 10 条，通过 8 条，失败 2 条，阻塞 0 条"
+  "verdict": "failed",
+  "summary": "共 10 条，通过 8 条，失败 2 条，阻塞 0 条",
+  "findings": [
+    {
+      "code": "bug_detected",
+      "severity": "high",
+      "message": "BUG-001 昵称长度超限时接口未返回预期错误。",
+      "stageKey": "testing",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "suggestion": "修复昵称长度校验与错误码返回。"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "artifact",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "summary": "测试报告中记录了 2 个失败用例"
+    }
+  ]
 }
 ```
 
@@ -285,9 +316,9 @@ doc_type: test
 
 1. 保存复测结果后，在群内发送本轮回归概况和未通过问题摘要
 2. 调用 `complete_delegation` 返回结果：
-   - 本轮全部通过：outcome=`success`
-   - 仍有未修复或新问题：outcome=`failure`
-3. result JSON 仍应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`test_doc`、`summary`
+   - 复测已执行完成并得出结论时，统一使用 `outcome=success`
+   - `outcome=failure` 只用于执行层失败或阻塞
+3. result JSON 仍应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`test_doc`、`verdict`、`summary`、`findings`、`evidence`
 4. 复测模式下的额外要求：
    - 对“旧问题未修复”的情况，必须继续使用原 `BUG ID`
    - 对“已修复”的问题，不要继续保留在 `bugs` 中

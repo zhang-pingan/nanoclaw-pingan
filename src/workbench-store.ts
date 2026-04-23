@@ -11,6 +11,7 @@ import {
   getDelegation,
   getWorkbenchSubtaskByDelegationId,
   getDelegationsByWorkflow,
+  getWorkflowStageEvaluation,
   getWorkbenchActionItem,
   getWorkbenchTaskById,
   getWorkbenchSubtaskByStage,
@@ -18,6 +19,7 @@ import {
   getWorkflow,
   listWorkbenchActionItemsByTask,
   listWorkbenchActionItemsBySource,
+  listWorkflowStageEvaluationsByWorkflow,
   listWorkbenchSubtasksByTask,
   resolveWorkbenchActionItemsBySource,
   resolveWorkbenchActionItemsByStage,
@@ -29,6 +31,8 @@ import type {
   Delegation,
   Workflow,
   WorkbenchActionItemRecord,
+  WorkflowEvalEvidence,
+  WorkflowEvalFinding,
 } from './types.js';
 import { WORKFLOW_ARTIFACT_DEFINITIONS } from './workflow-artifacts.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
@@ -59,7 +63,8 @@ function buildTemplateVars(
       WORKFLOW_CONTEXT_KEYS.mainBranch,
     ),
     work_branch:
-      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) || 'N/A',
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) ||
+      'N/A',
     staging_base_branch: getWorkflowContextValue(
       workflow,
       WORKFLOW_CONTEXT_KEYS.stagingBaseBranch,
@@ -85,6 +90,20 @@ function truncate(text: string | null | undefined, max = 400): string {
   return value.length > max ? `${value.slice(0, max - 3)}...` : value;
 }
 
+function parseExtraJson(
+  raw: string | null | undefined,
+): Record<string, unknown> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function taskIdForWorkflow(workflow: Workflow): string {
   return `wb-${workflow.id}`;
 }
@@ -105,6 +124,13 @@ function actionItemId(
   sourceRefId: string,
 ): string {
   return `wb-action-${workflowId}-${stageKey}-${sourceType}-${sourceRefId}`;
+}
+
+function stageEvaluationActionItemId(
+  workflowId: string,
+  stageKey: string,
+): string {
+  return `wb-action-${workflowId}-${stageKey}-evaluation`;
 }
 
 function getPendingActionSummary(taskId: string): {
@@ -246,6 +272,54 @@ function upsertActionItem(params: {
   });
 }
 
+function parseEvaluationFindings(
+  raw: string | null | undefined,
+): WorkflowEvalFinding[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as WorkflowEvalFinding[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseEvaluationEvidence(
+  raw: string | null | undefined,
+): WorkflowEvalEvidence[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as WorkflowEvalEvidence[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildEvaluationEventBody(params: {
+  summary: string | null;
+  findings: WorkflowEvalFinding[];
+  evidence: WorkflowEvalEvidence[];
+}): string {
+  const lines: string[] = [];
+  if (params.summary) lines.push(params.summary.trim());
+  if (params.findings.length > 0) {
+    lines.push(
+      ...params.findings
+        .slice(0, 3)
+        .map((item) => `- [${item.severity}] ${truncate(item.message, 140)}`),
+    );
+  }
+  if (params.evidence.length > 0) {
+    lines.push(
+      ...params.evidence
+        .slice(0, 2)
+        .map((item) => `证据: ${truncate(item.summary, 140)}`),
+    );
+  }
+  return truncate(lines.join('\n'), 1000);
+}
+
 function ensureArtifacts(workflow: Workflow): void {
   const deliverable = getWorkflowContextValue(
     workflow,
@@ -309,7 +383,9 @@ function upsertStageActionItem(workflow: Workflow): void {
     delegationId: workflow.current_delegation_id || null,
     itemType: 'approval',
     title,
-    body: card?.body_template ? renderTemplate(card.body_template, vars) : title,
+    body: card?.body_template
+      ? renderTemplate(card.body_template, vars)
+      : title,
     sourceType: 'workflow',
     sourceRefId: workflow.status,
     replyable: false,
@@ -334,8 +410,8 @@ function resolveCurrentStageActionItems(
   if (!task) return;
   const currentStageItems = listWorkbenchActionItemsByTask(taskId).filter(
     (item) =>
-      item.stage_key === task.current_stage
-      && (item.status === 'pending' || item.status === 'confirmed'),
+      item.stage_key === task.current_stage &&
+      (item.status === 'pending' || item.status === 'confirmed'),
   );
   if (currentStageItems.length === 0) return;
   resolveWorkbenchActionItemsByStage(
@@ -375,9 +451,20 @@ function resolveStaleStageActionItems(
     return item.delegation_id === workflow.current_delegation_id;
   };
 
+  const isStickyCurrentStageItem = (item: WorkbenchActionItemRecord) => {
+    if (item.stage_key !== task.current_stage) return false;
+    return (
+      parseExtraJson(item.extra_json)?.keep_visible_when_current_stage === true
+    );
+  };
+
   for (const item of listWorkbenchActionItemsByTask(taskId)) {
     if (item.status !== 'pending') continue;
-    if (isCurrentWorkflowApprovalItem(item) || isCurrentInteractionItem(item)) {
+    if (
+      isCurrentWorkflowApprovalItem(item) ||
+      isCurrentInteractionItem(item) ||
+      isStickyCurrentStageItem(item)
+    ) {
       continue;
     }
     updateWorkbenchActionItem(item.id, {
@@ -502,9 +589,12 @@ function resolveBypassedConfirmationStages(
   }
 
   return Array.from(candidateTargets).filter((stageKey) => {
-    if (!stageKey || stageKey === fromStatus || stageKey === toStatus) return false;
+    if (!stageKey || stageKey === fromStatus || stageKey === toStatus)
+      return false;
     const state = config.states[stageKey];
-    return state?.type === 'confirmation' && state.on_approve?.target === toStatus;
+    return (
+      state?.type === 'confirmation' && state.on_approve?.target === toStatus
+    );
   });
 }
 
@@ -590,7 +680,9 @@ export function syncWorkbenchInteractionItem(input: {
     updateWorkbenchActionItem(item.id, {
       body: input.body ?? item.body,
       replyable:
-        input.replyable !== undefined ? Number(input.replyable) : item.replyable,
+        input.replyable !== undefined
+          ? Number(input.replyable)
+          : item.replyable,
       updated_at: now,
       extra_json:
         input.extra !== undefined
@@ -714,8 +806,8 @@ export function syncWorkbenchOnWorkflowUpdated(
         summary: summary !== undefined ? truncate(summary) : task.summary,
         updatedAt: workflow.updated_at,
         pendingApproval:
-          stateConfig?.type === 'confirmation'
-          || pendingSummary.pendingApproval,
+          stateConfig?.type === 'confirmation' ||
+          pendingSummary.pendingApproval,
         pendingActionCount: pendingSummary.pendingActionCount,
       },
     });
@@ -1052,7 +1144,6 @@ export function syncWorkbenchOnDelegationCompleted(
       output_summary: truncate(delegation.result, 1000),
       finished_at: delegation.updated_at,
       updated_at: delegation.updated_at,
-      status: delegation.outcome === 'failure' ? 'failed' : subtask.status,
     });
     emitWorkbenchEvent({
       type: 'subtask_updated',
@@ -1061,7 +1152,7 @@ export function syncWorkbenchOnDelegationCompleted(
       payload: {
         id: subtask.id,
         delegationId: delegation.id,
-        status: delegation.outcome === 'failure' ? 'failed' : subtask.status,
+        status: subtask.status,
       },
     });
   }
@@ -1099,6 +1190,131 @@ export function syncWorkbenchOnDelegationCompleted(
   ensureArtifacts(workflow);
 }
 
+export function syncWorkbenchOnStageEvaluated(
+  workflowId: string,
+  stageKey: string,
+  evaluationId: string,
+): void {
+  const workflow = getWorkflow(workflowId);
+  const task = getWorkbenchTaskByWorkflowId(workflowId);
+  const evaluation = getWorkflowStageEvaluation(evaluationId);
+  if (!workflow || !task || !evaluation) return;
+
+  const findings = parseEvaluationFindings(evaluation.findings_json);
+  const evidence = parseEvaluationEvidence(evaluation.evidence_json);
+  const stageLabel = getStatusLabel(workflow.workflow_type, stageKey);
+  const subtask = getWorkbenchSubtaskByStage(task.id, stageKey);
+
+  if (subtask && evaluation.status !== 'passed') {
+    updateWorkbenchSubtask(subtask.id, {
+      status: 'failed',
+      output_summary: truncate(
+        evaluation.summary || subtask.output_summary,
+        1000,
+      ),
+      finished_at: subtask.finished_at || evaluation.updated_at,
+      updated_at: evaluation.updated_at,
+    });
+    emitWorkbenchEvent({
+      type: 'subtask_updated',
+      taskId: task.id,
+      workflowId,
+      payload: {
+        id: subtask.id,
+        stageKey,
+        status: 'failed',
+      },
+    });
+  }
+
+  const verdictText =
+    evaluation.status === 'passed'
+      ? '通过'
+      : evaluation.status === 'needs_revision'
+        ? '需回修'
+        : evaluation.status === 'pending'
+          ? '待补充证据'
+          : '失败';
+  const eventId = `wb-event-${evaluation.id}`;
+  const body = buildEvaluationEventBody({
+    summary: evaluation.summary,
+    findings,
+    evidence,
+  });
+
+  createWorkbenchEvent({
+    id: eventId,
+    task_id: task.id,
+    subtask_id: subtask?.id || null,
+    event_type: 'stage_evaluated',
+    title: `阶段评测：${stageLabel} ${verdictText}`,
+    body: body || null,
+    raw_ref_type: 'workflow_stage_evaluation',
+    raw_ref_id: evaluation.id,
+    created_at: evaluation.updated_at,
+  });
+  emitWorkbenchEvent({
+    type: 'event_created',
+    taskId: task.id,
+    workflowId,
+    payload: {
+      id: eventId,
+      title: `阶段评测：${stageLabel} ${verdictText}`,
+      body,
+      createdAt: evaluation.updated_at,
+      status: evaluation.status,
+      stageKey,
+      score: evaluation.score,
+    },
+  });
+}
+
+export function syncWorkbenchOnStageEvaluationActionNeeded(
+  workflowId: string,
+  stageKey: string,
+  evaluationId: string,
+  options?: {
+    keepVisibleWhenCurrentStage?: boolean;
+  },
+): void {
+  const workflow = getWorkflow(workflowId);
+  const task = getWorkbenchTaskByWorkflowId(workflowId);
+  const evaluation = getWorkflowStageEvaluation(evaluationId);
+  if (!workflow || !task || !evaluation) return;
+
+  const subtask = getWorkbenchSubtaskByStage(task.id, stageKey);
+  const findings = parseEvaluationFindings(evaluation.findings_json);
+  const body = buildEvaluationEventBody({
+    summary: evaluation.summary,
+    findings,
+    evidence: parseEvaluationEvidence(evaluation.evidence_json),
+  });
+
+  upsertActionItem({
+    id: stageEvaluationActionItemId(workflowId, stageKey),
+    workflowId,
+    stageKey,
+    subtaskId: subtask?.id || null,
+    delegationId: null,
+    groupFolder: subtask?.group_folder || null,
+    itemType: 'interactive',
+    title: `${getStatusLabel(workflow.workflow_type, stageKey)} 需要处理`,
+    body,
+    sourceType: 'send_message',
+    sourceRefId: evaluation.id,
+    replyable: false,
+    createdAt: evaluation.updated_at,
+    extra: {
+      evaluation_id: evaluation.id,
+      evaluation_status: evaluation.status,
+      evaluation_score: evaluation.score,
+      findings_count: findings.length,
+      keep_visible_when_current_stage:
+        options?.keepVisibleWhenCurrentStage === true,
+    },
+  });
+}
+
 export function syncWorkbenchFromWorkflow(workflowId: string): void {
   syncWorkbenchOnWorkflowCreated(workflowId);
   const workflow = getWorkflow(workflowId);
@@ -1112,6 +1328,13 @@ export function syncWorkbenchFromWorkflow(workflowId: string): void {
     if (delegation.status !== 'pending') {
       syncWorkbenchOnDelegationCompleted(workflowId, delegation.id);
     }
+  }
+  for (const evaluation of listWorkflowStageEvaluationsByWorkflow(workflowId)) {
+    syncWorkbenchOnStageEvaluated(
+      workflowId,
+      evaluation.stage_key,
+      evaluation.id,
+    );
   }
   for (const subtask of listWorkbenchSubtasksByTask(task.id)) {
     if (subtask.stage_key === workflow.status || subtask.status !== 'current') {
@@ -1128,7 +1351,10 @@ export function syncWorkbenchFromWorkflow(workflowId: string): void {
     !workflow.current_delegation_id
   ) {
     for (const subtask of listWorkbenchSubtasksByTask(task.id)) {
-      if (subtask.stage_key !== workflow.status || subtask.status !== 'current') {
+      if (
+        subtask.stage_key !== workflow.status ||
+        subtask.status !== 'current'
+      ) {
         continue;
       }
       const delegation = subtask.delegation_id
@@ -1143,7 +1369,8 @@ export function syncWorkbenchFromWorkflow(workflowId: string): void {
       if (!inferredStatus) continue;
       updateWorkbenchSubtask(subtask.id, {
         status: inferredStatus,
-        finished_at: subtask.finished_at || delegation?.updated_at || workflow.updated_at,
+        finished_at:
+          subtask.finished_at || delegation?.updated_at || workflow.updated_at,
         updated_at: workflow.updated_at,
       });
     }

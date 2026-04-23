@@ -36,13 +36,66 @@ description: Review requirement implementation plans for completeness, feasibili
 
 ## 回复委派要求
 
-- 审核通过时：
-  - `outcome`：`success`
-  - `result`：建议使用 JSON，至少包含 `conclusion`、`summary`，可附带 `issues`、`suggestions`
-- 审核为“有条件通过”或“不通过”时：
-  - `outcome`：`failure`
-  - `result`：必须清楚说明审核结论、关键问题、修改建议、复审条件
-- 若委派消息中带有分支信息，回传结果中应保留并核对这些字段，避免丢失上下文
+- 审核已完成并给出业务结论时，统一使用 `outcome=success`
+- `outcome=failure` 只用于执行层失败或阻塞，例如：方案文档缺失、仓库无法读取、工具调用失败、结果无法形成结构化评测
+- `result` 必须是 JSON，至少包含：
+  - `deliverable`
+  - `main_branch`
+  - `work_branch`
+  - `verdict`：`passed` 或 `needs_revision`
+  - `summary`
+  - `findings`
+  - `evidence`
+- 审核通过示例：
+
+```json
+{
+  "deliverable": "2026-03-20_用户昵称功能",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "verdict": "passed",
+  "summary": "方案覆盖范围、风险和测试策略完整，可以进入开发。",
+  "findings": [],
+  "evidence": [
+    {
+      "type": "artifact",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "summary": "已审阅 plan.md"
+    }
+  ]
+}
+```
+
+- 审核不通过示例：
+
+```json
+{
+  "deliverable": "2026-03-20_用户昵称功能",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "verdict": "needs_revision",
+  "summary": "方案缺少回滚方案和失败场景验证，需修改后再复审。",
+  "findings": [
+    {
+      "code": "missing_rollback_plan",
+      "severity": "high",
+      "message": "没有说明发布失败后的回滚步骤。",
+      "stageKey": "plan_examine",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "suggestion": "补充回滚触发条件、回滚步骤和数据影响。"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "artifact",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "summary": "plan.md 中未找到回滚章节"
+    }
+  ]
+}
+```
+
+- 若委派消息中带有分支信息，回传结果中必须保留并核对这些字段，避免丢失上下文
 
 ## 输出格式
 

@@ -37,6 +37,7 @@ import {
   WorkbenchEventRecord,
   WorkbenchSubtaskRecord,
   WorkbenchTaskRecord,
+  WorkflowStageEvaluationRecord,
   Workflow,
 } from './types.js';
 import {
@@ -416,6 +417,23 @@ function createSchema(database: Database.Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_workbench_assets_task ON workbench_context_assets(task_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS workflow_stage_evaluations (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL,
+      delegation_id TEXT,
+      stage_key TEXT NOT NULL,
+      evaluator_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      score INTEGER DEFAULT 0,
+      summary TEXT,
+      findings_json TEXT,
+      evidence_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_stage_evals_workflow_stage
+      ON workflow_stage_evaluations(workflow_id, stage_key, updated_at);
   `);
 
   database.exec(`
@@ -769,7 +787,7 @@ function normalizeWorkflowSchema(database: Database.Database): void {
       workflow_type,
       created_at,
       updated_at,
-      ${columnNames.has('context_json') ? 'context_json' : "NULL AS context_json"},
+      ${columnNames.has('context_json') ? 'context_json' : 'NULL AS context_json'},
       ${columnNames.has('main_branch') ? 'main_branch' : "'' AS main_branch"},
       ${columnNames.has('work_branch') ? 'work_branch' : "'' AS work_branch"},
       ${columnNames.has('deliverable') ? 'deliverable' : "'' AS deliverable"},
@@ -827,7 +845,9 @@ function normalizeWorkflowSchema(database: Database.Database): void {
   `);
 }
 
-function hydrateWorkflowRow(row: Record<string, unknown> | undefined): Workflow | undefined {
+function hydrateWorkflowRow(
+  row: Record<string, unknown> | undefined,
+): Workflow | undefined {
   if (!row) return undefined;
   const context = parseWorkflowContext(
     typeof row.context_json === 'string' ? row.context_json : undefined,
@@ -1215,7 +1235,11 @@ export function listStoredMessagesByIds(
   ids: string[],
 ): StoredChatMessageRecord[] {
   const normalizedIds = Array.from(
-    new Set(ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
+    new Set(
+      ids.filter(
+        (id): id is string => typeof id === 'string' && id.trim().length > 0,
+      ),
+    ),
   );
   if (normalizedIds.length === 0) return [];
   const placeholders = normalizedIds.map(() => '?').join(', ');
@@ -1748,7 +1772,9 @@ export function updateWorkflow(
     const currentContext = getWorkflow(id)?.context || {};
     fields.push('context_json = ?');
     values.push(
-      serializeWorkflowContext(mergeWorkflowContext(currentContext, updates.context)),
+      serializeWorkflowContext(
+        mergeWorkflowContext(currentContext, updates.context),
+      ),
     );
   }
   if (updates.status !== undefined) {
@@ -1788,9 +1814,9 @@ export function getWorkflowByDelegation(
   }
   // Fallback: old records without workflow_id — match via current_delegation_id
   return hydrateWorkflowRow(
-    db.prepare('SELECT * FROM workflows WHERE current_delegation_id = ?').get(
-      delegationId,
-    ) as Record<string, unknown> | undefined,
+    db
+      .prepare('SELECT * FROM workflows WHERE current_delegation_id = ?')
+      .get(delegationId) as Record<string, unknown> | undefined,
   );
 }
 
@@ -1800,6 +1826,64 @@ export function getDelegationsByWorkflow(workflowId: string): Delegation[] {
       'SELECT * FROM delegations WHERE workflow_id = ? ORDER BY created_at ASC',
     )
     .all(workflowId) as Delegation[];
+}
+
+export function createWorkflowStageEvaluation(
+  record: WorkflowStageEvaluationRecord,
+): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO workflow_stage_evaluations (
+      id, workflow_id, delegation_id, stage_key, evaluator_type, status, score,
+      summary, findings_json, evidence_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.workflow_id,
+    record.delegation_id,
+    record.stage_key,
+    record.evaluator_type,
+    record.status,
+    record.score,
+    record.summary,
+    record.findings_json,
+    record.evidence_json,
+    record.created_at,
+    record.updated_at,
+  );
+}
+
+export function getWorkflowStageEvaluation(
+  id: string,
+): WorkflowStageEvaluationRecord | undefined {
+  return db
+    .prepare('SELECT * FROM workflow_stage_evaluations WHERE id = ?')
+    .get(id) as WorkflowStageEvaluationRecord | undefined;
+}
+
+export function getLatestWorkflowStageEvaluation(
+  workflowId: string,
+  stageKey: string,
+): WorkflowStageEvaluationRecord | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_stage_evaluations
+       WHERE workflow_id = ? AND stage_key = ?
+       ORDER BY updated_at DESC, rowid DESC
+       LIMIT 1`,
+    )
+    .get(workflowId, stageKey) as WorkflowStageEvaluationRecord | undefined;
+}
+
+export function listWorkflowStageEvaluationsByWorkflow(
+  workflowId: string,
+): WorkflowStageEvaluationRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_stage_evaluations
+       WHERE workflow_id = ?
+       ORDER BY updated_at DESC, rowid DESC`,
+    )
+    .all(workflowId) as WorkflowStageEvaluationRecord[];
 }
 
 export function getAllActiveWorkflows(): Workflow[] {
@@ -1815,9 +1899,11 @@ export function getAllActiveWorkflows(): Workflow[] {
 }
 
 export function getAllWorkflows(): Workflow[] {
-  return (db
-    .prepare(`SELECT * FROM workflows ORDER BY created_at DESC`)
-    .all() as Record<string, unknown>[])
+  return (
+    db
+      .prepare(`SELECT * FROM workflows ORDER BY created_at DESC`)
+      .all() as Record<string, unknown>[]
+  )
     .map((row) => hydrateWorkflowRow(row))
     .filter((workflow): workflow is Workflow => Boolean(workflow));
 }
@@ -1825,6 +1911,7 @@ export function getAllWorkflows(): Workflow[] {
 export function deleteAllWorkbenchTaskData(): {
   workflows: number;
   delegations: number;
+  workflow_stage_evaluations: number;
   workbench_tasks: number;
   workbench_subtasks: number;
   workbench_events: number;
@@ -1840,6 +1927,9 @@ export function deleteAllWorkbenchTaskData(): {
     workflows: count('SELECT COUNT(*) AS count FROM workflows'),
     delegations: count(
       'SELECT COUNT(*) AS count FROM delegations WHERE workflow_id IS NOT NULL',
+    ),
+    workflow_stage_evaluations: count(
+      'SELECT COUNT(*) AS count FROM workflow_stage_evaluations',
     ),
     workbench_tasks: count('SELECT COUNT(*) AS count FROM workbench_tasks'),
     workbench_subtasks: count(
@@ -1868,6 +1958,7 @@ export function deleteAllWorkbenchTaskData(): {
     db.prepare('DELETE FROM workbench_events').run();
     db.prepare('DELETE FROM workbench_subtasks').run();
     db.prepare('DELETE FROM workbench_tasks').run();
+    db.prepare('DELETE FROM workflow_stage_evaluations').run();
     db.prepare('DELETE FROM delegations WHERE workflow_id IS NOT NULL').run();
     db.prepare('DELETE FROM workflows').run();
   });
@@ -1880,6 +1971,7 @@ export function deleteWorkbenchTaskData(taskId: string): {
   workflow_id: string;
   workflows: number;
   delegations: number;
+  workflow_stage_evaluations: number;
   workbench_tasks: number;
   workbench_subtasks: number;
   workbench_events: number;
@@ -1896,12 +1988,22 @@ export function deleteWorkbenchTaskData(taskId: string): {
 
   const summary = {
     workflow_id: task.workflow_id,
-    workflows: count('SELECT COUNT(*) AS count FROM workflows WHERE id = ?', task.workflow_id),
+    workflows: count(
+      'SELECT COUNT(*) AS count FROM workflows WHERE id = ?',
+      task.workflow_id,
+    ),
     delegations: count(
       'SELECT COUNT(*) AS count FROM delegations WHERE workflow_id = ?',
       task.workflow_id,
     ),
-    workbench_tasks: count('SELECT COUNT(*) AS count FROM workbench_tasks WHERE id = ?', task.id),
+    workflow_stage_evaluations: count(
+      'SELECT COUNT(*) AS count FROM workflow_stage_evaluations WHERE workflow_id = ?',
+      task.workflow_id,
+    ),
+    workbench_tasks: count(
+      'SELECT COUNT(*) AS count FROM workbench_tasks WHERE id = ?',
+      task.id,
+    ),
     workbench_subtasks: count(
       'SELECT COUNT(*) AS count FROM workbench_subtasks WHERE task_id = ?',
       task.id,
@@ -1929,14 +2031,25 @@ export function deleteWorkbenchTaskData(taskId: string): {
   };
 
   const clear = db.transaction(() => {
-    db.prepare('DELETE FROM workbench_context_assets WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_context_assets WHERE task_id = ?').run(
+      task.id,
+    );
     db.prepare('DELETE FROM workbench_comments WHERE task_id = ?').run(task.id);
-    db.prepare('DELETE FROM workbench_action_items WHERE task_id = ?').run(task.id);
-    db.prepare('DELETE FROM workbench_artifacts WHERE task_id = ?').run(task.id);
+    db.prepare('DELETE FROM workbench_action_items WHERE task_id = ?').run(
+      task.id,
+    );
+    db.prepare('DELETE FROM workbench_artifacts WHERE task_id = ?').run(
+      task.id,
+    );
     db.prepare('DELETE FROM workbench_events WHERE task_id = ?').run(task.id);
     db.prepare('DELETE FROM workbench_subtasks WHERE task_id = ?').run(task.id);
     db.prepare('DELETE FROM workbench_tasks WHERE id = ?').run(task.id);
-    db.prepare('DELETE FROM delegations WHERE workflow_id = ?').run(task.workflow_id);
+    db.prepare(
+      'DELETE FROM workflow_stage_evaluations WHERE workflow_id = ?',
+    ).run(task.workflow_id);
+    db.prepare('DELETE FROM delegations WHERE workflow_id = ?').run(
+      task.workflow_id,
+    );
     db.prepare('DELETE FROM workflows WHERE id = ?').run(task.workflow_id);
   });
 
@@ -2436,9 +2549,9 @@ export function createTodayPlan(input: {
 }
 
 export function getTodayPlanById(id: string): TodayPlanRecord | undefined {
-  return db
-    .prepare('SELECT * FROM today_plans WHERE id = ?')
-    .get(id) as TodayPlanRecord | undefined;
+  return db.prepare('SELECT * FROM today_plans WHERE id = ?').get(id) as
+    | TodayPlanRecord
+    | undefined;
 }
 
 export function getTodayPlanByDate(
@@ -2449,10 +2562,12 @@ export function getTodayPlanByDate(
     .get(planDate) as TodayPlanRecord | undefined;
 }
 
-export function listTodayPlans(input: {
-  before_date?: string;
-  limit?: number;
-} = {}): TodayPlanRecord[] {
+export function listTodayPlans(
+  input: {
+    before_date?: string;
+    limit?: number;
+  } = {},
+): TodayPlanRecord[] {
   const limit = Number.isFinite(input.limit)
     ? Math.max(1, Math.trunc(input.limit as number))
     : 30;
@@ -2480,7 +2595,11 @@ export function updateTodayPlan(
   updates: Partial<
     Pick<
       TodayPlanRecord,
-      'title' | 'status' | 'completed_at' | 'continued_from_plan_id' | 'updated_at'
+      | 'title'
+      | 'status'
+      | 'completed_at'
+      | 'continued_from_plan_id'
+      | 'updated_at'
     >
   >,
 ): void {
@@ -2553,9 +2672,9 @@ export function createTodayPlanItem(input: {
 export function getTodayPlanItemById(
   id: string,
 ): TodayPlanItemRecord | undefined {
-  return db
-    .prepare('SELECT * FROM today_plan_items WHERE id = ?')
-    .get(id) as TodayPlanItemRecord | undefined;
+  return db.prepare('SELECT * FROM today_plan_items WHERE id = ?').get(id) as
+    | TodayPlanItemRecord
+    | undefined;
 }
 
 export function listTodayPlanItems(planId: string): TodayPlanItemRecord[] {
@@ -2609,7 +2728,8 @@ export function updateTodayPlanItem(
 }
 
 export function deleteTodayPlanItem(id: string): number {
-  return db.prepare('DELETE FROM today_plan_items WHERE id = ?').run(id).changes;
+  return db.prepare('DELETE FROM today_plan_items WHERE id = ?').run(id)
+    .changes;
 }
 
 export function createTodayPlanMailDraft(input: {
@@ -2852,7 +2972,12 @@ export function searchMemoriesActive(
   query: string,
   limit: number = 10,
 ): MemorySearchResult[] {
-  return searchMemoriesByStatus(groupFolder, query, limit, `m.status = 'active'`);
+  return searchMemoriesByStatus(
+    groupFolder,
+    query,
+    limit,
+    `m.status = 'active'`,
+  );
 }
 
 export function listMemories(
@@ -3614,15 +3739,15 @@ export function updateAgentQuery(
   assign('created_at');
 
   values.push(queryId);
-  db.prepare(`UPDATE agent_queries SET ${fields.join(', ')} WHERE query_id = ?`).run(
-    ...values,
-  );
+  db.prepare(
+    `UPDATE agent_queries SET ${fields.join(', ')} WHERE query_id = ?`,
+  ).run(...values);
 }
 
 export function getAgentQuery(queryId: string): AgentQueryRecord | undefined {
-  return db.prepare('SELECT * FROM agent_queries WHERE query_id = ?').get(queryId) as
-    | AgentQueryRecord
-    | undefined;
+  return db
+    .prepare('SELECT * FROM agent_queries WHERE query_id = ?')
+    .get(queryId) as AgentQueryRecord | undefined;
 }
 
 export interface ListAgentQueriesOptions {
@@ -3647,7 +3772,9 @@ export function listAgentQueries(
     values.push(options.sourceRefId);
   }
 
-  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause = conditions.length
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
   return db
     .prepare(
       `SELECT * FROM agent_queries ${whereClause} ORDER BY started_at DESC LIMIT ? OFFSET ?`,
@@ -3800,7 +3927,9 @@ export function deleteAgentQueriesBySource(
   return deleteMany(queryIds);
 }
 
-export function deleteHistoricalAgentQueries(activeQueryIds: string[] = []): number {
+export function deleteHistoricalAgentQueries(
+  activeQueryIds: string[] = [],
+): number {
   const uniqueActiveIds = [...new Set(activeQueryIds.filter(Boolean))];
   const deleteEventsStmt = db.prepare(
     'DELETE FROM agent_query_events WHERE query_id = ?',

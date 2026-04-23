@@ -18,6 +18,7 @@ import { buildInteractiveCard } from './card-builder.js';
 import { PROJECT_ROOT } from './config.js';
 import {
   createDelegation,
+  createWorkflowStageEvaluation,
   createWorkflow as dbCreateWorkflow,
   getAllActiveWorkflows,
   getAllWorkflows,
@@ -53,10 +54,16 @@ import {
   createWorkbenchManualSkipEvent,
   syncWorkbenchOnDelegationCompleted,
   syncWorkbenchOnDelegationCreated,
+  syncWorkbenchOnStageEvaluated,
+  syncWorkbenchOnStageEvaluationActionNeeded,
   syncWorkbenchOnTransition,
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
+import {
+  buildWorkflowStageEvaluationRecord,
+  evaluateWorkflowStage,
+} from './workflow-stage-evaluation.js';
 import {
   getWorkflowContextValue,
   mergeWorkflowContext,
@@ -502,7 +509,8 @@ function buildTemplateVars(
       WORKFLOW_CONTEXT_KEYS.mainBranch,
     ),
     work_branch:
-      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) || 'N/A',
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) ||
+      'N/A',
     id: workflow.id,
     round: workflow.round,
     deliverable:
@@ -520,24 +528,27 @@ function buildTemplateVars(
       workflow,
       WORKFLOW_CONTEXT_KEYS.accessToken,
     ),
-    requirement_description: getWorkflowContextValue(
-      workflow,
-      WORKFLOW_CONTEXT_KEYS.requirementDescription,
-    ) || workflow.name,
+    requirement_description:
+      getWorkflowContextValue(
+        workflow,
+        WORKFLOW_CONTEXT_KEYS.requirementDescription,
+      ) || workflow.name,
     requirement_files: Array.isArray(
       workflow.context[WORKFLOW_CONTEXT_KEYS.requirementFiles],
     )
-      ? (
-          workflow.context[WORKFLOW_CONTEXT_KEYS.requirementFiles] as unknown[]
-        )
-          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      ? (workflow.context[WORKFLOW_CONTEXT_KEYS.requirementFiles] as unknown[])
+          .filter(
+            (item): item is string =>
+              typeof item === 'string' && item.trim().length > 0,
+          )
           .map((item) => `- ${item}`)
           .join('\n') || '无'
       : '无',
     plan_doc: buildDocPath(workflow, getDeliverableFileNameForRole('planner')),
     dev_doc: buildDocPath(workflow, getDeliverableFileNameForRole('dev')),
     test_doc:
-      extra?.testDoc || buildDocPath(workflow, getDeliverableFileNameForRole('test')),
+      extra?.testDoc ||
+      buildDocPath(workflow, getDeliverableFileNameForRole('test')),
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
@@ -554,7 +565,8 @@ function finalizeDelegationTaskContent(
 ): string {
   if (skill === 'dev-bugfix') {
     const testDoc =
-      extra?.testDoc || buildDocPath(workflow, getDeliverableFileNameForRole('test'));
+      extra?.testDoc ||
+      buildDocPath(workflow, getDeliverableFileNameForRole('test'));
     const testDocLine = `测试文档：${testDoc}`;
     const hasTestDocLine = taskContent.includes('测试文档：');
     let finalContent = hasTestDocLine
@@ -734,7 +746,7 @@ function applyTransition(
       updates.current_delegation_id,
     );
   }
-  syncWorkbenchOnWorkflowUpdated(workflow.id, undefined, {
+  syncWorkbenchOnWorkflowUpdated(workflow.id, extra?.resultSummary, {
     emitRealtime: false,
   });
 
@@ -938,7 +950,9 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
       [WORKFLOW_CONTEXT_KEYS.requirementDescription]:
         opts.requirementDescription || '',
-      [WORKFLOW_CONTEXT_KEYS.requirementFiles]: Array.isArray(opts.requirementFiles)
+      [WORKFLOW_CONTEXT_KEYS.requirementFiles]: Array.isArray(
+        opts.requirementFiles,
+      )
         ? opts.requirementFiles.filter(
             (item) => typeof item === 'string' && item.trim().length > 0,
           )
@@ -1014,8 +1028,7 @@ export function approveWorkflow(workflowId: string): { error?: string } {
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  if (!config)
-    return { error: `未知的流程类型: ${workflow.workflow_type}` };
+  if (!config) return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[workflow.status];
   if (
@@ -1040,8 +1053,7 @@ export function skipWorkflow(workflowId: string): { error?: string } {
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  if (!config)
-    return { error: `未知的流程类型: ${workflow.workflow_type}` };
+  if (!config) return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   return skipWorkflowStage(workflowId, workflow.status);
 }
@@ -1054,8 +1066,7 @@ export function skipWorkflowStage(
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  if (!config)
-    return { error: `未知的流程类型: ${workflow.workflow_type}` };
+  if (!config) return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const terminalStates = getTerminalStates(config);
   const stateConfig = config.states[stageKey];
@@ -1106,8 +1117,7 @@ export function reviseWorkflow(
   if (!workflow) return { error: `流程 ${workflowId} 不存在` };
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  if (!config)
-    return { error: `未知的流程类型: ${workflow.workflow_type}` };
+  if (!config) return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[workflow.status];
   if (
@@ -1142,8 +1152,7 @@ export function returnWorkflowToConfirmationStage(
   }
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  if (!config)
-    return { error: `未知的流程类型: ${workflow.workflow_type}` };
+  if (!config) return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[stageKey];
   if (!stateConfig) {
@@ -1197,8 +1206,7 @@ export function retryWorkflowStage(
   }
 
   const config = getWorkflowTypeConfig(workflow.workflow_type);
-  if (!config)
-    return { error: `未知的流程类型: ${workflow.workflow_type}` };
+  if (!config) return { error: `未知的流程类型: ${workflow.workflow_type}` };
 
   const stateConfig = config.states[stageKey];
   if (!stateConfig) {
@@ -1321,17 +1329,6 @@ export function onDelegationComplete(delegationId: string): void {
     return;
   }
 
-  // Determine outcome
-  const outcome = delegation.outcome === 'failure' ? 'failure' : 'success';
-  const transition = stateConfig.on_complete[outcome];
-  if (!transition) {
-    logger.warn(
-      { workflowId: workflow.id, status: workflow.status, outcome },
-      'No transition defined for outcome',
-    );
-    return;
-  }
-
   // Parse result summary and persisted workflow fields
   let resultSummary = delegation.result || '';
   let testDoc = '';
@@ -1374,12 +1371,100 @@ export function onDelegationComplete(delegationId: string): void {
     testDoc = payload.test_doc.trim();
   }
 
+  const evaluationWorkflow: Workflow = {
+    ...workflow,
+    context: mergeWorkflowContext(workflow.context, contextUpdates),
+  };
+  const evaluation = evaluateWorkflowStage({
+    workflow: evaluationWorkflow,
+    stageKey: workflow.status,
+    delegation,
+  });
+  const evaluationRecord = buildWorkflowStageEvaluationRecord({
+    workflow: evaluationWorkflow,
+    stageKey: workflow.status,
+    delegation,
+    result: evaluation,
+  });
+  createWorkflowStageEvaluation(evaluationRecord);
+  syncWorkbenchOnStageEvaluated(
+    workflow.id,
+    workflow.status,
+    evaluationRecord.id,
+  );
+
+  logger.info(
+    {
+      workflowId: workflow.id,
+      delegationId,
+      stageKey: workflow.status,
+      evaluationStatus: evaluation.status,
+      evaluationScore: evaluation.score,
+    },
+    'Workflow stage evaluated',
+  );
+
+  if (evaluation.summary) {
+    resultSummary = evaluation.summary;
+  }
+
+  if (evaluation.status === 'pending') {
+    updateWorkflow(workflow.id, {
+      current_delegation_id: '',
+      ...(workflowUpdates.context ? { context: workflowUpdates.context } : {}),
+    });
+    syncWorkbenchOnWorkflowUpdated(workflow.id, evaluation.summary);
+    syncWorkbenchOnStageEvaluationActionNeeded(
+      workflow.id,
+      workflow.status,
+      evaluationRecord.id,
+      { keepVisibleWhenCurrentStage: true },
+    );
+    notifyMain(
+      `[阶段评测] 需求「${workflow.name}」(${workflow.id}) 在阶段 ${config.status_labels[workflow.status] || workflow.status} 缺少充分证据，已停止自动流转。\n\n${evaluation.summary}\n\n请补充交付物或结果后重跑当前阶段。`,
+      workflow.source_jid,
+      workflow.id,
+    );
+    return;
+  }
+
+  const transitionOutcome =
+    evaluation.status === 'passed' ? 'success' : 'failure';
+  const transition = stateConfig.on_complete[transitionOutcome];
+  if (!transition) {
+    logger.warn(
+      {
+        workflowId: workflow.id,
+        status: workflow.status,
+        evaluationStatus: evaluation.status,
+        transitionOutcome,
+      },
+      'No transition defined for evaluated outcome',
+    );
+    return;
+  }
+
+  const targetState = config.states[transition.target];
+  const shouldCreateEvaluationActionItem =
+    transition.target === workflow.status || targetState?.type === 'terminal';
+
   applyTransition(workflow, transition, roles, {
     delegationResult: delegation.result || '',
     resultSummary,
     testDoc,
     workflowUpdates,
   });
+
+  if (shouldCreateEvaluationActionItem) {
+    syncWorkbenchOnStageEvaluationActionNeeded(
+      workflow.id,
+      targetState?.type === 'terminal' ? transition.target : workflow.status,
+      evaluationRecord.id,
+      {
+        keepVisibleWhenCurrentStage: transition.target === workflow.status,
+      },
+    );
+  }
 }
 
 // -------------------------------------------------------
@@ -1428,7 +1513,10 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
         // Fallback: send text notification
         const cardConfig = getCardConfig(workflow.workflow_type, cardKey);
         if (cardConfig) {
-          const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
+          const rolesResult = resolveRoles(
+            workflow.workflow_type,
+            workflow.source_jid,
+          );
           const roleFolders = 'roles' in rolesResult ? rolesResult.roles : {};
           const card = buildInteractiveCard(cardConfig, {
             workflowId: workflow.id,
@@ -1447,7 +1535,10 @@ function sendConfigCard(workflow: Workflow, cardKey: string): void {
     // Fallback: no card support
     const cardConfig = getCardConfig(workflow.workflow_type, cardKey);
     if (cardConfig) {
-      const rolesResult = resolveRoles(workflow.workflow_type, workflow.source_jid);
+      const rolesResult = resolveRoles(
+        workflow.workflow_type,
+        workflow.source_jid,
+      );
       const roleFolders = 'roles' in rolesResult ? rolesResult.roles : {};
       const card = buildInteractiveCard(cardConfig, {
         workflowId: workflow.id,
@@ -1475,7 +1566,10 @@ function buildWorkflowListCard(workflows: Workflow[]): InteractiveCard {
       w.status === 'paused'
         ? `⏸ 已中断（原状态：${labels[w.paused_from || ''] || w.paused_from || '未知'}）`
         : labels[w.status] || w.status;
-    const workBranch = getWorkflowContextValue(w, WORKFLOW_CONTEXT_KEYS.workBranch);
+    const workBranch = getWorkflowContextValue(
+      w,
+      WORKFLOW_CONTEXT_KEYS.workBranch,
+    );
     const stagingWorkBranch = getWorkflowContextValue(
       w,
       WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,

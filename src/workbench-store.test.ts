@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { initWorkbenchEvents } from './workbench-events.js';
@@ -7,6 +10,7 @@ import {
   createDelegation,
   createWorkflow as dbCreateWorkflow,
   getAllRegisteredGroups,
+  getLatestWorkflowStageEvaluation,
   getWorkbenchTaskByWorkflowId,
   getWorkbenchActionItem,
   listWorkbenchEventsByTask,
@@ -15,6 +19,7 @@ import {
   updateDelegation,
   updateWorkflow,
 } from './db.js';
+import { PROJECT_ROOT } from './config.js';
 import { RegisteredGroup } from './types.js';
 import {
   approveWorkflow,
@@ -83,8 +88,14 @@ const PLAN_EXAMINE_GROUP: RegisteredGroup = {
   added_at: '2026-04-07T00:00:00.000Z',
 };
 
+const WORKBENCH_TEST_SERVICE = 'workbench-store-test-service';
+
 beforeEach(() => {
   _initTestDatabase();
+  fs.rmSync(path.join(PROJECT_ROOT, 'projects', WORKBENCH_TEST_SERVICE), {
+    recursive: true,
+    force: true,
+  });
   initWorkbenchEvents(() => {});
   setRegisteredGroup('main@g.us', MAIN_GROUP);
   setRegisteredGroup('ops@g.us', OPS_GROUP);
@@ -133,6 +144,68 @@ describe('workbench approval transition sync', () => {
     ]);
     expect(
       detail?.assets.every((item) => item.asset_type === 'requirement_file'),
+    ).toBe(true);
+  });
+
+  it('surfaces pending stage evaluations in workbench when evidence is missing', () => {
+    dbCreateWorkflow({
+      id: 'wf-plan-eval-pending',
+      name: '方案评测待补证据',
+      service: WORKBENCH_TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        main_branch: '',
+        work_branch: '',
+        staging_base_branch: '',
+        deliverable: '',
+        staging_work_branch: '',
+        access_token: '',
+      },
+      status: 'plan',
+      current_delegation_id: 'wf-del-plan-eval-pending',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-plan-eval-pending');
+    createDelegation({
+      id: 'wf-del-plan-eval-pending',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'plan@g.us',
+      target_folder: 'web_plan',
+      task: '输出方案',
+      status: 'completed',
+      result: JSON.stringify({
+        deliverable: '2026-04-07_pending_eval',
+        summary: '方案已完成，但还没有产出 plan.md',
+      }),
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-plan-eval-pending',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:05:00.000Z',
+    });
+
+    onDelegationComplete('wf-del-plan-eval-pending');
+
+    const evaluation = getLatestWorkflowStageEvaluation(
+      'wf-plan-eval-pending',
+      'plan',
+    );
+    expect(evaluation?.status).toBe('pending');
+
+    const detail = getWorkbenchTaskDetail('wb-wf-plan-eval-pending');
+    expect(detail).not.toBeNull();
+    expect(detail?.task.workflow_stage).toBe('plan');
+    expect(detail?.evaluations[0]?.status).toBe('pending');
+    expect(detail?.action_items).toHaveLength(1);
+    expect(detail?.action_items[0]?.title).toContain('需要处理');
+    expect(
+      detail?.timeline.some((item) => item.status === 'stage_evaluated'),
     ).toBe(true);
   });
 
@@ -1089,7 +1162,8 @@ describe('workbench approval transition sync', () => {
     expect(task).not.toBeNull();
     const detailBefore = getWorkbenchTaskDetail(task!.id);
     const completedConfirmation = detailBefore?.subtasks.find(
-      (item) => item.stage_key === 'testing_confirm' && item.status === 'completed',
+      (item) =>
+        item.stage_key === 'testing_confirm' && item.status === 'completed',
     );
     expect(completedConfirmation?.stage_type).toBe('confirmation');
 
@@ -1107,7 +1181,8 @@ describe('workbench approval transition sync', () => {
     ).toEqual(['testing_confirm:pending']);
 
     const confirmationSubtasks =
-      detail?.subtasks.filter((item) => item.stage_key === 'testing_confirm') || [];
+      detail?.subtasks.filter((item) => item.stage_key === 'testing_confirm') ||
+      [];
     expect(confirmationSubtasks).toHaveLength(2);
     expect(confirmationSubtasks.map((item) => item.status)).toEqual([
       'completed',

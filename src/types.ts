@@ -90,6 +90,63 @@ export interface Delegation {
   updated_at: string;
 }
 
+export type WorkflowStageEvaluationStatus =
+  | 'passed'
+  | 'failed'
+  | 'needs_revision'
+  | 'pending';
+
+export type WorkflowStageEvaluatorType =
+  | 'rules'
+  | 'llm_judge'
+  | 'hybrid'
+  | 'manual';
+
+export interface WorkflowEvalFinding {
+  code: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  message: string;
+  stageKey: string;
+  path?: string;
+  suggestion?: string;
+}
+
+export interface WorkflowEvalEvidence {
+  type:
+    | 'artifact'
+    | 'message'
+    | 'workflow_state'
+    | 'test_result'
+    | 'user_feedback';
+  refId?: string;
+  path?: string;
+  summary: string;
+}
+
+export interface WorkflowStageEvalResult {
+  status: WorkflowStageEvaluationStatus;
+  score: number;
+  summary: string;
+  findings: WorkflowEvalFinding[];
+  evidence: WorkflowEvalEvidence[];
+  evaluatorType: WorkflowStageEvaluatorType;
+}
+
+export interface WorkflowStageEvaluationRecord {
+  id: string;
+  workflow_id: string;
+  delegation_id: string | null;
+  stage_key: string;
+  evaluator_type: WorkflowStageEvaluatorType;
+  status: WorkflowStageEvaluationStatus;
+  score: number;
+  summary: string | null;
+  findings_json: string | null;
+  evidence_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AskQuestionOption {
   label: string;
   description?: string;

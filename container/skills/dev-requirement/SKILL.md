@@ -97,12 +97,32 @@ doc_type: dev
 1. 将交付文档关键内容通过 `mcp__nanoclaw__send_message` 发送给用户
 2. 无论任务成功还是失败，都必须调用 `complete_delegation` 回复委派结果
 3. `complete_delegation` 返回结果要求：
-   - 若成功：
-     - outcome：`success`
-     - result：JSON 格式 `{"service":"xx","main_branch":"已确认主分支","work_branch":"已确认工作分支","deliverable":"2026-03-20_用户昵称功能","summary":"需求开发完成"}`
-   - 若失败：
-     - outcome：`failure`
-     - result：必须清楚说明失败原因、当前进展、阻塞点，以及是否已有本地代码 / 文档产出
+   - `outcome=success` 只表示开发任务执行完成并产出了合法的结构化结果；不要再用 `outcome` 表示“代码审核通过 / 不通过”这类业务 verdict
+   - `outcome=failure` 只用于执行层失败或阻塞，例如：仓库不可访问、分支不可确认、关键测试/构建无法执行且无法继续、文档无法落盘
+   - 若成功，`result` 必须是 JSON，至少包含：`service`、`main_branch`、`work_branch`、`deliverable`、`verdict`、`summary`、`findings`、`evidence`
+   - 本阶段通常返回 `verdict=passed`
+   - 成功返回示例：
+
+```json
+{
+  "service": "catstory",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "deliverable": "2026-03-20_用户昵称功能",
+  "verdict": "passed",
+  "summary": "需求开发完成，可以进入开发复核。",
+  "findings": [],
+  "evidence": [
+    {
+      "type": "artifact",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/dev.md",
+      "summary": "已写入 dev.md 并同步交付说明"
+    }
+  ]
+}
+```
+
+   - 若失败，`result` 也应尽量返回 JSON，至少说明 `summary`、`error`、`progress`，并保留已确认的分支与交付目录
    - **deliverable 是文件夹名**，不含 `.md` 后缀
    - 若任务消息已提供 `主分支`、`工作分支`，成功回传时这里必须原样返回；不要替换成新的 `feature/...`
 

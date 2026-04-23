@@ -44,9 +44,10 @@ description: Fix bugs in service code on the existing work branch — use the de
 ```
 
 6. 通过 `complete_delegation` 返回修复结果
-   - 成功时需包含：服务名、主分支、工作分支、预发分支、预发工作分支、交付目录、测试文档、已修复问题列表、修复概要
-   - 失败时需明确说明：失败原因、是否因缺少工作分支而中止
-   - 推荐返回字段：`service`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`deliverable`、`test_doc`、`fixed_bugs`、`summary`
+   - 修复任务已执行完成并形成明确阶段结论时，统一使用 `outcome=success`
+   - `outcome=failure` 只用于执行层失败或阻塞，例如：缺少明确工作分支、仓库不可访问、无法安全提交、文档无法回写
+   - 成功时需包含：服务名、主分支、工作分支、预发分支、预发工作分支、交付目录、测试文档、已修复问题列表、`verdict`、修复概要、`findings`、`evidence`
+   - 推荐返回字段：`service`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`deliverable`、`test_doc`、`fixed_bugs`、`verdict`、`summary`、`findings`、`evidence`
    - `fixed_bugs` 必须与测试报告中的 `BUG ID` 一一对应，不要自行改写 ID
    - `fixed_bugs` 中每个对象建议包含：`id`、`title`、`related_case`、`fix`
    - `fixed_bugs` 只返回本轮实际已完成修复、并已提交到当前工作分支的 BUG
@@ -64,6 +65,7 @@ description: Fix bugs in service code on the existing work branch — use the de
   "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
   "deliverable": "2026-03-20_用户昵称功能",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+  "verdict": "passed",
   "fixed_bugs": [
     {
       "id": "BUG-001",
@@ -78,7 +80,15 @@ description: Fix bugs in service code on the existing work branch — use the de
       "fix": "增加鉴权判空并返回 401"
     }
   ],
-  "summary": "已修复 2 个测试问题，并在测试文档追加 Round 1 修复记录"
+  "summary": "已修复 2 个测试问题，并在测试文档追加 Round 1 修复记录",
+  "findings": [],
+  "evidence": [
+    {
+      "type": "artifact",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "summary": "已在 test.md 追加修复记录"
+    }
+  ]
 }
 ```
 

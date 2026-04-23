@@ -25,8 +25,60 @@ description: Deploy service branches to staging environment — merge code, trig
    - 触发参数化构建，并传入 `BRANCH={预发工作分支}`：`POST /job/{staging.jenkins_job}/buildWithParameters?BRANCH={预发工作分支}`
    - 轮询构建状态直到完成
 6. 通过 `complete_delegation` 返回结果：
-   - outcome：成功传 `success`，失败传 `failure`
-   - result：JSON 格式
-     成功：{"service":"xx","main_branch":"已确认主分支","work_branch":"已确认工作分支","staging_base_branch":"已确认预发分支","staging_work_branch":"已确认预发工作分支","summary":"预发部署完成"}
-     失败：{"service":"xx","main_branch":"已确认主分支","work_branch":"已确认工作分支","staging_base_branch":"已确认预发分支","staging_work_branch":"已确认预发工作分支","summary":"预发部署失败","error":"conflict in src/xx.ts"}
+   - 部署流程已执行完成并得出明确结论时，统一使用 `outcome=success`
+   - `outcome=failure` 只用于执行层失败或阻塞，例如：缺少 Jenkins 配置、无法确认分支、无法访问部署环境、工具异常退出
+   - `result` 必须是 JSON，至少包含：`service`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`verdict`、`summary`、`findings`、`evidence`
+   - 部署成功时使用 `verdict=passed`
+   - 部署完成但失败时使用 `verdict=failed`
+   - 成功示例：
+
+```json
+{
+  "service": "catstory",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "staging_base_branch": "staging",
+  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
+  "verdict": "passed",
+  "summary": "预发部署完成，可以进入测试确认。",
+  "findings": [],
+  "evidence": [
+    {
+      "type": "workflow_state",
+      "summary": "Jenkins 已基于 staging-deploy/feature-user-nickname_20260320 完成部署"
+    }
+  ]
+}
+```
+
+   - 失败示例：
+
+```json
+{
+  "service": "catstory",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "staging_base_branch": "staging",
+  "staging_work_branch": "staging-deploy/feature-user-nickname_20260320",
+  "verdict": "failed",
+  "summary": "预发部署已执行，但 Jenkins 构建失败。",
+  "findings": [
+    {
+      "code": "jenkins_build_failed",
+      "severity": "critical",
+      "message": "Jenkins 构建返回 failed。",
+      "stageKey": "ops_deploy",
+      "suggestion": "检查构建日志并修复后重新部署。"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "message",
+      "summary": "Jenkins build #123 最终状态为 FAILED"
+    }
+  ]
+}
+```
+
+   - 若执行层失败，`result` 也应尽量返回 JSON，至少包含 `summary`、`error`、已确认的分支字段
    - 若任务消息已提供上述分支参数，返回结果中必须原样沿用；不要替换成新的 `feature/...` 或 `staging-deploy/...`

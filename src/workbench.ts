@@ -17,6 +17,7 @@ import {
   listWorkbenchCommentsByTask,
   listWorkbenchContextAssetsByTask,
   listWorkbenchEventsByTask,
+  listWorkflowStageEvaluationsByWorkflow,
   listWorkbenchSubtasksByTask,
   listWorkbenchTasks as listWorkbenchTaskRecords,
   updateWorkbenchActionItem,
@@ -32,6 +33,9 @@ import type {
   WorkbenchSubtaskRecord,
   WorkbenchTaskRecord,
   Workflow,
+  WorkflowEvalEvidence,
+  WorkflowEvalFinding,
+  WorkflowStageEvaluationRecord,
 } from './types.js';
 import {
   approveWorkflow,
@@ -151,10 +155,26 @@ export interface WorkbenchActionItem {
   extra?: Record<string, unknown>;
 }
 
+export interface WorkbenchStageEvaluation {
+  id: string;
+  stage_key: string;
+  stage_label: string;
+  delegation_id?: string;
+  status: 'passed' | 'failed' | 'needs_revision' | 'pending';
+  score: number;
+  summary: string;
+  evaluator_type: string;
+  findings: WorkflowEvalFinding[];
+  evidence: WorkflowEvalEvidence[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface WorkbenchTaskDetail {
   task: WorkbenchTaskItem;
   subtasks: WorkbenchSubtask[];
   timeline: WorkbenchTimelineEvent[];
+  evaluations: WorkbenchStageEvaluation[];
   artifacts: WorkbenchArtifact[];
   action_items: WorkbenchActionItem[];
   comments: Array<{
@@ -241,7 +261,8 @@ function mapPersistedSubtask(
   workflowType: string,
   manuallySkippedSubtaskIds?: Set<string>,
 ): WorkbenchSubtask {
-  const stageType = getWorkflowTypeConfig(workflowType)?.states[item.stage_key]?.type;
+  const stageType =
+    getWorkflowTypeConfig(workflowType)?.states[item.stage_key]?.type;
   return {
     id: item.id,
     title: item.title,
@@ -272,10 +293,10 @@ function mapPersistedEvent(item: WorkbenchEventRecord): WorkbenchTimelineEvent {
   return {
     id: item.id,
     type:
-      item.event_type === 'manual_skip'
-        || item.event_type === 'retry_note'
+      item.event_type === 'manual_skip' || item.event_type === 'retry_note'
         ? 'manual'
-        : item.event_type === 'workflow_created'
+        : item.event_type === 'workflow_created' ||
+            item.event_type === 'stage_evaluated'
           ? 'lifecycle'
           : item.event_type.includes('approval')
             ? 'approval'
@@ -342,6 +363,39 @@ function mapPersistedActionItem(
         : undefined,
     created_at: item.created_at,
     extra,
+  };
+}
+
+function parseEvaluationJsonArray<T>(raw: string | null): T[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapPersistedStageEvaluation(
+  item: WorkflowStageEvaluationRecord,
+  workflowType: string,
+): WorkbenchStageEvaluation {
+  return {
+    id: item.id,
+    stage_key: item.stage_key,
+    stage_label:
+      getStatusLabelsForType(workflowType)[item.stage_key] || item.stage_key,
+    delegation_id: item.delegation_id || undefined,
+    status: item.status,
+    score: item.score,
+    summary: item.summary || '',
+    evaluator_type: item.evaluator_type,
+    findings: parseEvaluationJsonArray<WorkflowEvalFinding>(item.findings_json),
+    evidence: parseEvaluationJsonArray<WorkflowEvalEvidence>(
+      item.evidence_json,
+    ),
+    created_at: item.created_at,
+    updated_at: item.updated_at,
   };
 }
 
@@ -539,7 +593,8 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
       WORKFLOW_CONTEXT_KEYS.mainBranch,
     ),
     work_branch:
-      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) || 'N/A',
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) ||
+      'N/A',
     staging_base_branch: getWorkflowContextValue(
       workflow,
       WORKFLOW_CONTEXT_KEYS.stagingBaseBranch,
@@ -791,6 +846,9 @@ export function getWorkbenchTaskDetail(
           ),
       ),
       timeline: sortTimelineEvents(events.map(mapPersistedEvent)),
+      evaluations: listWorkflowStageEvaluationsByWorkflow(workflow.id).map(
+        (item) => mapPersistedStageEvaluation(item, workflow.workflow_type),
+      ),
       artifacts: listWorkbenchArtifactsByTask(task.id).map(
         mapPersistedArtifact,
       ),
@@ -816,6 +874,9 @@ export function getWorkbenchTaskDetail(
       buildSubtasks(workflow, delegations),
     ),
     timeline: buildTimeline(workflow, delegations),
+    evaluations: listWorkflowStageEvaluationsByWorkflow(workflow.id).map(
+      (item) => mapPersistedStageEvaluation(item, workflow.workflow_type),
+    ),
     artifacts: buildArtifacts(workflow),
     action_items: buildActionItems(workflow),
     comments: [],
@@ -834,8 +895,11 @@ export function createWorkbenchTask(input: {
   const requirementFiles = Array.isArray(
     input.context?.[WORKFLOW_CONTEXT_KEYS.requirementFiles],
   )
-    ? (input.context?.[WORKFLOW_CONTEXT_KEYS.requirementFiles] as unknown[]).filter(
-        (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    ? (
+        input.context?.[WORKFLOW_CONTEXT_KEYS.requirementFiles] as unknown[]
+      ).filter(
+        (item): item is string =>
+          typeof item === 'string' && item.trim().length > 0,
       )
     : [];
 
@@ -858,11 +922,13 @@ export function createWorkbenchTask(input: {
         ? (input.context[WORKFLOW_CONTEXT_KEYS.workBranch] as string)
         : undefined,
     stagingBaseBranch:
-      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] === 'string'
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] ===
+      'string'
         ? (input.context[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] as string)
         : undefined,
     stagingWorkBranch:
-      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.stagingWorkBranch] === 'string'
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.stagingWorkBranch] ===
+      'string'
         ? (input.context[WORKFLOW_CONTEXT_KEYS.stagingWorkBranch] as string)
         : undefined,
     accessToken:
@@ -870,12 +936,16 @@ export function createWorkbenchTask(input: {
         ? (input.context[WORKFLOW_CONTEXT_KEYS.accessToken] as string)
         : undefined,
     requirementDescription:
-      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.requirementDescription] === 'string'
-        ? (input.context[WORKFLOW_CONTEXT_KEYS.requirementDescription] as string)
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.requirementDescription] ===
+      'string'
+        ? (input.context[
+            WORKFLOW_CONTEXT_KEYS.requirementDescription
+          ] as string)
         : undefined,
     requirementFiles,
     requirementPreset:
-      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.requirementPreset] === 'string'
+      typeof input.context?.[WORKFLOW_CONTEXT_KEYS.requirementPreset] ===
+      'string'
         ? (input.context[WORKFLOW_CONTEXT_KEYS.requirementPreset] as string)
         : undefined,
   });
@@ -956,7 +1026,8 @@ export function runWorkbenchTaskAction(input: {
     }
     case 'submit_access_token':
       if (
-        typeof input.context?.[WORKFLOW_CONTEXT_KEYS.accessToken] !== 'string' ||
+        typeof input.context?.[WORKFLOW_CONTEXT_KEYS.accessToken] !==
+          'string' ||
         !String(input.context[WORKFLOW_CONTEXT_KEYS.accessToken]).trim()
       ) {
         return { error: 'access_token required' };
@@ -1145,9 +1216,13 @@ export function retryWorkbenchSubtask(input: {
   const trimmedRetryNote = input.retryNote?.trim();
   if (trimmedRetryNote) {
     const createdAt = new Date().toISOString();
-    const eventId = ['wb-event', workflowId, 'retry-note', subtask.id, createdAt].join(
-      '-',
-    );
+    const eventId = [
+      'wb-event',
+      workflowId,
+      'retry-note',
+      subtask.id,
+      createdAt,
+    ].join('-');
     createWorkbenchEvent({
       id: eventId,
       task_id: detail.task.id,

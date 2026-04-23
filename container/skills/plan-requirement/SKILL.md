@@ -171,12 +171,39 @@ doc_type: plan
 
 1. 无论任务成功还是失败，都必须调用 `complete_delegation` 回复委派结果，不允许只发普通消息后结束
 2. `complete_delegation` 返回结果要求：
-   - 若成功：
-     - outcome：`success`
-     - result：JSON 格式 `{"service":"xx","main_branch":"main","work_branch":"已确认工作分支","deliverable":"2026-03-20_用户昵称功能","summary":"方案设计完成"}`
-   - 若失败：
-     - outcome：`failure`
-     - result：必须清楚说明失败原因、当前进展、阻塞点，以及是否已经产出可用的方案草稿
+   - `outcome=success` 只表示本 skill 已成功执行并产出了合法的结构化结果；即使业务结论不是“通过”，也不能改成 `outcome=failure`
+   - `outcome=failure` 只用于执行层失败或阻塞，例如：缺少必要输入、提问超时且无法继续、仓库/文件不可访问、工具调用失败、结果无法安全落盘
+   - 若成功，`result` 必须是 JSON，至少包含：
+     - `service`
+     - `deliverable`
+     - `main_branch`
+     - `work_branch`
+     - `verdict`：本阶段通常返回 `passed`；只有明确无法形成可用方案且已输出结构化评测时才返回 `pending` / `needs_revision`
+     - `summary`
+     - `findings`：数组，可为空
+     - `evidence`：数组，至少包含方案文档或关键信息来源
+   - 成功返回示例：
+
+```json
+{
+  "service": "catstory",
+  "deliverable": "2026-03-20_用户昵称功能",
+  "main_branch": "main",
+  "work_branch": "feature/user-nickname_20260320",
+  "verdict": "passed",
+  "summary": "方案文档已产出，可以进入方案审核。",
+  "findings": [],
+  "evidence": [
+    {
+      "type": "artifact",
+      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "summary": "已写入 plan.md"
+    }
+  ]
+}
+```
+
+   - 若失败，`result` 也应尽量返回 JSON，至少说明 `summary`、`error`、`progress`，并保留已确认的 `service/main_branch/work_branch/deliverable`
    - **deliverable 是文件夹名**，不含 `.md` 后缀
    - 若委派消息已提供 `工作分支`，成功回传时这里必须原样返回该值
 
