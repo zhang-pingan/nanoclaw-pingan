@@ -14,7 +14,6 @@ description: Implement features based on approved plans — read design docs, wr
 1. 从任务描述中获取方案文件路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` 中的方案内容
 2. 优先从任务消息读取 `主分支：xxx`、`工作分支：xxx` 等分支参数；若消息未提供 `主分支`，再读取 `/workspace/global/services.json` 获取服务的 `default_branch`
 3. 读取 `/workspace/global/services.json` 中对应服务的 `repo_path`，进入真实代码仓库 `/workspace/repos/{repo_path}`：
-   - `/workspace/projects/{服务名}` 只是项目知识库、方案和交付文档目录，正常情况下只有 `docs`、`iteration` 等内容，**不是** git 仓库，不要在这里执行 `git status`、建分支或修改业务代码
    - 开发、提交、push、代码搜索、测试执行都必须在 `/workspace/repos/{repo_path}` 下进行
    - 若 `/workspace/repos/{repo_path}` 不存在，才视为“代码仓库未挂载/不可用”的真实阻塞；此时不要臆断为 `projects` 目录缺代码，而应通过 `complete_delegation` 返回失败，明确说明缺失的仓库路径、当前已确认的服务名与 `repo_path`
 4. 如有疑问，优先使用提问工具向用户确认：

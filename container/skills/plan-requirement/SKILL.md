@@ -30,20 +30,17 @@ description: Design implementation plans for new requirements — analyze code, 
    - `需求描述：...`
    - `附件文件：...` 下列出的本地文件地址
    - 如果 `附件文件` 为 `无`，按无附件处理
-2. 检查 `/workspace/projects/{服务名}/docs/overview.md` 是否存在。如果存在：
-   - 阅读 overview.md 了解项目全貌和领域划分
+2. 检查 `/workspace/projects/{服务名}/docs` 下是否存在文档。如果存在：
+   - 阅读 `overview.md` 了解项目全貌和领域划分
    - 根据需求涉及的领域，阅读对应的 `domains/{领域名}.md`
    - 如需查找已有接口，阅读 `api-overview.md`
    - 如需了解跨领域数据关系，阅读 `data-model.md`
    - 阅读 `downstream-dependencies.md` 了解下游服务依赖关系
-   这些文档由 project-knowledge 技能维护，能帮助你更快理解项目架构。
-   如果文档不存在，参考 project-knowledge 技能的行为准则处理。
 3. 优先阅读需求附件中可直接打开的文件（PRD、原型、接口文档、日志、截图说明等），提炼目标、约束与验收口径
-4. 阅读项目代码中相关的文件，理解现有实现
+4. 阅读项目代码中相关的文件，理解现有实现,当文档和代码有冲突时以代码为准
 5. **下游服务联动分析**：如果需求可能涉及下游服务的改动（如修改调用接口的参数、新增对下游的调用、变更交互协议等），检查 `downstream-dependencies.md` 中该下游服务是否有 services.json 映射。如果有映射：
    - 通过 services.json 获取下游服务的 `repo_path`
    - 读取下游服务仓库 `/workspace/repos/{下游repo_path}/` 中的相关代码
-   - 如果下游服务也有项目知识库（`/workspace/projects/{下游服务名}/docs/`），一并阅读其 overview.md 和相关领域文档
    - 在后续方案中同时覆盖本服务和下游服务的改动点
 6. 梳理出需要和用户确认的问题，任何不确认的点都要和用户询问确认，例如：
    - 需求中含糊或可多种解读的部分
