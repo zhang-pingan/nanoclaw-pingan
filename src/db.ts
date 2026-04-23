@@ -17,6 +17,7 @@ import { logger } from './logger.js';
 import {
   AgentQueryEventRecord,
   AgentQueryRecord,
+  AgentQuerySourceType,
   AgentQueryStepRecord,
   AskQuestionRecord,
   Delegation,
@@ -26,11 +27,10 @@ import {
   RegisteredGroup,
   ScheduledTask,
   StoredChatMessageRecord,
-  TaskRunLog,
-    TodayPlanItemRecord,
-    TodayPlanMailDraftRecord,
-    TodayPlanRecord,
-    WorkbenchActionItemRecord,
+  TodayPlanItemRecord,
+  TodayPlanMailDraftRecord,
+  TodayPlanRecord,
+  WorkbenchActionItemRecord,
   WorkbenchArtifactRecord,
   WorkbenchCommentRecord,
   WorkbenchContextAssetRecord,
@@ -84,23 +84,12 @@ function createSchema(database: Database.Database): void {
       next_run TEXT,
       last_run TEXT,
       last_result TEXT,
+      last_query_id TEXT,
       status TEXT DEFAULT 'active',
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_next_run ON scheduled_tasks(next_run);
     CREATE INDEX IF NOT EXISTS idx_status ON scheduled_tasks(status);
-
-    CREATE TABLE IF NOT EXISTS task_run_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id TEXT NOT NULL,
-      run_at TEXT NOT NULL,
-      duration_ms INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      result TEXT,
-      error TEXT,
-      FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_task_run_logs ON task_run_logs(task_id, run_at);
 
     CREATE TABLE IF NOT EXISTS router_state (
       key TEXT PRIMARY KEY,
@@ -223,6 +212,15 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* column already exists */
   }
+
+  try {
+    database.exec(`ALTER TABLE scheduled_tasks ADD COLUMN last_query_id TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
+  // Scheduled task execution history now lives entirely in agent_queries.
+  database.exec(`DROP TABLE IF EXISTS task_run_logs`);
 
   // Add is_bot_message column if it doesn't exist (migration for existing DBs)
   try {
@@ -1236,7 +1234,7 @@ export function listStoredMessagesByIds(
 }
 
 export function createTask(
-  task: Omit<ScheduledTask, 'last_run' | 'last_result'>,
+  task: Omit<ScheduledTask, 'last_run' | 'last_result' | 'last_query_id'>,
 ): void {
   db.prepare(
     `
@@ -1319,8 +1317,7 @@ export function updateTask(
 }
 
 export function deleteTask(id: string): void {
-  // Delete child records first (FK constraint)
-  db.prepare('DELETE FROM task_run_logs WHERE task_id = ?').run(id);
+  deleteAgentQueriesBySource('scheduled_task', id);
   db.prepare('DELETE FROM scheduled_tasks WHERE id = ?').run(id);
 }
 
@@ -1341,30 +1338,31 @@ export function updateTaskAfterRun(
   id: string,
   nextRun: string | null,
   lastResult: string,
+  options: {
+    lastQueryId?: string | null;
+    status?: ScheduledTask['status'];
+    runAt?: string;
+  } = {},
 ): void {
-  const now = formatLocalTime(new Date());
+  const now = options.runAt ?? formatLocalTime(new Date());
   db.prepare(
     `
     UPDATE scheduled_tasks
-    SET next_run = ?, last_run = ?, last_result = ?, status = CASE WHEN ? IS NULL THEN 'completed' ELSE status END
+    SET next_run = ?,
+        last_run = ?,
+        last_result = ?,
+        last_query_id = ?,
+        status = COALESCE(?, CASE WHEN ? IS NULL THEN 'completed' ELSE status END)
     WHERE id = ?
   `,
-  ).run(nextRun, now, lastResult, nextRun, id);
-}
-
-export function logTaskRun(log: TaskRunLog): void {
-  db.prepare(
-    `
-    INSERT INTO task_run_logs (task_id, run_at, duration_ms, status, result, error)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `,
   ).run(
-    log.task_id,
-    log.run_at,
-    log.duration_ms,
-    log.status,
-    log.result,
-    log.error,
+    nextRun,
+    now,
+    lastResult,
+    options.lastQueryId ?? null,
+    options.status ?? null,
+    nextRun,
+    id,
   );
 }
 
@@ -3627,13 +3625,34 @@ export function getAgentQuery(queryId: string): AgentQueryRecord | undefined {
     | undefined;
 }
 
+export interface ListAgentQueriesOptions {
+  sourceType?: AgentQuerySourceType;
+  sourceRefId?: string;
+}
+
 export function listAgentQueries(
   limit: number = 50,
   offset: number = 0,
+  options: ListAgentQueriesOptions = {},
 ): AgentQueryRecord[] {
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+
+  if (options.sourceType) {
+    conditions.push('source_type = ?');
+    values.push(options.sourceType);
+  }
+  if (options.sourceRefId !== undefined) {
+    conditions.push('source_ref_id = ?');
+    values.push(options.sourceRefId);
+  }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   return db
-    .prepare('SELECT * FROM agent_queries ORDER BY started_at DESC LIMIT ? OFFSET ?')
-    .all(limit, Math.max(offset, 0)) as AgentQueryRecord[];
+    .prepare(
+      `SELECT * FROM agent_queries ${whereClause} ORDER BY started_at DESC LIMIT ? OFFSET ?`,
+    )
+    .all(...values, limit, Math.max(offset, 0)) as AgentQueryRecord[];
 }
 
 export function createAgentQueryStep(record: AgentQueryStepRecord): void {
@@ -3755,6 +3774,30 @@ export function deleteAgentQuery(queryId: string): void {
   db.prepare('DELETE FROM agent_query_events WHERE query_id = ?').run(queryId);
   db.prepare('DELETE FROM agent_query_steps WHERE query_id = ?').run(queryId);
   db.prepare('DELETE FROM agent_queries WHERE query_id = ?').run(queryId);
+}
+
+export function deleteAgentQueriesBySource(
+  sourceType: AgentQuerySourceType,
+  sourceRefId: string,
+): number {
+  const queryIds = db
+    .prepare(
+      'SELECT query_id FROM agent_queries WHERE source_type = ? AND source_ref_id = ?',
+    )
+    .all(sourceType, sourceRefId) as Array<{ query_id: string }>;
+
+  if (queryIds.length === 0) return 0;
+
+  const deleteMany = db.transaction((rows: Array<{ query_id: string }>) => {
+    let deleted = 0;
+    for (const row of rows) {
+      deleteAgentQuery(row.query_id);
+      deleted += 1;
+    }
+    return deleted;
+  });
+
+  return deleteMany(queryIds);
 }
 
 export function deleteHistoricalAgentQueries(activeQueryIds: string[] = []): number {

@@ -1335,6 +1335,7 @@ class WebChannel {
             next_run: t.next_run,
             last_run: t.last_run,
             last_result: t.last_result,
+            last_query_id: t.last_query_id ?? null,
           })),
         }),
       );
@@ -1471,17 +1472,30 @@ class WebChannel {
   ): void {
     const limitRaw = parseInt(reqUrl.searchParams.get('limit') || '50', 10);
     const offsetRaw = parseInt(reqUrl.searchParams.get('offset') || '0', 10);
+    const sourceType = reqUrl.searchParams.get('sourceType') || undefined;
+    const sourceRefIdParam = reqUrl.searchParams.get('sourceRefId');
+    const sourceRefId = sourceRefIdParam === null ? undefined : sourceRefIdParam;
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(limitRaw, 1), 200)
       : 50;
     const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
-    const queries = listAgentQueries(limit, offset);
+    const queries = listAgentQueries(limit, offset, {
+      sourceType: sourceType as
+        | 'message'
+        | 'scheduled_task'
+        | 'workflow_delegation'
+        | 'web_action'
+        | undefined,
+      sourceRefId,
+    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
         queries,
         limit,
         offset,
+        sourceType: sourceType ?? null,
+        sourceRefId: sourceRefId ?? null,
         hasMore: queries.length === limit,
       }),
     );

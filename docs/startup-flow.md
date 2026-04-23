@@ -175,7 +175,9 @@ chats              -- 聊天元数据（JID、名称、频道）
 messages           -- 消息历史（按 timestamp 排序，游标查询）
 registered_groups  -- 已注册群组（JID、文件夹、触发词、是否主群）
 scheduled_tasks    -- 定时任务（cron/interval/once）
-task_run_logs      -- 任务执行日志
+agent_queries      -- 统一执行记录（消息、定时任务、工作流委派等）
+agent_query_steps  -- 执行步骤
+agent_query_events -- 执行事件流
 router_state       -- 路由状态（消息游标等）
 sessions           -- Claude 会话 ID 持久化
 ```

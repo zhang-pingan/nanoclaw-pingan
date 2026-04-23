@@ -14,7 +14,6 @@ import {
   getAllTasks,
   getDueTasks,
   getTaskById,
-  logTaskRun,
   updateTask,
   updateTaskAfterRun,
 } from './db.js';
@@ -26,6 +25,46 @@ import { RegisteredGroup, ScheduledTask } from './types.js';
 
 function createExecutionId(): string {
   return crypto.randomUUID();
+}
+
+function finishScheduledTaskErrorQuery(
+  queryId: string,
+  error: string,
+  options: {
+    failureOrigin?: string | null;
+    outputPreview?: string | null;
+    summary?: string;
+  } = {},
+): void {
+  const errorStepId = agentQueryTraceManager.startStep({
+    queryId,
+    stepType: 'error',
+    stepName: 'run_error',
+    summary: options.summary ?? 'Scheduled task failed',
+  });
+  agentQueryTraceManager.completeStep(queryId, errorStepId, 'error');
+  agentQueryTraceManager.finishQuery(queryId, 'error', {
+    error_message: error,
+    failure_type: 'scheduled_task_error',
+    failure_origin: options.failureOrigin ?? null,
+    output_preview: options.outputPreview ?? null,
+  });
+}
+
+function finishScheduledTaskSuccessQuery(
+  queryId: string,
+  result: string | null,
+): void {
+  const finishStepId = agentQueryTraceManager.startStep({
+    queryId,
+    stepType: 'finish',
+    stepName: 'run_completed',
+    summary: 'Scheduled task completed',
+  });
+  agentQueryTraceManager.completeStep(queryId, finishStepId, 'success');
+  agentQueryTraceManager.finishQuery(queryId, 'success', {
+    output_preview: result ? result.slice(0, 200) : 'Completed',
+  });
 }
 
 /**
@@ -87,72 +126,6 @@ async function runTask(
   deps: SchedulerDependencies,
 ): Promise<void> {
   const startTime = Date.now();
-  let groupDir: string;
-  try {
-    groupDir = resolveGroupFolderPath(task.group_folder);
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    // Stop retry churn for malformed legacy rows.
-    updateTask(task.id, { status: 'paused' });
-    logger.error(
-      { taskId: task.id, groupFolder: task.group_folder, error },
-      'Task has invalid group folder',
-    );
-    logTaskRun({
-      task_id: task.id,
-      run_at: new Date().toISOString(),
-      duration_ms: Date.now() - startTime,
-      status: 'error',
-      result: null,
-      error,
-    });
-    return;
-  }
-  fs.mkdirSync(groupDir, { recursive: true });
-
-  logger.info(
-    { taskId: task.id, group: task.group_folder },
-    'Running scheduled task',
-  );
-
-  const groups = deps.registeredGroups();
-  const group = Object.values(groups).find(
-    (g) => g.folder === task.group_folder,
-  );
-
-  if (!group) {
-    logger.error(
-      { taskId: task.id, groupFolder: task.group_folder },
-      'Group not found for task',
-    );
-    logTaskRun({
-      task_id: task.id,
-      run_at: new Date().toISOString(),
-      duration_ms: Date.now() - startTime,
-      status: 'error',
-      result: null,
-      error: `Group not found: ${task.group_folder}`,
-    });
-    return;
-  }
-
-  // Update tasks snapshot for container to read (filtered by group)
-  const isMain = group.isMain === true;
-  const tasks = getAllTasks();
-  writeTasksSnapshot(
-    task.group_folder,
-    isMain,
-    tasks.map((t) => ({
-      id: t.id,
-      groupFolder: t.group_folder,
-      prompt: t.prompt,
-      schedule_type: t.schedule_type,
-      schedule_value: t.schedule_value,
-      status: t.status,
-      next_run: t.next_run,
-    })),
-  );
-
   let result: string | null = null;
   let error: string | null = null;
   const runId = createExecutionId();
@@ -183,6 +156,72 @@ async function runTask(
     payload: { taskId: task.id, contextMode: task.context_mode },
   });
   agentQueryTraceManager.completeStep(queryId, inputStepId, 'success');
+
+  let groupDir: string;
+  try {
+    groupDir = resolveGroupFolderPath(task.group_folder);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+    // Stop retry churn for malformed legacy rows.
+    updateTask(task.id, { status: 'paused' });
+    logger.error(
+      { taskId: task.id, groupFolder: task.group_folder, error },
+      'Task has invalid group folder',
+    );
+    finishScheduledTaskErrorQuery(queryId, error, {
+      failureOrigin: 'scheduler_preflight',
+      summary: 'Scheduled task failed preflight validation',
+    });
+    updateTaskAfterRun(task.id, task.next_run, `Error: ${error}`, {
+      lastQueryId: queryId,
+      status: 'paused',
+    });
+    return;
+  }
+  fs.mkdirSync(groupDir, { recursive: true });
+
+  logger.info(
+    { taskId: task.id, group: task.group_folder },
+    'Running scheduled task',
+  );
+
+  const groups = deps.registeredGroups();
+  const group = Object.values(groups).find(
+    (g) => g.folder === task.group_folder,
+  );
+
+  if (!group) {
+    error = `Group not found: ${task.group_folder}`;
+    logger.error(
+      { taskId: task.id, groupFolder: task.group_folder },
+      'Group not found for task',
+    );
+    finishScheduledTaskErrorQuery(queryId, error, {
+      failureOrigin: 'scheduler_preflight',
+      summary: 'Scheduled task group lookup failed',
+    });
+    updateTaskAfterRun(task.id, task.next_run, `Error: ${error}`, {
+      lastQueryId: queryId,
+    });
+    return;
+  }
+
+  // Update tasks snapshot for container to read (filtered by group)
+  const isMain = group.isMain === true;
+  const tasks = getAllTasks();
+  writeTasksSnapshot(
+    task.group_folder,
+    isMain,
+    tasks.map((t) => ({
+      id: t.id,
+      groupFolder: t.group_folder,
+      prompt: t.prompt,
+      schedule_type: t.schedule_type,
+      schedule_value: t.schedule_value,
+      status: t.status,
+      next_run: t.next_run,
+    })),
+  );
 
   // After the task produces a result, close the container promptly.
   // Tasks are single-turn — no need to wait IDLE_TIMEOUT (30 min) for the
@@ -393,57 +432,21 @@ async function runTask(
       'Task completed',
     );
     if (error) {
-      const errorStepId = agentQueryTraceManager.startStep({
-        queryId,
-        stepType: 'error',
-        stepName: 'run_error',
-        summary: 'Scheduled task failed',
-      });
-      agentQueryTraceManager.completeStep(queryId, errorStepId, 'error');
-      agentQueryTraceManager.finishQuery(queryId, 'error', {
-        error_message: error,
-        failure_type: 'scheduled_task_error',
-        output_preview: result ? result.slice(0, 200) : null,
+      finishScheduledTaskErrorQuery(queryId, error, {
+        failureOrigin: 'agent_execution',
+        outputPreview: result ? result.slice(0, 200) : null,
       });
     } else {
-      const finishStepId = agentQueryTraceManager.startStep({
-        queryId,
-        stepType: 'finish',
-        stepName: 'run_completed',
-        summary: 'Scheduled task completed',
-      });
-      agentQueryTraceManager.completeStep(queryId, finishStepId, 'success');
-      agentQueryTraceManager.finishQuery(queryId, 'success', {
-        output_preview: result ? result.slice(0, 200) : 'Completed',
-      });
+      finishScheduledTaskSuccessQuery(queryId, result);
     }
   } catch (err) {
     if (closeTimer) clearTimeout(closeTimer);
     error = err instanceof Error ? err.message : String(err);
     logger.error({ taskId: task.id, error }, 'Task failed');
-    const errorStepId = agentQueryTraceManager.startStep({
-      queryId,
-      stepType: 'error',
-      stepName: 'run_error',
-      summary: 'Scheduled task failed',
-    });
-    agentQueryTraceManager.completeStep(queryId, errorStepId, 'error');
-    agentQueryTraceManager.finishQuery(queryId, 'error', {
-      error_message: error,
-      failure_type: 'scheduled_task_error',
+    finishScheduledTaskErrorQuery(queryId, error, {
+      failureOrigin: 'scheduler_runtime',
     });
   }
-
-  const durationMs = Date.now() - startTime;
-
-  logTaskRun({
-    task_id: task.id,
-    run_at: new Date().toISOString(),
-    duration_ms: durationMs,
-    status: error ? 'error' : 'success',
-    result,
-    error,
-  });
 
   const nextRun = computeNextRun(task);
   const resultSummary = error
@@ -451,7 +454,9 @@ async function runTask(
     : result
       ? result.slice(0, 200)
       : 'Completed';
-  updateTaskAfterRun(task.id, nextRun, resultSummary);
+  updateTaskAfterRun(task.id, nextRun, resultSummary, {
+    lastQueryId: queryId,
+  });
 }
 
 let schedulerRunning = false;

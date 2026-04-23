@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { _initTestDatabase, createTask, getTaskById } from './db.js';
+import { _initTestDatabase, createTask, getTaskById, listAgentQueries } from './db.js';
 import {
   _resetSchedulerLoopForTests,
   computeNextRun,
@@ -58,6 +58,64 @@ describe('task scheduler', () => {
 
     const task = getTaskById('task-invalid-folder');
     expect(task?.status).toBe('paused');
+    expect(task?.last_result).toContain('Invalid group folder');
+    expect(task?.last_query_id).toBeTruthy();
+
+    const queries = listAgentQueries(10, 0, {
+      sourceType: 'scheduled_task',
+      sourceRefId: 'task-invalid-folder',
+    });
+    expect(queries).toHaveLength(1);
+    expect(queries[0].query_id).toBe(task?.last_query_id);
+    expect(queries[0].status).toBe('error');
+    expect(queries[0].failure_origin).toBe('scheduler_preflight');
+    expect(queries[0].error_message).toContain('Invalid group folder');
+  });
+
+  it('records canonical query history when a task group is missing', async () => {
+    createTask({
+      id: 'task-missing-group',
+      group_folder: 'missing-group',
+      chat_jid: 'missing@g.us',
+      prompt: 'run',
+      schedule_type: 'once',
+      schedule_value: '2026-02-22T00:00:00.000Z',
+      context_mode: 'isolated',
+      next_run: formatLocalTime(new Date(Date.now() - 60_000)),
+      status: 'active',
+      created_at: '2026-02-22T00:00:00.000Z',
+    });
+
+    const enqueueTask = vi.fn(
+      (_groupJid: string, _taskId: string, fn: () => Promise<void>) => {
+        void fn();
+      },
+    );
+
+    startSchedulerLoop({
+      registeredGroups: () => ({}),
+      getSessions: () => ({}),
+      queue: { enqueueTask } as any,
+      onProcess: () => {},
+      sendMessage: async () => {},
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const task = getTaskById('task-missing-group');
+    expect(task?.status).toBe('active');
+    expect(task?.last_result).toContain('Group not found: missing-group');
+    expect(task?.last_query_id).toBeTruthy();
+
+    const queries = listAgentQueries(10, 0, {
+      sourceType: 'scheduled_task',
+      sourceRefId: 'task-missing-group',
+    });
+    expect(queries).toHaveLength(1);
+    expect(queries[0].query_id).toBe(task?.last_query_id);
+    expect(queries[0].status).toBe('error');
+    expect(queries[0].failure_origin).toBe('scheduler_preflight');
+    expect(queries[0].error_message).toBe('Group not found: missing-group');
   });
 
   it('computeNextRun anchors interval tasks to scheduled time to prevent drift', () => {

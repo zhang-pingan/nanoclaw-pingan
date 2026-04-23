@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import { agentQueryTraceManager } from './agent-query-trace.js';
 import {
   _initTestDatabase,
   createDelegation,
@@ -25,9 +26,11 @@ import {
   getAllChats,
   getAllRegisteredGroups,
   getAllWorkflows,
+  getAgentQuery,
   getMessagesSince,
   getNewMessages,
   getTaskById,
+  listAgentQueries,
   listMemories,
   recordMemoryMetric,
   resolveConflict,
@@ -771,7 +774,7 @@ describe('task CRUD', () => {
     expect(getTaskById('task-2')!.status).toBe('paused');
   });
 
-  it('deletes a task and its run logs', () => {
+  it('deletes a task and its canonical run history', () => {
     createTask({
       id: 'task-3',
       group_folder: 'main',
@@ -785,8 +788,39 @@ describe('task CRUD', () => {
       created_at: '2024-01-01T00:00:00.000Z',
     });
 
+    agentQueryTraceManager.startQuery({
+      queryId: 'query-task-3',
+      runId: 'run-task-3',
+      sourceType: 'scheduled_task',
+      sourceRefId: 'task-3',
+      chatJid: 'group@g.us',
+      groupFolder: 'main',
+      promptSummary: 'delete me',
+      promptHash: 'prompt-hash',
+    });
+    const stepId = agentQueryTraceManager.startStep({
+      queryId: 'query-task-3',
+      stepType: 'finish',
+      stepName: 'run_completed',
+      summary: 'Scheduled task completed',
+    });
+    agentQueryTraceManager.completeStep('query-task-3', stepId, 'success');
+    agentQueryTraceManager.finishQuery('query-task-3', 'success', {
+      output_preview: 'Completed',
+    });
+
+    expect(getAgentQuery('query-task-3')).toBeDefined();
+
     deleteTask('task-3');
+
     expect(getTaskById('task-3')).toBeUndefined();
+    expect(getAgentQuery('query-task-3')).toBeUndefined();
+    expect(
+      listAgentQueries(10, 0, {
+        sourceType: 'scheduled_task',
+        sourceRefId: 'task-3',
+      }),
+    ).toHaveLength(0);
   });
 });
 

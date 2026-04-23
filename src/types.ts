@@ -69,17 +69,9 @@ export interface ScheduledTask {
   next_run: string | null;
   last_run: string | null;
   last_result: string | null;
+  last_query_id?: string | null;
   status: 'active' | 'paused' | 'completed';
   created_at: string;
-}
-
-export interface TaskRunLog {
-  task_id: string;
-  run_at: string;
-  duration_ms: number;
-  status: 'success' | 'error';
-  result: string | null;
-  error: string | null;
 }
 
 export interface Delegation {
