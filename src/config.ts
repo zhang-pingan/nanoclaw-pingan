@@ -50,6 +50,8 @@ export const SSH_KEY_PATH = sshKeyPath
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
+export const KNOWLEDGE_DIR = path.resolve(PROJECT_ROOT, 'knowledge');
+export const KNOWLEDGE_WIKI_DIR = path.join(KNOWLEDGE_DIR, 'wiki');
 
 export const CONTAINER_IMAGE =
   process.env.CONTAINER_IMAGE || 'nanoclaw-agent:latest';

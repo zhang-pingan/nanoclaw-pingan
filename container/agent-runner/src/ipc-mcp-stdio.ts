@@ -1166,6 +1166,168 @@ server.tool(
 );
 
 server.tool(
+  'wiki_search',
+  '搜索全局知识库中的长期知识页面。适用于你不确定稳定事实、既有决策、流程说明或用户明确提供过的资料结论时。',
+  {
+    query: z.string().describe('搜索问题或关键词'),
+    limit: z.number().optional().default(5).describe('最大返回条数'),
+  },
+  async (args) => {
+    const requestId = `wiki-search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'wiki_search',
+      query: args.query,
+      limit: args.limit || 5,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resultPath = path.join(IPC_DIR, 'wiki-results', `${requestId}.json`);
+    const result = await waitForIpcResult<{
+      hits?: Array<{
+        slug?: string;
+        title?: string;
+        page_kind?: string;
+        summary?: string | null;
+      }>;
+    }>(resultPath);
+
+    if (!result) {
+      return {
+        content: [{ type: 'text' as const, text: 'wiki_search 请求超时。' }],
+        isError: true,
+      };
+    }
+
+    const hits = Array.isArray(result.hits) ? result.hits : [];
+    if (hits.length === 0) {
+      return {
+        content: [{ type: 'text' as const, text: '知识库中未找到相关页面。' }],
+      };
+    }
+
+    const lines = ['## Wiki 搜索结果', ''];
+    for (const hit of hits) {
+      lines.push(
+        `- [${hit.slug || 'unknown'}][${hit.page_kind || 'page'}] ${hit.title || hit.slug || '未命名页面'}`,
+      );
+      if (hit.summary) {
+        lines.push(`  ${String(hit.summary).replace(/\s+/g, ' ').trim()}`);
+      }
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: lines.join('\n') }],
+    };
+  },
+);
+
+server.tool(
+  'wiki_get_page',
+  '读取知识库页面详情。通常在 wiki_search 命中后继续调用。',
+  {
+    slug: z.string().describe('页面 slug'),
+  },
+  async (args) => {
+    const requestId = `wiki-page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'wiki_get_page',
+      slug: args.slug,
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resultPath = path.join(IPC_DIR, 'wiki-results', `${requestId}.json`);
+    const result = await waitForIpcResult<{
+      found?: boolean;
+      detail?: {
+        page?: {
+          slug?: string;
+          title?: string;
+          page_kind?: string;
+          summary?: string | null;
+          content_markdown?: string;
+        };
+        claims?: Array<{
+          claim_type?: string;
+          statement?: string;
+        }>;
+        materials?: Array<{
+          id?: string;
+          title?: string;
+        }>;
+        relations?: Array<{
+          to_page_slug?: string;
+          relation_type?: string;
+        }>;
+      } | null;
+    }>(resultPath);
+
+    if (!result) {
+      return {
+        content: [{ type: 'text' as const, text: 'wiki_get_page 请求超时。' }],
+        isError: true,
+      };
+    }
+
+    if (!result.found || !result.detail?.page) {
+      return {
+        content: [{ type: 'text' as const, text: '未找到该知识库页面。' }],
+        isError: true,
+      };
+    }
+
+    const page = result.detail.page;
+    const parts = [
+      `# ${page.title || page.slug || args.slug}`,
+      '',
+      `slug: ${page.slug || args.slug}`,
+      `kind: ${page.page_kind || 'page'}`,
+    ];
+    if (page.summary) parts.push(`summary: ${page.summary}`);
+    parts.push('');
+    parts.push(page.content_markdown || '');
+
+    const claims = Array.isArray(result.detail.claims) ? result.detail.claims : [];
+    if (claims.length > 0) {
+      parts.push('');
+      parts.push('## Claims');
+      for (const claim of claims.slice(0, 12)) {
+        parts.push(`- [${claim.claim_type || 'claim'}] ${claim.statement || ''}`);
+      }
+    }
+
+    const materials = Array.isArray(result.detail.materials)
+      ? result.detail.materials
+      : [];
+    if (materials.length > 0) {
+      parts.push('');
+      parts.push('## Source Materials');
+      for (const material of materials.slice(0, 12)) {
+        parts.push(`- ${material.id || 'material'} ${material.title || ''}`.trim());
+      }
+    }
+
+    const relations = Array.isArray(result.detail.relations)
+      ? result.detail.relations
+      : [];
+    if (relations.length > 0) {
+      parts.push('');
+      parts.push('## Related');
+      for (const relation of relations.slice(0, 12)) {
+        parts.push(`- [${relation.relation_type || 'related_to'}] ${relation.to_page_slug || ''}`);
+      }
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: parts.join('\n') }],
+    };
+  },
+);
+
+server.tool(
   'memory_write',
   '写入结构化记忆到当前群组（working/episodic/canonical）。',
   {

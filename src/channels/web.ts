@@ -36,9 +36,15 @@ import {
   deleteWorkbenchTaskData,
   deleteHistoricalAgentQueries,
   getAgentQuery,
+  getWikiJob,
   listAgentQueryEvents,
   listAgentQuerySteps,
   listAgentQueries,
+  listWikiDrafts,
+  listWikiJobs,
+  listWikiMaterials,
+  listWikiPages,
+  searchWikiPages,
 } from '../db.js';
 import {
   deleteWorkflowDefinitionVersion,
@@ -77,6 +83,21 @@ import {
   dispatchCurrentAskQuestion,
   handleAskQuestionResponse,
 } from '../ask-user-question.js';
+import {
+  deleteWikiDraft,
+  deleteWikiMaterial,
+  deleteWikiPage,
+  ensureWikiDirs,
+  getWikiDraftDetail,
+  getWikiMaterialDetail,
+  getWikiPageDetail,
+  importWikiMaterialFromText,
+  importWikiMaterialFromUpload,
+  publishWikiDraft,
+  queueWikiDraftGenerationJob,
+  readWikiMaterialExtractedText,
+  resumePendingWikiJobs,
+} from '../wiki.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -134,6 +155,8 @@ class WebChannel {
 
   connect(): Promise<void> {
     initWebDb();
+    ensureWikiDirs();
+    resumePendingWikiJobs();
     return new Promise((resolve, reject) => {
       this.server = http.createServer((req, res) => this.handleHttp(req, res));
       this.wss = new WebSocketServer({ noServer: true });
@@ -561,6 +584,51 @@ class WebChannel {
       }
       if (pathname === '/api/upload' && req.method === 'POST') {
         return this.apiUpload(req, reqUrl, res);
+      }
+      if (pathname === '/api/wiki/materials' && req.method === 'GET') {
+        return this.apiListWikiMaterials(res);
+      }
+      if (pathname === '/api/wiki/materials/import' && req.method === 'POST') {
+        return this.apiImportWikiMaterial(req, res);
+      }
+      if (pathname === '/api/wiki/material' && req.method === 'GET') {
+        return this.apiGetWikiMaterial(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/material' && req.method === 'DELETE') {
+        return this.apiDeleteWikiMaterial(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/drafts' && req.method === 'GET') {
+        return this.apiListWikiDrafts(res);
+      }
+      if (pathname === '/api/wiki/draft' && req.method === 'GET') {
+        return this.apiGetWikiDraft(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/draft' && req.method === 'DELETE') {
+        return this.apiDeleteWikiDraft(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/draft/generate' && req.method === 'POST') {
+        return this.apiGenerateWikiDraft(req, res);
+      }
+      if (pathname === '/api/wiki/draft/publish' && req.method === 'POST') {
+        return this.apiPublishWikiDraft(req, res);
+      }
+      if (pathname === '/api/wiki/pages' && req.method === 'GET') {
+        return this.apiListWikiPages(res);
+      }
+      if (pathname === '/api/wiki/page' && req.method === 'GET') {
+        return this.apiGetWikiPage(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/page' && req.method === 'DELETE') {
+        return this.apiDeleteWikiPage(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/search' && req.method === 'GET') {
+        return this.apiSearchWikiPages(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/jobs' && req.method === 'GET') {
+        return this.apiListWikiJobs(res);
+      }
+      if (pathname === '/api/wiki/job' && req.method === 'GET') {
+        return this.apiGetWikiJob(reqUrl, res);
       }
       if (pathname.startsWith('/api/uploads/')) {
         return this.apiServeUpload(pathname, res);
@@ -2895,6 +2963,318 @@ class WebChannel {
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
+  }
+
+  private apiListWikiMaterials(res: http.ServerResponse): void {
+    const materials = listWikiMaterials(200).map((material) => {
+      const extractedText = readWikiMaterialExtractedText(material);
+      return {
+        ...material,
+        extracted_length: extractedText.length,
+        preview: extractedText.slice(0, 280),
+      };
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ materials }));
+  }
+
+  private apiGetWikiMaterial(reqUrl: URL, res: http.ServerResponse): void {
+    const id = (reqUrl.searchParams.get('id') || '').trim();
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'id required' }));
+      return;
+    }
+    const detail = getWikiMaterialDetail(id);
+    if (!detail) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'material not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(detail));
+  }
+
+  private apiDeleteWikiMaterial(reqUrl: URL, res: http.ServerResponse): void {
+    const id = (reqUrl.searchParams.get('id') || '').trim();
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'id required' }));
+      return;
+    }
+    try {
+      const result = deleteWikiMaterial(id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private async apiImportWikiMaterial(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      title?: string;
+      note?: string;
+      text?: string;
+      hostPath?: string;
+    };
+
+    try {
+      const material =
+        typeof data.text === 'string' && data.text.trim()
+          ? importWikiMaterialFromText({
+              title: data.title?.trim() || '未命名资料',
+              note: data.note,
+              text: data.text,
+            })
+          : data.hostPath
+            ? importWikiMaterialFromUpload({
+                title: data.title,
+                note: data.note,
+                hostPath: data.hostPath,
+              })
+            : null;
+
+      if (!material) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'text or hostPath required' }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, material }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private apiListWikiDrafts(res: http.ServerResponse): void {
+    const drafts = listWikiDrafts(200).map((draft) => {
+      let materialCount = 0;
+      try {
+        materialCount = JSON.parse(draft.material_ids_json).length;
+      } catch {
+        materialCount = 0;
+      }
+      const detail = getWikiDraftDetail(draft.id);
+      return {
+        ...draft,
+        material_count: materialCount,
+        publish_preview_summary: detail?.publish_preview_summary || null,
+      };
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ drafts }));
+  }
+
+  private apiGetWikiDraft(reqUrl: URL, res: http.ServerResponse): void {
+    const id = (reqUrl.searchParams.get('id') || '').trim();
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'id required' }));
+      return;
+    }
+    const detail = getWikiDraftDetail(id);
+    if (!detail) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'draft not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(detail));
+  }
+
+  private apiDeleteWikiDraft(reqUrl: URL, res: http.ServerResponse): void {
+    const id = (reqUrl.searchParams.get('id') || '').trim();
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'id required' }));
+      return;
+    }
+    try {
+      const result = deleteWikiDraft(id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private async apiGenerateWikiDraft(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      material_ids?: string[];
+      target_slug?: string;
+      title?: string;
+      page_kind?: string;
+      instruction?: string;
+    };
+    if (!Array.isArray(data.material_ids) || data.material_ids.length === 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'material_ids required' }));
+      return;
+    }
+
+    const job = queueWikiDraftGenerationJob({
+      materialIds: data.material_ids,
+      targetSlug: data.target_slug,
+      title: data.title,
+      pageKind: data.page_kind,
+      instruction: data.instruction,
+    });
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, job }));
+  }
+
+  private async apiPublishWikiDraft(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { draft_id?: string };
+    if (!data.draft_id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'draft_id required' }));
+      return;
+    }
+
+    try {
+      const result = publishWikiDraft(data.draft_id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private apiListWikiPages(res: http.ServerResponse): void {
+    const pages = listWikiPages(200);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ pages }));
+  }
+
+  private apiGetWikiPage(reqUrl: URL, res: http.ServerResponse): void {
+    const slug = (reqUrl.searchParams.get('slug') || '').trim();
+    if (!slug) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'slug required' }));
+      return;
+    }
+    const detail = getWikiPageDetail(slug);
+    if (!detail) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'page not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(detail));
+  }
+
+  private apiDeleteWikiPage(reqUrl: URL, res: http.ServerResponse): void {
+    const slug = (reqUrl.searchParams.get('slug') || '').trim();
+    if (!slug) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'slug required' }));
+      return;
+    }
+    try {
+      const result = deleteWikiPage(slug);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  private apiSearchWikiPages(reqUrl: URL, res: http.ServerResponse): void {
+    const query = (reqUrl.searchParams.get('q') || '').trim();
+    const limit = Math.max(
+      1,
+      Math.min(20, Number.parseInt(reqUrl.searchParams.get('limit') || '10', 10) || 10),
+    );
+    const results = query ? searchWikiPages(query, limit) : [];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ results }));
+  }
+
+  private apiListWikiJobs(res: http.ServerResponse): void {
+    const jobs = listWikiJobs(100);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ jobs }));
+  }
+
+  private apiGetWikiJob(reqUrl: URL, res: http.ServerResponse): void {
+    const id = (reqUrl.searchParams.get('id') || '').trim();
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'id required' }));
+      return;
+    }
+    const job = getWikiJob(id);
+    if (!job) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'job not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ job }));
   }
 
   private async apiUpload(

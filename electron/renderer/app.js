@@ -26,6 +26,7 @@ var todayPlanScreen = document.getElementById("today-plan-screen");
 var workflowDefinitionsScreen = document.getElementById("workflow-definitions-screen");
 var cardsManagementScreen = document.getElementById("cards-management-screen");
 var memoryManagementScreen = document.getElementById("memory-management-screen");
+var knowledgeManagementScreen = document.getElementById("knowledge-management-screen");
 var traceMonitorScreen = document.getElementById("trace-monitor-screen");
 var workflowDefinitionList = document.getElementById("workflow-definition-list");
 var workflowDefinitionRefreshBtn = document.getElementById("workflow-definition-refresh-btn");
@@ -153,6 +154,25 @@ var memoryMetricsWindow = document.getElementById("memory-metrics-window");
 var memoryMetricsTotal = document.getElementById("memory-metrics-total");
 var memoryMetricsList = document.getElementById("memory-metrics-list");
 var memoryMetricsCloseBtn = document.getElementById("memory-metrics-close-btn");
+var knowledgeMaterialList = document.getElementById("knowledge-material-list");
+var knowledgeDraftList = document.getElementById("knowledge-draft-list");
+var knowledgePageList = document.getElementById("knowledge-page-list");
+var knowledgeJobList = document.getElementById("knowledge-job-list");
+var knowledgeRefreshBtn = document.getElementById("knowledge-refresh-btn");
+var knowledgeImportTextBtn = document.getElementById("knowledge-import-text-btn");
+var knowledgeImportFileBtn = document.getElementById("knowledge-import-file-btn");
+var knowledgeGenerateDraftBtn = document.getElementById("knowledge-generate-draft-btn");
+var knowledgePublishDraftBtn = document.getElementById("knowledge-publish-draft-btn");
+var knowledgeSearchInput = document.getElementById("knowledge-search-input");
+var knowledgeSearchBtn = document.getElementById("knowledge-search-btn");
+var knowledgeDetailEmpty = document.getElementById("knowledge-detail-empty");
+var knowledgeDetail = document.getElementById("knowledge-detail");
+var knowledgeDetailTitle = document.getElementById("knowledge-detail-title");
+var knowledgeDetailMeta = document.getElementById("knowledge-detail-meta");
+var knowledgeDetailActions = document.getElementById("knowledge-detail-actions");
+var knowledgeDetailContent = document.getElementById("knowledge-detail-content");
+var knowledgeFileInput = document.getElementById("knowledge-file-input");
+var knowledgeSelectionSummary = document.getElementById("knowledge-selection-summary");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
 var primaryNav = document.getElementById("primary-nav");
@@ -356,6 +376,15 @@ var cardsPreviewPresets = {
 };
 var activeMemoryGroupJid = "";
 var memoryEntries = [];
+var knowledgeMaterials = [];
+var knowledgeDrafts = [];
+var knowledgePages = [];
+var knowledgeJobs = [];
+var knowledgeSelectedMaterialIds = /* @__PURE__ */ new Set();
+var currentKnowledgeDetail = null;
+var currentKnowledgeDraftId = "";
+var currentKnowledgePageSlug = "";
+var knowledgePollingTimer = null;
 const WORKBENCH_CONTEXT_BADGES = [
   { key: "requirement_preset", label: "关联需求" },
   { key: "main_branch", label: "主分支" },
@@ -1683,6 +1712,7 @@ function applyScreenVisibility() {
   const showWorkflowDefinitions = !showTodayPlan && activePrimaryNavKey === "workflow-definitions";
   const showCardsManagement = !showTodayPlan && activePrimaryNavKey === "cards-management";
   const showMemoryManagement = !showTodayPlan && activePrimaryNavKey === "memory-management";
+  const showKnowledgeManagement = !showTodayPlan && activePrimaryNavKey === "knowledge-management";
   const showTraceMonitor = !showTodayPlan && activePrimaryNavKey === "trace-monitor";
   if (todayPlanScreen) {
     todayPlanScreen.classList.toggle("active", showTodayPlan);
@@ -1702,6 +1732,9 @@ function applyScreenVisibility() {
   if (memoryManagementScreen) {
     memoryManagementScreen.classList.toggle("active", showMemoryManagement);
   }
+  if (knowledgeManagementScreen) {
+    knowledgeManagementScreen.classList.toggle("active", showKnowledgeManagement);
+  }
   if (traceMonitorScreen) {
     traceMonitorScreen.classList.toggle("active", showTraceMonitor);
   }
@@ -1719,6 +1752,18 @@ function setPrimaryNav(navKey) {
     renderDoctorPanel();
     renderMemoryList();
     loadMemories();
+  }
+  if (navKey === "knowledge-management") {
+    loadKnowledgeBaseData({ preserveDetail: true });
+    if (knowledgePollingTimer) clearInterval(knowledgePollingTimer);
+    knowledgePollingTimer = setInterval(() => {
+      if (activePrimaryNavKey === "knowledge-management") {
+        loadKnowledgeJobs();
+      }
+    }, 4000);
+  } else if (knowledgePollingTimer) {
+    clearInterval(knowledgePollingTimer);
+    knowledgePollingTimer = null;
   }
   if (navKey === "workbench") {
     loadWorkbenchTasks();
@@ -2412,6 +2457,947 @@ async function loadMemories(queryOverride) {
     if (reqSeq === memoryRequestSeq && memoryRefreshBtn) {
       memoryRefreshBtn.classList.remove("spinning");
     }
+  }
+}
+
+function renderKnowledgeSelectionSummary() {
+  if (!knowledgeSelectionSummary) return;
+  knowledgeSelectionSummary.textContent = `已选 ${knowledgeSelectedMaterialIds.size} 份`;
+}
+
+function clearKnowledgeDetail() {
+  currentKnowledgeDetail = null;
+  currentKnowledgeDraftId = "";
+  currentKnowledgePageSlug = "";
+  if (knowledgeDetailEmpty) knowledgeDetailEmpty.classList.remove("hidden");
+  if (knowledgeDetail) knowledgeDetail.classList.add("hidden");
+  if (knowledgeDetailTitle) knowledgeDetailTitle.textContent = "知识详情";
+  if (knowledgeDetailMeta) knowledgeDetailMeta.innerHTML = "";
+  if (knowledgeDetailActions) knowledgeDetailActions.innerHTML = "";
+  if (knowledgeDetailContent) knowledgeDetailContent.innerHTML = "";
+}
+
+function renderKnowledgeMaterials() {
+  if (!knowledgeMaterialList) return;
+  knowledgeMaterialList.innerHTML = "";
+  renderKnowledgeSelectionSummary();
+
+  if (!knowledgeMaterials.length) {
+    knowledgeMaterialList.innerHTML = '<div class="trace-monitor-list-empty">暂无资料快照</div>';
+    return;
+  }
+
+  for (const material of knowledgeMaterials) {
+    const item = document.createElement("div");
+    item.className = `knowledge-list-item${currentKnowledgeDetail?.type === "material" && currentKnowledgeDetail.id === material.id ? " active" : ""}`;
+    const checked = knowledgeSelectedMaterialIds.has(material.id);
+    item.innerHTML = `
+      <div class="knowledge-list-item-head">
+        <div class="knowledge-list-item-title">${escapeHtml(material.title || material.id)}</div>
+        <label class="knowledge-selection-toggle">
+          <input type="checkbox" data-material-select="${escapeAttribute(material.id)}" ${checked ? "checked" : ""} />
+          选中
+        </label>
+      </div>
+      <div class="knowledge-list-item-meta">
+        <span>${escapeHtml(material.source_kind || "--")}</span>
+        <span>${escapeHtml(formatDateTime(material.created_at))}</span>
+      </div>
+      <div class="knowledge-list-item-preview">${escapeHtml(material.preview || "无预览")}</div>
+    `;
+    const checkbox = item.querySelector('input[data-material-select]');
+    if (checkbox) {
+      checkbox.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (checkbox.checked) {
+          knowledgeSelectedMaterialIds.add(material.id);
+        } else {
+          knowledgeSelectedMaterialIds.delete(material.id);
+        }
+        renderKnowledgeSelectionSummary();
+      });
+    }
+    item.addEventListener("click", () => {
+      openKnowledgeMaterialDetail(material.id);
+    });
+    knowledgeMaterialList.appendChild(item);
+  }
+}
+
+function formatKnowledgeDraftListSummary(summary, fallbackText) {
+  if (!summary) return fallbackText || "等待查看内容";
+  const parts = [summary.mode === "create" ? "新建页面" : "更新页面"];
+  if ((summary.claims_added || 0) || (summary.claims_updated || 0) || (summary.claims_removed || 0)) {
+    parts.push(`Claim +${summary.claims_added || 0}/~${summary.claims_updated || 0}/-${summary.claims_removed || 0}`);
+  }
+  if ((summary.content_added || 0) || (summary.content_updated || 0) || (summary.content_removed || 0)) {
+    parts.push(`正文 +${summary.content_added || 0}/~${summary.content_updated || 0}/-${summary.content_removed || 0}`);
+  }
+  if ((summary.materials_added || 0) || (summary.materials_removed || 0)) {
+    parts.push(`资料 +${summary.materials_added || 0}/-${summary.materials_removed || 0}`);
+  }
+  if ((summary.relations_added || 0) || (summary.relations_removed || 0)) {
+    parts.push(`Relation +${summary.relations_added || 0}/-${summary.relations_removed || 0}`);
+  }
+  return parts.join(" · ");
+}
+
+function renderKnowledgeDrafts() {
+  if (!knowledgeDraftList) return;
+  knowledgeDraftList.innerHTML = "";
+  if (!knowledgeDrafts.length) {
+    knowledgeDraftList.innerHTML = '<div class="trace-monitor-list-empty">暂无草稿</div>';
+    return;
+  }
+  for (const draft of knowledgeDrafts) {
+    const item = document.createElement("div");
+    item.className = `knowledge-list-item${draft.id === currentKnowledgeDraftId ? " active" : ""}`;
+    item.innerHTML = `
+      <div class="knowledge-list-item-head">
+        <div class="knowledge-list-item-title">${escapeHtml(draft.title || draft.target_slug || draft.id)}</div>
+        <span class="knowledge-status-pill ${escapeHtml(draft.status || "draft")}">${escapeHtml(draft.status || "draft")}</span>
+      </div>
+      <div class="knowledge-list-item-meta">
+        <span>${escapeHtml(draft.page_kind || "--")}</span>
+        <span>${escapeHtml(draft.target_slug || "--")}</span>
+        <span>${escapeHtml(`资料 ${draft.material_count || 0}`)}</span>
+      </div>
+      <div class="knowledge-list-item-preview">${escapeHtml(formatKnowledgeDraftListSummary(draft.publish_preview_summary, draft.summary || "等待查看内容"))}</div>
+    `;
+    item.addEventListener("click", () => {
+      openKnowledgeDraftDetail(draft.id);
+    });
+    knowledgeDraftList.appendChild(item);
+  }
+}
+
+function renderKnowledgePages() {
+  if (!knowledgePageList) return;
+  knowledgePageList.innerHTML = "";
+  if (!knowledgePages.length) {
+    knowledgePageList.innerHTML = '<div class="trace-monitor-list-empty">暂无已发布页面</div>';
+    return;
+  }
+  for (const page of knowledgePages) {
+    const item = document.createElement("div");
+    item.className = `knowledge-list-item${page.slug === currentKnowledgePageSlug ? " active" : ""}`;
+    item.innerHTML = `
+      <div class="knowledge-list-item-head">
+        <div class="knowledge-list-item-title">${escapeHtml(page.title || page.slug)}</div>
+        <span class="knowledge-status-pill ${escapeHtml(page.status || "published")}">${escapeHtml(page.status || "published")}</span>
+      </div>
+      <div class="knowledge-list-item-meta">
+        <span>${escapeHtml(page.page_kind || "--")}</span>
+        <span>${escapeHtml(page.slug || "--")}</span>
+      </div>
+      <div class="knowledge-list-item-preview">${escapeHtml(page.summary || "无摘要")}</div>
+    `;
+    item.addEventListener("click", () => {
+      openKnowledgePageDetail(page.slug);
+    });
+    knowledgePageList.appendChild(item);
+  }
+}
+
+function renderKnowledgeJobs() {
+  if (!knowledgeJobList) return;
+  knowledgeJobList.innerHTML = "";
+  if (!knowledgeJobs.length) {
+    knowledgeJobList.innerHTML = '<div class="trace-monitor-list-empty">暂无后台任务</div>';
+    return;
+  }
+  for (const job of knowledgeJobs.slice(0, 12)) {
+    const item = document.createElement("div");
+    item.className = "knowledge-list-item";
+    item.innerHTML = `
+      <div class="knowledge-list-item-head">
+        <div class="knowledge-list-item-title">${escapeHtml(job.job_type || job.id)}</div>
+        <span class="knowledge-status-pill ${escapeHtml(job.status || "pending")}">${escapeHtml(job.status || "pending")}</span>
+      </div>
+      <div class="knowledge-list-item-meta">
+        <span>${escapeHtml(formatDateTime(job.created_at))}</span>
+      </div>
+      <div class="knowledge-list-item-preview">${escapeHtml(job.error_message || job.result_json || "等待执行")}</div>
+    `;
+    knowledgeJobList.appendChild(item);
+  }
+}
+
+function renderKnowledgeDetailActions(actions) {
+  if (!knowledgeDetailActions) return;
+  const actionList = Array.isArray(actions) ? actions : [];
+  if (!actionList.length) {
+    knowledgeDetailActions.innerHTML = "";
+    return;
+  }
+  knowledgeDetailActions.innerHTML = actionList.map((action, index) => {
+    const baseClass = action.kind === "primary" ? "btn-primary" : "btn-ghost";
+    const toneClass = action.tone === "danger" ? " danger" : "";
+    const disabledAttr = action.disabled ? " disabled" : "";
+    return `
+      <button
+        type="button"
+        class="${baseClass}${toneClass}"
+        data-knowledge-action-index="${escapeAttribute(String(index))}"
+        title="${escapeAttribute(action.title || action.label || "")}"${disabledAttr}
+      >
+        ${escapeHtml(action.label || "操作")}
+      </button>
+    `;
+  }).join("");
+  Array.from(knowledgeDetailActions.querySelectorAll("[data-knowledge-action-index]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.getAttribute("data-knowledge-action-index"));
+      const action = actionList[index];
+      if (!action || action.disabled || typeof action.onClick !== "function") return;
+      action.onClick();
+    });
+  });
+}
+
+function renderKnowledgeReferenceList(items, renderItem) {
+  if (!Array.isArray(items) || items.length === 0) return "<div>无</div>";
+  return `
+    <div class="knowledge-reference-list">
+      ${items.map((item) => renderItem(item)).join("")}
+    </div>
+  `;
+}
+
+function renderKnowledgeDetailHtml(title, metaLines, sectionsHtml, actions) {
+  if (knowledgeDetailTitle) knowledgeDetailTitle.textContent = title;
+  if (knowledgeDetailMeta) {
+    knowledgeDetailMeta.innerHTML = metaLines.map((line) => `<span class="trace-monitor-pill">${line}</span>`).join("");
+  }
+  renderKnowledgeDetailActions(actions);
+  if (knowledgeDetailContent) {
+    knowledgeDetailContent.innerHTML = sectionsHtml;
+  }
+  if (knowledgeDetailEmpty) knowledgeDetailEmpty.classList.add("hidden");
+  if (knowledgeDetail) knowledgeDetail.classList.remove("hidden");
+}
+
+function renderKnowledgeDiffMetric(label, count, tone) {
+  return `
+    <div class="knowledge-diff-card">
+      <span class="knowledge-diff-pill ${escapeAttribute(tone || "neutral")}">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(count))}</strong>
+    </div>
+  `;
+}
+
+function renderKnowledgeMaterialIdList(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return "<div>无</div>";
+  return `
+    <div class="knowledge-chip-list">
+      ${ids.map((id) => `<span class="knowledge-chip">${escapeHtml(id)}</span>`).join("")}
+    </div>
+  `;
+}
+
+function renderKnowledgeClaimPreviewList(items, kind) {
+  if (!Array.isArray(items) || items.length === 0) return "<div>无</div>";
+  return `
+    <div class="knowledge-diff-list">
+      ${items.map((item) => {
+        const previousStatement = item.previous_statement && item.previous_statement !== item.statement
+          ? `<div class="knowledge-diff-item-prev">Before: ${escapeHtml(item.previous_statement)}</div>`
+          : "";
+        const meta = [
+          item.claim_type || "claim",
+          item.canonical_form || "",
+          item.confidence === null || item.confidence === undefined ? "" : `confidence=${item.confidence}`,
+        ].filter(Boolean);
+        return `
+          <div class="knowledge-diff-item ${escapeAttribute(kind || "neutral")}">
+            <div class="knowledge-diff-item-head">
+              <span class="knowledge-diff-pill ${escapeAttribute(kind || "neutral")}">${escapeHtml(kind || "变更")}</span>
+              <span class="knowledge-diff-item-meta">${escapeHtml(meta.join(" · "))}</span>
+            </div>
+            ${previousStatement}
+            <div class="knowledge-diff-item-main">${escapeHtml(item.statement || "")}</div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderKnowledgeRelationPreviewList(items, kind) {
+  if (!Array.isArray(items) || items.length === 0) return "<div>无</div>";
+  return `
+    <div class="knowledge-diff-list">
+      ${items.map((item) => {
+        const previousRationale = item.previous_rationale && item.previous_rationale !== item.rationale
+          ? `<div class="knowledge-diff-item-prev">Before: ${escapeHtml(item.previous_rationale)}</div>`
+          : "";
+        return `
+          <div class="knowledge-diff-item ${escapeAttribute(kind || "neutral")}">
+            <div class="knowledge-diff-item-head">
+              <span class="knowledge-diff-pill ${escapeAttribute(kind || "neutral")}">${escapeHtml(kind || "变更")}</span>
+              <span class="knowledge-diff-item-meta">${escapeHtml(`${item.relation_type || "related_to"} -> ${item.to_page_slug || ""}`)}</span>
+            </div>
+            ${previousRationale}
+            <div class="knowledge-diff-item-main">${escapeHtml(item.rationale || "无 rationale")}</div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderKnowledgeContentDiff(contentDiff) {
+  if (!contentDiff) return "<div>无</div>";
+  const changedBlocks = Array.isArray(contentDiff.blocks)
+    ? contentDiff.blocks.filter((block) => block.kind !== "unchanged")
+    : [];
+  if (!changedBlocks.length) {
+    return '<div class="muted">正文无段落级变化</div>';
+  }
+  return `
+    <div class="knowledge-diff-list">
+      ${changedBlocks.map((block) => {
+        const previousText = block.kind === "updated" && block.previous_text
+          ? `<div class="knowledge-diff-item-prev">Before:</div><div class="knowledge-diff-item-block previous">${escapeHtml(block.previous_text || "")}</div>`
+          : "";
+        return `
+          <div class="knowledge-diff-item ${escapeAttribute(block.kind || "neutral")}">
+            <div class="knowledge-diff-item-head">
+              <span class="knowledge-diff-pill ${escapeAttribute(block.kind || "neutral")}">${escapeHtml(block.kind || "change")}</span>
+            </div>
+            ${previousText}
+            ${block.kind === "updated" ? '<div class="knowledge-diff-item-prev">After:</div>' : ""}
+            <div class="knowledge-diff-item-block">${escapeHtml(block.text || "")}</div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderKnowledgeDraftPublishPreview(preview) {
+  if (!preview) return "";
+  const pageChanges = Array.isArray([
+    preview.page_changes?.title ? "title" : "",
+    preview.page_changes?.page_kind ? "page_kind" : "",
+    preview.page_changes?.summary ? "summary" : "",
+    preview.page_changes?.content_markdown ? "content" : "",
+  ].filter(Boolean)) ? [
+    preview.page_changes?.title ? "title" : "",
+    preview.page_changes?.page_kind ? "page_kind" : "",
+    preview.page_changes?.summary ? "summary" : "",
+    preview.page_changes?.content_markdown ? "content" : "",
+  ].filter(Boolean) : [];
+  const modeLabel = preview.mode === "create" ? "新建页面" : "更新现有页面";
+  const existingPage = preview.existing_page || null;
+
+  return `
+    <div class="knowledge-detail-section">
+      <h3>Publish Preview</h3>
+      <div class="knowledge-diff-summary">
+        <div class="knowledge-diff-summary-line">
+          <span class="knowledge-diff-pill ${preview.mode === "create" ? "added" : "updated"}">${escapeHtml(modeLabel)}</span>
+          <span>${existingPage ? `当前页面：${escapeHtml(existingPage.title || existingPage.slug || "")}` : "当前尚无已发布页面"}</span>
+        </div>
+        <div class="knowledge-diff-summary-line">
+          <span>页面字段变化：</span>
+          <span>${pageChanges.length ? escapeHtml(pageChanges.join(" / ")) : "无"}</span>
+        </div>
+      </div>
+      <div class="knowledge-diff-grid">
+        ${renderKnowledgeDiffMetric("新增 Claim", preview.claims?.added?.length || 0, "added")}
+        ${renderKnowledgeDiffMetric("更新 Claim", preview.claims?.updated?.length || 0, "updated")}
+        ${renderKnowledgeDiffMetric("移除 Claim", preview.claims?.removed?.length || 0, "removed")}
+        ${renderKnowledgeDiffMetric("保留 Claim", preview.claims?.unchanged?.length || 0, "neutral")}
+        ${renderKnowledgeDiffMetric("新增段落", preview.content_diff?.added_count || 0, "added")}
+        ${renderKnowledgeDiffMetric("更新段落", preview.content_diff?.updated_count || 0, "updated")}
+        ${renderKnowledgeDiffMetric("移除段落", preview.content_diff?.removed_count || 0, "removed")}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Content Diff</strong>
+        <div class="knowledge-diff-summary-line">
+          <span>保留段落：</span>
+          <span>${escapeHtml(String(preview.content_diff?.unchanged_count || 0))}</span>
+        </div>
+        ${renderKnowledgeContentDiff(preview.content_diff)}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Materials Added</strong>
+        ${renderKnowledgeMaterialIdList(preview.materials?.added_material_ids || [])}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Materials Removed</strong>
+        ${renderKnowledgeMaterialIdList(preview.materials?.removed_material_ids || [])}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Claims Added</strong>
+        ${renderKnowledgeClaimPreviewList(preview.claims?.added || [], "added")}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Claims Updated</strong>
+        ${renderKnowledgeClaimPreviewList(preview.claims?.updated || [], "updated")}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Claims Removed</strong>
+        ${renderKnowledgeClaimPreviewList(preview.claims?.removed || [], "removed")}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Relations Added</strong>
+        ${renderKnowledgeRelationPreviewList(preview.relations?.added || [], "added")}
+      </div>
+      <div class="knowledge-detail-subsection">
+        <strong>Relations Removed</strong>
+        ${renderKnowledgeRelationPreviewList(preview.relations?.removed || [], "removed")}
+      </div>
+    </div>
+  `;
+}
+
+async function openKnowledgeMaterialDetail(materialId) {
+  try {
+    const res = await apiFetch(`/api/wiki/material?id=${encodeURIComponent(materialId)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const material = data.material;
+    const usage = data.usage || {};
+    currentKnowledgeDetail = { type: "material", id: materialId };
+    currentKnowledgeDraftId = "";
+    currentKnowledgePageSlug = "";
+    renderKnowledgeMaterials();
+    renderKnowledgeDrafts();
+    renderKnowledgePages();
+    renderKnowledgeDetailHtml(
+      material.title || material.id,
+      [
+        `<strong>Material</strong>${escapeHtml(material.id)}`,
+        `<strong>Source</strong>${escapeHtml(material.source_kind || "--")}`,
+        `<strong>Delete</strong>${escapeHtml(usage.can_delete ? "可删除" : "有依赖")}`,
+        `<strong>Created</strong>${escapeHtml(formatDateTime(material.created_at))}`,
+      ],
+      `
+        <div class="knowledge-detail-section">
+          <h3>说明</h3>
+          <div>${escapeHtml(material.note || "无")}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>引用状态</h3>
+          <div class="knowledge-diff-grid">
+            ${renderKnowledgeDiffMetric("引用页面", (usage.page_refs || []).length, (usage.page_refs || []).length ? "updated" : "neutral")}
+            ${renderKnowledgeDiffMetric("关联草稿", (usage.draft_refs || []).length, (usage.draft_refs || []).length ? "updated" : "neutral")}
+            ${renderKnowledgeDiffMetric("排队任务", (usage.job_refs || []).length, (usage.job_refs || []).length ? "updated" : "neutral")}
+            ${renderKnowledgeDiffMetric("证据片段", usage.evidence_count || 0, (usage.evidence_count || 0) ? "updated" : "neutral")}
+          </div>
+          <div class="knowledge-detail-subsection">
+            <strong>被这些页面使用</strong>
+            ${renderKnowledgeReferenceList(usage.page_refs || [], (item) => `
+              <div class="knowledge-reference-card">
+                <strong>${escapeHtml(item.title || item.slug || "")}</strong>
+                <div class="knowledge-reference-card-meta">slug: ${escapeHtml(item.slug || "")}</div>
+              </div>
+            `)}
+          </div>
+          <div class="knowledge-detail-subsection">
+            <strong>被这些草稿引用</strong>
+            ${renderKnowledgeReferenceList(usage.draft_refs || [], (item) => `
+              <div class="knowledge-reference-card">
+                <strong>${escapeHtml(item.title || item.id || "")}</strong>
+                <div class="knowledge-reference-card-meta">${escapeHtml([item.id, item.target_slug, item.status].filter(Boolean).join(" · "))}</div>
+              </div>
+            `)}
+          </div>
+          <div class="knowledge-detail-subsection">
+            <strong>被这些后台任务占用</strong>
+            ${renderKnowledgeReferenceList(usage.job_refs || [], (item) => `
+              <div class="knowledge-reference-card">
+                <strong>${escapeHtml(item.id || "")}</strong>
+                <div class="knowledge-reference-card-meta">${escapeHtml([item.job_type, item.status].filter(Boolean).join(" · "))}</div>
+              </div>
+            `)}
+          </div>
+          ${usage.can_delete
+            ? '<div class="muted">当前没有页面、草稿或运行中任务依赖这份资料。</div>'
+            : '<div class="knowledge-detail-warning">这份资料仍被知识库引用。要删除它，先删除相关草稿，或让页面改用其他资料后再重试。</div>'}
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>原始文本</h3>
+          <pre class="knowledge-detail-pre">${escapeHtml(data.extracted_text || "")}</pre>
+        </div>
+      `,
+      [
+        {
+          label: "删除资料",
+          kind: "ghost",
+          tone: "danger",
+          disabled: !usage.can_delete,
+          title: usage.can_delete ? "删除当前资料" : "仍有页面、草稿或任务依赖这份资料",
+          onClick: () => {
+            void deleteKnowledgeMaterial(materialId, material.title || material.id);
+          },
+        },
+      ],
+    );
+  } catch (err) {
+    console.error("Failed to load wiki material:", err);
+    showToast(`资料详情加载失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function openKnowledgeDraftDetail(draftId) {
+  try {
+    const res = await apiFetch(`/api/wiki/draft?id=${encodeURIComponent(draftId)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const detail = data;
+    currentKnowledgeDetail = { type: "draft", id: draftId };
+    currentKnowledgeDraftId = draftId;
+    currentKnowledgePageSlug = "";
+    renderKnowledgeDrafts();
+    renderKnowledgePages();
+    renderKnowledgeMaterials();
+    const claims = Array.isArray(detail.compiled?.claims) ? detail.compiled.claims : [];
+    const materials = Array.isArray(detail.materials) ? detail.materials : [];
+    const publishPreview = detail.publish_preview || null;
+    renderKnowledgeDetailHtml(
+      detail.draft.title || detail.draft.target_slug,
+      [
+        `<strong>Draft</strong>${escapeHtml(detail.draft.id)}`,
+        `<strong>Slug</strong>${escapeHtml(detail.draft.target_slug || "--")}`,
+        `<strong>Kind</strong>${escapeHtml(detail.draft.page_kind || "--")}`,
+        `<strong>Status</strong>${escapeHtml(detail.draft.status || "draft")}`,
+      ],
+      `
+        <div class="knowledge-detail-section">
+          <h3>Summary</h3>
+          <div>${escapeHtml(detail.draft.summary || "无摘要")}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>Materials</h3>
+          <div>${materials.map((item) => `<div>${escapeHtml(item.title || item.id)}</div>`).join("") || "<div>无</div>"}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>Claims</h3>
+          <div>${claims.map((claim) => `<div>• ${escapeHtml(claim.statement || "")}</div>`).join("") || "<div>无</div>"}</div>
+        </div>
+        ${renderKnowledgeDraftPublishPreview(publishPreview)}
+        <div class="knowledge-detail-section">
+          <h3>Draft Markdown</h3>
+          <div>${renderMarkdown(detail.compiled?.page?.content_markdown || detail.draft.content_markdown || "")}</div>
+        </div>
+      `,
+      [
+        detail.draft.status === "published"
+          ? null
+          : {
+              label: "发布草稿",
+              kind: "primary",
+              onClick: () => {
+                void publishSelectedKnowledgeDraft();
+              },
+            },
+        {
+          label: "删除草稿",
+          kind: "ghost",
+          tone: "danger",
+          onClick: () => {
+            void deleteKnowledgeDraft(draftId, detail.draft.title || detail.draft.id);
+          },
+        },
+      ].filter(Boolean),
+    );
+  } catch (err) {
+    console.error("Failed to load wiki draft:", err);
+    showToast(`草稿详情加载失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function openKnowledgePageDetail(pageSlug) {
+  try {
+    const res = await apiFetch(`/api/wiki/page?slug=${encodeURIComponent(pageSlug)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    currentKnowledgeDetail = { type: "page", id: pageSlug };
+    currentKnowledgeDraftId = "";
+    currentKnowledgePageSlug = pageSlug;
+    renderKnowledgeDrafts();
+    renderKnowledgePages();
+    renderKnowledgeMaterials();
+    const claimRows = Array.isArray(data.claims) ? data.claims : [];
+    const relationRows = Array.isArray(data.relations) ? data.relations : [];
+    const materialRows = Array.isArray(data.materials) ? data.materials : [];
+    const incomingRelationRows = Array.isArray(data.incoming_relations) ? data.incoming_relations : [];
+    renderKnowledgeDetailHtml(
+      data.page.title || data.page.slug,
+      [
+        `<strong>Page</strong>${escapeHtml(data.page.slug)}`,
+        `<strong>Kind</strong>${escapeHtml(data.page.page_kind || "--")}`,
+        `<strong>Updated</strong>${escapeHtml(formatDateTime(data.page.updated_at))}`,
+      ],
+      `
+        <div class="knowledge-detail-section">
+          <h3>Summary</h3>
+          <div>${escapeHtml(data.page.summary || "无摘要")}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>Content</h3>
+          <div>${renderMarkdown(data.page.content_markdown || "")}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>Claims</h3>
+          <div>${claimRows.map((claim) => `
+            <div style="margin-bottom:10px;">
+              <strong>${escapeHtml(claim.claim_type || "claim")}</strong> · ${escapeHtml(claim.statement || "")}
+            </div>
+          `).join("") || "<div>无</div>"}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>Materials</h3>
+          <div>${materialRows.map((item) => `<div>${escapeHtml(item.title || item.id)}</div>`).join("") || "<div>无</div>"}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>Relations</h3>
+          <div>${relationRows.map((relation) => `<div>${escapeHtml(relation.relation_type || "related_to")} → ${escapeHtml(relation.to_page_slug || "")}</div>`).join("") || "<div>无</div>"}</div>
+        </div>
+        <div class="knowledge-detail-section">
+          <h3>Incoming Relations</h3>
+          ${renderKnowledgeReferenceList(incomingRelationRows, (relation) => `
+            <div class="knowledge-reference-card">
+              <strong>${escapeHtml(relation.from_page_title || relation.from_page_slug || "")}</strong>
+              <div class="knowledge-reference-card-meta">${escapeHtml(`${relation.relation_type || "related_to"} -> ${relation.to_page_slug || ""}`)}</div>
+            </div>
+          `)}
+          ${incomingRelationRows.length
+            ? `<div class="knowledge-detail-warning">删除此页面时，会一并移除其他页面指向它的 ${escapeHtml(String(incomingRelationRows.length))} 条关系。</div>`
+            : ""}
+        </div>
+      `,
+      [
+        {
+          label: "删除页面",
+          kind: "ghost",
+          tone: "danger",
+          onClick: () => {
+            void deleteKnowledgePage(pageSlug, {
+              title: data.page.title || data.page.slug,
+              claimCount: claimRows.length,
+              materialCount: materialRows.length,
+              outgoingRelationCount: relationRows.length,
+              incomingRelationCount: incomingRelationRows.length,
+            });
+          },
+        },
+      ],
+    );
+  } catch (err) {
+    console.error("Failed to load wiki page:", err);
+    showToast(`页面详情加载失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function loadKnowledgeMaterials() {
+  const res = await apiFetch("/api/wiki/materials");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  knowledgeMaterials = Array.isArray(data.materials) ? data.materials : [];
+  renderKnowledgeMaterials();
+}
+
+async function loadKnowledgeDrafts() {
+  const res = await apiFetch("/api/wiki/drafts");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  knowledgeDrafts = Array.isArray(data.drafts) ? data.drafts : [];
+  renderKnowledgeDrafts();
+}
+
+async function loadKnowledgePages(queryOverride) {
+  const query =
+    typeof queryOverride === "string"
+      ? queryOverride.trim()
+      : (knowledgeSearchInput?.value || "").trim();
+  const endpoint = query
+    ? `/api/wiki/search?q=${encodeURIComponent(query)}`
+    : "/api/wiki/pages";
+  const res = await apiFetch(endpoint);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  knowledgePages = Array.isArray(data.pages)
+    ? data.pages
+    : Array.isArray(data.results)
+      ? data.results
+      : [];
+  renderKnowledgePages();
+}
+
+async function loadKnowledgeJobs() {
+  try {
+    const res = await apiFetch("/api/wiki/jobs");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    knowledgeJobs = Array.isArray(data.jobs) ? data.jobs : [];
+    renderKnowledgeJobs();
+
+    if (knowledgeJobs.some((job) => job.status === "completed" || job.status === "failed")) {
+      await Promise.all([loadKnowledgeDrafts(), loadKnowledgePages()]);
+    }
+  } catch (err) {
+    console.error("Failed to load wiki jobs:", err);
+  }
+}
+
+async function loadKnowledgeBaseData(options = {}) {
+  try {
+    await Promise.all([
+      loadKnowledgeMaterials(),
+      loadKnowledgeDrafts(),
+      loadKnowledgePages(),
+      loadKnowledgeJobs(),
+    ]);
+    if (options.preserveDetail && currentKnowledgeDetail) {
+      if (currentKnowledgeDetail.type === "material") {
+        await openKnowledgeMaterialDetail(currentKnowledgeDetail.id);
+      } else if (currentKnowledgeDetail.type === "draft") {
+        await openKnowledgeDraftDetail(currentKnowledgeDetail.id);
+      } else if (currentKnowledgeDetail.type === "page") {
+        await openKnowledgePageDetail(currentKnowledgeDetail.id);
+      }
+    } else if (!currentKnowledgeDetail) {
+      clearKnowledgeDetail();
+    }
+  } catch (err) {
+    console.error("Failed to load knowledge base:", err);
+    showToast(`知识库加载失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function importKnowledgeText() {
+  const title = await openTextPrompt("请输入资料标题", "", {
+    title: "导入文本资料",
+  });
+  if (title === null) return;
+  const text = await openTextPrompt("粘贴资料正文", "", {
+    title: "导入文本资料",
+    multiline: true,
+    placeholder: "仅会导入你主动提供的资料文本",
+  });
+  if (text === null || !String(text).trim()) return;
+
+  try {
+    const res = await apiFetch("/api/wiki/materials/import", {
+      method: "POST",
+      body: JSON.stringify({
+        title: String(title).trim() || "未命名资料",
+        text: String(text),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast("文本资料已导入");
+    await loadKnowledgeMaterials();
+  } catch (err) {
+    console.error("Failed to import wiki text material:", err);
+    showToast(`导入失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function importKnowledgeFiles(files) {
+  const mainGroup = getMainGroup();
+  const jid = mainGroup?.jid || "web:main";
+  for (const file of Array.from(files || [])) {
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const uploadRes = await fetch(`http://localhost:3000/api/upload?jid=${encodeURIComponent(jid)}`, {
+        method: "POST",
+        body: formData,
+      });
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      if (!uploadRes.ok || !uploadData.files?.[0]?.hostPath) {
+        throw new Error(uploadData.error || `HTTP ${uploadRes.status}`);
+      }
+
+      const importRes = await apiFetch("/api/wiki/materials/import", {
+        method: "POST",
+        body: JSON.stringify({
+          title: file.name,
+          hostPath: uploadData.files[0].hostPath,
+        }),
+      });
+      const importData = await importRes.json().catch(() => ({}));
+      if (!importRes.ok) {
+        throw new Error(importData.error || `HTTP ${importRes.status}`);
+      }
+      showToast(`已导入 ${file.name}`);
+    } catch (err) {
+      console.error("Failed to import wiki file material:", err);
+      showToast(`文件导入失败：${file.name} · ${err instanceof Error ? err.message : "未知错误"}`);
+    }
+  }
+  await loadKnowledgeMaterials();
+}
+
+async function generateKnowledgeDraft() {
+  const materialIds = Array.from(knowledgeSelectedMaterialIds);
+  if (!materialIds.length) {
+    showToast("请先勾选至少一份资料");
+    return;
+  }
+
+  const selectedDraft = knowledgeDrafts.find((draft) => draft.id === currentKnowledgeDraftId) || null;
+  const selectedPage = knowledgePages.find((page) => page.slug === currentKnowledgePageSlug) || null;
+  const defaultTargetSlug = selectedPage?.slug || selectedDraft?.target_slug || "";
+  const defaultTitle = selectedPage?.title || selectedDraft?.title || "";
+  const defaultPageKind = selectedPage?.page_kind || selectedDraft?.page_kind || "project";
+
+  const targetSlug = await openTextPrompt("目标页面 slug（可选；留空时由编纂任务自行生成）", defaultTargetSlug, {
+    title: "生成知识库草稿",
+    placeholder: "例如：project-overview",
+  });
+  if (targetSlug === null) return;
+
+  const title = await openTextPrompt("页面标题（可选）", defaultTitle, {
+    title: "生成知识库草稿",
+  });
+  if (title === null) return;
+  const pageKind = await openTextPrompt(
+    "页面类型（project/concept/decision/procedure/person/glossary）",
+    defaultPageKind,
+    { title: "生成知识库草稿" },
+  );
+  if (pageKind === null) return;
+  const instruction = await openTextPrompt("补充编纂要求（可选）", "", {
+    title: "生成知识库草稿",
+    multiline: true,
+    placeholder: "例如：突出流程步骤，避免泛化描述",
+  });
+  if (instruction === null) return;
+
+  try {
+    const res = await apiFetch("/api/wiki/draft/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        material_ids: materialIds,
+        target_slug: String(targetSlug || "").trim(),
+        title: String(title || "").trim(),
+        page_kind: String(pageKind || "").trim(),
+        instruction: String(instruction || "").trim(),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast("已创建后台编纂任务");
+    await loadKnowledgeJobs();
+  } catch (err) {
+    console.error("Failed to generate wiki draft:", err);
+    showToast(`生成草稿失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function publishSelectedKnowledgeDraft() {
+  if (!currentKnowledgeDraftId) {
+    showToast("请先在 Drafts 中选中一个草稿");
+    return;
+  }
+
+  const confirmed = await openConfirmDialog("发布后将覆盖同 slug 的当前页面快照。继续吗？", {
+    title: "发布知识库页面",
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await apiFetch("/api/wiki/draft/publish", {
+      method: "POST",
+      body: JSON.stringify({ draft_id: currentKnowledgeDraftId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast("草稿已发布到知识库");
+    await loadKnowledgeBaseData();
+    if (data.page?.slug) {
+      await openKnowledgePageDetail(data.page.slug);
+    }
+  } catch (err) {
+    console.error("Failed to publish wiki draft:", err);
+    showToast(`发布失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function deleteKnowledgeDraft(draftId, draftTitle) {
+  const confirmed = await openConfirmDialog(`删除草稿「${draftTitle || draftId}」？已发布页面不会受影响。`, {
+    title: "删除知识草稿",
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await apiFetch(`/api/wiki/draft?id=${encodeURIComponent(draftId)}`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    clearKnowledgeDetail();
+    showToast("草稿已删除");
+    await loadKnowledgeBaseData();
+  } catch (err) {
+    console.error("Failed to delete wiki draft:", err);
+    showToast(`删除草稿失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function deleteKnowledgeMaterial(materialId, materialTitle) {
+  const confirmed = await openConfirmDialog(`删除资料「${materialTitle || materialId}」？删除后若仍需使用，需要重新导入。`, {
+    title: "删除知识资料",
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await apiFetch(`/api/wiki/material?id=${encodeURIComponent(materialId)}`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    knowledgeSelectedMaterialIds.delete(materialId);
+    clearKnowledgeDetail();
+    showToast("资料已删除");
+    await loadKnowledgeBaseData();
+  } catch (err) {
+    console.error("Failed to delete wiki material:", err);
+    showToast(`删除资料失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function deleteKnowledgePage(pageSlug, options = {}) {
+  const summary = [
+    options.claimCount ? `Claim ${options.claimCount} 条` : "",
+    options.materialCount ? `资料 ${options.materialCount} 份` : "",
+    options.outgoingRelationCount ? `外连关系 ${options.outgoingRelationCount} 条` : "",
+    options.incomingRelationCount ? `入链关系 ${options.incomingRelationCount} 条` : "",
+  ].filter(Boolean).join("，");
+  const confirmed = await openConfirmDialog(
+    `删除页面「${options.title || pageSlug}」？${summary ? `将同时移除 ${summary}。` : "此操作不可撤销。"}`,
+    { title: "删除知识页面" },
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await apiFetch(`/api/wiki/page?slug=${encodeURIComponent(pageSlug)}`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    clearKnowledgeDetail();
+    showToast("页面已删除");
+    await loadKnowledgeBaseData();
+  } catch (err) {
+    console.error("Failed to delete wiki page:", err);
+    showToast(`删除页面失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function runKnowledgeSearch() {
+  try {
+    await loadKnowledgePages(knowledgeSearchInput?.value || "");
+  } catch (err) {
+    console.error("Failed to search wiki pages:", err);
+    showToast(`页面搜索失败：${err instanceof Error ? err.message : "未知错误"}`);
   }
 }
 
@@ -14806,6 +15792,53 @@ fileInput.addEventListener("change", () => {
   }
   fileInput.value = "";
 });
+if (knowledgeRefreshBtn) {
+  knowledgeRefreshBtn.addEventListener("click", () => {
+    loadKnowledgeBaseData({ preserveDetail: true });
+  });
+}
+if (knowledgeImportTextBtn) {
+  knowledgeImportTextBtn.addEventListener("click", () => {
+    void importKnowledgeText();
+  });
+}
+if (knowledgeImportFileBtn) {
+  knowledgeImportFileBtn.addEventListener("click", () => {
+    knowledgeFileInput?.click();
+  });
+}
+if (knowledgeFileInput) {
+  knowledgeFileInput.addEventListener("change", () => {
+    const files = knowledgeFileInput.files;
+    if (files && files.length > 0) {
+      void importKnowledgeFiles(files);
+    }
+    knowledgeFileInput.value = "";
+  });
+}
+if (knowledgeGenerateDraftBtn) {
+  knowledgeGenerateDraftBtn.addEventListener("click", () => {
+    void generateKnowledgeDraft();
+  });
+}
+if (knowledgePublishDraftBtn) {
+  knowledgePublishDraftBtn.addEventListener("click", () => {
+    void publishSelectedKnowledgeDraft();
+  });
+}
+if (knowledgeSearchBtn) {
+  knowledgeSearchBtn.addEventListener("click", () => {
+    void runKnowledgeSearch();
+  });
+}
+if (knowledgeSearchInput) {
+  knowledgeSearchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void runKnowledgeSearch();
+    }
+  });
+}
 document.addEventListener("dragover", (e) => {
   e.preventDefault();
   if (currentGroupJid) fileDropZone.classList.remove("hidden");

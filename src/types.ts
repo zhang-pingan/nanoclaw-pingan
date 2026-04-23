@@ -526,6 +526,101 @@ export interface MemorySearchResult {
   score: number;
 }
 
+export interface WikiMaterialRecord {
+  id: string;
+  title: string;
+  source_kind: 'upload' | 'text';
+  note: string | null;
+  source_name: string | null;
+  source_path: string | null;
+  stored_path: string;
+  extracted_text_path: string;
+  sha256: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WikiDraftRecord {
+  id: string;
+  target_slug: string;
+  title: string;
+  page_kind: string;
+  status: 'draft' | 'published' | 'failed';
+  instruction: string | null;
+  content_markdown: string;
+  summary: string | null;
+  payload_json: string;
+  material_ids_json: string;
+  file_path: string;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+}
+
+export interface WikiPageRecord {
+  slug: string;
+  title: string;
+  page_kind: string;
+  status: 'published' | 'archived';
+  summary: string | null;
+  content_markdown: string;
+  file_path: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WikiClaimRecord {
+  id: string;
+  owner_page_slug: string;
+  claim_type: string;
+  canonical_form: string;
+  statement: string;
+  status: 'active' | 'deprecated' | 'disputed';
+  confidence: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WikiClaimEvidenceRecord {
+  id: string;
+  claim_id: string;
+  material_id: string;
+  excerpt_text: string;
+  locator: string | null;
+  created_at: string;
+}
+
+export interface WikiRelationRecord {
+  id: string;
+  from_page_slug: string;
+  to_page_slug: string;
+  relation_type: string;
+  rationale: string | null;
+  created_at: string;
+}
+
+export interface WikiJobRecord {
+  id: string;
+  job_type: 'draft_generate';
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  payload_json: string;
+  result_json: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface WikiSearchResult {
+  slug: string;
+  title: string;
+  page_kind: string;
+  summary: string | null;
+  content_markdown: string;
+  score: number;
+ }
+
 // --- Channel abstraction ---
 
 /** @internal Feishu-specific card format — used only inside the Feishu channel. */

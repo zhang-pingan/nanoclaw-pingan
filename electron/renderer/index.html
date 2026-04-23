@@ -52,6 +52,10 @@
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">记忆管理</span>
           </button>
+          <button class="primary-nav-item" data-nav-key="knowledge-management">
+            <span class="primary-nav-dot"></span>
+            <span class="primary-nav-label">知识库管理</span>
+          </button>
           <button class="primary-nav-item" data-nav-key="trace-monitor">
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">Trace 监控</span>
@@ -665,6 +669,107 @@
             </div>
             <div id="memory-list" class="memory-list"></div>
             <div id="memory-empty" class="memory-empty hidden">暂无记忆数据</div>
+          </div>
+        </main>
+      </section>
+
+      <section id="knowledge-management-screen">
+        <aside class="knowledge-sidebar">
+          <div class="workflow-definitions-sidebar-header">
+            <div>
+              <div class="workflow-definitions-kicker">Knowledge Base</div>
+              <h2>知识库管理</h2>
+            </div>
+            <div class="workflow-definitions-sidebar-actions">
+              <button id="knowledge-refresh-btn" class="icon-btn" title="刷新知识库">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="knowledge-sidebar-toolbar">
+            <button id="knowledge-import-text-btn" class="btn-primary btn-soft-primary">导入文本</button>
+            <button id="knowledge-import-file-btn" class="btn-primary btn-soft-primary">导入文件</button>
+          </div>
+          <input id="knowledge-file-input" type="file" class="hidden" multiple />
+          <div class="knowledge-sidebar-section">
+            <div class="knowledge-sidebar-section-head">
+              <span>资料快照</span>
+              <span id="knowledge-selection-summary" class="muted">已选 0 份</span>
+            </div>
+            <div id="knowledge-material-list" class="knowledge-list"></div>
+          </div>
+          <div class="knowledge-sidebar-section">
+            <div class="knowledge-sidebar-section-head">
+              <span>后台任务</span>
+            </div>
+            <div id="knowledge-job-list" class="knowledge-list"></div>
+          </div>
+        </aside>
+        <main class="knowledge-main">
+          <div class="workflow-definition-hero knowledge-hero">
+            <div>
+              <div class="workflow-definitions-kicker">Host-managed Wiki</div>
+              <h2>全局 LLM Wiki</h2>
+              <p>
+                资料由用户显式导入，草稿由宿主侧 LLM 后台编纂生成，日常对话 Agent 仅通过只读工具检索。
+              </p>
+            </div>
+            <div class="knowledge-hero-actions">
+              <button id="knowledge-generate-draft-btn" class="btn-primary">基于所选资料生成草稿</button>
+              <button id="knowledge-publish-draft-btn" class="btn-ghost">发布当前草稿</button>
+            </div>
+          </div>
+          <div class="knowledge-toolbar">
+            <input
+              id="knowledge-search-input"
+              class="memory-search-input"
+              type="text"
+              placeholder="搜索知识库页面"
+            />
+            <button id="knowledge-search-btn" class="btn-primary btn-soft-primary">搜索页面</button>
+          </div>
+          <div class="knowledge-grid">
+            <section class="workflow-definition-panel knowledge-panel">
+              <div class="knowledge-panel-head">
+                <strong>Drafts</strong>
+              </div>
+              <div id="knowledge-draft-list" class="knowledge-list"></div>
+            </section>
+            <section class="workflow-definition-panel knowledge-panel">
+              <div class="knowledge-panel-head">
+                <strong>Pages</strong>
+              </div>
+              <div id="knowledge-page-list" class="knowledge-list"></div>
+            </section>
+            <section class="workflow-definition-panel knowledge-panel knowledge-detail-panel">
+              <div id="knowledge-detail-empty" class="workflow-definition-empty doraemon-tertiary-empty">
+                <div class="tertiary-empty-scene" aria-hidden="true">
+                  <span class="tertiary-empty-cloud cloud-a"></span>
+                  <span class="tertiary-empty-cloud cloud-b"></span>
+                  <span class="tertiary-empty-cloud cloud-c"></span>
+                  <span class="tertiary-empty-copter copter-a"></span>
+                  <span class="tertiary-empty-copter copter-b"></span>
+                </div>
+                <img src="/assets/doraemon-joy.png" alt="Knowledge empty mascot" />
+                <h3>选择资料、草稿或页面</h3>
+                <p>先导入资料，再生成草稿并发布到全局知识库。</p>
+              </div>
+              <div id="knowledge-detail" class="hidden">
+                <div class="knowledge-detail-header">
+                  <div>
+                    <div class="workflow-definitions-kicker">Knowledge Detail</div>
+                    <h2 id="knowledge-detail-title">知识详情</h2>
+                    <div id="knowledge-detail-meta" class="workflow-definition-meta"></div>
+                  </div>
+                  <div id="knowledge-detail-actions" class="knowledge-detail-actions"></div>
+                </div>
+                <div id="knowledge-detail-content" class="knowledge-detail-content"></div>
+              </div>
+            </section>
           </div>
         </main>
       </section>

@@ -41,6 +41,7 @@ import {
   recordMemoryMetric,
   resolveConflict,
   searchMessages,
+  searchWikiPages,
   storeChatMetadata,
   storeMessageDirect,
   updateDelegation,
@@ -57,6 +58,7 @@ import {
   updateWorkbenchInteractionItemStatus,
 } from './workbench-store.js';
 import { runLocalHostScript } from './host-script-runner.js';
+import { getWikiPageDetail } from './wiki.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -2020,6 +2022,61 @@ export async function processTaskIpc(
         'memory_search completed',
       );
       recordMemoryMetric(sourceGroup, `search:${mode}`, `q=${data.query}`);
+      break;
+    }
+
+    case 'wiki_search': {
+      if (!data.query || !data.requestId) {
+        logger.warn({ sourceGroup }, 'wiki_search missing query or requestId');
+        break;
+      }
+
+      const searchLimit = Math.max(1, Number(data.limit || 5));
+      const hits = searchWikiPages(String(data.query), searchLimit).map((hit) => ({
+        slug: hit.slug,
+        title: hit.title,
+        page_kind: hit.page_kind,
+        summary: hit.summary,
+        score: hit.score,
+      }));
+
+      const resultsDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'wiki-results');
+      fs.mkdirSync(resultsDir, { recursive: true });
+      const responsePath = path.join(resultsDir, `${data.requestId}.json`);
+      const tempPath = `${responsePath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify({ hits }, null, 2));
+      fs.renameSync(tempPath, responsePath);
+
+      logger.info(
+        { sourceGroup, query: data.query, resultHits: hits.length },
+        'wiki_search completed',
+      );
+      break;
+    }
+
+    case 'wiki_get_page': {
+      const wikiSlug =
+        'slug' in data && typeof data.slug === 'string' ? data.slug.trim() : '';
+      if (!wikiSlug || !data.requestId) {
+        logger.warn({ sourceGroup }, 'wiki_get_page missing slug or requestId');
+        break;
+      }
+
+      const detail = getWikiPageDetail(wikiSlug);
+      const resultsDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'wiki-results');
+      fs.mkdirSync(resultsDir, { recursive: true });
+      const responsePath = path.join(resultsDir, `${data.requestId}.json`);
+      const tempPath = `${responsePath}.tmp`;
+      fs.writeFileSync(
+        tempPath,
+        JSON.stringify({ found: !!detail, detail }, null, 2),
+      );
+      fs.renameSync(tempPath, responsePath);
+
+      logger.info(
+        { sourceGroup, slug: wikiSlug, found: !!detail },
+        'wiki_get_page completed',
+      );
       break;
     }
 

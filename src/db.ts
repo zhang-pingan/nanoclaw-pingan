@@ -30,6 +30,14 @@ import {
   TodayPlanItemRecord,
   TodayPlanMailDraftRecord,
   TodayPlanRecord,
+  WikiClaimEvidenceRecord,
+  WikiClaimRecord,
+  WikiDraftRecord,
+  WikiJobRecord,
+  WikiMaterialRecord,
+  WikiPageRecord,
+  WikiRelationRecord,
+  WikiSearchResult,
   WorkbenchActionItemRecord,
   WorkbenchArtifactRecord,
   WorkbenchCommentRecord,
@@ -733,6 +741,165 @@ function createSchema(database: Database.Database): void {
       SELECT rowid, content FROM memories;
     `);
     logger.info({ memoryCount: memCount.cnt }, 'Memory FTS backfill complete');
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS wiki_materials (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      source_kind TEXT NOT NULL,
+      note TEXT,
+      source_name TEXT,
+      source_path TEXT,
+      stored_path TEXT NOT NULL,
+      extracted_text_path TEXT NOT NULL,
+      sha256 TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_materials_created_at
+      ON wiki_materials(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS wiki_drafts (
+      id TEXT PRIMARY KEY,
+      target_slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      page_kind TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      instruction TEXT,
+      content_markdown TEXT NOT NULL,
+      summary TEXT,
+      payload_json TEXT NOT NULL,
+      material_ids_json TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      published_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_drafts_status_updated
+      ON wiki_drafts(status, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS wiki_pages (
+      slug TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      page_kind TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'published',
+      summary TEXT,
+      content_markdown TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_pages_updated_at
+      ON wiki_pages(updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS wiki_page_materials (
+      page_slug TEXT NOT NULL,
+      material_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (page_slug, material_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_page_materials_material
+      ON wiki_page_materials(material_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS wiki_claims (
+      id TEXT PRIMARY KEY,
+      owner_page_slug TEXT NOT NULL,
+      claim_type TEXT NOT NULL,
+      canonical_form TEXT NOT NULL,
+      statement TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      confidence REAL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_claims_page_status
+      ON wiki_claims(owner_page_slug, status, updated_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_claims_page_canonical_active
+      ON wiki_claims(owner_page_slug, canonical_form)
+      WHERE status = 'active';
+
+    CREATE TABLE IF NOT EXISTS wiki_claim_evidence (
+      id TEXT PRIMARY KEY,
+      claim_id TEXT NOT NULL,
+      material_id TEXT NOT NULL,
+      excerpt_text TEXT NOT NULL,
+      locator TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_claim_evidence_claim
+      ON wiki_claim_evidence(claim_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS wiki_relations (
+      id TEXT PRIMARY KEY,
+      from_page_slug TEXT NOT NULL,
+      to_page_slug TEXT NOT NULL,
+      relation_type TEXT NOT NULL,
+      rationale TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_relations_from_page
+      ON wiki_relations(from_page_slug, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_wiki_relations_to_page
+      ON wiki_relations(to_page_slug, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS wiki_jobs (
+      id TEXT PRIMARY KEY,
+      job_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      payload_json TEXT NOT NULL,
+      result_json TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_jobs_status_updated
+      ON wiki_jobs(status, updated_at DESC);
+  `);
+
+  database.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(
+      slug,
+      title,
+      summary,
+      content_markdown,
+      content='wiki_pages',
+      content_rowid='rowid',
+      tokenize='unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS wiki_pages_ai AFTER INSERT ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown)
+      VALUES (new.rowid, new.slug, new.title, COALESCE(new.summary, ''), new.content_markdown);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS wiki_pages_ad AFTER DELETE ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown)
+      VALUES('delete', old.rowid, old.slug, old.title, COALESCE(old.summary, ''), old.content_markdown);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS wiki_pages_au AFTER UPDATE ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown)
+      VALUES('delete', old.rowid, old.slug, old.title, COALESCE(old.summary, ''), old.content_markdown);
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown)
+      VALUES (new.rowid, new.slug, new.title, COALESCE(new.summary, ''), new.content_markdown);
+    END;
+  `);
+
+  const wikiFtsCount = database
+    .prepare(`SELECT COUNT(*) as cnt FROM wiki_pages_fts`)
+    .get() as { cnt: number };
+  const wikiPageCount = database
+    .prepare(`SELECT COUNT(*) as cnt FROM wiki_pages`)
+    .get() as { cnt: number };
+  if (wikiFtsCount.cnt === 0 && wikiPageCount.cnt > 0) {
+    database.exec(`
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown)
+      SELECT rowid, slug, title, COALESCE(summary, ''), content_markdown FROM wiki_pages;
+    `);
+    logger.info({ wikiPageCount }, 'Wiki page FTS backfill complete');
   }
 }
 
@@ -3603,6 +3770,560 @@ export function searchMessages(
   } catch (err) {
     logger.error({ err, groupFolder, query }, 'FTS search failed');
     return [];
+  }
+}
+
+// --- Wiki accessors ---
+
+export function createWikiMaterial(record: WikiMaterialRecord): void {
+  db.prepare(
+    `INSERT INTO wiki_materials (
+      id, title, source_kind, note, source_name, source_path, stored_path,
+      extracted_text_path, sha256, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.title,
+    record.source_kind,
+    record.note,
+    record.source_name,
+    record.source_path,
+    record.stored_path,
+    record.extracted_text_path,
+    record.sha256,
+    record.created_at,
+    record.updated_at,
+  );
+}
+
+export function getWikiMaterial(
+  id: string,
+): WikiMaterialRecord | undefined {
+  return db
+    .prepare('SELECT * FROM wiki_materials WHERE id = ?')
+    .get(id) as WikiMaterialRecord | undefined;
+}
+
+export function listWikiMaterials(limit: number = 200): WikiMaterialRecord[] {
+  return db
+    .prepare(
+      'SELECT * FROM wiki_materials ORDER BY created_at DESC LIMIT ?',
+    )
+    .all(Math.max(1, limit)) as WikiMaterialRecord[];
+}
+
+export function deleteWikiMaterialRecord(id: string): void {
+  db.prepare('DELETE FROM wiki_materials WHERE id = ?').run(id);
+}
+
+export function createWikiDraft(record: WikiDraftRecord): void {
+  db.prepare(
+    `INSERT INTO wiki_drafts (
+      id, target_slug, title, page_kind, status, instruction, content_markdown,
+      summary, payload_json, material_ids_json, file_path, created_at, updated_at, published_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.target_slug,
+    record.title,
+    record.page_kind,
+    record.status,
+    record.instruction,
+    record.content_markdown,
+    record.summary,
+    record.payload_json,
+    record.material_ids_json,
+    record.file_path,
+    record.created_at,
+    record.updated_at,
+    record.published_at,
+  );
+}
+
+export function updateWikiDraft(
+  id: string,
+  patch: Partial<WikiDraftRecord>,
+): void {
+  const fields: string[] = ['updated_at = ?'];
+  const values: unknown[] = [patch.updated_at ?? new Date().toISOString()];
+  const assign = <K extends keyof WikiDraftRecord>(key: K) => {
+    if (patch[key] !== undefined) {
+      fields.push(`${String(key)} = ?`);
+      values.push(patch[key]);
+    }
+  };
+
+  assign('target_slug');
+  assign('title');
+  assign('page_kind');
+  assign('status');
+  assign('instruction');
+  assign('content_markdown');
+  assign('summary');
+  assign('payload_json');
+  assign('material_ids_json');
+  assign('file_path');
+  assign('created_at');
+  assign('published_at');
+
+  values.push(id);
+  db.prepare(
+    `UPDATE wiki_drafts SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
+}
+
+export function getWikiDraft(id: string): WikiDraftRecord | undefined {
+  return db
+    .prepare('SELECT * FROM wiki_drafts WHERE id = ?')
+    .get(id) as WikiDraftRecord | undefined;
+}
+
+export function listWikiDrafts(limit: number = 200): WikiDraftRecord[] {
+  return db
+    .prepare(
+      'SELECT * FROM wiki_drafts ORDER BY updated_at DESC LIMIT ?',
+    )
+    .all(Math.max(1, limit)) as WikiDraftRecord[];
+}
+
+export function deleteWikiDraftRecord(id: string): void {
+  db.prepare('DELETE FROM wiki_drafts WHERE id = ?').run(id);
+}
+
+export function upsertWikiPage(record: WikiPageRecord): void {
+  db.prepare(
+    `INSERT INTO wiki_pages (
+      slug, title, page_kind, status, summary, content_markdown, file_path,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(slug) DO UPDATE SET
+      title = excluded.title,
+      page_kind = excluded.page_kind,
+      status = excluded.status,
+      summary = excluded.summary,
+      content_markdown = excluded.content_markdown,
+      file_path = excluded.file_path,
+      updated_at = excluded.updated_at`,
+  ).run(
+    record.slug,
+    record.title,
+    record.page_kind,
+    record.status,
+    record.summary,
+    record.content_markdown,
+    record.file_path,
+    record.created_at,
+    record.updated_at,
+  );
+}
+
+export function getWikiPage(slug: string): WikiPageRecord | undefined {
+  return db
+    .prepare('SELECT * FROM wiki_pages WHERE slug = ?')
+    .get(slug) as WikiPageRecord | undefined;
+}
+
+export function listWikiPages(limit: number = 200): WikiPageRecord[] {
+  return db
+    .prepare('SELECT * FROM wiki_pages ORDER BY updated_at DESC LIMIT ?')
+    .all(Math.max(1, limit)) as WikiPageRecord[];
+}
+
+export function listWikiPagesReferencingMaterial(
+  materialId: string,
+): WikiPageRecord[] {
+  return db
+    .prepare(
+      `
+        SELECT DISTINCT p.*
+        FROM wiki_pages p
+        LEFT JOIN wiki_page_materials pm
+          ON pm.page_slug = p.slug
+        LEFT JOIN wiki_claims c
+          ON c.owner_page_slug = p.slug
+        LEFT JOIN wiki_claim_evidence e
+          ON e.claim_id = c.id
+        WHERE pm.material_id = ? OR e.material_id = ?
+        ORDER BY p.updated_at DESC
+      `,
+    )
+    .all(materialId, materialId) as WikiPageRecord[];
+}
+
+export function deleteWikiPageRecord(slug: string): void {
+  db.prepare('DELETE FROM wiki_pages WHERE slug = ?').run(slug);
+}
+
+export function replaceWikiPageMaterials(
+  pageSlug: string,
+  materialIds: string[],
+): void {
+  const deleteStmt = db.prepare(
+    'DELETE FROM wiki_page_materials WHERE page_slug = ?',
+  );
+  const insertStmt = db.prepare(
+    `INSERT INTO wiki_page_materials (page_slug, material_id, created_at)
+     VALUES (?, ?, ?)`,
+  );
+  const now = new Date().toISOString();
+  const uniqueIds = [...new Set(materialIds.filter(Boolean))];
+  const txn = db.transaction(() => {
+    deleteStmt.run(pageSlug);
+    for (const materialId of uniqueIds) {
+      insertStmt.run(pageSlug, materialId, now);
+    }
+  });
+  txn();
+}
+
+export function listWikiPageMaterials(pageSlug: string): WikiMaterialRecord[] {
+  return db
+    .prepare(
+      `SELECT m.*
+       FROM wiki_page_materials pm
+       JOIN wiki_materials m ON m.id = pm.material_id
+       WHERE pm.page_slug = ?
+       ORDER BY pm.created_at ASC`,
+    )
+    .all(pageSlug) as WikiMaterialRecord[];
+}
+
+export function createWikiClaim(record: WikiClaimRecord): void {
+  db.prepare(
+    `INSERT INTO wiki_claims (
+      id, owner_page_slug, claim_type, canonical_form, statement, status,
+      confidence, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.owner_page_slug,
+    record.claim_type,
+    record.canonical_form,
+    record.statement,
+    record.status,
+    record.confidence,
+    record.created_at,
+    record.updated_at,
+  );
+}
+
+export function updateWikiClaim(
+  id: string,
+  patch: Partial<WikiClaimRecord>,
+): void {
+  const fields: string[] = ['updated_at = ?'];
+  const values: unknown[] = [patch.updated_at ?? new Date().toISOString()];
+  const assign = <K extends keyof WikiClaimRecord>(key: K) => {
+    if (patch[key] !== undefined) {
+      fields.push(`${String(key)} = ?`);
+      values.push(patch[key]);
+    }
+  };
+
+  assign('owner_page_slug');
+  assign('claim_type');
+  assign('canonical_form');
+  assign('statement');
+  assign('status');
+  assign('confidence');
+  assign('created_at');
+
+  values.push(id);
+  db.prepare(
+    `UPDATE wiki_claims SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
+}
+
+export function listWikiClaimsByPage(
+  pageSlug: string,
+  opts: { includeDeprecated?: boolean } = {},
+): WikiClaimRecord[] {
+  if (opts.includeDeprecated) {
+    return db
+      .prepare(
+        `SELECT * FROM wiki_claims
+         WHERE owner_page_slug = ?
+         ORDER BY updated_at DESC, created_at DESC`,
+      )
+      .all(pageSlug) as WikiClaimRecord[];
+  }
+
+  return db
+    .prepare(
+      `SELECT * FROM wiki_claims
+       WHERE owner_page_slug = ? AND status = 'active'
+       ORDER BY updated_at DESC, created_at DESC`,
+    )
+    .all(pageSlug) as WikiClaimRecord[];
+}
+
+export function replaceWikiClaimEvidence(
+  claimId: string,
+  evidence: Array<{
+    material_id: string;
+    excerpt_text: string;
+    locator?: string | null;
+  }>,
+): void {
+  const deleteStmt = db.prepare(
+    'DELETE FROM wiki_claim_evidence WHERE claim_id = ?',
+  );
+  const insertStmt = db.prepare(
+    `INSERT INTO wiki_claim_evidence (
+      id, claim_id, material_id, excerpt_text, locator, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  const now = new Date().toISOString();
+  const txn = db.transaction(() => {
+    deleteStmt.run(claimId);
+    for (const item of evidence) {
+      insertStmt.run(
+        `wiki-ev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        claimId,
+        item.material_id,
+        item.excerpt_text,
+        item.locator ?? null,
+        now,
+      );
+    }
+  });
+  txn();
+}
+
+export function listWikiClaimEvidence(
+  claimId: string,
+): WikiClaimEvidenceRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM wiki_claim_evidence
+       WHERE claim_id = ?
+       ORDER BY created_at ASC`,
+    )
+    .all(claimId) as WikiClaimEvidenceRecord[];
+}
+
+export function countWikiClaimEvidenceByMaterial(materialId: string): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS cnt
+       FROM wiki_claim_evidence
+       WHERE material_id = ?`,
+    )
+    .get(materialId) as { cnt: number } | undefined;
+  return row?.cnt || 0;
+}
+
+export function replaceWikiRelationsForPage(
+  pageSlug: string,
+  relations: Array<{
+    to_page_slug: string;
+    relation_type: string;
+    rationale?: string | null;
+  }>,
+): void {
+  const deleteStmt = db.prepare(
+    'DELETE FROM wiki_relations WHERE from_page_slug = ?',
+  );
+  const insertStmt = db.prepare(
+    `INSERT INTO wiki_relations (
+      id, from_page_slug, to_page_slug, relation_type, rationale, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  const now = new Date().toISOString();
+  const txn = db.transaction(() => {
+    deleteStmt.run(pageSlug);
+    for (const relation of relations) {
+      insertStmt.run(
+        `wiki-rel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        pageSlug,
+        relation.to_page_slug,
+        relation.relation_type,
+        relation.rationale ?? null,
+        now,
+      );
+    }
+  });
+  txn();
+}
+
+export function listWikiRelationsForPage(
+  pageSlug: string,
+): WikiRelationRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM wiki_relations
+       WHERE from_page_slug = ?
+       ORDER BY created_at ASC`,
+    )
+    .all(pageSlug) as WikiRelationRecord[];
+}
+
+export function listWikiRelationsToPage(
+  pageSlug: string,
+): WikiRelationRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM wiki_relations
+       WHERE to_page_slug = ?
+       ORDER BY created_at ASC`,
+    )
+    .all(pageSlug) as WikiRelationRecord[];
+}
+
+export function deleteWikiPageGraph(pageSlug: string): void {
+  const listClaimIdsStmt = db.prepare(
+    'SELECT id FROM wiki_claims WHERE owner_page_slug = ?',
+  );
+  const deleteClaimEvidenceStmt = db.prepare(
+    'DELETE FROM wiki_claim_evidence WHERE claim_id = ?',
+  );
+  const deleteClaimsStmt = db.prepare(
+    'DELETE FROM wiki_claims WHERE owner_page_slug = ?',
+  );
+  const deletePageMaterialsStmt = db.prepare(
+    'DELETE FROM wiki_page_materials WHERE page_slug = ?',
+  );
+  const deleteRelationsStmt = db.prepare(
+    'DELETE FROM wiki_relations WHERE from_page_slug = ? OR to_page_slug = ?',
+  );
+  const deletePageStmt = db.prepare('DELETE FROM wiki_pages WHERE slug = ?');
+
+  const txn = db.transaction(() => {
+    const claimIds = listClaimIdsStmt.all(pageSlug) as Array<{ id: string }>;
+    for (const claim of claimIds) {
+      deleteClaimEvidenceStmt.run(claim.id);
+    }
+    deleteClaimsStmt.run(pageSlug);
+    deletePageMaterialsStmt.run(pageSlug);
+    deleteRelationsStmt.run(pageSlug, pageSlug);
+    deletePageStmt.run(pageSlug);
+  });
+  txn();
+}
+
+export function createWikiJob(record: WikiJobRecord): void {
+  db.prepare(
+    `INSERT INTO wiki_jobs (
+      id, job_type, status, payload_json, result_json, error_message,
+      created_at, updated_at, started_at, finished_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.job_type,
+    record.status,
+    record.payload_json,
+    record.result_json,
+    record.error_message,
+    record.created_at,
+    record.updated_at,
+    record.started_at,
+    record.finished_at,
+  );
+}
+
+export function updateWikiJob(
+  id: string,
+  patch: Partial<WikiJobRecord>,
+): void {
+  const fields: string[] = ['updated_at = ?'];
+  const values: unknown[] = [patch.updated_at ?? new Date().toISOString()];
+  const assign = <K extends keyof WikiJobRecord>(key: K) => {
+    if (patch[key] !== undefined) {
+      fields.push(`${String(key)} = ?`);
+      values.push(patch[key]);
+    }
+  };
+
+  assign('job_type');
+  assign('status');
+  assign('payload_json');
+  assign('result_json');
+  assign('error_message');
+  assign('created_at');
+  assign('started_at');
+  assign('finished_at');
+
+  values.push(id);
+  db.prepare(
+    `UPDATE wiki_jobs SET ${fields.join(', ')} WHERE id = ?`,
+  ).run(...values);
+}
+
+export function getWikiJob(id: string): WikiJobRecord | undefined {
+  return db
+    .prepare('SELECT * FROM wiki_jobs WHERE id = ?')
+    .get(id) as WikiJobRecord | undefined;
+}
+
+export function listWikiJobs(limit: number = 100): WikiJobRecord[] {
+  return db
+    .prepare(
+      'SELECT * FROM wiki_jobs ORDER BY created_at DESC LIMIT ?',
+    )
+    .all(Math.max(1, limit)) as WikiJobRecord[];
+}
+
+export function listPendingWikiJobs(): WikiJobRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM wiki_jobs
+       WHERE status IN ('pending', 'running')
+       ORDER BY created_at ASC`,
+    )
+    .all() as WikiJobRecord[];
+}
+
+export function searchWikiPages(
+  query: string,
+  limit: number = 10,
+): WikiSearchResult[] {
+  const safeLimit = Math.max(1, limit);
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  try {
+    return db
+      .prepare(
+        `
+          SELECT
+            p.slug,
+            p.title,
+            p.page_kind,
+            p.summary,
+            p.content_markdown,
+            bm25(wiki_pages_fts) AS score
+          FROM wiki_pages_fts
+          JOIN wiki_pages p ON p.rowid = wiki_pages_fts.rowid
+          WHERE wiki_pages_fts MATCH ?
+          ORDER BY score
+          LIMIT ?
+        `,
+      )
+      .all(trimmed, safeLimit) as WikiSearchResult[];
+  } catch (err) {
+    logger.warn({ err, query }, 'Wiki FTS search failed, falling back to LIKE');
+    const like = `%${trimmed.replace(/[%_]/g, '')}%`;
+    return db
+      .prepare(
+        `
+          SELECT
+            slug,
+            title,
+            page_kind,
+            summary,
+            content_markdown,
+            0 AS score
+          FROM wiki_pages
+          WHERE
+            slug LIKE ? OR
+            title LIKE ? OR
+            COALESCE(summary, '') LIKE ? OR
+            content_markdown LIKE ?
+          ORDER BY updated_at DESC
+          LIMIT ?
+        `,
+      )
+      .all(like, like, like, like, safeLimit) as WikiSearchResult[];
   }
 }
 
