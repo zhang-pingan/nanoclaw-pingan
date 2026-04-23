@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { _initTestDatabase, getAllChats, storeChatMetadata } from './db.js';
+import { _initTestDatabase, storeChatMetadata } from './db.js';
 import { getAvailableGroups, _setRegisteredGroups } from './index.js';
 
 beforeEach(() => {
@@ -27,7 +27,7 @@ describe('JID ownership patterns', () => {
 // --- getAvailableGroups ---
 
 describe('getAvailableGroups', () => {
-  it('returns only groups, excludes DMs', () => {
+  it('returns only registered groups and ignores unregistered chats', () => {
     storeChatMetadata(
       'group1@g.us',
       '2024-01-01T00:00:01.000Z',
@@ -50,14 +50,23 @@ describe('getAvailableGroups', () => {
       true,
     );
 
+    _setRegisteredGroups({
+      'group1@g.us': {
+        name: 'Group 1',
+        folder: 'group1',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      },
+    });
+
     const groups = getAvailableGroups();
-    expect(groups).toHaveLength(2);
+    expect(groups).toHaveLength(1);
     expect(groups.map((g) => g.jid)).toContain('group1@g.us');
-    expect(groups.map((g) => g.jid)).toContain('group2@g.us');
+    expect(groups.map((g) => g.jid)).not.toContain('group2@g.us');
     expect(groups.map((g) => g.jid)).not.toContain('user@s.whatsapp.net');
   });
 
-  it('excludes __group_sync__ sentinel', () => {
+  it('ignores sentinel chat rows that are not registered groups', () => {
     storeChatMetadata('__group_sync__', '2024-01-01T00:00:00.000Z');
     storeChatMetadata(
       'group@g.us',
@@ -67,12 +76,21 @@ describe('getAvailableGroups', () => {
       true,
     );
 
+    _setRegisteredGroups({
+      'group@g.us': {
+        name: 'Group',
+        folder: 'group',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      },
+    });
+
     const groups = getAvailableGroups();
     expect(groups).toHaveLength(1);
     expect(groups[0].jid).toBe('group@g.us');
   });
 
-  it('marks registered groups correctly', () => {
+  it('marks every returned group as registered', () => {
     storeChatMetadata(
       'reg@g.us',
       '2024-01-01T00:00:01.000Z',
@@ -102,10 +120,10 @@ describe('getAvailableGroups', () => {
     const unreg = groups.find((g) => g.jid === 'unreg@g.us');
 
     expect(reg?.isRegistered).toBe(true);
-    expect(unreg?.isRegistered).toBe(false);
+    expect(unreg).toBeUndefined();
   });
 
-  it('returns groups ordered by most recent activity', () => {
+  it('preserves registered group order while enriching last activity', () => {
     storeChatMetadata(
       'old@g.us',
       '2024-01-01T00:00:01.000Z',
@@ -128,13 +146,37 @@ describe('getAvailableGroups', () => {
       true,
     );
 
+    _setRegisteredGroups({
+      'new@g.us': {
+        name: 'New',
+        folder: 'new',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      },
+      'mid@g.us': {
+        name: 'Mid',
+        folder: 'mid',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      },
+      'old@g.us': {
+        name: 'Old',
+        folder: 'old',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      },
+    });
+
     const groups = getAvailableGroups();
     expect(groups[0].jid).toBe('new@g.us');
     expect(groups[1].jid).toBe('mid@g.us');
     expect(groups[2].jid).toBe('old@g.us');
+    expect(groups[0].lastActivity).toBe('2024-01-01T00:00:05.000Z');
+    expect(groups[1].lastActivity).toBe('2024-01-01T00:00:03.000Z');
+    expect(groups[2].lastActivity).toBe('2024-01-01T00:00:01.000Z');
   });
 
-  it('excludes non-group chats regardless of JID format', () => {
+  it('returns registered groups even without chat metadata', () => {
     // Unknown JID format stored without is_group should not appear
     storeChatMetadata(
       'unknown-format-123',
@@ -158,9 +200,27 @@ describe('getAvailableGroups', () => {
       true,
     );
 
+    _setRegisteredGroups({
+      'group@g.us': {
+        name: 'Group',
+        folder: 'group',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      },
+      'missing@g.us': {
+        name: 'Missing',
+        folder: 'missing',
+        trigger: '@Andy',
+        added_at: '2024-01-01T00:00:00.000Z',
+      },
+    });
+
     const groups = getAvailableGroups();
-    expect(groups).toHaveLength(1);
+    expect(groups).toHaveLength(2);
     expect(groups[0].jid).toBe('group@g.us');
+    expect(groups[0].lastActivity).toBe('2024-01-01T00:00:03.000Z');
+    expect(groups[1].jid).toBe('missing@g.us');
+    expect(groups[1].lastActivity).toBe('');
   });
 
   it('returns empty array when no chats exist', () => {

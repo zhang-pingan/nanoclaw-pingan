@@ -1,443 +1,683 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import http from 'http';
-import type { AddressInfo } from 'net';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'events';
+import { PassThrough, Writable } from 'stream';
+import type { IncomingHttpHeaders, RequestOptions, Server } from 'http';
 
-const mockEnv: Record<string, string> = {};
-vi.mock('./env.js', () => ({
-  readEnvFile: vi.fn(() => ({ ...mockEnv })),
-}));
+interface MockCompatResult {
+  stream: boolean;
+  contentType?: string;
+  body?: string;
+  anthropicResponse?: unknown;
+  model?: string;
+}
 
-vi.mock('./logger.js', () => ({
-  logger: { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() },
-}));
+type UpstreamResult =
+  | {
+      statusCode: number;
+      headers?: IncomingHttpHeaders;
+      body?: string;
+    }
+  | {
+      error: Error;
+    };
 
-import { startCredentialProxy } from './credential-proxy.js';
+class LocalServerResponse extends Writable {
+  statusCode = 200;
+  headers: IncomingHttpHeaders = {};
+  headersSent = false;
+  private chunks: Buffer[] = [];
 
-function makeRequest(
-  port: number,
-  options: http.RequestOptions,
-  body = '',
-): Promise<{
-  statusCode: number;
-  body: string;
-  headers: http.IncomingHttpHeaders;
-}> {
-  return new Promise((resolve, reject) => {
-    const req = http.request(
-      {
-        ...options,
-        hostname: '127.0.0.1',
-        port,
-        headers: {
-          connection: 'close',
-          ...(options.headers || {}),
+  writeHead(statusCode: number, headers: IncomingHttpHeaders = {}): this {
+    this.statusCode = statusCode;
+    this.headers = { ...this.headers, ...headers };
+    this.headersSent = true;
+    return this;
+  }
+
+  _write(
+    chunk: Buffer | string,
+    _encoding: BufferEncoding,
+    callback: (error?: Error | null) => void,
+  ): void {
+    this.chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    callback();
+  }
+
+  override end(
+    chunk?: Buffer | string | (() => void),
+    encoding?: BufferEncoding | (() => void),
+    callback?: () => void,
+  ): this {
+    let finalChunk: Buffer | string | undefined;
+    let finalCallback = callback;
+
+    if (typeof chunk === 'function') {
+      finalCallback = chunk;
+    } else {
+      finalChunk = chunk;
+      if (typeof encoding === 'function') {
+        finalCallback = encoding;
+      }
+    }
+
+    if (finalChunk !== undefined) {
+      this.chunks.push(
+        typeof finalChunk === 'string'
+          ? Buffer.from(finalChunk)
+          : finalChunk,
+      );
+    }
+
+    this.headersSent = true;
+    return super.end(finalCallback);
+  }
+
+  get body(): string {
+    return Buffer.concat(this.chunks).toString();
+  }
+}
+
+let mockEnv: Record<string, string>;
+let lastServer:
+  | {
+      handler: (
+        req: PassThrough,
+        res: Writable & {
+          statusCode: number;
+          headers: IncomingHttpHeaders;
+          body: string;
         },
+      ) => void;
+    }
+  | undefined;
+let lastUpstreamHeaders: IncomingHttpHeaders;
+let lastUpstreamBody: string;
+let mockCompatResult: MockCompatResult | null;
+let mockCompatError: Error | null;
+let upstreamResponder: (
+  options: RequestOptions,
+  body: string,
+) => Promise<UpstreamResult>;
+let compatCalls: unknown[][];
+let compatConfigCalls: number;
+let modelResolutionCalls: unknown[][];
+let OpenAiCompatRequestErrorCtor:
+  | (new (status: number, endpoint: string, responseBody: string) => Error)
+  | undefined;
+let startCredentialProxy: typeof import('./credential-proxy.js').startCredentialProxy;
+
+function setupModuleMocks(): void {
+  vi.doMock('./env.js', () => ({
+    readEnvFile: () => ({ ...mockEnv }),
+  }));
+
+  vi.doMock('./logger.js', () => ({
+    logger: {
+      info: () => {},
+      error: () => {},
+      debug: () => {},
+      warn: () => {},
+    },
+  }));
+
+  vi.doMock('./model-resolution.js', () => ({
+    recordModelResolution: (...args: unknown[]) => {
+      modelResolutionCalls.push(args);
+    },
+  }));
+
+  vi.doMock('./agent-api.js', () => {
+    class OpenAiCompatRequestError extends Error {
+      status: number;
+      endpoint: string;
+      responseBody: string;
+
+      constructor(status: number, endpoint: string, responseBody: string) {
+        super(`Compat request failed with status ${status}`);
+        this.status = status;
+        this.endpoint = endpoint;
+        this.responseBody = responseBody;
+      }
+    }
+
+    OpenAiCompatRequestErrorCtor = OpenAiCompatRequestError;
+
+    return {
+      forwardAnthropicRequestToOpenAi: async (...args: unknown[]) => {
+        compatCalls.push(args);
+        if (mockCompatError) throw mockCompatError;
+        if (!mockCompatResult) {
+          throw new Error('No compatibility result configured');
+        }
+        return mockCompatResult;
       },
-      (res) => {
+      getCredentialProxyOpenAiCompatConfig: () => {
+        compatConfigCalls += 1;
+        return {
+          enabled:
+            (mockEnv.CREDENTIAL_PROXY_OPENAI_COMPAT || '')
+              .trim()
+              .toLowerCase() === 'true',
+          apiKey: mockEnv.CREDENTIAL_PROXY_OPENAI_API_KEY || '',
+          baseUrl:
+            mockEnv.CREDENTIAL_PROXY_OPENAI_BASE_URL || 'http://openai.test',
+          model: mockEnv.CREDENTIAL_PROXY_OPENAI_MODEL || 'gpt-5.4',
+          timeoutMs: 30000,
+          openAiProtocol:
+            mockEnv.CREDENTIAL_PROXY_OPENAI_PROTOCOL || 'chat_completions',
+        };
+      },
+      OpenAiCompatRequestError,
+    };
+  });
+
+  vi.doMock('http', () => {
+    class FakeServerResponse extends Writable {
+      statusCode = 200;
+      headers: IncomingHttpHeaders = {};
+      headersSent = false;
+      private chunks: Buffer[] = [];
+
+      writeHead(statusCode: number, headers: IncomingHttpHeaders = {}): this {
+        this.statusCode = statusCode;
+        this.headers = { ...this.headers, ...headers };
+        this.headersSent = true;
+        return this;
+      }
+
+      _write(
+        chunk: Buffer | string,
+        _encoding: BufferEncoding,
+        callback: (error?: Error | null) => void,
+      ): void {
+        this.chunks.push(
+          typeof chunk === 'string' ? Buffer.from(chunk) : chunk,
+        );
+        callback();
+      }
+
+      override end(
+        chunk?: Buffer | string | (() => void),
+        encoding?: BufferEncoding | (() => void),
+        callback?: () => void,
+      ): this {
+        let finalChunk: Buffer | string | undefined;
+        let finalCallback = callback;
+
+        if (typeof chunk === 'function') {
+          finalCallback = chunk;
+        } else {
+          finalChunk = chunk;
+          if (typeof encoding === 'function') {
+            finalCallback = encoding;
+          }
+        }
+
+        if (finalChunk !== undefined) {
+          this.chunks.push(
+            typeof finalChunk === 'string'
+              ? Buffer.from(finalChunk)
+              : finalChunk,
+          );
+        }
+
+        this.headersSent = true;
+        return super.end(finalCallback);
+      }
+
+      get body(): string {
+        return Buffer.concat(this.chunks).toString();
+      }
+    }
+
+    class FakeServer extends EventEmitter {
+      listening = false;
+      readonly handler: (
+        req: PassThrough,
+        res: FakeServerResponse,
+      ) => void;
+
+      constructor(
+        handler: (req: PassThrough, res: FakeServerResponse) => void,
+      ) {
+        super();
+        this.handler = handler;
+      }
+
+      listen(_port: number, _host: string, callback?: () => void): this {
+        this.listening = true;
+        queueMicrotask(() => callback?.());
+        return this;
+      }
+
+      closeAllConnections(): void {}
+
+      close(callback?: () => void): this {
+        this.listening = false;
+        queueMicrotask(() => callback?.());
+        return this;
+      }
+    }
+
+    return {
+      createServer: (
+        handler: (req: PassThrough, res: FakeServerResponse) => void,
+      ) => {
+        const server = new FakeServer(handler);
+        lastServer = server as unknown as typeof lastServer;
+        return server as unknown as Server;
+      },
+      request: (
+        options: RequestOptions,
+        callback?: (res: PassThrough & {
+          statusCode: number;
+          headers: IncomingHttpHeaders;
+        }) => void,
+      ) => {
+        const req = new EventEmitter() as EventEmitter & {
+          write: (chunk: Buffer | string) => void;
+          end: () => void;
+        };
+
         const chunks: Buffer[] = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => {
-          resolve({
-            statusCode: res.statusCode!,
-            body: Buffer.concat(chunks).toString(),
-            headers: res.headers,
-          });
-        });
+
+        req.write = (chunk: Buffer | string) => {
+          chunks.push(
+            typeof chunk === 'string' ? Buffer.from(chunk) : chunk,
+          );
+        };
+
+        req.end = () => {
+          lastUpstreamHeaders = {
+            ...((options.headers || {}) as IncomingHttpHeaders),
+          };
+          lastUpstreamBody = Buffer.concat(chunks).toString();
+
+          void upstreamResponder(options, lastUpstreamBody)
+            .then((result) => {
+              if ('error' in result) {
+                req.emit('error', result.error);
+                return;
+              }
+
+              const upstreamResponse = new PassThrough() as PassThrough & {
+                statusCode: number;
+                headers: IncomingHttpHeaders;
+              };
+              upstreamResponse.statusCode = result.statusCode;
+              upstreamResponse.headers = result.headers || {};
+              callback?.(upstreamResponse);
+              upstreamResponse.end(result.body || '');
+            })
+            .catch((error) => {
+              req.emit(
+                'error',
+                error instanceof Error ? error : new Error(String(error)),
+              );
+            });
+        };
+
+        return req;
       },
-    );
-    req.on('error', reject);
-    req.write(body);
-    req.end();
+    };
   });
 }
 
-describe('credential-proxy', () => {
-  let proxyServer: http.Server;
-  let upstreamServer: http.Server;
-  let proxyPort: number;
-  let upstreamPort: number;
-  let lastUpstreamHeaders: http.IncomingHttpHeaders;
-  let lastUpstreamBody: string;
-  let upstreamHandler: (
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ) => void;
+async function reloadCredentialProxyModule(): Promise<void> {
+  vi.resetModules();
+  setupModuleMocks();
+  ({ startCredentialProxy } = await import('./credential-proxy.js'));
+}
 
-  beforeEach(async () => {
-    lastUpstreamHeaders = {};
-    lastUpstreamBody = '';
-    upstreamHandler = (_req, res) => {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-    };
-
-    upstreamServer = http.createServer((req, res) => {
-      const chunks: Buffer[] = [];
-      req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
-        lastUpstreamHeaders = { ...req.headers };
-        lastUpstreamBody = Buffer.concat(chunks).toString();
-        upstreamHandler(req, res);
-      });
-    });
-    await new Promise<void>((resolve) =>
-      upstreamServer.listen(0, '127.0.0.1', resolve),
-    );
-    upstreamPort = (upstreamServer.address() as AddressInfo).port;
+async function startProxy(env: Record<string, string> = {}): Promise<void> {
+  Object.assign(mockEnv, env, {
+    ANTHROPIC_BASE_URL: 'http://upstream.test',
   });
+  await startCredentialProxy(0);
+}
 
-  afterEach(async () => {
-    proxyServer?.closeAllConnections?.();
-    upstreamServer?.closeAllConnections?.();
-    await new Promise<void>((r) => proxyServer?.close(() => r()));
-    await new Promise<void>((r) => upstreamServer?.close(() => r()));
-    for (const key of Object.keys(mockEnv)) delete mockEnv[key];
-  });
-
-  async function startProxy(env: Record<string, string>): Promise<number> {
-    Object.assign(mockEnv, env, {
-      ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
-    });
-    proxyServer = await startCredentialProxy(0);
-    return (proxyServer.address() as AddressInfo).port;
+async function invokeProxyRequest(input: {
+  method: string;
+  path: string;
+  headers?: IncomingHttpHeaders;
+  body?: string;
+}): Promise<{
+  statusCode: number;
+  body: string;
+  headers: IncomingHttpHeaders;
+}> {
+  if (!lastServer) {
+    throw new Error('Credential proxy server was not created');
   }
 
+  const req = new PassThrough() as PassThrough & {
+    method: string;
+    url: string;
+    headers: IncomingHttpHeaders;
+  };
+  req.method = input.method;
+  req.url = input.path;
+  req.headers = input.headers || {};
+
+  const res = new LocalServerResponse();
+  const completed = new Promise<{
+    statusCode: number;
+    body: string;
+    headers: IncomingHttpHeaders;
+  }>((resolve) => {
+    res.on('finish', () => {
+      resolve({
+        statusCode: res.statusCode,
+        body: res.body,
+        headers: res.headers,
+      });
+    });
+  });
+
+  lastServer.handler(req, res as never);
+  req.end(input.body || '');
+
+  return completed;
+}
+
+describe('credential-proxy', () => {
+  beforeEach(async () => {
+    mockEnv = {};
+    lastServer = undefined;
+    lastUpstreamHeaders = {};
+    lastUpstreamBody = '';
+    mockCompatResult = null;
+    mockCompatError = null;
+    upstreamResponder = vi.fn(async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ok: true }),
+    }));
+    compatCalls = [];
+    compatConfigCalls = 0;
+    modelResolutionCalls = [];
+    OpenAiCompatRequestErrorCtor = undefined;
+    await reloadCredentialProxyModule();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
   it('API-key mode injects x-api-key and strips placeholder', async () => {
-    proxyPort = await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      '{}',
-    );
-
+      body: '{}',
+    });
     expect(lastUpstreamHeaders['x-api-key']).toBe('sk-ant-real-key');
   });
 
   it('OAuth mode replaces Authorization when container sends one', async () => {
-    proxyPort = await startProxy({
-      CLAUDE_CODE_OAUTH_TOKEN: 'real-oauth-token',
-    });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/api/oauth/claude_cli/create_api_key',
-        headers: {
-          'content-type': 'application/json',
-          authorization: 'Bearer placeholder',
-        },
+    await startProxy({ CLAUDE_CODE_OAUTH_TOKEN: 'real-oauth-token' });
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/api/oauth/claude_cli/create_api_key',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer placeholder',
       },
-      '{}',
-    );
-
+      body: '{}',
+    });
     expect(lastUpstreamHeaders['authorization']).toBe(
       'Bearer real-oauth-token',
     );
   });
 
   it('OAuth mode does not inject Authorization when container omits it', async () => {
-    proxyPort = await startProxy({
-      CLAUDE_CODE_OAUTH_TOKEN: 'real-oauth-token',
-    });
-
-    // Post-exchange: container uses x-api-key only, no Authorization header
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'temp-key-from-exchange',
-        },
+    await startProxy({ CLAUDE_CODE_OAUTH_TOKEN: 'real-oauth-token' });
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'temp-key-from-exchange',
       },
-      '{}',
-    );
-
+      body: '{}',
+    });
     expect(lastUpstreamHeaders['x-api-key']).toBe('temp-key-from-exchange');
     expect(lastUpstreamHeaders['authorization']).toBeUndefined();
   });
 
   it('strips hop-by-hop headers', async () => {
-    proxyPort = await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          connection: 'keep-alive',
-          'keep-alive': 'timeout=5',
-          'transfer-encoding': 'chunked',
-        },
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        connection: 'keep-alive',
+        'keep-alive': 'timeout=5',
+        'transfer-encoding': 'chunked',
       },
-      '{}',
-    );
-
-    // Proxy strips client hop-by-hop headers. Node's HTTP client may re-add
-    // its own Connection header (standard HTTP/1.1 behavior), but the client's
-    // custom keep-alive and transfer-encoding must not be forwarded.
+      body: '{}',
+    });
     expect(lastUpstreamHeaders['keep-alive']).toBeUndefined();
     expect(lastUpstreamHeaders['transfer-encoding']).toBeUndefined();
   });
 
   it('model override replaces model in request body', async () => {
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       ANTHROPIC_CLAUDE_MODEL: 'gpt-4o',
     });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({ model: 'claude-opus-4-6', messages: [{ role: 'user', content: 'hello' }] }),
-    );
-
-    const body = JSON.parse(lastUpstreamBody);
-    expect(body.model).toBe('gpt-4o');
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    expect(JSON.parse(lastUpstreamBody).model).toBe('gpt-4o');
   });
 
-  it('model override injects model when request body is missing model', async () => {
-    proxyPort = await startProxy({
+  it('model override leaves body unchanged when request model is missing', async () => {
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       ANTHROPIC_CLAUDE_MODEL: 'gpt-4o',
     });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
-    );
-
-    const body = JSON.parse(lastUpstreamBody);
-    expect(body.model).toBe('gpt-4o');
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    expect(JSON.parse(lastUpstreamBody).model).toBeUndefined();
   });
 
   it('model override does nothing when body is not JSON', async () => {
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       ANTHROPIC_CLAUDE_MODEL: 'gpt-4o',
     });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      'not json body',
-    );
-
+      body: 'not json body',
+    });
     expect(lastUpstreamBody).toBe('not json body');
   });
 
   it('model override does nothing when ANTHROPIC_CLAUDE_MODEL is not set', async () => {
-    proxyPort = await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder' },
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({ model: 'claude-opus-4-6', messages: [] }),
-    );
-
-    const body = JSON.parse(lastUpstreamBody);
-    expect(body.model).toBe('claude-opus-4-6');
+      body: JSON.stringify({ model: 'claude-opus-4-6', messages: [] }),
+    });
+    expect(JSON.parse(lastUpstreamBody).model).toBe('claude-opus-4-6');
   });
 
   it('returns 502 when upstream is unreachable', async () => {
-    Object.assign(mockEnv, {
-      ANTHROPIC_API_KEY: 'sk-ant-real-key',
-      ANTHROPIC_BASE_URL: 'http://127.0.0.1:59999',
+    upstreamResponder = vi.fn(async () => ({
+      error: new Error('connect ECONNREFUSED'),
+    }));
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+    const res = await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
     });
-    proxyServer = await startCredentialProxy(0);
-    proxyPort = (proxyServer.address() as AddressInfo).port;
-
-    const res = await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: { 'content-type': 'application/json' },
-      },
-      '{}',
-    );
-
     expect(res.statusCode).toBe(502);
     expect(res.body).toBe('Bad Gateway');
   });
 
   it('uses OpenAI compat for non-stream anthropic messages when enabled', async () => {
-    upstreamHandler = (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(
-        [
-          'event: response.created',
-          'data: {"type":"response.created","response":{"model":"gpt-5.4","status":"in_progress"}}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"OK"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"model":"gpt-5.4","output_text":"OK"}}',
-          '',
-        ].join('\n'),
-      );
+    mockCompatResult = {
+      stream: false,
+      model: 'gpt-5.4',
+      anthropicResponse: {
+        id: 'msg_openai_compat',
+        type: 'message',
+        role: 'assistant',
+        model: 'gpt-5.4',
+        content: [{ type: 'text', text: 'OK' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+      },
     };
-
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
       CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
-      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'http://openai.test',
       CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
     });
-
-    const res = await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
+    const res = await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
-    );
-
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    const [requestArg, configArg] = compatCalls[0] || [];
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('application/json');
-    expect(JSON.parse(lastUpstreamBody)).toMatchObject({
-      model: 'gpt-5.4',
-      stream: true,
-      input: [
-        {
-          role: 'user',
-          content: [{ type: 'input_text', text: 'hello' }],
-        },
-      ],
-    });
-    expect(lastUpstreamHeaders['authorization']).toBe('Bearer sk-openai-real');
-    expect(JSON.parse(res.body)).toEqual({
-      id: 'msg_openai_compat',
-      type: 'message',
-      role: 'assistant',
-      model: 'gpt-5.4',
-      content: [{ type: 'text', text: 'OK' }],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-    });
-  });
-
-  it('overrides request model with CREDENTIAL_PROXY_OPENAI_MODEL when compat is enabled', async () => {
-    upstreamHandler = (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(
-        [
-          'event: response.created',
-          'data: {"type":"response.created","response":{"model":"gpt-5.4","status":"in_progress"}}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"OK"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"model":"gpt-5.4","output_text":"OK"}}',
-          '',
-        ].join('\n'),
-      );
-    };
-
-    proxyPort = await startProxy({
-      ANTHROPIC_API_KEY: 'sk-ant-real-key',
-      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
-      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
-      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
-      CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4',
-      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
-    });
-
-    const res = await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
-      },
-      JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+    expect(requestArg).toEqual(
+      expect.objectContaining({
+        model: 'gpt-5.4',
         messages: [{ role: 'user', content: 'hello' }],
       }),
     );
-
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(lastUpstreamBody)).toMatchObject({
-      model: 'gpt-5.4',
-    });
+    expect(configArg).toEqual(
+      expect.objectContaining({
+        apiKey: 'sk-openai-real',
+        baseUrl: 'http://openai.test',
+        model: 'gpt-5.4',
+        openAiProtocol: 'responses',
+      }),
+    );
+    expect(JSON.parse(res.body)).toEqual(mockCompatResult.anthropicResponse);
   });
 
-  it('returns upstream compat status and body instead of masking as 502', async () => {
-    upstreamHandler = (_req, res) => {
-      res.writeHead(400, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          detail: 'Model not supported',
-        }),
-      );
+  it('overrides request model with CREDENTIAL_PROXY_OPENAI_MODEL when compat is enabled', async () => {
+    mockCompatResult = {
+      stream: false,
+      model: 'gpt-5.4',
+      anthropicResponse: {
+        id: 'msg_openai_compat',
+        type: 'message',
+        role: 'assistant',
+        model: 'gpt-5.4',
+        content: [{ type: 'text', text: 'OK' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+      },
     };
-
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
       CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
-      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'http://openai.test',
       CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4',
       CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
     });
-
-    const res = await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    const [requestArg] = compatCalls[0] || [];
+    expect(requestArg).toEqual(
+      expect.objectContaining({
+        model: 'gpt-5.4',
+      }),
     );
+  });
 
+  it('returns upstream compat status and body instead of masking as 502', async () => {
+    if (!OpenAiCompatRequestErrorCtor) {
+      throw new Error('OpenAiCompatRequestError mock was not initialized');
+    }
+    mockCompatError = new OpenAiCompatRequestErrorCtor(
+      400,
+      'http://openai.test/v1/responses',
+      JSON.stringify({ detail: 'Model not supported' }),
+    );
+    await startProxy({
+      ANTHROPIC_API_KEY: 'sk-ant-real-key',
+      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
+      CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'http://openai.test',
+      CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4',
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+    });
+    const res = await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
+      },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body)).toEqual({
       error: 'Gateway compatibility translation request failed',
-      actualRequestApi: `http://127.0.0.1:${upstreamPort}/v1/responses`,
+      actualRequestApi: 'http://openai.test/v1/responses',
       upstreamStatus: 400,
       upstreamBody: {
         detail: 'Model not supported',
@@ -446,44 +686,44 @@ describe('credential-proxy', () => {
   });
 
   it('uses OpenAI compat for stream anthropic messages when enabled', async () => {
-    upstreamHandler = (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(
-        [
-          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"Hel"}}]}',
-          '',
-          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"lo"}}]}',
-          '',
-          'data: [DONE]',
-          '',
-        ].join('\n'),
-      );
+    mockCompatResult = {
+      stream: true,
+      model: 'gpt-4.1',
+      contentType: 'text/event-stream',
+      body: [
+        'event: message_start',
+        'data: {"type":"message_start"}',
+        '',
+        'event: content_block_delta',
+        'data: {"delta":{"type":"text_delta","text":"Hel"}}',
+        '',
+        'event: content_block_delta',
+        'data: {"delta":{"type":"text_delta","text":"lo"}}',
+        '',
+        'event: message_stop',
+        'data: {"type":"message_stop"}',
+        '',
+      ].join('\n'),
     };
-
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
       CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
-      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'http://openai.test',
       CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'chat_completions',
     });
-
-    const res = await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
+    const res = await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({
+      body: JSON.stringify({
         stream: true,
         messages: [{ role: 'user', content: 'hello' }],
       }),
-    );
-
+    });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
     expect(res.body).toContain('event: message_start');
@@ -494,165 +734,135 @@ describe('credential-proxy', () => {
   });
 
   it('preserves tool_use blocks in non-stream compat responses', async () => {
-    upstreamHandler = (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(
-        [
-          'data: {"model":"gpt-4.1","choices":[{"delta":{"content":"Checking."}}]}',
-          '',
-          'data: {"model":"gpt-4.1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"weather","arguments":"{\\"city\\":\\"Shang"}}]}}]}',
-          '',
-          'data: {"model":"gpt-4.1","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"hai\\"}"}}]},"finish_reason":"tool_calls"}]}',
-          '',
-          'data: [DONE]',
-          '',
-        ].join('\n'),
-      );
+    mockCompatResult = {
+      stream: false,
+      model: 'gpt-4.1',
+      anthropicResponse: {
+        id: 'msg_tool_use',
+        type: 'message',
+        role: 'assistant',
+        model: 'gpt-4.1',
+        content: [
+          { type: 'text', text: 'Checking.' },
+          {
+            type: 'tool_use',
+            id: 'call_1',
+            name: 'weather',
+            input: { city: 'Shanghai' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        stop_sequence: null,
+      },
     };
-
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
       CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
-      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'http://openai.test',
       CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'chat_completions',
     });
-
-    const res = await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
+    const res = await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({ messages: [{ role: 'user', content: 'weather?' }] }),
-    );
-
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toContain('application/json');
-    expect(JSON.parse(res.body)).toEqual({
-      id: 'msg_openai_compat',
-      type: 'message',
-      role: 'assistant',
-      model: 'gpt-4.1',
-      content: [
-        { type: 'text', text: 'Checking.' },
-        {
-          type: 'tool_use',
-          id: 'call_1',
-          name: 'weather',
-          input: { city: 'Shanghai' },
-        },
-      ],
-      stop_reason: 'tool_use',
-      stop_sequence: null,
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'weather' }],
+      }),
     });
+    expect(JSON.parse(res.body)).toEqual(mockCompatResult.anthropicResponse);
   });
 
   it('preserves tool_use deltas in stream compat responses', async () => {
-    upstreamHandler = (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(
-        [
-          'event: response.output_item.added',
-          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message"}}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"delta":"Need a tool."}',
-          '',
-          'event: response.output_item.added',
-          'data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_2","name":"weather"}}',
-          '',
-          'event: response.function_call_arguments.delta',
-          'data: {"type":"response.function_call_arguments.delta","output_index":1,"delta":"{\\"city\\":\\"Shanghai\\"}"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"model":"gpt-5.4","status":"completed"}}',
-          '',
-        ].join('\n'),
-      );
+    mockCompatResult = {
+      stream: true,
+      model: 'gpt-4.1',
+      contentType: 'text/event-stream',
+      body: [
+        'event: content_block_start',
+        'data: {"content_block":{"type":"tool_use","id":"call_1","name":"weather","input":{}}}',
+        '',
+        'event: content_block_delta',
+        'data: {"delta":{"type":"input_json_delta","partial_json":"{\\"city\\":\\"Shang"}}',
+        '',
+        'event: content_block_delta',
+        'data: {"delta":{"type":"input_json_delta","partial_json":"hai\\"}"}}',
+        '',
+      ].join('\n'),
     };
-
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
       CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
       CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
-      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
-      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'http://openai.test',
+      CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'chat_completions',
     });
-
-    const res = await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
+    const res = await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({
+      body: JSON.stringify({
         stream: true,
-        messages: [{ role: 'user', content: 'weather?' }],
+        messages: [{ role: 'user', content: 'weather' }],
       }),
-    );
-
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toContain('text/event-stream');
-    expect(res.body).toContain('"type":"text_delta","text":"Need a tool."');
-    expect(res.body).toContain('"type":"tool_use","id":"call_2","name":"weather"');
-    expect(res.body).toContain(
-      '"type":"input_json_delta","partial_json":"{\\"city\\":\\"Shanghai\\"}"',
-    );
+    });
+    expect(res.body).toContain('event: content_block_start');
+    expect(res.body).toContain('"type":"tool_use"');
+    expect(res.body).toContain('"partial_json":"{\\"city\\":\\"Shang"');
+    expect(res.body).toContain('"partial_json":"hai\\"}"');
   });
 
   it('ignores ANTHROPIC_CLAUDE_MODEL in compat mode and uses compat model config instead', async () => {
-    upstreamHandler = (_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(
-        [
-          'event: response.created',
-          'data: {"type":"response.created","response":{"model":"gpt-5.4","status":"in_progress"}}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"OK"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"model":"gpt-5.4","output_text":"OK"}}',
-          '',
-        ].join('\n'),
-      );
+    mockCompatResult = {
+      stream: false,
+      model: 'gpt-5.4',
+      anthropicResponse: {
+        id: 'msg_openai_compat',
+        type: 'message',
+        role: 'assistant',
+        model: 'gpt-5.4',
+        content: [{ type: 'text', text: 'OK' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+      },
     };
-
-    proxyPort = await startProxy({
+    await startProxy({
       ANTHROPIC_API_KEY: 'sk-ant-real-key',
-      ANTHROPIC_CLAUDE_MODEL: 'claude-should-not-apply',
+      ANTHROPIC_CLAUDE_MODEL: 'claude-opus-4-6',
       CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
       CREDENTIAL_PROXY_OPENAI_API_KEY: 'sk-openai-real',
-      CREDENTIAL_PROXY_OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      CREDENTIAL_PROXY_OPENAI_BASE_URL: 'http://openai.test',
       CREDENTIAL_PROXY_OPENAI_MODEL: 'gpt-5.4',
       CREDENTIAL_PROXY_OPENAI_PROTOCOL: 'responses',
     });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
       },
-      JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
-    );
-
-    expect(JSON.parse(lastUpstreamBody)).toMatchObject({
-      model: 'gpt-5.4',
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
     });
-    expect(JSON.parse(lastUpstreamBody).model).not.toBe('claude-should-not-apply');
+    const [requestArg, configArg] = compatCalls[0] || [];
+    expect(requestArg).toEqual(
+      expect.objectContaining({
+        model: 'gpt-5.4',
+      }),
+    );
+    expect(configArg).toEqual(
+      expect.objectContaining({
+        model: 'gpt-5.4',
+      }),
+    );
   });
 });

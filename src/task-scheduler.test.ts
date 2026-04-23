@@ -7,6 +7,14 @@ import {
   startSchedulerLoop,
 } from './task-scheduler.js';
 
+function formatLocalTime(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
 describe('task scheduler', () => {
   beforeEach(() => {
     _initTestDatabase();
@@ -27,7 +35,7 @@ describe('task scheduler', () => {
       schedule_type: 'once',
       schedule_value: '2026-02-22T00:00:00.000Z',
       context_mode: 'isolated',
-      next_run: new Date(Date.now() - 60_000).toISOString(),
+      next_run: formatLocalTime(new Date(Date.now() - 60_000)),
       status: 'active',
       created_at: '2026-02-22T00:00:00.000Z',
     });
