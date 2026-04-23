@@ -700,6 +700,14 @@
               <span>资料快照</span>
               <span id="knowledge-selection-summary" class="muted">已选 0 份</span>
             </div>
+            <div class="knowledge-filter-row">
+              <select id="knowledge-material-filter" class="knowledge-filter-select">
+                <option value="all">全部资料</option>
+                <option value="referenced">仅看有依赖</option>
+                <option value="deletable">仅看可删除</option>
+                <option value="selected">仅看已选中</option>
+              </select>
+            </div>
             <div id="knowledge-material-list" class="knowledge-list"></div>
           </div>
           <div class="knowledge-sidebar-section">
@@ -730,12 +738,29 @@
               type="text"
               placeholder="搜索知识库页面"
             />
+            <select id="knowledge-page-kind-filter" class="knowledge-filter-select">
+              <option value="all">全部页面类型</option>
+            </select>
             <button id="knowledge-search-btn" class="btn-primary btn-soft-primary">搜索页面</button>
           </div>
           <div class="knowledge-grid">
             <section class="workflow-definition-panel knowledge-panel">
               <div class="knowledge-panel-head">
                 <strong>Drafts</strong>
+                <span id="knowledge-draft-selection-summary" class="muted">已选 0 份</span>
+              </div>
+              <div class="knowledge-panel-toolbar">
+                <select id="knowledge-draft-status-filter" class="knowledge-filter-select">
+                  <option value="all">全部状态</option>
+                  <option value="draft">仅看 draft</option>
+                  <option value="failed">仅看 failed</option>
+                  <option value="published">仅看 published</option>
+                </select>
+                <div class="knowledge-inline-actions">
+                  <button id="knowledge-draft-select-visible-btn" type="button" class="knowledge-mini-btn">选中当前</button>
+                  <button id="knowledge-draft-clear-selection-btn" type="button" class="knowledge-mini-btn">清空</button>
+                  <button id="knowledge-draft-bulk-delete-btn" type="button" class="knowledge-mini-btn danger">批量删未发布</button>
+                </div>
               </div>
               <div id="knowledge-draft-list" class="knowledge-list"></div>
             </section>

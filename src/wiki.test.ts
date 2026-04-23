@@ -23,6 +23,7 @@ import {
 } from './db.js';
 import { KNOWLEDGE_WIKI_DIR } from './config.js';
 import {
+  bulkDeleteWikiDrafts,
   deleteWikiDraft,
   deleteWikiMaterial,
   deleteWikiPage,
@@ -590,5 +591,116 @@ describe('wiki', () => {
     expect(listWikiRelationsForPage(dependentSlug)).toHaveLength(0);
     expect(searchWikiPages('Primary Page', 10).some((item) => item.slug === primarySlug)).toBe(false);
     expect(getWikiPage(dependentSlug)?.slug).toBe(dependentSlug);
+  });
+
+  it('bulk deletes only unpublished drafts', async () => {
+    const publishedSlug = `wiki-bulk-published-${Date.now()}`;
+    const draftOnlySlug = `wiki-bulk-draft-${Date.now()}`;
+    const material = importWikiMaterialFromText({
+      title: '批量删除草稿资料',
+      text: '批量删除只应作用于未发布草稿，已发布草稿应被跳过。',
+    });
+    rememberMaterialArtifacts(material);
+
+    callAnthropicMessagesMock
+      .mockResolvedValueOnce({
+        model: 'test-model',
+        raw: {},
+        text: JSON.stringify({
+          page: {
+            slug: publishedSlug,
+            title: 'Published Draft Page',
+            page_kind: 'decision',
+            summary: '稍后发布',
+            content_markdown: '# Published Draft Page\n\n这个草稿会被发布。',
+          },
+          claims: [
+            {
+              claim_type: 'decision',
+              statement: '已发布草稿不应被批量删除。',
+              canonical_form: '已发布草稿不应被批量删除',
+              confidence: 0.84,
+              evidence: [
+                {
+                  material_id: material.id,
+                  excerpt_text: '已发布草稿不应被批量删除。',
+                },
+              ],
+            },
+          ],
+          relations: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        model: 'test-model',
+        raw: {},
+        text: JSON.stringify({
+          page: {
+            slug: draftOnlySlug,
+            title: 'Draft Only Page',
+            page_kind: 'procedure',
+            summary: '保持未发布',
+            content_markdown: '# Draft Only Page\n\n这个草稿保持未发布。',
+          },
+          claims: [
+            {
+              claim_type: 'procedure_step',
+              statement: '未发布草稿可以被批量删除。',
+              canonical_form: '未发布草稿可以被批量删除',
+              confidence: 0.8,
+              evidence: [
+                {
+                  material_id: material.id,
+                  excerpt_text: '未发布草稿可以被批量删除。',
+                },
+              ],
+            },
+          ],
+          relations: [],
+        }),
+      });
+
+    const publishedJob = queueWikiDraftGenerationJob({
+      materialIds: [material.id],
+      targetSlug: publishedSlug,
+      title: 'Published Draft Page',
+      pageKind: 'decision',
+    });
+    const publishedJobDone = await waitForJobCompletion(publishedJob.id);
+    const publishedDraftId = JSON.parse(
+      String(publishedJobDone.result_json || '{}'),
+    ).draft_id;
+    const publishedDraftDetail = getWikiDraftDetail(String(publishedDraftId));
+    rememberPath(publishedDraftDetail?.draft.file_path);
+    const publishedPage = publishWikiDraft(String(publishedDraftId));
+    rememberPath(publishedPage.page.file_path);
+
+    const draftOnlyJob = queueWikiDraftGenerationJob({
+      materialIds: [material.id],
+      targetSlug: draftOnlySlug,
+      title: 'Draft Only Page',
+      pageKind: 'procedure',
+    });
+    const draftOnlyJobDone = await waitForJobCompletion(draftOnlyJob.id);
+    const draftOnlyDraftId = JSON.parse(
+      String(draftOnlyJobDone.result_json || '{}'),
+    ).draft_id;
+    const draftOnlyDetail = getWikiDraftDetail(String(draftOnlyDraftId));
+    const draftOnlyPath = String(draftOnlyDetail?.draft.file_path || '');
+    rememberPath(draftOnlyPath);
+
+    const result = bulkDeleteWikiDrafts([
+      String(publishedDraftId),
+      String(draftOnlyDraftId),
+      'missing-draft-id',
+    ]);
+
+    expect(result.deleted_ids).toEqual([String(draftOnlyDraftId)]);
+    expect(result.skipped_published_ids).toEqual([String(publishedDraftId)]);
+    expect(result.missing_ids).toEqual(['missing-draft-id']);
+    expect(getWikiDraft(String(draftOnlyDraftId))).toBeUndefined();
+    expect(fs.existsSync(draftOnlyPath)).toBe(false);
+    expect(getWikiDraft(String(publishedDraftId))?.status).toBe('published');
+    expect(getWikiPage(publishedSlug)?.slug).toBe(publishedSlug);
   });
 });

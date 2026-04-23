@@ -173,6 +173,13 @@ var knowledgeDetailActions = document.getElementById("knowledge-detail-actions")
 var knowledgeDetailContent = document.getElementById("knowledge-detail-content");
 var knowledgeFileInput = document.getElementById("knowledge-file-input");
 var knowledgeSelectionSummary = document.getElementById("knowledge-selection-summary");
+var knowledgeMaterialFilter = document.getElementById("knowledge-material-filter");
+var knowledgeDraftStatusFilter = document.getElementById("knowledge-draft-status-filter");
+var knowledgeDraftSelectionSummary = document.getElementById("knowledge-draft-selection-summary");
+var knowledgeDraftSelectVisibleBtn = document.getElementById("knowledge-draft-select-visible-btn");
+var knowledgeDraftClearSelectionBtn = document.getElementById("knowledge-draft-clear-selection-btn");
+var knowledgeDraftBulkDeleteBtn = document.getElementById("knowledge-draft-bulk-delete-btn");
+var knowledgePageKindFilter = document.getElementById("knowledge-page-kind-filter");
 var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
 var primaryNav = document.getElementById("primary-nav");
@@ -381,10 +388,14 @@ var knowledgeDrafts = [];
 var knowledgePages = [];
 var knowledgeJobs = [];
 var knowledgeSelectedMaterialIds = /* @__PURE__ */ new Set();
+var knowledgeSelectedDraftIds = /* @__PURE__ */ new Set();
 var currentKnowledgeDetail = null;
 var currentKnowledgeDraftId = "";
 var currentKnowledgePageSlug = "";
 var knowledgePollingTimer = null;
+var knowledgeMaterialFilterValue = "all";
+var knowledgeDraftStatusFilterValue = "all";
+var knowledgePageKindFilterValue = "all";
 const WORKBENCH_CONTEXT_BADGES = [
   { key: "requirement_preset", label: "关联需求" },
   { key: "main_branch", label: "主分支" },
@@ -2462,7 +2473,83 @@ async function loadMemories(queryOverride) {
 
 function renderKnowledgeSelectionSummary() {
   if (!knowledgeSelectionSummary) return;
-  knowledgeSelectionSummary.textContent = `已选 ${knowledgeSelectedMaterialIds.size} 份`;
+  knowledgeSelectionSummary.textContent = `已选 ${knowledgeSelectedMaterialIds.size} 份 · 可见 ${getFilteredKnowledgeMaterials().length} 份`;
+}
+
+function renderKnowledgeDraftSelectionSummary() {
+  if (!knowledgeDraftSelectionSummary) return;
+  const selectedVisibleDrafts = knowledgeDrafts.filter((draft) => knowledgeSelectedDraftIds.has(draft.id) && draft.status !== "published");
+  knowledgeDraftSelectionSummary.textContent = `已选 ${selectedVisibleDrafts.length} 份`;
+  if (knowledgeDraftBulkDeleteBtn) {
+    knowledgeDraftBulkDeleteBtn.disabled = selectedVisibleDrafts.length === 0;
+    knowledgeDraftBulkDeleteBtn.title = selectedVisibleDrafts.length
+      ? `批量删除 ${selectedVisibleDrafts.length} 份未发布草稿`
+      : "请先勾选未发布草稿";
+  }
+}
+
+function getFilteredKnowledgeMaterials() {
+  return knowledgeMaterials.filter((material) => {
+    const usageSummary = material.usage_summary || {};
+    if (knowledgeMaterialFilterValue === "referenced") {
+      return !usageSummary.can_delete;
+    }
+    if (knowledgeMaterialFilterValue === "deletable") {
+      return !!usageSummary.can_delete;
+    }
+    if (knowledgeMaterialFilterValue === "selected") {
+      return knowledgeSelectedMaterialIds.has(material.id);
+    }
+    return true;
+  });
+}
+
+function getFilteredKnowledgeDrafts() {
+  return knowledgeDrafts.filter((draft) => {
+    if (knowledgeDraftStatusFilterValue === "all") return true;
+    return draft.status === knowledgeDraftStatusFilterValue;
+  });
+}
+
+function getFilteredKnowledgePages() {
+  return knowledgePages.filter((page) => {
+    if (knowledgePageKindFilterValue === "all") return true;
+    return page.page_kind === knowledgePageKindFilterValue;
+  });
+}
+
+function pruneKnowledgeDraftSelection() {
+  const validIds = new Set(
+    knowledgeDrafts
+      .filter((draft) => draft.status !== "published")
+      .map((draft) => draft.id),
+  );
+  Array.from(knowledgeSelectedDraftIds).forEach((draftId) => {
+    if (!validIds.has(draftId)) {
+      knowledgeSelectedDraftIds.delete(draftId);
+    }
+  });
+}
+
+function refreshKnowledgePageKindFilterOptions() {
+  if (!knowledgePageKindFilter) return;
+  const kinds = Array.from(
+    new Set(
+      knowledgePages
+        .map((page) => String(page.page_kind || "").trim())
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const currentValue = knowledgePageKindFilterValue;
+  const options = ['<option value="all">全部页面类型</option>'];
+  kinds.forEach((kind) => {
+    options.push(`<option value="${escapeAttribute(kind)}">${escapeHtml(kind)}</option>`);
+  });
+  if (currentValue !== "all" && !kinds.includes(currentValue)) {
+    options.push(`<option value="${escapeAttribute(currentValue)}">${escapeHtml(currentValue)}</option>`);
+  }
+  knowledgePageKindFilter.innerHTML = options.join("");
+  knowledgePageKindFilter.value = currentValue;
 }
 
 function clearKnowledgeDetail() {
@@ -2481,26 +2568,41 @@ function renderKnowledgeMaterials() {
   if (!knowledgeMaterialList) return;
   knowledgeMaterialList.innerHTML = "";
   renderKnowledgeSelectionSummary();
+  const visibleMaterials = getFilteredKnowledgeMaterials();
 
   if (!knowledgeMaterials.length) {
     knowledgeMaterialList.innerHTML = '<div class="trace-monitor-list-empty">暂无资料快照</div>';
     return;
   }
 
-  for (const material of knowledgeMaterials) {
+  if (!visibleMaterials.length) {
+    knowledgeMaterialList.innerHTML = '<div class="trace-monitor-list-empty">当前筛选下没有资料</div>';
+    return;
+  }
+
+  for (const material of visibleMaterials) {
+    const usageSummary = material.usage_summary || {};
+    const dependencyTone = usageSummary.can_delete ? "deletable" : "referenced";
+    const dependencyLabel = usageSummary.can_delete ? "可删除" : "有依赖";
     const item = document.createElement("div");
     item.className = `knowledge-list-item${currentKnowledgeDetail?.type === "material" && currentKnowledgeDetail.id === material.id ? " active" : ""}`;
     const checked = knowledgeSelectedMaterialIds.has(material.id);
     item.innerHTML = `
       <div class="knowledge-list-item-head">
         <div class="knowledge-list-item-title">${escapeHtml(material.title || material.id)}</div>
-        <label class="knowledge-selection-toggle">
-          <input type="checkbox" data-material-select="${escapeAttribute(material.id)}" ${checked ? "checked" : ""} />
-          选中
-        </label>
+        <div class="knowledge-list-item-head-actions">
+          <span class="knowledge-status-pill ${escapeAttribute(dependencyTone)}">${escapeHtml(dependencyLabel)}</span>
+          <label class="knowledge-selection-toggle">
+            <input type="checkbox" data-material-select="${escapeAttribute(material.id)}" ${checked ? "checked" : ""} />
+            选中
+          </label>
+        </div>
       </div>
       <div class="knowledge-list-item-meta">
         <span>${escapeHtml(material.source_kind || "--")}</span>
+        <span>${escapeHtml(`页面 ${usageSummary.page_ref_count || 0}`)}</span>
+        <span>${escapeHtml(`草稿 ${usageSummary.draft_ref_count || 0}`)}</span>
+        <span>${escapeHtml(`证据 ${usageSummary.evidence_count || 0}`)}</span>
         <span>${escapeHtml(formatDateTime(material.created_at))}</span>
       </div>
       <div class="knowledge-list-item-preview">${escapeHtml(material.preview || "无预览")}</div>
@@ -2545,17 +2647,31 @@ function formatKnowledgeDraftListSummary(summary, fallbackText) {
 function renderKnowledgeDrafts() {
   if (!knowledgeDraftList) return;
   knowledgeDraftList.innerHTML = "";
+  renderKnowledgeDraftSelectionSummary();
+  const visibleDrafts = getFilteredKnowledgeDrafts();
   if (!knowledgeDrafts.length) {
     knowledgeDraftList.innerHTML = '<div class="trace-monitor-list-empty">暂无草稿</div>';
     return;
   }
-  for (const draft of knowledgeDrafts) {
+  if (!visibleDrafts.length) {
+    knowledgeDraftList.innerHTML = '<div class="trace-monitor-list-empty">当前筛选下没有草稿</div>';
+    return;
+  }
+  for (const draft of visibleDrafts) {
+    const selectable = draft.status !== "published";
+    const checked = knowledgeSelectedDraftIds.has(draft.id);
     const item = document.createElement("div");
     item.className = `knowledge-list-item${draft.id === currentKnowledgeDraftId ? " active" : ""}`;
     item.innerHTML = `
       <div class="knowledge-list-item-head">
         <div class="knowledge-list-item-title">${escapeHtml(draft.title || draft.target_slug || draft.id)}</div>
-        <span class="knowledge-status-pill ${escapeHtml(draft.status || "draft")}">${escapeHtml(draft.status || "draft")}</span>
+        <div class="knowledge-list-item-head-actions">
+          <span class="knowledge-status-pill ${escapeHtml(draft.status || "draft")}">${escapeHtml(draft.status || "draft")}</span>
+          <label class="knowledge-selection-toggle" title="${escapeAttribute(selectable ? "加入批量删除" : "已发布草稿不参与批量删除")}">
+            <input type="checkbox" data-draft-select="${escapeAttribute(draft.id)}" ${checked ? "checked" : ""} ${selectable ? "" : "disabled"} />
+            选中
+          </label>
+        </div>
       </div>
       <div class="knowledge-list-item-meta">
         <span>${escapeHtml(draft.page_kind || "--")}</span>
@@ -2564,6 +2680,19 @@ function renderKnowledgeDrafts() {
       </div>
       <div class="knowledge-list-item-preview">${escapeHtml(formatKnowledgeDraftListSummary(draft.publish_preview_summary, draft.summary || "等待查看内容"))}</div>
     `;
+    const checkbox = item.querySelector('input[data-draft-select]');
+    if (checkbox) {
+      checkbox.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!selectable) return;
+        if (checkbox.checked) {
+          knowledgeSelectedDraftIds.add(draft.id);
+        } else {
+          knowledgeSelectedDraftIds.delete(draft.id);
+        }
+        renderKnowledgeDraftSelectionSummary();
+      });
+    }
     item.addEventListener("click", () => {
       openKnowledgeDraftDetail(draft.id);
     });
@@ -2574,11 +2703,16 @@ function renderKnowledgeDrafts() {
 function renderKnowledgePages() {
   if (!knowledgePageList) return;
   knowledgePageList.innerHTML = "";
+  const visiblePages = getFilteredKnowledgePages();
   if (!knowledgePages.length) {
     knowledgePageList.innerHTML = '<div class="trace-monitor-list-empty">暂无已发布页面</div>';
     return;
   }
-  for (const page of knowledgePages) {
+  if (!visiblePages.length) {
+    knowledgePageList.innerHTML = '<div class="trace-monitor-list-empty">当前筛选下没有页面</div>';
+    return;
+  }
+  for (const page of visiblePages) {
     const item = document.createElement("div");
     item.className = `knowledge-list-item${page.slug === currentKnowledgePageSlug ? " active" : ""}`;
     item.innerHTML = `
@@ -2589,6 +2723,7 @@ function renderKnowledgePages() {
       <div class="knowledge-list-item-meta">
         <span>${escapeHtml(page.page_kind || "--")}</span>
         <span>${escapeHtml(page.slug || "--")}</span>
+        <span>${escapeHtml(`入链 ${page.incoming_relation_count || 0}`)}</span>
       </div>
       <div class="knowledge-list-item-preview">${escapeHtml(page.summary || "无摘要")}</div>
     `;
@@ -3106,6 +3241,7 @@ async function loadKnowledgeDrafts() {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   knowledgeDrafts = Array.isArray(data.drafts) ? data.drafts : [];
+  pruneKnowledgeDraftSelection();
   renderKnowledgeDrafts();
 }
 
@@ -3125,6 +3261,7 @@ async function loadKnowledgePages(queryOverride) {
     : Array.isArray(data.results)
       ? data.results
       : [];
+  refreshKnowledgePageKindFilterOptions();
   renderKnowledgePages();
 }
 
@@ -3333,12 +3470,68 @@ async function deleteKnowledgeDraft(draftId, draftTitle) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    knowledgeSelectedDraftIds.delete(draftId);
     clearKnowledgeDetail();
     showToast("草稿已删除");
     await loadKnowledgeBaseData();
   } catch (err) {
     console.error("Failed to delete wiki draft:", err);
     showToast(`删除草稿失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+function selectVisibleKnowledgeDrafts() {
+  getFilteredKnowledgeDrafts().forEach((draft) => {
+    if (draft.status !== "published") {
+      knowledgeSelectedDraftIds.add(draft.id);
+    }
+  });
+  renderKnowledgeDrafts();
+}
+
+function clearKnowledgeDraftSelection() {
+  knowledgeSelectedDraftIds.clear();
+  renderKnowledgeDrafts();
+}
+
+async function bulkDeleteSelectedKnowledgeDrafts() {
+  const selectedDrafts = knowledgeDrafts.filter((draft) => knowledgeSelectedDraftIds.has(draft.id) && draft.status !== "published");
+  if (!selectedDrafts.length) {
+    showToast("请先勾选至少一个未发布草稿");
+    return;
+  }
+
+  const confirmed = await openConfirmDialog(
+    `批量删除 ${selectedDrafts.length} 个未发布草稿？已发布页面不会受影响。`,
+    { title: "批量删除知识草稿" },
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await apiFetch("/api/wiki/drafts/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({
+        draft_ids: selectedDrafts.map((draft) => draft.id),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const deletedIds = Array.isArray(data.deleted_ids) ? data.deleted_ids : [];
+    const skippedPublishedIds = Array.isArray(data.skipped_published_ids) ? data.skipped_published_ids : [];
+    deletedIds.forEach((draftId) => {
+      knowledgeSelectedDraftIds.delete(draftId);
+    });
+    clearKnowledgeDetail();
+    showToast(
+      skippedPublishedIds.length
+        ? `已删除 ${deletedIds.length} 份草稿，跳过 ${skippedPublishedIds.length} 份已发布草稿`
+        : `已删除 ${deletedIds.length} 份草稿`,
+      2200,
+    );
+    await loadKnowledgeBaseData();
+  } catch (err) {
+    console.error("Failed to bulk delete wiki drafts:", err);
+    showToast(`批量删除草稿失败：${err instanceof Error ? err.message : "未知错误"}`);
   }
 }
 
@@ -15837,6 +16030,42 @@ if (knowledgeSearchInput) {
       e.preventDefault();
       void runKnowledgeSearch();
     }
+  });
+}
+if (knowledgeMaterialFilter) {
+  knowledgeMaterialFilter.value = knowledgeMaterialFilterValue;
+  knowledgeMaterialFilter.addEventListener("change", () => {
+    knowledgeMaterialFilterValue = knowledgeMaterialFilter.value || "all";
+    renderKnowledgeMaterials();
+  });
+}
+if (knowledgeDraftStatusFilter) {
+  knowledgeDraftStatusFilter.value = knowledgeDraftStatusFilterValue;
+  knowledgeDraftStatusFilter.addEventListener("change", () => {
+    knowledgeDraftStatusFilterValue = knowledgeDraftStatusFilter.value || "all";
+    renderKnowledgeDrafts();
+  });
+}
+if (knowledgeDraftSelectVisibleBtn) {
+  knowledgeDraftSelectVisibleBtn.addEventListener("click", () => {
+    selectVisibleKnowledgeDrafts();
+  });
+}
+if (knowledgeDraftClearSelectionBtn) {
+  knowledgeDraftClearSelectionBtn.addEventListener("click", () => {
+    clearKnowledgeDraftSelection();
+  });
+}
+if (knowledgeDraftBulkDeleteBtn) {
+  knowledgeDraftBulkDeleteBtn.addEventListener("click", () => {
+    void bulkDeleteSelectedKnowledgeDrafts();
+  });
+}
+if (knowledgePageKindFilter) {
+  knowledgePageKindFilter.value = knowledgePageKindFilterValue;
+  knowledgePageKindFilter.addEventListener("change", () => {
+    knowledgePageKindFilterValue = knowledgePageKindFilter.value || "all";
+    renderKnowledgePages();
   });
 }
 document.addEventListener("dragover", (e) => {

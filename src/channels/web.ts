@@ -42,8 +42,6 @@ import {
   listAgentQueries,
   listWikiDrafts,
   listWikiJobs,
-  listWikiMaterials,
-  listWikiPages,
   searchWikiPages,
 } from '../db.js';
 import {
@@ -84,6 +82,7 @@ import {
   handleAskQuestionResponse,
 } from '../ask-user-question.js';
 import {
+  bulkDeleteWikiDrafts,
   deleteWikiDraft,
   deleteWikiMaterial,
   deleteWikiPage,
@@ -93,9 +92,10 @@ import {
   getWikiPageDetail,
   importWikiMaterialFromText,
   importWikiMaterialFromUpload,
+  listWikiMaterialSummaries,
+  listWikiPageSummaries,
   publishWikiDraft,
   queueWikiDraftGenerationJob,
-  readWikiMaterialExtractedText,
   resumePendingWikiJobs,
 } from '../wiki.js';
 
@@ -599,6 +599,12 @@ class WebChannel {
       }
       if (pathname === '/api/wiki/drafts' && req.method === 'GET') {
         return this.apiListWikiDrafts(res);
+      }
+      if (
+        pathname === '/api/wiki/drafts/bulk-delete' &&
+        req.method === 'POST'
+      ) {
+        return this.apiBulkDeleteWikiDrafts(req, res);
       }
       if (pathname === '/api/wiki/draft' && req.method === 'GET') {
         return this.apiGetWikiDraft(reqUrl, res);
@@ -2966,14 +2972,7 @@ class WebChannel {
   }
 
   private apiListWikiMaterials(res: http.ServerResponse): void {
-    const materials = listWikiMaterials(200).map((material) => {
-      const extractedText = readWikiMaterialExtractedText(material);
-      return {
-        ...material,
-        extracted_length: extractedText.length,
-        preview: extractedText.slice(0, 280),
-      };
-    });
+    const materials = listWikiMaterialSummaries(200);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ materials }));
   }
@@ -3089,6 +3088,42 @@ class WebChannel {
     res.end(JSON.stringify({ drafts }));
   }
 
+  private async apiBulkDeleteWikiDrafts(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      draft_ids?: string[];
+    };
+    if (!Array.isArray(data.draft_ids) || data.draft_ids.length === 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'draft_ids required' }));
+      return;
+    }
+
+    try {
+      const result = bulkDeleteWikiDrafts(data.draft_ids);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
   private apiGetWikiDraft(reqUrl: URL, res: http.ServerResponse): void {
     const id = (reqUrl.searchParams.get('id') || '').trim();
     if (!id) {
@@ -3200,7 +3235,7 @@ class WebChannel {
   }
 
   private apiListWikiPages(res: http.ServerResponse): void {
-    const pages = listWikiPages(200);
+    const pages = listWikiPageSummaries(200);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ pages }));
   }

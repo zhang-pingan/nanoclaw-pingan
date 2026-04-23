@@ -24,7 +24,9 @@ import {
   listWikiClaimEvidence,
   listWikiClaimsByPage,
   listWikiDrafts,
+  listWikiMaterials,
   listWikiPageMaterials,
+  listWikiPages,
   listWikiPagesReferencingMaterial,
   listWikiRelationsForPage,
   listWikiRelationsToPage,
@@ -1300,6 +1302,37 @@ export function getWikiMaterialDetail(materialId: string): {
   };
 }
 
+export function listWikiMaterialSummaries(limit: number = 200): Array<
+  WikiMaterialRecord & {
+    extracted_length: number;
+    preview: string;
+    usage_summary: {
+      page_ref_count: number;
+      draft_ref_count: number;
+      job_ref_count: number;
+      evidence_count: number;
+      can_delete: boolean;
+    };
+  }
+> {
+  return listWikiMaterials(limit).map((material) => {
+    const extractedText = readWikiMaterialExtractedText(material);
+    const usage = getWikiMaterialUsage(material.id);
+    return {
+      ...material,
+      extracted_length: extractedText.length,
+      preview: extractedText.slice(0, 280),
+      usage_summary: {
+        page_ref_count: usage.page_refs.length,
+        draft_ref_count: usage.draft_refs.length,
+        job_ref_count: usage.job_refs.length,
+        evidence_count: usage.evidence_count,
+        can_delete: usage.can_delete,
+      },
+    };
+  });
+}
+
 export function getWikiPageDetail(pageSlug: string): {
   page: WikiPageRecord;
   claims: Array<WikiClaimRecord & { evidence: WikiClaimEvidenceRecord[] }>;
@@ -1329,6 +1362,17 @@ export function getWikiPageDetail(pageSlug: string): {
   };
 }
 
+export function listWikiPageSummaries(limit: number = 200): Array<
+  WikiPageRecord & {
+    incoming_relation_count: number;
+  }
+> {
+  return listWikiPages(limit).map((page) => ({
+    ...page,
+    incoming_relation_count: listWikiRelationsToPage(page.slug).length,
+  }));
+}
+
 export function deleteWikiDraft(draftId: string): {
   draft_id: string;
 } {
@@ -1337,6 +1381,38 @@ export function deleteWikiDraft(draftId: string): {
   deleteWikiDraftRecord(draftId);
   removePathIfExists(draft.file_path);
   return { draft_id: draftId };
+}
+
+export function bulkDeleteWikiDrafts(draftIds: string[]): {
+  deleted_ids: string[];
+  skipped_published_ids: string[];
+  missing_ids: string[];
+} {
+  const deletedIds: string[] = [];
+  const skippedPublishedIds: string[] = [];
+  const missingIds: string[] = [];
+  const uniqueIds = [...new Set(draftIds.map((id) => id.trim()).filter(Boolean))];
+
+  for (const draftId of uniqueIds) {
+    const draft = getWikiDraft(draftId);
+    if (!draft) {
+      missingIds.push(draftId);
+      continue;
+    }
+    if (draft.status === 'published') {
+      skippedPublishedIds.push(draftId);
+      continue;
+    }
+    deleteWikiDraftRecord(draftId);
+    removePathIfExists(draft.file_path);
+    deletedIds.push(draftId);
+  }
+
+  return {
+    deleted_ids: deletedIds,
+    skipped_published_ids: skippedPublishedIds,
+    missing_ids: missingIds,
+  };
 }
 
 export function deleteWikiMaterial(materialId: string): {
