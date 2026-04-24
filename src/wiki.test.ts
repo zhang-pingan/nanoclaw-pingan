@@ -3,14 +3,41 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { callAnthropicMessagesMock, execFileSyncMock } = vi.hoisted(() => ({
-  callAnthropicMessagesMock: vi.fn(),
-  execFileSyncMock: vi.fn(),
-}));
+const {
+  callAnthropicMessagesMock,
+  execFileSyncMock,
+  readEnvFileMock,
+  testRoot,
+  testDataDir,
+  testKnowledgeWikiDir,
+} = vi.hoisted(() => {
+  const root = `/tmp/nanoclaw-wiki-test-${process.pid}-${Date.now()}`;
+  return {
+    callAnthropicMessagesMock: vi.fn(),
+    execFileSyncMock: vi.fn(),
+    readEnvFileMock: vi.fn(() => ({})),
+    testRoot: root,
+    testDataDir: `${root}/data`,
+    testKnowledgeWikiDir: `${root}/knowledge/wiki`,
+  };
+});
 
 vi.mock('./agent-api.js', () => ({
   callAnthropicMessages: callAnthropicMessagesMock,
 }));
+
+vi.mock('./env.js', () => ({
+  readEnvFile: readEnvFileMock,
+}));
+
+vi.mock('./config.js', async () => {
+  const actual = await vi.importActual<typeof import('./config.js')>('./config.js');
+  return {
+    ...actual,
+    DATA_DIR: testDataDir,
+    KNOWLEDGE_WIKI_DIR: testKnowledgeWikiDir,
+  };
+});
 
 vi.mock('child_process', async () => {
   const actual = await vi.importActual<typeof import('child_process')>('child_process');
@@ -123,17 +150,22 @@ async function waitForJobStatus(
 }
 
 beforeEach(() => {
+  fs.rmSync(testRoot, { recursive: true, force: true });
   _initTestDatabase();
   fs.mkdirSync(KNOWLEDGE_WIKI_DIR, { recursive: true });
   fs.mkdirSync(WEB_UPLOADS_DIR, { recursive: true });
   callAnthropicMessagesMock.mockReset();
   execFileSyncMock.mockReset();
+  readEnvFileMock.mockReset();
+  readEnvFileMock.mockReturnValue({});
 });
 
 afterEach(() => {
   cleanupCreatedWikiArtifacts();
+  fs.rmSync(testRoot, { recursive: true, force: true });
   callAnthropicMessagesMock.mockReset();
   execFileSyncMock.mockReset();
+  readEnvFileMock.mockReset();
 });
 
 describe('wiki', () => {
@@ -197,6 +229,25 @@ describe('wiki', () => {
     const completedJob = await waitForJobCompletion(job.id);
     expect(completedJob.status).toBe('completed');
     expect(completedJob.error_message).toBeNull();
+    expect(callAnthropicMessagesMock.mock.calls[0]?.[2]).toBe(300000);
+    const compileRequest = callAnthropicMessagesMock.mock.calls[0]?.[0] as {
+      system?: string;
+      messages?: Array<{ content?: string }>;
+    };
+    expect(compileRequest.system).toContain(
+      'Claims are the structured provenance layer for the page.',
+    );
+    expect(compileRequest.system).toContain(
+      'Do not create title-only or document-name-only claims.',
+    );
+    const compilePrompt = JSON.parse(
+      String(compileRequest.messages?.[0]?.content || '{}'),
+    );
+    expect(compilePrompt.constraints).toMatchObject({
+      claim_coverage_required: true,
+      evidence_excerpt_must_be_from_materials: true,
+      avoid_title_only_claims: true,
+    });
 
     const result = JSON.parse(String(completedJob.result_json || '{}'));
     const draftId = String(result.draft_id || '');

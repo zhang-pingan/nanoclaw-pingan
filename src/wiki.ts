@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { callAnthropicMessages } from './agent-api.js';
 import { DATA_DIR, KNOWLEDGE_WIKI_DIR } from './config.js';
+import { readEnvFile } from './env.js';
 import { extractPdfText } from './pdf-text-extractor.js';
 import {
   clearAllWikiRecords,
@@ -82,6 +83,7 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
 const PDF_EXTENSIONS = new Set(['.pdf']);
 const MAX_MATERIAL_CHARS = 12000;
 const MAX_TOTAL_MATERIAL_CHARS = 30000;
+const DEFAULT_WIKI_DRAFT_TIMEOUT_MS = 300000;
 
 const compiledWikiDraftSchema = z.object({
   page: z.object({
@@ -121,6 +123,25 @@ interface QueueDraftJobInput {
   title?: string;
   pageKind?: string;
   instruction?: string;
+}
+
+function parsePositiveTimeoutMs(
+  value: string | undefined,
+  fallbackMs: number,
+): number {
+  return Math.max(
+    1000,
+    Number.parseInt(value || String(fallbackMs), 10) || fallbackMs,
+  );
+}
+
+function getWikiDraftTimeoutMs(): number {
+  const env = readEnvFile(['NANOCLAW_WIKI_DRAFT_TIMEOUT_MS']);
+  return parsePositiveTimeoutMs(
+    env.NANOCLAW_WIKI_DRAFT_TIMEOUT_MS ||
+      process.env.NANOCLAW_WIKI_DRAFT_TIMEOUT_MS,
+    DEFAULT_WIKI_DRAFT_TIMEOUT_MS,
+  );
 }
 
 interface CompiledWikiDraft {
@@ -931,8 +952,17 @@ function buildCompileSystemPrompt(): string {
     'Return JSON only. No markdown fences. No prose outside JSON.',
     'A Page is a readable topic page.',
     'A Claim is an atomic statement owned by exactly one page.',
+    'Claims are the structured provenance layer for the page.',
+    'Every important factual statement, rule, table meaning, dependency, decision, or procedure in page.content_markdown should be represented by one or more claims.',
+    'Keep each claim atomic: one claim should express one fact, rule, dependency, decision, or procedure step.',
     'Avoid redundant claims: if two claims say the same thing, keep one canonical claim.',
     'Each claim must include at least one evidence item grounded in a provided material_id.',
+    'Evidence excerpt_text must be an exact or near-exact excerpt from the provided materials; prefer the shortest excerpt that proves the claim.',
+    'Do not create title-only or document-name-only claims.',
+    'Do not output a long page with only a few claims.',
+    'For source-like documents, extract claims from headings, bullet points, table rows, and explicit rules.',
+    'For project pages, cover module responsibilities, core business rules, key tables and ownership, downstream dependencies, branch or environment rules, and known implementation caveats when present.',
+    'Even when the user instruction asks to preserve source wording or avoid summarization, still extract structured claims for important facts and rules.',
     'Claims omitted from the output are treated as removed from the page snapshot.',
     'Prefer concise, readable Chinese for summaries and content when possible.',
     'Output schema:',
@@ -989,6 +1019,9 @@ function buildCompileUserPrompt(input: QueueDraftJobInput): string {
       constraints: {
         evidence_only_from_materials: true,
         dedupe_claims: true,
+        claim_coverage_required: true,
+        evidence_excerpt_must_be_from_materials: true,
+        avoid_title_only_claims: true,
         material_count: compactMaterials.length,
       },
       existing_page: existingPage
@@ -1037,7 +1070,7 @@ async function generateWikiDraftFromMaterials(
   const response = await callAnthropicMessages(
     requestPayload,
     undefined,
-    120000,
+    getWikiDraftTimeoutMs(),
     { signal: options.signal },
   );
   throwIfSignalAborted(options.signal);

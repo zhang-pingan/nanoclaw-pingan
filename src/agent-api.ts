@@ -1275,7 +1275,7 @@ export async function callAnthropicMessages(
           apiKey: config.openAiApiKey,
           baseUrl: config.openAiBaseUrl,
           model: config.openAiModel,
-          timeoutMs: config.timeoutMs,
+          timeoutMs: effectiveTimeoutMs,
           openAiProtocol: config.openAiProtocol,
         },
         fetchImpl,

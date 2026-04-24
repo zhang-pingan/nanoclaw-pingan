@@ -346,6 +346,64 @@ describe('agent-api', () => {
     });
   });
 
+  it('uses per-call timeout overrides for openai-compatible calls', async () => {
+    vi.useFakeTimers();
+    try {
+      readEnvFileMock.mockReturnValue({
+        NANOCLAW_AGENT_API_API_KEY: 'sk-anthropic',
+        NANOCLAW_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
+        NANOCLAW_AGENT_API_MODEL: 'claude-test',
+        NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'true',
+        NANOCLAW_AGENT_API_OPENAI_KEY: 'sk-openai',
+        NANOCLAW_AGENT_API_OPENAI_BASE_URL: 'https://example.test/api/',
+        NANOCLAW_AGENT_API_OPENAI_MODEL: 'gpt-4.1',
+        NANOCLAW_AGENT_API_OPENAI_PROTOCOL: 'chat_completions',
+      });
+      let capturedSignal: AbortSignal | undefined;
+      let outcome: unknown = 'pending';
+      const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+        capturedSignal = init?.signal ?? undefined;
+        return new Promise((_resolve, reject) => {
+          capturedSignal?.addEventListener(
+            'abort',
+            () => {
+              const err = new Error('aborted');
+              err.name = 'AbortError';
+              reject(err);
+            },
+            { once: true },
+          );
+        });
+      });
+
+      const promise = callAnthropicMessages(
+        {
+          messages: [{ role: 'user', content: 'hello' }],
+        },
+        fetchMock as unknown as typeof fetch,
+        45000,
+      ).then(
+        () => {
+          outcome = 'resolved';
+        },
+        (err) => {
+          outcome = err;
+        },
+      );
+
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(capturedSignal?.aborted).toBe(false);
+      expect(outcome).toBe('pending');
+
+      await vi.advanceTimersByTimeAsync(15000);
+      await promise;
+      expect(outcome).toBeInstanceOf(Error);
+      expect(String((outcome as Error).message)).toContain('45000ms');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('returns anthropic-style sse when the request is stream=true', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
