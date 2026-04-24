@@ -3903,13 +3903,6 @@ body.quick-chat-window .quick-chat-input {
   max-width: 760px;
 }
 
-.knowledge-hero-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .knowledge-toolbar {
   display: flex;
   align-items: center;
@@ -11779,6 +11772,50 @@ body.quick-chat-window .quick-chat-input {
   font-size: 14px;
   width: 20px;
   text-align: center;
+}
+
+.knowledge-material-context-menu {
+  min-width: 260px;
+  max-width: 340px;
+}
+
+.knowledge-material-context-summary {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.knowledge-material-context-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.knowledge-material-context-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  max-height: 168px;
+  overflow: auto;
+}
+
+.knowledge-material-context-name {
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(0, 128, 198, 0.12);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.knowledge-material-context-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* === Doraemon Theme Refresh === */
