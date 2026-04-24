@@ -3,13 +3,22 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { callAnthropicMessagesMock } = vi.hoisted(() => ({
+const { callAnthropicMessagesMock, execFileSyncMock } = vi.hoisted(() => ({
   callAnthropicMessagesMock: vi.fn(),
+  execFileSyncMock: vi.fn(),
 }));
 
 vi.mock('./agent-api.js', () => ({
   callAnthropicMessages: callAnthropicMessagesMock,
 }));
+
+vi.mock('child_process', async () => {
+  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  return {
+    ...actual,
+    execFileSync: (...args: unknown[]) => execFileSyncMock(...args),
+  };
+});
 
 import {
   _initTestDatabase,
@@ -22,7 +31,7 @@ import {
   listWikiRelationsForPage,
   searchWikiPages,
 } from './db.js';
-import { KNOWLEDGE_WIKI_DIR } from './config.js';
+import { DATA_DIR, KNOWLEDGE_WIKI_DIR } from './config.js';
 import {
   bulkDeleteWikiDrafts,
   clearWikiData,
@@ -33,12 +42,14 @@ import {
   getWikiDraftDetail,
   getWikiPageDetail,
   importWikiMaterialFromText,
+  importWikiMaterialFromUpload,
   publishWikiDraft,
   queueWikiDraftGenerationJob,
   stopWikiJob,
 } from './wiki.js';
 
 const createdPaths = new Set<string>();
+const WEB_UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
 
 function rememberPath(filePath: string | null | undefined): void {
   if (filePath) createdPaths.add(filePath);
@@ -114,12 +125,15 @@ async function waitForJobStatus(
 beforeEach(() => {
   _initTestDatabase();
   fs.mkdirSync(KNOWLEDGE_WIKI_DIR, { recursive: true });
+  fs.mkdirSync(WEB_UPLOADS_DIR, { recursive: true });
   callAnthropicMessagesMock.mockReset();
+  execFileSyncMock.mockReset();
 });
 
 afterEach(() => {
   cleanupCreatedWikiArtifacts();
   callAnthropicMessagesMock.mockReset();
+  execFileSyncMock.mockReset();
 });
 
 describe('wiki', () => {
@@ -215,6 +229,40 @@ describe('wiki', () => {
 
     const searchResults = searchWikiPages('NanoClaw', 5);
     expect(searchResults.some((item) => item.slug === testSlug)).toBe(true);
+  });
+
+  it('imports uploaded pdf materials by extracting text before storing them', () => {
+    const uploadPath = path.join(WEB_UPLOADS_DIR, `wiki-upload-${Date.now()}.pdf`);
+    fs.writeFileSync(uploadPath, Buffer.from('%PDF-1.4\n%fake pdf fixture\n'));
+    rememberPath(uploadPath);
+    execFileSyncMock.mockReturnValueOnce(
+      [
+        '漫 漫画 画需 需求 求文 文档 档',
+        'V V1 1. .0 0',
+        '为 为什 什么 么做 做？ ？',
+      ].join('\n'),
+    );
+
+    const material = importWikiMaterialFromUpload({
+      title: 'PDF 资料',
+      hostPath: uploadPath,
+    });
+    rememberMaterialArtifacts(material);
+
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      'swift',
+      ['-e', expect.stringContaining('PDFKit'), uploadPath],
+      expect.objectContaining({
+        encoding: 'utf-8',
+        env: expect.objectContaining({
+          CLANG_MODULE_CACHE_PATH: expect.any(String),
+        }),
+      }),
+    );
+    expect(fs.readFileSync(material.extracted_text_path, 'utf-8').trim()).toBe(
+      ['漫画需求文档', 'V1.0', '为什么做？'].join('\n'),
+    );
+    expect(material.source_name).toBe(path.basename(uploadPath));
   });
 
   it('reuses canonical claims on repeated publish and deprecates removed claims', async () => {

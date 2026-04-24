@@ -112,6 +112,102 @@ const WEB_TOKEN = process.env.WEB_TOKEN || webEnv.WEB_TOKEN;
 const RENDERER_DIR = path.resolve(process.cwd(), 'electron', 'renderer');
 const UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
 
+type MultipartFilePart = {
+  filename: string;
+  data: Buffer;
+};
+
+export function parseMultipartBoundary(contentType: string): string | null {
+  const match = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  return (match?.[1] || match?.[2] || '').trim() || null;
+}
+
+export function parseMultipartFileParts(
+  body: Buffer,
+  boundary: string,
+): MultipartFilePart[] {
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
+  const headerSeparator = Buffer.from('\r\n\r\n');
+  const parts: MultipartFilePart[] = [];
+  let searchIndex = 0;
+
+  while (searchIndex < body.length) {
+    const boundaryIndex = body.indexOf(boundaryBuffer, searchIndex);
+    if (boundaryIndex === -1) break;
+
+    let cursor = boundaryIndex + boundaryBuffer.length;
+    if (
+      body[cursor] === 45 &&
+      body[cursor + 1] === 45
+    ) {
+      break;
+    }
+    if (body[cursor] === 13 && body[cursor + 1] === 10) {
+      cursor += 2;
+    }
+
+    const headerEnd = body.indexOf(headerSeparator, cursor);
+    if (headerEnd === -1) break;
+    const headerText = body.slice(cursor, headerEnd).toString('utf-8');
+    const filenameMatch =
+      headerText.match(/filename\*=UTF-8''([^\r\n;]+)/i) ||
+      headerText.match(/filename="([^"]+)"/i);
+
+    const contentStart = headerEnd + headerSeparator.length;
+    const nextBoundaryIndex = body.indexOf(boundaryBuffer, contentStart);
+    if (nextBoundaryIndex === -1) break;
+
+    let contentEnd = nextBoundaryIndex;
+    if (
+      body[contentEnd - 2] === 13 &&
+      body[contentEnd - 1] === 10
+    ) {
+      contentEnd -= 2;
+    }
+
+    if (filenameMatch?.[1]) {
+      let rawFilename = filenameMatch[1];
+      try {
+        rawFilename = decodeURIComponent(rawFilename);
+      } catch {}
+      parts.push({
+        filename: rawFilename,
+        data: body.slice(contentStart, contentEnd),
+      });
+    }
+
+    searchIndex = nextBoundaryIndex;
+  }
+
+  return parts;
+}
+
+export function sanitizeUploadFilename(rawFilename: string): string {
+  const trimmed = path.basename(String(rawFilename || '').trim());
+  const ext = path.extname(trimmed);
+  const name = path.basename(trimmed, ext);
+  const safeName = name
+    .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]/g, '_')
+    .trim();
+  const safeExt = ext
+    .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]/g, '_')
+    .trim();
+  const base = safeName || `upload-${Date.now()}`;
+  return `${base}${safeExt}`;
+}
+
+function ensureUniqueUploadPath(baseDir: string, filename: string): string {
+  const ext = path.extname(filename);
+  const stem = path.basename(filename, ext);
+  let candidate = path.join(baseDir, filename);
+  let index = 1;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(baseDir, `${stem}-${index}${ext}`);
+    index += 1;
+  }
+  return candidate;
+}
+
 // --- Types ---
 interface WsClient {
   ws: WebSocket;
@@ -3404,13 +3500,12 @@ class WebChannel {
     }
 
     // Parse boundary
-    const boundaryMatch = contentType.match(/boundary=(.+)/);
-    if (!boundaryMatch) {
+    const boundary = parseMultipartBoundary(contentType);
+    if (!boundary) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'missing boundary' }));
       return;
     }
-    const boundary = '--' + boundaryMatch[1];
 
     // Extract target JID from URL
     // URL is /api/upload?jid=web:main
@@ -3421,8 +3516,6 @@ class WebChannel {
       return;
     }
 
-    // Extract group folder from JID
-    const groupFolder = jid.replace('web:', '');
     const uploadBase = UPLOADS_DIR;
     fs.mkdirSync(uploadBase, { recursive: true });
 
@@ -3432,42 +3525,30 @@ class WebChannel {
       chunks.push(Buffer.from(chunk));
     }
     const body = Buffer.concat(chunks);
-    const text = body.toString('utf-8');
-
-    // Parse multipart (simple approach: find filename and data sections)
-    const parts = text
-      .split(boundary)
-      .filter((p) => p.trim() && !p.startsWith('--'));
+    const parts = parseMultipartFileParts(body, boundary);
     const uploadedFiles: { name: string; hostPath: string }[] = [];
 
     for (const part of parts) {
-      const headerEnd = part.indexOf('\r\n\r\n');
-      if (headerEnd === -1) continue;
-      const header = part.slice(0, headerEnd);
-      const data = part.slice(
-        headerEnd + 4,
-        part.endsWith('\r\n') ? -2 : undefined,
-      );
-
-      const filenameMatch = header.match(/filename="([^"]+)"/);
-      if (!filenameMatch) continue;
-      const filename = filenameMatch[1].replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filePath = path.join(uploadBase, filename);
-
-      // Decode URL-encoded data if present
-      let fileData: Buffer;
-      if (data.includes('%')) {
-        fileData = Buffer.from(decodeURIComponent(data), 'utf-8');
-      } else {
-        fileData = Buffer.from(data.trim(), 'utf-8');
-      }
-
-      fs.writeFileSync(filePath, fileData);
-      uploadedFiles.push({ name: filename, hostPath: filePath });
+      const filename = sanitizeUploadFilename(part.filename);
+      const filePath = ensureUniqueUploadPath(uploadBase, filename);
+      fs.writeFileSync(filePath, part.data);
+      uploadedFiles.push({ name: path.basename(filePath), hostPath: filePath });
       logger.info(
-        { filename, size: fileData.length, jid, hostPath: filePath },
+        {
+          filename: path.basename(filePath),
+          originalFilename: part.filename,
+          size: part.data.length,
+          jid,
+          hostPath: filePath,
+        },
         'Web channel file uploaded',
       );
+    }
+
+    if (uploadedFiles.length === 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'no files found in multipart body' }));
+      return;
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
