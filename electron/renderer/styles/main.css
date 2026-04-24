@@ -3746,7 +3746,8 @@ body.quick-chat-window .quick-chat-input {
   --secondary-nav-border-strong: rgba(134, 239, 172, 0.24);
   border-right: 1px solid transparent;
   background:
-    linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0) 220px),
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.09), transparent 30%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.1) 0%, rgba(14, 165, 233, 0.04) 120px, rgba(14, 165, 233, 0) 240px),
     var(--surface);
   display: flex;
   flex-direction: column;
@@ -3772,9 +3773,7 @@ body.quick-chat-window .quick-chat-input {
   flex-shrink: 0;
   padding: 14px 18px 18px;
   border-top: 1px solid rgba(134, 239, 172, 0.18);
-  background:
-    linear-gradient(180deg, rgba(34, 197, 94, 0.02), rgba(34, 197, 94, 0.06)),
-    transparent;
+  background: transparent;
 }
 
 .knowledge-jobs-trigger {
@@ -3855,6 +3854,9 @@ body.quick-chat-window .quick-chat-input {
   flex-direction: column;
   gap: 18px;
   padding: 28px 28px 26px;
+  background:
+    linear-gradient(180deg, rgba(14, 165, 233, 0.016), rgba(255, 255, 255, 0) 140px),
+    var(--bg);
 }
 
 .knowledge-hero {
