@@ -13,6 +13,7 @@ vi.mock('./agent-api.js', () => ({
 
 import {
   _initTestDatabase,
+  createWikiJob,
   getWikiDraft,
   getWikiJob,
   getWikiMaterial,
@@ -25,6 +26,7 @@ import { KNOWLEDGE_WIKI_DIR } from './config.js';
 import {
   bulkDeleteWikiDrafts,
   clearWikiData,
+  deleteFinishedWikiJobs,
   deleteWikiDraft,
   deleteWikiMaterial,
   deleteWikiPage,
@@ -33,6 +35,7 @@ import {
   importWikiMaterialFromText,
   publishWikiDraft,
   queueWikiDraftGenerationJob,
+  stopWikiJob,
 } from './wiki.js';
 
 const createdPaths = new Set<string>();
@@ -86,6 +89,26 @@ async function waitForJobCompletion(jobId: string): Promise<{
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(`Timed out waiting for wiki job ${jobId}`);
+}
+
+async function waitForJobStatus(
+  jobId: string,
+  allowedStatuses: string[],
+): Promise<{
+  id: string;
+  status: string;
+  result_json: string | null;
+  error_message: string | null;
+}> {
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    const job = getWikiJob(jobId);
+    if (job && allowedStatuses.includes(job.status)) {
+      return job;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`Timed out waiting for wiki job ${jobId} to reach ${allowedStatuses.join(', ')}`);
 }
 
 beforeEach(() => {
@@ -703,6 +726,104 @@ describe('wiki', () => {
     expect(fs.existsSync(draftOnlyPath)).toBe(false);
     expect(getWikiDraft(String(publishedDraftId))?.status).toBe('published');
     expect(getWikiPage(publishedSlug)?.slug).toBe(publishedSlug);
+  });
+
+  it('stops a running wiki job and marks it as failed by manual stop', async () => {
+    const material = importWikiMaterialFromText({
+      title: '停止任务资料',
+      text: '用于验证运行中的 wiki 后台任务可以被手动停止。',
+    });
+    rememberMaterialArtifacts(material);
+
+    callAnthropicMessagesMock.mockImplementation(
+      async (
+        _request: unknown,
+        _fetchImpl: unknown,
+        _overrideTimeoutMs: unknown,
+        options?: { signal?: AbortSignal },
+      ) =>
+        new Promise((resolve, reject) => {
+          const onAbort = () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+          };
+          if (options?.signal?.aborted) {
+            onAbort();
+            return;
+          }
+          options?.signal?.addEventListener('abort', onAbort, { once: true });
+          setTimeout(() => {
+            options?.signal?.removeEventListener('abort', onAbort);
+            resolve({
+              model: 'test-model',
+              raw: {},
+              text: JSON.stringify({
+                page: {
+                  slug: `stopped-${Date.now()}`,
+                  title: 'Stopped Page',
+                  page_kind: 'project',
+                  summary: '不应真正写入',
+                  content_markdown: '# Stopped Page',
+                },
+                claims: [],
+                relations: [],
+              }),
+            });
+          }, 1500);
+        }),
+    );
+
+    const job = queueWikiDraftGenerationJob({
+      materialIds: [material.id],
+      title: 'Stopped Page',
+      pageKind: 'project',
+    });
+
+    await waitForJobStatus(job.id, ['running']);
+    const stopResult = stopWikiJob(job.id);
+    expect(stopResult.status).toBe('stopping');
+
+    const stoppedJob = await waitForJobCompletion(job.id);
+    expect(stoppedJob.status).toBe('failed');
+    expect(stoppedJob.result_json).toBeNull();
+    expect(stoppedJob.error_message).toBe('任务已手动停止');
+  });
+
+  it('deletes completed and failed wiki jobs in bulk', async () => {
+    const now = new Date().toISOString();
+    createWikiJob({
+      id: 'wiki-job-completed-test',
+      job_type: 'draft_generate',
+      status: 'completed',
+      payload_json: JSON.stringify({ materialIds: ['job-material-1'] }),
+      result_json: JSON.stringify({ draft_id: 'draft-1' }),
+      error_message: null,
+      created_at: now,
+      updated_at: now,
+      started_at: now,
+      finished_at: now,
+    });
+    createWikiJob({
+      id: 'wiki-job-failed-test',
+      job_type: 'draft_generate',
+      status: 'failed',
+      payload_json: JSON.stringify({ materialIds: ['job-material-2'] }),
+      result_json: null,
+      error_message: 'mock failure',
+      created_at: now,
+      updated_at: now,
+      started_at: now,
+      finished_at: now,
+    });
+
+    const result = deleteFinishedWikiJobs();
+    expect(result.deleted_count).toBe(2);
+    expect(result.deleted_ids).toEqual(
+      expect.arrayContaining(['wiki-job-completed-test', 'wiki-job-failed-test']),
+    );
+    expect(getWikiJob('wiki-job-completed-test')).toBeUndefined();
+    expect(getWikiJob('wiki-job-failed-test')).toBeUndefined();
   });
 
   it('clears the whole LLM wiki and removes stored artifacts', async () => {

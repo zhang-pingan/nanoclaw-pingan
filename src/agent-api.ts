@@ -1145,8 +1145,22 @@ export async function forwardAnthropicRequestToOpenAi(
   anthropicRequest: AnthropicMessagesRequest,
   config: OpenAiCompatConfig,
   fetchImpl: FetchLike = fetch,
+  options: {
+    signal?: AbortSignal;
+  } = {},
 ): Promise<OpenAiCompatResult> {
   const controller = new AbortController();
+  const externalSignal = options.signal;
+  const forwardAbort = () => {
+    controller.abort(externalSignal?.reason);
+  };
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener('abort', forwardAbort, { once: true });
+    }
+  }
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
   try {
@@ -1206,6 +1220,9 @@ export async function forwardAnthropicRequestToOpenAi(
         );
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
+      if (externalSignal?.aborted) {
+        throw err;
+      }
       throw new Error(
         `OpenAI-compatible API request timed out after ${config.timeoutMs}ms`,
       );
@@ -1213,6 +1230,9 @@ export async function forwardAnthropicRequestToOpenAi(
     throw err;
   } finally {
     clearTimeout(timeout);
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', forwardAbort);
+    }
   }
 }
 
@@ -1220,6 +1240,9 @@ export async function callAnthropicMessages(
   input: AnthropicMessagesRequest,
   fetchImpl: FetchLike = fetch,
   overrideTimeoutMs?: number,
+  options: {
+    signal?: AbortSignal;
+  } = {},
 ): Promise<AnthropicMessagesResponse> {
   const config = getAgentApiConfig();
   const effectiveTimeoutMs = overrideTimeoutMs ?? config.timeoutMs;
@@ -1228,6 +1251,17 @@ export async function callAnthropicMessages(
     model: config.model,
   };
   const controller = new AbortController();
+  const externalSignal = options.signal;
+  const forwardAbort = () => {
+    controller.abort(externalSignal?.reason);
+  };
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener('abort', forwardAbort, { once: true });
+    }
+  }
   const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
@@ -1245,6 +1279,7 @@ export async function callAnthropicMessages(
           openAiProtocol: config.openAiProtocol,
         },
         fetchImpl,
+        { signal: controller.signal },
       );
 
       if (compatResult.stream) {
@@ -1317,10 +1352,16 @@ export async function callAnthropicMessages(
     };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
+      if (externalSignal?.aborted) {
+        throw err;
+      }
       throw new Error(`Anthropic API request timed out after ${effectiveTimeoutMs}ms`);
     }
     throw err;
   } finally {
     clearTimeout(timeout);
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', forwardAbort);
+    }
   }
 }

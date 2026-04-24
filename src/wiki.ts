@@ -15,6 +15,7 @@ import {
   createWikiClaim,
   createWikiMaterial,
   deleteWikiDraftRecord,
+  deleteWikiJobRecord,
   deleteWikiMaterialRecord,
   deleteWikiPageGraph,
   getWikiDraft,
@@ -25,6 +26,7 @@ import {
   listWikiClaimEvidence,
   listWikiClaimsByPage,
   listWikiDrafts,
+  listWikiJobs,
   listWikiMaterials,
   listWikiPageMaterials,
   listWikiPages,
@@ -238,6 +240,8 @@ interface WikiMaterialUsage {
 }
 
 const pendingJobIds: string[] = [];
+const activeWikiJobControllers = new Map<string, AbortController>();
+const stoppingWikiJobIds = new Set<string>();
 let wikiJobDrainRunning = false;
 
 function nowIso(): string {
@@ -246,6 +250,18 @@ function nowIso(): string {
 
 function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
+}
+
+function createAbortError(message: string): Error {
+  const err = new Error(message);
+  err.name = 'AbortError';
+  return err;
+}
+
+function throwIfSignalAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError('Wiki job aborted');
+  }
 }
 
 function parseJsonStringArray(value: string | null | undefined): string[] {
@@ -989,10 +1005,14 @@ function buildCompileUserPrompt(input: QueueDraftJobInput): string {
 
 async function generateWikiDraftFromMaterials(
   input: QueueDraftJobInput,
+  options: {
+    signal?: AbortSignal;
+  } = {},
 ): Promise<WikiDraftRecord> {
   if (!Array.isArray(input.materialIds) || input.materialIds.length === 0) {
     throw new Error('至少需要选择一份资料');
   }
+  throwIfSignalAborted(options.signal);
   const requestPayload = {
     system: buildCompileSystemPrompt(),
     messages: [
@@ -1004,9 +1024,17 @@ async function generateWikiDraftFromMaterials(
     temperature: 0.1,
     max_tokens: 12000,
   };
-  const response = await callAnthropicMessages(requestPayload, undefined, 120000);
+  const response = await callAnthropicMessages(
+    requestPayload,
+    undefined,
+    120000,
+    { signal: options.signal },
+  );
+  throwIfSignalAborted(options.signal);
   const compiled = parseCompiledWikiDraft(response.text);
+  throwIfSignalAborted(options.signal);
   validateCompiledDraftEvidence(compiled, input.materialIds);
+  throwIfSignalAborted(options.signal);
 
   const now = nowIso();
   const draftId = createId('wiki-draft');
@@ -1036,6 +1064,8 @@ async function generateWikiDraftFromMaterials(
 
 async function processWikiJob(job: WikiJobRecord): Promise<void> {
   const startedAt = nowIso();
+  const controller = new AbortController();
+  activeWikiJobControllers.set(job.id, controller);
   updateWikiJob(job.id, {
     status: 'running',
     started_at: startedAt,
@@ -1049,7 +1079,9 @@ async function processWikiJob(job: WikiJobRecord): Promise<void> {
     }
 
     const payload = JSON.parse(job.payload_json) as QueueDraftJobInput;
-    const draft = await generateWikiDraftFromMaterials(payload);
+    const draft = await generateWikiDraftFromMaterials(payload, {
+      signal: controller.signal,
+    });
     updateWikiJob(job.id, {
       status: 'completed',
       result_json: JSON.stringify({
@@ -1060,12 +1092,23 @@ async function processWikiJob(job: WikiJobRecord): Promise<void> {
       finished_at: nowIso(),
     });
   } catch (err) {
+    if (controller.signal.aborted || stoppingWikiJobIds.has(job.id)) {
+      updateWikiJob(job.id, {
+        status: 'failed',
+        error_message: '任务已手动停止',
+        finished_at: nowIso(),
+      });
+      return;
+    }
     logger.error({ err, jobId: job.id }, 'Wiki job failed');
     updateWikiJob(job.id, {
       status: 'failed',
       error_message: err instanceof Error ? err.message : String(err),
       finished_at: nowIso(),
     });
+  } finally {
+    activeWikiJobControllers.delete(job.id);
+    stoppingWikiJobIds.delete(job.id);
   }
 }
 
@@ -1132,6 +1175,45 @@ export function queueWikiDraftGenerationJob(
   createWikiJob(job);
   enqueueWikiJob(job.id);
   return job;
+}
+
+export function stopWikiJob(jobId: string): {
+  job_id: string;
+  status: 'stopping';
+} {
+  const job = getWikiJob(jobId);
+  if (!job) throw new Error('Job not found');
+  if (job.status !== 'running') {
+    throw new Error('仅支持停止运行中的后台任务');
+  }
+  if (!stoppingWikiJobIds.has(jobId)) {
+    stoppingWikiJobIds.add(jobId);
+    updateWikiJob(jobId, {
+      error_message: '停止中...',
+      updated_at: nowIso(),
+    });
+    activeWikiJobControllers.get(jobId)?.abort(createAbortError('Wiki job stopped by user'));
+  }
+  return {
+    job_id: jobId,
+    status: 'stopping',
+  };
+}
+
+export function deleteFinishedWikiJobs(): {
+  deleted_count: number;
+  deleted_ids: string[];
+} {
+  const deletedIds = listWikiJobs(1000000)
+    .filter((job) => job.status === 'completed' || job.status === 'failed')
+    .map((job) => job.id);
+  deletedIds.forEach((jobId) => {
+    deleteWikiJobRecord(jobId);
+  });
+  return {
+    deleted_count: deletedIds.length,
+    deleted_ids: deletedIds,
+  };
 }
 
 function buildPublishedPageMarkdown(

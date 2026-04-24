@@ -84,6 +84,7 @@ import {
 import {
   bulkDeleteWikiDrafts,
   clearWikiData,
+  deleteFinishedWikiJobs,
   deleteWikiDraft,
   deleteWikiMaterial,
   deleteWikiPage,
@@ -98,6 +99,7 @@ import {
   publishWikiDraft,
   queueWikiDraftGenerationJob,
   resumePendingWikiJobs,
+  stopWikiJob,
 } from '../wiki.js';
 
 // --- Config ---
@@ -634,8 +636,14 @@ class WebChannel {
       if (pathname === '/api/wiki/jobs' && req.method === 'GET') {
         return this.apiListWikiJobs(res);
       }
+      if (pathname === '/api/wiki/jobs/finished' && req.method === 'DELETE') {
+        return this.apiDeleteFinishedWikiJobs(res);
+      }
       if (pathname === '/api/wiki/job' && req.method === 'GET') {
         return this.apiGetWikiJob(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/job/stop' && req.method === 'POST') {
+        return this.apiStopWikiJob(req, res);
       }
       if (pathname === '/api/wiki/all' && req.method === 'DELETE') {
         return this.apiClearWikiData(res);
@@ -3299,6 +3307,21 @@ class WebChannel {
     res.end(JSON.stringify({ jobs }));
   }
 
+  private apiDeleteFinishedWikiJobs(res: http.ServerResponse): void {
+    try {
+      const result = deleteFinishedWikiJobs();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
   private apiGetWikiJob(reqUrl: URL, res: http.ServerResponse): void {
     const id = (reqUrl.searchParams.get('id') || '').trim();
     if (!id) {
@@ -3314,6 +3337,45 @@ class WebChannel {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ job }));
+  }
+
+  private async apiStopWikiJob(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      job_id?: string;
+    };
+    if (!data.job_id || !String(data.job_id).trim()) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'job_id required' }));
+      return;
+    }
+
+    try {
+      const result = stopWikiJob(String(data.job_id).trim());
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const statusCode =
+        message === 'Job not found'
+          ? 404
+          : message.includes('运行中')
+            ? 409
+            : 400;
+      res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
+    }
   }
 
   private apiClearWikiData(res: http.ServerResponse): void {

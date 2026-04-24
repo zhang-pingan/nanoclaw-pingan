@@ -4304,6 +4304,10 @@ export function listWikiJobs(limit: number = 100): WikiJobRecord[] {
     .all(Math.max(1, limit)) as WikiJobRecord[];
 }
 
+export function deleteWikiJobRecord(id: string): void {
+  db.prepare('DELETE FROM wiki_jobs WHERE id = ?').run(id);
+}
+
 export function listPendingWikiJobs(): WikiJobRecord[] {
   return db
     .prepare(

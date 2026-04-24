@@ -158,6 +158,11 @@ var knowledgeMaterialList = document.getElementById("knowledge-material-list");
 var knowledgeDraftList = document.getElementById("knowledge-draft-list");
 var knowledgePageList = document.getElementById("knowledge-page-list");
 var knowledgeJobList = document.getElementById("knowledge-job-list");
+var knowledgeJobsPanel = document.getElementById("knowledge-jobs-panel");
+var openKnowledgeJobsBtn = document.getElementById("open-knowledge-jobs");
+var closeKnowledgeJobsBtn = document.getElementById("close-knowledge-jobs");
+var knowledgeJobsTriggerMeta = document.getElementById("knowledge-jobs-trigger-meta");
+var knowledgeJobsDeleteFinishedBtn = document.getElementById("knowledge-jobs-delete-finished-btn");
 var knowledgeImportBtn = document.getElementById("knowledge-import-btn");
 var knowledgeRefreshBtn = document.getElementById("knowledge-refresh-btn");
 var knowledgeClearBtn = document.getElementById("knowledge-clear-btn");
@@ -197,6 +202,7 @@ var agentStatusList = document.getElementById("agent-status-list");
 var openAgentStatusBtn = document.getElementById("open-agent-status");
 var closeAgentStatusBtn = document.getElementById("close-agent-status");
 var stoppingAgentIds = new Set();
+var stoppingKnowledgeJobIds = new Set();
 var traceMonitorList = document.getElementById("trace-monitor-list");
 var traceMonitorRefreshBtn = document.getElementById("trace-monitor-refresh-btn");
 var traceMonitorClearHistoryBtn = document.getElementById("trace-monitor-clear-history-btn");
@@ -1759,6 +1765,9 @@ function setPrimaryNav(navKey) {
   if (navKey === null || navKey === void 0) return;
   activePrimaryNavKey = navKey;
   todayPlanVisible = false;
+  if (navKey !== "knowledge-management" && knowledgeJobsPanel) {
+    knowledgeJobsPanel.classList.remove("open");
+  }
   primaryNavItems.forEach((item) => {
     item.classList.toggle("active", item.getAttribute("data-nav-key") === navKey);
   });
@@ -1814,6 +1823,10 @@ function cyclePrimaryNav(step) {
 }
 
 function openSchedulersPanel() {
+  closeKnowledgeImportMenu();
+  if (knowledgeJobsPanel) {
+    knowledgeJobsPanel.classList.remove("open");
+  }
   agentStatusPanel.classList.remove("open");
   if (agentStatusInterval) {
     clearInterval(agentStatusInterval);
@@ -1824,11 +1837,29 @@ function openSchedulersPanel() {
 }
 
 function openAgentStatusPanel() {
+  closeKnowledgeImportMenu();
+  if (knowledgeJobsPanel) {
+    knowledgeJobsPanel.classList.remove("open");
+  }
   schedulersPanel.classList.remove("open");
   agentStatusPanel.classList.add("open");
   loadAgentStatus();
   if (agentStatusInterval) clearInterval(agentStatusInterval);
   agentStatusInterval = setInterval(updateAgentDurations, 1000);
+}
+
+function openKnowledgeJobsPanel() {
+  closeKnowledgeImportMenu();
+  schedulersPanel.classList.remove("open");
+  agentStatusPanel.classList.remove("open");
+  if (agentStatusInterval) {
+    clearInterval(agentStatusInterval);
+    agentStatusInterval = null;
+  }
+  if (knowledgeJobsPanel) {
+    knowledgeJobsPanel.classList.add("open");
+  }
+  loadKnowledgeJobs();
 }
 
 function renderGroups() {
@@ -2609,7 +2640,6 @@ function renderKnowledgeMaterials() {
         <span>${escapeHtml(`证据 ${usageSummary.evidence_count || 0}`)}</span>
         <span>${escapeHtml(formatDateTime(material.created_at))}</span>
       </div>
-      <div class="knowledge-list-item-preview">${escapeHtml(material.preview || "无预览")}</div>
     `;
     const checkbox = item.querySelector('input[data-material-select]');
     if (checkbox) {
@@ -2628,24 +2658,6 @@ function renderKnowledgeMaterials() {
     });
     knowledgeMaterialList.appendChild(item);
   }
-}
-
-function formatKnowledgeDraftListSummary(summary, fallbackText) {
-  if (!summary) return fallbackText || "等待查看内容";
-  const parts = [summary.mode === "create" ? "新建页面" : "更新页面"];
-  if ((summary.claims_added || 0) || (summary.claims_updated || 0) || (summary.claims_removed || 0)) {
-    parts.push(`Claim +${summary.claims_added || 0}/~${summary.claims_updated || 0}/-${summary.claims_removed || 0}`);
-  }
-  if ((summary.content_added || 0) || (summary.content_updated || 0) || (summary.content_removed || 0)) {
-    parts.push(`正文 +${summary.content_added || 0}/~${summary.content_updated || 0}/-${summary.content_removed || 0}`);
-  }
-  if ((summary.materials_added || 0) || (summary.materials_removed || 0)) {
-    parts.push(`资料 +${summary.materials_added || 0}/-${summary.materials_removed || 0}`);
-  }
-  if ((summary.relations_added || 0) || (summary.relations_removed || 0)) {
-    parts.push(`Relation +${summary.relations_added || 0}/-${summary.relations_removed || 0}`);
-  }
-  return parts.join(" · ");
 }
 
 function renderKnowledgeDrafts() {
@@ -2682,7 +2694,6 @@ function renderKnowledgeDrafts() {
         <span>${escapeHtml(draft.target_slug || "--")}</span>
         <span>${escapeHtml(`资料 ${draft.material_count || 0}`)}</span>
       </div>
-      <div class="knowledge-list-item-preview">${escapeHtml(formatKnowledgeDraftListSummary(draft.publish_preview_summary, draft.summary || "等待查看内容"))}</div>
     `;
     const checkbox = item.querySelector('input[data-draft-select]');
     if (checkbox) {
@@ -2729,7 +2740,6 @@ function renderKnowledgePages() {
         <span>${escapeHtml(page.slug || "--")}</span>
         <span>${escapeHtml(`入链 ${page.incoming_relation_count || 0}`)}</span>
       </div>
-      <div class="knowledge-list-item-preview">${escapeHtml(page.summary || "无摘要")}</div>
     `;
     item.addEventListener("click", () => {
       openKnowledgePageDetail(page.slug);
@@ -2739,25 +2749,97 @@ function renderKnowledgePages() {
 }
 
 function renderKnowledgeJobs() {
+  const runningCount = knowledgeJobs.filter((job) => job.status === "running").length;
+  const pendingCount = knowledgeJobs.filter((job) => job.status === "pending").length;
+  const finishedCount = knowledgeJobs.filter((job) => job.status === "completed" || job.status === "failed").length;
+  if (knowledgeJobsTriggerMeta) {
+    knowledgeJobsTriggerMeta.textContent = `${knowledgeJobs.length} 条`;
+    const summaryParts = [];
+    if (runningCount) summaryParts.push(`${runningCount} 运行中`);
+    if (pendingCount) summaryParts.push(`${pendingCount} 排队中`);
+    openKnowledgeJobsBtn.title = summaryParts.length
+      ? `后台任务 · ${summaryParts.join(" · ")}`
+      : `后台任务 · ${knowledgeJobs.length} 条`;
+  }
+
+  if (knowledgeJobsDeleteFinishedBtn) {
+    knowledgeJobsDeleteFinishedBtn.disabled = finishedCount === 0;
+    knowledgeJobsDeleteFinishedBtn.title = finishedCount
+      ? `删除 ${finishedCount} 条已完成/失败任务`
+      : "没有可删除的已完成/失败任务";
+  }
+
   if (!knowledgeJobList) return;
+  const runningIds = new Set(
+    knowledgeJobs
+      .filter((job) => job.status === "running")
+      .map((job) => job.id),
+  );
+  Array.from(stoppingKnowledgeJobIds).forEach((jobId) => {
+    if (!runningIds.has(jobId)) {
+      stoppingKnowledgeJobIds.delete(jobId);
+    }
+  });
+
   knowledgeJobList.innerHTML = "";
   if (!knowledgeJobs.length) {
-    knowledgeJobList.innerHTML = '<div class="trace-monitor-list-empty">暂无后台任务</div>';
+    knowledgeJobList.innerHTML = '<div class="agent-status-empty">暂无后台任务</div>';
     return;
   }
-  for (const job of knowledgeJobs.slice(0, 12)) {
+
+  for (const job of knowledgeJobs.slice(0, 50)) {
+    let payload = null;
+    let result = null;
+    try {
+      payload = job.payload_json ? JSON.parse(job.payload_json) : null;
+    } catch {
+      payload = null;
+    }
+    try {
+      result = job.result_json ? JSON.parse(job.result_json) : null;
+    } catch {
+      result = null;
+    }
+
+    const isStopping = stoppingKnowledgeJobIds.has(job.id);
+    const canStop = job.status === "running";
+    const requestLabel = payload?.title || payload?.targetSlug || result?.title || result?.target_slug || job.job_type || job.id;
+    const summaryText = job.error_message
+      || result?.title
+      || result?.target_slug
+      || (payload?.instruction ? `要求：${payload.instruction}` : "")
+      || "等待执行";
+    const createdLabel = formatRelativeTime(job.created_at);
+    const startedLabel = job.started_at ? formatDateTime(job.started_at) : "未开始";
+    const finishedLabel = job.finished_at ? formatDateTime(job.finished_at) : "未结束";
+
     const item = document.createElement("div");
-    item.className = "knowledge-list-item";
+    item.className = `knowledge-job-panel-item${isStopping ? " is-stopping" : ""}`;
     item.innerHTML = `
-      <div class="knowledge-list-item-head">
-        <div class="knowledge-list-item-title">${escapeHtml(job.job_type || job.id)}</div>
+      <div class="knowledge-job-panel-head">
+        <div class="knowledge-job-panel-title">${escapeHtml(requestLabel || job.id)}</div>
         <span class="knowledge-status-pill ${escapeHtml(job.status || "pending")}">${escapeHtml(job.status || "pending")}</span>
       </div>
-      <div class="knowledge-list-item-meta">
-        <span>${escapeHtml(formatDateTime(job.created_at))}</span>
+      <div class="knowledge-job-panel-content">${escapeHtml(summaryText)}</div>
+      <div class="knowledge-job-panel-meta">
+        <span>${escapeHtml(`创建 ${createdLabel}`)}</span>
+        <span>${escapeHtml(`开始 ${startedLabel}`)}</span>
+        <span>${escapeHtml(`结束 ${finishedLabel}`)}</span>
       </div>
-      <div class="knowledge-list-item-preview">${escapeHtml(job.error_message || job.result_json || "等待执行")}</div>
+      ${canStop ? `
+        <div class="knowledge-job-panel-actions">
+          <button type="button" class="panel-action-btn stop icon-text-btn knowledge-job-stop-btn"${isStopping ? " disabled" : ""}>
+            ${isStopping ? "Stopping..." : `${SVG.stop} Stop`}
+          </button>
+        </div>
+      ` : ""}
     `;
+    const stopBtn = item.querySelector(".knowledge-job-stop-btn");
+    if (stopBtn && !isStopping) {
+      stopBtn.addEventListener("click", () => {
+        void stopKnowledgeJob(job.id);
+      });
+    }
     knowledgeJobList.appendChild(item);
   }
 }
@@ -3711,6 +3793,70 @@ async function clearKnowledgeWiki() {
   } catch (err) {
     console.error("Failed to clear LLM wiki:", err);
     showToast(`清除 LLM Wiki 失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function deleteFinishedKnowledgeJobs() {
+  const deletableJobs = knowledgeJobs.filter((job) => job.status === "completed" || job.status === "failed");
+  if (!deletableJobs.length) {
+    showToast("没有可删除的已完成/失败任务");
+    return;
+  }
+
+  const confirmed = await openConfirmDialog(
+    `确认删除 ${deletableJobs.length} 条已完成/失败任务记录吗？这不会影响已生成的草稿或页面。`,
+    { title: "删除后台任务记录" },
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await apiFetch("/api/wiki/jobs/finished", {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(`已删除 ${data.deleted_count || 0} 条后台任务记录`);
+    await loadKnowledgeJobs();
+  } catch (err) {
+    console.error("Failed to delete finished wiki jobs:", err);
+    showToast(`删除后台任务记录失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function stopKnowledgeJob(jobId) {
+  const job = knowledgeJobs.find((item) => item.id === jobId);
+  if (!job) {
+    showToast("未找到该后台任务");
+    return;
+  }
+  if (job.status !== "running") {
+    showToast("仅支持停止运行中的后台任务");
+    return;
+  }
+
+  const confirmed = await openConfirmDialog(
+    `确认停止任务「${job.job_type || job.id}」吗？正在进行的知识库编纂会被中断。`,
+    { title: "停止后台任务" },
+  );
+  if (!confirmed) return;
+
+  stoppingKnowledgeJobIds.add(jobId);
+  renderKnowledgeJobs();
+
+  try {
+    const res = await apiFetch("/api/wiki/job/stop", {
+      method: "POST",
+      body: JSON.stringify({ job_id: jobId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast("已发送停止请求");
+    await loadKnowledgeJobs();
+  } catch (err) {
+    console.error("Failed to stop wiki job:", err);
+    stoppingKnowledgeJobIds.delete(jobId);
+    renderKnowledgeJobs();
+    showToast(`停止后台任务失败：${err instanceof Error ? err.message : "未知错误"}`);
   }
 }
 
@@ -15896,6 +16042,25 @@ deleteAllSchedulersBtn.addEventListener("click", deleteAllSchedulers);
 closeSchedulersBtn.addEventListener("click", () => {
   schedulersPanel.classList.remove("open");
 });
+if (openKnowledgeJobsBtn) {
+  openKnowledgeJobsBtn.addEventListener("click", () => {
+    if (knowledgeJobsPanel?.classList.contains("open")) {
+      knowledgeJobsPanel.classList.remove("open");
+      return;
+    }
+    openKnowledgeJobsPanel();
+  });
+}
+if (knowledgeJobsDeleteFinishedBtn) {
+  knowledgeJobsDeleteFinishedBtn.addEventListener("click", () => {
+    void deleteFinishedKnowledgeJobs();
+  });
+}
+if (closeKnowledgeJobsBtn) {
+  closeKnowledgeJobsBtn.addEventListener("click", () => {
+    knowledgeJobsPanel?.classList.remove("open");
+  });
+}
 openAgentStatusBtn.addEventListener("click", () => {
   if (agentStatusPanel.classList.contains("open")) {
     agentStatusPanel.classList.remove("open");
