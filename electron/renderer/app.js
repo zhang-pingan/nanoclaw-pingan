@@ -2971,6 +2971,10 @@ function renderKnowledgeMarkdownBody(markdown, emptyText = "无") {
   return `<div class="knowledge-detail-rich">${renderMarkdown(value)}</div>`;
 }
 
+function renderKnowledgeRawTextBody(text) {
+  return `<pre class="knowledge-detail-pre">${escapeHtml(text || "")}</pre>`;
+}
+
 function renderKnowledgeCardList(items, renderItem, emptyText = "无") {
   if (!Array.isArray(items) || items.length === 0) {
     return `<div class="knowledge-empty-inline">${escapeHtml(emptyText)}</div>`;
@@ -3207,7 +3211,7 @@ async function openKnowledgeMaterialDetail(materialId) {
         )}
         ${renderKnowledgeSection(
           "原始文本",
-          `<pre class="knowledge-detail-pre">${escapeHtml(data.extracted_text || "")}</pre>`,
+          renderKnowledgeRawTextBody(data.extracted_text || ""),
           { bodyClass: "knowledge-detail-body-code" },
         )}
       `,
@@ -3340,8 +3344,8 @@ async function openKnowledgePageDetail(pageSlug) {
         ${renderKnowledgeSection("摘要", renderKnowledgeTextBody(data.page.summary || "无摘要"))}
         ${renderKnowledgeSection(
           "正文",
-          renderKnowledgeMarkdownBody(data.page.content_markdown || ""),
-          { bodyClass: "knowledge-detail-body-rich" },
+          renderKnowledgeRawTextBody(data.page.content_markdown || ""),
+          { bodyClass: "knowledge-detail-body-code" },
         )}
         ${renderKnowledgeSection(
           "知识陈述",
