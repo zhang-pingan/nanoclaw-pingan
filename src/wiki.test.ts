@@ -250,13 +250,10 @@ describe('wiki', () => {
     rememberMaterialArtifacts(material);
 
     expect(execFileSyncMock).toHaveBeenCalledWith(
-      'swift',
-      ['-e', expect.stringContaining('PDFKit'), uploadPath],
+      'pdftotext',
+      ['-enc', 'UTF-8', '-eol', 'unix', uploadPath, '-'],
       expect.objectContaining({
         encoding: 'utf-8',
-        env: expect.objectContaining({
-          CLANG_MODULE_CACHE_PATH: expect.any(String),
-        }),
       }),
     );
     expect(fs.readFileSync(material.extracted_text_path, 'utf-8').trim()).toBe(
@@ -437,6 +434,120 @@ describe('wiki', () => {
       (claim) => claim.canonical_form === '相同 canonical claim 不应重复创建',
     );
     expect(activeReusedClaim?.evidence).toHaveLength(1);
+  });
+
+  it('allows deleting materials that are only referenced by deprecated claims after overwrite publish', async () => {
+    const testSlug = `wiki-overwrite-${Date.now()}`;
+    const firstMaterial = importWikiMaterialFromText({
+      title: '第一次发布资料',
+      text: '第一次发布使用的资料，后续会被同 slug 页面覆盖。',
+    });
+    const secondMaterial = importWikiMaterialFromText({
+      title: '第二次发布资料',
+      text: '第二次发布使用另一份资料覆盖同 slug 页面。',
+    });
+    rememberMaterialArtifacts(firstMaterial);
+    rememberMaterialArtifacts(secondMaterial);
+
+    callAnthropicMessagesMock
+      .mockResolvedValueOnce({
+        model: 'test-model',
+        raw: {},
+        text: JSON.stringify({
+          page: {
+            slug: testSlug,
+            title: 'Overwrite Publish Page',
+            page_kind: 'decision',
+            summary: '第一次发布',
+            content_markdown: '# Overwrite Publish Page\n\n第一次发布内容。',
+          },
+          claims: [
+            {
+              claim_type: 'decision',
+              statement: '第一次发布的 claim 只引用第一份资料。',
+              canonical_form: '第一次发布的 claim 只引用第一份资料',
+              confidence: 0.9,
+              evidence: [
+                {
+                  material_id: firstMaterial.id,
+                  excerpt_text: '第一次发布的 claim 只引用第一份资料。',
+                },
+              ],
+            },
+          ],
+          relations: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        model: 'test-model',
+        raw: {},
+        text: JSON.stringify({
+          page: {
+            slug: testSlug,
+            title: 'Overwrite Publish Page',
+            page_kind: 'decision',
+            summary: '第二次发布',
+            content_markdown: '# Overwrite Publish Page\n\n第二次发布内容。',
+          },
+          claims: [
+            {
+              claim_type: 'fact',
+              statement: '第二次发布的 claim 只引用第二份资料。',
+              canonical_form: '第二次发布的 claim 只引用第二份资料',
+              confidence: 0.91,
+              evidence: [
+                {
+                  material_id: secondMaterial.id,
+                  excerpt_text: '第二次发布的 claim 只引用第二份资料。',
+                },
+              ],
+            },
+          ],
+          relations: [],
+        }),
+      });
+
+    const firstJob = queueWikiDraftGenerationJob({
+      materialIds: [firstMaterial.id],
+      targetSlug: testSlug,
+      title: 'Overwrite Publish Page',
+      pageKind: 'decision',
+    });
+    const firstJobDone = await waitForJobCompletion(firstJob.id);
+    const firstDraftId = JSON.parse(String(firstJobDone.result_json || '{}')).draft_id;
+    const firstDraftDetail = getWikiDraftDetail(String(firstDraftId));
+    rememberPath(firstDraftDetail?.draft.file_path);
+    const firstPublish = publishWikiDraft(String(firstDraftId));
+    rememberPath(firstPublish.page.file_path);
+    expect(firstPublish.materials.map((item) => item.id)).toEqual([firstMaterial.id]);
+
+    const secondJob = queueWikiDraftGenerationJob({
+      materialIds: [secondMaterial.id],
+      targetSlug: testSlug,
+      title: 'Overwrite Publish Page',
+      pageKind: 'decision',
+    });
+    const secondJobDone = await waitForJobCompletion(secondJob.id);
+    const secondDraftId = JSON.parse(String(secondJobDone.result_json || '{}')).draft_id;
+    const secondDraftDetail = getWikiDraftDetail(String(secondDraftId));
+    rememberPath(secondDraftDetail?.draft.file_path);
+    const secondPublish = publishWikiDraft(String(secondDraftId));
+    expect(secondPublish.materials.map((item) => item.id)).toEqual([secondMaterial.id]);
+
+    const pageDetail = getWikiPageDetail(testSlug);
+    expect(pageDetail?.materials.map((item) => item.id)).toEqual([secondMaterial.id]);
+
+    const allClaims = listWikiClaimsByPage(testSlug, {
+      includeDeprecated: true,
+    });
+    expect(allClaims).toHaveLength(2);
+    expect(allClaims.filter((claim) => claim.status === 'active')).toHaveLength(1);
+    expect(allClaims.filter((claim) => claim.status === 'deprecated')).toHaveLength(1);
+
+    const deleteResult = deleteWikiMaterial(firstMaterial.id);
+    expect(deleteResult.material_id).toBe(firstMaterial.id);
+    expect(getWikiMaterial(firstMaterial.id)).toBeUndefined();
+    expect(getWikiMaterial(secondMaterial.id)?.id).toBe(secondMaterial.id);
   });
 
   it('fails draft generation when a claim has no valid material evidence', async () => {

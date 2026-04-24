@@ -4177,12 +4177,24 @@ body.quick-chat-window .quick-chat-input {
   overflow: hidden;
 }
 
+#knowledge-detail-empty,
+#knowledge-detail {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#knowledge-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .knowledge-detail-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  flex: 0 0 auto;
 }
 
 .knowledge-detail-actions {
@@ -4248,9 +4260,31 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .knowledge-detail-content {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
-  max-height: calc(100vh - 270px);
   color: var(--text-primary);
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(14, 165, 233, 0.24) transparent;
+}
+
+.knowledge-detail-content::-webkit-scrollbar {
+  width: 7px;
+}
+
+.knowledge-detail-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.knowledge-detail-content::-webkit-scrollbar-thumb {
+  background: rgba(14, 165, 233, 0.18);
+  border-radius: 999px;
+}
+
+.knowledge-detail-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(14, 165, 233, 0.32);
 }
 
 .knowledge-detail-content .knowledge-detail-section {

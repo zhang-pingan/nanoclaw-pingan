@@ -3185,12 +3185,16 @@ async function openKnowledgeMaterialDetail(materialId) {
   }
 }
 
+async function fetchKnowledgeDraftDetail(draftId) {
+  const res = await apiFetch(`/api/wiki/draft?id=${encodeURIComponent(draftId)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
 async function openKnowledgeDraftDetail(draftId) {
   try {
-    const res = await apiFetch(`/api/wiki/draft?id=${encodeURIComponent(draftId)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const detail = data;
+    const detail = await fetchKnowledgeDraftDetail(draftId);
     currentKnowledgeDetail = { type: "draft", id: draftId };
     currentKnowledgeDraftId = draftId;
     currentKnowledgePageSlug = "";
@@ -3978,8 +3982,30 @@ async function publishSelectedKnowledgeDraft() {
     return;
   }
 
-  const confirmed = await openConfirmDialog("发布后将覆盖同 slug 的当前页面快照。继续吗？", {
-    title: "发布知识库页面",
+  let detail;
+  try {
+    detail = await fetchKnowledgeDraftDetail(currentKnowledgeDraftId);
+  } catch (err) {
+    console.error("Failed to validate wiki draft before publish:", err);
+    showToast(`发布前校验失败：${err instanceof Error ? err.message : "未知错误"}`);
+    return;
+  }
+
+  if (detail?.draft?.status === "published") {
+    showToast("该草稿已发布，无需重复操作");
+    return;
+  }
+
+  const existingPage = detail?.publish_preview?.existing_page || null;
+  const nextSlug = String(detail?.compiled?.page?.slug || detail?.draft?.target_slug || "").trim();
+  const hasSlugConflict =
+    detail?.publish_preview?.mode === "update" && Boolean(existingPage);
+  const confirmMessage = hasSlugConflict
+    ? `检测到 slug「${nextSlug || existingPage.slug || "--"}」已存在。\n当前页面：${existingPage.title || existingPage.slug || "未命名页面"}\n\n继续发布将覆盖该页面的当前快照。是否继续？`
+    : `确认发布草稿「${detail?.draft?.title || nextSlug || currentKnowledgeDraftId}」到知识库吗？`;
+  const confirmed = await openConfirmDialog(confirmMessage, {
+    title: hasSlugConflict ? "覆盖现有知识库页面" : "发布知识库页面",
+    confirmText: hasSlugConflict ? "确认覆盖并发布" : "发布",
   });
   if (!confirmed) return;
 

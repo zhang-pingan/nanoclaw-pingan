@@ -3941,6 +3941,7 @@ export function listWikiPagesReferencingMaterial(
           ON pm.page_slug = p.slug
         LEFT JOIN wiki_claims c
           ON c.owner_page_slug = p.slug
+         AND c.status = 'active'
         LEFT JOIN wiki_claim_evidence e
           ON e.claim_id = c.id
         WHERE pm.material_id = ? OR e.material_id = ?

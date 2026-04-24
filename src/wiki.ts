@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -8,6 +7,7 @@ import { z } from 'zod';
 
 import { callAnthropicMessages } from './agent-api.js';
 import { DATA_DIR, KNOWLEDGE_WIKI_DIR } from './config.js';
+import { extractPdfText } from './pdf-text-extractor.js';
 import {
   clearAllWikiRecords,
   countWikiClaimEvidenceByMaterial,
@@ -57,7 +57,6 @@ const WIKI_MATERIALS_DIR = path.join(KNOWLEDGE_WIKI_DIR, 'materials');
 const WIKI_DRAFTS_DIR = path.join(KNOWLEDGE_WIKI_DIR, 'drafts');
 const WIKI_PAGES_DIR = path.join(KNOWLEDGE_WIKI_DIR, 'pages');
 const WEB_UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
-const SWIFT_MODULE_CACHE_DIR = path.resolve(DATA_DIR, 'swift-module-cache');
 const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.txt',
   '.md',
@@ -81,19 +80,6 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.log',
 ]);
 const PDF_EXTENSIONS = new Set(['.pdf']);
-const PDF_TEXT_EXTRACT_SWIFT = `
-import Foundation
-import PDFKit
-
-let path = CommandLine.arguments[1]
-let url = URL(fileURLWithPath: path)
-guard let document = PDFDocument(url: url) else {
-  FileHandle.standardError.write(Data("failed to open pdf".utf8))
-  exit(2)
-}
-let text = document.string ?? ""
-print(text)
-`;
 const MAX_MATERIAL_CHARS = 12000;
 const MAX_TOTAL_MATERIAL_CHARS = 30000;
 
@@ -352,124 +338,15 @@ export function ensureWikiDirs(): void {
   ensureDir(WIKI_PAGES_DIR);
 }
 
-function mergeOverlappingPdfTokens(line: string): string {
-  const tokens = line.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length <= 1) return line.trim();
-
-  let output = '';
-  for (const token of tokens) {
-    if (!output) {
-      output = token;
-      continue;
-    }
-    if (token === output.slice(-token.length)) continue;
-
-    let merged = false;
-    for (let overlap = Math.min(output.length, token.length); overlap >= 1; overlap -= 1) {
-      if (output.slice(-overlap) === token.slice(0, overlap)) {
-        output += token.slice(overlap);
-        merged = true;
-        break;
-      }
-    }
-
-    if (!merged) {
-      output += ` ${token}`;
-    }
-  }
-
-  return output;
-}
-
-function normalizePdfExtractedLine(line: string): string {
-  if (!line.trim()) return '';
-
-  let normalized = mergeOverlappingPdfTokens(line);
-  normalized = normalized.replace(
-    /\b([A-Za-z])(?:\s+[A-Za-z])+\b/g,
-    (value) => value.replace(/\s+/g, ''),
-  );
-  normalized = normalized.replace(
-    /\b([A-Za-z])\s+([A-Za-z]{2,})\b/g,
-    '$1$2',
-  );
-  normalized = normalized.replace(
-    /(?<=[\p{Script=Han}])\s+(?=[\p{Script=Han}])/gu,
-    '',
-  );
-  normalized = normalized.replace(
-    /(?<=[【（《“‘])\s+/gu,
-    '',
-  );
-  normalized = normalized.replace(
-    /\s+(?=[】）》”’])/gu,
-    '',
-  );
-  normalized = normalized.replace(
-    /(?<=[\p{Script=Han}])\s+(?=[，。；：？！、])/gu,
-    '',
-  );
-  normalized = normalized.replace(
-    /(?<=[，。；：？！、】【（）《》“”‘’])\s+(?=[\p{Script=Han}A-Za-z0-9])/gu,
-    '',
-  );
-  normalized = normalized.replace(/[ \t]{2,}/g, ' ');
-  return normalized.trim();
-}
-
-function normalizePdfExtractedText(text: string): string {
-  const lines = text.replace(/\r\n/g, '\n').split('\n');
-  const normalizedLines = lines.map(normalizePdfExtractedLine);
-  const compacted: string[] = [];
-
-  for (const line of normalizedLines) {
-    if (!line) {
-      if (compacted.length === 0 || compacted[compacted.length - 1] === '') continue;
-      compacted.push('');
-      continue;
-    }
-    compacted.push(line);
-  }
-
-  return compacted.join('\n').trim();
-}
-
-function readPdfTextFromFile(filePath: string): string {
-  if (process.platform !== 'darwin') {
-    throw new Error('当前环境暂不支持直接解析 PDF；请先转为可复制文本后再导入');
-  }
-  ensureDir(SWIFT_MODULE_CACHE_DIR);
-  let extracted = '';
-  try {
-    extracted = execFileSync(
-      'swift',
-      ['-e', PDF_TEXT_EXTRACT_SWIFT, filePath],
-      {
-        encoding: 'utf-8',
-        env: {
-          ...process.env,
-          CLANG_MODULE_CACHE_PATH: SWIFT_MODULE_CACHE_DIR,
-        },
-      },
-    );
-  } catch (err) {
-    logger.warn(
-      { err, filePath },
-      'Failed to extract PDF text for wiki material import',
-    );
-    throw new Error('PDF 解析失败；请确认文件未损坏，或先转成文本后再导入');
-  }
-  const cleaned = extracted.replace(/^\uFEFF/, '').trim();
-  if (!cleaned) {
-    throw new Error('PDF 未提取到可用文本；如果是扫描件，请先做 OCR 后再导入');
-  }
-  return normalizePdfExtractedText(cleaned);
-}
-
 function readMaterialTextFromFile(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   if (PDF_EXTENSIONS.has(ext)) {
-    return readPdfTextFromFile(filePath);
+    const extraction = extractPdfText(filePath);
+    logger.info(
+      { filePath, extractor: extraction.engine },
+      'Extracted PDF text for wiki material import',
+    );
+    return extraction.text;
   }
   const buffer = fs.readFileSync(filePath);
   if (!SUPPORTED_TEXT_EXTENSIONS.has(ext) && !isProbablyTextBuffer(buffer)) {
