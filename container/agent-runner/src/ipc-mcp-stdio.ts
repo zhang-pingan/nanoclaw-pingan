@@ -1294,7 +1294,7 @@ server.tool(
     if (claims.length > 0) {
       parts.push('');
       parts.push('## Claims');
-      for (const claim of claims.slice(0, 12)) {
+      for (const claim of claims) {
         parts.push(`- [${claim.claim_type || 'claim'}] ${claim.statement || ''}`);
       }
     }
@@ -1305,7 +1305,7 @@ server.tool(
     if (materials.length > 0) {
       parts.push('');
       parts.push('## Source Materials');
-      for (const material of materials.slice(0, 12)) {
+      for (const material of materials) {
         parts.push(`- ${material.id || 'material'} ${material.title || ''}`.trim());
       }
     }
@@ -1316,7 +1316,7 @@ server.tool(
     if (relations.length > 0) {
       parts.push('');
       parts.push('## Related');
-      for (const relation of relations.slice(0, 12)) {
+      for (const relation of relations) {
         parts.push(`- [${relation.relation_type || 'related_to'}] ${relation.to_page_slug || ''}`);
       }
     }
