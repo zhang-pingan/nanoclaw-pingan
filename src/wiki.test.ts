@@ -158,6 +158,8 @@ beforeEach(() => {
   execFileSyncMock.mockReset();
   readEnvFileMock.mockReset();
   readEnvFileMock.mockReturnValue({});
+  delete process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS;
+  delete process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS;
 });
 
 afterEach(() => {
@@ -166,6 +168,8 @@ afterEach(() => {
   callAnthropicMessagesMock.mockReset();
   execFileSyncMock.mockReset();
   readEnvFileMock.mockReset();
+  delete process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS;
+  delete process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS;
 });
 
 describe('wiki', () => {
@@ -280,6 +284,84 @@ describe('wiki', () => {
 
     const searchResults = searchWikiPages('NanoClaw', 5);
     expect(searchResults.some((item) => item.slug === testSlug)).toBe(true);
+  });
+
+  it('uses configured wiki material character limits when compiling a draft', async () => {
+    readEnvFileMock.mockReturnValue({
+      NANOCLAW_WIKI_MAX_MATERIAL_CHARS: '8',
+      NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS: '12',
+    });
+    const testSlug = `wiki-material-limit-${Date.now()}`;
+    const compilePrompts: Array<{
+      materials?: Array<{ id?: string; text?: string }>;
+    }> = [];
+
+    callAnthropicMessagesMock.mockImplementation(async (request: {
+      messages?: Array<{ content?: string }>;
+    }) => {
+      const compilePrompt = JSON.parse(
+        String(request.messages?.[0]?.content || '{}'),
+      );
+      compilePrompts.push(compilePrompt);
+      const materialId = compilePrompt.materials?.[0]?.id || '';
+      return {
+        model: 'test-model',
+        raw: {},
+        text: JSON.stringify({
+          page: {
+            slug: testSlug,
+            title: 'Material Limit Page',
+            page_kind: 'project',
+            summary: '验证资料截断配置',
+            content_markdown: '# Material Limit Page\n\n配置生效。',
+          },
+          claims: [
+            {
+              claim_type: 'fact',
+              statement: '资料截断配置生效。',
+              canonical_form: '资料截断配置生效',
+              confidence: 0.9,
+              evidence: [
+                {
+                  material_id: materialId,
+                  excerpt_text: 'abcdefg',
+                },
+              ],
+            },
+          ],
+          relations: [],
+        }),
+      };
+    });
+
+    const firstMaterial = importWikiMaterialFromText({
+      title: '第一份资料',
+      text: 'abcdefghijk',
+    });
+    const secondMaterial = importWikiMaterialFromText({
+      title: '第二份资料',
+      text: '123456789',
+    });
+    rememberMaterialArtifacts(firstMaterial);
+    rememberMaterialArtifacts(secondMaterial);
+
+    const job = queueWikiDraftGenerationJob({
+      materialIds: [firstMaterial.id, secondMaterial.id],
+      title: 'Material Limit Page',
+      pageKind: 'project',
+      instruction: '验证资料截断配置',
+    });
+
+    const completedJob = await waitForJobCompletion(job.id);
+    expect(completedJob.status).toBe('completed');
+    const result = JSON.parse(String(completedJob.result_json || '{}'));
+    const draftId = String(result.draft_id || '');
+    rememberPath(getWikiDraftDetail(draftId)?.draft.file_path);
+
+    expect(compilePrompts[0]?.materials?.map((item) => item.text)).toEqual([
+      'abcdefg',
+      '1234',
+    ]);
   });
 
   it('imports uploaded pdf materials by extracting text before storing them', () => {

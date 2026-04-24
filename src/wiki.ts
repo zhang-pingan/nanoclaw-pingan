@@ -81,8 +81,8 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.log',
 ]);
 const PDF_EXTENSIONS = new Set(['.pdf']);
-const MAX_MATERIAL_CHARS = 12000;
-const MAX_TOTAL_MATERIAL_CHARS = 30000;
+const DEFAULT_MAX_MATERIAL_CHARS = 12000;
+const DEFAULT_MAX_TOTAL_MATERIAL_CHARS = 30000;
 const DEFAULT_WIKI_DRAFT_TIMEOUT_MS = 300000;
 
 const compiledWikiDraftSchema = z.object({
@@ -125,23 +125,49 @@ interface QueueDraftJobInput {
   instruction?: string;
 }
 
-function parsePositiveTimeoutMs(
+function parsePositiveInteger(
   value: string | undefined,
-  fallbackMs: number,
+  fallback: number,
+  minimum: number,
 ): number {
   return Math.max(
-    1000,
-    Number.parseInt(value || String(fallbackMs), 10) || fallbackMs,
+    minimum,
+    Number.parseInt(value || String(fallback), 10) || fallback,
   );
 }
 
 function getWikiDraftTimeoutMs(): number {
   const env = readEnvFile(['NANOCLAW_WIKI_DRAFT_TIMEOUT_MS']);
-  return parsePositiveTimeoutMs(
+  return parsePositiveInteger(
     env.NANOCLAW_WIKI_DRAFT_TIMEOUT_MS ||
       process.env.NANOCLAW_WIKI_DRAFT_TIMEOUT_MS,
     DEFAULT_WIKI_DRAFT_TIMEOUT_MS,
+    1000,
   );
+}
+
+function getWikiMaterialCharLimits(): {
+  maxMaterialChars: number;
+  maxTotalMaterialChars: number;
+} {
+  const env = readEnvFile([
+    'NANOCLAW_WIKI_MAX_MATERIAL_CHARS',
+    'NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS',
+  ]);
+  return {
+    maxMaterialChars: parsePositiveInteger(
+      env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS ||
+        process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS,
+      DEFAULT_MAX_MATERIAL_CHARS,
+      1,
+    ),
+    maxTotalMaterialChars: parsePositiveInteger(
+      env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS ||
+        process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS,
+      DEFAULT_MAX_TOTAL_MATERIAL_CHARS,
+      1,
+    ),
+  };
 }
 
 interface CompiledWikiDraft {
@@ -985,11 +1011,13 @@ function buildCompileUserPrompt(input: QueueDraftJobInput): string {
     throw new Error('未找到可用于编纂的资料');
   }
 
-  let remaining = MAX_TOTAL_MATERIAL_CHARS;
+  const { maxMaterialChars, maxTotalMaterialChars } =
+    getWikiMaterialCharLimits();
+  let remaining = maxTotalMaterialChars;
   const compactMaterials = materials.map((material) => {
     const next = limitMaterialText(
       material.text,
-      Math.min(remaining, MAX_MATERIAL_CHARS),
+      Math.min(remaining, maxMaterialChars),
     );
     remaining = Math.max(0, remaining - next.length);
     return {
