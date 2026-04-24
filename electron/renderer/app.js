@@ -3645,9 +3645,294 @@ async function importKnowledgeFiles(files) {
   await loadKnowledgeMaterials();
 }
 
+const KNOWLEDGE_PAGE_KIND_OPTIONS = Object.freeze([
+  { value: "project", label: "project · 项目" },
+  { value: "concept", label: "concept · 概念" },
+  { value: "decision", label: "decision · 决策" },
+  { value: "procedure", label: "procedure · 流程" },
+  { value: "person", label: "person · 人物" },
+  { value: "glossary", label: "glossary · 术语" },
+]);
+
+const KNOWLEDGE_PAGE_KIND_LABELS = Object.freeze(
+  KNOWLEDGE_PAGE_KIND_OPTIONS.reduce((result, option) => {
+    result[option.value] = option.label;
+    return result;
+  }, {})
+);
+
+function normalizeKnowledgePageKind(value) {
+  const normalized = String(value || "").trim();
+  return KNOWLEDGE_PAGE_KIND_LABELS[normalized] ? normalized : "project";
+}
+
+function summarizeKnowledgeDraftInstruction(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "未补充";
+  const firstLine = raw.split(/\n+/).find((line) => line.trim()) || raw;
+  return firstLine.length > 52 ? `${firstLine.slice(0, 52)}...` : firstLine;
+}
+
+async function openKnowledgeDraftGenerateDialog(options = {}) {
+  const selectedMaterials = Array.isArray(options.selectedMaterials) ? options.selectedMaterials : [];
+  const defaultTargetSlug = String(options.defaultTargetSlug || "").trim();
+  const defaultTitle = String(options.defaultTitle || "").trim();
+  const defaultPageKind = normalizeKnowledgePageKind(options.defaultPageKind);
+  const visibleMaterials = selectedMaterials.slice(0, 8);
+  const hiddenMaterialCount = Math.max(0, selectedMaterials.length - visibleMaterials.length);
+  const existing = document.getElementById("knowledge-draft-generate-overlay");
+  if (existing) existing.remove();
+
+  const materialListMarkup = visibleMaterials.length
+    ? visibleMaterials.map((material) => {
+      const meta = [
+        String(material.source_kind || "").trim(),
+        material.created_at ? formatDateTime(material.created_at) : "",
+      ].filter(Boolean).join(" · ");
+      return `
+        <div class="knowledge-draft-generate-material-card">
+          <div class="knowledge-draft-generate-material-title" title="${escapeAttribute(material.title || material.id)}">
+            ${escapeHtml(material.title || material.id)}
+          </div>
+          <div class="knowledge-draft-generate-material-meta">${escapeHtml(meta || material.id || "--")}</div>
+        </div>
+      `;
+    }).join("")
+    : '<div class="knowledge-draft-generate-material-empty">当前没有可用资料</div>';
+
+  return new Promise((resolve) => {
+    const state = {
+      targetSlug: defaultTargetSlug,
+      title: defaultTitle,
+      pageKind: defaultPageKind,
+      instruction: "",
+    };
+    let settled = false;
+
+    const overlay = document.createElement("div");
+    overlay.id = "knowledge-draft-generate-overlay";
+    overlay.className = "workflow-wizard-overlay";
+    overlay.innerHTML = `
+      <div class="workflow-wizard-modal knowledge-draft-generate-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-draft-generate-title">
+        <div class="workflow-wizard-header">
+          <div class="workflow-wizard-header-copy">
+            <div class="workflow-wizard-kicker">Knowledge Base</div>
+            <div class="workflow-wizard-title-row">
+              <div id="knowledge-draft-generate-title" class="workflow-wizard-title">生成知识库草稿</div>
+              <span class="workflow-wizard-header-badge">单次填写全部编纂选项</span>
+            </div>
+            <div class="workflow-wizard-header-desc">基于当前选中的资料直接发起后台编纂任务。页面标识、标题、类型与补充要求在一个弹窗里一次完成。</div>
+          </div>
+          <button type="button" class="workflow-wizard-action-btn workflow-wizard-close" data-knowledge-draft-close title="关闭" aria-label="关闭">
+            <span class="workflow-wizard-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 7l10 10"/><path d="M17 7L7 17"/></svg>
+            </span>
+          </button>
+        </div>
+        <div class="workflow-wizard-body workflow-wizard-body-split knowledge-draft-generate-body">
+          <div class="workflow-wizard-main">
+            <div class="workflow-wizard-section workflow-wizard-section-hero">
+              <div class="workflow-wizard-hero-grid">
+                <div>
+                  <div class="workflow-wizard-label">编纂方式</div>
+                  <div class="workflow-wizard-hero-title">用所选资料直接生成知识页草稿</div>
+                  <div class="workflow-wizard-hero-copy">资料会作为唯一事实来源发送到后台编纂任务。<code>slug</code> 和标题可留空，系统会结合上下文自动推断。</div>
+                </div>
+                <div class="workflow-wizard-metrics">
+                  <div class="workflow-wizard-metric">
+                    <span>已选资料</span>
+                    <strong>${escapeHtml(String(selectedMaterials.length))}</strong>
+                  </div>
+                  <div class="workflow-wizard-metric">
+                    <span>默认 slug</span>
+                    <strong>${escapeHtml(defaultTargetSlug || "自动")}</strong>
+                  </div>
+                  <div class="workflow-wizard-metric">
+                    <span>默认类型</span>
+                    <strong>${escapeHtml(KNOWLEDGE_PAGE_KIND_LABELS[defaultPageKind] || defaultPageKind)}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="workflow-wizard-section">
+              <div class="workflow-wizard-label">1. 页面基础信息</div>
+              <div class="workflow-wizard-subsection knowledge-draft-generate-grid">
+                <label class="knowledge-draft-generate-field">
+                  <span>目标页面 slug</span>
+                  <input id="knowledge-draft-target-slug" class="workflow-wizard-input" type="text" placeholder="例如：project-overview" value="${escapeAttribute(defaultTargetSlug)}" />
+                </label>
+                <label class="knowledge-draft-generate-field">
+                  <span>页面标题</span>
+                  <input id="knowledge-draft-title" class="workflow-wizard-input" type="text" placeholder="例如：项目总览" value="${escapeAttribute(defaultTitle)}" />
+                </label>
+                <label class="knowledge-draft-generate-field knowledge-draft-generate-field-wide">
+                  <span>页面类型</span>
+                  <select id="knowledge-draft-page-kind" class="workflow-wizard-select">
+                    ${KNOWLEDGE_PAGE_KIND_OPTIONS.map((option) => `
+                      <option value="${escapeAttribute(option.value)}"${option.value === defaultPageKind ? " selected" : ""}>${escapeHtml(option.label)}</option>
+                    `).join("")}
+                  </select>
+                </label>
+              </div>
+              <div class="workflow-wizard-field-help"><code>slug</code> 和页面标题都是可选项；留空时会在编纂任务里根据资料内容自动生成。</div>
+            </div>
+            <div class="workflow-wizard-section">
+              <div class="workflow-wizard-label">2. 补充编纂要求</div>
+              <div class="workflow-wizard-subsection">
+                <label class="knowledge-draft-generate-field">
+                  <span>编纂要求</span>
+                  <textarea id="knowledge-draft-instruction" class="workflow-wizard-input knowledge-draft-generate-textarea" rows="6" placeholder="例如：突出流程步骤，避免泛化描述"></textarea>
+                </label>
+              </div>
+              <div class="workflow-wizard-field-help">这些要求会一并发给后台编纂任务，作为页面组织方式和输出重点的补充约束。</div>
+            </div>
+          </div>
+          <aside class="workflow-wizard-sidebar-panel knowledge-draft-generate-sidebar">
+            <div class="workflow-wizard-section workflow-wizard-summary-card">
+              <div class="workflow-wizard-label">当前配置摘要</div>
+              <div id="knowledge-draft-generate-summary" class="workflow-wizard-selection-list"></div>
+            </div>
+            <div class="workflow-wizard-section workflow-wizard-validation-card" data-state="success">
+              <div class="workflow-wizard-label">已选资料</div>
+              <div class="knowledge-draft-generate-material-list">
+                ${materialListMarkup}
+              </div>
+              ${hiddenMaterialCount > 0 ? `<div class="workflow-wizard-field-help">另有 ${escapeHtml(String(hiddenMaterialCount))} 份资料未展开，提交后会一并参与编纂。</div>` : ""}
+            </div>
+          </aside>
+        </div>
+        <div class="workflow-wizard-footer">
+          <div class="workflow-wizard-footer-meta">
+            <div class="workflow-wizard-footer-label">Background job</div>
+            <div id="knowledge-draft-generate-footer-status" class="workflow-wizard-footer-status">将创建后台编纂任务</div>
+          </div>
+          <div class="workflow-wizard-footer-actions">
+            <button type="button" class="btn-ghost workflow-wizard-action-btn workflow-wizard-secondary-btn" data-knowledge-draft-close>
+              <span class="workflow-wizard-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+              </span>
+              <span>取消</span>
+            </button>
+            <button type="button" class="btn-primary workflow-wizard-action-btn workflow-wizard-submit-btn" data-knowledge-draft-submit>
+              <span class="workflow-wizard-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+              </span>
+              <span>创建草稿任务</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const targetSlugInput = overlay.querySelector("#knowledge-draft-target-slug");
+    const titleInput = overlay.querySelector("#knowledge-draft-title");
+    const pageKindSelect = overlay.querySelector("#knowledge-draft-page-kind");
+    const instructionInput = overlay.querySelector("#knowledge-draft-instruction");
+    const summaryEl = overlay.querySelector("#knowledge-draft-generate-summary");
+    const footerStatusEl = overlay.querySelector("#knowledge-draft-generate-footer-status");
+
+    function cleanup(result) {
+      if (settled) return;
+      settled = true;
+      overlay.remove();
+      resolve(result);
+    }
+
+    function renderSummary() {
+      const targetSlug = String(state.targetSlug || "").trim();
+      const title = String(state.title || "").trim();
+      const pageKind = normalizeKnowledgePageKind(state.pageKind);
+      const instruction = summarizeKnowledgeDraftInstruction(state.instruction);
+
+      summaryEl.innerHTML = `
+        <div class="workflow-wizard-selection-item">
+          <span>资料数量</span>
+          <strong>${escapeHtml(String(selectedMaterials.length))} 份</strong>
+        </div>
+        <div class="workflow-wizard-selection-item">
+          <span>目标 slug</span>
+          <strong>${escapeHtml(targetSlug || "自动生成")}</strong>
+        </div>
+        <div class="workflow-wizard-selection-item">
+          <span>页面标题</span>
+          <strong>${escapeHtml(title || "自动总结")}</strong>
+        </div>
+        <div class="workflow-wizard-selection-item">
+          <span>页面类型</span>
+          <strong>${escapeHtml(KNOWLEDGE_PAGE_KIND_LABELS[pageKind] || pageKind)}</strong>
+        </div>
+        <div class="workflow-wizard-selection-item">
+          <span>编纂要求</span>
+          <strong>${escapeHtml(instruction)}</strong>
+        </div>
+      `;
+
+      if (targetSlug && title) {
+        footerStatusEl.textContent = "将按当前 slug、标题与页面类型创建后台编纂任务";
+      } else if (targetSlug) {
+        footerStatusEl.textContent = "将使用当前 slug，其余页面信息由后台结合资料补全";
+      } else if (title) {
+        footerStatusEl.textContent = "将使用当前标题，slug 由后台结合资料自动生成";
+      } else {
+        footerStatusEl.textContent = "将依据所选资料自动推断标题与 slug，并创建后台编纂任务";
+      }
+    }
+
+    function syncState() {
+      state.targetSlug = targetSlugInput.value;
+      state.title = titleInput.value;
+      state.pageKind = pageKindSelect.value;
+      state.instruction = instructionInput.value;
+      renderSummary();
+    }
+
+    function handleSubmit() {
+      cleanup({
+        targetSlug: String(targetSlugInput.value || "").trim(),
+        title: String(titleInput.value || "").trim(),
+        pageKind: normalizeKnowledgePageKind(pageKindSelect.value),
+        instruction: String(instructionInput.value || "").trim(),
+      });
+    }
+
+    document.body.appendChild(overlay);
+    renderSummary();
+    titleInput.focus();
+    titleInput.setSelectionRange(0, titleInput.value.length);
+
+    [targetSlugInput, titleInput, pageKindSelect, instructionInput].forEach((input) => {
+      const eventName = input.tagName === "SELECT" ? "change" : "input";
+      input.addEventListener(eventName, syncState);
+      if (eventName !== "change") {
+        input.addEventListener("change", syncState);
+      }
+    });
+
+    Array.from(overlay.querySelectorAll("[data-knowledge-draft-close]")).forEach((button) => {
+      button.addEventListener("click", () => cleanup(null));
+    });
+    overlay.querySelector("[data-knowledge-draft-submit]").addEventListener("click", handleSubmit);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) cleanup(null);
+    });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanup(null);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        handleSubmit();
+      }
+    });
+  });
+}
+
 async function generateKnowledgeDraft() {
-  const materialIds = Array.from(knowledgeSelectedMaterialIds);
-  if (!materialIds.length) {
+  const selectedMaterials = getSelectedKnowledgeMaterials();
+  const materialIds = selectedMaterials.map((material) => material.id);
+  if (!selectedMaterials.length) {
     showToast("请先勾选至少一份资料");
     return;
   }
@@ -3656,40 +3941,25 @@ async function generateKnowledgeDraft() {
   const selectedPage = knowledgePages.find((page) => page.slug === currentKnowledgePageSlug) || null;
   const defaultTargetSlug = selectedPage?.slug || selectedDraft?.target_slug || "";
   const defaultTitle = selectedPage?.title || selectedDraft?.title || "";
-  const defaultPageKind = selectedPage?.page_kind || selectedDraft?.page_kind || "project";
+  const defaultPageKind = normalizeKnowledgePageKind(selectedPage?.page_kind || selectedDraft?.page_kind || "project");
 
-  const targetSlug = await openTextPrompt("目标页面 slug（可选；留空时由编纂任务自行生成）", defaultTargetSlug, {
-    title: "生成知识库草稿",
-    placeholder: "例如：project-overview",
-  });
-  if (targetSlug === null) return;
-
-  const title = await openTextPrompt("页面标题（可选）", defaultTitle, {
-    title: "生成知识库草稿",
-  });
-  if (title === null) return;
-  const pageKind = await openTextPrompt(
-    "页面类型（project/concept/decision/procedure/person/glossary）",
+  const payload = await openKnowledgeDraftGenerateDialog({
+    selectedMaterials,
+    defaultTargetSlug,
+    defaultTitle,
     defaultPageKind,
-    { title: "生成知识库草稿" },
-  );
-  if (pageKind === null) return;
-  const instruction = await openTextPrompt("补充编纂要求（可选）", "", {
-    title: "生成知识库草稿",
-    multiline: true,
-    placeholder: "例如：突出流程步骤，避免泛化描述",
   });
-  if (instruction === null) return;
+  if (!payload) return;
 
   try {
     const res = await apiFetch("/api/wiki/draft/generate", {
       method: "POST",
       body: JSON.stringify({
         material_ids: materialIds,
-        target_slug: String(targetSlug || "").trim(),
-        title: String(title || "").trim(),
-        page_kind: String(pageKind || "").trim(),
-        instruction: String(instruction || "").trim(),
+        target_slug: payload.targetSlug,
+        title: payload.title,
+        page_kind: payload.pageKind,
+        instruction: payload.instruction,
       }),
     });
     const data = await res.json().catch(() => ({}));
