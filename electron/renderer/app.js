@@ -2899,7 +2899,7 @@ function renderKnowledgeDetailActions(actions) {
 }
 
 function renderKnowledgeReferenceList(items, renderItem) {
-  if (!Array.isArray(items) || items.length === 0) return "<div>无</div>";
+  if (!Array.isArray(items) || items.length === 0) return '<div class="knowledge-empty-inline">无</div>';
   return `
     <div class="knowledge-reference-list">
       ${items.map((item) => renderItem(item)).join("")}
@@ -2930,7 +2930,7 @@ function renderKnowledgeDiffMetric(label, count, tone) {
 }
 
 function renderKnowledgeMaterialIdList(ids) {
-  if (!Array.isArray(ids) || ids.length === 0) return "<div>无</div>";
+  if (!Array.isArray(ids) || ids.length === 0) return '<div class="knowledge-empty-inline">无</div>';
   return `
     <div class="knowledge-chip-list">
       ${ids.map((id) => `<span class="knowledge-chip">${escapeHtml(id)}</span>`).join("")}
@@ -2938,8 +2938,52 @@ function renderKnowledgeMaterialIdList(ids) {
   `;
 }
 
+function renderKnowledgeSection(title, bodyHtml, options = {}) {
+  const bodyClass = typeof options.bodyClass === "string" && options.bodyClass.trim()
+    ? ` ${options.bodyClass.trim()}`
+    : "";
+  const note = typeof options.note === "string" && options.note.trim()
+    ? `<span class="knowledge-detail-section-note">${escapeHtml(options.note.trim())}</span>`
+    : "";
+  return `
+    <section class="knowledge-detail-section">
+      <div class="knowledge-detail-section-head">
+        <h3>${escapeHtml(title || "详情")}</h3>
+        ${note}
+      </div>
+      <div class="knowledge-detail-body${bodyClass}">
+        ${bodyHtml}
+      </div>
+    </section>
+  `;
+}
+
+function renderKnowledgeTextBody(text, emptyText = "无") {
+  const value = String(text || "").trim();
+  return `<div class="knowledge-detail-prose${value ? "" : " empty"}">${escapeHtml(value || emptyText)}</div>`;
+}
+
+function renderKnowledgeMarkdownBody(markdown, emptyText = "无") {
+  const value = String(markdown || "").trim();
+  if (!value) {
+    return `<div class="knowledge-empty-inline">${escapeHtml(emptyText)}</div>`;
+  }
+  return `<div class="knowledge-detail-rich">${renderMarkdown(value)}</div>`;
+}
+
+function renderKnowledgeCardList(items, renderItem, emptyText = "无") {
+  if (!Array.isArray(items) || items.length === 0) {
+    return `<div class="knowledge-empty-inline">${escapeHtml(emptyText)}</div>`;
+  }
+  return `
+    <div class="knowledge-detail-card-list">
+      ${items.map((item) => `<div class="knowledge-detail-card">${renderItem(item)}</div>`).join("")}
+    </div>
+  `;
+}
+
 function renderKnowledgeClaimPreviewList(items, kind) {
-  if (!Array.isArray(items) || items.length === 0) return "<div>无</div>";
+  if (!Array.isArray(items) || items.length === 0) return '<div class="knowledge-empty-inline">无</div>';
   return `
     <div class="knowledge-diff-list">
       ${items.map((item) => {
@@ -2967,7 +3011,7 @@ function renderKnowledgeClaimPreviewList(items, kind) {
 }
 
 function renderKnowledgeRelationPreviewList(items, kind) {
-  if (!Array.isArray(items) || items.length === 0) return "<div>无</div>";
+  if (!Array.isArray(items) || items.length === 0) return '<div class="knowledge-empty-inline">无</div>';
   return `
     <div class="knowledge-diff-list">
       ${items.map((item) => {
@@ -2990,7 +3034,7 @@ function renderKnowledgeRelationPreviewList(items, kind) {
 }
 
 function renderKnowledgeContentDiff(contentDiff) {
-  if (!contentDiff) return "<div>无</div>";
+  if (!contentDiff) return '<div class="knowledge-empty-inline">无</div>';
   const changedBlocks = Array.isArray(contentDiff.blocks)
     ? contentDiff.blocks.filter((block) => block.kind !== "unchanged")
     : [];
@@ -3033,10 +3077,9 @@ function renderKnowledgeDraftPublishPreview(preview) {
   ].filter(Boolean) : [];
   const modeLabel = preview.mode === "create" ? "新建页面" : "更新现有页面";
   const existingPage = preview.existing_page || null;
-
-  return `
-    <div class="knowledge-detail-section">
-      <h3>发布预览</h3>
+  return renderKnowledgeSection(
+    "发布预览",
+    `
       <div class="knowledge-diff-summary">
         <div class="knowledge-diff-summary-line">
           <span class="knowledge-diff-pill ${preview.mode === "create" ? "added" : "updated"}">${escapeHtml(modeLabel)}</span>
@@ -3092,8 +3135,9 @@ function renderKnowledgeDraftPublishPreview(preview) {
         <strong>移除关系</strong>
         ${renderKnowledgeRelationPreviewList(preview.relations?.removed || [], "removed")}
       </div>
-    </div>
-  `;
+    `,
+    { bodyClass: "knowledge-detail-body-rich knowledge-detail-body-accent" },
+  );
 }
 
 async function openKnowledgeMaterialDetail(materialId) {
@@ -3118,12 +3162,10 @@ async function openKnowledgeMaterialDetail(materialId) {
         `<strong>创建时间</strong>${escapeHtml(formatDateTime(material.created_at))}`,
       ],
       `
-        <div class="knowledge-detail-section">
-          <h3>说明</h3>
-          <div>${escapeHtml(material.note || "无")}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>引用状态</h3>
+        ${renderKnowledgeSection("说明", renderKnowledgeTextBody(material.note || "无"))}
+        ${renderKnowledgeSection(
+          "引用状态",
+          `
           <div class="knowledge-diff-grid">
             ${renderKnowledgeDiffMetric("引用页面", (usage.page_refs || []).length, (usage.page_refs || []).length ? "updated" : "neutral")}
             ${renderKnowledgeDiffMetric("关联草稿", (usage.draft_refs || []).length, (usage.draft_refs || []).length ? "updated" : "neutral")}
@@ -3160,11 +3202,14 @@ async function openKnowledgeMaterialDetail(materialId) {
           ${usage.can_delete
             ? '<div class="muted">当前没有页面、草稿或运行中任务依赖这份资料。</div>'
             : '<div class="knowledge-detail-warning">这份资料仍被知识库引用。要删除它，先删除相关草稿，或让页面改用其他资料后再重试。</div>'}
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>原始文本</h3>
-          <pre class="knowledge-detail-pre">${escapeHtml(data.extracted_text || "")}</pre>
-        </div>
+          `,
+          { bodyClass: "knowledge-detail-body-rich knowledge-detail-body-accent" },
+        )}
+        ${renderKnowledgeSection(
+          "原始文本",
+          `<pre class="knowledge-detail-pre">${escapeHtml(data.extracted_text || "")}</pre>`,
+          { bodyClass: "knowledge-detail-body-code" },
+        )}
       `,
       [
         {
@@ -3213,23 +3258,35 @@ async function openKnowledgeDraftDetail(draftId) {
         `<strong>状态</strong>${escapeHtml(detail.draft.status || "draft")}`,
       ],
       `
-        <div class="knowledge-detail-section">
-          <h3>摘要</h3>
-          <div>${escapeHtml(detail.draft.summary || "无摘要")}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>引用资料</h3>
-          <div>${materials.map((item) => `<div>${escapeHtml(item.title || item.id)}</div>`).join("") || "<div>无</div>"}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>知识陈述</h3>
-          <div>${claims.map((claim) => `<div>• ${escapeHtml(claim.statement || "")}</div>`).join("") || "<div>无</div>"}</div>
-        </div>
+        ${renderKnowledgeSection("摘要", renderKnowledgeTextBody(detail.draft.summary || "无摘要"))}
+        ${renderKnowledgeSection(
+          "引用资料",
+          renderKnowledgeCardList(
+            materials,
+            (item) => `
+              <div class="knowledge-detail-card-title">${escapeHtml(item.title || item.id)}</div>
+              <div class="knowledge-detail-card-meta">${escapeHtml(item.id || "")}</div>
+            `,
+          ),
+        )}
+        ${renderKnowledgeSection(
+          "知识陈述",
+          renderKnowledgeCardList(
+            claims,
+            (claim) => `
+              <div class="knowledge-detail-card-label">${escapeHtml(claim.claim_type || "陈述")}</div>
+              <div class="knowledge-detail-card-title">${escapeHtml(claim.statement || "")}</div>
+              <div class="knowledge-detail-card-meta">${escapeHtml(claim.canonical_form || "")}</div>
+            `,
+          ),
+          { bodyClass: "knowledge-detail-body-rich" },
+        )}
         ${renderKnowledgeDraftPublishPreview(publishPreview)}
-        <div class="knowledge-detail-section">
-          <h3>草稿正文</h3>
-          <div>${renderMarkdown(detail.compiled?.page?.content_markdown || detail.draft.content_markdown || "")}</div>
-        </div>
+        ${renderKnowledgeSection(
+          "草稿正文",
+          renderKnowledgeMarkdownBody(detail.compiled?.page?.content_markdown || detail.draft.content_markdown || ""),
+          { bodyClass: "knowledge-detail-body-rich" },
+        )}
       `,
       [
         detail.draft.status === "published"
@@ -3280,32 +3337,48 @@ async function openKnowledgePageDetail(pageSlug) {
         `<strong>更新时间</strong>${escapeHtml(formatDateTime(data.page.updated_at))}`,
       ],
       `
-        <div class="knowledge-detail-section">
-          <h3>摘要</h3>
-          <div>${escapeHtml(data.page.summary || "无摘要")}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>正文</h3>
-          <div>${renderMarkdown(data.page.content_markdown || "")}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>知识陈述</h3>
-          <div>${claimRows.map((claim) => `
-            <div style="margin-bottom:10px;">
-              <strong>${escapeHtml(claim.claim_type || "claim")}</strong> · ${escapeHtml(claim.statement || "")}
-            </div>
-          `).join("") || "<div>无</div>"}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>引用资料</h3>
-          <div>${materialRows.map((item) => `<div>${escapeHtml(item.title || item.id)}</div>`).join("") || "<div>无</div>"}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>关联关系</h3>
-          <div>${relationRows.map((relation) => `<div>${escapeHtml(relation.relation_type || "related_to")} → ${escapeHtml(relation.to_page_slug || "")}</div>`).join("") || "<div>无</div>"}</div>
-        </div>
-        <div class="knowledge-detail-section">
-          <h3>被这些页面引用</h3>
+        ${renderKnowledgeSection("摘要", renderKnowledgeTextBody(data.page.summary || "无摘要"))}
+        ${renderKnowledgeSection(
+          "正文",
+          renderKnowledgeMarkdownBody(data.page.content_markdown || ""),
+          { bodyClass: "knowledge-detail-body-rich" },
+        )}
+        ${renderKnowledgeSection(
+          "知识陈述",
+          renderKnowledgeCardList(
+            claimRows,
+            (claim) => `
+              <div class="knowledge-detail-card-label">${escapeHtml(claim.claim_type || "陈述")}</div>
+              <div class="knowledge-detail-card-title">${escapeHtml(claim.statement || "")}</div>
+              <div class="knowledge-detail-card-meta">${escapeHtml((claim.evidence || []).length ? `证据 ${(claim.evidence || []).length} 条` : "暂无证据")}</div>
+            `,
+          ),
+          { bodyClass: "knowledge-detail-body-rich" },
+        )}
+        ${renderKnowledgeSection(
+          "引用资料",
+          renderKnowledgeCardList(
+            materialRows,
+            (item) => `
+              <div class="knowledge-detail-card-title">${escapeHtml(item.title || item.id)}</div>
+              <div class="knowledge-detail-card-meta">${escapeHtml(item.id || "")}</div>
+            `,
+          ),
+        )}
+        ${renderKnowledgeSection(
+          "关联关系",
+          renderKnowledgeCardList(
+            relationRows,
+            (relation) => `
+              <div class="knowledge-detail-card-label">${escapeHtml(relation.relation_type || "related_to")}</div>
+              <div class="knowledge-detail-card-title">${escapeHtml(relation.to_page_slug || "未指定目标")}</div>
+              <div class="knowledge-detail-card-meta">${escapeHtml(relation.rationale || "无补充说明")}</div>
+            `,
+          ),
+        )}
+        ${renderKnowledgeSection(
+          "被这些页面引用",
+          `
           ${renderKnowledgeReferenceList(incomingRelationRows, (relation) => `
             <div class="knowledge-reference-card">
               <strong>${escapeHtml(relation.from_page_title || relation.from_page_slug || "")}</strong>
@@ -3315,7 +3388,9 @@ async function openKnowledgePageDetail(pageSlug) {
           ${incomingRelationRows.length
             ? `<div class="knowledge-detail-warning">删除此页面时，会一并移除其他页面指向它的 ${escapeHtml(String(incomingRelationRows.length))} 条关系。</div>`
             : ""}
-        </div>
+          `,
+          { bodyClass: "knowledge-detail-body-rich knowledge-detail-body-accent" },
+        )}
       `,
       [
         {
