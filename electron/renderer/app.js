@@ -2625,13 +2625,6 @@ function renderKnowledgeMaterials() {
     item.innerHTML = `
       <div class="knowledge-list-item-head">
         <div class="knowledge-list-item-title">${escapeHtml(material.title || material.id)}</div>
-        <div class="knowledge-list-item-head-actions">
-          <span class="knowledge-status-pill ${escapeAttribute(dependencyTone)}">${escapeHtml(dependencyLabel)}</span>
-          <label class="knowledge-selection-toggle">
-            <input type="checkbox" data-material-select="${escapeAttribute(material.id)}" ${checked ? "checked" : ""} />
-            选中
-          </label>
-        </div>
       </div>
       <div class="knowledge-list-item-meta">
         <span>${escapeHtml(material.source_kind || "--")}</span>
@@ -2639,6 +2632,13 @@ function renderKnowledgeMaterials() {
         <span>${escapeHtml(`草稿 ${usageSummary.draft_ref_count || 0}`)}</span>
         <span>${escapeHtml(`证据 ${usageSummary.evidence_count || 0}`)}</span>
         <span>${escapeHtml(formatDateTime(material.created_at))}</span>
+      </div>
+      <div class="knowledge-list-item-actions">
+        <span class="knowledge-status-pill ${escapeAttribute(dependencyTone)}">${escapeHtml(dependencyLabel)}</span>
+        <label class="knowledge-selection-toggle">
+          <input type="checkbox" data-material-select="${escapeAttribute(material.id)}" ${checked ? "checked" : ""} />
+          选中
+        </label>
       </div>
     `;
     const checkbox = item.querySelector('input[data-material-select]');
@@ -2681,18 +2681,18 @@ function renderKnowledgeDrafts() {
     item.innerHTML = `
       <div class="knowledge-list-item-head">
         <div class="knowledge-list-item-title">${escapeHtml(draft.title || draft.target_slug || draft.id)}</div>
-        <div class="knowledge-list-item-head-actions">
-          <span class="knowledge-status-pill ${escapeHtml(draft.status || "draft")}">${escapeHtml(draft.status || "draft")}</span>
-          <label class="knowledge-selection-toggle" title="${escapeAttribute(selectable ? "加入批量删除" : "已发布草稿不参与批量删除")}">
-            <input type="checkbox" data-draft-select="${escapeAttribute(draft.id)}" ${checked ? "checked" : ""} ${selectable ? "" : "disabled"} />
-            选中
-          </label>
-        </div>
       </div>
       <div class="knowledge-list-item-meta">
         <span>${escapeHtml(draft.page_kind || "--")}</span>
         <span>${escapeHtml(draft.target_slug || "--")}</span>
         <span>${escapeHtml(`资料 ${draft.material_count || 0}`)}</span>
+      </div>
+      <div class="knowledge-list-item-actions">
+        <span class="knowledge-status-pill ${escapeHtml(draft.status || "draft")}">${escapeHtml(draft.status || "draft")}</span>
+        <label class="knowledge-selection-toggle" title="${escapeAttribute(selectable ? "加入批量删除" : "已发布草稿不参与批量删除")}">
+          <input type="checkbox" data-draft-select="${escapeAttribute(draft.id)}" ${checked ? "checked" : ""} ${selectable ? "" : "disabled"} />
+          选中
+        </label>
       </div>
     `;
     const checkbox = item.querySelector('input[data-draft-select]');
@@ -2733,12 +2733,14 @@ function renderKnowledgePages() {
     item.innerHTML = `
       <div class="knowledge-list-item-head">
         <div class="knowledge-list-item-title">${escapeHtml(page.title || page.slug)}</div>
-        <span class="knowledge-status-pill ${escapeHtml(page.status || "published")}">${escapeHtml(page.status || "published")}</span>
       </div>
       <div class="knowledge-list-item-meta">
         <span>${escapeHtml(page.page_kind || "--")}</span>
         <span>${escapeHtml(page.slug || "--")}</span>
         <span>${escapeHtml(`入链 ${page.incoming_relation_count || 0}`)}</span>
+      </div>
+      <div class="knowledge-list-item-actions">
+        <span class="knowledge-status-pill ${escapeHtml(page.status || "published")}">${escapeHtml(page.status || "published")}</span>
       </div>
     `;
     item.addEventListener("click", () => {

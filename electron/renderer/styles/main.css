@@ -4018,9 +4018,9 @@ body.quick-chat-window .quick-chat-input {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  height: 118px;
-  justify-content: space-between;
+  gap: 6px;
+  height: 122px;
+  justify-content: flex-start;
   overflow: hidden;
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
@@ -4034,24 +4034,10 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .knowledge-list-item-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
   min-width: 0;
-}
-
-.knowledge-list-item-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
 }
 
 .knowledge-list-item-title {
-  flex: 1 1 auto;
-  min-width: 0;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.35;
@@ -4071,6 +4057,15 @@ body.quick-chat-window .quick-chat-input {
   line-height: 1.45;
   max-height: calc(1.45em * 2);
   overflow: hidden;
+}
+
+.knowledge-list-item-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .knowledge-selection-toggle {
