@@ -6893,6 +6893,11 @@ body.quick-chat-window .quick-chat-input {
   font-size: 13px;
 }
 
+#knowledge-management-screen .knowledge-list > .trace-monitor-list-empty {
+  background: transparent;
+  box-shadow: none;
+}
+
 .trace-monitor-list-item {
   appearance: none;
   width: calc(100% - 24px);
