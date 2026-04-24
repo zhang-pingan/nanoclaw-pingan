@@ -30,12 +30,9 @@ description: Design implementation plans for new requirements — analyze code, 
    - `需求描述：...`
    - `附件文件：...` 下列出的本地文件地址
    - 如果 `附件文件` 为 `无`，按无附件处理
-2. 检查 `/workspace/projects/{服务名}/docs` 下是否存在文档。如果存在：
-   - 阅读 `overview.md` 了解项目全貌和领域划分
-   - 根据需求涉及的领域，阅读对应的 `domains/{领域名}.md`
-   - 如需查找已有接口，阅读 `api-overview.md`
-   - 如需了解跨领域数据关系，阅读 `data-model.md`
-   - 阅读 `downstream-dependencies.md` 了解下游服务依赖关系
+2. 项目概述参考:
+   - 检查 `/workspace/projects/{服务名}/docs` 下是否存在文档。如果存在，阅读文档了解
+   - 使用 `wiki_search` 获取知识库中关于该服务的内容进行了解
 3. 优先阅读需求附件中可直接打开的文件（PRD、原型、接口文档、日志、截图说明等），提炼目标、约束与验收口径
 4. 阅读项目代码中相关的文件，理解现有实现,当文档和代码有冲突时以代码为准
 5. **下游服务联动分析**：如果需求可能涉及下游服务的改动（如修改调用接口的参数、新增对下游的调用、变更交互协议等），检查 `downstream-dependencies.md` 中该下游服务是否有 services.json 映射。如果有映射：

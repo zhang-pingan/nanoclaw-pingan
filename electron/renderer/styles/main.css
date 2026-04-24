@@ -10409,6 +10409,41 @@ body.quick-chat-window .quick-chat-input {
   flex-shrink: 0;
 }
 
+.knowledge-text-import-modal {
+  width: min(960px, 94vw);
+}
+
+.knowledge-text-import-body {
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+}
+
+.knowledge-text-import-field {
+  display: grid;
+  gap: 8px;
+}
+
+.knowledge-text-import-field span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.knowledge-text-import-textarea {
+  min-height: 260px;
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.knowledge-text-import-sidebar {
+  gap: 16px;
+}
+
+.knowledge-text-import-modal .workflow-wizard-metric strong {
+  font-size: 18px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .knowledge-draft-generate-modal {
   width: min(1020px, 94vw);
 }

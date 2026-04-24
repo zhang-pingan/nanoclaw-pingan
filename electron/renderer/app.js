@@ -3658,24 +3658,242 @@ function showKnowledgeMaterialContextMenu(e, material) {
   requestAnimationFrame(() => document.addEventListener("click", closeHandler));
 }
 
+function openKnowledgeTextImportDialog() {
+  const existing = document.getElementById("knowledge-text-import-overlay");
+  if (existing) existing.remove();
+
+  return new Promise((resolve) => {
+    const state = {
+      title: "",
+      text: "",
+    };
+    let settled = false;
+
+    const overlay = document.createElement("div");
+    overlay.id = "knowledge-text-import-overlay";
+    overlay.className = "workflow-wizard-overlay";
+    overlay.innerHTML = `
+      <div class="workflow-wizard-modal knowledge-text-import-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-text-import-title">
+        <div class="workflow-wizard-header">
+          <div class="workflow-wizard-header-copy">
+            <div class="workflow-wizard-kicker">Knowledge Base</div>
+            <div class="workflow-wizard-title-row">
+              <div id="knowledge-text-import-title" class="workflow-wizard-title">导入文本资料</div>
+              <span class="workflow-wizard-header-badge">单次填写标题与正文</span>
+            </div>
+            <div class="workflow-wizard-header-desc">把资料标题和正文集中在一个弹窗里完成，提交后直接写入知识库资料快照。</div>
+          </div>
+          <button type="button" class="workflow-wizard-action-btn workflow-wizard-close" data-knowledge-text-import-close title="关闭" aria-label="关闭">
+            <span class="workflow-wizard-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 7l10 10"/><path d="M17 7L7 17"/></svg>
+            </span>
+          </button>
+        </div>
+        <div class="workflow-wizard-body workflow-wizard-body-split knowledge-text-import-body">
+          <div class="workflow-wizard-main">
+            <div class="workflow-wizard-section workflow-wizard-section-hero">
+              <div class="workflow-wizard-hero-grid">
+                <div>
+                  <div class="workflow-wizard-label">导入方式</div>
+                  <div class="workflow-wizard-hero-title">粘贴文本生成资料快照</div>
+                  <div class="workflow-wizard-hero-copy">文本会作为用户显式提供的资料进入知识库，后续可勾选资料生成草稿。</div>
+                </div>
+                <div class="workflow-wizard-metrics">
+                  <div class="workflow-wizard-metric">
+                    <span>资料来源</span>
+                    <strong>文本</strong>
+                  </div>
+                  <div class="workflow-wizard-metric">
+                    <span>资料标题</span>
+                    <strong id="knowledge-text-import-title-metric">未命名资料</strong>
+                  </div>
+                  <div class="workflow-wizard-metric">
+                    <span>正文字数</span>
+                    <strong id="knowledge-text-import-count-metric">0</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="workflow-wizard-section">
+              <div class="workflow-wizard-label">1. 资料标题</div>
+              <div class="workflow-wizard-subsection">
+                <label class="knowledge-text-import-field">
+                  <span>标题</span>
+                  <input id="knowledge-text-import-name" class="workflow-wizard-input" type="text" placeholder="例如：项目部署说明" />
+                </label>
+              </div>
+              <div class="workflow-wizard-field-help">标题可留空；留空时会以“未命名资料”导入。</div>
+            </div>
+            <div class="workflow-wizard-section">
+              <div class="workflow-wizard-label">2. 资料正文</div>
+              <div class="workflow-wizard-subsection">
+                <label class="knowledge-text-import-field">
+                  <span>正文</span>
+                  <textarea id="knowledge-text-import-content" class="workflow-wizard-input knowledge-text-import-textarea" rows="10" placeholder="粘贴要导入知识库的资料文本"></textarea>
+                </label>
+              </div>
+              <div class="workflow-wizard-field-help">正文不能为空。提交后会保留原始换行和格式文本。</div>
+            </div>
+          </div>
+          <aside class="workflow-wizard-sidebar-panel knowledge-text-import-sidebar">
+            <div class="workflow-wizard-section workflow-wizard-summary-card">
+              <div class="workflow-wizard-label">当前导入摘要</div>
+              <div id="knowledge-text-import-summary" class="workflow-wizard-selection-list"></div>
+            </div>
+            <div id="knowledge-text-import-validation" class="workflow-wizard-section workflow-wizard-validation-card" data-state="warning">
+              <div class="workflow-wizard-label">校验提示</div>
+              <div id="knowledge-text-import-hint" class="workflow-wizard-hint"></div>
+            </div>
+          </aside>
+        </div>
+        <div class="workflow-wizard-footer">
+          <div class="workflow-wizard-footer-meta">
+            <div class="workflow-wizard-footer-label">Import material</div>
+            <div id="knowledge-text-import-footer-status" class="workflow-wizard-footer-status">请先填写资料正文</div>
+          </div>
+          <div class="workflow-wizard-footer-actions">
+            <button type="button" class="btn-ghost workflow-wizard-action-btn workflow-wizard-secondary-btn" data-knowledge-text-import-close>
+              <span class="workflow-wizard-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+              </span>
+              <span>取消</span>
+            </button>
+            <button type="button" class="btn-primary workflow-wizard-action-btn workflow-wizard-submit-btn" data-knowledge-text-import-submit disabled>
+              <span class="workflow-wizard-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+              </span>
+              <span>导入资料</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const titleInput = overlay.querySelector("#knowledge-text-import-name");
+    const textInput = overlay.querySelector("#knowledge-text-import-content");
+    const titleMetricEl = overlay.querySelector("#knowledge-text-import-title-metric");
+    const countMetricEl = overlay.querySelector("#knowledge-text-import-count-metric");
+    const summaryEl = overlay.querySelector("#knowledge-text-import-summary");
+    const validationCardEl = overlay.querySelector("#knowledge-text-import-validation");
+    const hintEl = overlay.querySelector("#knowledge-text-import-hint");
+    const footerStatusEl = overlay.querySelector("#knowledge-text-import-footer-status");
+    const submitBtn = overlay.querySelector("[data-knowledge-text-import-submit]");
+
+    function cleanup(result) {
+      if (settled) return;
+      settled = true;
+      overlay.remove();
+      resolve(result);
+    }
+
+    function renderSummary() {
+      const title = String(state.title || "").trim();
+      const text = String(state.text || "");
+      const trimmedText = text.trim();
+      const charCount = Array.from(text).length;
+      const lineCount = trimmedText ? trimmedText.split(/\r\n|\r|\n/).length : 0;
+      const preview = trimmedText
+        ? trimmedText.replace(/\s+/g, " ").slice(0, 88)
+        : "未填写";
+
+      titleMetricEl.textContent = title || "未命名资料";
+      countMetricEl.textContent = String(charCount);
+      summaryEl.innerHTML = `
+        <div class="workflow-wizard-selection-item">
+          <span>资料标题</span>
+          <strong>${escapeHtml(title || "未命名资料")}</strong>
+        </div>
+        <div class="workflow-wizard-selection-item">
+          <span>正文长度</span>
+          <strong>${escapeHtml(`${charCount} 字 · ${lineCount} 行`)}</strong>
+        </div>
+        <div class="workflow-wizard-selection-item">
+          <span>内容预览</span>
+          <strong>${escapeHtml(preview)}</strong>
+        </div>
+      `;
+
+      if (trimmedText) {
+        validationCardEl.dataset.state = "success";
+        hintEl.textContent = "资料正文已填写，可以导入知识库。";
+        footerStatusEl.textContent = title
+          ? "将按当前标题导入文本资料"
+          : "将以“未命名资料”导入文本资料";
+        submitBtn.disabled = false;
+      } else {
+        validationCardEl.dataset.state = "warning";
+        hintEl.textContent = "请先粘贴资料正文。";
+        footerStatusEl.textContent = "请先填写资料正文";
+        submitBtn.disabled = true;
+      }
+    }
+
+    function syncState() {
+      state.title = titleInput.value;
+      state.text = textInput.value;
+      renderSummary();
+    }
+
+    function handleSubmit() {
+      syncState();
+      const text = String(state.text || "");
+      if (!text.trim()) {
+        textInput.focus();
+        return;
+      }
+      cleanup({
+        title: String(state.title || "").trim() || "未命名资料",
+        text,
+      });
+    }
+
+    document.body.appendChild(overlay);
+    renderSummary();
+    titleInput.focus();
+
+    [titleInput, textInput].forEach((input) => {
+      input.addEventListener("input", syncState);
+      input.addEventListener("change", syncState);
+    });
+
+    titleInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        textInput.focus();
+      }
+    });
+
+    Array.from(overlay.querySelectorAll("[data-knowledge-text-import-close]")).forEach((button) => {
+      button.addEventListener("click", () => cleanup(null));
+    });
+    submitBtn.addEventListener("click", handleSubmit);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) cleanup(null);
+    });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanup(null);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        handleSubmit();
+      }
+    });
+  });
+}
+
 async function importKnowledgeText() {
-  const title = await openTextPrompt("请输入资料标题", "", {
-    title: "导入文本资料",
-  });
-  if (title === null) return;
-  const text = await openTextPrompt("粘贴资料正文", "", {
-    title: "导入文本资料",
-    multiline: true,
-    placeholder: "仅会导入你主动提供的资料文本",
-  });
-  if (text === null || !String(text).trim()) return;
+  const payload = await openKnowledgeTextImportDialog();
+  if (!payload) return;
 
   try {
     const res = await apiFetch("/api/wiki/materials/import", {
       method: "POST",
       body: JSON.stringify({
-        title: String(title).trim() || "未命名资料",
-        text: String(text),
+        title: payload.title,
+        text: payload.text,
       }),
     });
     const data = await res.json().catch(() => ({}));
