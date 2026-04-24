@@ -3751,13 +3751,6 @@ body.quick-chat-window .quick-chat-input {
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.7), 0 10px 24px rgba(22, 163, 74, 0.08);
 }
 
-.knowledge-sidebar-toolbar {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 0 18px 16px;
-}
-
 .knowledge-sidebar-section {
   padding: 0 18px 18px;
   display: flex;

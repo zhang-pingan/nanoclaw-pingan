@@ -24,6 +24,7 @@ import {
 import { KNOWLEDGE_WIKI_DIR } from './config.js';
 import {
   bulkDeleteWikiDrafts,
+  clearWikiData,
   deleteWikiDraft,
   deleteWikiMaterial,
   deleteWikiPage,
@@ -702,5 +703,88 @@ describe('wiki', () => {
     expect(fs.existsSync(draftOnlyPath)).toBe(false);
     expect(getWikiDraft(String(publishedDraftId))?.status).toBe('published');
     expect(getWikiPage(publishedSlug)?.slug).toBe(publishedSlug);
+  });
+
+  it('clears the whole LLM wiki and removes stored artifacts', async () => {
+    const testSlug = `wiki-clear-${Date.now()}`;
+    const material = importWikiMaterialFromText({
+      title: '清空 Wiki 资料',
+      text: '这份资料用于验证一键清空 LLM Wiki。',
+    });
+    rememberMaterialArtifacts(material);
+
+    callAnthropicMessagesMock.mockResolvedValueOnce({
+      model: 'test-model',
+      raw: {},
+      text: JSON.stringify({
+        page: {
+          slug: testSlug,
+          title: 'Clear Wiki Page',
+          page_kind: 'project',
+          summary: '用于验证清空',
+          content_markdown: '# Clear Wiki Page\n\n清空前会先发布这页。',
+        },
+        claims: [
+          {
+            claim_type: 'fact',
+            statement: '一键清空会移除页面、草稿、资料和任务记录。',
+            canonical_form: '一键清空会移除页面草稿资料和任务记录',
+            confidence: 0.88,
+            evidence: [
+              {
+                material_id: material.id,
+                excerpt_text: '一键清空会移除页面、草稿、资料和任务记录。',
+              },
+            ],
+          },
+        ],
+        relations: [],
+      }),
+    });
+
+    const job = queueWikiDraftGenerationJob({
+      materialIds: [material.id],
+      targetSlug: testSlug,
+      title: 'Clear Wiki Page',
+      pageKind: 'project',
+    });
+    const completedJob = await waitForJobCompletion(job.id);
+    const draftId = JSON.parse(String(completedJob.result_json || '{}')).draft_id;
+    const draftDetail = getWikiDraftDetail(String(draftId));
+    const draftFilePath = String(draftDetail?.draft.file_path || '');
+    rememberPath(draftFilePath);
+
+    const publishResult = publishWikiDraft(String(draftId));
+    const pageFilePath = publishResult.page.file_path;
+    rememberPath(pageFilePath);
+
+    const materialDir = path.dirname(material.stored_path);
+    expect(getWikiMaterial(material.id)?.id).toBe(material.id);
+    expect(getWikiDraft(String(draftId))?.id).toBe(String(draftId));
+    expect(getWikiPage(testSlug)?.slug).toBe(testSlug);
+    expect(listWikiClaimsByPage(testSlug)).toHaveLength(1);
+    expect(getWikiJob(job.id)?.id).toBe(job.id);
+    expect(fs.existsSync(materialDir)).toBe(true);
+    expect(fs.existsSync(draftFilePath)).toBe(true);
+    expect(fs.existsSync(pageFilePath)).toBe(true);
+
+    const summary = clearWikiData();
+
+    expect(summary.material_count).toBe(1);
+    expect(summary.draft_count).toBe(1);
+    expect(summary.page_count).toBe(1);
+    expect(summary.claim_count).toBe(1);
+    expect(summary.evidence_count).toBe(1);
+    expect(summary.relation_count).toBe(0);
+    expect(summary.job_count).toBe(1);
+    expect(getWikiMaterial(material.id)).toBeUndefined();
+    expect(getWikiDraft(String(draftId))).toBeUndefined();
+    expect(getWikiPage(testSlug)).toBeUndefined();
+    expect(getWikiJob(job.id)).toBeUndefined();
+    expect(listWikiClaimsByPage(testSlug, { includeDeprecated: true })).toHaveLength(0);
+    expect(listWikiRelationsForPage(testSlug)).toHaveLength(0);
+    expect(fs.existsSync(materialDir)).toBe(false);
+    expect(fs.existsSync(draftFilePath)).toBe(false);
+    expect(fs.existsSync(pageFilePath)).toBe(false);
   });
 });

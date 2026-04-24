@@ -681,6 +681,12 @@
               <h2>知识库管理</h2>
             </div>
             <div class="workflow-definitions-sidebar-actions">
+              <button id="knowledge-import-btn" class="icon-btn" title="导入资料" aria-label="导入资料" aria-haspopup="menu" aria-expanded="false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14"></path>
+                  <path d="M5 12h14"></path>
+                </svg>
+              </button>
               <button id="knowledge-refresh-btn" class="icon-btn" title="刷新知识库">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"></polyline>
@@ -688,11 +694,16 @@
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                 </svg>
               </button>
+              <button id="knowledge-clear-btn" class="icon-btn danger" title="一键清除 LLM Wiki" aria-label="一键清除 LLM Wiki">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                  <path d="M10 11v6"></path>
+                  <path d="M14 11v6"></path>
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                </svg>
+              </button>
             </div>
-          </div>
-          <div class="knowledge-sidebar-toolbar">
-            <button id="knowledge-import-text-btn" class="btn-primary btn-soft-primary">导入文本</button>
-            <button id="knowledge-import-file-btn" class="btn-primary btn-soft-primary">导入文件</button>
           </div>
           <input id="knowledge-file-input" type="file" class="hidden" multiple />
           <div class="knowledge-sidebar-section">

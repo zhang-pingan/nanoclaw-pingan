@@ -83,6 +83,7 @@ import {
 } from '../ask-user-question.js';
 import {
   bulkDeleteWikiDrafts,
+  clearWikiData,
   deleteWikiDraft,
   deleteWikiMaterial,
   deleteWikiPage,
@@ -635,6 +636,9 @@ class WebChannel {
       }
       if (pathname === '/api/wiki/job' && req.method === 'GET') {
         return this.apiGetWikiJob(reqUrl, res);
+      }
+      if (pathname === '/api/wiki/all' && req.method === 'DELETE') {
+        return this.apiClearWikiData(res);
       }
       if (pathname.startsWith('/api/uploads/')) {
         return this.apiServeUpload(pathname, res);
@@ -3310,6 +3314,19 @@ class WebChannel {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ job }));
+  }
+
+  private apiClearWikiData(res: http.ServerResponse): void {
+    try {
+      const result = clearWikiData();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const statusCode = message.includes('正在运行') ? 409 : 400;
+      res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
+    }
   }
 
   private async apiUpload(

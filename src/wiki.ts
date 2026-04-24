@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { callAnthropicMessages } from './agent-api.js';
 import { DATA_DIR, KNOWLEDGE_WIKI_DIR } from './config.js';
 import {
+  clearAllWikiRecords,
   countWikiClaimEvidenceByMaterial,
   createWikiDraft,
   createWikiJob,
@@ -1458,4 +1459,26 @@ export function deleteWikiPage(pageSlug: string): {
     removed_outgoing_relation_count: removedOutgoingRelationCount,
     removed_incoming_relation_count: removedIncomingRelationCount,
   };
+}
+
+export function clearWikiData(): {
+  material_count: number;
+  draft_count: number;
+  page_count: number;
+  claim_count: number;
+  evidence_count: number;
+  relation_count: number;
+  job_count: number;
+} {
+  if (wikiJobDrainRunning || listPendingWikiJobs().some((job) => job.status === 'running')) {
+    throw new Error('当前有正在运行的知识库后台任务，请等待任务完成后再清除 LLM Wiki');
+  }
+
+  pendingJobIds.length = 0;
+  const summary = clearAllWikiRecords();
+  removePathIfExists(WIKI_MATERIALS_DIR);
+  removePathIfExists(WIKI_DRAFTS_DIR);
+  removePathIfExists(WIKI_PAGES_DIR);
+  ensureWikiDirs();
+  return summary;
 }

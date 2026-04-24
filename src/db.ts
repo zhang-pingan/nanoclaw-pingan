@@ -4201,6 +4201,47 @@ export function deleteWikiPageGraph(pageSlug: string): void {
   txn();
 }
 
+export function clearAllWikiRecords(): {
+  material_count: number;
+  draft_count: number;
+  page_count: number;
+  claim_count: number;
+  evidence_count: number;
+  relation_count: number;
+  job_count: number;
+} {
+  const countRow = (table: string): number => {
+    const row = db
+      .prepare(`SELECT COUNT(*) AS cnt FROM ${table}`)
+      .get() as { cnt: number } | undefined;
+    return row?.cnt || 0;
+  };
+
+  const summary = {
+    material_count: countRow('wiki_materials'),
+    draft_count: countRow('wiki_drafts'),
+    page_count: countRow('wiki_pages'),
+    claim_count: countRow('wiki_claims'),
+    evidence_count: countRow('wiki_claim_evidence'),
+    relation_count: countRow('wiki_relations'),
+    job_count: countRow('wiki_jobs'),
+  };
+
+  const txn = db.transaction(() => {
+    db.prepare('DELETE FROM wiki_claim_evidence').run();
+    db.prepare('DELETE FROM wiki_claims').run();
+    db.prepare('DELETE FROM wiki_page_materials').run();
+    db.prepare('DELETE FROM wiki_relations').run();
+    db.prepare('DELETE FROM wiki_pages').run();
+    db.prepare('DELETE FROM wiki_drafts').run();
+    db.prepare('DELETE FROM wiki_materials').run();
+    db.prepare('DELETE FROM wiki_jobs').run();
+  });
+  txn();
+
+  return summary;
+}
+
 export function createWikiJob(record: WikiJobRecord): void {
   db.prepare(
     `INSERT INTO wiki_jobs (

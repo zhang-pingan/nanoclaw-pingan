@@ -158,9 +158,9 @@ var knowledgeMaterialList = document.getElementById("knowledge-material-list");
 var knowledgeDraftList = document.getElementById("knowledge-draft-list");
 var knowledgePageList = document.getElementById("knowledge-page-list");
 var knowledgeJobList = document.getElementById("knowledge-job-list");
+var knowledgeImportBtn = document.getElementById("knowledge-import-btn");
 var knowledgeRefreshBtn = document.getElementById("knowledge-refresh-btn");
-var knowledgeImportTextBtn = document.getElementById("knowledge-import-text-btn");
-var knowledgeImportFileBtn = document.getElementById("knowledge-import-file-btn");
+var knowledgeClearBtn = document.getElementById("knowledge-clear-btn");
 var knowledgeGenerateDraftBtn = document.getElementById("knowledge-generate-draft-btn");
 var knowledgePublishDraftBtn = document.getElementById("knowledge-publish-draft-btn");
 var knowledgeSearchInput = document.getElementById("knowledge-search-input");
@@ -207,6 +207,8 @@ var traceMonitorTitle = document.getElementById("trace-monitor-title");
 var traceMonitorMeta = document.getElementById("trace-monitor-meta");
 var traceMonitorSummary = document.getElementById("trace-monitor-summary");
 var traceMonitorTimeline = document.getElementById("trace-monitor-timeline");
+var knowledgeImportMenu = null;
+var knowledgeImportMenuCloseHandler = null;
 var workbenchSidebar = document.getElementById("workbench-sidebar");
 var workbenchSidebarCollapse = document.getElementById("workbench-sidebar-collapse");
 var workbenchTaskList = document.getElementById("workbench-task-list");
@@ -1569,6 +1571,7 @@ function getFileIcon(ext) {
 // --- File context menu ---
 function showFileContextMenu(e, filePath) {
   // Remove existing menu if any
+  closeKnowledgeImportMenu();
   document.querySelector(".context-menu")?.remove();
 
   const menu = document.createElement("div");
@@ -1613,6 +1616,7 @@ function showFileContextMenu(e, filePath) {
 }
 
 function showCardsListContextMenu(e, workflowType, cardKey) {
+  closeKnowledgeImportMenu();
   document.querySelector(".context-menu")?.remove();
 
   const menu = document.createElement("div");
@@ -3306,6 +3310,91 @@ async function loadKnowledgeBaseData(options = {}) {
   }
 }
 
+function closeKnowledgeImportMenu() {
+  if (knowledgeImportMenuCloseHandler) {
+    document.removeEventListener("click", knowledgeImportMenuCloseHandler);
+    knowledgeImportMenuCloseHandler = null;
+  }
+  if (knowledgeImportMenu) {
+    knowledgeImportMenu.remove();
+    knowledgeImportMenu = null;
+  }
+  if (knowledgeImportBtn) {
+    knowledgeImportBtn.setAttribute("aria-expanded", "false");
+  }
+}
+
+function showKnowledgeImportMenu() {
+  if (!knowledgeImportBtn) return;
+  if (knowledgeImportMenu) {
+    closeKnowledgeImportMenu();
+    return;
+  }
+
+  document.querySelector(".context-menu")?.remove();
+
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
+
+  const items = [
+    {
+      label: "导入文本",
+      icon: "📝",
+      action: () => {
+        closeKnowledgeImportMenu();
+        void importKnowledgeText();
+      },
+    },
+    {
+      label: "导入文件",
+      icon: "📄",
+      action: () => {
+        closeKnowledgeImportMenu();
+        knowledgeFileInput?.click();
+      },
+    },
+  ];
+
+  for (const item of items) {
+    const el = document.createElement("div");
+    el.className = "context-menu-item";
+    el.innerHTML = `<span class="context-menu-icon">${item.icon}</span>${escapeHtml(item.label)}`;
+    el.addEventListener("click", item.action);
+    menu.appendChild(el);
+  }
+
+  document.body.appendChild(menu);
+  const rect = knowledgeImportBtn.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  let left = rect.right - menuRect.width;
+  let top = rect.bottom + 8;
+
+  if (left < 8) left = 8;
+  if (left + menuRect.width > window.innerWidth - 8) {
+    left = window.innerWidth - menuRect.width - 8;
+  }
+  if (top + menuRect.height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - menuRect.height - 8);
+  }
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  knowledgeImportMenu = menu;
+  knowledgeImportBtn.setAttribute("aria-expanded", "true");
+
+  knowledgeImportMenuCloseHandler = (ev) => {
+    if (!knowledgeImportMenu) return;
+    if (knowledgeImportMenu.contains(ev.target) || knowledgeImportBtn.contains(ev.target)) {
+      return;
+    }
+    closeKnowledgeImportMenu();
+  };
+
+  requestAnimationFrame(() => {
+    document.addEventListener("click", knowledgeImportMenuCloseHandler);
+  });
+}
+
 async function importKnowledgeText() {
   const title = await openTextPrompt("请输入资料标题", "", {
     title: "导入文本资料",
@@ -3582,6 +3671,46 @@ async function deleteKnowledgePage(pageSlug, options = {}) {
   } catch (err) {
     console.error("Failed to delete wiki page:", err);
     showToast(`删除页面失败：${err instanceof Error ? err.message : "未知错误"}`);
+  }
+}
+
+async function clearKnowledgeWiki() {
+  const summary = [
+    knowledgeMaterials.length ? `资料 ${knowledgeMaterials.length} 份` : "",
+    knowledgeDrafts.length ? `草稿 ${knowledgeDrafts.length} 份` : "",
+    knowledgePages.length ? `页面 ${knowledgePages.length} 个` : "",
+    knowledgeJobs.length ? `任务 ${knowledgeJobs.length} 条` : "",
+  ].filter(Boolean).join("，");
+  const confirmed = await openConfirmDialog(
+    `确认一键清除整个 LLM Wiki？${summary ? `将删除 ${summary}。` : "这会重置资料、草稿、页面和任务记录。"}此操作不可撤销。`,
+    { title: "清除 LLM Wiki" },
+  );
+  if (!confirmed) return;
+
+  closeKnowledgeImportMenu();
+
+  try {
+    const res = await apiFetch("/api/wiki/all", {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    knowledgeSelectedMaterialIds.clear();
+    knowledgeSelectedDraftIds.clear();
+    clearKnowledgeDetail();
+    await loadKnowledgeBaseData();
+
+    const clearedSummary = [
+      data.material_count ? `资料 ${data.material_count} 份` : "",
+      data.draft_count ? `草稿 ${data.draft_count} 份` : "",
+      data.page_count ? `页面 ${data.page_count} 个` : "",
+      data.job_count ? `任务 ${data.job_count} 条` : "",
+    ].filter(Boolean).join("，");
+    showToast(clearedSummary ? `已清除 LLM Wiki（${clearedSummary}）` : "LLM Wiki 已清空", 2400);
+  } catch (err) {
+    console.error("Failed to clear LLM wiki:", err);
+    showToast(`清除 LLM Wiki 失败：${err instanceof Error ? err.message : "未知错误"}`);
   }
 }
 
@@ -6468,6 +6597,7 @@ function setWorkflowDefinitionVersionDiffFocus(sourceVersion, targetVersion) {
 }
 
 function showWorkflowDefinitionVersionContextMenu(e, version) {
+  closeKnowledgeImportMenu();
   document.querySelector(".context-menu")?.remove();
 
   const published = currentWorkflowDefinitionDetail?.published_definition || null;
@@ -9888,6 +10018,7 @@ async function deleteWorkbenchTask(task) {
 }
 
 function showWorkbenchTaskContextMenu(e, task) {
+  closeKnowledgeImportMenu();
   document.querySelector(".context-menu")?.remove();
 
   const menu = document.createElement("div");
@@ -15990,14 +16121,14 @@ if (knowledgeRefreshBtn) {
     loadKnowledgeBaseData({ preserveDetail: true });
   });
 }
-if (knowledgeImportTextBtn) {
-  knowledgeImportTextBtn.addEventListener("click", () => {
-    void importKnowledgeText();
+if (knowledgeClearBtn) {
+  knowledgeClearBtn.addEventListener("click", () => {
+    void clearKnowledgeWiki();
   });
 }
-if (knowledgeImportFileBtn) {
-  knowledgeImportFileBtn.addEventListener("click", () => {
-    knowledgeFileInput?.click();
+if (knowledgeImportBtn) {
+  knowledgeImportBtn.addEventListener("click", () => {
+    showKnowledgeImportMenu();
   });
 }
 if (knowledgeFileInput) {
