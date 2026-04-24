@@ -3662,9 +3662,9 @@ body.quick-chat-window .quick-chat-input {
   --tertiary-surface-tint: rgba(22, 163, 74, 0.016);
   --tertiary-surface-tint-strong: rgba(22, 163, 74, 0.028);
   background:
-    radial-gradient(circle at top left, rgba(187, 247, 208, 0.24), transparent 28%),
-    radial-gradient(circle at top right, rgba(220, 252, 231, 0.14), transparent 30%),
-    linear-gradient(180deg, rgba(22, 163, 74, 0.06), rgba(22, 163, 74, 0.02) 22%, transparent 42%),
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(186, 230, 253, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.05), rgba(14, 165, 233, 0.02) 20%, transparent 42%),
     var(--bg-primary);
 }
 
@@ -3856,7 +3856,7 @@ body.quick-chat-window .quick-chat-input {
   padding: 28px 28px 26px;
   background:
     linear-gradient(180deg, rgba(14, 165, 233, 0.016), rgba(255, 255, 255, 0) 140px),
-    var(--bg);
+    var(--bg-primary);
 }
 
 .knowledge-hero {
