@@ -2506,7 +2506,7 @@ async function loadMemories(queryOverride) {
 
 function renderKnowledgeSelectionSummary() {
   if (!knowledgeSelectionSummary) return;
-  knowledgeSelectionSummary.textContent = `已选 ${getSelectedKnowledgeMaterials().length} 份 · 可见 ${getFilteredKnowledgeMaterials().length} 份`;
+  knowledgeSelectionSummary.textContent = `已选 ${getSelectedKnowledgeMaterials().length} · 可见 ${getFilteredKnowledgeMaterials().length}`;
 }
 
 function renderKnowledgeDraftSelectionSummary() {
@@ -3471,15 +3471,15 @@ function showKnowledgeImportMenu() {
   document.body.appendChild(menu);
   const rect = knowledgeImportBtn.getBoundingClientRect();
   const menuRect = menu.getBoundingClientRect();
-  let left = rect.right - menuRect.width;
-  let top = rect.bottom + 8;
+  let left = rect.right;
+  let top = rect.bottom;
 
   if (left < 8) left = 8;
   if (left + menuRect.width > window.innerWidth - 8) {
-    left = window.innerWidth - menuRect.width - 8;
+    left = Math.max(8, rect.right - menuRect.width);
   }
   if (top + menuRect.height > window.innerHeight - 8) {
-    top = Math.max(8, rect.top - menuRect.height - 8);
+    top = Math.max(8, rect.top - menuRect.height);
   }
 
   menu.style.left = `${left}px`;

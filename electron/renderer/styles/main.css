@@ -3844,6 +3844,20 @@ body.quick-chat-window .quick-chat-input {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.knowledge-material-toolbar .knowledge-filter-select {
+  flex: 1 1 auto;
+}
+
+.knowledge-selection-summary-inline {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .knowledge-main {

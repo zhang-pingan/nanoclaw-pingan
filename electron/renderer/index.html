@@ -707,17 +707,14 @@
           </div>
           <input id="knowledge-file-input" type="file" class="hidden" multiple />
           <div class="knowledge-sidebar-section knowledge-materials-section">
-            <div class="knowledge-sidebar-section-head">
-              <span>资料快照</span>
-              <span id="knowledge-selection-summary" class="muted">已选 0 份</span>
-            </div>
-            <div class="knowledge-filter-row">
+            <div class="knowledge-filter-row knowledge-material-toolbar">
               <select id="knowledge-material-filter" class="knowledge-filter-select">
                 <option value="all">全部资料</option>
                 <option value="referenced">仅看有依赖</option>
                 <option value="deletable">仅看可删除</option>
                 <option value="selected">仅看已选中</option>
               </select>
+              <span id="knowledge-selection-summary" class="muted knowledge-selection-summary-inline">已选 0 · 可见 0</span>
             </div>
             <div id="knowledge-material-list" class="knowledge-list"></div>
           </div>
