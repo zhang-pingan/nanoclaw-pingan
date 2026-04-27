@@ -678,14 +678,18 @@ async function openConfirmDialog(message, options = {}) {
 
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
+    const dialogClassName = ["app-prompt-dialog", options.dialogClassName].filter(Boolean).join(" ");
+    const actionsClassName = ["app-prompt-actions", options.actionsClassName].filter(Boolean).join(" ");
+    const cancelButtonClassName = options.cancelButtonClassName || "btn-ghost";
+    const confirmButtonClassName = options.confirmButtonClassName || "btn-primary";
     overlay.className = "app-prompt-overlay";
     overlay.innerHTML = `
-      <div class="app-prompt-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(options.title || "确认")}">
+      <div class="${escapeAttribute(dialogClassName)}" role="dialog" aria-modal="true" aria-label="${escapeHtml(options.title || "确认")}">
         <div class="app-prompt-title">${escapeHtml(options.title || "请确认")}</div>
         <div class="app-prompt-message">${escapeHtml(message)}</div>
-        <div class="app-prompt-actions">
-          <button type="button" class="btn-ghost" data-action="cancel">${escapeHtml(options.cancelText || "取消")}</button>
-          <button type="button" class="btn-primary" data-action="confirm">${escapeHtml(options.confirmText || "确认")}</button>
+        <div class="${escapeAttribute(actionsClassName)}">
+          <button type="button" class="${escapeAttribute(cancelButtonClassName)}" data-action="cancel">${escapeHtml(options.cancelText || "取消")}</button>
+          <button type="button" class="${escapeAttribute(confirmButtonClassName)}" data-action="confirm">${escapeHtml(options.confirmText || "确认")}</button>
         </div>
       </div>
     `;
@@ -4393,6 +4397,7 @@ async function publishSelectedKnowledgeDraft() {
   const confirmed = await openConfirmDialog(confirmMessage, {
     title: hasSlugConflict ? "覆盖现有知识库页面" : "发布知识库页面",
     confirmText: hasSlugConflict ? "确认覆盖并发布" : "发布",
+    actionsClassName: "knowledge-detail-actions",
   });
   if (!confirmed) return;
 
