@@ -58,6 +58,79 @@ import {
 
 let db: Database.Database;
 
+function buildWikiSearchAliases(slug: string, title: string): string {
+  const aliases = new Set<string>();
+
+  for (const value of [slug, title]) {
+    const normalized = value.normalize('NFKC').toLowerCase().trim();
+    const parts = normalized.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    if (parts.length < 2) continue;
+
+    aliases.add(parts.join(' '));
+
+    const compact = parts.join('');
+    if (compact.length >= 3) {
+      aliases.add(compact);
+    }
+  }
+
+  return Array.from(aliases).join(' ');
+}
+
+function registerWikiSearchAliasFunction(database: Database.Database): void {
+  database.function(
+    'wiki_search_aliases',
+    { deterministic: true },
+    (slug: unknown, title: unknown) =>
+      buildWikiSearchAliases(String(slug || ''), String(title || '')),
+  );
+}
+
+function ensureWikiPageSearchAliases(database: Database.Database): void {
+  const columns = database.pragma('table_info(wiki_pages)') as Array<{
+    name: string;
+  }>;
+  const hasSearchAliases = columns.some(
+    (column) => column.name === 'search_aliases',
+  );
+
+  if (!hasSearchAliases) {
+    database.exec(
+      `ALTER TABLE wiki_pages ADD COLUMN search_aliases TEXT NOT NULL DEFAULT ''`,
+    );
+  }
+
+  database
+    .prepare(
+      `
+        UPDATE wiki_pages
+        SET search_aliases = wiki_search_aliases(slug, title)
+        WHERE search_aliases != wiki_search_aliases(slug, title)
+      `,
+    )
+    .run();
+}
+
+function recreateWikiFtsIfNeeded(database: Database.Database): void {
+  const columns = database.pragma('table_info(wiki_pages_fts)') as Array<{
+    name: string;
+  }>;
+  const hasExistingFts = columns.length > 0;
+  const hasSearchAliases = columns.some(
+    (column) => column.name === 'search_aliases',
+  );
+
+  if (!hasExistingFts || hasSearchAliases) return;
+
+  database.exec(`
+    DROP TRIGGER IF EXISTS wiki_pages_ai;
+    DROP TRIGGER IF EXISTS wiki_pages_ad;
+    DROP TRIGGER IF EXISTS wiki_pages_au;
+    DROP TABLE IF EXISTS wiki_pages_fts;
+  `);
+  logger.info('Wiki page FTS schema rebuilt with search aliases');
+}
+
 function createSchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS chats (
@@ -786,6 +859,7 @@ function createSchema(database: Database.Database): void {
       status TEXT NOT NULL DEFAULT 'published',
       summary TEXT,
       content_markdown TEXT NOT NULL,
+      search_aliases TEXT NOT NULL DEFAULT '',
       file_path TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -859,32 +933,71 @@ function createSchema(database: Database.Database): void {
       ON wiki_jobs(status, updated_at DESC);
   `);
 
+  registerWikiSearchAliasFunction(database);
+  ensureWikiPageSearchAliases(database);
+  recreateWikiFtsIfNeeded(database);
+
   database.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(
       slug,
       title,
       summary,
       content_markdown,
+      search_aliases,
       content='wiki_pages',
       content_rowid='rowid',
       tokenize='unicode61'
     );
 
-    CREATE TRIGGER IF NOT EXISTS wiki_pages_ai AFTER INSERT ON wiki_pages BEGIN
-      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown)
-      VALUES (new.rowid, new.slug, new.title, COALESCE(new.summary, ''), new.content_markdown);
+    DROP TRIGGER IF EXISTS wiki_pages_ai;
+    DROP TRIGGER IF EXISTS wiki_pages_ad;
+    DROP TRIGGER IF EXISTS wiki_pages_au;
+
+    CREATE TRIGGER wiki_pages_ai AFTER INSERT ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES (
+        new.rowid,
+        new.slug,
+        new.title,
+        COALESCE(new.summary, ''),
+        new.content_markdown,
+        wiki_search_aliases(new.slug, new.title)
+      );
     END;
 
-    CREATE TRIGGER IF NOT EXISTS wiki_pages_ad AFTER DELETE ON wiki_pages BEGIN
-      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown)
-      VALUES('delete', old.rowid, old.slug, old.title, COALESCE(old.summary, ''), old.content_markdown);
+    CREATE TRIGGER wiki_pages_ad AFTER DELETE ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES(
+        'delete',
+        old.rowid,
+        old.slug,
+        old.title,
+        COALESCE(old.summary, ''),
+        old.content_markdown,
+        wiki_search_aliases(old.slug, old.title)
+      );
     END;
 
-    CREATE TRIGGER IF NOT EXISTS wiki_pages_au AFTER UPDATE ON wiki_pages BEGIN
-      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown)
-      VALUES('delete', old.rowid, old.slug, old.title, COALESCE(old.summary, ''), old.content_markdown);
-      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown)
-      VALUES (new.rowid, new.slug, new.title, COALESCE(new.summary, ''), new.content_markdown);
+    CREATE TRIGGER wiki_pages_au AFTER UPDATE ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES(
+        'delete',
+        old.rowid,
+        old.slug,
+        old.title,
+        COALESCE(old.summary, ''),
+        old.content_markdown,
+        wiki_search_aliases(old.slug, old.title)
+      );
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES (
+        new.rowid,
+        new.slug,
+        new.title,
+        COALESCE(new.summary, ''),
+        new.content_markdown,
+        wiki_search_aliases(new.slug, new.title)
+      );
     END;
   `);
 
@@ -896,8 +1009,15 @@ function createSchema(database: Database.Database): void {
     .get() as { cnt: number };
   if (wikiFtsCount.cnt === 0 && wikiPageCount.cnt > 0) {
     database.exec(`
-      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown)
-      SELECT rowid, slug, title, COALESCE(summary, ''), content_markdown FROM wiki_pages;
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
+      SELECT
+        rowid,
+        slug,
+        title,
+        COALESCE(summary, ''),
+        content_markdown,
+        wiki_search_aliases(slug, title)
+      FROM wiki_pages;
     `);
     logger.info({ wikiPageCount }, 'Wiki page FTS backfill complete');
   }
@@ -3890,18 +4010,44 @@ export function deleteWikiDraftRecord(id: string): void {
   db.prepare('DELETE FROM wiki_drafts WHERE id = ?').run(id);
 }
 
+const WIKI_PAGE_SELECT_COLUMNS = `
+  slug,
+  title,
+  page_kind,
+  status,
+  summary,
+  content_markdown,
+  file_path,
+  created_at,
+  updated_at
+`;
+
+const WIKI_PAGE_SELECT_COLUMNS_P = `
+  p.slug,
+  p.title,
+  p.page_kind,
+  p.status,
+  p.summary,
+  p.content_markdown,
+  p.file_path,
+  p.created_at,
+  p.updated_at
+`;
+
 export function upsertWikiPage(record: WikiPageRecord): void {
+  const searchAliases = buildWikiSearchAliases(record.slug, record.title);
   db.prepare(
     `INSERT INTO wiki_pages (
-      slug, title, page_kind, status, summary, content_markdown, file_path,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      slug, title, page_kind, status, summary, content_markdown, search_aliases,
+      file_path, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slug) DO UPDATE SET
       title = excluded.title,
       page_kind = excluded.page_kind,
       status = excluded.status,
       summary = excluded.summary,
       content_markdown = excluded.content_markdown,
+      search_aliases = excluded.search_aliases,
       file_path = excluded.file_path,
       updated_at = excluded.updated_at`,
   ).run(
@@ -3911,6 +4057,7 @@ export function upsertWikiPage(record: WikiPageRecord): void {
     record.status,
     record.summary,
     record.content_markdown,
+    searchAliases,
     record.file_path,
     record.created_at,
     record.updated_at,
@@ -3919,13 +4066,18 @@ export function upsertWikiPage(record: WikiPageRecord): void {
 
 export function getWikiPage(slug: string): WikiPageRecord | undefined {
   return db
-    .prepare('SELECT * FROM wiki_pages WHERE slug = ?')
+    .prepare(`SELECT ${WIKI_PAGE_SELECT_COLUMNS} FROM wiki_pages WHERE slug = ?`)
     .get(slug) as WikiPageRecord | undefined;
 }
 
 export function listWikiPages(limit: number = 200): WikiPageRecord[] {
   return db
-    .prepare('SELECT * FROM wiki_pages ORDER BY updated_at DESC LIMIT ?')
+    .prepare(
+      `SELECT ${WIKI_PAGE_SELECT_COLUMNS}
+       FROM wiki_pages
+       ORDER BY updated_at DESC
+       LIMIT ?`,
+    )
     .all(Math.max(1, limit)) as WikiPageRecord[];
 }
 
@@ -3935,7 +4087,8 @@ export function listWikiPagesReferencingMaterial(
   return db
     .prepare(
       `
-        SELECT DISTINCT p.*
+        SELECT DISTINCT
+          ${WIKI_PAGE_SELECT_COLUMNS_P}
         FROM wiki_pages p
         LEFT JOIN wiki_page_materials pm
           ON pm.page_slug = p.slug

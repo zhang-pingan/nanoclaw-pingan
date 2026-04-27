@@ -59,6 +59,7 @@ import {
   listWikiClaimsByPage,
   listWikiRelationsForPage,
   searchWikiPages,
+  upsertWikiPage,
 } from './db.js';
 import { DATA_DIR, KNOWLEDGE_WIKI_DIR } from './config.js';
 import {
@@ -291,6 +292,41 @@ describe('wiki', () => {
 
     const searchResults = searchWikiPages('NanoClaw', 5);
     expect(searchResults.some((item) => item.slug === testSlug)).toBe(true);
+  });
+
+  it('searches compact aliases generated from wiki page slug and title', () => {
+    const now = new Date().toISOString();
+    const slugAliasPageSlug = 'content-platform';
+    const titleAliasPageSlug = 'wiki-title-alias';
+
+    upsertWikiPage({
+      slug: slugAliasPageSlug,
+      title: 'Slug Alias Page',
+      page_kind: 'concept',
+      status: 'published',
+      summary: 'Unrelated summary',
+      content_markdown: 'Body without the compact query.',
+      file_path: '/tmp/slug-alias.md',
+      created_at: now,
+      updated_at: now,
+    });
+    upsertWikiPage({
+      slug: titleAliasPageSlug,
+      title: 'Content-Platform',
+      page_kind: 'concept',
+      status: 'published',
+      summary: 'Unrelated summary',
+      content_markdown: 'Body without the compact query.',
+      file_path: '/tmp/title-alias.md',
+      created_at: now,
+      updated_at: now,
+    });
+
+    const searchResultSlugs = new Set(
+      searchWikiPages('contentplatform', 10).map((item) => item.slug),
+    );
+    expect(searchResultSlugs.has(slugAliasPageSlug)).toBe(true);
+    expect(searchResultSlugs.has(titleAliasPageSlug)).toBe(true);
   });
 
   it('uses configured wiki material character limits when compiling a draft', async () => {
