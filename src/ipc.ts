@@ -595,7 +595,7 @@ function buildArchiveExtractionRequestPayload(
         ),
       },
     ],
-    max_tokens: 1600,
+    max_tokens: 16000,
     temperature: 0,
   };
 }
