@@ -266,9 +266,16 @@ server.tool(
 if (isMain) {
   server.tool(
     'ai_image_generate_image',
-    '调用 AI_IMAGE 图片生成接口。支持文生图和图生图；参考图片可传 workspace 内路径或 HTTPS 图片 URL。API 地址、token、模型名、尺寸、质量和超时时间由宿主机 .env 配置。',
+    '调用 AI_IMAGE 图片生成接口。支持文生图和图生图；参考图片可传 workspace 内路径或 HTTPS 图片 URL。API 地址、token、模型名、默认尺寸、质量和超时时间由宿主机 .env 配置；size 可作为可选参数覆盖默认尺寸。',
     {
       prompt: z.string().min(1).describe('生图提示词'),
+      size: z
+        .string()
+        .trim()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('可选图片尺寸；不传时使用宿主机 .env 的 AI_IMAGE_SIZE。'),
       image_paths: z
         .array(z.string().min(1))
         .min(1)

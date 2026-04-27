@@ -17,6 +17,7 @@ import { readEnvFile } from './env.js';
 const MAX_IMAGES = 4;
 const MAX_GENERATE_INPUT_IMAGES = 16;
 const MAX_EDIT_IMAGES = 8;
+const imageSizeSchema = z.string().trim().min(1).max(100);
 
 type Operation = 'generate' | 'edit';
 type ImageSource =
@@ -38,6 +39,7 @@ const envKeys = [
 
 const commonArgsSchema = z.object({
   prompt: z.string().trim().min(1).max(8000),
+  size: imageSizeSchema.optional(),
   n: z.number().int().min(1).max(MAX_IMAGES).optional().default(1),
 });
 
@@ -123,7 +125,7 @@ function getRequiredConfigInteger(
   return value;
 }
 
-function resolveConfig(): ResolvedConfig {
+function resolveConfig(overrides: { size?: string } = {}): ResolvedConfig {
   const env = readEnvFile(envKeys);
   return {
     baseUrl: getRequiredConfigValue(env, 'AI_IMAGE_BASE_URL').replace(
@@ -132,7 +134,7 @@ function resolveConfig(): ResolvedConfig {
     ),
     apiKey: getRequiredConfigValue(env, 'AI_IMAGE_API_KEY'),
     model: getRequiredConfigValue(env, 'AI_IMAGE_MODEL'),
-    size: getRequiredConfigValue(env, 'AI_IMAGE_SIZE'),
+    size: overrides.size || getRequiredConfigValue(env, 'AI_IMAGE_SIZE'),
     quality: getRequiredConfigValue(env, 'AI_IMAGE_QUALITY'),
     timeoutMs: getRequiredConfigInteger(
       env,
@@ -476,7 +478,7 @@ export async function generateAiImage(
 ): Promise<AiImageResult> {
   try {
     const parsed = generateArgsSchema.parse(args);
-    const config = resolveConfig();
+    const config = resolveConfig({ size: parsed.size });
     const inputImages = await resolveGenerateInputImages(parsed, sourceGroup);
     const payload = {
       model: config.model,
@@ -528,7 +530,7 @@ export async function editAiImage(
 ): Promise<AiImageResult> {
   try {
     const parsed = editArgsSchema.parse(args);
-    const config = resolveConfig();
+    const config = resolveConfig({ size: parsed.size });
     const imageHostPaths = parsed.image_paths.map((item) =>
       resolveWorkspaceInputPath(item, sourceGroup),
     );
