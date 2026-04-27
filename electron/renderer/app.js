@@ -3057,16 +3057,16 @@ function renderKnowledgeTextBody(text, emptyText = "无") {
   return `<div class="knowledge-detail-prose${value ? "" : " empty"}">${escapeHtml(value || emptyText)}</div>`;
 }
 
-function renderKnowledgeMarkdownBody(markdown, emptyText = "无") {
-  const value = String(markdown || "").trim();
-  if (!value) {
-    return `<div class="knowledge-empty-inline">${escapeHtml(emptyText)}</div>`;
-  }
-  return `<div class="knowledge-detail-rich">${renderMarkdown(value)}</div>`;
-}
-
 function renderKnowledgeRawTextBody(text) {
   return `<pre class="knowledge-detail-pre">${escapeHtml(text || "")}</pre>`;
+}
+
+function renderKnowledgePageContentSection(title, contentMarkdown) {
+  return renderKnowledgeSection(
+    title || "正文",
+    renderKnowledgeRawTextBody(contentMarkdown || ""),
+    { bodyClass: "knowledge-detail-body-code" },
+  );
 }
 
 function renderKnowledgeCardList(items, renderItem, emptyText = "无") {
@@ -3380,10 +3380,9 @@ async function openKnowledgeDraftDetail(draftId) {
           { bodyClass: "knowledge-detail-body-rich" },
         )}
         ${renderKnowledgeDraftPublishPreview(publishPreview)}
-        ${renderKnowledgeSection(
-          "草稿正文",
-          renderKnowledgeMarkdownBody(detail.compiled?.page?.content_markdown || detail.draft.content_markdown || ""),
-          { bodyClass: "knowledge-detail-body-rich" },
+        ${renderKnowledgePageContentSection(
+          "正文",
+          detail.compiled?.page?.content_markdown || detail.draft.content_markdown || "",
         )}
       `,
       [
@@ -3436,11 +3435,7 @@ async function openKnowledgePageDetail(pageSlug) {
       ],
       `
         ${renderKnowledgeSection("摘要", renderKnowledgeTextBody(data.page.summary || "无摘要"))}
-        ${renderKnowledgeSection(
-          "正文",
-          renderKnowledgeRawTextBody(data.page.content_markdown || ""),
-          { bodyClass: "knowledge-detail-body-code" },
-        )}
+        ${renderKnowledgePageContentSection("正文", data.page.content_markdown || "")}
         ${renderKnowledgeSection(
           "知识陈述",
           renderKnowledgeCardList(
