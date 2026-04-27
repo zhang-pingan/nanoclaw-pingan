@@ -557,6 +557,37 @@ function workspaceFileApiPath(filePath) {
   return null;
 }
 
+function containerFilePath(filePath) {
+  if (!filePath) return null;
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  if (/^\/workspace\/(group|uploads|attachments|ai-images)\//.test(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  const sharedMappings = [
+    ["/data/web-uploads/", "/workspace/uploads/"],
+    ["/data/attachments/", "/workspace/attachments/"],
+    ["/data/ai-images/", "/workspace/ai-images/"],
+  ];
+  for (const [hostMarker, containerPrefix] of sharedMappings) {
+    const markerIndex = normalizedPath.lastIndexOf(hostMarker);
+    if (markerIndex >= 0) {
+      return `${containerPrefix}${normalizedPath.slice(markerIndex + hostMarker.length)}`;
+    }
+  }
+
+  if (currentGroupJid) {
+    const groupFolder = currentGroupJid.replace("web:", "");
+    const groupMarker = `/groups/${groupFolder}/`;
+    const groupIndex = normalizedPath.lastIndexOf(groupMarker);
+    if (groupIndex >= 0) {
+      return `/workspace/group/${normalizedPath.slice(groupIndex + groupMarker.length)}`;
+    }
+  }
+
+  return null;
+}
+
 function shouldUseCustomAppDialogs() {
   return typeof window !== "undefined" && Boolean(window.nanoclawApp);
 }
@@ -1633,11 +1664,13 @@ function showFileContextMenu(e, filePath) {
 
   const menu = document.createElement("div");
   menu.className = "context-menu";
+  const referencePath = containerFilePath(filePath);
 
   const items = [
     { label: "打开", icon: "📂", action: () => window.nanoclawApp?.openFile?.(filePath) },
     { label: "打开方式…", icon: "🔀", action: () => window.nanoclawApp?.openFileWith?.(filePath) },
     { label: "在文件夹中显示", icon: "📁", action: () => window.nanoclawApp?.showInFolder?.(filePath) },
+    ...(referencePath ? [{ label: "引用", icon: "↩", action: () => referenceFileInComposer(referencePath) }] : []),
     { label: "复制路径", icon: "📋", action: () => navigator.clipboard?.writeText(filePath) },
   ];
 
@@ -14637,6 +14670,26 @@ function selectMention(name) {
   hideMentionPicker(false);
   ta.focus();
   autoResizeInput();
+}
+
+function insertTextIntoComposer(text) {
+  const ta = messageInput;
+  const pos = typeof ta.selectionStart === "number" ? ta.selectionStart : ta.value.length;
+  const before = ta.value.substring(0, pos);
+  const after = ta.value.substring(pos);
+  let insertion = text;
+  if (before && !before.endsWith("\n")) insertion = `\n${insertion}`;
+  if (after && !after.startsWith("\n")) insertion = `${insertion}\n`;
+  ta.value = before + insertion + after;
+  const cursor = before.length + insertion.length;
+  ta.selectionStart = ta.selectionEnd = cursor;
+  ta.focus();
+  autoResizeInput();
+}
+
+function referenceFileInComposer(containerPath) {
+  insertTextIntoComposer(`文件地址: ${containerPath}`);
+  showToast("已引用文件");
 }
 
 // Stage a file for upload on next send
