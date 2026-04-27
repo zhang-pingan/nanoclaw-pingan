@@ -1,7 +1,7 @@
 /**
  * Workflow Engine for NanoClaw — Configuration-Driven
  *
- * State machine definitions live in container/skills/workflows.json.
+ * State machine definitions live in container/skills/workflow-definitions.json.
  * Card templates live in container/skills/cards.json.
  * This engine reads them at init and drives transitions generically.
  *
@@ -144,7 +144,7 @@ function resolveRoles(
     return {
       error:
         `渠道 "${channel}" 缺少角色配置：${missing.join('；')}。` +
-        `请在 workflows.json 的对应角色 channels 中添加 "${channel}" 渠道。`,
+        `请在 workflow-definitions.json 的对应角色 channels 中添加 "${channel}" 渠道。`,
     };
   }
 

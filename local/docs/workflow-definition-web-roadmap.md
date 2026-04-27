@@ -6,7 +6,7 @@
 
 当前 card 相关能力已经完成了从 workflow 代码特判到独立配置资源的拆分，现状如下：
 
-- card 配置已从 `container/skills/workflows.json` 中抽离，独立存放在 `container/skills/cards.json`
+- card 配置独立存放在 `container/skills/cards.json`
 - card schema 已独立定义在 `src/card-config.ts`
 - card 运行时构建逻辑已独立在 `src/card-builder.ts`
 - workflow / workbench 运行时已通过 `getCardConfig(workflowType, cardKey)` 访问 card，而不是直接依赖 workflow config 内嵌字段
@@ -21,9 +21,8 @@ workflow 相关配置已从“直接手写 runtime config”升级为“definiti
 
 - 新的编辑态 workflow definition schema 定义在 `src/workflow-definition.ts`
 - `src/workflow-compiler.ts` 已实现 definition 到 runtime config 的编译
-- `src/workflow-config.ts` 现在优先读取 `container/skills/workflow-definitions.json`
+- `src/workflow-config.ts` 现在只读取 `container/skills/workflow-definitions.json`
 - definition 会先经过 publish model 选择 published version，再经过 compiler 编译为现有引擎可执行的 runtime config
-- 如果 definition 文件不存在，仍可 fallback 到旧的 `container/skills/workflows.json`
 - 当前 `dev_test` 已迁移到 `container/skills/workflow-definitions.json`
 
 现阶段 runtime engine 基本保持不变，workflow 的主要升级集中在 definition 层和编译层。
