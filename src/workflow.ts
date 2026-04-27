@@ -491,7 +491,9 @@ function getStatusLabel(workflow: Workflow): string {
   return config.status_labels[workflow.status] || workflow.status;
 }
 
-function formatContextTemplateValue(value: unknown): string | number | undefined {
+function formatContextTemplateValue(
+  value: unknown,
+): string | number | undefined {
   if (typeof value === 'string' || typeof value === 'number') return value;
   if (typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {
@@ -533,9 +535,10 @@ function buildTemplateVars(
       workflow,
       WORKFLOW_CONTEXT_KEYS.mainBranch,
     ),
-    work_branch:
-      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch) ||
-      'N/A',
+    work_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.workBranch,
+    ),
     id: workflow.id,
     round: workflow.round,
     deliverable:

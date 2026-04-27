@@ -1,6 +1,6 @@
 ---
 name: fix-bug
-description: Use only in the fix_test workflow. Fix a user-reported bug on the specified work branch, create a bug-fix deliverable, and return structured workflow results.
+description: Use only in the fix_test workflow. Fix a user-reported bug on the specified or auto-created work branch, create a bug-fix deliverable, and return structured workflow results.
 ---
 
 # Bug 修复 Skill
@@ -15,11 +15,17 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
    - 服务名称
    - Bug 描述
    - Bug 附件
+   - 主分支
    - 工作分支
 2. 读取 `/workspace/global/services.json`，确认服务对应的仓库路径、默认分支和预发配置。
 3. 进入真实代码仓库 `/workspace/repos/{repo_path}`；如果服务配置没有 `repo_path`，再尝试 `/workspace/repos/{服务名}`。
-4. 必须在任务指定的工作分支上修复，不要自行新建其他分支，除非用户明确要求。
-5. 先复现或定位 Bug，再做最小必要修改。
+4. 确认分支：
+   - `主分支` 优先使用任务消息中的值；如果未提供，则使用服务配置的 `default_branch`。
+   - 将空值、`N/A`、`未提供` 都视为“未传工作分支”。
+   - 如果任务消息已提供有效 `工作分支`，必须使用该分支，不要改名或重建。
+   - 如果任务消息未提供有效 `工作分支`，则基于已确认的 `主分支` 创建工作分支，命名为 `bugfix/{Bug简短标题}_{YYYYMMDD}`。`Bug简短标题` 使用小写字母、数字、连字符或下划线，去掉路径危险字符；同名分支已存在时直接使用已有分支。
+   - 创建分支前先 `git fetch origin`，切到主分支并 `git pull --ff-only`；新建工作分支必须从最新主分支切出，禁止直接在 `main`、`master`、`staging`、`release` 等主干分支上修改。
+5. 在确认好的工作分支上复现或定位 Bug，再做最小必要修改。
 6. 完成后执行可行的验证命令，提交并 push 工作分支。
 7. 创建或更新修复文档：
    - 路径：`/workspace/projects/{服务名}/iteration/{日期}_bugfix_{简短标题}/fix.md`
@@ -40,6 +46,7 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
   - `findings`
   - `evidence`
 - 如果已从服务配置确认 `main_branch` 或 `staging_base_branch`，也一并返回。
+- 如果本轮自动创建了工作分支，`work_branch` 必须返回最终创建或复用的分支名，`summary` 或 `evidence` 中说明其基于哪个主分支创建。
 - `verdict=passed` 表示本轮修复已完成，可以部署预发。
 - `deliverable` 是目录名，不含文件名。
 
