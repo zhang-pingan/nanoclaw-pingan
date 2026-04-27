@@ -1,9 +1,11 @@
 ---
 name: dev-examine
-description: Review implemented code against approved plan, perform code review, and return pass/fail with actionable fixes.
+description: Use only in the dev_test workflow. Review implemented code against approved plan, perform code review, and return pass/fail with actionable fixes.
 ---
 
 # 开发复核 Skill
+
+本技能仅用于 `dev_test` 工作流，不用于其他流程类型。
 
 本技能用于“开发完成后”的复核，不负责主实现。
 

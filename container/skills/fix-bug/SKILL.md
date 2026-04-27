@@ -1,9 +1,11 @@
 ---
 name: fix-bug
-description: Fix a user-reported bug on the specified work branch, create a bug-fix deliverable, and return structured workflow results.
+description: Use only in the fix_test workflow. Fix a user-reported bug on the specified work branch, create a bug-fix deliverable, and return structured workflow results.
 ---
 
 # Bug 修复 Skill
+
+本技能仅用于 `fix_test` 工作流，不用于其他流程类型。
 
 本技能用于 `fix_test` 工作流的首轮 Bug 修复。
 

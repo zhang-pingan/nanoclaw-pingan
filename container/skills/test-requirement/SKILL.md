@@ -1,9 +1,11 @@
 ---
 name: test-requirement
-description: Test implemented features in first-pass or regression mode — analyze delivery docs, execute staging verification, and update test reports.
+description: Use only in the dev_test workflow. Test implemented features in first-pass or regression mode — analyze delivery docs, execute staging verification, and update test reports.
 ---
 
 # 需求测试 Skill
+
+本技能仅用于 `dev_test` 工作流，不用于其他流程类型。
 
 ## 模式说明
 

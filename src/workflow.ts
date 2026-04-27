@@ -527,6 +527,7 @@ function buildTemplateVars(
   return {
     ...buildContextTemplateVars(workflow.context),
     name: workflow.name,
+    workflow_type: workflow.workflow_type,
     service: workflow.service,
     main_branch: getWorkflowContextValue(
       workflow,

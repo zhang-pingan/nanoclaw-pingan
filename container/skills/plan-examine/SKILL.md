@@ -1,9 +1,11 @@
 ---
 name: plan-examine
-description: Review requirement implementation plans for completeness, feasibility, risk coverage, and testability; provide actionable revision feedback.
+description: Use only in the dev_test workflow. Review requirement implementation plans for completeness, feasibility, risk coverage, and testability; provide actionable revision feedback.
 ---
 
 # 方案审核 Skill
+
+本技能仅用于 `dev_test` 工作流，不用于其他流程类型。
 
 本技能只做方案审核，不写代码。
 

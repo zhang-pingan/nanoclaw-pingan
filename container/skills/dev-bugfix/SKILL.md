@@ -1,9 +1,11 @@
 ---
 name: dev-bugfix
-description: Fix bugs in service code on the existing work branch — use the delegated branch, commit fixes, and update delivery documents.
+description: Use only in the dev_test workflow. Fix bugs in service code on the existing work branch — use the delegated branch, commit fixes, and update delivery documents.
 ---
 
 # BUG 修复 Skill
+
+本技能仅用于 `dev_test` 工作流，不用于其他流程类型。
 
 ## 工作流程
 

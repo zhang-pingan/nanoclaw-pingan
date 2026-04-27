@@ -1,9 +1,11 @@
 ---
 name: fix-test-bug
-description: Verify a fix_test bug fix on staging, record first-pass or regression results, and return structured workflow verdicts.
+description: Use only in the fix_test workflow. Verify a fix_test bug fix on staging, record first-pass or regression results, and return structured workflow verdicts.
 ---
 
 # Bug 测试验证 Skill
+
+本技能仅用于 `fix_test` 工作流，不用于其他流程类型。
 
 本技能用于 `fix_test` 工作流的测试验证阶段，支持首轮验证和复修后的回归验证。
 

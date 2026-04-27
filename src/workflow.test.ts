@@ -210,6 +210,7 @@ describe('workflow metadata and branch flow', () => {
 
     const delegations = getDelegationsByWorkflow(result.workflowId);
     expect(delegations).toHaveLength(1);
+    expect(delegations[0]?.task).toContain('流程类型：dev_test');
     expect(delegations[0]?.task).toContain(
       '需求描述：需要支持用户昵称输入表情',
     );
@@ -251,6 +252,7 @@ describe('workflow metadata and branch flow', () => {
     const delegations = getDelegationsByWorkflow(result.workflowId);
     expect(delegations).toHaveLength(1);
     expect(delegations[0]?.target_folder).toBe('web_dev');
+    expect(delegations[0]?.task).toContain('流程类型：fix_test');
     expect(delegations[0]?.task).toContain('Bug 描述：用户未登录访问资料接口时返回 500');
     expect(delegations[0]?.task).toContain('- /tmp/login-500.log');
     expect(delegations[0]?.task).toContain('工作分支：bugfix/login-empty-500');
@@ -333,6 +335,7 @@ describe('workflow metadata and branch flow', () => {
       (item) => item.id !== 'del-bug-test-failed',
     );
     expect(refixDelegation?.target_folder).toBe('web_dev');
+    expect(refixDelegation?.task).toContain('流程类型：fix_test');
     expect(refixDelegation?.task).toContain('Round 1');
     expect(refixDelegation?.task).toContain('BUG-001');
     expect(refixDelegation?.task).toContain(

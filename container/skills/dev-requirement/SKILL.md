@@ -1,9 +1,11 @@
 ---
 name: dev-requirement
-description: Implement features based on approved plans — read design docs, write code, create branches, and produce delivery documents.
+description: Use only in the dev_test workflow. Implement features based on approved plans — read design docs, write code, create branches, and produce delivery documents.
 ---
 
 # 需求开发 Skill
+
+本技能仅用于 `dev_test` 工作流，不用于其他流程类型。
 
 本技能负责**按照已确认的方案执行代码实现**。
 

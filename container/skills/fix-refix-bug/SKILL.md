@@ -1,9 +1,11 @@
 ---
 name: fix-refix-bug
-description: Re-fix bugs that failed fix_test verification, using the existing work branch and previous test evidence.
+description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test verification, using the existing work branch and previous test evidence.
 ---
 
 # Bug 复修 Skill
+
+本技能仅用于 `fix_test` 工作流，不用于其他流程类型。
 
 本技能用于 `fix_test` 工作流中测试未通过后的复修阶段。
 

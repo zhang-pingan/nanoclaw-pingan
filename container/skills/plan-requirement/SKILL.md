@@ -1,9 +1,11 @@
 ---
 name: plan-requirement
-description: Design implementation plans for new requirements — analyze code, clarify with users, and produce detailed plans covering scope, files, steps, risks, and downstream service impacts.
+description: Use only in the dev_test workflow. Design implementation plans for new requirements — analyze code, clarify with users, and produce detailed plans covering scope, files, steps, risks, and downstream service impacts.
 ---
 
 # 需求方案设计 Skill
+
+本技能仅用于 `dev_test` 工作流，不用于其他流程类型。
 
 本技能**只做方案设计，不写代码**。你的唯一目标是输出一份完整的实现方案文档。
 
