@@ -54,6 +54,93 @@ async function waitForIpcResult<T>(
   return null;
 }
 
+const ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES = [
+  '/workspace/group/',
+  '/workspace/uploads/',
+  '/workspace/attachments/',
+  '/workspace/ai-images/',
+];
+
+function validateRootflowAiInputPath(filePath: string): string | null {
+  if (
+    !ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES.some((prefix) =>
+      filePath.startsWith(prefix),
+    )
+  ) {
+    return `图片路径必须以 ${ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES.join('、')} 之一开头。当前路径: ${filePath}`;
+  }
+  const resolved = path.resolve(filePath);
+  if (
+    !ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES.some((prefix) =>
+      resolved.startsWith(prefix),
+    )
+  ) {
+    return `图片路径不合法（检测到路径穿越）: ${filePath}`;
+  }
+  if (!fs.existsSync(resolved)) {
+    return `图片文件不存在: ${resolved}`;
+  }
+  if (!fs.statSync(resolved).isFile()) {
+    return `图片路径不是文件: ${resolved}`;
+  }
+  return null;
+}
+
+type RootflowAiMcpResult = {
+  status?: 'success' | 'error';
+  request_id?: string;
+  operation?: 'generate' | 'edit';
+  model?: string;
+  profile?: string;
+  images?: Array<{
+    path: string;
+    relative_path: string;
+    mime_type: string;
+    source: string;
+  }>;
+  error?: string;
+  details?: string;
+};
+
+function rootflowAiToolResponse(
+  result: RootflowAiMcpResult | null,
+  requestId: string,
+  actionName: string,
+) {
+  if (!result) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `${actionName} timed out waiting for response (requestId=${requestId}).`,
+        },
+      ],
+      isError: true,
+    };
+  }
+  if (result.status === 'error' || result.error) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: [result.error || `${actionName} failed.`, result.details]
+            .filter(Boolean)
+            .join('\n\n'),
+        },
+      ],
+      isError: true,
+    };
+  }
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
 const server = new McpServer({
   name: 'nanoclaw',
   version: '1.0.0',
@@ -94,22 +181,30 @@ server.tool(
 
 server.tool(
   'send_file',
-  '发送文件或图片到当前群/用户。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/group/ 目录下。',
+  '发送文件或图片到当前群/用户。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/group/、/workspace/attachments/ 或 /workspace/ai-images/ 目录下。',
   {
-    file_path: z.string().describe('文件绝对路径，必须在 /workspace/group/ 下'),
+    file_path: z
+      .string()
+      .describe(
+        '文件绝对路径，必须在 /workspace/group/、/workspace/attachments/ 或 /workspace/ai-images/ 下',
+      ),
     caption: z
       .string()
       .optional()
       .describe('可选说明文字，会在文件后以文本消息发送'),
   },
   async (args) => {
-    const prefix = '/workspace/group/';
-    if (!args.file_path.startsWith(prefix)) {
+    const allowedPrefixes = [
+      '/workspace/group/',
+      '/workspace/attachments/',
+      '/workspace/ai-images/',
+    ];
+    if (!allowedPrefixes.some((prefix) => args.file_path.startsWith(prefix))) {
       return {
         content: [
           {
             type: 'text' as const,
-            text: `文件路径必须以 ${prefix} 开头。当前路径: ${args.file_path}`,
+            text: `文件路径必须以 ${allowedPrefixes.join('、')} 之一开头。当前路径: ${args.file_path}`,
           },
         ],
         isError: true,
@@ -118,7 +213,7 @@ server.tool(
 
     // Resolve to catch ../ traversal
     const resolved = path.resolve(args.file_path);
-    if (!resolved.startsWith(prefix)) {
+    if (!allowedPrefixes.some((prefix) => resolved.startsWith(prefix))) {
       return {
         content: [
           { type: 'text' as const, text: '文件路径不合法（检测到路径穿越）。' },
@@ -130,6 +225,12 @@ server.tool(
     if (!fs.existsSync(resolved)) {
       return {
         content: [{ type: 'text' as const, text: `文件不存在: ${resolved}` }],
+        isError: true,
+      };
+    }
+    if (!fs.statSync(resolved).isFile()) {
+      return {
+        content: [{ type: 'text' as const, text: `路径不是文件: ${resolved}` }],
         isError: true,
       };
     }
@@ -148,6 +249,176 @@ server.tool(
     return {
       content: [{ type: 'text' as const, text: '文件发送请求已提交。' }],
     };
+  },
+);
+
+server.tool(
+  'rootflowai_generate_image',
+  '调用 RootFlowAI 图片生成接口。只传提示词、模型、尺寸等业务参数；API 地址和 token 由宿主机 .env 配置。',
+  {
+    prompt: z.string().min(1).describe('生图提示词'),
+    profile: z
+      .enum(['auto', 'metered', 'count'])
+      .optional()
+      .default('auto')
+      .describe('计费 profile。auto 会按模型自动选择，默认 metered。'),
+    model: z
+      .string()
+      .optional()
+      .describe(
+        '可选模型名。默认 gpt-image-2；count 计费可用 gpt-image-2-count。',
+      ),
+    size: z
+      .string()
+      .optional()
+      .default('1536x1024')
+      .describe('输出尺寸，例如 1536x1024。'),
+    quality: z
+      .string()
+      .optional()
+      .default('high')
+      .describe('输出质量，例如 high。'),
+    n: z
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .optional()
+      .default(1)
+      .describe('生成图片数量，1-4。'),
+    timeout_ms: z
+      .number()
+      .int()
+      .min(5000)
+      .max(600000)
+      .optional()
+      .default(180000)
+      .describe('请求超时时间，毫秒。'),
+  },
+  async (args) => {
+    const requestId = `rfgen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'rootflowai_generate_image',
+      requestId,
+      args,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resultPath = path.join(
+      IPC_DIR,
+      'rootflowai-results',
+      `${requestId}.json`,
+    );
+    const result = await waitForIpcResult<RootflowAiMcpResult>(
+      resultPath,
+      Math.min((args.timeout_ms || 180000) + 30000, 630000),
+      500,
+    );
+    return rootflowAiToolResponse(
+      result,
+      requestId,
+      'rootflowai_generate_image',
+    );
+  },
+);
+
+server.tool(
+  'rootflowai_edit_image',
+  '调用 RootFlowAI 图片编辑接口。输入图片必须是 workspace 内路径，API 地址和 token 由宿主机 .env 配置。',
+  {
+    prompt: z.string().min(1).describe('编辑指令'),
+    image_paths: z
+      .array(z.string().min(1))
+      .min(1)
+      .max(8)
+      .describe(
+        '输入图片路径列表，支持 /workspace/uploads/、/workspace/attachments/、/workspace/ai-images/、/workspace/group/。',
+      ),
+    mask_path: z.string().optional().describe('可选 mask 图片路径'),
+    profile: z
+      .enum(['auto', 'metered', 'count'])
+      .optional()
+      .default('auto')
+      .describe('计费 profile。auto 会按模型自动选择，默认 metered。'),
+    model: z
+      .string()
+      .optional()
+      .describe(
+        '可选模型名。默认 gpt-image-2；count 计费可用 gpt-image-2-count。',
+      ),
+    size: z
+      .string()
+      .optional()
+      .default('1536x1024')
+      .describe('输出尺寸，例如 1536x1024。'),
+    quality: z
+      .string()
+      .optional()
+      .default('high')
+      .describe('输出质量，例如 high。'),
+    n: z
+      .number()
+      .int()
+      .min(1)
+      .max(4)
+      .optional()
+      .default(1)
+      .describe('输出图片数量，1-4。'),
+    background: z.string().optional().describe('可选 background 参数。'),
+    input_fidelity: z
+      .string()
+      .optional()
+      .describe('可选 input_fidelity 参数。'),
+    timeout_ms: z
+      .number()
+      .int()
+      .min(5000)
+      .max(600000)
+      .optional()
+      .default(180000)
+      .describe('请求超时时间，毫秒。'),
+  },
+  async (args) => {
+    for (const imagePath of args.image_paths) {
+      const error = validateRootflowAiInputPath(imagePath);
+      if (error) {
+        return {
+          content: [{ type: 'text' as const, text: error }],
+          isError: true,
+        };
+      }
+    }
+    if (args.mask_path) {
+      const error = validateRootflowAiInputPath(args.mask_path);
+      if (error) {
+        return {
+          content: [{ type: 'text' as const, text: error }],
+          isError: true,
+        };
+      }
+    }
+
+    const requestId = `rfedit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'rootflowai_edit_image',
+      requestId,
+      args,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resultPath = path.join(
+      IPC_DIR,
+      'rootflowai-results',
+      `${requestId}.json`,
+    );
+    const result = await waitForIpcResult<RootflowAiMcpResult>(
+      resultPath,
+      Math.min((args.timeout_ms || 180000) + 30000, 630000),
+      500,
+    );
+    return rootflowAiToolResponse(result, requestId, 'rootflowai_edit_image');
   },
 );
 
@@ -1290,12 +1561,16 @@ server.tool(
     parts.push('');
     parts.push(page.content_markdown || '');
 
-    const claims = Array.isArray(result.detail.claims) ? result.detail.claims : [];
+    const claims = Array.isArray(result.detail.claims)
+      ? result.detail.claims
+      : [];
     if (claims.length > 0) {
       parts.push('');
       parts.push('## Claims');
       for (const claim of claims) {
-        parts.push(`- [${claim.claim_type || 'claim'}] ${claim.statement || ''}`);
+        parts.push(
+          `- [${claim.claim_type || 'claim'}] ${claim.statement || ''}`,
+        );
       }
     }
 
@@ -1306,7 +1581,9 @@ server.tool(
       parts.push('');
       parts.push('## Source Materials');
       for (const material of materials) {
-        parts.push(`- ${material.id || 'material'} ${material.title || ''}`.trim());
+        parts.push(
+          `- ${material.id || 'material'} ${material.title || ''}`.trim(),
+        );
       }
     }
 
@@ -1317,7 +1594,9 @@ server.tool(
       parts.push('');
       parts.push('## Related');
       for (const relation of relations) {
-        parts.push(`- [${relation.relation_type || 'related_to'}] ${relation.to_page_slug || ''}`);
+        parts.push(
+          `- [${relation.relation_type || 'related_to'}] ${relation.to_page_slug || ''}`,
+        );
       }
     }
 

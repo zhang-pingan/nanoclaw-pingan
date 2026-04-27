@@ -5,7 +5,14 @@ import { CronExpressionParser } from 'cron-parser';
 import { z } from 'zod';
 
 import { callAnthropicMessages } from './agent-api.js';
-import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
+import {
+  AI_IMAGES_DIR,
+  ATTACHMENTS_DIR,
+  DATA_DIR,
+  GROUPS_DIR,
+  IPC_POLL_INTERVAL,
+  TIMEZONE,
+} from './config.js';
 
 /** Format a Date to a local timezone string without T/Z (e.g., "2026-03-26 12:05:00") */
 function formatLocalTime(date: Date): string {
@@ -59,6 +66,10 @@ import {
 } from './workbench-store.js';
 import { runLocalHostScript } from './host-script-runner.js';
 import { getWikiPageDetail } from './wiki.js';
+import {
+  editRootflowAiImage,
+  generateRootflowAiImage,
+} from './rootflowai-image.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -82,6 +93,49 @@ export interface IpcDeps {
 }
 
 let ipcWatcherRunning = false;
+
+function resolveContainerFilePath(
+  filePath: string,
+  sourceGroup: string,
+): { hostPath: string; error?: string } {
+  const mappings = [
+    {
+      containerPrefix: '/workspace/group/',
+      hostBase: path.join(GROUPS_DIR, sourceGroup),
+    },
+    {
+      containerPrefix: '/workspace/attachments/',
+      hostBase: ATTACHMENTS_DIR,
+    },
+    {
+      containerPrefix: '/workspace/ai-images/',
+      hostBase: AI_IMAGES_DIR,
+    },
+  ];
+
+  const mapping = mappings.find((item) =>
+    filePath.startsWith(item.containerPrefix),
+  );
+  if (!mapping) {
+    return {
+      hostPath: '',
+      error:
+        'IPC file path must start with /workspace/group/, /workspace/attachments/, or /workspace/ai-images/',
+    };
+  }
+
+  const relativePath = filePath.slice(mapping.containerPrefix.length);
+  const hostBase = path.resolve(mapping.hostBase);
+  const hostPath = path.resolve(path.join(hostBase, relativePath));
+  if (!hostPath.startsWith(hostBase + path.sep) && hostPath !== hostBase) {
+    return {
+      hostPath,
+      error: 'IPC file path traversal attempt blocked',
+    };
+  }
+
+  return { hostPath };
+}
 
 export function startIpcWatcher(deps: IpcDeps): void {
   if (ipcWatcherRunning) {
@@ -197,38 +251,30 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
                   // Map container path to host path
-                  const containerPrefix = '/workspace/group/';
-                  if (
-                    typeof data.filePath !== 'string' ||
-                    !data.filePath.startsWith(containerPrefix)
-                  ) {
+                  if (typeof data.filePath !== 'string') {
                     logger.warn(
                       { filePath: data.filePath, sourceGroup },
-                      'IPC file path must start with /workspace/group/',
+                      'IPC file path must be a string',
                     );
                   } else {
-                    const relativePath = data.filePath.slice(
-                      containerPrefix.length,
+                    const { hostPath, error } = resolveContainerFilePath(
+                      data.filePath,
+                      sourceGroup,
                     );
-                    const hostPath = path.resolve(
-                      path.join(GROUPS_DIR, sourceGroup, relativePath),
-                    );
-                    // Prevent directory traversal
-                    const expectedPrefix = path.resolve(
-                      path.join(GROUPS_DIR, sourceGroup),
-                    );
-                    if (
-                      !hostPath.startsWith(expectedPrefix + path.sep) &&
-                      hostPath !== expectedPrefix
-                    ) {
+                    if (error) {
                       logger.warn(
                         { filePath: data.filePath, hostPath, sourceGroup },
-                        'IPC file path traversal attempt blocked',
+                        error,
                       );
                     } else if (!fs.existsSync(hostPath)) {
                       logger.warn(
                         { hostPath, sourceGroup },
                         'IPC file does not exist on host',
+                      );
+                    } else if (!fs.statSync(hostPath).isFile()) {
+                      logger.warn(
+                        { hostPath, sourceGroup },
+                        'IPC file path is not a file',
                       );
                     } else if (deps.sendFile) {
                       await deps.sendFile(data.chatJid, hostPath, data.caption);
@@ -996,6 +1042,23 @@ export async function processTaskIpc(
       'ipc',
       groupFolder,
       'host-script-results',
+    );
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
+  const writeRootflowAiResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'rootflowai-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
@@ -2032,15 +2095,22 @@ export async function processTaskIpc(
       }
 
       const searchLimit = Math.max(1, Number(data.limit || 5));
-      const hits = searchWikiPages(String(data.query), searchLimit).map((hit) => ({
-        slug: hit.slug,
-        title: hit.title,
-        page_kind: hit.page_kind,
-        summary: hit.summary,
-        score: hit.score,
-      }));
+      const hits = searchWikiPages(String(data.query), searchLimit).map(
+        (hit) => ({
+          slug: hit.slug,
+          title: hit.title,
+          page_kind: hit.page_kind,
+          summary: hit.summary,
+          score: hit.score,
+        }),
+      );
 
-      const resultsDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'wiki-results');
+      const resultsDir = path.join(
+        DATA_DIR,
+        'ipc',
+        sourceGroup,
+        'wiki-results',
+      );
       fs.mkdirSync(resultsDir, { recursive: true });
       const responsePath = path.join(resultsDir, `${data.requestId}.json`);
       const tempPath = `${responsePath}.tmp`;
@@ -2063,7 +2133,12 @@ export async function processTaskIpc(
       }
 
       const detail = getWikiPageDetail(wikiSlug);
-      const resultsDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'wiki-results');
+      const resultsDir = path.join(
+        DATA_DIR,
+        'ipc',
+        sourceGroup,
+        'wiki-results',
+      );
       fs.mkdirSync(resultsDir, { recursive: true });
       const responsePath = path.join(resultsDir, `${data.requestId}.json`);
       const tempPath = `${responsePath}.tmp`;
@@ -2124,6 +2199,57 @@ export async function processTaskIpc(
           workflowStatus: data.workflow_status,
         },
         'query_workbench_tasks completed',
+      );
+      break;
+    }
+
+    case 'rootflowai_generate_image': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn(
+          { sourceGroup },
+          'rootflowai_generate_image missing requestId',
+        );
+        break;
+      }
+
+      const result = await generateRootflowAiImage(data.args, data.requestId);
+      writeRootflowAiResult(sourceGroup, data.requestId, result);
+      logger.info(
+        {
+          sourceGroup,
+          requestId: data.requestId,
+          status: result.status,
+          imageCount: result.images?.length || 0,
+          model: result.model,
+          profile: result.profile,
+        },
+        'rootflowai_generate_image completed',
+      );
+      break;
+    }
+
+    case 'rootflowai_edit_image': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn({ sourceGroup }, 'rootflowai_edit_image missing requestId');
+        break;
+      }
+
+      const result = await editRootflowAiImage(
+        data.args,
+        data.requestId,
+        sourceGroup,
+      );
+      writeRootflowAiResult(sourceGroup, data.requestId, result);
+      logger.info(
+        {
+          sourceGroup,
+          requestId: data.requestId,
+          status: result.status,
+          imageCount: result.images?.length || 0,
+          model: result.model,
+          profile: result.profile,
+        },
+        'rootflowai_edit_image completed',
       );
       break;
     }

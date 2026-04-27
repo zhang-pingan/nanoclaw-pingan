@@ -99,6 +99,8 @@ registerChannel('feishu', (opts) => {
 项目根目录/                                 /workspace/project       ro
 项目根目录/.env → /dev/null                 /workspace/project/.env  ro (隐藏)
 groups/{folder}/                            /workspace/group         rw
+data/attachments/                           /workspace/attachments   rw
+data/ai-images/                             /workspace/ai-images     rw
 data/sessions/{folder}/.claude/             /home/node/.claude       rw
 data/ipc/{folder}/                          /workspace/ipc           rw
 data/sessions/{folder}/agent-runner-src/    /app/src                 rw
@@ -126,11 +128,11 @@ data/sessions/{folder}/agent-runner-src/    /app/src                 rw
 
 容器通过文件系统与宿主机通信：
 
-| 目录 | 方向 | 用途 |
-|------|------|------|
-| `/workspace/ipc/input/` | 宿主机 → 容器 | 新消息推送 |
+| 目录                       | 方向          | 用途               |
+| -------------------------- | ------------- | ------------------ |
+| `/workspace/ipc/input/`    | 宿主机 → 容器 | 新消息推送         |
 | `/workspace/ipc/messages/` | 容器 → 宿主机 | 发送消息到其他群组 |
-| `/workspace/ipc/tasks/` | 容器 → 宿主机 | 创建/管理定时任务 |
+| `/workspace/ipc/tasks/`    | 容器 → 宿主机 | 创建/管理定时任务  |
 
 宿主机每 1 秒扫描一次 IPC 目录。非主群只能操作自己的群组，主群可以操作任何群组。
 
@@ -139,6 +141,7 @@ data/sessions/{folder}/agent-runner-src/    /app/src                 rw
 每 60 秒检查 `scheduled_tasks` 表中到期的任务（`next_run <= now && status = 'active'`）。
 
 支持三种调度类型：
+
 - `cron`: cron 表达式（如 `0 9 * * *`）
 - `interval`: 毫秒间隔
 - `once`: 一次性任务
@@ -147,26 +150,26 @@ data/sessions/{folder}/agent-runner-src/    /app/src                 rw
 
 ## 9. 关键配置文件
 
-| 文件 | 控制什么 | 修改后需要 |
-|------|----------|-----------|
-| `.env` | API 密钥、频道凭据、BASE_URL | 重启服务 |
-| `data/sessions/{group}/.claude/settings.json` | 容器内模型、SDK 环境变量 | 下次容器启动生效 |
-| `groups/{group}/CLAUDE.md` | 群组记忆（容器内可读写） | 下次容器启动生效 |
-| `store/messages.db` | 消息历史、已注册群组、定时任务 | 实时生效 |
-| `~/Library/LaunchAgents/com.nanoclaw.plist` | launchd 服务配置 | unload + load |
+| 文件                                          | 控制什么                       | 修改后需要       |
+| --------------------------------------------- | ------------------------------ | ---------------- |
+| `.env`                                        | API 密钥、频道凭据、BASE_URL   | 重启服务         |
+| `data/sessions/{group}/.claude/settings.json` | 容器内模型、SDK 环境变量       | 下次容器启动生效 |
+| `groups/{group}/CLAUDE.md`                    | 群组记忆（容器内可读写）       | 下次容器启动生效 |
+| `store/messages.db`                           | 消息历史、已注册群组、定时任务 | 实时生效         |
+| `~/Library/LaunchAgents/com.nanoclaw.plist`   | launchd 服务配置               | unload + load    |
 
 ## 10. 关键超时和常量
 
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `POLL_INTERVAL` | 2s | 消息轮询间隔 |
-| `SCHEDULER_POLL_INTERVAL` | 60s | 任务调度检查 |
-| `IPC_POLL_INTERVAL` | 1s | IPC 文件检查 |
-| `CONTAINER_TIMEOUT` | 30 min | 容器硬超时 |
-| `IDLE_TIMEOUT` | 30 min | 容器空闲超时 |
-| `MAX_CONCURRENT_CONTAINERS` | 5 | 最大并发容器数 |
-| `CREDENTIAL_PROXY_PORT` | 3001 | 凭证代理端口 |
-| `MAX_RETRIES` | 5 | 消息处理重试上限（指数退避） |
+| 配置项                      | 默认值 | 说明                         |
+| --------------------------- | ------ | ---------------------------- |
+| `POLL_INTERVAL`             | 2s     | 消息轮询间隔                 |
+| `SCHEDULER_POLL_INTERVAL`   | 60s    | 任务调度检查                 |
+| `IPC_POLL_INTERVAL`         | 1s     | IPC 文件检查                 |
+| `CONTAINER_TIMEOUT`         | 30 min | 容器硬超时                   |
+| `IDLE_TIMEOUT`              | 30 min | 容器空闲超时                 |
+| `MAX_CONCURRENT_CONTAINERS` | 5      | 最大并发容器数               |
+| `CREDENTIAL_PROXY_PORT`     | 3001   | 凭证代理端口                 |
+| `MAX_RETRIES`               | 5      | 消息处理重试上限（指数退避） |
 
 ## 11. 数据库核心表
 

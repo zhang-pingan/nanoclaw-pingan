@@ -136,10 +136,7 @@ export function parseMultipartFileParts(
     if (boundaryIndex === -1) break;
 
     let cursor = boundaryIndex + boundaryBuffer.length;
-    if (
-      body[cursor] === 45 &&
-      body[cursor + 1] === 45
-    ) {
+    if (body[cursor] === 45 && body[cursor + 1] === 45) {
       break;
     }
     if (body[cursor] === 13 && body[cursor + 1] === 10) {
@@ -158,10 +155,7 @@ export function parseMultipartFileParts(
     if (nextBoundaryIndex === -1) break;
 
     let contentEnd = nextBoundaryIndex;
-    if (
-      body[contentEnd - 2] === 13 &&
-      body[contentEnd - 1] === 10
-    ) {
+    if (body[contentEnd - 2] === 13 && body[contentEnd - 1] === 10) {
       contentEnd -= 2;
     }
 
@@ -189,9 +183,7 @@ export function sanitizeUploadFilename(rawFilename: string): string {
   const safeName = name
     .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]/g, '_')
     .trim();
-  const safeExt = ext
-    .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]/g, '_')
-    .trim();
+  const safeExt = ext.replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]/g, '_').trim();
   const base = safeName || `upload-${Date.now()}`;
   return `${base}${safeExt}`;
 }
@@ -633,10 +625,7 @@ class WebChannel {
       if (pathname === '/api/today-plan' && req.method === 'POST') {
         return this.apiCreateTodayPlan(req, res);
       }
-      if (
-        pathname === '/api/today-plan/complete' &&
-        req.method === 'POST'
-      ) {
+      if (pathname === '/api/today-plan/complete' && req.method === 'POST') {
         return this.apiCompleteTodayPlan(req, res);
       }
       if (pathname === '/api/today-plan/item' && req.method === 'POST') {
@@ -1648,15 +1637,13 @@ class WebChannel {
     res.end(JSON.stringify({ queries }));
   }
 
-  private apiListAgentQueries(
-    reqUrl: URL,
-    res: http.ServerResponse,
-  ): void {
+  private apiListAgentQueries(reqUrl: URL, res: http.ServerResponse): void {
     const limitRaw = parseInt(reqUrl.searchParams.get('limit') || '50', 10);
     const offsetRaw = parseInt(reqUrl.searchParams.get('offset') || '0', 10);
     const sourceType = reqUrl.searchParams.get('sourceType') || undefined;
     const sourceRefIdParam = reqUrl.searchParams.get('sourceRefId');
-    const sourceRefId = sourceRefIdParam === null ? undefined : sourceRefIdParam;
+    const sourceRefId =
+      sourceRefIdParam === null ? undefined : sourceRefIdParam;
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(limitRaw, 1), 200)
       : 50;
@@ -1683,11 +1670,10 @@ class WebChannel {
     );
   }
 
-  private apiGetAgentQuery(
-    pathname: string,
-    res: http.ServerResponse,
-  ): void {
-    const match = pathname.match(/^\/api\/agent-queries\/([^/]+)(?:\/(steps|events))?$/);
+  private apiGetAgentQuery(pathname: string, res: http.ServerResponse): void {
+    const match = pathname.match(
+      /^\/api\/agent-queries\/([^/]+)(?:\/(steps|events))?$/,
+    );
     if (!match) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
@@ -2124,7 +2110,11 @@ class WebChannel {
       card_key?: string;
       card?: CardConfig;
     };
-    const workflowType = (data.workflow_type || parsed.workflowType || '').trim();
+    const workflowType = (
+      data.workflow_type ||
+      parsed.workflowType ||
+      ''
+    ).trim();
     const cardKey = (data.card_key || parsed.cardKey || '').trim();
     if (!workflowType || !cardKey) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2540,7 +2530,9 @@ class WebChannel {
         order_index: data.order_index,
         associations: data.associations
           ? {
-              workbench_task_ids: Array.isArray(data.associations.workbench_task_ids)
+              workbench_task_ids: Array.isArray(
+                data.associations.workbench_task_ids,
+              )
                 ? data.associations.workbench_task_ids
                 : [],
               chat_selections: Array.isArray(data.associations.chat_selections)
@@ -2685,7 +2677,12 @@ class WebChannel {
       return;
     }
 
-    const data = body as { plan_id?: string; name?: string; to?: string[]; cc?: string[] };
+    const data = body as {
+      plan_id?: string;
+      name?: string;
+      to?: string[];
+      cc?: string[];
+    };
     const name = typeof data.name === 'string' ? data.name.trim() : '';
     if (!data.plan_id || !name) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2886,7 +2883,9 @@ class WebChannel {
       }
     } else {
       if (
-        (data.action === 'confirm' || data.action === 'skip' || data.action === 'cancel') &&
+        (data.action === 'confirm' ||
+          data.action === 'skip' ||
+          data.action === 'cancel') &&
         item.source_ref_id &&
         item.group_folder
       ) {
@@ -3390,7 +3389,10 @@ class WebChannel {
     const query = (reqUrl.searchParams.get('q') || '').trim();
     const limit = Math.max(
       1,
-      Math.min(20, Number.parseInt(reqUrl.searchParams.get('limit') || '10', 10) || 10),
+      Math.min(
+        20,
+        Number.parseInt(reqUrl.searchParams.get('limit') || '10', 10) || 10,
+      ),
     );
     const results = query ? searchWikiPages(query, limit) : [];
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -3526,16 +3528,25 @@ class WebChannel {
     }
     const body = Buffer.concat(chunks);
     const parts = parseMultipartFileParts(body, boundary);
-    const uploadedFiles: { name: string; hostPath: string }[] = [];
+    const uploadedFiles: {
+      name: string;
+      hostPath: string;
+      agentPath: string;
+    }[] = [];
 
     for (const part of parts) {
       const filename = sanitizeUploadFilename(part.filename);
       const filePath = ensureUniqueUploadPath(uploadBase, filename);
       fs.writeFileSync(filePath, part.data);
-      uploadedFiles.push({ name: path.basename(filePath), hostPath: filePath });
+      const storedName = path.basename(filePath);
+      uploadedFiles.push({
+        name: storedName,
+        hostPath: filePath,
+        agentPath: `/workspace/uploads/${storedName}`,
+      });
       logger.info(
         {
-          filename: path.basename(filePath),
+          filename: storedName,
           originalFilename: part.filename,
           size: part.data.length,
           jid,

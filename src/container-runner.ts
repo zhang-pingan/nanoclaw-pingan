@@ -9,6 +9,8 @@ import path from 'path';
 import os from 'os';
 
 import {
+  AI_IMAGES_DIR,
+  ATTACHMENTS_DIR,
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
@@ -232,17 +234,36 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Mount agent-runner source directly (read-only) for non-main groups.
-  // Main group already has /workspace/project which contains everything.
-  if (!isMain) {
-    const agentRunnerSrc = path.join(projectRoot, 'container', 'agent-runner', 'src');
-    if (fs.existsSync(agentRunnerSrc)) {
-      mounts.push({
-        hostPath: agentRunnerSrc,
-        containerPath: '/app/src',
-        readonly: true,
-      });
-    }
+  // Shared attachments directory: inbound channel files are stored here.
+  // Mounted for all groups so agents can reference files with stable paths.
+  fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+  mounts.push({
+    hostPath: ATTACHMENTS_DIR,
+    containerPath: '/workspace/attachments',
+    readonly: false,
+  });
+
+  // Shared AI image directory: generated and edited images are stored here.
+  fs.mkdirSync(AI_IMAGES_DIR, { recursive: true });
+  mounts.push({
+    hostPath: AI_IMAGES_DIR,
+    containerPath: '/workspace/ai-images',
+    readonly: false,
+  });
+
+  // Mount agent-runner source directly because entrypoint compiles /app/src.
+  const agentRunnerSrc = path.join(
+    projectRoot,
+    'container',
+    'agent-runner',
+    'src',
+  );
+  if (fs.existsSync(agentRunnerSrc)) {
+    mounts.push({
+      hostPath: agentRunnerSrc,
+      containerPath: '/app/src',
+      readonly: true,
+    });
   }
 
   // Shared uploads directory: web client uploads are stored here.

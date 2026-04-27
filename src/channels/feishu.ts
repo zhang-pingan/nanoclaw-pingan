@@ -18,7 +18,7 @@ import {
   listWorkbenchActionItemsBySource,
   listWorkbenchActionItemsByTask,
 } from '../db.js';
-import { GROUPS_DIR } from '../config.js';
+import { ATTACHMENTS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel } from './registry.js';
@@ -482,7 +482,8 @@ class FeishuChannel implements Channel {
       'request_human_input',
     ] as const) {
       const items = listWorkbenchActionItemsBySource(sourceType, requestId);
-      const item = items.find((entry) => entry.status === 'pending') || items[0];
+      const item =
+        items.find((entry) => entry.status === 'pending') || items[0];
       if (item) {
         return {
           actionItemId: item.id,
@@ -499,9 +500,9 @@ class FeishuChannel implements Channel {
     const items = listWorkbenchActionItemsByTask(taskId);
     const item =
       items.find(
-        (entry) => entry.source_type === 'workflow' && entry.status === 'pending',
-      ) ||
-      items.find((entry) => entry.source_type === 'workflow');
+        (entry) =>
+          entry.source_type === 'workflow' && entry.status === 'pending',
+      ) || items.find((entry) => entry.source_type === 'workflow');
     if (!item) return null;
     return {
       actionItemId: item.id,
@@ -671,8 +672,8 @@ class FeishuChannel implements Channel {
     this.connected = false;
   }
 
-  // Download a file/image resource from a Feishu message and save to group attachments dir.
-  // Returns the saved file path (relative to group dir, for agent access), or null on failure.
+  // Download a file/image resource from a Feishu message and save to the shared attachments dir.
+  // Returns the saved container path for agent access, or null on failure.
   // Uses messageId in filename to avoid duplicate downloads of the same file.
   private async downloadMessageResource(
     messageId: string,
@@ -682,19 +683,20 @@ class FeishuChannel implements Channel {
     groupFolder: string,
   ): Promise<string | null> {
     try {
-      const attachDir = path.join(GROUPS_DIR, groupFolder, 'attachments');
+      const attachDir = ATTACHMENTS_DIR;
       fs.mkdirSync(attachDir, { recursive: true });
 
       // Use messageId as prefix for deduplication — same quoted message won't re-download
-      const safeName = `${messageId}_${fileName.replace(/[/\\]/g, '_')}`;
+      const safeName = `${groupFolder}_${messageId}_${fileName.replace(/[/\\]/g, '_')}`;
       const filePath = path.join(attachDir, safeName);
+      const containerPath = `/workspace/attachments/${safeName}`;
 
       if (fs.existsSync(filePath)) {
         logger.info(
           { messageId, filePath },
           'Feishu file already downloaded, skipping',
         );
-        return `attachments/${safeName}`;
+        return containerPath;
       }
 
       const token = await this.getTenantAccessToken();
@@ -711,7 +713,7 @@ class FeishuChannel implements Channel {
         { messageId, fileKey, filePath },
         'Downloaded Feishu file resource',
       );
-      return `attachments/${safeName}`;
+      return containerPath;
     } catch (err) {
       logger.warn(
         { messageId, fileKey, err },
@@ -745,43 +747,43 @@ class FeishuChannel implements Channel {
       case 'file': {
         const fileName = content.file_name || '未知文件';
         if (messageId && groupFolder && content.file_key) {
-          const relPath = await this.downloadMessageResource(
+          const resourcePath = await this.downloadMessageResource(
             messageId,
             content.file_key,
             fileName,
             'file',
             groupFolder,
           );
-          if (relPath)
-            return `[文件: ${fileName}] (已下载到 /workspace/group/${relPath})`;
+          if (resourcePath)
+            return `[文件: ${fileName}] (已下载到 ${resourcePath})`;
         }
         return `[文件: ${fileName}]`;
       }
       case 'image': {
         if (messageId && groupFolder && content.image_key) {
-          const relPath = await this.downloadMessageResource(
+          const resourcePath = await this.downloadMessageResource(
             messageId,
             content.image_key,
             `${content.image_key}.png`,
             'image',
             groupFolder,
           );
-          if (relPath) return `[图片] (已下载到 /workspace/group/${relPath})`;
+          if (resourcePath) return `[图片] (已下载到 ${resourcePath})`;
         }
         return '[图片]';
       }
       case 'media': {
         const mediaName = content.file_name || '媒体文件';
         if (messageId && groupFolder && content.file_key) {
-          const relPath = await this.downloadMessageResource(
+          const resourcePath = await this.downloadMessageResource(
             messageId,
             content.file_key,
             mediaName,
             'file',
             groupFolder,
           );
-          if (relPath)
-            return `[视频/音频: ${mediaName}] (已下载到 /workspace/group/${relPath})`;
+          if (resourcePath)
+            return `[视频/音频: ${mediaName}] (已下载到 ${resourcePath})`;
         }
         return `[视频/音频: ${mediaName}]`;
       }
@@ -801,7 +803,7 @@ class FeishuChannel implements Channel {
   }
 
   // Fetch a message by ID from Feishu API (used to get quoted/parent messages).
-  // When groupFolder is provided, file/image resources are downloaded to the group's attachments dir.
+  // When groupFolder is provided, file/image resources are downloaded to the shared attachments dir.
   private async getMessageContent(
     messageId: string,
     groupFolder?: string,
@@ -913,7 +915,11 @@ class FeishuChannel implements Channel {
             }
           } catch (err) {
             logger.debug(
-              { err, taskId: mergedFormValue.task_id, action: resolvedValue.action },
+              {
+                err,
+                taskId: mergedFormValue.task_id,
+                action: resolvedValue.action,
+              },
               'Failed to resolve workflow action item for Feishu form fallback',
             );
           }
@@ -1038,9 +1044,17 @@ class FeishuChannel implements Channel {
     const messageId = message.message_id || `feishu_${Date.now()}`;
     const fullJid = `feishu:${chatJid}`;
 
+    // Download file/image/media messages before handing them to the agent.
+    // For text messages this just returns the text content.
+    let messageContent = await this.extractMessageText(
+      message.message_type || message.msg_type || 'text',
+      content,
+      messageId,
+      group?.folder,
+    );
+
     // If this is a reply, fetch the quoted/parent message content.
     // Append (not prepend) quoted text so @trigger at the start of content is preserved.
-    let messageContent = content.text || '';
     const parentId = message.parent_id || message.upper_message_id;
     if (parentId) {
       const parentMsg = await this.getMessageContent(parentId, group?.folder);

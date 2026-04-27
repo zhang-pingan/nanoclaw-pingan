@@ -50,6 +50,9 @@ export const SSH_KEY_PATH = sshKeyPath
 export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
+export const ATTACHMENTS_DIR = path.resolve(DATA_DIR, 'attachments');
+export const AI_IMAGES_DIR = path.resolve(DATA_DIR, 'ai-images');
+export const WEB_UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
 export const KNOWLEDGE_DIR = path.resolve(PROJECT_ROOT, 'knowledge');
 export const KNOWLEDGE_WIKI_DIR = path.join(KNOWLEDGE_DIR, 'wiki');
 
