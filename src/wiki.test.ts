@@ -427,6 +427,66 @@ describe('wiki', () => {
     });
   });
 
+  it('retries wiki draft generation once when the model request times out', async () => {
+    const material = importWikiMaterialFromText({
+      title: '超时重试资料',
+      text: '模型请求超时时，wiki 草稿生成应自动重试一次。',
+    });
+    rememberMaterialArtifacts(material);
+
+    callAnthropicMessagesMock
+      .mockRejectedValueOnce(
+        new Error('Anthropic API request timed out after 300000ms'),
+      )
+      .mockResolvedValueOnce({
+        model: 'test-model',
+        raw: {},
+        text: JSON.stringify({
+          page: {
+            slug: `wiki-timeout-retry-${Date.now()}`,
+            title: 'Timeout Retry Page',
+            page_kind: 'project',
+            summary: '验证超时重试',
+            content_markdown: '# Timeout Retry Page\n\n重试后生成成功。',
+          },
+          claims: [
+            {
+              claim_type: 'fact',
+              statement: '模型请求超时时，wiki 草稿生成应自动重试一次。',
+              canonical_form: '模型请求超时时 wiki 草稿生成应自动重试一次',
+              confidence: 0.9,
+              evidence: [
+                {
+                  material_id: material.id,
+                  excerpt_text:
+                    '模型请求超时时，wiki 草稿生成应自动重试一次。',
+                },
+              ],
+            },
+          ],
+          relations: [],
+        }),
+      });
+
+    const job = queueWikiDraftGenerationJob({
+      materialIds: [material.id],
+      title: 'Timeout Retry Page',
+      pageKind: 'project',
+    });
+
+    const completedJob = await waitForJobCompletion(job.id);
+    expect(completedJob.status).toBe('completed');
+    expect(completedJob.error_message).toBeNull();
+    expect(callAnthropicMessagesMock).toHaveBeenCalledTimes(2);
+    expect(callAnthropicMessagesMock.mock.calls[0]?.[2]).toBe(300000);
+    expect(callAnthropicMessagesMock.mock.calls[1]?.[2]).toBe(300000);
+
+    const draftId = JSON.parse(
+      String(completedJob.result_json || '{}'),
+    ).draft_id;
+    rememberPath(getWikiDraftDetail(String(draftId))?.draft.file_path);
+  });
+
   it('imports uploaded pdf materials by extracting text before storing them', () => {
     const uploadPath = path.join(
       WEB_UPLOADS_DIR,

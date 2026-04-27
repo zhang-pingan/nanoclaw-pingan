@@ -180,6 +180,44 @@ function getWikiDraftMaxTokens(): number | undefined {
   );
 }
 
+function isWikiDraftModelTimeout(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /\b(?:Anthropic|OpenAI-compatible) API request timed out after \d+ms\b/.test(
+      err.message,
+    )
+  );
+}
+
+async function callWikiDraftModelWithTimeoutRetry(
+  requestPayload: Parameters<typeof callAnthropicMessages>[0],
+  timeoutMs: number,
+  options: {
+    signal?: AbortSignal;
+  },
+): ReturnType<typeof callAnthropicMessages> {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    throwIfSignalAborted(options.signal);
+    try {
+      return await callAnthropicMessages(
+        requestPayload,
+        undefined,
+        timeoutMs,
+        { signal: options.signal },
+      );
+    } catch (err) {
+      throwIfSignalAborted(options.signal);
+      if (attempt === 1 && isWikiDraftModelTimeout(err)) {
+        logger.warn({ err }, 'Wiki draft model request timed out; retrying');
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new Error('Wiki draft model request retry loop exited unexpectedly');
+}
+
 function getWikiMaterialCharLimits(): {
   maxMaterialChars: number;
   maxTotalMaterialChars: number;
@@ -1203,9 +1241,8 @@ async function generateWikiDraftFromMaterials(
     temperature: 0.1,
     ...(draftMaxTokens !== undefined ? { max_tokens: draftMaxTokens } : {}),
   };
-  const response = await callAnthropicMessages(
+  const response = await callWikiDraftModelWithTimeoutRetry(
     requestPayload,
-    undefined,
     getWikiDraftTimeoutMs(),
     { signal: options.signal },
   );
