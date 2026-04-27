@@ -362,6 +362,92 @@ describe('workflow metadata and branch flow', () => {
     );
   });
 
+  it('keeps fix_test bug fix pending when result omits final work branch', () => {
+    const result = createNewWorkflow({
+      title: '登录态为空时接口返回 500',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'fix',
+      workflowType: 'fix_test',
+      mainBranch: 'main',
+      stagingBaseBranch: 'staging',
+      context: {
+        bug_description: '用户未登录访问资料接口时返回 500，预期应返回 401。',
+        bug_files: ['/tmp/login-500.log'],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    const [fixDelegation] = getDelegationsByWorkflow(result.workflowId);
+    updateDelegation(fixDelegation!.id, {
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        main_branch: 'main',
+        deliverable: '2026-04-08_bugfix_login-empty-500',
+        verdict: 'passed',
+        summary: '已完成修复，但未返回最终工作分支。',
+      }),
+    });
+
+    onDelegationComplete(fixDelegation!.id);
+
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('bug_fix');
+    expect(workflow?.current_delegation_id).toBe('');
+    expect(
+      getLatestWorkflowStageEvaluation(result.workflowId, 'bug_fix')?.status,
+    ).toBe('pending');
+    expect(getDelegationsByWorkflow(result.workflowId)).toHaveLength(1);
+  });
+
+  it('allows fix_test bug fix to omit staging branches before deploy stage', () => {
+    const result = createNewWorkflow({
+      title: '登录态为空时接口返回 500',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'fix',
+      workflowType: 'fix_test',
+      mainBranch: 'main',
+      context: {
+        bug_description: '用户未登录访问资料接口时返回 500，预期应返回 401。',
+        bug_files: ['/tmp/login-500.log'],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    const [fixDelegation] = getDelegationsByWorkflow(result.workflowId);
+    updateDelegation(fixDelegation!.id, {
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        main_branch: 'main',
+        work_branch: 'bugfix/login-empty-500_20260408',
+        deliverable: '2026-04-08_bugfix_login-empty-500',
+        verdict: 'passed',
+        summary: '已完成修复，预发分支留给部署阶段确认。',
+      }),
+    });
+
+    onDelegationComplete(fixDelegation!.id);
+
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('ops_deploy');
+    expect(
+      getLatestWorkflowStageEvaluation(result.workflowId, 'bug_fix')?.status,
+    ).toBe('passed');
+
+    const deployDelegation = getDelegationsByWorkflow(result.workflowId).find(
+      (delegation) => delegation.target_folder === 'web_ops',
+    );
+    const taskLines = deployDelegation?.task.split('\n') || [];
+    expect(taskLines).toContain('工作分支：bugfix/login-empty-500_20260408');
+    expect(taskLines).toContain('预发分支：');
+    expect(taskLines).toContain('预发工作分支：');
+  });
+
   it('marks fix_test work branch fields optional in create form', () => {
     const fixTestConfig = getAvailableWorkflowTypes().find(
       (workflowType) => workflowType.type === 'fix_test',

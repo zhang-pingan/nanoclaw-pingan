@@ -38,15 +38,15 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
 - 只有仓库不可访问、分支无法确认、无法安全提交、关键工具异常等执行层阻塞，才使用 `outcome=failure`。
 - `result` 必须是 JSON，至少包含：
   - `service`
+  - `main_branch`
   - `work_branch`
-  - `staging_work_branch`
   - `deliverable`
   - `verdict`
   - `summary`
   - `findings`
   - `evidence`
-- 如果已从服务配置确认 `main_branch` 或 `staging_base_branch`，也一并返回。
 - 如果本轮自动创建了工作分支，`work_branch` 必须返回最终创建或复用的分支名，`summary` 或 `evidence` 中说明其基于哪个主分支创建。
+- 如果已确认 `staging_base_branch` 或 `staging_work_branch`，也一并返回，但它们不是 Bug 修复阶段的必填字段。
 - `verdict=passed` 表示本轮修复已完成，可以部署预发。
 - `deliverable` 是目录名，不含文件名。
 

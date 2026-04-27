@@ -20,6 +20,8 @@ description: Use only in the fix_test workflow. Verify a fix_test bug fix on sta
    - Bug 描述
    - Bug 附件
    - 服务名称
+   - 主分支
+   - 预发分支
    - 工作分支
    - 预发工作分支
    - 修复文档 `fix.md`
@@ -72,6 +74,8 @@ doc_type: fix-test
 {是否通过}
 ```
 
+如果已确认 `main_branch` 或 `staging_base_branch`，可以一并写入 front matter，但它们不是 Bug 测试验证阶段的必填字段。
+
 ## 返回结果要求
 
 - 已完成测试并形成业务结论时，使用 `outcome=success`。
@@ -91,6 +95,7 @@ doc_type: fix-test
   - `summary`
   - `findings`
   - `evidence`
+- 如果已确认 `main_branch` 或 `staging_base_branch`，也一并返回，但它们不是 Bug 测试验证阶段的必填字段。
 - 全部通过时 `verdict=passed`。
 - 只要存在失败用例或仍未修复的问题，`verdict=failed`。
 - 信息不足但已形成结构化阶段结论时，`verdict=pending`。

@@ -300,6 +300,13 @@ function getStagePayloadFieldRequirements(
         { name: 'test_doc', type: 'string' },
         { name: 'fixed_bugs', type: 'array' },
       ];
+    case 'bug_fix':
+    case 'bug_refix':
+      return [
+        { name: 'deliverable', type: 'string' },
+        { name: 'main_branch', type: 'string' },
+        { name: 'work_branch', type: 'string' },
+      ];
     default:
       return [];
   }
@@ -314,16 +321,25 @@ function evaluateStagePayloadContract(
     trimText(payload.summary) || truncate(delegation?.result || '');
   const issues: string[] = [];
 
-  if (!hasOwnPayloadField(payload, 'verdict') || !coerceStatus(payload.verdict)) {
+  if (
+    !hasOwnPayloadField(payload, 'verdict') ||
+    !coerceStatus(payload.verdict)
+  ) {
     issues.push('verdict');
   }
   if (!hasOwnPayloadField(payload, 'summary') || !trimText(payload.summary)) {
     issues.push('summary');
   }
-  if (!hasOwnPayloadField(payload, 'findings') || !Array.isArray(payload.findings)) {
+  if (
+    !hasOwnPayloadField(payload, 'findings') ||
+    !Array.isArray(payload.findings)
+  ) {
     issues.push('findings');
   }
-  if (!hasOwnPayloadField(payload, 'evidence') || !Array.isArray(payload.evidence)) {
+  if (
+    !hasOwnPayloadField(payload, 'evidence') ||
+    !Array.isArray(payload.evidence)
+  ) {
     issues.push('evidence');
   }
 
@@ -379,7 +395,8 @@ function addExecutionFailureFinding(
     severity: 'high',
     message: payloadSummary || fallbackMessage,
     stageKey,
-    suggestion: '排查技能执行阻塞后重跑当前阶段，不要把执行失败当作业务 verdict。',
+    suggestion:
+      '排查技能执行阻塞后重跑当前阶段，不要把执行失败当作业务 verdict。',
   });
 }
 
@@ -726,10 +743,7 @@ function evaluatePlanStage(
   if (outcome === 'failure' || contract.verdict === 'failed') status = 'failed';
   else if (!contract.valid || !planDoc.exists) status = 'pending';
   else if (contract.verdict === 'pending') status = 'pending';
-  else if (
-    contract.verdict === 'needs_revision' ||
-    hasRuleRevisionIssue
-  ) {
+  else if (contract.verdict === 'needs_revision' || hasRuleRevisionIssue) {
     status = 'needs_revision';
   } else {
     status = 'passed';
@@ -796,7 +810,8 @@ function evaluateReviewStage(
   }
 
   let status: WorkflowStageEvaluationStatus;
-  if (outcome === 'failure' || !contract.valid || !doc.exists) status = 'pending';
+  if (outcome === 'failure' || !contract.valid || !doc.exists)
+    status = 'pending';
   else if (contract.verdict === 'pending') status = 'pending';
   else if (
     contract.verdict === 'failed' ||
@@ -914,14 +929,60 @@ function evaluateDevStage(
   if (outcome === 'failure' || contract.verdict === 'failed') status = 'failed';
   else if (!contract.valid || !devDoc.exists) status = 'pending';
   else if (contract.verdict === 'pending') status = 'pending';
-  else if (
-    contract.verdict === 'needs_revision' ||
-    hasRuleRevisionIssue
-  ) {
+  else if (contract.verdict === 'needs_revision' || hasRuleRevisionIssue) {
     status = 'needs_revision';
   } else {
     status = 'passed';
   }
+
+  return finalizeResult({
+    workflow,
+    stageKey,
+    status,
+    summary: buildSummary(workflow, stageKey, status, payloadSummary, findings),
+    findings,
+    evidence,
+    evaluatorType:
+      payload.findings || payload.evidence || payload.summary
+        ? 'hybrid'
+        : 'rules',
+  });
+}
+
+function evaluateBugFixStage(
+  workflow: Workflow,
+  stageKey: string,
+  delegation: Delegation | null | undefined,
+  payload: ParsedDelegationPayload,
+): WorkflowStageEvalResult {
+  const contract = evaluateStagePayloadContract(stageKey, delegation, payload);
+  const findings = collectPayloadFindings(stageKey, payload);
+  const evidence = collectPayloadEvidence(payload);
+  const payloadSummary = contract.payloadSummary;
+  const outcome = normalizeDelegationOutcome(delegation);
+
+  addWorkflowContextEvidence(workflow, evidence);
+  addStructuredVerdictEvidence(evidence, contract.verdict);
+
+  if (outcome !== 'failure' && !contract.valid) {
+    addPayloadContractFinding(findings, stageKey, contract.issues);
+  }
+
+  if (outcome === 'failure') {
+    addExecutionFailureFinding(
+      findings,
+      stageKey,
+      payloadSummary,
+      'Bug 修复阶段执行失败。',
+    );
+  }
+
+  let status: WorkflowStageEvaluationStatus;
+  if (outcome === 'failure' || contract.verdict === 'failed') status = 'failed';
+  else if (!contract.valid) status = 'pending';
+  else if (contract.verdict === 'pending') status = 'pending';
+  else if (contract.verdict === 'needs_revision') status = 'needs_revision';
+  else status = 'passed';
 
   return finalizeResult({
     workflow,
@@ -1168,6 +1229,14 @@ export function evaluateWorkflowStage(params: {
     case 'dev':
     case 'fixing':
       return evaluateDevStage(
+        params.workflow,
+        params.stageKey,
+        params.delegation,
+        payload,
+      );
+    case 'bug_fix':
+    case 'bug_refix':
+      return evaluateBugFixStage(
         params.workflow,
         params.stageKey,
         params.delegation,

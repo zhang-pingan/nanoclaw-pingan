@@ -15,6 +15,8 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
    - Bug 描述
    - Bug 附件
    - 服务名称
+   - 主分支
+   - 预发分支
    - 工作分支
    - 预发工作分支
    - 修复文档 `fix.md`
@@ -22,7 +24,7 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
    - 本轮测试验证结果
 2. 读取 `/workspace/global/services.json`，确认服务仓库路径。
 3. 进入真实代码仓库 `/workspace/repos/{repo_path}`；如果服务配置没有 `repo_path`，再尝试 `/workspace/repos/{服务名}`。
-4. 必须继续使用任务指定的工作分支，不要创建新的修复分支。
+4. 必须继续使用任务指定或 `fix.md` 中记录的工作分支，不要创建新的修复分支；空值、`N/A`、`未提供` 都视为缺少工作分支，无法确认时通过 `complete_delegation` 返回失败。
 5. 以测试验证结果中的未通过问题为准，复修仍未解决的问题；不要重写与本轮失败无关的大范围逻辑。
 6. 提交并 push 工作分支。
 7. 在原 `fix.md` 末尾追加复修记录，包含 Round、未通过问题、修复方式、验证命令和提交信息。
@@ -34,14 +36,14 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
 - 执行层阻塞才使用 `outcome=failure`。
 - `result` 必须是 JSON，至少包含：
   - `service`
+  - `main_branch`
   - `work_branch`
-  - `staging_work_branch`
   - `deliverable`
   - `verdict`
   - `summary`
   - `findings`
   - `evidence`
-- 如果已确认 `main_branch` 或 `staging_base_branch`，也一并返回。
+- 如果已确认 `staging_base_branch` 或 `staging_work_branch`，也一并返回，但它们不是 Bug 复修阶段的必填字段。
 - `verdict=passed` 表示复修完成，可以重新部署预发。
 
 成功返回示例：
