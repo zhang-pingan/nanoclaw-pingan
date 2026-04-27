@@ -520,6 +520,43 @@ function apiFetch(path, options) {
   return fetch(`http://localhost:3000${path}`, { ...options, headers });
 }
 
+function apiUrl(path) {
+  if (!path) return "";
+  if (/^(https?:|file:|blob:|data:)/i.test(path)) return path;
+  return `http://localhost:3000${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function encodeApiPathSegments(pathValue) {
+  return pathValue
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function workspaceFileApiPath(filePath) {
+  if (!filePath) return null;
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  const webUploadsMarker = "/data/web-uploads/";
+  const webUploadsIndex = normalizedPath.lastIndexOf(webUploadsMarker);
+  if (webUploadsIndex >= 0) {
+    return `/api/uploads/${encodeApiPathSegments(normalizedPath.slice(webUploadsIndex + webUploadsMarker.length))}`;
+  }
+  const mappings = [
+    ["/workspace/uploads/", "/api/uploads/"],
+  ];
+  for (const [prefix, apiPrefix] of mappings) {
+    if (normalizedPath.startsWith(prefix)) {
+      return `${apiPrefix}${encodeApiPathSegments(normalizedPath.slice(prefix.length))}`;
+    }
+  }
+  if (normalizedPath.startsWith("/workspace/group/") && currentGroupJid) {
+    const groupFolder = currentGroupJid.replace("web:", "");
+    return `/api/files/${encodeURIComponent(groupFolder)}/${encodeApiPathSegments(normalizedPath.slice("/workspace/group/".length))}`;
+  }
+  return null;
+}
+
 function shouldUseCustomAppDialogs() {
   return typeof window !== "undefined" && Boolean(window.nanoclawApp);
 }
@@ -1026,7 +1063,7 @@ var IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "svg", "webp"];
 var PDF_EXTS = ["pdf"];
 
 function detectFileUpload(content) {
-  // Detect "文件地址: /absolute/path" pattern (client upload)
+  // Detect agent-visible workspace file references.
   const pathMatch = content.match(/文件地址:\s*(.+)/);
   if (pathMatch) {
     const filePath = pathMatch[1].trim();
@@ -1034,25 +1071,27 @@ function detectFileUpload(content) {
     const ext = filename.split(".").pop().toLowerCase();
     return { filename, ext, filePath };
   }
-  // Legacy: detect "📎 Uploaded: filename" pattern
-  const match = content.match(/\u{1F4CE}\s*Uploaded:\s*(.+)/u);
-  if (!match) return null;
-  const filename = match[1].trim();
-  const ext = filename.split(".").pop().toLowerCase();
-  return { filename, ext, filePath: null };
+  return null;
 }
 
-function renderFilePreview(filename, ext, filePath) {
+function renderFilePreview(filename, ext, filePath, fileUrl = null) {
   const div = document.createElement("div");
   div.className = "file-preview";
+  const workspaceApiPath = workspaceFileApiPath(filePath);
+  const previewUrl = fileUrl
+    ? apiUrl(fileUrl)
+    : workspaceApiPath
+      ? apiUrl(workspaceApiPath)
+      : filePath
+        ? `file://${filePath}`
+        : apiUrl(`/api/uploads/${encodeURIComponent(filename)}`);
 
   if (IMAGE_EXTS.includes(ext)) {
     const img = document.createElement("img");
     img.className = "file-preview-image";
     img.loading = "lazy";
     img.decoding = "async";
-    // Use file:// for local files, fallback to HTTP for legacy
-    img.src = filePath ? `file://${filePath}` : `http://localhost:3000/api/uploads/${encodeURIComponent(filename)}`;
+    img.src = previewUrl;
     img.alt = filename;
     img.addEventListener("click", () => openLightbox(img.src));
     div.appendChild(img);
@@ -1063,7 +1102,7 @@ function renderFilePreview(filename, ext, filePath) {
     div.appendChild(icon);
 
     // "打开文件" button
-    if (filePath) {
+    if (filePath && !fileUrl && !workspaceApiPath) {
       const btn = document.createElement("button");
       btn.className = "file-open-btn";
       btn.innerHTML = `${SVG.paperclip} ${escapeHtml(filename)}`;
@@ -1080,7 +1119,7 @@ function renderFilePreview(filename, ext, filePath) {
       info.className = "file-preview-info";
       const link = document.createElement("a");
       link.className = "file-preview-name";
-      link.href = `http://localhost:3000/api/uploads/${encodeURIComponent(filename)}`;
+      link.href = previewUrl;
       link.target = "_blank";
       link.textContent = filename;
       info.appendChild(link);
@@ -1428,6 +1467,8 @@ function createMessageEl(msg) {
     const senderName = msg.sender_name || msg.sender || "Assistant";
     const fileName = msg._filePath.split("/").pop() || msg.content;
     const ext = fileName.split(".").pop().toLowerCase();
+    const fileUrl = msg._fileUrl || null;
+    const isImageFile = IMAGE_EXTS.includes(ext);
     const wrapper = document.createElement("div");
     wrapper.className = "message assistant file-message";
     wrapper.setAttribute("data-msg-id", msg.id);
@@ -1440,27 +1481,39 @@ function createMessageEl(msg) {
           <span class="msg-sender">${escapeHtml(senderName)}</span>
           <span class="msg-time">${formatTime(msg.timestamp)}</span>
         </div>
-        <div class="msg-body">
-          <div class="file-card" data-ext="${escapeHtml(ext)}">
-            <div class="file-card-icon">${getFileIcon(ext)}</div>
-            <div class="file-card-name">${escapeHtml(fileName)}</div>
-          </div>
-        </div>
+        <div class="msg-body"></div>
       </div>
     `;
 
-    const card = wrapper.querySelector(".file-card");
-    card.addEventListener("click", () => {
-      if (window.nanoclawApp?.openFile) {
-        window.nanoclawApp.openFile(msg._filePath);
-      } else {
-        window.open(`file://${msg._filePath}`);
-      }
-    });
-    card.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      showFileContextMenu(e, msg._filePath);
-    });
+    const body = wrapper.querySelector(".msg-body");
+    if (isImageFile) {
+      const preview = renderFilePreview(fileName, ext, msg._filePath, fileUrl);
+      body.appendChild(preview);
+      preview.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showFileContextMenu(e, msg._filePath);
+      });
+    } else {
+      body.innerHTML = `
+        <div class="file-card" data-ext="${escapeHtml(ext)}">
+          <div class="file-card-icon">${getFileIcon(ext)}</div>
+          <div class="file-card-name">${escapeHtml(fileName)}</div>
+        </div>
+      `;
+
+      const card = wrapper.querySelector(".file-card");
+      card.addEventListener("click", () => {
+        if (window.nanoclawApp?.openFile) {
+          window.nanoclawApp.openFile(msg._filePath);
+        } else {
+          window.open(fileUrl ? apiUrl(fileUrl) : `file://${msg._filePath}`);
+        }
+      });
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showFileContextMenu(e, msg._filePath);
+      });
+    }
     wrapper.addEventListener("click", (e) => {
       if (!multiSelectMode) return;
       if (e.target.closest(".msg-actions")) return;
@@ -1687,7 +1740,11 @@ function scheduleModelSync() {
       if (!res.ok) return;
       const data = await res.json();
       if (!Array.isArray(data.messages)) return;
-      messages = data.messages.map(m => ({ ...m, _filePath: m.file_path || undefined }));
+      messages = data.messages.map(m => ({
+        ...m,
+        _filePath: m.file_path || undefined,
+        _fileUrl: m.file_url || undefined
+      }));
       renderMessages();
     } catch {
       // Best effort only.
@@ -13304,7 +13361,11 @@ async function loadMessages() {
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    messages = data.messages.map(m => ({ ...m, _filePath: m.file_path || undefined }));
+    messages = data.messages.map(m => ({
+      ...m,
+      _filePath: m.file_path || undefined,
+      _fileUrl: m.file_url || undefined
+    }));
     hasMoreHistory = messages.length >= INITIAL_MESSAGE_LIMIT;
     renderMessages();
   } catch (err) {
@@ -13332,7 +13393,11 @@ async function loadMoreHistory() {
       return;
     }
     // Prepend older messages
-    const olderMessages = data.messages.map(m => ({ ...m, _filePath: m.file_path || undefined }));
+    const olderMessages = data.messages.map(m => ({
+      ...m,
+      _filePath: m.file_path || undefined,
+      _fileUrl: m.file_url || undefined
+    }));
     messages = [...olderMessages, ...messages];
     // Rebuild DOM and restore scroll position
     renderMessages();
@@ -13653,7 +13718,7 @@ function handleWsMessage(msg) {
     case "file": {
       const content = msg.caption || `文件: ${msg.filePath.split("/").pop()}`;
       const fileMsg = {
-        id: `file_${msg.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+        id: msg.id || `file_${msg.timestamp}_${Math.random().toString(36).slice(2, 8)}`,
         chat_jid: msg.chatJid,
         sender: msg.sender || "assistant",
         sender_name: msg.sender || "Assistant",
@@ -13662,6 +13727,7 @@ function handleWsMessage(msg) {
         is_from_me: false,
         is_bot_message: true,
         _filePath: msg.filePath,
+        _fileUrl: msg.fileUrl || undefined,
       };
       if (fileMsg.chat_jid === currentGroupJid) {
         messages.push(fileMsg);
@@ -14601,7 +14667,7 @@ function removePendingFile(index) {
 async function uploadPendingFiles() {
   if (pendingFiles.length === 0) return "";
 
-  const hostPaths = [];
+  const agentPaths = [];
   for (const file of pendingFiles) {
     const formData = new FormData();
     formData.append("file", file);
@@ -14612,16 +14678,16 @@ async function uploadPendingFiles() {
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
     const data = await res.json();
     if (data.files && data.files[0]) {
-      hostPaths.push(data.files[0].hostPath);
+      agentPaths.push(data.files[0].agentPath);
     }
   }
   pendingFiles = [];
   renderPendingFiles();
 
-  if (hostPaths.length === 0) return "";
+  if (agentPaths.length === 0) return "";
   return (
     "【附件】\n" +
-    hostPaths.map((p) => `文件地址: ${p}`).join("\n") +
+    agentPaths.map((p) => `文件地址: ${p}`).join("\n") +
     "\n"
   );
 }

@@ -236,6 +236,28 @@ export function getWebMessagesBefore(
     .reverse() as WebMessage[];
 }
 
+export function getWebMessageById(
+  chatJid: string,
+  id: string,
+): WebMessage | null {
+  ensureWebDbInitialized();
+  return (
+    (db
+      .prepare(
+        `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             reply_to_id, model, model_reason, file_path
+        FROM messages
+       WHERE chat_jid = ? AND id = ?
+       LIMIT 1
+    `,
+      )
+      .get(chatJid, id) as WebMessage | undefined) || null
+  );
+}
+
 export function clearWebMessages(chatJid: string): void {
   ensureWebDbInitialized();
   db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);

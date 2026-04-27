@@ -67,9 +67,10 @@ import {
 import { runLocalHostScript } from './host-script-runner.js';
 import { getWikiPageDetail } from './wiki.js';
 import {
-  editRootflowAiImage,
-  generateRootflowAiImage,
-} from './rootflowai-image.js';
+  editAiImage,
+  generateAiImage,
+  getAiImageWaitTimeoutMs,
+} from './ai-image.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -1049,7 +1050,7 @@ export async function processTaskIpc(
     fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
     fs.renameSync(tempPath, responsePath);
   };
-  const writeRootflowAiResult = (
+  const writeAiImageResult = (
     groupFolder: string,
     requestId: string,
     payload: object,
@@ -1058,7 +1059,7 @@ export async function processTaskIpc(
       DATA_DIR,
       'ipc',
       groupFolder,
-      'rootflowai-results',
+      'ai-image-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
@@ -2203,17 +2204,20 @@ export async function processTaskIpc(
       break;
     }
 
-    case 'rootflowai_generate_image': {
+    case 'ai_image_generate_image': {
       if (!data.requestId || typeof data.requestId !== 'string') {
         logger.warn(
           { sourceGroup },
-          'rootflowai_generate_image missing requestId',
+          'ai_image_generate_image missing requestId',
         );
         break;
       }
 
-      const result = await generateRootflowAiImage(data.args, data.requestId);
-      writeRootflowAiResult(sourceGroup, data.requestId, result);
+      const result = await generateAiImage(data.args, data.requestId);
+      writeAiImageResult(sourceGroup, data.requestId, {
+        ...result,
+        waitTimeoutMs: getAiImageWaitTimeoutMs(),
+      });
       logger.info(
         {
           sourceGroup,
@@ -2221,25 +2225,23 @@ export async function processTaskIpc(
           status: result.status,
           imageCount: result.images?.length || 0,
           model: result.model,
-          profile: result.profile,
         },
-        'rootflowai_generate_image completed',
+        'ai_image_generate_image completed',
       );
       break;
     }
 
-    case 'rootflowai_edit_image': {
+    case 'ai_image_edit_image': {
       if (!data.requestId || typeof data.requestId !== 'string') {
-        logger.warn({ sourceGroup }, 'rootflowai_edit_image missing requestId');
+        logger.warn({ sourceGroup }, 'ai_image_edit_image missing requestId');
         break;
       }
 
-      const result = await editRootflowAiImage(
-        data.args,
-        data.requestId,
-        sourceGroup,
-      );
-      writeRootflowAiResult(sourceGroup, data.requestId, result);
+      const result = await editAiImage(data.args, data.requestId, sourceGroup);
+      writeAiImageResult(sourceGroup, data.requestId, {
+        ...result,
+        waitTimeoutMs: getAiImageWaitTimeoutMs(),
+      });
       logger.info(
         {
           sourceGroup,
@@ -2247,9 +2249,8 @@ export async function processTaskIpc(
           status: result.status,
           imageCount: result.images?.length || 0,
           model: result.model,
-          profile: result.profile,
         },
-        'rootflowai_edit_image completed',
+        'ai_image_edit_image completed',
       );
       break;
     }

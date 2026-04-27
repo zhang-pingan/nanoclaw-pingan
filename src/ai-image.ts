@@ -14,17 +14,9 @@ import {
 } from './config.js';
 import { readEnvFile } from './env.js';
 
-const DEFAULT_BASE_URL = 'https://api.rootflowai.com/v1';
-const DEFAULT_MODEL = 'gpt-image-2';
-const COUNT_MODEL = 'gpt-image-2-count';
-const DEFAULT_SIZE = '1536x1024';
-const DEFAULT_QUALITY = 'high';
-const DEFAULT_TIMEOUT_MS = 180_000;
 const MAX_IMAGES = 4;
 const MAX_EDIT_IMAGES = 8;
 
-type Profile = 'auto' | 'metered' | 'count';
-type ResolvedProfile = 'metered' | 'count';
 type Operation = 'generate' | 'edit';
 type ImageSource =
   | 'b64_json'
@@ -34,42 +26,18 @@ type ImageSource =
   | 'url'
   | 'image_url';
 
-const profileModelDefaults: Record<ResolvedProfile, string> = {
-  metered: DEFAULT_MODEL,
-  count: COUNT_MODEL,
-};
-
-const modelProfileMap: Record<string, ResolvedProfile> = {
-  [DEFAULT_MODEL]: 'metered',
-  [COUNT_MODEL]: 'count',
-};
-
 const envKeys = [
-  'ROOTFLOWAI_BASE_URL',
-  'ROOTFLOWAI_METERED_API_KEY',
-  'ROOTFLOWAI_API_KEY',
-  'ROOTFLOWAI_API_TOKEN',
-  'ROOTFLOWAI_TOKEN',
-  'ROOTFLOWAI_COUNT_API_KEY',
-  'ROOTFLOWAI_COUNT_TOKEN',
-  'ROOTFLOWAI_IMAGE_DEFAULT_SIZE',
-  'ROOTFLOWAI_IMAGE_DEFAULT_QUALITY',
+  'AI_IMAGE_BASE_URL',
+  'AI_IMAGE_MODEL',
+  'AI_IMAGE_API_KEY',
+  'AI_IMAGE_SIZE',
+  'AI_IMAGE_QUALITY',
+  'AI_IMAGE_TIMEOUT_MS',
 ];
 
 const commonArgsSchema = z.object({
   prompt: z.string().trim().min(1).max(8000),
-  profile: z.enum(['auto', 'metered', 'count']).optional().default('auto'),
-  model: z.string().trim().min(1).max(100).optional(),
-  size: z.string().trim().min(3).max(40).optional(),
-  quality: z.string().trim().min(1).max(40).optional(),
   n: z.number().int().min(1).max(MAX_IMAGES).optional().default(1),
-  timeout_ms: z
-    .number()
-    .int()
-    .min(5_000)
-    .max(600_000)
-    .optional()
-    .default(DEFAULT_TIMEOUT_MS),
 });
 
 const generateArgsSchema = commonArgsSchema;
@@ -81,20 +49,19 @@ const editArgsSchema = commonArgsSchema.extend({
   input_fidelity: z.string().trim().min(1).max(100).optional(),
 });
 
-export interface RootflowAiSavedImage {
+export interface AiImageSavedImage {
   path: string;
   relative_path: string;
   mime_type: string;
   source: ImageSource;
 }
 
-export interface RootflowAiResult {
+export interface AiImageResult {
   status: 'success' | 'error';
   request_id: string;
   operation: Operation;
   model?: string;
-  profile?: ResolvedProfile;
-  images?: RootflowAiSavedImage[];
+  images?: AiImageSavedImage[];
   error?: string;
   details?: string;
 }
@@ -102,11 +69,10 @@ export interface RootflowAiResult {
 interface ResolvedConfig {
   baseUrl: string;
   apiKey: string;
-  apiKeySource: string;
-  profile: ResolvedProfile;
   model: string;
   size: string;
   quality: string;
+  timeoutMs: number;
 }
 
 interface ResponseImageData {
@@ -115,64 +81,59 @@ interface ResponseImageData {
   source: ImageSource;
 }
 
-function resolveProfile(profile: Profile, model?: string): ResolvedProfile {
-  if (profile !== 'auto') return profile;
-  if (model && modelProfileMap[model]) return modelProfileMap[model];
-  return 'metered';
-}
-
-function resolveModel(profile: Profile, model?: string): string {
-  if (model) return model;
-  if (profile === 'auto') return DEFAULT_MODEL;
-  return profileModelDefaults[profile];
-}
-
-function resolveConfig(args: z.infer<typeof commonArgsSchema>): ResolvedConfig {
-  const env = readEnvFile(envKeys);
-  const model = resolveModel(args.profile, args.model);
-  const profile = resolveProfile(args.profile, model);
-  const baseUrl =
-    process.env.ROOTFLOWAI_BASE_URL ||
-    env.ROOTFLOWAI_BASE_URL ||
-    DEFAULT_BASE_URL;
-  const candidates =
-    profile === 'count'
-      ? ['ROOTFLOWAI_COUNT_API_KEY', 'ROOTFLOWAI_COUNT_TOKEN']
-      : [
-          'ROOTFLOWAI_METERED_API_KEY',
-          'ROOTFLOWAI_API_KEY',
-          'ROOTFLOWAI_API_TOKEN',
-          'ROOTFLOWAI_TOKEN',
-        ];
-
-  for (const key of candidates) {
-    const value = process.env[key] || env[key];
-    if (value) {
-      return {
-        baseUrl: baseUrl.replace(/\/+$/, ''),
-        apiKey: value,
-        apiKeySource: key,
-        profile,
-        model,
-        size:
-          args.size ||
-          process.env.ROOTFLOWAI_IMAGE_DEFAULT_SIZE ||
-          env.ROOTFLOWAI_IMAGE_DEFAULT_SIZE ||
-          DEFAULT_SIZE,
-        quality:
-          args.quality ||
-          process.env.ROOTFLOWAI_IMAGE_DEFAULT_QUALITY ||
-          env.ROOTFLOWAI_IMAGE_DEFAULT_QUALITY ||
-          DEFAULT_QUALITY,
-      };
-    }
+function getRequiredConfigValue(
+  env: Record<string, string>,
+  key: string,
+): string {
+  const value = process.env[key] || env[key];
+  if (!value) {
+    throw new Error(`AI_IMAGE config is missing. Set ${key} in .env.`);
   }
+  return value;
+}
 
-  throw new Error(
-    profile === 'count'
-      ? 'RootFlowAI count API key is not configured. Set ROOTFLOWAI_COUNT_API_KEY in .env.'
-      : 'RootFlowAI metered API key is not configured. Set ROOTFLOWAI_METERED_API_KEY or ROOTFLOWAI_API_KEY in .env.',
-  );
+function getRequiredConfigInteger(
+  env: Record<string, string>,
+  key: string,
+  min: number,
+  max: number,
+): number {
+  const raw = getRequiredConfigValue(env, key);
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || String(value) !== raw.trim()) {
+    throw new Error(`AI_IMAGE config ${key} must be an integer.`);
+  }
+  if (value < min || value > max) {
+    throw new Error(
+      `AI_IMAGE config ${key} must be between ${min} and ${max}.`,
+    );
+  }
+  return value;
+}
+
+function resolveConfig(): ResolvedConfig {
+  const env = readEnvFile(envKeys);
+  return {
+    baseUrl: getRequiredConfigValue(env, 'AI_IMAGE_BASE_URL').replace(
+      /\/+$/,
+      '',
+    ),
+    apiKey: getRequiredConfigValue(env, 'AI_IMAGE_API_KEY'),
+    model: getRequiredConfigValue(env, 'AI_IMAGE_MODEL'),
+    size: getRequiredConfigValue(env, 'AI_IMAGE_SIZE'),
+    quality: getRequiredConfigValue(env, 'AI_IMAGE_QUALITY'),
+    timeoutMs: getRequiredConfigInteger(
+      env,
+      'AI_IMAGE_TIMEOUT_MS',
+      5_000,
+      600_000,
+    ),
+  };
+}
+
+export function getAiImageWaitTimeoutMs(): number {
+  const env = readEnvFile(['AI_IMAGE_TIMEOUT_MS']);
+  return getRequiredConfigInteger(env, 'AI_IMAGE_TIMEOUT_MS', 5_000, 600_000);
 }
 
 function sanitizeRequestId(requestId: string): string {
@@ -240,8 +201,8 @@ function formatAxiosError(err: unknown): { error: string; details?: string } {
           : undefined;
     return {
       error: status
-        ? `RootFlowAI request failed with HTTP ${status}.`
-        : `RootFlowAI request failed: ${err.message}`,
+        ? `AI_IMAGE request failed with HTTP ${status}.`
+        : `AI_IMAGE request failed: ${err.message}`,
       details,
     };
   }
@@ -338,9 +299,7 @@ function isPublicIp(address: string): boolean {
 async function validateRemoteImageUrl(url: string): Promise<void> {
   const parsed = new URL(url);
   if (parsed.protocol !== 'https:') {
-    throw new Error(
-      'Only HTTPS image URLs are allowed in RootFlowAI responses.',
-    );
+    throw new Error('Only HTTPS image URLs are allowed in AI_IMAGE responses.');
   }
   const hostname = parsed.hostname.replace(/\.$/, '').toLowerCase();
   if (
@@ -349,7 +308,7 @@ async function validateRemoteImageUrl(url: string): Promise<void> {
     hostname === 'localhost.localdomain'
   ) {
     throw new Error(
-      'Localhost image URLs are not allowed in RootFlowAI responses.',
+      'Localhost image URLs are not allowed in AI_IMAGE responses.',
     );
   }
 
@@ -420,14 +379,14 @@ async function saveResponseImages(
   requestId: string,
   operation: Operation,
   timeoutMs: number,
-): Promise<RootflowAiSavedImage[]> {
+): Promise<AiImageSavedImage[]> {
   if (!payload || typeof payload !== 'object') {
-    throw new Error('RootFlowAI returned an unexpected non-object response.');
+    throw new Error('AI_IMAGE returned an unexpected non-object response.');
   }
   const items = (payload as { data?: unknown }).data;
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error(
-      'RootFlowAI response does not contain a non-empty data array.',
+      'AI_IMAGE response does not contain a non-empty data array.',
     );
   }
 
@@ -435,7 +394,7 @@ async function saveResponseImages(
   const hostDir = path.join(AI_IMAGES_DIR, safeRequestId);
   fs.mkdirSync(hostDir, { recursive: true });
 
-  const images: RootflowAiSavedImage[] = [];
+  const images: AiImageSavedImage[] = [];
   for (const [idx, item] of items.entries()) {
     const imageData = await extractImageData(item, timeoutMs);
     if (!imageData) continue;
@@ -457,20 +416,20 @@ async function saveResponseImages(
 
   if (images.length === 0) {
     throw new Error(
-      'RootFlowAI responded, but no image files could be extracted.',
+      'AI_IMAGE responded, but no image files could be extracted.',
     );
   }
 
   return images;
 }
 
-export async function generateRootflowAiImage(
+export async function generateAiImage(
   args: unknown,
   requestId: string,
-): Promise<RootflowAiResult> {
+): Promise<AiImageResult> {
   try {
     const parsed = generateArgsSchema.parse(args);
-    const config = resolveConfig(parsed);
+    const config = resolveConfig();
     const payload = {
       model: config.model,
       prompt: parsed.prompt,
@@ -486,21 +445,20 @@ export async function generateRootflowAiImage(
           Authorization: `Bearer ${config.apiKey}`,
           'Content-Type': 'application/json',
         },
-        timeout: parsed.timeout_ms,
+        timeout: config.timeoutMs,
       },
     );
     const images = await saveResponseImages(
       response.data,
       requestId,
       'generate',
-      parsed.timeout_ms,
+      config.timeoutMs,
     );
     return {
       status: 'success',
       request_id: requestId,
       operation: 'generate',
       model: config.model,
-      profile: config.profile,
       images,
     };
   } catch (err) {
@@ -514,14 +472,14 @@ export async function generateRootflowAiImage(
   }
 }
 
-export async function editRootflowAiImage(
+export async function editAiImage(
   args: unknown,
   requestId: string,
   sourceGroup: string,
-): Promise<RootflowAiResult> {
+): Promise<AiImageResult> {
   try {
     const parsed = editArgsSchema.parse(args);
-    const config = resolveConfig(parsed);
+    const config = resolveConfig();
     const imageHostPaths = parsed.image_paths.map((item) =>
       resolveWorkspaceInputPath(item, sourceGroup),
     );
@@ -556,20 +514,19 @@ export async function editRootflowAiImage(
       },
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
-      timeout: parsed.timeout_ms,
+      timeout: config.timeoutMs,
     });
     const images = await saveResponseImages(
       response.data,
       requestId,
       'edit',
-      parsed.timeout_ms,
+      config.timeoutMs,
     );
     return {
       status: 'success',
       request_id: requestId,
       operation: 'edit',
       model: config.model,
-      profile: config.profile,
       images,
     };
   } catch (err) {

@@ -9,15 +9,21 @@ import { validateCardConfig } from '../card-config.js';
 import type { CardConfig } from '../card-config.js';
 import type { WorkflowDefinition } from '../workflow-definition.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
-import { GROUPS_DIR, DATA_DIR } from '../config.js';
+import {
+  AI_IMAGES_DIR,
+  ASSISTANT_NAME,
+  ATTACHMENTS_DIR,
+  GROUPS_DIR,
+  DATA_DIR,
+} from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { CardActionHandler, InteractiveCard, NewMessage } from '../types.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
-import { ASSISTANT_NAME } from '../config.js';
 import {
   initWebDb,
   storeWebMessage,
+  getWebMessageById,
   getWebMessages,
   getWebMessagesBefore,
   deleteWebMessagesByIds,
@@ -111,6 +117,48 @@ const WEB_PORT = parseInt(
 const WEB_TOKEN = process.env.WEB_TOKEN || webEnv.WEB_TOKEN;
 const RENDERER_DIR = path.resolve(process.cwd(), 'electron', 'renderer');
 const UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
+
+const LOCAL_FILE_ROOTS: Record<string, string> = {
+  uploads: UPLOADS_DIR,
+  groups: GROUPS_DIR,
+  attachments: ATTACHMENTS_DIR,
+  'ai-images': AI_IMAGES_DIR,
+};
+
+function isPathInsideBase(baseDir: string, targetPath: string): boolean {
+  const relative = path.relative(
+    path.resolve(baseDir),
+    path.resolve(targetPath),
+  );
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  );
+}
+
+function resolveServableLocalFilePath(
+  filePath: string | null | undefined,
+): string | null {
+  if (!filePath) return null;
+  const resolved = path.resolve(filePath);
+  for (const rootDir of Object.values(LOCAL_FILE_ROOTS)) {
+    if (isPathInsideBase(rootDir, resolved)) return resolved;
+  }
+  return null;
+}
+
+function getMessageFileUrl(
+  chatJid: string,
+  messageId: string,
+  filePath: string | null | undefined,
+): string | null {
+  if (!chatJid || !messageId || !resolveServableLocalFilePath(filePath)) {
+    return null;
+  }
+  return `/api/message-files/${encodeURIComponent(chatJid)}/${encodeURIComponent(
+    messageId,
+  )}`;
+}
 
 type MultipartFilePart = {
   filename: string;
@@ -339,11 +387,13 @@ class WebChannel {
     caption?: string,
   ): Promise<void> {
     const timestamp = Date.now().toString();
+    const id = `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+    const fileUrl = getMessageFileUrl(jid, id, filePath);
 
     // Always persist to web message DB
     const content = caption || `文件: ${path.basename(filePath)}`;
     storeWebMessage({
-      id: `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+      id,
       chat_jid: jid,
       sender: ASSISTANT_NAME,
       sender_name: ASSISTANT_NAME,
@@ -360,8 +410,10 @@ class WebChannel {
 
     const payload = JSON.stringify({
       type: 'file',
+      id,
       chatJid: jid,
       filePath,
+      fileUrl,
       caption: caption || undefined,
       sender: ASSISTANT_NAME,
       timestamp,
@@ -735,6 +787,9 @@ class WebChannel {
       }
       if (pathname.startsWith('/api/uploads/')) {
         return this.apiServeUpload(pathname, res);
+      }
+      if (pathname.startsWith('/api/message-files/')) {
+        return this.apiServeMessageFile(pathname, res);
       }
       if (pathname.startsWith('/api/files/')) {
         return this.apiServeFile(pathname, res);
@@ -1427,6 +1482,7 @@ class WebChannel {
           reply_to_id: m.reply_to_id || null,
           model: m.model || null,
           file_path: m.file_path || null,
+          file_url: getMessageFileUrl(m.chat_jid, m.id, m.file_path),
         })),
       }),
     );
@@ -3608,6 +3664,61 @@ class WebChannel {
       '.md': 'text/markdown',
       '.json': 'application/json',
       '.js': 'application/javascript',
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.zip': 'application/zip',
+    };
+    res.writeHead(200, {
+      'Content-Type': mime[ext] || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=3600',
+    });
+    res.end(data);
+  }
+
+  private apiServeMessageFile(
+    pathname: string,
+    res: http.ServerResponse,
+  ): void {
+    // pathname: /api/message-files/{chatJid}/{messageId}
+    const parts = pathname.split('/');
+    if (parts.length !== 5) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid path' }));
+      return;
+    }
+
+    const chatJid = decodeURIComponent(parts[3]);
+    const messageId = decodeURIComponent(parts[4]);
+    const message = getWebMessageById(chatJid, messageId);
+    const filePath = resolveServableLocalFilePath(message?.file_path);
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'file not found' }));
+      return;
+    }
+
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+      return;
+    }
+
+    const data = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mime: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.json': 'application/json',
+      '.js': 'application/javascript',
+      '.ts': 'application/typescript',
+      '.py': 'text/x-python',
       '.html': 'text/html',
       '.css': 'text/css',
       '.zip': 'application/zip',

@@ -54,26 +54,22 @@ async function waitForIpcResult<T>(
   return null;
 }
 
-const ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES = [
+const AI_IMAGE_WORKSPACE_PREFIXES = [
   '/workspace/group/',
   '/workspace/uploads/',
   '/workspace/attachments/',
   '/workspace/ai-images/',
 ];
 
-function validateRootflowAiInputPath(filePath: string): string | null {
+function validateAiImageInputPath(filePath: string): string | null {
   if (
-    !ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES.some((prefix) =>
-      filePath.startsWith(prefix),
-    )
+    !AI_IMAGE_WORKSPACE_PREFIXES.some((prefix) => filePath.startsWith(prefix))
   ) {
-    return `图片路径必须以 ${ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES.join('、')} 之一开头。当前路径: ${filePath}`;
+    return `图片路径必须以 ${AI_IMAGE_WORKSPACE_PREFIXES.join('、')} 之一开头。当前路径: ${filePath}`;
   }
   const resolved = path.resolve(filePath);
   if (
-    !ROOTFLOWAI_WORKSPACE_IMAGE_PREFIXES.some((prefix) =>
-      resolved.startsWith(prefix),
-    )
+    !AI_IMAGE_WORKSPACE_PREFIXES.some((prefix) => resolved.startsWith(prefix))
   ) {
     return `图片路径不合法（检测到路径穿越）: ${filePath}`;
   }
@@ -86,12 +82,12 @@ function validateRootflowAiInputPath(filePath: string): string | null {
   return null;
 }
 
-type RootflowAiMcpResult = {
+type AiImageMcpResult = {
   status?: 'success' | 'error';
   request_id?: string;
   operation?: 'generate' | 'edit';
   model?: string;
-  profile?: string;
+  waitTimeoutMs?: number;
   images?: Array<{
     path: string;
     relative_path: string;
@@ -102,8 +98,8 @@ type RootflowAiMcpResult = {
   details?: string;
 };
 
-function rootflowAiToolResponse(
-  result: RootflowAiMcpResult | null,
+function aiImageToolResponse(
+  result: AiImageMcpResult | null,
   requestId: string,
   actionName: string,
 ) {
@@ -252,175 +248,115 @@ server.tool(
   },
 );
 
-server.tool(
-  'rootflowai_generate_image',
-  '调用 RootFlowAI 图片生成接口。只传提示词、模型、尺寸等业务参数；API 地址和 token 由宿主机 .env 配置。',
-  {
-    prompt: z.string().min(1).describe('生图提示词'),
-    profile: z
-      .enum(['auto', 'metered', 'count'])
-      .optional()
-      .default('auto')
-      .describe('计费 profile。auto 会按模型自动选择，默认 metered。'),
-    model: z
-      .string()
-      .optional()
-      .describe(
-        '可选模型名。默认 gpt-image-2；count 计费可用 gpt-image-2-count。',
-      ),
-    size: z
-      .string()
-      .optional()
-      .default('1536x1024')
-      .describe('输出尺寸，例如 1536x1024。'),
-    quality: z
-      .string()
-      .optional()
-      .default('high')
-      .describe('输出质量，例如 high。'),
-    n: z
-      .number()
-      .int()
-      .min(1)
-      .max(4)
-      .optional()
-      .default(1)
-      .describe('生成图片数量，1-4。'),
-    timeout_ms: z
-      .number()
-      .int()
-      .min(5000)
-      .max(600000)
-      .optional()
-      .default(180000)
-      .describe('请求超时时间，毫秒。'),
-  },
-  async (args) => {
-    const requestId = `rfgen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    writeIpcFile(TASKS_DIR, {
-      type: 'rootflowai_generate_image',
-      requestId,
-      args,
-      groupFolder,
-      timestamp: new Date().toISOString(),
-    });
+if (isMain) {
+  server.tool(
+    'ai_image_generate_image',
+    '调用 AI_IMAGE 图片生成接口。只传提示词等业务参数；API 地址、token、模型名、尺寸、质量和超时时间由宿主机 .env 配置。',
+    {
+      prompt: z.string().min(1).describe('生图提示词'),
+      n: z
+        .number()
+        .int()
+        .min(1)
+        .max(4)
+        .optional()
+        .default(1)
+        .describe('生成图片数量，1-4。'),
+    },
+    async (args) => {
+      const requestId = `aiimggen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      writeIpcFile(TASKS_DIR, {
+        type: 'ai_image_generate_image',
+        requestId,
+        args,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      });
 
-    const resultPath = path.join(
-      IPC_DIR,
-      'rootflowai-results',
-      `${requestId}.json`,
-    );
-    const result = await waitForIpcResult<RootflowAiMcpResult>(
-      resultPath,
-      Math.min((args.timeout_ms || 180000) + 30000, 630000),
-      500,
-    );
-    return rootflowAiToolResponse(
-      result,
-      requestId,
-      'rootflowai_generate_image',
-    );
-  },
-);
+      const resultPath = path.join(
+        IPC_DIR,
+        'ai-image-results',
+        `${requestId}.json`,
+      );
+      const result = await waitForIpcResult<AiImageMcpResult>(
+        resultPath,
+        630000,
+        500,
+      );
+      return aiImageToolResponse(result, requestId, 'ai_image_generate_image');
+    },
+  );
 
-server.tool(
-  'rootflowai_edit_image',
-  '调用 RootFlowAI 图片编辑接口。输入图片必须是 workspace 内路径，API 地址和 token 由宿主机 .env 配置。',
-  {
-    prompt: z.string().min(1).describe('编辑指令'),
-    image_paths: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(8)
-      .describe(
-        '输入图片路径列表，支持 /workspace/uploads/、/workspace/attachments/、/workspace/ai-images/、/workspace/group/。',
-      ),
-    mask_path: z.string().optional().describe('可选 mask 图片路径'),
-    profile: z
-      .enum(['auto', 'metered', 'count'])
-      .optional()
-      .default('auto')
-      .describe('计费 profile。auto 会按模型自动选择，默认 metered。'),
-    model: z
-      .string()
-      .optional()
-      .describe(
-        '可选模型名。默认 gpt-image-2；count 计费可用 gpt-image-2-count。',
-      ),
-    size: z
-      .string()
-      .optional()
-      .default('1536x1024')
-      .describe('输出尺寸，例如 1536x1024。'),
-    quality: z
-      .string()
-      .optional()
-      .default('high')
-      .describe('输出质量，例如 high。'),
-    n: z
-      .number()
-      .int()
-      .min(1)
-      .max(4)
-      .optional()
-      .default(1)
-      .describe('输出图片数量，1-4。'),
-    background: z.string().optional().describe('可选 background 参数。'),
-    input_fidelity: z
-      .string()
-      .optional()
-      .describe('可选 input_fidelity 参数。'),
-    timeout_ms: z
-      .number()
-      .int()
-      .min(5000)
-      .max(600000)
-      .optional()
-      .default(180000)
-      .describe('请求超时时间，毫秒。'),
-  },
-  async (args) => {
-    for (const imagePath of args.image_paths) {
-      const error = validateRootflowAiInputPath(imagePath);
-      if (error) {
-        return {
-          content: [{ type: 'text' as const, text: error }],
-          isError: true,
-        };
+  server.tool(
+    'ai_image_edit_image',
+    '调用 AI_IMAGE 图片编辑接口。输入图片必须是 workspace 内路径；API 地址、token、模型名、尺寸、质量和超时时间由宿主机 .env 配置。',
+    {
+      prompt: z.string().min(1).describe('编辑指令'),
+      image_paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(8)
+        .describe(
+          '输入图片路径列表，支持 /workspace/uploads/、/workspace/attachments/、/workspace/ai-images/、/workspace/group/。',
+        ),
+      mask_path: z.string().optional().describe('可选 mask 图片路径'),
+      n: z
+        .number()
+        .int()
+        .min(1)
+        .max(4)
+        .optional()
+        .default(1)
+        .describe('输出图片数量，1-4。'),
+      background: z.string().optional().describe('可选 background 参数。'),
+      input_fidelity: z
+        .string()
+        .optional()
+        .describe('可选 input_fidelity 参数。'),
+    },
+    async (args) => {
+      for (const imagePath of args.image_paths) {
+        const error = validateAiImageInputPath(imagePath);
+        if (error) {
+          return {
+            content: [{ type: 'text' as const, text: error }],
+            isError: true,
+          };
+        }
       }
-    }
-    if (args.mask_path) {
-      const error = validateRootflowAiInputPath(args.mask_path);
-      if (error) {
-        return {
-          content: [{ type: 'text' as const, text: error }],
-          isError: true,
-        };
+      if (args.mask_path) {
+        const error = validateAiImageInputPath(args.mask_path);
+        if (error) {
+          return {
+            content: [{ type: 'text' as const, text: error }],
+            isError: true,
+          };
+        }
       }
-    }
 
-    const requestId = `rfedit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    writeIpcFile(TASKS_DIR, {
-      type: 'rootflowai_edit_image',
-      requestId,
-      args,
-      groupFolder,
-      timestamp: new Date().toISOString(),
-    });
+      const requestId = `aiimgedit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      writeIpcFile(TASKS_DIR, {
+        type: 'ai_image_edit_image',
+        requestId,
+        args,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      });
 
-    const resultPath = path.join(
-      IPC_DIR,
-      'rootflowai-results',
-      `${requestId}.json`,
-    );
-    const result = await waitForIpcResult<RootflowAiMcpResult>(
-      resultPath,
-      Math.min((args.timeout_ms || 180000) + 30000, 630000),
-      500,
-    );
-    return rootflowAiToolResponse(result, requestId, 'rootflowai_edit_image');
-  },
-);
+      const resultPath = path.join(
+        IPC_DIR,
+        'ai-image-results',
+        `${requestId}.json`,
+      );
+      const result = await waitForIpcResult<AiImageMcpResult>(
+        resultPath,
+        630000,
+        500,
+      );
+      return aiImageToolResponse(result, requestId, 'ai_image_edit_image');
+    },
+  );
+}
 
 server.tool(
   'schedule_task',
