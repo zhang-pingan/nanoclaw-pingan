@@ -4,45 +4,6 @@ import {
   WorkflowDefinitionVersionBundle,
 } from './workflow-definition.js';
 
-export type LegacyWorkflowDefinitionMap = Record<string, WorkflowDefinition>;
-
-export function isWorkflowDefinitionRegistry(
-  input: unknown,
-): input is WorkflowDefinitionRegistry {
-  return (
-    !!input &&
-    typeof input === 'object' &&
-    'definitions' in input &&
-    typeof (input as { definitions?: unknown }).definitions === 'object'
-  );
-}
-
-export function normalizeWorkflowDefinitionRegistry(
-  input: WorkflowDefinitionRegistry | LegacyWorkflowDefinitionMap | unknown,
-): WorkflowDefinitionRegistry {
-  if (isWorkflowDefinitionRegistry(input)) {
-    return input;
-  }
-
-  if (!input || typeof input !== 'object') {
-    return { definitions: {} };
-  }
-
-  return {
-    definitions: Object.fromEntries(
-      Object.entries(input).map(([key, definition]) => [
-        key,
-        {
-          key,
-          label: definition.name,
-          description: definition.description,
-          versions: [definition],
-        },
-      ]),
-    ),
-  };
-}
-
 function compareDefinitionVersion(
   a: WorkflowDefinition,
   b: WorkflowDefinition,

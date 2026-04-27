@@ -21,9 +21,9 @@ workflow 相关配置已从“直接手写 runtime config”升级为“definiti
 
 - 新的编辑态 workflow definition schema 定义在 `src/workflow-definition.ts`
 - `src/workflow-compiler.ts` 已实现 definition 到 runtime config 的编译
-- `src/workflow-config.ts` 现在只读取 `container/skills/workflow-definitions.json`
+- `src/workflow-config.ts` 现在只读取 `container/skills/workflow-definitions/*.json`
 - definition 会先经过 publish model 选择 published version，再经过 compiler 编译为现有引擎可执行的 runtime config
-- 当前 `dev_test` 已迁移到 `container/skills/workflow-definitions.json`
+- 当前 `dev_test` 已迁移到 `container/skills/workflow-definitions/dev_test.json`
 
 现阶段 runtime engine 基本保持不变，workflow 的主要升级集中在 definition 层和编译层。
 
@@ -31,7 +31,7 @@ workflow 相关配置已从“直接手写 runtime config”升级为“definiti
 
 workflow definition 已具备最小可用的版本发布模型：
 
-- workflow definition 顶层使用 registry 结构：`definitions -> key -> versions[]`
+- workflow definition 按工作流拆分存放：`workflow-definitions/<key>.json -> versions[]`
 - 每个 version 具备 `version` 与 `status`
 - 当前支持三种状态：
   - `draft`

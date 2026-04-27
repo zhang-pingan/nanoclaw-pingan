@@ -57,6 +57,11 @@ import {
 const WIKI_MATERIALS_DIR = path.join(KNOWLEDGE_WIKI_DIR, 'materials');
 const WIKI_DRAFTS_DIR = path.join(KNOWLEDGE_WIKI_DIR, 'drafts');
 const WIKI_PAGES_DIR = path.join(KNOWLEDGE_WIKI_DIR, 'pages');
+const WIKI_FAILED_DRAFT_RESPONSES_DIR = path.join(
+  KNOWLEDGE_WIKI_DIR,
+  'debug',
+  'failed-draft-responses',
+);
 const WEB_UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
 const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.txt',
@@ -93,28 +98,37 @@ const compiledWikiDraftSchema = z.object({
     summary: z.string().optional().default(''),
     content_markdown: z.string().min(1),
   }),
-  claims: z.array(
-    z.object({
-      claim_type: z.string().min(1),
-      statement: z.string().min(1),
-      canonical_form: z.string().optional().default(''),
-      confidence: z.number().min(0).max(1).optional().nullable(),
-      evidence: z.array(
-        z.object({
-          material_id: z.string().min(1),
-          excerpt_text: z.string().min(1),
-          locator: z.string().optional().nullable(),
-        }),
-      ).optional().default([]),
-    }),
-  ).optional().default([]),
-  relations: z.array(
-    z.object({
-      to_slug: z.string().min(1),
-      relation_type: z.string().min(1),
-      rationale: z.string().optional().nullable(),
-    }),
-  ).optional().default([]),
+  claims: z
+    .array(
+      z.object({
+        claim_type: z.string().min(1),
+        statement: z.string().min(1),
+        canonical_form: z.string().optional().default(''),
+        confidence: z.number().min(0).max(1).optional().nullable(),
+        evidence: z
+          .array(
+            z.object({
+              material_id: z.string().min(1),
+              excerpt_text: z.string().min(1),
+              locator: z.string().optional().nullable(),
+            }),
+          )
+          .optional()
+          .default([]),
+      }),
+    )
+    .optional()
+    .default([]),
+  relations: z
+    .array(
+      z.object({
+        to_slug: z.string().min(1),
+        relation_type: z.string().min(1),
+        rationale: z.string().optional().nullable(),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 
 interface QueueDraftJobInput {
@@ -318,7 +332,10 @@ function parseJsonStringArray(value: string | null | undefined): string[] {
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      ? parsed.filter(
+          (item): item is string =>
+            typeof item === 'string' && item.trim().length > 0,
+        )
       : [];
   } catch {
     return [];
@@ -378,6 +395,10 @@ function removePathIfExists(targetPath: string | null | undefined): void {
   fs.rmSync(targetPath, { recursive: true, force: true });
 }
 
+function sanitizeFileToken(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
+}
+
 export function ensureWikiDirs(): void {
   ensureDir(KNOWLEDGE_WIKI_DIR);
   ensureDir(WIKI_MATERIALS_DIR);
@@ -397,7 +418,9 @@ function readMaterialTextFromFile(filePath: string): string {
   }
   const buffer = fs.readFileSync(filePath);
   if (!SUPPORTED_TEXT_EXTENSIONS.has(ext) && !isProbablyTextBuffer(buffer)) {
-    throw new Error('当前仅支持导入文本类文件和可提取文本的 PDF；请先提供可解析的资料');
+    throw new Error(
+      '当前仅支持导入文本类文件和可提取文本的 PDF；请先提供可解析的资料',
+    );
   }
   const text = buffer.toString('utf-8').replace(/^\uFEFF/, '');
   const cleaned = text.trim();
@@ -418,7 +441,9 @@ function writeMaterialManifest(
   );
 }
 
-export function readWikiMaterialExtractedText(material: WikiMaterialRecord): string {
+export function readWikiMaterialExtractedText(
+  material: WikiMaterialRecord,
+): string {
   if (!fs.existsSync(material.extracted_text_path)) return '';
   return fs.readFileSync(material.extracted_text_path, 'utf-8');
 }
@@ -496,7 +521,10 @@ export function importWikiMaterialFromUpload(input: {
     source_path: resolvedHostPath,
     stored_path: sourcePath,
     extracted_text_path: extractedPath,
-    sha256: crypto.createHash('sha256').update(fs.readFileSync(sourcePath)).digest('hex'),
+    sha256: crypto
+      .createHash('sha256')
+      .update(fs.readFileSync(sourcePath))
+      .digest('hex'),
     created_at: now,
     updated_at: now,
   };
@@ -511,16 +539,67 @@ function limitMaterialText(text: string, remaining: number): string {
   return normalized.slice(0, Math.max(0, remaining - 1)).trimEnd();
 }
 
+function persistFailedWikiDraftRawResponse(input: {
+  jobId?: string;
+  draftInput: QueueDraftJobInput;
+  responseText: string;
+  err: unknown;
+}): string | null {
+  try {
+    ensureDir(WIKI_FAILED_DRAFT_RESPONSES_DIR);
+    const stamp = nowIso().replace(/[:.]/g, '-');
+    const jobToken = sanitizeFileToken(input.jobId || createId('wiki-job'));
+    const basePath = path.join(
+      WIKI_FAILED_DRAFT_RESPONSES_DIR,
+      `${stamp}-${jobToken}`,
+    );
+    const rawResponsePath = `${basePath}.txt`;
+    const metadataPath = `${basePath}.json`;
+    const errorMessage =
+      input.err instanceof Error ? input.err.message : String(input.err);
+
+    fs.writeFileSync(rawResponsePath, input.responseText, 'utf-8');
+    fs.writeFileSync(
+      metadataPath,
+      JSON.stringify(
+        {
+          job_id: input.jobId || null,
+          saved_at: nowIso(),
+          error_name: input.err instanceof Error ? input.err.name : null,
+          error_message: errorMessage,
+          raw_response_path: rawResponsePath,
+          raw_response_chars: input.responseText.length,
+          material_ids: Array.isArray(input.draftInput.materialIds)
+            ? input.draftInput.materialIds
+            : [],
+          target_slug: input.draftInput.targetSlug || '',
+          title: input.draftInput.title || '',
+          page_kind: input.draftInput.pageKind || '',
+          instruction: input.draftInput.instruction || '',
+        },
+        null,
+        2,
+      ) + '\n',
+      'utf-8',
+    );
+
+    return rawResponsePath;
+  } catch (persistErr) {
+    logger.error(
+      { err: persistErr, jobId: input.jobId },
+      'Failed to persist raw wiki draft response',
+    );
+    return null;
+  }
+}
+
 function parseCompiledWikiDraft(text: string): CompiledWikiDraft {
   const parsed = compiledWikiDraftSchema.parse(
     JSON.parse(extractJsonObjectFromText(text)),
   );
 
   const pageSlug = slugify(parsed.page.slug || parsed.page.title);
-  const dedupedClaims = new Map<
-    string,
-    CompiledWikiDraft['claims'][number]
-  >();
+  const dedupedClaims = new Map<string, CompiledWikiDraft['claims'][number]>();
   for (const claim of parsed.claims) {
     const canonical = canonicalizeWikiClaim(
       claim.canonical_form || claim.statement,
@@ -550,7 +629,7 @@ function parseCompiledWikiDraft(text: string): CompiledWikiDraft {
       confidence:
         claim.confidence != null
           ? claim.confidence
-          : existing?.confidence ?? null,
+          : (existing?.confidence ?? null),
       evidence: uniqueEvidence,
     });
   }
@@ -703,8 +782,7 @@ function buildMarkdownBlockDiff(
       ((previous.kind === 'removed' && block.kind === 'added') ||
         (previous.kind === 'added' && block.kind === 'removed'));
     if (isReplacePair) {
-      const removedBlock =
-        previous.kind === 'removed' ? previous : block;
+      const removedBlock = previous.kind === 'removed' ? previous : block;
       const addedBlock = previous.kind === 'added' ? previous : block;
       mergedBlocks[mergedBlocks.length - 1] = {
         kind: 'updated',
@@ -718,9 +796,12 @@ function buildMarkdownBlockDiff(
 
   return {
     added_count: mergedBlocks.filter((block) => block.kind === 'added').length,
-    removed_count: mergedBlocks.filter((block) => block.kind === 'removed').length,
-    updated_count: mergedBlocks.filter((block) => block.kind === 'updated').length,
-    unchanged_count: mergedBlocks.filter((block) => block.kind === 'unchanged').length,
+    removed_count: mergedBlocks.filter((block) => block.kind === 'removed')
+      .length,
+    updated_count: mergedBlocks.filter((block) => block.kind === 'updated')
+      .length,
+    unchanged_count: mergedBlocks.filter((block) => block.kind === 'unchanged')
+      .length,
     blocks: mergedBlocks,
   };
 }
@@ -816,7 +897,9 @@ function buildWikiDraftPublishPreview(
     rationale: relation.rationale ?? null,
   }));
   const existingRelationByKey = new Map(
-    existingRelations.map((relation) => [relationPreviewKey(relation), relation] as const),
+    existingRelations.map(
+      (relation) => [relationPreviewKey(relation), relation] as const,
+    ),
   );
   for (const relation of compiledRelations) {
     const existingRelation = existingRelationByKey.get(
@@ -851,7 +934,8 @@ function buildWikiDraftPublishPreview(
     compiledRelations.map((relation) => relationPreviewKey(relation)),
   );
   for (const existingRelation of existingRelations) {
-    if (compiledRelationKeys.has(relationPreviewKey(existingRelation))) continue;
+    if (compiledRelationKeys.has(relationPreviewKey(existingRelation)))
+      continue;
     previewRelations.removed.push({
       to_page_slug: existingRelation.to_page_slug,
       relation_type: existingRelation.relation_type,
@@ -932,9 +1016,10 @@ function getWikiMaterialUsage(materialId: string): WikiMaterialUsage {
     title: page.title,
   }));
   const draftRefs = listWikiDrafts(1000000)
-    .filter((draft) =>
-      draft.status !== 'published' &&
-      parseJsonStringArray(draft.material_ids_json).includes(materialId)
+    .filter(
+      (draft) =>
+        draft.status !== 'published' &&
+        parseJsonStringArray(draft.material_ids_json).includes(materialId),
     )
     .map((draft) => ({
       id: draft.id,
@@ -948,7 +1033,10 @@ function getWikiMaterialUsage(materialId: string): WikiMaterialUsage {
         const payload = JSON.parse(job.payload_json) as {
           materialIds?: string[];
         };
-        return Array.isArray(payload.materialIds) && payload.materialIds.includes(materialId);
+        return (
+          Array.isArray(payload.materialIds) &&
+          payload.materialIds.includes(materialId)
+        );
       } catch {
         return false;
       }
@@ -964,9 +1052,7 @@ function getWikiMaterialUsage(materialId: string): WikiMaterialUsage {
     job_refs: jobRefs,
     evidence_count: countWikiClaimEvidenceByMaterial(materialId),
     can_delete:
-      pageRefs.length === 0 &&
-      draftRefs.length === 0 &&
-      jobRefs.length === 0,
+      pageRefs.length === 0 && draftRefs.length === 0 && jobRefs.length === 0,
   };
 }
 
@@ -1077,6 +1163,7 @@ function buildCompileUserPrompt(input: QueueDraftJobInput): string {
 async function generateWikiDraftFromMaterials(
   input: QueueDraftJobInput,
   options: {
+    jobId?: string;
     signal?: AbortSignal;
   } = {},
 ): Promise<WikiDraftRecord> {
@@ -1102,9 +1189,26 @@ async function generateWikiDraftFromMaterials(
     { signal: options.signal },
   );
   throwIfSignalAborted(options.signal);
-  const compiled = parseCompiledWikiDraft(response.text);
-  throwIfSignalAborted(options.signal);
-  validateCompiledDraftEvidence(compiled, input.materialIds);
+  let compiled: CompiledWikiDraft;
+  try {
+    compiled = parseCompiledWikiDraft(response.text);
+    throwIfSignalAborted(options.signal);
+    validateCompiledDraftEvidence(compiled, input.materialIds);
+  } catch (err) {
+    throwIfSignalAborted(options.signal);
+    const rawResponsePath = persistFailedWikiDraftRawResponse({
+      jobId: options.jobId,
+      draftInput: input,
+      responseText: response.text,
+      err,
+    });
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      rawResponsePath
+        ? `${message}; 原始响应已保存: ${rawResponsePath}`
+        : message,
+    );
+  }
   throwIfSignalAborted(options.signal);
 
   const now = nowIso();
@@ -1151,6 +1255,7 @@ async function processWikiJob(job: WikiJobRecord): Promise<void> {
 
     const payload = JSON.parse(job.payload_json) as QueueDraftJobInput;
     const draft = await generateWikiDraftFromMaterials(payload, {
+      jobId: job.id,
       signal: controller.signal,
     });
     updateWikiJob(job.id, {
@@ -1263,7 +1368,9 @@ export function stopWikiJob(jobId: string): {
       error_message: '停止中...',
       updated_at: nowIso(),
     });
-    activeWikiJobControllers.get(jobId)?.abort(createAbortError('Wiki job stopped by user'));
+    activeWikiJobControllers
+      .get(jobId)
+      ?.abort(createAbortError('Wiki job stopped by user'));
   }
   return {
     job_id: jobId,
@@ -1545,7 +1652,9 @@ export function bulkDeleteWikiDrafts(draftIds: string[]): {
   const deletedIds: string[] = [];
   const skippedPublishedIds: string[] = [];
   const missingIds: string[] = [];
-  const uniqueIds = [...new Set(draftIds.map((id) => id.trim()).filter(Boolean))];
+  const uniqueIds = [
+    ...new Set(draftIds.map((id) => id.trim()).filter(Boolean)),
+  ];
 
   for (const draftId of uniqueIds) {
     const draft = getWikiDraft(draftId);
@@ -1601,7 +1710,8 @@ export function deleteWikiPage(pageSlug: string): {
     includeDeprecated: true,
   }).length;
   const removedMaterialCount = listWikiPageMaterials(pageSlug).length;
-  const removedOutgoingRelationCount = listWikiRelationsForPage(pageSlug).length;
+  const removedOutgoingRelationCount =
+    listWikiRelationsForPage(pageSlug).length;
   const removedIncomingRelationCount = listWikiRelationsToPage(pageSlug).length;
   deleteWikiPageGraph(pageSlug);
   removePathIfExists(page.file_path);
@@ -1623,8 +1733,13 @@ export function clearWikiData(): {
   relation_count: number;
   job_count: number;
 } {
-  if (wikiJobDrainRunning || listPendingWikiJobs().some((job) => job.status === 'running')) {
-    throw new Error('当前有正在运行的知识库后台任务，请等待任务完成后再清除 LLM Wiki');
+  if (
+    wikiJobDrainRunning ||
+    listPendingWikiJobs().some((job) => job.status === 'running')
+  ) {
+    throw new Error(
+      '当前有正在运行的知识库后台任务，请等待任务完成后再清除 LLM Wiki',
+    );
   }
 
   pendingJobIds.length = 0;

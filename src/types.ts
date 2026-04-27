@@ -194,7 +194,7 @@ export interface AskQuestionRecord {
   responder_user_id: string | null;
 }
 
-/** Workflow status is now a plain string — valid values are defined in workflow-definitions.json per type. */
+/** Workflow status is now a plain string — valid values are defined in workflow-definitions/*.json per type. */
 export type WorkflowStatus = string;
 
 /** Agent status info for the Agent Status panel. */

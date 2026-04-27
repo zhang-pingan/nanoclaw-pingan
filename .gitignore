@@ -20,6 +20,7 @@ groups/main/*
 groups/global/*
 !groups/main/CLAUDE.md
 !groups/global/CLAUDE.md
+!groups/global/services.json.example
 
 # Secrets
 *.keys.json

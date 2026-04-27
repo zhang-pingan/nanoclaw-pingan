@@ -31,7 +31,8 @@ vi.mock('./env.js', () => ({
 }));
 
 vi.mock('./config.js', async () => {
-  const actual = await vi.importActual<typeof import('./config.js')>('./config.js');
+  const actual =
+    await vi.importActual<typeof import('./config.js')>('./config.js');
   return {
     ...actual,
     DATA_DIR: testDataDir,
@@ -40,7 +41,8 @@ vi.mock('./config.js', async () => {
 });
 
 vi.mock('child_process', async () => {
-  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  const actual =
+    await vi.importActual<typeof import('child_process')>('child_process');
   return {
     ...actual,
     execFileSync: (...args: unknown[]) => execFileSyncMock(...args),
@@ -93,9 +95,7 @@ function rememberMaterialArtifacts(material: {
 }
 
 function cleanupCreatedWikiArtifacts(): void {
-  const sorted = Array.from(createdPaths).sort(
-    (a, b) => b.length - a.length,
-  );
+  const sorted = Array.from(createdPaths).sort((a, b) => b.length - a.length);
   for (const target of sorted) {
     try {
       if (!fs.existsSync(target)) continue;
@@ -146,7 +146,9 @@ async function waitForJobStatus(
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  throw new Error(`Timed out waiting for wiki job ${jobId} to reach ${allowedStatuses.join(', ')}`);
+  throw new Error(
+    `Timed out waiting for wiki job ${jobId} to reach ${allowedStatuses.join(', ')}`,
+  );
 }
 
 beforeEach(() => {
@@ -175,47 +177,47 @@ afterEach(() => {
 describe('wiki', () => {
   it('imports material, generates a draft, publishes a page, and can search it', async () => {
     const testSlug = `vitest-wiki-page-${Date.now()}`;
-    callAnthropicMessagesMock.mockImplementation(async (request: {
-      messages?: Array<{ content?: string }>;
-    }) => {
-      const rawUserContent = String(request.messages?.[0]?.content || '{}');
-      const payload = JSON.parse(rawUserContent);
-      const materialId = payload.materials?.[0]?.id;
-      if (!materialId) {
-        throw new Error('missing material id in compile request');
-      }
+    callAnthropicMessagesMock.mockImplementation(
+      async (request: { messages?: Array<{ content?: string }> }) => {
+        const rawUserContent = String(request.messages?.[0]?.content || '{}');
+        const payload = JSON.parse(rawUserContent);
+        const materialId = payload.materials?.[0]?.id;
+        if (!materialId) {
+          throw new Error('missing material id in compile request');
+        }
 
-      return {
-        model: 'test-model',
-        raw: {},
-        text: JSON.stringify({
-          page: {
-            slug: testSlug,
-            title: 'Vitest Wiki Page',
-            page_kind: 'project',
-            summary: '验证全局 wiki 的主链路',
-            content_markdown:
-              '# Vitest Wiki Page\n\nNanoClaw wiki 采用全局知识模型。',
-          },
-          claims: [
-            {
-              claim_type: 'decision',
-              statement: 'NanoClaw wiki 采用全局知识模型。',
-              canonical_form: 'nanoclaw wiki 采用全局知识模型',
-              confidence: 0.92,
-              evidence: [
-                {
-                  material_id: materialId,
-                  excerpt_text: '知识库统一为全局 wiki，由用户主动提供资料。',
-                  locator: 'section:decision',
-                },
-              ],
+        return {
+          model: 'test-model',
+          raw: {},
+          text: JSON.stringify({
+            page: {
+              slug: testSlug,
+              title: 'Vitest Wiki Page',
+              page_kind: 'project',
+              summary: '验证全局 wiki 的主链路',
+              content_markdown:
+                '# Vitest Wiki Page\n\nNanoClaw wiki 采用全局知识模型。',
             },
-          ],
-          relations: [],
-        }),
-      };
-    });
+            claims: [
+              {
+                claim_type: 'decision',
+                statement: 'NanoClaw wiki 采用全局知识模型。',
+                canonical_form: 'nanoclaw wiki 采用全局知识模型',
+                confidence: 0.92,
+                evidence: [
+                  {
+                    material_id: materialId,
+                    excerpt_text: '知识库统一为全局 wiki，由用户主动提供资料。',
+                    locator: 'section:decision',
+                  },
+                ],
+              },
+            ],
+            relations: [],
+          }),
+        };
+      },
+    );
 
     const material = importWikiMaterialFromText({
       title: 'Wiki 设计说明',
@@ -272,10 +274,12 @@ describe('wiki', () => {
 
     expect(publishResult.page.slug).toBe(testSlug);
     expect(publishResult.claims).toHaveLength(1);
-    expect(publishResult.materials.map((item) => item.id)).toContain(material.id);
-    expect(
-      publishResult.claims[0]?.canonical_form,
-    ).toBe('nanoclaw wiki 采用全局知识模型');
+    expect(publishResult.materials.map((item) => item.id)).toContain(
+      material.id,
+    );
+    expect(publishResult.claims[0]?.canonical_form).toBe(
+      'nanoclaw wiki 采用全局知识模型',
+    );
 
     const pageDetail = getWikiPageDetail(testSlug);
     expect(pageDetail?.claims).toHaveLength(1);
@@ -296,43 +300,43 @@ describe('wiki', () => {
       materials?: Array<{ id?: string; text?: string }>;
     }> = [];
 
-    callAnthropicMessagesMock.mockImplementation(async (request: {
-      messages?: Array<{ content?: string }>;
-    }) => {
-      const compilePrompt = JSON.parse(
-        String(request.messages?.[0]?.content || '{}'),
-      );
-      compilePrompts.push(compilePrompt);
-      const materialId = compilePrompt.materials?.[0]?.id || '';
-      return {
-        model: 'test-model',
-        raw: {},
-        text: JSON.stringify({
-          page: {
-            slug: testSlug,
-            title: 'Material Limit Page',
-            page_kind: 'project',
-            summary: '验证资料截断配置',
-            content_markdown: '# Material Limit Page\n\n配置生效。',
-          },
-          claims: [
-            {
-              claim_type: 'fact',
-              statement: '资料截断配置生效。',
-              canonical_form: '资料截断配置生效',
-              confidence: 0.9,
-              evidence: [
-                {
-                  material_id: materialId,
-                  excerpt_text: 'abcdefg',
-                },
-              ],
+    callAnthropicMessagesMock.mockImplementation(
+      async (request: { messages?: Array<{ content?: string }> }) => {
+        const compilePrompt = JSON.parse(
+          String(request.messages?.[0]?.content || '{}'),
+        );
+        compilePrompts.push(compilePrompt);
+        const materialId = compilePrompt.materials?.[0]?.id || '';
+        return {
+          model: 'test-model',
+          raw: {},
+          text: JSON.stringify({
+            page: {
+              slug: testSlug,
+              title: 'Material Limit Page',
+              page_kind: 'project',
+              summary: '验证资料截断配置',
+              content_markdown: '# Material Limit Page\n\n配置生效。',
             },
-          ],
-          relations: [],
-        }),
-      };
-    });
+            claims: [
+              {
+                claim_type: 'fact',
+                statement: '资料截断配置生效。',
+                canonical_form: '资料截断配置生效',
+                confidence: 0.9,
+                evidence: [
+                  {
+                    material_id: materialId,
+                    excerpt_text: 'abcdefg',
+                  },
+                ],
+              },
+            ],
+            relations: [],
+          }),
+        };
+      },
+    );
 
     const firstMaterial = importWikiMaterialFromText({
       title: '第一份资料',
@@ -365,7 +369,10 @@ describe('wiki', () => {
   });
 
   it('imports uploaded pdf materials by extracting text before storing them', () => {
-    const uploadPath = path.join(WEB_UPLOADS_DIR, `wiki-upload-${Date.now()}.pdf`);
+    const uploadPath = path.join(
+      WEB_UPLOADS_DIR,
+      `wiki-upload-${Date.now()}.pdf`,
+    );
     fs.writeFileSync(uploadPath, Buffer.from('%PDF-1.4\n%fake pdf fixture\n'));
     rememberPath(uploadPath);
     execFileSyncMock.mockReturnValueOnce(
@@ -492,7 +499,9 @@ describe('wiki', () => {
       pageKind: 'decision',
     });
     const firstJobDone = await waitForJobCompletion(firstJob.id);
-    const firstDraftId = JSON.parse(String(firstJobDone.result_json || '{}')).draft_id;
+    const firstDraftId = JSON.parse(
+      String(firstJobDone.result_json || '{}'),
+    ).draft_id;
     const firstDraftDetail = getWikiDraftDetail(String(firstDraftId));
     rememberPath(firstDraftDetail?.draft.file_path);
 
@@ -512,20 +521,28 @@ describe('wiki', () => {
       pageKind: 'decision',
     });
     const secondJobDone = await waitForJobCompletion(secondJob.id);
-    const secondDraftId = JSON.parse(String(secondJobDone.result_json || '{}')).draft_id;
+    const secondDraftId = JSON.parse(
+      String(secondJobDone.result_json || '{}'),
+    ).draft_id;
     const secondDraftDetail = getWikiDraftDetail(String(secondDraftId));
     rememberPath(secondDraftDetail?.draft.file_path);
     expect(secondDraftDetail?.publish_preview.mode).toBe('update');
     expect(secondDraftDetail?.publish_preview.claims.added).toHaveLength(1);
     expect(secondDraftDetail?.publish_preview.claims.updated).toHaveLength(1);
     expect(secondDraftDetail?.publish_preview.claims.removed).toHaveLength(1);
-    expect(secondDraftDetail?.publish_preview.materials.unchanged_material_ids).toEqual([
-      material.id,
-    ]);
+    expect(
+      secondDraftDetail?.publish_preview.materials.unchanged_material_ids,
+    ).toEqual([material.id]);
     expect(secondDraftDetail?.publish_preview.content_diff.added_count).toBe(0);
-    expect(secondDraftDetail?.publish_preview.content_diff.removed_count).toBe(0);
-    expect(secondDraftDetail?.publish_preview.content_diff.updated_count).toBe(1);
-    expect(secondDraftDetail?.publish_preview.content_diff.unchanged_count).toBe(1);
+    expect(secondDraftDetail?.publish_preview.content_diff.removed_count).toBe(
+      0,
+    );
+    expect(secondDraftDetail?.publish_preview.content_diff.updated_count).toBe(
+      1,
+    );
+    expect(
+      secondDraftDetail?.publish_preview.content_diff.unchanged_count,
+    ).toBe(1);
     expect(
       secondDraftDetail?.publish_preview.content_diff.blocks.find(
         (block) => block.kind === 'updated',
@@ -647,12 +664,16 @@ describe('wiki', () => {
       pageKind: 'decision',
     });
     const firstJobDone = await waitForJobCompletion(firstJob.id);
-    const firstDraftId = JSON.parse(String(firstJobDone.result_json || '{}')).draft_id;
+    const firstDraftId = JSON.parse(
+      String(firstJobDone.result_json || '{}'),
+    ).draft_id;
     const firstDraftDetail = getWikiDraftDetail(String(firstDraftId));
     rememberPath(firstDraftDetail?.draft.file_path);
     const firstPublish = publishWikiDraft(String(firstDraftId));
     rememberPath(firstPublish.page.file_path);
-    expect(firstPublish.materials.map((item) => item.id)).toEqual([firstMaterial.id]);
+    expect(firstPublish.materials.map((item) => item.id)).toEqual([
+      firstMaterial.id,
+    ]);
 
     const secondJob = queueWikiDraftGenerationJob({
       materialIds: [secondMaterial.id],
@@ -661,21 +682,31 @@ describe('wiki', () => {
       pageKind: 'decision',
     });
     const secondJobDone = await waitForJobCompletion(secondJob.id);
-    const secondDraftId = JSON.parse(String(secondJobDone.result_json || '{}')).draft_id;
+    const secondDraftId = JSON.parse(
+      String(secondJobDone.result_json || '{}'),
+    ).draft_id;
     const secondDraftDetail = getWikiDraftDetail(String(secondDraftId));
     rememberPath(secondDraftDetail?.draft.file_path);
     const secondPublish = publishWikiDraft(String(secondDraftId));
-    expect(secondPublish.materials.map((item) => item.id)).toEqual([secondMaterial.id]);
+    expect(secondPublish.materials.map((item) => item.id)).toEqual([
+      secondMaterial.id,
+    ]);
 
     const pageDetail = getWikiPageDetail(testSlug);
-    expect(pageDetail?.materials.map((item) => item.id)).toEqual([secondMaterial.id]);
+    expect(pageDetail?.materials.map((item) => item.id)).toEqual([
+      secondMaterial.id,
+    ]);
 
     const allClaims = listWikiClaimsByPage(testSlug, {
       includeDeprecated: true,
     });
     expect(allClaims).toHaveLength(2);
-    expect(allClaims.filter((claim) => claim.status === 'active')).toHaveLength(1);
-    expect(allClaims.filter((claim) => claim.status === 'deprecated')).toHaveLength(1);
+    expect(allClaims.filter((claim) => claim.status === 'active')).toHaveLength(
+      1,
+    );
+    expect(
+      allClaims.filter((claim) => claim.status === 'deprecated'),
+    ).toHaveLength(1);
 
     const deleteResult = deleteWikiMaterial(firstMaterial.id);
     expect(deleteResult.material_id).toBe(firstMaterial.id);
@@ -728,7 +759,51 @@ describe('wiki', () => {
     const completedJob = await waitForJobCompletion(job.id);
     expect(completedJob.status).toBe('failed');
     expect(completedJob.result_json).toBeNull();
-    expect(String(completedJob.error_message || '')).toContain('Claim 缺少有效证据');
+    expect(String(completedJob.error_message || '')).toContain(
+      'Claim 缺少有效证据',
+    );
+  });
+
+  it('persists the raw model response when draft JSON parsing fails', async () => {
+    const material = importWikiMaterialFromText({
+      title: '坏 JSON 资料',
+      text: '模型返回 JSON 损坏时，需要把原始响应保存到本地文件。',
+    });
+    rememberMaterialArtifacts(material);
+
+    const malformedResponse = `{"page":{"slug":"bad-json","title":"Bad JSON","page_kind":"project","summary":"","content_markdown":"# Bad JSON"},"claims":[{"claim_type":"fact","statement":"模型返回 JSON 损坏时需要保存原始响应。","canonical_form":"模型返回 JSON 损坏时需要保存原始响应","confidence":0.8,"evidence":[{"material_id":"${material.id}","excerpt_text":"模型返回 JSON 损坏时，需要把原始响应保存到本地文件。"}]} "missing-comma"],"relations":[]}`;
+
+    callAnthropicMessagesMock.mockResolvedValueOnce({
+      model: 'test-model',
+      raw: {},
+      text: malformedResponse,
+    });
+
+    const job = queueWikiDraftGenerationJob({
+      materialIds: [material.id],
+      title: 'Bad JSON Page',
+      pageKind: 'project',
+    });
+
+    const completedJob = await waitForJobCompletion(job.id);
+    expect(completedJob.status).toBe('failed');
+    expect(completedJob.result_json).toBeNull();
+    const message = String(completedJob.error_message || '');
+    expect(message).toContain('原始响应已保存');
+
+    const rawPath = message.match(/原始响应已保存: (.+)$/)?.[1] || '';
+    expect(rawPath).toContain('failed-draft-responses');
+    expect(fs.existsSync(rawPath)).toBe(true);
+    expect(fs.readFileSync(rawPath, 'utf-8')).toBe(malformedResponse);
+
+    const metadataPath = rawPath.replace(/\.txt$/, '.json');
+    expect(fs.existsSync(metadataPath)).toBe(true);
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8')) as {
+      job_id?: string;
+      raw_response_path?: string;
+    };
+    expect(metadata.job_id).toBe(job.id);
+    expect(metadata.raw_response_path).toBe(rawPath);
   });
 
   it('blocks deleting referenced materials and allows deleting drafts first', async () => {
@@ -773,7 +848,9 @@ describe('wiki', () => {
       pageKind: 'decision',
     });
     const completedJob = await waitForJobCompletion(job.id);
-    const draftId = JSON.parse(String(completedJob.result_json || '{}')).draft_id;
+    const draftId = JSON.parse(
+      String(completedJob.result_json || '{}'),
+    ).draft_id;
     const draftDetail = getWikiDraftDetail(String(draftId));
     rememberPath(draftDetail?.draft.file_path);
 
@@ -839,7 +916,8 @@ describe('wiki', () => {
             title: 'Dependent Page',
             page_kind: 'project',
             summary: '引用待删除页面',
-            content_markdown: '# Dependent Page\n\n这个页面会引用 Primary Page。',
+            content_markdown:
+              '# Dependent Page\n\n这个页面会引用 Primary Page。',
           },
           claims: [
             {
@@ -872,7 +950,9 @@ describe('wiki', () => {
       pageKind: 'concept',
     });
     const firstJobDone = await waitForJobCompletion(firstJob.id);
-    const firstDraftId = JSON.parse(String(firstJobDone.result_json || '{}')).draft_id;
+    const firstDraftId = JSON.parse(
+      String(firstJobDone.result_json || '{}'),
+    ).draft_id;
     const firstDraftDetail = getWikiDraftDetail(String(firstDraftId));
     rememberPath(firstDraftDetail?.draft.file_path);
     const firstPublish = publishWikiDraft(String(firstDraftId));
@@ -885,7 +965,9 @@ describe('wiki', () => {
       pageKind: 'project',
     });
     const secondJobDone = await waitForJobCompletion(secondJob.id);
-    const secondDraftId = JSON.parse(String(secondJobDone.result_json || '{}')).draft_id;
+    const secondDraftId = JSON.parse(
+      String(secondJobDone.result_json || '{}'),
+    ).draft_id;
     const secondDraftDetail = getWikiDraftDetail(String(secondDraftId));
     rememberPath(secondDraftDetail?.draft.file_path);
     const secondPublish = publishWikiDraft(String(secondDraftId));
@@ -903,9 +985,15 @@ describe('wiki', () => {
 
     expect(getWikiPage(primarySlug)).toBeUndefined();
     expect(getWikiPageDetail(primarySlug)).toBeNull();
-    expect(listWikiClaimsByPage(primarySlug, { includeDeprecated: true })).toHaveLength(0);
+    expect(
+      listWikiClaimsByPage(primarySlug, { includeDeprecated: true }),
+    ).toHaveLength(0);
     expect(listWikiRelationsForPage(dependentSlug)).toHaveLength(0);
-    expect(searchWikiPages('Primary Page', 10).some((item) => item.slug === primarySlug)).toBe(false);
+    expect(
+      searchWikiPages('Primary Page', 10).some(
+        (item) => item.slug === primarySlug,
+      ),
+    ).toBe(false);
     expect(getWikiPage(dependentSlug)?.slug).toBe(dependentSlug);
   });
 
@@ -1112,7 +1200,10 @@ describe('wiki', () => {
     const result = deleteFinishedWikiJobs();
     expect(result.deleted_count).toBe(2);
     expect(result.deleted_ids).toEqual(
-      expect.arrayContaining(['wiki-job-completed-test', 'wiki-job-failed-test']),
+      expect.arrayContaining([
+        'wiki-job-completed-test',
+        'wiki-job-failed-test',
+      ]),
     );
     expect(getWikiJob('wiki-job-completed-test')).toBeUndefined();
     expect(getWikiJob('wiki-job-failed-test')).toBeUndefined();
@@ -1162,7 +1253,9 @@ describe('wiki', () => {
       pageKind: 'project',
     });
     const completedJob = await waitForJobCompletion(job.id);
-    const draftId = JSON.parse(String(completedJob.result_json || '{}')).draft_id;
+    const draftId = JSON.parse(
+      String(completedJob.result_json || '{}'),
+    ).draft_id;
     const draftDetail = getWikiDraftDetail(String(draftId));
     const draftFilePath = String(draftDetail?.draft.file_path || '');
     rememberPath(draftFilePath);
@@ -1194,7 +1287,9 @@ describe('wiki', () => {
     expect(getWikiDraft(String(draftId))).toBeUndefined();
     expect(getWikiPage(testSlug)).toBeUndefined();
     expect(getWikiJob(job.id)).toBeUndefined();
-    expect(listWikiClaimsByPage(testSlug, { includeDeprecated: true })).toHaveLength(0);
+    expect(
+      listWikiClaimsByPage(testSlug, { includeDeprecated: true }),
+    ).toHaveLength(0);
     expect(listWikiRelationsForPage(testSlug)).toHaveLength(0);
     expect(fs.existsSync(materialDir)).toBe(false);
     expect(fs.existsSync(draftFilePath)).toBe(false);

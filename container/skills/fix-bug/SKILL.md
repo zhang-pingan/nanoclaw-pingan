@@ -16,7 +16,6 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
    - Bug 描述
    - Bug 附件
    - 工作分支
-   - 预发工作分支
 2. 读取 `/workspace/global/services.json`，确认服务对应的仓库路径、默认分支和预发配置。
 3. 进入真实代码仓库 `/workspace/repos/{repo_path}`；如果服务配置没有 `repo_path`，再尝试 `/workspace/repos/{服务名}`。
 4. 必须在任务指定的工作分支上修复，不要自行新建其他分支，除非用户明确要求。

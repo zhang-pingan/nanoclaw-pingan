@@ -7,14 +7,19 @@ import {
   WorkflowDefinitionRegistry,
   WorkflowDefinitionVersionBundle,
 } from './workflow-definition.js';
+import { getPublishedWorkflowDefinitions } from './workflow-definition-registry.js';
 import {
-  getPublishedWorkflowDefinitions,
-  normalizeWorkflowDefinitionRegistry,
-} from './workflow-definition-registry.js';
-import { compileWorkflowDefinition, validateWorkflowDefinition } from './workflow-compiler.js';
+  readWorkflowDefinitionRegistryFromDir,
+  validateWorkflowDefinitionKey,
+  writeWorkflowDefinitionBundle,
+  writeWorkflowDefinitionRegistryToDir,
+} from './workflow-definition-files.js';
+import {
+  compileWorkflowDefinition,
+  validateWorkflowDefinition,
+} from './workflow-compiler.js';
 
 const SKILLS_DIR = path.join(process.cwd(), 'container', 'skills');
-const DEFINITIONS_PATH = path.join(SKILLS_DIR, 'workflow-definitions.json');
 const CARDS_PATH = path.join(SKILLS_DIR, 'cards.json');
 
 function ensureSkillsDir(): void {
@@ -23,32 +28,26 @@ function ensureSkillsDir(): void {
   }
 }
 
-function sortVersions(
-  versions: WorkflowDefinition[],
-): WorkflowDefinition[] {
+function sortVersions(versions: WorkflowDefinition[]): WorkflowDefinition[] {
   return [...versions].sort((a, b) => a.version - b.version);
 }
 
 export function readWorkflowDefinitionRegistry(): WorkflowDefinitionRegistry {
-  if (!fs.existsSync(DEFINITIONS_PATH)) {
-    return { definitions: {} };
-  }
-  const raw = JSON.parse(fs.readFileSync(DEFINITIONS_PATH, 'utf-8')) as unknown;
-  return normalizeWorkflowDefinitionRegistry(raw);
+  return readWorkflowDefinitionRegistryFromDir();
 }
 
 export function writeWorkflowDefinitionRegistry(
   registry: WorkflowDefinitionRegistry,
 ): void {
-  ensureSkillsDir();
-  fs.writeFileSync(DEFINITIONS_PATH, `${JSON.stringify(registry, null, 2)}\n`, 'utf-8');
+  writeWorkflowDefinitionRegistryToDir(registry);
 }
 
 export function readCardRegistry(): Record<string, Record<string, CardConfig>> {
   if (!fs.existsSync(CARDS_PATH)) return {};
-  return JSON.parse(
-    fs.readFileSync(CARDS_PATH, 'utf-8'),
-  ) as Record<string, Record<string, CardConfig>>;
+  return JSON.parse(fs.readFileSync(CARDS_PATH, 'utf-8')) as Record<
+    string,
+    Record<string, CardConfig>
+  >;
 }
 
 export function writeCardRegistry(
@@ -70,13 +69,17 @@ export function listWorkflowDefinitionBundles(): Array<{
   return Object.values(registry.definitions)
     .map((bundle) => {
       const versions = sortVersions(bundle.versions);
-      const published = versions.filter((version) => version.status === 'published');
+      const published = versions.filter(
+        (version) => version.status === 'published',
+      );
       const drafts = versions.filter((version) => version.status === 'draft');
       return {
         key: bundle.key,
         label: bundle.label,
         description: bundle.description,
-        published_version: published.length ? published[published.length - 1].version : null,
+        published_version: published.length
+          ? published[published.length - 1].version
+          : null,
         draft_version: drafts.length ? drafts[drafts.length - 1].version : null,
         version_count: versions.length,
       };
@@ -107,6 +110,9 @@ export function saveWorkflowDefinitionDraft(input: {
     version?: number;
   };
 }): { definition?: WorkflowDefinition; error?: string } {
+  const keyError = validateWorkflowDefinitionKey(input.key);
+  if (keyError) return { error: keyError };
+
   const registry = readWorkflowDefinitionRegistry();
   const bundle = registry.definitions[input.key] || {
     key: input.key,
@@ -116,7 +122,9 @@ export function saveWorkflowDefinitionDraft(input: {
   };
 
   const existingVersions = sortVersions(bundle.versions);
-  const existingDraft = existingVersions.find((version) => version.status === 'draft');
+  const existingDraft = existingVersions.find(
+    (version) => version.status === 'draft',
+  );
   const nextVersion =
     input.definition.version ||
     existingDraft?.version ||
@@ -132,18 +140,20 @@ export function saveWorkflowDefinitionDraft(input: {
   };
 
   const versions = existingVersions.filter(
-    (version) => !(version.status === 'draft' && version.version === nextVersion),
+    (version) =>
+      !(version.status === 'draft' && version.version === nextVersion),
   );
   versions.push(definition);
 
   registry.definitions[input.key] = {
     key: input.key,
     label: input.label ?? bundle.label ?? definition.name,
-    description: input.description ?? bundle.description ?? definition.description,
+    description:
+      input.description ?? bundle.description ?? definition.description,
     versions: sortVersions(versions),
   };
 
-  writeWorkflowDefinitionRegistry(registry);
+  writeWorkflowDefinitionBundle(registry.definitions[input.key]);
   return { definition };
 }
 
@@ -151,6 +161,9 @@ export function publishWorkflowDefinitionVersion(input: {
   key: string;
   version?: number;
 }): { definition?: WorkflowDefinition; error?: string } {
+  const keyError = validateWorkflowDefinitionKey(input.key);
+  if (keyError) return { error: keyError };
+
   const registry = readWorkflowDefinitionRegistry();
   const bundle = registry.definitions[input.key];
   if (!bundle) {
@@ -161,8 +174,9 @@ export function publishWorkflowDefinitionVersion(input: {
   const target =
     (input.version
       ? versions.find((version) => version.version === input.version)
-      : [...versions].reverse().find((version) => version.status === 'draft')) ||
-    null;
+      : [...versions]
+          .reverse()
+          .find((version) => version.status === 'draft')) || null;
 
   if (!target) {
     return { error: `Workflow definition "${input.key}" 没有可发布的版本` };
@@ -188,9 +202,11 @@ export function publishWorkflowDefinitionVersion(input: {
     return version;
   });
 
-  writeWorkflowDefinitionRegistry(registry);
+  writeWorkflowDefinitionBundle(bundle);
   return {
-    definition: bundle.versions.find((version) => version.version === target.version),
+    definition: bundle.versions.find(
+      (version) => version.version === target.version,
+    ),
   };
 }
 
@@ -198,6 +214,9 @@ export function deleteWorkflowDefinitionVersion(input: {
   key: string;
   version: number;
 }): { ok?: true; error?: string } {
+  const keyError = validateWorkflowDefinitionKey(input.key);
+  if (keyError) return { error: keyError };
+
   const registry = readWorkflowDefinitionRegistry();
   const bundle = registry.definitions[input.key];
   if (!bundle) {
@@ -215,7 +234,9 @@ export function deleteWorkflowDefinitionVersion(input: {
     return { error: '已发布版本不支持直接删除' };
   }
 
-  const remaining = versions.filter((version) => version.version !== input.version);
+  const remaining = versions.filter(
+    (version) => version.version !== input.version,
+  );
   if (!remaining.length) {
     return { error: '至少需要保留一个版本' };
   }
@@ -224,6 +245,6 @@ export function deleteWorkflowDefinitionVersion(input: {
   }
 
   bundle.versions = remaining;
-  writeWorkflowDefinitionRegistry(registry);
+  writeWorkflowDefinitionBundle(bundle);
   return { ok: true };
 }

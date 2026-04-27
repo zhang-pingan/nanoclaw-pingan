@@ -1,7 +1,7 @@
 /**
  * Workflow Configuration — types, loader, template renderer, validator.
  *
- * Editable workflow definitions live in container/skills/workflow-definitions.json.
+ * Editable workflow definitions live in container/skills/workflow-definitions/*.json.
  * Card templates live in container/skills/cards.json.
  * The engine (workflow.ts) reads them once at init and drives state
  * transitions generically instead of hard-coding each workflow type.
@@ -11,11 +11,13 @@ import path from 'path';
 
 import { CardConfig, validateCardConfig } from './card-config.js';
 import { logger } from './logger.js';
-import { WorkflowCreateForm, WorkflowDefinition } from './workflow-definition.js';
+import { WorkflowCreateForm } from './workflow-definition.js';
 import {
-  getPublishedWorkflowDefinitions,
-  normalizeWorkflowDefinitionRegistry,
-} from './workflow-definition-registry.js';
+  getWorkflowDefinitionsDir,
+  readWorkflowDefinitionRegistryFromDir,
+  WORKFLOW_DEFINITIONS_RELATIVE_DIR,
+} from './workflow-definition-files.js';
+import { getPublishedWorkflowDefinitions } from './workflow-definition-registry.js';
 import { compileWorkflowDefinitions } from './workflow-compiler.js';
 
 // -------------------------------------------------------
@@ -96,17 +98,16 @@ export function loadWorkflowConfigs(): Record<
   string,
   WorkflowTypeConfig
 > | null {
-  const definitionsPath = path.join(
+  const definitionsDir = getWorkflowDefinitionsDir();
+  const cardsPath = path.join(
     process.cwd(),
     'container',
     'skills',
-    'workflow-definitions.json',
+    'cards.json',
   );
-  const cardsPath = path.join(process.cwd(), 'container', 'skills', 'cards.json');
 
-  if (!fs.existsSync(definitionsPath)) {
-    lastLoadError =
-      'Workflow 未启用：未找到 container/skills/workflow-definitions.json';
+  if (!fs.existsSync(definitionsDir)) {
+    lastLoadError = `Workflow 未启用：未找到 ${WORKFLOW_DEFINITIONS_RELATIVE_DIR}`;
     logger.info(lastLoadError);
     return null;
   }
@@ -118,14 +119,18 @@ export function loadWorkflowConfigs(): Record<
   }
 
   try {
-    const rawCards = JSON.parse(
-      fs.readFileSync(cardsPath, 'utf-8'),
-    ) as Record<string, Record<string, CardConfig>>;
+    const rawCards = JSON.parse(fs.readFileSync(cardsPath, 'utf-8')) as Record<
+      string,
+      Record<string, CardConfig>
+    >;
 
-    const rawDefinitions = JSON.parse(
-      fs.readFileSync(definitionsPath, 'utf-8'),
-    ) as WorkflowDefinition | Record<string, WorkflowDefinition>;
-    const registry = normalizeWorkflowDefinitionRegistry(rawDefinitions);
+    const registry = readWorkflowDefinitionRegistryFromDir();
+    if (Object.keys(registry.definitions).length === 0) {
+      lastLoadError = `Workflow 未启用：${WORKFLOW_DEFINITIONS_RELATIVE_DIR} 下没有 workflow definition JSON 文件`;
+      logger.info(lastLoadError);
+      return null;
+    }
+
     const published = getPublishedWorkflowDefinitions(registry);
     if (published.errors.length > 0) {
       lastLoadError = `Workflow definition 发布模型校验失败: ${published.errors.join('; ')}`;
@@ -147,11 +152,7 @@ export function loadWorkflowConfigs(): Record<
     const configs = compiled.configs as Record<string, WorkflowTypeConfig>;
 
     for (const [typeName, config] of Object.entries(configs)) {
-      const errors = validateConfig(
-        typeName,
-        config,
-        rawCards[typeName] || {},
-      );
+      const errors = validateConfig(typeName, config, rawCards[typeName] || {});
       if (errors.length > 0) {
         lastLoadError = `Workflow 配置校验失败 (${typeName}): ${errors.join('; ')}`;
         logger.error({ typeName, errors }, 'Workflow config validation failed');
