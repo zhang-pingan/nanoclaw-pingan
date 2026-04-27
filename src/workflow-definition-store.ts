@@ -1,7 +1,8 @@
-import fs from 'fs';
-import path from 'path';
-
 import { CardConfig } from './card-config.js';
+import {
+  readCardRegistryFromDir,
+  writeCardRegistryToDir,
+} from './card-files.js';
 import {
   WorkflowDefinition,
   WorkflowDefinitionRegistry,
@@ -19,15 +20,6 @@ import {
   validateWorkflowDefinition,
 } from './workflow-compiler.js';
 
-const SKILLS_DIR = path.join(process.cwd(), 'container', 'skills');
-const CARDS_PATH = path.join(SKILLS_DIR, 'cards.json');
-
-function ensureSkillsDir(): void {
-  if (!fs.existsSync(SKILLS_DIR)) {
-    fs.mkdirSync(SKILLS_DIR, { recursive: true });
-  }
-}
-
 function sortVersions(versions: WorkflowDefinition[]): WorkflowDefinition[] {
   return [...versions].sort((a, b) => a.version - b.version);
 }
@@ -43,18 +35,13 @@ export function writeWorkflowDefinitionRegistry(
 }
 
 export function readCardRegistry(): Record<string, Record<string, CardConfig>> {
-  if (!fs.existsSync(CARDS_PATH)) return {};
-  return JSON.parse(fs.readFileSync(CARDS_PATH, 'utf-8')) as Record<
-    string,
-    Record<string, CardConfig>
-  >;
+  return readCardRegistryFromDir();
 }
 
 export function writeCardRegistry(
   cards: Record<string, Record<string, CardConfig>>,
 ): void {
-  ensureSkillsDir();
-  fs.writeFileSync(CARDS_PATH, `${JSON.stringify(cards, null, 2)}\n`, 'utf-8');
+  writeCardRegistryToDir(cards);
 }
 
 export function listWorkflowDefinitionBundles(): Array<{

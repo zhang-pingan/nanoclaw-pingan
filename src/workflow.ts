@@ -2,7 +2,7 @@
  * Workflow Engine for NanoClaw — Configuration-Driven
  *
  * State machine definitions live in container/workflow-definitions/*.json.
- * Card templates live in container/skills/cards.json.
+ * Card templates live in container/cards/*.json.
  * This engine reads them at init and drives transitions generically.
  *
  * Role resolution (no hardcoded group names):

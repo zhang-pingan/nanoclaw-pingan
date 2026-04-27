@@ -6,7 +6,7 @@
 
 当前 card 相关能力已经完成了从 workflow 代码特判到独立配置资源的拆分，现状如下：
 
-- card 配置独立存放在 `container/skills/cards.json`
+- card 配置按 workflow type 拆分存放在 `container/cards/*.json`
 - card schema 已独立定义在 `src/card-config.ts`
 - card 运行时构建逻辑已独立在 `src/card-builder.ts`
 - workflow / workbench 运行时已通过 `getCardConfig(workflowType, cardKey)` 访问 card，而不是直接依赖 workflow config 内嵌字段
@@ -159,7 +159,7 @@ workflow definitions 的 Electron Web 管理页第一阶段已经完成，而且
 
 ### 2.1 第一步：完成 Cards 的 Web 管理页
 
-目标：让 card 作为独立资源被查看、编辑、校验，而不是继续靠改 `cards.json`。
+目标：让 card 作为独立资源被查看、编辑、校验，而不是继续靠手工改 `container/cards/*.json`。
 
 建议页面能力：
 

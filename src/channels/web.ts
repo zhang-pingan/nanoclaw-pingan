@@ -7,6 +7,7 @@ import { AgentStatusInfo } from '../types.js';
 import type { WorkbenchRealtimeEvent } from '../workbench-events.js';
 import { validateCardConfig } from '../card-config.js';
 import type { CardConfig } from '../card-config.js';
+import { validateCardRegistryKey } from '../card-files.js';
 import type { WorkflowDefinition } from '../workflow-definition.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 import {
@@ -2102,6 +2103,11 @@ class WebChannel {
   ): string[] {
     const errors: string[] = [];
     for (const [workflowType, cardGroup] of Object.entries(cards)) {
+      const workflowTypeError = validateCardRegistryKey(workflowType);
+      if (workflowTypeError) {
+        errors.push(workflowTypeError);
+        continue;
+      }
       for (const [cardKey, cardConfig] of Object.entries(cardGroup || {})) {
         errors.push(
           ...validateCardConfig(`${workflowType}.${cardKey}`, cardConfig),

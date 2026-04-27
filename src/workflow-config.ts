@@ -2,14 +2,18 @@
  * Workflow Configuration — types, loader, template renderer, validator.
  *
  * Editable workflow definitions live in container/workflow-definitions/*.json.
- * Card templates live in container/skills/cards.json.
+ * Card templates live in container/cards/*.json.
  * The engine (workflow.ts) reads them once at init and drives state
  * transitions generically instead of hard-coding each workflow type.
  */
 import fs from 'fs';
-import path from 'path';
 
 import { CardConfig, validateCardConfig } from './card-config.js';
+import {
+  CARDS_RELATIVE_DIR,
+  getCardsDir,
+  readCardRegistryFromDir,
+} from './card-files.js';
 import { logger } from './logger.js';
 import { WorkflowCreateForm } from './workflow-definition.js';
 import {
@@ -99,12 +103,7 @@ export function loadWorkflowConfigs(): Record<
   WorkflowTypeConfig
 > | null {
   const definitionsDir = getWorkflowDefinitionsDir();
-  const cardsPath = path.join(
-    process.cwd(),
-    'container',
-    'skills',
-    'cards.json',
-  );
+  const cardsDir = getCardsDir();
 
   if (!fs.existsSync(definitionsDir)) {
     lastLoadError = `Workflow 未启用：未找到 ${WORKFLOW_DEFINITIONS_RELATIVE_DIR}`;
@@ -112,17 +111,14 @@ export function loadWorkflowConfigs(): Record<
     return null;
   }
 
-  if (!fs.existsSync(cardsPath)) {
-    lastLoadError = 'Workflow 未启用：未找到 container/skills/cards.json';
+  if (!fs.existsSync(cardsDir)) {
+    lastLoadError = `Workflow 未启用：未找到 ${CARDS_RELATIVE_DIR}`;
     logger.info(lastLoadError);
     return null;
   }
 
   try {
-    const rawCards = JSON.parse(fs.readFileSync(cardsPath, 'utf-8')) as Record<
-      string,
-      Record<string, CardConfig>
-    >;
+    const rawCards = readCardRegistryFromDir();
 
     const registry = readWorkflowDefinitionRegistryFromDir();
     if (Object.keys(registry.definitions).length === 0) {
