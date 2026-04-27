@@ -909,6 +909,7 @@ export function createWorkbenchTask(input: {
     sourceJid: input.sourceJid,
     startFrom: input.startFrom,
     workflowType: input.workflowType,
+    context: input.context,
     deliverable:
       typeof input.context?.[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
         ? (input.context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)

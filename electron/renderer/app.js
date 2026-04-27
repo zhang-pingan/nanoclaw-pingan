@@ -12719,6 +12719,7 @@ async function openWorkbenchCreateTaskModal() {
             label: "需求描述",
             type: "textarea",
             placeholder: "请描述需求背景、目标、范围与限制条件",
+            required: true,
             visible_when: { entry_points: ["plan"] },
           },
           {
@@ -12843,6 +12844,60 @@ async function openWorkbenchCreateTaskModal() {
     return (getCreateForm().fields || []).filter((field) => isFieldVisible(field));
   }
 
+  function isCreateFieldFilled(field) {
+    const value = state.formValues[field.key];
+    if (field.type === "file_uploads") {
+      return Array.isArray(value) && value.some((item) => item && typeof item.path === "string" && item.path.trim());
+    }
+    if (Array.isArray(value)) return value.length > 0;
+    return typeof value === "string" ? value.trim().length > 0 : value !== void 0 && value !== null;
+  }
+
+  function getMissingRequiredCreateFields() {
+    return getVisibleCreateFields().filter((field) => field.required === true && !isCreateFieldFilled(field));
+  }
+
+  function getFileUploadFields() {
+    return getVisibleCreateFields().filter((field) => field.type === "file_uploads");
+  }
+
+  function getFileUploadSummary() {
+    const labels = [];
+    getFileUploadFields().forEach((field) => {
+      const files = Array.isArray(state.formValues[field.key]) ? state.formValues[field.key] : [];
+      files.forEach((item) => {
+        if (!item) return;
+        labels.push(item.name || item.path || "未命名附件");
+      });
+    });
+    return labels;
+  }
+
+  function buildCreateFormContext() {
+    const context = {};
+    getVisibleCreateFields().forEach((field) => {
+      const value = state.formValues[field.key];
+      if (field.type === "file_uploads") {
+        const paths = Array.isArray(value)
+          ? value
+            .map((item) => item && item.path)
+            .filter((item) => typeof item === "string" && item.trim())
+          : [];
+        if (paths.length > 0) context[field.key] = paths;
+        return;
+      }
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed) context[field.key] = trimmed;
+        return;
+      }
+      if (value !== void 0 && value !== null) {
+        context[field.key] = value;
+      }
+    });
+    return context;
+  }
+
   function getTaskTitle() {
     return typeof state.title === "string" ? state.title.trim() : "";
   }
@@ -12897,11 +12952,6 @@ async function openWorkbenchCreateTaskModal() {
     }
   }
 
-  function getRequirementFiles() {
-    const value = state.formValues.requirement_files;
-    return Array.isArray(value) ? value : [];
-  }
-
   function summarizeRequirementDescription(text) {
     const raw = typeof text === "string" ? text.trim() : "";
     if (!raw) return "待填写";
@@ -12928,22 +12978,22 @@ async function openWorkbenchCreateTaskModal() {
     const requiredFile = getRequiredDeliverableFile();
     const deliverableFiles = getRequirementDeliverables(selectedRequirement);
     const deliverableOk = !deliverableRequired || deliverableFiles.includes(requiredFile);
-    const requirementDescriptionRequired = state.entryPoint === "plan";
-    const requirementDescriptionOk = !requirementDescriptionRequired || !!requirementDescription;
+    const missingRequiredFields = getMissingRequiredCreateFields();
+    const missingRequiredField = missingRequiredFields[0];
     let validationTone = "info";
 
     if (!taskTitle) {
       reqHintEl.textContent = "请输入任务名称";
       validationTone = "warning";
-    } else if (!requirementDescriptionOk) {
-      reqHintEl.textContent = "Plan 入口需要填写需求描述";
+    } else if (state.uploadingFiles > 0) {
+      reqHintEl.textContent = `附件上传中（${state.uploadingFiles}）...`;
+      validationTone = "info";
+    } else if (missingRequiredField) {
+      reqHintEl.textContent = `请填写${missingRequiredField.label || missingRequiredField.key}`;
       validationTone = "warning";
     } else if (deliverableRequired && !selectedRequirement) {
       reqHintEl.textContent = "请选择关联需求后再创建";
       validationTone = "warning";
-    } else if (state.uploadingFiles > 0) {
-      reqHintEl.textContent = `附件上传中（${state.uploadingFiles}）...`;
-      validationTone = "info";
     } else if (deliverableRequired) {
       reqHintEl.textContent = deliverableOk
         ? `已校验交付物文件：${requiredFile}`
@@ -12958,12 +13008,12 @@ async function openWorkbenchCreateTaskModal() {
     let summaryText = `将向 ${state.service || "--"} 发起 ${state.entryPoint || "--"} 流程`;
     if (!taskTitle) {
       summaryText = "请填写任务名称后再创建";
-    } else if (!requirementDescriptionOk) {
-      summaryText = "请补充需求描述后再创建";
-    } else if (deliverableRequired && !selectedRequirement) {
-      summaryText = "请先选择关联需求";
     } else if (state.uploadingFiles > 0) {
       summaryText = `等待 ${state.uploadingFiles} 个附件上传完成`;
+    } else if (missingRequiredField) {
+      summaryText = `请补充${missingRequiredField.label || missingRequiredField.key}`;
+    } else if (deliverableRequired && !selectedRequirement) {
+      summaryText = "请先选择关联需求";
     } else if (deliverableRequired && !deliverableOk) {
       summaryText = `缺少必需交付物 ${requiredFile}`;
     }
@@ -12974,6 +13024,10 @@ async function openWorkbenchCreateTaskModal() {
     if (selectionSummaryEl) {
       const summaryTitle = getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--";
       const summarySubtitle = `${state.service || "--"} · ${state.entryPoint || "--"}`;
+      const visibleFields = getVisibleCreateFields();
+      const hasRequirementDescriptionField = visibleFields.some((field) => ["requirement_description", "requirement_custom"].includes(field.key));
+      const fileUploadFields = getFileUploadFields();
+      const fileUploadSummary = getFileUploadSummary();
       const summaryItems = [
         { label: "流程", value: getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--" },
         { label: "入口点", value: state.entryPoint || "--" },
@@ -12983,7 +13037,7 @@ async function openWorkbenchCreateTaskModal() {
           label: "需求描述",
           value: requirementDescription
             ? summarizeRequirementDescription(requirementDescription)
-            : (state.entryPoint === "plan" ? "待填写" : "--")
+            : (hasRequirementDescriptionField ? "待填写" : "--")
         },
         {
           label: "关联需求",
@@ -12991,10 +13045,8 @@ async function openWorkbenchCreateTaskModal() {
         },
         {
           label: "附件",
-          value: state.entryPoint === "plan"
-            ? (getRequirementFiles().length > 0
-              ? getRequirementFiles().map((item) => item.name || item.path || "未命名附件").join("、")
-              : "无")
+          value: fileUploadFields.length > 0
+            ? (fileUploadSummary.length > 0 ? fileUploadSummary.join("、") : "无")
             : "--"
         },
         { label: "交付物", value: deliverableRequired ? (deliverableOk ? `已满足 ${requiredFile}` : `缺少 ${requiredFile}`) : "当前入口无需交付物" }
@@ -13020,7 +13072,7 @@ async function openWorkbenchCreateTaskModal() {
 
     submitBtn.disabled =
       !taskTitle ||
-      !requirementDescriptionOk ||
+      missingRequiredFields.length > 0 ||
       !state.entryPoint ||
       !state.service ||
       (deliverableRequired && !selectedRequirement) ||
@@ -13321,13 +13373,15 @@ async function openWorkbenchCreateTaskModal() {
     const deliverableRequired = !!detail?.requires_deliverable;
     const requiredFile = getRequiredDeliverableFile();
     const deliverableFiles = getRequirementDeliverables(selectedRequirement);
+    const missingRequiredFields = getMissingRequiredCreateFields();
     if (!title) return;
-    if (state.entryPoint === "plan" && !requirementDescription) return;
+    if (missingRequiredFields.length > 0) return;
     if (deliverableRequired && !selectedRequirement) return;
     if (deliverableRequired && !deliverableFiles.includes(requiredFile)) {
       alert(`当前入口点要求交付物文件 ${requiredFile}，所选需求不满足。`);
       return;
     }
+    const createFormContext = buildCreateFormContext();
 
     try {
       const res = await apiFetch("/api/workbench/task", {
@@ -13339,17 +13393,9 @@ async function openWorkbenchCreateTaskModal() {
           start_from: state.entryPoint,
           workflow_type: state.workflowType,
           context: {
-            deliverable: deliverableRequired ? selectedRequirement : void 0,
-            main_branch: (state.formValues.main_branch || "").trim() || void 0,
-            staging_base_branch: (state.formValues.staging_base_branch || "").trim() || void 0,
-            work_branch: (state.formValues.work_branch || "").trim() || void 0,
-            staging_work_branch: (state.formValues.staging_work_branch || "").trim() || void 0,
-            requirement_description: state.entryPoint === "plan" ? requirementDescription : void 0,
-            requirement_files: state.entryPoint === "plan"
-              ? getRequirementFiles()
-                .map((item) => item.path)
-                .filter((item) => typeof item === "string" && item.trim())
-              : void 0,
+            ...createFormContext,
+            deliverable: deliverableRequired ? selectedRequirement : createFormContext.deliverable,
+            requirement_description: requirementDescription || createFormContext.requirement_description,
             requirement_preset: selectedRequirement || void 0,
           },
         }),
@@ -14341,6 +14387,19 @@ async function openWorkflowDefinitionCreateFormPreview() {
     return (getCreateForm().fields || []).filter((field) => isFieldVisible(field));
   }
 
+  function isPreviewFieldFilled(field) {
+    const value = state.formValues[field.key];
+    if (field.type === "file_uploads") {
+      return Array.isArray(value) && value.some((item) => item && typeof item.path === "string" && item.path.trim());
+    }
+    if (Array.isArray(value)) return value.length > 0;
+    return typeof value === "string" ? value.trim().length > 0 : value !== void 0 && value !== null;
+  }
+
+  function getMissingRequiredFields() {
+    return getVisibleFields().filter((field) => field.required === true && !isPreviewFieldFilled(field));
+  }
+
   function getTaskTitle() {
     return typeof state.title === "string" ? state.title.trim() : "";
   }
@@ -14377,17 +14436,17 @@ async function openWorkflowDefinitionCreateFormPreview() {
 
   function updateHint() {
     const taskTitle = getTaskTitle();
-    const requirementDescription = getRequirementDescription();
     const selectedRequirement = getSelectedRequirementName();
     const detail = workflowType.entry_points_detail?.[state.entryPoint];
     const deliverableRequired = !!detail?.requires_deliverable;
     const requiredFile = getRequiredDeliverableFile();
     const deliverableOk =
       !deliverableRequired || getRequirementDeliverables(selectedRequirement).includes(requiredFile);
+    const missingRequiredField = getMissingRequiredFields()[0];
     if (!taskTitle) {
       hintEl.textContent = "请输入任务名称";
-    } else if (state.entryPoint === "plan" && !requirementDescription) {
-      hintEl.textContent = "Plan 入口需要填写需求描述";
+    } else if (missingRequiredField) {
+      hintEl.textContent = `请填写${missingRequiredField.label || missingRequiredField.key}`;
     } else if (deliverableRequired && !selectedRequirement) {
       hintEl.textContent = "请选择关联需求";
     } else if (deliverableRequired) {

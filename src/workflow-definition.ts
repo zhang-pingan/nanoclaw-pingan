@@ -103,6 +103,7 @@ export interface WorkflowCreateField {
   placeholder?: string;
   helper_text?: string;
   default_value?: string;
+  required?: boolean;
   searchable?: boolean;
   options?: WorkflowCreateFieldOption[];
   visible_when?: WorkflowCreateFieldCondition;

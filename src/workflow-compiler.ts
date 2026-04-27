@@ -132,6 +132,12 @@ export function validateWorkflowDefinition(
         if (!['text', 'textarea', 'choice', 'requirement_select', 'file_uploads'].includes(field.type)) {
           errors.push(`${fieldPath}.type "${field.type}" is invalid`);
         }
+        if (
+          field.required !== undefined &&
+          typeof field.required !== 'boolean'
+        ) {
+          errors.push(`${fieldPath}.required must be a boolean`);
+        }
         if (field.type === 'choice' && (!Array.isArray(field.options) || field.options.length === 0)) {
           errors.push(`${fieldPath}.options must contain at least one item for choice fields`);
         }

@@ -448,6 +448,7 @@
                 "label": "需求描述",
                 "type": "textarea",
                 "placeholder": "请描述需求背景、目标、范围与限制条件",
+                "required": true,
                 "helper_text": "从 Plan 入口创建时，直接填写完整需求描述。",
                 "visible_when": {
                   "entry_points": [
@@ -951,6 +952,7 @@
                 "label": "需求描述",
                 "type": "textarea",
                 "placeholder": "请描述需求背景、目标、范围与限制条件",
+                "required": true,
                 "helper_text": "从 Plan 入口创建时，直接填写完整需求描述。",
                 "visible_when": {
                   "entry_points": [

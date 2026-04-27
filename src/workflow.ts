@@ -491,6 +491,29 @@ function getStatusLabel(workflow: Workflow): string {
   return config.status_labels[workflow.status] || workflow.status;
 }
 
+function formatContextTemplateValue(value: unknown): string | number | undefined {
+  if (typeof value === 'string' || typeof value === 'number') return value;
+  if (typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    const items = value
+      .filter(
+        (item): item is string =>
+          typeof item === 'string' && item.trim().length > 0,
+      )
+      .map((item) => `- ${item}`);
+    return items.join('\n') || undefined;
+  }
+  return undefined;
+}
+
+function buildContextTemplateVars(context: WorkflowContext): TemplateVars {
+  return Object.fromEntries(
+    Object.entries(context)
+      .map(([key, value]) => [key, formatContextTemplateValue(value)] as const)
+      .filter(([, value]) => value !== undefined),
+  ) as TemplateVars;
+}
+
 /** Build template vars from a workflow + optional delegation result. */
 function buildTemplateVars(
   workflow: Workflow,
@@ -502,6 +525,7 @@ function buildTemplateVars(
   },
 ): TemplateVars {
   return {
+    ...buildContextTemplateVars(workflow.context),
     name: workflow.name,
     service: workflow.service,
     main_branch: getWorkflowContextValue(
@@ -778,6 +802,7 @@ export interface CreateWorkflowOpts {
   sourceJid: string;
   startFrom: string;
   workflowType: string;
+  context?: WorkflowContext;
   deliverable?: string;
   mainBranch?: string;
   workBranch?: string;
@@ -841,24 +866,26 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       };
     }
 
+    const workflowContext = mergeWorkflowContext(opts.context || {}, {
+      [WORKFLOW_CONTEXT_KEYS.mainBranch]:
+        opts.mainBranch || deliverable.main_branch,
+      [WORKFLOW_CONTEXT_KEYS.workBranch]:
+        opts.workBranch || deliverable.work_branch,
+      [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable.fileName,
+      [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]:
+        opts.stagingBaseBranch || deliverable.staging_base_branch,
+      [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]:
+        opts.stagingWorkBranch || deliverable.staging_work_branch,
+      [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
+      [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
+    });
+
     dbCreateWorkflow({
       id: workflowId,
       name: opts.title,
       service: opts.service,
       start_from: opts.startFrom,
-      context: {
-        [WORKFLOW_CONTEXT_KEYS.mainBranch]:
-          opts.mainBranch || deliverable.main_branch,
-        [WORKFLOW_CONTEXT_KEYS.workBranch]:
-          opts.workBranch || deliverable.work_branch,
-        [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable.fileName,
-        [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]:
-          opts.stagingBaseBranch || deliverable.staging_base_branch,
-        [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]:
-          opts.stagingWorkBranch || deliverable.staging_work_branch,
-        [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
-        [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
-      },
+      context: workflowContext,
       status: entryPoint.state,
       current_delegation_id: '',
       round: 0,
@@ -935,30 +962,31 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
   // 正常入口：创建任务对应的流程实例，并委派到初始状态对应角色
   const entryStateConfig = config.states[entryPoint.state];
+  const workflowContext = mergeWorkflowContext(opts.context || {}, {
+    [WORKFLOW_CONTEXT_KEYS.mainBranch]: opts.mainBranch || '',
+    [WORKFLOW_CONTEXT_KEYS.workBranch]: opts.workBranch || '',
+    [WORKFLOW_CONTEXT_KEYS.deliverable]: '',
+    [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]: opts.stagingBaseBranch || '',
+    [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]: opts.stagingWorkBranch || '',
+    [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
+    [WORKFLOW_CONTEXT_KEYS.requirementDescription]:
+      opts.requirementDescription || '',
+    [WORKFLOW_CONTEXT_KEYS.requirementFiles]: Array.isArray(
+      opts.requirementFiles,
+    )
+      ? opts.requirementFiles.filter(
+          (item) => typeof item === 'string' && item.trim().length > 0,
+        )
+      : [],
+    [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
+  });
 
   dbCreateWorkflow({
     id: workflowId,
     name: opts.title,
     service: opts.service,
     start_from: opts.startFrom,
-    context: {
-      [WORKFLOW_CONTEXT_KEYS.mainBranch]: opts.mainBranch || '',
-      [WORKFLOW_CONTEXT_KEYS.workBranch]: opts.workBranch || '',
-      [WORKFLOW_CONTEXT_KEYS.deliverable]: '',
-      [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]: opts.stagingBaseBranch || '',
-      [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]: opts.stagingWorkBranch || '',
-      [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
-      [WORKFLOW_CONTEXT_KEYS.requirementDescription]:
-        opts.requirementDescription || '',
-      [WORKFLOW_CONTEXT_KEYS.requirementFiles]: Array.isArray(
-        opts.requirementFiles,
-      )
-        ? opts.requirementFiles.filter(
-            (item) => typeof item === 'string' && item.trim().length > 0,
-          )
-        : [],
-      [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
-    },
+    context: workflowContext,
     status: entryPoint.state,
     current_delegation_id: '',
     round: 0,
