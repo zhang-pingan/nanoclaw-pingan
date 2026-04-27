@@ -47,6 +47,11 @@ const generateArgsSchema = commonArgsSchema.extend({
     .min(1)
     .max(MAX_GENERATE_INPUT_IMAGES)
     .optional(),
+  image_urls: z
+    .array(z.string().trim().url())
+    .min(1)
+    .max(MAX_GENERATE_INPUT_IMAGES)
+    .optional(),
 });
 
 const editArgsSchema = commonArgsSchema.extend({
@@ -439,6 +444,31 @@ function encodeInputImageAsDataUri(hostPath: string): string {
   return `data:${mimeType};base64,${bytes.toString('base64')}`;
 }
 
+async function resolveGenerateInputImages(
+  parsed: z.infer<typeof generateArgsSchema>,
+  sourceGroup?: string,
+): Promise<string[] | undefined> {
+  const images: string[] = [];
+  for (const item of parsed.image_paths || []) {
+    if (!sourceGroup) {
+      throw new Error('sourceGroup is required for image-to-image requests.');
+    }
+    images.push(
+      encodeInputImageAsDataUri(resolveWorkspaceInputPath(item, sourceGroup)),
+    );
+  }
+  for (const url of parsed.image_urls || []) {
+    await validateRemoteImageUrl(url);
+    images.push(url);
+  }
+  if (images.length > MAX_GENERATE_INPUT_IMAGES) {
+    throw new Error(
+      `AI_IMAGE generation accepts at most ${MAX_GENERATE_INPUT_IMAGES} input images.`,
+    );
+  }
+  return images.length > 0 ? images : undefined;
+}
+
 export async function generateAiImage(
   args: unknown,
   requestId: string,
@@ -447,21 +477,14 @@ export async function generateAiImage(
   try {
     const parsed = generateArgsSchema.parse(args);
     const config = resolveConfig();
-    const imageDataUris = parsed.image_paths?.map((item) => {
-      if (!sourceGroup) {
-        throw new Error('sourceGroup is required for image-to-image requests.');
-      }
-      return encodeInputImageAsDataUri(
-        resolveWorkspaceInputPath(item, sourceGroup),
-      );
-    });
+    const inputImages = await resolveGenerateInputImages(parsed, sourceGroup);
     const payload = {
       model: config.model,
       prompt: parsed.prompt,
       size: config.size,
       quality: config.quality,
       n: parsed.n,
-      ...(imageDataUris ? { image: imageDataUris } : {}),
+      ...(inputImages ? { image: inputImages } : {}),
     };
     const response = await axios.post(
       `${config.baseUrl}/images/generations`,

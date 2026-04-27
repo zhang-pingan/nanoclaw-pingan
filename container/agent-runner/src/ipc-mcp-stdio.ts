@@ -82,6 +82,21 @@ function validateAiImageInputPath(filePath: string): string | null {
   return null;
 }
 
+function validateAiImageInputUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') {
+      return `图片 URL 必须使用 https: ${url}`;
+    }
+    if (!parsed.hostname) {
+      return `图片 URL 缺少 hostname: ${url}`;
+    }
+  } catch {
+    return `图片 URL 格式不合法: ${url}`;
+  }
+  return null;
+}
+
 type AiImageMcpResult = {
   status?: 'success' | 'error';
   request_id?: string;
@@ -251,7 +266,7 @@ server.tool(
 if (isMain) {
   server.tool(
     'ai_image_generate_image',
-    '调用 AI_IMAGE 图片生成接口。支持文生图和图生图；输入图片必须是 workspace 内路径。API 地址、token、模型名、尺寸、质量和超时时间由宿主机 .env 配置。',
+    '调用 AI_IMAGE 图片生成接口。支持文生图和图生图；参考图片可传 workspace 内路径或 HTTPS 图片 URL。API 地址、token、模型名、尺寸、质量和超时时间由宿主机 .env 配置。',
     {
       prompt: z.string().min(1).describe('生图提示词'),
       image_paths: z
@@ -261,6 +276,14 @@ if (isMain) {
         .optional()
         .describe(
           '可选参考图片路径列表；传入后使用 /images/generations 的图生图能力。支持 /workspace/uploads/、/workspace/attachments/、/workspace/ai-images/、/workspace/group/。',
+        ),
+      image_urls: z
+        .array(z.string().url())
+        .min(1)
+        .max(16)
+        .optional()
+        .describe(
+          '可选 HTTPS 参考图片 URL 列表；传入后会与 image_paths 一起作为 /images/generations 的 image 数组。',
         ),
       n: z
         .number()
@@ -280,6 +303,26 @@ if (isMain) {
             isError: true,
           };
         }
+      }
+      for (const imageUrl of args.image_urls || []) {
+        const error = validateAiImageInputUrl(imageUrl);
+        if (error) {
+          return {
+            content: [{ type: 'text' as const, text: error }],
+            isError: true,
+          };
+        }
+      }
+      if (
+        (args.image_paths?.length || 0) + (args.image_urls?.length || 0) >
+        16
+      ) {
+        return {
+          content: [
+            { type: 'text' as const, text: '参考图片总数不能超过 16。' },
+          ],
+          isError: true,
+        };
       }
 
       const requestId = `aiimggen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
