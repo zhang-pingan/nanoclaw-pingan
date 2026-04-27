@@ -49,7 +49,9 @@ describe('agent-api', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.test/api/v1/messages');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://example.test/api/v1/messages',
+    );
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST',
       headers: {
@@ -58,12 +60,17 @@ describe('agent-api', () => {
         'anthropic-version': '2023-06-01',
       },
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       model: 'claude-test',
       system: 'system prompt',
       messages: [{ role: 'user', content: 'hello' }],
       stream: true,
     });
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).not.toHaveProperty('max_tokens');
     expect(res).toEqual({
       text: '{"ok":true}',
       raw: {
@@ -159,7 +166,9 @@ describe('agent-api', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       model: 'claude-test',
       stream: true,
     });
@@ -215,7 +224,9 @@ describe('agent-api', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       'https://example.test/api/v1/chat/completions',
     );
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       model: 'gpt-4.1',
       stream: true,
       messages: [
@@ -223,6 +234,9 @@ describe('agent-api', () => {
         { role: 'user', content: 'hello' },
       ],
     });
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).not.toHaveProperty('max_tokens');
     expect(res).toEqual({
       text: '{"ok":true}',
       raw: {
@@ -269,8 +283,12 @@ describe('agent-api', () => {
       fetchMock as unknown as typeof fetch,
     );
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.test/api/v1/responses');
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://example.test/api/v1/responses',
+    );
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       model: 'gpt-5.4',
       stream: true,
       input: [
@@ -340,8 +358,12 @@ describe('agent-api', () => {
       fetchMock as unknown as typeof fetch,
     );
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://openai.example.test/api/v1/responses');
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://openai.example.test/api/v1/responses',
+    );
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       model: 'gpt-env',
     });
   });
@@ -525,7 +547,9 @@ describe('agent-api', () => {
       fetchMock as unknown as typeof fetch,
     );
 
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       tools: [
         {
           type: 'function',
@@ -606,7 +630,9 @@ describe('agent-api', () => {
       fetchMock as unknown as typeof fetch,
     );
 
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
       tools: [
         {
           type: 'function',
@@ -715,8 +741,12 @@ describe('agent-api', () => {
     expect(res.stream).toBe(true);
     if (res.stream) {
       expect(res.body).toContain('"type":"text_delta","text":"Need a tool."');
-      expect(res.body).toContain('"type":"tool_use","id":"call_2","name":"weather"');
-      expect(res.body).toContain('"type":"input_json_delta","partial_json":"{\\"city\\":\\"Shanghai\\"}"');
+      expect(res.body).toContain(
+        '"type":"tool_use","id":"call_2","name":"weather"',
+      );
+      expect(res.body).toContain(
+        '"type":"input_json_delta","partial_json":"{\\"city\\":\\"Shanghai\\"}"',
+      );
     }
   });
 });

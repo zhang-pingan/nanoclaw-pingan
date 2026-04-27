@@ -160,6 +160,7 @@ beforeEach(() => {
   execFileSyncMock.mockReset();
   readEnvFileMock.mockReset();
   readEnvFileMock.mockReturnValue({});
+  delete process.env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS;
   delete process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS;
   delete process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS;
 });
@@ -170,6 +171,7 @@ afterEach(() => {
   callAnthropicMessagesMock.mockReset();
   execFileSyncMock.mockReset();
   readEnvFileMock.mockReset();
+  delete process.env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS;
   delete process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS;
   delete process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS;
 });
@@ -243,6 +245,7 @@ describe('wiki', () => {
     expect(compileRequest.system).toContain(
       'Claims are the structured provenance layer for the page.',
     );
+    expect(compileRequest).not.toHaveProperty('max_tokens');
     expect(compileRequest.system).toContain(
       'Do not create title-only or document-name-only claims.',
     );
@@ -366,6 +369,62 @@ describe('wiki', () => {
       'abcdefg',
       '1234',
     ]);
+  });
+
+  it('uses configured wiki draft max tokens when compiling a draft', async () => {
+    readEnvFileMock.mockReturnValue({
+      NANOCLAW_WIKI_DRAFT_MAX_TOKENS: '24000',
+    });
+    const material = importWikiMaterialFromText({
+      title: '输出上限资料',
+      text: '知识库草稿输出上限应由配置控制。',
+    });
+    rememberMaterialArtifacts(material);
+
+    callAnthropicMessagesMock.mockResolvedValueOnce({
+      model: 'test-model',
+      raw: {},
+      text: JSON.stringify({
+        page: {
+          slug: `wiki-max-tokens-${Date.now()}`,
+          title: 'Max Tokens Page',
+          page_kind: 'project',
+          summary: '验证输出上限配置',
+          content_markdown: '# Max Tokens Page\n\n配置生效。',
+        },
+        claims: [
+          {
+            claim_type: 'fact',
+            statement: '知识库草稿输出上限应由配置控制。',
+            canonical_form: '知识库草稿输出上限应由配置控制',
+            confidence: 0.9,
+            evidence: [
+              {
+                material_id: material.id,
+                excerpt_text: '知识库草稿输出上限应由配置控制。',
+              },
+            ],
+          },
+        ],
+        relations: [],
+      }),
+    });
+
+    const job = queueWikiDraftGenerationJob({
+      materialIds: [material.id],
+      title: 'Max Tokens Page',
+      pageKind: 'project',
+    });
+
+    const completedJob = await waitForJobCompletion(job.id);
+    expect(completedJob.status).toBe('completed');
+    const draftId = JSON.parse(
+      String(completedJob.result_json || '{}'),
+    ).draft_id;
+    rememberPath(getWikiDraftDetail(String(draftId))?.draft.file_path);
+    expect(callAnthropicMessagesMock.mock.calls[0]?.[0]).toMatchObject({
+      max_tokens: 24000,
+    });
   });
 
   it('imports uploaded pdf materials by extracting text before storing them', () => {

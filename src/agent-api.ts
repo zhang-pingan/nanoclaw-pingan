@@ -164,7 +164,8 @@ function parseOpenAiProtocol(
 function parseTimeoutMs(value: string | undefined): number {
   return Math.max(
     1000,
-    Number.parseInt(value || String(DEFAULT_TIMEOUT_MS), 10) || DEFAULT_TIMEOUT_MS,
+    Number.parseInt(value || String(DEFAULT_TIMEOUT_MS), 10) ||
+      DEFAULT_TIMEOUT_MS,
   );
 }
 
@@ -189,7 +190,9 @@ function getAgentApiConfig(): AgentApiConfig {
     'https://api.anthropic.com';
   const baseUrl = rawBaseUrl.replace(/\/+$/, '');
   const model = getEnvValue('NANOCLAW_AGENT_API_MODEL', env) || DEFAULT_MODEL;
-  const timeoutMs = parseTimeoutMs(getEnvValue('NANOCLAW_AGENT_API_TIMEOUT_MS', env));
+  const timeoutMs = parseTimeoutMs(
+    getEnvValue('NANOCLAW_AGENT_API_TIMEOUT_MS', env),
+  );
   const useOpenAiCompat =
     (getEnvValue('NANOCLAW_AGENT_API_USE_OPENAI_COMPAT', env) || '')
       .trim()
@@ -240,8 +243,7 @@ export function getCredentialProxyOpenAiCompatConfig(): OpenAiCompatConfig & {
       getEnvValue('CREDENTIAL_PROXY_OPENAI_BASE_URL', env) ||
       'https://api.openai.com'
     ).replace(/\/+$/, ''),
-    model:
-      getEnvValue('CREDENTIAL_PROXY_OPENAI_MODEL', env) || 'gpt-5.4',
+    model: getEnvValue('CREDENTIAL_PROXY_OPENAI_MODEL', env) || 'gpt-5.4',
     timeoutMs: parseTimeoutMs(
       getEnvValue('CREDENTIAL_PROXY_OPENAI_TIMEOUT_MS', env),
     ),
@@ -343,7 +345,9 @@ function toOpenAiTools(
   );
 }
 
-function toOpenAiChatMessages(input: AnthropicMessagesRequest): OpenAiChatMessage[] {
+function toOpenAiChatMessages(
+  input: AnthropicMessagesRequest,
+): OpenAiChatMessage[] {
   const messages: OpenAiChatMessage[] = [];
 
   if (typeof input.system === 'string' && input.system.trim()) {
@@ -560,10 +564,7 @@ function aggregateAnthropicSseResponse(
       const message = parsed.message;
       if (!message || typeof message !== 'object') continue;
       messageStart = message as Record<string, unknown>;
-      if (
-        typeof messageStart.model === 'string' &&
-        messageStart.model.trim()
-      ) {
+      if (typeof messageStart.model === 'string' && messageStart.model.trim()) {
         model = messageStart.model;
       }
       if (messageStart.usage && typeof messageStart.usage === 'object') {
@@ -632,8 +633,8 @@ function aggregateAnthropicSseResponse(
     }
   }
 
-  const content: AnthropicContentBlock[] = blocks.flatMap<AnthropicContentBlock>(
-    (block) => {
+  const content: AnthropicContentBlock[] =
+    blocks.flatMap<AnthropicContentBlock>((block) => {
       if (block.type === 'tool_use') {
         return [
           {
@@ -650,12 +651,12 @@ function aggregateAnthropicSseResponse(
       }
       if (!block.text) return [];
       return [{ type: 'text' as const, text: block.text }];
-    },
-  );
+    });
 
   const text = extractTextFromBlocks(content);
   if (!text) {
-    const contentPreview = JSON.stringify(content)?.slice(0, 500) ?? 'undefined';
+    const contentPreview =
+      JSON.stringify(content)?.slice(0, 500) ?? 'undefined';
     throw new Error(
       `Anthropic API returned no text content (content=${contentPreview})`,
     );
@@ -735,7 +736,10 @@ function startStreamBlock(
   );
 }
 
-function stopAllStreamBlocks(streamBody: string, blocks: StreamBlockState[]): string {
+function stopAllStreamBlocks(
+  streamBody: string,
+  blocks: StreamBlockState[],
+): string {
   let next = streamBody;
   for (let index = 0; index < blocks.length; index += 1) {
     const block = blocks[index];
@@ -749,7 +753,10 @@ function stopAllStreamBlocks(streamBody: string, blocks: StreamBlockState[]): st
   return next;
 }
 
-function parseJsonObjectOrDefault(value: string, fallback: unknown = {}): unknown {
+function parseJsonObjectOrDefault(
+  value: string,
+  fallback: unknown = {},
+): unknown {
   try {
     return JSON.parse(value);
   } catch {
@@ -819,7 +826,10 @@ function convertChatCompletionsSse(
     for (const choice of choices) {
       if (!choice || typeof choice !== 'object') continue;
       const choiceRecord = choice as Record<string, unknown>;
-      if (typeof choiceRecord.finish_reason === 'string' && choiceRecord.finish_reason) {
+      if (
+        typeof choiceRecord.finish_reason === 'string' &&
+        choiceRecord.finish_reason
+      ) {
         stopReason = mapStopReason(choiceRecord.finish_reason);
       }
 
@@ -849,9 +859,12 @@ function convertChatCompletionsSse(
         const toolRecord = toolCall as Record<string, unknown>;
         const rawIndex = toolRecord.index;
         const index =
-          typeof rawIndex === 'number' && rawIndex >= 0 ? rawIndex + 1 : blocks.length;
+          typeof rawIndex === 'number' && rawIndex >= 0
+            ? rawIndex + 1
+            : blocks.length;
         const block = ensureStreamBlock(blocks, index, 'tool_use');
-        const id = typeof toolRecord.id === 'string' ? toolRecord.id : undefined;
+        const id =
+          typeof toolRecord.id === 'string' ? toolRecord.id : undefined;
         if (id) block.id = id;
         const fn = toolRecord.function;
         if (fn && typeof fn === 'object') {
@@ -876,26 +889,35 @@ function convertChatCompletionsSse(
     }
   }
 
-  const content: AnthropicContentBlock[] = blocks.flatMap<AnthropicContentBlock>((block) => {
-    if (block.type === 'tool_use') {
-      return [
-        {
-          type: 'tool_use' as const,
-          id: block.id || `toolu_openai_${Math.random().toString(36).slice(2, 10)}`,
-          name: block.name || 'unknown_tool',
-          input: block.inputJson ? parseJsonObjectOrDefault(block.inputJson) : {},
-        },
-      ];
-    }
-    if (!block.text) return [];
-    return [{ type: 'text' as const, text: block.text }];
-  });
+  const content: AnthropicContentBlock[] =
+    blocks.flatMap<AnthropicContentBlock>((block) => {
+      if (block.type === 'tool_use') {
+        return [
+          {
+            type: 'tool_use' as const,
+            id:
+              block.id ||
+              `toolu_openai_${Math.random().toString(36).slice(2, 10)}`,
+            name: block.name || 'unknown_tool',
+            input: block.inputJson
+              ? parseJsonObjectOrDefault(block.inputJson)
+              : {},
+          },
+        ];
+      }
+      if (!block.text) return [];
+      return [{ type: 'text' as const, text: block.text }];
+    });
   const text = extractTextFromBlocks(content);
   if (content.length === 0) {
     throw new Error('OpenAI-compatible API returned no text content');
   }
 
-  const anthropicResponse = buildAnthropicMessageResponse(content, model, stopReason);
+  const anthropicResponse = buildAnthropicMessageResponse(
+    content,
+    model,
+    stopReason,
+  );
 
   if (shouldStream) {
     streamBody = stopAllStreamBlocks(streamBody, blocks);
@@ -974,7 +996,9 @@ function convertResponsesSse(
       const delta = parsed.delta;
       if (typeof delta === 'string' && delta) {
         const index =
-          typeof parsed.output_index === 'number' ? Number(parsed.output_index) : 0;
+          typeof parsed.output_index === 'number'
+            ? Number(parsed.output_index)
+            : 0;
         const block = ensureStreamBlock(blocks, index, 'text');
         block.text += delta;
         if (shouldStream) {
@@ -1002,7 +1026,8 @@ function convertResponsesSse(
           : blocks.length;
       if (itemRecord.type === 'function_call') {
         const block = ensureStreamBlock(blocks, outputIndex, 'tool_use');
-        if (typeof itemRecord.call_id === 'string') block.id = itemRecord.call_id;
+        if (typeof itemRecord.call_id === 'string')
+          block.id = itemRecord.call_id;
         if (typeof itemRecord.name === 'string') block.name = itemRecord.name;
         if (shouldStream) {
           streamBody = startStreamBlock(streamBody, blocks, outputIndex);
@@ -1048,26 +1073,34 @@ function convertResponsesSse(
         completedResponse = responseRecord as Record<string, unknown>;
         if (typeof completedResponse.status === 'string') {
           stopReason =
-            completedResponse.status === 'incomplete' ? 'max_tokens' : stopReason;
+            completedResponse.status === 'incomplete'
+              ? 'max_tokens'
+              : stopReason;
         }
       }
     }
   }
 
-  let content: AnthropicContentBlock[] = blocks.flatMap<AnthropicContentBlock>((block) => {
-    if (block.type === 'tool_use') {
-      return [
-        {
-          type: 'tool_use' as const,
-          id: block.id || `toolu_openai_${Math.random().toString(36).slice(2, 10)}`,
-          name: block.name || 'unknown_tool',
-          input: block.inputJson ? parseJsonObjectOrDefault(block.inputJson) : {},
-        },
-      ];
-    }
-    if (!block.text) return [];
-    return [{ type: 'text' as const, text: block.text }];
-  });
+  let content: AnthropicContentBlock[] = blocks.flatMap<AnthropicContentBlock>(
+    (block) => {
+      if (block.type === 'tool_use') {
+        return [
+          {
+            type: 'tool_use' as const,
+            id:
+              block.id ||
+              `toolu_openai_${Math.random().toString(36).slice(2, 10)}`,
+            name: block.name || 'unknown_tool',
+            input: block.inputJson
+              ? parseJsonObjectOrDefault(block.inputJson)
+              : {},
+          },
+        ];
+      }
+      if (!block.text) return [];
+      return [{ type: 'text' as const, text: block.text }];
+    },
+  );
 
   if (content.length === 0 && completedResponse) {
     const output = completedResponse.output;
@@ -1112,7 +1145,11 @@ function convertResponsesSse(
     throw new Error('OpenAI-compatible API returned no text content');
   }
 
-  const anthropicResponse = buildAnthropicMessageResponse(content, model, stopReason);
+  const anthropicResponse = buildAnthropicMessageResponse(
+    content,
+    model,
+    stopReason,
+  );
 
   if (shouldStream) {
     streamBody = stopAllStreamBlocks(streamBody, blocks);
@@ -1168,19 +1205,25 @@ export async function forwardAnthropicRequestToOpenAi(
       config.openAiProtocol === 'responses'
         ? `${config.baseUrl}/v1/responses`
         : `${config.baseUrl}/v1/chat/completions`;
+    const maxTokens =
+      typeof anthropicRequest.max_tokens === 'number'
+        ? anthropicRequest.max_tokens
+        : undefined;
     const body =
       config.openAiProtocol === 'responses'
         ? {
             model: anthropicRequest.model || config.model,
             input: toOpenAiResponsesInput(anthropicRequest),
             tools: toOpenAiTools(anthropicRequest.tools, 'responses'),
-            max_output_tokens: anthropicRequest.max_tokens ?? 1200,
+            ...(maxTokens !== undefined
+              ? { max_output_tokens: maxTokens }
+              : {}),
             temperature: anthropicRequest.temperature ?? 0,
             stream: true,
           }
         : {
             model: anthropicRequest.model || config.model,
-            max_tokens: anthropicRequest.max_tokens ?? 1200,
+            ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
             temperature: anthropicRequest.temperature ?? 0,
             messages: toOpenAiChatMessages(anthropicRequest),
             tools: toOpenAiTools(anthropicRequest.tools, 'chat_completions'),
@@ -1199,11 +1242,7 @@ export async function forwardAnthropicRequestToOpenAi(
 
     if (!response.ok) {
       const errorText = (await response.text()).trim();
-      throw new OpenAiCompatRequestError(
-        response.status,
-        endpoint,
-        errorText,
-      );
+      throw new OpenAiCompatRequestError(response.status, endpoint, errorText);
     }
 
     const ssePayload = await response.text();
@@ -1295,6 +1334,10 @@ export async function callAnthropicMessages(
       };
     }
 
+    const maxTokens =
+      typeof normalizedInput.max_tokens === 'number'
+        ? normalizedInput.max_tokens
+        : undefined;
     const response = await fetchImpl(`${config.baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
@@ -1304,7 +1347,7 @@ export async function callAnthropicMessages(
       },
       body: JSON.stringify({
         model: normalizedInput.model,
-        max_tokens: normalizedInput.max_tokens ?? 1200,
+        ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
         temperature: normalizedInput.temperature ?? 0,
         system: normalizedInput.system,
         messages: normalizedInput.messages,
@@ -1338,7 +1381,8 @@ export async function callAnthropicMessages(
     };
     const text = extractTextFromAnthropicContent(raw.content);
     if (!text) {
-      const contentPreview = JSON.stringify(raw.content)?.slice(0, 500) ?? 'undefined';
+      const contentPreview =
+        JSON.stringify(raw.content)?.slice(0, 500) ?? 'undefined';
       throw new Error(
         `Anthropic API returned no text content (content=${contentPreview})`,
       );
@@ -1355,7 +1399,9 @@ export async function callAnthropicMessages(
       if (externalSignal?.aborted) {
         throw err;
       }
-      throw new Error(`Anthropic API request timed out after ${effectiveTimeoutMs}ms`);
+      throw new Error(
+        `Anthropic API request timed out after ${effectiveTimeoutMs}ms`,
+      );
     }
     throw err;
   } finally {

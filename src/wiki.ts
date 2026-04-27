@@ -150,6 +150,17 @@ function parsePositiveInteger(
   );
 }
 
+function parseOptionalPositiveInteger(
+  value: string | undefined,
+  minimum: number,
+): number | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.max(minimum, parsed);
+}
+
 function getWikiDraftTimeoutMs(): number {
   const env = readEnvFile(['NANOCLAW_WIKI_DRAFT_TIMEOUT_MS']);
   return parsePositiveInteger(
@@ -157,6 +168,15 @@ function getWikiDraftTimeoutMs(): number {
       process.env.NANOCLAW_WIKI_DRAFT_TIMEOUT_MS,
     DEFAULT_WIKI_DRAFT_TIMEOUT_MS,
     1000,
+  );
+}
+
+function getWikiDraftMaxTokens(): number | undefined {
+  const env = readEnvFile(['NANOCLAW_WIKI_DRAFT_MAX_TOKENS']);
+  return parseOptionalPositiveInteger(
+    env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS ||
+      process.env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS,
+    1,
   );
 }
 
@@ -1171,6 +1191,7 @@ async function generateWikiDraftFromMaterials(
     throw new Error('至少需要选择一份资料');
   }
   throwIfSignalAborted(options.signal);
+  const draftMaxTokens = getWikiDraftMaxTokens();
   const requestPayload = {
     system: buildCompileSystemPrompt(),
     messages: [
@@ -1180,7 +1201,7 @@ async function generateWikiDraftFromMaterials(
       },
     ],
     temperature: 0.1,
-    max_tokens: 12000,
+    ...(draftMaxTokens !== undefined ? { max_tokens: draftMaxTokens } : {}),
   };
   const response = await callAnthropicMessages(
     requestPayload,
