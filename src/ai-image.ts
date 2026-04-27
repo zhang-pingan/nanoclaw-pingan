@@ -15,6 +15,7 @@ import {
 import { readEnvFile } from './env.js';
 
 const MAX_IMAGES = 4;
+const MAX_GENERATE_INPUT_IMAGES = 16;
 const MAX_EDIT_IMAGES = 8;
 
 type Operation = 'generate' | 'edit';
@@ -40,7 +41,13 @@ const commonArgsSchema = z.object({
   n: z.number().int().min(1).max(MAX_IMAGES).optional().default(1),
 });
 
-const generateArgsSchema = commonArgsSchema;
+const generateArgsSchema = commonArgsSchema.extend({
+  image_paths: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .max(MAX_GENERATE_INPUT_IMAGES)
+    .optional(),
+});
 
 const editArgsSchema = commonArgsSchema.extend({
   image_paths: z.array(z.string().trim().min(1)).min(1).max(MAX_EDIT_IMAGES),
@@ -423,19 +430,38 @@ async function saveResponseImages(
   return images;
 }
 
+function encodeInputImageAsDataUri(hostPath: string): string {
+  const bytes = fs.readFileSync(hostPath);
+  const { mimeType } = inferMimeAndExtension(bytes);
+  if (!mimeType.startsWith('image/')) {
+    throw new Error(`Unsupported image file type: ${hostPath}`);
+  }
+  return `data:${mimeType};base64,${bytes.toString('base64')}`;
+}
+
 export async function generateAiImage(
   args: unknown,
   requestId: string,
+  sourceGroup?: string,
 ): Promise<AiImageResult> {
   try {
     const parsed = generateArgsSchema.parse(args);
     const config = resolveConfig();
+    const imageDataUris = parsed.image_paths?.map((item) => {
+      if (!sourceGroup) {
+        throw new Error('sourceGroup is required for image-to-image requests.');
+      }
+      return encodeInputImageAsDataUri(
+        resolveWorkspaceInputPath(item, sourceGroup),
+      );
+    });
     const payload = {
       model: config.model,
       prompt: parsed.prompt,
       size: config.size,
       quality: config.quality,
       n: parsed.n,
+      ...(imageDataUris ? { image: imageDataUris } : {}),
     };
     const response = await axios.post(
       `${config.baseUrl}/images/generations`,

@@ -2213,7 +2213,11 @@ export async function processTaskIpc(
         break;
       }
 
-      const result = await generateAiImage(data.args, data.requestId);
+      const result = await generateAiImage(
+        data.args,
+        data.requestId,
+        sourceGroup,
+      );
       writeAiImageResult(sourceGroup, data.requestId, {
         ...result,
         waitTimeoutMs: getAiImageWaitTimeoutMs(),

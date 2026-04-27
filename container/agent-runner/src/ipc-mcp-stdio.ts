@@ -251,9 +251,17 @@ server.tool(
 if (isMain) {
   server.tool(
     'ai_image_generate_image',
-    '调用 AI_IMAGE 图片生成接口。只传提示词等业务参数；API 地址、token、模型名、尺寸、质量和超时时间由宿主机 .env 配置。',
+    '调用 AI_IMAGE 图片生成接口。支持文生图和图生图；输入图片必须是 workspace 内路径。API 地址、token、模型名、尺寸、质量和超时时间由宿主机 .env 配置。',
     {
       prompt: z.string().min(1).describe('生图提示词'),
+      image_paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(16)
+        .optional()
+        .describe(
+          '可选参考图片路径列表；传入后使用 /images/generations 的图生图能力。支持 /workspace/uploads/、/workspace/attachments/、/workspace/ai-images/、/workspace/group/。',
+        ),
       n: z
         .number()
         .int()
@@ -264,6 +272,16 @@ if (isMain) {
         .describe('生成图片数量，1-4。'),
     },
     async (args) => {
+      for (const imagePath of args.image_paths || []) {
+        const error = validateAiImageInputPath(imagePath);
+        if (error) {
+          return {
+            content: [{ type: 'text' as const, text: error }],
+            isError: true,
+          };
+        }
+      }
+
       const requestId = `aiimggen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       writeIpcFile(TASKS_DIR, {
         type: 'ai_image_generate_image',
