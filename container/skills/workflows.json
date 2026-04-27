@@ -359,5 +359,162 @@
         }
       ]
     }
+  },
+  "fix_test": {
+    "name": "Bug 修复测试流程",
+    "roles": {
+      "dev": {
+        "channels": {
+          "feishu": "feishu_dev",
+          "web": "web_dev"
+        }
+      },
+      "ops": {
+        "channels": {
+          "feishu": "feishu_ops",
+          "web": "web_ops"
+        }
+      },
+      "test": {
+        "channels": {
+          "feishu": "feishu_test",
+          "web": "web_test"
+        }
+      }
+    },
+    "entry_points": {
+      "fix": {
+        "state": "bug_fix"
+      }
+    },
+    "states": {
+      "bug_fix": {
+        "type": "delegation",
+        "role": "dev",
+        "skill": "fix-bug",
+        "task_template": "请修复以下 Bug：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n要求：在指定工作分支上完成修复、提交并 push，输出结构化修复结果。",
+        "on_complete": {
+          "success": {
+            "target": "ops_deploy",
+            "role": "ops",
+            "skill": "ops-staging-deploy",
+            "task_template": "请部署以下 Bug 修复到预发环境：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n\n修复结果：\n{{delegation_result}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。",
+            "notify": "[流程进展] Bug「{{name}}」({{id}}) 修复完成，已委派 {{role_folder:ops}} 部署预发环境。"
+          },
+          "failure": {
+            "target": "bug_fix",
+            "notify": "[流程异常] Bug「{{name}}」({{id}}) 修复失败，请检查。"
+          }
+        }
+      },
+      "ops_deploy": {
+        "type": "delegation",
+        "role": "ops",
+        "skill": "ops-staging-deploy",
+        "on_complete": {
+          "success": {
+            "target": "bug_test",
+            "role": "test",
+            "skill": "fix-test-bug",
+            "task_template": "请验证以下 Bug 修复是否通过：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n预发部署结果：\n{{delegation_result}}",
+            "notify": "[流程进展] Bug「{{name}}」({{id}}) 预发部署成功，已委派 {{role_folder:test}} 进行测试验证。"
+          },
+          "failure": {
+            "target": "ops_failed",
+            "notify": "[流程终止] Bug「{{name}}」({{id}}) 预发部署失败 ❌\n\n{{result_summary}}"
+          }
+        }
+      },
+      "bug_test": {
+        "type": "delegation",
+        "role": "test",
+        "skill": "fix-test-bug",
+        "on_complete": {
+          "success": {
+            "target": "passed",
+            "notify": "[流程完成] Bug「{{name}}」({{id}}) 测试验证通过 ✅"
+          },
+          "failure": {
+            "target": "bug_refix",
+            "role": "dev",
+            "skill": "fix-refix-bug",
+            "increment_round": true,
+            "task_template": "请复修以下测试未通过的 Bug（Round {{round}}）：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n测试验证结果：\n{{delegation_result}}",
+            "notify": "[流程进展] Bug「{{name}}」({{id}}) 测试未通过 ❌\n{{result_summary}}\n进入 Round {{round}} 复修流程，已委派 {{role_folder:dev}} 处理。"
+          }
+        }
+      },
+      "bug_refix": {
+        "type": "delegation",
+        "role": "dev",
+        "skill": "fix-refix-bug",
+        "on_complete": {
+          "success": {
+            "target": "ops_deploy",
+            "role": "ops",
+            "skill": "ops-staging-deploy",
+            "task_template": "请重新部署以下 Bug 复修结果到预发环境：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n\n复修结果：\n{{delegation_result}}\n\n注意：部署前必须先将最新工作分支合并到预发工作分支并推送，再执行部署。",
+            "notify": "[流程进展] Bug「{{name}}」({{id}}) Round {{round}} 复修完成，已委派 {{role_folder:ops}} 重新部署预发。"
+          },
+          "failure": {
+            "target": "bug_refix",
+            "notify": "[流程异常] Bug「{{name}}」({{id}}) Round {{round}} 复修失败，请检查。"
+          }
+        }
+      },
+      "passed": {
+        "type": "terminal"
+      },
+      "ops_failed": {
+        "type": "terminal"
+      },
+      "cancelled": {
+        "type": "terminal"
+      },
+      "paused": {
+        "type": "system"
+      }
+    },
+    "status_labels": {
+      "bug_fix": "🔨 修复 Bug",
+      "ops_deploy": "🚀 预发部署",
+      "bug_test": "🧪 测试验证",
+      "bug_refix": "🔧 复修 Bug",
+      "passed": "✅ 已通过",
+      "ops_failed": "❌ 部署失败",
+      "cancelled": "🚫 已取消",
+      "paused": "⏸ 已中断"
+    },
+    "create_form": {
+      "fields": [
+        {
+          "key": "bug_description",
+          "label": "Bug 描述",
+          "type": "textarea",
+          "placeholder": "请描述 Bug 现象、复现步骤、预期结果和实际结果",
+          "required": true
+        },
+        {
+          "key": "bug_files",
+          "label": "Bug 附件",
+          "type": "file_uploads",
+          "helper_text": "支持上传截图、日志、录屏或问题说明文件。"
+        },
+        {
+          "key": "work_branch",
+          "label": "work_branch（工作分支）",
+          "type": "text",
+          "placeholder": "填写实际工作分支，如 bugfix/xxx",
+          "required": true
+        },
+        {
+          "key": "staging_work_branch",
+          "label": "staging_work_branch（预发工作分支）",
+          "type": "text",
+          "placeholder": "填写实际预发工作分支，如 staging-deploy/bugfix-xxx",
+          "required": true
+        }
+      ]
+    }
   }
 }

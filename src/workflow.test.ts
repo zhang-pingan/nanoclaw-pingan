@@ -217,6 +217,129 @@ describe('workflow metadata and branch flow', () => {
     expect(delegations[0]?.task).toContain('- /tmp/nickname-ui.png');
   });
 
+  it('starts fix_test from the single fix entry with bug context', () => {
+    const result = createNewWorkflow({
+      title: '登录态为空时接口返回 500',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'fix',
+      workflowType: 'fix_test',
+      workBranch: 'bugfix/login-empty-500',
+      stagingWorkBranch: 'staging-deploy/bugfix-login-empty-500',
+      context: {
+        bug_description:
+          '用户未登录访问资料接口时返回 500，预期应返回 401。',
+        bug_files: ['/tmp/login-500.log', '/tmp/login-500.png'],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('bug_fix');
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch),
+    ).toBe('bugfix/login-empty-500');
+    expect(
+      workflow &&
+        getWorkflowContextValue(
+          workflow,
+          WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
+        ),
+    ).toBe('staging-deploy/bugfix-login-empty-500');
+
+    const delegations = getDelegationsByWorkflow(result.workflowId);
+    expect(delegations).toHaveLength(1);
+    expect(delegations[0]?.target_folder).toBe('web_dev');
+    expect(delegations[0]?.task).toContain('Bug 描述：用户未登录访问资料接口时返回 500');
+    expect(delegations[0]?.task).toContain('- /tmp/login-500.log');
+    expect(delegations[0]?.task).toContain('工作分支：bugfix/login-empty-500');
+    expect(delegations[0]?.task).toContain(
+      '预发工作分支：staging-deploy/bugfix-login-empty-500',
+    );
+  });
+
+  it('routes fix_test bug verification failure to refix and increments round', () => {
+    createWorkflow({
+      id: 'wf-fix-test-failed',
+      name: 'Login empty token 500',
+      service: TEST_SERVICE,
+      start_from: 'fix',
+      context: {
+        bug_description:
+          '用户未登录访问资料接口时返回 500，预期应返回 401。',
+        bug_files: ['/tmp/login-500.log'],
+        work_branch: 'bugfix/login-empty-500',
+        staging_work_branch: 'staging-deploy/bugfix-login-empty-500',
+        deliverable: '2026-04-08_bugfix_login-empty-500',
+      },
+      status: 'bug_test',
+      current_delegation_id: 'del-bug-test-failed',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'fix_test',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-bug-test-failed',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'test@g.us',
+      target_folder: 'web_test',
+      task: 'bug test task',
+      status: 'completed',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        work_branch: 'bugfix/login-empty-500',
+        staging_work_branch: 'staging-deploy/bugfix-login-empty-500',
+        deliverable: '2026-04-08_bugfix_login-empty-500',
+        test_doc: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_bugfix_login-empty-500/fix-test.md`,
+        total: 3,
+        passed: 2,
+        failed: 1,
+        blocked: 0,
+        bugs: [
+          {
+            id: 'BUG-001',
+            title: '未登录访问资料接口仍返回 500',
+            severity: 'high',
+            related_case: 'TC-001',
+          },
+        ],
+        verdict: 'failed',
+        summary: 'Bug 验证未通过，需要复修。',
+      }),
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-fix-test-failed',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+
+    onDelegationComplete('del-bug-test-failed');
+
+    const workflow = getWorkflow('wf-fix-test-failed');
+    expect(workflow?.status).toBe('bug_refix');
+    expect(workflow?.round).toBe(1);
+    expect(
+      getLatestWorkflowStageEvaluation('wf-fix-test-failed', 'bug_test')
+        ?.status,
+    ).toBe('failed');
+
+    const delegations = getDelegationsByWorkflow('wf-fix-test-failed');
+    const refixDelegation = delegations.find(
+      (item) => item.id !== 'del-bug-test-failed',
+    );
+    expect(refixDelegation?.target_folder).toBe('web_dev');
+    expect(refixDelegation?.task).toContain('Round 1');
+    expect(refixDelegation?.task).toContain('BUG-001');
+    expect(refixDelegation?.task).toContain(
+      '/workspace/projects/workflow-test-service/iteration/2026-04-08_bugfix_login-empty-500/fix-test.md',
+    );
+  });
+
   it('propagates plan result fields into next delegation', () => {
     writeDoc(
       '2026-04-08_feature',

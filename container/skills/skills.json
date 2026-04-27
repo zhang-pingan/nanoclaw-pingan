@@ -1,19 +1,19 @@
 {
   "global": ["agent-browser"],
-  "feishu_dev": ["dev-requirement", "dev-bugfix"],
+  "feishu_dev": ["dev-requirement", "dev-bugfix", "fix-bug", "fix-refix-bug"],
   "feishu_dev_examine": ["dev-examine"],
   "feishu_plan": ["plan-requirement"],
   "feishu_plan_examine": ["plan-examine"],
   "feishu_knowledge": ["project-knowledge"],
   "feishu_ops": ["ops-staging-deploy", "devops"],
-  "feishu_test": ["test-requirement", "devops"],
+  "feishu_test": ["test-requirement", "fix-test-bug", "devops"],
   "feishu_main": ["macos"],
-  "web_dev": ["dev-requirement", "dev-bugfix"],
+  "web_dev": ["dev-requirement", "dev-bugfix", "fix-bug", "fix-refix-bug"],
   "web_dev_examine": ["dev-examine"],
   "web_plan_examine": ["plan-examine"],
   "web_plan": ["plan-requirement"],
   "web_knowledge": ["project-knowledge"],
   "web_ops": ["ops-staging-deploy", "devops"],
-  "web_test": ["test-requirement", "devops"],
+  "web_test": ["test-requirement", "fix-test-bug", "devops"],
   "web_main": ["macos"]
 }
