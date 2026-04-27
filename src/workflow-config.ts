@@ -1,7 +1,7 @@
 /**
  * Workflow Configuration — types, loader, template renderer, validator.
  *
- * Editable workflow definitions live in container/skills/workflow-definitions/*.json.
+ * Editable workflow definitions live in container/workflow-definitions/*.json.
  * Card templates live in container/skills/cards.json.
  * The engine (workflow.ts) reads them once at init and drives state
  * transitions generically instead of hard-coding each workflow type.

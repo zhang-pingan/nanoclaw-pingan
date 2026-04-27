@@ -8,14 +8,14 @@ import {
 
 export const WORKFLOW_DEFINITION_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const WORKFLOW_DEFINITIONS_RELATIVE_DIR =
-  'container/skills/workflow-definitions';
+  'container/workflow-definitions';
 
-function getSkillsDir(): string {
-  return path.join(process.cwd(), 'container', 'skills');
+function getContainerDir(): string {
+  return path.join(process.cwd(), 'container');
 }
 
 export function getWorkflowDefinitionsDir(): string {
-  return path.join(getSkillsDir(), 'workflow-definitions');
+  return path.join(getContainerDir(), 'workflow-definitions');
 }
 
 export function validateWorkflowDefinitionKey(key: string): string | null {
