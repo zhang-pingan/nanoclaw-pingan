@@ -16009,11 +16009,44 @@ function updateTodayPlanChatSelection(state, groupJid, messageId, checked) {
   }
 }
 
+function captureTodayPlanAssociationScrollState(dialog) {
+  if (!dialog) return null;
+  const grid = dialog.querySelector(".today-plan-association-grid");
+  return {
+    gridTop: grid ? grid.scrollTop : 0,
+    gridLeft: grid ? grid.scrollLeft : 0,
+    listTops: Array.from(dialog.querySelectorAll(".today-plan-association-list")).map((list) => list.scrollTop),
+    listLefts: Array.from(dialog.querySelectorAll(".today-plan-association-list")).map((list) => list.scrollLeft),
+  };
+}
+
+function restoreTodayPlanAssociationScrollState(dialog, scrollState) {
+  if (!dialog || !scrollState) return;
+  const grid = dialog.querySelector(".today-plan-association-grid");
+  if (grid) {
+    grid.scrollTop = scrollState.gridTop || 0;
+    grid.scrollLeft = scrollState.gridLeft || 0;
+  }
+  Array.from(dialog.querySelectorAll(".today-plan-association-list")).forEach((list, index) => {
+    list.scrollTop = scrollState.listTops[index] || 0;
+    list.scrollLeft = scrollState.listLefts[index] || 0;
+  });
+}
+
+function updateTodayPlanAssociationServiceBranchCount(dialog, serviceName, count) {
+  const badge = Array.from(dialog.querySelectorAll("[data-today-plan-service-branch-count]"))
+    .find((item) => item.getAttribute("data-today-plan-service-branch-count") === serviceName);
+  if (badge) {
+    badge.textContent = `已选 ${count} 个分支`;
+  }
+}
+
 function renderTodayPlanAssociationDialog() {
   const state = todayPlanAssociationState;
   if (!state || !todayPlanAssociationOverlay) return;
   const dialog = todayPlanAssociationOverlay.querySelector(".today-plan-association-dialog");
   if (!dialog) return;
+  const scrollState = captureTodayPlanAssociationScrollState(dialog);
   const chatGroups = (state.groups || []).filter((group) => {
     const messages = state.chatMessagesByGroup[group.jid] || [];
     return Array.isArray(messages) && messages.length > 0;
@@ -16096,7 +16129,7 @@ function renderTodayPlanAssociationDialog() {
                     <div class="today-plan-option-title">${escapeHtml(service.service)}</div>
                     <div class="today-plan-option-desc">${escapeHtml(service.repo_path || "未配置仓库路径")}</div>
                   </div>
-                  ${selected ? `<span class="today-plan-meta-pill">已选 ${escapeHtml(String(selectedBranchCount))} 个分支</span>` : ""}
+                  ${selected ? `<span class="today-plan-meta-pill" data-today-plan-service-branch-count="${escapeAttribute(service.service)}">已选 ${escapeHtml(String(selectedBranchCount))} 个分支</span>` : ""}
                 </label>
                 ${selected ? `
                   <div class="today-plan-service-branch-panel">
@@ -16126,8 +16159,8 @@ function renderTodayPlanAssociationDialog() {
       </section>
     </div>
     <div class="today-plan-association-footer">
-      <button type="button" class="btn-ghost" data-today-plan-close-associations>取消</button>
-      <button type="button" class="btn-primary" data-today-plan-save-associations>保存关联</button>
+      <button type="button" class="btn-primary btn-soft-primary today-plan-action-btn today-plan-btn-view" data-today-plan-close-associations>取消</button>
+      <button type="button" class="btn-primary btn-soft-primary today-plan-action-btn today-plan-btn-add" data-today-plan-save-associations>保存关联</button>
     </div>
     ${activeChatGroup ? `
       <div class="today-plan-chat-picker" data-today-plan-chat-picker-overlay="1">
@@ -16171,6 +16204,10 @@ function renderTodayPlanAssociationDialog() {
       </div>
     ` : ""}
   `;
+  restoreTodayPlanAssociationScrollState(dialog, scrollState);
+  requestAnimationFrame(() => {
+    restoreTodayPlanAssociationScrollState(dialog, scrollState);
+  });
 
   Array.from(dialog.querySelectorAll("[data-today-plan-close-associations]")).forEach((button) => {
     button.addEventListener("click", () => {
@@ -16241,8 +16278,11 @@ function renderTodayPlanAssociationDialog() {
         if (!getTodayPlanAssociationServiceEntry(state, serviceName)) {
           state.associations.services.push({ service: serviceName, branches: [] });
         }
-        renderTodayPlanAssociationDialog();
-        await ensureTodayPlanServiceBranchesLoaded(state, serviceName);
+        if (state.branchesByService[serviceName] || state.loadingBranches[serviceName]) {
+          renderTodayPlanAssociationDialog();
+        } else {
+          await ensureTodayPlanServiceBranchesLoaded(state, serviceName);
+        }
       } else {
         state.associations.services = state.associations.services.filter((item) => item.service !== serviceName);
         renderTodayPlanAssociationDialog();
@@ -16255,6 +16295,7 @@ function renderTodayPlanAssociationDialog() {
       const serviceName = checkbox.getAttribute("data-service-name") || "";
       const serviceEntry = getTodayPlanAssociationServiceEntry(state, serviceName);
       if (!serviceEntry) return;
+      serviceEntry.branches = Array.isArray(serviceEntry.branches) ? serviceEntry.branches : [];
       if (checkbox.checked) {
         if (!serviceEntry.branches.includes(checkbox.value)) {
           serviceEntry.branches.push(checkbox.value);
@@ -16262,7 +16303,7 @@ function renderTodayPlanAssociationDialog() {
       } else {
         serviceEntry.branches = serviceEntry.branches.filter((branch) => branch !== checkbox.value);
       }
-      renderTodayPlanAssociationDialog();
+      updateTodayPlanAssociationServiceBranchCount(dialog, serviceName, serviceEntry.branches.length);
     });
   });
 
