@@ -50,6 +50,7 @@ declare global {
 }
 
 const API_BASE = 'http://localhost:3000';
+const ASSISTANT_CHAT_JID = 'assistant:main';
 const shell = document.getElementById('assistant-shell') as HTMLElement;
 const bubbleKicker = document.getElementById('bubble-kicker') as HTMLElement;
 const bubbleTitle = document.getElementById('bubble-title') as HTMLElement;
@@ -64,6 +65,16 @@ const chatForm = document.getElementById('chat-form') as HTMLFormElement;
 const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
 const chatSend = document.getElementById('chat-send') as HTMLButtonElement;
 const chatStatus = document.getElementById('chat-status') as HTMLElement;
+const pendingFilesEl = document.getElementById(
+  'pending-files-preview',
+) as HTMLElement;
+const pendingFilesContent = document.getElementById(
+  'pending-files-content',
+) as HTMLElement;
+const pendingFilesClose = document.getElementById(
+  'pending-files-close',
+) as HTMLButtonElement;
+const fileDropZone = document.getElementById('file-drop-zone') as HTMLElement;
 
 let webToken = '';
 let ws: WebSocket | null = null;
@@ -72,6 +83,8 @@ let state: AssistantState | null = null;
 let movingTimer: number | null = null;
 let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
+let pendingFiles: File[] = [];
+let dragDepth = 0;
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
 
@@ -91,13 +104,17 @@ function primaryItem(): AgentInboxItem | null {
   return items[0] || null;
 }
 
-async function headers(): Promise<Record<string, string>> {
+async function authorizationHeaders(): Promise<Record<string, string>> {
   if (!webToken && window.assistantHost?.getWebToken) {
     webToken = await window.assistantHost.getWebToken();
   }
+  return webToken ? { Authorization: `Bearer ${webToken}` } : {};
+}
+
+async function headers(): Promise<Record<string, string>> {
   return {
     'Content-Type': 'application/json',
-    ...(webToken ? { Authorization: `Bearer ${webToken}` } : {}),
+    ...(await authorizationHeaders()),
   };
 }
 
@@ -202,6 +219,37 @@ function fileExtension(fileName: string): string {
   return index >= 0 ? fileName.slice(index + 1).toLowerCase() : '';
 }
 
+function apiUrl(path: string): string {
+  if (!path) return '';
+  if (/^(https?:|file:|blob:|data:)/i.test(path)) return path;
+  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function encodeApiPathSegments(pathValue: string): string {
+  return pathValue
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}
+
+function workspaceFileApiPath(filePath: string): string | null {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const webUploadsMarker = '/data/web-uploads/';
+  const webUploadsIndex = normalizedPath.lastIndexOf(webUploadsMarker);
+  if (webUploadsIndex >= 0) {
+    return `/api/uploads/${encodeApiPathSegments(
+      normalizedPath.slice(webUploadsIndex + webUploadsMarker.length),
+    )}`;
+  }
+  if (normalizedPath.startsWith('/workspace/uploads/')) {
+    return `/api/uploads/${encodeApiPathSegments(
+      normalizedPath.slice('/workspace/uploads/'.length),
+    )}`;
+  }
+  return null;
+}
+
 function localFileUrl(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/');
   const encoded = normalized
@@ -214,6 +262,11 @@ function localFileUrl(filePath: string): string {
   return normalized.startsWith('/')
     ? `file://${encoded}`
     : `file:///${encoded}`;
+}
+
+function fileUrlForPath(filePath: string): string {
+  const workspaceApiPath = workspaceFileApiPath(filePath);
+  return workspaceApiPath ? apiUrl(workspaceApiPath) : localFileUrl(filePath);
 }
 
 function detectFilePathFromContent(content: string): string | null {
@@ -237,10 +290,10 @@ function chatFileInfo(message: AssistantChatMessage): {
   const fileName = basename(filePath || message.fileUrl || 'file');
   const extension = fileExtension(fileName);
   const url = filePath
-    ? localFileUrl(filePath)
+    ? fileUrlForPath(filePath)
     : /^https?:\/\//i.test(message.fileUrl || '')
       ? message.fileUrl || ''
-      : `${API_BASE}${message.fileUrl}`;
+      : apiUrl(message.fileUrl || '');
 
   return { fileName, extension, url };
 }
@@ -351,13 +404,19 @@ async function loadChat(): Promise<void> {
 
 async function sendChatMessage(content: string): Promise<void> {
   const trimmed = content.trim();
-  if (!trimmed) return;
+  if (!trimmed && pendingFiles.length === 0) return;
 
   chatSend.disabled = true;
   try {
+    chatStatus.textContent =
+      pendingFiles.length > 0 ? `附件上传中（${pendingFiles.length}）...` : '';
+    const filePrefix = await uploadPendingFiles();
+    const fullContent = `${filePrefix}${trimmed}`.trim();
+    if (!fullContent) return;
+
     const res = await apiFetch('/api/assistant/chat/message', {
       method: 'POST',
-      body: JSON.stringify({ content: trimmed }),
+      body: JSON.stringify({ content: fullContent }),
     });
     const data = (await res.json()) as {
       message?: AssistantChatMessage;
@@ -372,6 +431,154 @@ async function sendChatMessage(content: string): Promise<void> {
   } finally {
     chatSend.disabled = false;
   }
+}
+
+function clipboardImageExtension(mimeType: string): string {
+  const normalized = String(mimeType || '').toLowerCase();
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
+  if (normalized === 'image/gif') return 'gif';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/svg+xml') return 'svg';
+  const subtype = normalized
+    .split('/')[1]
+    ?.replace('+xml', '')
+    .replace(/[^a-z0-9]/g, '');
+  return subtype || 'png';
+}
+
+function clipboardImageTimestamp(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    '-',
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join('');
+}
+
+function isGenericClipboardImageName(name: string): boolean {
+  return !name || /^image\.(png|jpe?g|gif|webp|svg)$/i.test(name);
+}
+
+function withClipboardImageName(file: File, index: number, count: number): File {
+  const originalName = typeof file.name === 'string' ? file.name.trim() : '';
+  if (!isGenericClipboardImageName(originalName)) return file;
+
+  const suffix = count > 1 ? `-${index + 1}` : '';
+  const filename = `clipboard-image-${clipboardImageTimestamp()}${suffix}.${clipboardImageExtension(file.type)}`;
+  if (typeof File !== 'function') return file;
+
+  try {
+    return new File([file], filename, {
+      type: file.type || 'image/png',
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file;
+  }
+}
+
+function getClipboardImageFiles(event: ClipboardEvent): File[] {
+  const clipboardData = event.clipboardData;
+  if (!clipboardData) return [];
+
+  const itemFiles = Array.from(clipboardData.items || [])
+    .filter(
+      (item) =>
+        item.kind === 'file' && String(item.type || '').startsWith('image/'),
+    )
+    .map((item) =>
+      typeof item.getAsFile === 'function' ? item.getAsFile() : null,
+    )
+    .filter((file): file is File => Boolean(file));
+  const rawFiles =
+    itemFiles.length > 0
+      ? itemFiles
+      : Array.from(clipboardData.files || []).filter((file) =>
+          String(file.type || '').startsWith('image/'),
+        );
+
+  return rawFiles.map((file, index) =>
+    withClipboardImageName(file, index, rawFiles.length),
+  );
+}
+
+function handleComposerPaste(event: ClipboardEvent): void {
+  const imageFiles = getClipboardImageFiles(event);
+  if (imageFiles.length === 0) return;
+
+  event.preventDefault();
+  imageFiles.forEach(stageFile);
+  chatStatus.textContent =
+    imageFiles.length > 1
+      ? `已暂存 ${imageFiles.length} 张图片`
+      : '已暂存图片';
+}
+
+function stageFile(file: File): void {
+  pendingFiles.push(file);
+  renderPendingFiles();
+}
+
+function renderPendingFiles(): void {
+  if (pendingFiles.length === 0) {
+    pendingFilesEl.classList.remove('visible');
+    pendingFilesContent.textContent = '';
+    return;
+  }
+
+  const names = pendingFiles.map((file) => file.name || '未命名附件').join(', ');
+  pendingFilesContent.textContent = `${pendingFiles.length} 个附件: ${names}`;
+  pendingFilesEl.classList.add('visible');
+}
+
+async function uploadPendingFiles(): Promise<string> {
+  if (pendingFiles.length === 0) return '';
+
+  const filesToUpload = [...pendingFiles];
+  const agentPaths: string[] = [];
+  for (const file of filesToUpload) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(
+      `${API_BASE}/api/upload?jid=${encodeURIComponent(ASSISTANT_CHAT_JID)}`,
+      {
+        method: 'POST',
+        headers: await authorizationHeaders(),
+        body: formData,
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      files?: Array<{ agentPath?: string }>;
+    };
+    if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+    const agentPath = data.files?.[0]?.agentPath;
+    if (agentPath) agentPaths.push(agentPath);
+  }
+
+  pendingFiles = pendingFiles.filter((file) => !filesToUpload.includes(file));
+  renderPendingFiles();
+  if (agentPaths.length === 0) return '';
+
+  return (
+    '【附件】\n' +
+    agentPaths.map((agentPath) => `文件地址: ${agentPath}`).join('\n') +
+    '\n'
+  );
+}
+
+function hasDraggedFiles(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer?.types || []).includes('Files');
+}
+
+function hideFileDropZone(): void {
+  dragDepth = 0;
+  fileDropZone.classList.add('hidden');
 }
 
 async function runInboxAction(
@@ -473,6 +680,55 @@ chatInput.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' || event.shiftKey) return;
   event.preventDefault();
   void sendChatMessage(chatInput.value);
+});
+
+chatInput.addEventListener('paste', handleComposerPaste);
+
+pendingFilesClose.addEventListener('click', () => {
+  pendingFiles = [];
+  renderPendingFiles();
+  chatInput.focus();
+});
+
+document.addEventListener('dragenter', (event) => {
+  if (!hasDraggedFiles(event)) return;
+  event.preventDefault();
+  dragDepth += 1;
+  fileDropZone.classList.remove('hidden');
+});
+
+document.addEventListener('dragover', (event) => {
+  if (!hasDraggedFiles(event)) return;
+  event.preventDefault();
+  fileDropZone.classList.remove('hidden');
+});
+
+document.addEventListener('dragleave', (event) => {
+  if (!hasDraggedFiles(event) && dragDepth === 0) return;
+  event.preventDefault();
+  const relatedTarget = event.relatedTarget;
+  if (
+    !relatedTarget ||
+    !(relatedTarget instanceof Node) ||
+    !document.documentElement.contains(relatedTarget)
+  ) {
+    hideFileDropZone();
+    return;
+  }
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) fileDropZone.classList.add('hidden');
+});
+
+document.addEventListener('drop', (event) => {
+  if (!hasDraggedFiles(event)) return;
+  event.preventDefault();
+  const files = Array.from(event.dataTransfer?.files || []);
+  hideFileDropZone();
+  if (files.length === 0) return;
+  files.forEach(stageFile);
+  chatStatus.textContent =
+    files.length > 1 ? `已暂存 ${files.length} 个附件` : '已暂存附件';
+  chatInput.focus();
 });
 
 void loadState();

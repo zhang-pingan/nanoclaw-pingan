@@ -20,6 +20,13 @@
 
     <section class="assistant-chat no-drag" aria-label="Assistant chat">
       <div id="chat-log" class="chat-log"></div>
+      <div id="pending-files-preview" class="pending-files-preview">
+        <span id="pending-files-content"></span>
+        <button id="pending-files-close" type="button" title="取消附件" aria-label="取消附件">×</button>
+      </div>
+      <div id="file-drop-zone" class="file-drop-zone hidden">
+        <span>Drop files here to upload</span>
+      </div>
       <form id="chat-form" class="chat-form">
         <textarea id="chat-input" rows="2" placeholder="直接和助手说话"></textarea>
         <button id="chat-send" type="submit">发送</button>

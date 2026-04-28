@@ -425,6 +425,12 @@ class WebChannel {
     return jid.startsWith('web:');
   }
 
+  private canUploadForJid(jid: string): boolean {
+    if (!jid) return false;
+    if (this.ownsJid(jid)) return true;
+    return Boolean(this.opts.registeredGroups()[jid]);
+  }
+
   async sendMessage(jid: string, text: string): Promise<void> {
     const timestamp = Date.now().toString();
     const id = `web_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
@@ -4047,9 +4053,9 @@ class WebChannel {
     }
 
     // Extract target JID from URL
-    // URL is /api/upload?jid=web:main
+    // URL is /api/upload?jid=web:main or another registered chat jid.
     const jid = reqUrl.searchParams.get('jid') || '';
-    if (!jid || !this.ownsJid(jid)) {
+    if (!this.canUploadForJid(jid)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid jid' }));
       return;

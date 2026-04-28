@@ -1174,14 +1174,14 @@ async function startMessageLoop(): Promise<void> {
 
           if (loopCmdMsg) {
             // Only close active container if the sender is authorized — otherwise an
-            // untrusted user could kill in-flight work by sending /compact (DoS).
+            // untrusted user could kill in-flight work by sending a slash command (DoS).
             // closeStdin no-ops internally when no container is active.
             const command = extractSessionCommand(
               loopCmdMsg.content,
               TRIGGER_PATTERN,
             );
             if (
-              command === '/compact' &&
+              command &&
               isSessionCommandAllowed(!!loopCmdMsg.is_from_me)
             ) {
               queue.closeStdin(chatJid);

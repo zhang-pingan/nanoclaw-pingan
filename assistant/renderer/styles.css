@@ -170,7 +170,7 @@ button {
   top: 174px;
   bottom: 24px;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto auto auto auto;
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(17, 24, 39, 0.08);
@@ -188,6 +188,65 @@ button {
   gap: 7px;
   overflow: auto;
   padding-right: 2px;
+}
+
+.pending-files-preview {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 6px 8px;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.06);
+  color: #334155;
+  font-size: 11px;
+}
+
+.pending-files-preview.visible {
+  display: flex;
+}
+
+#pending-files-content {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pending-files-close {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#pending-files-close:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.file-drop-zone {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  border: 2px dashed rgba(37, 99, 235, 0.35);
+  border-radius: 9px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.file-drop-zone.hidden {
+  display: none;
 }
 
 .chat-message {
