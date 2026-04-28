@@ -535,21 +535,42 @@
       <section id="assistant-screen">
         <main class="assistant-workstation">
           <section class="assistant-hero">
-            <div>
+            <div class="assistant-hero-copy">
               <div class="assistant-kicker">Personal Assistant</div>
-              <h2>个人助手</h2>
+              <div class="assistant-title-row">
+                <h2>个人助手</h2>
+                <span id="assistant-status-badge" class="assistant-status-badge">加载中</span>
+              </div>
               <p>管理桌面个人助手、主动触发源和 Agent Inbox。桌面助手只负责轻量提醒，完整详情仍回到工作站处理。</p>
+              <div class="assistant-hero-actions">
+                <button id="assistant-refresh-btn" class="btn-primary btn-soft-primary assistant-icon-action-btn" title="刷新个人助手" aria-label="刷新个人助手">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                </button>
+                <button id="assistant-scan-btn" class="btn-primary btn-soft-primary">立即扫描</button>
+                <button id="assistant-clear-data-btn" class="btn-primary btn-soft-primary">清除数据</button>
+              </div>
             </div>
-            <div class="assistant-hero-actions">
-              <button id="assistant-refresh-btn" class="btn-primary btn-soft-primary assistant-icon-action-btn" title="刷新个人助手" aria-label="刷新个人助手">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="23 4 23 10 17 10"></polyline>
-                  <polyline points="1 20 1 14 7 14"></polyline>
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                </svg>
-              </button>
-              <button id="assistant-scan-btn" class="btn-primary btn-soft-primary">立即扫描</button>
-              <button id="assistant-clear-data-btn" class="btn-primary btn-soft-primary">清除数据</button>
+            <div class="assistant-hero-metrics" aria-label="个人助手概览">
+              <div class="assistant-metric">
+                <span>主动事项</span>
+                <strong id="assistant-active-count">--</strong>
+              </div>
+              <div class="assistant-metric">
+                <span>未读</span>
+                <strong id="assistant-unread-count">--</strong>
+              </div>
+              <div class="assistant-metric">
+                <span>扫描间隔</span>
+                <strong id="assistant-scan-cadence">--</strong>
+              </div>
+              <div class="assistant-metric">
+                <span>数据源</span>
+                <strong id="assistant-source-count">--</strong>
+              </div>
             </div>
           </section>
 
@@ -610,6 +631,10 @@
                 </label>
               </div>
 
+              <div class="assistant-source-heading">
+                <div class="assistant-section-title">主动触发源</div>
+                <div class="assistant-section-subtitle">选择助手用于发现待处理事项的数据范围。</div>
+              </div>
               <div class="assistant-source-grid">
                 <label><input data-assistant-source="todayPlan" type="checkbox" /> 今日计划</label>
                 <label><input data-assistant-source="workbench" type="checkbox" /> 工作台</label>

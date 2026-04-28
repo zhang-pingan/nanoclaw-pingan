@@ -443,6 +443,11 @@ var workbenchPendingReminderIdsByTask = {};
 var assistantRefreshBtn = document.getElementById("assistant-refresh-btn");
 var assistantScanBtn = document.getElementById("assistant-scan-btn");
 var assistantClearDataBtn = document.getElementById("assistant-clear-data-btn");
+var assistantStatusBadge = document.getElementById("assistant-status-badge");
+var assistantActiveCount = document.getElementById("assistant-active-count");
+var assistantUnreadCount = document.getElementById("assistant-unread-count");
+var assistantScanCadence = document.getElementById("assistant-scan-cadence");
+var assistantSourceCount = document.getElementById("assistant-source-count");
 var assistantSettingsSummary = document.getElementById("assistant-settings-summary");
 var assistantInboxSummary = document.getElementById("assistant-inbox-summary");
 var assistantInboxList = document.getElementById("assistant-inbox-list");
@@ -16624,10 +16629,31 @@ function formatAssistantStatusText(item) {
   return parts.filter(Boolean).join(" · ");
 }
 
+function renderAssistantHeroMetrics() {
+  const settings = getAssistantSettings();
+  const activeItems = assistantInboxItems.filter((item) => !["done", "dismissed"].includes(item.status));
+  const unreadCount = activeItems.filter((item) => item.status === "unread").length;
+  const enabled = Boolean(settings && settings.enabled);
+  const dataSourceCount = settings && settings.dataSources
+    ? Object.values(settings.dataSources).filter(Boolean).length
+    : 0;
+  if (assistantStatusBadge) {
+    assistantStatusBadge.textContent = settings ? (enabled ? "运行中" : "已暂停") : "加载中";
+    assistantStatusBadge.classList.toggle("is-paused", Boolean(settings && !enabled));
+  }
+  if (assistantActiveCount) assistantActiveCount.textContent = settings ? String(activeItems.length) : "--";
+  if (assistantUnreadCount) assistantUnreadCount.textContent = settings ? String(unreadCount) : "--";
+  if (assistantScanCadence) {
+    assistantScanCadence.textContent = settings ? `${settings.scanIntervalMinutes || 10}m` : "--";
+  }
+  if (assistantSourceCount) assistantSourceCount.textContent = settings ? String(dataSourceCount) : "--";
+}
+
 function renderAssistantSettings() {
   const settings = getAssistantSettings();
   if (!settings) {
     if (assistantSettingsSummary) assistantSettingsSummary.textContent = "加载中";
+    renderAssistantHeroMetrics();
     return;
   }
   if (assistantSettingsSummary) {
@@ -16643,6 +16669,7 @@ function renderAssistantSettings() {
     const key = input.getAttribute("data-assistant-source") || "";
     input.checked = Boolean(settings.dataSources && settings.dataSources[key]);
   });
+  renderAssistantHeroMetrics();
 }
 
 function renderAssistantInbox() {
@@ -16650,6 +16677,7 @@ function renderAssistantInbox() {
   const activeItems = assistantInboxItems.filter((item) => !["done", "dismissed"].includes(item.status));
   const unreadCount = activeItems.filter((item) => item.status === "unread").length;
   assistantInboxSummary.textContent = `${activeItems.length} 条活跃 · ${unreadCount} 条未读`;
+  renderAssistantHeroMetrics();
   if (assistantInboxItems.length === 0) {
     assistantInboxList.innerHTML = '<div class="assistant-empty">暂无主动事项</div>';
     return;
