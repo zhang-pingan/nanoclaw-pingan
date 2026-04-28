@@ -3783,7 +3783,8 @@ body.quick-chat-window .quick-chat-input {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 22px;
+  margin-top: auto;
+  padding-top: 30px;
 }
 
 #assistant-screen .assistant-hero-actions .btn-primary {
