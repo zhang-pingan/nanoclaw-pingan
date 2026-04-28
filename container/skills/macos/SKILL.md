@@ -22,10 +22,14 @@ mcp__nanoclaw__desktop_capture
 ```
 
 Useful arguments:
-- `include_image`: `true` for a screenshot, `false` for metadata only.
+- `include_image`: `true` to capture and save a screenshot, `false` for metadata only.
 - `include_windows`: `true` to include visible window titles.
 - `display_id`: optional display id from a prior metadata result.
 - `max_width`: screenshot max width, default 1920.
+
+Successful screenshot results include `image.containerPath`.
+- To send the screenshot to the user, call `mcp__nanoclaw__send_file` with `file_path` set to `image.containerPath`.
+- To inspect the screenshot yourself, read `image.containerPath` with the image/file read tool.
 
 ### Sleep Mac
 

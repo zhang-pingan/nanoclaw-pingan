@@ -2082,7 +2082,7 @@ server.tool(
 if (isMain) {
   server.tool(
     'desktop_capture',
-    '通过已连接的 NanoClaw Electron/Web 客户端实时抓取宿主 Mac 的桌面信息，可按需截图。只在主群可用；需要桌面客户端在线并授予 macOS 屏幕录制权限。',
+    '通过已连接的 NanoClaw Electron/Web 客户端实时抓取宿主 Mac 的桌面信息，可按需截图。只在主群可用；需要桌面客户端在线并授予 macOS 屏幕录制权限。截图成功后会返回 image.containerPath；需要把截图发给用户时，继续调用 send_file(file_path=image.containerPath)。需要自己查看截图时，继续用 Read 读取 image.containerPath。',
     {
       display_id: z
         .string()
@@ -2098,7 +2098,7 @@ if (isMain) {
       include_image: z
         .boolean()
         .optional()
-        .describe('是否返回截图图片，默认 true。设为 false 时只返回 display/window 信息。'),
+        .describe('是否捕获并保存截图图片，默认 true。设为 false 时只返回 display/window 信息。'),
       include_windows: z
         .boolean()
         .optional()
@@ -2151,33 +2151,32 @@ if (isMain) {
         };
       }
 
-      const imageData =
-        typeof result.image?.data === 'string' ? result.image.data : undefined;
+      const imageDataLength =
+        typeof result.image?.data === 'string'
+          ? result.image.data.length
+          : undefined;
       const summary = {
         ...result,
         image: result.image
           ? {
               ...result.image,
-              data: imageData ? `[base64 omitted: ${imageData.length} chars]` : undefined,
+              data: undefined,
+              dataBase64Chars: imageDataLength,
+            }
+          : undefined,
+        nextSteps: result.image?.containerPath
+          ? {
+              sendToChat: `call send_file with file_path="${result.image.containerPath}"`,
+              inspectImage: `call Read with file_path="${result.image.containerPath}"`,
             }
           : undefined,
       };
-      const content: Array<
-        | { type: 'text'; text: string }
-        | { type: 'image'; data: string; mimeType: string }
-      > = [
+      const content: Array<{ type: 'text'; text: string }> = [
         {
           type: 'text',
           text: JSON.stringify(summary, null, 2),
         },
       ];
-      if (imageData) {
-        content.push({
-          type: 'image',
-          data: imageData,
-          mimeType: result.image?.mimeType || 'image/png',
-        });
-      }
 
       return { content };
     },
