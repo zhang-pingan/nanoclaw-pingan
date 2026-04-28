@@ -58,6 +58,7 @@ import {
 import {
   deleteWorkbenchTaskData,
   deleteHistoricalAgentQueries,
+  getAssistantChatMessageById,
   getAgentQuery,
   getWikiJob,
   listAgentQueryEvents,
@@ -609,9 +610,7 @@ class WebChannel {
           requestId,
           error: `Timed out waiting for desktop capture response after ${waitMs}ms.`,
           details:
-            pending.errors.length > 0
-              ? pending.errors.join('\n')
-              : undefined,
+            pending.errors.length > 0 ? pending.errors.join('\n') : undefined,
         });
       }, waitMs);
 
@@ -643,10 +642,7 @@ class WebChannel {
     pending.resolve(result);
   }
 
-  private handleDesktopCaptureError(
-    ws: WebSocket,
-    msg: IncomingMsg,
-  ): void {
+  private handleDesktopCaptureError(ws: WebSocket, msg: IncomingMsg): void {
     const requestId = msg.requestId || '';
     const pending = this.pendingDesktopCaptures.get(requestId);
     if (!pending) return;
@@ -670,10 +666,7 @@ class WebChannel {
     }
   }
 
-  private handleDesktopCaptureSuccess(
-    ws: WebSocket,
-    msg: IncomingMsg,
-  ): void {
+  private handleDesktopCaptureSuccess(ws: WebSocket, msg: IncomingMsg): void {
     const requestId = msg.requestId || '';
     const pending = this.pendingDesktopCaptures.get(requestId);
     if (!pending) return;
@@ -1469,7 +1462,8 @@ class WebChannel {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: err instanceof Error ? err.message : 'Agent inbox action failed',
+          error:
+            err instanceof Error ? err.message : 'Agent inbox action failed',
         }),
       );
     }
@@ -4176,8 +4170,13 @@ class WebChannel {
 
     const chatJid = decodeURIComponent(parts[3]);
     const messageId = decodeURIComponent(parts[4]);
-    const message = getWebMessageById(chatJid, messageId);
-    const filePath = resolveServableLocalFilePath(message?.file_path);
+    const webMessage = getWebMessageById(chatJid, messageId);
+    const assistantMessage = webMessage
+      ? null
+      : getAssistantChatMessageById(chatJid, messageId);
+    const filePath = resolveServableLocalFilePath(
+      webMessage?.file_path || assistantMessage?.file_path,
+    );
     if (!filePath) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'file not found' }));

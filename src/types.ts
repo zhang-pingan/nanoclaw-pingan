@@ -564,6 +564,7 @@ export interface StoredChatMessageRecord {
   is_from_me: number;
   is_bot_message: number;
   workflow_id: string | null;
+  file_path?: string | null;
 }
 
 export interface MemoryRecord {
@@ -681,7 +682,7 @@ export interface WikiSearchResult {
   summary: string | null;
   content_markdown: string;
   score: number;
- }
+}
 
 // --- Channel abstraction ---
 
@@ -778,7 +779,9 @@ export interface Channel {
   // Optional: send file or image. Channels that support it implement it.
   sendFile?(jid: string, filePath: string, caption?: string): Promise<void>;
   // Optional: capture the host desktop through a connected web/Electron client.
-  captureDesktop?(options?: DesktopCaptureOptions): Promise<DesktopCaptureResult>;
+  captureDesktop?(
+    options?: DesktopCaptureOptions,
+  ): Promise<DesktopCaptureResult>;
 }
 
 // Callback type that channels use to deliver inbound messages

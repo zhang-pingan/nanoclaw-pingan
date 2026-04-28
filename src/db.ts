@@ -635,6 +635,7 @@ function createSchema(database: Database.Database): void {
       is_from_me INTEGER,
       is_bot_message INTEGER DEFAULT 0,
       workflow_id TEXT,
+      file_path TEXT,
       PRIMARY KEY (chat_jid, id)
     );
     CREATE INDEX IF NOT EXISTS idx_assistant_chat_messages_chat_time
@@ -651,6 +652,13 @@ function createSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_assistant_snoozes_scope
       ON assistant_snoozes(scope, scope_ref, until);
   `);
+  try {
+    database.exec(
+      `ALTER TABLE assistant_chat_messages ADD COLUMN file_path TEXT`,
+    );
+  } catch {
+    /* column already exists */
+  }
   database.exec(`
     INSERT OR IGNORE INTO assistant_chat_messages (
       id,
@@ -661,7 +669,8 @@ function createSchema(database: Database.Database): void {
       timestamp,
       is_from_me,
       is_bot_message,
-      workflow_id
+      workflow_id,
+      file_path
     )
     SELECT
       id,
@@ -672,6 +681,7 @@ function createSchema(database: Database.Database): void {
       timestamp,
       is_from_me,
       is_bot_message,
+      NULL,
       NULL
     FROM messages
     WHERE chat_jid LIKE 'assistant:%';
@@ -1569,6 +1579,7 @@ export function storeAssistantChatMessage(msg: {
   is_from_me: boolean;
   is_bot_message?: boolean;
   workflow_id?: string | null;
+  file_path?: string | null;
 }): void {
   db.prepare(
     `INSERT INTO assistant_chat_messages (
@@ -1580,8 +1591,9 @@ export function storeAssistantChatMessage(msg: {
       timestamp,
       is_from_me,
       is_bot_message,
-      workflow_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      workflow_id,
+      file_path
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chat_jid, id) DO UPDATE SET
       sender = excluded.sender,
       sender_name = excluded.sender_name,
@@ -1589,7 +1601,8 @@ export function storeAssistantChatMessage(msg: {
       timestamp = excluded.timestamp,
       is_from_me = excluded.is_from_me,
       is_bot_message = excluded.is_bot_message,
-      workflow_id = COALESCE(excluded.workflow_id, assistant_chat_messages.workflow_id)`,
+      workflow_id = COALESCE(excluded.workflow_id, assistant_chat_messages.workflow_id),
+      file_path = COALESCE(excluded.file_path, assistant_chat_messages.file_path)`,
   ).run(
     msg.id,
     msg.chat_jid,
@@ -1600,6 +1613,7 @@ export function storeAssistantChatMessage(msg: {
     msg.is_from_me ? 1 : 0,
     msg.is_bot_message ? 1 : 0,
     msg.workflow_id ?? null,
+    msg.file_path ?? null,
   );
 }
 
@@ -1616,7 +1630,8 @@ export function listAssistantChatMessageRecords(
       SELECT id, chat_jid, sender, sender_name, content, timestamp,
              CAST(is_from_me AS INTEGER) AS is_from_me,
              CAST(is_bot_message AS INTEGER) AS is_bot_message,
-             workflow_id
+             workflow_id,
+             file_path
         FROM assistant_chat_messages
        WHERE chat_jid = ?
        ORDER BY timestamp DESC, rowid DESC
@@ -1624,6 +1639,28 @@ export function listAssistantChatMessageRecords(
     `,
     )
     .all(chatJid, normalizedLimit) as StoredChatMessageRecord[];
+}
+
+export function getAssistantChatMessageById(
+  chatJid: string,
+  id: string,
+): StoredChatMessageRecord | null {
+  return (
+    (db
+      .prepare(
+        `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             workflow_id,
+             file_path
+        FROM assistant_chat_messages
+       WHERE chat_jid = ? AND id = ?
+       LIMIT 1
+    `,
+      )
+      .get(chatJid, id) as StoredChatMessageRecord | undefined) || null
+  );
 }
 
 export function clearAssistantData(): {
@@ -1641,10 +1678,13 @@ export function clearAssistantData(): {
     const messages = db
       .prepare(`DELETE FROM messages WHERE chat_jid LIKE 'assistant:%'`)
       .run().changes;
-    const actionLogs = db.prepare(`DELETE FROM assistant_action_logs`).run()
-      .changes;
+    const actionLogs = db
+      .prepare(`DELETE FROM assistant_action_logs`)
+      .run().changes;
     const snoozes = db.prepare(`DELETE FROM assistant_snoozes`).run().changes;
-    const inboxItems = db.prepare(`DELETE FROM agent_inbox_items`).run().changes;
+    const inboxItems = db
+      .prepare(`DELETE FROM agent_inbox_items`)
+      .run().changes;
 
     return {
       assistant_chat_messages: assistantChatMessages,
@@ -1652,7 +1692,8 @@ export function clearAssistantData(): {
       agent_inbox_items: inboxItems,
       assistant_action_logs: actionLogs,
       assistant_snoozes: snoozes,
-      total: assistantChatMessages + messages + inboxItems + actionLogs + snoozes,
+      total:
+        assistantChatMessages + messages + inboxItems + actionLogs + snoozes,
     };
   });
 
@@ -4173,19 +4214,15 @@ export function createWikiMaterial(record: WikiMaterialRecord): void {
   );
 }
 
-export function getWikiMaterial(
-  id: string,
-): WikiMaterialRecord | undefined {
-  return db
-    .prepare('SELECT * FROM wiki_materials WHERE id = ?')
-    .get(id) as WikiMaterialRecord | undefined;
+export function getWikiMaterial(id: string): WikiMaterialRecord | undefined {
+  return db.prepare('SELECT * FROM wiki_materials WHERE id = ?').get(id) as
+    | WikiMaterialRecord
+    | undefined;
 }
 
 export function listWikiMaterials(limit: number = 200): WikiMaterialRecord[] {
   return db
-    .prepare(
-      'SELECT * FROM wiki_materials ORDER BY created_at DESC LIMIT ?',
-    )
+    .prepare('SELECT * FROM wiki_materials ORDER BY created_at DESC LIMIT ?')
     .all(Math.max(1, limit)) as WikiMaterialRecord[];
 }
 
@@ -4244,22 +4281,20 @@ export function updateWikiDraft(
   assign('published_at');
 
   values.push(id);
-  db.prepare(
-    `UPDATE wiki_drafts SET ${fields.join(', ')} WHERE id = ?`,
-  ).run(...values);
+  db.prepare(`UPDATE wiki_drafts SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
 }
 
 export function getWikiDraft(id: string): WikiDraftRecord | undefined {
-  return db
-    .prepare('SELECT * FROM wiki_drafts WHERE id = ?')
-    .get(id) as WikiDraftRecord | undefined;
+  return db.prepare('SELECT * FROM wiki_drafts WHERE id = ?').get(id) as
+    | WikiDraftRecord
+    | undefined;
 }
 
 export function listWikiDrafts(limit: number = 200): WikiDraftRecord[] {
   return db
-    .prepare(
-      'SELECT * FROM wiki_drafts ORDER BY updated_at DESC LIMIT ?',
-    )
+    .prepare('SELECT * FROM wiki_drafts ORDER BY updated_at DESC LIMIT ?')
     .all(Math.max(1, limit)) as WikiDraftRecord[];
 }
 
@@ -4323,7 +4358,9 @@ export function upsertWikiPage(record: WikiPageRecord): void {
 
 export function getWikiPage(slug: string): WikiPageRecord | undefined {
   return db
-    .prepare(`SELECT ${WIKI_PAGE_SELECT_COLUMNS} FROM wiki_pages WHERE slug = ?`)
+    .prepare(
+      `SELECT ${WIKI_PAGE_SELECT_COLUMNS} FROM wiki_pages WHERE slug = ?`,
+    )
     .get(slug) as WikiPageRecord | undefined;
 }
 
@@ -4440,9 +4477,9 @@ export function updateWikiClaim(
   assign('created_at');
 
   values.push(id);
-  db.prepare(
-    `UPDATE wiki_claims SET ${fields.join(', ')} WHERE id = ?`,
-  ).run(...values);
+  db.prepare(`UPDATE wiki_claims SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
 }
 
 export function listWikiClaimsByPage(
@@ -4622,9 +4659,9 @@ export function clearAllWikiRecords(): {
   job_count: number;
 } {
   const countRow = (table: string): number => {
-    const row = db
-      .prepare(`SELECT COUNT(*) AS cnt FROM ${table}`)
-      .get() as { cnt: number } | undefined;
+    const row = db.prepare(`SELECT COUNT(*) AS cnt FROM ${table}`).get() as
+      | { cnt: number }
+      | undefined;
     return row?.cnt || 0;
   };
 
@@ -4673,10 +4710,7 @@ export function createWikiJob(record: WikiJobRecord): void {
   );
 }
 
-export function updateWikiJob(
-  id: string,
-  patch: Partial<WikiJobRecord>,
-): void {
+export function updateWikiJob(id: string, patch: Partial<WikiJobRecord>): void {
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [patch.updated_at ?? new Date().toISOString()];
   const assign = <K extends keyof WikiJobRecord>(key: K) => {
@@ -4696,22 +4730,20 @@ export function updateWikiJob(
   assign('finished_at');
 
   values.push(id);
-  db.prepare(
-    `UPDATE wiki_jobs SET ${fields.join(', ')} WHERE id = ?`,
-  ).run(...values);
+  db.prepare(`UPDATE wiki_jobs SET ${fields.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
 }
 
 export function getWikiJob(id: string): WikiJobRecord | undefined {
-  return db
-    .prepare('SELECT * FROM wiki_jobs WHERE id = ?')
-    .get(id) as WikiJobRecord | undefined;
+  return db.prepare('SELECT * FROM wiki_jobs WHERE id = ?').get(id) as
+    | WikiJobRecord
+    | undefined;
 }
 
 export function listWikiJobs(limit: number = 100): WikiJobRecord[] {
   return db
-    .prepare(
-      'SELECT * FROM wiki_jobs ORDER BY created_at DESC LIMIT ?',
-    )
+    .prepare('SELECT * FROM wiki_jobs ORDER BY created_at DESC LIMIT ?')
     .all(Math.max(1, limit)) as WikiJobRecord[];
 }
 

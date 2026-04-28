@@ -14865,6 +14865,83 @@ function referenceFileInComposer(containerPath) {
   showToast("已引用文件");
 }
 
+function clipboardImageExtension(mimeType) {
+  const normalized = String(mimeType || "").toLowerCase();
+  if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
+  if (normalized === "image/gif") return "gif";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/svg+xml") return "svg";
+  const subtype = normalized.split("/")[1]?.replace("+xml", "").replace(/[^a-z0-9]/g, "");
+  return subtype || "png";
+}
+
+function clipboardImageTimestamp() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    "-",
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join("");
+}
+
+function isGenericClipboardImageName(name) {
+  return !name || /^image\.(png|jpe?g|gif|webp|svg)$/i.test(name);
+}
+
+function withClipboardImageName(file, index, count) {
+  const originalName = typeof file.name === "string" ? file.name.trim() : "";
+  if (!isGenericClipboardImageName(originalName)) return file;
+
+  const suffix = count > 1 ? `-${index + 1}` : "";
+  const filename = `clipboard-image-${clipboardImageTimestamp()}${suffix}.${clipboardImageExtension(file.type)}`;
+  if (typeof File !== "function") return file;
+
+  try {
+    return new File([file], filename, {
+      type: file.type || "image/png",
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file;
+  }
+}
+
+function getClipboardImageFiles(event) {
+  const clipboardData = event.clipboardData;
+  if (!clipboardData) return [];
+
+  const itemFiles = Array.from(clipboardData.items || [])
+    .filter((item) => item.kind === "file" && String(item.type || "").startsWith("image/"))
+    .map((item) => (typeof item.getAsFile === "function" ? item.getAsFile() : null))
+    .filter(Boolean);
+  const rawFiles = itemFiles.length > 0
+    ? itemFiles
+    : Array.from(clipboardData.files || []).filter((file) => String(file.type || "").startsWith("image/"));
+
+  return rawFiles.map((file, index) => withClipboardImageName(file, index, rawFiles.length));
+}
+
+function handleComposerPaste(event) {
+  const imageFiles = getClipboardImageFiles(event);
+  if (imageFiles.length === 0) return;
+
+  event.preventDefault();
+  if (!currentGroupJid) {
+    showToast("请选择群聊后再粘贴图片", 1800);
+    return;
+  }
+
+  for (const file of imageFiles) {
+    stageFile(file);
+  }
+  showToast(imageFiles.length > 1 ? `已暂存 ${imageFiles.length} 张图片` : "已暂存图片");
+}
+
 // Stage a file for upload on next send
 function stageFile(file) {
   if (!currentGroupJid) return;
@@ -14876,9 +14953,10 @@ function stageFile(file) {
 function renderPendingFiles() {
   if (pendingFiles.length === 0) {
     pendingFilesEl.classList.remove("visible");
+    pendingFilesContent.textContent = "";
     return;
   }
-  const names = pendingFiles.map((f) => f.name).join(", ");
+  const names = pendingFiles.map((f) => escapeHtml(f.name || "未命名附件")).join(", ");
   pendingFilesContent.innerHTML = `${SVG.paperclip} ${pendingFiles.length} 个附件: ${names}`;
   pendingFilesEl.classList.add("visible");
 }
@@ -17655,6 +17733,8 @@ messageInput.addEventListener("input", () => {
     hideCommandPalette();
   }
 });
+
+messageInput.addEventListener("paste", handleComposerPaste);
 
 // Reply preview close
 replyPreviewClose.addEventListener("click", clearReplyTo);

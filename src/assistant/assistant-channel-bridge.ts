@@ -11,6 +11,8 @@ export interface AssistantChatMessageView {
   timestamp: string;
   isFromMe: boolean;
   isBotMessage: boolean;
+  filePath: string | null;
+  fileUrl: string | null;
 }
 
 export interface AssistantChannelPort {

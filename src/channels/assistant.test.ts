@@ -69,6 +69,22 @@ describe('assistant channel', () => {
       '可以，我先查看今日计划。',
     ]);
 
+    expect(channel.sendFile).toBeTruthy();
+    await channel.sendFile?.(
+      ASSISTANT_MAIN_JID,
+      '/tmp/nanoclaw-test-image.png',
+      '生成图片',
+    );
+    const messagesWithFile = listAssistantChatMessages(10);
+    const fileMessage = messagesWithFile[messagesWithFile.length - 1];
+    expect(fileMessage.content).toBe('生成图片');
+    expect(fileMessage.filePath).toBe('/tmp/nanoclaw-test-image.png');
+    expect(fileMessage.fileUrl).toBe(
+      `/api/message-files/${encodeURIComponent(
+        ASSISTANT_MAIN_JID,
+      )}/${encodeURIComponent(fileMessage.id)}`,
+    );
+
     const genericMessages = listStoredMessagesByChat(ASSISTANT_MAIN_JID, 10);
     expect(genericMessages.map((message) => message.content)).toEqual([
       '帮我总结今天要做什么',

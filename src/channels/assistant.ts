@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { ASSISTANT_NAME } from '../config.js';
 import {
   listAssistantChatMessageRecords,
@@ -13,7 +15,11 @@ import {
   registerAssistantChannelPort,
 } from '../assistant/assistant-channel-bridge.js';
 import { logger } from '../logger.js';
-import type { NewMessage, RegisteredGroup, StoredChatMessageRecord } from '../types.js';
+import type {
+  NewMessage,
+  RegisteredGroup,
+  StoredChatMessageRecord,
+} from '../types.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 
 function nowTs(): string {
@@ -36,9 +42,21 @@ function assistantMainGroup(): RegisteredGroup {
   };
 }
 
+function assistantMessageFileUrl(
+  chatJid: string,
+  messageId: string,
+  filePath: string | null | undefined,
+): string | null {
+  if (!chatJid || !messageId || !filePath) return null;
+  return `/api/message-files/${encodeURIComponent(chatJid)}/${encodeURIComponent(
+    messageId,
+  )}`;
+}
+
 function toChatMessageView(
   record: StoredChatMessageRecord | NewMessage,
 ): AssistantChatMessageView {
+  const filePath = 'file_path' in record ? record.file_path || null : null;
   return {
     id: record.id,
     chatJid: record.chat_jid,
@@ -48,6 +66,8 @@ function toChatMessageView(
     timestamp: record.timestamp,
     isFromMe: Boolean(record.is_from_me),
     isBotMessage: Boolean(record.is_bot_message),
+    filePath,
+    fileUrl: assistantMessageFileUrl(record.chat_jid, record.id, filePath),
   };
 }
 
@@ -115,6 +135,38 @@ class AssistantChannel {
       ...msg,
       is_from_me: false,
       is_bot_message: true,
+    });
+    emitAssistantEvent({
+      type: 'chat_message',
+      message: toChatMessageView(msg),
+    });
+  }
+
+  async sendFile(
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
+    if (!this.ownsJid(jid)) return;
+    const timestamp = nowTs();
+    const msg: StoredChatMessageRecord = {
+      id: createMessageId('assistant-file'),
+      chat_jid: jid,
+      sender: ASSISTANT_NAME,
+      sender_name: ASSISTANT_NAME,
+      content: caption || `文件: ${path.basename(filePath)}`,
+      timestamp,
+      is_from_me: 0,
+      is_bot_message: 1,
+      workflow_id: null,
+      file_path: filePath,
+    };
+    storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant', true);
+    storeAssistantChatMessage({
+      ...msg,
+      is_from_me: false,
+      is_bot_message: true,
+      file_path: filePath,
     });
     emitAssistantEvent({
       type: 'chat_message',

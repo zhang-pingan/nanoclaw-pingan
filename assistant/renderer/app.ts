@@ -32,6 +32,8 @@ type AssistantChatMessage = {
   timestamp: string;
   isFromMe: boolean;
   isBotMessage: boolean;
+  filePath?: string | null;
+  fileUrl?: string | null;
 };
 
 declare global {
@@ -53,7 +55,9 @@ const bubbleKicker = document.getElementById('bubble-kicker') as HTMLElement;
 const bubbleTitle = document.getElementById('bubble-title') as HTMLElement;
 const bubbleBody = document.getElementById('bubble-body') as HTMLElement;
 const bubbleActions = document.getElementById('bubble-actions') as HTMLElement;
-const assistantStatus = document.getElementById('assistant-status') as HTMLElement;
+const assistantStatus = document.getElementById(
+  'assistant-status',
+) as HTMLElement;
 const hideBtn = document.getElementById('hide-btn') as HTMLButtonElement;
 const chatLog = document.getElementById('chat-log') as HTMLElement;
 const chatForm = document.getElementById('chat-form') as HTMLFormElement;
@@ -68,6 +72,8 @@ let state: AssistantState | null = null;
 let movingTimer: number | null = null;
 let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
+
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
 
 function setConnectionState(connected: boolean): void {
   shell.classList.toggle('connected', connected);
@@ -95,7 +101,10 @@ async function headers(): Promise<Record<string, string>> {
   };
 }
 
-async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+async function apiFetch(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
   return fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -105,7 +114,11 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   });
 }
 
-function button(label: string, className: string, onClick: () => void): HTMLButtonElement {
+function button(
+  label: string,
+  className: string,
+  onClick: () => void,
+): HTMLButtonElement {
   const el = document.createElement('button');
   el.type = 'button';
   el.textContent = label;
@@ -117,14 +130,18 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
 function renderIdle(): void {
   shell.classList.remove('attention');
   bubbleKicker.textContent = 'Personal Assistant';
-  bubbleTitle.textContent = state?.settings.enabled ? '当前没有新的主动事项' : '个人助手已暂停';
+  bubbleTitle.textContent = state?.settings.enabled
+    ? '当前没有新的主动事项'
+    : '个人助手已暂停';
   bubbleBody.textContent = state?.settings.enabled
     ? '我会继续观察今日计划、工作台任务、定时任务和 Agent 执行状态。'
     : '可以在 Web 工作站的个人助手页重新启用。';
   bubbleActions.innerHTML = '';
   bubbleActions.append(
     button('打开工作站', 'primary', () =>
-      window.assistantHost?.openWorkstation(`${API_BASE}/?assistantTarget=assistant`),
+      window.assistantHost?.openWorkstation(
+        `${API_BASE}/?assistantTarget=assistant`,
+      ),
     ),
   );
 }
@@ -145,7 +162,10 @@ function renderItem(item: AgentInboxItem): void {
     );
   }
 
-  if (item.action_kind === 'create_today_plan' || item.action_kind === 'continue_today_plan') {
+  if (
+    item.action_kind === 'create_today_plan' ||
+    item.action_kind === 'continue_today_plan'
+  ) {
     bubbleActions.append(
       button(item.action_label || '执行', '', () => {
         void runInboxAction(item.id, 'execute');
@@ -172,21 +192,116 @@ function render(): void {
   renderItem(item);
 }
 
-function escapeText(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function basename(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  return normalized.split('/').filter(Boolean).pop() || normalized;
+}
+
+function fileExtension(fileName: string): string {
+  const index = fileName.lastIndexOf('.');
+  return index >= 0 ? fileName.slice(index + 1).toLowerCase() : '';
+}
+
+function localFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const encoded = normalized
+    .split('/')
+    .map((segment, index) => {
+      if (index === 0 && /^[A-Za-z]:$/.test(segment)) return segment;
+      return encodeURIComponent(segment);
+    })
+    .join('/');
+  return normalized.startsWith('/')
+    ? `file://${encoded}`
+    : `file:///${encoded}`;
+}
+
+function detectFilePathFromContent(content: string): string | null {
+  const match =
+    content.match(/(?:文件地址|文件路径|file path|path)[:：]\s*(.+)$/im) ||
+    content.match(/^\s*文件[:：]\s*(.+)$/im);
+  const value = match?.[1]?.trim().replace(/[。.,，\s]+$/, '') || '';
+  if (!value || !/[\\/]/.test(value)) return null;
+  return value;
+}
+
+function chatFileInfo(message: AssistantChatMessage): {
+  fileName: string;
+  extension: string;
+  url: string;
+} | null {
+  const filePath =
+    message.filePath || detectFilePathFromContent(message.content);
+  if (!filePath && !message.fileUrl) return null;
+
+  const fileName = basename(filePath || message.fileUrl || 'file');
+  const extension = fileExtension(fileName);
+  const url = filePath
+    ? localFileUrl(filePath)
+    : /^https?:\/\//i.test(message.fileUrl || '')
+      ? message.fileUrl || ''
+      : `${API_BASE}${message.fileUrl}`;
+
+  return { fileName, extension, url };
+}
+
+function openImagePreview(src: string, alt: string): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'image-preview-overlay no-drag';
+  overlay.innerHTML = '<button type="button" aria-label="关闭">×</button>';
+
+  const image = document.createElement('img');
+  image.src = src;
+  image.alt = alt;
+  overlay.append(image);
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay || event.target instanceof HTMLButtonElement) {
+      overlay.remove();
+    }
+  });
+  document.body.append(overlay);
 }
 
 function renderChat(): void {
-  chatLog.innerHTML = chatMessages
-    .map((message) => {
-      const klass = message.isFromMe ? 'user' : 'bot';
-      return `<div class="chat-message ${klass}">${escapeText(message.content)}</div>`;
-    })
-    .join('');
+  chatLog.innerHTML = '';
+  for (const message of chatMessages) {
+    const klass = message.isFromMe ? 'user' : 'bot';
+    const el = document.createElement('div');
+    el.className = `chat-message ${klass}`;
+
+    if (message.content.trim()) {
+      const text = document.createElement('div');
+      text.className = 'chat-message-text';
+      text.textContent = message.content;
+      el.append(text);
+    }
+
+    const fileInfo = chatFileInfo(message);
+    if (fileInfo && IMAGE_EXTENSIONS.has(fileInfo.extension)) {
+      const image = document.createElement('img');
+      image.className = 'chat-image-preview';
+      image.loading = 'lazy';
+      image.decoding = 'async';
+      image.src = fileInfo.url;
+      image.alt = fileInfo.fileName;
+      image.addEventListener('click', () => {
+        openImagePreview(image.src, fileInfo.fileName);
+      });
+      el.append(image);
+    } else if (fileInfo) {
+      const file = document.createElement('div');
+      file.className = 'chat-file-chip';
+      file.textContent = fileInfo.fileName;
+      el.append(file);
+    }
+
+    if (!el.childElementCount) {
+      el.textContent = '无内容';
+    }
+
+    chatLog.append(el);
+  }
   chatStatus.textContent = chatTyping ? 'Agent 正在回复...' : '';
   chatLog.scrollTop = chatLog.scrollHeight;
 }
@@ -253,8 +368,7 @@ async function sendChatMessage(content: string): Promise<void> {
     chatInput.value = '';
     chatStatus.textContent = '已发送';
   } catch (err) {
-    chatStatus.textContent =
-      err instanceof Error ? err.message : '发送失败';
+    chatStatus.textContent = err instanceof Error ? err.message : '发送失败';
   } finally {
     chatSend.disabled = false;
   }
@@ -316,10 +430,7 @@ async function connectWs(): Promise<void> {
           void loadState();
           return;
         }
-        if (
-          message.event?.type === 'chat_message' &&
-          message.event.message
-        ) {
+        if (message.event?.type === 'chat_message' && message.event.message) {
           upsertChatMessage(message.event.message);
           chatTyping = false;
           renderChat();
