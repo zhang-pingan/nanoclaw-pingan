@@ -1,6 +1,20 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, ipcMain, Notification, globalShortcut, screen, desktopCapturer, systemPreferences } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  MenuItemConstructorOptions,
+  shell,
+  ipcMain,
+  Notification,
+  globalShortcut,
+  screen,
+  desktopCapturer,
+  systemPreferences,
+  nativeImage,
+} from 'electron';
 import path from 'path';
 import { execFile } from 'child_process';
+import { readFile, unlink } from 'fs/promises';
 
 const mainDir = __dirname;
 const QUICK_CHAT_SHORTCUT = 'Command+`';
@@ -50,6 +64,148 @@ interface DesktopCaptureDisplayInfo {
   primary: boolean;
 }
 
+function formatError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function getMacAppBundlePath(): string | undefined {
+  const match = process.execPath.match(/^(.*?\.app)(?:\/|$)/);
+  return match?.[1];
+}
+
+function getMacScreenCaptureDiagnostics(extra?: string): string | undefined {
+  if (!isMac) return extra;
+
+  const appBundlePath = getMacAppBundlePath();
+  const lines = [
+    extra,
+    `screenPermission=${systemPreferences.getMediaAccessStatus('screen')}`,
+    `appName=${app.getName()}`,
+    appBundlePath ? `appBundlePath=${appBundlePath}` : undefined,
+    `isPackaged=${app.isPackaged}`,
+    `execPath=${process.execPath}`,
+    `pid=${process.pid}`,
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+
+function execFileAsync(
+  file: string,
+  args: string[],
+  timeout = 10_000,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { timeout }, (err, _stdout, stderr) => {
+      if (err) {
+        const message = stderr?.trim()
+          ? `${err.message}\n${stderr.trim()}`
+          : err.message;
+        reject(new Error(message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function captureDesktopWithMacScreencapture(args: {
+  targetDisplay?: DesktopCaptureDisplayInfo;
+  displays: DesktopCaptureDisplayInfo[];
+  windows?: { id: string; name: string }[];
+  maxWidth: number;
+  desktopCapturerError: string;
+  windowSourceError?: string;
+}) {
+  const filename = `nanoclaw-desktop-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}.png`;
+  const outputPath = path.join(app.getPath('temp'), filename);
+  const captureArgs = ['-x', '-t', 'png'];
+
+  if (args.targetDisplay) {
+    const { x, y, width, height } = args.targetDisplay.bounds;
+    captureArgs.push('-R', `${x},${y},${width},${height}`);
+  }
+  captureArgs.push(outputPath);
+
+  try {
+    await execFileAsync('/usr/sbin/screencapture', captureArgs);
+    if (args.maxWidth > 0) {
+      await execFileAsync('/usr/bin/sips', [
+        '-Z',
+        String(args.maxWidth),
+        outputPath,
+      ]);
+    }
+
+    const png = await readFile(outputPath);
+    const size = nativeImage.createFromBuffer(png).getSize();
+    if (png.length === 0 || size.width === 0 || size.height === 0) {
+      return {
+        ok: false,
+        error: 'macOS screencapture returned an empty image.',
+        details: getMacScreenCaptureDiagnostics(
+          [
+            `desktopCapturerError=${args.desktopCapturerError}`,
+            args.windowSourceError
+              ? `windowSourceError=${args.windowSourceError}`
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        ),
+        displays: args.displays,
+        windows: args.windows,
+      };
+    }
+
+    return {
+      ok: true,
+      capturedAt: new Date().toISOString(),
+      platform: process.platform,
+      screenPermission: systemPreferences.getMediaAccessStatus('screen'),
+      displays: args.displays,
+      windows: args.windows,
+      imageBase64: png.toString('base64'),
+      mimeType: 'image/png',
+      width: size.width,
+      height: size.height,
+      displayId: args.targetDisplay?.id,
+      details: getMacScreenCaptureDiagnostics(
+        [
+          'captureMethod=screencapture',
+          `desktopCapturerError=${args.desktopCapturerError}`,
+          args.windowSourceError
+            ? `windowSourceError=${args.windowSourceError}`
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      ),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: 'Failed to capture desktop with Electron desktopCapturer and macOS screencapture.',
+      details: getMacScreenCaptureDiagnostics(
+        [
+          `desktopCapturerError=${args.desktopCapturerError}`,
+          `screencaptureError=${formatError(err)}`,
+          args.windowSourceError
+            ? `windowSourceError=${args.windowSourceError}`
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      ),
+      displays: args.displays,
+      windows: args.windows,
+    };
+  } finally {
+    await unlink(outputPath).catch(() => undefined);
+  }
+}
+
 function clampDesktopCaptureMaxWidth(value: unknown): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 1920;
@@ -90,23 +246,26 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
       }
     : { width: 1, height: 1 };
 
-  const screenSources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize,
-  });
+  let windowSourceError: string | undefined;
   const windowSources = includeWindows
-    ? (
-        await desktopCapturer.getSources({
+    ? await desktopCapturer
+        .getSources({
           types: ['window'],
           thumbnailSize: { width: 1, height: 1 },
           fetchWindowIcons: false,
         })
-      )
-        .filter((source) => source.id.startsWith('window:'))
-        .map((source) => ({
-          id: source.id,
-          name: source.name,
-        }))
+        .then((sources) =>
+          sources
+            .filter((source) => source.id.startsWith('window:'))
+            .map((source) => ({
+              id: source.id,
+              name: source.name,
+            })),
+        )
+        .catch((err) => {
+          windowSourceError = formatError(err);
+          return undefined;
+        })
     : undefined;
 
   if (!includeImage) {
@@ -120,6 +279,37 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
           : undefined,
       displays,
       windows: windowSources,
+      details: windowSourceError
+        ? getMacScreenCaptureDiagnostics(`windowSourceError=${windowSourceError}`)
+        : undefined,
+    };
+  }
+
+  let screenSources: Electron.DesktopCapturerSource[];
+  try {
+    screenSources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize,
+    });
+  } catch (err) {
+    const desktopCapturerError = formatError(err);
+    if (isMac) {
+      return captureDesktopWithMacScreencapture({
+        targetDisplay,
+        displays,
+        windows: windowSources,
+        maxWidth,
+        desktopCapturerError,
+        windowSourceError,
+      });
+    }
+
+    return {
+      ok: false,
+      error: 'Failed to get desktop screen sources.',
+      details: desktopCapturerError,
+      displays,
+      windows: windowSources,
     };
   }
 
@@ -130,6 +320,9 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
     return {
       ok: false,
       error: 'No desktop screen source is available.',
+      details: getMacScreenCaptureDiagnostics(
+        windowSourceError ? `windowSourceError=${windowSourceError}` : undefined,
+      ),
       displays,
       windows: windowSources,
     };
@@ -143,7 +336,11 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
       error: 'Desktop capture returned an empty image.',
       details:
         process.platform === 'darwin'
-          ? `Screen permission: ${systemPreferences.getMediaAccessStatus('screen')}`
+          ? getMacScreenCaptureDiagnostics(
+              windowSourceError
+                ? `windowSourceError=${windowSourceError}`
+                : undefined,
+            )
           : undefined,
       displays,
       windows: windowSources,
@@ -165,6 +362,9 @@ async function captureDesktop(payload: DesktopCapturePayload = {}) {
     width: size.width,
     height: size.height,
     displayId: source.display_id || targetDisplay?.id,
+    details: windowSourceError
+      ? getMacScreenCaptureDiagnostics(`windowSourceError=${windowSourceError}`)
+      : undefined,
   };
 }
 
