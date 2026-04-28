@@ -853,7 +853,9 @@ describe('workbench approval transition sync', () => {
     syncWorkbenchOnWorkflowCreated('wf-terminal-flags');
 
     const detail = getWorkbenchTaskDetail('wb-wf-terminal-flags');
+    const persisted = getWorkbenchTaskByWorkflowId('wf-terminal-flags');
     expect(detail).not.toBeNull();
+    expect(persisted?.task_state).toBe('success');
     expect(detail?.task.workflow_status).toBe('passed');
     expect(detail?.task.task_state).toBe('success');
   });

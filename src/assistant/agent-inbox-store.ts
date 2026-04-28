@@ -270,6 +270,53 @@ export function getAgentInboxCounts(): Record<AgentInboxStatus, number> {
   return counts;
 }
 
+export function resolveActiveAgentInboxItemByDedupeKey(
+  dedupeKey: string,
+  status: 'done' | 'dismissed' = 'done',
+): AgentInboxItemView | null {
+  const existing = getAgentInboxItemByDedupeKey(dedupeKey);
+  if (!existing || !ACTIVE_INBOX_STATUSES.includes(existing.status)) {
+    return existing;
+  }
+  return updateAgentInboxItemStatus(existing.id, status);
+}
+
+export function resolveActiveAgentInboxItemsBySource(input: {
+  sourceType: string;
+  sourceRefId: string;
+  status?: 'done' | 'dismissed';
+  excludeDedupeKeys?: string[];
+}): AgentInboxItemView[] {
+  const activeStatusPlaceholders = ACTIVE_INBOX_STATUSES.map(() => '?').join(
+    ', ',
+  );
+  const excludeKeys = Array.from(new Set(input.excludeDedupeKeys || [])).filter(
+    Boolean,
+  );
+  const excludeClause =
+    excludeKeys.length > 0
+      ? `AND dedupe_key NOT IN (${excludeKeys.map(() => '?').join(', ')})`
+      : '';
+  const rows = getDatabase()
+    .prepare(
+      `SELECT id FROM agent_inbox_items
+       WHERE source_type = ?
+         AND source_ref_id = ?
+         AND status IN (${activeStatusPlaceholders})
+         ${excludeClause}`,
+    )
+    .all(
+      input.sourceType,
+      input.sourceRefId,
+      ...ACTIVE_INBOX_STATUSES,
+      ...excludeKeys,
+    ) as Array<{ id: string }>;
+
+  return rows.map((row) =>
+    updateAgentInboxItemStatus(row.id, input.status || 'done'),
+  );
+}
+
 export function createOrUpdateAgentInboxItem(
   input: UpsertAgentInboxItemInput,
 ): AgentInboxItemView {

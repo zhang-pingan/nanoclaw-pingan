@@ -1267,8 +1267,18 @@ async function startMessageLoop(): Promise<void> {
             lastAgentTimestamp[chatJid] || '',
             ASSISTANT_NAME,
           );
-          const messagesToSend =
-            allPending.length > 0 ? allPending : groupMessages;
+          if (allPending.length === 0) {
+            logger.debug(
+              {
+                chatJid,
+                count: groupMessages.length,
+                lastAgentTimestamp: lastAgentTimestamp[chatJid] || '',
+              },
+              'Skipping already-consumed messages for active container',
+            );
+            continue;
+          }
+          const messagesToSend = allPending;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
           const pipedSelection = await selectModel({
             prompt: formatted,

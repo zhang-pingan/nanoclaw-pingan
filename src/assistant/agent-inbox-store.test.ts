@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { _initTestDatabase, getTodayPlanByDate } from '../db.js';
+import {
+  _initTestDatabase,
+  createWorkbenchTask,
+  getTodayPlanByDate,
+} from '../db.js';
 import { initAssistantEvents } from './assistant-events.js';
 import { runAgentInboxAction } from './assistant-actions.js';
 import {
   createOrUpdateAgentInboxItem,
+  getAgentInboxItem,
   getAssistantSettings,
   listAgentInboxItems,
   updateAssistantSettings,
@@ -15,6 +20,30 @@ beforeEach(() => {
   _initTestDatabase();
   initAssistantEvents(() => {});
 });
+
+function createStoredWorkbenchTask(input: {
+  id: string;
+  status: string;
+  taskState: 'running' | 'success' | 'failed' | 'cancelled';
+  updatedAt: string;
+}): void {
+  createWorkbenchTask({
+    id: input.id,
+    workflow_id: input.id.replace(/^wb-/, ''),
+    source_jid: 'main@g.us',
+    title: '工作台测试任务',
+    service: 'catstory',
+    start_from: 'dev',
+    workflow_type: 'dev_test',
+    status: input.status,
+    task_state: input.taskState,
+    current_stage: input.status,
+    summary: null,
+    created_at: input.updatedAt,
+    updated_at: input.updatedAt,
+    last_event_at: input.updatedAt,
+  });
+}
 
 describe('agent inbox store', () => {
   it('merges assistant settings without dropping nested defaults', () => {
@@ -76,5 +105,47 @@ describe('agent inbox store', () => {
     expect(result.item.status).toBe('done');
     expect(result.result.planDate).toBe('2026-04-28');
     expect(getTodayPlanByDate('2026-04-28')).toBeTruthy();
+  });
+
+  it('does not stale-alert successful workbench tasks', () => {
+    const now = new Date(2026, 3, 28, 9, 0, 0);
+    const updatedAt = String(now.getTime() - 6 * 60 * 60 * 1000);
+    createStoredWorkbenchTask({
+      id: 'wb-success-task',
+      status: 'passed',
+      taskState: 'success',
+      updatedAt,
+    });
+
+    runProactiveScan({ now });
+
+    expect(
+      listAgentInboxItems({ status: 'active' }).some(
+        (item) => item.dedupe_key === 'workbench:task-stale:wb-success-task',
+      ),
+    ).toBe(false);
+  });
+
+  it('resolves obsolete workbench stale inbox items after task success', () => {
+    const now = new Date(2026, 3, 28, 9, 0, 0);
+    const updatedAt = String(now.getTime() - 6 * 60 * 60 * 1000);
+    const stale = createOrUpdateAgentInboxItem({
+      dedupeKey: 'workbench:task-stale:wb-resolved-success-task',
+      kind: 'risk',
+      priority: 'normal',
+      title: '任务长时间没有进展：工作台测试任务',
+      sourceType: 'workbench_task',
+      sourceRefId: 'wb-resolved-success-task',
+    });
+    createStoredWorkbenchTask({
+      id: 'wb-resolved-success-task',
+      status: 'passed',
+      taskState: 'success',
+      updatedAt,
+    });
+
+    runProactiveScan({ now });
+
+    expect(getAgentInboxItem(stale.id)?.status).toBe('done');
   });
 });

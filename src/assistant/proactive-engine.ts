@@ -19,6 +19,8 @@ import { emitAssistantEvent } from './assistant-events.js';
 import {
   createOrUpdateAgentInboxItem,
   getAssistantSettings,
+  resolveActiveAgentInboxItemByDedupeKey,
+  resolveActiveAgentInboxItemsBySource,
 } from './agent-inbox-store.js';
 import type { AgentInboxPriority, UpsertAgentInboxItemInput } from './types.js';
 
@@ -45,26 +47,13 @@ function timestampMs(value: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function isTerminalStatus(status: string | null | undefined): boolean {
-  const normalized = String(status || '').toLowerCase();
-  return [
-    'completed',
-    'complete',
-    'done',
-    'success',
-    'succeeded',
-    'closed',
-    'resolved',
-    'cancelled',
-    'canceled',
-    'failed',
-    'error',
-  ].includes(normalized);
-}
-
 function isFailureStatus(status: string | null | undefined): boolean {
   const normalized = String(status || '').toLowerCase();
   return ['failed', 'error', 'cancelled', 'canceled'].includes(normalized);
+}
+
+function isWorkbenchRiskState(taskState: string | null | undefined): boolean {
+  return taskState === 'failed' || taskState === 'cancelled';
 }
 
 function isPendingActionItem(item: WorkbenchActionItemRecord): boolean {
@@ -134,7 +123,13 @@ function scanWorkbenchActionItems(
   task: WorkbenchTaskRecord,
 ): void {
   for (const actionItem of listWorkbenchActionItemsByTask(task.id)) {
-    if (!isPendingActionItem(actionItem)) continue;
+    if (!isPendingActionItem(actionItem)) {
+      resolveActiveAgentInboxItemsBySource({
+        sourceType: 'workbench_action_item',
+        sourceRefId: actionItem.id,
+      });
+      continue;
+    }
     pushInbox(items, {
       dedupeKey: `workbench:action-item:${actionItem.id}`,
       kind: actionItem.replyable ? 'approval' : 'notification',
@@ -169,13 +164,21 @@ function scanWorkbenchRules(
   for (const task of listWorkbenchTasks()) {
     scanWorkbenchActionItems(items, task);
 
-    if (isFailureStatus(task.status)) {
+    const staleDedupeKey = `workbench:task-stale:${task.id}`;
+
+    if (isWorkbenchRiskState(task.task_state)) {
+      const riskDedupeKey = `workbench:task-risk:${task.id}:${task.task_state}:${task.status}`;
+      resolveActiveAgentInboxItemsBySource({
+        sourceType: 'workbench_task',
+        sourceRefId: task.id,
+        excludeDedupeKeys: [riskDedupeKey],
+      });
       pushInbox(items, {
-        dedupeKey: `workbench:task-risk:${task.id}:${task.status}`,
+        dedupeKey: riskDedupeKey,
         kind: 'risk',
         priority: 'high',
         title: `工作台任务异常：${task.title}`,
-        body: `当前状态为 ${task.status}，建议进入工作台查看失败阶段和日志。`,
+        body: `当前任务态为 ${task.task_state}，流程状态为 ${task.status}，建议进入工作台查看失败阶段和日志。`,
         sourceType: 'workbench_task',
         sourceRefId: task.id,
         actionKind: 'open_workbench_task',
@@ -185,17 +188,46 @@ function scanWorkbenchRules(
           taskId: task.id,
           workflowId: task.workflow_id,
           service: task.service,
+          taskState: task.task_state,
+          workflowStatus: task.status,
         },
       });
+      continue;
     }
 
-    if (isTerminalStatus(task.status)) continue;
+    if (task.task_state !== 'running') {
+      resolveActiveAgentInboxItemsBySource({
+        sourceType: 'workbench_task',
+        sourceRefId: task.id,
+      });
+      continue;
+    }
+
     const lastTouch = timestampMs(task.last_event_at || task.updated_at);
-    if (!lastTouch) continue;
+    if (!lastTouch) {
+      resolveActiveAgentInboxItemsBySource({
+        sourceType: 'workbench_task',
+        sourceRefId: task.id,
+      });
+      continue;
+    }
     const ageHours = (nowMs - lastTouch) / (60 * 60 * 1000);
-    if (ageHours < DEFAULT_STALE_TASK_HOURS) continue;
+    if (ageHours < DEFAULT_STALE_TASK_HOURS) {
+      resolveActiveAgentInboxItemByDedupeKey(staleDedupeKey);
+      resolveActiveAgentInboxItemsBySource({
+        sourceType: 'workbench_task',
+        sourceRefId: task.id,
+        excludeDedupeKeys: [staleDedupeKey],
+      });
+      continue;
+    }
+    resolveActiveAgentInboxItemsBySource({
+      sourceType: 'workbench_task',
+      sourceRefId: task.id,
+      excludeDedupeKeys: [staleDedupeKey],
+    });
     pushInbox(items, {
-      dedupeKey: `workbench:task-stale:${task.id}`,
+      dedupeKey: staleDedupeKey,
       kind: 'risk',
       priority: 'normal',
       title: `任务长时间没有进展：${task.title}`,

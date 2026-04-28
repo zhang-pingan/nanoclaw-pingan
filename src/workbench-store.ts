@@ -705,6 +705,7 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
   if (!workflow) return;
   const taskId = taskIdForWorkflow(workflow);
   if (!getWorkbenchTaskByWorkflowId(workflow.id)) {
+    const taskState = getTaskState(workflow.workflow_type, workflow.status);
     createWorkbenchTask({
       id: taskId,
       workflow_id: workflow.id,
@@ -714,6 +715,7 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
       start_from: workflow.start_from,
       workflow_type: workflow.workflow_type,
       status: workflow.status,
+      task_state: taskState,
       current_stage: workflow.status,
       summary: null,
       created_at: workflow.created_at,
@@ -745,7 +747,7 @@ export function syncWorkbenchOnWorkflowCreated(workflowId: string): void {
           workflow.workflow_type,
           workflow.status,
         ),
-        taskState: getTaskState(workflow.workflow_type, workflow.status),
+        taskState,
         workflowStage: workflow.status,
         workflowStageLabel: getStatusLabel(
           workflow.workflow_type,
@@ -776,9 +778,11 @@ export function syncWorkbenchOnWorkflowUpdated(
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const stateConfig = config?.states[workflow.status];
   const pendingSummary = getPendingActionSummary(task.id);
+  const taskState = getTaskState(workflow.workflow_type, workflow.status);
 
   updateWorkbenchTask(task.id, {
     status: workflow.status,
+    task_state: taskState,
     current_stage: workflow.status,
     summary: summary !== undefined ? truncate(summary) : task.summary,
     updated_at: workflow.updated_at,
@@ -796,7 +800,7 @@ export function syncWorkbenchOnWorkflowUpdated(
           workflow.workflow_type,
           workflow.status,
         ),
-        taskState: getTaskState(workflow.workflow_type, workflow.status),
+        taskState,
         workflowStage: workflow.status,
         workflowStageLabel: getStatusLabel(
           workflow.workflow_type,
@@ -946,8 +950,10 @@ export function syncWorkbenchOnTransition(
   }
 
   resolveCurrentStageActionItems(task.id, workflow.updated_at);
+  const taskState = getTaskState(workflow.workflow_type, workflow.status);
   updateWorkbenchTask(task.id, {
     status: workflow.status,
+    task_state: taskState,
     current_stage: toStatus,
     updated_at: workflow.updated_at,
     last_event_at: workflow.updated_at,
@@ -963,7 +969,7 @@ export function syncWorkbenchOnTransition(
         workflow.workflow_type,
         workflow.status,
       ),
-      taskState: getTaskState(workflow.workflow_type, workflow.status),
+      taskState,
       workflowStage: toStatus,
       workflowStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
       context: cloneWorkflowContext(workflow.context),

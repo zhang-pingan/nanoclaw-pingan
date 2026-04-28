@@ -16663,9 +16663,9 @@ function renderAssistantInbox() {
       </div>
       <div class="assistant-inbox-actions">
         ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
-        ${item.action_kind === "create_today_plan" || item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-ghost assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
-        <button type="button" class="btn-ghost assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
-        <button type="button" class="btn-ghost assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
+        ${item.action_kind === "create_today_plan" || item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
+        <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
+        <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
       </div>
     </article>
   `).join("");

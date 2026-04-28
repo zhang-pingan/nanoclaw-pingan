@@ -400,6 +400,7 @@ function createSchema(database: Database.Database): void {
       start_from TEXT NOT NULL DEFAULT 'plan',
       workflow_type TEXT NOT NULL,
       status TEXT NOT NULL,
+      task_state TEXT NOT NULL DEFAULT 'running',
       current_stage TEXT NOT NULL,
       summary TEXT,
       created_at TEXT NOT NULL,
@@ -780,6 +781,36 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* column already exists */
   }
+
+  // Add persisted task_state to workbench_tasks (migration for existing DBs).
+  try {
+    database.exec(
+      `ALTER TABLE workbench_tasks ADD COLUMN task_state TEXT NOT NULL DEFAULT 'running'`,
+    );
+  } catch {
+    /* column already exists */
+  }
+  database.exec(`
+    UPDATE workbench_tasks
+    SET task_state = CASE
+      WHEN LOWER(status) IN ('cancelled', 'canceled') THEN 'cancelled'
+      WHEN LOWER(status) IN (
+        'passed', 'completed', 'complete', 'done', 'success', 'succeeded',
+        'closed', 'resolved'
+      ) THEN 'success'
+      WHEN LOWER(status) IN ('failed', 'error', 'ops_failed') THEN 'failed'
+      WHEN LOWER(status) LIKE '%_passed'
+        OR LOWER(status) LIKE '%_completed'
+        OR LOWER(status) LIKE '%_done'
+        OR LOWER(status) LIKE '%_success' THEN 'success'
+      WHEN LOWER(status) LIKE '%_failed'
+        OR LOWER(status) LIKE '%_error' THEN 'failed'
+      ELSE task_state
+    END
+    WHERE task_state IS NULL
+      OR task_state = 'running'
+      OR task_state NOT IN ('running', 'success', 'failed', 'cancelled')
+  `);
 
   // Add workflow_id column to delegations (migration for existing DBs)
   try {
@@ -2569,8 +2600,9 @@ export function createWorkbenchTask(record: WorkbenchTaskRecord): void {
   db.prepare(
     `INSERT INTO workbench_tasks (
       id, workflow_id, source_jid, title, service, start_from, workflow_type,
-      status, current_stage, summary, created_at, updated_at, last_event_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      status, task_state, current_stage, summary, created_at, updated_at,
+      last_event_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
     record.workflow_id,
@@ -2580,6 +2612,7 @@ export function createWorkbenchTask(record: WorkbenchTaskRecord): void {
     record.start_from,
     record.workflow_type,
     record.status,
+    record.task_state,
     record.current_stage,
     record.summary,
     record.created_at,
@@ -2616,6 +2649,7 @@ export function updateWorkbenchTask(
     Pick<
       WorkbenchTaskRecord,
       | 'status'
+      | 'task_state'
       | 'current_stage'
       | 'summary'
       | 'updated_at'
@@ -2630,6 +2664,10 @@ export function updateWorkbenchTask(
   if (updates.status !== undefined) {
     fields.push('status = ?');
     values.push(updates.status);
+  }
+  if (updates.task_state !== undefined) {
+    fields.push('task_state = ?');
+    values.push(updates.task_state);
   }
   if (updates.current_stage !== undefined) {
     fields.push('current_stage = ?');

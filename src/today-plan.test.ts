@@ -164,6 +164,7 @@ describe('today-plan', () => {
       start_from: 'dev',
       workflow_type: 'dev_test',
       status: 'dev',
+      task_state: 'running',
       current_stage: 'dev',
       summary: 'summary',
       created_at: '2026-04-20T00:00:00.000Z',

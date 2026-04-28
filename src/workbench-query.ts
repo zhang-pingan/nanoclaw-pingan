@@ -2,13 +2,14 @@ import {
   getWorkbenchTaskDetail,
   listWorkbenchTasks,
 } from './workbench.js';
+import type { WorkbenchTaskState } from './types.js';
 
 export interface WorkbenchStatusQueryInput {
   task_id?: string;
   keyword?: string;
   /** Matches either workflow status/current stage or aggregated task_state. */
   status?: string;
-  task_state?: 'running' | 'success' | 'failed' | 'cancelled';
+  task_state?: WorkbenchTaskState;
   workflow_status?: string;
   include_terminal?: boolean;
   include_detail?: boolean;
@@ -20,7 +21,7 @@ export interface WorkbenchStatusQueryResult {
     task_id?: string;
     keyword?: string;
     status?: string;
-    task_state?: 'running' | 'success' | 'failed' | 'cancelled';
+    task_state?: WorkbenchTaskState;
     workflow_status?: string;
     include_terminal: boolean;
     include_detail: boolean;
@@ -35,7 +36,7 @@ export interface WorkbenchStatusQueryResult {
     workflow_type: string;
     workflow_status: string;
     workflow_status_label: string;
-    task_state: 'running' | 'success' | 'failed' | 'cancelled';
+    task_state: WorkbenchTaskState;
     workflow_stage: string;
     workflow_stage_label: string;
     pending_approval: boolean;

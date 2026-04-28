@@ -32,6 +32,7 @@ import type {
   WorkbenchEventRecord,
   WorkbenchSubtaskRecord,
   WorkbenchTaskRecord,
+  WorkbenchTaskState,
   Workflow,
   WorkflowEvalEvidence,
   WorkflowEvalFinding,
@@ -77,7 +78,7 @@ export interface WorkbenchTaskItem {
   /** Human-readable label for the workflow status shown in UI. */
   workflow_status_label: string;
   /** Aggregated task state used for filtering and high-level task outcome display. */
-  task_state: 'running' | 'success' | 'failed' | 'cancelled';
+  task_state: WorkbenchTaskState;
   /** Current workflow stage key, usually aligned with status for active tasks. */
   workflow_stage: string;
   /** Human-readable label for the current workflow stage. */
@@ -238,7 +239,9 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     workflow_type: persisted?.workflow_type || workflow.workflow_type,
     workflow_status: persisted?.status || workflow.status,
     workflow_status_label: statusLabels[workflow.status] || workflow.status,
-    task_state: getTaskState(workflow.workflow_type, workflow.status),
+    task_state:
+      persisted?.task_state ||
+      getTaskState(workflow.workflow_type, workflow.status),
     workflow_stage: persisted?.current_stage || workflow.status,
     workflow_stage_label:
       statusLabels[persisted?.current_stage || workflow.status] ||
@@ -750,7 +753,7 @@ export function listWorkbenchTasks(): WorkbenchTaskItem[] {
           workflow_type: item.workflow_type,
           workflow_status: item.status,
           workflow_status_label: item.status,
-          task_state: getTaskState(item.workflow_type, item.status),
+          task_state: item.task_state,
           workflow_stage: item.current_stage,
           workflow_stage_label: item.current_stage,
           round: 0,

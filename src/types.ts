@@ -197,6 +197,8 @@ export interface AskQuestionRecord {
 /** Workflow status is now a plain string — valid values are defined in workflow-definitions/*.json per type. */
 export type WorkflowStatus = string;
 
+export type WorkbenchTaskState = 'running' | 'success' | 'failed' | 'cancelled';
+
 /** Agent status info for the Agent Status panel. */
 export interface AgentStatusInfo {
   groupJid: string;
@@ -414,6 +416,7 @@ export interface WorkbenchTaskRecord {
   start_from: string;
   workflow_type: string;
   status: string;
+  task_state: WorkbenchTaskState;
   current_stage: string;
   summary: string | null;
   created_at: string;

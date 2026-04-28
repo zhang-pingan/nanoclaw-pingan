@@ -3704,18 +3704,10 @@ body.quick-chat-window .quick-chat-input {
   flex-shrink: 0;
 }
 
-.assistant-danger-btn {
-  border: 1px solid rgba(var(--workbench-danger-rgb), 0.24);
-  background: rgba(var(--workbench-danger-rgb), 0.08);
-  color: rgb(var(--workbench-danger-rgb));
-  font-size: 13px;
-  font-weight: 760;
-  min-height: 36px;
-}
-
-.assistant-danger-btn:hover:not(:disabled) {
-  background: rgba(var(--workbench-danger-rgb), 0.14);
-  color: rgb(var(--workbench-danger-rgb));
+#assistant-screen .assistant-icon-action-btn {
+  width: 34px;
+  padding: 0;
+  flex: 0 0 34px;
 }
 
 .assistant-grid {
