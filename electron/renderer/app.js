@@ -13500,6 +13500,7 @@ function connectWS() {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    sendDesktopCaptureCapabilities();
     if (currentGroupJid) {
       sendWs({ type: "select_group", chatJid: currentGroupJid });
     }
@@ -13525,6 +13526,65 @@ function connectWS() {
 function sendWs(payload) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(payload));
+  }
+}
+
+function sendDesktopCaptureCapabilities() {
+  const appApi = typeof window !== "undefined" ? window.nanoclawApp : null;
+  sendWs({
+    type: "desktop_capture_capabilities",
+    supported: Boolean(appApi?.captureDesktop),
+    platform: appApi?.platform || navigator.platform || "browser"
+  });
+}
+
+async function handleDesktopCaptureRequest(msg) {
+  const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+  if (!requestId) return;
+
+  const appApi = typeof window !== "undefined" ? window.nanoclawApp : null;
+  if (!appApi?.captureDesktop) {
+    sendWs({
+      type: "desktop_capture_result",
+      requestId,
+      ok: false,
+      error: "Desktop capture is only available in the Electron client."
+    });
+    return;
+  }
+
+  try {
+    const result = await appApi.captureDesktop({
+      displayId: typeof msg.displayId === "string" ? msg.displayId : undefined,
+      maxWidth: typeof msg.maxWidth === "number" ? msg.maxWidth : undefined,
+      includeImage: msg.includeImage !== false,
+      includeWindows: msg.includeWindows === true
+    });
+    sendWs({
+      type: "desktop_capture_result",
+      requestId,
+      ok: result?.ok === true,
+      error: result?.error,
+      details: [
+        result?.details,
+        result?.screenPermission ? `screenPermission=${result.screenPermission}` : null
+      ].filter(Boolean).join("\n") || undefined,
+      capturedAt: result?.capturedAt,
+      displays: result?.displays || [],
+      windows: result?.windows || [],
+      imageBase64: result?.imageBase64,
+      mimeType: result?.mimeType,
+      width: result?.width,
+      height: result?.height,
+      displayId: result?.displayId
+    });
+  } catch (err) {
+    sendWs({
+      type: "desktop_capture_result",
+      requestId,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 }
 
@@ -13849,6 +13909,9 @@ function handleWsMessage(msg) {
       break;
     case "workbench_event":
       handleWorkbenchRealtimeEvent(msg.event);
+      break;
+    case "desktop_capture_request":
+      handleDesktopCaptureRequest(msg);
       break;
     case "error":
       console.error("WS error from server:", msg.message);

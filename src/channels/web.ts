@@ -3,7 +3,11 @@ import path from 'path';
 import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 
-import { AgentStatusInfo } from '../types.js';
+import {
+  AgentStatusInfo,
+  DesktopCaptureOptions,
+  DesktopCaptureResult,
+} from '../types.js';
 import type { WorkbenchRealtimeEvent } from '../workbench-events.js';
 import { validateCardConfig } from '../card-config.js';
 import type { CardConfig } from '../card-config.js';
@@ -118,6 +122,9 @@ const WEB_PORT = parseInt(
 const WEB_TOKEN = process.env.WEB_TOKEN || webEnv.WEB_TOKEN;
 const RENDERER_DIR = path.resolve(process.cwd(), 'electron', 'renderer');
 const UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
+const DESKTOP_CAPTURE_DIR = path.join(ATTACHMENTS_DIR, 'desktop-captures');
+const DESKTOP_CAPTURE_TIMEOUT_MS = 30_000;
+const DESKTOP_CAPTURE_MAX_BASE64_BYTES = 64 * 1024 * 1024;
 
 const LOCAL_FILE_ROOTS: Record<string, string> = {
   uploads: UPLOADS_DIR,
@@ -249,14 +256,52 @@ function ensureUniqueUploadPath(baseDir: string, filename: string): string {
   return candidate;
 }
 
+function sanitizeDesktopCaptureRequestId(requestId: string): string {
+  return requestId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+}
+
+function desktopCaptureExtensionForMime(mimeType: string): string {
+  if (mimeType === 'image/jpeg') return '.jpg';
+  return '.png';
+}
+
+function clampDesktopCaptureMaxWidth(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 1920;
+  return Math.min(Math.max(Math.round(numeric), 320), 4096);
+}
+
 // --- Types ---
 interface WsClient {
   ws: WebSocket;
   groupFolder: string;
 }
 
+interface DesktopCaptureClient {
+  id: string;
+  supported: boolean;
+  platform?: string;
+  updatedAt: number;
+}
+
+interface PendingDesktopCapture {
+  requestId: string;
+  startedAt: number;
+  includeImage: boolean;
+  expectedResponses: number;
+  responseCount: number;
+  errors: string[];
+  timeout: NodeJS.Timeout;
+  resolve: (result: DesktopCaptureResult) => void;
+}
+
 interface IncomingMsg {
-  type: 'message' | 'select_group' | 'card_action';
+  type:
+    | 'message'
+    | 'select_group'
+    | 'card_action'
+    | 'desktop_capture_capabilities'
+    | 'desktop_capture_result';
   chatJid?: string;
   content?: string;
   model?: string;
@@ -266,6 +311,20 @@ interface IncomingMsg {
   cardId?: string;
   value?: Record<string, string>;
   formValue?: Record<string, string>;
+  supported?: boolean;
+  platform?: string;
+  requestId?: string;
+  ok?: boolean;
+  error?: string;
+  details?: string;
+  capturedAt?: string;
+  displays?: unknown[];
+  windows?: unknown[];
+  imageBase64?: string;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  displayId?: string;
 }
 
 interface OutgoingMsg {
@@ -279,7 +338,8 @@ interface OutgoingMsg {
     | 'agent_status'
     | 'agent_query_trace'
     | 'file'
-    | 'workbench_event';
+    | 'workbench_event'
+    | 'desktop_capture_request';
   [key: string]: unknown;
 }
 
@@ -289,6 +349,11 @@ class WebChannel {
   private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private clients: Map<string, Set<WsClient>> = new Map();
+  private wsClientIds: Map<WebSocket, string> = new Map();
+  private desktopCaptureClients: Map<WebSocket, DesktopCaptureClient> =
+    new Map();
+  private pendingDesktopCaptures: Map<string, PendingDesktopCapture> =
+    new Map();
   opts!: ChannelOpts;
   private connected = false;
   onCardAction: CardActionHandler | null = null;
@@ -483,13 +548,245 @@ class WebChannel {
     return cardId;
   }
 
+  async captureDesktop(
+    options: DesktopCaptureOptions = {},
+  ): Promise<DesktopCaptureResult> {
+    const requestId = `desktop-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    const includeImage = options.includeImage !== false;
+    const includeWindows = options.includeWindows === true;
+    const maxWidth = clampDesktopCaptureMaxWidth(options.maxWidth);
+    const waitMs =
+      typeof options.waitMs === 'number' && Number.isFinite(options.waitMs)
+        ? Math.min(Math.max(Math.round(options.waitMs), 1000), 60_000)
+        : DESKTOP_CAPTURE_TIMEOUT_MS;
+
+    const targets = [...this.desktopCaptureClients.entries()].filter(
+      ([ws, client]) => client.supported && ws.readyState === WebSocket.OPEN,
+    );
+
+    if (targets.length === 0) {
+      return {
+        status: 'error',
+        requestId,
+        error:
+          'No connected Electron web client with desktop capture support. Open the NanoClaw desktop app and keep it connected.',
+      };
+    }
+
+    const payload: OutgoingMsg = {
+      type: 'desktop_capture_request',
+      requestId,
+      displayId: options.displayId,
+      includeImage,
+      includeWindows,
+      maxWidth,
+    };
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        const pending = this.pendingDesktopCaptures.get(requestId);
+        if (!pending) return;
+        this.pendingDesktopCaptures.delete(requestId);
+        resolve({
+          status: 'error',
+          requestId,
+          error: `Timed out waiting for desktop capture response after ${waitMs}ms.`,
+          details:
+            pending.errors.length > 0
+              ? pending.errors.join('\n')
+              : undefined,
+        });
+      }, waitMs);
+
+      this.pendingDesktopCaptures.set(requestId, {
+        requestId,
+        startedAt: Date.now(),
+        includeImage,
+        expectedResponses: targets.length,
+        responseCount: 0,
+        errors: [],
+        timeout,
+        resolve,
+      });
+
+      for (const [ws] of targets) {
+        ws.send(JSON.stringify(payload));
+      }
+    });
+  }
+
+  private completeDesktopCapture(
+    requestId: string,
+    result: DesktopCaptureResult,
+  ): void {
+    const pending = this.pendingDesktopCaptures.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingDesktopCaptures.delete(requestId);
+    pending.resolve(result);
+  }
+
+  private handleDesktopCaptureError(
+    ws: WebSocket,
+    msg: IncomingMsg,
+  ): void {
+    const requestId = msg.requestId || '';
+    const pending = this.pendingDesktopCaptures.get(requestId);
+    if (!pending) return;
+
+    pending.responseCount += 1;
+    const client = this.desktopCaptureClients.get(ws);
+    const prefix = client ? `client=${client.id}` : 'client=unknown';
+    pending.errors.push(
+      `${prefix}: ${msg.error || 'desktop capture failed'}${
+        msg.details ? ` (${msg.details})` : ''
+      }`,
+    );
+
+    if (pending.responseCount >= pending.expectedResponses) {
+      this.completeDesktopCapture(requestId, {
+        status: 'error',
+        requestId,
+        error: 'All connected desktop capture clients failed.',
+        details: pending.errors.join('\n'),
+      });
+    }
+  }
+
+  private handleDesktopCaptureSuccess(
+    ws: WebSocket,
+    msg: IncomingMsg,
+  ): void {
+    const requestId = msg.requestId || '';
+    const pending = this.pendingDesktopCaptures.get(requestId);
+    if (!pending) return;
+
+    pending.responseCount += 1;
+    const client = this.desktopCaptureClients.get(ws);
+    const displays = Array.isArray(msg.displays) ? msg.displays : [];
+    const windows = Array.isArray(msg.windows) ? msg.windows : undefined;
+    const capturedAt =
+      typeof msg.capturedAt === 'string'
+        ? msg.capturedAt
+        : new Date().toISOString();
+
+    let image: DesktopCaptureResult['image'] | undefined;
+    if (pending.includeImage) {
+      const imageBase64 =
+        typeof msg.imageBase64 === 'string' ? msg.imageBase64 : '';
+      if (!imageBase64) {
+        pending.errors.push(
+          `${client ? `client=${client.id}` : 'client=unknown'}: response did not include image data`,
+        );
+        if (pending.responseCount >= pending.expectedResponses) {
+          this.completeDesktopCapture(requestId, {
+            status: 'error',
+            requestId,
+            error: 'Desktop capture response did not include image data.',
+            details: pending.errors.join('\n'),
+          });
+        }
+        return;
+      }
+
+      if (
+        Buffer.byteLength(imageBase64, 'utf8') >
+        DESKTOP_CAPTURE_MAX_BASE64_BYTES
+      ) {
+        pending.errors.push(
+          `${client ? `client=${client.id}` : 'client=unknown'}: image exceeded size limit`,
+        );
+        if (pending.responseCount >= pending.expectedResponses) {
+          this.completeDesktopCapture(requestId, {
+            status: 'error',
+            requestId,
+            error: 'Desktop capture image exceeded size limit.',
+            details: pending.errors.join('\n'),
+          });
+        }
+        return;
+      }
+
+      const mimeType =
+        msg.mimeType === 'image/jpeg' || msg.mimeType === 'image/png'
+          ? msg.mimeType
+          : 'image/png';
+      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      const safeRequestId = sanitizeDesktopCaptureRequestId(requestId);
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-')
+        .replace('T', '_')
+        .replace('Z', '');
+      const filename = `${timestamp}-${safeRequestId}${desktopCaptureExtensionForMime(
+        mimeType,
+      )}`;
+      fs.mkdirSync(DESKTOP_CAPTURE_DIR, { recursive: true });
+      const hostPath = path.join(DESKTOP_CAPTURE_DIR, filename);
+      fs.writeFileSync(hostPath, imageBuffer);
+
+      image = {
+        path: hostPath,
+        containerPath: `/workspace/attachments/desktop-captures/${filename}`,
+        mimeType,
+        width:
+          typeof msg.width === 'number' && Number.isFinite(msg.width)
+            ? msg.width
+            : 0,
+        height:
+          typeof msg.height === 'number' && Number.isFinite(msg.height)
+            ? msg.height
+            : 0,
+        byteLength: imageBuffer.length,
+        displayId:
+          typeof msg.displayId === 'string' && msg.displayId
+            ? msg.displayId
+            : undefined,
+        data: imageBase64,
+      };
+    }
+
+    this.completeDesktopCapture(requestId, {
+      status: 'success',
+      requestId,
+      source: 'web-client',
+      capturedAt,
+      displays: displays as DesktopCaptureResult['displays'],
+      windows: windows as DesktopCaptureResult['windows'],
+      image,
+      client: client
+        ? {
+            id: client.id,
+            platform: client.platform,
+          }
+        : undefined,
+      details:
+        typeof msg.details === 'string' && msg.details
+          ? msg.details
+          : undefined,
+    });
+  }
+
   async disconnect(): Promise<void> {
+    for (const pending of this.pendingDesktopCaptures.values()) {
+      clearTimeout(pending.timeout);
+      pending.resolve({
+        status: 'error',
+        requestId: pending.requestId,
+        error: 'Web channel disconnected before desktop capture completed.',
+      });
+    }
+    this.pendingDesktopCaptures.clear();
     for (const clients of this.clients.values()) {
       for (const client of clients) {
         client.ws.close();
       }
     }
     this.clients.clear();
+    this.wsClientIds.clear();
+    this.desktopCaptureClients.clear();
     this.wss?.close();
     this.server?.close();
     this.connected = false;
@@ -3799,6 +4096,10 @@ class WebChannel {
   // --- WebSocket ---
   private handleWsConnect(ws: WebSocket, req: http.IncomingMessage): void {
     logger.debug('Web channel WS client connected');
+    const clientId = `webclient-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    this.wsClientIds.set(ws, clientId);
 
     const send = (payload: OutgoingMsg) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -3849,6 +4150,8 @@ class WebChannel {
           }
         }
       }
+      this.desktopCaptureClients.delete(ws);
+      this.wsClientIds.delete(ws);
     });
 
     ws.on('error', (err: unknown) => {
@@ -3963,6 +4266,45 @@ class WebChannel {
             group_folder: value.group_folder,
             form_value: mergedFormValue,
           });
+        }
+        break;
+      }
+      case 'desktop_capture_capabilities': {
+        const clientId =
+          this.wsClientIds.get(ws) ||
+          `webclient-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        this.wsClientIds.set(ws, clientId);
+        this.desktopCaptureClients.set(ws, {
+          id: clientId,
+          supported: msg.supported === true,
+          platform:
+            typeof msg.platform === 'string' && msg.platform
+              ? msg.platform
+              : undefined,
+          updatedAt: Date.now(),
+        });
+        logger.debug(
+          {
+            clientId,
+            supported: msg.supported === true,
+            platform: msg.platform,
+          },
+          'Web client desktop capture capabilities updated',
+        );
+        break;
+      }
+      case 'desktop_capture_result': {
+        if (!msg.requestId) {
+          send({
+            type: 'error',
+            message: 'requestId required for desktop_capture_result',
+          });
+          return;
+        }
+        if (msg.ok === true) {
+          this.handleDesktopCaptureSuccess(ws, msg);
+        } else {
+          this.handleDesktopCaptureError(ws, msg);
         }
         break;
       }

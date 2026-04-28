@@ -330,6 +330,65 @@ export interface StopAgentResult {
   error?: string;
 }
 
+export interface DesktopCaptureDisplayInfo {
+  id: string;
+  label?: string;
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  workArea?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  scaleFactor?: number;
+  rotation?: number;
+  internal?: boolean;
+  primary?: boolean;
+}
+
+export interface DesktopCaptureWindowInfo {
+  id: string;
+  name: string;
+}
+
+export interface DesktopCaptureOptions {
+  displayId?: string;
+  maxWidth?: number;
+  includeImage?: boolean;
+  includeWindows?: boolean;
+  waitMs?: number;
+}
+
+export interface DesktopCaptureResult {
+  status: 'success' | 'error';
+  requestId?: string;
+  source?: 'web-client';
+  capturedAt?: string;
+  displays?: DesktopCaptureDisplayInfo[];
+  windows?: DesktopCaptureWindowInfo[];
+  image?: {
+    path: string;
+    containerPath: string;
+    mimeType: string;
+    width: number;
+    height: number;
+    byteLength: number;
+    displayId?: string;
+    data?: string;
+  };
+  client?: {
+    id: string;
+    platform?: string;
+  };
+  error?: string;
+  details?: string;
+}
+
 export interface Workflow {
   id: string;
   name: string;
@@ -715,6 +774,8 @@ export interface Channel {
   onCardAction?: CardActionHandler | null;
   // Optional: send file or image. Channels that support it implement it.
   sendFile?(jid: string, filePath: string, caption?: string): Promise<void>;
+  // Optional: capture the host desktop through a connected web/Electron client.
+  captureDesktop?(options?: DesktopCaptureOptions): Promise<DesktopCaptureResult>;
 }
 
 // Callback type that channels use to deliver inbound messages

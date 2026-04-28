@@ -19,6 +19,27 @@ interface NanoClawAppAPI {
   openFileWith(filePath: string): Promise<{ ok: boolean; error?: string }>;
   /** Reveal a file in the system file manager */
   showInFolder(filePath: string): Promise<{ ok: boolean; error?: string }>;
+  /** Capture desktop display metadata and, optionally, a screenshot */
+  captureDesktop(options?: {
+    displayId?: string;
+    maxWidth?: number;
+    includeImage?: boolean;
+    includeWindows?: boolean;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    details?: string;
+    capturedAt?: string;
+    platform?: string;
+    screenPermission?: string;
+    displays?: unknown[];
+    windows?: unknown[];
+    imageBase64?: string;
+    mimeType?: string;
+    width?: number;
+    height?: number;
+    displayId?: string;
+  }>;
   /** Current platform (darwin, win32, linux) */
   platform: string;
   /** Bring the main application window to the foreground */

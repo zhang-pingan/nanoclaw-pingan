@@ -58,7 +58,12 @@ import type { MemoryExtractConfig } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { retrieveStructuredMemories } from './memory-retrieval.js';
-import { InteractiveCard, RegisteredGroup } from './types.js';
+import {
+  DesktopCaptureOptions,
+  DesktopCaptureResult,
+  InteractiveCard,
+  RegisteredGroup,
+} from './types.js';
 import { queryWorkbenchTaskStatuses } from './workbench-query.js';
 import {
   createWorkbenchInteractionItem,
@@ -91,6 +96,9 @@ export interface IpcDeps {
   ) => Promise<string | undefined>;
   sendFile?: (jid: string, filePath: string, caption?: string) => Promise<void>;
   reloadContainer?: (jid: string) => void;
+  captureDesktop?: (
+    options?: DesktopCaptureOptions,
+  ) => Promise<DesktopCaptureResult>;
 }
 
 let ipcWatcherRunning = false;
@@ -981,6 +989,11 @@ export async function processTaskIpc(
     sourceRefId?: string;
     scriptPath?: string;
     args?: unknown;
+    displayId?: string;
+    maxWidth?: number;
+    includeImage?: boolean;
+    includeWindows?: boolean;
+    waitMs?: number;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -1060,6 +1073,23 @@ export async function processTaskIpc(
       'ipc',
       groupFolder,
       'ai-image-results',
+    );
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
+  const writeDesktopCaptureResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'desktop-capture-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
@@ -2516,6 +2546,86 @@ export async function processTaskIpc(
             scriptPath: data.scriptPath,
           },
           'run_local_host_script failed',
+        );
+      }
+      break;
+    }
+
+    case 'desktop_capture': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn({ sourceGroup }, 'desktop_capture missing requestId');
+        break;
+      }
+      if (!isMain) {
+        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+          status: 'error',
+          requestId: data.requestId,
+          error: 'desktop_capture is only available to the main group',
+        });
+        logger.warn(
+          { sourceGroup, requestId: data.requestId },
+          'Unauthorized desktop_capture attempt blocked',
+        );
+        break;
+      }
+      if (!deps.captureDesktop) {
+        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+          status: 'error',
+          requestId: data.requestId,
+          error: 'No channel supports desktop capture',
+        });
+        break;
+      }
+
+      const options: DesktopCaptureOptions = {
+        displayId:
+          typeof data.displayId === 'string' && data.displayId
+            ? data.displayId
+            : undefined,
+        maxWidth:
+          typeof data.maxWidth === 'number' && Number.isFinite(data.maxWidth)
+            ? data.maxWidth
+            : undefined,
+        includeImage:
+          typeof data.includeImage === 'boolean'
+            ? data.includeImage
+            : undefined,
+        includeWindows:
+          typeof data.includeWindows === 'boolean'
+            ? data.includeWindows
+            : undefined,
+        waitMs:
+          typeof data.waitMs === 'number' && Number.isFinite(data.waitMs)
+            ? data.waitMs
+            : undefined,
+      };
+
+      try {
+        const result = await deps.captureDesktop(options);
+        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+          ...result,
+          requestId: result.requestId || data.requestId,
+        });
+        logger.info(
+          {
+            sourceGroup,
+            requestId: data.requestId,
+            status: result.status,
+            displayId: options.displayId,
+            includeImage: options.includeImage,
+          },
+          'desktop_capture completed',
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        writeDesktopCaptureResult(sourceGroup, data.requestId, {
+          status: 'error',
+          requestId: data.requestId,
+          error: errMsg,
+        });
+        logger.error(
+          { err, sourceGroup, requestId: data.requestId },
+          'desktop_capture failed',
         );
       }
       break;

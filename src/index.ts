@@ -1722,6 +1722,13 @@ async function main(): Promise<void> {
       queue.closeStdin(jid);
       queue.enqueueMessageCheck(jid);
     },
+    captureDesktop: (options) => {
+      const channel = channels.find((ch) => ch.captureDesktop);
+      if (!channel?.captureDesktop) {
+        throw new Error('No connected channel supports desktop capture');
+      }
+      return channel.captureDesktop(options);
+    },
   });
   initWorkflow({
     registeredGroups: () => registeredGroups,

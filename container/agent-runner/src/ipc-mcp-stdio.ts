@@ -113,6 +113,31 @@ type AiImageMcpResult = {
   details?: string;
 };
 
+type DesktopCaptureMcpResult = {
+  status?: 'success' | 'error';
+  requestId?: string;
+  source?: 'web-client';
+  capturedAt?: string;
+  displays?: unknown[];
+  windows?: unknown[];
+  image?: {
+    path?: string;
+    containerPath?: string;
+    mimeType?: string;
+    width?: number;
+    height?: number;
+    byteLength?: number;
+    displayId?: string;
+    data?: string;
+  };
+  client?: {
+    id?: string;
+    platform?: string;
+  };
+  error?: string;
+  details?: string;
+};
+
 function aiImageToolResponse(
   result: AiImageMcpResult | null,
   requestId: string,
@@ -2055,6 +2080,109 @@ server.tool(
 );
 
 if (isMain) {
+  server.tool(
+    'desktop_capture',
+    '通过已连接的 NanoClaw Electron/Web 客户端实时抓取宿主 Mac 的桌面信息，可按需截图。只在主群可用；需要桌面客户端在线并授予 macOS 屏幕录制权限。',
+    {
+      display_id: z
+        .string()
+        .optional()
+        .describe('可选 display id；不传时抓取主显示器。'),
+      max_width: z
+        .number()
+        .int()
+        .min(320)
+        .max(4096)
+        .optional()
+        .describe('截图最大宽度，默认 1920。'),
+      include_image: z
+        .boolean()
+        .optional()
+        .describe('是否返回截图图片，默认 true。设为 false 时只返回 display/window 信息。'),
+      include_windows: z
+        .boolean()
+        .optional()
+        .describe('是否同时列出当前可见窗口标题，默认 false。'),
+    },
+    async (args) => {
+      const requestId = `desktop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      writeIpcFile(TASKS_DIR, {
+        type: 'desktop_capture',
+        requestId,
+        displayId: args.display_id,
+        maxWidth: args.max_width,
+        includeImage: args.include_image,
+        includeWindows: args.include_windows,
+        groupFolder,
+        timestamp: new Date().toISOString(),
+      });
+
+      const resultsDir = path.join(IPC_DIR, 'desktop-capture-results');
+      const resultPath = path.join(resultsDir, `${requestId}.json`);
+      const result = await waitForIpcResult<DesktopCaptureMcpResult>(
+        resultPath,
+        65000,
+        300,
+      );
+
+      if (!result) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `desktop_capture timed out waiting for response (requestId=${requestId}).`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      if (result.status === 'error' || result.error) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: [result.error || 'desktop_capture failed.', result.details]
+                .filter(Boolean)
+                .join('\n\n'),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const imageData =
+        typeof result.image?.data === 'string' ? result.image.data : undefined;
+      const summary = {
+        ...result,
+        image: result.image
+          ? {
+              ...result.image,
+              data: imageData ? `[base64 omitted: ${imageData.length} chars]` : undefined,
+            }
+          : undefined,
+      };
+      const content: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image'; data: string; mimeType: string }
+      > = [
+        {
+          type: 'text',
+          text: JSON.stringify(summary, null, 2),
+        },
+      ];
+      if (imageData) {
+        content.push({
+          type: 'image',
+          data: imageData,
+          mimeType: result.image?.mimeType || 'image/png',
+        });
+      }
+
+      return { content };
+    },
+  );
+
   server.tool(
     'run_local_host_script',
     '执行宿主机 local/shell 目录下的脚本。script_path 必须是 /workspace/project/local/shell/ 下的绝对容器路径。',

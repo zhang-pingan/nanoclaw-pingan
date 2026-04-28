@@ -100,6 +100,23 @@ function readHostScriptIpcResult(sourceGroup: string, requestId: string): any {
   return data;
 }
 
+function readDesktopCaptureIpcResult(
+  sourceGroup: string,
+  requestId: string,
+): any {
+  const p = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    'desktop-capture-results',
+    `${requestId}.json`,
+  );
+  expect(fs.existsSync(p)).toBe(true);
+  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+  fs.unlinkSync(p);
+  return data;
+}
+
 function rid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -2124,5 +2141,67 @@ describe('run_local_host_script authorization', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('host-script-ok:main');
     expect(result.scriptPath).toContain(`/local/shell/${filename}`);
+  });
+});
+
+describe('desktop_capture authorization', () => {
+  it('main group can capture desktop through a supporting channel', async () => {
+    const requestId = rid('desktop');
+    const captureDesktop = vi.fn(async () => ({
+      status: 'success' as const,
+      requestId: 'client-request',
+      source: 'web-client' as const,
+      capturedAt: '2026-04-28T00:00:00.000Z',
+      displays: [],
+    }));
+    deps.captureDesktop = captureDesktop;
+
+    await processTaskIpc(
+      {
+        type: 'desktop_capture',
+        requestId,
+        displayId: '123',
+        maxWidth: 1280,
+        includeImage: false,
+        includeWindows: true,
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    expect(captureDesktop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayId: '123',
+        maxWidth: 1280,
+        includeImage: false,
+        includeWindows: true,
+      }),
+    );
+    const result = readDesktopCaptureIpcResult('whatsapp_main', requestId);
+    expect(result.status).toBe('success');
+    expect(result.requestId).toBe('client-request');
+    expect(result.source).toBe('web-client');
+  });
+
+  it('non-main group cannot capture desktop', async () => {
+    const requestId = rid('desktop');
+    const captureDesktop = vi.fn();
+    deps.captureDesktop = captureDesktop;
+
+    await processTaskIpc(
+      {
+        type: 'desktop_capture',
+        requestId,
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    expect(captureDesktop).not.toHaveBeenCalled();
+    const result = readDesktopCaptureIpcResult('other-group', requestId);
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('main group');
   });
 });

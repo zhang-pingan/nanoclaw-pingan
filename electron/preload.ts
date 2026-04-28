@@ -71,6 +71,16 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     return ipcRenderer.invoke('show-in-folder', filePath);
   },
 
+  // Capture current desktop display metadata and, optionally, a screenshot.
+  captureDesktop: (options?: {
+    displayId?: string;
+    maxWidth?: number;
+    includeImage?: boolean;
+    includeWindows?: boolean;
+  }) => {
+    return ipcRenderer.invoke('desktop-capture', options || {});
+  },
+
   // Platform info
   platform: process.platform,
 
