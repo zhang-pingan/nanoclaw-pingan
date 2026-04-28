@@ -9834,7 +9834,7 @@ function trimLiveMessageBuffer() {
 
   if (selectedMsgIds.size > 0) {
     removedIds.forEach((id) => selectedMsgIds.delete(id));
-    updateSelectedBar();
+    updateMultiSelectBar();
   }
 
   return removedMessages.length;
@@ -15028,26 +15028,47 @@ function showToast(message, duration = 1500) {
 }
 
 // --- Multi-select ---
+function preserveMessageScrollAfterLayoutChange(applyChange) {
+  const distanceFromBottom = Math.max(
+    0,
+    messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight
+  );
+
+  applyChange();
+
+  requestAnimationFrame(() => {
+    messagesEl.scrollTop = Math.max(
+      0,
+      messagesEl.scrollHeight - messagesEl.clientHeight - distanceFromBottom
+    );
+  });
+}
+
 function enterMultiSelect() {
-  multiSelectMode = true;
-  messagesEl.classList.add("multi-select");
-  multiSelectBar.classList.add("visible");
-  selectModeBtn.classList.add("active");
-  selectModeBtn.innerHTML = SVG.checkSquare;
-  inputArea.style.display = "none";
-  selectedMsgIds.clear();
-  updateMultiSelectBar();
+  preserveMessageScrollAfterLayoutChange(() => {
+    multiSelectMode = true;
+    messagesEl.classList.add("multi-select");
+    multiSelectBar.classList.add("visible");
+    selectModeBtn.classList.add("active");
+    selectModeBtn.innerHTML = SVG.checkSquare;
+    inputArea.style.display = "none";
+    selectedMsgIds.clear();
+    updateMultiSelectBar();
+  });
 }
 
 function exitMultiSelect() {
-  multiSelectMode = false;
-  messagesEl.classList.remove("multi-select");
-  multiSelectBar.classList.remove("visible");
-  selectModeBtn.classList.remove("active");
-  selectModeBtn.innerHTML = originalSelectIcon;
-  inputArea.style.display = "";
-  messagesEl.querySelectorAll(".message.selected").forEach((el) => el.classList.remove("selected"));
-  selectedMsgIds.clear();
+  preserveMessageScrollAfterLayoutChange(() => {
+    multiSelectMode = false;
+    messagesEl.classList.remove("multi-select");
+    multiSelectBar.classList.remove("visible");
+    selectModeBtn.classList.remove("active");
+    selectModeBtn.innerHTML = originalSelectIcon;
+    inputArea.style.display = "";
+    messagesEl.querySelectorAll(".message.selected").forEach((el) => el.classList.remove("selected"));
+    selectedMsgIds.clear();
+    updateMultiSelectBar();
+  });
 }
 
 function toggleMultiSelectMode() {
