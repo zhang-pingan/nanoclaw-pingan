@@ -309,6 +309,13 @@ async function connectWs(): Promise<void> {
         render();
       }
       if (message.type === 'assistant_event') {
+        if (message.event?.type === 'data_cleared') {
+          chatMessages = [];
+          chatTyping = false;
+          renderChat();
+          void loadState();
+          return;
+        }
         if (
           message.event?.type === 'chat_message' &&
           message.event.message

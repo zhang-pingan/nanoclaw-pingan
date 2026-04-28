@@ -442,6 +442,7 @@ var workbenchDetailReloadTimer = null;
 var workbenchPendingReminderIdsByTask = {};
 var assistantRefreshBtn = document.getElementById("assistant-refresh-btn");
 var assistantScanBtn = document.getElementById("assistant-scan-btn");
+var assistantClearDataBtn = document.getElementById("assistant-clear-data-btn");
 var assistantSettingsSummary = document.getElementById("assistant-settings-summary");
 var assistantInboxSummary = document.getElementById("assistant-inbox-summary");
 var assistantInboxList = document.getElementById("assistant-inbox-list");
@@ -16758,6 +16759,27 @@ async function runAssistantScan() {
   }
 }
 
+async function clearAssistantData() {
+  if (!confirm("确定清除个人助手的聊天记录、Inbox、动作日志和稍后提醒？运行设置会保留。")) {
+    return;
+  }
+  if (assistantClearDataBtn) assistantClearDataBtn.disabled = true;
+  try {
+    const res = await apiFetch("/api/assistant/data", { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    assistantInboxItems = [];
+    assistantActionLogs = [];
+    await loadAssistantState();
+    showToast(`已清除 ${data.deleted?.total || 0} 条个人助手数据`, 2200);
+  } catch (err) {
+    console.error("Failed to clear assistant data:", err);
+    showToast(err instanceof Error ? err.message : "个人助手数据清除失败", 2600);
+  } finally {
+    if (assistantClearDataBtn) assistantClearDataBtn.disabled = false;
+  }
+}
+
 async function runAssistantInboxAction(itemId, action) {
   if (!itemId || !action) return;
   try {
@@ -16893,6 +16915,11 @@ if (assistantRefreshBtn) {
 if (assistantScanBtn) {
   assistantScanBtn.addEventListener("click", () => {
     runAssistantScan();
+  });
+}
+if (assistantClearDataBtn) {
+  assistantClearDataBtn.addEventListener("click", () => {
+    clearAssistantData();
   });
 }
 if (assistantEnabledToggle) {

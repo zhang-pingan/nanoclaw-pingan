@@ -32,6 +32,18 @@ export type AssistantRealtimeEvent =
       type: 'scan_completed';
       createdOrUpdated: number;
       scannedAt: string;
+    }
+  | {
+      type: 'data_cleared';
+      deleted: {
+        assistant_chat_messages: number;
+        messages: number;
+        agent_inbox_items: number;
+        assistant_action_logs: number;
+        assistant_snoozes: number;
+        total: number;
+      };
+      clearedAt: string;
     };
 
 type AssistantEventBroadcaster = (event: AssistantRealtimeEvent) => void;

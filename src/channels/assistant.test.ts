@@ -9,6 +9,7 @@ import {
 } from '../assistant/assistant-channel-bridge.js';
 import {
   _initTestDatabase,
+  clearAssistantData,
   getAllRegisteredGroups,
   getMessagesSince,
   listStoredMessagesByChat,
@@ -72,6 +73,11 @@ describe('assistant channel', () => {
     expect(genericMessages.map((message) => message.content)).toEqual([
       '帮我总结今天要做什么',
     ]);
+
+    const clearResult = clearAssistantData();
+    expect(clearResult.total).toBeGreaterThan(0);
+    expect(listAssistantChatMessages(10)).toEqual([]);
+    expect(listStoredMessagesByChat(ASSISTANT_MAIN_JID, 10)).toEqual([]);
 
     await channel.disconnect();
   });

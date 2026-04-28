@@ -1595,6 +1595,39 @@ export function listAssistantChatMessageRecords(
     .all(chatJid, normalizedLimit) as StoredChatMessageRecord[];
 }
 
+export function clearAssistantData(): {
+  assistant_chat_messages: number;
+  messages: number;
+  agent_inbox_items: number;
+  assistant_action_logs: number;
+  assistant_snoozes: number;
+  total: number;
+} {
+  const tx = db.transaction(() => {
+    const assistantChatMessages = db
+      .prepare(`DELETE FROM assistant_chat_messages`)
+      .run().changes;
+    const messages = db
+      .prepare(`DELETE FROM messages WHERE chat_jid LIKE 'assistant:%'`)
+      .run().changes;
+    const actionLogs = db.prepare(`DELETE FROM assistant_action_logs`).run()
+      .changes;
+    const snoozes = db.prepare(`DELETE FROM assistant_snoozes`).run().changes;
+    const inboxItems = db.prepare(`DELETE FROM agent_inbox_items`).run().changes;
+
+    return {
+      assistant_chat_messages: assistantChatMessages,
+      messages,
+      agent_inbox_items: inboxItems,
+      assistant_action_logs: actionLogs,
+      assistant_snoozes: snoozes,
+      total: assistantChatMessages + messages + inboxItems + actionLogs + snoozes,
+    };
+  });
+
+  return tx();
+}
+
 export function getNewMessages(
   jids: string[],
   lastTimestamp: string,

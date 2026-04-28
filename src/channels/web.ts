@@ -4,6 +4,7 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import {
+  clearAssistantDataForApi,
   getAssistantState,
   listAssistantChatForApi,
   listAgentInboxForApi,
@@ -906,6 +907,9 @@ class WebChannel {
       if (pathname === '/api/assistant/scan' && req.method === 'POST') {
         return this.apiRunAssistantScan(res);
       }
+      if (pathname === '/api/assistant/data' && req.method === 'DELETE') {
+        return this.apiClearAssistantData(res);
+      }
       if (pathname === '/api/assistant/chat' && req.method === 'GET') {
         return this.apiListAssistantChat(reqUrl, res);
       }
@@ -1390,6 +1394,22 @@ class WebChannel {
       res.end(
         JSON.stringify({
           error: err instanceof Error ? err.message : 'Assistant scan failed',
+        }),
+      );
+    }
+  }
+
+  private apiClearAssistantData(res: http.ServerResponse): void {
+    try {
+      const result = clearAssistantDataForApi();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error:
+            err instanceof Error ? err.message : 'Assistant data clear failed',
         }),
       );
     }

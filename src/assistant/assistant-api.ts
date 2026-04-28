@@ -10,6 +10,8 @@ import {
   listAssistantActionLogs,
   updateAssistantSettings,
 } from './agent-inbox-store.js';
+import { clearAssistantData } from '../db.js';
+import { emitAssistantEvent } from './assistant-events.js';
 import { runProactiveScan } from './proactive-engine.js';
 import type { AgentInboxStatus, AssistantState } from './types.js';
 
@@ -79,6 +81,16 @@ export function runAgentInboxActionForApi(body: unknown) {
 
 export function runAssistantScanForApi() {
   return runProactiveScan();
+}
+
+export function clearAssistantDataForApi() {
+  const deleted = clearAssistantData();
+  emitAssistantEvent({
+    type: 'data_cleared',
+    deleted,
+    clearedAt: new Date().toISOString(),
+  });
+  return { ok: true, deleted };
 }
 
 export function listAssistantChatForApi(input: { limit?: unknown }) {
