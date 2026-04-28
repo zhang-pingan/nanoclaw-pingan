@@ -45,13 +45,13 @@ button {
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.96),
-      rgba(247, 250, 252, 0.94)
+      rgba(255, 255, 255, 0.78),
+      rgba(247, 250, 252, 0.7)
     ),
-    rgba(255, 255, 255, 0.86);
+    rgba(255, 255, 255, 0.54);
   box-shadow:
-    0 22px 56px rgba(15, 23, 42, 0.16),
-    0 7px 18px rgba(15, 23, 42, 0.08);
+    0 20px 48px rgba(15, 23, 42, 0.12),
+    0 6px 16px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(18px);
   z-index: 3;
 }
@@ -66,7 +66,7 @@ button {
   transform: rotate(45deg);
   border-right: 1px solid rgba(17, 24, 39, 0.08);
   border-bottom: 1px solid rgba(17, 24, 39, 0.08);
-  background: rgba(247, 250, 252, 0.94);
+  background: rgba(247, 250, 252, 0.7);
 }
 
 .assistant-shell.attention .assistant-bubble {
