@@ -20,6 +20,7 @@ vi.mock('axios', () => ({
 vi.mock('./config.js', () => ({
   AI_IMAGES_DIR: aiImagesDir,
   ATTACHMENTS_DIR: '/tmp/nanoclaw-ai-image-attachments',
+  DESKTOP_CAPTURES_DIR: '/tmp/nanoclaw-ai-image-desktop-captures',
   GROUPS_DIR: '/tmp/nanoclaw-ai-image-groups',
   WEB_UPLOADS_DIR: '/tmp/nanoclaw-ai-image-uploads',
 }));

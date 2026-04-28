@@ -58,6 +58,7 @@ const AI_IMAGE_WORKSPACE_PREFIXES = [
   '/workspace/group/',
   '/workspace/uploads/',
   '/workspace/attachments/',
+  '/workspace/desktop-captures/',
   '/workspace/ai-images/',
 ];
 
@@ -217,12 +218,12 @@ server.tool(
 
 server.tool(
   'send_file',
-  '发送文件或图片到当前群/用户。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/group/、/workspace/attachments/ 或 /workspace/ai-images/ 目录下。',
+  '发送文件或图片到当前群/用户。支持图片（png/jpg/gif等）和文件（pdf/doc/xls等）。文件必须在 /workspace/group/、/workspace/attachments/、/workspace/desktop-captures/ 或 /workspace/ai-images/ 目录下。',
   {
     file_path: z
       .string()
       .describe(
-        '文件绝对路径，必须在 /workspace/group/、/workspace/attachments/ 或 /workspace/ai-images/ 下',
+        '文件绝对路径，必须在 /workspace/group/、/workspace/attachments/、/workspace/desktop-captures/ 或 /workspace/ai-images/ 下',
       ),
     caption: z
       .string()
@@ -233,6 +234,7 @@ server.tool(
     const allowedPrefixes = [
       '/workspace/group/',
       '/workspace/attachments/',
+      '/workspace/desktop-captures/',
       '/workspace/ai-images/',
     ];
     if (!allowedPrefixes.some((prefix) => args.file_path.startsWith(prefix))) {
@@ -307,7 +309,7 @@ if (isMain) {
         .max(16)
         .optional()
         .describe(
-          '可选参考图片路径列表；传入后使用 /images/generations 的图生图能力。支持 /workspace/uploads/、/workspace/attachments/、/workspace/ai-images/、/workspace/group/。',
+          '可选参考图片路径列表；传入后使用 /images/generations 的图生图能力。支持 /workspace/uploads/、/workspace/attachments/、/workspace/desktop-captures/、/workspace/ai-images/、/workspace/group/。',
         ),
       image_urls: z
         .array(z.string().url())

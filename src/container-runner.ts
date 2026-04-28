@@ -16,6 +16,7 @@ import {
   CONTAINER_TIMEOUT,
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
+  DESKTOP_CAPTURES_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
   MYSQL_PROXY_PORT,
@@ -240,6 +241,15 @@ function buildVolumeMounts(
   mounts.push({
     hostPath: ATTACHMENTS_DIR,
     containerPath: '/workspace/attachments',
+    readonly: false,
+  });
+
+  // Shared desktop capture directory: screenshots captured through the host
+  // desktop client are stored here, separate from inbound attachments.
+  fs.mkdirSync(DESKTOP_CAPTURES_DIR, { recursive: true });
+  mounts.push({
+    hostPath: DESKTOP_CAPTURES_DIR,
+    containerPath: '/workspace/desktop-captures',
     readonly: false,
   });
 

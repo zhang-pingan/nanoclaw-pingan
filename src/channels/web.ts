@@ -18,6 +18,7 @@ import {
   AI_IMAGES_DIR,
   ASSISTANT_NAME,
   ATTACHMENTS_DIR,
+  DESKTOP_CAPTURES_DIR,
   GROUPS_DIR,
   DATA_DIR,
 } from '../config.js';
@@ -122,7 +123,7 @@ const WEB_PORT = parseInt(
 const WEB_TOKEN = process.env.WEB_TOKEN || webEnv.WEB_TOKEN;
 const RENDERER_DIR = path.resolve(process.cwd(), 'electron', 'renderer');
 const UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
-const DESKTOP_CAPTURE_DIR = path.join(ATTACHMENTS_DIR, 'desktop-captures');
+const DESKTOP_CAPTURE_DIR = DESKTOP_CAPTURES_DIR;
 const DESKTOP_CAPTURE_TIMEOUT_MS = 30_000;
 const DESKTOP_CAPTURE_MAX_BASE64_BYTES = 64 * 1024 * 1024;
 
@@ -130,6 +131,7 @@ const LOCAL_FILE_ROOTS: Record<string, string> = {
   uploads: UPLOADS_DIR,
   groups: GROUPS_DIR,
   attachments: ATTACHMENTS_DIR,
+  'desktop-captures': DESKTOP_CAPTURES_DIR,
   'ai-images': AI_IMAGES_DIR,
 };
 
@@ -729,7 +731,7 @@ class WebChannel {
 
       image = {
         path: hostPath,
-        containerPath: `/workspace/attachments/desktop-captures/${filename}`,
+        containerPath: `/workspace/desktop-captures/${filename}`,
         mimeType,
         width:
           typeof msg.width === 'number' && Number.isFinite(msg.width)

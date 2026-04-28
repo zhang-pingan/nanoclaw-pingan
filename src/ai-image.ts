@@ -9,6 +9,7 @@ import { z } from 'zod';
 import {
   AI_IMAGES_DIR,
   ATTACHMENTS_DIR,
+  DESKTOP_CAPTURES_DIR,
   GROUPS_DIR,
   WEB_UPLOADS_DIR,
 } from './config.js';
@@ -172,6 +173,10 @@ function resolveWorkspaceInputPath(
       hostBase: ATTACHMENTS_DIR,
     },
     {
+      containerPrefix: '/workspace/desktop-captures/',
+      hostBase: DESKTOP_CAPTURES_DIR,
+    },
+    {
       containerPrefix: '/workspace/ai-images/',
       hostBase: AI_IMAGES_DIR,
     },
@@ -182,7 +187,7 @@ function resolveWorkspaceInputPath(
   );
   if (!mapping) {
     throw new Error(
-      'Image path must start with /workspace/group/, /workspace/uploads/, /workspace/attachments/, or /workspace/ai-images/.',
+      'Image path must start with /workspace/group/, /workspace/uploads/, /workspace/attachments/, /workspace/desktop-captures/, or /workspace/ai-images/.',
     );
   }
 

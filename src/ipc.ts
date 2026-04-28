@@ -9,6 +9,7 @@ import {
   AI_IMAGES_DIR,
   ATTACHMENTS_DIR,
   DATA_DIR,
+  DESKTOP_CAPTURES_DIR,
   GROUPS_DIR,
   IPC_POLL_INTERVAL,
   TIMEZONE,
@@ -117,6 +118,10 @@ function resolveContainerFilePath(
       hostBase: ATTACHMENTS_DIR,
     },
     {
+      containerPrefix: '/workspace/desktop-captures/',
+      hostBase: DESKTOP_CAPTURES_DIR,
+    },
+    {
       containerPrefix: '/workspace/ai-images/',
       hostBase: AI_IMAGES_DIR,
     },
@@ -129,7 +134,7 @@ function resolveContainerFilePath(
     return {
       hostPath: '',
       error:
-        'IPC file path must start with /workspace/group/, /workspace/attachments/, or /workspace/ai-images/',
+        'IPC file path must start with /workspace/group/, /workspace/attachments/, /workspace/desktop-captures/, or /workspace/ai-images/',
     };
   }
 

@@ -13,7 +13,10 @@ vi.mock('./config.js', () => ({
   CONTAINER_TIMEOUT: 1800000, // 30min
   CREDENTIAL_PROXY_PORT: 3001,
   MYSQL_PROXY_PORT: 3307,
+  AI_IMAGES_DIR: '/tmp/nanoclaw-test-ai-images',
+  ATTACHMENTS_DIR: '/tmp/nanoclaw-test-attachments',
   DATA_DIR: '/tmp/nanoclaw-test-data',
+  DESKTOP_CAPTURES_DIR: '/tmp/nanoclaw-test-desktop-captures',
   GROUPS_DIR: '/tmp/nanoclaw-test-groups',
   IDLE_TIMEOUT: 1800000, // 30min
   TIMEZONE: 'America/Los_Angeles',

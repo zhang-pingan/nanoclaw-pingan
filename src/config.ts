@@ -51,6 +51,7 @@ export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 export const ATTACHMENTS_DIR = path.resolve(DATA_DIR, 'attachments');
+export const DESKTOP_CAPTURES_DIR = path.resolve(DATA_DIR, 'desktop-captures');
 export const AI_IMAGES_DIR = path.resolve(DATA_DIR, 'ai-images');
 export const WEB_UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
 export const KNOWLEDGE_DIR = path.resolve(PROJECT_ROOT, 'knowledge');

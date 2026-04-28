@@ -27,7 +27,7 @@ Useful arguments:
 - `display_id`: optional display id from a prior metadata result.
 - `max_width`: screenshot max width, default 1920.
 
-Successful screenshot results include `image.containerPath`.
+Successful screenshot results include `image.containerPath` under `/workspace/desktop-captures/`.
 - To send the screenshot to the user, call `mcp__nanoclaw__send_file` with `file_path` set to `image.containerPath`.
 - To inspect the screenshot yourself, read `image.containerPath` with the image/file read tool.
 

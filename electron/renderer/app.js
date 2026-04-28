@@ -560,13 +560,14 @@ function workspaceFileApiPath(filePath) {
 function containerFilePath(filePath) {
   if (!filePath) return null;
   const normalizedPath = filePath.replace(/\\/g, "/");
-  if (/^\/workspace\/(group|uploads|attachments|ai-images)\//.test(normalizedPath)) {
+  if (/^\/workspace\/(group|uploads|attachments|desktop-captures|ai-images)\//.test(normalizedPath)) {
     return normalizedPath;
   }
 
   const sharedMappings = [
     ["/data/web-uploads/", "/workspace/uploads/"],
     ["/data/attachments/", "/workspace/attachments/"],
+    ["/data/desktop-captures/", "/workspace/desktop-captures/"],
     ["/data/ai-images/", "/workspace/ai-images/"],
   ];
   for (const [hostMarker, containerPrefix] of sharedMappings) {
