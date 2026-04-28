@@ -15,5 +15,6 @@
   "web_knowledge": ["project-knowledge"],
   "web_ops": ["ops-staging-deploy", "devops"],
   "web_test": ["test-requirement", "fix-test-bug", "devops"],
-  "web_main": ["macos"]
+  "web_main": ["macos"],
+  "assistant_main": ["macos","devops"]
 }
