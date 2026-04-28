@@ -4,6 +4,16 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import {
+  getAssistantState,
+  listAssistantChatForApi,
+  listAgentInboxForApi,
+  runAgentInboxActionForApi,
+  runAssistantScanForApi,
+  sendAssistantChatMessageForApi,
+  updateAssistantSettingsForApi,
+} from '../assistant/assistant-api.js';
+import type { AssistantRealtimeEvent } from '../assistant/assistant-events.js';
+import {
   AgentStatusInfo,
   DesktopCaptureOptions,
   DesktopCaptureResult,
@@ -341,6 +351,8 @@ interface OutgoingMsg {
     | 'agent_query_trace'
     | 'file'
     | 'workbench_event'
+    | 'assistant_state'
+    | 'assistant_event'
     | 'desktop_capture_request';
   [key: string]: unknown;
 }
@@ -802,7 +814,10 @@ class WebChannel {
   ): Promise<void> {
     // CORS for local development
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PATCH, DELETE, OPTIONS',
+    );
     res.setHeader(
       'Access-Control-Allow-Headers',
       'Content-Type, Authorization',
@@ -875,6 +890,33 @@ class WebChannel {
       }
       if (pathname === '/api/agent-status/stop' && req.method === 'POST') {
         return this.apiStopAgent(req, res);
+      }
+      if (pathname === '/api/assistant/state' && req.method === 'GET') {
+        return this.apiGetAssistantState(res);
+      }
+      if (pathname === '/api/assistant/settings' && req.method === 'GET') {
+        return this.apiGetAssistantSettings(res);
+      }
+      if (
+        pathname === '/api/assistant/settings' &&
+        (req.method === 'POST' || req.method === 'PATCH')
+      ) {
+        return this.apiUpdateAssistantSettings(req, res);
+      }
+      if (pathname === '/api/assistant/scan' && req.method === 'POST') {
+        return this.apiRunAssistantScan(res);
+      }
+      if (pathname === '/api/assistant/chat' && req.method === 'GET') {
+        return this.apiListAssistantChat(reqUrl, res);
+      }
+      if (pathname === '/api/assistant/chat/message' && req.method === 'POST') {
+        return this.apiSendAssistantChatMessage(req, res);
+      }
+      if (pathname === '/api/agent-inbox' && req.method === 'GET') {
+        return this.apiListAgentInbox(reqUrl, res);
+      }
+      if (pathname === '/api/agent-inbox/action' && req.method === 'POST') {
+        return this.apiAgentInboxAction(req, res);
       }
       if (pathname === '/api/sessions/reset' && req.method === 'POST') {
         return this.apiResetSessions(req, res);
@@ -1306,6 +1348,111 @@ class WebChannel {
     }
     const raw = Buffer.concat(chunks).toString('utf-8') || '{}';
     return JSON.parse(raw);
+  }
+
+  private apiGetAssistantState(res: http.ServerResponse): void {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getAssistantState()));
+  }
+
+  private apiGetAssistantSettings(res: http.ServerResponse): void {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ settings: getAssistantState().settings }));
+  }
+
+  private async apiUpdateAssistantSettings(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+      const settings = updateAssistantSettingsForApi(body);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, settings }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : 'Invalid settings body',
+        }),
+      );
+    }
+  }
+
+  private apiRunAssistantScan(res: http.ServerResponse): void {
+    try {
+      const result = runAssistantScanForApi();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : 'Assistant scan failed',
+        }),
+      );
+    }
+  }
+
+  private apiListAssistantChat(reqUrl: URL, res: http.ServerResponse): void {
+    const result = listAssistantChatForApi({
+      limit: reqUrl.searchParams.get('limit') || '80',
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  }
+
+  private async apiSendAssistantChatMessage(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+      const message = sendAssistantChatMessageForApi(body);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, message }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Assistant chat message failed',
+        }),
+      );
+    }
+  }
+
+  private apiListAgentInbox(reqUrl: URL, res: http.ServerResponse): void {
+    const result = listAgentInboxForApi({
+      status: reqUrl.searchParams.get('status') || 'active',
+      limit: reqUrl.searchParams.get('limit') || '100',
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  }
+
+  private async apiAgentInboxAction(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+      const result = runAgentInboxActionForApi(body);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : 'Agent inbox action failed',
+        }),
+      );
+    }
   }
 
   private async apiCreateMemory(
@@ -2107,6 +2254,21 @@ class WebChannel {
   broadcastWorkbenchEvent(event: WorkbenchRealtimeEvent): void {
     const payload = JSON.stringify({
       type: 'workbench_event',
+      event,
+    } satisfies OutgoingMsg);
+
+    for (const clients of this.clients.values()) {
+      for (const client of clients) {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+    }
+  }
+
+  broadcastAssistantEvent(event: AssistantRealtimeEvent): void {
+    const payload = JSON.stringify({
+      type: 'assistant_event',
       event,
     } satisfies OutgoingMsg);
 
@@ -4117,6 +4279,10 @@ class WebChannel {
     send({
       type: 'agent_query_trace',
       queries: this.opts.getActiveAgentQueryTraces?.() ?? [],
+    });
+    send({
+      type: 'assistant_state',
+      state: getAssistantState(),
     });
 
     // Register this client for ALL web groups so it receives messages

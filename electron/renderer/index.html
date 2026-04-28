@@ -40,6 +40,10 @@
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">工作台</span>
           </button>
+          <button class="primary-nav-item" data-nav-key="assistant">
+            <span class="primary-nav-dot"></span>
+            <span class="primary-nav-label">个人助手</span>
+          </button>
           <button class="primary-nav-item" data-nav-key="workflow-definitions">
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">流程定义</span>
@@ -526,6 +530,114 @@
             <pre id="today-plan-commit-diff" class="today-plan-commit-diff"></pre>
           </div>
         </div>
+      </section>
+
+      <section id="assistant-screen">
+        <main class="assistant-workstation">
+          <section class="assistant-hero">
+            <div>
+              <div class="assistant-kicker">Personal Assistant</div>
+              <h2>个人助手</h2>
+              <p>管理桌面个人助手、主动触发源和 Agent Inbox。桌面助手只负责轻量提醒，完整详情仍回到工作站处理。</p>
+            </div>
+            <div class="assistant-hero-actions">
+              <button id="assistant-refresh-btn" class="icon-btn" title="刷新个人助手">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+              <button id="assistant-scan-btn" class="btn-primary btn-soft-primary">立即扫描</button>
+            </div>
+          </section>
+
+          <section class="assistant-grid">
+            <section class="assistant-panel assistant-settings-panel">
+              <div class="assistant-panel-head">
+                <div>
+                  <div class="assistant-section-title">运行设置</div>
+                  <div id="assistant-settings-summary" class="assistant-section-subtitle">加载中</div>
+                </div>
+              </div>
+
+              <div class="assistant-settings-grid">
+                <label class="assistant-switch-row">
+                  <input id="assistant-enabled-toggle" type="checkbox" />
+                  <span>
+                    <strong>启用主动助手</strong>
+                    <small>关闭后不再生成新的主动提醒。</small>
+                  </span>
+                </label>
+
+                <label class="assistant-field">
+                  <span>主动级别</span>
+                  <select id="assistant-level-select">
+                    <option value="quiet">quiet</option>
+                    <option value="balanced">balanced</option>
+                    <option value="active">active</option>
+                  </select>
+                </label>
+
+                <label class="assistant-field">
+                  <span>扫描间隔</span>
+                  <input id="assistant-scan-interval-input" type="number" min="1" max="120" step="1" />
+                </label>
+
+                <label class="assistant-switch-row">
+                  <input id="assistant-autostart-toggle" type="checkbox" />
+                  <span>
+                    <strong>桌面助手自启动</strong>
+                    <small>保存偏好；独立进程由本机启动项或脚本拉起。</small>
+                  </span>
+                </label>
+
+                <label class="assistant-switch-row">
+                  <input id="assistant-always-on-top-toggle" type="checkbox" />
+                  <span>
+                    <strong>桌面置顶</strong>
+                    <small>独立助手窗口保持在桌面前台。</small>
+                  </span>
+                </label>
+
+                <label class="assistant-switch-row">
+                  <input id="assistant-movement-toggle" type="checkbox" />
+                  <span>
+                    <strong>允许桌面移动</strong>
+                    <small>空闲时可小幅移动，鼠标悬停时暂停。</small>
+                  </span>
+                </label>
+              </div>
+
+              <div class="assistant-source-grid">
+                <label><input data-assistant-source="todayPlan" type="checkbox" /> 今日计划</label>
+                <label><input data-assistant-source="workbench" type="checkbox" /> 工作台</label>
+                <label><input data-assistant-source="scheduler" type="checkbox" /> 定时任务</label>
+                <label><input data-assistant-source="agentRuns" type="checkbox" /> Agent Runs</label>
+              </div>
+            </section>
+
+            <section class="assistant-panel">
+              <div class="assistant-panel-head">
+                <div>
+                  <div class="assistant-section-title">Agent Inbox</div>
+                  <div id="assistant-inbox-summary" class="assistant-section-subtitle">暂无数据</div>
+                </div>
+              </div>
+              <div id="assistant-inbox-list" class="assistant-inbox-list"></div>
+            </section>
+
+            <section class="assistant-panel">
+              <div class="assistant-panel-head">
+                <div>
+                  <div class="assistant-section-title">动作日志</div>
+                  <div class="assistant-section-subtitle">记录助手执行、忽略和稍后处理的动作。</div>
+                </div>
+              </div>
+              <div id="assistant-log-list" class="assistant-log-list"></div>
+            </section>
+          </section>
+        </main>
       </section>
 
       <section id="memory-management-screen">

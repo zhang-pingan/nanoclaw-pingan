@@ -569,6 +569,73 @@ function createSchema(database: Database.Database): void {
       ON today_plan_mail_drafts(status, updated_at DESC);
   `);
 
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS agent_inbox_items (
+      id TEXT PRIMARY KEY,
+      dedupe_key TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'unread',
+      priority TEXT NOT NULL DEFAULT 'normal',
+      title TEXT NOT NULL,
+      body TEXT,
+      source_type TEXT NOT NULL,
+      source_ref_id TEXT,
+      action_kind TEXT,
+      action_label TEXT,
+      action_url TEXT,
+      action_payload_json TEXT,
+      created_by TEXT NOT NULL DEFAULT 'assistant',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      due_at TEXT,
+      snoozed_until TEXT,
+      read_at TEXT,
+      resolved_at TEXT,
+      extra_json TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_inbox_items_status
+      ON agent_inbox_items(status, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_inbox_items_source
+      ON agent_inbox_items(source_type, source_ref_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_inbox_items_created
+      ON agent_inbox_items(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS assistant_settings (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS assistant_action_logs (
+      id TEXT PRIMARY KEY,
+      item_id TEXT,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      title TEXT,
+      body TEXT,
+      source_type TEXT,
+      source_ref_id TEXT,
+      payload_json TEXT,
+      result_json TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_assistant_action_logs_created
+      ON assistant_action_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_assistant_action_logs_item
+      ON assistant_action_logs(item_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS assistant_snoozes (
+      id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      scope_ref TEXT NOT NULL,
+      until TEXT NOT NULL,
+      reason TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_assistant_snoozes_scope
+      ON assistant_snoozes(scope, scope_ref, until);
+  `);
+
   // Add ask_questions table if it doesn't exist (human-in-the-loop questions)
   database.exec(`
     CREATE TABLE IF NOT EXISTS ask_questions (
@@ -1174,6 +1241,13 @@ export function initDatabase(): void {
 export function _initTestDatabase(): void {
   db = new Database(':memory:');
   createSchema(db);
+}
+
+export function getDatabase(): Database.Database {
+  if (!db) {
+    throw new Error('Database has not been initialized');
+  }
+  return db;
 }
 
 /**

@@ -11,6 +11,8 @@
     "dev:electron": "node scripts/build-electron.mjs && electron dist-electron/main.cjs",
     "dev:electron:watch": "node scripts/build-electron.mjs && electron dist-electron/main.cjs",
     "build:electron": "node scripts/build-electron.mjs",
+    "dev:assistant": "node scripts/build-assistant.mjs && electron dist-assistant/main.cjs",
+    "build:assistant": "node scripts/build-assistant.mjs",
     "package:mac": "npm run build && npm run build:electron && electron-builder --mac",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",

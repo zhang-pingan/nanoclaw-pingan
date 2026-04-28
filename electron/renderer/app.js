@@ -2,7 +2,10 @@
 var ws = null;
 var reconnectTimer = null;
 var currentGroupJid = "";
-var isStandaloneQuickChat = new URLSearchParams(window.location.search).get("quick-chat") === "1";
+var launchParams = new URLSearchParams(window.location.search);
+var isStandaloneQuickChat = launchParams.get("quick-chat") === "1";
+var initialAssistantTarget = launchParams.get("assistantTarget") || "";
+var initialWorkbenchTaskId = launchParams.get("taskId") || "";
 var browserNotificationPermissionRequested = false;
 var groups = [];
 var messages = [];
@@ -23,6 +26,7 @@ var mainScreen = document.getElementById("main-screen");
 var workspace = document.getElementById("workspace");
 var workbenchScreen = document.getElementById("workbench-screen");
 var todayPlanScreen = document.getElementById("today-plan-screen");
+var assistantScreen = document.getElementById("assistant-screen");
 var workflowDefinitionsScreen = document.getElementById("workflow-definitions-screen");
 var cardsManagementScreen = document.getElementById("cards-management-screen");
 var memoryManagementScreen = document.getElementById("memory-management-screen");
@@ -303,8 +307,14 @@ var cancelSelectBtn = document.getElementById("cancel-select-btn");
 var agentStatusInterval = null;
 var agentStatusData = [];
 var agentRunTraceByGroup = {};
-var activePrimaryNavKey = "agent-groups";
-var todayPlanVisible = false;
+var activePrimaryNavKey = initialAssistantTarget === "assistant"
+  ? "assistant"
+  : initialAssistantTarget === "workbench"
+    ? "workbench"
+    : initialAssistantTarget === "trace-monitor"
+      ? "trace-monitor"
+      : "agent-groups";
+var todayPlanVisible = initialAssistantTarget === "today-plan";
 var todayPlanOverview = null;
 var currentTodayPlan = null;
 var currentTodayPlanId = "";
@@ -430,6 +440,22 @@ var workbenchDetailLoading = false;
 var workbenchQueuedDetailTaskId = "";
 var workbenchDetailReloadTimer = null;
 var workbenchPendingReminderIdsByTask = {};
+var assistantRefreshBtn = document.getElementById("assistant-refresh-btn");
+var assistantScanBtn = document.getElementById("assistant-scan-btn");
+var assistantSettingsSummary = document.getElementById("assistant-settings-summary");
+var assistantInboxSummary = document.getElementById("assistant-inbox-summary");
+var assistantInboxList = document.getElementById("assistant-inbox-list");
+var assistantLogList = document.getElementById("assistant-log-list");
+var assistantEnabledToggle = document.getElementById("assistant-enabled-toggle");
+var assistantLevelSelect = document.getElementById("assistant-level-select");
+var assistantScanIntervalInput = document.getElementById("assistant-scan-interval-input");
+var assistantAutostartToggle = document.getElementById("assistant-autostart-toggle");
+var assistantAlwaysOnTopToggle = document.getElementById("assistant-always-on-top-toggle");
+var assistantMovementToggle = document.getElementById("assistant-movement-toggle");
+var assistantSourceInputs = Array.from(document.querySelectorAll("[data-assistant-source]"));
+var assistantState = null;
+var assistantInboxItems = [];
+var assistantActionLogs = [];
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -1822,6 +1848,7 @@ function setConnectionStatus(status) {
 function applyScreenVisibility() {
   const showTodayPlan = todayPlanVisible;
   const showWorkbench = !showTodayPlan && activePrimaryNavKey === "workbench";
+  const showAssistant = !showTodayPlan && activePrimaryNavKey === "assistant";
   const showWorkspace = !showTodayPlan && activePrimaryNavKey === "agent-groups";
   const showWorkflowDefinitions = !showTodayPlan && activePrimaryNavKey === "workflow-definitions";
   const showCardsManagement = !showTodayPlan && activePrimaryNavKey === "cards-management";
@@ -1833,6 +1860,9 @@ function applyScreenVisibility() {
   }
   if (workbenchScreen) {
     workbenchScreen.classList.toggle("active", showWorkbench);
+  }
+  if (assistantScreen) {
+    assistantScreen.classList.toggle("active", showAssistant);
   }
   if (workspace) {
     workspace.classList.toggle("active", showWorkspace);
@@ -1883,7 +1913,12 @@ function setPrimaryNav(navKey) {
     knowledgePollingTimer = null;
   }
   if (navKey === "workbench") {
-    loadWorkbenchTasks();
+    const preferredTaskId = initialWorkbenchTaskId;
+    initialWorkbenchTaskId = "";
+    loadWorkbenchTasks(preferredTaskId || undefined);
+  }
+  if (navKey === "assistant") {
+    loadAssistantState();
   }
   if (navKey === "workflow-definitions") {
     loadWorkflowDefinitions({ preserveSelection: true });
@@ -13911,6 +13946,15 @@ function handleWsMessage(msg) {
     case "workbench_event":
       handleWorkbenchRealtimeEvent(msg.event);
       break;
+    case "assistant_state":
+      assistantState = msg.state || null;
+      assistantInboxItems = Array.isArray(msg.state?.latestInboxItems) ? msg.state.latestInboxItems : assistantInboxItems;
+      assistantActionLogs = Array.isArray(msg.state?.latestActionLogs) ? msg.state.latestActionLogs : assistantActionLogs;
+      if (activePrimaryNavKey === "assistant") renderAssistantScreen();
+      break;
+    case "assistant_event":
+      handleAssistantRealtimeEvent(msg.event);
+      break;
     case "desktop_capture_request":
       handleDesktopCaptureRequest(msg);
       break;
@@ -16569,6 +16613,210 @@ async function sendTodayPlanMail() {
   }
 }
 
+function getAssistantSettings() {
+  return assistantState && assistantState.settings ? assistantState.settings : null;
+}
+
+function formatAssistantStatusText(item) {
+  if (!item) return "";
+  const parts = [item.kind || "notification", item.priority || "normal", item.status || "unread"];
+  return parts.filter(Boolean).join(" · ");
+}
+
+function renderAssistantSettings() {
+  const settings = getAssistantSettings();
+  if (!settings) {
+    if (assistantSettingsSummary) assistantSettingsSummary.textContent = "加载中";
+    return;
+  }
+  if (assistantSettingsSummary) {
+    assistantSettingsSummary.textContent = `${settings.enabled ? "已启用" : "已暂停"} · ${settings.proactiveLevel} · 每 ${settings.scanIntervalMinutes} 分钟扫描`;
+  }
+  if (assistantEnabledToggle) assistantEnabledToggle.checked = Boolean(settings.enabled);
+  if (assistantLevelSelect) assistantLevelSelect.value = settings.proactiveLevel || "balanced";
+  if (assistantScanIntervalInput) assistantScanIntervalInput.value = String(settings.scanIntervalMinutes || 10);
+  if (assistantAutostartToggle) assistantAutostartToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.autostart);
+  if (assistantAlwaysOnTopToggle) assistantAlwaysOnTopToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.alwaysOnTop);
+  if (assistantMovementToggle) assistantMovementToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.allowMovement);
+  assistantSourceInputs.forEach((input) => {
+    const key = input.getAttribute("data-assistant-source") || "";
+    input.checked = Boolean(settings.dataSources && settings.dataSources[key]);
+  });
+}
+
+function renderAssistantInbox() {
+  if (!assistantInboxList || !assistantInboxSummary) return;
+  const activeItems = assistantInboxItems.filter((item) => !["done", "dismissed"].includes(item.status));
+  const unreadCount = activeItems.filter((item) => item.status === "unread").length;
+  assistantInboxSummary.textContent = `${activeItems.length} 条活跃 · ${unreadCount} 条未读`;
+  if (assistantInboxItems.length === 0) {
+    assistantInboxList.innerHTML = '<div class="assistant-empty">暂无主动事项</div>';
+    return;
+  }
+  assistantInboxList.innerHTML = assistantInboxItems.map((item) => `
+    <article class="assistant-inbox-item ${escapeAttribute(item.priority || "normal")}">
+      <div class="assistant-inbox-main">
+        <div class="assistant-inbox-meta">${escapeHtml(formatAssistantStatusText(item))}</div>
+        <div class="assistant-inbox-title">${escapeHtml(item.title || "未命名事项")}</div>
+        <div class="assistant-inbox-body">${escapeHtml(item.body || "")}</div>
+      </div>
+      <div class="assistant-inbox-actions">
+        ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
+        ${item.action_kind === "create_today_plan" || item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-ghost assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
+        <button type="button" class="btn-ghost assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
+        <button type="button" class="btn-ghost assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
+      </div>
+    </article>
+  `).join("");
+
+  Array.from(assistantInboxList.querySelectorAll("[data-assistant-open]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemId = button.getAttribute("data-assistant-open") || "";
+      const item = assistantInboxItems.find((entry) => entry.id === itemId);
+      if (!item) return;
+      openAssistantItemTarget(item);
+    });
+  });
+  Array.from(assistantInboxList.querySelectorAll("[data-assistant-action]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const itemId = button.getAttribute("data-assistant-item") || "";
+      const action = button.getAttribute("data-assistant-action") || "";
+      await runAssistantInboxAction(itemId, action);
+    });
+  });
+}
+
+function renderAssistantLogs() {
+  if (!assistantLogList) return;
+  if (assistantActionLogs.length === 0) {
+    assistantLogList.innerHTML = '<div class="assistant-empty">暂无动作日志</div>';
+    return;
+  }
+  assistantLogList.innerHTML = assistantActionLogs.map((log) => `
+    <div class="assistant-log-item">
+      <div class="assistant-log-title">${escapeHtml(log.action || "action")} · ${escapeHtml(log.status || "")}</div>
+      <div class="assistant-log-meta">${escapeHtml(formatDateTime(log.created_at || ""))}${log.title ? ` · ${escapeHtml(log.title)}` : ""}</div>
+    </div>
+  `).join("");
+}
+
+function renderAssistantScreen() {
+  renderAssistantSettings();
+  renderAssistantInbox();
+  renderAssistantLogs();
+}
+
+async function loadAssistantState() {
+  try {
+    const res = await apiFetch("/api/assistant/state");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    assistantState = data;
+    assistantInboxItems = Array.isArray(data.latestInboxItems) ? data.latestInboxItems : [];
+    assistantActionLogs = Array.isArray(data.latestActionLogs) ? data.latestActionLogs : [];
+    renderAssistantScreen();
+  } catch (err) {
+    console.error("Failed to load assistant state:", err);
+    if (assistantInboxList) {
+      assistantInboxList.innerHTML = `<div class="assistant-empty">个人助手加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+    }
+  }
+}
+
+async function updateAssistantSettingsPatch(patch) {
+  try {
+    const res = await apiFetch("/api/assistant/settings", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    assistantState = {
+      ...(assistantState || {}),
+      settings: data.settings,
+    };
+    renderAssistantScreen();
+  } catch (err) {
+    console.error("Failed to update assistant settings:", err);
+    showToast(err instanceof Error ? err.message : "个人助手设置保存失败", 2200);
+  }
+}
+
+async function runAssistantScan() {
+  if (assistantScanBtn) assistantScanBtn.disabled = true;
+  try {
+    const res = await apiFetch("/api/assistant/scan", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(`扫描完成 · ${data.createdOrUpdated || 0} 条`, 1800);
+    await loadAssistantState();
+  } catch (err) {
+    console.error("Failed to run assistant scan:", err);
+    showToast(err instanceof Error ? err.message : "个人助手扫描失败", 2200);
+  } finally {
+    if (assistantScanBtn) assistantScanBtn.disabled = false;
+  }
+}
+
+async function runAssistantInboxAction(itemId, action) {
+  if (!itemId || !action) return;
+  try {
+    const payload = action === "snooze" ? { minutes: 60 } : {};
+    const res = await apiFetch("/api/agent-inbox/action", {
+      method: "POST",
+      body: JSON.stringify({ item_id: itemId, action, payload }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await loadAssistantState();
+  } catch (err) {
+    console.error("Failed to run assistant inbox action:", err);
+    showToast(err instanceof Error ? err.message : "Inbox 动作失败", 2200);
+  }
+}
+
+function openAssistantItemTarget(item) {
+  if (!item || !item.action_url) return;
+  try {
+    const url = new URL(item.action_url);
+    const target = url.searchParams.get("assistantTarget") || "";
+    if (target === "today-plan") {
+      todayPlanVisible = true;
+      applyScreenVisibility();
+      loadTodayPlanOverview({ forceOpenToday: true, showEmptyWhenNoToday: true });
+    } else if (target === "workbench") {
+      setPrimaryNav("workbench");
+      const taskId = url.searchParams.get("taskId") || "";
+      loadWorkbenchTasks(taskId || undefined);
+    } else if (target === "trace-monitor") {
+      setPrimaryNav("trace-monitor");
+      loadTraceMonitorData({ force: true });
+    } else if (target === "assistant") {
+      setPrimaryNav("assistant");
+    } else {
+      window.open(item.action_url, "_blank");
+    }
+    runAssistantInboxAction(item.id, "mark_read");
+  } catch {
+    window.open(item.action_url, "_blank");
+  }
+}
+
+function handleAssistantRealtimeEvent(event) {
+  if (!event) return;
+  if (activePrimaryNavKey === "assistant") {
+    loadAssistantState();
+    return;
+  }
+  if (event.type === "inbox_updated") {
+    const item = event.item;
+    if (!item || !item.id) return;
+    const index = assistantInboxItems.findIndex((entry) => entry.id === item.id);
+    if (index >= 0) assistantInboxItems[index] = item;
+    else assistantInboxItems.unshift(item);
+  }
+}
+
 // Auto-start on page load
 initTakeCopterCursor();
 initChatBgParticleNudge();
@@ -16585,7 +16833,15 @@ warmWorkflowCreateOptions();
 
 // --- Event listeners ---
 if (primaryNav) {
-  setPrimaryNav(activePrimaryNavKey);
+  if (todayPlanVisible) {
+    primaryNavItems.forEach((item) => {
+      item.classList.toggle("active", false);
+    });
+    applyScreenVisibility();
+    loadTodayPlanOverview({ forceOpenToday: true, showEmptyWhenNoToday: true });
+  } else {
+    setPrimaryNav(activePrimaryNavKey);
+  }
 }
 if (window.nanoclawApp && typeof window.nanoclawApp.onCyclePrimaryNav === "function") {
   window.nanoclawApp.onCyclePrimaryNav(() => {
@@ -16611,6 +16867,63 @@ primaryNavItems.forEach((item) => {
   item.addEventListener("click", () => {
     const navKey = item.getAttribute("data-nav-key") || "";
     setPrimaryNav(navKey);
+  });
+});
+if (assistantRefreshBtn) {
+  assistantRefreshBtn.addEventListener("click", () => {
+    loadAssistantState();
+  });
+}
+if (assistantScanBtn) {
+  assistantScanBtn.addEventListener("click", () => {
+    runAssistantScan();
+  });
+}
+if (assistantEnabledToggle) {
+  assistantEnabledToggle.addEventListener("change", () => {
+    updateAssistantSettingsPatch({ enabled: assistantEnabledToggle.checked });
+  });
+}
+if (assistantLevelSelect) {
+  assistantLevelSelect.addEventListener("change", () => {
+    updateAssistantSettingsPatch({ proactiveLevel: assistantLevelSelect.value });
+  });
+}
+if (assistantScanIntervalInput) {
+  assistantScanIntervalInput.addEventListener("change", () => {
+    updateAssistantSettingsPatch({
+      scanIntervalMinutes: Number(assistantScanIntervalInput.value) || 10,
+    });
+  });
+}
+if (assistantAutostartToggle) {
+  assistantAutostartToggle.addEventListener("change", () => {
+    updateAssistantSettingsPatch({
+      desktopAssistant: { autostart: assistantAutostartToggle.checked },
+    });
+  });
+}
+if (assistantAlwaysOnTopToggle) {
+  assistantAlwaysOnTopToggle.addEventListener("change", () => {
+    updateAssistantSettingsPatch({
+      desktopAssistant: { alwaysOnTop: assistantAlwaysOnTopToggle.checked },
+    });
+  });
+}
+if (assistantMovementToggle) {
+  assistantMovementToggle.addEventListener("change", () => {
+    updateAssistantSettingsPatch({
+      desktopAssistant: { allowMovement: assistantMovementToggle.checked },
+    });
+  });
+}
+assistantSourceInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    const key = input.getAttribute("data-assistant-source") || "";
+    if (!key) return;
+    updateAssistantSettingsPatch({
+      dataSources: { [key]: input.checked },
+    });
   });
 });
 if (todayPlanRefreshBtn) {

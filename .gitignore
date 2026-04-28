@@ -4,8 +4,10 @@ node_modules/
 # Build output
 dist/
 dist-electron/
+dist-assistant/
 release/
 electron/renderer/dist/
+assistant/renderer/dist/
 
 # Local data & auth
 store/
@@ -49,4 +51,5 @@ projects
 
 local/shell/cloudflare/.runtime
 local/shell/electron/.runtime
+local/shell/assistant/.runtime
 knowledge

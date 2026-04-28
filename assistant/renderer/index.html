@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NanoClaw Assistant</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main id="assistant-shell" class="assistant-shell">
+    <section id="bubble" class="assistant-bubble" aria-live="polite">
+      <div class="bubble-head">
+        <span id="bubble-kicker" class="bubble-kicker">Personal Assistant</span>
+        <button id="hide-btn" class="icon-btn no-drag" title="隐藏">×</button>
+      </div>
+      <h1 id="bubble-title">正在连接工作站</h1>
+      <p id="bubble-body">等待 NanoClaw Web 服务响应。</p>
+      <div id="bubble-actions" class="bubble-actions no-drag"></div>
+    </section>
+
+    <section class="assistant-chat no-drag" aria-label="Assistant chat">
+      <div id="chat-log" class="chat-log"></div>
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" rows="2" placeholder="直接和助手说话"></textarea>
+        <button id="chat-send" type="submit">发送</button>
+      </form>
+      <div id="chat-status" class="chat-status"></div>
+    </section>
+
+    <section class="assistant-mascot-wrap" aria-label="NanoClaw desktop assistant">
+      <img class="assistant-mascot" src="./assets/mascot.svg" alt="" />
+      <div id="assistant-status" class="assistant-status">offline</div>
+    </section>
+  </main>
+
+  <script type="module" src="./dist/app.js"></script>
+</body>
+</html>

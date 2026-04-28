@@ -88,6 +88,8 @@ import {
   isSessionCommandAllowed,
 } from './session-commands.js';
 import { startSchedulerLoop } from './task-scheduler.js';
+import { initAssistantEvents } from './assistant/assistant-events.js';
+import { startProactiveEngine } from './assistant/proactive-engine.js';
 import {
   Channel,
   InteractiveCard,
@@ -1523,6 +1525,7 @@ async function main(): Promise<void> {
       all?: boolean;
       groupJid?: string;
     }) => Promise<{ resetCount: number }>;
+    registerGroup?: (jid: string, group: RegisteredGroup) => void;
     onAgentStatusChange?: () => void;
     onAgentQueryTraceChange?: () => void;
   } = {
@@ -1571,6 +1574,7 @@ async function main(): Promise<void> {
         all: scope.all,
         groupJid: scope.groupJid,
       }),
+    registerGroup,
     onAgentStatusChange: () => {
       for (const ch of channels) {
         if (ch.name === 'web' && 'broadcastAgentStatus' in ch) {
@@ -1756,6 +1760,18 @@ async function main(): Promise<void> {
     }
     void workbenchBroadcast.handleEvent(event);
   });
+  initAssistantEvents((event) => {
+    for (const ch of channels) {
+      if (ch.name === 'web' && 'broadcastAssistantEvent' in ch) {
+        (
+          ch as typeof ch & {
+            broadcastAssistantEvent: (payload: typeof event) => void;
+          }
+        ).broadcastAssistantEvent(event);
+      }
+    }
+  });
+  startProactiveEngine();
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
   startMessageLoop().catch((err) => {
