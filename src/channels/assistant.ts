@@ -1,8 +1,8 @@
 import { ASSISTANT_NAME } from '../config.js';
 import {
-  listStoredMessagesByChat,
+  listAssistantChatMessageRecords,
   storeChatMetadata,
-  storeMessageDirect,
+  storeAssistantChatMessage,
 } from '../db.js';
 import { emitAssistantEvent } from '../assistant/assistant-events.js';
 import {
@@ -111,7 +111,7 @@ class AssistantChannel {
       workflow_id: null,
     };
     storeChatMetadata(jid, timestamp, ASSISTANT_MAIN_NAME, 'assistant', true);
-    storeMessageDirect({
+    storeAssistantChatMessage({
       ...msg,
       is_from_me: false,
       is_bot_message: true,
@@ -152,6 +152,12 @@ class AssistantChannel {
       true,
     );
     this.opts.onMessage(ASSISTANT_MAIN_JID, msg);
+    storeAssistantChatMessage({
+      ...msg,
+      is_from_me: true,
+      is_bot_message: false,
+      workflow_id: msg.workflow_id ?? null,
+    });
     this.opts.enqueueMessageCheck?.(ASSISTANT_MAIN_JID);
 
     const view = toChatMessageView(msg);
@@ -160,7 +166,7 @@ class AssistantChannel {
   }
 
   private listMessages(limit: number = 80): AssistantChatMessageView[] {
-    return listStoredMessagesByChat(ASSISTANT_MAIN_JID, limit)
+    return listAssistantChatMessageRecords(ASSISTANT_MAIN_JID, limit)
       .reverse()
       .map(toChatMessageView);
   }

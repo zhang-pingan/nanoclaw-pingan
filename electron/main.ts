@@ -18,12 +18,15 @@ import { readFile, unlink } from 'fs/promises';
 
 const mainDir = __dirname;
 const QUICK_CHAT_SHORTCUT = 'Command+`';
-const QUICK_CHAT_URL = 'http://localhost:3000/?quick-chat=1';
+const WORKSTATION_URL = 'http://localhost:3000/';
+const QUICK_CHAT_URL = `${WORKSTATION_URL}?quick-chat=1`;
+const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
 
 // Track whether we're doing a full quit (Quit All) vs just hiding
 let isQuitting = false;
 let mainWindow: BrowserWindow | null = null;
 let quickChatWindow: BrowserWindow | null = null;
+let pendingWorkstationOpenUrl: string | undefined;
 
 const isMac = process.platform === 'darwin';
 
@@ -66,6 +69,43 @@ interface DesktopCaptureDisplayInfo {
 
 function formatError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function normalizeWorkstationUrl(target?: string): string {
+  const raw = typeof target === 'string' && target.trim() ? target : WORKSTATION_URL;
+  try {
+    const url = new URL(raw);
+    const isLocalWorkstation =
+      url.protocol === 'http:' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+      url.port === '3000';
+    return isLocalWorkstation ? url.toString() : WORKSTATION_URL;
+  } catch {
+    return WORKSTATION_URL;
+  }
+}
+
+function getWorkstationOpenArg(argv: string[]): string | undefined {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === OPEN_WORKSTATION_ARG) {
+      return normalizeWorkstationUrl(argv[i + 1]);
+    }
+    if (arg.startsWith(`${OPEN_WORKSTATION_ARG}=`)) {
+      return normalizeWorkstationUrl(arg.slice(OPEN_WORKSTATION_ARG.length + 1));
+    }
+  }
+  return undefined;
+}
+
+pendingWorkstationOpenUrl = getWorkstationOpenArg(process.argv);
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    openWorkstationInClient(getWorkstationOpenArg(argv) || WORKSTATION_URL);
+  });
 }
 
 function getMacAppBundlePath(): string | undefined {
@@ -381,6 +421,41 @@ function bringMainWindowToFront(): void {
   mainWindow.focus();
 }
 
+function sendWorkstationOpenTarget(url: string): void {
+  if (!mainWindow) return;
+  try {
+    if (!new URL(url).searchParams.get('assistantTarget')) return;
+  } catch {
+    return;
+  }
+
+  const send = () => {
+    mainWindow?.webContents.send('open-workstation-target', { url });
+  };
+
+  if (mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once('did-finish-load', send);
+    return;
+  }
+
+  send();
+}
+
+function openWorkstationInClient(target?: string): void {
+  const url = normalizeWorkstationUrl(target);
+  pendingWorkstationOpenUrl = url;
+
+  if (!app.isReady()) return;
+
+  if (!mainWindow) {
+    createWindow(url);
+    return;
+  }
+
+  bringMainWindowToFront();
+  sendWorkstationOpenTarget(url);
+}
+
 function bringWindowToFront(win: BrowserWindow | null): void {
   if (!win) return;
 
@@ -491,7 +566,7 @@ function toggleQuickChat(): void {
   showQuickChatWindow();
 }
 
-function createWindow(): void {
+function createWindow(initialUrl: string = WORKSTATION_URL): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -508,7 +583,7 @@ function createWindow(): void {
   });
 
   // Load the NanoClaw web channel UI
-  mainWindow.loadURL('http://localhost:3000');
+  mainWindow.loadURL(normalizeWorkstationUrl(initialUrl));
 
   // Show window when ready to prevent white flash
   mainWindow.once('ready-to-show', () => {
@@ -656,8 +731,9 @@ function buildAppMenu(): Menu {
 
 // Dock icon click (macOS) — show window
 app.on('activate', () => {
+  if (!gotSingleInstanceLock) return;
   if (mainWindow === null) {
-    createWindow();
+    createWindow(pendingWorkstationOpenUrl);
   } else {
     bringMainWindowToFront();
   }
@@ -670,8 +746,9 @@ app.on('before-quit', () => {
 
 // Electron ready
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return;
   Menu.setApplicationMenu(buildAppMenu());
-  createWindow();
+  createWindow(pendingWorkstationOpenUrl);
   globalShortcut.register(QUICK_CHAT_SHORTCUT, () => {
     toggleQuickChat();
   });

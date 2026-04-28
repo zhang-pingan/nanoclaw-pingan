@@ -16775,10 +16775,10 @@ async function runAssistantInboxAction(itemId, action) {
   }
 }
 
-function openAssistantItemTarget(item) {
-  if (!item || !item.action_url) return;
+function openWorkstationTargetUrl(targetUrl) {
+  if (!targetUrl) return false;
   try {
-    const url = new URL(item.action_url);
+    const url = new URL(targetUrl);
     const target = url.searchParams.get("assistantTarget") || "";
     if (target === "today-plan") {
       todayPlanVisible = true;
@@ -16794,12 +16794,20 @@ function openAssistantItemTarget(item) {
     } else if (target === "assistant") {
       setPrimaryNav("assistant");
     } else {
-      window.open(item.action_url, "_blank");
+      return false;
     }
-    runAssistantInboxAction(item.id, "mark_read");
+    return true;
   } catch {
+    return false;
+  }
+}
+
+function openAssistantItemTarget(item) {
+  if (!item || !item.action_url) return;
+  if (!openWorkstationTargetUrl(item.action_url)) {
     window.open(item.action_url, "_blank");
   }
+  runAssistantInboxAction(item.id, "mark_read");
 }
 
 function handleAssistantRealtimeEvent(event) {
@@ -16861,6 +16869,14 @@ if (window.nanoclawApp && typeof window.nanoclawApp.onQuickChatOpenMainGroup ===
       setPrimaryNav("agent-groups");
     }
     await selectGroup(mainGroup.jid);
+  });
+}
+if (window.nanoclawApp && typeof window.nanoclawApp.onOpenWorkstationTarget === "function") {
+  window.nanoclawApp.onOpenWorkstationTarget(({ url }) => {
+    if (typeof url !== "string" || !url) return;
+    if (!openWorkstationTargetUrl(url)) {
+      window.open(url, "_blank");
+    }
   });
 }
 primaryNavItems.forEach((item) => {

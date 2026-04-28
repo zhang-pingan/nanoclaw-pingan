@@ -11,6 +11,8 @@ interface NanoClawAppAPI {
   onToggleTodayPlan(handler: () => void): () => void;
   /** Listen for quick-chat actions that should switch the main window to the main group */
   onQuickChatOpenMainGroup(handler: () => void): () => void;
+  /** Listen for desktop assistant requests to open a workstation target */
+  onOpenWorkstationTarget(handler: (payload: { url?: string }) => void): () => void;
   /** Open a URL in the system browser */
   openExternal(url: string): void;
   /** Open a local file in the default app */

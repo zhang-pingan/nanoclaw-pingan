@@ -49,6 +49,17 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     return () => ipcRenderer.removeListener('quick-chat-open-main-group', listener);
   },
 
+  onOpenWorkstationTarget: (handler: (payload: { url?: string }) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: { url?: string },
+    ) => {
+      handler(payload || {});
+    };
+    ipcRenderer.on('open-workstation-target', listener);
+    return () => ipcRenderer.removeListener('open-workstation-target', listener);
+  },
+
   // Open external URL in system browser
   openExternal: (url: string) => {
     // This would go through IPC in a real implementation

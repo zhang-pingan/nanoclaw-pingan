@@ -11,6 +11,7 @@ import {
   _initTestDatabase,
   getAllRegisteredGroups,
   getMessagesSince,
+  listStoredMessagesByChat,
   setRegisteredGroup,
   storeChatMetadata,
   storeMessage,
@@ -65,6 +66,11 @@ describe('assistant channel', () => {
     expect(chatMessages.map((message) => message.content)).toEqual([
       '帮我总结今天要做什么',
       '可以，我先查看今日计划。',
+    ]);
+
+    const genericMessages = listStoredMessagesByChat(ASSISTANT_MAIN_JID, 10);
+    expect(genericMessages.map((message) => message.content)).toEqual([
+      '帮我总结今天要做什么',
     ]);
 
     await channel.disconnect();

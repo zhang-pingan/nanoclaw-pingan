@@ -8,11 +8,15 @@ import {
   screen,
   shell,
 } from 'electron';
+import { spawn } from 'child_process';
+import { existsSync } from 'fs';
 import path from 'path';
 
 const WINDOW_WIDTH = 390;
 const WINDOW_HEIGHT = 430;
 const WORKSTATION_URL = 'http://localhost:3000/';
+const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
+const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
 
 let assistantWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -20,6 +24,86 @@ let isQuitting = false;
 
 function rendererPath(filename: string): string {
   return path.join(process.cwd(), 'assistant', 'renderer', filename);
+}
+
+function assetPath(filename: string): string {
+  return path.join(process.cwd(), 'assets', filename);
+}
+
+function electronClientEntryPath(): string {
+  return path.join(process.cwd(), 'dist-electron', 'main.cjs');
+}
+
+function electronBinPath(): string {
+  const binary = process.platform === 'win32' ? 'electron.cmd' : 'electron';
+  return path.join(process.cwd(), 'node_modules', '.bin', binary);
+}
+
+function localWorkstationUrl(target?: string): string | null {
+  const raw = typeof target === 'string' && target.trim() ? target : WORKSTATION_URL;
+  try {
+    const url = new URL(raw);
+    const isLocalWebClient =
+      url.protocol === 'http:' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+      url.port === '3000';
+    return isLocalWebClient ? url.toString() : null;
+  } catch {
+    return WORKSTATION_URL;
+  }
+}
+
+function openWorkstationClient(target?: string): void {
+  const url = localWorkstationUrl(target);
+  if (!url) {
+    if (target) void shell.openExternal(target);
+    return;
+  }
+
+  const entry = electronClientEntryPath();
+  if (!existsSync(entry)) {
+    void shell.openExternal(url);
+    return;
+  }
+
+  const localElectron = electronBinPath();
+  const electronExecutable = existsSync(localElectron) ? localElectron : process.execPath;
+  const child = spawn(electronExecutable, [entry, `${OPEN_WORKSTATION_ARG}=${url}`], {
+    cwd: process.cwd(),
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.once('error', () => {
+    void shell.openExternal(url);
+  });
+  child.unref();
+}
+
+function bringAssistantWindowToFront(): void {
+  createAssistantWindow();
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+
+  if (process.platform === 'darwin') {
+    app.focus({ steal: true });
+  }
+
+  if (assistantWindow.isMinimized()) assistantWindow.restore();
+  assistantWindow.show();
+  assistantWindow.moveTop();
+  assistantWindow.focus();
+}
+
+function toggleAssistantWindow(): void {
+  if (
+    assistantWindow &&
+    !assistantWindow.isDestroyed() &&
+    assistantWindow.isVisible()
+  ) {
+    assistantWindow.hide();
+    return;
+  }
+
+  bringAssistantWindowToFront();
 }
 
 function clampWindowToWorkArea(x: number, y: number): { x: number; y: number } {
@@ -79,15 +163,18 @@ function createAssistantWindow(): void {
 }
 
 function createTray(): void {
-  const image = nativeImage.createEmpty();
+  const image = nativeImage
+    .createFromPath(assetPath('nanoclaw-icon.png'))
+    .resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
   tray = new Tray(image);
   tray.setToolTip('NanoClaw Personal Assistant');
+  tray.on('click', toggleAssistantWindow);
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '显示个人助手', click: () => createAssistantWindow() },
+      { label: '显示个人助手', click: () => bringAssistantWindowToFront() },
       {
         label: '打开工作站',
-        click: () => shell.openExternal(WORKSTATION_URL),
+        click: () => openWorkstationClient(),
       },
       { type: 'separator' },
       {
@@ -104,11 +191,7 @@ function createTray(): void {
 ipcMain.handle('assistant:get-web-token', () => process.env.WEB_TOKEN || '');
 
 ipcMain.handle('assistant:open-workstation', async (_event, target?: string) => {
-  const url =
-    typeof target === 'string' && target.startsWith('http')
-      ? target
-      : WORKSTATION_URL;
-  await shell.openExternal(url);
+  openWorkstationClient(target);
 });
 
 ipcMain.handle(

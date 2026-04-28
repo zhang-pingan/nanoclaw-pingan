@@ -624,6 +624,21 @@ function createSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_assistant_action_logs_item
       ON assistant_action_logs(item_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS assistant_chat_messages (
+      id TEXT,
+      chat_jid TEXT,
+      sender TEXT,
+      sender_name TEXT,
+      content TEXT,
+      timestamp TEXT,
+      is_from_me INTEGER,
+      is_bot_message INTEGER DEFAULT 0,
+      workflow_id TEXT,
+      PRIMARY KEY (chat_jid, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_assistant_chat_messages_chat_time
+      ON assistant_chat_messages(chat_jid, timestamp);
+
     CREATE TABLE IF NOT EXISTS assistant_snoozes (
       id TEXT PRIMARY KEY,
       scope TEXT NOT NULL,
@@ -634,6 +649,36 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_assistant_snoozes_scope
       ON assistant_snoozes(scope, scope_ref, until);
+  `);
+  database.exec(`
+    INSERT OR IGNORE INTO assistant_chat_messages (
+      id,
+      chat_jid,
+      sender,
+      sender_name,
+      content,
+      timestamp,
+      is_from_me,
+      is_bot_message,
+      workflow_id
+    )
+    SELECT
+      id,
+      chat_jid,
+      sender,
+      sender_name,
+      content,
+      timestamp,
+      is_from_me,
+      is_bot_message,
+      NULL
+    FROM messages
+    WHERE chat_jid LIKE 'assistant:%';
+  `);
+  database.exec(`
+    DELETE FROM messages
+    WHERE chat_jid LIKE 'assistant:%'
+      AND is_bot_message = 1;
   `);
 
   // Add ask_questions table if it doesn't exist (human-in-the-loop questions)
@@ -1481,6 +1526,73 @@ export function storeMessageDirect(msg: {
     msg.model_reason ?? null,
     msg.workflow_id ?? null,
   );
+}
+
+export function storeAssistantChatMessage(msg: {
+  id: string;
+  chat_jid: string;
+  sender: string;
+  sender_name: string;
+  content: string;
+  timestamp: string;
+  is_from_me: boolean;
+  is_bot_message?: boolean;
+  workflow_id?: string | null;
+}): void {
+  db.prepare(
+    `INSERT INTO assistant_chat_messages (
+      id,
+      chat_jid,
+      sender,
+      sender_name,
+      content,
+      timestamp,
+      is_from_me,
+      is_bot_message,
+      workflow_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(chat_jid, id) DO UPDATE SET
+      sender = excluded.sender,
+      sender_name = excluded.sender_name,
+      content = excluded.content,
+      timestamp = excluded.timestamp,
+      is_from_me = excluded.is_from_me,
+      is_bot_message = excluded.is_bot_message,
+      workflow_id = COALESCE(excluded.workflow_id, assistant_chat_messages.workflow_id)`,
+  ).run(
+    msg.id,
+    msg.chat_jid,
+    msg.sender,
+    msg.sender_name,
+    msg.content,
+    msg.timestamp,
+    msg.is_from_me ? 1 : 0,
+    msg.is_bot_message ? 1 : 0,
+    msg.workflow_id ?? null,
+  );
+}
+
+export function listAssistantChatMessageRecords(
+  chatJid: string,
+  limit: number = 1000,
+): StoredChatMessageRecord[] {
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.trunc(limit))
+    : 1000;
+  return db
+    .prepare(
+      `
+      SELECT id, chat_jid, sender, sender_name, content, timestamp,
+             CAST(is_from_me AS INTEGER) AS is_from_me,
+             CAST(is_bot_message AS INTEGER) AS is_bot_message,
+             workflow_id
+        FROM assistant_chat_messages
+       WHERE chat_jid = ?
+       ORDER BY timestamp DESC, rowid DESC
+       LIMIT ?
+    `,
+    )
+    .all(chatJid, normalizedLimit) as StoredChatMessageRecord[];
 }
 
 export function getNewMessages(
