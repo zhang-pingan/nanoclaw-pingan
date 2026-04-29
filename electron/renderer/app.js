@@ -123,9 +123,6 @@ var cardsManagementPreviewData = document.getElementById("cards-management-previ
 var cardsManagementPreview = document.getElementById("cards-management-preview");
 var cardsManagementReferences = document.getElementById("cards-management-references");
 var memoryGroupsList = document.getElementById("memory-groups-list");
-var memoryGroupTitle = document.getElementById("memory-group-title");
-var memoryGroupFolder = document.getElementById("memory-group-folder");
-var memoryGroupSummary = document.getElementById("memory-group-summary");
 var memorySearchInput = document.getElementById("memory-search-input");
 var memoryStatusFilter = document.getElementById("memory-status-filter");
 var memoryDoctorBtn = document.getElementById("memory-doctor-btn");
@@ -2027,20 +2024,6 @@ function getDefaultMemoryGroupJid() {
   return (mainGroup && mainGroup.jid) || groups[0].jid || "";
 }
 
-function updateMemoryGroupHeader() {
-  if (!memoryGroupTitle || !memoryGroupFolder || !memoryGroupSummary) return;
-  const group = groups.find((g) => g.jid === activeMemoryGroupJid);
-  if (!group) {
-    memoryGroupTitle.textContent = "记忆管理";
-    memoryGroupFolder.textContent = "";
-    memoryGroupSummary.textContent = "请先在左侧选择一个 Group。记忆管理按 Group（group_folder）隔离。";
-    return;
-  }
-  memoryGroupTitle.textContent = group.name;
-  memoryGroupFolder.textContent = group.isMain ? "(main)" : `@ ${group.folder}`;
-  memoryGroupSummary.textContent = `当前 Group: ${group.folder}。可在此范围内进行记忆检索、整理与维护。`;
-}
-
 function selectMemoryGroup(jid) {
   activeMemoryGroupJid = jid;
   closeMemoryEditor();
@@ -2052,7 +2035,8 @@ function selectMemoryGroup(jid) {
   renderDoctorPanel();
   setDoctorLog("");
   renderMemoryGroups();
-  updateMemoryGroupHeader();
+  memoryEntries = [];
+  renderMemoryList();
   loadMemories();
 }
 
@@ -2462,6 +2446,27 @@ function openEditMemoryEditor(mem) {
   memoryContentInput?.focus();
 }
 
+function renderMemoryContentBody(content) {
+  const raw = typeof content === "string" ? content.trim() : "";
+  if (!raw) return '<div class="memory-content-empty">暂无内容</div>';
+  const blocks = raw
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  return blocks
+    .map((block) => {
+      const lines = block
+        .split(/\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (lines.length > 1) {
+        return `<div class="memory-content-block">${lines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}</div>`;
+      }
+      return `<p class="memory-content-paragraph">${escapeHtml(block)}</p>`;
+    })
+    .join("");
+}
+
 async function saveMemoryEditor() {
   const group = getActiveMemoryGroup();
   if (!group) {
@@ -2563,17 +2568,32 @@ function renderMemoryList() {
     const item = document.createElement("div");
     item.className = "memory-item";
     const statusClass = `status-${mem.status || "active"}`;
+    const memoryId = mem.id || "";
     item.innerHTML = `
       <div class="memory-item-header">
-        <span class="memory-tag">${escapeHtml(mem.layer || "")}</span>
-        <span class="memory-tag">${escapeHtml(mem.memory_type || "")}</span>
-        <span class="memory-tag ${statusClass}">${escapeHtml(mem.status || "active")}</span>
+        <div class="memory-item-tags">
+          <span class="memory-tag">${escapeHtml(mem.layer || "")}</span>
+          <span class="memory-tag">${escapeHtml(mem.memory_type || "")}</span>
+          <span class="memory-tag ${statusClass}">${escapeHtml(mem.status || "active")}</span>
+        </div>
         <span class="memory-item-time">${escapeHtml(formatDateTime(mem.updated_at))}</span>
       </div>
-      <p class="memory-item-content">${escapeHtml(mem.content || "")}</p>
-      <div class="memory-item-actions">
-        <button class="memory-action-btn" data-action="edit" data-memory-id="${escapeHtml(mem.id || "")}">编辑</button>
-        <button class="memory-action-btn danger" data-action="delete" data-memory-id="${escapeHtml(mem.id || "")}">删除</button>
+      <div class="memory-item-content-panel">
+        <div class="memory-item-content-label">Content</div>
+        <div class="memory-item-content-text">${renderMemoryContentBody(mem.content)}</div>
+      </div>
+      <div class="memory-item-footer">
+        <span class="memory-item-id" title="${escapeAttribute(memoryId)}">${escapeHtml(memoryId || "--")}</span>
+        <div class="memory-item-actions">
+          <button class="memory-action-btn" data-action="edit" data-memory-id="${escapeAttribute(memoryId)}">
+            <svg class="memory-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="m16.5 3.5 4 4L8 20l-5 1 1-5z"></path></svg>
+            <span>编辑</span>
+          </button>
+          <button class="memory-action-btn danger" data-action="delete" data-memory-id="${escapeAttribute(memoryId)}">
+            <svg class="memory-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m19 6-1 14H6L5 6"></path><path d="M10 11v5"></path><path d="M14 11v5"></path></svg>
+            <span>删除</span>
+          </button>
+        </div>
       </div>
     `;
     const editBtn = item.querySelector('button[data-action="edit"]');
@@ -9935,7 +9955,6 @@ async function loadGroups() {
       activeMemoryGroupJid = getDefaultMemoryGroupJid();
     }
     renderMemoryGroups();
-    updateMemoryGroupHeader();
     renderMemoryList();
     if (activePrimaryNavKey === "memory-management") {
       loadMemories();

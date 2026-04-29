@@ -676,30 +676,8 @@
           </div>
           <div id="memory-groups-list" class="list memory-groups-list"></div>
         </aside>
-        <main class="memory-main doraemon-memory-surface">
-          <div class="memory-background-scene tertiary-empty-scene" aria-hidden="true">
-            <span class="tertiary-empty-cloud cloud-a"></span>
-            <span class="tertiary-empty-cloud cloud-b"></span>
-            <span class="tertiary-empty-cloud cloud-c"></span>
-            <span class="tertiary-empty-copter copter-a"></span>
-            <span class="tertiary-empty-copter copter-b"></span>
-            <span class="tertiary-empty-bell bell-a"></span>
-            <span class="tertiary-empty-bell bell-b"></span>
-          </div>
-          <div class="memory-main-header">
-            <div class="memory-group-info">
-              <h2 id="memory-group-title">记忆管理</h2>
-              <span id="memory-group-folder" class="muted"></span>
-            </div>
-            <div class="doraemon-header-decor memory-header-decor">
-              <img class="doraemon-take-copter" src="/assets/doraemon-bell.png" alt="Doraemon bell" />
-              <span class="doraemon-tag">记忆口袋</span>
-            </div>
-          </div>
+        <main class="memory-main">
           <div class="memory-main-body">
-            <p id="memory-group-summary">
-              请先在左侧选择一个 Group。记忆管理按 Group（group_folder）隔离。
-            </p>
             <div class="memory-toolbar">
               <input
                 id="memory-search-input"
@@ -713,10 +691,40 @@
                 <option value="conflicted">conflicted</option>
                 <option value="deprecated">deprecated</option>
               </select>
-              <button id="memory-doctor-btn" class="btn-primary btn-soft-primary">Doctor</button>
-              <button id="memory-metrics-btn" class="btn-primary btn-soft-primary">指标统计</button>
-              <button id="memory-create-btn" class="btn-primary btn-soft-primary">新增记忆</button>
-              <button id="memory-search-btn" class="btn-primary btn-soft-primary">搜索</button>
+              <div class="memory-toolbar-actions">
+                <button id="memory-doctor-btn" class="btn-primary btn-soft-primary memory-toolbar-btn">
+                  <svg class="memory-btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 4v5a4 4 0 0 0 8 0V4"></path>
+                    <path d="M12 17v3"></path>
+                    <path d="M9 20h6"></path>
+                    <path d="M6 4h4"></path>
+                    <path d="M14 4h4"></path>
+                  </svg>
+                  <span>Doctor</span>
+                </button>
+                <button id="memory-metrics-btn" class="btn-primary btn-soft-primary memory-toolbar-btn">
+                  <svg class="memory-btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 20V10"></path>
+                    <path d="M12 20V4"></path>
+                    <path d="M19 20v-7"></path>
+                  </svg>
+                  <span>指标统计</span>
+                </button>
+                <button id="memory-create-btn" class="btn-primary btn-soft-primary memory-toolbar-btn">
+                  <svg class="memory-btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14"></path>
+                    <path d="M5 12h14"></path>
+                  </svg>
+                  <span>新增记忆</span>
+                </button>
+                <button id="memory-search-btn" class="btn-primary btn-soft-primary memory-toolbar-btn">
+                  <svg class="memory-btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6"></circle>
+                    <path d="m16 16 4 4"></path>
+                  </svg>
+                  <span>搜索</span>
+                </button>
+              </div>
               <button id="memory-refresh-btn" class="icon-btn" title="刷新记忆列表">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"></polyline>
@@ -727,7 +735,11 @@
             </div>
             <div id="memory-editor" class="memory-editor hidden">
               <div class="memory-editor-header">
-                <span id="memory-editor-title">新增记忆</span>
+                <div class="memory-editor-header-copy">
+                  <div class="memory-editor-kicker">Memory Record</div>
+                  <span id="memory-editor-title">新增记忆</span>
+                  <small>按层级、类型与状态维护当前 Group 的结构化记忆。</small>
+                </div>
               </div>
               <div class="memory-editor-grid">
                 <label class="memory-field">
