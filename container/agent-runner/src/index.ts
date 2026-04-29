@@ -81,6 +81,8 @@ interface SDKUserMessage {
   session_id: string;
 }
 
+type ContainerEvent = NonNullable<ContainerOutput['event']>;
+
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_TASKS_DIR = '/workspace/ipc/tasks';
@@ -161,6 +163,216 @@ function writeEvent(output: NonNullable<ContainerOutput['event']>, meta: {
     queryId: meta.queryId,
     event: output,
   });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function compactText(value: unknown, max = 160): string | undefined {
+  const text = stringValue(value)?.trim();
+  if (!text) return undefined;
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function summarizeUnknown(value: unknown, max = 240): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return compactText(value, max);
+  try {
+    return compactText(JSON.stringify(value), max);
+  } catch {
+    return compactText(String(value), max);
+  }
+}
+
+function sanitizeSdkPayloadValue(value: unknown, depth = 0): unknown {
+  if (value === undefined || value === null) return value;
+  if (typeof value === 'string') return value.length > 2000 ? `${value.slice(0, 1997)}...` : value;
+  if (typeof value !== 'object') return value;
+  if (depth >= 3) return summarizeUnknown(value);
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => sanitizeSdkPayloadValue(item, depth + 1));
+
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'content' || key === 'prompt') continue;
+    output[key] = sanitizeSdkPayloadValue(child, depth + 1);
+  }
+  return output;
+}
+
+const SDK_PAYLOAD_ALIASES: Record<string, string> = {
+  session_id: 'sessionId',
+  task_id: 'taskId',
+  tool_use_id: 'toolUseId',
+  max_retries: 'maxRetries',
+  retry_delay_ms: 'retryDelayMs',
+  error_status: 'errorStatus',
+  output_file: 'outputFile',
+  skip_transcript: 'skipTranscript',
+  task_type: 'taskType',
+  workflow_name: 'workflowName',
+  last_tool_name: 'lastToolName',
+  timeout_ms: 'timeoutMs',
+};
+
+function buildSdkPayload(message: Record<string, unknown>): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(message)) {
+    if (key === 'type' || key === 'subtype') continue;
+    if (key === 'prompt') {
+      const prompt = stringValue(value);
+      if (prompt) {
+        payload.promptPreview = compactText(prompt, 240);
+        payload.promptLength = prompt.length;
+      }
+      continue;
+    }
+    if (key === 'memories' && Array.isArray(value)) {
+      payload.memories = value.map((item) => {
+        const memory = asRecord(item);
+        return {
+          path: stringValue(memory.path),
+          scope: stringValue(memory.scope),
+          hasContent: typeof memory.content === 'string' && memory.content.length > 0,
+        };
+      });
+      continue;
+    }
+    payload[key] = sanitizeSdkPayloadValue(value);
+    const alias = SDK_PAYLOAD_ALIASES[key];
+    if (alias) payload[alias] = payload[key];
+  }
+  return payload;
+}
+
+function normalizeSdkTaskStatus(value: unknown): string | undefined {
+  const status = stringValue(value);
+  if (!status) return undefined;
+  if (status === 'completed') return 'success';
+  if (status === 'failed' || status === 'killed') return 'error';
+  if (status === 'pending' || status === 'running') return 'running';
+  return status;
+}
+
+function buildSdkSystemEvent(message: unknown): ContainerEvent | null {
+  const msg = asRecord(message);
+  const subtype = stringValue(msg.subtype);
+  if (!subtype) return null;
+
+  const payload = buildSdkPayload(msg);
+  if (subtype === 'init') {
+    return {
+      type: 'lifecycle',
+      name: 'sdk_init',
+      status: 'success',
+      summary: 'Claude SDK session initialized',
+      payload,
+    };
+  }
+  if (subtype === 'task_notification') {
+    return {
+      type: 'task',
+      name: 'task_notification',
+      status: stringValue(msg.status),
+      summary: compactText(msg.summary) || 'Task notification',
+      payload,
+    };
+  }
+  if (subtype === 'api_retry') {
+    const attempt = numberValue(msg.attempt);
+    const maxRetries = numberValue(msg.max_retries);
+    const retryDelayMs = numberValue(msg.retry_delay_ms);
+    return {
+      type: 'api',
+      name: 'api_retry',
+      status: 'running',
+      summary: `API retry ${attempt ?? '?'}${maxRetries ? `/${maxRetries}` : ''}${retryDelayMs ? ` in ${retryDelayMs}ms` : ''}`,
+      payload,
+    };
+  }
+  if (subtype === 'task_started' || subtype === 'task_progress') {
+    return {
+      type: 'task',
+      name: subtype,
+      status: 'running',
+      summary: compactText(msg.description) || compactText(msg.summary) || subtype.replace('_', ' '),
+      payload,
+    };
+  }
+  if (subtype === 'task_updated') {
+    const patch = asRecord(msg.patch);
+    const status = stringValue(patch.status);
+    const error = stringValue(patch.error);
+    return {
+      type: 'task',
+      name: 'task_updated',
+      status: normalizeSdkTaskStatus(status),
+      summary:
+        compactText(patch.description) ||
+        (error ? `Task failed: ${compactText(error)}` : undefined) ||
+        `Task ${status || 'updated'}`,
+      payload,
+    };
+  }
+  if (subtype === 'session_state_changed') {
+    const state = stringValue(msg.state);
+    return {
+      type: 'lifecycle',
+      name: 'session_state_changed',
+      status: state,
+      summary: state ? `SDK session ${state}` : 'SDK session state changed',
+      payload,
+    };
+  }
+  if (subtype === 'notification') {
+    return {
+      type: 'notification',
+      name: 'sdk_notification',
+      status: 'success',
+      summary: compactText(msg.text, 240) || compactText(msg.key) || 'SDK notification',
+      payload,
+    };
+  }
+  if (subtype === 'memory_recall') {
+    const memories = Array.isArray(msg.memories) ? msg.memories : [];
+    const mode = stringValue(msg.mode);
+    return {
+      type: 'memory',
+      name: 'memory_recall',
+      status: 'success',
+      summary: `Memory recall${mode ? ` (${mode})` : ''}: ${memories.length} item(s)`,
+      payload,
+    };
+  }
+  if (subtype === 'plugin_install') {
+    const status = stringValue(msg.status);
+    return {
+      type: 'plugin',
+      name: 'plugin_install',
+      status: status === 'failed' ? 'error' : status === 'installed' || status === 'completed' ? 'success' : 'running',
+      summary: `Plugin install ${status || 'updated'}${stringValue(msg.name) ? `: ${stringValue(msg.name)}` : ''}`,
+      payload,
+    };
+  }
+  if (subtype === 'mirror_error') {
+    return {
+      type: 'error',
+      name: 'mirror_error',
+      status: 'error',
+      summary: compactText(msg.error) || 'SDK mirror error',
+      payload,
+    };
+  }
+  return null;
 }
 
 function okHookOutput(): SyncHookJSONOutput {
@@ -936,6 +1148,10 @@ function buildQueryOptions(
       'mcp__nanoclaw__*'
     ],
     env: withQueryScopedEnv(sdkEnv, containerInput.runId, queryId),
+    stderr: (data: string) => {
+      const text = data.trim();
+      if (text) log(`[sdk stderr] ${text}`);
+    },
     permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
     settingSources: ['project', 'user'] as Array<'project' | 'user'>,
@@ -1005,50 +1221,21 @@ async function iterateQuery(
       lastAssistantUuid = (message as { uuid: string }).uuid;
     }
 
-    if (message.type === 'system' && message.subtype === 'init') {
-      newSessionId = message.session_id;
-      log(`Session initialized: ${newSessionId}`);
-      writeEvent(
-        {
-          type: 'lifecycle',
-          name: 'sdk_init',
-          status: 'success',
-          summary: 'Claude SDK session initialized',
-          payload: {
-            sessionId: newSessionId,
-          },
-        },
-        {
+    if (message.type === 'system') {
+      if ((message as { subtype?: string }).subtype === 'init') {
+        newSessionId = (message as { session_id?: string }).session_id;
+        log(`Session initialized: ${newSessionId}`);
+      }
+      const event = buildSdkSystemEvent(message);
+      if (event) {
+        log(`SDK event: ${event.name}${event.status ? ` status=${event.status}` : ''}${event.summary ? ` summary=${event.summary}` : ''}`);
+        writeEvent(event, {
           newSessionId,
           selectedModel: options.model,
           runId: identifiers.runId,
           queryId: identifiers.queryId,
-        },
-      );
-    }
-
-    if (message.type === 'system' && (message as { subtype?: string }).subtype === 'task_notification') {
-      const tn = message as { task_id: string; status: string; summary: string };
-      log(`Task notification: task=${tn.task_id} status=${tn.status} summary=${tn.summary}`);
-      writeEvent(
-        {
-          type: 'task',
-          name: 'task_notification',
-          status: tn.status,
-          summary: tn.summary,
-          payload: {
-            taskId: tn.task_id,
-            status: tn.status,
-            summary: tn.summary,
-          },
-        },
-        {
-          newSessionId,
-          selectedModel: options.model,
-          runId: identifiers.runId,
-          queryId: identifiers.queryId,
-        },
-      );
+        });
+      }
     }
 
     if (message.type === 'result') {

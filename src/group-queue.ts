@@ -315,7 +315,11 @@ export class GroupQueue {
    */
   notifyIdle(groupJid: string): void {
     const state = this.getGroup(groupJid);
+    const wasIdle = state.idleWaiting;
     state.idleWaiting = true;
+    if (!wasIdle) {
+      this.emitStatusChange();
+    }
     if (state.pendingTasks.length > 0 || state.pendingMessages) {
       this.closeStdin(groupJid);
     }
@@ -334,6 +338,7 @@ export class GroupQueue {
     const state = this.getGroup(groupJid);
     if (!state.active || !state.groupFolder || state.isTaskContainer)
       return false;
+    const wasIdle = state.idleWaiting;
     state.idleWaiting = false; // Agent is about to receive work, no longer idle
 
     const inputDir = path.join(DATA_DIR, 'ipc', state.groupFolder, 'input');
@@ -347,6 +352,9 @@ export class GroupQueue {
         JSON.stringify({ type: 'message', text, selectedModel, queryId }),
       );
       fs.renameSync(tempPath, filepath);
+      if (wasIdle) {
+        this.emitStatusChange();
+      }
       return true;
     } catch {
       return false;
