@@ -12753,9 +12753,259 @@ async function openWorkbenchCreateTaskModal() {
   const footerStatusEl = overlay.querySelector("#wb-footer-status");
   const submitBtn = overlay.querySelector("#wb-submit-btn");
   const submitBtnLabelEl = submitBtn.querySelector("span:last-child");
+  let createSubmitting = false;
 
   function closeWorkbenchCreateModal() {
     overlay.remove();
+  }
+
+  function getWorkbenchCreateChannel() {
+    const folder = mainGroup && typeof mainGroup.folder === "string" ? mainGroup.folder : "";
+    return folder.split("_")[0] || "";
+  }
+
+  function getWorkbenchCreateRelatedSessionGroups() {
+    const selectedType = getSelectedWorkflowType();
+    const roleChannels = selectedType && selectedType.role_channels ? selectedType.role_channels : {};
+    const channel = getWorkbenchCreateChannel();
+    const seen = new Set();
+    const targets = [];
+
+    Object.entries(roleChannels).forEach(([role, channels]) => {
+      const folder = channels && channel ? channels[channel] : "";
+      if (!folder) return;
+      const group = groups.find((item) => item && item.folder === folder && item.jid);
+      if (!group || seen.has(group.jid)) return;
+      seen.add(group.jid);
+      targets.push({
+        jid: group.jid,
+        name: group.name || group.jid,
+        folder: group.folder || folder,
+        role,
+      });
+    });
+
+    return targets;
+  }
+
+  function renderWorkbenchSessionGroupSummary(groupsToReset) {
+    if (!groupsToReset.length) {
+      return '<div class="workbench-session-empty">当前流程未匹配到可初始化的相关群组。</div>';
+    }
+    return `
+      <div class="workbench-session-group-summary">
+        ${groupsToReset.map((group) => `
+          <div class="workbench-session-group-chip">
+            <span>${escapeHtml(group.name)}</span>
+            <strong>${escapeHtml(group.role || group.folder)}</strong>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  async function openWorkbenchTaskStartModeDialog(groupsToReset) {
+    return new Promise((resolve) => {
+      const promptOverlay = document.createElement("div");
+      promptOverlay.className = "app-prompt-overlay";
+      promptOverlay.innerHTML = `
+        <div class="app-prompt-dialog workbench-start-mode-dialog" role="dialog" aria-modal="true" aria-label="选择任务启动方式">
+          <div class="app-prompt-title">选择任务启动方式</div>
+          <div class="app-prompt-message">可以沿用当前流程直接开始，也可以先让相关群组切换到全新 session 后再开始任务。</div>
+          ${renderWorkbenchSessionGroupSummary(groupsToReset)}
+          <div class="workbench-start-mode-options">
+            <button type="button" class="workbench-start-mode-card" data-action="direct">
+              <span class="workbench-start-mode-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+              </span>
+              <span>
+                <strong>直接开始任务</strong>
+                <small>保持和之前创建任务完全一致。</small>
+              </span>
+            </button>
+            <button type="button" class="workbench-start-mode-card primary" data-action="init" ${groupsToReset.length === 0 ? "disabled" : ""}>
+              <span class="workbench-start-mode-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+              </span>
+              <span>
+                <strong>初始化群组 session 后开始任务</strong>
+                <small>逐个展示相关群组是否已开始新会话。</small>
+              </span>
+            </button>
+          </div>
+          <div class="app-prompt-actions workbench-start-mode-actions">
+            <button type="button" class="btn-ghost" data-action="cancel">取消</button>
+          </div>
+        </div>
+      `;
+
+      function cleanup(value) {
+        promptOverlay.remove();
+        resolve(value);
+      }
+
+      document.body.appendChild(promptOverlay);
+      const primaryAction = promptOverlay.querySelector('[data-action="init"]:not(:disabled)') || promptOverlay.querySelector('[data-action="direct"]');
+      if (primaryAction) primaryAction.focus();
+
+      promptOverlay.querySelector('[data-action="direct"]').addEventListener("click", () => cleanup("direct"));
+      const initBtn = promptOverlay.querySelector('[data-action="init"]');
+      if (initBtn && !initBtn.disabled) {
+        initBtn.addEventListener("click", () => cleanup("init"));
+      }
+      promptOverlay.querySelector('[data-action="cancel"]').addEventListener("click", () => cleanup(null));
+      promptOverlay.addEventListener("click", (event) => {
+        if (event.target === promptOverlay) cleanup(null);
+      });
+      promptOverlay.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cleanup(null);
+        }
+      });
+    });
+  }
+
+  async function resetWorkbenchGroupSession(group) {
+    const res = await apiFetch("/api/sessions/reset", {
+      method: "POST",
+      body: JSON.stringify({ jid: group.jid }),
+    });
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!data || Number(data.resetCount || 0) < 1) {
+      throw new Error("未确认该群组已切换到新 session");
+    }
+  }
+
+  async function openWorkbenchSessionProgressDialog(groupsToReset) {
+    if (!groupsToReset.length) return true;
+
+    return new Promise((resolve) => {
+      const progressOverlay = document.createElement("div");
+      progressOverlay.className = "app-prompt-overlay";
+      const progressState = groupsToReset.map((group) => ({
+        ...group,
+        status: "pending",
+        error: "",
+      }));
+      let busy = false;
+      let settled = false;
+
+      function statusLabel(status) {
+        if (status === "running") return "初始化中";
+        if (status === "done") return "已开始新会话";
+        if (status === "error") return "失败";
+        return "等待";
+      }
+
+      function cleanup(value) {
+        if (settled) return;
+        settled = true;
+        progressOverlay.remove();
+        resolve(value);
+      }
+
+      function canDismissProgress() {
+        return !busy && !progressState.every((item) => item.status === "done");
+      }
+
+      function render() {
+        const doneCount = progressState.filter((item) => item.status === "done").length;
+        const errorCount = progressState.filter((item) => item.status === "error").length;
+        const allDone = doneCount === progressState.length && errorCount === 0;
+        const title = allDone ? "群组 session 已初始化" : "初始化相关群组 session";
+        const message = errorCount > 0
+          ? "部分群组未能切换到新 session，可以重试或取消创建。"
+          : allDone
+            ? "所有相关群组都已切换到全新 session，即将开始任务。"
+            : "正在按 /new 相同逻辑切换群组 session，全部完成后会自动开始任务。";
+
+        progressOverlay.innerHTML = `
+          <div class="app-prompt-dialog workbench-session-progress-dialog" role="dialog" aria-modal="true" aria-label="${escapeAttribute(title)}">
+            <div class="app-prompt-title">${escapeHtml(title)}</div>
+            <div class="app-prompt-message">${escapeHtml(message)}</div>
+            <div class="workbench-session-progress-list">
+              ${progressState.map((group) => `
+                <div class="workbench-session-progress-item" data-session-status="${escapeAttribute(group.status)}">
+                  <span class="workbench-session-progress-icon" aria-hidden="true"></span>
+                  <span class="workbench-session-progress-main">
+                    <strong>${escapeHtml(group.name)}</strong>
+                    <small>${escapeHtml(group.role || group.folder)} · ${escapeHtml(group.folder)}</small>
+                    ${group.error ? `<em>${escapeHtml(group.error)}</em>` : ""}
+                  </span>
+                  <span class="workbench-session-progress-status">${escapeHtml(statusLabel(group.status))}</span>
+                </div>
+              `).join("")}
+            </div>
+            <div class="workbench-session-progress-summary">
+              <span>${escapeHtml(String(doneCount))}/${escapeHtml(String(progressState.length))} 已完成</span>
+              ${errorCount > 0 ? `<span>${escapeHtml(String(errorCount))} 个失败</span>` : ""}
+            </div>
+            ${errorCount > 0 && !busy ? `
+              <div class="app-prompt-actions workbench-session-progress-actions">
+                <button type="button" class="btn-ghost" data-action="cancel">取消</button>
+                <button type="button" class="btn-primary" data-action="retry">重试初始化</button>
+              </div>
+            ` : ""}
+          </div>
+        `;
+
+        const retryBtn = progressOverlay.querySelector('[data-action="retry"]');
+        if (retryBtn) retryBtn.addEventListener("click", () => runReset());
+        const cancelBtn = progressOverlay.querySelector('[data-action="cancel"]');
+        if (cancelBtn) cancelBtn.addEventListener("click", () => cleanup(false));
+      }
+
+      async function runReset() {
+        if (busy || settled) return;
+        busy = true;
+        progressState.forEach((item) => {
+          item.status = "pending";
+          item.error = "";
+        });
+        render();
+
+        for (const item of progressState) {
+          if (settled) return;
+          item.status = "running";
+          item.error = "";
+          render();
+          try {
+            await resetWorkbenchGroupSession(item);
+            item.status = "done";
+          } catch (err) {
+            item.status = "error";
+            item.error = err instanceof Error ? err.message : String(err);
+          }
+          render();
+        }
+
+        busy = false;
+        render();
+        if (progressState.every((item) => item.status === "done")) {
+          setTimeout(() => cleanup(true), 450);
+        }
+      }
+
+      document.body.appendChild(progressOverlay);
+      progressOverlay.addEventListener("click", (event) => {
+        if (event.target === progressOverlay && canDismissProgress()) cleanup(false);
+      });
+      progressOverlay.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && canDismissProgress()) {
+          event.preventDefault();
+          cleanup(false);
+        }
+      });
+      render();
+      runReset();
+    });
   }
 
   function getSelectedWorkflowType() {
@@ -13080,7 +13330,11 @@ async function openWorkbenchCreateTaskModal() {
     }
     footerStatusEl.textContent = summaryText;
     if (submitBtnLabelEl) {
-      submitBtnLabelEl.textContent = state.uploadingFiles > 0 ? "上传中..." : "创建任务";
+      submitBtnLabelEl.textContent = createSubmitting
+        ? "处理中..."
+        : state.uploadingFiles > 0
+          ? "上传中..."
+          : "创建任务";
     }
     if (selectionSummaryEl) {
       const summaryTitle = getSelectedWorkflowType().name || getSelectedWorkflowType().type || "--";
@@ -13132,6 +13386,7 @@ async function openWorkbenchCreateTaskModal() {
     }
 
     submitBtn.disabled =
+      createSubmitting ||
       !taskTitle ||
       missingRequiredFields.length > 0 ||
       !state.entryPoint ||
@@ -13421,12 +13676,43 @@ async function openWorkbenchCreateTaskModal() {
     updateValidation();
   }
 
+  async function createWorkbenchTaskFromPayload(payload) {
+    const res = await apiFetch("/api/workbench/task", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    closeWorkbenchCreateModal();
+    const createdDetail = data.detail && data.detail.task ? data.detail : null;
+    const selectedTaskId = data.task_id || (createdDetail && createdDetail.task && createdDetail.task.id) || data.workflow_id || "";
+
+    if (createdDetail) {
+      currentWorkbenchTaskId = createdDetail.task.id;
+      currentWorkbenchDetail = createdDetail;
+      const taskIdx = workbenchTasks.findIndex((item) => item.id === createdDetail.task.id);
+      if (taskIdx >= 0) {
+        workbenchTasks[taskIdx] = { ...workbenchTasks[taskIdx], ...createdDetail.task };
+      } else {
+        workbenchTasks.unshift(createdDetail.task);
+      }
+      renderWorkbenchTaskList();
+      renderWorkbenchTaskDetail(createdDetail);
+    }
+
+    await loadWorkbenchTasks(selectedTaskId, false, !createdDetail);
+    if (selectedTaskId) {
+      scheduleWorkbenchTaskDetailReload(selectedTaskId, createdDetail ? 400 : 0);
+    }
+  }
+
   overlay.querySelector("#workbench-create-close").addEventListener("click", closeWorkbenchCreateModal);
   overlay.querySelector("#wb-cancel-btn").addEventListener("click", closeWorkbenchCreateModal);
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closeWorkbenchCreateModal();
   });
   submitBtn.addEventListener("click", async () => {
+    if (createSubmitting) return;
     const title = getTaskTitle();
     const requirementDescription = getRequirementDescription();
     const selectedRequirement = getSelectedRequirementName();
@@ -13443,50 +13729,40 @@ async function openWorkbenchCreateTaskModal() {
       return;
     }
     const createFormContext = buildCreateFormContext();
+    const payload = {
+      title,
+      service: state.service,
+      source_jid: mainGroup.jid,
+      start_from: state.entryPoint,
+      workflow_type: state.workflowType,
+      context: {
+        ...createFormContext,
+        deliverable: deliverableRequired ? selectedRequirement : createFormContext.deliverable,
+        requirement_description: requirementDescription || createFormContext.requirement_description,
+        requirement_preset: selectedRequirement || void 0,
+      },
+    };
 
+    createSubmitting = true;
+    updateValidation();
     try {
-      const res = await apiFetch("/api/workbench/task", {
-        method: "POST",
-        body: JSON.stringify({
-          title,
-          service: state.service,
-          source_jid: mainGroup.jid,
-          start_from: state.entryPoint,
-          workflow_type: state.workflowType,
-          context: {
-            ...createFormContext,
-            deliverable: deliverableRequired ? selectedRequirement : createFormContext.deliverable,
-            requirement_description: requirementDescription || createFormContext.requirement_description,
-            requirement_preset: selectedRequirement || void 0,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      closeWorkbenchCreateModal();
-      const createdDetail = data.detail && data.detail.task ? data.detail : null;
-      const selectedTaskId = data.task_id || (createdDetail && createdDetail.task && createdDetail.task.id) || data.workflow_id || "";
-
-      if (createdDetail) {
-        currentWorkbenchTaskId = createdDetail.task.id;
-        currentWorkbenchDetail = createdDetail;
-        const taskIdx = workbenchTasks.findIndex((item) => item.id === createdDetail.task.id);
-        if (taskIdx >= 0) {
-          workbenchTasks[taskIdx] = { ...workbenchTasks[taskIdx], ...createdDetail.task };
-        } else {
-          workbenchTasks.unshift(createdDetail.task);
-        }
-        renderWorkbenchTaskList();
-        renderWorkbenchTaskDetail(createdDetail);
+      const relatedGroups = getWorkbenchCreateRelatedSessionGroups();
+      const startMode = await openWorkbenchTaskStartModeDialog(relatedGroups);
+      if (!startMode) return;
+      if (startMode === "init") {
+        const initialized = await openWorkbenchSessionProgressDialog(relatedGroups);
+        if (!initialized) return;
       }
-
-      await loadWorkbenchTasks(selectedTaskId, false, !createdDetail);
-      if (selectedTaskId) {
-        scheduleWorkbenchTaskDetailReload(selectedTaskId, createdDetail ? 400 : 0);
-      }
+      if (submitBtnLabelEl) submitBtnLabelEl.textContent = "创建中...";
+      await createWorkbenchTaskFromPayload(payload);
     } catch (err) {
       console.error("Failed to create workbench task:", err);
       alert(err.message || "任务创建失败");
+    } finally {
+      createSubmitting = false;
+      if (document.body.contains(overlay)) {
+        updateValidation();
+      }
     }
   });
 

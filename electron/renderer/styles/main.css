@@ -2027,6 +2027,238 @@ body.quick-chat-window #app {
   padding: 20px;
 }
 
+.workbench-start-mode-dialog,
+.workbench-session-progress-dialog {
+  width: min(620px, 100%);
+}
+
+.workbench-session-group-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.workbench-session-group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 132, 201, 0.14);
+  background: rgba(240, 247, 255, 0.92);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workbench-session-group-chip strong {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.workbench-session-empty {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.34);
+  background: rgba(248, 250, 252, 0.9);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.workbench-start-mode-options {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.workbench-start-mode-card {
+  width: 100%;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.workbench-start-mode-card:hover:not(:disabled),
+.workbench-start-mode-card:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  border-color: rgba(0, 132, 201, 0.28);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+
+.workbench-start-mode-card.primary {
+  border-color: rgba(0, 132, 201, 0.28);
+  background: linear-gradient(180deg, rgba(240, 249, 255, 0.98), rgba(255, 255, 255, 0.96));
+}
+
+.workbench-start-mode-card:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.workbench-start-mode-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  color: var(--accent);
+  background: rgba(0, 132, 201, 0.1);
+}
+
+.workbench-start-mode-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workbench-start-mode-card strong,
+.workbench-start-mode-card small {
+  display: block;
+  min-width: 0;
+}
+
+.workbench-start-mode-card strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.workbench-start-mode-card small {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workbench-start-mode-actions {
+  margin-top: 16px;
+}
+
+.workbench-session-progress-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.workbench-session-progress-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.workbench-session-progress-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.44);
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.workbench-session-progress-item[data-session-status="running"] .workbench-session-progress-icon {
+  border-color: rgba(0, 132, 201, 0.22);
+  border-top-color: var(--accent);
+  animation: workflowWizardSpin 0.9s linear infinite;
+}
+
+.workbench-session-progress-item[data-session-status="done"] .workbench-session-progress-icon {
+  border-color: rgba(7, 193, 96, 0.26);
+  background: #07c160;
+  box-shadow: inset 0 0 0 4px #fff;
+}
+
+.workbench-session-progress-item[data-session-status="error"] .workbench-session-progress-icon {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: #ef4444;
+  box-shadow: inset 0 0 0 4px #fff;
+}
+
+.workbench-session-progress-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workbench-session-progress-main strong,
+.workbench-session-progress-main small,
+.workbench-session-progress-main em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workbench-session-progress-main strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.workbench-session-progress-main small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.workbench-session-progress-main em {
+  color: #b91c1c;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.workbench-session-progress-status {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.workbench-session-progress-item[data-session-status="done"] .workbench-session-progress-status {
+  color: #047857;
+}
+
+.workbench-session-progress-item[data-session-status="error"] .workbench-session-progress-status {
+  color: #b91c1c;
+}
+
+.workbench-session-progress-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workbench-session-progress-actions {
+  margin-top: 18px;
+}
+
 .quick-chat-overlay {
   position: fixed;
   inset: 0;
