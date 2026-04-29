@@ -35,9 +35,10 @@ button {
 
 .assistant-bubble {
   position: absolute;
-  left: 14px;
+  right: 52px;
   top: 16px;
-  width: 300px;
+  box-sizing: border-box;
+  width: 314px;
   min-height: 112px;
   padding: 14px 14px 12px;
   border: 1px solid rgba(17, 24, 39, 0.08);
@@ -179,13 +180,21 @@ button {
   filter: drop-shadow(0 20px 26px rgba(15, 23, 42, 0.18));
   animation: floaty 3.4s ease-in-out infinite;
   opacity: 0.9;
-  z-index: 1;
+  z-index: 4;
+  cursor: pointer;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.assistant-mascot-wrap:focus-visible {
+  border-radius: 18px;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
 }
 
 .assistant-chat {
   position: absolute;
   left: 14px;
-  right: 16px;
+  right: 166px;
   top: 174px;
   bottom: 24px;
   display: grid;
@@ -198,6 +207,22 @@ button {
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
   backdrop-filter: blur(16px);
   z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(18px) scale(0.98);
+  transform-origin: right bottom;
+  visibility: hidden;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 160ms ease;
+}
+
+.assistant-shell.chat-open .assistant-chat {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+  visibility: visible;
 }
 
 .chat-log {

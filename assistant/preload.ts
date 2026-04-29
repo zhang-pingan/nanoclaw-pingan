@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('assistantHost', {
     ipcRenderer.invoke('assistant:open-workstation', target),
   setAlwaysOnTop: (enabled: boolean) =>
     ipcRenderer.invoke('assistant:set-always-on-top', enabled),
+  setChatOpen: (open: boolean) =>
+    ipcRenderer.invoke('assistant:set-chat-open', open),
   moveBy: (dx: number, dy: number) => ipcRenderer.invoke('assistant:move-by', dx, dy),
   hide: () => ipcRenderer.invoke('assistant:hide'),
   platform: process.platform,

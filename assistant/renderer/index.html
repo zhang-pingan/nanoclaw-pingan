@@ -18,7 +18,7 @@
       <div id="bubble-actions" class="bubble-actions no-drag"></div>
     </section>
 
-    <section class="assistant-chat no-drag" aria-label="Assistant chat">
+    <section id="assistant-chat" class="assistant-chat no-drag" aria-label="Assistant chat" aria-hidden="true">
       <div id="chat-log" class="chat-log"></div>
       <div id="pending-files-preview" class="pending-files-preview">
         <span id="pending-files-content"></span>
@@ -34,7 +34,15 @@
       <div id="chat-status" class="chat-status"></div>
     </section>
 
-    <section class="assistant-mascot-wrap" aria-label="NanoClaw desktop assistant">
+    <section
+      id="assistant-mascot-trigger"
+      class="assistant-mascot-wrap no-drag"
+      aria-label="打开或收起聊天框"
+      aria-controls="assistant-chat"
+      aria-expanded="false"
+      role="button"
+      tabindex="0"
+    >
       <img class="assistant-mascot" src="./assets/mascot.svg" alt="" />
       <div id="assistant-status" class="assistant-status">offline</div>
     </section>

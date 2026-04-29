@@ -12,8 +12,10 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';
 
-const WINDOW_WIDTH = 390;
-const WINDOW_HEIGHT = 430;
+const COLLAPSED_WINDOW_WIDTH = 390;
+const COLLAPSED_WINDOW_HEIGHT = 320;
+const EXPANDED_WINDOW_WIDTH = 540;
+const EXPANDED_WINDOW_HEIGHT = 430;
 const WORKSTATION_URL = 'http://localhost:3000/';
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
 const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
@@ -21,6 +23,7 @@ const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
 let assistantWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+let chatOpen = false;
 
 function rendererPath(filename: string): string {
   return path.join(process.cwd(), 'assistant', 'renderer', filename);
@@ -106,19 +109,48 @@ function toggleAssistantWindow(): void {
   bringAssistantWindowToFront();
 }
 
-function clampWindowToWorkArea(x: number, y: number): { x: number; y: number } {
+function assistantWindowSize(): { width: number; height: number } {
+  return chatOpen
+    ? { width: EXPANDED_WINDOW_WIDTH, height: EXPANDED_WINDOW_HEIGHT }
+    : { width: COLLAPSED_WINDOW_WIDTH, height: COLLAPSED_WINDOW_HEIGHT };
+}
+
+function clampWindowToWorkArea(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number } {
   const currentBounds = assistantWindow?.getBounds() || {
     x,
     y,
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
+    width,
+    height,
   };
   const display = screen.getDisplayMatching(currentBounds);
   const area = display.workArea;
   return {
-    x: Math.min(Math.max(Math.round(x), area.x), area.x + area.width - WINDOW_WIDTH),
-    y: Math.min(Math.max(Math.round(y), area.y), area.y + area.height - WINDOW_HEIGHT),
+    x: Math.min(Math.max(Math.round(x), area.x), area.x + area.width - width),
+    y: Math.min(Math.max(Math.round(y), area.y), area.y + area.height - height),
   };
+}
+
+function resizeAssistantWindowForChatMode(): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+
+  const bounds = assistantWindow.getBounds();
+  const size = assistantWindowSize();
+  if (bounds.width === size.width && bounds.height === size.height) return;
+
+  const bottomRightX = bounds.x + bounds.width;
+  const bottomRightY = bounds.y + bounds.height;
+  const next = clampWindowToWorkArea(
+    bottomRightX - size.width,
+    bottomRightY - size.height,
+    size.width,
+    size.height,
+  );
+  assistantWindow.setBounds({ ...next, ...size });
 }
 
 function createAssistantWindow(): void {
@@ -130,11 +162,12 @@ function createAssistantWindow(): void {
 
   const display = screen.getPrimaryDisplay();
   const area = display.workArea;
+  const size = assistantWindowSize();
   assistantWindow = new BrowserWindow({
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
-    x: area.x + area.width - WINDOW_WIDTH - 34,
-    y: area.y + area.height - WINDOW_HEIGHT - 42,
+    width: size.width,
+    height: size.height,
+    x: area.x + area.width - size.width - 34,
+    y: area.y + area.height - size.height - 42,
     transparent: true,
     frame: false,
     resizable: false,
@@ -201,10 +234,20 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle('assistant:set-chat-open', (_event, open: boolean) => {
+  chatOpen = Boolean(open);
+  resizeAssistantWindowForChatMode();
+});
+
 ipcMain.handle('assistant:move-by', (_event, dx: number, dy: number) => {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
   const bounds = assistantWindow.getBounds();
-  const next = clampWindowToWorkArea(bounds.x + dx, bounds.y + dy);
+  const next = clampWindowToWorkArea(
+    bounds.x + dx,
+    bounds.y + dy,
+    bounds.width,
+    bounds.height,
+  );
   assistantWindow.setBounds({ ...bounds, ...next });
 });
 

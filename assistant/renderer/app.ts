@@ -42,6 +42,7 @@ declare global {
       getWebToken: () => Promise<string>;
       openWorkstation: (target?: string) => Promise<void>;
       setAlwaysOnTop: (enabled: boolean) => Promise<void>;
+      setChatOpen: (open: boolean) => Promise<void>;
       moveBy: (dx: number, dy: number) => Promise<void>;
       hide: () => Promise<void>;
       platform: string;
@@ -51,11 +52,16 @@ declare global {
 
 const API_BASE = 'http://localhost:3000';
 const ASSISTANT_CHAT_JID = 'assistant:main';
+const CHAT_AUTO_HIDE_DELAY_MS = 5_000;
 const shell = document.getElementById('assistant-shell') as HTMLElement;
 const bubbleKicker = document.getElementById('bubble-kicker') as HTMLElement;
 const bubbleTitle = document.getElementById('bubble-title') as HTMLElement;
 const bubbleBody = document.getElementById('bubble-body') as HTMLElement;
 const bubbleActions = document.getElementById('bubble-actions') as HTMLElement;
+const assistantChat = document.getElementById('assistant-chat') as HTMLElement;
+const mascotTrigger = document.getElementById(
+  'assistant-mascot-trigger',
+) as HTMLElement;
 const assistantStatus = document.getElementById(
   'assistant-status',
 ) as HTMLElement;
@@ -83,6 +89,8 @@ let state: AssistantState | null = null;
 let movingTimer: number | null = null;
 let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
+let chatOpen = false;
+let chatAutoHideTimer: number | null = null;
 let pendingFiles: File[] = [];
 let dragDepth = 0;
 
@@ -91,6 +99,41 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
 function setConnectionState(connected: boolean): void {
   shell.classList.toggle('connected', connected);
   assistantStatus.textContent = connected ? 'online' : 'offline';
+}
+
+function clearChatAutoHideTimer(): void {
+  if (!chatAutoHideTimer) return;
+  window.clearTimeout(chatAutoHideTimer);
+  chatAutoHideTimer = null;
+}
+
+function setChatOpen(open: boolean): void {
+  if (chatOpen === open) {
+    if (open) clearChatAutoHideTimer();
+    return;
+  }
+
+  chatOpen = open;
+  shell.classList.toggle('chat-open', chatOpen);
+  assistantChat.setAttribute('aria-hidden', chatOpen ? 'false' : 'true');
+  mascotTrigger.setAttribute('aria-expanded', chatOpen ? 'true' : 'false');
+  void window.assistantHost?.setChatOpen(chatOpen);
+
+  if (chatOpen) {
+    clearChatAutoHideTimer();
+    renderChat();
+    void loadChat();
+  } else {
+    clearChatAutoHideTimer();
+  }
+}
+
+function scheduleChatAutoHide(): void {
+  if (!chatOpen) return;
+  clearChatAutoHideTimer();
+  chatAutoHideTimer = window.setTimeout(() => {
+    setChatOpen(false);
+  }, CHAT_AUTO_HIDE_DELAY_MS);
 }
 
 function activeInboxItems(): AgentInboxItem[] {
@@ -666,6 +709,21 @@ function scheduleMovement(): void {
     void window.assistantHost?.moveBy(dx, dy);
   }, 18_000);
 }
+
+mascotTrigger.addEventListener('click', () => {
+  setChatOpen(!chatOpen);
+});
+
+mascotTrigger.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  setChatOpen(!chatOpen);
+});
+
+window.addEventListener('blur', scheduleChatAutoHide);
+window.addEventListener('focus', clearChatAutoHideTimer);
+document.addEventListener('pointerdown', clearChatAutoHideTimer);
+document.addEventListener('keydown', clearChatAutoHideTimer);
 
 hideBtn.addEventListener('click', () => {
   void window.assistantHost?.hide();
