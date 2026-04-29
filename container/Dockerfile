@@ -32,8 +32,9 @@ RUN apt-get update && apt-get install -y \
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install agent-browser and claude-code globally
-RUN npm install -g agent-browser @anthropic-ai/claude-code
+# Install agent-browser and claude-code globally.
+# Keep claude-code aligned with @anthropic-ai/claude-agent-sdk@0.2.120.
+RUN npm install -g agent-browser @anthropic-ai/claude-code@2.1.120
 
 # Create app directory
 WORKDIR /app
