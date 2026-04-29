@@ -53,6 +53,8 @@ declare global {
 const API_BASE = 'http://localhost:3000';
 const ASSISTANT_CHAT_JID = 'assistant:main';
 const CHAT_AUTO_HIDE_DELAY_MS = 5_000;
+const MASCOT_DRAG_HOLD_MS = 200;
+const MASCOT_DRAG_CANCEL_DISTANCE_PX = 6;
 const shell = document.getElementById('assistant-shell') as HTMLElement;
 const bubbleKicker = document.getElementById('bubble-kicker') as HTMLElement;
 const bubbleTitle = document.getElementById('bubble-title') as HTMLElement;
@@ -91,6 +93,14 @@ let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
 let chatOpen = false;
 let chatAutoHideTimer: number | null = null;
+let mascotDragHoldTimer: number | null = null;
+let mascotPointerId: number | null = null;
+let mascotPressStartScreenX = 0;
+let mascotPressStartScreenY = 0;
+let mascotLastScreenX = 0;
+let mascotLastScreenY = 0;
+let mascotDragging = false;
+let suppressNextMascotClick = false;
 let pendingFiles: File[] = [];
 let dragDepth = 0;
 
@@ -134,6 +144,35 @@ function scheduleChatAutoHide(): void {
   chatAutoHideTimer = window.setTimeout(() => {
     setChatOpen(false);
   }, CHAT_AUTO_HIDE_DELAY_MS);
+}
+
+function clearMascotDragHoldTimer(): void {
+  if (!mascotDragHoldTimer) return;
+  window.clearTimeout(mascotDragHoldTimer);
+  mascotDragHoldTimer = null;
+}
+
+function beginMascotWindowDrag(): void {
+  if (mascotPointerId === null) return;
+  clearMascotDragHoldTimer();
+  clearChatAutoHideTimer();
+  mascotDragging = true;
+  suppressNextMascotClick = true;
+  mascotTrigger.classList.add('dragging');
+}
+
+function resetMascotPointerState(): void {
+  clearMascotDragHoldTimer();
+  mascotPointerId = null;
+  mascotDragging = false;
+  mascotTrigger.classList.remove('dragging');
+}
+
+function suppressMascotClickForCurrentGesture(): void {
+  suppressNextMascotClick = true;
+  window.setTimeout(() => {
+    suppressNextMascotClick = false;
+  }, 0);
 }
 
 function activeInboxItems(): AgentInboxItem[] {
@@ -710,7 +749,83 @@ function scheduleMovement(): void {
   }, 18_000);
 }
 
-mascotTrigger.addEventListener('click', () => {
+mascotTrigger.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0 || mascotPointerId !== null) return;
+
+  mascotPointerId = event.pointerId;
+  mascotPressStartScreenX = event.screenX;
+  mascotPressStartScreenY = event.screenY;
+  mascotLastScreenX = event.screenX;
+  mascotLastScreenY = event.screenY;
+
+  try {
+    mascotTrigger.setPointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture can fail if the pointer is already released.
+  }
+
+  mascotDragHoldTimer = window.setTimeout(() => {
+    beginMascotWindowDrag();
+  }, MASCOT_DRAG_HOLD_MS);
+});
+
+mascotTrigger.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== mascotPointerId) return;
+
+  const startDx = event.screenX - mascotPressStartScreenX;
+  const startDy = event.screenY - mascotPressStartScreenY;
+  const movedFromPress = Math.hypot(startDx, startDy);
+
+  if (!mascotDragging) {
+    if (movedFromPress > MASCOT_DRAG_CANCEL_DISTANCE_PX) {
+      clearMascotDragHoldTimer();
+      suppressNextMascotClick = true;
+    }
+    mascotLastScreenX = event.screenX;
+    mascotLastScreenY = event.screenY;
+    return;
+  }
+
+  event.preventDefault();
+  const dx = Math.round(event.screenX - mascotLastScreenX);
+  const dy = Math.round(event.screenY - mascotLastScreenY);
+  mascotLastScreenX = event.screenX;
+  mascotLastScreenY = event.screenY;
+
+  if (dx !== 0 || dy !== 0) {
+    void window.assistantHost?.moveBy(dx, dy);
+  }
+});
+
+function finishMascotPointerInteraction(event: PointerEvent): void {
+  if (event.pointerId !== mascotPointerId) return;
+  const shouldSuppressClick = mascotDragging || suppressNextMascotClick;
+
+  try {
+    mascotTrigger.releasePointerCapture(event.pointerId);
+  } catch {
+    // The capture may already be released after pointer cancellation.
+  }
+
+  resetMascotPointerState();
+  if (shouldSuppressClick) suppressMascotClickForCurrentGesture();
+}
+
+mascotTrigger.addEventListener('pointerup', finishMascotPointerInteraction);
+mascotTrigger.addEventListener('pointercancel', finishMascotPointerInteraction);
+mascotTrigger.addEventListener(
+  'lostpointercapture',
+  finishMascotPointerInteraction,
+);
+
+mascotTrigger.addEventListener('click', (event) => {
+  if (suppressNextMascotClick) {
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextMascotClick = false;
+    return;
+  }
+
   setChatOpen(!chatOpen);
 });
 

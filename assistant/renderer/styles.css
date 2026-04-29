@@ -181,9 +181,16 @@ button {
   animation: floaty 3.4s ease-in-out infinite;
   opacity: 0.9;
   z-index: 4;
-  cursor: pointer;
+  cursor: grab;
   outline: none;
+  touch-action: none;
+  user-select: none;
   -webkit-app-region: no-drag;
+}
+
+.assistant-mascot-wrap.dragging {
+  cursor: grabbing;
+  animation-play-state: paused;
 }
 
 .assistant-mascot-wrap:focus-visible {
