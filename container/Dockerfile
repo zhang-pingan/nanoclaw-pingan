@@ -43,7 +43,8 @@ WORKDIR /app
 COPY agent-runner/package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm install \
+    && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-*-musl
 
 # Copy source code
 COPY agent-runner/ ./
