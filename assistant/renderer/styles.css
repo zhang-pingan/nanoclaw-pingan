@@ -209,7 +209,8 @@ button {
   top: 174px;
   bottom: 24px;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+  grid-template-rows: minmax(0, 1fr);
+  grid-auto-rows: auto;
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(17, 24, 39, 0.08);
@@ -244,7 +245,8 @@ button {
 }
 
 .assistant-shell.bubble-hidden .assistant-chat {
-  top: 24px;
+  top: 104px;
+  bottom: 16px;
 }
 
 .chat-log {
@@ -418,9 +420,18 @@ button {
 }
 
 .chat-status {
-  min-height: 14px;
+  min-height: 0;
   color: #64748b;
   font-size: 10px;
+  line-height: 1.35;
+}
+
+.chat-status:empty {
+  display: none;
+}
+
+.chat-status:not(:empty) {
+  min-height: 12px;
 }
 
 .assistant-scene-stage {
