@@ -1,3 +1,5 @@
+import { AssistantScene } from './assistant-scene.js';
+
 type AgentInboxItem = {
   id: string;
   kind: string;
@@ -67,9 +69,9 @@ const assistantChat = document.getElementById('assistant-chat') as HTMLElement;
 const mascotTrigger = document.getElementById(
   'assistant-mascot-trigger',
 ) as HTMLElement;
-const assistantModel = document.getElementById(
-  'assistant-model',
-) as HTMLElement | null;
+const assistantSceneEl = document.getElementById(
+  'assistant-scene',
+) as HTMLElement;
 const assistantStatus = document.getElementById(
   'assistant-status',
 ) as HTMLElement;
@@ -113,19 +115,31 @@ let dragDepth = 0;
 const pendingInboxActionItemIds = new Set<string>();
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
-
-function setModelFallback(enabled: boolean): void {
-  shell.classList.toggle('model-fallback', enabled);
+let scene: AssistantScene | null = null;
+try {
+  scene = new AssistantScene(assistantSceneEl, {
+    onReady: (ready) => {
+      shell.classList.toggle('scene-fallback', !ready);
+    },
+  });
+  void scene.loadManifest('./assets/scifi-scene.manifest.json');
+} catch {
+  shell.classList.add('scene-fallback');
 }
 
-function setModelAnimation(name: string): void {
-  if (!assistantModel) return;
-  assistantModel.setAttribute('animation-name', name);
+function syncScene(): void {
+  scene?.update({
+    connected: shell.classList.contains('connected'),
+    attention: shell.classList.contains('attention'),
+    chatOpen,
+    typing: chatTyping,
+  });
 }
 
 function setConnectionState(connected: boolean): void {
   shell.classList.toggle('connected', connected);
   assistantStatus.textContent = connected ? 'online' : 'offline';
+  syncScene();
 }
 
 function clearChatAutoHideTimer(): void {
@@ -143,7 +157,7 @@ function delay(ms: number): Promise<void> {
 function afterNextPaint(): Promise<void> {
   return new Promise((resolve) => {
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(resolve);
+      window.requestAnimationFrame(() => resolve());
     });
   });
 }
@@ -157,6 +171,7 @@ function setChatOpen(open: boolean): void {
   const transitionToken = ++chatTransitionToken;
   chatOpen = open;
   mascotTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  syncScene();
 
   if (open) {
     clearChatAutoHideTimer();
@@ -290,7 +305,7 @@ function button(
 
 function renderIdle(): void {
   shell.classList.remove('attention');
-  setModelAnimation('Idle');
+  syncScene();
   bubbleKicker.textContent = 'Personal Assistant';
   bubbleTitle.textContent = state?.settings.enabled
     ? '当前没有新的主动事项'
@@ -310,7 +325,7 @@ function renderIdle(): void {
 
 function renderItem(item: AgentInboxItem): void {
   shell.classList.add('attention');
-  setModelAnimation('Wave');
+  syncScene();
   bubbleKicker.textContent = `${item.kind} · ${item.priority}`;
   bubbleTitle.textContent = item.title || '新的主动事项';
   bubbleBody.textContent = item.body || '我发现了一条需要关注的信息。';
@@ -499,6 +514,7 @@ function renderChat(): void {
     chatLog.append(el);
   }
   chatStatus.textContent = chatTyping ? 'Agent 正在回复...' : '';
+  syncScene();
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
@@ -984,14 +1000,6 @@ document.addEventListener('drop', (event) => {
     files.length > 1 ? `已暂存 ${files.length} 个附件` : '已暂存附件';
   chatInput.focus();
 });
-
-if (assistantModel) {
-  assistantModel.addEventListener('load', () => setModelFallback(false));
-  assistantModel.addEventListener('error', () => setModelFallback(true));
-  window.setTimeout(() => {
-    if (!customElements.get('model-viewer')) setModelFallback(true);
-  }, 2_500);
-}
 
 void loadState();
 void loadChat();

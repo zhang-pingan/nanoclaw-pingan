@@ -171,10 +171,10 @@ button {
 
 .assistant-mascot-wrap {
   position: absolute;
-  right: 12px;
+  right: 10px;
   bottom: 8px;
-  width: 150px;
-  height: 150px;
+  width: 156px;
+  height: 156px;
   display: grid;
   place-items: center;
   filter: drop-shadow(0 18px 24px rgba(15, 23, 42, 0.14));
@@ -415,48 +415,63 @@ button {
   font-size: 10px;
 }
 
-.assistant-avatar-stage {
+.assistant-scene-stage {
   position: relative;
-  width: 144px;
-  height: 144px;
+  width: 150px;
+  height: 150px;
   display: grid;
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.92), transparent 42%),
-    radial-gradient(circle at 50% 72%, rgba(20, 184, 166, 0.2), transparent 58%);
+    radial-gradient(circle at 50% 34%, rgba(255, 255, 255, 0.86), transparent 38%),
+    radial-gradient(circle at 50% 70%, rgba(20, 184, 166, 0.22), transparent 56%),
+    rgba(226, 245, 255, 0.28);
   user-select: none;
   pointer-events: none;
+  transition:
+    width 150ms ease,
+    height 150ms ease,
+    border-radius 150ms ease,
+    background 150ms ease;
 }
 
-.assistant-avatar-stage::after {
+.assistant-shell.chat-open .assistant-scene-stage {
+  width: 156px;
+  height: 156px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(226, 245, 255, 0.08)),
+    rgba(15, 23, 42, 0.03);
+}
+
+.assistant-scene-stage::after {
   content: '';
   position: absolute;
-  left: 27px;
-  right: 27px;
-  bottom: 14px;
-  height: 14px;
+  left: 23px;
+  right: 23px;
+  bottom: 12px;
+  height: 16px;
   border-radius: 50%;
   background: rgba(15, 23, 42, 0.12);
   filter: blur(7px);
 }
 
-.assistant-model {
-  position: relative;
+.assistant-scene {
+  position: absolute;
+  inset: 0;
   z-index: 1;
-  width: 158px;
-  height: 158px;
-  transform: translateY(2px);
-  --poster-color: transparent;
+  opacity: 1;
+  transition: opacity 140ms ease;
 }
 
-.assistant-model::part(default-progress-bar),
-.assistant-model::part(default-progress-mask) {
-  display: none;
+.assistant-scene-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-.assistant-mascot-fallback {
+.assistant-scene-fallback {
   position: absolute;
   z-index: 0;
   width: 96px;
@@ -468,11 +483,11 @@ button {
   transition: opacity 140ms ease;
 }
 
-.assistant-shell.model-fallback .assistant-model {
+.assistant-shell.scene-fallback .assistant-scene {
   opacity: 0;
 }
 
-.assistant-shell.model-fallback .assistant-mascot-fallback {
+.assistant-shell.scene-fallback .assistant-scene-fallback {
   opacity: 1;
 }
 

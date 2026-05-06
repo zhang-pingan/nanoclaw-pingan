@@ -1,0 +1,17 @@
+{
+  "theme": "quaternius-scifi-stage",
+  "license": "CC0-compatible scene shell; replace robotModel with selected Quaternius Sci-Fi Essentials GLB when bundled.",
+  "robotModel": "https://modelviewer.dev/shared-assets/models/RobotExpressive.glb",
+  "animations": {
+    "idle": "Idle",
+    "attention": "Wave",
+    "typing": "Dance",
+    "offline": "Idle"
+  },
+  "palette": {
+    "online": "#10B981",
+    "offline": "#64748B",
+    "attention": "#F59E0B",
+    "typing": "#38BDF8"
+  }
+}
