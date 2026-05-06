@@ -86,13 +86,10 @@ function scanTodayPlanRules(
       kind: 'suggestion',
       priority: 'high',
       title: '今天还没有计划',
-      body: '可以先创建今日计划，再把工作台任务、群聊上下文和服务分支纳入当天工作面。',
+      body: '可以打开今日计划页，再把工作台任务、群聊上下文和服务分支纳入当天工作面。',
       sourceType: 'today_plan',
       sourceRefId: todayKey,
-      actionKind: 'create_today_plan',
-      actionLabel: '创建今日计划',
       actionUrl: workstationUrl('today-plan'),
-      actionPayload: { planDate: todayKey },
     });
   }
 

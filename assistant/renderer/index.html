@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NanoClaw Assistant</title>
   <link rel="stylesheet" href="./styles.css" />
+  <script
+    type="module"
+    src="https://cdnjs.cloudflare.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"
+  ></script>
 </head>
 <body>
-  <main id="assistant-shell" class="assistant-shell">
+  <main id="assistant-shell" class="assistant-shell model-fallback">
     <section id="bubble" class="assistant-bubble" aria-live="polite">
       <div class="bubble-head">
         <span id="bubble-kicker" class="bubble-kicker">Personal Assistant</span>
@@ -43,7 +47,30 @@
       role="button"
       tabindex="0"
     >
-      <img class="assistant-mascot" src="./assets/mascot.svg" alt="" />
+      <div class="assistant-avatar-stage" aria-hidden="true">
+        <model-viewer
+          id="assistant-model"
+          class="assistant-model"
+          src="https://modelviewer.dev/shared-assets/models/RobotExpressive.glb"
+          alt="NanoClaw personal assistant"
+          autoplay
+          animation-name="Idle"
+          camera-orbit="0deg 77deg 2.65m"
+          field-of-view="30deg"
+          interaction-prompt="none"
+          disable-pan
+          disable-zoom
+          loading="eager"
+          reveal="auto"
+          shadow-intensity="0.42"
+          exposure="1.08"
+        ></model-viewer>
+        <img
+          class="assistant-mascot-fallback"
+          src="../../assets/nanoclaw-icon.png"
+          alt=""
+        />
+      </div>
       <div id="assistant-status" class="assistant-status">offline</div>
     </section>
   </main>

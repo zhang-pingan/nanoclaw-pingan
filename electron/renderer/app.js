@@ -459,6 +459,7 @@ var assistantSourceInputs = Array.from(document.querySelectorAll("[data-assistan
 var assistantState = null;
 var assistantInboxItems = [];
 var assistantActionLogs = [];
+var assistantInboxActionPendingItemIds = new Set();
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -17085,7 +17086,7 @@ function renderAssistantInbox() {
       </div>
       <div class="assistant-inbox-actions">
         ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
-        ${item.action_kind === "create_today_plan" || item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
+        ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
         <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
         <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
       </div>
@@ -17104,9 +17105,24 @@ function renderAssistantInbox() {
     button.addEventListener("click", async () => {
       const itemId = button.getAttribute("data-assistant-item") || "";
       const action = button.getAttribute("data-assistant-action") || "";
-      await runAssistantInboxAction(itemId, action);
+      await runAssistantInboxAction(itemId, action, button);
     });
   });
+}
+
+function assistantLocalStatusForAction(action) {
+  if (action === "snooze") return "snoozed";
+  if (action === "dismiss") return "dismissed";
+  if (action === "mark_read") return "read";
+  if (action === "resolve") return "done";
+  return null;
+}
+
+function patchAssistantInboxItemStatus(itemId, status) {
+  assistantInboxItems = assistantInboxItems.map((item) =>
+    item.id === itemId ? { ...item, status } : item
+  );
+  renderAssistantInbox();
 }
 
 function renderAssistantLogs() {
@@ -17202,8 +17218,18 @@ async function clearAssistantData() {
   }
 }
 
-async function runAssistantInboxAction(itemId, action) {
+async function runAssistantInboxAction(itemId, action, triggerButton) {
   if (!itemId || !action) return;
+  if (assistantInboxActionPendingItemIds.has(itemId)) return;
+  assistantInboxActionPendingItemIds.add(itemId);
+  if (triggerButton) triggerButton.disabled = true;
+
+  const previousItems = assistantInboxItems.slice();
+  const localStatus = assistantLocalStatusForAction(action);
+  if (localStatus) {
+    patchAssistantInboxItemStatus(itemId, localStatus);
+  }
+
   try {
     const payload = action === "snooze" ? { minutes: 60 } : {};
     const res = await apiFetch("/api/agent-inbox/action", {
@@ -17214,8 +17240,13 @@ async function runAssistantInboxAction(itemId, action) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     await loadAssistantState();
   } catch (err) {
+    assistantInboxItems = previousItems;
+    renderAssistantInbox();
     console.error("Failed to run assistant inbox action:", err);
     showToast(err instanceof Error ? err.message : "Inbox 动作失败", 2200);
+  } finally {
+    assistantInboxActionPendingItemIds.delete(itemId);
+    if (triggerButton) triggerButton.disabled = false;
   }
 }
 

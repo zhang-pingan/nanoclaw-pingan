@@ -64,6 +64,9 @@ const assistantChat = document.getElementById('assistant-chat') as HTMLElement;
 const mascotTrigger = document.getElementById(
   'assistant-mascot-trigger',
 ) as HTMLElement;
+const assistantModel = document.getElementById(
+  'assistant-model',
+) as HTMLElement | null;
 const assistantStatus = document.getElementById(
   'assistant-status',
 ) as HTMLElement;
@@ -103,8 +106,18 @@ let mascotDragging = false;
 let suppressNextMascotClick = false;
 let pendingFiles: File[] = [];
 let dragDepth = 0;
+const pendingInboxActionItemIds = new Set<string>();
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
+
+function setModelFallback(enabled: boolean): void {
+  shell.classList.toggle('model-fallback', enabled);
+}
+
+function setModelAnimation(name: string): void {
+  if (!assistantModel) return;
+  assistantModel.setAttribute('animation-name', name);
+}
 
 function setConnectionState(connected: boolean): void {
   shell.classList.toggle('connected', connected);
@@ -186,6 +199,24 @@ function primaryItem(): AgentInboxItem | null {
   return items[0] || null;
 }
 
+function localStatusForInboxAction(action: string): string | null {
+  if (action === 'snooze') return 'snoozed';
+  if (action === 'dismiss') return 'dismissed';
+  if (action === 'mark_read') return 'read';
+  if (action === 'resolve') return 'done';
+  return null;
+}
+
+function patchLocalInboxItemStatus(itemId: string, status: string): void {
+  if (!state) return;
+  state = {
+    ...state,
+    latestInboxItems: state.latestInboxItems.map((item) =>
+      item.id === itemId ? { ...item, status } : item,
+    ),
+  };
+}
+
 async function authorizationHeaders(): Promise<Record<string, string>> {
   if (!webToken && window.assistantHost?.getWebToken) {
     webToken = await window.assistantHost.getWebToken();
@@ -228,6 +259,7 @@ function button(
 
 function renderIdle(): void {
   shell.classList.remove('attention');
+  setModelAnimation('Idle');
   bubbleKicker.textContent = 'Personal Assistant';
   bubbleTitle.textContent = state?.settings.enabled
     ? '当前没有新的主动事项'
@@ -247,6 +279,7 @@ function renderIdle(): void {
 
 function renderItem(item: AgentInboxItem): void {
   shell.classList.add('attention');
+  setModelAnimation('Wave');
   bubbleKicker.textContent = `${item.kind} · ${item.priority}`;
   bubbleTitle.textContent = item.title || '新的主动事项';
   bubbleBody.textContent = item.body || '我发现了一条需要关注的信息。';
@@ -261,10 +294,7 @@ function renderItem(item: AgentInboxItem): void {
     );
   }
 
-  if (
-    item.action_kind === 'create_today_plan' ||
-    item.action_kind === 'continue_today_plan'
-  ) {
+  if (item.action_kind === 'continue_today_plan') {
     bubbleActions.append(
       button(item.action_label || '执行', '', () => {
         void runInboxAction(item.id, 'execute');
@@ -668,14 +698,34 @@ async function runInboxAction(
   action: string,
   payload: Record<string, unknown> = {},
 ): Promise<void> {
-  const res = await apiFetch('/api/agent-inbox/action', {
-    method: 'POST',
-    body: JSON.stringify({ item_id: itemId, action, payload }),
-  });
-  if (!res.ok) {
-    bubbleBody.textContent = '动作执行失败，请到工作站查看详情。';
+  if (pendingInboxActionItemIds.has(itemId)) return;
+  pendingInboxActionItemIds.add(itemId);
+
+  const previousItems = state ? [...state.latestInboxItems] : null;
+  const localStatus = localStatusForInboxAction(action);
+  if (localStatus) {
+    patchLocalInboxItemStatus(itemId, localStatus);
+    render();
   }
-  await loadState();
+
+  try {
+    const res = await apiFetch('/api/agent-inbox/action', {
+      method: 'POST',
+      body: JSON.stringify({ item_id: itemId, action, payload }),
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    await loadState();
+  } catch {
+    if (previousItems && state) {
+      state = { ...state, latestInboxItems: previousItems };
+      render();
+    }
+    bubbleBody.textContent = '动作执行失败，请到工作站查看详情。';
+  } finally {
+    pendingInboxActionItemIds.delete(itemId);
+  }
 }
 
 async function connectWs(): Promise<void> {
@@ -903,6 +953,14 @@ document.addEventListener('drop', (event) => {
     files.length > 1 ? `已暂存 ${files.length} 个附件` : '已暂存附件';
   chatInput.focus();
 });
+
+if (assistantModel) {
+  assistantModel.addEventListener('load', () => setModelFallback(false));
+  assistantModel.addEventListener('error', () => setModelFallback(true));
+  window.setTimeout(() => {
+    if (!customElements.get('model-viewer')) setModelFallback(true);
+  }, 2_500);
+}
 
 void loadState();
 void loadChat();

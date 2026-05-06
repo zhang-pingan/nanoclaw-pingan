@@ -104,26 +104,6 @@ export function runAgentInboxAction(input: {
     }
 
     if (input.action === 'execute') {
-      if (item.action_kind === 'create_today_plan') {
-        const plan = createOrContinueTodayPlan();
-        const updated = updateAgentInboxItemStatus(item.id, 'done');
-        createAssistantActionLog({
-          itemId: item.id,
-          action: item.action_kind,
-          status: 'success',
-          title: item.title,
-          sourceType: item.source_type,
-          sourceRefId: item.source_ref_id,
-          payload,
-          result: { planId: plan.id, planDate: plan.plan_date },
-        });
-        return {
-          ok: true,
-          item: updated,
-          result: { planId: plan.id, planDate: plan.plan_date },
-        };
-      }
-
       if (item.action_kind === 'continue_today_plan') {
         const continueFromPlanId =
           typeof item.action_payload.continueFromPlanId === 'string'

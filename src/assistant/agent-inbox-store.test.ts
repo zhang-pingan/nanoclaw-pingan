@@ -3,10 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   _initTestDatabase,
   createWorkbenchTask,
-  getTodayPlanByDate,
 } from '../db.js';
 import { initAssistantEvents } from './assistant-events.js';
-import { runAgentInboxAction } from './assistant-actions.js';
 import {
   createOrUpdateAgentInboxItem,
   getAgentInboxItem,
@@ -87,24 +85,18 @@ describe('agent inbox store', () => {
     expect(listAgentInboxItems({ status: 'active' })).toHaveLength(1);
   });
 
-  it('creates a today-plan inbox item and can execute it', () => {
+  it('creates a today-plan inbox item without direct create action', () => {
     const now = new Date(2026, 3, 28, 9, 0, 0);
     const scan = runProactiveScan({ now });
     expect(scan.createdOrUpdated).toBeGreaterThanOrEqual(1);
 
     const item = listAgentInboxItems({ status: 'active' }).find(
-      (entry) => entry.action_kind === 'create_today_plan',
+      (entry) => entry.dedupe_key === 'today-plan:missing:2026-04-28',
     );
     expect(item).toBeTruthy();
-
-    const result = runAgentInboxAction({
-      itemId: item!.id,
-      action: 'execute',
-    });
-
-    expect(result.item.status).toBe('done');
-    expect(result.result.planDate).toBe('2026-04-28');
-    expect(getTodayPlanByDate('2026-04-28')).toBeTruthy();
+    expect(item?.action_kind).toBeNull();
+    expect(item?.action_label).toBeNull();
+    expect(item?.action_payload).toEqual({});
   });
 
   it('does not stale-alert successful workbench tasks', () => {
