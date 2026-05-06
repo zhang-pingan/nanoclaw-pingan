@@ -20,14 +20,12 @@ type AssistantSceneState = {
 type SceneObjects = {
   root: THREE.Group;
   robotPivot: THREE.Group;
-  proceduralRobot: THREE.Group;
   consoleGroup: THREE.Group;
   platform: THREE.Mesh;
   screen: THREE.Mesh;
   screenGlow: THREE.PointLight;
   statusLight: THREE.PointLight;
   statusRing: THREE.Mesh;
-  antennaLight: THREE.Mesh;
   sidePanels: THREE.Mesh[];
 };
 
@@ -67,7 +65,6 @@ export class AssistantScene {
   private mode: SceneMode = 'compact';
   private screenMaterial: THREE.MeshStandardMaterial;
   private ringMaterial: THREE.MeshStandardMaterial;
-  private antennaMaterial: THREE.MeshStandardMaterial;
   private disposed = false;
 
   constructor(
@@ -92,7 +89,6 @@ export class AssistantScene {
     const materials = this.createSharedMaterials();
     this.screenMaterial = materials.screen;
     this.ringMaterial = materials.ring;
-    this.antennaMaterial = materials.antenna;
     this.objects = this.createObjects(materials);
     this.scene.add(this.objects.root);
     this.setupLights();
@@ -132,7 +128,7 @@ export class AssistantScene {
       await this.loadRobotModel(this.manifest.robotModel || '');
       this.playMoodAnimation();
     } catch {
-      this.showProceduralRobot(true);
+      this.clearRobotModel();
     }
   }
 
@@ -178,25 +174,12 @@ export class AssistantScene {
   }
 
   private createSharedMaterials(): {
-    shell: THREE.MeshStandardMaterial;
-    accent: THREE.MeshStandardMaterial;
     dark: THREE.MeshStandardMaterial;
     panel: THREE.MeshStandardMaterial;
     screen: THREE.MeshStandardMaterial;
     ring: THREE.MeshStandardMaterial;
-    antenna: THREE.MeshStandardMaterial;
   } {
     return {
-      shell: new THREE.MeshStandardMaterial({
-        color: '#E6F6FF',
-        roughness: 0.52,
-        metalness: 0.05,
-      }),
-      accent: new THREE.MeshStandardMaterial({
-        color: '#2563EB',
-        roughness: 0.38,
-        metalness: 0.18,
-      }),
       dark: new THREE.MeshStandardMaterial({
         color: '#172033',
         roughness: 0.58,
@@ -220,13 +203,6 @@ export class AssistantScene {
         emissiveIntensity: 0.5,
         roughness: 0.35,
         metalness: 0.25,
-      }),
-      antenna: new THREE.MeshStandardMaterial({
-        color: '#FACC15',
-        emissive: '#F59E0B',
-        emissiveIntensity: 0.64,
-        roughness: 0.22,
-        metalness: 0.08,
       }),
     };
   }
@@ -294,107 +270,21 @@ export class AssistantScene {
       sidePanels.push(panel);
     });
 
-    const proceduralRobot = this.createProceduralRobot(materials);
-    robotPivot.add(proceduralRobot);
-
     const statusLight = new THREE.PointLight('#10B981', 1.35, 3.2);
     statusLight.position.set(0, 1.38, 1.1);
     root.add(statusLight);
 
-    const antennaLight = proceduralRobot.getObjectByName(
-      'antennaLight',
-    ) as THREE.Mesh;
-
     return {
       root,
       robotPivot,
-      proceduralRobot,
       consoleGroup,
       platform,
       screen,
       screenGlow,
       statusLight,
       statusRing,
-      antennaLight,
       sidePanels,
     };
-  }
-
-  private createProceduralRobot(
-    materials: ReturnType<AssistantScene['createSharedMaterials']>,
-  ): THREE.Group {
-    const robot = new THREE.Group();
-    robot.name = 'proceduralRobot';
-
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.42, 0.42, 8, 22),
-      materials.shell,
-    );
-    body.position.y = 0.78;
-    body.castShadow = true;
-    robot.add(body);
-
-    const face = new THREE.Mesh(
-      new THREE.BoxGeometry(0.58, 0.36, 0.06),
-      materials.screen,
-    );
-    face.position.set(0, 0.98, 0.38);
-    robot.add(face);
-
-    [-0.14, 0.14].forEach((x) => {
-      const eye = new THREE.Mesh(
-        new THREE.SphereGeometry(0.035, 16, 16),
-        this.antennaMaterial,
-      );
-      eye.position.set(x, 1.02, 0.42);
-      robot.add(eye);
-    });
-
-    const smile = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, 0.018, 0.018),
-      this.antennaMaterial,
-    );
-    smile.position.set(0, 0.91, 0.425);
-    robot.add(smile);
-
-    [-0.5, 0.5].forEach((x) => {
-      const arm = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.06, 0.46, 6, 14),
-        materials.accent,
-      );
-      arm.position.set(x, 0.77, 0.02);
-      arm.rotation.z = -x * 0.5;
-      arm.castShadow = true;
-      robot.add(arm);
-    });
-
-    [-0.2, 0.2].forEach((x) => {
-      const leg = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.07, 0.34, 6, 14),
-        materials.accent,
-      );
-      leg.position.set(x, 0.25, 0.02);
-      leg.castShadow = true;
-      robot.add(leg);
-    });
-
-    const antenna = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 0.28, 10),
-      materials.accent,
-    );
-    antenna.position.set(0, 1.36, 0);
-    antenna.rotation.z = -0.2;
-    robot.add(antenna);
-
-    const antennaLight = new THREE.Mesh(
-      new THREE.SphereGeometry(0.07, 18, 18),
-      this.antennaMaterial,
-    );
-    antennaLight.name = 'antennaLight';
-    antennaLight.position.set(0.04, 1.51, 0);
-    robot.add(antennaLight);
-
-    return robot;
   }
 
   private setupLights(): void {
@@ -434,12 +324,16 @@ export class AssistantScene {
     this.clips = gltf.animations || [];
     this.mixer = this.clips.length > 0 ? new THREE.AnimationMixer(root) : null;
     this.objects.robotPivot.add(root);
-    this.showProceduralRobot(false);
   }
 
-  private showProceduralRobot(visible: boolean): void {
-    this.objects.proceduralRobot.visible = visible;
-    if (this.gltfRoot) this.gltfRoot.visible = !visible;
+  private clearRobotModel(): void {
+    if (this.gltfRoot) {
+      this.objects.robotPivot.remove(this.gltfRoot);
+      this.gltfRoot = null;
+    }
+    this.mixer = null;
+    this.clips = [];
+    this.activeAction = null;
   }
 
   private playMoodAnimation(): void {
@@ -469,7 +363,6 @@ export class AssistantScene {
     this.screenMaterial.emissive.copy(color);
     this.ringMaterial.emissive.copy(color);
     this.ringMaterial.color.copy(color);
-    this.antennaMaterial.emissive.copy(color);
     this.objects.statusLight.color.copy(color);
     this.objects.screenGlow.color.copy(color);
   }
@@ -509,7 +402,6 @@ export class AssistantScene {
     this.screenMaterial.emissiveIntensity =
       this.mood === 'typing' ? 0.75 + Math.sin(elapsed * 8) * 0.18 : 0.45;
     this.ringMaterial.emissiveIntensity = intensityBase * pulse;
-    this.antennaMaterial.emissiveIntensity = intensityBase * pulse;
     this.objects.statusLight.intensity = intensityBase * 1.2;
     this.objects.screenGlow.intensity =
       this.mode === 'expanded' ? intensityBase * 1.4 : intensityBase * 0.6;
