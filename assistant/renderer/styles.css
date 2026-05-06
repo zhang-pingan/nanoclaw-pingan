@@ -25,7 +25,7 @@ button {
   position: relative;
   width: 100vw;
   height: 100vh;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .no-drag,
@@ -55,6 +55,7 @@ button {
     0 6px 16px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(18px);
   z-index: 3;
+  -webkit-app-region: drag;
 }
 
 .assistant-bubble::after {

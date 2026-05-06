@@ -57,8 +57,9 @@ const API_BASE = 'http://localhost:3000';
 const ASSISTANT_CHAT_JID = 'assistant:main';
 const CHAT_AUTO_HIDE_DELAY_MS = 5_000;
 const CHAT_PANEL_TRANSITION_MS = 110;
-const MASCOT_DRAG_HOLD_MS = 200;
-const MASCOT_DRAG_CANCEL_DISTANCE_PX = 6;
+const MASCOT_DRAG_START_DISTANCE_PX = 4;
+const MOUSE_CAPTURE_SELECTOR =
+  '.assistant-mascot-wrap, .assistant-bubble, .assistant-chat, .image-preview-overlay';
 const shell = document.getElementById('assistant-shell') as HTMLElement;
 const bubble = document.getElementById('bubble') as HTMLElement;
 const bubbleKicker = document.getElementById('bubble-kicker') as HTMLElement;
@@ -103,7 +104,6 @@ let chatAutoHideTimer: number | null = null;
 let mousePassthrough = false;
 let lastMouseClientX = -1;
 let lastMouseClientY = -1;
-let mascotDragHoldTimer: number | null = null;
 let mascotPointerId: number | null = null;
 let mascotPressStartScreenX = 0;
 let mascotPressStartScreenY = 0;
@@ -144,11 +144,7 @@ function setSceneChatOpen(open: boolean): void {
 }
 
 function shouldCaptureMouse(target: Element | null): boolean {
-  return Boolean(
-    target?.closest(
-      '.no-drag, .assistant-bubble, .image-preview-overlay',
-    ),
-  );
+  return Boolean(target?.closest(MOUSE_CAPTURE_SELECTOR));
 }
 
 function setMousePassthrough(enabled: boolean): void {
@@ -243,15 +239,8 @@ function scheduleChatAutoHide(): void {
   }, CHAT_AUTO_HIDE_DELAY_MS);
 }
 
-function clearMascotDragHoldTimer(): void {
-  if (!mascotDragHoldTimer) return;
-  window.clearTimeout(mascotDragHoldTimer);
-  mascotDragHoldTimer = null;
-}
-
 function beginMascotWindowDrag(): void {
-  if (mascotPointerId === null) return;
-  clearMascotDragHoldTimer();
+  if (mascotPointerId === null || mascotDragging) return;
   clearChatAutoHideTimer();
   mascotDragging = true;
   suppressNextMascotClick = true;
@@ -259,7 +248,6 @@ function beginMascotWindowDrag(): void {
 }
 
 function resetMascotPointerState(): void {
-  clearMascotDragHoldTimer();
   mascotPointerId = null;
   mascotDragging = false;
   mascotTrigger.classList.remove('dragging');
@@ -405,9 +393,11 @@ function render(): void {
   const item = primaryItem();
   if (!item) {
     renderIdle();
+    syncMousePassthrough();
     return;
   }
   renderItem(item);
+  syncMousePassthrough();
 }
 
 function basename(filePath: string): string {
@@ -909,10 +899,6 @@ mascotTrigger.addEventListener('pointerdown', (event) => {
   } catch {
     // Pointer capture can fail if the pointer is already released.
   }
-
-  mascotDragHoldTimer = window.setTimeout(() => {
-    beginMascotWindowDrag();
-  }, MASCOT_DRAG_HOLD_MS);
 });
 
 mascotTrigger.addEventListener('pointermove', (event) => {
@@ -923,13 +909,8 @@ mascotTrigger.addEventListener('pointermove', (event) => {
   const movedFromPress = Math.hypot(startDx, startDy);
 
   if (!mascotDragging) {
-    if (movedFromPress > MASCOT_DRAG_CANCEL_DISTANCE_PX) {
-      clearMascotDragHoldTimer();
-      suppressNextMascotClick = true;
-    }
-    mascotLastScreenX = event.screenX;
-    mascotLastScreenY = event.screenY;
-    return;
+    if (movedFromPress < MASCOT_DRAG_START_DISTANCE_PX) return;
+    beginMascotWindowDrag();
   }
 
   event.preventDefault();
@@ -985,6 +966,7 @@ window.addEventListener('blur', scheduleChatAutoHide);
 window.addEventListener('focus', clearChatAutoHideTimer);
 window.addEventListener('mousemove', syncMousePassthrough);
 window.addEventListener('mouseleave', () => setMousePassthrough(true));
+setMousePassthrough(true);
 document.addEventListener('pointerdown', clearChatAutoHideTimer);
 document.addEventListener('keydown', clearChatAutoHideTimer);
 
