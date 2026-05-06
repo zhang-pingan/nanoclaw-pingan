@@ -436,8 +436,8 @@ button {
 
 .assistant-scene-stage {
   position: relative;
-  width: 150px;
-  height: 150px;
+  width: 156px;
+  height: 156px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -449,15 +449,11 @@ button {
   user-select: none;
   pointer-events: none;
   transition:
-    width 150ms ease,
-    height 150ms ease,
     border-radius 150ms ease,
     background 150ms ease;
 }
 
 .assistant-shell.chat-open .assistant-scene-stage {
-  width: 156px;
-  height: 156px;
   border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(226, 245, 255, 0.08)),

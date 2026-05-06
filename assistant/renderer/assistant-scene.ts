@@ -92,6 +92,8 @@ export class AssistantScene {
   private screenMaterial: THREE.MeshStandardMaterial;
   private ringMaterial: THREE.MeshStandardMaterial;
   private disposed = false;
+  private renderWidth = 0;
+  private renderHeight = 0;
 
   constructor(
     container: HTMLElement,
@@ -532,6 +534,9 @@ export class AssistantScene {
     const rect = this.container.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width));
     const height = Math.max(1, Math.round(rect.height));
+    if (width === this.renderWidth && height === this.renderHeight) return;
+    this.renderWidth = width;
+    this.renderHeight = height;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();

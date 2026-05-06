@@ -58,6 +58,8 @@ const CHAT_AUTO_HIDE_DELAY_MS = 5_000;
 const CHAT_PANEL_TRANSITION_MS = 110;
 const CHAT_OPEN_RESIZE_DELAY_MS =
   window.assistantHost?.platform === 'darwin' ? 60 : 16;
+const CHAT_CLOSE_RESIZE_DELAY_MS =
+  window.assistantHost?.platform === 'darwin' ? 80 : 32;
 const MASCOT_DRAG_HOLD_MS = 200;
 const MASCOT_DRAG_CANCEL_DISTANCE_PX = 6;
 const shell = document.getElementById('assistant-shell') as HTMLElement;
@@ -98,6 +100,7 @@ let movingTimer: number | null = null;
 let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
 let chatOpen = false;
+let sceneChatOpen = false;
 let chatTransitionToken = 0;
 let chatAutoHideTimer: number | null = null;
 let mascotDragHoldTimer: number | null = null;
@@ -129,9 +132,15 @@ function syncScene(): void {
   scene?.update({
     connected: shell.classList.contains('connected'),
     attention: shell.classList.contains('attention'),
-    chatOpen,
+    chatOpen: sceneChatOpen,
     typing: chatTyping,
   });
+}
+
+function setSceneChatOpen(open: boolean): void {
+  if (sceneChatOpen === open) return;
+  sceneChatOpen = open;
+  syncScene();
 }
 
 function setConnectionState(connected: boolean): void {
@@ -168,7 +177,6 @@ function setChatOpen(open: boolean): void {
   const transitionToken = ++chatTransitionToken;
   chatOpen = open;
   mascotTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
-  syncScene();
 
   if (open) {
     clearChatAutoHideTimer();
@@ -180,7 +188,9 @@ function setChatOpen(open: boolean): void {
       await delay(CHAT_OPEN_RESIZE_DELAY_MS);
       await afterNextPaint();
       if (transitionToken !== chatTransitionToken || !chatOpen) return;
+      setSceneChatOpen(true);
       shell.classList.add('chat-open');
+      chatInput.focus();
     })();
   } else {
     clearChatAutoHideTimer();
@@ -190,6 +200,10 @@ function setChatOpen(open: boolean): void {
       await delay(CHAT_PANEL_TRANSITION_MS);
       if (transitionToken !== chatTransitionToken || chatOpen) return;
       await window.assistantHost?.setChatOpen(false);
+      await delay(CHAT_CLOSE_RESIZE_DELAY_MS);
+      await afterNextPaint();
+      if (transitionToken !== chatTransitionToken || chatOpen) return;
+      setSceneChatOpen(false);
     })();
   }
 }

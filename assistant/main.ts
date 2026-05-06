@@ -16,7 +16,9 @@ const COLLAPSED_WINDOW_WIDTH = 390;
 const COLLAPSED_WINDOW_HEIGHT = 320;
 const EXPANDED_WINDOW_WIDTH = 540;
 const EXPANDED_WINDOW_HEIGHT = 430;
-const ANIMATE_CHAT_WINDOW_RESIZE = process.platform === 'darwin';
+// Animated BrowserWindow resize repeatedly resizes/recomposites the transparent
+// WebGL surface and makes the desktop mascot flicker during chat toggles.
+const ANIMATE_CHAT_WINDOW_RESIZE = false;
 const WORKSTATION_URL = 'http://localhost:3000/';
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
 const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
