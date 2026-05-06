@@ -3,9 +3,23 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 type SceneMode = 'compact' | 'expanded';
 type AssistantSceneMood = 'offline' | 'idle' | 'attention' | 'typing';
+type Vec3 = [number, number, number];
+
+type ScenePropManifest = {
+  url: string;
+  name?: string;
+  position?: Vec3;
+  rotation?: Vec3;
+  scale?: number | Vec3;
+  visibleIn?: SceneMode | 'all';
+};
 
 type AssistantSceneManifest = {
+  theme?: string;
+  source?: string;
+  license?: string;
   robotModel?: string;
+  props?: ScenePropManifest[];
   animations?: Partial<Record<AssistantSceneMood, string>>;
   palette?: Partial<Record<AssistantSceneMood, string>>;
 };
@@ -21,20 +35,24 @@ type SceneObjects = {
   root: THREE.Group;
   robotPivot: THREE.Group;
   consoleGroup: THREE.Group;
+  propGroup: THREE.Group;
+  wallGroup: THREE.Group;
   platform: THREE.Mesh;
   screen: THREE.Mesh;
   screenGlow: THREE.PointLight;
   statusLight: THREE.PointLight;
   statusRing: THREE.Mesh;
+  backgroundScreen: THREE.Mesh;
   sidePanels: THREE.Mesh[];
+  alertBars: THREE.Mesh[];
 };
 
 const DEFAULT_MANIFEST: AssistantSceneManifest = {
-  robotModel: 'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb',
+  robotModel: './assets/scifi/Enemy_EyeDrone.gltf',
   animations: {
     idle: 'Idle',
-    attention: 'Wave',
-    typing: 'Dance',
+    attention: 'Hit',
+    typing: 'Charging',
     offline: 'Idle',
   },
   palette: {
@@ -51,14 +69,22 @@ export class AssistantScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+  private readonly cameraFocus = new THREE.Vector3(0, 0.72, 0.05);
+  private readonly targetCameraPosition = new THREE.Vector3();
+  private readonly targetCameraFocus = new THREE.Vector3();
+  private readonly targetRootScale = new THREE.Vector3();
   private readonly clock = new THREE.Clock();
   private readonly loader = new GLTFLoader();
   private readonly objects: SceneObjects;
   private readonly resizeObserver: ResizeObserver;
+  private hemisphereLight: THREE.HemisphereLight | null = null;
+  private keyLight: THREE.DirectionalLight | null = null;
+  private rimLight: THREE.DirectionalLight | null = null;
   private manifest = DEFAULT_MANIFEST;
   private animationFrame = 0;
   private mixer: THREE.AnimationMixer | null = null;
   private gltfRoot: THREE.Object3D | null = null;
+  private propRoots: THREE.Object3D[] = [];
   private clips: THREE.AnimationClip[] = [];
   private activeAction: THREE.AnimationAction | null = null;
   private mood: AssistantSceneMood = 'offline';
@@ -92,8 +118,8 @@ export class AssistantScene {
     this.objects = this.createObjects(materials);
     this.scene.add(this.objects.root);
     this.setupLights();
-    this.camera.position.set(0, 1.36, 6.1);
-    this.camera.lookAt(0, 1.1, 0);
+    this.camera.position.set(0, 1.32, 5.7);
+    this.camera.lookAt(this.cameraFocus);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
@@ -116,6 +142,7 @@ export class AssistantScene {
       this.manifest = {
         ...DEFAULT_MANIFEST,
         ...manifest,
+        props: manifest.props || DEFAULT_MANIFEST.props || [],
         animations: {
           ...DEFAULT_MANIFEST.animations,
           ...(manifest.animations || {}),
@@ -126,9 +153,12 @@ export class AssistantScene {
         },
       };
       await this.loadRobotModel(this.manifest.robotModel || '');
+      await this.loadSceneProps(this.manifest.props || []);
       this.playMoodAnimation();
+      this.onReady(true);
     } catch {
       this.clearRobotModel();
+      this.clearSceneProps();
     }
   }
 
@@ -160,6 +190,8 @@ export class AssistantScene {
     window.cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
     this.renderer.dispose();
+    this.clearRobotModel();
+    this.clearSceneProps();
     this.scene.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.geometry) return;
@@ -178,6 +210,8 @@ export class AssistantScene {
     panel: THREE.MeshStandardMaterial;
     screen: THREE.MeshStandardMaterial;
     ring: THREE.MeshStandardMaterial;
+    wall: THREE.MeshStandardMaterial;
+    wallDark: THREE.MeshStandardMaterial;
   } {
     return {
       dark: new THREE.MeshStandardMaterial({
@@ -204,6 +238,16 @@ export class AssistantScene {
         roughness: 0.35,
         metalness: 0.25,
       }),
+      wall: new THREE.MeshStandardMaterial({
+        color: '#94A3B8',
+        roughness: 0.5,
+        metalness: 0.28,
+      }),
+      wallDark: new THREE.MeshStandardMaterial({
+        color: '#1E293B',
+        roughness: 0.54,
+        metalness: 0.2,
+      }),
     };
   }
 
@@ -212,8 +256,56 @@ export class AssistantScene {
   ): SceneObjects {
     const root = new THREE.Group();
     const robotPivot = new THREE.Group();
-    robotPivot.position.set(0, 0.36, 0.25);
+    robotPivot.position.set(-0.18, 0.72, 0.15);
     root.add(robotPivot);
+
+    const wallGroup = new THREE.Group();
+    wallGroup.position.set(0, 0, -1.26);
+    root.add(wallGroup);
+
+    const backPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(2.9, 1.48, 0.05),
+      materials.wallDark,
+    );
+    backPanel.position.set(0, 0.92, 0);
+    backPanel.receiveShadow = true;
+    wallGroup.add(backPanel);
+
+    const panelLayout: Array<[number, number, number, number]> = [
+      [-0.94, 1.14, 0.62, 0.38],
+      [-0.2, 1.18, 0.58, 0.42],
+      [0.62, 1.12, 0.74, 0.34],
+      [-0.68, 0.64, 0.74, 0.34],
+      [0.42, 0.62, 0.96, 0.32],
+    ];
+    panelLayout.forEach(([x, y, width, height]) => {
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(width, height, 0.035),
+        materials.wall,
+      );
+      panel.position.set(x, y, 0.04);
+      panel.castShadow = true;
+      panel.receiveShadow = true;
+      wallGroup.add(panel);
+    });
+
+    const backgroundScreen = new THREE.Mesh(
+      new THREE.BoxGeometry(0.78, 0.42, 0.035),
+      materials.screen,
+    );
+    backgroundScreen.position.set(0.7, 1.14, 0.085);
+    wallGroup.add(backgroundScreen);
+
+    const alertBars: THREE.Mesh[] = [];
+    [-0.16, 0, 0.16].forEach((x) => {
+      const bar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.055, 0.26, 0.035),
+        materials.ring,
+      );
+      bar.position.set(0.7 + x, 1.13, 0.11);
+      wallGroup.add(bar);
+      alertBars.push(bar);
+    });
 
     const platform = new THREE.Mesh(
       new THREE.CylinderGeometry(1.24, 1.42, 0.22, 48),
@@ -274,51 +366,52 @@ export class AssistantScene {
     statusLight.position.set(0, 1.38, 1.1);
     root.add(statusLight);
 
+    const propGroup = new THREE.Group();
+    root.add(propGroup);
+
     return {
       root,
       robotPivot,
       consoleGroup,
+      propGroup,
+      wallGroup,
       platform,
       screen,
       screenGlow,
       statusLight,
       statusRing,
+      backgroundScreen,
       sidePanels,
+      alertBars,
     };
   }
 
   private setupLights(): void {
-    this.scene.add(new THREE.HemisphereLight('#DFFBFF', '#1E293B', 1.8));
+    this.hemisphereLight = new THREE.HemisphereLight('#DFFBFF', '#1E293B', 1.8);
+    this.scene.add(this.hemisphereLight);
 
-    const key = new THREE.DirectionalLight('#FFFFFF', 2.3);
-    key.position.set(2.8, 4.2, 3.3);
-    key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    this.scene.add(key);
+    this.keyLight = new THREE.DirectionalLight('#FFFFFF', 2.3);
+    this.keyLight.position.set(2.8, 4.2, 3.3);
+    this.keyLight.castShadow = true;
+    this.keyLight.shadow.mapSize.set(1024, 1024);
+    this.scene.add(this.keyLight);
 
-    const rim = new THREE.DirectionalLight('#7DD3FC', 1.2);
-    rim.position.set(-2.6, 1.6, -2.5);
-    this.scene.add(rim);
+    this.rimLight = new THREE.DirectionalLight('#7DD3FC', 1.2);
+    this.rimLight.position.set(-2.6, 1.6, -2.5);
+    this.scene.add(this.rimLight);
   }
 
   private async loadRobotModel(url: string): Promise<void> {
     if (!url) return;
     const gltf = await this.loader.loadAsync(url);
-    if (this.gltfRoot) {
-      this.objects.robotPivot.remove(this.gltfRoot);
-    }
+    this.clearRobotModel();
 
     const root = gltf.scene;
     root.name = 'assistantRobotModel';
-    root.scale.setScalar(0.54);
-    root.position.set(0, -0.12, 0.03);
-    root.rotation.y = 0.08;
-    root.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-    });
+    root.scale.setScalar(1.18);
+    root.position.set(0, 0, 0.02);
+    root.rotation.y = 0.16;
+    this.configureLoadedObject(root);
 
     this.gltfRoot = root;
     this.clips = gltf.animations || [];
@@ -329,11 +422,79 @@ export class AssistantScene {
   private clearRobotModel(): void {
     if (this.gltfRoot) {
       this.objects.robotPivot.remove(this.gltfRoot);
+      this.disposeObject(this.gltfRoot);
       this.gltfRoot = null;
     }
     this.mixer = null;
     this.clips = [];
     this.activeAction = null;
+  }
+
+  private async loadSceneProps(props: ScenePropManifest[]): Promise<void> {
+    this.clearSceneProps();
+    const roots = await Promise.all(
+      props.map(async (prop) => {
+        const gltf = await this.loader.loadAsync(prop.url);
+        const root = gltf.scene;
+        root.name = prop.name || prop.url.split('/').pop() || 'sceneProp';
+        root.userData.visibleIn = prop.visibleIn || 'expanded';
+        this.applyTransform(root, prop);
+        this.configureLoadedObject(root);
+        return root;
+      }),
+    );
+
+    roots.forEach((root) => {
+      this.objects.propGroup.add(root);
+    });
+    this.propRoots = roots;
+  }
+
+  private clearSceneProps(): void {
+    this.propRoots.forEach((root) => {
+      this.objects.propGroup.remove(root);
+      this.disposeObject(root);
+    });
+    this.propRoots = [];
+  }
+
+  private applyTransform(
+    object: THREE.Object3D,
+    manifest: ScenePropManifest,
+  ): void {
+    const position = manifest.position || [0, 0, 0];
+    const rotation = manifest.rotation || [0, 0, 0];
+    object.position.set(position[0], position[1], position[2]);
+    object.rotation.set(rotation[0], rotation[1], rotation[2]);
+
+    if (Array.isArray(manifest.scale)) {
+      object.scale.set(manifest.scale[0], manifest.scale[1], manifest.scale[2]);
+    } else {
+      object.scale.setScalar(manifest.scale || 1);
+    }
+  }
+
+  private configureLoadedObject(object: THREE.Object3D): void {
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    });
+  }
+
+  private disposeObject(object: THREE.Object3D): void {
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry?.dispose();
+      const material = mesh.material;
+      if (Array.isArray(material)) {
+        material.forEach((item) => item.dispose());
+      } else {
+        material.dispose();
+      }
+    });
   }
 
   private playMoodAnimation(): void {
@@ -382,35 +543,88 @@ export class AssistantScene {
     const elapsed = this.clock.elapsedTime;
     this.mixer?.update(delta);
 
-    const targetScale = this.mode === 'expanded' ? 1.1 : 0.9;
-    const targetX = this.mode === 'expanded' ? 0.06 : 0;
-    this.objects.root.scale.lerp(
-      new THREE.Vector3(targetScale, targetScale, targetScale),
-      0.08,
+    const expanded = this.mode === 'expanded';
+    const compactFocus = this.mood === 'typing' ? 0.78 : 0.7;
+    this.targetRootScale.setScalar(expanded ? 1.08 : 1.22);
+    this.targetCameraPosition.set(
+      expanded ? 0.1 : -0.12,
+      expanded ? 1.18 : 1.16,
+      expanded ? 4.65 : 3.75,
     );
-    this.objects.root.position.x += (targetX - this.objects.root.position.x) * 0.08;
-    this.objects.root.rotation.y =
-      Math.sin(elapsed * 0.36) * (this.mode === 'expanded' ? 0.12 : 0.08);
+    this.targetCameraFocus.set(expanded ? 0.04 : -0.12, compactFocus, -0.06);
 
-    const floatY = Math.sin(elapsed * 2.2) * 0.035;
-    this.objects.robotPivot.position.y = 0.36 + floatY;
-    this.objects.robotPivot.rotation.y = Math.sin(elapsed * 1.1) * 0.05;
+    this.objects.root.scale.lerp(this.targetRootScale, 0.08);
+    const targetX = expanded ? 0.02 : 0.08;
+    this.objects.root.position.x +=
+      (targetX - this.objects.root.position.x) * 0.08;
+    this.objects.root.rotation.y =
+      Math.sin(elapsed * 0.34) * (expanded ? 0.08 : 0.05);
+    this.camera.position.lerp(this.targetCameraPosition, 0.08);
+    this.cameraFocus.lerp(this.targetCameraFocus, 0.08);
+    this.camera.lookAt(this.cameraFocus);
+
+    const floatY =
+      Math.sin(elapsed * (this.mood === 'typing' ? 3.3 : 2.2)) *
+      (this.mood === 'typing' ? 0.05 : 0.035);
+    this.objects.robotPivot.position.y = 0.72 + floatY;
+    this.objects.robotPivot.position.x =
+      -0.18 + Math.sin(elapsed * 1.7) * (this.mood === 'typing' ? 0.025 : 0.01);
+    this.objects.robotPivot.rotation.y =
+      Math.sin(elapsed * 1.1) * (this.mood === 'attention' ? 0.12 : 0.05);
+    this.objects.robotPivot.rotation.z =
+      this.mood === 'typing' ? Math.sin(elapsed * 5.2) * 0.045 : 0;
 
     const intensityBase =
-      this.mood === 'offline' ? 0.35 : this.mood === 'attention' ? 1.7 : 1.1;
+      this.mood === 'offline'
+        ? 0.26
+        : this.mood === 'attention'
+          ? 1.75
+          : this.mood === 'typing'
+            ? 1.28
+            : 1.0;
+    const attentionFlash =
+      this.mood === 'attention'
+        ? Math.sin(elapsed * 13) > 0.52
+          ? 1.75
+          : 0.76
+        : 1;
     const pulse = 0.72 + Math.sin(elapsed * 4.4) * 0.18;
     this.screenMaterial.emissiveIntensity =
-      this.mood === 'typing' ? 0.75 + Math.sin(elapsed * 8) * 0.18 : 0.45;
+      this.mood === 'offline'
+        ? 0.12
+        : this.mood === 'typing'
+          ? 0.76 + Math.sin(elapsed * 8) * 0.2
+          : this.mood === 'attention'
+            ? 0.62 * attentionFlash
+            : 0.42;
     this.ringMaterial.emissiveIntensity = intensityBase * pulse;
     this.objects.statusLight.intensity = intensityBase * 1.2;
-    this.objects.screenGlow.intensity =
-      this.mode === 'expanded' ? intensityBase * 1.4 : intensityBase * 0.6;
+    this.objects.screenGlow.intensity = expanded
+      ? intensityBase * attentionFlash * 1.4
+      : intensityBase * 0.6;
     this.objects.statusRing.rotation.z += delta * 0.42;
     this.objects.sidePanels.forEach((panel, index) => {
       panel.position.y = 0.42 + Math.sin(elapsed * 1.7 + index) * 0.025;
-      panel.visible = this.mode === 'expanded';
+      panel.visible = expanded;
     });
-    this.objects.consoleGroup.visible = this.mode === 'expanded';
+    this.objects.alertBars.forEach((bar, index) => {
+      const scan = 0.5 + Math.sin(elapsed * 4.6 + index * 0.8) * 0.5;
+      bar.scale.y = 0.42 + scan * (this.mood === 'typing' ? 1.15 : 0.72);
+      bar.visible = expanded;
+    });
+    this.objects.consoleGroup.visible = expanded;
+    this.objects.wallGroup.visible = expanded;
+    this.objects.propGroup.visible = expanded;
+    this.propRoots.forEach((root) => {
+      const visibleIn = root.userData
+        .visibleIn as ScenePropManifest['visibleIn'];
+      root.visible = visibleIn === 'all' || visibleIn === this.mode;
+    });
+
+    const offlineDim = this.mood === 'offline' ? 0.34 : 1;
+    if (this.hemisphereLight) this.hemisphereLight.intensity = 1.8 * offlineDim;
+    if (this.keyLight) this.keyLight.intensity = 2.3 * offlineDim;
+    if (this.rimLight) this.rimLight.intensity = 1.2 * offlineDim;
 
     this.renderer.render(this.scene, this.camera);
     this.animationFrame = window.requestAnimationFrame(() => this.animate());

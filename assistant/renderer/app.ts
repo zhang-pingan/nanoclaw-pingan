@@ -72,9 +72,6 @@ const mascotTrigger = document.getElementById(
 const assistantSceneEl = document.getElementById(
   'assistant-scene',
 ) as HTMLElement;
-const assistantStatus = document.getElementById(
-  'assistant-status',
-) as HTMLElement;
 const hideBtn = document.getElementById('hide-btn') as HTMLButtonElement;
 const chatLog = document.getElementById('chat-log') as HTMLElement;
 const chatForm = document.getElementById('chat-form') as HTMLFormElement;
@@ -138,7 +135,6 @@ function syncScene(): void {
 
 function setConnectionState(connected: boolean): void {
   shell.classList.toggle('connected', connected);
-  assistantStatus.textContent = connected ? 'online' : 'offline';
   syncScene();
 }
 
@@ -623,7 +619,11 @@ function isGenericClipboardImageName(name: string): boolean {
   return !name || /^image\.(png|jpe?g|gif|webp|svg)$/i.test(name);
 }
 
-function withClipboardImageName(file: File, index: number, count: number): File {
+function withClipboardImageName(
+  file: File,
+  index: number,
+  count: number,
+): File {
   const originalName = typeof file.name === 'string' ? file.name.trim() : '';
   if (!isGenericClipboardImageName(originalName)) return file;
 
@@ -673,9 +673,7 @@ function handleComposerPaste(event: ClipboardEvent): void {
   event.preventDefault();
   imageFiles.forEach(stageFile);
   chatStatus.textContent =
-    imageFiles.length > 1
-      ? `已暂存 ${imageFiles.length} 张图片`
-      : '已暂存图片';
+    imageFiles.length > 1 ? `已暂存 ${imageFiles.length} 张图片` : '已暂存图片';
 }
 
 function stageFile(file: File): void {
@@ -690,7 +688,9 @@ function renderPendingFiles(): void {
     return;
   }
 
-  const names = pendingFiles.map((file) => file.name || '未命名附件').join(', ');
+  const names = pendingFiles
+    .map((file) => file.name || '未命名附件')
+    .join(', ');
   pendingFilesContent.textContent = `${pendingFiles.length} 个附件: ${names}`;
   pendingFilesEl.classList.add('visible');
 }

@@ -53,3 +53,4 @@ local/shell/cloudflare/.runtime
 local/shell/electron/.runtime
 local/shell/assistant/.runtime
 knowledge
+assistant/renderer/assets/scifi
