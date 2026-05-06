@@ -61,6 +61,7 @@ const CHAT_OPEN_RESIZE_DELAY_MS =
 const MASCOT_DRAG_HOLD_MS = 200;
 const MASCOT_DRAG_CANCEL_DISTANCE_PX = 6;
 const shell = document.getElementById('assistant-shell') as HTMLElement;
+const bubble = document.getElementById('bubble') as HTMLElement;
 const bubbleKicker = document.getElementById('bubble-kicker') as HTMLElement;
 const bubbleTitle = document.getElementById('bubble-title') as HTMLElement;
 const bubbleBody = document.getElementById('bubble-body') as HTMLElement;
@@ -301,6 +302,9 @@ function button(
 
 function renderIdle(): void {
   shell.classList.remove('attention');
+  const hideIdleBubble = Boolean(state?.settings.enabled);
+  shell.classList.toggle('bubble-hidden', hideIdleBubble);
+  bubble.setAttribute('aria-hidden', hideIdleBubble ? 'true' : 'false');
   syncScene();
   bubbleKicker.textContent = 'Personal Assistant';
   bubbleTitle.textContent = state?.settings.enabled
@@ -321,6 +325,8 @@ function renderIdle(): void {
 
 function renderItem(item: AgentInboxItem): void {
   shell.classList.add('attention');
+  shell.classList.remove('bubble-hidden');
+  bubble.setAttribute('aria-hidden', 'false');
   syncScene();
   bubbleKicker.textContent = `${item.kind} · ${item.priority}`;
   bubbleTitle.textContent = item.title || '新的主动事项';
@@ -537,6 +543,8 @@ async function loadState(): Promise<void> {
     scheduleMovement();
   } catch {
     setConnectionState(false);
+    shell.classList.remove('bubble-hidden');
+    bubble.setAttribute('aria-hidden', 'false');
     bubbleKicker.textContent = 'Connection';
     bubbleTitle.textContent = '无法连接 NanoClaw';
     bubbleBody.textContent = '请确认主服务和 Web 工作站正在运行。';
