@@ -53,6 +53,9 @@ declare global {
 const API_BASE = 'http://localhost:3000';
 const ASSISTANT_CHAT_JID = 'assistant:main';
 const CHAT_AUTO_HIDE_DELAY_MS = 5_000;
+const CHAT_PANEL_TRANSITION_MS = 110;
+const CHAT_OPEN_RESIZE_DELAY_MS =
+  window.assistantHost?.platform === 'darwin' ? 60 : 16;
 const MASCOT_DRAG_HOLD_MS = 200;
 const MASCOT_DRAG_CANCEL_DISTANCE_PX = 6;
 const shell = document.getElementById('assistant-shell') as HTMLElement;
@@ -95,6 +98,7 @@ let movingTimer: number | null = null;
 let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
 let chatOpen = false;
+let chatTransitionToken = 0;
 let chatAutoHideTimer: number | null = null;
 let mascotDragHoldTimer: number | null = null;
 let mascotPointerId: number | null = null;
@@ -130,24 +134,51 @@ function clearChatAutoHideTimer(): void {
   chatAutoHideTimer = null;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function afterNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(resolve);
+    });
+  });
+}
+
 function setChatOpen(open: boolean): void {
   if (chatOpen === open) {
     if (open) clearChatAutoHideTimer();
     return;
   }
 
+  const transitionToken = ++chatTransitionToken;
   chatOpen = open;
-  shell.classList.toggle('chat-open', chatOpen);
-  assistantChat.setAttribute('aria-hidden', chatOpen ? 'false' : 'true');
-  mascotTrigger.setAttribute('aria-expanded', chatOpen ? 'true' : 'false');
-  void window.assistantHost?.setChatOpen(chatOpen);
+  mascotTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
 
-  if (chatOpen) {
+  if (open) {
     clearChatAutoHideTimer();
+    assistantChat.setAttribute('aria-hidden', 'false');
     renderChat();
     void loadChat();
+    void (async () => {
+      await window.assistantHost?.setChatOpen(true);
+      await delay(CHAT_OPEN_RESIZE_DELAY_MS);
+      await afterNextPaint();
+      if (transitionToken !== chatTransitionToken || !chatOpen) return;
+      shell.classList.add('chat-open');
+    })();
   } else {
     clearChatAutoHideTimer();
+    shell.classList.remove('chat-open');
+    assistantChat.setAttribute('aria-hidden', 'true');
+    void (async () => {
+      await delay(CHAT_PANEL_TRANSITION_MS);
+      if (transitionToken !== chatTransitionToken || chatOpen) return;
+      await window.assistantHost?.setChatOpen(false);
+    })();
   }
 }
 

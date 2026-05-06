@@ -219,10 +219,13 @@ button {
   transform: translateX(18px) scale(0.98);
   transform-origin: right bottom;
   visibility: hidden;
+  will-change: opacity, transform;
+  contain: layout paint;
+  backface-visibility: hidden;
   transition:
-    opacity 160ms ease,
-    transform 160ms ease,
-    visibility 160ms ease;
+    opacity 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s linear 110ms;
 }
 
 .assistant-shell.chat-open .assistant-chat {
@@ -230,6 +233,10 @@ button {
   pointer-events: auto;
   transform: translateX(0) scale(1);
   visibility: visible;
+  transition:
+    opacity 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s;
 }
 
 .chat-log {
