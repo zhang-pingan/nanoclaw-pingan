@@ -1663,6 +1663,12 @@ export function getAssistantChatMessageById(
   );
 }
 
+export function clearAssistantChatMessages(chatJid: string): number {
+  return db
+    .prepare(`DELETE FROM assistant_chat_messages WHERE chat_jid = ?`)
+    .run(chatJid).changes;
+}
+
 export function clearAssistantData(): {
   assistant_chat_messages: number;
   messages: number;

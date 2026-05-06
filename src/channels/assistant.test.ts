@@ -9,12 +9,15 @@ import {
 } from '../assistant/assistant-channel-bridge.js';
 import {
   _initTestDatabase,
+  clearAssistantChatMessages,
   clearAssistantData,
   getAllRegisteredGroups,
   getMessagesSince,
+  listAssistantChatMessageRecords,
   listStoredMessagesByChat,
   setRegisteredGroup,
   storeChatMetadata,
+  storeAssistantChatMessage,
   storeMessage,
 } from '../db.js';
 import { ASSISTANT_NAME } from '../config.js';
@@ -96,5 +99,45 @@ describe('assistant channel', () => {
     expect(listStoredMessagesByChat(ASSISTANT_MAIN_JID, 10)).toEqual([]);
 
     await channel.disconnect();
+  });
+
+  it('clears assistant chat messages only for the target chat', () => {
+    storeAssistantChatMessage({
+      id: 'assistant-main-1',
+      chat_jid: ASSISTANT_MAIN_JID,
+      sender: 'desktop_assistant_user',
+      sender_name: 'Desktop User',
+      content: 'main message',
+      timestamp: '100',
+      is_from_me: true,
+      is_bot_message: false,
+    });
+    storeAssistantChatMessage({
+      id: 'assistant-other-1',
+      chat_jid: 'assistant:other',
+      sender: 'desktop_assistant_user',
+      sender_name: 'Desktop User',
+      content: 'other message',
+      timestamp: '101',
+      is_from_me: true,
+      is_bot_message: false,
+    });
+
+    expect(listAssistantChatMessageRecords(ASSISTANT_MAIN_JID, 10)).toHaveLength(
+      1,
+    );
+    expect(
+      listAssistantChatMessageRecords('assistant:other', 10).map(
+        (message) => message.content,
+      ),
+    ).toEqual(['other message']);
+
+    expect(clearAssistantChatMessages(ASSISTANT_MAIN_JID)).toBe(1);
+    expect(listAssistantChatMessageRecords(ASSISTANT_MAIN_JID, 10)).toEqual([]);
+    expect(
+      listAssistantChatMessageRecords('assistant:other', 10).map(
+        (message) => message.content,
+      ),
+    ).toEqual(['other message']);
   });
 });

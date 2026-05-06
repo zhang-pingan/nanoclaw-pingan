@@ -43,6 +43,7 @@ import {
 import { agentQueryTraceManager } from './agent-query-trace.js';
 import {
   backfillMessageModel,
+  clearAssistantChatMessages,
   clearMessages,
   clearSession,
   getAllChats,
@@ -571,6 +572,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
       clearMessages(chatJid);
       if (channel.name === 'web') clearWebMessages(chatJid);
+      if (channel.name === 'assistant') clearAssistantChatMessages(chatJid);
       resetGroupSession(chatJid, { deleteSessionDir: true });
       await channel.sendMessage(chatJid, '数据已清理完毕，可正常发送命令啦');
       logger.info({ group: group.name }, '/clear: context reset');
@@ -1223,6 +1225,8 @@ async function startMessageLoop(): Promise<void> {
               queue.closeStdin(chatJid);
               clearMessages(chatJid);
               if (channel.name === 'web') clearWebMessages(chatJid);
+              if (channel.name === 'assistant')
+                clearAssistantChatMessages(chatJid);
               resetGroupSession(chatJid, {
                 deleteSessionDir: true,
               });
