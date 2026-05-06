@@ -43,7 +43,7 @@ groups/global/*
 
 agents-sdk-docs
 
-temp/
+tmp/
 
 .claude/settings.local.json
 
