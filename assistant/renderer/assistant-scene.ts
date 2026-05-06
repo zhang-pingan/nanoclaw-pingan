@@ -308,19 +308,19 @@ export class AssistantScene {
     });
 
     const platform = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.24, 1.42, 0.22, 48),
+      new THREE.CylinderGeometry(0.74, 0.88, 0.16, 48),
       materials.panel,
     );
-    platform.position.y = 0.02;
+    platform.position.set(-0.18, 0.06, 0.12);
     platform.receiveShadow = true;
     root.add(platform);
 
     const statusRing = new THREE.Mesh(
-      new THREE.TorusGeometry(1.18, 0.025, 8, 64),
+      new THREE.TorusGeometry(0.78, 0.024, 8, 64),
       materials.ring,
     );
     statusRing.rotation.x = Math.PI / 2;
-    statusRing.position.y = 0.17;
+    statusRing.position.set(-0.18, 0.16, 0.12);
     root.add(statusRing);
 
     const consoleGroup = new THREE.Group();
