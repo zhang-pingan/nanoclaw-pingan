@@ -424,16 +424,8 @@ button {
   overflow: hidden;
   border-radius: 50%;
   background:
-    radial-gradient(
-      circle at 50% 34%,
-      rgba(255, 255, 255, 0.86),
-      transparent 38%
-    ),
-    radial-gradient(
-      circle at 50% 70%,
-      rgba(20, 184, 166, 0.22),
-      transparent 56%
-    ),
+    radial-gradient(circle at 50% 34%, rgba(255, 255, 255, 0.86), transparent 38%),
+    radial-gradient(circle at 50% 70%, rgba(20, 184, 166, 0.22), transparent 56%),
     rgba(226, 245, 255, 0.28);
   user-select: none;
   pointer-events: none;
@@ -449,11 +441,7 @@ button {
   height: 156px;
   border-radius: 18px;
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.24),
-      rgba(226, 245, 255, 0.08)
-    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(226, 245, 255, 0.08)),
     rgba(15, 23, 42, 0.03);
 }
 
