@@ -41,15 +41,6 @@ license: CC0
 
 贴图已缩放到 512px 级别，资源目录约 4.8MB。这样在桌面助手的小窗口里能保持足够观感，同时避免把原始大贴图直接打进仓库。
 
-`.gitignore` 只应忽略误放进该目录的 ZIP 和临时目录：
-
-```text
-assistant/renderer/assets/scifi/*.zip
-assistant/renderer/assets/scifi/extracted/
-```
-
-不要忽略 `assistant/renderer/assets/scifi/` 目录本身，否则运行资源会漏提交。
-
 ## Manifest
 
 场景配置在：
