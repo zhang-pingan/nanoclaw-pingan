@@ -37,14 +37,23 @@ type SceneObjects = {
   consoleGroup: THREE.Group;
   propGroup: THREE.Group;
   wallGroup: THREE.Group;
+  viewportGroup: THREE.Group;
+  planetGroup: THREE.Group;
+  hologramGroup: THREE.Group;
   platform: THREE.Mesh;
+  floorDeck: THREE.Mesh;
   screen: THREE.Mesh;
+  hologramMesh: THREE.Mesh;
+  hologramScan: THREE.Mesh;
   screenGlow: THREE.PointLight;
   statusLight: THREE.PointLight;
   statusRing: THREE.Mesh;
   backgroundScreen: THREE.Mesh;
+  starField: THREE.Points;
+  cockpitBeams: THREE.Mesh[];
   sidePanels: THREE.Mesh[];
   alertBars: THREE.Mesh[];
+  dataTicks: THREE.Mesh[];
 };
 
 const DEFAULT_MANIFEST: AssistantSceneManifest = {
@@ -214,6 +223,13 @@ export class AssistantScene {
     ring: THREE.MeshStandardMaterial;
     wall: THREE.MeshStandardMaterial;
     wallDark: THREE.MeshStandardMaterial;
+    floor: THREE.MeshStandardMaterial;
+    frame: THREE.MeshStandardMaterial;
+    glass: THREE.MeshStandardMaterial;
+    planet: THREE.MeshStandardMaterial;
+    planetRing: THREE.MeshBasicMaterial;
+    hologram: THREE.MeshBasicMaterial;
+    hologramScan: THREE.MeshBasicMaterial;
   } {
     return {
       dark: new THREE.MeshStandardMaterial({
@@ -250,6 +266,51 @@ export class AssistantScene {
         roughness: 0.54,
         metalness: 0.2,
       }),
+      floor: new THREE.MeshStandardMaterial({
+        color: '#243244',
+        roughness: 0.64,
+        metalness: 0.26,
+      }),
+      frame: new THREE.MeshStandardMaterial({
+        color: '#0B1220',
+        roughness: 0.48,
+        metalness: 0.38,
+      }),
+      glass: new THREE.MeshStandardMaterial({
+        color: '#0F172A',
+        transparent: true,
+        opacity: 0.46,
+        roughness: 0.18,
+        metalness: 0.08,
+      }),
+      planet: new THREE.MeshStandardMaterial({
+        color: '#22D3EE',
+        emissive: '#0E7490',
+        emissiveIntensity: 0.18,
+        roughness: 0.72,
+        metalness: 0.02,
+      }),
+      planetRing: new THREE.MeshBasicMaterial({
+        color: '#F59E0B',
+        transparent: true,
+        opacity: 0.58,
+        side: THREE.DoubleSide,
+      }),
+      hologram: new THREE.MeshBasicMaterial({
+        color: '#34D399',
+        transparent: true,
+        opacity: 0.72,
+        wireframe: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+      hologramScan: new THREE.MeshBasicMaterial({
+        color: '#A7F3D0',
+        transparent: true,
+        opacity: 0.64,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
     };
   }
 
@@ -261,13 +322,82 @@ export class AssistantScene {
     robotPivot.position.set(-0.18, 0.72, 0.15);
     root.add(robotPivot);
 
+    const viewportGroup = new THREE.Group();
+    viewportGroup.position.set(0, 0.92, -1.78);
+    root.add(viewportGroup);
+
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(360 * 3);
+    for (let i = 0; i < starPositions.length; i += 3) {
+      starPositions[i] = (Math.random() - 0.5) * 4.8;
+      starPositions[i + 1] = Math.random() * 2.2 - 0.62;
+      starPositions[i + 2] = Math.random() * 0.8 - 0.42;
+    }
+    starGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(starPositions, 3),
+    );
+    const starField = new THREE.Points(
+      starGeometry,
+      new THREE.PointsMaterial({
+        color: '#E0F2FE',
+        size: 0.018,
+        transparent: true,
+        opacity: 0.82,
+        depthWrite: false,
+      }),
+    );
+    viewportGroup.add(starField);
+
+    const planetGroup = new THREE.Group();
+    planetGroup.position.set(1.1, 0.12, -0.22);
+    planetGroup.rotation.z = -0.2;
+    viewportGroup.add(planetGroup);
+
+    const planet = new THREE.Mesh(
+      new THREE.SphereGeometry(0.54, 40, 20),
+      materials.planet,
+    );
+    planet.castShadow = false;
+    planet.receiveShadow = false;
+    planetGroup.add(planet);
+
+    const planetRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.72, 0.018, 8, 96),
+      materials.planetRing,
+    );
+    planetRing.rotation.set(1.16, 0.12, -0.56);
+    planetGroup.add(planetRing);
+
+    const cockpitBeams: THREE.Mesh[] = [];
+    const beamLayout: Array<[number, number, number, number, number]> = [
+      [0, 0.84, 3.2, 0.09, 0],
+      [0, -0.74, 3.25, 0.12, 0],
+      [-1.56, 0.02, 0.11, 1.65, 0],
+      [1.56, 0.02, 0.11, 1.65, 0],
+      [-0.86, 0.38, 1.08, 0.07, -0.52],
+      [0.86, 0.38, 1.08, 0.07, 0.52],
+    ];
+    beamLayout.forEach(([x, y, width, height, rotation]) => {
+      const beam = new THREE.Mesh(
+        new THREE.BoxGeometry(width, height, 0.08),
+        materials.frame,
+      );
+      beam.position.set(x, y, 0.08);
+      beam.rotation.z = rotation;
+      beam.castShadow = true;
+      beam.receiveShadow = true;
+      viewportGroup.add(beam);
+      cockpitBeams.push(beam);
+    });
+
     const wallGroup = new THREE.Group();
     wallGroup.position.set(0, 0, -1.26);
     root.add(wallGroup);
 
     const backPanel = new THREE.Mesh(
       new THREE.BoxGeometry(2.9, 1.48, 0.05),
-      materials.wallDark,
+      materials.glass,
     );
     backPanel.position.set(0, 0.92, 0);
     backPanel.receiveShadow = true;
@@ -347,9 +477,55 @@ export class AssistantScene {
     screen.castShadow = true;
     consoleGroup.add(screen);
 
+    const dataTicks: THREE.Mesh[] = [];
+    for (let i = 0; i < 18; i += 1) {
+      const width = i % 5 === 0 ? 0.18 : 0.08 + (i % 3) * 0.035;
+      const tick = new THREE.Mesh(
+        new THREE.BoxGeometry(width, 0.012, 0.008),
+        materials.ring,
+      );
+      tick.position.set(
+        -0.24 + (i % 3) * 0.19,
+        0.07 - Math.floor(i / 3) * 0.048,
+        0.032,
+      );
+      screen.add(tick);
+      dataTicks.push(tick);
+    }
+
     const screenGlow = new THREE.PointLight('#38BDF8', 1.2, 2.2);
     screenGlow.position.set(0, 0.42, 0.08);
     consoleGroup.add(screenGlow);
+
+    const hologramGroup = new THREE.Group();
+    hologramGroup.position.set(0.2, 0.46, -0.16);
+    root.add(hologramGroup);
+
+    const hologramGeometry = new THREE.PlaneGeometry(1.12, 0.62, 28, 14);
+    const positions = hologramGeometry.attributes
+      .position as THREE.BufferAttribute;
+    for (let i = 0; i < positions.count; i += 1) {
+      const x = positions.getX(i);
+      const y = positions.getY(i);
+      const ridge =
+        Math.exp(-Math.pow(x * 2.2 - 0.18, 2) - Math.pow(y * 3.2, 2)) * 0.18 +
+        Math.exp(-Math.pow(x * 3.4 + 0.78, 2) - Math.pow(y * 2.4 - 0.36, 2)) *
+          0.1;
+      positions.setZ(i, ridge + Math.sin((x + y) * 9) * 0.018);
+    }
+    positions.needsUpdate = true;
+    hologramGeometry.computeVertexNormals();
+
+    const hologramMesh = new THREE.Mesh(hologramGeometry, materials.hologram);
+    hologramMesh.rotation.x = -Math.PI / 2;
+    hologramGroup.add(hologramMesh);
+
+    const hologramScan = new THREE.Mesh(
+      new THREE.BoxGeometry(0.026, 0.014, 0.62),
+      materials.hologramScan,
+    );
+    hologramScan.position.set(-0.5, 0.04, 0);
+    hologramGroup.add(hologramScan);
 
     const sidePanels: THREE.Mesh[] = [];
     [-0.82, 0.82].forEach((x) => {
@@ -364,6 +540,14 @@ export class AssistantScene {
       sidePanels.push(panel);
     });
 
+    const floorDeck = new THREE.Mesh(
+      new THREE.BoxGeometry(3.25, 0.06, 1.55),
+      materials.floor,
+    );
+    floorDeck.position.set(0, -0.04, -0.34);
+    floorDeck.receiveShadow = true;
+    root.add(floorDeck);
+
     const statusLight = new THREE.PointLight('#10B981', 1.35, 3.2);
     statusLight.position.set(0, 1.38, 1.1);
     root.add(statusLight);
@@ -377,14 +561,23 @@ export class AssistantScene {
       consoleGroup,
       propGroup,
       wallGroup,
+      viewportGroup,
+      planetGroup,
+      hologramGroup,
       platform,
+      floorDeck,
       screen,
+      hologramMesh,
+      hologramScan,
       screenGlow,
       statusLight,
       statusRing,
       backgroundScreen,
+      starField,
+      cockpitBeams,
       sidePanels,
       alertBars,
+      dataTicks,
     };
   }
 
@@ -528,6 +721,12 @@ export class AssistantScene {
     this.ringMaterial.color.copy(color);
     this.objects.statusLight.color.copy(color);
     this.objects.screenGlow.color.copy(color);
+    const hologramMaterial = this.objects.hologramMesh
+      .material as THREE.MeshBasicMaterial;
+    const hologramScanMaterial = this.objects.hologramScan
+      .material as THREE.MeshBasicMaterial;
+    hologramMaterial.color.copy(color);
+    hologramScanMaterial.color.copy(color);
   }
 
   private resize(): void {
@@ -550,13 +749,20 @@ export class AssistantScene {
 
     const expanded = this.mode === 'expanded';
     const compactFocus = this.mood === 'typing' ? 0.78 : 0.7;
-    this.targetRootScale.setScalar(expanded ? 1.08 : 1.22);
+    const targetFov = expanded ? 39 : 34;
+    this.camera.fov += (targetFov - this.camera.fov) * 0.08;
+    this.camera.updateProjectionMatrix();
+    this.targetRootScale.setScalar(expanded ? 0.94 : 1.22);
     this.targetCameraPosition.set(
-      expanded ? 0.1 : -0.12,
-      expanded ? 1.18 : 1.16,
-      expanded ? 4.65 : 3.75,
+      expanded ? 0.18 : -0.12,
+      expanded ? 1.16 : 1.16,
+      expanded ? 5.25 : 3.75,
     );
-    this.targetCameraFocus.set(expanded ? 0.04 : -0.12, compactFocus, -0.06);
+    this.targetCameraFocus.set(
+      expanded ? 0.04 : -0.12,
+      expanded ? 0.66 : compactFocus,
+      expanded ? -0.28 : -0.06,
+    );
 
     this.objects.root.scale.lerp(this.targetRootScale, 0.08);
     const targetX = expanded ? 0.02 : 0.08;
@@ -608,6 +814,19 @@ export class AssistantScene {
       ? intensityBase * attentionFlash * 1.4
       : intensityBase * 0.6;
     this.objects.statusRing.rotation.z += delta * 0.42;
+    this.objects.starField.rotation.z += delta * 0.012;
+    this.objects.planetGroup.rotation.y += delta * 0.075;
+    this.objects.hologramGroup.position.y =
+      0.46 + Math.sin(elapsed * 2.7) * 0.018;
+    this.objects.hologramScan.position.x = -0.54 + ((elapsed * 0.52) % 1.08);
+    const hologramMaterial = this.objects.hologramMesh
+      .material as THREE.MeshBasicMaterial;
+    const hologramScanMaterial = this.objects.hologramScan
+      .material as THREE.MeshBasicMaterial;
+    hologramMaterial.opacity =
+      this.mood === 'offline' ? 0.18 : 0.58 + Math.sin(elapsed * 3.6) * 0.1;
+    hologramScanMaterial.opacity =
+      this.mood === 'offline' ? 0.12 : 0.48 + Math.sin(elapsed * 7.2) * 0.16;
     this.objects.sidePanels.forEach((panel, index) => {
       panel.position.y = 0.42 + Math.sin(elapsed * 1.7 + index) * 0.025;
       panel.visible = expanded;
@@ -617,9 +836,24 @@ export class AssistantScene {
       bar.scale.y = 0.42 + scan * (this.mood === 'typing' ? 1.15 : 0.72);
       bar.visible = expanded;
     });
+    this.objects.dataTicks.forEach((tick, index) => {
+      const glow =
+        this.mood === 'typing'
+          ? 0.64 + Math.sin(elapsed * 8 + index * 0.5) * 0.36
+          : 0.56 + Math.sin(elapsed * 3.4 + index) * 0.18;
+      tick.scale.x = 0.72 + glow * 0.36;
+      tick.visible = expanded;
+    });
+    this.objects.cockpitBeams.forEach((beam, index) => {
+      beam.position.z = 0.08 + Math.sin(elapsed * 1.2 + index) * 0.006;
+      beam.visible = expanded;
+    });
     this.objects.consoleGroup.visible = expanded;
     this.objects.wallGroup.visible = expanded;
     this.objects.propGroup.visible = expanded;
+    this.objects.viewportGroup.visible = expanded;
+    this.objects.hologramGroup.visible = expanded;
+    this.objects.floorDeck.visible = expanded;
     this.propRoots.forEach((root) => {
       const visibleIn = root.userData
         .visibleIn as ScenePropManifest['visibleIn'];
