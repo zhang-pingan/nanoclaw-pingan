@@ -45,6 +45,7 @@ declare global {
       openWorkstation: (target?: string) => Promise<void>;
       setAlwaysOnTop: (enabled: boolean) => Promise<void>;
       setChatOpen: (open: boolean) => Promise<void>;
+      setMousePassthrough: (enabled: boolean) => Promise<void>;
       moveBy: (dx: number, dy: number) => Promise<void>;
       hide: () => Promise<void>;
       platform: string;
@@ -56,10 +57,6 @@ const API_BASE = 'http://localhost:3000';
 const ASSISTANT_CHAT_JID = 'assistant:main';
 const CHAT_AUTO_HIDE_DELAY_MS = 5_000;
 const CHAT_PANEL_TRANSITION_MS = 110;
-const CHAT_OPEN_RESIZE_DELAY_MS =
-  window.assistantHost?.platform === 'darwin' ? 60 : 16;
-const CHAT_CLOSE_RESIZE_DELAY_MS =
-  window.assistantHost?.platform === 'darwin' ? 80 : 32;
 const MASCOT_DRAG_HOLD_MS = 200;
 const MASCOT_DRAG_CANCEL_DISTANCE_PX = 6;
 const shell = document.getElementById('assistant-shell') as HTMLElement;
@@ -103,6 +100,9 @@ let chatOpen = false;
 let sceneChatOpen = false;
 let chatTransitionToken = 0;
 let chatAutoHideTimer: number | null = null;
+let mousePassthrough = false;
+let lastMouseClientX = -1;
+let lastMouseClientY = -1;
 let mascotDragHoldTimer: number | null = null;
 let mascotPointerId: number | null = null;
 let mascotPressStartScreenX = 0;
@@ -141,6 +141,33 @@ function setSceneChatOpen(open: boolean): void {
   if (sceneChatOpen === open) return;
   sceneChatOpen = open;
   syncScene();
+}
+
+function shouldCaptureMouse(target: Element | null): boolean {
+  return Boolean(
+    target?.closest(
+      '.no-drag, .assistant-bubble, .image-preview-overlay',
+    ),
+  );
+}
+
+function setMousePassthrough(enabled: boolean): void {
+  if (mousePassthrough === enabled) return;
+  mousePassthrough = enabled;
+  void window.assistantHost?.setMousePassthrough?.(enabled);
+}
+
+function syncMousePassthrough(event?: MouseEvent): void {
+  if (event) {
+    lastMouseClientX = event.clientX;
+    lastMouseClientY = event.clientY;
+  }
+  const hasKnownMousePosition =
+    lastMouseClientX >= 0 && lastMouseClientY >= 0;
+  const target = hasKnownMousePosition
+    ? document.elementFromPoint(lastMouseClientX, lastMouseClientY)
+    : null;
+  setMousePassthrough(!shouldCaptureMouse(target));
 }
 
 function setConnectionState(connected: boolean): void {
@@ -185,11 +212,11 @@ function setChatOpen(open: boolean): void {
     void loadChat();
     void (async () => {
       await window.assistantHost?.setChatOpen(true);
-      await delay(CHAT_OPEN_RESIZE_DELAY_MS);
       await afterNextPaint();
       if (transitionToken !== chatTransitionToken || !chatOpen) return;
       setSceneChatOpen(true);
       shell.classList.add('chat-open');
+      setMousePassthrough(false);
       chatInput.focus();
     })();
   } else {
@@ -200,10 +227,10 @@ function setChatOpen(open: boolean): void {
       await delay(CHAT_PANEL_TRANSITION_MS);
       if (transitionToken !== chatTransitionToken || chatOpen) return;
       await window.assistantHost?.setChatOpen(false);
-      await delay(CHAT_CLOSE_RESIZE_DELAY_MS);
       await afterNextPaint();
       if (transitionToken !== chatTransitionToken || chatOpen) return;
       setSceneChatOpen(false);
+      syncMousePassthrough();
     })();
   }
 }
@@ -956,6 +983,8 @@ mascotTrigger.addEventListener('keydown', (event) => {
 
 window.addEventListener('blur', scheduleChatAutoHide);
 window.addEventListener('focus', clearChatAutoHideTimer);
+window.addEventListener('mousemove', syncMousePassthrough);
+window.addEventListener('mouseleave', () => setMousePassthrough(true));
 document.addEventListener('pointerdown', clearChatAutoHideTimer);
 document.addEventListener('keydown', clearChatAutoHideTimer);
 

@@ -12,13 +12,8 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';
 
-const COLLAPSED_WINDOW_WIDTH = 390;
-const COLLAPSED_WINDOW_HEIGHT = 320;
-const EXPANDED_WINDOW_WIDTH = 540;
-const EXPANDED_WINDOW_HEIGHT = 430;
-// Animated BrowserWindow resize repeatedly resizes/recomposites the transparent
-// WebGL surface and makes the desktop mascot flicker during chat toggles.
-const ANIMATE_CHAT_WINDOW_RESIZE = false;
+const ASSISTANT_WINDOW_WIDTH = 540;
+const ASSISTANT_WINDOW_HEIGHT = 430;
 const WORKSTATION_URL = 'http://localhost:3000/';
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
 const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
@@ -26,7 +21,6 @@ const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
 let assistantWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
-let chatOpen = false;
 
 function rendererPath(filename: string): string {
   return path.join(process.cwd(), 'assistant', 'renderer', filename);
@@ -113,9 +107,7 @@ function toggleAssistantWindow(): void {
 }
 
 function assistantWindowSize(): { width: number; height: number } {
-  return chatOpen
-    ? { width: EXPANDED_WINDOW_WIDTH, height: EXPANDED_WINDOW_HEIGHT }
-    : { width: COLLAPSED_WINDOW_WIDTH, height: COLLAPSED_WINDOW_HEIGHT };
+  return { width: ASSISTANT_WINDOW_WIDTH, height: ASSISTANT_WINDOW_HEIGHT };
 }
 
 function clampWindowToWorkArea(
@@ -136,24 +128,6 @@ function clampWindowToWorkArea(
     x: Math.min(Math.max(Math.round(x), area.x), area.x + area.width - width),
     y: Math.min(Math.max(Math.round(y), area.y), area.y + area.height - height),
   };
-}
-
-function resizeAssistantWindowForChatMode(): void {
-  if (!assistantWindow || assistantWindow.isDestroyed()) return;
-
-  const bounds = assistantWindow.getBounds();
-  const size = assistantWindowSize();
-  if (bounds.width === size.width && bounds.height === size.height) return;
-
-  const bottomRightX = bounds.x + bounds.width;
-  const bottomRightY = bounds.y + bounds.height;
-  const next = clampWindowToWorkArea(
-    bottomRightX - size.width,
-    bottomRightY - size.height,
-    size.width,
-    size.height,
-  );
-  assistantWindow.setBounds({ ...next, ...size }, ANIMATE_CHAT_WINDOW_RESIZE);
 }
 
 function createAssistantWindow(): void {
@@ -238,8 +212,16 @@ ipcMain.handle(
 );
 
 ipcMain.handle('assistant:set-chat-open', (_event, open: boolean) => {
-  chatOpen = Boolean(open);
-  resizeAssistantWindowForChatMode();
+  void open;
+});
+
+ipcMain.handle('assistant:set-mouse-passthrough', (_event, enabled: boolean) => {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  if (enabled) {
+    assistantWindow.setIgnoreMouseEvents(true, { forward: true });
+    return;
+  }
+  assistantWindow.setIgnoreMouseEvents(false);
 });
 
 ipcMain.handle('assistant:move-by', (_event, dx: number, dy: number) => {
