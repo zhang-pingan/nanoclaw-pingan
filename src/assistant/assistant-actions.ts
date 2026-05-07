@@ -5,6 +5,7 @@ import {
   getAgentInboxItem,
   updateAgentInboxItemStatus,
 } from './agent-inbox-store.js';
+import { resolveTodayPlanInboxItemsForDate } from './today-plan-inbox.js';
 import type { AgentInboxItemView } from './types.js';
 
 function requireItem(itemId: string): AgentInboxItemView {
@@ -113,6 +114,7 @@ export function runAgentInboxAction(input: {
           throw new Error('continueFromPlanId missing');
         }
         const plan = createOrContinueTodayPlan({ continueFromPlanId });
+        resolveTodayPlanInboxItemsForDate(plan.plan_date);
         const updated = updateAgentInboxItemStatus(item.id, 'done');
         createAssistantActionLog({
           itemId: item.id,

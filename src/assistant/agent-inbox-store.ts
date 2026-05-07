@@ -14,11 +14,7 @@ import {
 } from './types.js';
 
 const SETTINGS_KEY = 'assistant';
-const ACTIVE_INBOX_STATUSES: AgentInboxStatus[] = [
-  'unread',
-  'read',
-  'snoozed',
-];
+const ACTIVE_INBOX_STATUSES: AgentInboxStatus[] = ['unread', 'read', 'snoozed'];
 
 function nowTs(): string {
   return Date.now().toString();
@@ -28,7 +24,9 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function readJsonObject(value: string | null | undefined): Record<string, unknown> {
+function readJsonObject(
+  value: string | null | undefined,
+): Record<string, unknown> {
   if (!value) return {};
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -51,7 +49,9 @@ function toInboxView(record: AgentInboxItemRecord): AgentInboxItemView {
   };
 }
 
-function toActionLogView(record: AssistantActionLogRecord): AssistantActionLogView {
+function toActionLogView(
+  record: AssistantActionLogRecord,
+): AssistantActionLogView {
   const { payload_json, result_json, ...rest } = record;
   return {
     ...rest,
@@ -60,7 +60,12 @@ function toActionLogView(record: AssistantActionLogRecord): AssistantActionLogVi
   };
 }
 
-function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
+function clampNumber(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
   return Math.min(Math.max(Math.round(numeric), min), max);
@@ -107,7 +112,10 @@ function normalizeSettings(raw: unknown): AssistantSettings {
         quietHours.start,
         DEFAULT_ASSISTANT_SETTINGS.quietHours.start,
       ),
-      end: normalizeTime(quietHours.end, DEFAULT_ASSISTANT_SETTINGS.quietHours.end),
+      end: normalizeTime(
+        quietHours.end,
+        DEFAULT_ASSISTANT_SETTINGS.quietHours.end,
+      ),
     },
     dataSources: {
       todayPlan:
@@ -215,10 +223,12 @@ export function getAgentInboxItemByDedupeKey(
   return row ? toInboxView(row) : null;
 }
 
-export function listAgentInboxItems(input: {
-  status?: AgentInboxStatus | 'active' | 'all';
-  limit?: number;
-} = {}): AgentInboxItemView[] {
+export function listAgentInboxItems(
+  input: {
+    status?: AgentInboxStatus | 'active' | 'all';
+    limit?: number;
+  } = {},
+): AgentInboxItemView[] {
   const limit = clampNumber(input.limit, 100, 1, 1000);
   const values: unknown[] = [];
   let where = '';
@@ -262,7 +272,9 @@ export function getAgentInboxCounts(): Record<AgentInboxStatus, number> {
     snoozed: 0,
   };
   const rows = getDatabase()
-    .prepare('SELECT status, COUNT(*) AS count FROM agent_inbox_items GROUP BY status')
+    .prepare(
+      'SELECT status, COUNT(*) AS count FROM agent_inbox_items GROUP BY status',
+    )
     .all() as Array<{ status: AgentInboxStatus; count: number }>;
   for (const row of rows) {
     if (row.status in counts) counts[row.status] = row.count;
@@ -315,6 +327,29 @@ export function resolveActiveAgentInboxItemsBySource(input: {
   return rows.map((row) =>
     updateAgentInboxItemStatus(row.id, input.status || 'done'),
   );
+}
+
+export function resolveActiveAgentInboxItemsByDedupePrefix(
+  dedupeKeyPrefix: string,
+  status: 'done' | 'dismissed' = 'done',
+): AgentInboxItemView[] {
+  if (!dedupeKeyPrefix) return [];
+  const activeStatusPlaceholders = ACTIVE_INBOX_STATUSES.map(() => '?').join(
+    ', ',
+  );
+  const rows = getDatabase()
+    .prepare(
+      `SELECT id FROM agent_inbox_items
+       WHERE substr(dedupe_key, 1, ?) = ?
+         AND status IN (${activeStatusPlaceholders})`,
+    )
+    .all(
+      dedupeKeyPrefix.length,
+      dedupeKeyPrefix,
+      ...ACTIVE_INBOX_STATUSES,
+    ) as Array<{ id: string }>;
+
+  return rows.map((row) => updateAgentInboxItemStatus(row.id, status));
 }
 
 export function createOrUpdateAgentInboxItem(
@@ -447,7 +482,9 @@ export function updateAgentInboxItemStatus(
   return updated;
 }
 
-export function listAssistantActionLogs(limit: number = 50): AssistantActionLogView[] {
+export function listAssistantActionLogs(
+  limit: number = 50,
+): AssistantActionLogView[] {
   const rows = getDatabase()
     .prepare(
       `SELECT * FROM assistant_action_logs

@@ -46,9 +46,7 @@ type SceneObjects = {
   screenGlow: THREE.PointLight;
   statusLight: THREE.PointLight;
   statusRing: THREE.Mesh;
-  backgroundScreen: THREE.Mesh;
   starField: THREE.Points;
-  alertBars: THREE.Mesh[];
   dataTicks: THREE.Mesh[];
 };
 
@@ -310,24 +308,6 @@ export class AssistantScene {
     wallGroup.position.set(0, 0, -1.26);
     root.add(wallGroup);
 
-    const backgroundScreen = new THREE.Mesh(
-      new THREE.BoxGeometry(1.18, 0.42, 0.035),
-      materials.screen,
-    );
-    backgroundScreen.position.set(0, 1.5, 0.085);
-    wallGroup.add(backgroundScreen);
-
-    const alertBars: THREE.Mesh[] = [];
-    [-0.22, 0, 0.22].forEach((x) => {
-      const bar = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, 0.3, 0.035),
-        materials.ring,
-      );
-      bar.position.set(x, 1.49, 0.11);
-      wallGroup.add(bar);
-      alertBars.push(bar);
-    });
-
     const platform = new THREE.Mesh(
       new THREE.CylinderGeometry(0.74, 0.88, 0.16, 48),
       materials.panel,
@@ -349,7 +329,7 @@ export class AssistantScene {
     root.add(consoleGroup);
 
     const screen = new THREE.Mesh(
-      new THREE.BoxGeometry(1.28, 0.42, 0.04),
+      new THREE.BoxGeometry(1.0, 0.44, 0.04),
       materials.screen,
     );
     screen.position.set(0, 0, -0.1);
@@ -358,8 +338,8 @@ export class AssistantScene {
     consoleGroup.add(screen);
 
     [
-      { x: -1.02, rotationY: 0.34 },
-      { x: 1.02, rotationY: -0.34 },
+      { x: -0.88, rotationY: 0.34 },
+      { x: 0.88, rotationY: -0.34 },
     ].forEach(({ x, rotationY }) => {
       const sideScreen = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, 0.36, 0.038),
@@ -452,9 +432,7 @@ export class AssistantScene {
       screenGlow,
       statusLight,
       statusRing,
-      backgroundScreen,
       starField,
-      alertBars,
       dataTicks,
     };
   }
@@ -739,11 +717,6 @@ export class AssistantScene {
       this.mood === 'offline' ? 0.18 : 0.58 + Math.sin(elapsed * 3.6) * 0.1;
     hologramScanMaterial.opacity =
       this.mood === 'offline' ? 0.12 : 0.48 + Math.sin(elapsed * 7.2) * 0.16;
-    this.objects.alertBars.forEach((bar, index) => {
-      const scan = 0.5 + Math.sin(elapsed * 4.6 + index * 0.8) * 0.5;
-      bar.scale.y = 0.42 + scan * (this.mood === 'typing' ? 1.15 : 0.72);
-      bar.visible = expanded;
-    });
     this.objects.dataTicks.forEach((tick, index) => {
       const glow =
         this.mood === 'typing'

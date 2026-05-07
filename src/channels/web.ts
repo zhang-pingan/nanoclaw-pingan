@@ -13,6 +13,7 @@ import {
   sendAssistantChatMessageForApi,
   updateAssistantSettingsForApi,
 } from '../assistant/assistant-api.js';
+import { resolveTodayPlanInboxItemsForDate } from '../assistant/today-plan-inbox.js';
 import type { AssistantRealtimeEvent } from '../assistant/assistant-events.js';
 import {
   AgentStatusInfo,
@@ -2944,6 +2945,7 @@ class WebChannel {
         planDate: data.plan_date || getTodayPlanDateKey(),
         continueFromPlanId: data.continue_from_plan_id || undefined,
       });
+      resolveTodayPlanInboxItemsForDate(plan.plan_date);
       const detail = getTodayPlanDetail({
         planId: plan.id,
         groups: this.opts.registeredGroups(),

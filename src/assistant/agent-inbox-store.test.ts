@@ -1,9 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  _initTestDatabase,
-  createWorkbenchTask,
-} from '../db.js';
+import { _initTestDatabase, createWorkbenchTask } from '../db.js';
+import { createOrContinueTodayPlan } from '../today-plan.js';
 import { initAssistantEvents } from './assistant-events.js';
 import {
   createOrUpdateAgentInboxItem,
@@ -12,11 +10,16 @@ import {
   listAgentInboxItems,
   updateAssistantSettings,
 } from './agent-inbox-store.js';
+import { getAssistantState } from './assistant-api.js';
 import { runProactiveScan } from './proactive-engine.js';
 
 beforeEach(() => {
   _initTestDatabase();
   initAssistantEvents(() => {});
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function createStoredWorkbenchTask(input: {
@@ -97,6 +100,61 @@ describe('agent inbox store', () => {
     expect(item?.action_kind).toBeNull();
     expect(item?.action_label).toBeNull();
     expect(item?.action_payload).toEqual({});
+  });
+
+  it('resolves obsolete today-plan inbox items after today plan exists', () => {
+    const now = new Date(2026, 3, 28, 9, 0, 0);
+    const missing = createOrUpdateAgentInboxItem({
+      dedupeKey: 'today-plan:missing:2026-04-28',
+      kind: 'suggestion',
+      priority: 'high',
+      title: '今天还没有计划',
+      sourceType: 'today_plan',
+      sourceRefId: '2026-04-28',
+    });
+    const continuation = createOrUpdateAgentInboxItem({
+      dedupeKey: 'today-plan:continue:2026-04-28:old-plan',
+      kind: 'suggestion',
+      priority: 'normal',
+      title: '有未完成的往日计划',
+      sourceType: 'today_plan',
+      sourceRefId: 'old-plan',
+    });
+
+    createOrContinueTodayPlan({ planDate: '2026-04-28' });
+    runProactiveScan({ now });
+
+    expect(getAgentInboxItem(missing.id)?.status).toBe('done');
+    expect(getAgentInboxItem(continuation.id)?.status).toBe('done');
+    expect(
+      listAgentInboxItems({ status: 'active' }).some((item) =>
+        item.dedupe_key.startsWith('today-plan:'),
+      ),
+    ).toBe(false);
+  });
+
+  it('resolves obsolete today-plan inbox items when refreshing assistant state', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 28, 9, 0, 0));
+    const missing = createOrUpdateAgentInboxItem({
+      dedupeKey: 'today-plan:missing:2026-04-28',
+      kind: 'suggestion',
+      priority: 'high',
+      title: '今天还没有计划',
+      sourceType: 'today_plan',
+      sourceRefId: '2026-04-28',
+    });
+
+    createOrContinueTodayPlan({ planDate: '2026-04-28' });
+
+    const state = getAssistantState();
+
+    expect(getAgentInboxItem(missing.id)?.status).toBe('done');
+    expect(
+      state.latestInboxItems.some(
+        (item) => item.dedupe_key === 'today-plan:missing:2026-04-28',
+      ),
+    ).toBe(false);
   });
 
   it('does not stale-alert successful workbench tasks', () => {

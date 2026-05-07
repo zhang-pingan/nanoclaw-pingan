@@ -22,6 +22,7 @@ import {
   resolveActiveAgentInboxItemByDedupeKey,
   resolveActiveAgentInboxItemsBySource,
 } from './agent-inbox-store.js';
+import { resolveTodayPlanInboxItemsForDate } from './today-plan-inbox.js';
 import type { AgentInboxPriority, UpsertAgentInboxItemInput } from './types.js';
 
 const WORKSTATION_URL = 'http://localhost:3000/';
@@ -30,7 +31,10 @@ const DEFAULT_STALE_TASK_HOURS = 4;
 let proactiveLoopStarted = false;
 let proactiveLoopTimer: NodeJS.Timeout | null = null;
 
-function workstationUrl(target: string, params: Record<string, string> = {}): string {
+function workstationUrl(
+  target: string,
+  params: Record<string, string> = {},
+): string {
   const url = new URL(WORKSTATION_URL);
   url.searchParams.set('assistantTarget', target);
   for (const [key, value] of Object.entries(params)) {
@@ -91,11 +95,14 @@ function scanTodayPlanRules(
       sourceRefId: todayKey,
       actionUrl: workstationUrl('today-plan'),
     });
+  } else {
+    resolveTodayPlanInboxItemsForDate(todayKey);
   }
 
-  const unfinishedPlan = listTodayPlans({ before_date: todayKey, limit: 10 }).find(
-    (plan: TodayPlanRecord) => plan.status === 'active',
-  );
+  const unfinishedPlan = listTodayPlans({
+    before_date: todayKey,
+    limit: 10,
+  }).find((plan: TodayPlanRecord) => plan.status === 'active');
   if (unfinishedPlan && !todayPlan) {
     pushInbox(items, {
       dedupeKey: `today-plan:continue:${todayKey}:${unfinishedPlan.id}`,
@@ -246,7 +253,8 @@ function scanWorkbenchRules(
 
 function scanSchedulerRules(items: UpsertAgentInboxItemInput[]): void {
   for (const task of getAllTasks() as ScheduledTask[]) {
-    if (!task.last_result || !/^error:/i.test(task.last_result.trim())) continue;
+    if (!task.last_result || !/^error:/i.test(task.last_result.trim()))
+      continue;
     pushInbox(items, {
       dedupeKey: `scheduler:failure:${task.id}:${task.last_run || task.last_result}`,
       kind: 'risk',

@@ -13,6 +13,7 @@ import {
 import { clearAssistantData } from '../db.js';
 import { emitAssistantEvent } from './assistant-events.js';
 import { runProactiveScan } from './proactive-engine.js';
+import { resolveTodayPlanInboxItemsIfPlanExists } from './today-plan-inbox.js';
 import type { AgentInboxStatus, AssistantState } from './types.js';
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -43,6 +44,7 @@ function toStatus(value: unknown): AgentInboxStatus | 'active' | 'all' {
 }
 
 export function getAssistantState(): AssistantState {
+  resolveTodayPlanInboxItemsIfPlanExists();
   return {
     settings: getAssistantSettings(),
     inboxCounts: getAgentInboxCounts(),
@@ -55,6 +57,7 @@ export function listAgentInboxForApi(input: {
   status?: unknown;
   limit?: unknown;
 }) {
+  resolveTodayPlanInboxItemsIfPlanExists();
   return {
     items: listAgentInboxItems({
       status: toStatus(input.status),
