@@ -310,14 +310,6 @@ export class AssistantScene {
     wallGroup.position.set(0, 0, -1.26);
     root.add(wallGroup);
 
-    const backPanel = new THREE.Mesh(
-      new THREE.BoxGeometry(2.9, 1.48, 0.05),
-      materials.glass,
-    );
-    backPanel.position.set(0, 0.92, 0);
-    backPanel.receiveShadow = true;
-    wallGroup.add(backPanel);
-
     const backgroundScreen = new THREE.Mesh(
       new THREE.BoxGeometry(0.78, 0.42, 0.035),
       materials.screen,
