@@ -40,7 +40,6 @@ type SceneObjects = {
   viewportGroup: THREE.Group;
   hologramGroup: THREE.Group;
   platform: THREE.Mesh;
-  floorDeck: THREE.Mesh;
   screen: THREE.Mesh;
   hologramMesh: THREE.Mesh;
   hologramScan: THREE.Mesh;
@@ -217,9 +216,7 @@ export class AssistantScene {
     panel: THREE.MeshStandardMaterial;
     screen: THREE.MeshStandardMaterial;
     ring: THREE.MeshStandardMaterial;
-    wall: THREE.MeshStandardMaterial;
     wallDark: THREE.MeshStandardMaterial;
-    floor: THREE.MeshStandardMaterial;
     glass: THREE.MeshStandardMaterial;
     hologram: THREE.MeshBasicMaterial;
     hologramScan: THREE.MeshBasicMaterial;
@@ -244,20 +241,10 @@ export class AssistantScene {
         roughness: 0.35,
         metalness: 0.25,
       }),
-      wall: new THREE.MeshStandardMaterial({
-        color: '#94A3B8',
-        roughness: 0.5,
-        metalness: 0.28,
-      }),
       wallDark: new THREE.MeshStandardMaterial({
         color: '#1E293B',
         roughness: 0.54,
         metalness: 0.2,
-      }),
-      floor: new THREE.MeshStandardMaterial({
-        color: '#243244',
-        roughness: 0.64,
-        metalness: 0.26,
       }),
       glass: new THREE.MeshStandardMaterial({
         color: '#0F172A',
@@ -330,24 +317,6 @@ export class AssistantScene {
     backPanel.position.set(0, 0.92, 0);
     backPanel.receiveShadow = true;
     wallGroup.add(backPanel);
-
-    const panelLayout: Array<[number, number, number, number]> = [
-      [-0.94, 1.14, 0.62, 0.38],
-      [-0.2, 1.18, 0.58, 0.42],
-      [0.62, 1.12, 0.74, 0.34],
-      [-0.68, 0.64, 0.74, 0.34],
-      [0.42, 0.62, 0.96, 0.32],
-    ];
-    panelLayout.forEach(([x, y, width, height]) => {
-      const panel = new THREE.Mesh(
-        new THREE.BoxGeometry(width, height, 0.035),
-        materials.wall,
-      );
-      panel.position.set(x, y, 0.04);
-      panel.castShadow = true;
-      panel.receiveShadow = true;
-      wallGroup.add(panel);
-    });
 
     const backgroundScreen = new THREE.Mesh(
       new THREE.BoxGeometry(0.78, 0.42, 0.035),
@@ -447,14 +416,6 @@ export class AssistantScene {
     hologramScan.position.set(-0.5, 0.04, 0);
     hologramGroup.add(hologramScan);
 
-    const floorDeck = new THREE.Mesh(
-      new THREE.BoxGeometry(3.25, 0.06, 1.55),
-      materials.floor,
-    );
-    floorDeck.position.set(0, -0.04, -0.34);
-    floorDeck.receiveShadow = true;
-    root.add(floorDeck);
-
     const statusLight = new THREE.PointLight('#10B981', 1.35, 3.2);
     statusLight.position.set(0, 1.38, 1.1);
     root.add(statusLight);
@@ -471,7 +432,6 @@ export class AssistantScene {
       viewportGroup,
       hologramGroup,
       platform,
-      floorDeck,
       screen,
       hologramMesh,
       hologramScan,
@@ -751,6 +711,8 @@ export class AssistantScene {
       ? intensityBase * attentionFlash * 1.4
       : intensityBase * 0.6;
     this.objects.statusRing.rotation.z += delta * 0.42;
+    this.objects.platform.visible = !expanded;
+    this.objects.statusRing.visible = !expanded;
     this.objects.starField.rotation.z += delta * 0.012;
     this.objects.hologramGroup.position.y =
       0.46 + Math.sin(elapsed * 2.7) * 0.018;
@@ -781,7 +743,6 @@ export class AssistantScene {
     this.objects.propGroup.visible = expanded;
     this.objects.viewportGroup.visible = expanded;
     this.objects.hologramGroup.visible = expanded;
-    this.objects.floorDeck.visible = expanded;
     this.propRoots.forEach((root) => {
       const visibleIn = root.userData
         .visibleIn as ScenePropManifest['visibleIn'];
