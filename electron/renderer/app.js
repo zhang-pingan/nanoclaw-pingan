@@ -122,6 +122,25 @@ var cardsManagementPreviewPreset = document.getElementById("cards-management-pre
 var cardsManagementPreviewData = document.getElementById("cards-management-preview-data");
 var cardsManagementPreview = document.getElementById("cards-management-preview");
 var cardsManagementReferences = document.getElementById("cards-management-references");
+var configurationScreen = document.getElementById("configuration-screen");
+var configurationServicesToggle = document.getElementById("configuration-services-toggle");
+var configurationServiceList = document.getElementById("configuration-service-list");
+var configurationServiceRefreshBtn = document.getElementById("configuration-service-refresh-btn");
+var configurationServiceAddBtn = document.getElementById("configuration-service-add-btn");
+var configurationServiceEmpty = document.getElementById("configuration-service-empty");
+var configurationServiceDetail = document.getElementById("configuration-service-detail");
+var configurationServiceTitle = document.getElementById("configuration-service-title");
+var configurationServiceSummary = document.getElementById("configuration-service-summary");
+var configurationServiceMeta = document.getElementById("configuration-service-meta");
+var configurationServiceSaveStatus = document.getElementById("configuration-service-save-status");
+var configurationServiceSaveBtn = document.getElementById("configuration-service-save-btn");
+var configurationServiceDeleteBtn = document.getElementById("configuration-service-delete-btn");
+var configurationServicesPathEl = document.getElementById("configuration-services-path");
+var configurationServiceNameInput = document.getElementById("configuration-service-name-input");
+var configurationServiceJsonEditor = document.getElementById("configuration-service-json-editor");
+var configurationServiceJsonFormatBtn = document.getElementById("configuration-service-json-format-btn");
+var configurationServiceJsonApplyBtn = document.getElementById("configuration-service-json-apply-btn");
+var configurationServiceFieldInputs = Array.from(document.querySelectorAll("[data-service-config-path]"));
 var memoryGroupsList = document.getElementById("memory-groups-list");
 var memorySearchInput = document.getElementById("memory-search-input");
 var memoryStatusFilter = document.getElementById("memory-status-filter");
@@ -344,6 +363,15 @@ var cardsManagementGroupsInitialized = false;
 var cardsManagementEditMode = false;
 var cardsManagementEditSnapshot = null;
 var cardsRequestSeq = 0;
+var serviceConfigRegistry = {};
+var serviceConfigNames = [];
+var currentServiceConfigName = "";
+var serviceConfigDraft = null;
+var serviceConfigDirty = false;
+var serviceConfigRequestSeq = 0;
+var serviceConfigFilePath = "";
+var serviceConfigSaving = false;
+var serviceConfigListExpanded = true;
 var workflowDefinitionReferenceDetails = {};
 var cardsDragState = null;
 var cardsPreviewPresets = {
@@ -1858,6 +1886,7 @@ function applyScreenVisibility() {
   const showWorkspace = !showTodayPlan && activePrimaryNavKey === "agent-groups";
   const showWorkflowDefinitions = !showTodayPlan && activePrimaryNavKey === "workflow-definitions";
   const showCardsManagement = !showTodayPlan && activePrimaryNavKey === "cards-management";
+  const showConfiguration = !showTodayPlan && activePrimaryNavKey === "configuration";
   const showMemoryManagement = !showTodayPlan && activePrimaryNavKey === "memory-management";
   const showKnowledgeManagement = !showTodayPlan && activePrimaryNavKey === "knowledge-management";
   const showTraceMonitor = !showTodayPlan && activePrimaryNavKey === "trace-monitor";
@@ -1878,6 +1907,9 @@ function applyScreenVisibility() {
   }
   if (cardsManagementScreen) {
     cardsManagementScreen.classList.toggle("active", showCardsManagement);
+  }
+  if (configurationScreen) {
+    configurationScreen.classList.toggle("active", showConfiguration);
   }
   if (memoryManagementScreen) {
     memoryManagementScreen.classList.toggle("active", showMemoryManagement);
@@ -1931,6 +1963,9 @@ function setPrimaryNav(navKey) {
   }
   if (navKey === "cards-management") {
     loadCardsRegistry({ preserveSelection: true });
+  }
+  if (navKey === "configuration") {
+    loadServiceConfigs({ preserveSelection: true });
   }
   if (navKey === "trace-monitor") {
     loadTraceMonitorData({ force: false });
@@ -14259,6 +14294,9 @@ function handleWsMessage(msg) {
     case "assistant_event":
       handleAssistantRealtimeEvent(msg.event);
       break;
+    case "config_event":
+      handleConfigRealtimeEvent(msg.event);
+      break;
     case "desktop_capture_request":
       handleDesktopCaptureRequest(msg);
       break;
@@ -17500,6 +17538,418 @@ function handleAssistantRealtimeEvent(event) {
   }
 }
 
+function normalizeServiceConfigRegistry(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const next = {};
+  Object.entries(input).forEach(([name, config]) => {
+    const safeName = String(name || "").trim();
+    if (!safeName || !config || typeof config !== "object" || Array.isArray(config)) return;
+    next[safeName] = cloneJson(config);
+  });
+  return next;
+}
+
+function sortServiceConfigNames(registry) {
+  return Object.keys(registry || {}).sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function getServiceConfigValue(source, pathValue) {
+  if (!source || !pathValue) return undefined;
+  return String(pathValue).split(".").reduce((acc, part) => {
+    if (!acc || typeof acc !== "object") return undefined;
+    return acc[part];
+  }, source);
+}
+
+function setServiceConfigValue(target, pathValue, value) {
+  if (!target || !pathValue) return;
+  const parts = String(pathValue).split(".").filter(Boolean);
+  if (parts.length === 0) return;
+  let cursor = target;
+  parts.slice(0, -1).forEach((part) => {
+    if (!cursor[part] || typeof cursor[part] !== "object" || Array.isArray(cursor[part])) {
+      cursor[part] = {};
+    }
+    cursor = cursor[part];
+  });
+  const last = parts[parts.length - 1];
+  if (value === "" || value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
+    delete cursor[last];
+    return;
+  }
+  cursor[last] = value;
+}
+
+function normalizeServiceFieldValue(input, type) {
+  if (type === "number") {
+    const raw = typeof input === "string" ? input.trim() : input;
+    if (raw === "" || raw === null || raw === undefined) return "";
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) ? Math.round(numeric) : "";
+  }
+  if (type === "csv") {
+    const text = Array.isArray(input) ? input.join(",") : String(input || "");
+    return text.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return typeof input === "string" ? input.trim() : input;
+}
+
+function formatServiceFieldValue(value, type) {
+  if (type === "csv") {
+    return Array.isArray(value) ? value.join(", ") : String(value || "");
+  }
+  if (value === undefined || value === null) return "";
+  return String(value);
+}
+
+function createEmptyServiceConfig(name = "") {
+  const serviceName = name.trim();
+  return {
+    repo_path: serviceName,
+    git_url: "",
+    default_branch: "master",
+    jenkins_job: "",
+    staging: {
+      branch: "erp",
+      jenkins_job: "",
+      domain: "",
+      log_hosts: [],
+      logs_info: "",
+      logs_error: "",
+      mysql: {
+        host: "",
+        port: 3306,
+        user: "",
+        database: "",
+      },
+    },
+    user: "root",
+    log_hosts: [],
+    logs_info: "",
+    logs_error: "",
+    mysql: {
+      host: "",
+      port: 3306,
+      user: "",
+      database: "",
+    },
+  };
+}
+
+function updateServiceConfigSaveStatus(text, state = "") {
+  if (!configurationServiceSaveStatus) return;
+  configurationServiceSaveStatus.textContent = text || "";
+  configurationServiceSaveStatus.dataset.state = state || "";
+}
+
+function updateServiceConfigDirty(nextDirty) {
+  serviceConfigDirty = Boolean(nextDirty);
+  if (configurationServiceSaveBtn) {
+    configurationServiceSaveBtn.disabled = serviceConfigSaving || (!currentServiceConfigName && !serviceConfigDirty);
+    configurationServiceSaveBtn.textContent = serviceConfigSaving ? "保存中..." : "保存并生效";
+  }
+  if (serviceConfigSaving) {
+    updateServiceConfigSaveStatus("保存中", "saving");
+  } else if (serviceConfigDirty) {
+    updateServiceConfigSaveStatus("有未保存修改", "dirty");
+  } else if (currentServiceConfigName) {
+    updateServiceConfigSaveStatus("已保存", "saved");
+  } else {
+    updateServiceConfigSaveStatus("未选择服务", "");
+  }
+}
+
+function readServiceConfigDraftFromForm() {
+  const base = serviceConfigDraft && typeof serviceConfigDraft === "object" ? cloneJson(serviceConfigDraft) : {};
+  configurationServiceFieldInputs.forEach((input) => {
+    const pathValue = input.getAttribute("data-service-config-path") || "";
+    const type = input.getAttribute("data-service-config-type") || "text";
+    setServiceConfigValue(base, pathValue, normalizeServiceFieldValue(input.value, type));
+  });
+  return base;
+}
+
+function syncServiceJsonFromForm(markDirty = true) {
+  if (!currentServiceConfigName) return;
+  serviceConfigDraft = readServiceConfigDraftFromForm();
+  if (configurationServiceJsonEditor) {
+    configurationServiceJsonEditor.value = stringifyPrettyJson(serviceConfigDraft || {});
+  }
+  if (markDirty) updateServiceConfigDirty(true);
+  renderServiceConfigHeader();
+}
+
+function renderServiceConfigHeader() {
+  const draft = serviceConfigDraft || {};
+  if (configurationServiceTitle) {
+    configurationServiceTitle.textContent = currentServiceConfigName || "--";
+  }
+  if (configurationServiceSummary) {
+    const repoPath = draft.repo_path || currentServiceConfigName || "--";
+    const defaultBranch = draft.default_branch || "--";
+    const jenkinsJob = draft.jenkins_job || "--";
+    configurationServiceSummary.textContent = `${repoPath} · ${defaultBranch} · ${jenkinsJob}`;
+  }
+  if (configurationServiceMeta) {
+    const mysql = draft.mysql && typeof draft.mysql === "object" ? draft.mysql : {};
+    const staging = draft.staging && typeof draft.staging === "object" ? draft.staging : {};
+    configurationServiceMeta.innerHTML = [
+      { label: "Repo", value: draft.repo_path || "--" },
+      { label: "Git", value: draft.git_url || "--" },
+      { label: "MySQL", value: mysql.database || mysql.host ? `${mysql.database || "--"} @ ${mysql.host || "--"}` : "--" },
+      { label: "Staging", value: staging.domain || staging.branch || "--" },
+    ].map((item) => `<span class="workflow-definition-pill"><strong>${escapeHtml(item.label)}</strong>${escapeHtml(String(item.value))}</span>`).join("");
+  }
+}
+
+function renderServiceConfigList() {
+  if (!configurationServiceList) return;
+  const toggle = configurationServicesToggle;
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", serviceConfigListExpanded ? "true" : "false");
+    const group = toggle.closest(".configuration-nav-group");
+    if (group) group.classList.toggle("expanded", serviceConfigListExpanded);
+    const chevron = toggle.querySelector(".configuration-nav-chevron");
+    if (chevron) chevron.textContent = serviceConfigListExpanded ? "▾" : "▸";
+  }
+  configurationServiceList.classList.toggle("hidden", !serviceConfigListExpanded);
+  if (!serviceConfigListExpanded) return;
+  serviceConfigNames = sortServiceConfigNames(serviceConfigRegistry);
+  if (serviceConfigNames.length === 0) {
+    configurationServiceList.innerHTML = '<div class="workflow-definition-list-empty">暂无服务配置</div>';
+    return;
+  }
+  configurationServiceList.innerHTML = serviceConfigNames.map((name) => {
+    const config = serviceConfigRegistry[name] || {};
+    const mysql = config.mysql && typeof config.mysql === "object" ? config.mysql : {};
+    return `
+      <button type="button" class="workflow-definition-list-item configuration-service-item${name === currentServiceConfigName ? " active" : ""}" data-service-config-name="${escapeAttribute(name)}">
+        <div class="workflow-definition-list-head">
+          <div class="workflow-definition-list-title">${escapeHtml(name)}</div>
+          <span class="workflow-definition-pill workflow-definition-main-pill">${escapeHtml(config.default_branch || "branch --")}</span>
+        </div>
+        <p class="workflow-definition-list-desc">${escapeHtml(config.repo_path || config.git_url || "未配置仓库")}</p>
+        <div class="workflow-definition-list-meta">
+          <span class="workflow-definition-pill"><strong>Jenkins</strong>${escapeHtml(config.jenkins_job || "--")}</span>
+          <span class="workflow-definition-pill"><strong>DB</strong>${escapeHtml(mysql.database || "--")}</span>
+        </div>
+      </button>
+    `;
+  }).join("");
+  Array.from(configurationServiceList.querySelectorAll("[data-service-config-name]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const name = button.getAttribute("data-service-config-name") || "";
+      selectServiceConfig(name);
+    });
+  });
+}
+
+function renderServiceConfigDetail() {
+  const hasSelection = Boolean(currentServiceConfigName);
+  if (configurationServiceEmpty) configurationServiceEmpty.classList.toggle("hidden", hasSelection);
+  if (configurationServiceDetail) configurationServiceDetail.classList.toggle("hidden", !hasSelection);
+  if (!hasSelection) {
+    updateServiceConfigDirty(false);
+    return;
+  }
+
+  if (configurationServiceNameInput) {
+    configurationServiceNameInput.value = currentServiceConfigName;
+  }
+  configurationServiceFieldInputs.forEach((input) => {
+    const pathValue = input.getAttribute("data-service-config-path") || "";
+    const type = input.getAttribute("data-service-config-type") || "text";
+    input.value = formatServiceFieldValue(getServiceConfigValue(serviceConfigDraft || {}, pathValue), type);
+  });
+  if (configurationServiceJsonEditor) {
+    configurationServiceJsonEditor.value = stringifyPrettyJson(serviceConfigDraft || {});
+  }
+  renderServiceConfigHeader();
+  updateServiceConfigDirty(false);
+}
+
+function selectServiceConfig(name) {
+  if (!name || !serviceConfigRegistry[name]) return;
+  currentServiceConfigName = name;
+  serviceConfigDraft = cloneJson(serviceConfigRegistry[name] || {});
+  renderServiceConfigList();
+  renderServiceConfigDetail();
+}
+
+function updateServiceConfigFromJson(markDirty = true) {
+  if (!configurationServiceJsonEditor || !currentServiceConfigName) return false;
+  let parsed;
+  try {
+    parsed = JSON.parse(configurationServiceJsonEditor.value || "{}");
+  } catch (err) {
+    updateServiceConfigSaveStatus(`JSON 格式错误：${err instanceof Error ? err.message : "无法解析"}`, "error");
+    return false;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    updateServiceConfigSaveStatus("当前服务 JSON 必须是对象", "error");
+    return false;
+  }
+  serviceConfigDraft = parsed;
+  renderServiceConfigDetail();
+  if (markDirty) updateServiceConfigDirty(true);
+  return true;
+}
+
+function renameServiceConfigInDraft(nextName) {
+  const safeName = nextName.trim();
+  if (!safeName || safeName === currentServiceConfigName) return true;
+  const exists = serviceConfigRegistry[safeName] && safeName !== currentServiceConfigName;
+  if (exists) {
+    updateServiceConfigSaveStatus("服务名称已存在", "error");
+    if (configurationServiceNameInput) configurationServiceNameInput.value = currentServiceConfigName;
+    return false;
+  }
+  const previousName = currentServiceConfigName;
+  currentServiceConfigName = safeName;
+  serviceConfigRegistry[safeName] = serviceConfigDraft || createEmptyServiceConfig(safeName);
+  delete serviceConfigRegistry[previousName];
+  renderServiceConfigList();
+  renderServiceConfigHeader();
+  updateServiceConfigDirty(true);
+  return true;
+}
+
+async function loadServiceConfigs(options = {}) {
+  if (!configurationServiceList) return;
+  const requestSeq = ++serviceConfigRequestSeq;
+  const preserveSelection = options.preserveSelection !== false;
+  if (!preserveSelection) {
+    currentServiceConfigName = "";
+    serviceConfigDraft = null;
+  }
+  configurationServiceList.innerHTML = '<div class="workflow-definition-list-empty">加载服务配置中...</div>';
+  try {
+    const res = await apiFetch("/api/config/services");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (requestSeq !== serviceConfigRequestSeq) return;
+    serviceConfigRegistry = normalizeServiceConfigRegistry(data.services || {});
+    serviceConfigNames = sortServiceConfigNames(serviceConfigRegistry);
+    serviceConfigFilePath = data.path || "";
+    if (configurationServicesPathEl) {
+      configurationServicesPathEl.textContent = serviceConfigFilePath || "groups/global/services.json";
+    }
+    const nextSelection = preserveSelection && currentServiceConfigName && serviceConfigRegistry[currentServiceConfigName]
+      ? currentServiceConfigName
+      : serviceConfigNames[0] || "";
+    currentServiceConfigName = "";
+    serviceConfigDraft = null;
+    renderServiceConfigList();
+    if (nextSelection) {
+      selectServiceConfig(nextSelection);
+    } else {
+      renderServiceConfigDetail();
+    }
+  } catch (err) {
+    console.error("Failed to load service configs:", err);
+    configurationServiceList.innerHTML = `<div class="workflow-definition-list-empty">加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+    updateServiceConfigSaveStatus("加载失败", "error");
+  }
+}
+
+async function createServiceConfig() {
+  const rawName = await openTextPrompt("输入服务名称", "", { title: "新增服务" });
+  const name = String(rawName || "").trim();
+  if (!name) return;
+  if (serviceConfigRegistry[name]) {
+    alert("服务名称已存在");
+    return;
+  }
+  serviceConfigRegistry[name] = createEmptyServiceConfig(name);
+  currentServiceConfigName = name;
+  serviceConfigDraft = cloneJson(serviceConfigRegistry[name]);
+  renderServiceConfigList();
+  renderServiceConfigDetail();
+  updateServiceConfigDirty(true);
+}
+
+async function saveServiceConfigs() {
+  if (serviceConfigSaving) return;
+  if (currentServiceConfigName) {
+    if (configurationServiceNameInput && !renameServiceConfigInDraft(configurationServiceNameInput.value || "")) {
+      return;
+    }
+    if (!updateServiceConfigFromJson(false)) return;
+  }
+  const nextRegistry = normalizeServiceConfigRegistry({
+    ...serviceConfigRegistry,
+    ...(currentServiceConfigName ? { [currentServiceConfigName]: serviceConfigDraft || {} } : {}),
+  });
+  serviceConfigSaving = true;
+  updateServiceConfigDirty(true);
+  let saveSucceeded = false;
+  try {
+    const res = await apiFetch("/api/config/services", {
+      method: "POST",
+      body: JSON.stringify({ services: nextRegistry }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    serviceConfigRegistry = normalizeServiceConfigRegistry(data.services || nextRegistry);
+    serviceConfigNames = sortServiceConfigNames(serviceConfigRegistry);
+    if (!serviceConfigRegistry[currentServiceConfigName]) {
+      currentServiceConfigName = serviceConfigNames[0] || "";
+    }
+    serviceConfigDraft = currentServiceConfigName ? cloneJson(serviceConfigRegistry[currentServiceConfigName]) : null;
+    invalidateWorkflowCreateOptionsCache();
+    renderServiceConfigList();
+    renderServiceConfigDetail();
+    saveSucceeded = true;
+    updateServiceConfigSaveStatus("已保存并实时生效", "saved");
+  } catch (err) {
+    console.error("Failed to save service configs:", err);
+    updateServiceConfigSaveStatus(`保存失败：${err instanceof Error ? err.message : String(err)}`, "error");
+  } finally {
+    serviceConfigSaving = false;
+    if (saveSucceeded) {
+      updateServiceConfigDirty(false);
+      updateServiceConfigSaveStatus("已保存并实时生效", "saved");
+    } else if (!configurationServiceSaveStatus?.dataset || configurationServiceSaveStatus?.dataset.state !== "error") {
+      updateServiceConfigDirty(false);
+    } else if (configurationServiceSaveBtn) {
+      configurationServiceSaveBtn.disabled = false;
+      configurationServiceSaveBtn.textContent = "保存并生效";
+    }
+  }
+}
+
+async function deleteCurrentServiceConfig() {
+  if (!currentServiceConfigName) return;
+  const confirmed = await openConfirmDialog(
+    `确认删除服务 ${currentServiceConfigName}？确认后会立即写入 services.json 并实时生效。`,
+    {
+      title: "删除服务配置",
+      confirmText: "删除",
+      cancelText: "取消",
+      danger: true,
+    }
+  );
+  if (!confirmed) return;
+  delete serviceConfigRegistry[currentServiceConfigName];
+  const nextName = sortServiceConfigNames(serviceConfigRegistry)[0] || "";
+  currentServiceConfigName = "";
+  serviceConfigDraft = null;
+  renderServiceConfigList();
+  if (nextName) selectServiceConfig(nextName);
+  else renderServiceConfigDetail();
+  updateServiceConfigDirty(true);
+  renderServiceConfigList();
+  await saveServiceConfigs();
+}
+
+function handleConfigRealtimeEvent(event) {
+  if (!event || event.type !== "services_updated") return;
+  invalidateWorkflowCreateOptionsCache();
+  if (activePrimaryNavKey === "configuration" && !serviceConfigDirty && !serviceConfigSaving) {
+    loadServiceConfigs({ preserveSelection: true });
+  }
+}
+
 // Auto-start on page load
 initTakeCopterCursor();
 initChatBgParticleNudge();
@@ -17754,6 +18204,71 @@ if (cardsManagementSectionAddBtn) {
   cardsManagementSectionAddBtn.addEventListener("click", () => {
     if (!cardsManagementEditMode) return;
     addCardSectionRow();
+  });
+}
+if (configurationServiceRefreshBtn) {
+  configurationServiceRefreshBtn.addEventListener("click", async () => {
+    await loadServiceConfigs({ preserveSelection: true });
+  });
+}
+if (configurationServiceAddBtn) {
+  configurationServiceAddBtn.addEventListener("click", async () => {
+    serviceConfigListExpanded = true;
+    renderServiceConfigList();
+    await createServiceConfig();
+  });
+}
+if (configurationServicesToggle) {
+  configurationServicesToggle.addEventListener("click", () => {
+    serviceConfigListExpanded = !serviceConfigListExpanded;
+    renderServiceConfigList();
+  });
+}
+if (configurationServiceSaveBtn) {
+  configurationServiceSaveBtn.addEventListener("click", async () => {
+    await saveServiceConfigs();
+  });
+}
+if (configurationServiceDeleteBtn) {
+  configurationServiceDeleteBtn.addEventListener("click", async () => {
+    await deleteCurrentServiceConfig();
+  });
+}
+if (configurationServiceNameInput) {
+  configurationServiceNameInput.addEventListener("change", () => {
+    renameServiceConfigInDraft(configurationServiceNameInput.value || "");
+  });
+  configurationServiceNameInput.addEventListener("input", () => {
+    updateServiceConfigDirty(true);
+  });
+}
+configurationServiceFieldInputs.forEach((input) => {
+  input.addEventListener("input", () => {
+    syncServiceJsonFromForm(true);
+  });
+  input.addEventListener("change", () => {
+    syncServiceJsonFromForm(true);
+  });
+});
+if (configurationServiceJsonEditor) {
+  configurationServiceJsonEditor.addEventListener("input", () => {
+    updateServiceConfigDirty(true);
+  });
+}
+if (configurationServiceJsonFormatBtn) {
+  configurationServiceJsonFormatBtn.addEventListener("click", () => {
+    if (!configurationServiceJsonEditor) return;
+    try {
+      configurationServiceJsonEditor.value = stringifyPrettyJson(JSON.parse(configurationServiceJsonEditor.value || "{}"));
+      updateServiceConfigSaveStatus(serviceConfigDirty ? "有未保存修改" : "已格式化", serviceConfigDirty ? "dirty" : "saved");
+    } catch (err) {
+      updateServiceConfigSaveStatus(`JSON 格式错误：${err instanceof Error ? err.message : "无法解析"}`, "error");
+    }
+  });
+}
+if (configurationServiceJsonApplyBtn) {
+  configurationServiceJsonApplyBtn.addEventListener("click", () => {
+    updateServiceConfigFromJson(true);
   });
 }
 [

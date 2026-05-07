@@ -52,6 +52,10 @@
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">卡片管理</span>
           </button>
+          <button class="primary-nav-item" data-nav-key="configuration">
+            <span class="primary-nav-dot"></span>
+            <span class="primary-nav-label">配置管理</span>
+          </button>
           <button class="primary-nav-item" data-nav-key="memory-management">
             <span class="primary-nav-dot"></span>
             <span class="primary-nav-label">记忆管理</span>
@@ -1396,6 +1400,225 @@
                   </div>
                   <div id="cards-management-references" class="cards-management-references"></div>
                 </section>
+              </section>
+            </section>
+          </div>
+        </main>
+      </section>
+
+      <section id="configuration-screen">
+        <aside class="configuration-sidebar">
+          <div class="workflow-definitions-sidebar-header configuration-sidebar-header">
+            <div>
+              <div class="workflow-definitions-kicker configuration-kicker">Configuration</div>
+              <h2>配置管理</h2>
+            </div>
+            <div class="workflow-definitions-sidebar-actions">
+              <button id="configuration-service-refresh-btn" class="icon-btn" title="刷新服务配置" aria-label="刷新服务配置">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+              <button id="configuration-service-add-btn" class="icon-btn" title="新增服务" aria-label="新增服务">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14"></path>
+                  <path d="M5 12h14"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="configuration-secondary-nav" id="configuration-secondary-nav">
+            <section class="configuration-nav-group expanded">
+              <button type="button" class="configuration-nav-item active" id="configuration-services-toggle" data-config-section="services" aria-expanded="true">
+                <span class="configuration-nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h16"></path><path d="M7 7v10"></path></svg>
+                </span>
+                <span class="configuration-nav-copy">
+                  <strong>服务管理</strong>
+                  <small>groups/global/services.json</small>
+                </span>
+                <span class="configuration-nav-chevron" aria-hidden="true">▾</span>
+              </button>
+              <div id="configuration-service-list" class="workflow-definition-list configuration-service-list"></div>
+            </section>
+          </div>
+        </aside>
+
+        <main class="configuration-main">
+          <div id="configuration-service-empty" class="workflow-definition-empty configuration-empty doraemon-tertiary-empty">
+            <div class="tertiary-empty-scene" aria-hidden="true">
+              <span class="tertiary-empty-cloud cloud-a"></span>
+              <span class="tertiary-empty-cloud cloud-b"></span>
+              <span class="tertiary-empty-cloud cloud-c"></span>
+              <span class="tertiary-empty-copter copter-a"></span>
+              <span class="tertiary-empty-copter copter-b"></span>
+              <span class="tertiary-empty-bell bell-a"></span>
+              <span class="tertiary-empty-bell bell-b"></span>
+            </div>
+            <div class="tertiary-empty-content">
+              <img src="/assets/doraemon-joy.png" alt="Doraemon mascot" />
+              <h3>服务管理</h3>
+              <p>左侧新增或选择一个服务，维护仓库、分支、日志、Jenkins、MySQL 与预发配置。</p>
+            </div>
+          </div>
+
+          <div id="configuration-service-detail" class="configuration-service-detail hidden">
+            <section class="configuration-service-hero">
+              <div class="configuration-service-hero-main">
+                <div class="workflow-definition-kicker configuration-kicker">服务详情</div>
+                <h2 id="configuration-service-title">--</h2>
+                <p id="configuration-service-summary" class="workflow-definition-summary"></p>
+                <div id="configuration-service-meta" class="workflow-definition-meta"></div>
+              </div>
+              <div class="configuration-service-hero-side">
+                <span id="configuration-service-save-status" class="configuration-save-status">加载中</span>
+                <div class="configuration-service-actions">
+                  <button id="configuration-service-delete-btn" class="configuration-action-btn configuration-danger-btn">删除</button>
+                  <button id="configuration-service-save-btn" class="configuration-action-btn configuration-primary-btn">保存并生效</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="configuration-overview-grid">
+              <section class="configuration-panel configuration-editor-panel">
+                <div class="workflow-definition-panel-head">
+                  <div>
+                    <div class="workflow-definition-panel-title">基础信息</div>
+                    <div id="configuration-services-path" class="workflow-definition-panel-note">groups/global/services.json</div>
+                  </div>
+                </div>
+                <div class="configuration-form-grid">
+                  <label class="configuration-field">
+                    <span>服务名称</span>
+                    <input id="configuration-service-name-input" type="text" placeholder="例如 user-platform" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Repo Path</span>
+                    <input data-service-config-path="repo_path" type="text" placeholder="例如 user-platform" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Default Branch</span>
+                    <input data-service-config-path="default_branch" type="text" placeholder="例如 master" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>User</span>
+                    <input data-service-config-path="user" type="text" placeholder="例如 root" />
+                  </label>
+                </div>
+                <label class="configuration-field configuration-field-block">
+                  <span>Git URL</span>
+                  <input data-service-config-path="git_url" type="text" placeholder="git@..." />
+                </label>
+                <label class="configuration-field configuration-field-block">
+                  <span>Jenkins Job</span>
+                  <input data-service-config-path="jenkins_job" type="text" placeholder="生产 Jenkins Job" />
+                </label>
+              </section>
+
+              <section class="configuration-panel">
+                <div class="workflow-definition-panel-head">
+                  <div>
+                    <div class="workflow-definition-panel-title">运行配置</div>
+                    <div class="workflow-definition-panel-note">生产日志与数据库连接信息</div>
+                  </div>
+                </div>
+                <div class="configuration-form-grid">
+                  <label class="configuration-field">
+                    <span>Log Hosts</span>
+                    <input data-service-config-path="log_hosts" data-service-config-type="csv" type="text" placeholder="host1, host2" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Logs Info</span>
+                    <input data-service-config-path="logs_info" type="text" placeholder="/data/log/app/app.log" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Logs Error</span>
+                    <input data-service-config-path="logs_error" type="text" placeholder="/data/log/app/error.log" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>MySQL Host</span>
+                    <input data-service-config-path="mysql.host" type="text" placeholder="mysql.example.com" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>MySQL Port</span>
+                    <input data-service-config-path="mysql.port" data-service-config-type="number" type="number" min="1" max="65535" step="1" placeholder="3306" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>MySQL User</span>
+                    <input data-service-config-path="mysql.user" type="text" placeholder="db_user" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>MySQL Database</span>
+                    <input data-service-config-path="mysql.database" type="text" placeholder="database" />
+                  </label>
+                </div>
+              </section>
+
+              <section class="configuration-panel">
+                <div class="workflow-definition-panel-head">
+                  <div>
+                    <div class="workflow-definition-panel-title">预发配置</div>
+                    <div class="workflow-definition-panel-note">staging 下的分支、域名、日志与 MySQL</div>
+                  </div>
+                </div>
+                <div class="configuration-form-grid">
+                  <label class="configuration-field">
+                    <span>Staging Branch</span>
+                    <input data-service-config-path="staging.branch" type="text" placeholder="例如 erp" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging Jenkins</span>
+                    <input data-service-config-path="staging.jenkins_job" type="text" placeholder="预发 Jenkins Job" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging Domain</span>
+                    <input data-service-config-path="staging.domain" type="text" placeholder="https://..." />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging Log Hosts</span>
+                    <input data-service-config-path="staging.log_hosts" data-service-config-type="csv" type="text" placeholder="host1, host2" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging Logs Info</span>
+                    <input data-service-config-path="staging.logs_info" type="text" placeholder="/data/log/app/app.log" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging Logs Error</span>
+                    <input data-service-config-path="staging.logs_error" type="text" placeholder="/data/log/app/error.log" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging MySQL Host</span>
+                    <input data-service-config-path="staging.mysql.host" type="text" placeholder="mysql.example.com" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging MySQL Port</span>
+                    <input data-service-config-path="staging.mysql.port" data-service-config-type="number" type="number" min="1" max="65535" step="1" placeholder="3306" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging MySQL User</span>
+                    <input data-service-config-path="staging.mysql.user" type="text" placeholder="db_user" />
+                  </label>
+                  <label class="configuration-field">
+                    <span>Staging MySQL Database</span>
+                    <input data-service-config-path="staging.mysql.database" type="text" placeholder="database" />
+                  </label>
+                </div>
+              </section>
+
+              <section class="configuration-panel configuration-json-panel">
+                <div class="workflow-definition-panel-head">
+                  <div>
+                    <div class="workflow-definition-panel-title">高级 JSON</div>
+                    <div class="workflow-definition-panel-note">当前服务完整 JSON，保留表单未覆盖字段</div>
+                  </div>
+                  <div class="configuration-json-actions">
+                    <button id="configuration-service-json-format-btn" type="button" class="configuration-action-btn">格式化</button>
+                    <button id="configuration-service-json-apply-btn" type="button" class="configuration-action-btn">同步到表单</button>
+                  </div>
+                </div>
+                <textarea id="configuration-service-json-editor" class="configuration-json-editor" spellcheck="false"></textarea>
               </section>
             </section>
           </div>

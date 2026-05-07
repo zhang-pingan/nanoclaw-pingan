@@ -84,6 +84,7 @@ import {
   validateWorkflowDefinition,
 } from '../workflow-compiler.js';
 import { loadWorkflowConfigs } from '../workflow-config.js';
+import { loadMysqlConfigs } from '../mysql-proxy.js';
 import {
   completeTodayPlan,
   createOrContinueTodayPlan,
@@ -181,6 +182,67 @@ function getMessageFileUrl(
   return `/api/message-files/${encodeURIComponent(chatJid)}/${encodeURIComponent(
     messageId,
   )}`;
+}
+
+function getServicesConfigPath(): string {
+  return path.join(GROUPS_DIR, 'global', 'services.json');
+}
+
+function sortServiceNames(services: ServiceConfigRegistry): string[] {
+  return Object.keys(services).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+}
+
+function readServiceConfigRegistry(): {
+  services: ServiceConfigRegistry;
+  exists: boolean;
+  path: string;
+} {
+  const servicesPath = getServicesConfigPath();
+  if (!fs.existsSync(servicesPath)) {
+    return { services: {}, exists: false, path: servicesPath };
+  }
+
+  const parsed = JSON.parse(
+    fs.readFileSync(servicesPath, 'utf-8'),
+  ) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('services.json must be a JSON object');
+  }
+
+  return {
+    services: parsed as ServiceConfigRegistry,
+    exists: true,
+    path: servicesPath,
+  };
+}
+
+function validateServiceConfigRegistry(
+  services: unknown,
+): ServiceConfigRegistry {
+  if (!services || typeof services !== 'object' || Array.isArray(services)) {
+    throw new Error('services object required');
+  }
+
+  const registry = services as Record<string, unknown>;
+  const normalized: ServiceConfigRegistry = {};
+  for (const [serviceName, config] of Object.entries(registry)) {
+    const name = serviceName.trim();
+    if (!name) {
+      throw new Error('service name cannot be empty');
+    }
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      throw new Error(`service "${name}" config must be an object`);
+    }
+    normalized[name] = config as Record<string, unknown>;
+  }
+  return normalized;
+}
+
+function writeServiceConfigRegistry(services: ServiceConfigRegistry): void {
+  const servicesPath = getServicesConfigPath();
+  fs.mkdirSync(path.dirname(servicesPath), { recursive: true });
+  fs.writeFileSync(`${servicesPath}.tmp`, `${JSON.stringify(services, null, 2)}\n`);
+  fs.renameSync(`${servicesPath}.tmp`, servicesPath);
 }
 
 type MultipartFilePart = {
@@ -356,8 +418,19 @@ interface OutgoingMsg {
     | 'workbench_event'
     | 'assistant_state'
     | 'assistant_event'
+    | 'config_event'
     | 'desktop_capture_request';
   [key: string]: unknown;
+}
+
+type ServiceConfigRegistry = Record<string, Record<string, unknown>>;
+
+interface ConfigRealtimeEvent {
+  type: 'services_updated';
+  updatedAt: string;
+  path: string;
+  serviceCount: number;
+  services: string[];
 }
 
 // --- WebChannel ---
@@ -945,6 +1018,12 @@ class WebChannel {
       }
       if (pathname === '/api/workflow/create-options') {
         return this.apiGetWorkflowCreateOptions(res);
+      }
+      if (pathname === '/api/config/services' && req.method === 'GET') {
+        return this.apiGetServiceConfigs(res);
+      }
+      if (pathname === '/api/config/services' && req.method === 'POST') {
+        return this.apiSaveServiceConfigs(req, res);
       }
       if (pathname === '/api/workflow-definitions' && req.method === 'GET') {
         return this.apiListWorkflowDefinitions(res);
@@ -2302,6 +2381,21 @@ class WebChannel {
     }
   }
 
+  broadcastConfigEvent(event: ConfigRealtimeEvent): void {
+    const payload = JSON.stringify({
+      type: 'config_event',
+      event,
+    } satisfies OutgoingMsg);
+
+    for (const clients of this.clients.values()) {
+      for (const client of clients) {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+    }
+  }
+
   private async apiGetWorkflowCreateOptions(
     res: http.ServerResponse,
   ): Promise<void> {
@@ -2370,6 +2464,89 @@ class WebChannel {
         services,
         workflow_types: workflowTypes,
         requirements_by_service: requirementsByService,
+      }),
+    );
+  }
+
+  private async apiGetServiceConfigs(
+    res: http.ServerResponse,
+  ): Promise<void> {
+    try {
+      const registry = readServiceConfigRegistry();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          services: registry.services,
+          service_names: sortServiceNames(registry.services),
+          path: registry.path,
+          exists: registry.exists,
+        }),
+      );
+    } catch (err) {
+      logger.warn({ err }, 'Failed to read services config');
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error:
+            err instanceof Error ? err.message : 'Failed to read services config',
+        }),
+      );
+    }
+  }
+
+  private async apiSaveServiceConfigs(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    let services: ServiceConfigRegistry;
+    try {
+      services = validateServiceConfigRegistry(
+        (body as { services?: unknown })?.services,
+      );
+      writeServiceConfigRegistry(services);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Failed to save services config',
+        }),
+      );
+      return;
+    }
+
+    loadWorkflowConfigs();
+    loadMysqlConfigs(services);
+
+    const serviceNames = sortServiceNames(services);
+    const event: ConfigRealtimeEvent = {
+      type: 'services_updated',
+      updatedAt: new Date().toISOString(),
+      path: getServicesConfigPath(),
+      serviceCount: serviceNames.length,
+      services: serviceNames,
+    };
+    this.broadcastConfigEvent(event);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        services,
+        service_names: serviceNames,
+        path: getServicesConfigPath(),
+        updated_at: event.updatedAt,
       }),
     );
   }

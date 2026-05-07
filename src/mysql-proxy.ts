@@ -35,24 +35,71 @@ interface Mysql2Promise {
 const serviceMysqlConfigs: Record<string, MysqlConfig> = {};
 const pools: Map<string, Pool> = new Map();
 
+function normalizeMysqlConfig(
+  service: string,
+  config: unknown,
+): MysqlConfig | null {
+  if (!config || typeof config !== 'object') return null;
+  const mysqlConfig = (config as Record<string, unknown>).mysql;
+  if (!mysqlConfig || typeof mysqlConfig !== 'object') return null;
+
+  const c = mysqlConfig as Record<string, unknown>;
+  const host = typeof c.host === 'string' ? c.host.trim() : '';
+  const user = typeof c.user === 'string' ? c.user.trim() : '';
+  const database = typeof c.database === 'string' ? c.database.trim() : '';
+  const rawPort = Number(c.port || 3306);
+  const port = Number.isFinite(rawPort) ? Math.round(rawPort) : 3306;
+  if (!service || !host || !user || !database) return null;
+
+  return {
+    host,
+    port,
+    user,
+    database,
+  };
+}
+
+function mysqlConfigChanged(
+  current: MysqlConfig | undefined,
+  next: MysqlConfig | undefined,
+): boolean {
+  if (!current && !next) return false;
+  if (!current || !next) return true;
+  return (
+    current.host !== next.host ||
+    current.port !== next.port ||
+    current.user !== next.user ||
+    current.database !== next.database
+  );
+}
+
 // Load MySQL configs from services.json
 export function loadMysqlConfigs(configs: Record<string, unknown>): void {
+  const nextConfigs: Record<string, MysqlConfig> = {};
   for (const [service, config] of Object.entries(configs)) {
-    const mysqlConfig = (config as Record<string, unknown>).mysql;
-    if (mysqlConfig && typeof mysqlConfig === 'object') {
-      const c = mysqlConfig as Record<string, unknown>;
-      serviceMysqlConfigs[service] = {
-        host: c.host as string,
-        port: (c.port as number) || 3306,
-        user: c.user as string,
-        database: c.database as string,
-      };
+    const mysqlConfig = normalizeMysqlConfig(service, config);
+    if (mysqlConfig) {
+      nextConfigs[service] = mysqlConfig;
       logger.info(
-        { service, host: c.host, database: c.database },
+        { service, host: mysqlConfig.host, database: mysqlConfig.database },
         'Loaded MySQL config for service',
       );
     }
   }
+
+  for (const [service, pool] of pools.entries()) {
+    if (mysqlConfigChanged(serviceMysqlConfigs[service], nextConfigs[service])) {
+      pools.delete(service);
+      void pool.end().catch((err) => {
+        logger.warn({ err, service }, 'Failed to close stale MySQL pool');
+      });
+    }
+  }
+
+  for (const service of Object.keys(serviceMysqlConfigs)) {
+    delete serviceMysqlConfigs[service];
+  }
+  Object.assign(serviceMysqlConfigs, nextConfigs);
 }
 
 async function getPool(service: string): Promise<Pool> {
