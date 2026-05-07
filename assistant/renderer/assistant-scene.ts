@@ -280,7 +280,7 @@ export class AssistantScene {
     root.add(robotPivot);
 
     const viewportGroup = new THREE.Group();
-    viewportGroup.position.set(0, 0.92, -1.78);
+    viewportGroup.position.set(0, 0.98, -1.82);
     root.add(viewportGroup);
 
     const starGeometry = new THREE.BufferGeometry();
@@ -311,10 +311,10 @@ export class AssistantScene {
     root.add(wallGroup);
 
     const backgroundScreen = new THREE.Mesh(
-      new THREE.BoxGeometry(0.78, 0.42, 0.035),
+      new THREE.BoxGeometry(0.92, 0.34, 0.035),
       materials.screen,
     );
-    backgroundScreen.position.set(0.7, 1.14, 0.085);
+    backgroundScreen.position.set(0, 1.46, 0.085);
     wallGroup.add(backgroundScreen);
 
     const alertBars: THREE.Mesh[] = [];
@@ -323,7 +323,7 @@ export class AssistantScene {
         new THREE.BoxGeometry(0.055, 0.26, 0.035),
         materials.ring,
       );
-      bar.position.set(0.7 + x, 1.13, 0.11);
+      bar.position.set(x, 1.45, 0.11);
       wallGroup.add(bar);
       alertBars.push(bar);
     });
@@ -345,18 +345,47 @@ export class AssistantScene {
     root.add(statusRing);
 
     const consoleGroup = new THREE.Group();
-    consoleGroup.position.set(0.95, 0.34, -0.18);
-    consoleGroup.rotation.y = -0.48;
+    consoleGroup.position.set(0, 1.28, -0.8);
     root.add(consoleGroup);
 
     const screen = new THREE.Mesh(
-      new THREE.BoxGeometry(0.72, 0.42, 0.04),
+      new THREE.BoxGeometry(0.78, 0.38, 0.04),
       materials.screen,
     );
-    screen.position.set(0, 0.38, -0.1);
-    screen.rotation.x = -0.17;
+    screen.position.set(0, 0, -0.1);
+    screen.rotation.x = 0.03;
     screen.castShadow = true;
     consoleGroup.add(screen);
+
+    const topScreenRail = new THREE.Mesh(
+      new THREE.BoxGeometry(1.62, 0.05, 0.045),
+      materials.wallDark,
+    );
+    topScreenRail.position.set(0, -0.28, -0.12);
+    consoleGroup.add(topScreenRail);
+
+    [
+      { x: -0.66, rotationY: 0.3 },
+      { x: 0.66, rotationY: -0.3 },
+    ].forEach(({ x, rotationY }) => {
+      const sideScreen = new THREE.Mesh(
+        new THREE.BoxGeometry(0.38, 0.3, 0.038),
+        materials.screen,
+      );
+      sideScreen.position.set(x, -0.03, -0.08);
+      sideScreen.rotation.y = rotationY;
+      sideScreen.castShadow = true;
+      consoleGroup.add(sideScreen);
+
+      for (let i = 0; i < 5; i += 1) {
+        const tick = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12 - (i % 2) * 0.04, 0.01, 0.006),
+          materials.ring,
+        );
+        tick.position.set(-0.06, 0.08 - i * 0.04, 0.025);
+        sideScreen.add(tick);
+      }
+    });
 
     const dataTicks: THREE.Mesh[] = [];
     for (let i = 0; i < 18; i += 1) {
@@ -375,11 +404,11 @@ export class AssistantScene {
     }
 
     const screenGlow = new THREE.PointLight('#38BDF8', 1.2, 2.2);
-    screenGlow.position.set(0, 0.42, 0.08);
+    screenGlow.position.set(0, 0.04, 0.08);
     consoleGroup.add(screenGlow);
 
     const hologramGroup = new THREE.Group();
-    hologramGroup.position.set(0.2, 0.46, -0.16);
+    hologramGroup.position.set(0.02, 0.52, -0.32);
     root.add(hologramGroup);
 
     const hologramGeometry = new THREE.PlaneGeometry(1.12, 0.62, 28, 14);
@@ -605,23 +634,23 @@ export class AssistantScene {
 
     const expanded = this.mode === 'expanded';
     const compactFocus = this.mood === 'typing' ? 0.78 : 0.7;
-    const targetFov = expanded ? 39 : 34;
+    const targetFov = expanded ? 42 : 34;
     this.camera.fov += (targetFov - this.camera.fov) * 0.08;
     this.camera.updateProjectionMatrix();
     this.targetRootScale.setScalar(expanded ? 0.88 : 1.22);
     this.targetCameraPosition.set(
-      expanded ? 0.24 : -0.12,
-      expanded ? 1.18 : 1.16,
-      expanded ? 5.85 : 3.75,
+      expanded ? 0.08 : -0.12,
+      expanded ? 1.24 : 1.16,
+      expanded ? 6.15 : 3.75,
     );
     this.targetCameraFocus.set(
-      expanded ? 0.2 : -0.12,
-      expanded ? 0.68 : compactFocus,
-      expanded ? -0.38 : -0.06,
+      expanded ? 0.0 : -0.12,
+      expanded ? 0.76 : compactFocus,
+      expanded ? -0.58 : -0.06,
     );
 
     this.objects.root.scale.lerp(this.targetRootScale, 0.08);
-    const targetX = expanded ? -0.04 : 0.08;
+    const targetX = expanded ? 0.06 : 0.08;
     this.objects.root.position.x +=
       (targetX - this.objects.root.position.x) * 0.08;
     this.objects.root.rotation.y =
@@ -633,10 +662,10 @@ export class AssistantScene {
     const floatY =
       Math.sin(elapsed * (this.mood === 'typing' ? 3.3 : 2.2)) *
       (this.mood === 'typing' ? 0.05 : 0.035);
-    const targetRobotScale = expanded ? 0.78 : 1;
-    const targetRobotX = expanded ? -0.58 : -0.18;
-    const targetRobotY = expanded ? 0.64 : 0.72;
-    const targetRobotZ = expanded ? 0.16 : 0.15;
+    const targetRobotScale = expanded ? 0.66 : 1;
+    const targetRobotX = expanded ? -0.92 : -0.18;
+    const targetRobotY = expanded ? 0.58 : 0.72;
+    const targetRobotZ = expanded ? 0.14 : 0.15;
     const targetPlatformY = expanded ? 0.04 : 0.06;
     const targetRingY = expanded ? 0.13 : 0.16;
     this.objects.robotPivot.scale.lerp(
