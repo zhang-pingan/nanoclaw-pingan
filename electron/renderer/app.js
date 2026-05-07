@@ -457,6 +457,7 @@ var assistantAlwaysOnTopToggle = document.getElementById("assistant-always-on-to
 var assistantMovementToggle = document.getElementById("assistant-movement-toggle");
 var assistantSourceGrid = document.getElementById("assistant-source-grid");
 var assistantSourceInputs = [];
+var assistantSourceExpandedGroups = {};
 var assistantState = null;
 var assistantInboxItems = [];
 var assistantActionLogs = [];
@@ -17036,6 +17037,81 @@ function getAssistantRuleCapability(ruleKey) {
   return getAssistantRuleCapabilities().find((rule) => rule.key === ruleKey) || null;
 }
 
+function getAssistantSourceGroupKey(rule) {
+  return rule && rule.sourceLabel ? String(rule.sourceLabel) : "其他";
+}
+
+function groupAssistantRuleCapabilities(capabilities) {
+  const groups = [];
+  const groupByKey = {};
+  capabilities.forEach((rule) => {
+    const key = getAssistantSourceGroupKey(rule);
+    if (!groupByKey[key]) {
+      groupByKey[key] = {
+        key,
+        label: key,
+        rules: [],
+      };
+      groups.push(groupByKey[key]);
+    }
+    groupByKey[key].rules.push(rule);
+  });
+  return groups;
+}
+
+function formatAssistantSourceGroupSummary(group) {
+  const totalCount = group.rules.length;
+  const enabledCount = group.rules.filter((rule) => getAssistantRuleSetting(rule.key).enabled).length;
+  const investigationCount = group.rules.filter((rule) => getAssistantRuleSetting(rule.key).investigationEnabled).length;
+  const autoCount = group.rules.filter((rule) => getAssistantRuleSetting(rule.key).autoEnabled).length;
+  const parts = [`${enabledCount}/${totalCount} 已启用`];
+  if (investigationCount > 0) parts.push(`${investigationCount} 排查`);
+  if (autoCount > 0) parts.push(`${autoCount} 自动`);
+  return parts.join(" · ");
+}
+
+function formatAssistantRuleCapabilitySummary(rule) {
+  const parts = [];
+  if (rule.supportsInvestigation) parts.push("可排查");
+  if (rule.supportsRepair) parts.push("可自动");
+  return parts.length > 0 ? parts.join(" · ") : "纯提醒";
+}
+
+function renderAssistantSourceRule(rule) {
+  const ruleSetting = getAssistantRuleSetting(rule.key);
+  const investigateDisabled = !rule.supportsInvestigation || !ruleSetting.enabled;
+  const autoDisabled = !rule.supportsRepair || !ruleSetting.enabled;
+  return `
+    <article class="assistant-rule-card">
+      <div class="assistant-rule-main">
+        <div>
+          <div class="assistant-rule-title">${escapeHtml(rule.label || rule.key)}</div>
+          <div class="assistant-rule-source">${escapeHtml(formatAssistantRuleCapabilitySummary(rule))}</div>
+        </div>
+        <label class="assistant-rule-toggle">
+          <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="enabled" type="checkbox" ${ruleSetting.enabled ? "checked" : ""} />
+          <span>生成</span>
+        </label>
+      </div>
+      <div class="assistant-rule-options">
+        ${rule.supportsInvestigation ? `
+          <label>
+            <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="investigationEnabled" type="checkbox" ${ruleSetting.investigationEnabled ? "checked" : ""} ${investigateDisabled ? "disabled" : ""} />
+            <span>排查</span>
+          </label>
+        ` : ""}
+        ${rule.supportsRepair ? `
+          <label>
+            <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="autoEnabled" type="checkbox" ${ruleSetting.autoEnabled ? "checked" : ""} ${autoDisabled ? "disabled" : ""} />
+            <span>自动</span>
+          </label>
+        ` : ""}
+        ${!rule.supportsInvestigation && !rule.supportsRepair ? '<span class="assistant-rule-muted">纯提醒</span>' : ""}
+      </div>
+    </article>
+  `;
+}
+
 function formatAssistantStatusText(item) {
   if (!item) return "";
   const parts = [item.kind || "notification", item.priority || "normal", item.status || "unread"];
@@ -17071,40 +17147,32 @@ function renderAssistantSourceRules() {
     assistantSourceInputs = [];
     return;
   }
-  assistantSourceGrid.innerHTML = capabilities.map((rule) => {
-    const ruleSetting = getAssistantRuleSetting(rule.key);
-    const investigateDisabled = !rule.supportsInvestigation || !ruleSetting.enabled;
-    const autoDisabled = !rule.supportsRepair || !ruleSetting.enabled;
+  const groups = groupAssistantRuleCapabilities(capabilities);
+  assistantSourceGrid.innerHTML = groups.map((group) => {
+    const isExpanded = Boolean(assistantSourceExpandedGroups[group.key]);
     return `
-      <article class="assistant-rule-card">
-        <div class="assistant-rule-main">
-          <div>
-            <div class="assistant-rule-source">${escapeHtml(rule.sourceLabel || "")}</div>
-            <div class="assistant-rule-title">${escapeHtml(rule.label || rule.key)}</div>
-          </div>
-          <label class="assistant-rule-toggle">
-            <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="enabled" type="checkbox" ${ruleSetting.enabled ? "checked" : ""} />
-            <span>生成</span>
-          </label>
+      <section class="assistant-source-group${isExpanded ? " expanded" : ""}">
+        <button type="button" class="assistant-source-group-toggle" data-assistant-source-group="${escapeAttribute(group.key)}" aria-expanded="${isExpanded ? "true" : "false"}">
+          <span class="assistant-source-group-copy">
+            <span class="assistant-source-group-title">${escapeHtml(group.label)}</span>
+            <span class="assistant-source-group-meta">${escapeHtml(formatAssistantSourceGroupSummary(group))}</span>
+          </span>
+          <span class="assistant-source-group-chevron" aria-hidden="true">${isExpanded ? "▾" : "▸"}</span>
+        </button>
+        <div class="assistant-source-group-items${isExpanded ? "" : " hidden"}">
+          ${group.rules.map((rule) => renderAssistantSourceRule(rule)).join("")}
         </div>
-        <div class="assistant-rule-options">
-          ${rule.supportsInvestigation ? `
-            <label>
-              <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="investigationEnabled" type="checkbox" ${ruleSetting.investigationEnabled ? "checked" : ""} ${investigateDisabled ? "disabled" : ""} />
-              <span>排查</span>
-            </label>
-          ` : ""}
-          ${rule.supportsRepair ? `
-            <label>
-              <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="autoEnabled" type="checkbox" ${ruleSetting.autoEnabled ? "checked" : ""} ${autoDisabled ? "disabled" : ""} />
-              <span>自动</span>
-            </label>
-          ` : ""}
-          ${!rule.supportsInvestigation && !rule.supportsRepair ? '<span class="assistant-rule-muted">纯提醒</span>' : ""}
-        </div>
-      </article>
+      </section>
     `;
   }).join("");
+  Array.from(assistantSourceGrid.querySelectorAll("[data-assistant-source-group]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const groupKey = button.getAttribute("data-assistant-source-group") || "";
+      if (!groupKey) return;
+      assistantSourceExpandedGroups[groupKey] = !assistantSourceExpandedGroups[groupKey];
+      renderAssistantSourceRules();
+    });
+  });
   assistantSourceInputs = Array.from(assistantSourceGrid.querySelectorAll("[data-assistant-rule]"));
   assistantSourceInputs.forEach((input) => {
     input.addEventListener("change", () => {
