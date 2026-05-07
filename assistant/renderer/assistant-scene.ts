@@ -38,7 +38,6 @@ type SceneObjects = {
   propGroup: THREE.Group;
   wallGroup: THREE.Group;
   viewportGroup: THREE.Group;
-  planetGroup: THREE.Group;
   hologramGroup: THREE.Group;
   platform: THREE.Mesh;
   floorDeck: THREE.Mesh;
@@ -226,8 +225,6 @@ export class AssistantScene {
     floor: THREE.MeshStandardMaterial;
     frame: THREE.MeshStandardMaterial;
     glass: THREE.MeshStandardMaterial;
-    planet: THREE.MeshStandardMaterial;
-    planetRing: THREE.MeshBasicMaterial;
     hologram: THREE.MeshBasicMaterial;
     hologramScan: THREE.MeshBasicMaterial;
   } {
@@ -283,19 +280,6 @@ export class AssistantScene {
         roughness: 0.18,
         metalness: 0.08,
       }),
-      planet: new THREE.MeshStandardMaterial({
-        color: '#22D3EE',
-        emissive: '#0E7490',
-        emissiveIntensity: 0.18,
-        roughness: 0.72,
-        metalness: 0.02,
-      }),
-      planetRing: new THREE.MeshBasicMaterial({
-        color: '#F59E0B',
-        transparent: true,
-        opacity: 0.58,
-        side: THREE.DoubleSide,
-      }),
       hologram: new THREE.MeshBasicMaterial({
         color: '#34D399',
         transparent: true,
@@ -348,26 +332,6 @@ export class AssistantScene {
       }),
     );
     viewportGroup.add(starField);
-
-    const planetGroup = new THREE.Group();
-    planetGroup.position.set(1.1, 0.12, -0.22);
-    planetGroup.rotation.z = -0.2;
-    viewportGroup.add(planetGroup);
-
-    const planet = new THREE.Mesh(
-      new THREE.SphereGeometry(0.54, 40, 20),
-      materials.planet,
-    );
-    planet.castShadow = false;
-    planet.receiveShadow = false;
-    planetGroup.add(planet);
-
-    const planetRing = new THREE.Mesh(
-      new THREE.TorusGeometry(0.72, 0.018, 8, 96),
-      materials.planetRing,
-    );
-    planetRing.rotation.set(1.16, 0.12, -0.56);
-    planetGroup.add(planetRing);
 
     const cockpitBeams: THREE.Mesh[] = [];
     const beamLayout: Array<[number, number, number, number, number]> = [
@@ -562,7 +526,6 @@ export class AssistantScene {
       propGroup,
       wallGroup,
       viewportGroup,
-      planetGroup,
       hologramGroup,
       platform,
       floorDeck,
@@ -848,7 +811,6 @@ export class AssistantScene {
       : intensityBase * 0.6;
     this.objects.statusRing.rotation.z += delta * 0.42;
     this.objects.starField.rotation.z += delta * 0.012;
-    this.objects.planetGroup.rotation.y += delta * 0.075;
     this.objects.hologramGroup.position.y =
       0.46 + Math.sin(elapsed * 2.7) * 0.018;
     this.objects.hologramScan.position.x = -0.54 + ((elapsed * 0.52) % 1.08);
