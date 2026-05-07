@@ -49,8 +49,6 @@ type SceneObjects = {
   statusRing: THREE.Mesh;
   backgroundScreen: THREE.Mesh;
   starField: THREE.Points;
-  cockpitBeams: THREE.Mesh[];
-  sidePanels: THREE.Mesh[];
   alertBars: THREE.Mesh[];
   dataTicks: THREE.Mesh[];
 };
@@ -216,24 +214,17 @@ export class AssistantScene {
   }
 
   private createSharedMaterials(): {
-    dark: THREE.MeshStandardMaterial;
     panel: THREE.MeshStandardMaterial;
     screen: THREE.MeshStandardMaterial;
     ring: THREE.MeshStandardMaterial;
     wall: THREE.MeshStandardMaterial;
     wallDark: THREE.MeshStandardMaterial;
     floor: THREE.MeshStandardMaterial;
-    frame: THREE.MeshStandardMaterial;
     glass: THREE.MeshStandardMaterial;
     hologram: THREE.MeshBasicMaterial;
     hologramScan: THREE.MeshBasicMaterial;
   } {
     return {
-      dark: new THREE.MeshStandardMaterial({
-        color: '#172033',
-        roughness: 0.58,
-        metalness: 0.1,
-      }),
       panel: new THREE.MeshStandardMaterial({
         color: '#E2E8F0',
         roughness: 0.44,
@@ -267,11 +258,6 @@ export class AssistantScene {
         color: '#243244',
         roughness: 0.64,
         metalness: 0.26,
-      }),
-      frame: new THREE.MeshStandardMaterial({
-        color: '#0B1220',
-        roughness: 0.48,
-        metalness: 0.38,
       }),
       glass: new THREE.MeshStandardMaterial({
         color: '#0F172A',
@@ -332,28 +318,6 @@ export class AssistantScene {
       }),
     );
     viewportGroup.add(starField);
-
-    const cockpitBeams: THREE.Mesh[] = [];
-    const beamLayout: Array<[number, number, number, number, number]> = [
-      [0, 0.84, 3.2, 0.09, 0],
-      [0, -0.74, 3.25, 0.12, 0],
-      [-1.56, 0.02, 0.11, 1.65, 0],
-      [1.56, 0.02, 0.11, 1.65, 0],
-      [-0.86, 0.38, 1.08, 0.07, -0.52],
-      [0.86, 0.38, 1.08, 0.07, 0.52],
-    ];
-    beamLayout.forEach(([x, y, width, height, rotation]) => {
-      const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(width, height, 0.08),
-        materials.frame,
-      );
-      beam.position.set(x, y, 0.08);
-      beam.rotation.z = rotation;
-      beam.castShadow = true;
-      beam.receiveShadow = true;
-      viewportGroup.add(beam);
-      cockpitBeams.push(beam);
-    });
 
     const wallGroup = new THREE.Group();
     wallGroup.position.set(0, 0, -1.26);
@@ -424,14 +388,6 @@ export class AssistantScene {
     consoleGroup.rotation.y = -0.48;
     root.add(consoleGroup);
 
-    const consoleBase = new THREE.Mesh(
-      new THREE.BoxGeometry(0.74, 0.36, 0.28),
-      materials.dark,
-    );
-    consoleBase.castShadow = true;
-    consoleBase.receiveShadow = true;
-    consoleGroup.add(consoleBase);
-
     const screen = new THREE.Mesh(
       new THREE.BoxGeometry(0.72, 0.42, 0.04),
       materials.screen,
@@ -491,19 +447,6 @@ export class AssistantScene {
     hologramScan.position.set(-0.5, 0.04, 0);
     hologramGroup.add(hologramScan);
 
-    const sidePanels: THREE.Mesh[] = [];
-    [-0.82, 0.82].forEach((x) => {
-      const panel = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 0.62, 0.36),
-        materials.dark,
-      );
-      panel.position.set(x, 0.42, -0.42);
-      panel.castShadow = true;
-      panel.receiveShadow = true;
-      root.add(panel);
-      sidePanels.push(panel);
-    });
-
     const floorDeck = new THREE.Mesh(
       new THREE.BoxGeometry(3.25, 0.06, 1.55),
       materials.floor,
@@ -537,8 +480,6 @@ export class AssistantScene {
       statusRing,
       backgroundScreen,
       starField,
-      cockpitBeams,
-      sidePanels,
       alertBars,
       dataTicks,
     };
@@ -822,10 +763,6 @@ export class AssistantScene {
       this.mood === 'offline' ? 0.18 : 0.58 + Math.sin(elapsed * 3.6) * 0.1;
     hologramScanMaterial.opacity =
       this.mood === 'offline' ? 0.12 : 0.48 + Math.sin(elapsed * 7.2) * 0.16;
-    this.objects.sidePanels.forEach((panel, index) => {
-      panel.position.y = 0.42 + Math.sin(elapsed * 1.7 + index) * 0.025;
-      panel.visible = expanded;
-    });
     this.objects.alertBars.forEach((bar, index) => {
       const scan = 0.5 + Math.sin(elapsed * 4.6 + index * 0.8) * 0.5;
       bar.scale.y = 0.42 + scan * (this.mood === 'typing' ? 1.15 : 0.72);
@@ -838,10 +775,6 @@ export class AssistantScene {
           : 0.56 + Math.sin(elapsed * 3.4 + index) * 0.18;
       tick.scale.x = 0.72 + glow * 0.36;
       tick.visible = expanded;
-    });
-    this.objects.cockpitBeams.forEach((beam, index) => {
-      beam.position.z = 0.08 + Math.sin(elapsed * 1.2 + index) * 0.006;
-      beam.visible = expanded;
     });
     this.objects.consoleGroup.visible = expanded;
     this.objects.wallGroup.visible = expanded;
