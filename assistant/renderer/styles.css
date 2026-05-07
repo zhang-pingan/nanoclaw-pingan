@@ -27,6 +27,10 @@ button {
   --assistant-scene-width: 640px;
   --assistant-alert-height: 0px;
   --assistant-alert-gap: 12px;
+  --assistant-mascot-size: 156px;
+  --assistant-mascot-right: 10px;
+  --assistant-mascot-bottom: 8px;
+  --assistant-bubble-mascot-gap: 10px;
   position: relative;
   width: 100vw;
   height: 100vh;
@@ -98,7 +102,11 @@ button {
 .assistant-bubble {
   position: absolute;
   right: 52px;
-  top: 16px;
+  top: auto;
+  bottom: calc(
+    var(--assistant-mascot-bottom) + var(--assistant-mascot-size) +
+      var(--assistant-bubble-mascot-gap)
+  );
   box-sizing: border-box;
   width: 314px;
   min-height: 112px;
@@ -126,7 +134,7 @@ button {
 .assistant-bubble::after {
   content: '';
   position: absolute;
-  right: 30px;
+  right: 56px;
   bottom: -10px;
   width: 18px;
   height: 18px;
@@ -166,6 +174,7 @@ button {
       var(--assistant-panel-gap)
   );
   top: var(--assistant-shell-inset);
+  bottom: auto;
   width: auto;
   min-height: 0;
   max-height: 148px;
@@ -292,10 +301,10 @@ button {
 
 .assistant-mascot-wrap {
   position: absolute;
-  right: 10px;
-  bottom: 8px;
-  width: 156px;
-  height: 156px;
+  right: var(--assistant-mascot-right);
+  bottom: var(--assistant-mascot-bottom);
+  width: var(--assistant-mascot-size);
+  height: var(--assistant-mascot-size);
   display: grid;
   place-items: center;
   filter: drop-shadow(0 18px 24px rgba(15, 23, 42, 0.14));
