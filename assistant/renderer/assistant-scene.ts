@@ -91,6 +91,9 @@ export class AssistantScene {
   private clips: THREE.AnimationClip[] = [];
   private activeAction: THREE.AnimationAction | null = null;
   private mood: AssistantSceneMood = 'offline';
+  private readonly idleAnimationNames = ['Idle', 'Attack', 'BackFlip', 'Look'];
+  private idleAnimationName = 'Idle';
+  private nextIdleAnimationAt = 0;
   private mode: SceneMode = 'compact';
   private screenMaterial: THREE.MeshStandardMaterial;
   private ringMaterial: THREE.MeshStandardMaterial;
@@ -184,6 +187,11 @@ export class AssistantScene {
 
     if (this.mood !== nextMood) {
       this.mood = nextMood;
+      if (nextMood === 'idle') {
+        this.resetIdleAnimationRotation();
+      } else {
+        this.nextIdleAnimationAt = 0;
+      }
       this.playMoodAnimation();
     }
 
@@ -561,7 +569,10 @@ export class AssistantScene {
 
   private playMoodAnimation(): void {
     if (!this.mixer || this.clips.length === 0) return;
-    const desiredName = this.manifest.animations?.[this.mood] || 'Idle';
+    const desiredName =
+      this.mood === 'idle'
+        ? this.idleAnimationName
+        : this.manifest.animations?.[this.mood] || 'Idle';
     const clip =
       THREE.AnimationClip.findByName(this.clips, desiredName) ||
       this.clips.find((item) =>
@@ -575,6 +586,45 @@ export class AssistantScene {
     nextAction.reset().fadeIn(0.18).play();
     if (this.activeAction) this.activeAction.fadeOut(0.18);
     this.activeAction = nextAction;
+  }
+
+  private resetIdleAnimationRotation(): void {
+    this.idleAnimationName = 'Idle';
+    this.nextIdleAnimationAt =
+      this.clock.elapsedTime + this.randomIdleAnimationDelay();
+  }
+
+  private randomIdleAnimationDelay(): number {
+    return 4 + Math.random() * 5;
+  }
+
+  private rotateIdleAnimationIfNeeded(elapsed: number): void {
+    if (this.mood !== 'idle') return;
+    if (!this.mixer || this.clips.length === 0) return;
+    if (elapsed < this.nextIdleAnimationAt) return;
+
+    const availableNames = this.idleAnimationNames.filter((name) =>
+      this.findAnimationClip(name),
+    );
+    if (availableNames.length === 0) return;
+
+    const candidates =
+      availableNames.length > 1
+        ? availableNames.filter((name) => name !== this.idleAnimationName)
+        : availableNames;
+    const nextName = candidates[Math.floor(Math.random() * candidates.length)];
+    this.idleAnimationName = nextName || 'Idle';
+    this.nextIdleAnimationAt = elapsed + this.randomIdleAnimationDelay();
+    this.playMoodAnimation();
+  }
+
+  private findAnimationClip(name: string): THREE.AnimationClip | undefined {
+    return (
+      THREE.AnimationClip.findByName(this.clips, name) ||
+      this.clips.find((item) =>
+        item.name.toLowerCase().includes(name.toLowerCase()),
+      )
+    );
   }
 
   private applyMoodColor(): void {
@@ -612,6 +662,7 @@ export class AssistantScene {
     if (this.disposed) return;
     const delta = this.clock.getDelta();
     const elapsed = this.clock.elapsedTime;
+    this.rotateIdleAnimationIfNeeded(elapsed);
     this.mixer?.update(delta);
 
     const expanded = this.mode === 'expanded';
