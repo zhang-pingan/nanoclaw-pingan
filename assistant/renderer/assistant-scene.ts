@@ -311,19 +311,19 @@ export class AssistantScene {
     root.add(wallGroup);
 
     const backgroundScreen = new THREE.Mesh(
-      new THREE.BoxGeometry(0.92, 0.34, 0.035),
+      new THREE.BoxGeometry(1.18, 0.42, 0.035),
       materials.screen,
     );
-    backgroundScreen.position.set(0, 1.46, 0.085);
+    backgroundScreen.position.set(0, 1.5, 0.085);
     wallGroup.add(backgroundScreen);
 
     const alertBars: THREE.Mesh[] = [];
-    [-0.16, 0, 0.16].forEach((x) => {
+    [-0.22, 0, 0.22].forEach((x) => {
       const bar = new THREE.Mesh(
-        new THREE.BoxGeometry(0.055, 0.26, 0.035),
+        new THREE.BoxGeometry(0.06, 0.3, 0.035),
         materials.ring,
       );
-      bar.position.set(x, 1.45, 0.11);
+      bar.position.set(x, 1.49, 0.11);
       wallGroup.add(bar);
       alertBars.push(bar);
     });
@@ -345,11 +345,11 @@ export class AssistantScene {
     root.add(statusRing);
 
     const consoleGroup = new THREE.Group();
-    consoleGroup.position.set(0, 1.28, -0.8);
+    consoleGroup.position.set(0, 1.34, -0.86);
     root.add(consoleGroup);
 
     const screen = new THREE.Mesh(
-      new THREE.BoxGeometry(0.78, 0.38, 0.04),
+      new THREE.BoxGeometry(1.28, 0.42, 0.04),
       materials.screen,
     );
     screen.position.set(0, 0, -0.1);
@@ -357,19 +357,12 @@ export class AssistantScene {
     screen.castShadow = true;
     consoleGroup.add(screen);
 
-    const topScreenRail = new THREE.Mesh(
-      new THREE.BoxGeometry(1.62, 0.05, 0.045),
-      materials.wallDark,
-    );
-    topScreenRail.position.set(0, -0.28, -0.12);
-    consoleGroup.add(topScreenRail);
-
     [
-      { x: -0.66, rotationY: 0.3 },
-      { x: 0.66, rotationY: -0.3 },
+      { x: -1.02, rotationY: 0.34 },
+      { x: 1.02, rotationY: -0.34 },
     ].forEach(({ x, rotationY }) => {
       const sideScreen = new THREE.Mesh(
-        new THREE.BoxGeometry(0.38, 0.3, 0.038),
+        new THREE.BoxGeometry(0.5, 0.36, 0.038),
         materials.screen,
       );
       sideScreen.position.set(x, -0.03, -0.08);
@@ -408,10 +401,10 @@ export class AssistantScene {
     consoleGroup.add(screenGlow);
 
     const hologramGroup = new THREE.Group();
-    hologramGroup.position.set(0.02, 0.52, -0.32);
+    hologramGroup.position.set(0.06, 0.7, -0.32);
     root.add(hologramGroup);
 
-    const hologramGeometry = new THREE.PlaneGeometry(1.12, 0.62, 28, 14);
+    const hologramGeometry = new THREE.PlaneGeometry(1.38, 0.76, 36, 18);
     const positions = hologramGeometry.attributes
       .position as THREE.BufferAttribute;
     for (let i = 0; i < positions.count; i += 1) {
@@ -431,10 +424,10 @@ export class AssistantScene {
     hologramGroup.add(hologramMesh);
 
     const hologramScan = new THREE.Mesh(
-      new THREE.BoxGeometry(0.026, 0.014, 0.62),
+      new THREE.BoxGeometry(0.032, 0.018, 0.78),
       materials.hologramScan,
     );
-    hologramScan.position.set(-0.5, 0.04, 0);
+    hologramScan.position.set(-0.66, 0.04, 0);
     hologramGroup.add(hologramScan);
 
     const statusLight = new THREE.PointLight('#10B981', 1.35, 3.2);
@@ -736,8 +729,8 @@ export class AssistantScene {
     this.objects.statusRing.visible = !expanded;
     this.objects.starField.rotation.z += delta * 0.012;
     this.objects.hologramGroup.position.y =
-      0.46 + Math.sin(elapsed * 2.7) * 0.018;
-    this.objects.hologramScan.position.x = -0.54 + ((elapsed * 0.52) % 1.08);
+      0.7 + Math.sin(elapsed * 2.7) * 0.022;
+    this.objects.hologramScan.position.x = -0.68 + ((elapsed * 0.58) % 1.36);
     const hologramMaterial = this.objects.hologramMesh
       .material as THREE.MeshBasicMaterial;
     const hologramScanMaterial = this.objects.hologramScan
