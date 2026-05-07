@@ -133,6 +133,8 @@ interface ActiveMessageQueryTraceState {
   hadError: boolean;
   outputSent: boolean;
   finished: boolean;
+  pipedIntoActiveSession: boolean;
+  agentActivitySeen: boolean;
 }
 
 const channels: Channel[] = [];
@@ -273,6 +275,7 @@ function createMessageQueryTrace(params: {
   inputSummary: string;
   inputPayload: Record<string, unknown>;
   contextPayload?: Record<string, unknown> | null;
+  pipedIntoActiveSession?: boolean;
 }): void {
   agentQueryTraceManager.startQuery({
     queryId: params.queryId,
@@ -347,6 +350,8 @@ function createMessageQueryTrace(params: {
     hadError: false,
     outputSent: false,
     finished: false,
+    pipedIntoActiveSession: params.pipedIntoActiveSession ?? false,
+    agentActivitySeen: false,
   });
 }
 
@@ -387,6 +392,57 @@ function finishMessageQueryTrace(
   agentQueryTraceManager.finishQuery(queryId, status, patch as never);
   state.finished = true;
   activeMessageQueryTraces.delete(queryId);
+}
+
+function markMergedMessageQueryTrace(
+  mergedQueryId: string,
+  targetQueryId: string,
+  payload: Record<string, unknown>,
+): void {
+  if (!mergedQueryId || mergedQueryId === targetQueryId) return;
+  forgetPendingQueryBatch(mergedQueryId);
+
+  const outputPreview = `Merged into active query ${targetQueryId}`;
+  const patch = {
+    current_phase: 'merged',
+    current_action: outputPreview,
+    output_preview: outputPreview,
+  };
+  const state = activeMessageQueryTraces.get(mergedQueryId);
+
+  if (!state || state.finished) {
+    const query = agentQueryTraceManager.getQuery(mergedQueryId);
+    if (query?.status === 'running') {
+      agentQueryTraceManager.finishQuery(mergedQueryId, 'success', patch);
+    }
+    activeMessageQueryTraces.delete(mergedQueryId);
+    return;
+  }
+
+  try {
+    state.agentActivitySeen = true;
+    agentQueryTraceManager.appendEvent({
+      queryId: mergedQueryId,
+      stepId: state.executionStepId,
+      eventType: 'lifecycle',
+      eventName: 'query_merged_into_active_query',
+      status: 'success',
+      summary: outputPreview,
+      payload: {
+        ...payload,
+        mergedQueryId,
+        targetQueryId,
+      },
+    });
+    finishMessageQueryTrace(mergedQueryId, 'success', patch);
+  } catch (err) {
+    logger.warn(
+      { err, mergedQueryId, targetQueryId },
+      'Failed to mark merged query trace',
+    );
+    activeMessageQueryTraces.delete(mergedQueryId);
+    agentQueryTraceManager.finishQuery(mergedQueryId, 'success', patch);
+  }
 }
 
 async function handleAskAnswerCommand(opts: {
@@ -754,8 +810,29 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     prompt,
     chatJid,
     async (result) => {
-      const queryId = result.queryId || initialQueryId;
-      const traceState = activeMessageQueryTraces.get(queryId);
+      const outputQueryId = result.queryId || initialQueryId;
+      let queryId = outputQueryId;
+      let traceState = activeMessageQueryTraces.get(queryId);
+      if (!traceState && queryId !== initialQueryId) {
+        const fallbackTraceState = activeMessageQueryTraces.get(initialQueryId);
+        if (fallbackTraceState) {
+          logger.warn(
+            {
+              group: group.name,
+              chatJid,
+              outputQueryId: queryId,
+              fallbackQueryId: initialQueryId,
+              runId,
+            },
+            'Received output for inactive query, attaching to active query',
+          );
+          queryId = initialQueryId;
+          traceState = fallbackTraceState;
+        }
+      }
+      if (traceState && traceState.runId !== runId && result.runId === runId) {
+        traceState.runId = runId;
+      }
       if (result.newSessionId) {
         agentQueryTraceManager.updateQuery(queryId, {
           session_id: result.newSessionId,
@@ -770,6 +847,20 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         // keep query traces in sync with the latest resumed session id
       }
       if (result.event) {
+        if (!traceState) {
+          logger.warn(
+            {
+              group: group.name,
+              chatJid,
+              queryId,
+              eventName: result.event.name,
+              runId: result.runId,
+            },
+            'Skipping event for inactive query trace',
+          );
+          return;
+        }
+        traceState.agentActivitySeen = true;
         const payload = result.event.payload || {};
         const mergedQueryId =
           result.event.name === 'query_merged_into_active_query' &&
@@ -787,16 +878,24 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           payload,
         });
         if (mergedQueryId) {
-          forgetPendingQueryBatch(mergedQueryId);
-          activeMessageQueryTraces.delete(mergedQueryId);
-          agentQueryTraceManager.deleteQuery(mergedQueryId);
+          markMergedMessageQueryTrace(mergedQueryId, queryId, payload);
         }
       }
       // Streaming output callback — called for each agent result
       if (result.result) {
         if (!traceState) {
-          throw new Error(`Missing active query trace for ${queryId}`);
+          logger.warn(
+            {
+              group: group.name,
+              chatJid,
+              queryId,
+              runId: result.runId,
+            },
+            'Skipping output for inactive query trace',
+          );
+          return;
         }
+        traceState.agentActivitySeen = true;
         if (!traceState.resultDeliveryStepId) {
           agentQueryTraceManager.completeStep(
             queryId,
@@ -898,8 +997,20 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
       if (result.status === 'error') {
         if (!traceState) {
-          throw new Error(`Missing active query trace for ${queryId}`);
+          logger.warn(
+            {
+              group: group.name,
+              chatJid,
+              queryId,
+              runId: result.runId,
+              error: result.error,
+            },
+            'Skipping error for inactive query trace',
+          );
+          sessionHadError = true;
+          return;
         }
+        traceState.agentActivitySeen = true;
         agentQueryTraceManager.appendEvent({
           queryId,
           stepId: traceState.resultDeliveryStepId || traceState.executionStepId,
@@ -925,6 +1036,32 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   if (idleTimer) clearTimeout(idleTimer);
   for (const [queryId, state] of activeMessageQueryTraces) {
     if (state.runId !== runId) continue;
+    if (
+      state.pipedIntoActiveSession &&
+      !state.agentActivitySeen &&
+      output !== 'error' &&
+      !state.hadError
+    ) {
+      agentQueryTraceManager.appendEvent({
+        queryId,
+        stepId: state.executionStepId,
+        eventType: 'lifecycle',
+        eventName: 'piped_message_waiting_for_handoff',
+        status: 'running',
+        summary:
+          'Piped message was not consumed before the active container exited',
+      });
+      logger.warn(
+        {
+          group: group.name,
+          chatJid,
+          queryId,
+          runId,
+        },
+        'Leaving unconsumed piped query trace active for next container handoff',
+      );
+      continue;
+    }
     finishMessageQueryTrace(
       queryId,
       output === 'error' || state.hadError ? 'error' : 'success',
@@ -1348,6 +1485,7 @@ async function startMessageLoop(): Promise<void> {
                 messageCount: messagesToSend.length,
                 pipedIntoActiveSession: true,
               },
+              pipedIntoActiveSession: true,
             });
             rememberPendingQueryBatch({
               runId,

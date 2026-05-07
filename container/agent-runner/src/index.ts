@@ -1413,9 +1413,37 @@ async function main(): Promise<void> {
   const pending = drainIpcInput();
   if (pending.length > 0) {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
-    prompt += '\n' + pending.map((m) => m.text).join('\n');
-    selectedModel = pending[pending.length - 1].selectedModel || MODEL_DEFAULT;
-    currentQueryId = pending[pending.length - 1].queryId || currentQueryId;
+    const pendingPrompt = pending.map((m) => m.text).join('\n');
+    prompt += '\n' + pendingPrompt;
+    if (currentQueryId) {
+      for (const message of pending) {
+        if (!message.queryId) continue;
+        writeEvent(
+          {
+            type: 'lifecycle',
+            name: 'query_merged_into_active_query',
+            status: 'success',
+            summary: 'Merged pending IPC message into initial query stream',
+            payload: {
+              mergedQueryId: message.queryId,
+              targetQueryId: currentQueryId,
+              textLength: message.text.length,
+              selectedModel: message.selectedModel,
+              drainedAtStartup: true,
+            },
+          },
+          {
+            newSessionId: sessionId,
+            selectedModel,
+            runId: containerInput.runId,
+            queryId: currentQueryId,
+          },
+        );
+      }
+    } else {
+      selectedModel = pending[pending.length - 1].selectedModel || MODEL_DEFAULT;
+      currentQueryId = pending[pending.length - 1].queryId || currentQueryId;
+    }
   }
 
   // --- Slash command handling ---

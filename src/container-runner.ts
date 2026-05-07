@@ -585,7 +585,7 @@ export async function runContainerAgent(
               .then(() => onOutput(parsed))
               .catch((err) => {
                 logger.error(
-                  { group: group.name, error: err },
+                  { group: group.name, err },
                   'Error in onOutput callback',
                 );
               });
