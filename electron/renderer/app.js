@@ -371,6 +371,7 @@ var serviceConfigDirty = false;
 var serviceConfigRequestSeq = 0;
 var serviceConfigFilePath = "";
 var serviceConfigSaving = false;
+var serviceConfigFieldError = "";
 var serviceConfigListExpanded = true;
 var workflowDefinitionReferenceDetails = {};
 var cardsDragState = null;
@@ -485,11 +486,14 @@ var assistantAlwaysOnTopToggle = document.getElementById("assistant-always-on-to
 var assistantMovementToggle = document.getElementById("assistant-movement-toggle");
 var assistantSourceGrid = document.getElementById("assistant-source-grid");
 var assistantSourceInputs = [];
+var assistantServiceInputs = [];
 var assistantSourceExpandedGroups = {};
 var assistantState = null;
 var assistantInboxItems = [];
 var assistantActionLogs = [];
 var assistantInboxActionPendingItemIds = new Set();
+var assistantLogDetailExpandedItems = {};
+var assistantLogDetailExpandedLogs = {};
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -17075,6 +17079,12 @@ function getAssistantRuleCapability(ruleKey) {
   return getAssistantRuleCapabilities().find((rule) => rule.key === ruleKey) || null;
 }
 
+function getAssistantOnlineLogServiceOptions() {
+  return assistantState && Array.isArray(assistantState.onlineLogServiceOptions)
+    ? assistantState.onlineLogServiceOptions
+    : [];
+}
+
 function getAssistantSourceGroupKey(rule) {
   return rule && rule.sourceLabel ? String(rule.sourceLabel) : "其他";
 }
@@ -17115,6 +17125,41 @@ function formatAssistantRuleCapabilitySummary(rule) {
   return parts.length > 0 ? parts.join(" · ") : "纯提醒";
 }
 
+function renderAssistantOnlineLogServicePicker(rule, ruleSetting) {
+  if (!rule || rule.key !== "online.error_logs") return "";
+  const services = getAssistantOnlineLogServiceOptions();
+  const selected = new Set(Array.isArray(ruleSetting.selectedServices) ? ruleSetting.selectedServices : []);
+  if (services.length === 0) {
+    return '<div class="assistant-service-picker-empty">暂无服务配置</div>';
+  }
+  return `
+    <div class="assistant-service-picker">
+      ${services.map((service) => {
+        const configured = Boolean(service.configured);
+        const checked = configured && selected.has(service.service);
+        const meta = configured
+          ? `${(service.hosts || []).join(", ")} · ${service.logsErrorPath || ""}`
+          : (service.disabledReason || "缺少日志配置");
+        return `
+          <label class="assistant-service-option${configured ? "" : " disabled"}">
+            <input
+              data-assistant-rule-service="${escapeAttribute(rule.key)}"
+              data-assistant-service="${escapeAttribute(service.service || "")}"
+              type="checkbox"
+              ${checked ? "checked" : ""}
+              ${configured && ruleSetting.enabled ? "" : "disabled"}
+            />
+            <span>
+              <strong>${escapeHtml(service.service || "--")}</strong>
+              <small>${escapeHtml(meta)}</small>
+            </span>
+          </label>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function renderAssistantSourceRule(rule) {
   const ruleSetting = getAssistantRuleSetting(rule.key);
   const investigateDisabled = !rule.supportsInvestigation || !ruleSetting.enabled;
@@ -17146,6 +17191,7 @@ function renderAssistantSourceRule(rule) {
         ` : ""}
         ${!rule.supportsInvestigation && !rule.supportsRepair ? '<span class="assistant-rule-muted">纯提醒</span>' : ""}
       </div>
+      ${renderAssistantOnlineLogServicePicker(rule, ruleSetting)}
     </article>
   `;
 }
@@ -17183,6 +17229,7 @@ function renderAssistantSourceRules() {
   if (!settings || capabilities.length === 0) {
     assistantSourceGrid.innerHTML = '<div class="assistant-empty">加载中</div>';
     assistantSourceInputs = [];
+    assistantServiceInputs = [];
     return;
   }
   const groups = groupAssistantRuleCapabilities(capabilities);
@@ -17222,6 +17269,7 @@ function renderAssistantSourceRules() {
         enabled: Boolean(current.enabled),
         investigationEnabled: Boolean(current.investigationEnabled),
         autoEnabled: Boolean(current.autoEnabled),
+        selectedServices: Array.isArray(current.selectedServices) ? current.selectedServices.slice() : [],
         [field]: input.checked,
       };
       if (field === "autoEnabled" && input.checked) {
@@ -17234,6 +17282,28 @@ function renderAssistantSourceRules() {
       }
       updateAssistantSettingsPatch({
         triggerRules: { [ruleKey]: next },
+      });
+    });
+  });
+  assistantServiceInputs = Array.from(assistantSourceGrid.querySelectorAll("[data-assistant-rule-service]"));
+  assistantServiceInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      const ruleKey = input.getAttribute("data-assistant-rule-service") || "";
+      const service = input.getAttribute("data-assistant-service") || "";
+      if (!ruleKey || !service) return;
+      const current = getAssistantRuleSetting(ruleKey);
+      const selected = new Set(Array.isArray(current.selectedServices) ? current.selectedServices : []);
+      if (input.checked) selected.add(service);
+      else selected.delete(service);
+      updateAssistantSettingsPatch({
+        triggerRules: {
+          [ruleKey]: {
+            enabled: Boolean(current.enabled),
+            investigationEnabled: Boolean(current.investigationEnabled),
+            autoEnabled: Boolean(current.autoEnabled),
+            selectedServices: Array.from(selected),
+          },
+        },
       });
     });
   });
@@ -17276,9 +17346,80 @@ function renderAssistantAutoFlowDetail(item) {
   return `<div class="assistant-inbox-flow">${lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}</div>`;
 }
 
+function getAssistantOnlineErrorLogExtra(item) {
+  const extra = item && item.extra && item.extra.onlineErrorLog && typeof item.extra.onlineErrorLog === "object"
+    ? item.extra.onlineErrorLog
+    : null;
+  if (!extra) return null;
+  return {
+    ...extra,
+    logs: Array.isArray(extra.logs) ? extra.logs : [],
+  };
+}
+
+function isAssistantOnlineErrorLogItem(item) {
+  return Boolean(item && item.source_type === "online_error_log" && getAssistantOnlineErrorLogExtra(item));
+}
+
+function formatAssistantOnlineErrorLogBody(item) {
+  const detail = getAssistantOnlineErrorLogExtra(item);
+  if (!detail) return item && item.body ? item.body : "";
+  const count = Number(detail.totalErrorCount);
+  const safeCount = Number.isFinite(count) ? count : detail.logs.length;
+  const minutes = detail.window && Number(detail.window.minutes);
+  return `最近 ${Number.isFinite(minutes) ? minutes : 10} 分钟扫描到 ${safeCount} 条 ERROR 日志。`;
+}
+
+function formatAssistantOnlineErrorLogSummary(log, index) {
+  const parts = [
+    `#${index + 1}`,
+    log && log.time ? String(log.time) : "",
+    log && log.host ? String(log.host) : "",
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function renderAssistantOnlineErrorLogDetails(item) {
+  if (!isAssistantOnlineErrorLogItem(item) || !assistantLogDetailExpandedItems[item.id]) return "";
+  const detail = getAssistantOnlineErrorLogExtra(item);
+  const logs = detail.logs;
+  const scanErrors = Array.isArray(detail.scanErrors) ? detail.scanErrors : [];
+  const itemExpandedLogs = assistantLogDetailExpandedLogs[item.id] || {};
+  return `
+    <div class="assistant-log-detail-panel">
+      <div class="assistant-log-detail-meta">
+        <span>服务：${escapeHtml(String(detail.service || item.source_ref_id || "--"))}</span>
+        <span>日志：${escapeHtml(String(detail.logPath || "--"))}</span>
+      </div>
+      ${logs.length === 0 ? '<div class="assistant-log-detail-empty">暂无日志详情</div>' : `
+        <div class="assistant-log-detail-list">
+          ${logs.map((log, index) => {
+            const expanded = Boolean(itemExpandedLogs[index]);
+            return `
+              <article class="assistant-log-detail-entry${expanded ? " expanded" : ""}">
+                <button type="button" class="assistant-log-detail-toggle" data-assistant-log-item="${escapeAttribute(item.id)}" data-assistant-log-index="${escapeAttribute(String(index))}" aria-expanded="${expanded ? "true" : "false"}">
+                  <span>${escapeHtml(formatAssistantOnlineErrorLogSummary(log, index))}</span>
+                  <strong>${expanded ? "收起" : "展开"}</strong>
+                </button>
+                ${expanded ? `<pre class="assistant-log-detail-raw">${escapeHtml(String(log.rawLog || ""))}</pre>` : ""}
+              </article>
+            `;
+          }).join("")}
+        </div>
+      `}
+      ${scanErrors.length > 0 ? `
+        <div class="assistant-log-detail-scan-errors">
+          ${scanErrors.map((scanError) => `<div>${escapeHtml(`${scanError.host || "--"}：${scanError.error || ""}`)}</div>`).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
 function renderAssistantInboxActions(item) {
   return `
     ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
+    ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? "收起日志" : "日志详情"}</button>` : ""}
     ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}">排查</button>` : ""}
     ${canShowAssistantRepair(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="repair" data-assistant-item="${escapeAttribute(item.id)}">修复</button>` : ""}
     ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
@@ -17322,7 +17463,8 @@ function renderAssistantInbox() {
       <div class="assistant-inbox-main">
         <div class="assistant-inbox-meta">${escapeHtml(formatAssistantStatusText(item))}</div>
         <div class="assistant-inbox-title">${escapeHtml(item.title || "未命名事项")}</div>
-        <div class="assistant-inbox-body">${escapeHtml(item.body || "")}</div>
+        <div class="assistant-inbox-body">${escapeHtml(formatAssistantOnlineErrorLogBody(item))}</div>
+        ${renderAssistantOnlineErrorLogDetails(item)}
         ${renderAssistantAutoFlowDetail(item)}
       </div>
       <div class="assistant-inbox-actions">
@@ -17337,6 +17479,27 @@ function renderAssistantInbox() {
       const item = assistantInboxItems.find((entry) => entry.id === itemId);
       if (!item) return;
       openAssistantItemTarget(item);
+    });
+  });
+  Array.from(assistantInboxList.querySelectorAll("[data-assistant-log-detail]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemId = button.getAttribute("data-assistant-log-detail") || "";
+      if (!itemId) return;
+      assistantLogDetailExpandedItems[itemId] = !assistantLogDetailExpandedItems[itemId];
+      if (!assistantLogDetailExpandedItems[itemId]) {
+        delete assistantLogDetailExpandedLogs[itemId];
+      }
+      renderAssistantInbox();
+    });
+  });
+  Array.from(assistantInboxList.querySelectorAll("[data-assistant-log-index]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemId = button.getAttribute("data-assistant-log-item") || "";
+      const index = button.getAttribute("data-assistant-log-index") || "";
+      if (!itemId || !index) return;
+      assistantLogDetailExpandedLogs[itemId] = assistantLogDetailExpandedLogs[itemId] || {};
+      assistantLogDetailExpandedLogs[itemId][index] = !assistantLogDetailExpandedLogs[itemId][index];
+      renderAssistantInbox();
     });
   });
   Array.from(assistantInboxList.querySelectorAll("[data-assistant-action]")).forEach((button) => {
@@ -17506,6 +17669,12 @@ function openWorkstationTargetUrl(targetUrl) {
       loadTraceMonitorData({ force: true });
     } else if (target === "assistant") {
       setPrimaryNav("assistant");
+    } else if (target === "configuration") {
+      setPrimaryNav("configuration");
+      const service = url.searchParams.get("service") || "";
+      if (service) {
+        currentServiceConfigName = service;
+      }
     } else {
       return false;
     }
@@ -17591,12 +17760,31 @@ function normalizeServiceFieldValue(input, type) {
     const text = Array.isArray(input) ? input.join(",") : String(input || "");
     return text.split(",").map((item) => item.trim()).filter(Boolean);
   }
+  if (type === "json") {
+    if (input && typeof input === "object") return input;
+    const text = String(input || "").trim();
+    if (!text) return "";
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      serviceConfigFieldError = `JSON 字段格式错误：${err instanceof Error ? err.message : "无法解析"}`;
+      return undefined;
+    }
+  }
   return typeof input === "string" ? input.trim() : input;
 }
 
 function formatServiceFieldValue(value, type) {
   if (type === "csv") {
     return Array.isArray(value) ? value.join(", ") : String(value || "");
+  }
+  if (type === "json") {
+    if (value === undefined || value === null || value === "") return "";
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value || "");
+    }
   }
   if (value === undefined || value === null) return "";
   return String(value);
@@ -17627,6 +17815,11 @@ function createEmptyServiceConfig(name = "") {
     log_hosts: [],
     logs_info: "",
     logs_error: "",
+    log_line_pattern: "",
+    log_line_group_mapping: {
+      time: 1,
+      level: 2,
+    },
     mysql: {
       host: "",
       port: 3306,
@@ -17661,17 +17854,28 @@ function updateServiceConfigDirty(nextDirty) {
 
 function readServiceConfigDraftFromForm() {
   const base = serviceConfigDraft && typeof serviceConfigDraft === "object" ? cloneJson(serviceConfigDraft) : {};
+  serviceConfigFieldError = "";
   configurationServiceFieldInputs.forEach((input) => {
+    if (serviceConfigFieldError) return;
     const pathValue = input.getAttribute("data-service-config-path") || "";
     const type = input.getAttribute("data-service-config-type") || "text";
-    setServiceConfigValue(base, pathValue, normalizeServiceFieldValue(input.value, type));
+    const value = normalizeServiceFieldValue(input.value, type);
+    if (serviceConfigFieldError) return;
+    setServiceConfigValue(base, pathValue, value);
   });
+  if (serviceConfigFieldError) return null;
   return base;
 }
 
 function syncServiceJsonFromForm(markDirty = true) {
   if (!currentServiceConfigName) return;
-  serviceConfigDraft = readServiceConfigDraftFromForm();
+  const nextDraft = readServiceConfigDraftFromForm();
+  if (!nextDraft) {
+    updateServiceConfigSaveStatus(serviceConfigFieldError, "error");
+    updateServiceConfigDirty(true);
+    return;
+  }
+  serviceConfigDraft = nextDraft;
   if (configurationServiceJsonEditor) {
     configurationServiceJsonEditor.value = stringifyPrettyJson(serviceConfigDraft || {});
   }

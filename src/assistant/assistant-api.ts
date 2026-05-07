@@ -14,6 +14,7 @@ import { clearAssistantData } from '../db.js';
 import { emitAssistantEvent } from './assistant-events.js';
 import { runProactiveScan } from './proactive-engine.js';
 import { resolveTodayPlanInboxItemsIfPlanExists } from './today-plan-inbox.js';
+import { listOnlineLogServiceOptions } from './online-error-log.js';
 import {
   ASSISTANT_TRIGGER_RULE_CAPABILITIES,
   type AgentInboxStatus,
@@ -52,6 +53,7 @@ export function getAssistantState(): AssistantState {
   return {
     settings: getAssistantSettings(),
     triggerRuleCapabilities: ASSISTANT_TRIGGER_RULE_CAPABILITIES,
+    onlineLogServiceOptions: listOnlineLogServiceOptions(),
     inboxCounts: getAgentInboxCounts(),
     latestInboxItems: listAgentInboxItems({ status: 'active', limit: 20 }),
     latestActionLogs: listAssistantActionLogs(20),

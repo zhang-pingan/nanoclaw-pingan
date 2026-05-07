@@ -116,6 +116,15 @@ function normalizeTriggerRuleSettings(
     enabled && supportsRepair && typeof input.autoEnabled === 'boolean'
       ? input.autoEnabled
       : false;
+  const selectedServices = Array.isArray(input.selectedServices)
+    ? Array.from(
+        new Set(
+          input.selectedServices
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean),
+        ),
+      )
+    : [];
   return {
     enabled,
     investigationEnabled:
@@ -126,6 +135,7 @@ function normalizeTriggerRuleSettings(
           ? input.investigationEnabled
           : false)),
     autoEnabled,
+    selectedServices: ruleKey === 'online.error_logs' ? selectedServices : [],
   };
 }
 

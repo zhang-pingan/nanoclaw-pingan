@@ -20,12 +20,14 @@ export type AssistantTriggerRuleKey =
   | 'workbench.task_failed_or_cancelled'
   | 'workbench.task_stale'
   | 'scheduler.task_failed'
-  | 'agent_runs.query_failed';
+  | 'agent_runs.query_failed'
+  | 'online.error_logs';
 
 export interface AssistantTriggerRuleSettings {
   enabled: boolean;
   investigationEnabled: boolean;
   autoEnabled: boolean;
+  selectedServices: string[];
 }
 
 export interface AssistantTriggerRuleCapability {
@@ -34,6 +36,14 @@ export interface AssistantTriggerRuleCapability {
   sourceLabel: string;
   supportsInvestigation: boolean;
   supportsRepair: boolean;
+}
+
+export interface AssistantOnlineLogServiceOption {
+  service: string;
+  hosts: string[];
+  logsErrorPath: string;
+  configured: boolean;
+  disabledReason: string | null;
 }
 
 export interface AgentInboxItemRecord {
@@ -155,6 +165,13 @@ export const ASSISTANT_TRIGGER_RULE_CAPABILITIES: AssistantTriggerRuleCapability
       supportsInvestigation: true,
       supportsRepair: true,
     },
+    {
+      key: 'online.error_logs',
+      label: '线上 error 日志',
+      sourceLabel: '线上异常',
+      supportsInvestigation: true,
+      supportsRepair: true,
+    },
   ];
 
 export const ASSISTANT_TRIGGER_RULE_DEFAULTS: Record<
@@ -167,9 +184,10 @@ export const ASSISTANT_TRIGGER_RULE_DEFAULTS: Record<
       enabled: true,
       investigationEnabled: false,
       autoEnabled: false,
+      selectedServices: [],
     },
   ]),
-) as Record<AssistantTriggerRuleKey, AssistantTriggerRuleSettings>;
+) as unknown as Record<AssistantTriggerRuleKey, AssistantTriggerRuleSettings>;
 
 export const DEFAULT_ASSISTANT_SETTINGS: AssistantSettings = {
   enabled: true,
@@ -214,6 +232,7 @@ export interface AssistantActionLogView extends Omit<
 export interface AssistantState {
   settings: AssistantSettings;
   triggerRuleCapabilities: AssistantTriggerRuleCapability[];
+  onlineLogServiceOptions: AssistantOnlineLogServiceOption[];
   inboxCounts: Record<AgentInboxStatus, number>;
   latestInboxItems: AgentInboxItemView[];
   latestActionLogs: AssistantActionLogView[];

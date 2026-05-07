@@ -1537,6 +1537,14 @@
                     <span>Logs Error</span>
                     <input data-service-config-path="logs_error" type="text" placeholder="/data/log/app/error.log" />
                   </label>
+                  <label class="configuration-field configuration-field-wide">
+                    <span>Log Line Pattern</span>
+                    <textarea data-service-config-path="log_line_pattern" rows="3" spellcheck="false" placeholder="例如 ^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+(\\w+)"></textarea>
+                  </label>
+                  <label class="configuration-field configuration-field-wide">
+                    <span>Log Line Group Mapping</span>
+                    <textarea data-service-config-path="log_line_group_mapping" data-service-config-type="json" rows="4" spellcheck="false" placeholder='{"time":1,"level":2}'></textarea>
+                  </label>
                   <label class="configuration-field">
                     <span>MySQL Host</span>
                     <input data-service-config-path="mysql.host" type="text" placeholder="mysql.example.com" />

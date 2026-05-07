@@ -11,6 +11,11 @@
       "log_hosts": ["139.196.13.81"],
       "logs_info": "/data/log/catstory/catstory.log",
       "logs_error": "/data/log/catstory/error.log",
+      "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+(?:\\[[^\\]]*\\]\\s+)*(\\w+)\\s+.*$",
+      "log_line_group_mapping": {
+        "time": 1,
+        "level": 2
+      },
       "mysql": {
         "host": "rm-uf6689m1cqi8972kseo.mysql.rds.aliyuncs.com",
         "port": 3306,
@@ -22,6 +27,11 @@
     "log_hosts": ["106.14.14.235","106.15.95.61"],
     "logs_info": "/data/log/catstory/catstory.log",
     "logs_error": "/data/log/catstory/error.log",
+    "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+(?:\\[[^\\]]*\\]\\s+)*(\\w+)\\s+.*$",
+    "log_line_group_mapping": {
+      "time": 1,
+      "level": 2
+    },
     "mysql": {
       "host": "rm-uf6689m1cqi8972kseo.mysql.rds.aliyuncs.com",
       "port": 3306,

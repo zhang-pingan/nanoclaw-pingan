@@ -29,6 +29,7 @@ import {
   scheduleAutoProcessAgentInboxItem,
   shouldAutoProcessInboxItem,
 } from './assistant-auto-flow.js';
+import { scanOnlineErrorLogRule } from './online-error-log.js';
 import { resolveTodayPlanInboxItemsForDate } from './today-plan-inbox.js';
 import type {
   AgentInboxPriority,
@@ -416,6 +417,9 @@ export function runProactiveScan(input: { now?: Date } = {}): {
   scanWorkbenchRules(candidates, now, settings);
   scanSchedulerRules(candidates, settings);
   scanAgentRunRules(candidates, settings);
+  if (!resolveDisabledRule(settings, 'online.error_logs')) {
+    candidates.push(...scanOnlineErrorLogRule({ settings, now }));
+  }
 
   for (const item of candidates) {
     const inboxItem = createOrUpdateAgentInboxItem(item);

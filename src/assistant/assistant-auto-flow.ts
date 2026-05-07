@@ -135,8 +135,40 @@ function stringifyContext(value: unknown): string {
   return JSON.stringify(value, null, 2).slice(0, 20000);
 }
 
+function normalizeOnlineErrorLogContext(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!isObject(value)) return null;
+  const rawLogs = Array.isArray(value.logs) ? value.logs : [];
+  const logs = rawLogs
+    .filter(isObject)
+    .map((log) => ({
+      host: typeof log.host === 'string' ? log.host : '',
+      logPath: typeof log.logPath === 'string' ? log.logPath : '',
+      time: typeof log.time === 'string' ? log.time : '',
+      level: typeof log.level === 'string' ? log.level : null,
+      rawLog: typeof log.rawLog === 'string' ? log.rawLog : '',
+    }))
+    .filter((log) => log.rawLog);
+  return {
+    service: value.service || null,
+    hosts: Array.isArray(value.hosts) ? value.hosts : [],
+    logPath: value.logPath || null,
+    window: isObject(value.window) ? value.window : null,
+    totalErrorCount: value.totalErrorCount || logs.length,
+    scanErrors: Array.isArray(value.scanErrors) ? value.scanErrors : [],
+    logs,
+  };
+}
+
 function buildContext(item: AgentInboxItemView): Record<string, unknown> {
   const ruleKey = toRuleKey(item.extra.ruleKey);
+  const inboxExtra =
+    ruleKey === 'online.error_logs'
+      ? Object.fromEntries(
+          Object.entries(item.extra).filter(([key]) => key !== 'onlineErrorLog'),
+        )
+      : item.extra;
   const context: Record<string, unknown> = {
     inbox: {
       id: item.id,
@@ -145,7 +177,7 @@ function buildContext(item: AgentInboxItemView): Record<string, unknown> {
       source_type: item.source_type,
       source_ref_id: item.source_ref_id,
       action_kind: item.action_kind,
-      extra: item.extra,
+      extra: inboxExtra,
     },
   };
 
@@ -180,6 +212,12 @@ function buildContext(item: AgentInboxItemView): Record<string, unknown> {
       steps: queryId ? listAgentQuerySteps(queryId) : [],
       events: queryId ? listAgentQueryEvents(queryId).slice(-40) : [],
     };
+  }
+
+  if (ruleKey === 'online.error_logs') {
+    context.onlineErrorLog = normalizeOnlineErrorLogContext(
+      item.extra.onlineErrorLog,
+    );
   }
 
   return context;
@@ -254,7 +292,8 @@ export function canInvestigateInboxItem(item: AgentInboxItemView): boolean {
     ruleKey === 'workbench.task_failed_or_cancelled' ||
     ruleKey === 'workbench.task_stale' ||
     ruleKey === 'scheduler.task_failed' ||
-    ruleKey === 'agent_runs.query_failed'
+    ruleKey === 'agent_runs.query_failed' ||
+    ruleKey === 'online.error_logs'
   );
 }
 

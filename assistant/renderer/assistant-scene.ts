@@ -91,7 +91,7 @@ export class AssistantScene {
   private clips: THREE.AnimationClip[] = [];
   private activeAction: THREE.AnimationAction | null = null;
   private mood: AssistantSceneMood = 'offline';
-  private readonly idleAnimationNames = ['Idle', 'Attack', 'BackFlip', 'Look'];
+  private readonly idleAnimationNames = ['Idle', 'BackFlip', 'Look'];
   private idleAnimationName = 'Idle';
   private nextIdleAnimationAt = 0;
   private mode: SceneMode = 'compact';
