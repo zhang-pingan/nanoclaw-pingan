@@ -7691,9 +7691,11 @@ body.quick-chat-window .quick-chat-input {
 .configuration-nav-chevron {
   width: 24px;
   height: 24px;
+  align-self: start;
   display: inline-grid;
   place-items: center;
   border-radius: 8px;
+  margin-top: 1px;
   background: rgba(20, 184, 166, 0.1);
   color: #0f766e;
   font-size: 13px;
