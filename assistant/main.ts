@@ -12,8 +12,10 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';
 
-const ASSISTANT_WINDOW_WIDTH = 540;
-const ASSISTANT_WINDOW_HEIGHT = 430;
+const ASSISTANT_COMPACT_WINDOW_WIDTH = 540;
+const ASSISTANT_COMPACT_WINDOW_HEIGHT = 430;
+const ASSISTANT_EXPANDED_WINDOW_WIDTH = 1010;
+const ASSISTANT_EXPANDED_WINDOW_HEIGHT = 520;
 const WORKSTATION_URL = 'http://localhost:3000/';
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
 const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
@@ -40,7 +42,8 @@ function electronBinPath(): string {
 }
 
 function localWorkstationUrl(target?: string): string | null {
-  const raw = typeof target === 'string' && target.trim() ? target : WORKSTATION_URL;
+  const raw =
+    typeof target === 'string' && target.trim() ? target : WORKSTATION_URL;
   try {
     const url = new URL(raw);
     const isLocalWebClient =
@@ -67,12 +70,18 @@ function openWorkstationClient(target?: string): void {
   }
 
   const localElectron = electronBinPath();
-  const electronExecutable = existsSync(localElectron) ? localElectron : process.execPath;
-  const child = spawn(electronExecutable, [entry, `${OPEN_WORKSTATION_ARG}=${url}`], {
-    cwd: process.cwd(),
-    detached: true,
-    stdio: 'ignore',
-  });
+  const electronExecutable = existsSync(localElectron)
+    ? localElectron
+    : process.execPath;
+  const child = spawn(
+    electronExecutable,
+    [entry, `${OPEN_WORKSTATION_ARG}=${url}`],
+    {
+      cwd: process.cwd(),
+      detached: true,
+      stdio: 'ignore',
+    },
+  );
   child.once('error', () => {
     void shell.openExternal(url);
   });
@@ -106,8 +115,19 @@ function toggleAssistantWindow(): void {
   bringAssistantWindowToFront();
 }
 
-function assistantWindowSize(): { width: number; height: number } {
-  return { width: ASSISTANT_WINDOW_WIDTH, height: ASSISTANT_WINDOW_HEIGHT };
+function assistantWindowSize(expanded = false): {
+  width: number;
+  height: number;
+} {
+  return expanded
+    ? {
+        width: ASSISTANT_EXPANDED_WINDOW_WIDTH,
+        height: ASSISTANT_EXPANDED_WINDOW_HEIGHT,
+      }
+    : {
+        width: ASSISTANT_COMPACT_WINDOW_WIDTH,
+        height: ASSISTANT_COMPACT_WINDOW_HEIGHT,
+      };
 }
 
 function clampWindowToWorkArea(
@@ -172,6 +192,25 @@ function createAssistantWindow(): void {
   });
 }
 
+function setAssistantWindowExpanded(expanded: boolean): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  const bounds = assistantWindow.getBounds();
+  const size = assistantWindowSize(expanded);
+  if (bounds.width === size.width && bounds.height === size.height) return;
+
+  const next = clampWindowToWorkArea(
+    bounds.x + bounds.width - size.width,
+    bounds.y + bounds.height - size.height,
+    size.width,
+    size.height,
+  );
+  assistantWindow.setBounds({
+    ...next,
+    width: size.width,
+    height: size.height,
+  });
+}
+
 function createTray(): void {
   const image = nativeImage
     .createFromPath(assetPath('nanoclaw-icon.png'))
@@ -200,29 +239,32 @@ function createTray(): void {
 
 ipcMain.handle('assistant:get-web-token', () => process.env.WEB_TOKEN || '');
 
-ipcMain.handle('assistant:open-workstation', async (_event, target?: string) => {
-  openWorkstationClient(target);
-});
-
 ipcMain.handle(
-  'assistant:set-always-on-top',
-  (_event, enabled: boolean) => {
-    assistantWindow?.setAlwaysOnTop(Boolean(enabled), 'floating');
+  'assistant:open-workstation',
+  async (_event, target?: string) => {
+    openWorkstationClient(target);
   },
 );
 
-ipcMain.handle('assistant:set-chat-open', (_event, open: boolean) => {
-  void open;
+ipcMain.handle('assistant:set-always-on-top', (_event, enabled: boolean) => {
+  assistantWindow?.setAlwaysOnTop(Boolean(enabled), 'floating');
 });
 
-ipcMain.handle('assistant:set-mouse-passthrough', (_event, enabled: boolean) => {
-  if (!assistantWindow || assistantWindow.isDestroyed()) return;
-  if (enabled) {
-    assistantWindow.setIgnoreMouseEvents(true, { forward: true });
-    return;
-  }
-  assistantWindow.setIgnoreMouseEvents(false);
+ipcMain.handle('assistant:set-chat-open', (_event, open: boolean) => {
+  setAssistantWindowExpanded(Boolean(open));
 });
+
+ipcMain.handle(
+  'assistant:set-mouse-passthrough',
+  (_event, enabled: boolean) => {
+    if (!assistantWindow || assistantWindow.isDestroyed()) return;
+    if (enabled) {
+      assistantWindow.setIgnoreMouseEvents(true, { forward: true });
+      return;
+    }
+    assistantWindow.setIgnoreMouseEvents(false);
+  },
+);
 
 ipcMain.handle('assistant:move-by', (_event, dx: number, dy: number) => {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;

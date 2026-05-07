@@ -22,6 +22,11 @@ button {
 }
 
 .assistant-shell {
+  --assistant-shell-inset: 6px;
+  --assistant-panel-gap: 12px;
+  --assistant-scene-width: 640px;
+  --assistant-alert-height: 0px;
+  --assistant-alert-gap: 12px;
   position: relative;
   width: 100vw;
   height: 100vh;
@@ -113,6 +118,9 @@ button {
   backdrop-filter: blur(18px);
   z-index: 3;
   -webkit-app-region: drag;
+  transition:
+    opacity 110ms ease,
+    transform 110ms ease;
 }
 
 .assistant-bubble::after {
@@ -152,9 +160,19 @@ button {
 }
 
 .assistant-shell.chat-open .assistant-bubble {
-  right: 230px;
-  width: 286px;
+  left: var(--assistant-shell-inset);
+  right: calc(
+    var(--assistant-shell-inset) + var(--assistant-scene-width) +
+      var(--assistant-panel-gap)
+  );
+  top: var(--assistant-shell-inset);
+  width: auto;
+  min-height: 0;
+  max-height: 148px;
+  overflow: hidden;
+  padding: 12px 14px 10px;
   border-color: rgba(45, 212, 191, 0.24);
+  border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(8, 13, 26, 0.68)),
     rgba(2, 6, 23, 0.64);
@@ -165,8 +183,7 @@ button {
 }
 
 .assistant-shell.chat-open .assistant-bubble::after {
-  border-color: rgba(45, 212, 191, 0.18);
-  background: rgba(8, 13, 26, 0.72);
+  display: none;
 }
 
 .assistant-shell.chat-open .bubble-kicker {
@@ -178,6 +195,9 @@ button {
 }
 
 .assistant-shell.chat-open .assistant-bubble p {
+  min-height: 0;
+  max-height: 40px;
+  overflow: auto;
   color: #b6c6d6;
 }
 
@@ -297,10 +317,11 @@ button {
 }
 
 .assistant-shell.chat-open .assistant-mascot-wrap {
-  right: 8px;
-  bottom: 12px;
-  width: 214px;
-  height: 302px;
+  right: var(--assistant-shell-inset);
+  top: var(--assistant-shell-inset);
+  bottom: var(--assistant-shell-inset);
+  width: var(--assistant-scene-width);
+  height: auto;
   filter: drop-shadow(0 22px 36px rgba(2, 6, 23, 0.42))
     drop-shadow(0 0 24px rgba(20, 184, 166, 0.18));
   animation: none;
@@ -391,7 +412,16 @@ button {
 }
 
 .assistant-shell.chat-open .assistant-chat {
-  right: 230px;
+  left: var(--assistant-shell-inset);
+  right: calc(
+    var(--assistant-shell-inset) + var(--assistant-scene-width) +
+      var(--assistant-panel-gap)
+  );
+  top: calc(
+    var(--assistant-shell-inset) + var(--assistant-alert-height) +
+      var(--assistant-alert-gap)
+  );
+  bottom: var(--assistant-shell-inset);
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0) scale(1);
@@ -420,13 +450,9 @@ button {
   animation: console-glint 3.2s ease-in-out infinite;
 }
 
-.assistant-shell.bubble-hidden .assistant-chat {
-  top: 104px;
-  bottom: 16px;
-}
-
-.assistant-shell.bubble-hidden.chat-open .assistant-chat {
-  top: 88px;
+.assistant-shell.chat-open.bubble-hidden {
+  --assistant-alert-height: 0px;
+  --assistant-alert-gap: 0px;
 }
 
 .chat-log {
@@ -732,7 +758,7 @@ button {
 }
 
 .assistant-shell.chat-open .assistant-scene-stage {
-  border-radius: 18px 8px 18px 8px;
+  border-radius: 18px 10px 18px 10px;
   background:
     linear-gradient(180deg, rgba(12, 21, 34, 0.96), rgba(3, 8, 18, 0.88)),
     rgba(2, 6, 23, 0.72);

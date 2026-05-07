@@ -319,7 +319,7 @@ export class AssistantScene {
   ): SceneObjects {
     const root = new THREE.Group();
     const robotPivot = new THREE.Group();
-    robotPivot.position.set(-0.18, 0.72, 0.15);
+    robotPivot.position.set(-0.3, 0.72, 0.16);
     root.add(robotPivot);
 
     const viewportGroup = new THREE.Group();
@@ -752,20 +752,20 @@ export class AssistantScene {
     const targetFov = expanded ? 39 : 34;
     this.camera.fov += (targetFov - this.camera.fov) * 0.08;
     this.camera.updateProjectionMatrix();
-    this.targetRootScale.setScalar(expanded ? 0.94 : 1.22);
+    this.targetRootScale.setScalar(expanded ? 0.88 : 1.22);
     this.targetCameraPosition.set(
-      expanded ? 0.18 : -0.12,
-      expanded ? 1.16 : 1.16,
-      expanded ? 5.25 : 3.75,
+      expanded ? 0.24 : -0.12,
+      expanded ? 1.18 : 1.16,
+      expanded ? 5.85 : 3.75,
     );
     this.targetCameraFocus.set(
-      expanded ? 0.04 : -0.12,
-      expanded ? 0.66 : compactFocus,
-      expanded ? -0.28 : -0.06,
+      expanded ? 0.2 : -0.12,
+      expanded ? 0.68 : compactFocus,
+      expanded ? -0.38 : -0.06,
     );
 
     this.objects.root.scale.lerp(this.targetRootScale, 0.08);
-    const targetX = expanded ? 0.02 : 0.08;
+    const targetX = expanded ? -0.04 : 0.08;
     this.objects.root.position.x +=
       (targetX - this.objects.root.position.x) * 0.08;
     this.objects.root.rotation.y =
@@ -777,9 +777,42 @@ export class AssistantScene {
     const floatY =
       Math.sin(elapsed * (this.mood === 'typing' ? 3.3 : 2.2)) *
       (this.mood === 'typing' ? 0.05 : 0.035);
-    this.objects.robotPivot.position.y = 0.72 + floatY;
+    const targetRobotScale = expanded ? 0.78 : 1;
+    const targetRobotX = expanded ? -0.58 : -0.18;
+    const targetRobotY = expanded ? 0.64 : 0.72;
+    const targetRobotZ = expanded ? 0.16 : 0.15;
+    const targetPlatformY = expanded ? 0.04 : 0.06;
+    const targetRingY = expanded ? 0.13 : 0.16;
+    this.objects.robotPivot.scale.lerp(
+      new THREE.Vector3(targetRobotScale, targetRobotScale, targetRobotScale),
+      0.08,
+    );
+    this.objects.robotPivot.position.y = targetRobotY + floatY;
     this.objects.robotPivot.position.x =
-      -0.18 + Math.sin(elapsed * 1.7) * (this.mood === 'typing' ? 0.025 : 0.01);
+      targetRobotX +
+      Math.sin(elapsed * 1.7) * (this.mood === 'typing' ? 0.025 : 0.01);
+    this.objects.robotPivot.position.z +=
+      (targetRobotZ - this.objects.robotPivot.position.z) * 0.08;
+    this.objects.platform.position.x +=
+      (targetRobotX - this.objects.platform.position.x) * 0.08;
+    this.objects.platform.position.y +=
+      (targetPlatformY - this.objects.platform.position.y) * 0.08;
+    this.objects.platform.position.z +=
+      (targetRobotZ - this.objects.platform.position.z) * 0.08;
+    this.objects.platform.scale.lerp(
+      new THREE.Vector3(targetRobotScale, 1, targetRobotScale),
+      0.08,
+    );
+    this.objects.statusRing.position.x +=
+      (targetRobotX - this.objects.statusRing.position.x) * 0.08;
+    this.objects.statusRing.position.y +=
+      (targetRingY - this.objects.statusRing.position.y) * 0.08;
+    this.objects.statusRing.position.z +=
+      (targetRobotZ - this.objects.statusRing.position.z) * 0.08;
+    this.objects.statusRing.scale.lerp(
+      new THREE.Vector3(targetRobotScale, targetRobotScale, targetRobotScale),
+      0.08,
+    );
     this.objects.robotPivot.rotation.y =
       Math.sin(elapsed * 1.1) * (this.mood === 'attention' ? 0.12 : 0.05);
     this.objects.robotPivot.rotation.z =

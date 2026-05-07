@@ -143,6 +143,22 @@ function setSceneChatOpen(open: boolean): void {
   syncScene();
 }
 
+function updateAlertLayout(): void {
+  const shouldReserveAlert =
+    chatOpen &&
+    !shell.classList.contains('bubble-hidden') &&
+    bubble.getAttribute('aria-hidden') !== 'true';
+  const alertHeight = shouldReserveAlert
+    ? Math.ceil(bubble.getBoundingClientRect().height)
+    : 0;
+  shell.style.setProperty('--assistant-alert-height', `${alertHeight}px`);
+}
+
+const alertResizeObserver = new ResizeObserver(() => {
+  updateAlertLayout();
+});
+alertResizeObserver.observe(bubble);
+
 function shouldCaptureMouse(target: Element | null): boolean {
   return Boolean(target?.closest(MOUSE_CAPTURE_SELECTOR));
 }
@@ -158,8 +174,7 @@ function syncMousePassthrough(event?: MouseEvent): void {
     lastMouseClientX = event.clientX;
     lastMouseClientY = event.clientY;
   }
-  const hasKnownMousePosition =
-    lastMouseClientX >= 0 && lastMouseClientY >= 0;
+  const hasKnownMousePosition = lastMouseClientX >= 0 && lastMouseClientY >= 0;
   const target = hasKnownMousePosition
     ? document.elementFromPoint(lastMouseClientX, lastMouseClientY)
     : null;
@@ -212,12 +227,14 @@ function setChatOpen(open: boolean): void {
       if (transitionToken !== chatTransitionToken || !chatOpen) return;
       setSceneChatOpen(true);
       shell.classList.add('chat-open');
+      updateAlertLayout();
       setMousePassthrough(false);
       chatInput.focus();
     })();
   } else {
     clearChatAutoHideTimer();
     shell.classList.remove('chat-open');
+    updateAlertLayout();
     assistantChat.setAttribute('aria-hidden', 'true');
     void (async () => {
       await delay(CHAT_PANEL_TRANSITION_MS);
@@ -350,6 +367,7 @@ function renderIdle(): void {
       ),
     ),
   );
+  updateAlertLayout();
 }
 
 function renderItem(item: AgentInboxItem): void {
@@ -387,6 +405,7 @@ function renderItem(item: AgentInboxItem): void {
       void runInboxAction(item.id, 'dismiss');
     }),
   );
+  updateAlertLayout();
 }
 
 function render(): void {
@@ -581,6 +600,7 @@ async function loadState(): Promise<void> {
     bubbleBody.textContent = '请确认主服务和 Web 工作站正在运行。';
     bubbleActions.innerHTML = '';
     bubbleActions.append(button('重试', 'primary', () => void loadState()));
+    updateAlertLayout();
   }
 }
 
