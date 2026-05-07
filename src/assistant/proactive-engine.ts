@@ -18,12 +18,24 @@ import type {
 import { emitAssistantEvent } from './assistant-events.js';
 import {
   createOrUpdateAgentInboxItem,
+  deleteLegacyActiveAgentInboxItemsWithoutTriggerRule,
   getAssistantSettings,
   resolveActiveAgentInboxItemByDedupeKey,
+  resolveActiveAgentInboxItemsByTriggerRule,
   resolveActiveAgentInboxItemsBySource,
 } from './agent-inbox-store.js';
+import {
+  canInvestigateInboxItem,
+  scheduleAutoProcessAgentInboxItem,
+  shouldAutoProcessInboxItem,
+} from './assistant-auto-flow.js';
 import { resolveTodayPlanInboxItemsForDate } from './today-plan-inbox.js';
-import type { AgentInboxPriority, UpsertAgentInboxItemInput } from './types.js';
+import type {
+  AgentInboxPriority,
+  AssistantSettings,
+  AssistantTriggerRuleKey,
+  UpsertAgentInboxItemInput,
+} from './types.js';
 
 const WORKSTATION_URL = 'http://localhost:3000/';
 const DEFAULT_STALE_TASK_HOURS = 4;
@@ -78,23 +90,45 @@ function pushInbox(
   items.push(input);
 }
 
+function isRuleEnabled(
+  settings: AssistantSettings,
+  ruleKey: AssistantTriggerRuleKey,
+): boolean {
+  return Boolean(settings.triggerRules[ruleKey]?.enabled);
+}
+
+function resolveDisabledRule(
+  settings: AssistantSettings,
+  ruleKey: AssistantTriggerRuleKey,
+): boolean {
+  if (isRuleEnabled(settings, ruleKey)) return false;
+  resolveActiveAgentInboxItemsByTriggerRule(ruleKey);
+  return true;
+}
+
 function scanTodayPlanRules(
   items: UpsertAgentInboxItemInput[],
   now: Date,
+  settings: AssistantSettings,
 ): void {
   const todayKey = getTodayPlanDateKey(now);
   const todayPlan = getTodayPlanByDate(todayKey);
   if (!todayPlan) {
-    pushInbox(items, {
-      dedupeKey: `today-plan:missing:${todayKey}`,
-      kind: 'suggestion',
-      priority: 'high',
-      title: '今天还没有计划',
-      body: '可以打开今日计划页，再把工作台任务、群聊上下文和服务分支纳入当天工作面。',
-      sourceType: 'today_plan',
-      sourceRefId: todayKey,
-      actionUrl: workstationUrl('today-plan'),
-    });
+    if (resolveDisabledRule(settings, 'today_plan.missing_today_plan')) {
+      resolveActiveAgentInboxItemByDedupeKey(`today-plan:missing:${todayKey}`);
+    } else {
+      pushInbox(items, {
+        dedupeKey: `today-plan:missing:${todayKey}`,
+        kind: 'suggestion',
+        priority: 'high',
+        title: '今天还没有计划',
+        body: '可以打开今日计划页，再把工作台任务、群聊上下文和服务分支纳入当天工作面。',
+        triggerRuleKey: 'today_plan.missing_today_plan',
+        sourceType: 'today_plan',
+        sourceRefId: todayKey,
+        actionUrl: workstationUrl('today-plan'),
+      });
+    }
   } else {
     resolveTodayPlanInboxItemsForDate(todayKey);
   }
@@ -104,12 +138,19 @@ function scanTodayPlanRules(
     limit: 10,
   }).find((plan: TodayPlanRecord) => plan.status === 'active');
   if (unfinishedPlan && !todayPlan) {
+    if (resolveDisabledRule(settings, 'today_plan.unfinished_previous_plan')) {
+      resolveActiveAgentInboxItemByDedupeKey(
+        `today-plan:continue:${todayKey}:${unfinishedPlan.id}`,
+      );
+      return;
+    }
     pushInbox(items, {
       dedupeKey: `today-plan:continue:${todayKey}:${unfinishedPlan.id}`,
       kind: 'suggestion',
       priority: 'normal',
       title: '有未完成的往日计划',
       body: `${unfinishedPlan.plan_date} 的计划仍处于 active 状态，可以承接到今天继续处理。`,
+      triggerRuleKey: 'today_plan.unfinished_previous_plan',
       sourceType: 'today_plan',
       sourceRefId: unfinishedPlan.id,
       actionKind: 'continue_today_plan',
@@ -125,6 +166,7 @@ function scanTodayPlanRules(
 function scanWorkbenchActionItems(
   items: UpsertAgentInboxItemInput[],
   task: WorkbenchTaskRecord,
+  settings: AssistantSettings,
 ): void {
   for (const actionItem of listWorkbenchActionItemsByTask(task.id)) {
     if (!isPendingActionItem(actionItem)) {
@@ -132,6 +174,12 @@ function scanWorkbenchActionItems(
         sourceType: 'workbench_action_item',
         sourceRefId: actionItem.id,
       });
+      continue;
+    }
+    if (resolveDisabledRule(settings, 'workbench.pending_action_item')) {
+      resolveActiveAgentInboxItemByDedupeKey(
+        `workbench:action-item:${actionItem.id}`,
+      );
       continue;
     }
     pushInbox(items, {
@@ -142,6 +190,7 @@ function scanWorkbenchActionItems(
       body:
         actionItem.body ||
         `${task.title} 的 ${actionItem.stage_key || task.current_stage} 阶段需要处理。`,
+      triggerRuleKey: 'workbench.pending_action_item',
       sourceType: 'workbench_action_item',
       sourceRefId: actionItem.id,
       actionKind: 'open_workbench_action_item',
@@ -163,10 +212,11 @@ function scanWorkbenchActionItems(
 function scanWorkbenchRules(
   items: UpsertAgentInboxItemInput[],
   now: Date,
+  settings: AssistantSettings,
 ): void {
   const nowMs = now.getTime();
   for (const task of listWorkbenchTasks()) {
-    scanWorkbenchActionItems(items, task);
+    scanWorkbenchActionItems(items, task, settings);
 
     const staleDedupeKey = `workbench:task-stale:${task.id}`;
 
@@ -177,12 +227,17 @@ function scanWorkbenchRules(
         sourceRefId: task.id,
         excludeDedupeKeys: [riskDedupeKey],
       });
+      if (resolveDisabledRule(settings, 'workbench.task_failed_or_cancelled')) {
+        resolveActiveAgentInboxItemByDedupeKey(riskDedupeKey);
+        continue;
+      }
       pushInbox(items, {
         dedupeKey: riskDedupeKey,
         kind: 'risk',
         priority: 'high',
         title: `工作台任务异常：${task.title}`,
         body: `当前任务态为 ${task.task_state}，流程状态为 ${task.status}，建议进入工作台查看失败阶段和日志。`,
+        triggerRuleKey: 'workbench.task_failed_or_cancelled',
         sourceType: 'workbench_task',
         sourceRefId: task.id,
         actionKind: 'open_workbench_task',
@@ -230,12 +285,17 @@ function scanWorkbenchRules(
       sourceRefId: task.id,
       excludeDedupeKeys: [staleDedupeKey],
     });
+    if (resolveDisabledRule(settings, 'workbench.task_stale')) {
+      resolveActiveAgentInboxItemByDedupeKey(staleDedupeKey);
+      continue;
+    }
     pushInbox(items, {
       dedupeKey: staleDedupeKey,
       kind: 'risk',
       priority: 'normal',
       title: `任务长时间没有进展：${task.title}`,
       body: `最近一次更新约 ${Math.floor(ageHours)} 小时前，可能需要检查当前 Agent 或阶段是否卡住。`,
+      triggerRuleKey: 'workbench.task_stale',
       sourceType: 'workbench_task',
       sourceRefId: task.id,
       actionKind: 'open_workbench_task',
@@ -251,16 +311,30 @@ function scanWorkbenchRules(
   }
 }
 
-function scanSchedulerRules(items: UpsertAgentInboxItemInput[]): void {
+function scanSchedulerRules(
+  items: UpsertAgentInboxItemInput[],
+  settings: AssistantSettings,
+): void {
   for (const task of getAllTasks() as ScheduledTask[]) {
-    if (!task.last_result || !/^error:/i.test(task.last_result.trim()))
+    if (!task.last_result || !/^error:/i.test(task.last_result.trim())) {
+      resolveActiveAgentInboxItemsBySource({
+        sourceType: 'scheduled_task',
+        sourceRefId: task.id,
+      });
       continue;
+    }
+    const dedupeKey = `scheduler:failure:${task.id}:${task.last_run || task.last_result}`;
+    if (resolveDisabledRule(settings, 'scheduler.task_failed')) {
+      resolveActiveAgentInboxItemByDedupeKey(dedupeKey);
+      continue;
+    }
     pushInbox(items, {
-      dedupeKey: `scheduler:failure:${task.id}:${task.last_run || task.last_result}`,
+      dedupeKey,
       kind: 'risk',
       priority: 'high',
       title: '定时任务执行失败',
       body: task.last_result.slice(0, 240),
+      triggerRuleKey: 'scheduler.task_failed',
       sourceType: 'scheduled_task',
       sourceRefId: task.id,
       actionKind: 'open_scheduled_task',
@@ -275,13 +349,27 @@ function scanSchedulerRules(items: UpsertAgentInboxItemInput[]): void {
   }
 }
 
-function scanAgentRunRules(items: UpsertAgentInboxItemInput[]): void {
+function scanAgentRunRules(
+  items: UpsertAgentInboxItemInput[],
+  settings: AssistantSettings,
+): void {
   for (const query of listAgentQueries(30, 0) as AgentQueryRecord[]) {
-    if (!isFailureStatus(query.status)) continue;
+    if (!isFailureStatus(query.status)) {
+      resolveActiveAgentInboxItemsBySource({
+        sourceType: 'agent_query',
+        sourceRefId: query.query_id,
+      });
+      continue;
+    }
+    const dedupeKey = `agent-query:error:${query.query_id}`;
+    if (resolveDisabledRule(settings, 'agent_runs.query_failed')) {
+      resolveActiveAgentInboxItemByDedupeKey(dedupeKey);
+      continue;
+    }
     const priority: AgentInboxPriority =
       query.failure_retryable === 0 ? 'high' : 'normal';
     pushInbox(items, {
-      dedupeKey: `agent-query:error:${query.query_id}`,
+      dedupeKey,
       kind: 'risk',
       priority,
       title: 'Agent 执行异常',
@@ -289,6 +377,7 @@ function scanAgentRunRules(items: UpsertAgentInboxItemInput[]): void {
         query.error_message ||
         query.output_preview ||
         `${query.source_type} 执行状态为 ${query.status}`,
+      triggerRuleKey: 'agent_runs.query_failed',
       sourceType: 'agent_query',
       sourceRefId: query.query_id,
       actionKind: 'open_trace',
@@ -322,13 +411,26 @@ export function runProactiveScan(input: { now?: Date } = {}): {
   const candidates: UpsertAgentInboxItemInput[] = [];
   const now = input.now || new Date();
 
-  if (settings.dataSources.todayPlan) scanTodayPlanRules(candidates, now);
-  if (settings.dataSources.workbench) scanWorkbenchRules(candidates, now);
-  if (settings.dataSources.scheduler) scanSchedulerRules(candidates);
-  if (settings.dataSources.agentRuns) scanAgentRunRules(candidates);
+  deleteLegacyActiveAgentInboxItemsWithoutTriggerRule();
+  scanTodayPlanRules(candidates, now, settings);
+  scanWorkbenchRules(candidates, now, settings);
+  scanSchedulerRules(candidates, settings);
+  scanAgentRunRules(candidates, settings);
 
   for (const item of candidates) {
-    createOrUpdateAgentInboxItem(item);
+    const inboxItem = createOrUpdateAgentInboxItem(item);
+    const ruleKey =
+      typeof inboxItem.extra.ruleKey === 'string'
+        ? inboxItem.extra.ruleKey
+        : '';
+    if (
+      ruleKey &&
+      settings.triggerRules[ruleKey as AssistantTriggerRuleKey]?.autoEnabled &&
+      canInvestigateInboxItem(inboxItem) &&
+      shouldAutoProcessInboxItem(inboxItem)
+    ) {
+      scheduleAutoProcessAgentInboxItem(inboxItem.id);
+    }
   }
 
   emitAssistantEvent({

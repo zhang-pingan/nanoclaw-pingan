@@ -455,7 +455,8 @@ var assistantScanIntervalInput = document.getElementById("assistant-scan-interva
 var assistantAutostartToggle = document.getElementById("assistant-autostart-toggle");
 var assistantAlwaysOnTopToggle = document.getElementById("assistant-always-on-top-toggle");
 var assistantMovementToggle = document.getElementById("assistant-movement-toggle");
-var assistantSourceInputs = Array.from(document.querySelectorAll("[data-assistant-source]"));
+var assistantSourceGrid = document.getElementById("assistant-source-grid");
+var assistantSourceInputs = [];
 var assistantState = null;
 var assistantInboxItems = [];
 var assistantActionLogs = [];
@@ -17018,6 +17019,23 @@ function getAssistantSettings() {
   return assistantState && assistantState.settings ? assistantState.settings : null;
 }
 
+function getAssistantRuleCapabilities() {
+  return assistantState && Array.isArray(assistantState.triggerRuleCapabilities)
+    ? assistantState.triggerRuleCapabilities
+    : [];
+}
+
+function getAssistantRuleSetting(ruleKey) {
+  const settings = getAssistantSettings();
+  return settings && settings.triggerRules && settings.triggerRules[ruleKey]
+    ? settings.triggerRules[ruleKey]
+    : { enabled: false, investigationEnabled: false, autoEnabled: false };
+}
+
+function getAssistantRuleCapability(ruleKey) {
+  return getAssistantRuleCapabilities().find((rule) => rule.key === ruleKey) || null;
+}
+
 function formatAssistantStatusText(item) {
   if (!item) return "";
   const parts = [item.kind || "notification", item.priority || "normal", item.status || "unread"];
@@ -17029,8 +17047,8 @@ function renderAssistantHeroMetrics() {
   const activeItems = assistantInboxItems.filter((item) => !["done", "dismissed"].includes(item.status));
   const unreadCount = activeItems.filter((item) => item.status === "unread").length;
   const enabled = Boolean(settings && settings.enabled);
-  const dataSourceCount = settings && settings.dataSources
-    ? Object.values(settings.dataSources).filter(Boolean).length
+  const dataSourceCount = settings && settings.triggerRules
+    ? Object.values(settings.triggerRules).filter((rule) => rule && rule.enabled).length
     : 0;
   if (assistantStatusBadge) {
     assistantStatusBadge.textContent = settings ? (enabled ? "运行中" : "已暂停") : "加载中";
@@ -17042,6 +17060,125 @@ function renderAssistantHeroMetrics() {
     assistantScanCadence.textContent = settings ? `${settings.scanIntervalMinutes || 10}m` : "--";
   }
   if (assistantSourceCount) assistantSourceCount.textContent = settings ? String(dataSourceCount) : "--";
+}
+
+function renderAssistantSourceRules() {
+  if (!assistantSourceGrid) return;
+  const capabilities = getAssistantRuleCapabilities();
+  const settings = getAssistantSettings();
+  if (!settings || capabilities.length === 0) {
+    assistantSourceGrid.innerHTML = '<div class="assistant-empty">加载中</div>';
+    assistantSourceInputs = [];
+    return;
+  }
+  assistantSourceGrid.innerHTML = capabilities.map((rule) => {
+    const ruleSetting = getAssistantRuleSetting(rule.key);
+    const investigateDisabled = !rule.supportsInvestigation || !ruleSetting.enabled;
+    const autoDisabled = !rule.supportsRepair || !ruleSetting.enabled;
+    return `
+      <article class="assistant-rule-card">
+        <div class="assistant-rule-main">
+          <div>
+            <div class="assistant-rule-source">${escapeHtml(rule.sourceLabel || "")}</div>
+            <div class="assistant-rule-title">${escapeHtml(rule.label || rule.key)}</div>
+          </div>
+          <label class="assistant-rule-toggle">
+            <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="enabled" type="checkbox" ${ruleSetting.enabled ? "checked" : ""} />
+            <span>生成</span>
+          </label>
+        </div>
+        <div class="assistant-rule-options">
+          ${rule.supportsInvestigation ? `
+            <label>
+              <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="investigationEnabled" type="checkbox" ${ruleSetting.investigationEnabled ? "checked" : ""} ${investigateDisabled ? "disabled" : ""} />
+              <span>排查</span>
+            </label>
+          ` : ""}
+          ${rule.supportsRepair ? `
+            <label>
+              <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="autoEnabled" type="checkbox" ${ruleSetting.autoEnabled ? "checked" : ""} ${autoDisabled ? "disabled" : ""} />
+              <span>自动</span>
+            </label>
+          ` : ""}
+          ${!rule.supportsInvestigation && !rule.supportsRepair ? '<span class="assistant-rule-muted">纯提醒</span>' : ""}
+        </div>
+      </article>
+    `;
+  }).join("");
+  assistantSourceInputs = Array.from(assistantSourceGrid.querySelectorAll("[data-assistant-rule]"));
+  assistantSourceInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      const ruleKey = input.getAttribute("data-assistant-rule") || "";
+      const field = input.getAttribute("data-assistant-rule-field") || "";
+      if (!ruleKey || !field) return;
+      const current = getAssistantRuleSetting(ruleKey);
+      const next = {
+        enabled: Boolean(current.enabled),
+        investigationEnabled: Boolean(current.investigationEnabled),
+        autoEnabled: Boolean(current.autoEnabled),
+        [field]: input.checked,
+      };
+      if (field === "autoEnabled" && input.checked) {
+        next.enabled = true;
+        next.investigationEnabled = true;
+      }
+      if (field === "enabled" && !input.checked) {
+        next.investigationEnabled = false;
+        next.autoEnabled = false;
+      }
+      updateAssistantSettingsPatch({
+        triggerRules: { [ruleKey]: next },
+      });
+    });
+  });
+}
+
+function getAssistantInboxRuleKey(item) {
+  return item && item.extra && typeof item.extra.ruleKey === "string" ? item.extra.ruleKey : "";
+}
+
+function canShowAssistantInvestigate(item) {
+  const ruleKey = getAssistantInboxRuleKey(item);
+  const rule = getAssistantRuleCapability(ruleKey);
+  const setting = getAssistantRuleSetting(ruleKey);
+  return Boolean(rule && rule.supportsInvestigation && setting.investigationEnabled);
+}
+
+function canShowAssistantRepair(item) {
+  const ruleKey = getAssistantInboxRuleKey(item);
+  const rule = getAssistantRuleCapability(ruleKey);
+  const investigation = item && item.extra ? item.extra.investigation : null;
+  return Boolean(rule && rule.supportsRepair && investigation && investigation.repairable === true);
+}
+
+function renderAssistantAutoFlowDetail(item) {
+  const extra = item && item.extra ? item.extra : {};
+  const investigation = extra.investigation || null;
+  const repair = extra.repair || null;
+  const lines = [];
+  if (extra.autoFlowStatus) lines.push(`状态：${extra.autoFlowStatus}`);
+  if (investigation && investigation.summary) lines.push(`排查：${investigation.summary}`);
+  if (investigation && investigation.root_cause) lines.push(`原因：${investigation.root_cause}`);
+  if (investigation && investigation.repair_plan) lines.push(`方案：${investigation.repair_plan}`);
+  if (investigation && investigation.required_user_action) lines.push(`需处理：${investigation.required_user_action}`);
+  if (repair && repair.summary) lines.push(`修复：${repair.summary}`);
+  if (repair && repair.next_action) lines.push(`后续：${repair.next_action}`);
+  if (extra.lastAutoFlowError) lines.push(`异常：${extra.lastAutoFlowError}`);
+  if (extra.lastInvestigationError) lines.push(`排查失败：${extra.lastInvestigationError}`);
+  if (extra.lastRepairError) lines.push(`修复失败：${extra.lastRepairError}`);
+  if (lines.length === 0) return "";
+  return `<div class="assistant-inbox-flow">${lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}</div>`;
+}
+
+function renderAssistantInboxActions(item) {
+  return `
+    ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
+    ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}">排查</button>` : ""}
+    ${canShowAssistantRepair(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="repair" data-assistant-item="${escapeAttribute(item.id)}">修复</button>` : ""}
+    ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
+    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
+    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
+  `;
 }
 
 function renderAssistantSettings() {
@@ -17060,10 +17197,7 @@ function renderAssistantSettings() {
   if (assistantAutostartToggle) assistantAutostartToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.autostart);
   if (assistantAlwaysOnTopToggle) assistantAlwaysOnTopToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.alwaysOnTop);
   if (assistantMovementToggle) assistantMovementToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.allowMovement);
-  assistantSourceInputs.forEach((input) => {
-    const key = input.getAttribute("data-assistant-source") || "";
-    input.checked = Boolean(settings.dataSources && settings.dataSources[key]);
-  });
+  renderAssistantSourceRules();
   renderAssistantHeroMetrics();
 }
 
@@ -17083,12 +17217,10 @@ function renderAssistantInbox() {
         <div class="assistant-inbox-meta">${escapeHtml(formatAssistantStatusText(item))}</div>
         <div class="assistant-inbox-title">${escapeHtml(item.title || "未命名事项")}</div>
         <div class="assistant-inbox-body">${escapeHtml(item.body || "")}</div>
+        ${renderAssistantAutoFlowDetail(item)}
       </div>
       <div class="assistant-inbox-actions">
-        ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
-        ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
-        <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
-        <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
+        ${renderAssistantInboxActions(item)}
       </div>
     </article>
   `).join("");
@@ -17413,15 +17545,6 @@ if (assistantMovementToggle) {
     });
   });
 }
-assistantSourceInputs.forEach((input) => {
-  input.addEventListener("change", () => {
-    const key = input.getAttribute("data-assistant-source") || "";
-    if (!key) return;
-    updateAssistantSettingsPatch({
-      dataSources: { [key]: input.checked },
-    });
-  });
-});
 if (todayPlanRefreshBtn) {
   todayPlanRefreshBtn.addEventListener("click", async () => {
     await loadTodayPlanOverview({ forceOpenToday: !currentTodayPlanId });

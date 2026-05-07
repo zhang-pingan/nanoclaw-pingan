@@ -1462,7 +1462,7 @@ class WebChannel {
     let body: unknown;
     try {
       body = await this.parseJsonBody(req);
-      const result = runAgentInboxActionForApi(body);
+      const result = await runAgentInboxActionForApi(body);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {

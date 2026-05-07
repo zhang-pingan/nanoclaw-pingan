@@ -13,6 +13,29 @@ export type AgentInboxStatus =
 
 export type AgentInboxPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+export type AssistantTriggerRuleKey =
+  | 'today_plan.missing_today_plan'
+  | 'today_plan.unfinished_previous_plan'
+  | 'workbench.pending_action_item'
+  | 'workbench.task_failed_or_cancelled'
+  | 'workbench.task_stale'
+  | 'scheduler.task_failed'
+  | 'agent_runs.query_failed';
+
+export interface AssistantTriggerRuleSettings {
+  enabled: boolean;
+  investigationEnabled: boolean;
+  autoEnabled: boolean;
+}
+
+export interface AssistantTriggerRuleCapability {
+  key: AssistantTriggerRuleKey;
+  label: string;
+  sourceLabel: string;
+  supportsInvestigation: boolean;
+  supportsRepair: boolean;
+}
+
 export interface AgentInboxItemRecord {
   id: string;
   dedupe_key: string;
@@ -37,11 +60,10 @@ export interface AgentInboxItemRecord {
   extra_json: string | null;
 }
 
-export interface AgentInboxItemView
-  extends Omit<
-    AgentInboxItemRecord,
-    'action_payload_json' | 'extra_json'
-  > {
+export interface AgentInboxItemView extends Omit<
+  AgentInboxItemRecord,
+  'action_payload_json' | 'extra_json'
+> {
   action_payload: Record<string, unknown>;
   extra: Record<string, unknown>;
 }
@@ -52,6 +74,7 @@ export interface UpsertAgentInboxItemInput {
   priority?: AgentInboxPriority;
   title: string;
   body?: string | null;
+  triggerRuleKey?: AssistantTriggerRuleKey | null;
   sourceType: string;
   sourceRefId?: string | null;
   actionKind?: string | null;
@@ -72,12 +95,7 @@ export interface AssistantSettings {
     start: string;
     end: string;
   };
-  dataSources: {
-    todayPlan: boolean;
-    workbench: boolean;
-    scheduler: boolean;
-    agentRuns: boolean;
-  };
+  triggerRules: Record<AssistantTriggerRuleKey, AssistantTriggerRuleSettings>;
   desktopAssistant: {
     autostart: boolean;
     alwaysOnTop: boolean;
@@ -85,6 +103,73 @@ export interface AssistantSettings {
   };
   maxInboxItems: number;
 }
+
+export const ASSISTANT_TRIGGER_RULE_CAPABILITIES: AssistantTriggerRuleCapability[] =
+  [
+    {
+      key: 'today_plan.missing_today_plan',
+      label: '今天还没有计划',
+      sourceLabel: '今日计划',
+      supportsInvestigation: false,
+      supportsRepair: false,
+    },
+    {
+      key: 'today_plan.unfinished_previous_plan',
+      label: '有未完成的往日计划',
+      sourceLabel: '今日计划',
+      supportsInvestigation: false,
+      supportsRepair: false,
+    },
+    {
+      key: 'workbench.pending_action_item',
+      label: '工作台待处理项',
+      sourceLabel: '工作台',
+      supportsInvestigation: false,
+      supportsRepair: false,
+    },
+    {
+      key: 'workbench.task_failed_or_cancelled',
+      label: '工作台任务失败或取消',
+      sourceLabel: '工作台',
+      supportsInvestigation: true,
+      supportsRepair: true,
+    },
+    {
+      key: 'workbench.task_stale',
+      label: '工作台任务长时间无进展',
+      sourceLabel: '工作台',
+      supportsInvestigation: true,
+      supportsRepair: true,
+    },
+    {
+      key: 'scheduler.task_failed',
+      label: '定时任务执行失败',
+      sourceLabel: '定时任务',
+      supportsInvestigation: true,
+      supportsRepair: true,
+    },
+    {
+      key: 'agent_runs.query_failed',
+      label: 'Agent 执行异常',
+      sourceLabel: 'Agent Runs',
+      supportsInvestigation: true,
+      supportsRepair: true,
+    },
+  ];
+
+export const ASSISTANT_TRIGGER_RULE_DEFAULTS: Record<
+  AssistantTriggerRuleKey,
+  AssistantTriggerRuleSettings
+> = Object.fromEntries(
+  ASSISTANT_TRIGGER_RULE_CAPABILITIES.map((rule) => [
+    rule.key,
+    {
+      enabled: true,
+      investigationEnabled: false,
+      autoEnabled: false,
+    },
+  ]),
+) as Record<AssistantTriggerRuleKey, AssistantTriggerRuleSettings>;
 
 export const DEFAULT_ASSISTANT_SETTINGS: AssistantSettings = {
   enabled: true,
@@ -95,12 +180,7 @@ export const DEFAULT_ASSISTANT_SETTINGS: AssistantSettings = {
     start: '22:30',
     end: '08:30',
   },
-  dataSources: {
-    todayPlan: true,
-    workbench: true,
-    scheduler: true,
-    agentRuns: true,
-  },
+  triggerRules: ASSISTANT_TRIGGER_RULE_DEFAULTS,
   desktopAssistant: {
     autostart: false,
     alwaysOnTop: true,
@@ -123,14 +203,17 @@ export interface AssistantActionLogRecord {
   created_at: string;
 }
 
-export interface AssistantActionLogView
-  extends Omit<AssistantActionLogRecord, 'payload_json' | 'result_json'> {
+export interface AssistantActionLogView extends Omit<
+  AssistantActionLogRecord,
+  'payload_json' | 'result_json'
+> {
   payload: Record<string, unknown>;
   result: Record<string, unknown>;
 }
 
 export interface AssistantState {
   settings: AssistantSettings;
+  triggerRuleCapabilities: AssistantTriggerRuleCapability[];
   inboxCounts: Record<AgentInboxStatus, number>;
   latestInboxItems: AgentInboxItemView[];
   latestActionLogs: AssistantActionLogView[];

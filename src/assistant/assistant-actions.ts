@@ -1,5 +1,10 @@
 import { createOrContinueTodayPlan } from '../today-plan.js';
 import {
+  autoProcessAgentInboxItem,
+  investigateAgentInboxItem,
+  repairAgentInboxItem,
+} from './assistant-auto-flow.js';
+import {
   createAssistantActionLog,
   createAssistantSnooze,
   getAgentInboxItem,
@@ -31,11 +36,15 @@ function getSnoozeUntil(payload: Record<string, unknown>): string {
   return String(Date.now() + minutes * 60 * 1000);
 }
 
-export function runAgentInboxAction(input: {
+export async function runAgentInboxAction(input: {
   itemId: string;
   action: string;
   payload?: Record<string, unknown>;
-}): { ok: true; item: AgentInboxItemView; result: Record<string, unknown> } {
+}): Promise<{
+  ok: true;
+  item: AgentInboxItemView;
+  result: Record<string, unknown>;
+}> {
   const item = requireItem(input.itemId);
   const payload = toRecord(input.payload);
 
@@ -147,6 +156,36 @@ export function runAgentInboxAction(input: {
         ok: true,
         item,
         result: { reason: 'No executable action registered' },
+      };
+    }
+
+    if (input.action === 'investigate') {
+      const result = await investigateAgentInboxItem(item.id);
+      return {
+        ok: true,
+        item: result.item,
+        result: { investigation: result.result },
+      };
+    }
+
+    if (input.action === 'repair') {
+      const result = await repairAgentInboxItem(item.id);
+      return {
+        ok: true,
+        item: result.item,
+        result: { repair: result.result },
+      };
+    }
+
+    if (input.action === 'auto') {
+      const result = await autoProcessAgentInboxItem(item.id);
+      return {
+        ok: true,
+        item: result.item,
+        result: {
+          investigation: result.investigation,
+          repair: result.repair || null,
+        },
       };
     }
 

@@ -9,6 +9,8 @@ import {
   AssistantActionLogRecord,
   AssistantActionLogView,
   AssistantSettings,
+  AssistantTriggerRuleKey,
+  ASSISTANT_TRIGGER_RULE_CAPABILITIES,
   DEFAULT_ASSISTANT_SETTINGS,
   UpsertAgentInboxItemInput,
 } from './types.js';
@@ -38,6 +40,26 @@ function readJsonObject(
 
 function writeJson(value: Record<string, unknown> | undefined): string | null {
   return value ? JSON.stringify(value) : null;
+}
+
+function buildInputExtra(
+  input: UpsertAgentInboxItemInput,
+  existingExtra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const extra = {
+    ...existingExtra,
+    ...(input.extra || {}),
+    ...(input.triggerRuleKey ? { ruleKey: input.triggerRuleKey } : {}),
+  };
+  return extra;
+}
+
+function writeInputExtra(
+  input: UpsertAgentInboxItemInput,
+  existingExtra: Record<string, unknown> = {},
+): string | null {
+  const extra = buildInputExtra(input, existingExtra);
+  return Object.keys(extra).length > 0 ? JSON.stringify(extra) : null;
 }
 
 function toInboxView(record: AgentInboxItemRecord): AgentInboxItemView {
@@ -76,10 +98,52 @@ function normalizeTime(value: unknown, fallback: string): string {
   return /^\d{2}:\d{2}$/.test(value) ? value : fallback;
 }
 
+function normalizeTriggerRuleSettings(
+  ruleKey: AssistantTriggerRuleKey,
+  raw: unknown,
+): AssistantSettings['triggerRules'][AssistantTriggerRuleKey] {
+  const input = isObject(raw) ? raw : {};
+  const capability = ASSISTANT_TRIGGER_RULE_CAPABILITIES.find(
+    (rule) => rule.key === ruleKey,
+  );
+  const supportsInvestigation = Boolean(capability?.supportsInvestigation);
+  const supportsRepair = Boolean(capability?.supportsRepair);
+  const enabled =
+    typeof input.enabled === 'boolean'
+      ? input.enabled
+      : DEFAULT_ASSISTANT_SETTINGS.triggerRules[ruleKey].enabled;
+  const autoEnabled =
+    enabled && supportsRepair && typeof input.autoEnabled === 'boolean'
+      ? input.autoEnabled
+      : false;
+  return {
+    enabled,
+    investigationEnabled:
+      enabled &&
+      supportsInvestigation &&
+      (autoEnabled ||
+        (typeof input.investigationEnabled === 'boolean'
+          ? input.investigationEnabled
+          : false)),
+    autoEnabled,
+  };
+}
+
+function normalizeTriggerRules(
+  raw: unknown,
+): AssistantSettings['triggerRules'] {
+  const input = isObject(raw) ? raw : {};
+  return Object.fromEntries(
+    ASSISTANT_TRIGGER_RULE_CAPABILITIES.map((rule) => [
+      rule.key,
+      normalizeTriggerRuleSettings(rule.key, input[rule.key]),
+    ]),
+  ) as AssistantSettings['triggerRules'];
+}
+
 function normalizeSettings(raw: unknown): AssistantSettings {
   const input = isObject(raw) ? raw : {};
   const quietHours = isObject(input.quietHours) ? input.quietHours : {};
-  const dataSources = isObject(input.dataSources) ? input.dataSources : {};
   const desktopAssistant = isObject(input.desktopAssistant)
     ? input.desktopAssistant
     : {};
@@ -117,24 +181,7 @@ function normalizeSettings(raw: unknown): AssistantSettings {
         DEFAULT_ASSISTANT_SETTINGS.quietHours.end,
       ),
     },
-    dataSources: {
-      todayPlan:
-        typeof dataSources.todayPlan === 'boolean'
-          ? dataSources.todayPlan
-          : DEFAULT_ASSISTANT_SETTINGS.dataSources.todayPlan,
-      workbench:
-        typeof dataSources.workbench === 'boolean'
-          ? dataSources.workbench
-          : DEFAULT_ASSISTANT_SETTINGS.dataSources.workbench,
-      scheduler:
-        typeof dataSources.scheduler === 'boolean'
-          ? dataSources.scheduler
-          : DEFAULT_ASSISTANT_SETTINGS.dataSources.scheduler,
-      agentRuns:
-        typeof dataSources.agentRuns === 'boolean'
-          ? dataSources.agentRuns
-          : DEFAULT_ASSISTANT_SETTINGS.dataSources.agentRuns,
-    },
+    triggerRules: normalizeTriggerRules(input.triggerRules),
     desktopAssistant: {
       autostart:
         typeof desktopAssistant.autostart === 'boolean'
@@ -169,9 +216,9 @@ function mergeSettingsPatch(
       ...current.quietHours,
       ...(isObject(patch.quietHours) ? patch.quietHours : {}),
     },
-    dataSources: {
-      ...current.dataSources,
-      ...(isObject(patch.dataSources) ? patch.dataSources : {}),
+    triggerRules: {
+      ...current.triggerRules,
+      ...(isObject(patch.triggerRules) ? patch.triggerRules : {}),
     },
     desktopAssistant: {
       ...current.desktopAssistant,
@@ -185,7 +232,19 @@ export function getAssistantSettings(): AssistantSettings {
     .prepare('SELECT value_json FROM assistant_settings WHERE key = ?')
     .get(SETTINGS_KEY) as { value_json: string } | undefined;
   if (!row) return DEFAULT_ASSISTANT_SETTINGS;
-  return normalizeSettings(readJsonObject(row.value_json));
+  const raw = readJsonObject(row.value_json);
+  const settings = normalizeSettings(raw);
+  if ('dataSources' in raw || !isObject(raw.triggerRules)) {
+    getDatabase()
+      .prepare(
+        `UPDATE assistant_settings SET
+          value_json = ?,
+          updated_at = ?
+         WHERE key = ?`,
+      )
+      .run(JSON.stringify(settings), nowTs(), SETTINGS_KEY);
+  }
+  return settings;
 }
 
 export function updateAssistantSettings(
@@ -352,13 +411,50 @@ export function resolveActiveAgentInboxItemsByDedupePrefix(
   return rows.map((row) => updateAgentInboxItemStatus(row.id, status));
 }
 
+export function resolveActiveAgentInboxItemsByTriggerRule(
+  ruleKey: AssistantTriggerRuleKey,
+  status: 'done' | 'dismissed' = 'done',
+): AgentInboxItemView[] {
+  const activeStatusPlaceholders = ACTIVE_INBOX_STATUSES.map(() => '?').join(
+    ', ',
+  );
+  const rows = getDatabase()
+    .prepare(
+      `SELECT id FROM agent_inbox_items
+       WHERE json_extract(extra_json, '$.ruleKey') = ?
+         AND status IN (${activeStatusPlaceholders})`,
+    )
+    .all(ruleKey, ...ACTIVE_INBOX_STATUSES) as Array<{ id: string }>;
+
+  return rows.map((row) => updateAgentInboxItemStatus(row.id, status));
+}
+
+export function deleteLegacyActiveAgentInboxItemsWithoutTriggerRule(): number {
+  const activeStatusPlaceholders = ACTIVE_INBOX_STATUSES.map(() => '?').join(
+    ', ',
+  );
+  return getDatabase()
+    .prepare(
+      `DELETE FROM agent_inbox_items
+       WHERE source_type IN (
+           'today_plan',
+           'workbench_action_item',
+           'workbench_task',
+           'scheduled_task',
+           'agent_query'
+         )
+         AND json_extract(extra_json, '$.ruleKey') IS NULL
+         AND status IN (${activeStatusPlaceholders})`,
+    )
+    .run(...ACTIVE_INBOX_STATUSES).changes;
+}
+
 export function createOrUpdateAgentInboxItem(
   input: UpsertAgentInboxItemInput,
 ): AgentInboxItemView {
   const existing = getAgentInboxItemByDedupeKey(input.dedupeKey);
   const now = nowTs();
   const basePayload = writeJson(input.actionPayload);
-  const extraJson = writeJson(input.extra);
 
   if (existing) {
     if (existing.status === 'done' || existing.status === 'dismissed') {
@@ -404,7 +500,7 @@ export function createOrUpdateAgentInboxItem(
         input.actionUrl ?? null,
         basePayload,
         input.dueAt ?? null,
-        extraJson,
+        writeInputExtra(input, existing.extra),
         now,
         existing.id,
       );
@@ -441,7 +537,7 @@ export function createOrUpdateAgentInboxItem(
       now,
       now,
       input.dueAt ?? null,
-      extraJson,
+      writeInputExtra(input),
     );
   const created = getAgentInboxItem(id);
   if (!created) throw new Error('Created inbox item not found');
@@ -476,6 +572,31 @@ export function updateAgentInboxItemStatus(
       status === 'snoozed' ? options.snoozedUntil || now : null,
       id,
     );
+  const updated = getAgentInboxItem(id);
+  if (!updated) throw new Error('Agent inbox item not found');
+  emitAssistantEvent({ type: 'inbox_updated', item: updated });
+  return updated;
+}
+
+export function updateAgentInboxItemExtra(
+  id: string,
+  patch: Record<string, unknown>,
+): AgentInboxItemView {
+  const existing = getAgentInboxItem(id);
+  if (!existing) throw new Error('Agent inbox item not found');
+  const now = nowTs();
+  const nextExtra = {
+    ...existing.extra,
+    ...patch,
+  };
+  getDatabase()
+    .prepare(
+      `UPDATE agent_inbox_items SET
+        extra_json = ?,
+        updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(JSON.stringify(nextExtra), now, id);
   const updated = getAgentInboxItem(id);
   if (!updated) throw new Error('Agent inbox item not found');
   emitAssistantEvent({ type: 'inbox_updated', item: updated });

@@ -10,6 +10,7 @@ type AgentInboxItem = {
   action_kind: string | null;
   action_label: string | null;
   action_url: string | null;
+  extra?: Record<string, unknown>;
 };
 
 type AssistantSettings = {

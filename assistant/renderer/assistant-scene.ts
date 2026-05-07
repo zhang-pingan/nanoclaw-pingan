@@ -361,17 +361,28 @@ export class AssistantScene {
     });
 
     const dataTicks: THREE.Mesh[] = [];
-    for (let i = 0; i < 18; i += 1) {
-      const width = i % 5 === 0 ? 0.18 : 0.08 + (i % 3) * 0.035;
+    const stripeGroupCenters = [-0.22];
+    const stripeWidths = [0.18, 0.13, 0.16, 0.11];
+    stripeGroupCenters.forEach((groupX) => {
+      stripeWidths.forEach((width, index) => {
+        const tick = new THREE.Mesh(
+          new THREE.BoxGeometry(width, 0.012, 0.008),
+          materials.ring,
+        );
+        tick.position.set(groupX, 0.075 - index * 0.05, 0.032);
+        tick.userData.kind = 'staticStripe';
+        screen.add(tick);
+        dataTicks.push(tick);
+      });
+    });
+
+    for (let i = 0; i < 3; i += 1) {
       const tick = new THREE.Mesh(
-        new THREE.BoxGeometry(width, 0.012, 0.008),
+        new THREE.BoxGeometry(0.048, 0.16, 0.008),
         materials.ring,
       );
-      tick.position.set(
-        -0.24 + (i % 3) * 0.19,
-        0.07 - Math.floor(i / 3) * 0.048,
-        0.032,
-      );
+      tick.position.set(0.13 + (i - 1) * 0.082, 0, 0.032);
+      tick.userData.kind = 'dynamicBar';
       screen.add(tick);
       dataTicks.push(tick);
     }
@@ -718,11 +729,17 @@ export class AssistantScene {
     hologramScanMaterial.opacity =
       this.mood === 'offline' ? 0.12 : 0.48 + Math.sin(elapsed * 7.2) * 0.16;
     this.objects.dataTicks.forEach((tick, index) => {
+      if (tick.userData.kind === 'staticStripe') {
+        tick.scale.set(1, 1, 1);
+        tick.visible = expanded;
+        return;
+      }
       const glow =
         this.mood === 'typing'
           ? 0.64 + Math.sin(elapsed * 8 + index * 0.5) * 0.36
           : 0.56 + Math.sin(elapsed * 3.4 + index) * 0.18;
-      tick.scale.x = 0.72 + glow * 0.36;
+      tick.scale.x = 1;
+      tick.scale.y = 0.65 + glow * 1.35;
       tick.visible = expanded;
     });
     this.objects.consoleGroup.visible = expanded;

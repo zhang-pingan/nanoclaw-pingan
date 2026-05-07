@@ -90,6 +90,7 @@ import {
 } from './session-commands.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { initAssistantEvents } from './assistant/assistant-events.js';
+import { initAssistantAutoFlow } from './assistant/assistant-auto-flow.js';
 import { startProactiveEngine } from './assistant/proactive-engine.js';
 import {
   Channel,
@@ -1109,6 +1110,37 @@ async function runAgent(
   }
 }
 
+async function runMainGroupAssistantAgent(input: {
+  prompt: string;
+  itemSourceJid?: string | null;
+}): Promise<{ ok: boolean; text: string; error?: string }> {
+  const mainEntry =
+    Object.entries(registeredGroups).find(([, group]) => group.isMain) || null;
+  if (!mainEntry) {
+    return { ok: false, text: '', error: 'Main group not found' };
+  }
+  const [mainJid, mainGroup] = mainEntry;
+  const chunks: string[] = [];
+  const status = await runAgent(
+    mainGroup,
+    input.prompt,
+    mainJid,
+    async (output) => {
+      if (!output.result) return;
+      chunks.push(String(output.result));
+    },
+  );
+  const text = chunks.join('\n').trim();
+  if (status === 'error') {
+    return {
+      ok: false,
+      text,
+      error: text || 'Main group agent execution failed',
+    };
+  }
+  return { ok: true, text };
+}
+
 async function startMessageLoop(): Promise<void> {
   if (messageLoopRunning) {
     logger.debug('Message loop already running, skipping duplicate start');
@@ -1784,6 +1816,14 @@ async function main(): Promise<void> {
         ).broadcastAssistantEvent(event);
       }
     }
+  });
+  initAssistantAutoFlow({
+    agentRunner: async ({ prompt, item }) =>
+      runMainGroupAssistantAgent({
+        prompt,
+        itemSourceJid:
+          typeof item.extra.chatJid === 'string' ? item.extra.chatJid : null,
+      }),
   });
   startProactiveEngine();
   queue.setProcessMessagesFn(processGroupMessages);

@@ -14,7 +14,11 @@ import { clearAssistantData } from '../db.js';
 import { emitAssistantEvent } from './assistant-events.js';
 import { runProactiveScan } from './proactive-engine.js';
 import { resolveTodayPlanInboxItemsIfPlanExists } from './today-plan-inbox.js';
-import type { AgentInboxStatus, AssistantState } from './types.js';
+import {
+  ASSISTANT_TRIGGER_RULE_CAPABILITIES,
+  type AgentInboxStatus,
+  type AssistantState,
+} from './types.js';
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -47,6 +51,7 @@ export function getAssistantState(): AssistantState {
   resolveTodayPlanInboxItemsIfPlanExists();
   return {
     settings: getAssistantSettings(),
+    triggerRuleCapabilities: ASSISTANT_TRIGGER_RULE_CAPABILITIES,
     inboxCounts: getAgentInboxCounts(),
     latestInboxItems: listAgentInboxItems({ status: 'active', limit: 20 }),
     latestActionLogs: listAssistantActionLogs(20),
@@ -71,7 +76,7 @@ export function updateAssistantSettingsForApi(body: unknown) {
   return updateAssistantSettings(toRecord(body));
 }
 
-export function runAgentInboxActionForApi(body: unknown) {
+export async function runAgentInboxActionForApi(body: unknown) {
   const input = toRecord(body);
   const itemId = typeof input.item_id === 'string' ? input.item_id : '';
   const action = typeof input.action === 'string' ? input.action : '';
