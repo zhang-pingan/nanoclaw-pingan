@@ -13,8 +13,22 @@ type AgentInboxItem = {
   extra?: Record<string, unknown>;
 };
 
+type AssistantTriggerRuleSetting = {
+  enabled: boolean;
+  investigationEnabled: boolean;
+  autoEnabled: boolean;
+  selectedServices?: string[];
+};
+
+type AssistantTriggerRuleCapability = {
+  key: string;
+  supportsInvestigation: boolean;
+  supportsRepair: boolean;
+};
+
 type AssistantSettings = {
   enabled: boolean;
+  triggerRules?: Record<string, AssistantTriggerRuleSetting>;
   desktopAssistant: {
     alwaysOnTop: boolean;
     allowMovement: boolean;
@@ -23,6 +37,7 @@ type AssistantSettings = {
 
 type AssistantState = {
   settings: AssistantSettings;
+  triggerRuleCapabilities?: AssistantTriggerRuleCapability[];
   latestInboxItems: AgentInboxItem[];
 };
 
@@ -297,6 +312,49 @@ function localStatusForInboxAction(action: string): string | null {
   return null;
 }
 
+function inboxItemRuleKey(item: AgentInboxItem): string {
+  return typeof item.extra?.ruleKey === 'string' ? item.extra.ruleKey : '';
+}
+
+function triggerRuleCapability(
+  item: AgentInboxItem,
+): AssistantTriggerRuleCapability | null {
+  const ruleKey = inboxItemRuleKey(item);
+  if (!ruleKey) return null;
+  return (
+    state?.triggerRuleCapabilities?.find((rule) => rule.key === ruleKey) ||
+    null
+  );
+}
+
+function triggerRuleSetting(
+  item: AgentInboxItem,
+): AssistantTriggerRuleSetting | null {
+  const ruleKey = inboxItemRuleKey(item);
+  if (!ruleKey) return null;
+  return state?.settings.triggerRules?.[ruleKey] || null;
+}
+
+function canInvestigate(item: AgentInboxItem): boolean {
+  const capability = triggerRuleCapability(item);
+  const setting = triggerRuleSetting(item);
+  return Boolean(
+    capability?.supportsInvestigation && setting?.investigationEnabled,
+  );
+}
+
+function canRepair(item: AgentInboxItem): boolean {
+  const capability = triggerRuleCapability(item);
+  const investigation = item.extra?.investigation;
+  return Boolean(
+    capability?.supportsRepair &&
+      investigation &&
+      typeof investigation === 'object' &&
+      !Array.isArray(investigation) &&
+      (investigation as Record<string, unknown>).repairable === true,
+  );
+}
+
 function patchLocalInboxItemStatus(itemId: string, status: string): void {
   if (!state) return;
   state = {
@@ -386,6 +444,22 @@ function renderItem(item: AgentInboxItem): void {
       button('查看', 'primary', () => {
         window.assistantHost?.openWorkstation(item.action_url || undefined);
         void runInboxAction(item.id, 'mark_read');
+      }),
+    );
+  }
+
+  if (canInvestigate(item)) {
+    bubbleActions.append(
+      button('排查', 'primary', () => {
+        void runInboxAction(item.id, 'investigate');
+      }),
+    );
+  }
+
+  if (canRepair(item)) {
+    bubbleActions.append(
+      button('修复', 'primary', () => {
+        void runInboxAction(item.id, 'repair');
       }),
     );
   }

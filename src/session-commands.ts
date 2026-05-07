@@ -141,9 +141,12 @@ export async function handleSessionCommand(opts: {
   }
 
   if (command === '/new') {
+    deps.closeStdin();
     await deps.resetSession();
     deps.advanceCursor(cmdMsg.timestamp);
-    await deps.sendMessage('已切换到全新 session，下一条消息将使用干净上下文。');
+    await deps.sendMessage(
+      '已切换到全新 session，下一条消息将使用干净上下文。',
+    );
     return { handled: true, success: true };
   }
 

@@ -88,6 +88,11 @@ import {
   handleSessionCommand,
   isSessionCommandAllowed,
 } from './session-commands.js';
+import {
+  bumpSessionResetEpoch,
+  getSessionResetEpoch,
+  isSessionResetEpochCurrent,
+} from './session-reset-guard.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { initAssistantEvents } from './assistant/assistant-events.js';
 import { initAssistantAutoFlow } from './assistant/assistant-auto-flow.js';
@@ -142,7 +147,10 @@ const queue = new GroupQueue();
 const pendingSessionCleanup = new Set<string>();
 const activeRunIds = new Map<string, string>();
 const pendingQueryBatches = new Map<string, PendingQueryBatch>();
-const activeMessageQueryTraces = new Map<string, ActiveMessageQueryTraceState>();
+const activeMessageQueryTraces = new Map<
+  string,
+  ActiveMessageQueryTraceState
+>();
 
 function removeSessionDir(groupFolder: string): void {
   const sessionDir = path.join(DATA_DIR, 'sessions', groupFolder, '.claude');
@@ -164,6 +172,7 @@ function resetGroupSession(
 
   clearSession(group.folder);
   delete sessions[group.folder];
+  bumpSessionResetEpoch(group.folder);
 
   if (opts.deleteSessionDir) {
     if (isActive) pendingSessionCleanup.add(group.folder);
@@ -308,7 +317,11 @@ function createMessageQueryTrace(params: {
       summary: 'Built prompt and memory pack',
       payload: params.contextPayload,
     });
-    agentQueryTraceManager.completeStep(params.queryId, contextStepId, 'success');
+    agentQueryTraceManager.completeStep(
+      params.queryId,
+      contextStepId,
+      'success',
+    );
   }
   const modelStepId = agentQueryTraceManager.startStep({
     queryId: params.queryId,
@@ -870,7 +883,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         agentQueryTraceManager.appendEvent({
           queryId,
           stepId:
-            traceState?.resultDeliveryStepId || traceState?.executionStepId || null,
+            traceState?.resultDeliveryStepId ||
+            traceState?.executionStepId ||
+            null,
           eventType: result.event.type,
           eventName: result.event.name,
           status: result.event.status ?? null,
@@ -922,7 +937,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           eventType: 'output',
           eventName: 'assistant_output',
           status: 'success',
-          summary: text ? `Output: ${text.slice(0, 120)}` : 'Received output chunk',
+          summary: text
+            ? `Output: ${text.slice(0, 120)}`
+            : 'Received output chunk',
           payload: {
             text,
             rawLength: raw.length,
@@ -1072,7 +1089,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
             ? null
             : 'Completed without channel output',
         error_message:
-          output === 'error' || state.hadError ? 'Agent execution failed' : null,
+          output === 'error' || state.hadError
+            ? 'Agent execution failed'
+            : null,
       },
     );
   }
@@ -1125,6 +1144,26 @@ async function runAgent(
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = sessions[group.folder];
+  const sessionResetEpoch = getSessionResetEpoch(group.folder);
+  const isSessionWriteCurrent = () =>
+    isSessionResetEpochCurrent(group.folder, sessionResetEpoch);
+  const writeSessionIfCurrent = (sessionIdToWrite: string): boolean => {
+    if (!isSessionWriteCurrent()) {
+      logger.info(
+        {
+          group: group.name,
+          sessionId: sessionIdToWrite,
+          runEpoch: sessionResetEpoch,
+          currentEpoch: getSessionResetEpoch(group.folder),
+        },
+        'Skipping stale session update after reset',
+      );
+      return false;
+    }
+    sessions[group.folder] = sessionIdToWrite;
+    setSession(group.folder, sessionIdToWrite);
+    return true;
+  };
   const resolvedRunId = runId || createExecutionId();
   const resolvedInitialQueryId = initialQueryId || createExecutionId();
   const modelSelection = selectedModel
@@ -1182,8 +1221,11 @@ async function runAgent(
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
         if (output.newSessionId) {
-          sessions[group.folder] = output.newSessionId;
-          setSession(group.folder, output.newSessionId);
+          const didWrite = writeSessionIfCurrent(output.newSessionId);
+          if (!didWrite) {
+            await onOutput({ ...output, newSessionId: undefined });
+            return;
+          }
         }
         await onOutput(output);
       }
@@ -1222,10 +1264,10 @@ async function runAgent(
       );
       clearSession(group.folder);
       delete sessions[group.folder];
+      bumpSessionResetEpoch(group.folder);
       // Don't save the invalid session ID - let retry create a new one
     } else if (output.newSessionId) {
-      sessions[group.folder] = output.newSessionId;
-      setSession(group.folder, output.newSessionId);
+      writeSessionIfCurrent(output.newSessionId);
     }
 
     if (output.status === 'error') {
@@ -1351,10 +1393,7 @@ async function startMessageLoop(): Promise<void> {
               loopCmdMsg.content,
               TRIGGER_PATTERN,
             );
-            if (
-              command &&
-              isSessionCommandAllowed(!!loopCmdMsg.is_from_me)
-            ) {
+            if (command && isSessionCommandAllowed(!!loopCmdMsg.is_from_me)) {
               queue.closeStdin(chatJid);
             }
             // Enqueue so processGroupMessages handles auth + cursor advancement.
@@ -1474,11 +1513,15 @@ async function startMessageLoop(): Promise<void> {
               runId,
               chatJid,
               groupFolder: group.folder,
-              sourceRefId: messagesToSend[messagesToSend.length - 1]?.id ?? null,
+              sourceRefId:
+                messagesToSend[messagesToSend.length - 1]?.id ?? null,
               selectedModel: pipedSelection.selectedModel,
               selectedModelReason: pipedSelection.reason,
               promptSummary: formatted.slice(0, 140),
-              promptHash: crypto.createHash('sha256').update(formatted).digest('hex'),
+              promptHash: crypto
+                .createHash('sha256')
+                .update(formatted)
+                .digest('hex'),
               inputSummary: `Queued ${messagesToSend.length} piped messages`,
               inputPayload: {
                 messageIds: messagesToSend.map((m) => m.id),

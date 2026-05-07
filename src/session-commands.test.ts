@@ -211,6 +211,7 @@ describe('handleSessionCommand', () => {
       deps,
     });
     expect(result).toEqual({ handled: true, success: true });
+    expect(deps.closeStdin).toHaveBeenCalledTimes(1);
     expect(deps.resetSession).toHaveBeenCalledTimes(1);
     expect(deps.runAgent).not.toHaveBeenCalled();
     expect(deps.sendMessage).toHaveBeenCalledWith(
