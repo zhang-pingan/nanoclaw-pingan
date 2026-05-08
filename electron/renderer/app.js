@@ -494,6 +494,7 @@ var assistantActionLogs = [];
 var assistantInboxActionPendingItemIds = new Set();
 var assistantLogDetailExpandedItems = {};
 var assistantLogDetailExpandedLogs = {};
+var assistantScanIntervalSaveTimer = null;
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -17440,7 +17441,9 @@ function renderAssistantSettings() {
   }
   if (assistantEnabledToggle) assistantEnabledToggle.checked = Boolean(settings.enabled);
   if (assistantLevelSelect) assistantLevelSelect.value = settings.proactiveLevel || "balanced";
-  if (assistantScanIntervalInput) assistantScanIntervalInput.value = String(settings.scanIntervalMinutes || 10);
+  if (assistantScanIntervalInput && document.activeElement !== assistantScanIntervalInput) {
+    assistantScanIntervalInput.value = String(settings.scanIntervalMinutes || 10);
+  }
   if (assistantAutostartToggle) assistantAutostartToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.autostart);
   if (assistantAlwaysOnTopToggle) assistantAlwaysOnTopToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.alwaysOnTop);
   if (assistantMovementToggle) assistantMovementToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.allowMovement);
@@ -17580,6 +17583,17 @@ async function updateAssistantSettingsPatch(patch) {
     console.error("Failed to update assistant settings:", err);
     showToast(err instanceof Error ? err.message : "个人助手设置保存失败", 2200);
   }
+}
+
+function scheduleAssistantScanIntervalSave() {
+  if (!assistantScanIntervalInput) return;
+  if (assistantScanIntervalSaveTimer) clearTimeout(assistantScanIntervalSaveTimer);
+  assistantScanIntervalSaveTimer = setTimeout(() => {
+    assistantScanIntervalSaveTimer = null;
+    updateAssistantSettingsPatch({
+      scanIntervalMinutes: Number(assistantScanIntervalInput.value) || 10,
+    });
+  }, 350);
 }
 
 async function runAssistantScan() {
@@ -18240,7 +18254,14 @@ if (assistantLevelSelect) {
   });
 }
 if (assistantScanIntervalInput) {
+  assistantScanIntervalInput.addEventListener("input", () => {
+    scheduleAssistantScanIntervalSave();
+  });
   assistantScanIntervalInput.addEventListener("change", () => {
+    if (assistantScanIntervalSaveTimer) {
+      clearTimeout(assistantScanIntervalSaveTimer);
+      assistantScanIntervalSaveTimer = null;
+    }
     updateAssistantSettingsPatch({
       scanIntervalMinutes: Number(assistantScanIntervalInput.value) || 10,
     });

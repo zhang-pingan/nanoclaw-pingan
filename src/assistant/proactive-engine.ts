@@ -44,6 +44,34 @@ const DEFAULT_STALE_TASK_HOURS = 4;
 let proactiveLoopStarted = false;
 let proactiveLoopTimer: NodeJS.Timeout | null = null;
 
+function proactiveScanDelayMs(settings: AssistantSettings): number {
+  return Math.max(settings.scanIntervalMinutes, 1) * 60 * 1000;
+}
+
+function clearProactiveLoopTimer(): void {
+  if (!proactiveLoopTimer) return;
+  clearTimeout(proactiveLoopTimer);
+  proactiveLoopTimer = null;
+}
+
+function scheduleNextProactiveScan(): void {
+  const settings = getAssistantSettings();
+  proactiveLoopTimer = setTimeout(
+    runProactiveLoop,
+    proactiveScanDelayMs(settings),
+  );
+}
+
+function runProactiveLoop(): void {
+  try {
+    runProactiveScan();
+  } catch (err) {
+    logger.error({ err }, 'Assistant proactive scan failed');
+  }
+
+  scheduleNextProactiveScan();
+}
+
 function workstationUrl(
   target: string,
   params: Record<string, string> = {},
@@ -452,27 +480,17 @@ export function startProactiveEngine(): void {
   }
   proactiveLoopStarted = true;
   logger.info('Assistant proactive engine started');
+  runProactiveLoop();
+}
 
-  const loop = () => {
-    try {
-      runProactiveScan();
-    } catch (err) {
-      logger.error({ err }, 'Assistant proactive scan failed');
-    }
-
-    const settings = getAssistantSettings();
-    proactiveLoopTimer = setTimeout(
-      loop,
-      Math.max(settings.scanIntervalMinutes, 1) * 60 * 1000,
-    );
-  };
-
-  loop();
+export function rescheduleProactiveEngine(): void {
+  if (!proactiveLoopStarted) return;
+  clearProactiveLoopTimer();
+  scheduleNextProactiveScan();
 }
 
 /** @internal - for tests only. */
 export function _resetProactiveEngineForTests(): void {
-  if (proactiveLoopTimer) clearTimeout(proactiveLoopTimer);
-  proactiveLoopTimer = null;
+  clearProactiveLoopTimer();
   proactiveLoopStarted = false;
 }

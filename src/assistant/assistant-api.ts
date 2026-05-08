@@ -12,7 +12,10 @@ import {
 } from './agent-inbox-store.js';
 import { clearAssistantData } from '../db.js';
 import { emitAssistantEvent } from './assistant-events.js';
-import { runProactiveScan } from './proactive-engine.js';
+import {
+  rescheduleProactiveEngine,
+  runProactiveScan,
+} from './proactive-engine.js';
 import { resolveTodayPlanInboxItemsIfPlanExists } from './today-plan-inbox.js';
 import { listOnlineLogServiceOptions } from './online-error-log.js';
 import {
@@ -75,7 +78,9 @@ export function listAgentInboxForApi(input: {
 }
 
 export function updateAssistantSettingsForApi(body: unknown) {
-  return updateAssistantSettings(toRecord(body));
+  const settings = updateAssistantSettings(toRecord(body));
+  rescheduleProactiveEngine();
+  return settings;
 }
 
 export async function runAgentInboxActionForApi(body: unknown) {
