@@ -1,0 +1,143 @@
+[
+  {
+    "id": "dev_test.plan.v1",
+    "version": 1,
+    "description": "Plan stage must publish a plan document and branch metadata.",
+    "allowed_artifact_roots": ["/workspace/projects"],
+    "payload": {
+      "required": ["deliverable", "main_branch", "work_branch"],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "main_branch": { "type": "string", "minLength": 1 },
+        "work_branch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "files": [
+      {
+        "path": "projects/{{service}}/iteration/{{deliverable}}/plan.md",
+        "required": true,
+        "frontmatter_required": ["service", "deliverable", "doc_type"],
+        "max_bytes": 200000
+      }
+    ]
+  },
+  {
+    "id": "dev_test.dev.v1",
+    "version": 1,
+    "description": "Development stage must publish an implementation document and branch metadata.",
+    "allowed_artifact_roots": ["/workspace/projects"],
+    "payload": {
+      "required": ["deliverable", "main_branch", "work_branch"],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "main_branch": { "type": "string", "minLength": 1 },
+        "work_branch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "files": [
+      {
+        "path": "projects/{{service}}/iteration/{{deliverable}}/dev.md",
+        "required": true,
+        "frontmatter_required": ["service", "deliverable", "doc_type"],
+        "max_bytes": 250000
+      }
+    ]
+  },
+  {
+    "id": "dev_test.ops_deploy.v1",
+    "version": 1,
+    "description": "Deployment stage must return pre-production branch metadata.",
+    "payload": {
+      "required": [
+        "main_branch",
+        "work_branch",
+        "staging_base_branch",
+        "staging_work_branch"
+      ],
+      "properties": {
+        "main_branch": { "type": "string", "minLength": 1 },
+        "work_branch": { "type": "string", "minLength": 1 },
+        "staging_base_branch": { "type": "string", "minLength": 1 },
+        "staging_work_branch": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  {
+    "id": "dev_test.testing.v1",
+    "version": 1,
+    "description": "Testing stage must return a structured test result and test document reference.",
+    "payload": {
+      "required": [
+        "deliverable",
+        "test_doc",
+        "total",
+        "passed",
+        "failed",
+        "blocked"
+      ],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "test_doc": { "type": "string", "minLength": 1 },
+        "total": { "type": "number" },
+        "passed": { "type": "number" },
+        "failed": { "type": "number" },
+        "blocked": { "type": "number" }
+      }
+    }
+  },
+  {
+    "id": "fix_test.bug_fix.v1",
+    "version": 1,
+    "description": "Bug fix stage must return a deliverable and final work branch.",
+    "payload": {
+      "required": ["deliverable", "main_branch", "work_branch"],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "main_branch": { "type": "string", "minLength": 1 },
+        "work_branch": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  {
+    "id": "fix_test.ops_deploy.v1",
+    "version": 1,
+    "description": "Bug deployment stage must return pre-production branch metadata.",
+    "payload": {
+      "required": [
+        "main_branch",
+        "work_branch",
+        "staging_base_branch",
+        "staging_work_branch"
+      ],
+      "properties": {
+        "main_branch": { "type": "string", "minLength": 1 },
+        "work_branch": { "type": "string", "minLength": 1 },
+        "staging_base_branch": { "type": "string", "minLength": 1 },
+        "staging_work_branch": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  {
+    "id": "fix_test.bug_test.v1",
+    "version": 1,
+    "description": "Bug verification stage must return structured test counts.",
+    "payload": {
+      "required": [
+        "deliverable",
+        "test_doc",
+        "total",
+        "passed",
+        "failed",
+        "blocked"
+      ],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "test_doc": { "type": "string", "minLength": 1 },
+        "total": { "type": "number" },
+        "passed": { "type": "number" },
+        "failed": { "type": "number" },
+        "blocked": { "type": "number" }
+      }
+    }
+  }
+]

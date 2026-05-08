@@ -74,6 +74,12 @@
         "plan": {
           "type": "delegation",
           "label": "方案设计",
+          "artifact_contract": {
+            "ref": "dev_test.plan.v1"
+          },
+          "evaluator": {
+            "ref": "dev_test.plan.v1"
+          },
           "delegate": {
             "role": "planner",
             "skill": "plan-requirement",
@@ -102,6 +108,9 @@
         "plan_examine": {
           "type": "delegation",
           "label": "方案审核",
+          "evaluator": {
+            "ref": "dev_test.plan_review.v1"
+          },
           "delegate": {
             "role": "plan_examiner",
             "skill": "plan-examine",
@@ -239,6 +248,12 @@
         "dev": {
           "type": "delegation",
           "label": "开发",
+          "artifact_contract": {
+            "ref": "dev_test.dev.v1"
+          },
+          "evaluator": {
+            "ref": "dev_test.dev.v1"
+          },
           "delegate": {
             "role": "dev",
             "skill": "dev-requirement",
@@ -267,6 +282,9 @@
         "dev_examine": {
           "type": "delegation",
           "label": "开发复核",
+          "evaluator": {
+            "ref": "dev_test.dev_review.v1"
+          },
           "delegate": {
             "role": "dev_examiner",
             "skill": "dev-examine",
@@ -388,6 +406,12 @@
         "ops_deploy": {
           "type": "delegation",
           "label": "预发部署",
+          "artifact_contract": {
+            "ref": "dev_test.ops_deploy.v1"
+          },
+          "evaluator": {
+            "ref": "dev_test.ops_deploy.v1"
+          },
           "delegate": {
             "role": "ops",
             "skill": "ops-staging-deploy"
@@ -466,6 +490,12 @@
         "testing": {
           "type": "delegation",
           "label": "测试",
+          "artifact_contract": {
+            "ref": "dev_test.testing.v1"
+          },
+          "evaluator": {
+            "ref": "dev_test.testing.v1"
+          },
           "delegate": {
             "role": "test",
             "skill": "test-requirement"

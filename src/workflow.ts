@@ -98,6 +98,11 @@ import {
 import { evaluateWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 import {
+  buildQueuedWorkflowLlmJudgeRecord,
+  runWorkflowLlmJudgeSidecar,
+  shouldRunWorkflowLlmJudgeNow,
+} from './workflow-llm-judge.js';
+import {
   getWorkflowContextValue,
   mergeWorkflowContext,
   WORKFLOW_CONTEXT_KEYS,
@@ -2085,6 +2090,65 @@ function mergeEvaluationResults(input: {
   };
 }
 
+function recordLlmJudgeSidecar(input: {
+  workflow: Workflow;
+  stageKey: string;
+  delegation?: Delegation | null;
+  primaryEvaluationId: string;
+  deterministicEvaluation: WorkflowStageEvalResult;
+  evaluatorConfig?: ReturnType<typeof getWorkflowEvaluatorConfig>;
+}): ReturnType<typeof buildQueuedWorkflowLlmJudgeRecord> {
+  const sidecarRecord = buildQueuedWorkflowLlmJudgeRecord(input);
+  if (!sidecarRecord) return null;
+
+  createWorkflowStageEvaluation(sidecarRecord);
+  writeWorkflowEvent({
+    workflowId: input.workflow.id,
+    eventType: 'llm_judge_sidecar_recorded',
+    stateKey: input.stageKey,
+    refType: 'workflow_stage_evaluation',
+    refId: sidecarRecord.id,
+    payload: {
+      sidecar_for: input.primaryEvaluationId,
+      evaluator_ref: input.evaluatorConfig?.id || null,
+      result: sidecarRecord.status,
+    },
+  });
+
+  if (shouldRunWorkflowLlmJudgeNow()) {
+    void runWorkflowLlmJudgeSidecar(input)
+      .then((completedRecord) => {
+        if (!completedRecord) return;
+        createWorkflowStageEvaluation(completedRecord);
+        writeWorkflowEvent({
+          workflowId: input.workflow.id,
+          eventType: 'llm_judge_sidecar_completed',
+          stateKey: input.stageKey,
+          refType: 'workflow_stage_evaluation',
+          refId: completedRecord.id,
+          payload: {
+            sidecar_for: input.primaryEvaluationId,
+            evaluator_ref: input.evaluatorConfig?.id || null,
+            result: completedRecord.status,
+          },
+        });
+      })
+      .catch((err) => {
+        logger.error(
+          {
+            err,
+            workflowId: input.workflow.id,
+            stageKey: input.stageKey,
+            primaryEvaluationId: input.primaryEvaluationId,
+          },
+          'Workflow LLM judge sidecar failed',
+        );
+      });
+  }
+
+  return sidecarRecord;
+}
+
 function resumeCurrentWorkflowInterrupt(
   workflowId: string,
   action: string,
@@ -3371,12 +3435,15 @@ export function onDelegationComplete(delegationId: string): void {
     stageKey: workflow.status,
     delegation,
   });
+  const evaluatorConfig = getWorkflowEvaluatorConfig(
+    stateConfig.evaluator?.ref,
+  );
+  const artifactContractRef =
+    stateConfig.artifact_contract?.ref ||
+    evaluatorConfig?.deterministic?.artifact_contract;
   const contractEvaluation = evaluateWorkflowArtifactContract({
     workflow: evaluationWorkflow,
-    contractRef:
-      stateConfig.artifact_contract?.ref ||
-      getWorkflowEvaluatorConfig(stateConfig.evaluator?.ref)?.deterministic
-        ?.artifact_contract,
+    contractRef: artifactContractRef,
     payload: payload as unknown as Record<string, unknown>,
   });
   const evaluation = mergeEvaluationResults({
@@ -3391,6 +3458,14 @@ export function onDelegationComplete(delegationId: string): void {
     result: evaluation,
   });
   createWorkflowStageEvaluation(evaluationRecord);
+  const llmJudgeSidecarRecord = recordLlmJudgeSidecar({
+    workflow: evaluationWorkflow,
+    stageKey: workflow.status,
+    delegation,
+    primaryEvaluationId: evaluationRecord.id,
+    deterministicEvaluation: evaluation,
+    evaluatorConfig,
+  });
   workflowUpdates.context = mergeWorkflowContext(
     workflowUpdates.context || {},
     {
@@ -3399,7 +3474,7 @@ export function onDelegationComplete(delegationId: string): void {
         evaluation_id: evaluationRecord.id,
         evaluator_ref:
           stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
-        artifact_contract_ref: stateConfig.artifact_contract?.ref || null,
+        artifact_contract_ref: artifactContractRef || null,
         status: evaluation.status,
         score: evaluation.score,
         summary: evaluation.summary,
@@ -3407,6 +3482,20 @@ export function onDelegationComplete(delegationId: string): void {
         evidence: evaluation.evidence,
         evaluated_at: evaluationRecord.updated_at,
       },
+      ...(llmJudgeSidecarRecord
+        ? {
+            latest_llm_judge_result: {
+              state_key: workflow.status,
+              evaluation_id: llmJudgeSidecarRecord.id,
+              evaluator_ref: evaluatorConfig?.id || null,
+              status: llmJudgeSidecarRecord.status,
+              score: llmJudgeSidecarRecord.score,
+              summary: llmJudgeSidecarRecord.summary,
+              evaluated_at: llmJudgeSidecarRecord.updated_at,
+              sidecar_for: evaluationRecord.id,
+            },
+          }
+        : {}),
       ...(stateConfig.rollback_hint
         ? {
             latest_rollback_hint: {
@@ -3425,7 +3514,7 @@ export function onDelegationComplete(delegationId: string): void {
     refType: 'workflow_stage_evaluation',
     refId: evaluationRecord.id,
     payload: {
-      artifact_contract_ref: stateConfig.artifact_contract?.ref || null,
+      artifact_contract_ref: artifactContractRef || null,
       evaluator_ref:
         stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
       result: evaluation.status,

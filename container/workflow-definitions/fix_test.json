@@ -42,6 +42,12 @@
         "bug_fix": {
           "type": "delegation",
           "label": "修复 Bug",
+          "artifact_contract": {
+            "ref": "fix_test.bug_fix.v1"
+          },
+          "evaluator": {
+            "ref": "fix_test.bug_fix.v1"
+          },
           "delegate": {
             "role": "dev",
             "skill": "fix-bug",
@@ -70,6 +76,12 @@
         "ops_deploy": {
           "type": "delegation",
           "label": "预发部署",
+          "artifact_contract": {
+            "ref": "fix_test.ops_deploy.v1"
+          },
+          "evaluator": {
+            "ref": "fix_test.ops_deploy.v1"
+          },
           "delegate": {
             "role": "ops",
             "skill": "ops-staging-deploy"
@@ -97,6 +109,12 @@
         "bug_test": {
           "type": "delegation",
           "label": "测试验证",
+          "artifact_contract": {
+            "ref": "fix_test.bug_test.v1"
+          },
+          "evaluator": {
+            "ref": "fix_test.bug_test.v1"
+          },
           "delegate": {
             "role": "test",
             "skill": "fix-test-bug"
@@ -127,6 +145,12 @@
         "bug_refix": {
           "type": "delegation",
           "label": "复修 Bug",
+          "artifact_contract": {
+            "ref": "fix_test.bug_fix.v1"
+          },
+          "evaluator": {
+            "ref": "fix_test.bug_fix.v1"
+          },
           "delegate": {
             "role": "dev",
             "skill": "fix-refix-bug"

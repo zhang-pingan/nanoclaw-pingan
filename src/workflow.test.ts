@@ -13,6 +13,7 @@ import {
   getAllRegisteredGroups,
   getDelegationsByWorkflow,
   getLatestWorkflowStageEvaluation,
+  listWorkflowStageEvaluationsByWorkflow,
   getPendingWorkflowInterruptForState,
   listWorkflowInterruptsByWorkflow,
   getWorkflow,
@@ -37,6 +38,8 @@ import {
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
 import { getWorkflowTypeConfig } from './workflow-config.js';
+import { getWorkflowArtifactContract } from './workflow-artifact-contract.js';
+import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 
 const GROUPS: Array<[string, RegisteredGroup]> = [
   [
@@ -939,6 +942,15 @@ describe('workflow metadata and branch flow', () => {
     expect(getLatestWorkflowStageEvaluation('wf-plan', 'plan')?.status).toBe(
       'passed',
     );
+    const evaluations = listWorkflowStageEvaluationsByWorkflow('wf-plan');
+    expect(
+      evaluations.some(
+        (item) =>
+          item.stage_key === 'plan:llm_judge' &&
+          item.evaluator_type === 'llm_judge' &&
+          item.status === 'pending',
+      ),
+    ).toBe(true);
     expect(
       workflow &&
         getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable),
@@ -1463,5 +1475,29 @@ describe('workflow metadata and branch flow', () => {
       requires_deliverable: true,
       required_deliverable_file: 'dev.md',
     });
+  });
+
+  it('declares artifact contracts and sidecar evaluator refs for critical stages', () => {
+    const devTest = getWorkflowTypeConfig('dev_test');
+    expect(devTest?.states.plan.artifact_contract?.ref).toBe(
+      'dev_test.plan.v1',
+    );
+    expect(devTest?.states.plan.evaluator?.ref).toBe('dev_test.plan.v1');
+    expect(devTest?.states.dev.artifact_contract?.ref).toBe('dev_test.dev.v1');
+    expect(devTest?.states.ops_deploy.evaluator?.ref).toBe(
+      'dev_test.ops_deploy.v1',
+    );
+    expect(devTest?.states.testing.evaluator?.ref).toBe('dev_test.testing.v1');
+    expect(getWorkflowArtifactContract('dev_test.plan.v1')).toBeDefined();
+    expect(getWorkflowEvaluatorConfig('dev_test.plan.v1')?.ai?.enabled).toBe(
+      true,
+    );
+
+    const fixTest = getWorkflowTypeConfig('fix_test');
+    expect(fixTest?.states.bug_fix.evaluator?.ref).toBe('fix_test.bug_fix.v1');
+    expect(fixTest?.states.bug_test.artifact_contract?.ref).toBe(
+      'fix_test.bug_test.v1',
+    );
+    expect(getWorkflowArtifactContract('fix_test.bug_test.v1')).toBeDefined();
   });
 });

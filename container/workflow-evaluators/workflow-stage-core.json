@@ -1,0 +1,195 @@
+[
+  {
+    "id": "dev_test.plan.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "dev_test.plan.v1",
+      "required_checks": [
+        "plan_doc",
+        "frontmatter",
+        "acceptance_criteria",
+        "scope",
+        "risk"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether plan.md states a concrete goal, bounded scope, testable acceptance criteria, risks or constraints, and enough implementation context for downstream dev and test. Treat vague acceptance criteria as needs_revision.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "dev_test.plan_review.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "dev_test.plan.v1",
+      "required_checks": ["review_verdict", "findings", "evidence"]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether the plan review verdict is backed by concrete findings and evidence, and whether the review clearly distinguishes passable gaps from blockers.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "dev_test.dev.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "dev_test.dev.v1",
+      "required_checks": [
+        "dev_doc",
+        "plan_reference",
+        "impact_scope",
+        "validation_notes"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether dev.md explains the implemented change, references the plan, identifies impact scope, and gives credible validation notes. Treat missing or unverifiable validation as needs_revision.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "dev_test.dev_review.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "dev_test.dev.v1",
+      "required_checks": ["review_verdict", "findings", "evidence"]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether the development review evaluates plan alignment, implementation quality, regression risk, and validation evidence with actionable findings.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "dev_test.ops_deploy.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "dev_test.ops_deploy.v1",
+      "required_checks": [
+        "deploy_branch_metadata",
+        "deploy_result",
+        "verification_evidence"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether deployment evidence clearly identifies the target environment, source and staging branches, deployment result, verification evidence, and rollback or risk note when relevant.",
+      "max_context_bytes": 12000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "dev_test.testing.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "dev_test.testing.v1",
+      "required_checks": [
+        "test_summary",
+        "failure_breakdown",
+        "coverage",
+        "evidence"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether the test report has structured counts, pass/fail/blocked distinction, coverage scope, clear conclusion, and evidence for failures. Preserve failed verdicts when bugs or failed cases are present.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "tests_failed": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "fix_test.bug_fix.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "fix_test.bug_fix.v1",
+      "required_checks": ["fix_summary", "work_branch", "validation_notes"]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether the bug fix result identifies the actual fix, final work branch, validation performed, and any residual risk.",
+      "max_context_bytes": 12000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "fix_test.ops_deploy.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "fix_test.ops_deploy.v1",
+      "required_checks": ["deploy_branch_metadata", "deploy_result"]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether the bug-fix deployment result includes branch metadata, target environment, deployment result, and verification evidence.",
+      "max_context_bytes": 12000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "fix_test.bug_test.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "artifact_contract": "fix_test.bug_test.v1",
+      "required_checks": ["test_counts", "bug_verification", "evidence"]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether bug verification clearly proves the fix, distinguishes passed and failed cases, and gives actionable evidence for any remaining bug.",
+      "max_context_bytes": 12000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "tests_failed": "failed",
+      "ai_uncertain": "pending"
+    }
+  }
+]
