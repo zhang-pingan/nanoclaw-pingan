@@ -46,7 +46,7 @@ import {
   getStatusLabelsForType,
   pauseWorkflow,
   resumeWorkflow,
-  returnWorkflowToConfirmationStage,
+  returnWorkflowToInterruptStage,
   retryWorkflowStage,
   resumeWorkflowInterrupt,
   skipWorkflow,
@@ -1234,7 +1234,7 @@ export function retryWorkbenchSubtask(input: {
         error: 'Only completed interrupt subtasks can return to the node',
       };
     }
-    return returnWorkflowToConfirmationStage(workflowId, subtask.stage_key);
+    return returnWorkflowToInterruptStage(workflowId, subtask.stage_key);
   }
 
   if (subtask.status !== 'failed') {

@@ -2712,6 +2712,34 @@ export function closePendingWorkflowInterrupts(
   return pending;
 }
 
+export function listExpiredPendingWorkflowInterrupts(
+  nowIso: string,
+): WorkflowInterruptRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_interrupts
+       WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?
+       ORDER BY expires_at ASC`,
+    )
+    .all(nowIso) as WorkflowInterruptRecord[];
+}
+
+export function markWorkflowInterruptExpired(input: {
+  interruptId: string;
+  updatedAt: string;
+}): boolean {
+  const result = db
+    .prepare(
+      `UPDATE workflow_interrupts
+       SET status = 'expired',
+           updated_at = ?,
+           expired_at = ?
+       WHERE id = ? AND status = 'pending'`,
+    )
+    .run(input.updatedAt, input.updatedAt, input.interruptId);
+  return result.changes === 1;
+}
+
 export function createWorkflowEvent(record: WorkflowEventRecord): void {
   db.prepare(
     `INSERT OR IGNORE INTO workflow_events (
@@ -2740,6 +2768,14 @@ export function listWorkflowEvents(workflowId: string): WorkflowEventRecord[] {
        ORDER BY created_at ASC`,
     )
     .all(workflowId) as WorkflowEventRecord[];
+}
+
+export function getWorkflowEventByIdempotencyKey(
+  idempotencyKey: string,
+): WorkflowEventRecord | undefined {
+  return db
+    .prepare('SELECT * FROM workflow_events WHERE idempotency_key = ? LIMIT 1')
+    .get(idempotencyKey) as WorkflowEventRecord | undefined;
 }
 
 export function createWorkflowInterruptResumeAttempt(
@@ -2832,6 +2868,77 @@ export function createWorkflowOutbox(record: WorkflowOutboxRecord): void {
     record.last_error,
     record.created_at,
     record.updated_at,
+  );
+}
+
+export function listRunnableWorkflowOutbox(
+  nowIso: string,
+  limit = 50,
+): WorkflowOutboxRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_outbox
+       WHERE status IN ('pending', 'failed')
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+       ORDER BY created_at ASC
+       LIMIT ?`,
+    )
+    .all(nowIso, limit) as WorkflowOutboxRecord[];
+}
+
+export function markWorkflowOutboxProcessing(input: {
+  id: string;
+  updatedAt: string;
+}): WorkflowOutboxRecord | undefined {
+  const result = db
+    .prepare(
+      `UPDATE workflow_outbox
+       SET status = 'processing',
+           attempts = attempts + 1,
+           updated_at = ?
+       WHERE id = ? AND status IN ('pending', 'failed')`,
+    )
+    .run(input.updatedAt, input.id);
+  if (result.changes !== 1) return undefined;
+  return db
+    .prepare('SELECT * FROM workflow_outbox WHERE id = ?')
+    .get(input.id) as WorkflowOutboxRecord | undefined;
+}
+
+export function markWorkflowOutboxSucceeded(input: {
+  id: string;
+  updatedAt: string;
+}): void {
+  db.prepare(
+    `UPDATE workflow_outbox
+     SET status = 'succeeded',
+         updated_at = ?,
+         next_attempt_at = NULL,
+         last_error = NULL
+     WHERE id = ?`,
+  ).run(input.updatedAt, input.id);
+}
+
+export function markWorkflowOutboxFailed(input: {
+  id: string;
+  updatedAt: string;
+  nextAttemptAt: string | null;
+  lastError: string;
+  deadLetter?: boolean;
+}): void {
+  db.prepare(
+    `UPDATE workflow_outbox
+     SET status = ?,
+         updated_at = ?,
+         next_attempt_at = ?,
+         last_error = ?
+     WHERE id = ?`,
+  ).run(
+    input.deadLetter ? 'dead_letter' : 'failed',
+    input.updatedAt,
+    input.nextAttemptAt,
+    input.lastError,
+    input.id,
   );
 }
 

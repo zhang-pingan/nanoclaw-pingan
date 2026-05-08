@@ -23,20 +23,28 @@ import {
   createWorkflowEvent,
   createWorkflowInterrupt,
   createWorkflowInterruptResumeAttempt,
+  createWorkflowOutbox,
   createWorkflowStageEvaluation,
   createWorkflow as dbCreateWorkflow,
   getAllActiveWorkflows,
   getAllWorkflows,
   getDelegation,
   getLatestWorkflowCheckpoint,
+  getWorkflowEventByIdempotencyKey,
   getPendingWorkflowInterruptForState,
   getWorkflow,
   getWorkflowByDelegation,
   getWorkflowInterrupt,
   getWorkflowInterruptByIdempotencyKey,
   getWorkflowInterruptResumeAttemptByIdempotency,
+  listExpiredPendingWorkflowInterrupts,
   listWorkflowInterruptsByWorkflow,
+  listRunnableWorkflowOutbox,
+  markWorkflowInterruptExpired,
   listPendingWorkflowInterruptsByWorkflow,
+  markWorkflowOutboxFailed,
+  markWorkflowOutboxProcessing,
+  markWorkflowOutboxSucceeded,
   markWorkflowInterruptResumed,
   runWorkflowTransaction,
   storeChatMetadata,
@@ -53,6 +61,7 @@ import {
   WorkflowInterruptActorChannel,
   WorkflowInterruptKind,
   WorkflowInterruptRecord,
+  WorkflowStageEvalResult,
 } from './types.js';
 import {
   getCardConfig,
@@ -65,7 +74,10 @@ import {
   TemplateVars,
   WorkflowTypeConfig,
 } from './workflow-config.js';
-import { WorkflowCreateForm } from './workflow-definition.js';
+import {
+  WorkflowCreateForm,
+  WorkflowDefinitionTransition,
+} from './workflow-definition.js';
 import { getDeliverableFileNameForRole } from './workflow-artifacts.js';
 import {
   createWorkbenchManualSkipEvent,
@@ -81,6 +93,8 @@ import {
   buildWorkflowStageEvaluationRecord,
   evaluateWorkflowStage,
 } from './workflow-stage-evaluation.js';
+import { evaluateWorkflowArtifactContract } from './workflow-artifact-contract.js';
+import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 import {
   getWorkflowContextValue,
   mergeWorkflowContext,
@@ -144,6 +158,32 @@ type JsonSchema = {
   maxLength?: number;
   enum?: unknown[];
 };
+
+type WorkflowOutboxEffectType =
+  | 'send_notification'
+  | 'send_feishu_card'
+  | 'refresh_feishu_card'
+  | 'sync_workbench_action_item'
+  | 'sync_assistant_inbox'
+  | 'inject_delegation_message'
+  | 'index_artifact';
+
+interface DelegationIntent {
+  delegationId: string;
+  targetFolder: string;
+  sourceFolder: string;
+  targetJid: string;
+  skillName: string;
+  taskContent: string;
+}
+
+let workflowRuntimeStarted = false;
+let workflowWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+let workflowOutboxTimer: ReturnType<typeof setInterval> | null = null;
+let processingWorkflowOutbox = false;
+
+const WORKFLOW_WATCHDOG_INTERVAL_MS = 15_000;
+const WORKFLOW_OUTBOX_INTERVAL_MS = 2_000;
 
 // -------------------------------------------------------
 // Role resolution — per trigger channel
@@ -212,7 +252,9 @@ let deps: WorkflowDeps | null = null;
 
 export function initWorkflow(d: WorkflowDeps): void {
   deps = d;
-  loadWorkflowConfigs();
+  const configs = loadWorkflowConfigs();
+  if (!configs) return;
+  resumeWorkflowRuntime();
 }
 
 function getDeps(): WorkflowDeps {
@@ -411,6 +453,524 @@ function delegateTo(
   );
 
   return delegationId;
+}
+
+function createDurableDelegationIntent(input: {
+  workflowId: string;
+  sourceJid: string;
+  targetFolder: string;
+  sourceFolder: string;
+  skillName: string;
+  taskContent: string;
+  idempotencyKey: string;
+}): DelegationIntent {
+  const groups = getDeps().registeredGroups();
+  const targetJid = findJidByFolder(input.targetFolder, groups);
+  if (!targetJid) {
+    throw new Error(
+      `Workflow: target group folder "${input.targetFolder}" not found`,
+    );
+  }
+  const sourceJid = findJidByFolder(input.sourceFolder, groups) || '';
+  const delegationId = `wf-del-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const now = Date.now().toString();
+
+  createDelegation({
+    id: delegationId,
+    source_jid: sourceJid,
+    source_folder: input.sourceFolder,
+    target_jid: targetJid,
+    target_folder: input.targetFolder,
+    task: input.taskContent,
+    status: 'pending',
+    result: null,
+    outcome: null,
+    workflow_id: input.workflowId,
+    created_at: now,
+    updated_at: now,
+  });
+
+  enqueueWorkflowOutbox({
+    workflowId: input.workflowId,
+    effectType: 'inject_delegation_message',
+    channel: null,
+    payload: {
+      delegationId,
+      targetJid,
+      targetFolder: input.targetFolder,
+      skillName: input.skillName,
+      taskContent: input.taskContent,
+    },
+    idempotencyKey: `workflow_outbox:inject_delegation:${input.idempotencyKey}`,
+  });
+
+  return {
+    delegationId,
+    targetFolder: input.targetFolder,
+    sourceFolder: input.sourceFolder,
+    targetJid,
+    skillName: input.skillName,
+    taskContent: input.taskContent,
+  };
+}
+
+function enqueueWorkflowOutbox(input: {
+  workflowId: string;
+  eventId?: string | null;
+  effectType: WorkflowOutboxEffectType;
+  channel?: string | null;
+  payload: Record<string, unknown>;
+  idempotencyKey: string;
+  nextAttemptAt?: string | null;
+}): void {
+  const now = new Date().toISOString();
+  createWorkflowOutbox({
+    id: `wf-outbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    workflow_id: input.workflowId,
+    event_id: input.eventId || null,
+    effect_type: input.effectType,
+    channel: input.channel ?? null,
+    status: 'pending',
+    payload_json: JSON.stringify(input.payload),
+    idempotency_key: input.idempotencyKey,
+    attempts: 0,
+    next_attempt_at: input.nextAttemptAt || null,
+    last_error: null,
+    created_at: now,
+    updated_at: now,
+  });
+}
+
+function enqueueWorkflowNotification(
+  workflow: Workflow,
+  message: string,
+  keySuffix: string,
+): void {
+  enqueueWorkflowOutbox({
+    workflowId: workflow.id,
+    effectType: 'send_notification',
+    channel: 'main_group',
+    payload: {
+      message,
+      sourceJid: workflow.source_jid,
+    },
+    idempotencyKey: `workflow_outbox:notification:${workflow.id}:${keySuffix}`,
+  });
+}
+
+function enqueueWorkflowWorkbenchSync(
+  workflowId: string,
+  effect: string,
+  payload: Record<string, unknown>,
+  keySuffix: string,
+): void {
+  enqueueWorkflowOutbox({
+    workflowId,
+    effectType: 'sync_workbench_action_item',
+    channel: 'workbench',
+    payload: {
+      effect,
+      ...payload,
+    },
+    idempotencyKey: `workflow_outbox:workbench:${workflowId}:${keySuffix}`,
+  });
+}
+
+function enqueueWorkflowCard(
+  workflow: Workflow,
+  cardKey: string,
+  keySuffix: string,
+): void {
+  enqueueWorkflowOutbox({
+    workflowId: workflow.id,
+    effectType: 'send_feishu_card',
+    channel: 'feishu',
+    payload: {
+      cardKey,
+      sourceJid: workflow.source_jid,
+    },
+    idempotencyKey: `workflow_outbox:card:${workflow.id}:${cardKey}:${keySuffix}`,
+  });
+}
+
+function parseOutboxPayload(
+  payloadJson: string,
+): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(payloadJson);
+    return parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function compileDefinitionTransitionToStateTransition(
+  transition: WorkflowDefinitionTransition | StateTransition,
+): StateTransition {
+  if (typeof transition.notify === 'string' || 'role' in transition) {
+    return transition as StateTransition;
+  }
+  const definitionTransition = transition as WorkflowDefinitionTransition;
+  return {
+    target: definitionTransition.target,
+    role: definitionTransition.delegate?.role,
+    skill: definitionTransition.delegate?.skill,
+    task_template: definitionTransition.delegate?.task_template,
+    increment_round: definitionTransition.effects?.increment_round,
+    notify: definitionTransition.notify?.template,
+    card: definitionTransition.card?.ref,
+  };
+}
+
+function executeWorkflowOutboxRecord(recordId: string): void {
+  const now = new Date().toISOString();
+  const record = markWorkflowOutboxProcessing({
+    id: recordId,
+    updatedAt: now,
+  });
+  if (!record) return;
+
+  try {
+    const payload = parseOutboxPayload(record.payload_json);
+    if (record.effect_type === 'send_notification') {
+      const message = typeof payload.message === 'string' ? payload.message : '';
+      if (message) {
+        notifyMain(
+          message,
+          typeof payload.sourceJid === 'string' ? payload.sourceJid : undefined,
+          record.workflow_id,
+        );
+      }
+    } else if (record.effect_type === 'send_feishu_card') {
+      const workflow = getWorkflow(record.workflow_id);
+      const cardKey =
+        typeof payload.cardKey === 'string' ? payload.cardKey : '';
+      if (workflow && cardKey) sendConfigCard(workflow, cardKey);
+    } else if (record.effect_type === 'inject_delegation_message') {
+      const workflow = getWorkflow(record.workflow_id);
+      const targetJid =
+        typeof payload.targetJid === 'string' ? payload.targetJid : '';
+      const delegationId =
+        typeof payload.delegationId === 'string' ? payload.delegationId : '';
+      const skillName =
+        typeof payload.skillName === 'string' ? payload.skillName : '';
+      const taskContent =
+        typeof payload.taskContent === 'string' ? payload.taskContent : '';
+      const targetGroup = targetJid
+        ? getDeps().registeredGroups()[targetJid]
+        : undefined;
+      if (workflow && targetJid && targetGroup && delegationId && skillName) {
+        injectDelegation(
+          targetJid,
+          targetGroup,
+          delegationId,
+          workflow.id,
+          skillName,
+          taskContent,
+        );
+      }
+    } else if (record.effect_type === 'sync_workbench_action_item') {
+      const effect = typeof payload.effect === 'string' ? payload.effect : '';
+      if (effect === 'workflow_updated') {
+        syncWorkbenchOnWorkflowUpdated(
+          record.workflow_id,
+          typeof payload.resultSummary === 'string'
+            ? payload.resultSummary
+            : undefined,
+          { emitRealtime: false },
+        );
+      } else if (effect === 'transition') {
+        syncWorkbenchOnTransition(
+          record.workflow_id,
+          String(payload.fromStatus || ''),
+          String(payload.toStatus || ''),
+          typeof payload.delegationId === 'string'
+            ? payload.delegationId
+            : undefined,
+        );
+      } else if (effect === 'delegation_created') {
+        const delegationId =
+          typeof payload.delegationId === 'string' ? payload.delegationId : '';
+        if (delegationId) {
+          syncWorkbenchOnDelegationCreated(record.workflow_id, delegationId);
+        }
+      }
+    }
+    markWorkflowOutboxSucceeded({
+      id: record.id,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    const attempts = record.attempts || 1;
+    const deadLetter = attempts >= 5;
+    const retryMs = Math.min(60_000, 2 ** attempts * 1_000);
+    markWorkflowOutboxFailed({
+      id: record.id,
+      updatedAt: new Date().toISOString(),
+      nextAttemptAt: deadLetter
+        ? null
+        : new Date(Date.now() + retryMs).toISOString(),
+      lastError: err instanceof Error ? err.message : String(err),
+      deadLetter,
+    });
+  }
+}
+
+export function processWorkflowOutbox(limit = 50): void {
+  if (processingWorkflowOutbox) return;
+  processingWorkflowOutbox = true;
+  try {
+    const due = listRunnableWorkflowOutbox(new Date().toISOString(), limit);
+    for (const record of due) {
+      executeWorkflowOutboxRecord(record.id);
+    }
+  } finally {
+    processingWorkflowOutbox = false;
+  }
+}
+
+function validateActiveWorkflowGate(): void {
+  const activeWorkflows = getAllActiveWorkflows();
+  const invalid: string[] = [];
+  for (const workflow of activeWorkflows) {
+    const config = getWorkflowTypeConfig(workflow.workflow_type);
+    const state = config?.states[workflow.status];
+    if (!config) {
+      invalid.push(`${workflow.id}: unknown workflow_type ${workflow.workflow_type}`);
+      continue;
+    }
+    if (workflow.status !== 'paused' && !state) {
+      invalid.push(`${workflow.id}: unknown state ${workflow.status}`);
+    }
+    if ((state as { type?: string } | undefined)?.type === 'confirmation') {
+      invalid.push(`${workflow.id}: legacy confirmation state ${workflow.status}`);
+    }
+  }
+  if (invalid.length > 0) {
+    throw new Error(
+      `Active workflow migration gate failed: ${invalid.join('; ')}. Please terminate or migrate these workflows before startup.`,
+    );
+  }
+}
+
+function recoverActiveWorkflow(workflow: Workflow): void {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  if (!config) return;
+  if (workflow.status === 'paused') {
+    writeWorkflowCheckpoint({ workflow });
+    return;
+  }
+
+  const state = config.states[workflow.status];
+  if (state?.type === 'interrupt') {
+    createPendingInterruptForState(workflow);
+    enqueueWorkflowWorkbenchSync(
+      workflow.id,
+      'workflow_updated',
+      { resultSummary: null },
+      `recovery:${workflow.status}:${workflow.round}`,
+    );
+  } else if (state?.type === 'terminal') {
+    closePendingWorkflowInterrupts(
+      workflow.id,
+      'cancelled',
+      new Date().toISOString(),
+    );
+    writeWorkflowCheckpoint({ workflow });
+  } else {
+    writeWorkflowCheckpoint({ workflow });
+  }
+}
+
+function stateEnteredAt(workflow: Workflow): number {
+  const latest = getLatestWorkflowCheckpoint(workflow.id);
+  if (latest?.state_key === workflow.status) {
+    const checkpointTime = Date.parse(latest.created_at);
+    if (Number.isFinite(checkpointTime)) return checkpointTime;
+  }
+  const updatedAt = Number(workflow.updated_at);
+  if (Number.isFinite(updatedAt)) return updatedAt;
+  const parsedUpdatedAt = Date.parse(workflow.updated_at);
+  if (Number.isFinite(parsedUpdatedAt)) return parsedUpdatedAt;
+  const createdAt = Number(workflow.created_at);
+  if (Number.isFinite(createdAt)) return createdAt;
+  const parsedCreatedAt = Date.parse(workflow.created_at);
+  return Number.isFinite(parsedCreatedAt) ? parsedCreatedAt : Date.now();
+}
+
+function processTimedOutActiveWorkflow(
+  workflow: Workflow,
+  nowIso: string,
+): void {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const state = config?.states[workflow.status];
+  if (!state?.timeout_policy?.duration_ms) return;
+  if (state.type === 'interrupt') return;
+  const elapsedMs = Date.parse(nowIso) - stateEnteredAt(workflow);
+  if (!Number.isFinite(elapsedMs) || elapsedMs < state.timeout_policy.duration_ms) {
+    return;
+  }
+
+  const attempts = parseCheckpointAttempts(workflow.id);
+  const attempt = attempts[workflow.status] || 1;
+  const idempotencyKey = `workflow_timeout:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`;
+  if (getWorkflowEventByIdempotencyKey(idempotencyKey)) return;
+
+  writeWorkflowEvent({
+    workflowId: workflow.id,
+    eventType: 'timeout_fired',
+    stateKey: workflow.status,
+    payload: {
+      timeout_policy: state.timeout_policy,
+      attempt,
+    },
+    idempotencyKey,
+    createdAt: nowIso,
+  });
+
+  applyTransition(
+    workflow,
+    compileDefinitionTransitionToStateTransition(state.timeout_policy.on_timeout),
+    resolveRolesOrEmpty(workflow),
+    {
+      workflowUpdates: {
+        context: {
+          last_state_timeout: {
+            state_key: workflow.status,
+            fired_at: nowIso,
+            attempt,
+          },
+        },
+      },
+    },
+  );
+}
+
+export function resumeWorkflowRuntime(): void {
+  validateActiveWorkflowGate();
+  for (const workflow of getAllActiveWorkflows()) {
+    recoverActiveWorkflow(workflow);
+  }
+  processWorkflowOutbox();
+  if (!workflowRuntimeStarted) {
+    workflowWatchdogTimer = setInterval(
+      runWorkflowWatchdogOnce,
+      WORKFLOW_WATCHDOG_INTERVAL_MS,
+    );
+    workflowWatchdogTimer.unref?.();
+    workflowOutboxTimer = setInterval(
+      () => processWorkflowOutbox(),
+      WORKFLOW_OUTBOX_INTERVAL_MS,
+    );
+    workflowOutboxTimer.unref?.();
+    workflowRuntimeStarted = true;
+  }
+}
+
+export function stopWorkflowRuntimeForTest(): void {
+  if (workflowWatchdogTimer) clearInterval(workflowWatchdogTimer);
+  if (workflowOutboxTimer) clearInterval(workflowOutboxTimer);
+  workflowWatchdogTimer = null;
+  workflowOutboxTimer = null;
+  workflowRuntimeStarted = false;
+}
+
+export function runWorkflowWatchdogOnce(nowIso = new Date().toISOString()): void {
+  const expiredInterrupts = listExpiredPendingWorkflowInterrupts(nowIso);
+  for (const interrupt of expiredInterrupts) {
+    try {
+      runWorkflowTransaction(() => {
+        const latestInterrupt = getWorkflowInterrupt(interrupt.id);
+        if (!latestInterrupt || latestInterrupt.status !== 'pending') return;
+        const workflow = getWorkflow(latestInterrupt.workflow_id);
+        if (!workflow || workflow.status !== latestInterrupt.state_key) return;
+        const config = getWorkflowTypeConfig(workflow.workflow_type);
+        const state = config?.states[latestInterrupt.state_key];
+        if (!state || state.type !== 'interrupt') return;
+
+        const marked = markWorkflowInterruptExpired({
+          interruptId: latestInterrupt.id,
+          updatedAt: nowIso,
+        });
+        if (!marked) return;
+
+        writeWorkflowEvent({
+          workflowId: workflow.id,
+          eventType: 'interrupt_expired',
+          stateKey: latestInterrupt.state_key,
+          refType: 'workflow_interrupt',
+          refId: latestInterrupt.id,
+          payload: {
+            interrupt_id: latestInterrupt.id,
+            expires_at: latestInterrupt.expires_at,
+          },
+          idempotencyKey: `workflow_interrupt_expired:${latestInterrupt.id}`,
+          createdAt: nowIso,
+        });
+
+        const definitionTransition =
+          state.on_expire || state.timeout_policy?.on_timeout;
+        if (definitionTransition) {
+          writeWorkflowEvent({
+            workflowId: workflow.id,
+            eventType: 'timeout_fired',
+            stateKey: latestInterrupt.state_key,
+            payload: {
+              timeout_policy: state.timeout_policy || null,
+              attempt: parseCheckpointAttempts(workflow.id)[workflow.status] || 1,
+            },
+            idempotencyKey: `workflow_timeout:${workflow.id}:${workflow.status}:${workflow.round}:${
+              parseCheckpointAttempts(workflow.id)[workflow.status] || 1
+            }`,
+            createdAt: nowIso,
+          });
+          applyTransition(
+            workflow,
+            compileDefinitionTransitionToStateTransition(definitionTransition),
+            resolveRolesOrEmpty(workflow),
+            {
+              workflowUpdates: {
+                context: {
+                  last_interrupt_expired: {
+                    interrupt_id: latestInterrupt.id,
+                    state_key: latestInterrupt.state_key,
+                    expired_at: nowIso,
+                  },
+                },
+              },
+            },
+          );
+        } else {
+          writeWorkflowCheckpoint({
+            workflow,
+            pendingInterruptId: null,
+          });
+        }
+      });
+    } catch (err) {
+      logger.error(
+        { err, interruptId: interrupt.id },
+        'Workflow watchdog failed to process expired interrupt',
+      );
+    }
+  }
+  for (const workflow of getAllActiveWorkflows()) {
+    try {
+      runWorkflowTransaction(() => {
+        const latest = getWorkflow(workflow.id);
+        if (!latest || isTerminalStatus(latest)) return;
+        processTimedOutActiveWorkflow(latest, nowIso);
+      });
+    } catch (err) {
+      logger.error(
+        { err, workflowId: workflow.id },
+        'Workflow watchdog failed to process active workflow timeout',
+      );
+    }
+  }
+  processWorkflowOutbox();
 }
 
 function readFrontMatter(content: string): Record<string, unknown> | null {
@@ -912,8 +1472,11 @@ function createPendingInterruptForState(
   }
 
   const now = new Date().toISOString();
-  const idempotencyKey = `workflow_interrupt:${workflow.id}:${workflow.status}:${workflow.round}:1`;
-  const interruptId = `wi-${workflow.id}-${workflow.status}-${workflow.round}`;
+  const attempts = parseCheckpointAttempts(workflow.id);
+  const attempt = (attempts[workflow.status] || 0) + 1;
+  attempts[workflow.status] = attempt;
+  const idempotencyKey = `workflow_interrupt:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`;
+  const interruptId = `wi-${workflow.id}-${workflow.status}-${workflow.round}-${attempt}`;
   const allowedChannels = state.allowed_channels || [
     'web',
     'feishu',
@@ -972,6 +1535,7 @@ function createPendingInterruptForState(
   writeWorkflowCheckpoint({
     workflow,
     pendingInterruptId: persisted.id,
+    attempts,
   });
   return persisted;
 }
@@ -1094,6 +1658,138 @@ function isTerminalStatus(workflow: Workflow): boolean {
   return config?.states[workflow.status]?.type === 'terminal';
 }
 
+function transitionForEvaluation(
+  stateConfig: NonNullable<WorkflowTypeConfig['states'][string]>,
+  evaluationStatus: ReturnType<typeof evaluateWorkflowStage>['status'],
+): StateTransition | undefined {
+  if (stateConfig.evaluator) {
+    if (evaluationStatus === 'passed' && stateConfig.evaluator.on_pass) {
+      return compileDefinitionTransitionToStateTransition(
+        stateConfig.evaluator.on_pass,
+      );
+    }
+    if (
+      evaluationStatus === 'needs_revision' &&
+      stateConfig.evaluator.on_needs_revision
+    ) {
+      return compileDefinitionTransitionToStateTransition(
+        stateConfig.evaluator.on_needs_revision,
+      );
+    }
+    if (evaluationStatus === 'failed' && stateConfig.evaluator.on_fail) {
+      return compileDefinitionTransitionToStateTransition(
+        stateConfig.evaluator.on_fail,
+      );
+    }
+    if (evaluationStatus === 'pending' && stateConfig.evaluator.on_pending) {
+      return compileDefinitionTransitionToStateTransition(
+        stateConfig.evaluator.on_pending,
+      );
+    }
+  }
+
+  if (evaluationStatus === 'passed') {
+    return stateConfig.on_complete?.success;
+  }
+  if (evaluationStatus === 'needs_revision' || evaluationStatus === 'failed') {
+    return stateConfig.on_complete?.failure;
+  }
+  return undefined;
+}
+
+function scheduleEvaluatorRetryIfConfigured(input: {
+  workflow: Workflow;
+  stateConfig: NonNullable<WorkflowTypeConfig['states'][string]>;
+  evaluationId: string;
+  nowIso?: string;
+}): boolean {
+  const policy = input.stateConfig.retry_policy;
+  if (!policy?.retry_on?.includes('evaluator_pending')) return false;
+  const attempts = parseCheckpointAttempts(input.workflow.id);
+  const currentAttempt = attempts[input.workflow.status] || 1;
+  if (currentAttempt >= policy.max_attempts) return false;
+  const nextAttempt = currentAttempt + 1;
+  attempts[input.workflow.status] = nextAttempt;
+  const now = input.nowIso || new Date().toISOString();
+  const delayMs = Math.min(
+    policy.max_delay_ms || policy.initial_delay_ms || 0,
+    policy.initial_delay_ms || 0,
+  );
+  const nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+  writeWorkflowEvent({
+    workflowId: input.workflow.id,
+    eventType: 'retry_scheduled',
+    stateKey: input.workflow.status,
+    refType: 'workflow_stage_evaluation',
+    refId: input.evaluationId,
+    payload: {
+      reason: 'evaluator_pending',
+      next_attempt_at: nextAttemptAt,
+      attempt: nextAttempt,
+    },
+    idempotencyKey: `workflow_retry:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${nextAttempt}`,
+    createdAt: now,
+  });
+  writeWorkflowCheckpoint({
+    workflow: input.workflow,
+    currentDelegationId: null,
+    attempts,
+  });
+  return true;
+}
+
+function exhaustedRetryTransition(
+  stateConfig: NonNullable<WorkflowTypeConfig['states'][string]>,
+): StateTransition | undefined {
+  return stateConfig.retry_policy?.on_exhausted
+    ? compileDefinitionTransitionToStateTransition(
+        stateConfig.retry_policy.on_exhausted,
+      )
+    : undefined;
+}
+
+function mergeEvaluationResults(input: {
+  stageEvaluation: WorkflowStageEvalResult;
+  contractEvaluation: WorkflowStageEvalResult | null;
+  evaluatorRef?: string;
+}): WorkflowStageEvalResult {
+  if (!input.contractEvaluation) return input.stageEvaluation;
+  const evaluatorConfig = getWorkflowEvaluatorConfig(input.evaluatorRef);
+  const missingStatus =
+    evaluatorConfig?.status_mapping?.artifact_missing || 'pending';
+  const contractStatus =
+    input.contractEvaluation.status === 'pending'
+      ? missingStatus
+      : input.contractEvaluation.status;
+  const severityRank: Record<WorkflowStageEvalResult['status'], number> = {
+    passed: 0,
+    needs_revision: 1,
+    pending: 2,
+    failed: 3,
+  };
+  const status =
+    severityRank[contractStatus] > severityRank[input.stageEvaluation.status]
+      ? contractStatus
+      : input.stageEvaluation.status;
+  return {
+    status,
+    score: Math.min(input.stageEvaluation.score, input.contractEvaluation.score),
+    summary:
+      status === input.stageEvaluation.status
+        ? input.stageEvaluation.summary
+        : input.contractEvaluation.summary,
+    findings: [
+      ...input.contractEvaluation.findings,
+      ...input.stageEvaluation.findings,
+    ],
+    evidence: [
+      ...input.contractEvaluation.evidence,
+      ...input.stageEvaluation.evidence,
+    ],
+    evaluatorType: 'hybrid',
+  };
+}
+
 function resumeCurrentWorkflowInterrupt(
   workflowId: string,
   action: string,
@@ -1148,7 +1844,9 @@ export function resumeWorkflowInterrupt(input: {
   idempotencyKey?: string;
 }): { ok: true; workflowId: string } | { ok: false; error: string } {
   const payload = input.payload || {};
-  return runWorkflowTransaction(() => {
+  let result: { ok: true; workflowId: string } | { ok: false; error: string };
+  try {
+    result = runWorkflowTransaction(() => {
     if (input.idempotencyKey) {
       const previous = getWorkflowInterruptResumeAttemptByIdempotency(
         input.interruptId,
@@ -1388,17 +2086,23 @@ export function resumeWorkflowInterrupt(input: {
       input.action,
       payload,
     );
-    applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
-      revisionText:
-        typeof contextPatch.revision_text === 'string'
-          ? contextPatch.revision_text
-          : undefined,
-      accessToken:
-        typeof contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken] === 'string'
-          ? String(contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken])
-          : undefined,
-      workflowUpdates: { context: contextPatch },
-    });
+    try {
+      applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
+        revisionText:
+          typeof contextPatch.revision_text === 'string'
+            ? contextPatch.revision_text
+            : undefined,
+        accessToken:
+          typeof contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken] === 'string'
+            ? String(contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken])
+            : undefined,
+        workflowUpdates: { context: contextPatch },
+      });
+    } catch (err) {
+      throw new Error(
+        `恢复中断后的状态流转失败: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     const updatedWorkflow = getWorkflow(workflow.id);
     if (updatedWorkflow) {
@@ -1412,7 +2116,15 @@ export function resumeWorkflowInterrupt(input: {
       });
     }
     return { ok: true, workflowId: workflow.id } as const;
-  });
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+  if (result.ok) processWorkflowOutbox();
+  return result;
 }
 
 function resolveRolesOrEmpty(workflow: Workflow): Record<string, string> {
@@ -1486,11 +2198,18 @@ function applyTransition(
     extra,
   );
 
-  // 3. Delegate if transition specifies a role + skill
+  // 3. Create durable delegation intent if transition specifies a role + skill
   const delegateRole = transition.role;
   const delegateSkill = transition.skill;
+  let delegationIntent: DelegationIntent | null = null;
 
-  if (delegateRole && delegateSkill && roles[delegateRole]) {
+  if (delegateRole && delegateSkill) {
+    const targetFolder = roles[delegateRole];
+    if (!targetFolder) {
+      throw new Error(
+        `Workflow: role "${delegateRole}" has no resolved target folder`,
+      );
+    }
     const taskContent = transition.task_template
       ? renderTemplate(transition.task_template, vars, roles)
       : '';
@@ -1501,27 +2220,17 @@ function applyTransition(
       extra,
     );
 
-    try {
-      const delegationId = delegateTo(
-        roles[delegateRole],
-        mainFolder,
-        workflow.id,
-        delegateSkill,
-        finalTaskContent,
-      );
-      updates.current_delegation_id = delegationId;
-    } catch (err) {
-      logger.error(
-        { err, workflowId: workflow.id, role: delegateRole },
-        'Failed to delegate task in transition',
-      );
-      notifyMain(
-        `[流程异常] 需求「${workflow.name}」(${workflow.id}) 委派任务失败。`,
-        workflow.source_jid,
-        workflow.id,
-      );
-      return;
-    }
+    const delegationKey = `workflow_delegation:${workflow.id}:${transition.target}:${round}:1`;
+    delegationIntent = createDurableDelegationIntent({
+      workflowId: workflow.id,
+      sourceJid: workflow.source_jid,
+      targetFolder,
+      sourceFolder: mainFolder,
+      skillName: delegateSkill,
+      taskContent: finalTaskContent,
+      idempotencyKey: delegationKey,
+    });
+    updates.current_delegation_id = delegationIntent.delegationId;
   } else {
     // No delegation — clear current_delegation_id
     updates.current_delegation_id = '';
@@ -1542,17 +2251,23 @@ function applyTransition(
   const isPassiveSelfLoop =
     transition.target === fromStatus && !updates.current_delegation_id;
   if (!isPassiveSelfLoop) {
-    syncWorkbenchOnTransition(
+    enqueueWorkflowWorkbenchSync(
       workflow.id,
-      fromStatus,
-      transition.target,
-      updates.current_delegation_id,
+      'transition',
+      {
+        fromStatus,
+        toStatus: transition.target,
+        delegationId: updates.current_delegation_id,
+      },
+      `transition:${fromStatus}:${transition.target}:${round}`,
     );
   }
   if (updates.current_delegation_id) {
-    syncWorkbenchOnDelegationCreated(
+    enqueueWorkflowWorkbenchSync(
       workflow.id,
-      updates.current_delegation_id,
+      'delegation_created',
+      { delegationId: updates.current_delegation_id },
+      `delegation_created:${updates.current_delegation_id}`,
     );
     writeWorkflowEvent({
       workflowId: workflow.id,
@@ -1564,12 +2279,16 @@ function applyTransition(
         delegation_id: updates.current_delegation_id,
         idempotency_key: `workflow_delegation:${workflow.id}:${transition.target}:${round}:1`,
         attempt: 1,
+        target_folder: delegationIntent?.targetFolder || null,
       },
     });
   }
-  syncWorkbenchOnWorkflowUpdated(workflow.id, extra?.resultSummary, {
-    emitRealtime: false,
-  });
+  enqueueWorkflowWorkbenchSync(
+    workflow.id,
+    'workflow_updated',
+    { resultSummary: extra?.resultSummary || null },
+    `workflow_updated:${transition.target}:${round}`,
+  );
 
   const transitionedWorkflow = getWorkflow(workflow.id);
   if (transitionedWorkflow) {
@@ -1582,10 +2301,10 @@ function applyTransition(
 
   // 5. Send notification
   if (transition.notify) {
-    notifyMain(
+    enqueueWorkflowNotification(
+      { ...workflow, ...updates, context: mergeWorkflowContext(workflow.context, updates.context) },
       renderTemplate(transition.notify, vars, roles),
-      workflow.source_jid,
-      workflow.id,
+      `transition_notify:${fromStatus}:${transition.target}:${round}`,
     );
   }
 
@@ -1597,7 +2316,11 @@ function applyTransition(
       ? targetState.card
       : transition.card;
   if (cardKey && updatedWorkflow) {
-    sendConfigCard(updatedWorkflow, cardKey);
+    enqueueWorkflowCard(
+      updatedWorkflow,
+      cardKey,
+      `transition_card:${fromStatus}:${transition.target}:${round}`,
+    );
   }
 }
 
@@ -2031,9 +2754,6 @@ export function returnWorkflowToInterruptStage(
   return {};
 }
 
-export const returnWorkflowToConfirmationStage =
-  returnWorkflowToInterruptStage;
-
 export function retryWorkflowStage(
   workflowId: string,
   stageKey: string,
@@ -2230,10 +2950,23 @@ export function onDelegationComplete(delegationId: string): void {
     ...workflow,
     context: mergeWorkflowContext(workflow.context, contextUpdates),
   };
-  const evaluation = evaluateWorkflowStage({
+  const stageEvaluation = evaluateWorkflowStage({
     workflow: evaluationWorkflow,
     stageKey: workflow.status,
     delegation,
+  });
+  const contractEvaluation = evaluateWorkflowArtifactContract({
+    workflow: evaluationWorkflow,
+    contractRef:
+      stateConfig.artifact_contract?.ref ||
+      getWorkflowEvaluatorConfig(stateConfig.evaluator?.ref)?.deterministic
+        ?.artifact_contract,
+    payload: payload as unknown as Record<string, unknown>,
+  });
+  const evaluation = mergeEvaluationResults({
+    stageEvaluation,
+    contractEvaluation,
+    evaluatorRef: stateConfig.evaluator?.ref,
   });
   const evaluationRecord = buildWorkflowStageEvaluationRecord({
     workflow: evaluationWorkflow,
@@ -2242,6 +2975,29 @@ export function onDelegationComplete(delegationId: string): void {
     result: evaluation,
   });
   createWorkflowStageEvaluation(evaluationRecord);
+  workflowUpdates.context = mergeWorkflowContext(workflowUpdates.context || {}, {
+    latest_evaluator_result: {
+      state_key: workflow.status,
+      evaluation_id: evaluationRecord.id,
+      evaluator_ref: stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
+      artifact_contract_ref: stateConfig.artifact_contract?.ref || null,
+      status: evaluation.status,
+      score: evaluation.score,
+      summary: evaluation.summary,
+      findings: evaluation.findings,
+      evidence: evaluation.evidence,
+      evaluated_at: evaluationRecord.updated_at,
+    },
+    ...(stateConfig.rollback_hint
+      ? {
+          latest_rollback_hint: {
+            ref: stateConfig.rollback_hint.ref,
+            state_key: workflow.status,
+            evaluation_id: evaluationRecord.id,
+          },
+        }
+      : {}),
+  });
   writeWorkflowEvent({
     workflowId: workflow.id,
     eventType: 'artifact_evaluated',
@@ -2277,11 +3033,31 @@ export function onDelegationComplete(delegationId: string): void {
     resultSummary = evaluation.summary;
   }
 
-  if (evaluation.status === 'pending') {
+  const evaluatorTransition = transitionForEvaluation(
+    stateConfig,
+    evaluation.status,
+  );
+  const retryExhaustedTransition =
+    evaluation.status === 'pending'
+      ? exhaustedRetryTransition(stateConfig)
+      : undefined;
+
+  if (
+    evaluation.status === 'pending' &&
+    !evaluatorTransition &&
+    !retryExhaustedTransition
+  ) {
     updateWorkflow(workflow.id, {
       current_delegation_id: '',
       ...(workflowUpdates.context ? { context: workflowUpdates.context } : {}),
     });
+    const pendingWorkflow = getWorkflow(workflow.id);
+    if (pendingWorkflow) {
+      writeWorkflowCheckpoint({
+        workflow: pendingWorkflow,
+        currentDelegationId: null,
+      });
+    }
     syncWorkbenchOnWorkflowUpdated(workflow.id, evaluation.summary);
     syncWorkbenchOnStageEvaluationActionNeeded(
       workflow.id,
@@ -2289,6 +3065,11 @@ export function onDelegationComplete(delegationId: string): void {
       evaluationRecord.id,
       { keepVisibleWhenCurrentStage: true },
     );
+    scheduleEvaluatorRetryIfConfigured({
+      workflow: pendingWorkflow || workflow,
+      stateConfig,
+      evaluationId: evaluationRecord.id,
+    });
     notifyMain(
       `[阶段评测] 需求「${workflow.name}」(${workflow.id}) 在阶段 ${config.status_labels[workflow.status] || workflow.status} 缺少充分证据，已停止自动流转。\n\n${evaluation.summary}\n\n请补充交付物或结果后重跑当前阶段。`,
       workflow.source_jid,
@@ -2297,16 +3078,13 @@ export function onDelegationComplete(delegationId: string): void {
     return;
   }
 
-  const transitionOutcome =
-    evaluation.status === 'passed' ? 'success' : 'failure';
-  const transition = stateConfig.on_complete[transitionOutcome];
+  const transition = evaluatorTransition || retryExhaustedTransition;
   if (!transition) {
     logger.warn(
       {
         workflowId: workflow.id,
         status: workflow.status,
         evaluationStatus: evaluation.status,
-        transitionOutcome,
       },
       'No transition defined for evaluated outcome',
     );

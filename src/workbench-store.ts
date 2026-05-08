@@ -19,6 +19,7 @@ import {
   getWorkbenchSubtaskByStage,
   getWorkbenchTaskByWorkflowId,
   getWorkflow,
+  listWorkflowInterruptsByWorkflow,
   listWorkbenchActionItemsByTask,
   listWorkbenchActionItemsBySource,
   listWorkflowStageEvaluationsByWorkflow,
@@ -393,8 +394,11 @@ function ensurePendingInterruptForWorkbench(
   if (!config || state?.type !== 'interrupt') return null;
 
   const now = new Date().toISOString();
+  const attempts = listWorkflowInterruptsByWorkflow(workflow.id).filter(
+    (interrupt) => interrupt.state_key === workflow.status,
+  ).length + 1;
   const interrupt: WorkflowInterruptRecord = {
-    id: `wi-${workflow.id}-${workflow.status}-${workflow.round}`,
+    id: `wi-${workflow.id}-${workflow.status}-${workflow.round}-${attempts}`,
     workflow_id: workflow.id,
     state_key: workflow.status,
     kind: state.kind || 'approval',
@@ -416,7 +420,7 @@ function ensurePendingInterruptForWorkbench(
     resume_action: null,
     resume_payload_json: null,
     resume_error: null,
-    idempotency_key: `workflow_interrupt:${workflow.id}:${workflow.status}:${workflow.round}:1`,
+    idempotency_key: `workflow_interrupt:${workflow.id}:${workflow.status}:${workflow.round}:${attempts}`,
     created_at: now,
     updated_at: now,
     expires_at: state.timeout_policy?.duration_ms

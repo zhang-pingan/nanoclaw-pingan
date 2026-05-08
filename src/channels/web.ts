@@ -84,6 +84,13 @@ import {
   validateWorkflowDefinition,
 } from '../workflow-compiler.js';
 import { loadWorkflowConfigs } from '../workflow-config.js';
+import {
+  cancelWorkflow,
+  pauseWorkflow,
+  resumeWorkflowInterrupt,
+  retryWorkflowStage,
+  returnWorkflowToInterruptStage,
+} from '../workflow.js';
 import { loadMysqlConfigs } from '../mysql-proxy.js';
 import {
   completeTodayPlan,
@@ -1077,6 +1084,27 @@ class WebChannel {
       }
       if (pathname === '/api/workbench/task/action' && req.method === 'POST') {
         return this.apiWorkbenchTaskAction(req, res);
+      }
+      const workflowInterruptResumeMatch = pathname.match(
+        /^\/api\/workflow-interrupts\/([^/]+)\/resume$/,
+      );
+      if (workflowInterruptResumeMatch && req.method === 'POST') {
+        return this.apiResumeWorkflowInterrupt(
+          workflowInterruptResumeMatch[1],
+          req,
+          res,
+        );
+      }
+      const workflowControlMatch = pathname.match(
+        /^\/api\/workflows\/([^/]+)\/(pause|cancel|retry-stage|return-to-stage)$/,
+      );
+      if (workflowControlMatch && req.method === 'POST') {
+        return this.apiWorkflowControl(
+          workflowControlMatch[1],
+          workflowControlMatch[2],
+          req,
+          res,
+        );
       }
       if (pathname === '/api/workbench/action-item' && req.method === 'POST') {
         return this.apiWorkbenchActionItem(req, res);
@@ -3046,6 +3074,92 @@ class WebChannel {
     const detail = getWorkbenchTaskDetail(data.task_id);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, task: detail?.task || null }));
+  }
+
+  private async apiResumeWorkflowInterrupt(
+    interruptId: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as {
+      action?: string;
+      payload?: Record<string, unknown>;
+      idempotency_key?: string;
+      actor?: {
+        userId?: string;
+        displayName?: string;
+      };
+    };
+    if (!data.action) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'action required' }));
+      return;
+    }
+
+    const result = resumeWorkflowInterrupt({
+      interruptId,
+      action: data.action,
+      payload: data.payload || {},
+      actor: {
+        channel: 'web',
+        userId: data.actor?.userId || 'web',
+        displayName: data.actor?.displayName,
+      },
+      idempotencyKey: data.idempotency_key,
+    });
+    if (!result.ok) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: result.error }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, workflow_id: result.workflowId }));
+  }
+
+  private async apiWorkflowControl(
+    workflowId: string,
+    action: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown = {};
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      body = {};
+    }
+    const data = body as {
+      stage_key?: string;
+      retry_note?: string;
+    };
+
+    const result =
+      action === 'pause'
+        ? pauseWorkflow(workflowId)
+        : action === 'cancel'
+          ? cancelWorkflow(workflowId)
+          : action === 'retry-stage'
+            ? retryWorkflowStage(workflowId, data.stage_key || '', {
+                retryNote: data.retry_note,
+              })
+            : returnWorkflowToInterruptStage(workflowId, data.stage_key || '');
+
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: result.error }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, workflow_id: workflowId }));
   }
 
   private findPreferredMainGroupJid(): string | null {

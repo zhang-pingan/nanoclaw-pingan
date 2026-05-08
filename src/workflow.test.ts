@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   _initTestDatabase,
   createDelegation,
+  createWorkflowInterrupt,
   createWorkflow,
   getAllRegisteredGroups,
   getDelegationsByWorkflow,
   getLatestWorkflowStageEvaluation,
   getPendingWorkflowInterruptForState,
+  listWorkflowInterruptsByWorkflow,
   getWorkflow,
   setRegisteredGroup,
   storeChatMetadata,
@@ -24,6 +26,9 @@ import {
   initWorkflow,
   onDelegationComplete,
   resumeWorkflowInterrupt,
+  returnWorkflowToInterruptStage,
+  runWorkflowWatchdogOnce,
+  stopWorkflowRuntimeForTest,
 } from './workflow.js';
 import {
   getWorkflowContextValue,
@@ -144,7 +149,39 @@ function buildStructuredResult(
   });
 }
 
+function createWorkflowAtInterrupt(input: {
+  id: string;
+  state: string;
+  round?: number;
+}): void {
+  createWorkflow({
+    id: input.id,
+    name: input.id,
+    service: TEST_SERVICE,
+    start_from: input.state,
+    context: {
+      main_branch: 'main',
+      work_branch: 'feature/test',
+      deliverable: '2026-04-08_feature',
+      staging_base_branch: 'staging',
+      staging_work_branch: 'staging-deploy/feature-test',
+      access_token: '',
+      requirement_description: 'runtime regression',
+      requirement_files: [],
+    },
+    status: input.state,
+    current_delegation_id: '',
+    round: input.round || 0,
+    source_jid: 'main@g.us',
+    paused_from: null,
+    workflow_type: 'dev_test',
+    created_at: '2026-04-08T00:00:00.000Z',
+    updated_at: '2026-04-08T00:00:00.000Z',
+  });
+}
+
 beforeEach(() => {
+  stopWorkflowRuntimeForTest();
   _initTestDatabase();
   fs.rmSync(path.join(PROJECT_ROOT, 'projects', TEST_SERVICE), {
     recursive: true,
@@ -158,6 +195,160 @@ beforeEach(() => {
     registeredGroups: () => getAllRegisteredGroups(),
     enqueueMessageCheck: () => {},
   });
+});
+
+describe('durable interrupt runtime', () => {
+  it('rolls back interrupt resume when transition delegation cannot be created', () => {
+    stopWorkflowRuntimeForTest();
+    _initTestDatabase();
+    for (const [jid, group] of GROUPS) {
+      setRegisteredGroup(jid, group);
+      storeChatMetadata(jid, '2026-04-08T00:00:00.000Z');
+    }
+    initWorkflow({
+      registeredGroups: () => ({
+        ...getAllRegisteredGroups(),
+        'ops@g.us': {
+          name: 'Ops',
+          folder: 'web_ops_hidden',
+          trigger: '/nc',
+          added_at: '2026-04-08T00:00:00.000Z',
+        },
+      }),
+      enqueueMessageCheck: () => {},
+    });
+    createWorkflowAtInterrupt({
+      id: 'wf-resume-fail',
+      state: 'awaiting_confirm',
+    });
+    createWorkflowInterrupt({
+      id: 'wi-resume-fail',
+      workflow_id: 'wf-resume-fail',
+      state_key: 'awaiting_confirm',
+      kind: 'approval',
+      status: 'pending',
+      title: 'awaiting confirm',
+      body: null,
+      resume_payload_schema_json: JSON.stringify({ type: 'object' }),
+      allowed_actions_json: JSON.stringify(['approve']),
+      allowed_channels_json: JSON.stringify(['web', 'feishu', 'assistant']),
+      assigned_role: null,
+      action_payload_json: null,
+      created_by: 'test',
+      resumed_by: null,
+      resume_action: null,
+      resume_payload_json: null,
+      resume_error: null,
+      idempotency_key: 'workflow_interrupt:wf-resume-fail:awaiting_confirm:0:1',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+      expires_at: null,
+      resumed_at: null,
+      cancelled_at: null,
+      expired_at: null,
+    });
+    const interrupt = getPendingWorkflowInterruptForState(
+      'wf-resume-fail',
+      'awaiting_confirm',
+    );
+    expect(interrupt).toBeDefined();
+
+    const result = resumeWorkflowInterrupt({
+      interruptId: interrupt!.id,
+      action: 'approve',
+      payload: {},
+      actor: { channel: 'web', userId: 'tester' },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(getWorkflow('wf-resume-fail')?.status).toBe('awaiting_confirm');
+    expect(
+      getPendingWorkflowInterruptForState(
+        'wf-resume-fail',
+        'awaiting_confirm',
+      )?.id,
+    ).toBe(interrupt!.id);
+  });
+
+  it('creates a fresh pending interrupt when re-entering the same state', () => {
+    createWorkflowAtInterrupt({
+      id: 'wf-reenter-interrupt',
+      state: 'plan_confirm',
+    });
+    initWorkflow({
+      registeredGroups: () => getAllRegisteredGroups(),
+      enqueueMessageCheck: () => {},
+    });
+    const first = getPendingWorkflowInterruptForState(
+      'wf-reenter-interrupt',
+      'plan_confirm',
+    );
+    expect(first).toBeDefined();
+
+    const firstResult = resumeWorkflowInterrupt({
+      interruptId: first!.id,
+      action: 'revise',
+      payload: { revision_text: '补充边界条件' },
+      actor: { channel: 'web', userId: 'tester' },
+    });
+    expect(firstResult.ok).toBe(true);
+
+    returnWorkflowToInterruptStage('wf-reenter-interrupt', 'plan_confirm');
+    const second = getPendingWorkflowInterruptForState(
+      'wf-reenter-interrupt',
+      'plan_confirm',
+    );
+
+    expect(second).toBeDefined();
+    expect(second!.id).not.toBe(first!.id);
+    expect(
+      listWorkflowInterruptsByWorkflow('wf-reenter-interrupt').filter(
+        (interrupt) => interrupt.state_key === 'plan_confirm',
+      ),
+    ).toHaveLength(2);
+  });
+
+  it('expires pending interrupts through the durable watchdog transition', () => {
+    const workflowId = 'wf-expire-interrupt';
+    createWorkflowAtInterrupt({
+      id: 'wf-expire-interrupt',
+      state: 'testing_confirm',
+    });
+    createWorkflowInterrupt({
+      id: 'wi-expired-testing-confirm',
+      workflow_id: workflowId,
+      state_key: 'testing_confirm',
+      kind: 'credential',
+      status: 'pending',
+      title: 'expired',
+      body: null,
+      resume_payload_schema_json: JSON.stringify({ type: 'object' }),
+      allowed_actions_json: JSON.stringify(['skip']),
+      allowed_channels_json: JSON.stringify(['web', 'feishu', 'assistant']),
+      assigned_role: null,
+      action_payload_json: null,
+      created_by: 'test',
+      resumed_by: null,
+      resume_action: null,
+      resume_payload_json: null,
+      resume_error: null,
+      idempotency_key: 'workflow_interrupt:wf-expire-interrupt:testing_confirm:0:expired',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+      expires_at: '2026-04-08T00:00:01.000Z',
+      resumed_at: null,
+      cancelled_at: null,
+      expired_at: null,
+    });
+
+    runWorkflowWatchdogOnce('2026-04-08T00:00:02.000Z');
+
+    expect(
+      getPendingWorkflowInterruptForState(workflowId, 'testing_confirm'),
+    ).toBeUndefined();
+    expect(getWorkflow(workflowId)?.status).toBe('testing_confirm');
+  });
+
 });
 
 describe('workflow metadata and branch flow', () => {
