@@ -184,6 +184,14 @@ function createAssistantWindow(): void {
     visibleOnFullScreen: true,
   });
   assistantWindow.loadFile(rendererPath('index.html'));
+  assistantWindow.webContents.on('context-menu', () => {
+    Menu.buildFromTemplate([
+      {
+        label: '打开工作站',
+        click: () => openWorkstationClient(),
+      },
+    ]).popup({ window: assistantWindow || undefined });
+  });
 
   assistantWindow.on('close', (event) => {
     if (isQuitting) return;
