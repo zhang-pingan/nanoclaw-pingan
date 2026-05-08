@@ -90,8 +90,7 @@ export interface WorkflowDefinitionStateBase {
   rollback_hint?: WorkflowDefinitionRollbackHintRef;
 }
 
-export interface WorkflowDefinitionDelegationState
-  extends WorkflowDefinitionStateBase {
+export interface WorkflowDefinitionDelegationState extends WorkflowDefinitionStateBase {
   type: 'delegation';
   delegate: WorkflowDefinitionDelegate;
   on_complete: {
@@ -107,13 +106,9 @@ export type WorkflowDefinitionInterruptKind =
   | 'human_input'
   | 'external_blocker';
 
-export type WorkflowDefinitionInterruptChannel =
-  | 'web'
-  | 'feishu'
-  | 'assistant';
+export type WorkflowDefinitionInterruptChannel = 'web' | 'feishu' | 'assistant';
 
-export interface WorkflowDefinitionInterruptState
-  extends WorkflowDefinitionStateBase {
+export interface WorkflowDefinitionInterruptState extends WorkflowDefinitionStateBase {
   type: 'interrupt';
   kind: WorkflowDefinitionInterruptKind;
   card?: WorkflowDefinitionCardRef;
@@ -127,14 +122,16 @@ export interface WorkflowDefinitionInterruptState
   on_expire?: WorkflowDefinitionTransition;
 }
 
-export interface WorkflowDefinitionTerminalState
-  extends WorkflowDefinitionStateBase {
+export interface WorkflowDefinitionTerminalState extends WorkflowDefinitionStateBase {
   type: 'terminal';
 }
 
-export interface WorkflowDefinitionSystemState
-  extends WorkflowDefinitionStateBase {
+export interface WorkflowDefinitionSystemState extends WorkflowDefinitionStateBase {
   type: 'system';
+  on_complete?: {
+    success: WorkflowDefinitionTransition;
+    failure?: WorkflowDefinitionTransition;
+  };
 }
 
 export type WorkflowDefinitionState =

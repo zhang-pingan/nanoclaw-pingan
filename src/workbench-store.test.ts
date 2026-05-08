@@ -24,8 +24,10 @@ import { PROJECT_ROOT } from './config.js';
 import { RegisteredGroup } from './types.js';
 import {
   cancelWorkflow,
+  processWorkflowOutbox,
   initWorkflow,
   onDelegationComplete,
+  resumeWorkflowRuntime,
   resumeWorkflowInterrupt,
 } from './workflow.js';
 import {
@@ -89,7 +91,9 @@ function resumePendingInterruptForTest(
 ): void {
   const interrupt = getPendingWorkflowInterruptForState(workflowId, stateKey);
   expect(interrupt).toBeDefined();
-  const allowedActions = JSON.parse(interrupt!.allowed_actions_json) as string[];
+  const allowedActions = JSON.parse(
+    interrupt!.allowed_actions_json,
+  ) as string[];
   const resumeAction =
     action ||
     (allowedActions.includes('approve')
@@ -104,6 +108,11 @@ function resumePendingInterruptForTest(
     actor: { channel: 'system', userId: 'test' },
   });
   expect(result.ok).toBe(true);
+}
+
+function recoverWorkflowRuntimeForTest(): void {
+  resumeWorkflowRuntime();
+  processWorkflowOutbox();
 }
 
 const PLAN_EXAMINE_GROUP: RegisteredGroup = {
@@ -216,6 +225,7 @@ describe('workbench approval transition sync', () => {
     });
 
     onDelegationComplete('wf-del-plan-eval-pending');
+    processWorkflowOutbox();
 
     const evaluation = getLatestWorkflowStageEvaluation(
       'wf-plan-eval-pending',
@@ -232,6 +242,43 @@ describe('workbench approval transition sync', () => {
     expect(
       detail?.timeline.some((item) => item.status === 'stage_evaluated'),
     ).toBe(true);
+  });
+
+  it('does not create core workflow interrupts during workbench sync', () => {
+    dbCreateWorkflow({
+      id: 'wf-workbench-no-core-interrupt',
+      name: 'Workbench 不创建核心中断',
+      service: WORKBENCH_TEST_SERVICE,
+      start_from: 'testing_confirm',
+      context: {
+        main_branch: '',
+        work_branch: '',
+        staging_base_branch: '',
+        deliverable: '',
+        staging_work_branch: '',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+
+    syncWorkbenchOnWorkflowCreated('wf-workbench-no-core-interrupt');
+
+    expect(
+      getPendingWorkflowInterruptForState(
+        'wf-workbench-no-core-interrupt',
+        'testing_confirm',
+      ),
+    ).toBeUndefined();
+    expect(
+      getWorkbenchTaskDetail('wb-wf-workbench-no-core-interrupt')?.action_items,
+    ).toHaveLength(0);
   });
 
   it('marks awaiting_confirm completed and clears pending approval after approve', () => {
@@ -257,6 +304,7 @@ describe('workbench approval transition sync', () => {
       created_at: '2026-04-07T00:00:00.000Z',
       updated_at: '2026-04-07T00:00:00.000Z',
     });
+    recoverWorkflowRuntimeForTest();
     syncWorkbenchOnWorkflowCreated('wf-predeploy');
 
     resumePendingInterruptForTest('wf-predeploy', 'awaiting_confirm');
@@ -352,6 +400,7 @@ describe('workbench approval transition sync', () => {
       created_at: '2026-04-07T00:00:00.000Z',
       updated_at: '2026-04-07T00:00:00.000Z',
     });
+    recoverWorkflowRuntimeForTest();
     syncWorkbenchOnWorkflowCreated('wf-broadcast-readonly-detail');
 
     const taskId = 'wb-wf-broadcast-readonly-detail';
@@ -403,6 +452,7 @@ describe('workbench approval transition sync', () => {
       created_at: '2026-04-07T00:00:00.000Z',
       updated_at: '2026-04-07T00:00:00.000Z',
     });
+    recoverWorkflowRuntimeForTest();
     syncWorkbenchOnWorkflowCreated('wf-broadcast-testing-confirm');
 
     const card = buildWorkbenchBroadcastCard({
@@ -444,6 +494,7 @@ describe('workbench approval transition sync', () => {
       created_at: '2026-04-07T00:00:00.000Z',
       updated_at: '2026-04-07T00:00:00.000Z',
     });
+    recoverWorkflowRuntimeForTest();
     syncWorkbenchOnWorkflowCreated(
       'wf-broadcast-testing-confirm-feishu-fallback',
     );
@@ -709,6 +760,7 @@ describe('workbench approval transition sync', () => {
       created_at: '2026-04-07T00:00:00.000Z',
       updated_at: '2026-04-07T00:00:00.000Z',
     });
+    recoverWorkflowRuntimeForTest();
     syncWorkbenchOnWorkflowCreated('wf-approve-event-order');
 
     const emittedEvents: string[] = [];
@@ -830,6 +882,7 @@ describe('workbench approval transition sync', () => {
       created_at: '2026-04-07T00:00:00.000Z',
       updated_at: '2026-04-07T00:00:00.000Z',
     });
+    recoverWorkflowRuntimeForTest();
     syncWorkbenchOnWorkflowCreated('wf-realtime-labels');
 
     const events: Array<Record<string, unknown>> = [];

@@ -29,6 +29,7 @@ import {
   getAllActiveWorkflows,
   getAllWorkflows,
   getDelegation,
+  getDelegationsByWorkflow,
   getLatestWorkflowCheckpoint,
   getWorkflowEventByIdempotencyKey,
   getPendingWorkflowInterruptForState,
@@ -53,6 +54,7 @@ import {
 } from './db.js';
 import { logger } from './logger.js';
 import {
+  Delegation,
   CardButton,
   CardSection,
   InteractiveCard,
@@ -576,6 +578,15 @@ function enqueueWorkflowWorkbenchSync(
   });
 }
 
+function enqueueWorkflowCreatedSync(workflowId: string): void {
+  enqueueWorkflowWorkbenchSync(
+    workflowId,
+    'workflow_created',
+    {},
+    'workflow_created',
+  );
+}
+
 function enqueueWorkflowCard(
   workflow: Workflow,
   cardKey: string,
@@ -593,9 +604,7 @@ function enqueueWorkflowCard(
   });
 }
 
-function parseOutboxPayload(
-  payloadJson: string,
-): Record<string, unknown> {
+function parseOutboxPayload(payloadJson: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(payloadJson);
     return parsed && typeof parsed === 'object'
@@ -635,7 +644,8 @@ function executeWorkflowOutboxRecord(recordId: string): void {
   try {
     const payload = parseOutboxPayload(record.payload_json);
     if (record.effect_type === 'send_notification') {
-      const message = typeof payload.message === 'string' ? payload.message : '';
+      const message =
+        typeof payload.message === 'string' ? payload.message : '';
       if (message) {
         notifyMain(
           message,
@@ -644,6 +654,11 @@ function executeWorkflowOutboxRecord(recordId: string): void {
         );
       }
     } else if (record.effect_type === 'send_feishu_card') {
+      const workflow = getWorkflow(record.workflow_id);
+      const cardKey =
+        typeof payload.cardKey === 'string' ? payload.cardKey : '';
+      if (workflow && cardKey) sendConfigCard(workflow, cardKey);
+    } else if (record.effect_type === 'refresh_feishu_card') {
       const workflow = getWorkflow(record.workflow_id);
       const cardKey =
         typeof payload.cardKey === 'string' ? payload.cardKey : '';
@@ -696,6 +711,42 @@ function executeWorkflowOutboxRecord(recordId: string): void {
         if (delegationId) {
           syncWorkbenchOnDelegationCreated(record.workflow_id, delegationId);
         }
+      } else if (effect === 'workflow_created') {
+        syncWorkbenchOnWorkflowCreated(record.workflow_id);
+      } else if (effect === 'delegation_completed') {
+        const delegationId =
+          typeof payload.delegationId === 'string' ? payload.delegationId : '';
+        if (delegationId) {
+          syncWorkbenchOnDelegationCompleted(record.workflow_id, delegationId);
+        }
+      } else if (effect === 'stage_evaluated') {
+        const stageKey =
+          typeof payload.stageKey === 'string' ? payload.stageKey : '';
+        const evaluationId =
+          typeof payload.evaluationId === 'string' ? payload.evaluationId : '';
+        if (stageKey && evaluationId) {
+          syncWorkbenchOnStageEvaluated(
+            record.workflow_id,
+            stageKey,
+            evaluationId,
+          );
+        }
+      } else if (effect === 'stage_evaluation_action_needed') {
+        const stageKey =
+          typeof payload.stageKey === 'string' ? payload.stageKey : '';
+        const evaluationId =
+          typeof payload.evaluationId === 'string' ? payload.evaluationId : '';
+        if (stageKey && evaluationId) {
+          syncWorkbenchOnStageEvaluationActionNeeded(
+            record.workflow_id,
+            stageKey,
+            evaluationId,
+            {
+              keepVisibleWhenCurrentStage:
+                payload.keepVisibleWhenCurrentStage === true,
+            },
+          );
+        }
       }
     }
     markWorkflowOutboxSucceeded({
@@ -738,14 +789,18 @@ function validateActiveWorkflowGate(): void {
     const config = getWorkflowTypeConfig(workflow.workflow_type);
     const state = config?.states[workflow.status];
     if (!config) {
-      invalid.push(`${workflow.id}: unknown workflow_type ${workflow.workflow_type}`);
+      invalid.push(
+        `${workflow.id}: unknown workflow_type ${workflow.workflow_type}`,
+      );
       continue;
     }
     if (workflow.status !== 'paused' && !state) {
       invalid.push(`${workflow.id}: unknown state ${workflow.status}`);
     }
     if ((state as { type?: string } | undefined)?.type === 'confirmation') {
-      invalid.push(`${workflow.id}: legacy confirmation state ${workflow.status}`);
+      invalid.push(
+        `${workflow.id}: legacy confirmation state ${workflow.status}`,
+      );
     }
   }
   if (invalid.length > 0) {
@@ -809,7 +864,10 @@ function processTimedOutActiveWorkflow(
   if (!state?.timeout_policy?.duration_ms) return;
   if (state.type === 'interrupt') return;
   const elapsedMs = Date.parse(nowIso) - stateEnteredAt(workflow);
-  if (!Number.isFinite(elapsedMs) || elapsedMs < state.timeout_policy.duration_ms) {
+  if (
+    !Number.isFinite(elapsedMs) ||
+    elapsedMs < state.timeout_policy.duration_ms
+  ) {
     return;
   }
 
@@ -832,7 +890,9 @@ function processTimedOutActiveWorkflow(
 
   applyTransition(
     workflow,
-    compileDefinitionTransitionToStateTransition(state.timeout_policy.on_timeout),
+    compileDefinitionTransitionToStateTransition(
+      state.timeout_policy.on_timeout,
+    ),
     resolveRolesOrEmpty(workflow),
     {
       workflowUpdates: {
@@ -851,7 +911,10 @@ function processTimedOutActiveWorkflow(
 export function resumeWorkflowRuntime(): void {
   validateActiveWorkflowGate();
   for (const workflow of getAllActiveWorkflows()) {
-    recoverActiveWorkflow(workflow);
+    runWorkflowTransaction(() => {
+      const latest = getWorkflow(workflow.id);
+      if (latest && !isTerminalStatus(latest)) recoverActiveWorkflow(latest);
+    });
   }
   processWorkflowOutbox();
   if (!workflowRuntimeStarted) {
@@ -877,7 +940,9 @@ export function stopWorkflowRuntimeForTest(): void {
   workflowRuntimeStarted = false;
 }
 
-export function runWorkflowWatchdogOnce(nowIso = new Date().toISOString()): void {
+export function runWorkflowWatchdogOnce(
+  nowIso = new Date().toISOString(),
+): void {
   const expiredInterrupts = listExpiredPendingWorkflowInterrupts(nowIso);
   for (const interrupt of expiredInterrupts) {
     try {
@@ -919,7 +984,8 @@ export function runWorkflowWatchdogOnce(nowIso = new Date().toISOString()): void
             stateKey: latestInterrupt.state_key,
             payload: {
               timeout_policy: state.timeout_policy || null,
-              attempt: parseCheckpointAttempts(workflow.id)[workflow.status] || 1,
+              attempt:
+                parseCheckpointAttempts(workflow.id)[workflow.status] || 1,
             },
             idempotencyKey: `workflow_timeout:${workflow.id}:${workflow.status}:${workflow.round}:${
               parseCheckpointAttempts(workflow.id)[workflow.status] || 1
@@ -962,6 +1028,7 @@ export function runWorkflowWatchdogOnce(nowIso = new Date().toISOString()): void
         const latest = getWorkflow(workflow.id);
         if (!latest || isTerminalStatus(latest)) return;
         processTimedOutActiveWorkflow(latest, nowIso);
+        processDueEvaluatorRetry(latest, nowIso);
       });
     } catch (err) {
       logger.error(
@@ -1292,9 +1359,7 @@ function writeWorkflowEvent(input: {
   return eventId;
 }
 
-function parseCheckpointAttempts(
-  workflowId: string,
-): Record<string, number> {
+function parseCheckpointAttempts(workflowId: string): Record<string, number> {
   const latest = getLatestWorkflowCheckpoint(workflowId);
   if (!latest) return {};
   try {
@@ -1382,9 +1447,7 @@ function validateJsonSchemaSubset(
         errors.push(`${pathName}.${requiredKey} is required`);
       }
     }
-    for (const [key, childSchema] of Object.entries(
-      schema.properties || {},
-    )) {
+    for (const [key, childSchema] of Object.entries(schema.properties || {})) {
       if (objectValue[key] === undefined) continue;
       errors.push(
         ...validateJsonSchemaSubset(
@@ -1400,7 +1463,9 @@ function validateJsonSchemaSubset(
   if (expectedType === 'string') {
     if (typeof value !== 'string') return [`${pathName} must be a string`];
     if (schema.minLength !== undefined && value.length < schema.minLength) {
-      errors.push(`${pathName} must be at least ${schema.minLength} characters`);
+      errors.push(
+        `${pathName} must be at least ${schema.minLength} characters`,
+      );
     }
     if (schema.maxLength !== undefined && value.length > schema.maxLength) {
       errors.push(`${pathName} must be at most ${schema.maxLength} characters`);
@@ -1574,6 +1639,8 @@ function ensureWorkflowStateDurableRecords(
   ];
   if (state?.type === 'interrupt') {
     createPendingInterruptForState(workflow);
+  } else if (state?.type === 'system') {
+    runSystemState(workflow, reason, fromStateKey);
   } else {
     if (state?.type === 'terminal') {
       const closed = closePendingWorkflowInterrupts(
@@ -1608,12 +1675,84 @@ function ensureWorkflowStateDurableRecords(
   }
 }
 
+function runSystemState(
+  workflow: Workflow,
+  reason: 'create' | 'transition' | 'resume' | 'retry' | 'timeout',
+  fromStateKey?: string,
+): void {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const state = config?.states[workflow.status];
+  if (!state || state.type !== 'system') return;
+  const attempts = parseCheckpointAttempts(workflow.id);
+  const attempt = attempts[workflow.status] || 1;
+  const idempotencyKey = `workflow_system:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`;
+  if (getWorkflowEventByIdempotencyKey(idempotencyKey)) return;
+
+  const now = new Date().toISOString();
+  writeWorkflowEvent({
+    workflowId: workflow.id,
+    eventType: 'system_executed',
+    stateKey: workflow.status,
+    payload: {
+      reason,
+      from_state_key: fromStateKey || null,
+      attempt,
+    },
+    idempotencyKey,
+    createdAt: now,
+  });
+  writeWorkflowCheckpoint({ workflow, attempts });
+
+  const transition = state.on_complete?.success;
+  if (!transition) return;
+  applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
+    workflowUpdates: {
+      context: {
+        last_system_state: {
+          state_key: workflow.status,
+          executed_at: now,
+          attempt,
+        },
+      },
+    },
+  });
+}
+
 function actorToJson(actor: ResumeActor): string {
   return JSON.stringify({
     channel: actor.channel,
     userId: actor.userId || '',
     displayName: actor.displayName || '',
   });
+}
+
+function canonicalJson(value: unknown): string {
+  if (!value || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
+  }
+  const objectValue = value as Record<string, unknown>;
+  return `{${Object.keys(objectValue)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(objectValue[key])}`)
+    .join(',')}}`;
+}
+
+function sameResumeActor(
+  recordedActorJson: string | null,
+  actor: ResumeActor,
+): boolean {
+  if (!recordedActorJson) return false;
+  try {
+    const recorded = JSON.parse(recordedActorJson) as Record<string, unknown>;
+    return (
+      recorded.channel === actor.channel &&
+      String(recorded.userId || '') === (actor.userId || '') &&
+      String(recorded.displayName || '') === (actor.displayName || '')
+    );
+  } catch {
+    return false;
+  }
 }
 
 function createResumeAttempt(input: {
@@ -1697,6 +1836,22 @@ function transitionForEvaluation(
   return undefined;
 }
 
+function calculateRetryDelayMs(
+  policy: NonNullable<WorkflowTypeConfig['states'][string]['retry_policy']>,
+  nextAttempt: number,
+): number {
+  const initial = policy.initial_delay_ms ?? 0;
+  const max = policy.max_delay_ms ?? initial;
+  if (initial <= 0) return 0;
+  let delay = initial;
+  if (policy.backoff === 'linear') {
+    delay = initial * Math.max(1, nextAttempt - 1);
+  } else if (policy.backoff === 'exponential') {
+    delay = initial * 2 ** Math.max(0, nextAttempt - 2);
+  }
+  return max > 0 ? Math.min(delay, max) : delay;
+}
+
 function scheduleEvaluatorRetryIfConfigured(input: {
   workflow: Workflow;
   stateConfig: NonNullable<WorkflowTypeConfig['states'][string]>;
@@ -1711,11 +1866,11 @@ function scheduleEvaluatorRetryIfConfigured(input: {
   const nextAttempt = currentAttempt + 1;
   attempts[input.workflow.status] = nextAttempt;
   const now = input.nowIso || new Date().toISOString();
-  const delayMs = Math.min(
-    policy.max_delay_ms || policy.initial_delay_ms || 0,
-    policy.initial_delay_ms || 0,
-  );
-  const nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+  const delayMs = calculateRetryDelayMs(policy, nextAttempt);
+  const baseTime = Date.parse(now);
+  const nextAttemptAt = new Date(
+    (Number.isFinite(baseTime) ? baseTime : Date.now()) + delayMs,
+  ).toISOString();
   writeWorkflowEvent({
     workflowId: input.workflow.id,
     eventType: 'retry_scheduled',
@@ -1736,6 +1891,143 @@ function scheduleEvaluatorRetryIfConfigured(input: {
     attempts,
   });
   return true;
+}
+
+function getLatestEvaluatorResult(
+  workflow: Workflow,
+): Record<string, unknown> | null {
+  const value = workflow.context.latest_evaluator_result;
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function hasEvaluatorRetryCapacity(
+  workflow: Workflow,
+  stateConfig: NonNullable<WorkflowTypeConfig['states'][string]>,
+): boolean {
+  const policy = stateConfig.retry_policy;
+  if (!policy?.retry_on?.includes('evaluator_pending')) return false;
+  const attempts = parseCheckpointAttempts(workflow.id);
+  const currentAttempt = attempts[workflow.status] || 1;
+  return currentAttempt < policy.max_attempts;
+}
+
+function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const state = config?.states[workflow.status];
+  if (!state || state.type !== 'delegation') return;
+  if (!state.retry_policy?.retry_on?.includes('evaluator_pending')) return;
+
+  const latestEvaluator = getLatestEvaluatorResult(workflow);
+  if (latestEvaluator?.status !== 'pending') return;
+
+  const attempts = parseCheckpointAttempts(workflow.id);
+  const attempt = attempts[workflow.status] || 1;
+  if (attempt > state.retry_policy.max_attempts) {
+    const transition = exhaustedRetryTransition(state);
+    if (transition) {
+      applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
+        workflowUpdates: {
+          context: {
+            last_retry_exhausted: {
+              state_key: workflow.status,
+              attempt,
+              exhausted_at: nowIso,
+            },
+          },
+        },
+      });
+    }
+    return;
+  }
+
+  const retryEvent = getWorkflowEventByIdempotencyKey(
+    `workflow_retry:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`,
+  );
+  if (!retryEvent) return;
+  const payload = parseOutboxPayload(retryEvent.payload_json || '{}');
+  const nextAttemptAt =
+    typeof payload.next_attempt_at === 'string' ? payload.next_attempt_at : '';
+  if (!nextAttemptAt || nextAttemptAt > nowIso) return;
+  if (
+    getWorkflowEventByIdempotencyKey(
+      `workflow_retry_executed:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`,
+    )
+  ) {
+    return;
+  }
+
+  if (!state.role || !state.skill) return;
+  const roles = resolveRolesOrEmpty(workflow);
+  const targetFolder = roles[state.role];
+  if (!targetFolder) return;
+
+  const vars = buildTemplateVars(workflow);
+  const taskContent = state.task_template
+    ? renderTemplate(state.task_template, vars, roles)
+    : '';
+  const finalTaskContent = finalizeDelegationTaskContent(
+    state.skill,
+    appendRetryNote(
+      taskContent,
+      `Evaluator pending retry attempt ${attempt}. Previous evaluation: ${String(
+        latestEvaluator.summary || '',
+      )}`,
+    ),
+    workflow,
+  );
+  const idempotencyKey = `workflow_delegation:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`;
+  const delegationId = createDurableDelegationIntent({
+    workflowId: workflow.id,
+    sourceJid: workflow.source_jid,
+    targetFolder,
+    sourceFolder: getMainFolder(workflow.source_jid),
+    skillName: state.skill,
+    taskContent: finalTaskContent,
+    idempotencyKey,
+  }).delegationId;
+  updateWorkflow(workflow.id, { current_delegation_id: delegationId });
+  const updated = getWorkflow(workflow.id) || workflow;
+  writeWorkflowEvent({
+    workflowId: workflow.id,
+    eventType: 'retry_scheduled',
+    stateKey: workflow.status,
+    refType: 'delegation',
+    refId: delegationId,
+    payload: {
+      reason: 'evaluator_pending_retry_executed',
+      attempt,
+      delegation_id: delegationId,
+    },
+    idempotencyKey: `workflow_retry_executed:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`,
+    createdAt: nowIso,
+  });
+  writeWorkflowEvent({
+    workflowId: workflow.id,
+    eventType: 'delegation_created',
+    stateKey: workflow.status,
+    refType: 'delegation',
+    refId: delegationId,
+    payload: {
+      delegation_id: delegationId,
+      idempotency_key: idempotencyKey,
+      attempt,
+      target_folder: targetFolder,
+    },
+    createdAt: nowIso,
+  });
+  writeWorkflowCheckpoint({
+    workflow: updated,
+    currentDelegationId: delegationId,
+    attempts,
+  });
+  enqueueWorkflowWorkbenchSync(
+    workflow.id,
+    'delegation_created',
+    { delegationId },
+    `retry_due_delegation_created:${delegationId}`,
+  );
 }
 
 function exhaustedRetryTransition(
@@ -1773,7 +2065,10 @@ function mergeEvaluationResults(input: {
       : input.stageEvaluation.status;
   return {
     status,
-    score: Math.min(input.stageEvaluation.score, input.contractEvaluation.score),
+    score: Math.min(
+      input.stageEvaluation.score,
+      input.contractEvaluation.score,
+    ),
     summary:
       status === input.stageEvaluation.status
         ? input.stageEvaluation.summary
@@ -1847,275 +2142,295 @@ export function resumeWorkflowInterrupt(input: {
   let result: { ok: true; workflowId: string } | { ok: false; error: string };
   try {
     result = runWorkflowTransaction(() => {
-    if (input.idempotencyKey) {
-      const previous = getWorkflowInterruptResumeAttemptByIdempotency(
-        input.interruptId,
-        input.idempotencyKey,
-      );
-      if (previous) {
-        if (previous.status === 'accepted' || previous.status === 'duplicate') {
-          return { ok: true, workflowId: previous.workflow_id } as const;
+      if (input.idempotencyKey) {
+        const previous = getWorkflowInterruptResumeAttemptByIdempotency(
+          input.interruptId,
+          input.idempotencyKey,
+        );
+        if (previous) {
+          if (
+            previous.status === 'accepted' ||
+            previous.status === 'duplicate'
+          ) {
+            return { ok: true, workflowId: previous.workflow_id } as const;
+          }
+          return {
+            ok: false,
+            error: previous.conflict_reason || '重复提交已被拒绝',
+          } as const;
         }
+      }
+
+      const interrupt = getWorkflowInterrupt(input.interruptId);
+      if (!interrupt) {
         return {
           ok: false,
-          error: previous.conflict_reason || '重复提交已被拒绝',
+          error: `中断 ${input.interruptId} 不存在`,
         } as const;
       }
-    }
 
-    const interrupt = getWorkflowInterrupt(input.interruptId);
-    if (!interrupt) {
-      return { ok: false, error: `中断 ${input.interruptId} 不存在` } as const;
-    }
+      const workflow = getWorkflow(interrupt.workflow_id);
+      if (!workflow) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'rejected',
+          conflictReason: 'workflow_not_found',
+        });
+        return {
+          ok: false,
+          error: `流程 ${interrupt.workflow_id} 不存在`,
+        } as const;
+      }
 
-    const workflow = getWorkflow(interrupt.workflow_id);
-    if (!workflow) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
+      if (interrupt.status !== 'pending') {
+        const samePayload =
+          canonicalJson(
+            parseOutboxPayload(interrupt.resume_payload_json || '{}'),
+          ) === canonicalJson(payload);
+        const sameActor = sameResumeActor(interrupt.resumed_by, input.actor);
+        const sameAction =
+          interrupt.status === 'resumed' &&
+          interrupt.resume_action === input.action &&
+          samePayload &&
+          sameActor;
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: sameAction ? 'duplicate' : 'conflict',
+          result: {
+            workflowId: workflow.id,
+            interruptStatus: interrupt.status,
+          },
+          conflictReason: sameAction
+            ? null
+            : !sameActor && interrupt.status === 'resumed'
+              ? 'resume_actor_conflict'
+              : !samePayload && interrupt.status === 'resumed'
+                ? 'resume_payload_conflict'
+                : `interrupt_${interrupt.status}`,
+        });
+        if (sameAction) return { ok: true, workflowId: workflow.id } as const;
+        return {
+          ok: false,
+          error: `中断已${interrupt.status}，不能再次提交不同操作或内容`,
+        } as const;
+      }
+
+      if (isTerminalStatus(workflow)) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'rejected',
+          conflictReason: 'workflow_terminal',
+        });
+        return { ok: false, error: `流程已结束 (${workflow.status})` } as const;
+      }
+
+      const config = getWorkflowTypeConfig(workflow.workflow_type);
+      const state = config?.states[interrupt.state_key];
+      if (!config || !state || state.type !== 'interrupt') {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'rejected',
+          conflictReason: 'state_not_interrupt',
+        });
+        return {
+          ok: false,
+          error: `流程状态 ${interrupt.state_key} 不是人工中断`,
+        } as const;
+      }
+
+      if (workflow.status !== interrupt.state_key) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'conflict',
+          conflictReason: `workflow_state_changed:${workflow.status}`,
+        });
+        return {
+          ok: false,
+          error: `流程当前状态已变更为 ${workflow.status}`,
+        } as const;
+      }
+
+      const allowedActions = parseJsonArray(interrupt.allowed_actions_json);
+      if (!allowedActions.includes(input.action)) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'rejected',
+          conflictReason: 'action_not_allowed',
+        });
+        return {
+          ok: false,
+          error: `操作 ${input.action} 不在允许列表: ${allowedActions.join(', ')}`,
+        } as const;
+      }
+
+      const allowedChannels = parseJsonArray(interrupt.allowed_channels_json);
+      if (
+        input.actor.channel !== 'system' &&
+        allowedChannels.length > 0 &&
+        !allowedChannels.includes(input.actor.channel)
+      ) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'rejected',
+          conflictReason: 'channel_not_allowed',
+        });
+        return {
+          ok: false,
+          error: `渠道 ${input.actor.channel} 不允许恢复该中断`,
+        } as const;
+      }
+
+      const schemaErrors = validateJsonSchemaSubset(
+        parseSchema(interrupt.resume_payload_schema_json),
         payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'rejected',
-        conflictReason: 'workflow_not_found',
-      });
-      return {
-        ok: false,
-        error: `流程 ${interrupt.workflow_id} 不存在`,
-      } as const;
-    }
-
-    if (interrupt.status !== 'pending') {
-      const sameAction =
-        interrupt.status === 'resumed' &&
-        interrupt.resume_action === input.action;
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: sameAction ? 'duplicate' : 'conflict',
-        result: { workflowId: workflow.id, interruptStatus: interrupt.status },
-        conflictReason: sameAction ? null : `interrupt_${interrupt.status}`,
-      });
-      if (sameAction) return { ok: true, workflowId: workflow.id } as const;
-      return {
-        ok: false,
-        error: `中断已${interrupt.status}，不能再次提交不同操作`,
-      } as const;
-    }
-
-    if (isTerminalStatus(workflow)) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'rejected',
-        conflictReason: 'workflow_terminal',
-      });
-      return { ok: false, error: `流程已结束 (${workflow.status})` } as const;
-    }
-
-    const config = getWorkflowTypeConfig(workflow.workflow_type);
-    const state = config?.states[interrupt.state_key];
-    if (!config || !state || state.type !== 'interrupt') {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'rejected',
-        conflictReason: 'state_not_interrupt',
-      });
-      return {
-        ok: false,
-        error: `流程状态 ${interrupt.state_key} 不是人工中断`,
-      } as const;
-    }
-
-    if (workflow.status !== interrupt.state_key) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'conflict',
-        conflictReason: `workflow_state_changed:${workflow.status}`,
-      });
-      return {
-        ok: false,
-        error: `流程当前状态已变更为 ${workflow.status}`,
-      } as const;
-    }
-
-    const allowedActions = parseJsonArray(interrupt.allowed_actions_json);
-    if (!allowedActions.includes(input.action)) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'rejected',
-        conflictReason: 'action_not_allowed',
-      });
-      return {
-        ok: false,
-        error: `操作 ${input.action} 不在允许列表: ${allowedActions.join(', ')}`,
-      } as const;
-    }
-
-    const allowedChannels = parseJsonArray(
-      interrupt.allowed_channels_json,
-    );
-    if (
-      input.actor.channel !== 'system' &&
-      allowedChannels.length > 0 &&
-      !allowedChannels.includes(input.actor.channel)
-    ) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'rejected',
-        conflictReason: 'channel_not_allowed',
-      });
-      return {
-        ok: false,
-        error: `渠道 ${input.actor.channel} 不允许恢复该中断`,
-      } as const;
-    }
-
-    const schemaErrors = validateJsonSchemaSubset(
-      parseSchema(interrupt.resume_payload_schema_json),
-      payload,
-    );
-    if (schemaErrors.length > 0) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'rejected',
-        conflictReason: schemaErrors.join('; '),
-      });
-      return {
-        ok: false,
-        error: `提交内容不符合 schema: ${schemaErrors.join('; ')}`,
-      } as const;
-    }
-
-    const transition = state.on_resume?.[input.action];
-    if (!transition) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'rejected',
-        conflictReason: 'transition_missing',
-      });
-      return {
-        ok: false,
-        error: `操作 ${input.action} 没有配置 on_resume transition`,
-      } as const;
-    }
-
-    const now = new Date().toISOString();
-    const actorJson = actorToJson(input.actor);
-    const marked = markWorkflowInterruptResumed({
-      interruptId: interrupt.id,
-      resumedBy: actorJson,
-      resumeAction: input.action,
-      resumePayloadJson: JSON.stringify(payload),
-      updatedAt: now,
-    });
-    if (!marked) {
-      createResumeAttempt({
-        interrupt,
-        actor: input.actor,
-        action: input.action,
-        payload,
-        idempotencyKey: input.idempotencyKey,
-        status: 'conflict',
-        conflictReason: 'interrupt_cas_failed',
-      });
-      return { ok: false, error: '中断已被其他提交处理' } as const;
-    }
-
-    createResumeAttempt({
-      interrupt,
-      actor: input.actor,
-      action: input.action,
-      payload,
-      idempotencyKey: input.idempotencyKey,
-      status: 'accepted',
-      result: { workflowId: workflow.id, target: transition.target },
-    });
-    writeWorkflowEvent({
-      workflowId: workflow.id,
-      eventType: 'interrupt_resumed',
-      stateKey: interrupt.state_key,
-      refType: 'workflow_interrupt',
-      refId: interrupt.id,
-      actor: {
-        channel: input.actor.channel,
-        userId: input.actor.userId || '',
-        displayName: input.actor.displayName || '',
-      },
-      payload: {
-        interrupt_id: interrupt.id,
-        resume_action: input.action,
-        actor: input.actor,
-        payload,
-      },
-      createdAt: now,
-    });
-
-    const contextPatch = buildInterruptPayloadPatch(
-      interrupt.state_key,
-      input.action,
-      payload,
-    );
-    try {
-      applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
-        revisionText:
-          typeof contextPatch.revision_text === 'string'
-            ? contextPatch.revision_text
-            : undefined,
-        accessToken:
-          typeof contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken] === 'string'
-            ? String(contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken])
-            : undefined,
-        workflowUpdates: { context: contextPatch },
-      });
-    } catch (err) {
-      throw new Error(
-        `恢复中断后的状态流转失败: ${err instanceof Error ? err.message : String(err)}`,
       );
-    }
+      if (schemaErrors.length > 0) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'rejected',
+          conflictReason: schemaErrors.join('; '),
+        });
+        return {
+          ok: false,
+          error: `提交内容不符合 schema: ${schemaErrors.join('; ')}`,
+        } as const;
+      }
 
-    const updatedWorkflow = getWorkflow(workflow.id);
-    if (updatedWorkflow) {
-      writeWorkflowCheckpoint({
-        workflow: updatedWorkflow,
-        pendingInterruptId:
-          getPendingWorkflowInterruptForState(
-            updatedWorkflow.id,
-            updatedWorkflow.status,
-          )?.id || null,
+      const transition = state.on_resume?.[input.action];
+      if (!transition) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'rejected',
+          conflictReason: 'transition_missing',
+        });
+        return {
+          ok: false,
+          error: `操作 ${input.action} 没有配置 on_resume transition`,
+        } as const;
+      }
+
+      const now = new Date().toISOString();
+      const actorJson = actorToJson(input.actor);
+      const marked = markWorkflowInterruptResumed({
+        interruptId: interrupt.id,
+        resumedBy: actorJson,
+        resumeAction: input.action,
+        resumePayloadJson: JSON.stringify(payload),
+        updatedAt: now,
       });
-    }
-    return { ok: true, workflowId: workflow.id } as const;
+      if (!marked) {
+        createResumeAttempt({
+          interrupt,
+          actor: input.actor,
+          action: input.action,
+          payload,
+          idempotencyKey: input.idempotencyKey,
+          status: 'conflict',
+          conflictReason: 'interrupt_cas_failed',
+        });
+        return { ok: false, error: '中断已被其他提交处理' } as const;
+      }
+
+      createResumeAttempt({
+        interrupt,
+        actor: input.actor,
+        action: input.action,
+        payload,
+        idempotencyKey: input.idempotencyKey,
+        status: 'accepted',
+        result: { workflowId: workflow.id, target: transition.target },
+      });
+      writeWorkflowEvent({
+        workflowId: workflow.id,
+        eventType: 'interrupt_resumed',
+        stateKey: interrupt.state_key,
+        refType: 'workflow_interrupt',
+        refId: interrupt.id,
+        actor: {
+          channel: input.actor.channel,
+          userId: input.actor.userId || '',
+          displayName: input.actor.displayName || '',
+        },
+        payload: {
+          interrupt_id: interrupt.id,
+          resume_action: input.action,
+          actor: input.actor,
+          payload,
+        },
+        createdAt: now,
+      });
+
+      const contextPatch = buildInterruptPayloadPatch(
+        interrupt.state_key,
+        input.action,
+        payload,
+      );
+      try {
+        applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
+          revisionText:
+            typeof contextPatch.revision_text === 'string'
+              ? contextPatch.revision_text
+              : undefined,
+          accessToken:
+            typeof contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken] === 'string'
+              ? String(contextPatch[WORKFLOW_CONTEXT_KEYS.accessToken])
+              : undefined,
+          workflowUpdates: { context: contextPatch },
+        });
+      } catch (err) {
+        throw new Error(
+          `恢复中断后的状态流转失败: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      const updatedWorkflow = getWorkflow(workflow.id);
+      if (updatedWorkflow) {
+        writeWorkflowCheckpoint({
+          workflow: updatedWorkflow,
+          pendingInterruptId:
+            getPendingWorkflowInterruptForState(
+              updatedWorkflow.id,
+              updatedWorkflow.status,
+            )?.id || null,
+        });
+      }
+      return { ok: true, workflowId: workflow.id } as const;
     });
   } catch (err) {
     return {
@@ -2302,7 +2617,11 @@ function applyTransition(
   // 5. Send notification
   if (transition.notify) {
     enqueueWorkflowNotification(
-      { ...workflow, ...updates, context: mergeWorkflowContext(workflow.context, updates.context) },
+      {
+        ...workflow,
+        ...updates,
+        context: mergeWorkflowContext(workflow.context, updates.context),
+      },
       renderTemplate(transition.notify, vars, roles),
       `transition_notify:${fromStatus}:${transition.target}:${round}`,
     );
@@ -2427,20 +2746,23 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       created_at: now,
       updated_at: now,
     });
-    syncWorkbenchOnWorkflowCreated(workflowId);
-
     const entryStateConfig = config.states[entryPoint.state];
 
     const createdWorkflow = getWorkflow(workflowId);
     if (createdWorkflow) {
       ensureWorkflowStateDurableRecords(createdWorkflow, 'create');
     }
+    enqueueWorkflowCreatedSync(workflowId);
 
     // If entry state is an interrupt state, send the card
     if (entryStateConfig?.type === 'interrupt' && entryStateConfig.card) {
       const createdWorkflow = getWorkflow(workflowId);
       if (createdWorkflow) {
-        sendConfigCard(createdWorkflow, entryStateConfig.card);
+        enqueueWorkflowCard(
+          createdWorkflow,
+          entryStateConfig.card,
+          `entry_card:${entryPoint.state}:0`,
+        );
       }
     }
 
@@ -2470,15 +2792,22 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           createdWorkflow,
         );
 
-        const delegationId = delegateTo(
-          targetFolder,
-          mainFolder,
+        const delegationId = createDurableDelegationIntent({
           workflowId,
-          entryStateConfig.skill,
-          finalTaskContent,
-        );
+          sourceJid: opts.sourceJid,
+          targetFolder,
+          sourceFolder: mainFolder,
+          skillName: entryStateConfig.skill,
+          taskContent: finalTaskContent,
+          idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
+        }).delegationId;
         updateWorkflow(workflowId, { current_delegation_id: delegationId });
-        syncWorkbenchOnDelegationCreated(workflowId, delegationId);
+        enqueueWorkflowWorkbenchSync(
+          workflowId,
+          'delegation_created',
+          { delegationId },
+          `delegation_created:${delegationId}`,
+        );
         writeWorkflowEvent({
           workflowId,
           eventType: 'delegation_created',
@@ -2506,13 +2835,28 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         };
       }
 
-      notifyMain(
+      enqueueWorkflowNotification(
+        {
+          id: workflowId,
+          name: opts.title,
+          service: opts.service,
+          start_from: opts.startFrom,
+          context: {},
+          status: entryPoint.state,
+          current_delegation_id: '',
+          round: 0,
+          source_jid: opts.sourceJid,
+          paused_from: null,
+          workflow_type: workflowType,
+          created_at: now,
+          updated_at: now,
+        },
         `[流程启动] 需求「${opts.title}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
-        opts.sourceJid,
-        workflowId,
+        `workflow_started:${entryPoint.state}`,
       );
     }
 
+    processWorkflowOutbox();
     return { workflowId };
   }
 
@@ -2552,12 +2896,11 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     created_at: now,
     updated_at: now,
   });
-  syncWorkbenchOnWorkflowCreated(workflowId);
-
   const createdWorkflow = getWorkflow(workflowId);
   if (createdWorkflow) {
     ensureWorkflowStateDurableRecords(createdWorkflow, 'create');
   }
+  enqueueWorkflowCreatedSync(workflowId);
 
   // If entry state is a delegation state, delegate immediately
   if (
@@ -2585,15 +2928,22 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         createdWorkflow,
       );
 
-      const delegationId = delegateTo(
-        targetFolder,
-        mainFolder,
+      const delegationId = createDurableDelegationIntent({
         workflowId,
-        entryStateConfig.skill,
-        finalTaskContent,
-      );
+        sourceJid: opts.sourceJid,
+        targetFolder,
+        sourceFolder: mainFolder,
+        skillName: entryStateConfig.skill,
+        taskContent: finalTaskContent,
+        idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
+      }).delegationId;
       updateWorkflow(workflowId, { current_delegation_id: delegationId });
-      syncWorkbenchOnDelegationCreated(workflowId, delegationId);
+      enqueueWorkflowWorkbenchSync(
+        workflowId,
+        'delegation_created',
+        { delegationId },
+        `delegation_created:${delegationId}`,
+      );
       writeWorkflowEvent({
         workflowId,
         eventType: 'delegation_created',
@@ -2621,13 +2971,28 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       };
     }
 
-    notifyMain(
+    enqueueWorkflowNotification(
+      {
+        id: workflowId,
+        name: opts.title,
+        service: opts.service,
+        start_from: opts.startFrom,
+        context: {},
+        status: entryPoint.state,
+        current_delegation_id: '',
+        round: 0,
+        source_jid: opts.sourceJid,
+        paused_from: null,
+        workflow_type: workflowType,
+        created_at: now,
+        updated_at: now,
+      },
       `[流程启动] 需求「${opts.title}」${config.name}已创建 (${workflowId})，已委派 ${roles[entryStateConfig.role]} 开始执行。`,
-      opts.sourceJid,
-      workflowId,
+      `workflow_started:${entryPoint.state}`,
     );
   }
 
+  processWorkflowOutbox();
   return { workflowId };
 }
 
@@ -2732,25 +3097,38 @@ export function returnWorkflowToInterruptStage(
     current_delegation_id: '',
     paused_from: null,
   });
-  syncWorkbenchOnTransition(workflowId, fromStatus, stageKey);
-  syncWorkbenchOnWorkflowUpdated(
+  enqueueWorkflowWorkbenchSync(
     workflowId,
-    `已回到阶段 ${config.status_labels[stageKey] || stageKey}`,
-    { emitRealtime: false },
+    'transition',
+    { fromStatus, toStatus: stageKey, delegationId: '' },
+    `return_to_stage:${fromStatus}:${stageKey}:${workflow.round}`,
+  );
+  enqueueWorkflowWorkbenchSync(
+    workflowId,
+    'workflow_updated',
+    {
+      resultSummary: `已回到阶段 ${config.status_labels[stageKey] || stageKey}`,
+    },
+    `return_to_stage_updated:${stageKey}:${workflow.round}`,
   );
 
   const updatedWorkflow = getWorkflow(workflowId);
   if (!updatedWorkflow) return {};
   ensureWorkflowStateDurableRecords(updatedWorkflow, 'transition', fromStatus);
 
-  notifyMain(
+  enqueueWorkflowNotification(
+    updatedWorkflow,
     `[流程回退] 需求「${updatedWorkflow.name}」(${workflowId}) 已回到阶段 ${config.status_labels[stageKey] || stageKey}，请重新确认。`,
-    updatedWorkflow.source_jid,
-    workflowId,
+    `return_to_stage_notify:${stageKey}:${updatedWorkflow.round}`,
   );
   if (stateConfig.card) {
-    sendConfigCard(updatedWorkflow, stateConfig.card);
+    enqueueWorkflowCard(
+      updatedWorkflow,
+      stateConfig.card,
+      `return_to_stage_card:${stageKey}:${updatedWorkflow.round}`,
+    );
   }
+  processWorkflowOutbox();
   return {};
 }
 
@@ -2805,13 +3183,19 @@ export function retryWorkflowStage(
       finalTaskContent,
       extra?.retryNote,
     );
-    const delegationId = delegateTo(
-      targetFolder,
-      getMainFolder(workflow.source_jid),
+    const retryAttempt =
+      listWorkflowInterruptsByWorkflow(workflowId).length +
+      getDelegationsByWorkflow(workflowId).length +
+      1;
+    const delegationId = createDurableDelegationIntent({
       workflowId,
-      stateConfig.skill,
-      retriedTaskContent,
-    );
+      sourceJid: workflow.source_jid,
+      targetFolder,
+      sourceFolder: getMainFolder(workflow.source_jid),
+      skillName: stateConfig.skill,
+      taskContent: retriedTaskContent,
+      idempotencyKey: `workflow_delegation:${workflowId}:${stageKey}:${workflow.round}:${retryAttempt}`,
+    }).delegationId;
 
     const fromStatus = workflow.status;
     updateWorkflow(workflowId, {
@@ -2819,18 +3203,45 @@ export function retryWorkflowStage(
       current_delegation_id: delegationId,
       paused_from: null,
     });
-    syncWorkbenchOnDelegationCreated(workflowId, delegationId);
-    syncWorkbenchOnTransition(workflowId, fromStatus, stageKey, delegationId);
-    syncWorkbenchOnWorkflowUpdated(
+    enqueueWorkflowWorkbenchSync(
       workflowId,
-      `已重跑阶段 ${config.status_labels[stageKey] || stageKey}`,
-      { emitRealtime: false },
+      'delegation_created',
+      { delegationId },
+      `retry_delegation_created:${delegationId}`,
     );
-    notifyMain(
+    enqueueWorkflowWorkbenchSync(
+      workflowId,
+      'transition',
+      { fromStatus, toStatus: stageKey, delegationId },
+      `retry_transition:${fromStatus}:${stageKey}:${workflow.round}:${retryAttempt}`,
+    );
+    enqueueWorkflowWorkbenchSync(
+      workflowId,
+      'workflow_updated',
+      {
+        resultSummary: `已重跑阶段 ${config.status_labels[stageKey] || stageKey}`,
+      },
+      `retry_workflow_updated:${stageKey}:${workflow.round}:${retryAttempt}`,
+    );
+    writeWorkflowEvent({
+      workflowId,
+      eventType: 'delegation_created',
+      stateKey: stageKey,
+      refType: 'delegation',
+      refId: delegationId,
+      payload: {
+        delegation_id: delegationId,
+        idempotency_key: `workflow_delegation:${workflowId}:${stageKey}:${workflow.round}:${retryAttempt}`,
+        attempt: retryAttempt,
+        target_folder: targetFolder,
+      },
+    });
+    enqueueWorkflowNotification(
+      workflow,
       `[流程重跑] 需求「${workflow.name}」(${workflowId}) 已重新执行阶段 ${config.status_labels[stageKey] || stageKey}，已委派 ${targetFolder}。`,
-      workflow.source_jid,
-      workflowId,
+      `retry_notify:${stageKey}:${workflow.round}:${retryAttempt}`,
     );
+    processWorkflowOutbox();
     return {};
   } catch (err) {
     return {
@@ -2856,7 +3267,12 @@ export function onDelegationComplete(delegationId: string): void {
 
   const delegation = getDelegation(delegationId);
   if (!delegation) return;
-  syncWorkbenchOnDelegationCompleted(workflow.id, delegationId);
+  enqueueWorkflowWorkbenchSync(
+    workflow.id,
+    'delegation_completed',
+    { delegationId },
+    `delegation_completed:${delegationId}`,
+  );
   writeWorkflowEvent({
     workflowId: workflow.id,
     eventType: 'delegation_completed',
@@ -2975,29 +3391,33 @@ export function onDelegationComplete(delegationId: string): void {
     result: evaluation,
   });
   createWorkflowStageEvaluation(evaluationRecord);
-  workflowUpdates.context = mergeWorkflowContext(workflowUpdates.context || {}, {
-    latest_evaluator_result: {
-      state_key: workflow.status,
-      evaluation_id: evaluationRecord.id,
-      evaluator_ref: stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
-      artifact_contract_ref: stateConfig.artifact_contract?.ref || null,
-      status: evaluation.status,
-      score: evaluation.score,
-      summary: evaluation.summary,
-      findings: evaluation.findings,
-      evidence: evaluation.evidence,
-      evaluated_at: evaluationRecord.updated_at,
+  workflowUpdates.context = mergeWorkflowContext(
+    workflowUpdates.context || {},
+    {
+      latest_evaluator_result: {
+        state_key: workflow.status,
+        evaluation_id: evaluationRecord.id,
+        evaluator_ref:
+          stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
+        artifact_contract_ref: stateConfig.artifact_contract?.ref || null,
+        status: evaluation.status,
+        score: evaluation.score,
+        summary: evaluation.summary,
+        findings: evaluation.findings,
+        evidence: evaluation.evidence,
+        evaluated_at: evaluationRecord.updated_at,
+      },
+      ...(stateConfig.rollback_hint
+        ? {
+            latest_rollback_hint: {
+              ref: stateConfig.rollback_hint.ref,
+              state_key: workflow.status,
+              evaluation_id: evaluationRecord.id,
+            },
+          }
+        : {}),
     },
-    ...(stateConfig.rollback_hint
-      ? {
-          latest_rollback_hint: {
-            ref: stateConfig.rollback_hint.ref,
-            state_key: workflow.status,
-            evaluation_id: evaluationRecord.id,
-          },
-        }
-      : {}),
-  });
+  );
   writeWorkflowEvent({
     workflowId: workflow.id,
     eventType: 'artifact_evaluated',
@@ -3006,16 +3426,18 @@ export function onDelegationComplete(delegationId: string): void {
     refId: evaluationRecord.id,
     payload: {
       artifact_contract_ref: stateConfig.artifact_contract?.ref || null,
-      evaluator_ref: stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
+      evaluator_ref:
+        stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
       result: evaluation.status,
       findings: evaluation.findings,
       evidence: evaluation.evidence,
     },
   });
-  syncWorkbenchOnStageEvaluated(
+  enqueueWorkflowWorkbenchSync(
     workflow.id,
-    workflow.status,
-    evaluationRecord.id,
+    'stage_evaluated',
+    { stageKey: workflow.status, evaluationId: evaluationRecord.id },
+    `stage_evaluated:${workflow.status}:${evaluationRecord.id}`,
   );
 
   logger.info(
@@ -3038,7 +3460,8 @@ export function onDelegationComplete(delegationId: string): void {
     evaluation.status,
   );
   const retryExhaustedTransition =
-    evaluation.status === 'pending'
+    evaluation.status === 'pending' &&
+    !hasEvaluatorRetryCapacity(workflow, stateConfig)
       ? exhaustedRetryTransition(stateConfig)
       : undefined;
 
@@ -3058,22 +3481,31 @@ export function onDelegationComplete(delegationId: string): void {
         currentDelegationId: null,
       });
     }
-    syncWorkbenchOnWorkflowUpdated(workflow.id, evaluation.summary);
-    syncWorkbenchOnStageEvaluationActionNeeded(
+    enqueueWorkflowWorkbenchSync(
       workflow.id,
-      workflow.status,
-      evaluationRecord.id,
-      { keepVisibleWhenCurrentStage: true },
+      'workflow_updated',
+      { resultSummary: evaluation.summary },
+      `evaluation_pending_updated:${workflow.status}:${evaluationRecord.id}`,
+    );
+    enqueueWorkflowWorkbenchSync(
+      workflow.id,
+      'stage_evaluation_action_needed',
+      {
+        stageKey: workflow.status,
+        evaluationId: evaluationRecord.id,
+        keepVisibleWhenCurrentStage: true,
+      },
+      `evaluation_action_needed:${workflow.status}:${evaluationRecord.id}`,
     );
     scheduleEvaluatorRetryIfConfigured({
       workflow: pendingWorkflow || workflow,
       stateConfig,
       evaluationId: evaluationRecord.id,
     });
-    notifyMain(
+    enqueueWorkflowNotification(
+      workflow,
       `[阶段评测] 需求「${workflow.name}」(${workflow.id}) 在阶段 ${config.status_labels[workflow.status] || workflow.status} 缺少充分证据，已停止自动流转。\n\n${evaluation.summary}\n\n请补充交付物或结果后重跑当前阶段。`,
-      workflow.source_jid,
-      workflow.id,
+      `evaluation_pending_notify:${workflow.status}:${evaluationRecord.id}`,
     );
     return;
   }
@@ -3103,13 +3535,18 @@ export function onDelegationComplete(delegationId: string): void {
   });
 
   if (shouldCreateEvaluationActionItem) {
-    syncWorkbenchOnStageEvaluationActionNeeded(
+    enqueueWorkflowWorkbenchSync(
       workflow.id,
-      targetState?.type === 'terminal' ? transition.target : workflow.status,
-      evaluationRecord.id,
+      'stage_evaluation_action_needed',
       {
+        stageKey:
+          targetState?.type === 'terminal'
+            ? transition.target
+            : workflow.status,
+        evaluationId: evaluationRecord.id,
         keepVisibleWhenCurrentStage: transition.target === workflow.status,
       },
+      `evaluation_action_needed:${transition.target}:${evaluationRecord.id}`,
     );
   }
 }
@@ -3358,15 +3795,24 @@ export function cancelWorkflow(workflowId: string): { error?: string } {
       workflow.status,
     );
   }
-  syncWorkbenchOnTransition(workflowId, workflow.status, 'cancelled');
-  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已取消', {
-    emitRealtime: false,
-  });
-  notifyMain(
-    `[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`,
-    workflow.source_jid,
+  enqueueWorkflowWorkbenchSync(
     workflowId,
+    'transition',
+    { fromStatus: workflow.status, toStatus: 'cancelled', delegationId: '' },
+    `cancel_transition:${workflow.status}:${workflow.round}`,
   );
+  enqueueWorkflowWorkbenchSync(
+    workflowId,
+    'workflow_updated',
+    { resultSummary: '任务已取消' },
+    `cancel_updated:${workflow.round}`,
+  );
+  enqueueWorkflowNotification(
+    workflow,
+    `[流程取消] 需求「${workflow.name}」(${workflowId}) 已取消。`,
+    `cancel_notify:${workflow.round}`,
+  );
+  processWorkflowOutbox();
   return {};
 }
 
@@ -3389,15 +3835,28 @@ export function pauseWorkflow(workflowId: string): { error?: string } {
     status: 'paused',
     paused_from: workflow.status,
   });
-  syncWorkbenchOnTransition(workflowId, workflow.status, 'paused');
-  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已暂停', {
-    emitRealtime: false,
-  });
-  notifyMain(
-    `[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`,
-    workflow.source_jid,
+  enqueueWorkflowWorkbenchSync(
     workflowId,
+    'transition',
+    {
+      fromStatus: workflow.status,
+      toStatus: 'paused',
+      delegationId: workflow.current_delegation_id,
+    },
+    `pause_transition:${workflow.status}:${workflow.round}`,
   );
+  enqueueWorkflowWorkbenchSync(
+    workflowId,
+    'workflow_updated',
+    { resultSummary: '任务已暂停' },
+    `pause_updated:${workflow.round}`,
+  );
+  enqueueWorkflowNotification(
+    workflow,
+    `[流程中断] 需求「${workflow.name}」(${workflowId}) 已中断，可随时恢复。`,
+    `pause_notify:${workflow.round}`,
+  );
+  processWorkflowOutbox();
   return {};
 }
 
@@ -3417,17 +3876,23 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
         status: workflow.paused_from,
         paused_from: null,
       });
-      syncWorkbenchOnTransition(
+      enqueueWorkflowWorkbenchSync(
         workflowId,
-        workflow.status,
-        workflow.paused_from,
+        'transition',
+        {
+          fromStatus: workflow.status,
+          toStatus: workflow.paused_from,
+          delegationId: workflow.current_delegation_id,
+        },
+        `resume_completed_transition:${workflow.paused_from}:${workflow.round}`,
       );
       onDelegationComplete(workflow.current_delegation_id);
-      notifyMain(
+      enqueueWorkflowNotification(
+        workflow,
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，中断期间任务已完成，自动推进。`,
-        workflow.source_jid,
-        workflowId,
+        `resume_completed_notify:${workflow.round}`,
       );
+      processWorkflowOutbox();
       return {};
     }
     if (delegation?.status === 'pending') {
@@ -3436,19 +3901,28 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
         status: workflow.paused_from,
         paused_from: null,
       });
-      syncWorkbenchOnTransition(
+      enqueueWorkflowWorkbenchSync(
         workflowId,
-        workflow.status,
-        workflow.paused_from,
+        'transition',
+        {
+          fromStatus: workflow.status,
+          toStatus: workflow.paused_from,
+          delegationId: workflow.current_delegation_id,
+        },
+        `resume_pending_transition:${workflow.paused_from}:${workflow.round}`,
       );
-      syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复，委派仍在执行', {
-        emitRealtime: false,
-      });
-      notifyMain(
+      enqueueWorkflowWorkbenchSync(
+        workflowId,
+        'workflow_updated',
+        { resultSummary: '任务已恢复，委派仍在执行' },
+        `resume_pending_updated:${workflow.round}`,
+      );
+      enqueueWorkflowNotification(
+        workflow,
         `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复，任务仍在执行中。`,
-        workflow.source_jid,
-        workflowId,
+        `resume_pending_notify:${workflow.round}`,
       );
+      processWorkflowOutbox();
       return {};
     }
   }
@@ -3458,31 +3932,45 @@ export function resumeWorkflow(workflowId: string): { error?: string } {
     status: workflow.paused_from,
     paused_from: null,
   });
-  syncWorkbenchOnTransition(workflowId, workflow.status, workflow.paused_from);
-  syncWorkbenchOnWorkflowUpdated(workflowId, '任务已恢复', {
-    emitRealtime: false,
-  });
-  notifyMain(
-    `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`,
-    workflow.source_jid,
+  enqueueWorkflowWorkbenchSync(
     workflowId,
+    'transition',
+    {
+      fromStatus: workflow.status,
+      toStatus: workflow.paused_from,
+      delegationId: workflow.current_delegation_id,
+    },
+    `resume_transition:${workflow.paused_from}:${workflow.round}`,
+  );
+  enqueueWorkflowWorkbenchSync(
+    workflowId,
+    'workflow_updated',
+    { resultSummary: '任务已恢复' },
+    `resume_updated:${workflow.round}`,
+  );
+  enqueueWorkflowNotification(
+    workflow,
+    `[流程恢复] 需求「${workflow.name}」(${workflowId}) 已恢复。`,
+    `resume_notify:${workflow.round}`,
   );
 
   // If resuming to an interrupt state, resend its card
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (config) {
     const resumedStateConfig = config.states[workflow.paused_from];
-    if (
-      resumedStateConfig?.type === 'interrupt' &&
-      resumedStateConfig.card
-    ) {
+    if (resumedStateConfig?.type === 'interrupt' && resumedStateConfig.card) {
       const updatedWorkflow = getWorkflow(workflowId);
       if (updatedWorkflow) {
         ensureWorkflowStateDurableRecords(updatedWorkflow, 'resume', 'paused');
-        sendConfigCard(updatedWorkflow, resumedStateConfig.card);
+        enqueueWorkflowCard(
+          updatedWorkflow,
+          resumedStateConfig.card,
+          `resume_card:${workflow.paused_from}:${updatedWorkflow.round}`,
+        );
       }
     }
   }
+  processWorkflowOutbox();
   return {};
 }
 
@@ -3556,10 +4044,7 @@ export function handleCardAction(action: {
         channel: 'feishu',
         userId: action.user_id,
       },
-      idempotencyKey: buildIdempotencyKey(
-        resolvedInterruptId,
-        resumeAction,
-      ),
+      idempotencyKey: buildIdempotencyKey(resolvedInterruptId, resumeAction),
     });
     if (!result.ok) {
       notifyMain(

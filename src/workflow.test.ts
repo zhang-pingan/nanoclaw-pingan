@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   _initTestDatabase,
   createDelegation,
+  createWorkflowCheckpoint,
+  createWorkflowEvent,
   createWorkflowInterrupt,
   createWorkflow,
   getAllRegisteredGroups,
@@ -34,6 +36,7 @@ import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
+import { getWorkflowTypeConfig } from './workflow-config.js';
 
 const GROUPS: Array<[string, RegisteredGroup]> = [
   [
@@ -263,10 +266,8 @@ describe('durable interrupt runtime', () => {
     expect(result.ok).toBe(false);
     expect(getWorkflow('wf-resume-fail')?.status).toBe('awaiting_confirm');
     expect(
-      getPendingWorkflowInterruptForState(
-        'wf-resume-fail',
-        'awaiting_confirm',
-      )?.id,
+      getPendingWorkflowInterruptForState('wf-resume-fail', 'awaiting_confirm')
+        ?.id,
     ).toBe(interrupt!.id);
   });
 
@@ -332,7 +333,8 @@ describe('durable interrupt runtime', () => {
       resume_action: null,
       resume_payload_json: null,
       resume_error: null,
-      idempotency_key: 'workflow_interrupt:wf-expire-interrupt:testing_confirm:0:expired',
+      idempotency_key:
+        'workflow_interrupt:wf-expire-interrupt:testing_confirm:0:expired',
       created_at: '2026-04-08T00:00:00.000Z',
       updated_at: '2026-04-08T00:00:00.000Z',
       expires_at: '2026-04-08T00:00:01.000Z',
@@ -349,6 +351,125 @@ describe('durable interrupt runtime', () => {
     expect(getWorkflow(workflowId)?.status).toBe('testing_confirm');
   });
 
+  it('treats same-action resume with different payload as a conflict', () => {
+    createWorkflowAtInterrupt({
+      id: 'wf-resume-conflict',
+      state: 'plan_confirm',
+    });
+    initWorkflow({
+      registeredGroups: () => getAllRegisteredGroups(),
+      enqueueMessageCheck: () => {},
+    });
+    const interrupt = getPendingWorkflowInterruptForState(
+      'wf-resume-conflict',
+      'plan_confirm',
+    );
+    expect(interrupt).toBeDefined();
+
+    const first = resumeWorkflowInterrupt({
+      interruptId: interrupt!.id,
+      action: 'revise',
+      payload: { revision_text: 'first' },
+      actor: { channel: 'web', userId: 'tester-a' },
+    });
+    expect(first.ok).toBe(true);
+
+    const second = resumeWorkflowInterrupt({
+      interruptId: interrupt!.id,
+      action: 'revise',
+      payload: { revision_text: 'second' },
+      actor: { channel: 'web', userId: 'tester-b' },
+    });
+
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.error).toContain('不能再次提交');
+    }
+  });
+
+  it('executes due evaluator retries by creating a fresh delegation', () => {
+    const workflowId = 'wf-evaluator-retry';
+    const retryConfig = getWorkflowTypeConfig('dev_test')?.states.plan;
+    expect(retryConfig?.type).toBe('delegation');
+    retryConfig!.retry_policy = {
+      max_attempts: 2,
+      retry_on: ['evaluator_pending'],
+      initial_delay_ms: 0,
+    };
+    const context = {
+      main_branch: 'main',
+      work_branch: 'feature/retry-evidence',
+      deliverable: '2026-04-08_retry_evidence',
+      staging_base_branch: 'staging',
+      staging_work_branch: 'staging-deploy/retry-evidence',
+      access_token: '',
+      requirement_description: 'retry pending evidence',
+      requirement_files: [],
+      latest_evaluator_result: {
+        status: 'pending',
+        summary: 'missing deliverable',
+      },
+    };
+    createWorkflow({
+      id: workflowId,
+      name: 'retry pending evidence',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context,
+      status: 'plan',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createWorkflowCheckpoint({
+      id: 'wf-checkpoint-wf-evaluator-retry-1',
+      workflow_id: workflowId,
+      state_key: 'plan',
+      checkpoint_version: 1,
+      checkpoint_json: JSON.stringify({
+        workflowId,
+        workflowType: 'dev_test',
+        stateKey: 'plan',
+        round: 0,
+        context,
+        currentDelegationId: null,
+        pendingInterruptId: null,
+        attempts: { plan: 2 },
+        updatedAt: '2026-04-08T00:00:00.000Z',
+      }),
+      created_at: '2026-04-08T00:00:00.000Z',
+    });
+    createWorkflowEvent({
+      id: 'wf-event-evaluator-retry-scheduled',
+      workflow_id: workflowId,
+      event_type: 'retry_scheduled',
+      state_key: 'plan',
+      ref_type: 'workflow_stage_evaluation',
+      ref_id: 'eval-plan-pending',
+      actor_json: null,
+      payload_json: JSON.stringify({
+        reason: 'evaluator_pending',
+        next_attempt_at: '2026-04-08T00:00:01.000Z',
+        attempt: 2,
+      }),
+      idempotency_key: `workflow_retry:${workflowId}:plan:0:2`,
+      created_at: '2026-04-08T00:00:00.000Z',
+    });
+
+    runWorkflowWatchdogOnce('2026-04-08T00:00:02.000Z');
+
+    const delegations = getDelegationsByWorkflow(workflowId);
+    expect(delegations).toHaveLength(1);
+    expect(delegations[0]?.target_folder).toBe('web_plan');
+    expect(delegations[0]?.task).toContain('Evaluator pending retry attempt 2');
+    expect(getWorkflow(workflowId)?.current_delegation_id).toBe(
+      delegations[0]?.id,
+    );
+  });
 });
 
 describe('workflow metadata and branch flow', () => {

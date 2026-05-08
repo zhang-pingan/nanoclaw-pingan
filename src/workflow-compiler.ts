@@ -77,9 +77,7 @@ function compileTransition(
   };
 }
 
-function compileState(
-  state: WorkflowDefinitionState,
-): CompiledWorkflowState {
+function compileState(state: WorkflowDefinitionState): CompiledWorkflowState {
   const base = {
     label: state.label,
     description: state.description,
@@ -130,6 +128,21 @@ function compileState(
     };
   }
 
+  if (state.type === 'system') {
+    return {
+      ...base,
+      type: 'system',
+      on_complete: state.on_complete
+        ? {
+            success: compileTransition(state.on_complete.success),
+            failure: state.on_complete.failure
+              ? compileTransition(state.on_complete.failure)
+              : compileTransition(state.on_complete.success),
+          }
+        : undefined,
+    };
+  }
+
   return {
     ...base,
     type: state.type,
@@ -172,7 +185,15 @@ export function validateWorkflowDefinition(
         if (!field.label?.trim()) {
           errors.push(`${fieldPath}.label is required`);
         }
-        if (!['text', 'textarea', 'choice', 'requirement_select', 'file_uploads'].includes(field.type)) {
+        if (
+          ![
+            'text',
+            'textarea',
+            'choice',
+            'requirement_select',
+            'file_uploads',
+          ].includes(field.type)
+        ) {
           errors.push(`${fieldPath}.type "${field.type}" is invalid`);
         }
         if (
@@ -181,14 +202,21 @@ export function validateWorkflowDefinition(
         ) {
           errors.push(`${fieldPath}.required must be a boolean`);
         }
-        if (field.type === 'choice' && (!Array.isArray(field.options) || field.options.length === 0)) {
-          errors.push(`${fieldPath}.options must contain at least one item for choice fields`);
+        if (
+          field.type === 'choice' &&
+          (!Array.isArray(field.options) || field.options.length === 0)
+        ) {
+          errors.push(
+            `${fieldPath}.options must contain at least one item for choice fields`,
+          );
         }
         const visibleWhen = field.visible_when;
         if (visibleWhen?.entry_points) {
           for (const entryPoint of visibleWhen.entry_points) {
             if (!entryPointNames.has(entryPoint)) {
-              errors.push(`${fieldPath}.visible_when.entry_points contains unknown entry point "${entryPoint}"`);
+              errors.push(
+                `${fieldPath}.visible_when.entry_points contains unknown entry point "${entryPoint}"`,
+              );
             }
           }
         }
@@ -234,6 +262,22 @@ export function validateWorkflowDefinition(
       }
     }
 
+    if (state.type === 'system' && state.on_complete) {
+      for (const [outcome, transition] of Object.entries(state.on_complete)) {
+        if (!transition) continue;
+        if (!stateNames.has(transition.target)) {
+          errors.push(
+            `${definition.key}.states.${stateKey}.on_complete.${outcome}.target "${transition.target}" does not exist`,
+          );
+        }
+        if (transition.delegate && !roleNames.has(transition.delegate.role)) {
+          errors.push(
+            `${definition.key}.states.${stateKey}.on_complete.${outcome}.delegate.role "${transition.delegate.role}" not defined in roles`,
+          );
+        }
+      }
+    }
+
     if (state.type === 'interrupt') {
       if (!state.kind?.trim()) {
         errors.push(`${definition.key}.states.${stateKey}.kind is required`);
@@ -246,10 +290,7 @@ export function validateWorkflowDefinition(
           `${definition.key}.states.${stateKey}.allowed_actions must contain at least one action`,
         );
       }
-      if (
-        !state.on_resume ||
-        Object.keys(state.on_resume).length === 0
-      ) {
+      if (!state.on_resume || Object.keys(state.on_resume).length === 0) {
         errors.push(
           `${definition.key}.states.${stateKey}.on_resume must contain at least one transition`,
         );

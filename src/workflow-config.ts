@@ -69,7 +69,7 @@ export interface StateConfig {
   task_template?: string;
   on_complete?: {
     success: StateTransition;
-    failure: StateTransition;
+    failure?: StateTransition;
   };
 
   // --- interrupt fields ---
@@ -402,7 +402,10 @@ export function validateConfig(
       if (!state.kind) {
         errors.push(`${typeName}.states.${stateName}.kind is required`);
       }
-      if (!Array.isArray(state.allowed_actions) || state.allowed_actions.length === 0) {
+      if (
+        !Array.isArray(state.allowed_actions) ||
+        state.allowed_actions.length === 0
+      ) {
         errors.push(
           `${typeName}.states.${stateName}.allowed_actions must contain at least one action`,
         );
@@ -490,7 +493,9 @@ export function validateConfig(
   }
 
   for (const [cardKey, cardConfig] of Object.entries(cards)) {
-    errors.push(...validateCardConfig(`${typeName}.cards.${cardKey}`, cardConfig));
+    errors.push(
+      ...validateCardConfig(`${typeName}.cards.${cardKey}`, cardConfig),
+    );
   }
 
   return errors;

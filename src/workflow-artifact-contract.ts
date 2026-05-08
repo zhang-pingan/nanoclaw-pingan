@@ -15,6 +15,15 @@ import {
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
 
+type JsonSchema = {
+  type?: string;
+  required?: string[];
+  properties?: Record<string, JsonSchema>;
+  minLength?: number;
+  maxLength?: number;
+  enum?: unknown[];
+};
+
 interface WorkflowArtifactContract {
   id: string;
   version: number;
@@ -24,10 +33,13 @@ interface WorkflowArtifactContract {
     required: boolean;
     allowed_roots?: string[];
     must_exist?: boolean;
+    frontmatter_required?: string[];
+    frontmatter_schema?: Record<string, unknown>;
     max_bytes?: number;
   }>;
   payload?: {
     required?: string[];
+    properties?: Record<string, unknown>;
   };
   allowed_artifact_roots?: string[];
 }
@@ -63,7 +75,10 @@ export function loadWorkflowArtifactContracts(): Record<
         registry[contract.id] = contract;
       }
     } catch (err) {
-      logger.error({ err, fullPath }, 'Failed to load workflow artifact contract');
+      logger.error(
+        { err, fullPath },
+        'Failed to load workflow artifact contract',
+      );
     }
   }
 
@@ -110,6 +125,83 @@ function isUnderAllowedRoot(filePath: string, allowedRoots: string[]): boolean {
   });
 }
 
+function readFrontMatter(content: string): Record<string, unknown> | null {
+  if (!content.startsWith('---\n')) return null;
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return null;
+  const raw = content.slice(4, end);
+  const result: Record<string, unknown> = {};
+  for (const line of raw.split('\n')) {
+    const separator = line.indexOf(':');
+    if (separator <= 0) continue;
+    result[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+  }
+  return result;
+}
+
+function validateJsonSchemaSubset(
+  schema: JsonSchema | undefined,
+  value: unknown,
+  pathName: string,
+): string[] {
+  if (!schema || Object.keys(schema).length === 0) return [];
+  const errors: string[] = [];
+  if (schema.type === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return [`${pathName} must be an object`];
+    }
+    const objectValue = value as Record<string, unknown>;
+    for (const key of schema.required || []) {
+      if (objectValue[key] === undefined)
+        errors.push(`${pathName}.${key} is required`);
+    }
+    for (const [key, child] of Object.entries(schema.properties || {})) {
+      if (objectValue[key] !== undefined) {
+        errors.push(
+          ...validateJsonSchemaSubset(
+            child,
+            objectValue[key],
+            `${pathName}.${key}`,
+          ),
+        );
+      }
+    }
+    return errors;
+  }
+  if (schema.type === 'string') {
+    if (typeof value !== 'string') errors.push(`${pathName} must be a string`);
+    if (
+      typeof value === 'string' &&
+      schema.minLength !== undefined &&
+      value.length < schema.minLength
+    ) {
+      errors.push(
+        `${pathName} must be at least ${schema.minLength} characters`,
+      );
+    }
+    if (
+      typeof value === 'string' &&
+      schema.maxLength !== undefined &&
+      value.length > schema.maxLength
+    ) {
+      errors.push(`${pathName} must be at most ${schema.maxLength} characters`);
+    }
+  } else if (schema.type === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value))
+      errors.push(`${pathName} must be a number`);
+  } else if (schema.type === 'integer') {
+    if (typeof value !== 'number' || !Number.isInteger(value))
+      errors.push(`${pathName} must be an integer`);
+  } else if (schema.type === 'boolean') {
+    if (typeof value !== 'boolean')
+      errors.push(`${pathName} must be a boolean`);
+  }
+  if (schema.enum && !schema.enum.includes(value)) {
+    errors.push(`${pathName} must be one of ${schema.enum.join(', ')}`);
+  }
+  return errors;
+}
+
 export function evaluateWorkflowArtifactContract(input: {
   workflow: Workflow;
   contractRef: string | undefined;
@@ -127,6 +219,23 @@ export function evaluateWorkflowArtifactContract(input: {
         code: 'artifact_contract.payload_missing',
         severity: 'high',
         message: `Payload missing required field "${requiredKey}"`,
+        stageKey: input.workflow.status,
+      });
+    }
+  }
+  for (const [key, schema] of Object.entries(
+    contract.payload?.properties || {},
+  )) {
+    if (input.payload[key] === undefined) continue;
+    for (const error of validateJsonSchemaSubset(
+      schema as JsonSchema,
+      input.payload[key],
+      `payload.${key}`,
+    )) {
+      findings.push({
+        code: 'artifact_contract.payload_schema_invalid',
+        severity: 'high',
+        message: error,
         stageKey: input.workflow.status,
       });
     }
@@ -161,6 +270,46 @@ export function evaluateWorkflowArtifactContract(input: {
     }
     if (exists) {
       const stat = fs.statSync(fullPath);
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const frontMatter = readFrontMatter(content);
+      if (
+        (file.frontmatter_required || file.frontmatter_schema) &&
+        !frontMatter
+      ) {
+        findings.push({
+          code: 'artifact_contract.frontmatter_missing',
+          severity: 'high',
+          message: `Artifact frontmatter is missing: ${file.path}`,
+          stageKey: input.workflow.status,
+          path: fullPath,
+        });
+      }
+      for (const requiredKey of file.frontmatter_required || []) {
+        if (frontMatter?.[requiredKey] === undefined) {
+          findings.push({
+            code: 'artifact_contract.frontmatter_required_missing',
+            severity: 'high',
+            message: `Artifact frontmatter missing required field "${requiredKey}": ${file.path}`,
+            stageKey: input.workflow.status,
+            path: fullPath,
+          });
+        }
+      }
+      if (file.frontmatter_schema && frontMatter) {
+        for (const error of validateJsonSchemaSubset(
+          file.frontmatter_schema as JsonSchema,
+          frontMatter,
+          `frontmatter.${file.path}`,
+        )) {
+          findings.push({
+            code: 'artifact_contract.frontmatter_schema_invalid',
+            severity: 'high',
+            message: error,
+            stageKey: input.workflow.status,
+            path: fullPath,
+          });
+        }
+      }
       if (file.max_bytes && stat.size > file.max_bytes) {
         findings.push({
           code: 'artifact_contract.file_too_large',

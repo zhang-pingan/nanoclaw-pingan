@@ -3,7 +3,6 @@ import path from 'path';
 
 import { PROJECT_ROOT } from './config.js';
 import {
-  createWorkflowInterrupt,
   createWorkbenchActionItem,
   createWorkbenchArtifact,
   createWorkbenchEvent,
@@ -19,7 +18,6 @@ import {
   getWorkbenchSubtaskByStage,
   getWorkbenchTaskByWorkflowId,
   getWorkflow,
-  listWorkflowInterruptsByWorkflow,
   listWorkbenchActionItemsByTask,
   listWorkbenchActionItemsBySource,
   listWorkflowStageEvaluationsByWorkflow,
@@ -383,57 +381,8 @@ function parseInterruptJsonArray(raw: string | null | undefined): string[] {
 function ensurePendingInterruptForWorkbench(
   workflow: Workflow,
 ): WorkflowInterruptRecord | null {
-  const existing = getPendingWorkflowInterruptForState(
-    workflow.id,
-    workflow.status,
-  );
-  if (existing) return existing;
-
-  const config = getWorkflowTypeConfig(workflow.workflow_type);
-  const state = config?.states[workflow.status];
-  if (!config || state?.type !== 'interrupt') return null;
-
-  const now = new Date().toISOString();
-  const attempts = listWorkflowInterruptsByWorkflow(workflow.id).filter(
-    (interrupt) => interrupt.state_key === workflow.status,
-  ).length + 1;
-  const interrupt: WorkflowInterruptRecord = {
-    id: `wi-${workflow.id}-${workflow.status}-${workflow.round}-${attempts}`,
-    workflow_id: workflow.id,
-    state_key: workflow.status,
-    kind: state.kind || 'approval',
-    status: 'pending',
-    title:
-      state.title || config.status_labels[workflow.status] || workflow.status,
-    body: state.body || null,
-    resume_payload_schema_json: JSON.stringify(
-      state.resume_payload_schema?.schema || { type: 'object' },
-    ),
-    allowed_actions_json: JSON.stringify(state.allowed_actions || []),
-    allowed_channels_json: JSON.stringify(
-      state.allowed_channels || ['web', 'feishu', 'assistant'],
-    ),
-    assigned_role: null,
-    action_payload_json: null,
-    created_by: 'workbench_sync',
-    resumed_by: null,
-    resume_action: null,
-    resume_payload_json: null,
-    resume_error: null,
-    idempotency_key: `workflow_interrupt:${workflow.id}:${workflow.status}:${workflow.round}:${attempts}`,
-    created_at: now,
-    updated_at: now,
-    expires_at: state.timeout_policy?.duration_ms
-      ? new Date(Date.now() + state.timeout_policy.duration_ms).toISOString()
-      : null,
-    resumed_at: null,
-    cancelled_at: null,
-    expired_at: null,
-  };
-  createWorkflowInterrupt(interrupt);
   return (
-    getPendingWorkflowInterruptForState(workflow.id, workflow.status) ||
-    interrupt
+    getPendingWorkflowInterruptForState(workflow.id, workflow.status) || null
   );
 }
 
@@ -447,8 +396,7 @@ function upsertStageActionItem(
   const state = config.states[workflow.status];
   if (!state || state.type !== 'interrupt') return;
   const pendingInterrupt =
-    interrupt ||
-    ensurePendingInterruptForWorkbench(workflow);
+    interrupt || ensurePendingInterruptForWorkbench(workflow);
   if (!pendingInterrupt) return;
   const card = state.card
     ? getCardConfig(workflow.workflow_type, state.card)
