@@ -3,6 +3,10 @@ import {
   WorkflowCreateForm,
   WorkflowDefinitionState,
   WorkflowDefinitionTransition,
+  WorkflowDefinitionEvaluatorRef,
+  WorkflowDefinitionJsonSchemaRef,
+  WorkflowDefinitionRetryPolicy,
+  WorkflowDefinitionTimeoutPolicy,
 } from './workflow-definition.js';
 
 export interface CompiledWorkflowTransition {
@@ -16,17 +20,31 @@ export interface CompiledWorkflowTransition {
 }
 
 export interface CompiledWorkflowState {
-  type: 'delegation' | 'confirmation' | 'terminal' | 'system';
+  type: 'delegation' | 'interrupt' | 'terminal' | 'system';
   role?: string;
   skill?: string;
   task_template?: string;
   card?: string;
+  label?: string;
+  description?: string;
+  retry_policy?: WorkflowDefinitionRetryPolicy;
+  timeout_policy?: WorkflowDefinitionTimeoutPolicy;
+  artifact_contract?: { ref: string };
+  evaluator?: WorkflowDefinitionEvaluatorRef;
+  rollback_hint?: { ref: string };
   on_complete?: {
     success: CompiledWorkflowTransition;
     failure: CompiledWorkflowTransition;
   };
-  on_approve?: CompiledWorkflowTransition;
-  on_revise?: CompiledWorkflowTransition;
+  kind?: string;
+  title?: string;
+  body?: string;
+  resume_payload_schema?: WorkflowDefinitionJsonSchemaRef;
+  allowed_actions?: string[];
+  allowed_channels?: Array<'web' | 'feishu' | 'assistant'>;
+  on_resume?: Record<string, CompiledWorkflowTransition>;
+  on_cancel?: CompiledWorkflowTransition;
+  on_expire?: CompiledWorkflowTransition;
 }
 
 export interface CompiledWorkflowConfig {
@@ -62,8 +80,19 @@ function compileTransition(
 function compileState(
   state: WorkflowDefinitionState,
 ): CompiledWorkflowState {
+  const base = {
+    label: state.label,
+    description: state.description,
+    retry_policy: state.retry_policy,
+    timeout_policy: state.timeout_policy,
+    artifact_contract: state.artifact_contract,
+    evaluator: state.evaluator,
+    rollback_hint: state.rollback_hint,
+  };
+
   if (state.type === 'delegation') {
     return {
+      ...base,
       type: 'delegation',
       role: state.delegate.role,
       skill: state.delegate.skill,
@@ -75,20 +104,34 @@ function compileState(
     };
   }
 
-  if (state.type === 'confirmation') {
+  if (state.type === 'interrupt') {
     return {
-      type: 'confirmation',
-      card: state.card.ref,
-      on_approve: state.on_approve
-        ? compileTransition(state.on_approve)
+      ...base,
+      type: 'interrupt',
+      kind: state.kind,
+      card: state.card?.ref,
+      title: state.title,
+      body: state.body,
+      resume_payload_schema: state.resume_payload_schema,
+      allowed_actions: state.allowed_actions,
+      allowed_channels: state.allowed_channels,
+      on_resume: Object.fromEntries(
+        Object.entries(state.on_resume).map(([action, transition]) => [
+          action,
+          compileTransition(transition),
+        ]),
+      ),
+      on_cancel: state.on_cancel
+        ? compileTransition(state.on_cancel)
         : undefined,
-      on_revise: state.on_revise
-        ? compileTransition(state.on_revise)
+      on_expire: state.on_expire
+        ? compileTransition(state.on_expire)
         : undefined,
     };
   }
 
   return {
+    ...base,
     type: state.type,
   };
 }
@@ -164,6 +207,13 @@ export function validateWorkflowDefinition(
   }
 
   for (const [stateKey, state] of Object.entries(definition.states)) {
+    if ((state as { type?: string }).type === 'confirmation') {
+      errors.push(
+        `${definition.key}.states.${stateKey}.type "confirmation" is no longer supported; use "interrupt"`,
+      );
+      continue;
+    }
+
     if (state.type === 'delegation') {
       if (!roleNames.has(state.delegate.role)) {
         errors.push(
@@ -184,28 +234,90 @@ export function validateWorkflowDefinition(
       }
     }
 
-    if (state.type === 'confirmation') {
-      if (!state.card?.ref?.trim()) {
-        errors.push(`${definition.key}.states.${stateKey}.card.ref is required`);
+    if (state.type === 'interrupt') {
+      if (!state.kind?.trim()) {
+        errors.push(`${definition.key}.states.${stateKey}.kind is required`);
       }
-      if (state.on_approve && !stateNames.has(state.on_approve.target)) {
+      if (
+        !Array.isArray(state.allowed_actions) ||
+        state.allowed_actions.length === 0
+      ) {
         errors.push(
-          `${definition.key}.states.${stateKey}.on_approve.target "${state.on_approve.target}" does not exist`,
+          `${definition.key}.states.${stateKey}.allowed_actions must contain at least one action`,
         );
       }
-      if (state.on_revise && !stateNames.has(state.on_revise.target)) {
+      if (
+        !state.on_resume ||
+        Object.keys(state.on_resume).length === 0
+      ) {
         errors.push(
-          `${definition.key}.states.${stateKey}.on_revise.target "${state.on_revise.target}" does not exist`,
+          `${definition.key}.states.${stateKey}.on_resume must contain at least one transition`,
         );
       }
-      if (state.on_approve?.delegate && !roleNames.has(state.on_approve.delegate.role)) {
+      if (!state.resume_payload_schema) {
         errors.push(
-          `${definition.key}.states.${stateKey}.on_approve.delegate.role "${state.on_approve.delegate.role}" not defined in roles`,
+          `${definition.key}.states.${stateKey}.resume_payload_schema is required`,
         );
       }
-      if (state.on_revise?.delegate && !roleNames.has(state.on_revise.delegate.role)) {
+      for (const action of state.allowed_actions || []) {
+        if (!state.on_resume?.[action]) {
+          errors.push(
+            `${definition.key}.states.${stateKey}.on_resume.${action} is required for allowed action "${action}"`,
+          );
+        }
+      }
+      for (const [action, transition] of Object.entries(
+        state.on_resume || {},
+      )) {
+        if (!stateNames.has(transition.target)) {
+          errors.push(
+            `${definition.key}.states.${stateKey}.on_resume.${action}.target "${transition.target}" does not exist`,
+          );
+        }
+        if (transition.delegate && !roleNames.has(transition.delegate.role)) {
+          errors.push(
+            `${definition.key}.states.${stateKey}.on_resume.${action}.delegate.role "${transition.delegate.role}" not defined in roles`,
+          );
+        }
+      }
+      for (const [fieldName, transition] of [
+        ['on_cancel', state.on_cancel],
+        ['on_expire', state.on_expire],
+      ] as const) {
+        if (!transition) continue;
+        if (!stateNames.has(transition.target)) {
+          errors.push(
+            `${definition.key}.states.${stateKey}.${fieldName}.target "${transition.target}" does not exist`,
+          );
+        }
+        if (transition.delegate && !roleNames.has(transition.delegate.role)) {
+          errors.push(
+            `${definition.key}.states.${stateKey}.${fieldName}.delegate.role "${transition.delegate.role}" not defined in roles`,
+          );
+        }
+      }
+    }
+
+    const evaluatorTransitions = state.evaluator
+      ? {
+          on_pass: state.evaluator.on_pass,
+          on_needs_revision: state.evaluator.on_needs_revision,
+          on_fail: state.evaluator.on_fail,
+          on_pending: state.evaluator.on_pending,
+        }
+      : {};
+    for (const [fieldName, transition] of Object.entries(
+      evaluatorTransitions,
+    )) {
+      if (!transition) continue;
+      if (!stateNames.has(transition.target)) {
         errors.push(
-          `${definition.key}.states.${stateKey}.on_revise.delegate.role "${state.on_revise.delegate.role}" not defined in roles`,
+          `${definition.key}.states.${stateKey}.evaluator.${fieldName}.target "${transition.target}" does not exist`,
+        );
+      }
+      if (transition.delegate && !roleNames.has(transition.delegate.role)) {
+        errors.push(
+          `${definition.key}.states.${stateKey}.evaluator.${fieldName}.delegate.role "${transition.delegate.role}" not defined in roles`,
         );
       }
     }

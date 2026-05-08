@@ -10,6 +10,7 @@ import {
   getAllRegisteredGroups,
   getDelegationsByWorkflow,
   getLatestWorkflowStageEvaluation,
+  getPendingWorkflowInterruptForState,
   getWorkflow,
   setRegisteredGroup,
   storeChatMetadata,
@@ -18,11 +19,11 @@ import {
 import { PROJECT_ROOT } from './config.js';
 import type { RegisteredGroup } from './types.js';
 import {
-  approveWorkflow,
   createNewWorkflow,
   getAvailableWorkflowTypes,
   initWorkflow,
   onDelegationComplete,
+  resumeWorkflowInterrupt,
 } from './workflow.js';
 import {
   getWorkflowContextValue,
@@ -95,6 +96,22 @@ const GROUPS: Array<[string, RegisteredGroup]> = [
     },
   ],
 ];
+
+function resumePendingInterruptForTest(
+  workflowId: string,
+  stateKey: string,
+  action = 'skip',
+): void {
+  const interrupt = getPendingWorkflowInterruptForState(workflowId, stateKey);
+  expect(interrupt).toBeDefined();
+  const result = resumeWorkflowInterrupt({
+    interruptId: interrupt!.id,
+    action,
+    payload: action === 'skip' ? { skipped: true } : {},
+    actor: { channel: 'system', userId: 'test' },
+  });
+  expect(result.ok).toBe(true);
+}
 
 const TEST_SERVICE = 'workflow-test-service';
 const ITERATION_DIR = path.join(
@@ -899,8 +916,7 @@ describe('workflow metadata and branch flow', () => {
         ),
     ).toBe('staging-deploy/feature-test_20260408');
 
-    const approveResult = approveWorkflow('wf-ops');
-    expect(approveResult.error).toBeUndefined();
+    resumePendingInterruptForTest('wf-ops', 'testing_confirm');
 
     workflow = getWorkflow('wf-ops');
     expect(workflow?.status).toBe('testing');

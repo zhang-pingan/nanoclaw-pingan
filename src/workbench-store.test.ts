@@ -11,6 +11,7 @@ import {
   createWorkflow as dbCreateWorkflow,
   getAllRegisteredGroups,
   getLatestWorkflowStageEvaluation,
+  getPendingWorkflowInterruptForState,
   getWorkbenchTaskByWorkflowId,
   getWorkbenchActionItem,
   listWorkbenchEventsByTask,
@@ -22,10 +23,10 @@ import {
 import { PROJECT_ROOT } from './config.js';
 import { RegisteredGroup } from './types.js';
 import {
-  approveWorkflow,
   cancelWorkflow,
   initWorkflow,
   onDelegationComplete,
+  resumeWorkflowInterrupt,
 } from './workflow.js';
 import {
   createWorkbenchTask,
@@ -80,6 +81,30 @@ const PLAN_GROUP: RegisteredGroup = {
   trigger: '/nc',
   added_at: '2026-04-07T00:00:00.000Z',
 };
+
+function resumePendingInterruptForTest(
+  workflowId: string,
+  stateKey: string,
+  action?: string,
+): void {
+  const interrupt = getPendingWorkflowInterruptForState(workflowId, stateKey);
+  expect(interrupt).toBeDefined();
+  const allowedActions = JSON.parse(interrupt!.allowed_actions_json) as string[];
+  const resumeAction =
+    action ||
+    (allowedActions.includes('approve')
+      ? 'approve'
+      : allowedActions.includes('skip')
+        ? 'skip'
+        : allowedActions[0]);
+  const result = resumeWorkflowInterrupt({
+    interruptId: interrupt!.id,
+    action: resumeAction,
+    payload: resumeAction === 'skip' ? { skipped: true } : {},
+    actor: { channel: 'system', userId: 'test' },
+  });
+  expect(result.ok).toBe(true);
+}
 
 const PLAN_EXAMINE_GROUP: RegisteredGroup = {
   name: 'Plan Examine',
@@ -234,8 +259,7 @@ describe('workbench approval transition sync', () => {
     });
     syncWorkbenchOnWorkflowCreated('wf-predeploy');
 
-    const result = approveWorkflow('wf-predeploy');
-    expect(result.error).toBeUndefined();
+    resumePendingInterruptForTest('wf-predeploy', 'awaiting_confirm');
 
     const detail = getWorkbenchTaskDetail('wb-wf-predeploy');
     expect(detail).not.toBeNull();
@@ -425,7 +449,7 @@ describe('workbench approval transition sync', () => {
     );
 
     const result = await handleWorkbenchBroadcastCardAction({
-      action: 'wb_broadcast_submit_access_token',
+      action: 'wb_broadcast_submit',
       formValue: {
         action_item_id:
           'wb-action-wf-broadcast-testing-confirm-feishu-fallback-testing_confirm',
@@ -580,7 +604,7 @@ describe('workbench approval transition sync', () => {
       answers_json: null,
       current_index: 0,
       created_at: '2026-04-07T00:00:00.000Z',
-      expires_at: '2026-05-08T00:00:00.000Z',
+      expires_at: '2026-06-08T00:00:00.000Z',
       answered_at: null,
       responder_user_id: null,
     });
@@ -694,8 +718,7 @@ describe('workbench approval transition sync', () => {
       );
     });
 
-    const result = approveWorkflow('wf-approve-event-order');
-    expect(result.error).toBeUndefined();
+    resumePendingInterruptForTest('wf-approve-event-order', 'testing_confirm');
 
     const firstTransitionSubtaskIdx = emittedEvents.findIndex(
       (item) => item === 'subtask_updated:testing',
@@ -816,8 +839,7 @@ describe('workbench approval transition sync', () => {
       }
     });
 
-    const result = approveWorkflow('wf-realtime-labels');
-    expect(result.error).toBeUndefined();
+    resumePendingInterruptForTest('wf-realtime-labels', 'testing_confirm');
     expect(events).not.toHaveLength(0);
     expect(events[0]?.workflowStatus).toBe('testing');
     expect(events[0]?.workflowStatusLabel).toBe('🧪 测试中');
@@ -1102,18 +1124,18 @@ describe('workbench approval transition sync', () => {
     ).toBe(false);
   });
 
-  it('allows returning from a completed confirmation subtask to that node', () => {
+  it('allows returning from a completed interrupt subtask to that node', () => {
     dbCreateWorkflow({
-      id: 'wf-return-confirmation-stage',
+      id: 'wf-return-interrupt-stage',
       name: '回到确认节点',
       service: 'order-service',
       start_from: 'testing',
       context: {
         main_branch: '',
-        work_branch: 'feature/return-confirmation',
+        work_branch: 'feature/return-interrupt',
         staging_base_branch: 'staging',
-        deliverable: '2026-04-07_return_confirmation',
-        staging_work_branch: 'staging-deploy/feature-return-confirmation',
+        deliverable: '2026-04-07_return_interrupt',
+        staging_work_branch: 'staging-deploy/feature-return-interrupt',
         access_token: '',
       },
       status: 'ops_deploy',
@@ -1125,53 +1147,53 @@ describe('workbench approval transition sync', () => {
       created_at: '2026-04-07T00:00:00.000Z',
       updated_at: '2026-04-07T00:00:00.000Z',
     });
-    syncWorkbenchOnWorkflowCreated('wf-return-confirmation-stage');
+    syncWorkbenchOnWorkflowCreated('wf-return-interrupt-stage');
 
-    updateWorkflow('wf-return-confirmation-stage', {
+    updateWorkflow('wf-return-interrupt-stage', {
       status: 'testing_confirm',
       current_delegation_id: '',
     });
     syncWorkbenchOnTransition(
-      'wf-return-confirmation-stage',
+      'wf-return-interrupt-stage',
       'ops_deploy',
       'testing_confirm',
       'wf-del-ops-return-1',
     );
 
-    updateWorkflow('wf-return-confirmation-stage', {
+    updateWorkflow('wf-return-interrupt-stage', {
       status: 'testing',
       current_delegation_id: 'wf-del-test-return-1',
     });
     syncWorkbenchOnTransition(
-      'wf-return-confirmation-stage',
+      'wf-return-interrupt-stage',
       'testing_confirm',
       'testing',
       'wf-del-test-return-1',
     );
 
-    updateWorkflow('wf-return-confirmation-stage', {
+    updateWorkflow('wf-return-interrupt-stage', {
       status: 'fixing',
       current_delegation_id: 'wf-del-fixing-return-1',
     });
     syncWorkbenchOnTransition(
-      'wf-return-confirmation-stage',
+      'wf-return-interrupt-stage',
       'testing',
       'fixing',
       'wf-del-fixing-return-1',
     );
 
-    const task = getWorkbenchTaskByWorkflowId('wf-return-confirmation-stage');
+    const task = getWorkbenchTaskByWorkflowId('wf-return-interrupt-stage');
     expect(task).not.toBeNull();
     const detailBefore = getWorkbenchTaskDetail(task!.id);
-    const completedConfirmation = detailBefore?.subtasks.find(
+    const completedInterrupt = detailBefore?.subtasks.find(
       (item) =>
         item.stage_key === 'testing_confirm' && item.status === 'completed',
     );
-    expect(completedConfirmation?.stage_type).toBe('confirmation');
+    expect(completedInterrupt?.stage_type).toBe('interrupt');
 
     const result = retryWorkbenchSubtask({
       taskId: task!.id,
-      subtaskId: completedConfirmation!.id,
+      subtaskId: completedInterrupt!.id,
     });
     expect(result.error).toBeUndefined();
 
@@ -1182,16 +1204,16 @@ describe('workbench approval transition sync', () => {
       detail?.action_items.map((item) => `${item.stage_key}:${item.status}`),
     ).toEqual(['testing_confirm:pending']);
 
-    const confirmationSubtasks =
+    const interruptSubtasks =
       detail?.subtasks.filter((item) => item.stage_key === 'testing_confirm') ||
       [];
-    expect(confirmationSubtasks).toHaveLength(2);
-    expect(confirmationSubtasks.map((item) => item.status)).toEqual([
+    expect(interruptSubtasks).toHaveLength(2);
+    expect(interruptSubtasks.map((item) => item.status)).toEqual([
       'completed',
       'current',
     ]);
     expect(
-      confirmationSubtasks.every((item) => item.stage_type === 'confirmation'),
+      interruptSubtasks.every((item) => item.stage_type === 'interrupt'),
     ).toBe(true);
   });
 

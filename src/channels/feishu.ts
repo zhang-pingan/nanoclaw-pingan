@@ -438,7 +438,7 @@ class FeishuChannel implements Channel {
       actionName.length > workflowSubmitPrefix.length
     ) {
       return {
-        action: 'wb_broadcast_submit_access_token',
+        action: 'wb_broadcast_submit',
         task_id: actionName.slice(workflowSubmitPrefix.length),
       };
     }
@@ -455,7 +455,7 @@ class FeishuChannel implements Channel {
     }
 
     const suffixMap: Array<[string, string]> = [
-      ['-submit-access-token', 'wb_broadcast_submit_access_token'],
+      ['-submit-access-token', 'wb_broadcast_submit'],
       ['-revise', 'wb_broadcast_revise'],
       ['-reply', 'wb_broadcast_reply'],
     ];
@@ -502,7 +502,17 @@ class FeishuChannel implements Channel {
       items.find(
         (entry) =>
           entry.source_type === 'workflow' && entry.status === 'pending',
-      ) || items.find((entry) => entry.source_type === 'workflow');
+      ) ||
+      items.find(
+        (entry) =>
+          entry.source_type === 'workflow_interrupt' &&
+          entry.status === 'pending',
+      ) ||
+      items.find(
+        (entry) =>
+          entry.source_type === 'workflow' ||
+          entry.source_type === 'workflow_interrupt',
+      );
     if (!item) return null;
     return {
       actionItemId: item.id,
@@ -904,7 +914,7 @@ class FeishuChannel implements Channel {
           !mergedFormValue.action_item_id &&
           typeof mergedFormValue.task_id === 'string' &&
           (resolvedValue.action === 'wb_broadcast_revise' ||
-            resolvedValue.action === 'wb_broadcast_submit_access_token')
+            resolvedValue.action === 'wb_broadcast_submit')
         ) {
           try {
             const resolvedItem = this.resolvePendingWorkflowActionItemByTaskId(

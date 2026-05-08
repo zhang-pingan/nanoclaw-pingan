@@ -3,6 +3,7 @@ import path from 'path';
 
 import { PROJECT_ROOT } from './config.js';
 import {
+  createWorkflowInterrupt,
   createWorkbenchActionItem,
   createWorkbenchArtifact,
   createWorkbenchEvent,
@@ -12,6 +13,7 @@ import {
   getWorkbenchSubtaskByDelegationId,
   getDelegationsByWorkflow,
   getWorkflowStageEvaluation,
+  getPendingWorkflowInterruptForState,
   getWorkbenchActionItem,
   getWorkbenchTaskById,
   getWorkbenchSubtaskByStage,
@@ -31,6 +33,7 @@ import type {
   Delegation,
   Workflow,
   WorkbenchActionItemRecord,
+  WorkflowInterruptRecord,
   WorkflowEvalEvidence,
   WorkflowEvalFinding,
 } from './types.js';
@@ -364,12 +367,85 @@ function ensureArtifacts(workflow: Workflow): void {
   }
 }
 
-function upsertStageActionItem(workflow: Workflow): void {
+function parseInterruptJsonArray(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function ensurePendingInterruptForWorkbench(
+  workflow: Workflow,
+): WorkflowInterruptRecord | null {
+  const existing = getPendingWorkflowInterruptForState(
+    workflow.id,
+    workflow.status,
+  );
+  if (existing) return existing;
+
+  const config = getWorkflowTypeConfig(workflow.workflow_type);
+  const state = config?.states[workflow.status];
+  if (!config || state?.type !== 'interrupt') return null;
+
+  const now = new Date().toISOString();
+  const interrupt: WorkflowInterruptRecord = {
+    id: `wi-${workflow.id}-${workflow.status}-${workflow.round}`,
+    workflow_id: workflow.id,
+    state_key: workflow.status,
+    kind: state.kind || 'approval',
+    status: 'pending',
+    title:
+      state.title || config.status_labels[workflow.status] || workflow.status,
+    body: state.body || null,
+    resume_payload_schema_json: JSON.stringify(
+      state.resume_payload_schema?.schema || { type: 'object' },
+    ),
+    allowed_actions_json: JSON.stringify(state.allowed_actions || []),
+    allowed_channels_json: JSON.stringify(
+      state.allowed_channels || ['web', 'feishu', 'assistant'],
+    ),
+    assigned_role: null,
+    action_payload_json: null,
+    created_by: 'workbench_sync',
+    resumed_by: null,
+    resume_action: null,
+    resume_payload_json: null,
+    resume_error: null,
+    idempotency_key: `workflow_interrupt:${workflow.id}:${workflow.status}:${workflow.round}:1`,
+    created_at: now,
+    updated_at: now,
+    expires_at: state.timeout_policy?.duration_ms
+      ? new Date(Date.now() + state.timeout_policy.duration_ms).toISOString()
+      : null,
+    resumed_at: null,
+    cancelled_at: null,
+    expired_at: null,
+  };
+  createWorkflowInterrupt(interrupt);
+  return (
+    getPendingWorkflowInterruptForState(workflow.id, workflow.status) ||
+    interrupt
+  );
+}
+
+function upsertStageActionItem(
+  workflow: Workflow,
+  interrupt?: WorkflowInterruptRecord | null,
+): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const task = getWorkbenchTaskByWorkflowId(workflow.id);
   if (!config || !task) return;
   const state = config.states[workflow.status];
-  if (!state || state.type !== 'confirmation') return;
+  if (!state || state.type !== 'interrupt') return;
+  const pendingInterrupt =
+    interrupt ||
+    ensurePendingInterruptForWorkbench(workflow);
+  if (!pendingInterrupt) return;
   const card = state.card
     ? getCardConfig(workflow.workflow_type, state.card)
     : undefined;
@@ -381,21 +457,32 @@ function upsertStageActionItem(workflow: Workflow): void {
     stageKey: workflow.status,
     subtaskId: getWorkbenchSubtaskByStage(task.id, workflow.status)?.id || null,
     delegationId: workflow.current_delegation_id || null,
-    itemType: 'approval',
+    itemType: pendingInterrupt.kind,
     title,
     body: card?.body_template
       ? renderTemplate(card.body_template, vars)
-      : title,
-    sourceType: 'workflow',
-    sourceRefId: workflow.status,
+      : pendingInterrupt.body || title,
+    sourceType: 'workflow_interrupt',
+    sourceRefId: pendingInterrupt.id,
     replyable: false,
-    createdAt: workflow.updated_at,
+    createdAt: pendingInterrupt.created_at,
     extra: {
+      interruptId: pendingInterrupt.id,
+      allowedActions: parseInterruptJsonArray(
+        pendingInterrupt.allowed_actions_json,
+      ),
+      payloadSchema: pendingInterrupt.resume_payload_schema_json
+        ? JSON.parse(pendingInterrupt.resume_payload_schema_json)
+        : {},
+      allowedChannels: parseInterruptJsonArray(
+        pendingInterrupt.allowed_channels_json,
+      ),
+      action_kind: 'resume_workflow_interrupt',
       approval_type: workflow.status,
       action_mode:
         workflow.status === 'testing_confirm'
           ? 'input_required'
-          : state.on_revise
+          : state.allowed_actions?.includes('revise')
             ? 'approve_or_revise'
             : 'approve_only',
     },
@@ -440,12 +527,12 @@ function resolveStaleStageActionItems(
   if (!workflow) return;
 
   const isCurrentWorkflowApprovalItem = (item: WorkbenchActionItemRecord) =>
-    item.source_type === 'workflow' &&
+    item.source_type === 'workflow_interrupt' &&
     !!currentApprovalType &&
-    item.source_ref_id === currentApprovalType;
+    item.stage_key === currentApprovalType;
 
   const isCurrentInteractionItem = (item: WorkbenchActionItemRecord) => {
-    if (item.source_type === 'workflow') return false;
+    if (item.source_type === 'workflow_interrupt') return false;
     if (item.stage_key !== task.current_stage) return false;
     if (!item.delegation_id || !workflow.current_delegation_id) return false;
     return item.delegation_id === workflow.current_delegation_id;
@@ -567,7 +654,7 @@ function ensureSubtasks(workflow: Workflow): void {
   }
 }
 
-function resolveBypassedConfirmationStages(
+function resolveBypassedInterruptStages(
   workflow: Workflow,
   fromStatus: string,
   toStatus: string,
@@ -593,7 +680,10 @@ function resolveBypassedConfirmationStages(
       return false;
     const state = config.states[stageKey];
     return (
-      state?.type === 'confirmation' && state.on_approve?.target === toStatus
+      state?.type === 'interrupt' &&
+      Object.values(state.on_resume || {}).some(
+        (transition) => transition.target === toStatus,
+      )
     );
   });
 }
@@ -810,8 +900,7 @@ export function syncWorkbenchOnWorkflowUpdated(
         summary: summary !== undefined ? truncate(summary) : task.summary,
         updatedAt: workflow.updated_at,
         pendingApproval:
-          stateConfig?.type === 'confirmation' ||
-          pendingSummary.pendingApproval,
+          stateConfig?.type === 'interrupt' || pendingSummary.pendingApproval,
         pendingActionCount: pendingSummary.pendingActionCount,
       },
     });
@@ -850,7 +939,7 @@ export function syncWorkbenchOnWorkflowUpdated(
 
   resolveStaleStageActionItems(
     task.id,
-    stateConfig?.type === 'confirmation' ? workflow.status : null,
+    stateConfig?.type === 'interrupt' ? workflow.status : null,
     workflow.updated_at,
   );
 
@@ -928,22 +1017,22 @@ export function syncWorkbenchOnTransition(
     });
   }
 
-  for (const stageKey of resolveBypassedConfirmationStages(
+  for (const stageKey of resolveBypassedInterruptStages(
     workflow,
     fromStatus,
     toStatus,
   )) {
-    const confirmationSubtask = getWorkbenchSubtaskByStage(task.id, stageKey);
-    if (!confirmationSubtask || confirmationSubtask.status !== 'pending') {
+    const interruptSubtask = getWorkbenchSubtaskByStage(task.id, stageKey);
+    if (!interruptSubtask || interruptSubtask.status !== 'pending') {
       continue;
     }
-    updateWorkbenchSubtask(confirmationSubtask.id, {
+    updateWorkbenchSubtask(interruptSubtask.id, {
       status: 'completed',
       finished_at: workflow.updated_at,
       updated_at: workflow.updated_at,
     });
     subtaskEvents.push({
-      id: confirmationSubtask.id,
+      id: interruptSubtask.id,
       stageKey,
       status: 'completed',
     });
@@ -959,6 +1048,9 @@ export function syncWorkbenchOnTransition(
     last_event_at: workflow.updated_at,
   });
   const pendingSummary = getPendingActionSummary(task.id);
+  const targetState = getWorkflowTypeConfig(workflow.workflow_type)?.states[
+    toStatus
+  ];
   emitWorkbenchEvent({
     type: 'task_updated',
     taskId: task.id,
@@ -974,7 +1066,8 @@ export function syncWorkbenchOnTransition(
       workflowStageLabel: getStatusLabel(workflow.workflow_type, toStatus),
       context: cloneWorkflowContext(workflow.context),
       updatedAt: workflow.updated_at,
-      pendingApproval: pendingSummary.pendingApproval,
+      pendingApproval:
+        targetState?.type === 'interrupt' || pendingSummary.pendingApproval,
       pendingActionCount: pendingSummary.pendingActionCount,
     },
   });

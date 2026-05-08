@@ -49,7 +49,7 @@ describe('FeishuChannel form cards', () => {
           label: '填写 access_token 并开始测试',
           type: 'primary',
           value: {
-            action: 'wb_broadcast_submit_access_token',
+            action: 'wb_broadcast_submit',
             task_id: 'task-1',
             action_item_id: 'item-1',
           },
@@ -85,7 +85,7 @@ describe('FeishuChannel form cards', () => {
         action_type: 'form_submit',
         type: 'primary',
         value: {
-          action: 'wb_broadcast_submit_access_token',
+          action: 'wb_broadcast_submit',
           task_id: 'task-1',
           action_item_id: 'item-1',
         },
@@ -114,7 +114,7 @@ describe('FeishuChannel card action callbacks', () => {
           context: { open_message_id: 'msg-1' },
           action: {
             value: {
-              action: 'wb_broadcast_submit_access_token',
+              action: 'wb_broadcast_submit',
               task_id: 'task-1',
               action_item_id: 'item-1',
             },
@@ -128,13 +128,13 @@ describe('FeishuChannel card action callbacks', () => {
     );
 
     expect(onCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_submit_access_token',
+      action: 'wb_broadcast_submit',
       user_id: 'user-1',
       message_id: 'msg-1',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
-        action: 'wb_broadcast_submit_access_token',
+        action: 'wb_broadcast_submit',
         task_id: 'task-1',
         action_item_id: 'item-1',
         access_token: 'demo-token',
@@ -182,13 +182,13 @@ describe('FeishuChannel card action callbacks', () => {
     );
 
     expect(onCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_submit_access_token',
+      action: 'wb_broadcast_submit',
       user_id: 'user-2',
       message_id: 'msg-2',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
-        action: 'wb_broadcast_submit_access_token',
+        action: 'wb_broadcast_submit',
         action_item_id: 'item-1',
         access_token: 'demo-token',
       },
@@ -266,13 +266,13 @@ describe('FeishuChannel card action callbacks', () => {
     );
 
     expect(onCardAction).toHaveBeenCalledWith({
-      action: 'wb_broadcast_submit_access_token',
+      action: 'wb_broadcast_submit',
       user_id: 'user-4',
       message_id: 'msg-4',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
-        action: 'wb_broadcast_submit_access_token',
+        action: 'wb_broadcast_submit',
         task_id: 'task-1',
         access_token: 'demo-token',
       },

@@ -3023,16 +3023,7 @@ class WebChannel {
     const data = body as {
       task_id?: string;
       subtask_id?: string;
-      action?:
-        | 'approve'
-        | 'revise'
-        | 'pause'
-        | 'resume'
-        | 'cancel'
-        | 'skip'
-        | 'submit_access_token';
-      revision_text?: string;
-      context?: Record<string, unknown>;
+      action?: 'pause' | 'resume' | 'cancel' | 'skip';
     };
 
     if (!data.task_id || !data.action) {
@@ -3045,8 +3036,6 @@ class WebChannel {
       taskId: data.task_id,
       action: data.action,
       subtaskId: data.subtask_id,
-      revisionText: data.revision_text,
-      context: data.context,
     });
     if (result.error) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -3518,8 +3507,16 @@ class WebChannel {
     const data = body as {
       task_id?: string;
       action_item_id?: string;
-      action?: 'confirm' | 'skip' | 'cancel' | 'reply';
+      action?:
+        | 'confirm'
+        | 'approve'
+        | 'revise'
+        | 'submit'
+        | 'skip'
+        | 'cancel'
+        | 'reply';
       reply_text?: string;
+      payload?: Record<string, unknown>;
     };
     if (!data.task_id || !data.action_item_id || !data.action) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -3606,6 +3603,9 @@ class WebChannel {
     } else {
       if (
         (data.action === 'confirm' ||
+          data.action === 'approve' ||
+          data.action === 'revise' ||
+          data.action === 'submit' ||
           data.action === 'skip' ||
           data.action === 'cancel') &&
         item.source_ref_id &&
@@ -3634,6 +3634,7 @@ class WebChannel {
         taskId: data.task_id,
         actionItemId: data.action_item_id,
         action: data.action,
+        payload: data.payload,
       });
       if (result.error) {
         res.writeHead(400, { 'Content-Type': 'application/json' });

@@ -6913,7 +6913,7 @@ body.quick-chat-window .quick-chat-input {
   box-shadow: inset 3px 0 0 #94a3b8;
 }
 
-.workflow-definition-graph-node.confirmation {
+.workflow-definition-graph-node.interrupt {
   border-color: rgba(245, 158, 11, 0.24);
   box-shadow: inset 3px 0 0 #f59e0b;
 }

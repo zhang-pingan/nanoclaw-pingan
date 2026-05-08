@@ -17,6 +17,14 @@ export interface CardActionConfig {
   label?: string;
   type?: 'primary' | 'danger' | 'default';
   value?: Record<string, string>;
+  action_kind?: 'interrupt_resume' | 'workflow_control' | 'external_link';
+  resume_action?: string;
+  workflow_control_action?:
+    | 'pause_workflow'
+    | 'cancel_workflow'
+    | 'retry_stage'
+    | 'return_to_stage';
+  url?: string;
 }
 
 export interface CardFieldOption {
@@ -76,15 +84,41 @@ export function validateCardConfig(
   }
 
   const actionIds = new Set<string>();
-  for (const action of card.actions || []) {
+  const validateAction = (path: string, action: CardActionConfig): void => {
     if (!action.id?.trim()) {
-      errors.push(`${cardKey}.actions[].id is required`);
-      continue;
+      errors.push(`${path}.id is required`);
+      return;
     }
     if (actionIds.has(action.id)) {
       errors.push(`${cardKey}.actions action id "${action.id}" is duplicated`);
     }
     actionIds.add(action.id);
+    if (
+      action.action_kind &&
+      !['interrupt_resume', 'workflow_control', 'external_link'].includes(
+        action.action_kind,
+      )
+    ) {
+      errors.push(`${path}.action_kind "${action.action_kind}" is invalid`);
+    }
+    if (action.action_kind === 'interrupt_resume' && !action.resume_action) {
+      errors.push(`${path}.resume_action is required for interrupt_resume`);
+    }
+    if (
+      action.action_kind === 'workflow_control' &&
+      !action.workflow_control_action
+    ) {
+      errors.push(
+        `${path}.workflow_control_action is required for workflow_control`,
+      );
+    }
+    if (action.action_kind === 'external_link' && !action.url) {
+      errors.push(`${path}.url is required for external_link`);
+    }
+  };
+
+  for (const [index, action] of (card.actions || []).entries()) {
+    validateAction(`${cardKey}.actions[${index}]`, action);
   }
 
   if (card.form) {
@@ -93,6 +127,8 @@ export function validateCardConfig(
     }
     if (!card.form.submit_action?.id?.trim()) {
       errors.push(`${cardKey}.form.submit_action.id is required`);
+    } else {
+      validateAction(`${cardKey}.form.submit_action`, card.form.submit_action);
     }
     const fieldNames = new Set<string>();
     for (const field of card.form.fields || []) {
@@ -120,6 +156,15 @@ export function validateCardConfig(
 
   if (card.pattern === 'section_list' && (!card.sections || card.sections.length === 0)) {
     errors.push(`${cardKey}.sections is required for pattern=section_list`);
+  }
+
+  for (const [sectionIndex, section] of (card.sections || []).entries()) {
+    for (const [actionIndex, action] of (section.actions || []).entries()) {
+      validateAction(
+        `${cardKey}.sections[${sectionIndex}].actions[${actionIndex}]`,
+        action,
+      );
+    }
   }
 
   return errors;

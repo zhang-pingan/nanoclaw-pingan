@@ -8,21 +8,27 @@
     "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接进入开发\n2) 提交修改意见，回到 Plan 重新设计",
     "actions": [
       {
-        "id": "approve_dev",
+        "id": "approve",
         "label": "✅ 进入开发",
-        "type": "primary"
+        "type": "primary",
+        "action_kind": "interrupt_resume",
+        "resume_action": "approve"
       },
       {
-        "id": "cancel",
+        "id": "cancel_workflow",
         "label": "❌ 取消流程",
-        "type": "danger"
+        "type": "danger",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "cancel_workflow"
       }
     ],
     "form": {
       "name": "revision_form",
       "submit_action": {
-        "id": "request_revision",
-        "label": "✏️ 返回方案修改"
+        "id": "revise",
+        "label": "✏️ 返回方案修改",
+        "action_kind": "interrupt_resume",
+        "resume_action": "revise"
       },
       "fields": [
         {
@@ -44,21 +50,27 @@
     "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接继续后续流程（进入开发）\n2) 回到 Plan 修改（可填写补充修改意见）",
     "actions": [
       {
-        "id": "approve_dev",
+        "id": "approve",
         "label": "✅ 继续开发",
-        "type": "primary"
+        "type": "primary",
+        "action_kind": "interrupt_resume",
+        "resume_action": "approve"
       },
       {
-        "id": "cancel",
+        "id": "cancel_workflow",
         "label": "❌ 取消流程",
-        "type": "danger"
+        "type": "danger",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "cancel_workflow"
       }
     ],
     "form": {
       "name": "revision_form",
       "submit_action": {
-        "id": "request_revision",
-        "label": "✏️ 返回方案修改"
+        "id": "revise",
+        "label": "✏️ 返回方案修改",
+        "action_kind": "interrupt_resume",
+        "resume_action": "revise"
       },
       "fields": [
         {
@@ -82,16 +94,22 @@
       {
         "id": "approve",
         "label": "✅ 开始预发部署",
-        "type": "primary"
+        "type": "primary",
+        "action_kind": "interrupt_resume",
+        "resume_action": "approve"
       },
       {
-        "id": "pause",
-        "label": "⏸ 暂缓"
+        "id": "pause_workflow",
+        "label": "⏸ 暂缓",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "pause_workflow"
       },
       {
-        "id": "cancel",
+        "id": "cancel_workflow",
         "label": "❌ 取消流程",
-        "type": "danger"
+        "type": "danger",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "cancel_workflow"
       }
     ]
   },
@@ -106,19 +124,25 @@
       {
         "id": "approve",
         "label": "✅ 继续后续流程",
-        "type": "primary"
+        "type": "primary",
+        "action_kind": "interrupt_resume",
+        "resume_action": "approve"
       },
       {
-        "id": "cancel",
+        "id": "cancel_workflow",
         "label": "❌ 取消流程",
-        "type": "danger"
+        "type": "danger",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "cancel_workflow"
       }
     ],
     "form": {
       "name": "revision_form",
       "submit_action": {
-        "id": "request_revision",
-        "label": "✏️ 返回开发修正"
+        "id": "revise",
+        "label": "✏️ 返回开发修正",
+        "action_kind": "interrupt_resume",
+        "resume_action": "revise"
       },
       "fields": [
         {
@@ -141,24 +165,32 @@
     "actions": [
       {
         "id": "skip",
-        "label": "⏭ 跳过鉴权直接测试"
+        "label": "⏭ 跳过鉴权直接测试",
+        "action_kind": "interrupt_resume",
+        "resume_action": "skip"
       },
       {
-        "id": "pause",
-        "label": "⏸ 暂缓"
+        "id": "pause_workflow",
+        "label": "⏸ 暂缓",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "pause_workflow"
       },
       {
-        "id": "cancel",
+        "id": "cancel_workflow",
         "label": "❌ 取消流程",
-        "type": "danger"
+        "type": "danger",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "cancel_workflow"
       }
     ],
     "form": {
       "name": "access_token_form",
       "submit_action": {
-        "id": "submit_access_token",
+        "id": "submit",
         "label": "🔐 提交 Token 并开始测试",
-        "type": "primary"
+        "type": "primary",
+        "action_kind": "interrupt_resume",
+        "resume_action": "submit"
       },
       "fields": [
         {

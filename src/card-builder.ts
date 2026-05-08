@@ -4,6 +4,9 @@ import { renderTemplate, TemplateVars } from './workflow-config.js';
 
 export interface CardBuildContext {
   workflowId?: string;
+  interruptId?: string;
+  allowedActions?: string[];
+  payloadSchema?: Record<string, unknown>;
   groupFolder?: string;
   vars: TemplateVars;
   roleFolders?: Record<string, string>;
@@ -14,13 +17,12 @@ const DEFAULT_ACTIONS: Record<
   { label: string; type?: 'primary' | 'danger' | 'default' }
 > = {
   approve: { label: '✅ 确认执行', type: 'primary' },
-  approve_dev: { label: '✅ 进入开发', type: 'primary' },
+  revise: { label: '✏️ 提交修改' },
+  submit: { label: '🔐 提交并继续', type: 'primary' },
   skip: { label: '⏭ 跳过此节点' },
   pause: { label: '⏸ 暂缓' },
   cancel: { label: '❌ 取消流程', type: 'danger' },
   resume: { label: '▶ 继续', type: 'primary' },
-  request_revision: { label: '✏️ 提交修改' },
-  submit_access_token: { label: '🔐 提交 Token 并开始测试', type: 'primary' },
 };
 
 function buildButton(
@@ -28,6 +30,30 @@ function buildButton(
   context: CardBuildContext,
 ): CardButton {
   const fallback = DEFAULT_ACTIONS[action.id] || { label: action.id };
+  const actionKind = action.action_kind;
+  if (actionKind === 'interrupt_resume') {
+    if (!context.interruptId) {
+      throw new Error(
+        `Card action "${action.id}" requires interruptId for interrupt resume`,
+      );
+    }
+    if (
+      context.allowedActions &&
+      action.resume_action &&
+      !context.allowedActions.includes(action.resume_action)
+    ) {
+      throw new Error(
+        `Card action "${action.id}" resume_action "${action.resume_action}" is not allowed by current interrupt`,
+      );
+    }
+  }
+
+  const platformAction =
+    actionKind === 'interrupt_resume'
+      ? 'workflow_interrupt_resume'
+      : actionKind === 'workflow_control'
+        ? action.workflow_control_action || action.id
+        : action.id;
 
   return {
     id: action.id,
@@ -36,8 +62,13 @@ function buildButton(
     value: {
       ...(action.value || {}),
       ...(context.workflowId ? { workflow_id: context.workflowId } : {}),
+      ...(context.interruptId ? { interrupt_id: context.interruptId } : {}),
+      ...(action.resume_action ? { resume_action: action.resume_action } : {}),
+      ...(context.payloadSchema
+        ? { resume_payload_schema: JSON.stringify(context.payloadSchema) }
+        : {}),
       ...(context.groupFolder ? { group_folder: context.groupFolder } : {}),
-      action: action.id,
+      action: platformAction,
     },
   };
 }

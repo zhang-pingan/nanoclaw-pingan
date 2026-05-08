@@ -131,62 +131,110 @@
           }
         },
         "plan_examine_confirm": {
-          "type": "confirmation",
+          "type": "interrupt",
           "label": "确认方案修改或继续开发",
           "card": {
             "ref": "plan_examine_confirm"
           },
-          "on_approve": {
-            "target": "dev",
-            "delegate": {
-              "role": "dev",
-              "skill": "dev-requirement",
-              "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
-            },
-            "notify": {
-              "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程，已委派 {{role_folder:dev}} 开始开发。"
+          "kind": "approval",
+          "title": "确认方案修改或继续开发",
+          "allowed_actions": [
+            "approve",
+            "revise"
+          ],
+          "resume_payload_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "revision_text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
             }
           },
-          "on_revise": {
-            "target": "plan",
-            "delegate": {
-              "role": "planner",
-              "skill": "plan-requirement",
-              "task_template": "流程类型：{{workflow_type}}\n请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+          "on_resume": {
+            "approve": {
+              "target": "dev",
+              "delegate": {
+                "role": "dev",
+                "skill": "dev-requirement",
+                "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程，已委派 {{role_folder:dev}} 开始开发。"
+              }
             },
-            "notify": {
-              "template": "[方案修改] 需求「{{name}}」({{id}}) 已确认回到 Plan 修改，Plan Agent 正在重新设计方案。"
+            "revise": {
+              "target": "plan",
+              "delegate": {
+                "role": "planner",
+                "skill": "plan-requirement",
+                "task_template": "流程类型：{{workflow_type}}\n请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+              },
+              "notify": {
+                "template": "[方案修改] 需求「{{name}}」({{id}}) 已确认回到 Plan 修改，Plan Agent 正在重新设计方案。"
+              }
             }
-          }
+          },
+          "allowed_channels": [
+            "web",
+            "feishu",
+            "assistant"
+          ]
         },
         "plan_confirm": {
-          "type": "confirmation",
+          "type": "interrupt",
           "label": "方案待确认",
           "card": {
             "ref": "plan_confirm"
           },
-          "on_approve": {
-            "target": "dev",
-            "delegate": {
-              "role": "dev",
-              "skill": "dev-requirement",
-              "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
-            },
-            "notify": {
-              "template": "[流程进展] 需求「{{name}}」({{id}}) 方案已确认，已委派 {{role_folder:dev}} 开始执行。"
+          "kind": "approval",
+          "title": "方案待确认",
+          "allowed_actions": [
+            "approve",
+            "revise"
+          ],
+          "resume_payload_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "revision_text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
             }
           },
-          "on_revise": {
-            "target": "plan",
-            "delegate": {
-              "role": "planner",
-              "skill": "plan-requirement",
-              "task_template": "流程类型：{{workflow_type}}\n请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+          "on_resume": {
+            "approve": {
+              "target": "dev",
+              "delegate": {
+                "role": "dev",
+                "skill": "dev-requirement",
+                "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 方案已确认，已委派 {{role_folder:dev}} 开始执行。"
+              }
             },
-            "notify": {
-              "template": "[方案修改] 需求「{{name}}」({{id}}) 修改意见已提交，Plan Agent 正在重新设计方案。"
+            "revise": {
+              "target": "plan",
+              "delegate": {
+                "role": "planner",
+                "skill": "plan-requirement",
+                "task_template": "流程类型：{{workflow_type}}\n请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}"
+              },
+              "notify": {
+                "template": "[方案修改] 需求「{{name}}」({{id}}) 修改意见已提交，Plan Agent 正在重新设计方案。"
+              }
             }
-          }
+          },
+          "allowed_channels": [
+            "web",
+            "feishu",
+            "assistant"
+          ]
         },
         "dev": {
           "type": "delegation",
@@ -246,49 +294,96 @@
           }
         },
         "dev_examine_confirm": {
-          "type": "confirmation",
+          "type": "interrupt",
           "label": "确认回修或继续后续流程",
           "card": {
             "ref": "dev_examine_confirm"
           },
-          "on_approve": {
-            "target": "awaiting_confirm",
-            "card": {
-              "ref": "deploy_confirm"
-            },
-            "notify": {
-              "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程。\n\n请点击卡片按钮确认部署。"
+          "kind": "approval",
+          "title": "确认回修或继续后续流程",
+          "allowed_actions": [
+            "approve",
+            "revise"
+          ],
+          "resume_payload_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "revision_text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
             }
           },
-          "on_revise": {
-            "target": "dev",
-            "delegate": {
-              "role": "dev",
-              "skill": "dev-bugfix",
-              "task_template": "流程类型：{{workflow_type}}\n请根据开发复核意见修正实现：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}"
+          "on_resume": {
+            "approve": {
+              "target": "awaiting_confirm",
+              "card": {
+                "ref": "deploy_confirm"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程。\n\n请点击卡片按钮确认部署。"
+              }
             },
-            "notify": {
-              "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认回到开发修正，已委派 {{role_folder:dev}} 处理。"
+            "revise": {
+              "target": "dev",
+              "delegate": {
+                "role": "dev",
+                "skill": "dev-bugfix",
+                "task_template": "流程类型：{{workflow_type}}\n请根据开发复核意见修正实现：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认回到开发修正，已委派 {{role_folder:dev}} 处理。"
+              }
             }
-          }
+          },
+          "allowed_channels": [
+            "web",
+            "feishu",
+            "assistant"
+          ]
         },
         "awaiting_confirm": {
-          "type": "confirmation",
+          "type": "interrupt",
           "label": "确认预发部署",
           "card": {
             "ref": "deploy_confirm"
           },
-          "on_approve": {
-            "target": "ops_deploy",
-            "delegate": {
-              "role": "ops",
-              "skill": "ops-staging-deploy",
-              "task_template": "流程类型：{{workflow_type}}\n请部署以下服务到预发环境：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。"
-            },
-            "notify": {
-              "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认，正在委派 {{role_folder:ops}} 部署预发环境。"
+          "kind": "approval",
+          "title": "确认预发部署",
+          "allowed_actions": [
+            "approve"
+          ],
+          "resume_payload_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "revision_text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
             }
-          }
+          },
+          "on_resume": {
+            "approve": {
+              "target": "ops_deploy",
+              "delegate": {
+                "role": "ops",
+                "skill": "ops-staging-deploy",
+                "task_template": "流程类型：{{workflow_type}}\n请部署以下服务到预发环境：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认，正在委派 {{role_folder:ops}} 部署预发环境。"
+              }
+            }
+          },
+          "allowed_channels": [
+            "web",
+            "feishu",
+            "assistant"
+          ]
         },
         "ops_deploy": {
           "type": "delegation",
@@ -316,30 +411,57 @@
           }
         },
         "testing_confirm": {
-          "type": "confirmation",
+          "type": "interrupt",
           "label": "确认测试 Token",
           "card": {
             "ref": "testing_confirm"
           },
-          "on_approve": {
-            "target": "testing",
-            "delegate": {
-              "role": "test",
-              "skill": "test-requirement",
-              "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}"
+          "kind": "credential",
+          "title": "确认测试 Token",
+          "allowed_actions": [
+            "submit",
+            "skip"
+          ],
+          "resume_payload_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "access_token": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "skipped": {
+                  "type": "boolean"
+                }
+              }
             }
           },
-          "on_revise": {
-            "target": "testing",
-            "delegate": {
-              "role": "test",
-              "skill": "test-requirement",
-              "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}"
+          "on_resume": {
+            "submit": {
+              "target": "testing",
+              "delegate": {
+                "role": "test",
+                "skill": "test-requirement",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认 access_token，已委派 {{role_folder:test}} 开始测试。"
+              }
             },
-            "notify": {
-              "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认 access_token，已委派 {{role_folder:test}} 开始测试。"
+            "skip": {
+              "target": "testing",
+              "delegate": {
+                "role": "test",
+                "skill": "test-requirement",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}"
+              }
             }
-          }
+          },
+          "allowed_channels": [
+            "web",
+            "feishu",
+            "assistant"
+          ]
         },
         "testing": {
           "type": "delegation",

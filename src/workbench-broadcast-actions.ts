@@ -1,6 +1,7 @@
 import {
   getAskQuestion,
   getWorkbenchActionItem,
+  listWorkbenchActionItemsByTask,
   listWorkbenchActionItemsBySource,
 } from './db.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
@@ -119,83 +120,180 @@ export async function handleWorkbenchBroadcastCardAction(input: {
   const resolvedAskItem = resolveAskActionItemByRequestId(
     input.formValue?.request_id,
   );
+  const askQuestion = input.formValue?.request_id
+    ? getAskQuestion(input.formValue.request_id)
+    : undefined;
+  if (
+    askQuestion &&
+    (input.action === 'wb_broadcast_reply' ||
+      input.action === 'wb_broadcast_skip_reply')
+  ) {
+    const answer = input.formValue?.reply_text?.trim() || input.formValue?.answer?.trim();
+    const extraQuestion = resolvedAskItem?.extra_json
+      ? (JSON.parse(resolvedAskItem.extra_json) as {
+          current_question?: { options?: Array<{ label?: string }> };
+        }).current_question
+      : undefined;
+    if (
+      answer &&
+      extraQuestion?.options?.some((option) => option.label === answer)
+    ) {
+      return {
+        ok: true,
+        toast: {
+          type: 'success',
+          content: '答案已提交，感谢。',
+        },
+      };
+    }
+    const result = await handleAskQuestionResponse({
+      requestId: askQuestion.id,
+      groupFolder: askQuestion.group_folder,
+      userId: input.userId || 'unknown',
+      answer,
+      formValues: input.formValue
+        ? Object.fromEntries(
+            Object.entries(input.formValue).filter(
+              ([key]) =>
+                ![
+                  'action',
+                  'task_id',
+                  'action_item_id',
+                  'request_id',
+                  'source_type',
+                  'source_ref_id',
+                  'reply_text',
+                  'answer',
+                ].includes(key),
+            ),
+          )
+        : undefined,
+      skip: input.action === 'wb_broadcast_skip_reply',
+      registeredGroups: input.registeredGroups,
+      sendCard: input.sendCard,
+      sendMessage: input.sendMessage,
+    });
+    if (!result.ok) return errorResult(result.userMessage);
+    return {
+      ok: true,
+      toast: {
+        type: 'success',
+        content: result.userMessage || '答案已提交，感谢。',
+      },
+    };
+  }
   const resolvedSourceItem = resolveActionItemBySource({
     sourceType: input.formValue?.source_type,
     sourceRefId: input.formValue?.source_ref_id,
   });
+  const actionItemIdFromForm = input.formValue?.action_item_id;
+  const fallbackTaskId = actionItemIdFromForm
+    ? getWorkbenchActionItem(actionItemIdFromForm)?.task_id
+    : undefined;
+  const fallbackTaskPendingItem =
+    fallbackTaskId && !getWorkbenchActionItem(actionItemIdFromForm || '')
+      ? listWorkbenchActionItemsByTask(fallbackTaskId).find(
+          (entry) => entry.status === 'pending',
+        )
+      : undefined;
   const actionItemId =
-    input.formValue?.action_item_id ||
+    actionItemIdFromForm ||
     resolvedAskItem?.id ||
-    resolvedSourceItem?.id;
+    resolvedSourceItem?.id ||
+    fallbackTaskPendingItem?.id;
   const taskId =
     input.formValue?.task_id ||
     resolvedAskItem?.task_id ||
     resolvedSourceItem?.task_id ||
+    fallbackTaskPendingItem?.task_id ||
     (actionItemId ? getWorkbenchActionItem(actionItemId)?.task_id : undefined);
-  if (!taskId || !actionItemId)
+  if ((!taskId || !actionItemId) && !askQuestion)
     return errorResult('缺少待办标识，无法处理该卡片。');
+  const resolvedTaskId = taskId || '';
+  const resolvedActionItemId = actionItemId || '';
 
   switch (input.action) {
     case 'wb_broadcast_confirm': {
-      const result = runWorkbenchTaskAction({ taskId, action: 'approve' });
+      const item = getWorkbenchActionItem(resolvedActionItemId);
+      if (item?.source_type !== 'workflow_interrupt') {
+        return errorResult('该待办不是 workflow interrupt，不能执行确认。');
+      }
+      const result = runWorkbenchActionItemAction({
+        taskId: resolvedTaskId,
+        actionItemId: resolvedActionItemId,
+        action: 'confirm',
+      });
       if (result.error) return errorResult(`确认失败：${result.error}`);
       return successResult(
-        taskId,
-        actionItemId,
+        resolvedTaskId,
+        resolvedActionItemId,
         '已提交确认，正在推进后续流程。',
         '已提交确认，正在推进后续流程。',
       );
     }
     case 'wb_broadcast_skip': {
-      const result = runWorkbenchTaskAction({ taskId, action: 'skip' });
+      const item = getWorkbenchActionItem(resolvedActionItemId);
+      const result =
+        item?.source_type === 'workflow_interrupt'
+          ? runWorkbenchActionItemAction({
+              taskId: resolvedTaskId,
+              actionItemId: resolvedActionItemId,
+              action: 'skip',
+            })
+          : runWorkbenchTaskAction({ taskId: resolvedTaskId, action: 'skip' });
       if (result.error) return errorResult(`跳过失败：${result.error}`);
       return successResult(
-        taskId,
-        actionItemId,
+        resolvedTaskId,
+        resolvedActionItemId,
         '已提交跳过请求，正在推进后续流程。',
         '已提交跳过请求，正在推进后续流程。',
       );
     }
     case 'wb_broadcast_revise': {
       const revisionText = input.formValue?.revision_text?.trim();
-      const result = runWorkbenchTaskAction({
-        taskId,
+      const result = runWorkbenchActionItemAction({
+        taskId: resolvedTaskId,
+        actionItemId: resolvedActionItemId,
         action: 'revise',
-        revisionText,
+        payload: { revision_text: revisionText },
       });
       if (result.error) return errorResult(`提交修改意见失败：${result.error}`);
       return successResult(
-        taskId,
-        actionItemId,
+        resolvedTaskId,
+        resolvedActionItemId,
         '已提交修改意见，正在回退并重新处理。',
         '已提交修改意见，正在回退并重新处理。',
       );
     }
-    case 'wb_broadcast_submit_access_token': {
+    case 'wb_broadcast_submit': {
       const accessToken = input.formValue?.access_token?.trim();
-      const result = runWorkbenchTaskAction({
-        taskId,
-        action: 'submit_access_token',
-        context: { access_token: accessToken },
+      const result = runWorkbenchActionItemAction({
+        taskId: resolvedTaskId,
+        actionItemId: resolvedActionItemId,
+        action: 'submit',
+        payload: { access_token: accessToken },
       });
       if (result.error)
         return errorResult(`提交 access_token 失败：${result.error}`);
       return successResult(
-        taskId,
-        actionItemId,
+        resolvedTaskId,
+        resolvedActionItemId,
         '已提交 access_token，正在开始测试。',
         '已提交 access_token，正在开始测试。',
       );
     }
     case 'wb_broadcast_reply':
     case 'wb_broadcast_skip_reply': {
-      const item = resolvedAskItem || getWorkbenchActionItem(actionItemId);
-      if (!item?.source_ref_id || !item.group_folder) {
+      const item =
+        resolvedAskItem || getWorkbenchActionItem(resolvedActionItemId);
+      const requestId = item?.source_ref_id || input.formValue?.request_id;
+      const groupFolder = item?.group_folder || askQuestion?.group_folder;
+      if (!requestId || !groupFolder) {
         return errorResult('未找到原始问答请求，无法继续处理。');
       }
       const result = await handleAskQuestionResponse({
-        requestId: item.source_ref_id,
-        groupFolder: item.group_folder,
+        requestId,
+        groupFolder,
         userId: input.userId || 'unknown',
         answer:
           input.formValue?.reply_text?.trim() ||
@@ -223,17 +321,19 @@ export async function handleWorkbenchBroadcastCardAction(input: {
         sendMessage: input.sendMessage,
       });
       if (result.ok && result.completed) {
-        runWorkbenchActionItemAction({
-          taskId,
-          actionItemId,
-          action:
-            input.action === 'wb_broadcast_skip_reply' ? 'skip' : 'confirm',
-        });
+        if (taskId && actionItemId) {
+          runWorkbenchActionItemAction({
+            taskId,
+            actionItemId,
+            action:
+              input.action === 'wb_broadcast_skip_reply' ? 'skip' : 'confirm',
+          });
+        }
       }
       if (!result.ok) return errorResult(result.userMessage);
       return successResult(
-        taskId,
-        actionItemId,
+        taskId || askQuestion?.id || requestId,
+        actionItemId || askQuestion?.id || requestId,
         result.userMessage || '已提交答复。',
         result.completed
           ? result.userMessage || '已提交答复。'
@@ -241,17 +341,18 @@ export async function handleWorkbenchBroadcastCardAction(input: {
       );
     }
     case 'wb_broadcast_resolve': {
-      const item = resolvedSourceItem || getWorkbenchActionItem(actionItemId);
+      const item =
+        resolvedSourceItem || getWorkbenchActionItem(resolvedActionItemId);
       if (!item) return errorResult('待办不存在，无法标记已读。');
       const result = runWorkbenchActionItemAction({
-        taskId,
-        actionItemId,
+        taskId: resolvedTaskId,
+        actionItemId: resolvedActionItemId,
         action: 'resolve',
       });
       if (result.error) return errorResult(`标记已读失败：${result.error}`);
       return successResult(
-        taskId,
-        actionItemId,
+        resolvedTaskId,
+        resolvedActionItemId,
         '已标记已读。',
         '已标记已读。',
       );

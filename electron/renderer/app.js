@@ -115,6 +115,10 @@ var cardsManagementFormNameInput = document.getElementById("cards-management-for
 var cardsManagementFormSubmitIdInput = document.getElementById("cards-management-form-submit-id");
 var cardsManagementFormSubmitLabelInput = document.getElementById("cards-management-form-submit-label");
 var cardsManagementFormSubmitTypeInput = document.getElementById("cards-management-form-submit-type");
+var cardsManagementFormSubmitActionKindInput = document.getElementById("cards-management-form-submit-action-kind");
+var cardsManagementFormSubmitResumeActionInput = document.getElementById("cards-management-form-submit-resume-action");
+var cardsManagementFormSubmitWorkflowControlInput = document.getElementById("cards-management-form-submit-workflow-control");
+var cardsManagementFormSubmitUrlInput = document.getElementById("cards-management-form-submit-url");
 var cardsManagementFormFields = document.getElementById("cards-management-form-fields");
 var cardsManagementSectionAddBtn = document.getElementById("cards-management-section-add-btn");
 var cardsManagementSections = document.getElementById("cards-management-sections");
@@ -1106,7 +1110,7 @@ function iconBtnHTML(iconSvg, extraClass) {
 }
 
 function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function renderMarkdown(text) {
   if (typeof marked === "undefined") return escapeHtml(text);
@@ -5122,10 +5126,11 @@ function collectWorkflowDefinitionRoleReferences(roleKey, states, entryPoints) {
   });
   Object.entries(states || {}).forEach(([stateKey, state]) => {
     if (state?.delegate?.role === roleKey) refs.push(`states.${stateKey}.delegate.role`);
-    if (state?.on_complete?.success?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_complete.success.delegate.role`);
-    if (state?.on_complete?.failure?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_complete.failure.delegate.role`);
-    if (state?.on_approve?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_approve.delegate.role`);
-    if (state?.on_revise?.delegate?.role === roleKey) refs.push(`states.${stateKey}.on_revise.delegate.role`);
+    collectWorkflowDefinitionTransitionEntries(state).forEach(({ path, transition }) => {
+      if (transition.delegate?.role === roleKey) {
+        refs.push(`states.${stateKey}.${path}.delegate.role`);
+      }
+    });
   });
   return refs;
 }
@@ -5273,6 +5278,53 @@ function createWorkflowDefinitionCreateFormFieldTemplate() {
   };
 }
 
+function collectWorkflowDefinitionTransitionEntries(state) {
+  const entries = [];
+  const push = (path, transition) => {
+    if (transition && typeof transition === "object" && !Array.isArray(transition)) {
+      entries.push({ path, transition });
+    }
+  };
+  push("on_complete.success", state?.on_complete?.success);
+  push("on_complete.failure", state?.on_complete?.failure);
+  if (state?.on_resume && typeof state.on_resume === "object" && !Array.isArray(state.on_resume)) {
+    Object.entries(state.on_resume).forEach(([action, transition]) => {
+      push(`on_resume.${action}`, transition);
+    });
+  }
+  push("on_cancel", state?.on_cancel);
+  push("on_expire", state?.on_expire);
+  push("timeout_policy.on_timeout", state?.timeout_policy?.on_timeout);
+  push("retry_policy.on_exhausted", state?.retry_policy?.on_exhausted);
+  push("evaluator.on_pass", state?.evaluator?.on_pass);
+  push("evaluator.on_needs_revision", state?.evaluator?.on_needs_revision);
+  push("evaluator.on_fail", state?.evaluator?.on_fail);
+  push("evaluator.on_pending", state?.evaluator?.on_pending);
+  return entries;
+}
+
+function getWorkflowDefinitionInterruptActions(state) {
+  const actions = [];
+  const add = (action) => {
+    const value = String(action || "").trim();
+    if (value && !actions.includes(value)) actions.push(value);
+  };
+  if (Array.isArray(state?.allowed_actions)) {
+    state.allowed_actions.forEach(add);
+  }
+  if (state?.on_resume && typeof state.on_resume === "object" && !Array.isArray(state.on_resume)) {
+    Object.keys(state.on_resume).forEach(add);
+  }
+  return actions;
+}
+
+function parseWorkflowDefinitionListText(raw) {
+  return String(raw || "")
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function getCurrentWorkflowCardRefs() {
   const workflowCards = workflowDefinitionCardsRegistry?.[currentWorkflowDefinitionKey] || {};
   return Object.keys(workflowCards);
@@ -5304,19 +5356,49 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   });
 
   Object.entries(states).forEach(([stateKey, state]) => {
+    if (state?.type === "confirmation") {
+      pushItem("states", `states.${stateKey}.type confirmation 已废弃，请改用 interrupt`);
+    }
     if (state?.delegate?.role && !roleOptions.includes(state.delegate.role)) {
       pushItem("states", `states.${stateKey}.delegate.role 引用了不存在的 role: ${state.delegate.role}`);
     }
     if (state?.card?.ref && !workflowCards.includes(state.card.ref)) {
       pushItem("cards", `states.${stateKey}.card.ref 引用了不存在的 card: ${state.card.ref}`);
     }
-    [
-      ["on_complete.success", state?.on_complete?.success],
-      ["on_complete.failure", state?.on_complete?.failure],
-      ["on_approve", state?.on_approve],
-      ["on_revise", state?.on_revise],
-    ].forEach(([path, transition]) => {
-      if (!transition) return;
+    if (state?.type === "interrupt") {
+      if (!Array.isArray(state.allowed_actions) || state.allowed_actions.length === 0) {
+        pushItem("states", `states.${stateKey}.allowed_actions 不能为空`);
+      }
+      if (!state.on_resume || typeof state.on_resume !== "object" || Array.isArray(state.on_resume)) {
+        pushItem("states", `states.${stateKey}.on_resume 不能为空`);
+      } else {
+        (state.allowed_actions || []).forEach((action) => {
+          if (!state.on_resume[action]) {
+            pushItem("states", `states.${stateKey}.on_resume.${action} 缺少 transition`);
+          }
+        });
+      }
+      const card = state.card?.ref ? workflowDefinitionCardsRegistry?.[bundleKey || ""]?.[state.card.ref] : null;
+      const cardActions = [
+        ...(card?.actions || []),
+        ...(card?.form?.submit_action ? [card.form.submit_action] : []),
+        ...(card?.sections || []).flatMap((section) => section?.actions || []),
+      ];
+      cardActions.forEach((action) => {
+        if (
+          action?.action_kind === "interrupt_resume" &&
+          action.resume_action &&
+          Array.isArray(state.allowed_actions) &&
+          !state.allowed_actions.includes(action.resume_action)
+        ) {
+          pushItem(
+            "cards",
+            `states.${stateKey}.card.ref action ${action.id || action.resume_action} resume_action ${action.resume_action} 不在 allowed_actions 中`,
+          );
+        }
+      });
+    }
+    collectWorkflowDefinitionTransitionEntries(state).forEach(({ path, transition }) => {
       if (transition.target && !stateOptions.includes(transition.target)) {
         pushItem("states", `states.${stateKey}.${path}.target 引用了不存在的 state: ${transition.target}`);
       }
@@ -5388,18 +5470,26 @@ function createWorkflowDefinitionStateTemplate(type) {
       },
     };
   }
-  if (type === "confirmation") {
+  if (type === "interrupt") {
     return {
-      type: "confirmation",
-      label: "新确认状态",
+      type: "interrupt",
+      kind: "approval",
+      label: "新中断状态",
       card: {
         ref: "",
       },
-      on_approve: {
-        target: "",
+      title: "",
+      resume_payload_schema: {
+        schema: {
+          type: "object",
+        },
       },
-      on_revise: {
-        target: "",
+      allowed_actions: ["approve"],
+      allowed_channels: ["web", "feishu", "assistant"],
+      on_resume: {
+        approve: {
+          target: "",
+        },
       },
     };
   }
@@ -5417,18 +5507,11 @@ function collectWorkflowDefinitionStateReferences(stateKey, states, entryPoints)
     }
   });
   Object.entries(states || {}).forEach(([otherStateKey, state]) => {
-    if (state?.on_complete?.success?.target === stateKey) {
-      refs.push(`states.${otherStateKey}.on_complete.success.target`);
-    }
-    if (state?.on_complete?.failure?.target === stateKey) {
-      refs.push(`states.${otherStateKey}.on_complete.failure.target`);
-    }
-    if (state?.on_approve?.target === stateKey) {
-      refs.push(`states.${otherStateKey}.on_approve.target`);
-    }
-    if (state?.on_revise?.target === stateKey) {
-      refs.push(`states.${otherStateKey}.on_revise.target`);
-    }
+    collectWorkflowDefinitionTransitionEntries(state).forEach(({ path, transition }) => {
+      if (transition.target === stateKey) {
+        refs.push(`states.${otherStateKey}.${path}.target`);
+      }
+    });
   });
   return refs;
 }
@@ -6024,12 +6107,12 @@ async function addWorkflowDefinitionState() {
       return;
     }
     const rawType = await openTextPrompt(
-      "输入 state type（delegation / confirmation / terminal / system）",
+      "输入 state type（delegation / interrupt / terminal / system）",
       "delegation",
       { title: "新增 State" },
     );
     const type = (rawType || "delegation").trim();
-    if (!["delegation", "confirmation", "terminal", "system"].includes(type)) {
+    if (!["delegation", "interrupt", "terminal", "system"].includes(type)) {
       alert("state type 不合法");
       return;
     }
@@ -6098,10 +6181,9 @@ async function renameWorkflowDefinitionRole() {
     });
     Object.values(states).forEach((state) => {
       if (state?.delegate?.role === oldKey) state.delegate.role = newKey;
-      if (state?.on_complete?.success?.delegate?.role === oldKey) state.on_complete.success.delegate.role = newKey;
-      if (state?.on_complete?.failure?.delegate?.role === oldKey) state.on_complete.failure.delegate.role = newKey;
-      if (state?.on_approve?.delegate?.role === oldKey) state.on_approve.delegate.role = newKey;
-      if (state?.on_revise?.delegate?.role === oldKey) state.on_revise.delegate.role = newKey;
+      collectWorkflowDefinitionTransitionEntries(state).forEach(({ transition }) => {
+        if (transition.delegate?.role === oldKey) transition.delegate.role = newKey;
+      });
     });
     updateRolesEditor(nextRoles);
     updateEntryPointsEditor(entryPoints);
@@ -6307,10 +6389,9 @@ async function renameWorkflowDefinitionState() {
     Object.entries(states).forEach(([key, state]) => {
       const actualKey = key === oldKey ? newKey : key;
       const clonedState = cloneJson(state);
-      if (clonedState?.on_complete?.success?.target === oldKey) clonedState.on_complete.success.target = newKey;
-      if (clonedState?.on_complete?.failure?.target === oldKey) clonedState.on_complete.failure.target = newKey;
-      if (clonedState?.on_approve?.target === oldKey) clonedState.on_approve.target = newKey;
-      if (clonedState?.on_revise?.target === oldKey) clonedState.on_revise.target = newKey;
+      collectWorkflowDefinitionTransitionEntries(clonedState).forEach(({ transition }) => {
+        if (transition.target === oldKey) transition.target = newKey;
+      });
       nextStates[actualKey] = clonedState;
     });
     Object.values(entryPoints).forEach((entry) => {
@@ -6846,6 +6927,21 @@ function buildStateTransitionInspectorHtml(prefix, transition) {
   `;
 }
 
+function buildInterruptResumeTransitionsInspectorHtml(state) {
+  const actions = getWorkflowDefinitionInterruptActions(state);
+  if (!actions.length) {
+    return '<div class="workflow-definition-state-inspector-empty">先填写 allowed_actions，再为每个 action 配置 on_resume transition。</div>';
+  }
+  return actions
+    .map((action) => `
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">On Resume · ${escapeHtml(action)}</div>
+        ${buildStateTransitionInspectorHtml(`on_resume.${action}`, state?.on_resume?.[action])}
+      </section>
+    `)
+    .join("");
+}
+
 function setNestedValue(target, path, rawValue, options = {}) {
   const parts = path.split(".");
   let cursor = target;
@@ -6866,6 +6962,22 @@ function setNestedValue(target, path, rawValue, options = {}) {
   } else {
     delete cursor[leaf];
   }
+}
+
+function syncInterruptResumeTransitions(state) {
+  if (!state || state.type !== "interrupt") return state;
+  const actions = getWorkflowDefinitionInterruptActions(state);
+  state.allowed_actions = actions;
+  state.on_resume = state.on_resume && typeof state.on_resume === "object" && !Array.isArray(state.on_resume)
+    ? state.on_resume
+    : {};
+  actions.forEach((action) => {
+    if (!state.on_resume[action]) state.on_resume[action] = { target: "" };
+  });
+  Object.keys(state.on_resume).forEach((action) => {
+    if (!actions.includes(action)) delete state.on_resume[action];
+  });
+  return state;
 }
 
 function cleanupStateObject(obj) {
@@ -6924,6 +7036,21 @@ function bindWorkflowDefinitionStateInspectorEvents() {
           nextState.label = state.label || nextState.label;
           if (state.description) nextState.description = state.description;
           return cleanupStateObject(nextState);
+        }
+        if (path === "allowed_actions" || path === "allowed_channels") {
+          state[path] = parseWorkflowDefinitionListText(el.value);
+          if (path === "allowed_actions") syncInterruptResumeTransitions(state);
+          return cleanupStateObject(state);
+        }
+        if (path === "resume_payload_schema.schema") {
+          const text = String(el.value || "").trim();
+          if (!text) {
+            delete state.resume_payload_schema;
+          } else {
+            state.resume_payload_schema = state.resume_payload_schema || {};
+            state.resume_payload_schema.schema = JSON.parse(text);
+          }
+          return cleanupStateObject(state);
         }
         setNestedValue(state, path, el.type === "checkbox" ? el.checked : el.value, {
           boolean: el.type === "checkbox",
@@ -7392,27 +7519,32 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
     }
   }
   if (selectedState.type === "confirmation") {
+    validationItems.push("confirmation 已废弃，请将 Type 改为 interrupt");
+  }
+  if (selectedState.type === "interrupt") {
     if (selectedState.card?.ref && !cardOptions.includes(selectedState.card.ref)) {
       validationItems.push(`card.ref 引用了不存在的 card: ${selectedState.card.ref}`);
     }
-    if (selectedState.on_approve?.target && !stateOptions.includes(selectedState.on_approve.target)) {
-      validationItems.push(`on_approve.target 引用了不存在的 state: ${selectedState.on_approve.target}`);
+    if (!Array.isArray(selectedState.allowed_actions) || selectedState.allowed_actions.length === 0) {
+      validationItems.push("allowed_actions 不能为空");
     }
-    if (selectedState.on_revise?.target && !stateOptions.includes(selectedState.on_revise.target)) {
-      validationItems.push(`on_revise.target 引用了不存在的 state: ${selectedState.on_revise.target}`);
-    }
-    if (selectedState.on_approve?.delegate?.role && !roleOptions.includes(selectedState.on_approve.delegate.role)) {
-      validationItems.push(`on_approve.delegate.role 引用了不存在的 role: ${selectedState.on_approve.delegate.role}`);
-    }
-    if (selectedState.on_revise?.delegate?.role && !roleOptions.includes(selectedState.on_revise.delegate.role)) {
-      validationItems.push(`on_revise.delegate.role 引用了不存在的 role: ${selectedState.on_revise.delegate.role}`);
-    }
-    if (selectedState.on_approve?.card?.ref && !cardOptions.includes(selectedState.on_approve.card.ref)) {
-      validationItems.push(`on_approve.card.ref 引用了不存在的 card: ${selectedState.on_approve.card.ref}`);
-    }
-    if (selectedState.on_revise?.card?.ref && !cardOptions.includes(selectedState.on_revise.card.ref)) {
-      validationItems.push(`on_revise.card.ref 引用了不存在的 card: ${selectedState.on_revise.card.ref}`);
-    }
+    const onResume = selectedState.on_resume && typeof selectedState.on_resume === "object" && !Array.isArray(selectedState.on_resume)
+      ? selectedState.on_resume
+      : {};
+    (selectedState.allowed_actions || []).forEach((action) => {
+      if (!onResume[action]) validationItems.push(`on_resume.${action} 缺少 transition`);
+    });
+    collectWorkflowDefinitionTransitionEntries(selectedState).forEach(({ path, transition }) => {
+      if (transition.target && !stateOptions.includes(transition.target)) {
+        validationItems.push(`${path}.target 引用了不存在的 state: ${transition.target}`);
+      }
+      if (transition.delegate?.role && !roleOptions.includes(transition.delegate.role)) {
+        validationItems.push(`${path}.delegate.role 引用了不存在的 role: ${transition.delegate.role}`);
+      }
+      if (transition.card?.ref && !cardOptions.includes(transition.card.ref)) {
+        validationItems.push(`${path}.card.ref 引用了不存在的 card: ${transition.card.ref}`);
+      }
+    });
   }
 
   let inspectorHtml = `
@@ -7429,7 +7561,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
           <span>Type</span>
           <select data-state-field="type">
             <option value="delegation" ${selectedState.type === "delegation" ? "selected" : ""}>delegation</option>
-            <option value="confirmation" ${selectedState.type === "confirmation" ? "selected" : ""}>confirmation</option>
+            <option value="interrupt" ${selectedState.type === "interrupt" ? "selected" : ""}>interrupt</option>
             <option value="terminal" ${selectedState.type === "terminal" ? "selected" : ""}>terminal</option>
             <option value="system" ${selectedState.type === "system" ? "selected" : ""}>system</option>
           </select>
@@ -7483,8 +7615,27 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
         ${buildStateTransitionInspectorHtml("on_complete.failure", selectedState.on_complete?.failure)}
       </section>
     `;
-  } else if (selectedState.type === "confirmation") {
+  } else if (selectedState.type === "interrupt") {
     inspectorHtml += `
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">Interrupt</div>
+        <div class="workflow-definition-state-inspector-grid">
+          <label class="workflow-definition-field">
+            <span>Kind</span>
+            <select data-state-field="kind">
+              ${["approval", "revision_request", "credential", "human_input", "external_blocker"].map((kind) => `<option value="${kind}"${selectedState.kind === kind ? " selected" : ""}>${kind}</option>`).join("")}
+            </select>
+          </label>
+          <label class="workflow-definition-field">
+            <span>Title</span>
+            <input data-state-field="title" type="text" value="${escapeAttribute(selectedState.title || "")}" />
+          </label>
+        </div>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>Body</span>
+          <textarea data-state-field="body" rows="2">${escapeHtml(selectedState.body || "")}</textarea>
+        </label>
+      </section>
       <section class="workflow-definition-state-inspector-section">
         <div class="workflow-definition-state-inspector-title">Card</div>
         <label class="workflow-definition-field">
@@ -7493,13 +7644,24 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
         </label>
       </section>
       <section class="workflow-definition-state-inspector-section">
-        <div class="workflow-definition-state-inspector-title">On Approve</div>
-        ${buildStateTransitionInspectorHtml("on_approve", selectedState.on_approve)}
+        <div class="workflow-definition-state-inspector-title">Allowed Actions</div>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>Actions</span>
+          <textarea data-state-field="allowed_actions" rows="2" placeholder="approve&#10;revise">${escapeHtml((selectedState.allowed_actions || []).join("\n"))}</textarea>
+        </label>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>Channels</span>
+          <textarea data-state-field="allowed_channels" rows="2" placeholder="web&#10;feishu&#10;assistant">${escapeHtml((selectedState.allowed_channels || ["web", "feishu", "assistant"]).join("\n"))}</textarea>
+        </label>
       </section>
       <section class="workflow-definition-state-inspector-section">
-        <div class="workflow-definition-state-inspector-title">On Revise</div>
-        ${buildStateTransitionInspectorHtml("on_revise", selectedState.on_revise)}
+        <div class="workflow-definition-state-inspector-title">Resume Payload Schema</div>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>JSON Schema</span>
+          <textarea data-state-field="resume_payload_schema.schema" rows="5" spellcheck="false">${escapeHtml(stringifyPrettyJson(selectedState.resume_payload_schema?.schema || { type: "object" }))}</textarea>
+        </label>
       </section>
+      ${buildInterruptResumeTransitionsInspectorHtml(selectedState)}
     `;
   }
 
@@ -7602,11 +7764,16 @@ function renderWorkflowDefinitionGraph(definition) {
       if (state.on_complete?.failure) {
         transitions.push(buildWorkflowTransitionSummary("failure", state.on_complete.failure));
       }
-      if (state.on_approve) {
-        transitions.push(buildWorkflowTransitionSummary("approve", state.on_approve));
+      if (state.on_resume && typeof state.on_resume === "object" && !Array.isArray(state.on_resume)) {
+        Object.entries(state.on_resume).forEach(([action, transition]) => {
+          transitions.push(buildWorkflowTransitionSummary(`resume:${action}`, transition));
+        });
       }
-      if (state.on_revise) {
-        transitions.push(buildWorkflowTransitionSummary("revise", state.on_revise));
+      if (state.on_cancel) {
+        transitions.push(buildWorkflowTransitionSummary("cancel", state.on_cancel));
+      }
+      if (state.on_expire) {
+        transitions.push(buildWorkflowTransitionSummary("expire", state.on_expire));
       }
 
       return `
@@ -8381,6 +8548,16 @@ function createEmptyCardConfig() {
 
 function normalizeCardConfig(card) {
   const safe = cloneJson(card || {});
+  const normalizeAction = (action) => ({
+    id: action?.id || "",
+    label: action?.label || "",
+    type: action?.type || "",
+    value: action?.value && typeof action.value === "object" && !Array.isArray(action.value) ? action.value : undefined,
+    action_kind: action?.action_kind || "",
+    resume_action: action?.resume_action || "",
+    workflow_control_action: action?.workflow_control_action || "",
+    url: action?.url || "",
+  });
   return {
     pattern: safe.pattern || "info_actions",
     header: {
@@ -8388,19 +8565,20 @@ function normalizeCardConfig(card) {
       color: safe.header?.color || "blue",
     },
     body_template: safe.body_template || "",
-    actions: Array.isArray(safe.actions) ? safe.actions : [],
+    actions: Array.isArray(safe.actions) ? safe.actions.map(normalizeAction) : [],
     form: safe.form
       ? {
           name: safe.form.name || "",
-          submit_action: {
-            id: safe.form.submit_action?.id || "",
-            label: safe.form.submit_action?.label || "",
-            type: safe.form.submit_action?.type || "",
-          },
+          submit_action: normalizeAction(safe.form.submit_action || {}),
           fields: Array.isArray(safe.form.fields) ? safe.form.fields : [],
         }
       : null,
-    sections: Array.isArray(safe.sections) ? safe.sections : [],
+    sections: Array.isArray(safe.sections)
+      ? safe.sections.map((section) => ({
+          ...section,
+          actions: Array.isArray(section?.actions) ? section.actions.map(normalizeAction) : [],
+        }))
+      : [],
   };
 }
 
@@ -8507,6 +8685,41 @@ function getCardsManagementIconSvg(name) {
   return icons[name] || "";
 }
 
+function buildCardActionKindFieldsHtml(fieldAttr, valuePrefix, errorPrefix, action) {
+  const safe = action || {};
+  return `
+    <div class="cards-management-row-grid compact">
+      <label class="workflow-definition-field" data-card-field-path="${escapeAttribute(errorPrefix)}.action_kind">
+        <span>Action Kind</span>
+        <select ${fieldAttr}="${escapeAttribute(valuePrefix)}action_kind">
+          <option value=""${!safe.action_kind ? " selected" : ""}>legacy</option>
+          <option value="interrupt_resume"${safe.action_kind === "interrupt_resume" ? " selected" : ""}>interrupt_resume</option>
+          <option value="workflow_control"${safe.action_kind === "workflow_control" ? " selected" : ""}>workflow_control</option>
+          <option value="external_link"${safe.action_kind === "external_link" ? " selected" : ""}>external_link</option>
+        </select>
+      </label>
+      <label class="workflow-definition-field" data-card-field-path="${escapeAttribute(errorPrefix)}.resume_action">
+        <span>Resume Action</span>
+        <input ${fieldAttr}="${escapeAttribute(valuePrefix)}resume_action" type="text" value="${escapeAttribute(safe.resume_action || "")}" placeholder="approve / revise / submit" />
+      </label>
+      <label class="workflow-definition-field" data-card-field-path="${escapeAttribute(errorPrefix)}.workflow_control_action">
+        <span>Workflow Control</span>
+        <select ${fieldAttr}="${escapeAttribute(valuePrefix)}workflow_control_action">
+          <option value=""${!safe.workflow_control_action ? " selected" : ""}>none</option>
+          <option value="pause_workflow"${safe.workflow_control_action === "pause_workflow" ? " selected" : ""}>pause_workflow</option>
+          <option value="cancel_workflow"${safe.workflow_control_action === "cancel_workflow" ? " selected" : ""}>cancel_workflow</option>
+          <option value="retry_stage"${safe.workflow_control_action === "retry_stage" ? " selected" : ""}>retry_stage</option>
+          <option value="return_to_stage"${safe.workflow_control_action === "return_to_stage" ? " selected" : ""}>return_to_stage</option>
+        </select>
+      </label>
+      <label class="workflow-definition-field" data-card-field-path="${escapeAttribute(errorPrefix)}.url">
+        <span>External URL</span>
+        <input ${fieldAttr}="${escapeAttribute(valuePrefix)}url" type="text" value="${escapeAttribute(safe.url || "")}" placeholder="https://..." />
+      </label>
+    </div>
+  `;
+}
+
 function renderCardActionRows(actions) {
   if (!cardsManagementActions) return;
   const rows = Array.isArray(actions) ? actions : [];
@@ -8521,27 +8734,35 @@ function renderCardActionRows(actions) {
           <div class="cards-management-row-title">Action ${index + 1}</div>
           <button type="button" class="cards-management-icon-btn danger" data-card-action-remove="${index}" title="删除操作" aria-label="删除操作">${getCardsManagementIconSvg("remove")}</button>
         </div>
-        <div class="cards-management-row-grid">
-          <label class="workflow-definition-field" data-card-field-path="actions[${index}].id">
-            <span>ID</span>
-            <input data-card-action-field="${index}.id" type="text" value="${escapeAttribute(action.id || "")}" />
-          </label>
-          <label class="workflow-definition-field">
-            <span>Label</span>
-            <input data-card-action-field="${index}.label" type="text" value="${escapeAttribute(action.label || "")}" />
-          </label>
-          <label class="workflow-definition-field">
-            <span>Type</span>
-            <select data-card-action-field="${index}.type">
-              <option value=""${!action.type ? " selected" : ""}>default</option>
-              <option value="primary"${action.type === "primary" ? " selected" : ""}>primary</option>
-              <option value="danger"${action.type === "danger" ? " selected" : ""}>danger</option>
-            </select>
-          </label>
-        </div>
+        ${renderCardActionFields("data-card-action-field", `${index}.`, `actions[${index}]`, action)}
       </div>
     `)
     .join("");
+}
+
+function renderCardActionFields(fieldAttr, valuePrefix, errorPrefix, action) {
+  const safe = action || {};
+  return `
+    <div class="cards-management-row-grid">
+      <label class="workflow-definition-field" data-card-field-path="${escapeAttribute(errorPrefix)}.id">
+        <span>ID</span>
+        <input ${fieldAttr}="${escapeAttribute(valuePrefix)}id" type="text" value="${escapeAttribute(safe.id || "")}" />
+      </label>
+      <label class="workflow-definition-field">
+        <span>Label</span>
+        <input ${fieldAttr}="${escapeAttribute(valuePrefix)}label" type="text" value="${escapeAttribute(safe.label || "")}" />
+      </label>
+      <label class="workflow-definition-field">
+        <span>Type</span>
+        <select ${fieldAttr}="${escapeAttribute(valuePrefix)}type">
+          <option value=""${!safe.type ? " selected" : ""}>default</option>
+          <option value="primary"${safe.type === "primary" ? " selected" : ""}>primary</option>
+          <option value="danger"${safe.type === "danger" ? " selected" : ""}>danger</option>
+        </select>
+      </label>
+    </div>
+    ${buildCardActionKindFieldsHtml(fieldAttr, valuePrefix, errorPrefix, safe)}
+  `;
 }
 
 function renderCardFormFields(fields) {
@@ -8673,24 +8894,7 @@ function renderCardSections(sections) {
                             <button type="button" class="cards-management-icon-btn danger" data-card-section-action-remove="${index}.${actionIndex}" title="删除操作" aria-label="删除操作">${getCardsManagementIconSvg("remove")}</button>
                           </div>
                         </div>
-                        <div class="cards-management-row-grid">
-                          <label class="workflow-definition-field">
-                            <span>ID</span>
-                            <input data-card-section-action-field="${index}.${actionIndex}.id" type="text" value="${escapeAttribute(action.id || "")}" />
-                          </label>
-                          <label class="workflow-definition-field">
-                            <span>Label</span>
-                            <input data-card-section-action-field="${index}.${actionIndex}.label" type="text" value="${escapeAttribute(action.label || "")}" />
-                          </label>
-                          <label class="workflow-definition-field">
-                            <span>Type</span>
-                            <select data-card-section-action-field="${index}.${actionIndex}.type">
-                              <option value=""${!action.type ? " selected" : ""}>default</option>
-                              <option value="primary"${action.type === "primary" ? " selected" : ""}>primary</option>
-                              <option value="danger"${action.type === "danger" ? " selected" : ""}>danger</option>
-                            </select>
-                          </label>
-                        </div>
+                        ${renderCardActionFields("data-card-section-action-field", `${index}.${actionIndex}.`, `sections[${index}].actions[${actionIndex}]`, action)}
                       </div>
                     `)
                     .join("")
@@ -8713,6 +8917,10 @@ function renderCardsEditor(card) {
   if (cardsManagementFormSubmitIdInput) cardsManagementFormSubmitIdInput.value = safe.form?.submit_action?.id || "";
   if (cardsManagementFormSubmitLabelInput) cardsManagementFormSubmitLabelInput.value = safe.form?.submit_action?.label || "";
   if (cardsManagementFormSubmitTypeInput) cardsManagementFormSubmitTypeInput.value = safe.form?.submit_action?.type || "";
+  if (cardsManagementFormSubmitActionKindInput) cardsManagementFormSubmitActionKindInput.value = safe.form?.submit_action?.action_kind || "";
+  if (cardsManagementFormSubmitResumeActionInput) cardsManagementFormSubmitResumeActionInput.value = safe.form?.submit_action?.resume_action || "";
+  if (cardsManagementFormSubmitWorkflowControlInput) cardsManagementFormSubmitWorkflowControlInput.value = safe.form?.submit_action?.workflow_control_action || "";
+  if (cardsManagementFormSubmitUrlInput) cardsManagementFormSubmitUrlInput.value = safe.form?.submit_action?.url || "";
   if (cardsManagementForm) {
     cardsManagementForm.classList.toggle("hidden", !safe.form);
   }
@@ -8794,12 +9002,26 @@ function getCardActionRowsFromEditor() {
   if (!cardsManagementActions) return [];
   return Array.from(cardsManagementActions.querySelectorAll("[data-card-action-row]")).map((row) => {
     const index = row.getAttribute("data-card-action-row");
-    return {
-      id: (row.querySelector(`[data-card-action-field="${index}.id"]`)?.value || "").trim(),
-      label: (row.querySelector(`[data-card-action-field="${index}.label"]`)?.value || "").trim(),
-      type: (row.querySelector(`[data-card-action-field="${index}.type"]`)?.value || "").trim() || undefined,
-    };
+    return readCardActionFields(row, "data-card-action-field", `${index}.`);
   });
+}
+
+function readCardActionFields(root, fieldAttr, valuePrefix = "") {
+  const read = (field) => (root.querySelector(`[${fieldAttr}="${valuePrefix}${field}"]`)?.value || "").trim();
+  const action = {
+    id: read("id"),
+    label: read("label"),
+    type: read("type") || undefined,
+  };
+  const actionKind = read("action_kind");
+  const resumeAction = read("resume_action");
+  const workflowControlAction = read("workflow_control_action");
+  const url = read("url");
+  if (actionKind) action.action_kind = actionKind;
+  if (resumeAction) action.resume_action = resumeAction;
+  if (workflowControlAction) action.workflow_control_action = workflowControlAction;
+  if (url) action.url = url;
+  return action;
 }
 
 function getCardFormFieldsFromEditor(validationErrors) {
@@ -8836,11 +9058,7 @@ function getCardSectionsFromEditor(validationErrors) {
     const bodyTemplate = row.querySelector(`[data-card-section-field="${index}.body_template"]`)?.value || "";
     const actions = Array.from(row.querySelectorAll(`[data-card-section-action-row^="${index}."]`)).map((actionRow) => {
       const actionKey = actionRow.getAttribute("data-card-section-action-row");
-      return {
-        id: (actionRow.querySelector(`[data-card-section-action-field="${actionKey}.id"]`)?.value || "").trim(),
-        label: (actionRow.querySelector(`[data-card-section-action-field="${actionKey}.label"]`)?.value || "").trim(),
-        type: (actionRow.querySelector(`[data-card-section-action-field="${actionKey}.type"]`)?.value || "").trim() || undefined,
-      };
+      return readCardActionFields(actionRow, "data-card-section-action-field", `${actionKey}.`);
     });
     return {
       body_template: bodyTemplate,
@@ -8871,26 +9089,43 @@ function validateCardDraft(cardState) {
     pushError("header.title_template", "标题模板不能为空");
   }
 
-  const actionIds = new Set();
-  (card.actions || []).forEach((action, index) => {
+  const validateAction = (action, path, actionIds) => {
     const actionId = String(action.id || "").trim();
     if (!actionId) {
-      pushError(`actions[${index}].id`, "操作 ID 不能为空");
+      pushError(`${path}.id`, "操作 ID 不能为空");
       return;
     }
     if (actionIds.has(actionId)) {
-      pushError(`actions[${index}].id`, `操作 ID「${actionId}」重复`);
+      pushError(`${path}.id`, `操作 ID「${actionId}」重复`);
     }
     actionIds.add(actionId);
+    if (
+      action.action_kind &&
+      !["interrupt_resume", "workflow_control", "external_link"].includes(action.action_kind)
+    ) {
+      pushError(`${path}.action_kind`, `Action Kind「${action.action_kind}」不合法`);
+    }
+    if (action.action_kind === "interrupt_resume" && !String(action.resume_action || "").trim()) {
+      pushError(`${path}.resume_action`, "interrupt_resume 必须填写 Resume Action");
+    }
+    if (action.action_kind === "workflow_control" && !String(action.workflow_control_action || "").trim()) {
+      pushError(`${path}.workflow_control_action`, "workflow_control 必须选择 Workflow Control");
+    }
+    if (action.action_kind === "external_link" && !String(action.url || "").trim()) {
+      pushError(`${path}.url`, "external_link 必须填写 URL");
+    }
+  };
+
+  const actionIds = new Set();
+  (card.actions || []).forEach((action, index) => {
+    validateAction(action, `actions[${index}]`, actionIds);
   });
 
   if (card.form) {
     if (!String(card.form.name || "").trim()) {
       pushError("form.name", "表单名称不能为空");
     }
-    if (!String(card.form.submit_action?.id || "").trim()) {
-      pushError("form.submit_action.id", "提交动作 ID 不能为空");
-    }
+    validateAction(card.form.submit_action || {}, "form.submit_action", actionIds);
     const fieldNames = new Set();
     (card.form.fields || []).forEach((field, index) => {
       const fieldName = String(field.name || "").trim();
@@ -8914,12 +9149,29 @@ function validateCardDraft(cardState) {
   if (card.pattern === "section_list" && (!Array.isArray(card.sections) || card.sections.length === 0)) {
     pushError("sections", "当前展示模式必须至少有一个分组");
   }
+  (card.sections || []).forEach((section, sectionIndex) => {
+    const sectionActionIds = new Set(actionIds);
+    (section.actions || []).forEach((action, actionIndex) => {
+      validateAction(action, `sections[${sectionIndex}].actions[${actionIndex}]`, sectionActionIds);
+    });
+  });
 
   return errors;
 }
 
-function createCardPreviewValue(actionId) {
-  return { action: actionId || "preview_action" };
+function createCardPreviewValue(action) {
+  const safe = typeof action === "string" ? { id: action } : action || {};
+  const platformAction =
+    safe.action_kind === "interrupt_resume"
+      ? "workflow_interrupt_resume"
+      : safe.action_kind === "workflow_control"
+        ? safe.workflow_control_action || safe.id
+        : safe.id || "preview_action";
+  return {
+    action: platformAction,
+    ...(safe.resume_action ? { resume_action: safe.resume_action } : {}),
+    ...(safe.action_kind === "interrupt_resume" ? { interrupt_id: "preview_interrupt" } : {}),
+  };
 }
 
 function moveArrayItem(list, fromIndex, toIndex) {
@@ -8959,14 +9211,14 @@ function buildPreviewCardFromConfig(card, sampleData) {
     buttons: (safe.actions || []).map((action) => ({
       label: action.label || action.id || "Action",
       type: action.type || "default",
-      value: createCardPreviewValue(action.id),
+      value: createCardPreviewValue(action),
     })),
     sections: (safe.sections || []).map((section) => ({
       body: interpolateCardTemplate(section.body_template || "", templateData),
       buttons: (Array.isArray(section.actions) ? section.actions : []).map((action) => ({
         label: action.label || action.id || "Action",
         type: action.type || "default",
-        value: createCardPreviewValue(action.id),
+        value: createCardPreviewValue(action),
       })),
     })),
     form: safe.form
@@ -8978,7 +9230,7 @@ function buildPreviewCardFromConfig(card, sampleData) {
           submitButton: {
             label: safe.form.submit_action?.label || safe.form.submit_action?.id || "Submit",
             type: safe.form.submit_action?.type || "default",
-            value: createCardPreviewValue(safe.form.submit_action?.id),
+            value: createCardPreviewValue(safe.form.submit_action),
           },
         }
       : null,
@@ -9015,6 +9267,15 @@ function readCurrentCardEditorState() {
       },
       fields: getCardFormFieldsFromEditor(validationErrors),
     };
+    const submitAction = card.form.submit_action;
+    const submitActionKind = (cardsManagementFormSubmitActionKindInput?.value || "").trim();
+    const submitResumeAction = (cardsManagementFormSubmitResumeActionInput?.value || "").trim();
+    const submitWorkflowControl = (cardsManagementFormSubmitWorkflowControlInput?.value || "").trim();
+    const submitUrl = (cardsManagementFormSubmitUrlInput?.value || "").trim();
+    if (submitActionKind) submitAction.action_kind = submitActionKind;
+    if (submitResumeAction) submitAction.resume_action = submitResumeAction;
+    if (submitWorkflowControl) submitAction.workflow_control_action = submitWorkflowControl;
+    if (submitUrl) submitAction.url = submitUrl;
   }
   const sections = getCardSectionsFromEditor(validationErrors);
   if (sections.length > 0) {
@@ -9057,12 +9318,12 @@ function collectCardReferencesFromStateTransitions(stateKey, state, cardRef, ref
   if (state?.on_complete?.failure?.card?.ref === cardRef) {
     refs.push({ stateKey, path: "on_complete.failure.card.ref", type: state.type || "unknown" });
   }
-  if (state?.on_approve?.card?.ref === cardRef) {
-    refs.push({ stateKey, path: "on_approve.card.ref", type: state.type || "unknown" });
-  }
-  if (state?.on_revise?.card?.ref === cardRef) {
-    refs.push({ stateKey, path: "on_revise.card.ref", type: state.type || "unknown" });
-  }
+  collectWorkflowDefinitionTransitionEntries(state).forEach(({ path, transition }) => {
+    if (path === "on_complete.success" || path === "on_complete.failure") return;
+    if (transition.card?.ref === cardRef) {
+      refs.push({ stateKey, path: `${path}.card.ref`, type: state.type || "unknown" });
+    }
+  });
 }
 
 function getCardReferenceItems(workflowType, cardKey) {
@@ -11672,7 +11933,7 @@ function renderWorkbenchSubtasks(subtasks) {
     });
   }
   function isAwaitingStage(item) {
-    return item.stage_type === "confirmation"
+    return item.stage_type === "interrupt"
       || (typeof item.stage_key === "string" && item.stage_key.startsWith("awaiting_"));
   }
   function getSubtaskStatusLabel(item) {
@@ -11889,12 +12150,12 @@ function renderWorkbenchSubtasks(subtasks) {
     selected.stage_type === "delegation"
     && !selected.manually_skipped
     && (selected.status === "failed" || selected.status === "cancelled");
-  const canReturnConfirmation =
-    selected.stage_type === "confirmation"
+  const canReturnInterrupt =
+    selected.stage_type === "interrupt"
     && !selected.manually_skipped
     && selected.status === "completed";
 
-  if (canRetryDelegation || canReturnConfirmation) {
+  if (canRetryDelegation || canReturnInterrupt) {
     const actions = document.createElement("div");
     actions.className = "workbench-subtask-actions";
     if (selected.stage_type === "delegation" && selected.status === "failed") {
@@ -11904,14 +12165,14 @@ function renderWorkbenchSubtasks(subtasks) {
       retryBtn.addEventListener("click", () => toggleWorkbenchRetryComposer(selected.id));
       actions.appendChild(retryBtn);
     }
-    if (canReturnConfirmation && activeTask) {
+    if (canReturnInterrupt && activeTask) {
       const returnBtn = document.createElement("button");
       returnBtn.className = "btn-ghost";
       returnBtn.textContent = "回到此节点";
       returnBtn.addEventListener("click", async () => {
         if (
-          !(await openConfirmDialog(`确认回到“${selected.stage_label || selected.title}”并重新处理该确认节点吗？`, {
-            title: "回到确认节点",
+          !(await openConfirmDialog(`确认回到“${selected.stage_label || selected.title}”并重新处理该中断节点吗？`, {
+            title: "回到中断节点",
           }))
         ) return;
         triggerWorkbenchSubtaskRetry(currentWorkbenchTaskId, selected.id, "", {
@@ -12049,8 +12310,17 @@ function renderWorkbenchActionItems(actionItems, task) {
   actionItems.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-approval-item";
+    const isWorkflowInterrupt = item.source_type === "workflow_interrupt";
     const badge = item.item_type === "approval"
       ? "待确认"
+      : item.item_type === "credential"
+        ? "凭据"
+        : item.item_type === "revision_request"
+          ? "修改意见"
+          : item.item_type === "human_input"
+            ? "人工输入"
+            : item.item_type === "external_blocker"
+              ? "外部阻塞"
       : item.source_type === "request_human_input"
         ? "人工输入"
         : item.source_type === "ask_user_question"
@@ -12072,34 +12342,43 @@ function renderWorkbenchActionItems(actionItems, task) {
     `;
     const actions = document.createElement("div");
     actions.className = "workbench-task-actions";
-    if (item.item_type === "approval") {
+    if (isWorkflowInterrupt) {
       const labels = getWorkbenchApprovalLabels(task, {
         approval_type: item.stage_key || task.workflow_status,
         action_mode: item.action_mode || "approve_only",
       });
-      if (item.action_mode !== "input_required") {
+      const allowedActions = Array.isArray(item.extra?.allowedActions)
+        ? item.extra.allowedActions.map((entry) => String(entry))
+        : [];
+      const canApprove = allowedActions.includes("approve") || item.action_mode !== "input_required";
+      const canRevise = allowedActions.includes("revise") || item.action_mode === "approve_or_revise";
+      const canSubmit = allowedActions.includes("submit") || item.action_mode === "input_required";
+      const canSkip = allowedActions.includes("skip") || true;
+      if (canApprove && item.action_mode !== "input_required") {
         const approveBtn = document.createElement("button");
         approveBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-primary";
         approveBtn.textContent = labels.approve;
-        approveBtn.addEventListener("click", () => triggerWorkbenchAction(task.id, "approve"));
+        approveBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "approve"));
         actions.appendChild(approveBtn);
       }
-      const skipBtn = document.createElement("button");
-      skipBtn.className = "btn-ghost workbench-action-btn";
-      skipBtn.textContent = labels.skip || "跳过此节点";
-      skipBtn.addEventListener("click", async () => {
-        if (!(await openConfirmDialog(`确认跳过“${item.title}”并进入下一步吗？`, { title: "跳过节点" }))) return;
-        triggerWorkbenchAction(task.id, "skip");
-      });
-      actions.appendChild(skipBtn);
-      if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
+      if (canSkip) {
+        const skipBtn = document.createElement("button");
+        skipBtn.className = "btn-ghost workbench-action-btn";
+        skipBtn.textContent = labels.skip || "跳过此节点";
+        skipBtn.addEventListener("click", async () => {
+          if (!(await openConfirmDialog(`确认跳过“${item.title}”并进入下一步吗？`, { title: "跳过节点" }))) return;
+          triggerWorkbenchActionItem(task.id, item.id, "skip");
+        });
+        actions.appendChild(skipBtn);
+      }
+      if (canRevise || canSubmit) {
         const reviseBtn = document.createElement("button");
         reviseBtn.className = item.action_mode === "input_required"
           ? "btn-ghost workbench-action-btn workbench-action-btn-primary"
           : "btn-ghost workbench-action-btn";
         reviseBtn.textContent = labels.revise || "驳回并修改";
         reviseBtn.addEventListener("click", () =>
-          triggerWorkbenchAction(task.id, item.action_mode === "input_required" ? "submit_access_token" : "revise")
+          triggerWorkbenchActionItem(task.id, item.id, item.action_mode === "input_required" ? "submit" : "revise")
         );
         actions.appendChild(reviseBtn);
       }
@@ -12406,21 +12685,6 @@ function sortWorkbenchTimeline(timeline) {
 }
 
 async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
-  let revisionText = "";
-  let accessToken = "";
-  if (action === "revise") {
-    revisionText = await openTextPrompt("请输入修改意见", "", {
-      title: "修改意见",
-      multiline: true,
-    }) || "";
-    if (!revisionText.trim()) return;
-  } else if (action === "submit_access_token") {
-    accessToken = await openTextPrompt("请输入 access_token", "", {
-      title: "填写 access_token",
-      placeholder: "请输入测试 token",
-    }) || "";
-    if (!accessToken.trim()) return;
-  }
   try {
     const res = await apiFetch("/api/workbench/task/action", {
       method: "POST",
@@ -12428,8 +12692,6 @@ async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
         task_id: taskId,
         subtask_id: subtaskId || undefined,
         action,
-        revision_text: revisionText,
-        context: accessToken ? { access_token: accessToken } : void 0,
       }),
     });
     const data = await res.json();
@@ -12447,6 +12709,7 @@ async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
 
 async function triggerWorkbenchActionItem(taskId, actionItemId, action, prefillText) {
   let replyText = "";
+  let payload = undefined;
   if (action === "reply") {
     if (typeof prefillText === "string" && prefillText) {
       replyText = prefillText;
@@ -12457,6 +12720,20 @@ async function triggerWorkbenchActionItem(taskId, actionItemId, action, prefillT
       }) || "";
       if (!replyText.trim()) return;
     }
+  } else if (action === "revise") {
+    const revisionText = await openTextPrompt("请输入修改意见", "", {
+      title: "修改意见",
+      multiline: true,
+    }) || "";
+    if (!revisionText.trim()) return;
+    payload = { revision_text: revisionText };
+  } else if (action === "submit") {
+    const accessToken = await openTextPrompt("请输入 access_token", "", {
+      title: "填写 access_token",
+      placeholder: "请输入测试 token",
+    }) || "";
+    if (!accessToken.trim()) return;
+    payload = { access_token: accessToken };
   }
   try {
     const res = await apiFetch("/api/workbench/action-item", {
@@ -12466,6 +12743,7 @@ async function triggerWorkbenchActionItem(taskId, actionItemId, action, prefillT
         action_item_id: actionItemId,
         action,
         reply_text: replyText || undefined,
+        payload,
       }),
     });
     const data = await res.json();
@@ -15845,18 +16123,18 @@ function renderTodayPlanTaskActions(task, options = {}) {
     <div class="today-plan-action-items">
       ${task.action_items.map((item) => {
         const actionButtons = [];
-        if (!readonly && item.item_type === "approval") {
+        if (!readonly && item.source_type === "workflow_interrupt") {
           const labels = getWorkbenchApprovalLabels(task.task, {
             approval_type: item.stage_key || task.task.workflow_status,
             action_mode: item.action_mode || "approve_only",
           });
           if (item.action_mode !== "input_required") {
-            actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-task-action="${escapeAttribute(task.task_id)}" data-today-plan-task-op="approve" data-today-plan-task-op-title="${escapeAttribute(item.title || task.title || "当前节点")}">${escapeHtml(labels.approve || "通过")}</button>`);
+            actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="approve">${escapeHtml(labels.approve || "通过")}</button>`);
           }
-          actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-task-action="${escapeAttribute(task.task_id)}" data-today-plan-task-op="skip" data-today-plan-task-op-title="${escapeAttribute(item.title || task.title || "当前节点")}">${escapeHtml(labels.skip || "跳过此节点")}</button>`);
+          actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="skip">${escapeHtml(labels.skip || "跳过此节点")}</button>`);
           if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
-            const actionName = item.action_mode === "input_required" ? "submit_access_token" : "revise";
-            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-task-action="${escapeAttribute(task.task_id)}" data-today-plan-task-op="${escapeAttribute(actionName)}" data-today-plan-task-op-title="${escapeAttribute(item.title || task.title || "当前节点")}">${escapeHtml(labels.revise || "驳回并修改")}</button>`);
+            const actionName = item.action_mode === "input_required" ? "submit" : "revise";
+            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="${escapeAttribute(actionName)}">${escapeHtml(labels.revise || "驳回并修改")}</button>`);
           }
         } else if (!readonly) {
           const askQuestion = item.source_type === "ask_user_question"
@@ -18507,6 +18785,10 @@ if (configurationServiceJsonApplyBtn) {
   cardsManagementFormSubmitIdInput,
   cardsManagementFormSubmitLabelInput,
   cardsManagementFormSubmitTypeInput,
+  cardsManagementFormSubmitActionKindInput,
+  cardsManagementFormSubmitResumeActionInput,
+  cardsManagementFormSubmitWorkflowControlInput,
+  cardsManagementFormSubmitUrlInput,
 ].forEach((input) => {
   if (!input) return;
   input.addEventListener("input", () => {

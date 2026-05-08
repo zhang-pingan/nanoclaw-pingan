@@ -1349,6 +1349,33 @@
                           <option value="danger">danger</option>
                         </select>
                       </label>
+                      <label class="workflow-definition-field" data-card-field-path="form.submit_action.action_kind">
+                        <span>Submit Action Kind</span>
+                        <select id="cards-management-form-submit-action-kind">
+                          <option value="">legacy</option>
+                          <option value="interrupt_resume">interrupt_resume</option>
+                          <option value="workflow_control">workflow_control</option>
+                          <option value="external_link">external_link</option>
+                        </select>
+                      </label>
+                      <label class="workflow-definition-field" data-card-field-path="form.submit_action.resume_action">
+                        <span>Resume Action</span>
+                        <input id="cards-management-form-submit-resume-action" type="text" placeholder="例如 submit / revise" />
+                      </label>
+                      <label class="workflow-definition-field" data-card-field-path="form.submit_action.workflow_control_action">
+                        <span>Workflow Control</span>
+                        <select id="cards-management-form-submit-workflow-control">
+                          <option value="">none</option>
+                          <option value="pause_workflow">pause_workflow</option>
+                          <option value="cancel_workflow">cancel_workflow</option>
+                          <option value="retry_stage">retry_stage</option>
+                          <option value="return_to_stage">return_to_stage</option>
+                        </select>
+                      </label>
+                      <label class="workflow-definition-field" data-card-field-path="form.submit_action.url">
+                        <span>External URL</span>
+                        <input id="cards-management-form-submit-url" type="text" placeholder="https://..." />
+                      </label>
                     </div>
                     <div id="cards-management-form-fields" class="cards-management-rows"></div>
                   </div>

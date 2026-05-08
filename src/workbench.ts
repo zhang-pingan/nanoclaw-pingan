@@ -10,6 +10,7 @@ import {
   getDelegationsByWorkflow,
   getWorkflow,
   getAllWorkflows,
+  getPendingWorkflowInterruptForState,
   getWorkbenchTaskById,
   getWorkbenchTaskByWorkflowId,
   listWorkbenchActionItemsByTask,
@@ -39,7 +40,6 @@ import type {
   WorkflowStageEvaluationRecord,
 } from './types.js';
 import {
-  approveWorkflow,
   cancelWorkflow,
   createNewWorkflow,
   getAvailableWorkflowTypes,
@@ -48,7 +48,7 @@ import {
   resumeWorkflow,
   returnWorkflowToConfirmationStage,
   retryWorkflowStage,
-  reviseWorkflow,
+  resumeWorkflowInterrupt,
   skipWorkflow,
   skipWorkflowStage,
 } from './workflow.js';
@@ -107,7 +107,7 @@ export interface WorkbenchSubtask {
   title: string;
   stage_key: string;
   stage_label: string;
-  stage_type: 'delegation' | 'confirmation';
+  stage_type: 'delegation' | 'interrupt';
   status: 'completed' | 'current' | 'pending' | 'failed' | 'cancelled';
   manually_skipped?: boolean;
   role?: string;
@@ -131,9 +131,15 @@ export interface WorkbenchArtifact {
 
 export interface WorkbenchActionItem {
   id: string;
-  item_type: 'approval' | 'interactive';
+  item_type:
+    | 'approval'
+    | 'revision_request'
+    | 'credential'
+    | 'human_input'
+    | 'external_blocker'
+    | 'interactive';
   source_type:
-    | 'workflow'
+    | 'workflow_interrupt'
     | 'request_human_input'
     | 'ask_user_question'
     | 'send_message';
@@ -251,8 +257,7 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     source_jid: persisted?.source_jid || workflow.source_jid,
     created_at: persisted?.created_at || workflow.created_at,
     updated_at: persisted?.updated_at || workflow.updated_at,
-    pending_approval:
-      stateConfig?.type === 'confirmation' || pendingActionCount > 0,
+    pending_approval: stateConfig?.type === 'interrupt' || pendingActionCount > 0,
     pending_action_count: pendingActionCount,
     active_delegation_id: workflow.current_delegation_id || '',
     context: { ...workflow.context },
@@ -271,7 +276,7 @@ function mapPersistedSubtask(
     title: item.title,
     stage_key: item.stage_key,
     stage_label: item.title,
-    stage_type: stageType === 'confirmation' ? 'confirmation' : 'delegation',
+    stage_type: stageType === 'interrupt' ? 'interrupt' : 'delegation',
     status:
       item.status === 'completed'
         ? 'completed'
@@ -336,13 +341,21 @@ function mapPersistedActionItem(
     : undefined;
   return {
     id: item.id,
-    item_type: item.item_type === 'approval' ? 'approval' : 'interactive',
+    item_type:
+      item.item_type === 'approval' ||
+      item.item_type === 'revision_request' ||
+      item.item_type === 'credential' ||
+      item.item_type === 'human_input' ||
+      item.item_type === 'external_blocker'
+        ? item.item_type
+        : 'interactive',
     source_type:
+      item.source_type === 'workflow_interrupt' ||
       item.source_type === 'request_human_input' ||
       item.source_type === 'ask_user_question' ||
       item.source_type === 'send_message'
         ? item.source_type
-        : 'workflow',
+        : 'workflow_interrupt',
     title: item.title,
     body: item.body || '',
     status:
@@ -500,7 +513,7 @@ function getStageDefinitions(workflow: Workflow): WorkbenchSubtask[] {
       title: state.role || key,
       stage_key: key,
       stage_label: config.status_labels[key] || key,
-      stage_type: state.type === 'confirmation' ? 'confirmation' : 'delegation',
+      stage_type: state.type === 'interrupt' ? 'interrupt' : 'delegation',
       status: 'pending' as const,
       role: state.role,
       skill: state.skill,
@@ -583,7 +596,12 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
 function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   const stateConfig = config?.states[workflow.status];
-  if (!config || !stateConfig || stateConfig.type !== 'confirmation') return [];
+  if (!config || !stateConfig || stateConfig.type !== 'interrupt') return [];
+  const interrupt = getPendingWorkflowInterruptForState(
+    workflow.id,
+    workflow.status,
+  );
+  if (!interrupt) return [];
 
   const card = stateConfig.card
     ? getCardConfig(workflow.workflow_type, stateConfig.card)
@@ -622,21 +640,32 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
   return [
     {
       id: `${workflow.id}-approval-${workflow.status}`,
-      item_type: 'approval',
-      source_type: 'workflow',
+      item_type: interrupt.kind,
+      source_type: 'workflow_interrupt',
       title: config.status_labels[workflow.status] || workflow.status,
       body,
       status: 'pending',
       stage_key: workflow.status,
-      source_ref_id: workflow.status,
+      source_ref_id: interrupt.id,
       replyable: false,
       action_mode:
         workflow.status === 'testing_confirm'
           ? 'input_required'
-          : stateConfig.on_revise
+          : stateConfig.allowed_actions?.includes('revise')
             ? 'approve_or_revise'
             : 'approve_only',
       created_at: workflow.updated_at,
+      extra: {
+        interruptId: interrupt.id,
+        allowedActions: JSON.parse(interrupt.allowed_actions_json) as string[],
+        payloadSchema: interrupt.resume_payload_schema_json
+          ? JSON.parse(interrupt.resume_payload_schema_json)
+          : {},
+        allowedChannels: interrupt.allowed_channels_json
+          ? JSON.parse(interrupt.allowed_channels_json)
+          : [],
+        action_kind: 'resume_workflow_interrupt',
+      },
     },
   ];
 }
@@ -983,29 +1012,15 @@ export function createWorkbenchTask(input: {
 
 export function runWorkbenchTaskAction(input: {
   taskId: string;
-  action:
-    | 'approve'
-    | 'revise'
-    | 'pause'
-    | 'resume'
-    | 'cancel'
-    | 'skip'
-    | 'submit_access_token';
+  action: 'pause' | 'resume' | 'cancel' | 'skip';
   subtaskId?: string;
-  revisionText?: string;
-  context?: WorkflowContext;
 }): { error?: string } {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
+  const workflow = getWorkflow(workflowId);
+  if (!workflow) return { error: 'Task not found' };
 
   switch (input.action) {
-    case 'approve':
-      return approveWorkflow(workflowId);
-    case 'revise':
-      return reviseWorkflow(
-        workflowId,
-        input.revisionText?.trim() || '请按最新意见修正',
-      );
     case 'pause':
       return pauseWorkflow(workflowId);
     case 'resume':
@@ -1028,18 +1043,6 @@ export function runWorkbenchTaskAction(input: {
       }
       return skipWorkflowStage(workflowId, subtask.stage_key);
     }
-    case 'submit_access_token':
-      if (
-        typeof input.context?.[WORKFLOW_CONTEXT_KEYS.accessToken] !==
-          'string' ||
-        !String(input.context[WORKFLOW_CONTEXT_KEYS.accessToken]).trim()
-      ) {
-        return { error: 'access_token required' };
-      }
-      return reviseWorkflow(
-        workflowId,
-        String(input.context[WORKFLOW_CONTEXT_KEYS.accessToken]).trim(),
-      );
     default:
       return { error: `Unsupported action: ${input.action}` };
   }
@@ -1091,12 +1094,43 @@ export function addWorkbenchComment(input: {
 export function runWorkbenchActionItemAction(input: {
   taskId: string;
   actionItemId: string;
-  action: 'confirm' | 'skip' | 'cancel' | 'resolve';
+  action:
+    | 'confirm'
+    | 'approve'
+    | 'revise'
+    | 'submit'
+    | 'skip'
+    | 'cancel'
+    | 'resolve';
+  payload?: Record<string, unknown>;
 }): { error?: string } {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
   const item = getWorkbenchActionItem(input.actionItemId);
   if (!item) return { error: 'Action item not found' };
+
+  if (item.source_type === 'workflow_interrupt' && item.source_ref_id) {
+    const resumeAction =
+      input.action === 'confirm'
+        ? 'approve'
+        : input.action === 'resolve'
+          ? 'approve'
+          : input.action;
+    if (input.action === 'cancel') {
+      return cancelWorkflow(workflowId);
+    }
+    const result = resumeWorkflowInterrupt({
+      interruptId: item.source_ref_id,
+      action: resumeAction,
+      payload: {
+        ...(input.action === 'skip' ? { skipped: true } : {}),
+        ...(input.payload || {}),
+      },
+      actor: { channel: 'web', userId: 'workbench' },
+      idempotencyKey: `workbench:${input.actionItemId}:${input.action}`,
+    });
+    return result.ok ? {} : { error: result.error };
+  }
 
   const nextStatus =
     input.action === 'confirm'
@@ -1194,10 +1228,10 @@ export function retryWorkbenchSubtask(input: {
   ];
   if (!stateConfig) return { error: 'Stage not found' };
 
-  if (stateConfig.type === 'confirmation') {
+  if (stateConfig.type === 'interrupt') {
     if (subtask.status !== 'completed') {
       return {
-        error: 'Only completed confirmation subtasks can return to the node',
+        error: 'Only completed interrupt subtasks can return to the node',
       };
     }
     return returnWorkflowToConfirmationStage(workflowId, subtask.stage_key);

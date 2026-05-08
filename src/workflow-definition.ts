@@ -30,6 +30,47 @@ export interface WorkflowDefinitionEffects {
   increment_round?: boolean;
 }
 
+export interface WorkflowDefinitionRetryPolicy {
+  max_attempts: number;
+  backoff?: 'fixed' | 'linear' | 'exponential';
+  initial_delay_ms?: number;
+  max_delay_ms?: number;
+  retry_on?: Array<
+    | 'timeout'
+    | 'transient_error'
+    | 'agent_retryable_error'
+    | 'evaluator_pending'
+  >;
+  on_exhausted?: WorkflowDefinitionTransition;
+}
+
+export interface WorkflowDefinitionTimeoutPolicy {
+  duration_ms: number;
+  notify?: Array<'web' | 'feishu' | 'assistant' | 'main_group'>;
+  on_timeout: WorkflowDefinitionTransition;
+}
+
+export interface WorkflowDefinitionJsonSchemaRef {
+  ref?: string;
+  schema?: Record<string, unknown>;
+}
+
+export interface WorkflowDefinitionArtifactContractRef {
+  ref: string;
+}
+
+export interface WorkflowDefinitionEvaluatorRef {
+  ref: string;
+  on_pass?: WorkflowDefinitionTransition;
+  on_needs_revision?: WorkflowDefinitionTransition;
+  on_fail?: WorkflowDefinitionTransition;
+  on_pending?: WorkflowDefinitionTransition;
+}
+
+export interface WorkflowDefinitionRollbackHintRef {
+  ref: string;
+}
+
 export interface WorkflowDefinitionTransition {
   target: string;
   delegate?: WorkflowDefinitionDelegate;
@@ -39,9 +80,14 @@ export interface WorkflowDefinitionTransition {
 }
 
 export interface WorkflowDefinitionStateBase {
-  type: 'delegation' | 'confirmation' | 'terminal' | 'system';
+  type: 'delegation' | 'interrupt' | 'terminal' | 'system';
   label?: string;
   description?: string;
+  retry_policy?: WorkflowDefinitionRetryPolicy;
+  timeout_policy?: WorkflowDefinitionTimeoutPolicy;
+  artifact_contract?: WorkflowDefinitionArtifactContractRef;
+  evaluator?: WorkflowDefinitionEvaluatorRef;
+  rollback_hint?: WorkflowDefinitionRollbackHintRef;
 }
 
 export interface WorkflowDefinitionDelegationState
@@ -54,12 +100,31 @@ export interface WorkflowDefinitionDelegationState
   };
 }
 
-export interface WorkflowDefinitionConfirmationState
+export type WorkflowDefinitionInterruptKind =
+  | 'approval'
+  | 'revision_request'
+  | 'credential'
+  | 'human_input'
+  | 'external_blocker';
+
+export type WorkflowDefinitionInterruptChannel =
+  | 'web'
+  | 'feishu'
+  | 'assistant';
+
+export interface WorkflowDefinitionInterruptState
   extends WorkflowDefinitionStateBase {
-  type: 'confirmation';
-  card: WorkflowDefinitionCardRef;
-  on_approve?: WorkflowDefinitionTransition;
-  on_revise?: WorkflowDefinitionTransition;
+  type: 'interrupt';
+  kind: WorkflowDefinitionInterruptKind;
+  card?: WorkflowDefinitionCardRef;
+  title?: string;
+  body?: string;
+  resume_payload_schema: WorkflowDefinitionJsonSchemaRef;
+  allowed_actions: string[];
+  allowed_channels?: WorkflowDefinitionInterruptChannel[];
+  on_resume: Record<string, WorkflowDefinitionTransition>;
+  on_cancel?: WorkflowDefinitionTransition;
+  on_expire?: WorkflowDefinitionTransition;
 }
 
 export interface WorkflowDefinitionTerminalState
@@ -74,7 +139,7 @@ export interface WorkflowDefinitionSystemState
 
 export type WorkflowDefinitionState =
   | WorkflowDefinitionDelegationState
-  | WorkflowDefinitionConfirmationState
+  | WorkflowDefinitionInterruptState
   | WorkflowDefinitionTerminalState
   | WorkflowDefinitionSystemState;
 

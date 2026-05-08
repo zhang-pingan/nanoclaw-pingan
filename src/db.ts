@@ -46,6 +46,11 @@ import {
   WorkbenchSubtaskRecord,
   WorkbenchTaskRecord,
   WorkflowStageEvaluationRecord,
+  WorkflowCheckpointRecord,
+  WorkflowEventRecord,
+  WorkflowInterruptRecord,
+  WorkflowInterruptResumeAttemptRecord,
+  WorkflowOutboxRecord,
   Workflow,
 } from './types.js';
 import {
@@ -516,6 +521,105 @@ function createSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_workflow_stage_evals_workflow_stage
       ON workflow_stage_evaluations(workflow_id, stage_key, updated_at);
+
+    CREATE TABLE IF NOT EXISTS workflow_interrupts (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL,
+      state_key TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      resume_payload_schema_json TEXT,
+      allowed_actions_json TEXT NOT NULL,
+      allowed_channels_json TEXT,
+      assigned_role TEXT,
+      action_payload_json TEXT,
+      created_by TEXT NOT NULL,
+      resumed_by TEXT,
+      resume_action TEXT,
+      resume_payload_json TEXT,
+      resume_error TEXT,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      expires_at TEXT,
+      resumed_at TEXT,
+      cancelled_at TEXT,
+      expired_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_interrupts_workflow
+      ON workflow_interrupts(workflow_id, status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_interrupts_status
+      ON workflow_interrupts(status, expires_at);
+
+    CREATE TABLE IF NOT EXISTS workflow_events (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      state_key TEXT,
+      ref_type TEXT,
+      ref_id TEXT,
+      actor_json TEXT,
+      payload_json TEXT,
+      idempotency_key TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_events_workflow
+      ON workflow_events(workflow_id, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_events_idempotency
+      ON workflow_events(idempotency_key)
+      WHERE idempotency_key IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS workflow_interrupt_resume_attempts (
+      id TEXT PRIMARY KEY,
+      interrupt_id TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      actor_json TEXT NOT NULL,
+      resume_action TEXT NOT NULL,
+      resume_payload_json TEXT,
+      idempotency_key TEXT,
+      status TEXT NOT NULL,
+      result_json TEXT,
+      conflict_reason TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_interrupt_resume_attempts_idempotency
+      ON workflow_interrupt_resume_attempts(interrupt_id, idempotency_key)
+      WHERE idempotency_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_workflow_interrupt_resume_attempts_interrupt
+      ON workflow_interrupt_resume_attempts(interrupt_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS workflow_checkpoints (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL,
+      state_key TEXT NOT NULL,
+      checkpoint_version INTEGER NOT NULL,
+      checkpoint_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_checkpoints_workflow
+      ON workflow_checkpoints(workflow_id, checkpoint_version DESC);
+
+    CREATE TABLE IF NOT EXISTS workflow_outbox (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL,
+      event_id TEXT,
+      effect_type TEXT NOT NULL,
+      channel TEXT,
+      status TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_outbox_status
+      ON workflow_outbox(status, next_attempt_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_outbox_workflow
+      ON workflow_outbox(workflow_id, created_at);
   `);
 
   database.exec(`
@@ -2470,6 +2574,271 @@ export function listWorkflowStageEvaluationsByWorkflow(
     .all(workflowId) as WorkflowStageEvaluationRecord[];
 }
 
+export function createWorkflowInterrupt(
+  record: WorkflowInterruptRecord,
+): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO workflow_interrupts (
+      id, workflow_id, state_key, kind, status, title, body,
+      resume_payload_schema_json, allowed_actions_json, allowed_channels_json,
+      assigned_role, action_payload_json, created_by, resumed_by,
+      resume_action, resume_payload_json, resume_error, idempotency_key,
+      created_at, updated_at, expires_at, resumed_at, cancelled_at, expired_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.workflow_id,
+    record.state_key,
+    record.kind,
+    record.status,
+    record.title,
+    record.body,
+    record.resume_payload_schema_json,
+    record.allowed_actions_json,
+    record.allowed_channels_json,
+    record.assigned_role,
+    record.action_payload_json,
+    record.created_by,
+    record.resumed_by,
+    record.resume_action,
+    record.resume_payload_json,
+    record.resume_error,
+    record.idempotency_key,
+    record.created_at,
+    record.updated_at,
+    record.expires_at,
+    record.resumed_at,
+    record.cancelled_at,
+    record.expired_at,
+  );
+}
+
+export function getWorkflowInterrupt(
+  id: string,
+): WorkflowInterruptRecord | undefined {
+  return db
+    .prepare('SELECT * FROM workflow_interrupts WHERE id = ?')
+    .get(id) as WorkflowInterruptRecord | undefined;
+}
+
+export function getWorkflowInterruptByIdempotencyKey(
+  idempotencyKey: string,
+): WorkflowInterruptRecord | undefined {
+  return db
+    .prepare('SELECT * FROM workflow_interrupts WHERE idempotency_key = ?')
+    .get(idempotencyKey) as WorkflowInterruptRecord | undefined;
+}
+
+export function getPendingWorkflowInterruptForState(
+  workflowId: string,
+  stateKey: string,
+): WorkflowInterruptRecord | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_interrupts
+       WHERE workflow_id = ? AND state_key = ? AND status = 'pending'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    )
+    .get(workflowId, stateKey) as WorkflowInterruptRecord | undefined;
+}
+
+export function listWorkflowInterruptsByWorkflow(
+  workflowId: string,
+): WorkflowInterruptRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_interrupts
+       WHERE workflow_id = ?
+       ORDER BY created_at DESC`,
+    )
+    .all(workflowId) as WorkflowInterruptRecord[];
+}
+
+export function listPendingWorkflowInterruptsByWorkflow(
+  workflowId: string,
+): WorkflowInterruptRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_interrupts
+       WHERE workflow_id = ? AND status = 'pending'
+       ORDER BY created_at DESC`,
+    )
+    .all(workflowId) as WorkflowInterruptRecord[];
+}
+
+export function markWorkflowInterruptResumed(input: {
+  interruptId: string;
+  resumedBy: string;
+  resumeAction: string;
+  resumePayloadJson: string | null;
+  updatedAt: string;
+}): boolean {
+  const result = db
+    .prepare(
+      `UPDATE workflow_interrupts
+       SET status = 'resumed',
+           resumed_by = ?,
+           resume_action = ?,
+           resume_payload_json = ?,
+           updated_at = ?,
+           resumed_at = ?
+       WHERE id = ? AND status = 'pending'`,
+    )
+    .run(
+      input.resumedBy,
+      input.resumeAction,
+      input.resumePayloadJson,
+      input.updatedAt,
+      input.updatedAt,
+      input.interruptId,
+    );
+  return result.changes === 1;
+}
+
+export function closePendingWorkflowInterrupts(
+  workflowId: string,
+  status: 'cancelled' | 'expired',
+  updatedAt: string,
+): WorkflowInterruptRecord[] {
+  const pending = listPendingWorkflowInterruptsByWorkflow(workflowId);
+  if (pending.length === 0) return [];
+  const column = status === 'cancelled' ? 'cancelled_at' : 'expired_at';
+  db.prepare(
+    `UPDATE workflow_interrupts
+     SET status = ?, updated_at = ?, ${column} = ?
+     WHERE workflow_id = ? AND status = 'pending'`,
+  ).run(status, updatedAt, updatedAt, workflowId);
+  return pending;
+}
+
+export function createWorkflowEvent(record: WorkflowEventRecord): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO workflow_events (
+      id, workflow_id, event_type, state_key, ref_type, ref_id, actor_json,
+      payload_json, idempotency_key, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.workflow_id,
+    record.event_type,
+    record.state_key,
+    record.ref_type,
+    record.ref_id,
+    record.actor_json,
+    record.payload_json,
+    record.idempotency_key,
+    record.created_at,
+  );
+}
+
+export function listWorkflowEvents(workflowId: string): WorkflowEventRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_events
+       WHERE workflow_id = ?
+       ORDER BY created_at ASC`,
+    )
+    .all(workflowId) as WorkflowEventRecord[];
+}
+
+export function createWorkflowInterruptResumeAttempt(
+  record: WorkflowInterruptResumeAttemptRecord,
+): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO workflow_interrupt_resume_attempts (
+      id, interrupt_id, workflow_id, actor_json, resume_action,
+      resume_payload_json, idempotency_key, status, result_json,
+      conflict_reason, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.interrupt_id,
+    record.workflow_id,
+    record.actor_json,
+    record.resume_action,
+    record.resume_payload_json,
+    record.idempotency_key,
+    record.status,
+    record.result_json,
+    record.conflict_reason,
+    record.created_at,
+  );
+}
+
+export function getWorkflowInterruptResumeAttemptByIdempotency(
+  interruptId: string,
+  idempotencyKey: string,
+): WorkflowInterruptResumeAttemptRecord | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_interrupt_resume_attempts
+       WHERE interrupt_id = ? AND idempotency_key = ?
+       LIMIT 1`,
+    )
+    .get(interruptId, idempotencyKey) as
+    | WorkflowInterruptResumeAttemptRecord
+    | undefined;
+}
+
+export function getLatestWorkflowCheckpoint(
+  workflowId: string,
+): WorkflowCheckpointRecord | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM workflow_checkpoints
+       WHERE workflow_id = ?
+       ORDER BY checkpoint_version DESC
+       LIMIT 1`,
+    )
+    .get(workflowId) as WorkflowCheckpointRecord | undefined;
+}
+
+export function createWorkflowCheckpoint(
+  record: WorkflowCheckpointRecord,
+): void {
+  db.prepare(
+    `INSERT INTO workflow_checkpoints (
+      id, workflow_id, state_key, checkpoint_version, checkpoint_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.workflow_id,
+    record.state_key,
+    record.checkpoint_version,
+    record.checkpoint_json,
+    record.created_at,
+  );
+}
+
+export function createWorkflowOutbox(record: WorkflowOutboxRecord): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO workflow_outbox (
+      id, workflow_id, event_id, effect_type, channel, status, payload_json,
+      idempotency_key, attempts, next_attempt_at, last_error, created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    record.id,
+    record.workflow_id,
+    record.event_id,
+    record.effect_type,
+    record.channel,
+    record.status,
+    record.payload_json,
+    record.idempotency_key,
+    record.attempts,
+    record.next_attempt_at,
+    record.last_error,
+    record.created_at,
+    record.updated_at,
+  );
+}
+
+export function runWorkflowTransaction<T>(fn: () => T): T {
+  return db.transaction(fn)();
+}
+
 export function getAllActiveWorkflows(): Workflow[] {
   return (
     db
@@ -2496,6 +2865,11 @@ export function deleteAllWorkbenchTaskData(): {
   workflows: number;
   delegations: number;
   workflow_stage_evaluations: number;
+  workflow_interrupts: number;
+  workflow_events: number;
+  workflow_interrupt_resume_attempts: number;
+  workflow_checkpoints: number;
+  workflow_outbox: number;
   workbench_tasks: number;
   workbench_subtasks: number;
   workbench_events: number;
@@ -2515,6 +2889,17 @@ export function deleteAllWorkbenchTaskData(): {
     workflow_stage_evaluations: count(
       'SELECT COUNT(*) AS count FROM workflow_stage_evaluations',
     ),
+    workflow_interrupts: count(
+      'SELECT COUNT(*) AS count FROM workflow_interrupts',
+    ),
+    workflow_events: count('SELECT COUNT(*) AS count FROM workflow_events'),
+    workflow_interrupt_resume_attempts: count(
+      'SELECT COUNT(*) AS count FROM workflow_interrupt_resume_attempts',
+    ),
+    workflow_checkpoints: count(
+      'SELECT COUNT(*) AS count FROM workflow_checkpoints',
+    ),
+    workflow_outbox: count('SELECT COUNT(*) AS count FROM workflow_outbox'),
     workbench_tasks: count('SELECT COUNT(*) AS count FROM workbench_tasks'),
     workbench_subtasks: count(
       'SELECT COUNT(*) AS count FROM workbench_subtasks',
@@ -2535,6 +2920,11 @@ export function deleteAllWorkbenchTaskData(): {
   };
 
   const clear = db.transaction(() => {
+    db.prepare('DELETE FROM workflow_outbox').run();
+    db.prepare('DELETE FROM workflow_checkpoints').run();
+    db.prepare('DELETE FROM workflow_interrupt_resume_attempts').run();
+    db.prepare('DELETE FROM workflow_events').run();
+    db.prepare('DELETE FROM workflow_interrupts').run();
     db.prepare('DELETE FROM workbench_context_assets').run();
     db.prepare('DELETE FROM workbench_comments').run();
     db.prepare('DELETE FROM workbench_action_items').run();
@@ -2556,6 +2946,11 @@ export function deleteWorkbenchTaskData(taskId: string): {
   workflows: number;
   delegations: number;
   workflow_stage_evaluations: number;
+  workflow_interrupts: number;
+  workflow_events: number;
+  workflow_interrupt_resume_attempts: number;
+  workflow_checkpoints: number;
+  workflow_outbox: number;
   workbench_tasks: number;
   workbench_subtasks: number;
   workbench_events: number;
@@ -2582,6 +2977,26 @@ export function deleteWorkbenchTaskData(taskId: string): {
     ),
     workflow_stage_evaluations: count(
       'SELECT COUNT(*) AS count FROM workflow_stage_evaluations WHERE workflow_id = ?',
+      task.workflow_id,
+    ),
+    workflow_interrupts: count(
+      'SELECT COUNT(*) AS count FROM workflow_interrupts WHERE workflow_id = ?',
+      task.workflow_id,
+    ),
+    workflow_events: count(
+      'SELECT COUNT(*) AS count FROM workflow_events WHERE workflow_id = ?',
+      task.workflow_id,
+    ),
+    workflow_interrupt_resume_attempts: count(
+      'SELECT COUNT(*) AS count FROM workflow_interrupt_resume_attempts WHERE workflow_id = ?',
+      task.workflow_id,
+    ),
+    workflow_checkpoints: count(
+      'SELECT COUNT(*) AS count FROM workflow_checkpoints WHERE workflow_id = ?',
+      task.workflow_id,
+    ),
+    workflow_outbox: count(
+      'SELECT COUNT(*) AS count FROM workflow_outbox WHERE workflow_id = ?',
       task.workflow_id,
     ),
     workbench_tasks: count(
@@ -2631,6 +3046,21 @@ export function deleteWorkbenchTaskData(taskId: string): {
     db.prepare(
       'DELETE FROM workflow_stage_evaluations WHERE workflow_id = ?',
     ).run(task.workflow_id);
+    db.prepare('DELETE FROM workflow_outbox WHERE workflow_id = ?').run(
+      task.workflow_id,
+    );
+    db.prepare('DELETE FROM workflow_checkpoints WHERE workflow_id = ?').run(
+      task.workflow_id,
+    );
+    db.prepare(
+      'DELETE FROM workflow_interrupt_resume_attempts WHERE workflow_id = ?',
+    ).run(task.workflow_id);
+    db.prepare('DELETE FROM workflow_events WHERE workflow_id = ?').run(
+      task.workflow_id,
+    );
+    db.prepare('DELETE FROM workflow_interrupts WHERE workflow_id = ?').run(
+      task.workflow_id,
+    );
     db.prepare('DELETE FROM delegations WHERE workflow_id = ?').run(
       task.workflow_id,
     );

@@ -147,6 +147,110 @@ export interface WorkflowStageEvaluationRecord {
   updated_at: string;
 }
 
+export type WorkflowInterruptKind =
+  | 'approval'
+  | 'revision_request'
+  | 'credential'
+  | 'human_input'
+  | 'external_blocker';
+
+export type WorkflowInterruptStatus =
+  | 'pending'
+  | 'resumed'
+  | 'cancelled'
+  | 'expired';
+
+export type WorkflowInterruptActorChannel =
+  | 'web'
+  | 'feishu'
+  | 'assistant'
+  | 'system';
+
+export interface WorkflowInterruptRecord {
+  id: string;
+  workflow_id: string;
+  state_key: string;
+  kind: WorkflowInterruptKind;
+  status: WorkflowInterruptStatus;
+  title: string;
+  body: string | null;
+  resume_payload_schema_json: string | null;
+  allowed_actions_json: string;
+  allowed_channels_json: string | null;
+  assigned_role: string | null;
+  action_payload_json: string | null;
+  created_by: string;
+  resumed_by: string | null;
+  resume_action: string | null;
+  resume_payload_json: string | null;
+  resume_error: string | null;
+  idempotency_key: string;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  resumed_at: string | null;
+  cancelled_at: string | null;
+  expired_at: string | null;
+}
+
+export interface WorkflowEventRecord {
+  id: string;
+  workflow_id: string;
+  event_type: string;
+  state_key: string | null;
+  ref_type: string | null;
+  ref_id: string | null;
+  actor_json: string | null;
+  payload_json: string | null;
+  idempotency_key: string | null;
+  created_at: string;
+}
+
+export type WorkflowInterruptResumeAttemptStatus =
+  | 'accepted'
+  | 'duplicate'
+  | 'conflict'
+  | 'rejected';
+
+export interface WorkflowInterruptResumeAttemptRecord {
+  id: string;
+  interrupt_id: string;
+  workflow_id: string;
+  actor_json: string;
+  resume_action: string;
+  resume_payload_json: string | null;
+  idempotency_key: string | null;
+  status: WorkflowInterruptResumeAttemptStatus;
+  result_json: string | null;
+  conflict_reason: string | null;
+  created_at: string;
+}
+
+export interface WorkflowCheckpointRecord {
+  id: string;
+  workflow_id: string;
+  state_key: string;
+  checkpoint_version: number;
+  checkpoint_json: string;
+  created_at: string;
+}
+
+export interface WorkflowOutboxRecord {
+  id: string;
+  workflow_id: string;
+  event_id: string | null;
+  effect_type: string;
+  channel: string | null;
+  status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'dead_letter';
+  payload_json: string;
+  idempotency_key: string;
+  attempts: number;
+  next_attempt_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AskQuestionOption {
   label: string;
   description?: string;
@@ -756,7 +860,7 @@ export type CardActionHandler = (action: {
   action: string;
   user_id: string;
   message_id: string;
-  group_folder?: string; // Plan confirmation primary key
+  group_folder?: string; // Plan item primary key
   workflow_id?: string; // Workflow operations primary key (approve/pause/resume)
   form_value?: Record<string, string>;
 }) => void | CardActionResult | Promise<void | CardActionResult>;

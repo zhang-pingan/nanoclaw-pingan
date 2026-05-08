@@ -15,7 +15,15 @@ import {
   readCardRegistryFromDir,
 } from './card-files.js';
 import { logger } from './logger.js';
-import { WorkflowCreateForm } from './workflow-definition.js';
+import {
+  WorkflowCreateForm,
+  WorkflowDefinitionArtifactContractRef,
+  WorkflowDefinitionEvaluatorRef,
+  WorkflowDefinitionJsonSchemaRef,
+  WorkflowDefinitionRetryPolicy,
+  WorkflowDefinitionRollbackHintRef,
+  WorkflowDefinitionTimeoutPolicy,
+} from './workflow-definition.js';
 import {
   getWorkflowDefinitionsDir,
   readWorkflowDefinitionRegistryFromDir,
@@ -45,8 +53,15 @@ export interface StateTransition {
 }
 
 export interface StateConfig {
-  /** State type: delegation, confirmation, terminal, system. */
-  type: 'delegation' | 'confirmation' | 'terminal' | 'system';
+  /** State type: delegation, interrupt, terminal, system. */
+  type: 'delegation' | 'interrupt' | 'terminal' | 'system';
+  label?: string;
+  description?: string;
+  retry_policy?: WorkflowDefinitionRetryPolicy;
+  timeout_policy?: WorkflowDefinitionTimeoutPolicy;
+  artifact_contract?: WorkflowDefinitionArtifactContractRef;
+  evaluator?: WorkflowDefinitionEvaluatorRef;
+  rollback_hint?: WorkflowDefinitionRollbackHintRef;
 
   // --- delegation fields ---
   role?: string;
@@ -57,10 +72,22 @@ export interface StateConfig {
     failure: StateTransition;
   };
 
-  // --- confirmation fields ---
+  // --- interrupt fields ---
   card?: string;
-  on_approve?: StateTransition;
-  on_revise?: StateTransition;
+  kind?:
+    | 'approval'
+    | 'revision_request'
+    | 'credential'
+    | 'human_input'
+    | 'external_blocker';
+  title?: string;
+  body?: string;
+  resume_payload_schema?: WorkflowDefinitionJsonSchemaRef;
+  allowed_actions?: string[];
+  allowed_channels?: Array<'web' | 'feishu' | 'assistant'>;
+  on_resume?: Record<string, StateTransition>;
+  on_cancel?: StateTransition;
+  on_expire?: StateTransition;
 }
 
 export interface RoleConfig {
@@ -215,8 +242,11 @@ export function getReachableWorkflowStages(
     const nextStates = [
       state.on_complete?.success?.target,
       state.on_complete?.failure?.target,
-      state.on_approve?.target,
-      state.on_revise?.target,
+      ...(state.on_resume
+        ? Object.values(state.on_resume).map((transition) => transition.target)
+        : []),
+      state.on_cancel?.target,
+      state.on_expire?.target,
     ];
 
     for (const target of nextStates) {
@@ -309,6 +339,12 @@ export function validateConfig(
 
   // Check that all transition targets reference existing states
   for (const [stateName, state] of Object.entries(config.states)) {
+    if ((state as { type?: string }).type === 'confirmation') {
+      errors.push(
+        `${typeName}.states.${stateName}.type "confirmation" is no longer supported; use "interrupt"`,
+      );
+      continue;
+    }
     if (state.on_complete) {
       for (const [outcome, transition] of Object.entries(state.on_complete)) {
         if (!stateNames.has(transition.target)) {
@@ -324,28 +360,84 @@ export function validateConfig(
         }
       }
     }
-    if (state.on_approve) {
-      if (!stateNames.has(state.on_approve.target)) {
+    if (state.on_resume) {
+      for (const [action, transition] of Object.entries(state.on_resume)) {
+        if (!stateNames.has(transition.target)) {
+          errors.push(
+            `${typeName}.states.${stateName}.on_resume.${action}.target "${transition.target}" does not exist`,
+          );
+        }
+        if (transition.role && !config.roles[transition.role]) {
+          errors.push(
+            `${typeName}.states.${stateName}.on_resume.${action}.role "${transition.role}" not defined in roles`,
+          );
+        }
+      }
+    }
+    if (state.on_cancel) {
+      if (!stateNames.has(state.on_cancel.target)) {
         errors.push(
-          `${typeName}.states.${stateName}.on_approve.target "${state.on_approve.target}" does not exist`,
+          `${typeName}.states.${stateName}.on_cancel.target "${state.on_cancel.target}" does not exist`,
         );
       }
-      if (state.on_approve.role && !config.roles[state.on_approve.role]) {
+      if (state.on_cancel.role && !config.roles[state.on_cancel.role]) {
         errors.push(
-          `${typeName}.states.${stateName}.on_approve.role "${state.on_approve.role}" not defined in roles`,
+          `${typeName}.states.${stateName}.on_cancel.role "${state.on_cancel.role}" not defined in roles`,
         );
       }
     }
-    if (state.on_revise) {
-      if (!stateNames.has(state.on_revise.target)) {
+    if (state.on_expire) {
+      if (!stateNames.has(state.on_expire.target)) {
         errors.push(
-          `${typeName}.states.${stateName}.on_revise.target "${state.on_revise.target}" does not exist`,
+          `${typeName}.states.${stateName}.on_expire.target "${state.on_expire.target}" does not exist`,
         );
       }
-      if (state.on_revise.role && !config.roles[state.on_revise.role]) {
+      if (state.on_expire.role && !config.roles[state.on_expire.role]) {
         errors.push(
-          `${typeName}.states.${stateName}.on_revise.role "${state.on_revise.role}" not defined in roles`,
+          `${typeName}.states.${stateName}.on_expire.role "${state.on_expire.role}" not defined in roles`,
         );
+      }
+    }
+    if (state.type === 'interrupt') {
+      if (!state.kind) {
+        errors.push(`${typeName}.states.${stateName}.kind is required`);
+      }
+      if (!Array.isArray(state.allowed_actions) || state.allowed_actions.length === 0) {
+        errors.push(
+          `${typeName}.states.${stateName}.allowed_actions must contain at least one action`,
+        );
+      }
+      if (!state.on_resume || Object.keys(state.on_resume).length === 0) {
+        errors.push(
+          `${typeName}.states.${stateName}.on_resume must contain at least one transition`,
+        );
+      }
+      if (!state.resume_payload_schema) {
+        errors.push(
+          `${typeName}.states.${stateName}.resume_payload_schema is required`,
+        );
+      }
+      for (const action of state.allowed_actions || []) {
+        if (!state.on_resume?.[action]) {
+          errors.push(
+            `${typeName}.states.${stateName}.on_resume.${action} is required for allowed action "${action}"`,
+          );
+        }
+      }
+      const card = state.card ? cards[state.card] : undefined;
+      const cardActions = [
+        ...(card?.actions || []),
+        ...(card?.form ? [card.form.submit_action] : []),
+        ...(card?.sections || []).flatMap((section) => section.actions || []),
+      ];
+      for (const action of cardActions) {
+        if (action.action_kind !== 'interrupt_resume') continue;
+        if (!action.resume_action) continue;
+        if (!state.allowed_actions?.includes(action.resume_action)) {
+          errors.push(
+            `${typeName}.states.${stateName}.card "${state.card}" action "${action.id}" resume_action "${action.resume_action}" is not in allowed_actions`,
+          );
+        }
       }
     }
     // Check card references
@@ -386,15 +478,14 @@ export function validateConfig(
         }
       }
     }
-    if (state.on_approve?.card && !cards[state.on_approve.card]) {
-      errors.push(
-        `${typeName}.states.${stateName}.on_approve.card "${state.on_approve.card}" not defined in cards`,
-      );
-    }
-    if (state.on_revise?.card && !cards[state.on_revise.card]) {
-      errors.push(
-        `${typeName}.states.${stateName}.on_revise.card "${state.on_revise.card}" not defined in cards`,
-      );
+    if (state.on_resume) {
+      for (const [action, transition] of Object.entries(state.on_resume)) {
+        if (transition.card && !cards[transition.card]) {
+          errors.push(
+            `${typeName}.states.${stateName}.on_resume.${action}.card "${transition.card}" not defined in cards`,
+          );
+        }
+      }
     }
   }
 
