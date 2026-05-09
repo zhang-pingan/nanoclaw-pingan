@@ -129,23 +129,6 @@ export async function handleWorkbenchBroadcastCardAction(input: {
       input.action === 'wb_broadcast_skip_reply')
   ) {
     const answer = input.formValue?.reply_text?.trim() || input.formValue?.answer?.trim();
-    const extraQuestion = resolvedAskItem?.extra_json
-      ? (JSON.parse(resolvedAskItem.extra_json) as {
-          current_question?: { options?: Array<{ label?: string }> };
-        }).current_question
-      : undefined;
-    if (
-      answer &&
-      extraQuestion?.options?.some((option) => option.label === answer)
-    ) {
-      return {
-        ok: true,
-        toast: {
-          type: 'success',
-          content: '答案已提交，感谢。',
-        },
-      };
-    }
     const result = await handleAskQuestionResponse({
       requestId: askQuestion.id,
       groupFolder: askQuestion.group_folder,
@@ -186,6 +169,10 @@ export async function handleWorkbenchBroadcastCardAction(input: {
     sourceType: input.formValue?.source_type,
     sourceRefId: input.formValue?.source_ref_id,
   });
+  const resolvedInterruptItem = resolveActionItemBySource({
+    sourceType: 'workflow_interrupt',
+    sourceRefId: input.formValue?.interrupt_id,
+  });
   const actionItemIdFromForm = input.formValue?.action_item_id;
   const fallbackTaskId = actionItemIdFromForm
     ? getWorkbenchActionItem(actionItemIdFromForm)?.task_id
@@ -200,11 +187,13 @@ export async function handleWorkbenchBroadcastCardAction(input: {
     actionItemIdFromForm ||
     resolvedAskItem?.id ||
     resolvedSourceItem?.id ||
+    resolvedInterruptItem?.id ||
     fallbackTaskPendingItem?.id;
   const taskId =
     input.formValue?.task_id ||
     resolvedAskItem?.task_id ||
     resolvedSourceItem?.task_id ||
+    resolvedInterruptItem?.task_id ||
     fallbackTaskPendingItem?.task_id ||
     (actionItemId ? getWorkbenchActionItem(actionItemId)?.task_id : undefined);
   if ((!taskId || !actionItemId) && !askQuestion)

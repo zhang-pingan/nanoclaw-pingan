@@ -1857,6 +1857,29 @@ body.quick-chat-window #app {
   margin-top: 14px;
 }
 
+.workbench-action-card {
+  margin-top: 12px;
+  min-width: 0;
+  max-width: 100%;
+  box-shadow: none;
+}
+
+.workbench-action-card .card-header {
+  display: none;
+}
+
+.workbench-action-card .card-body {
+  padding: 12px 0;
+  color: var(--text-secondary);
+}
+
+.workbench-action-card .card-actions,
+.workbench-action-card .card-form {
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+}
+
 .workbench-task-actions .workbench-action-btn {
   min-height: 36px;
   padding: 8px 14px;

@@ -34,6 +34,7 @@ import type {
   WorkbenchSubtaskRecord,
   WorkbenchTaskRecord,
   WorkbenchTaskState,
+  InteractiveCard,
   Workflow,
   WorkflowEvalEvidence,
   WorkflowEvalFinding,
@@ -160,6 +161,7 @@ export interface WorkbenchActionItem {
   action_mode?: 'approve_only' | 'approve_or_revise' | 'input_required';
   created_at?: string;
   extra?: Record<string, unknown>;
+  card?: InteractiveCard;
 }
 
 export interface WorkbenchStageEvaluation {
@@ -657,6 +659,7 @@ function buildActionItems(workflow: Workflow): WorkbenchActionItem[] {
       created_at: workflow.updated_at,
       extra: {
         interruptId: interrupt.id,
+        workflowId: workflow.id,
         allowedActions: JSON.parse(interrupt.allowed_actions_json) as string[],
         payloadSchema: interrupt.resume_payload_schema_json
           ? JSON.parse(interrupt.resume_payload_schema_json)
@@ -1127,7 +1130,7 @@ export function runWorkbenchActionItemAction(input: {
         ...(input.payload || {}),
       },
       actor: { channel: 'web', userId: 'workbench' },
-      idempotencyKey: `workbench:${input.actionItemId}:${input.action}`,
+      idempotencyKey: `workbench:${input.actionItemId}:${input.action}:${Date.now()}`,
     });
     return result.ok ? {} : { error: result.error };
   }

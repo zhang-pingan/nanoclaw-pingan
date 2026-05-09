@@ -114,6 +114,7 @@ import {
   dispatchCurrentAskQuestion,
   handleAskQuestionResponse,
 } from '../ask-user-question.js';
+import { buildHumanInputCard } from '../human-input-card.js';
 import {
   bulkDeleteWikiDrafts,
   clearWikiData,
@@ -2955,7 +2956,9 @@ class WebChannel {
       return;
     }
 
-    const detail = getWorkbenchTaskDetail(id);
+    const detail = this.withWorkbenchActionItemCards(
+      getWorkbenchTaskDetail(id),
+    );
     if (!detail) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Task not found' }));
@@ -2964,6 +2967,19 @@ class WebChannel {
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(detail));
+  }
+
+  private withWorkbenchActionItemCards<
+    T extends NonNullable<ReturnType<typeof getWorkbenchTaskDetail>> | null,
+  >(detail: T): T {
+    if (!detail) return detail;
+    return {
+      ...detail,
+      action_items: detail.action_items.map((item) => ({
+        ...item,
+        card: buildHumanInputCard(item, detail.task),
+      })),
+    };
   }
 
   private async apiCreateWorkbenchTask(
@@ -3022,7 +3038,9 @@ class WebChannel {
       return;
     }
 
-    const detail = getWorkbenchTaskDetail(result.workflowId);
+    const detail = this.withWorkbenchActionItemCards(
+      getWorkbenchTaskDetail(result.workflowId),
+    );
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
@@ -3071,7 +3089,9 @@ class WebChannel {
       return;
     }
 
-    const detail = getWorkbenchTaskDetail(data.task_id);
+    const detail = this.withWorkbenchActionItemCards(
+      getWorkbenchTaskDetail(data.task_id),
+    );
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, task: detail?.task || null }));
   }
@@ -3619,6 +3639,9 @@ class WebChannel {
     }
 
     const data = body as {
+      value?: Record<string, string>;
+      formValue?: Record<string, string>;
+      form_value?: Record<string, string>;
       task_id?: string;
       action_item_id?: string;
       action?:
@@ -3632,6 +3655,21 @@ class WebChannel {
       reply_text?: string;
       payload?: Record<string, unknown>;
     };
+    if (data.value?.action) {
+      const result = await this.apiWorkbenchCardAction({
+        value: data.value,
+        formValue: data.formValue || data.form_value,
+      });
+      if (result.error) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: result.error }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
     if (!data.task_id || !data.action_item_id || !data.action) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(
@@ -3759,6 +3797,138 @@ class WebChannel {
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
+  }
+
+  private async apiWorkbenchCardAction(input: {
+    value: Record<string, string>;
+    formValue?: Record<string, string>;
+  }): Promise<{ error?: string }> {
+    const merged = {
+      ...(input.value || {}),
+      ...(input.formValue || {}),
+    };
+    const taskId = merged.task_id;
+    const actionItemId = merged.action_item_id;
+    if (!taskId || !actionItemId) {
+      return { error: 'task_id and action_item_id required' };
+    }
+
+    const detail = getWorkbenchTaskDetail(taskId);
+    const item = detail?.action_items?.find(
+      (entry) => entry.id === actionItemId,
+    );
+    if (!detail || !item) {
+      return { error: 'Action item not found' };
+    }
+
+    if (merged.action === 'ask_question_answer') {
+      const requestId = merged.request_id || item.source_ref_id;
+      const groupFolder = merged.group_folder || item.group_folder;
+      if (!requestId || !groupFolder) {
+        return { error: 'request_id and group_folder required' };
+      }
+      const result = await handleAskQuestionResponse({
+        requestId,
+        groupFolder,
+        userId: 'web_user',
+        answer: merged.answer || merged.reply_text,
+        formValues: Object.fromEntries(
+          Object.entries(merged).filter(
+            ([key]) =>
+              ![
+                'action',
+                'task_id',
+                'action_item_id',
+                'request_id',
+                'group_folder',
+                'question_id',
+                'answer',
+                'reply_text',
+              ].includes(key),
+          ),
+        ),
+        registeredGroups: this.opts.registeredGroups(),
+        sendMessage: async () => {},
+      });
+      if (!result.ok && !result.completed) {
+        await dispatchCurrentAskQuestion({
+          requestId,
+          groupFolder,
+          validationError: result.userMessage,
+          validationErrors: result.validationErrors,
+          registeredGroups: this.opts.registeredGroups(),
+          sendMessage: async () => {},
+        });
+      }
+      return result.ok ? {} : { error: result.userMessage };
+    }
+
+    if (merged.action === 'ask_question_skip') {
+      const requestId = merged.request_id || item.source_ref_id;
+      const groupFolder = merged.group_folder || item.group_folder;
+      if (!requestId || !groupFolder) {
+        return { error: 'request_id and group_folder required' };
+      }
+      const result = await handleAskQuestionResponse({
+        requestId,
+        groupFolder,
+        userId: 'web_user',
+        skip: true,
+        registeredGroups: this.opts.registeredGroups(),
+        sendMessage: async () => {},
+      });
+      return result.ok ? {} : { error: result.userMessage };
+    }
+
+    if (merged.action === 'cancel_workflow') {
+      return runWorkbenchTaskAction({ taskId, action: 'cancel' });
+    }
+    if (merged.action === 'pause_workflow') {
+      return runWorkbenchTaskAction({ taskId, action: 'pause' });
+    }
+    if (merged.action === 'workflow_interrupt_resume') {
+      merged.workbench_action = merged.resume_action;
+    }
+
+    const action =
+      merged.workbench_action ||
+      (merged.action === 'workbench_action_item'
+        ? 'resolve'
+        : merged.resume_action || merged.action);
+    if (
+      action !== 'confirm' &&
+      action !== 'approve' &&
+      action !== 'revise' &&
+      action !== 'submit' &&
+      action !== 'skip' &&
+      action !== 'cancel' &&
+      action !== 'resolve'
+    ) {
+      return { error: `Unsupported action: ${action}` };
+    }
+    const payload = Object.fromEntries(
+      Object.entries(merged).filter(
+        ([key]) =>
+          ![
+            'action',
+            'workbench_action',
+            'task_id',
+            'action_item_id',
+            'workflow_id',
+            'interrupt_id',
+            'resume_action',
+            'resume_payload_schema',
+            'group_folder',
+          ].includes(key),
+      ),
+    );
+    const result = runWorkbenchActionItemAction({
+      taskId,
+      actionItemId,
+      action,
+      payload,
+    });
+    return result.error ? { error: result.error } : {};
   }
 
   private async apiWorkbenchTaskComment(

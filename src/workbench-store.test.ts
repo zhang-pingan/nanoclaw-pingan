@@ -422,10 +422,10 @@ describe('workbench approval transition sync', () => {
 
     expect(card?.header.title).toContain('确认方案修改或继续开发');
     expect(card?.buttons?.map((button) => button.label)).toEqual([
-      '继续开发',
-      '跳过此节点',
+      '✅ 继续开发',
+      '❌ 取消流程',
     ]);
-    expect(card?.form?.submitButton.label).toBe('返回方案修改');
+    expect(card?.form?.submitButton.label).toBe('✏️ 返回方案修改');
     expect(nestedPendingEvents).toBe(0);
   });
 
@@ -461,13 +461,15 @@ describe('workbench approval transition sync', () => {
     });
 
     expect(card?.buttons?.map((button) => button.label)).toEqual([
-      '跳过鉴权直接测试',
+      '⏭ 跳过鉴权直接测试',
+      '⏸ 暂缓',
+      '❌ 取消流程',
     ]);
-    expect(card?.form?.name).toBe('wb-su-wb-wf-broadcast-testing-confirm');
-    expect(card?.form?.submitButton.id).toBe(
-      'wb-su-wb-wf-broadcast-testing-confirm',
+    expect(card?.form?.name).toBe('access_token_form');
+    expect(card?.form?.submitButton.id).toBe('submit');
+    expect(card?.form?.submitButton.label).toBe(
+      '🔐 提交 Token 并开始测试',
     );
-    expect(card?.form?.submitButton.label).toBe('填写 access_token 并开始测试');
   });
 
   it('accepts testing_confirm submit actions when Feishu only returns action_item_id', async () => {
@@ -579,19 +581,18 @@ describe('workbench approval transition sync', () => {
       '回滚',
       '跳过',
     ]);
-    expect(card?.form?.name).toBe('wb-reply-ask-broadcast-ask-options');
-    expect(card?.form?.submitButton.id).toBe(
-      'wb-reply-ask-broadcast-ask-options',
-    );
+    expect(card?.form?.name).toBe('human-input-ask-broadcast-ask-options');
+    expect(card?.form?.submitButton.id).toBe(`${actionItemId}-submit-answer`);
     expect(card?.form?.submitButton.label).toBe('提交自定义答复');
-    expect(card?.form?.submitButton.value).toEqual({
+    expect(card?.form?.submitButton.value).toMatchObject({
       action: 'wb_broadcast_reply',
       request_id: 'ask-broadcast-ask-options',
+      action_item_id: actionItemId,
     });
-    expect(card?.buttons?.[0]?.value).toEqual({
+    expect(card?.buttons?.[0]?.value).toMatchObject({
       action: 'wb_broadcast_reply',
       request_id: 'ask-broadcast-ask-options',
-      answer: '继续',
+      reply_text: '继续',
     });
   });
 
@@ -730,8 +731,9 @@ describe('workbench approval transition sync', () => {
         label: '标记已读',
         value: {
           action: 'wb_broadcast_resolve',
-          source_type: 'send_message',
-          source_ref_id: 'msg-broadcast-send-message',
+          workbench_action: 'resolve',
+          task_id: 'wb-wf-broadcast-send-message',
+          action_item_id: actionItemId,
         },
       },
     ]);

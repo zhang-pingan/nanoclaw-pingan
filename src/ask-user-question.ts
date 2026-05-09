@@ -872,6 +872,7 @@ export async function dispatchCurrentAskQuestion(params: {
       current_index: rec.current_index,
       current_question: q,
       validation_error: params.validationError || null,
+      validation_errors: params.validationErrors || null,
     },
   });
 

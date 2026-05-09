@@ -1273,6 +1273,17 @@ function lockCardInteraction(container, pendingLabel) {
   }
 }
 
+function unlockCardInteraction(container) {
+  if (!container) return;
+  container.dataset.locked = "0";
+  container.classList.remove("card-locked");
+  const controls = container.querySelectorAll("button, input, select, textarea");
+  controls.forEach((el) => {
+    el.disabled = false;
+  });
+  container.querySelectorAll(".card-submit-status").forEach((el) => el.remove());
+}
+
 function validateCardFormField(input, value) {
   const text = String(value || "").trim();
   const label = input.placeholder || input.name;
@@ -1315,10 +1326,32 @@ function validateCardFormField(input, value) {
   return null;
 }
 
-function renderCardElement(card, msgId) {
+function renderInteractiveCard(card, callbacks = {}) {
   const container = document.createElement("div");
   container.className = "interactive-card";
-  container.setAttribute("data-card-id", msgId);
+  if (callbacks.cardId) container.setAttribute("data-card-id", callbacks.cardId);
+  const onAction = typeof callbacks.onAction === "function" ? callbacks.onAction : () => {};
+  const pendingLabel = callbacks.pendingLabel || "已提交，处理中...";
+  const formPendingLabel = callbacks.formPendingLabel || "表单已提交，处理中...";
+  const lockOnAction = callbacks.lockOnAction !== false;
+
+  const runAction = async (value, formValue, pendingText) => {
+    if (container.dataset.locked === "1") return;
+    if (lockOnAction) lockCardInteraction(container, pendingText);
+    try {
+      await onAction(value, formValue);
+    } catch (err) {
+      if (lockOnAction) unlockCardInteraction(container);
+      const message = err instanceof Error ? err.message : "操作提交失败";
+      const formError = container.querySelector(".card-form-error");
+      if (formError) {
+        formError.textContent = message;
+        formError.classList.remove("hidden");
+      } else {
+        showToast(message, 2200);
+      }
+    }
+  };
 
   // Header
   const header = document.createElement("div");
@@ -1344,8 +1377,7 @@ function renderCardElement(card, msgId) {
       button.className = `card-btn card-btn-${btn.type || "default"}`;
       button.textContent = btn.label;
       button.addEventListener("click", () => {
-        lockCardInteraction(container, "已提交，处理中...");
-        sendCardAction(btn.value, msgId);
+        runAction(btn.value, undefined, pendingLabel);
       });
       actions.appendChild(button);
     }
@@ -1372,8 +1404,7 @@ function renderCardElement(card, msgId) {
           button.className = `card-btn card-btn-${btn.type || "default"}`;
           button.textContent = btn.label;
           button.addEventListener("click", () => {
-            lockCardInteraction(container, "已提交，处理中...");
-            sendCardAction(btn.value, msgId);
+            runAction(btn.value, undefined, pendingLabel);
           });
           actions.appendChild(button);
         }
@@ -1508,14 +1539,20 @@ function renderCardElement(card, msgId) {
       }
       formError.textContent = "";
       formError.classList.add("hidden");
-      lockCardInteraction(container, "表单已提交，处理中...");
-      sendCardAction(card.form.submitButton.value, msgId, formValue);
+      runAction(card.form.submitButton.value, formValue, formPendingLabel);
     });
     formEl.appendChild(submitBtn);
     container.appendChild(formEl);
   }
 
   return container;
+}
+
+function renderCardElement(card, msgId) {
+  return renderInteractiveCard(card, {
+    cardId: msgId,
+    onAction: (value, formValue) => sendCardAction(value, msgId, formValue),
+  });
 }
 
 function sendCardAction(value, cardId, formValue) {
@@ -12299,6 +12336,181 @@ function getWorkbenchApprovalLabels(task, approval) {
   }
 }
 
+function getWorkbenchItemAllowedActions(item) {
+  return Array.isArray(item.extra?.allowedActions)
+    ? item.extra.allowedActions.map((entry) => String(entry))
+    : [];
+}
+
+function getWorkbenchItemPayloadSchema(item) {
+  return item.extra?.payloadSchema && typeof item.extra.payloadSchema === "object"
+    ? item.extra.payloadSchema
+    : {};
+}
+
+function buildWorkbenchSchemaInputs(schema) {
+  if (!schema || schema.type !== "object" || !schema.properties || typeof schema.properties !== "object") return [];
+  const required = new Set(Array.isArray(schema.required) ? schema.required.map((entry) => String(entry)) : []);
+  return Object.entries(schema.properties)
+    .filter(([name]) => name !== "skipped")
+    .map(([name, raw]) => {
+      const field = raw && typeof raw === "object" ? raw : {};
+      const enumValues = Array.isArray(field.enum) ? field.enum.map((entry) => String(entry)) : [];
+      const type = enumValues.length > 0
+        ? "enum"
+        : field.type === "number"
+          ? "number"
+          : field.type === "integer"
+            ? "integer"
+            : field.type === "boolean"
+              ? "boolean"
+              : "text";
+      return {
+        name,
+        type,
+        placeholder: field.title || field.description || name,
+        required: required.has(name),
+        options: enumValues.map((value) => ({ value, label: value })),
+        min: typeof field.minimum === "number" ? field.minimum : undefined,
+        max: typeof field.maximum === "number" ? field.maximum : undefined,
+        min_length: typeof field.minLength === "number" ? field.minLength : undefined,
+        max_length: typeof field.maxLength === "number" ? field.maxLength : undefined,
+        format: ["email", "uri", "date", "date-time"].includes(field.format) ? field.format : undefined,
+      };
+    });
+}
+
+function getWorkbenchActionLabel(action, item, task) {
+  const labels = getWorkbenchApprovalLabels(task, {
+    approval_type: item.stage_key || task.workflow_status,
+    action_mode: item.action_mode || "approve_only",
+  });
+  if (action === "approve") return labels.approve || "确认";
+  if (action === "revise") return labels.revise || "提交修改";
+  if (action === "skip") return labels.skip || "跳过";
+  if (action === "submit") return "提交";
+  if (action === "cancel") return "取消";
+  if (action === "reject") return "拒绝";
+  return action;
+}
+
+function buildWorkbenchActionItemCardFallback(item, task) {
+  if (item.source_type === "workflow_interrupt") {
+    const allowedActions = getWorkbenchItemAllowedActions(item);
+    const payloadSchema = getWorkbenchItemPayloadSchema(item);
+    const buttons = [];
+    const buttonActions = allowedActions.length > 0
+      ? allowedActions.filter((action) => action !== "revise" && action !== "submit")
+      : item.action_mode === "input_required"
+        ? ["skip"]
+        : ["approve", "skip"];
+    for (const action of buttonActions) {
+      buttons.push({
+        id: `${item.id}-${action}`,
+        label: getWorkbenchActionLabel(action, item, task),
+        type: ["approve", "submit", "resume"].includes(action) ? "primary" : action === "cancel" || action === "reject" ? "danger" : undefined,
+        value: {
+          action: "workflow_interrupt_resume",
+          task_id: task.id,
+          action_item_id: item.id,
+          interrupt_id: item.source_ref_id || item.extra?.interruptId || "",
+          resume_action: action,
+        },
+      });
+    }
+    const card = {
+      header: { title: item.title || "待处理项", color: item.item_type === "credential" ? "orange" : "blue" },
+      body: item.body || "",
+      buttons,
+    };
+    const formAction = allowedActions.find((action) => action === "submit" || action === "revise") ||
+      (item.action_mode === "input_required" ? "submit" : item.action_mode === "approve_or_revise" ? "revise" : "");
+    if (formAction) {
+      const schemaInputs = buildWorkbenchSchemaInputs(payloadSchema);
+      card.form = {
+        name: `workbench-${item.id}`,
+        inputs: schemaInputs.length > 0
+          ? schemaInputs
+          : [{
+              name: formAction === "revise" ? "revision_text" : "reply_text",
+              type: "textarea",
+              placeholder: formAction === "revise" ? "输入修改意见" : "输入内容",
+              required: true,
+            }],
+        submitButton: {
+          id: `${item.id}-${formAction}`,
+          label: getWorkbenchActionLabel(formAction, item, task),
+          type: formAction === "submit" ? "primary" : undefined,
+          value: {
+            action: "workflow_interrupt_resume",
+            task_id: task.id,
+            action_item_id: item.id,
+            interrupt_id: item.source_ref_id || item.extra?.interruptId || "",
+            resume_action: formAction,
+          },
+        },
+      };
+    }
+    return card;
+  }
+
+  const question = item.extra?.current_question || item.extra?.questions?.[0];
+  const answerValue = {
+    action: "ask_question_answer",
+    task_id: task.id,
+    action_item_id: item.id,
+    request_id: item.source_ref_id || item.extra?.request_id || "",
+    group_folder: item.group_folder || "",
+    ...(question?.id ? { question_id: question.id } : {}),
+  };
+  const buttons = Array.isArray(question?.options)
+    ? question.options.map((opt, index) => ({
+        id: `${item.id}-answer-${index}`,
+        label: opt.label,
+        value: { ...answerValue, answer: opt.label },
+      }))
+    : [];
+  buttons.push({
+    id: `${item.id}-skip`,
+    label: "跳过",
+    value: {
+      action: "ask_question_skip",
+      task_id: task.id,
+      action_item_id: item.id,
+      request_id: item.source_ref_id || item.extra?.request_id || "",
+      group_folder: item.group_folder || "",
+    },
+  });
+  if (item.source_type === "send_message") {
+    return {
+      header: { title: item.title || "待处理项", color: "grey" },
+      body: item.body || "",
+      buttons: [{
+        id: `${item.id}-resolve`,
+        label: "标记已读",
+        value: { action: "workbench_action_item", workbench_action: "resolve", task_id: task.id, action_item_id: item.id },
+      }],
+    };
+  }
+  return {
+    header: { title: item.title || "待处理项", color: item.source_type === "request_human_input" ? "purple" : "blue" },
+    body: question?.question || item.body || "",
+    buttons,
+    form: item.replyable
+      ? {
+          name: `workbench-${item.id}`,
+          inputs: [{ name: "answer", type: "textarea", placeholder: "输入答复内容", required: true }],
+          submitButton: { id: `${item.id}-reply`, label: "提交答复", type: "primary", value: answerValue },
+        }
+      : undefined,
+  };
+}
+
+function getWorkbenchActionItemCard(item, task) {
+  if (item && item.card && typeof item.card === "object") return item.card;
+  return buildWorkbenchActionItemCardFallback(item || {}, task || currentWorkbenchDetail?.task || {});
+}
+
 function renderWorkbenchActionItems(actionItems, task) {
   workbenchActionItems.innerHTML = "";
   if (actionItems.length === 0) {
@@ -12310,7 +12522,6 @@ function renderWorkbenchActionItems(actionItems, task) {
   actionItems.forEach((item) => {
     const el = document.createElement("div");
     el.className = "workbench-approval-item";
-    const isWorkflowInterrupt = item.source_type === "workflow_interrupt";
     const badge = item.item_type === "approval"
       ? "待确认"
       : item.item_type === "credential"
@@ -12338,108 +12549,50 @@ function renderWorkbenchActionItems(actionItems, task) {
         <div class="workbench-item-title">${escapeHtml(item.title)}</div>
         ${renderWorkbenchBadge(badge, badgeKind)}
       </div>
-      <div class="workbench-item-body">${escapeHtml(item.body)}</div>
     `;
-    const actions = document.createElement("div");
-    actions.className = "workbench-task-actions";
-    if (isWorkflowInterrupt) {
-      const labels = getWorkbenchApprovalLabels(task, {
-        approval_type: item.stage_key || task.workflow_status,
-        action_mode: item.action_mode || "approve_only",
-      });
-      const allowedActions = Array.isArray(item.extra?.allowedActions)
-        ? item.extra.allowedActions.map((entry) => String(entry))
-        : [];
-      const canApprove = allowedActions.includes("approve") || item.action_mode !== "input_required";
-      const canRevise = allowedActions.includes("revise") || item.action_mode === "approve_or_revise";
-      const canSubmit = allowedActions.includes("submit") || item.action_mode === "input_required";
-      const canSkip = allowedActions.includes("skip") || true;
-      if (canApprove && item.action_mode !== "input_required") {
-        const approveBtn = document.createElement("button");
-        approveBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-primary";
-        approveBtn.textContent = labels.approve;
-        approveBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "approve"));
-        actions.appendChild(approveBtn);
-      }
-      if (canSkip) {
-        const skipBtn = document.createElement("button");
-        skipBtn.className = "btn-ghost workbench-action-btn";
-        skipBtn.textContent = labels.skip || "跳过此节点";
-        skipBtn.addEventListener("click", async () => {
-          if (!(await openConfirmDialog(`确认跳过“${item.title}”并进入下一步吗？`, { title: "跳过节点" }))) return;
-          triggerWorkbenchActionItem(task.id, item.id, "skip");
-        });
-        actions.appendChild(skipBtn);
-      }
-      if (canRevise || canSubmit) {
-        const reviseBtn = document.createElement("button");
-        reviseBtn.className = item.action_mode === "input_required"
-          ? "btn-ghost workbench-action-btn workbench-action-btn-primary"
-          : "btn-ghost workbench-action-btn";
-        reviseBtn.textContent = labels.revise || "驳回并修改";
-        reviseBtn.addEventListener("click", () =>
-          triggerWorkbenchActionItem(task.id, item.id, item.action_mode === "input_required" ? "submit" : "revise")
-        );
-        actions.appendChild(reviseBtn);
-      }
-    } else {
-      const askQuestion = item.source_type === "ask_user_question"
-        ? item.extra?.current_question || item.extra?.questions?.[0]
-        : null;
-      const askOptions = askQuestion?.options;
-      if (Array.isArray(askOptions) && askOptions.length > 0) {
-        const optionsRow = document.createElement("div");
-        optionsRow.className = "workbench-ask-options";
-        askOptions.forEach((opt) => {
-          const optBtn = document.createElement("button");
-          optBtn.className = "btn-ghost workbench-action-btn workbench-ask-btn";
-          optBtn.textContent = opt.label;
-          if (opt.description) optBtn.title = opt.description;
-          optBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "reply", opt.label));
-          optionsRow.appendChild(optBtn);
-        });
-        actions.appendChild(optionsRow);
-        const fallbackRow = document.createElement("div");
-        fallbackRow.className = "workbench-ask-fallback";
-        const replyBtn = document.createElement("button");
-        replyBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-primary";
-        replyBtn.textContent = "自定义回复";
-        replyBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "reply"));
-        fallbackRow.appendChild(replyBtn);
-        const skipBtn = document.createElement("button");
-        skipBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-muted";
-        skipBtn.textContent = "跳过";
-        skipBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "skip"));
-        fallbackRow.appendChild(skipBtn);
-        actions.appendChild(fallbackRow);
-      } else {
-        if (item.replyable) {
-          const replyBtn = document.createElement("button");
-          replyBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-primary";
-          replyBtn.textContent = "回复";
-          replyBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "reply"));
-          actions.appendChild(replyBtn);
-        }
-        const approveBtn = document.createElement("button");
-        approveBtn.className = "btn-ghost workbench-action-btn";
-        approveBtn.textContent = "确认";
-        approveBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "confirm"));
-        actions.appendChild(approveBtn);
-        const skipBtn = document.createElement("button");
-        skipBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-muted";
-        skipBtn.textContent = "跳过";
-        skipBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "skip"));
-        actions.appendChild(skipBtn);
-        const cancelBtn = document.createElement("button");
-        cancelBtn.className = "btn-ghost workbench-action-btn workbench-action-btn-danger";
-        cancelBtn.textContent = "取消";
-        cancelBtn.addEventListener("click", () => triggerWorkbenchActionItem(task.id, item.id, "cancel"));
-        actions.appendChild(cancelBtn);
-      }
-    }
-    el.appendChild(actions);
+    const card = renderInteractiveCard(getWorkbenchActionItemCard(item, task), {
+      cardId: item.id,
+      pendingLabel: "已提交，刷新待处理项...",
+      formPendingLabel: "表单已提交，刷新待处理项...",
+      onAction: (value, formValue) => triggerWorkbenchActionItemCard(task.id, item.id, value, formValue),
+    });
+    card.classList.add("workbench-action-card");
+    el.appendChild(card);
     workbenchActionItems.appendChild(el);
   });
+}
+
+async function triggerWorkbenchActionItemCard(taskId, actionItemId, value, formValue) {
+  try {
+    const res = await apiFetch("/api/workbench/action-item", {
+      method: "POST",
+      body: JSON.stringify({
+        value: {
+          ...(value || {}),
+          task_id: value?.task_id || taskId,
+          action_item_id: value?.action_item_id || actionItemId,
+        },
+        formValue: formValue || undefined,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await loadWorkbenchTaskDetail(taskId);
+  } catch (err) {
+    console.error("Failed to handle workbench action item card:", err);
+    const message = err instanceof Error ? err.message : "待处理项操作失败";
+    if (/Action item not found/i.test(message)) {
+      try {
+        await loadWorkbenchTaskDetail(taskId);
+      } catch (reloadErr) {
+        console.error("Failed to reload stale workbench detail:", reloadErr);
+      }
+      showToast("待处理项已失效，已刷新工作台", 2200);
+      return;
+    }
+    showToast(message, 2200);
+    throw err;
+  }
 }
 
 function sortWorkbenchItemsByCreatedAt(items) {

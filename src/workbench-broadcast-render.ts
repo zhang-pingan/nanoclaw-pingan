@@ -1,10 +1,5 @@
-import type {
-  AskQuestionField,
-  AskQuestionItem,
-  CardButton,
-  CardInput,
-  InteractiveCard,
-} from './types.js';
+import type { CardButton, InteractiveCard } from './types.js';
+import { buildHumanInputCard } from './human-input-card.js';
 import { getWorkbenchTaskDetail } from './workbench.js';
 
 function headerColorForTaskState(
@@ -38,221 +33,6 @@ function buildWorkbenchBroadcastBody(input: {
     .join('\n');
 }
 
-function getWorkbenchApprovalLabels(input: {
-  approvalType: string;
-  actionMode?: 'approve_only' | 'approve_or_revise' | 'input_required';
-}): { approve: string; revise: string; skip: string } {
-  switch (input.approvalType) {
-    case 'plan_confirm':
-      return {
-        approve: '进入开发',
-        revise: '返回方案修改',
-        skip: '跳过此节点',
-      };
-    case 'plan_examine_confirm':
-      return {
-        approve: '继续开发',
-        revise: '返回方案修改',
-        skip: '跳过此节点',
-      };
-    case 'dev_examine_confirm':
-      return {
-        approve: '继续后续流程',
-        revise: '返回开发修正',
-        skip: '跳过此节点',
-      };
-    case 'awaiting_confirm':
-      return { approve: '开始预发部署', revise: '', skip: '跳过此节点' };
-    case 'testing_confirm':
-      return {
-        approve: '',
-        revise: '填写 access_token 并开始测试',
-        skip: '跳过鉴权直接测试',
-      };
-    default:
-      return {
-        approve: '通过',
-        revise: input.actionMode === 'approve_or_revise' ? '驳回并修改' : '',
-        skip: '跳过此节点',
-      };
-  }
-}
-
-function getCurrentAskQuestion(item: {
-  extra?: Record<string, unknown>;
-}): AskQuestionItem | null {
-  const current = item.extra?.current_question;
-  if (!current || typeof current !== 'object') return null;
-  return current as AskQuestionItem;
-}
-
-function isAskFormQuestion(question: AskQuestionItem | null): boolean {
-  return Array.isArray(question?.fields) && question.fields.length > 0;
-}
-
-function askFieldPlaceholder(field: AskQuestionField): string {
-  return field.description || field.label;
-}
-
-function askFieldInputType(field: AskQuestionField): CardInput['type'] {
-  if (field.enum && field.enum.length > 0) return 'enum';
-  if (
-    field.type === 'number' ||
-    field.type === 'integer' ||
-    field.type === 'boolean'
-  ) {
-    return field.type;
-  }
-  return 'text';
-}
-
-function buildAskQuestionButtons(input: {
-  itemId: string;
-  taskId: string;
-  actionItemId: string;
-  requestId?: string;
-  question: AskQuestionItem | null;
-}): CardButton[] {
-  const skipValue: Record<string, string> = {
-    action: 'wb_broadcast_skip_reply',
-  };
-  if (input.requestId) {
-    skipValue.request_id = input.requestId;
-  } else {
-    skipValue.task_id = input.taskId;
-    skipValue.action_item_id = input.actionItemId;
-  }
-  const skipButton: CardButton = {
-    id: `${input.itemId}-skip`,
-    label: '跳过',
-    value: skipValue,
-  };
-
-  if (
-    !input.question ||
-    isAskFormQuestion(input.question) ||
-    input.question.multi_select === true ||
-    !Array.isArray(input.question.options) ||
-    input.question.options.length === 0
-  ) {
-    return [skipButton];
-  }
-
-  return [
-    ...input.question.options.map((opt, index) => ({
-      id: `${input.itemId}-answer-${index}`,
-      label: opt.label,
-      value: (() => {
-        const value: Record<string, string> = {
-          action: 'wb_broadcast_reply',
-          answer: opt.label,
-        };
-        if (input.requestId) {
-          value.request_id = input.requestId;
-        } else {
-          value.task_id = input.taskId;
-          value.action_item_id = input.actionItemId;
-        }
-        return value;
-      })(),
-    })),
-    skipButton,
-  ];
-}
-
-function buildAskQuestionForm(input: {
-  itemId: string;
-  taskId: string;
-  actionItemId: string;
-  requestId?: string;
-  question: AskQuestionItem | null;
-}): InteractiveCard['form'] {
-  const formToken = input.requestId || input.itemId;
-  const submitValue: Record<string, string> = {
-    action: 'wb_broadcast_reply',
-  };
-  if (input.requestId) {
-    submitValue.request_id = input.requestId;
-  } else {
-    submitValue.task_id = input.taskId;
-    submitValue.action_item_id = input.actionItemId;
-  }
-  if (input.question && isAskFormQuestion(input.question)) {
-    return {
-      name: `wb-reply-${formToken}`,
-      inputs: (input.question.fields || []).map((field) => ({
-        name: field.id,
-        placeholder: askFieldPlaceholder(field),
-        type: askFieldInputType(field),
-        options: field.enum?.map((opt) => ({
-          value: opt.value,
-          label: opt.label,
-        })),
-        required: field.required === true,
-        min: field.min,
-        max: field.max,
-        min_length: field.min_length,
-        max_length: field.max_length,
-        format: field.format,
-      })),
-      submitButton: {
-        id: `wb-reply-${formToken}`,
-        label: '提交',
-        type: 'primary',
-        value: submitValue,
-      },
-    };
-  }
-
-  if (input.question?.multi_select) {
-    return {
-      name: `wb-reply-${formToken}`,
-      inputs: [
-        {
-          name: 'reply_text',
-          type: 'textarea',
-          placeholder: '输入多个选项或自定义文本，逗号分隔',
-          required: true,
-        },
-      ],
-      submitButton: {
-        id: `wb-reply-${formToken}`,
-        label: '提交答复',
-        type: 'primary',
-        value: submitValue,
-      },
-    };
-  }
-
-  return {
-    name: `wb-reply-${formToken}`,
-    inputs: [
-      {
-        name: 'reply_text',
-        type: 'textarea',
-        placeholder:
-          input.question &&
-          Array.isArray(input.question.options) &&
-          input.question.options.length > 0
-            ? '输入自定义答复'
-            : '输入答复内容',
-        required: true,
-      },
-    ],
-    submitButton: {
-      id: `wb-reply-${formToken}`,
-      label:
-        input.question &&
-        Array.isArray(input.question.options) &&
-        input.question.options.length > 0
-          ? '提交自定义答复'
-          : '提交答复',
-      type: 'primary',
-      value: submitValue,
-    },
-  };
-}
-
 export function buildWorkbenchBroadcastResolvedText(input: {
   taskId: string;
   actionItemId: string;
@@ -269,6 +49,74 @@ export function buildWorkbenchBroadcastResolvedText(input: {
     `待办ID: ${input.actionItemId}`,
     `新状态: ${input.nextStatus}`,
   ].join('\n');
+}
+
+function mapBroadcastActionValue(
+  value: Record<string, string>,
+): Record<string, string> {
+  if (value.action === 'workflow_interrupt_resume') {
+    const resumeAction = value.resume_action;
+    return {
+      ...value,
+      action:
+        resumeAction === 'revise'
+          ? 'wb_broadcast_revise'
+          : resumeAction === 'submit'
+            ? 'wb_broadcast_submit'
+            : resumeAction === 'skip'
+              ? 'wb_broadcast_skip'
+              : 'wb_broadcast_confirm',
+    };
+  }
+  if (value.action === 'ask_question_answer') {
+    return {
+      ...value,
+      action: 'wb_broadcast_reply',
+      ...(value.answer ? { reply_text: value.answer } : {}),
+    };
+  }
+  if (value.action === 'ask_question_skip') {
+    return {
+      ...value,
+      action: 'wb_broadcast_skip_reply',
+    };
+  }
+  if (value.action === 'workbench_action_item') {
+    return {
+      ...value,
+      action: 'wb_broadcast_resolve',
+    };
+  }
+  return value;
+}
+
+function mapBroadcastButton(button: CardButton): CardButton {
+  return {
+    ...button,
+    value: mapBroadcastActionValue(button.value),
+  };
+}
+
+function mapHumanInputCardForBroadcast(card: InteractiveCard): InteractiveCard {
+  return {
+    ...card,
+    buttons: card.buttons?.map(mapBroadcastButton),
+    form: card.form
+      ? {
+          ...card.form,
+          inputs: card.form.inputs.map((input) =>
+            input.name === 'answer'
+              ? { ...input, name: 'reply_text' }
+              : input,
+          ),
+          submitButton: mapBroadcastButton(card.form.submitButton),
+        }
+      : undefined,
+    sections: card.sections?.map((section) => ({
+      ...section,
+      buttons: section.buttons?.map(mapBroadcastButton),
+    })),
+  };
 }
 
 export function buildWorkbenchBroadcastFallbackText(input: {
@@ -323,7 +171,11 @@ export function buildWorkbenchBroadcastCard(input: {
   );
   if (!item || item.status !== 'pending') return null;
 
-  const card: InteractiveCard = {
+  const humanInputCard = mapHumanInputCardForBroadcast(
+    buildHumanInputCard(item, detail.task),
+  );
+  return {
+    ...humanInputCard,
     header: {
       title: `工作台待办：${item.title}`,
       color: headerColorForTaskState(detail.task.task_state),
@@ -334,7 +186,7 @@ export function buildWorkbenchBroadcastCard(input: {
       taskState: detail.task.task_state,
       workflowStatusLabel: detail.task.workflow_status_label,
       workflowStageLabel: detail.task.workflow_stage_label,
-      description: item.body,
+      description: humanInputCard.body || item.body,
       extraLines:
         typeof item.extra?.validation_error === 'string' &&
         item.extra.validation_error.trim()
@@ -342,128 +194,6 @@ export function buildWorkbenchBroadcastCard(input: {
           : undefined,
     }),
   };
-
-  if (item.source_type === 'workflow_interrupt') {
-    const compactTaskToken = detail.task.id;
-    const labels = getWorkbenchApprovalLabels({
-      approvalType: item.stage_key || detail.task.workflow_status,
-      actionMode: item.action_mode,
-    });
-    const buttons: CardButton[] = [];
-    if (item.action_mode !== 'input_required' && labels.approve) {
-      buttons.push({
-        id: `${item.id}-confirm`,
-        label: labels.approve,
-        type: 'primary' as const,
-        value: {
-          action: 'wb_broadcast_confirm',
-          task_id: detail.task.id,
-          action_item_id: item.id,
-        },
-      });
-    }
-    buttons.push({
-      id: `${item.id}-skip`,
-      label: labels.skip || '跳过此节点',
-      value: {
-        action: 'wb_broadcast_skip',
-        task_id: detail.task.id,
-        action_item_id: item.id,
-      },
-    });
-    if (item.action_mode === 'approve_or_revise') {
-      card.form = {
-        name: `wb-rv-${compactTaskToken}`,
-        inputs: [
-          {
-            name: 'revision_text',
-            type: 'textarea',
-            placeholder: '输入修改意见',
-            required: true,
-          },
-        ],
-        submitButton: {
-          id: `wb-rv-${compactTaskToken}`,
-          label: labels.revise || '返回方案修改',
-          value: {
-            action: 'wb_broadcast_revise',
-            task_id: detail.task.id,
-            action_item_id: item.id,
-          },
-        },
-      };
-    } else if (item.action_mode === 'input_required') {
-      card.form = {
-        name: `wb-su-${compactTaskToken}`,
-        inputs: [
-          {
-            name: 'access_token',
-            type: 'text',
-            placeholder: '请输入 access_token',
-            required: true,
-          },
-        ],
-        submitButton: {
-          id: `wb-su-${compactTaskToken}`,
-          label: labels.revise || '填写 access_token 并开始测试',
-          type: 'primary',
-          value: {
-            action: 'wb_broadcast_submit',
-            task_id: detail.task.id,
-            action_item_id: item.id,
-          },
-        },
-      };
-    }
-    if (buttons.length > 0) card.buttons = buttons;
-    return card;
-  }
-
-  if (
-    item.source_type === 'ask_user_question' ||
-    item.source_type === 'request_human_input'
-  ) {
-    const requestId = item.source_ref_id || undefined;
-    const question = getCurrentAskQuestion(item);
-    card.form = buildAskQuestionForm({
-      itemId: item.id,
-      taskId: detail.task.id,
-      actionItemId: item.id,
-      requestId,
-      question,
-    });
-    card.buttons = buildAskQuestionButtons({
-      itemId: item.id,
-      taskId: detail.task.id,
-      actionItemId: item.id,
-      requestId,
-      question,
-    });
-    return card;
-  }
-
-  if (item.source_type === 'send_message') {
-    card.buttons = [
-      {
-        id: `${item.id}-resolve`,
-        label: '标记已读',
-        value: item.source_ref_id
-          ? {
-              action: 'wb_broadcast_resolve',
-              source_type: 'send_message',
-              source_ref_id: item.source_ref_id,
-            }
-          : {
-              action: 'wb_broadcast_resolve',
-              task_id: detail.task.id,
-              action_item_id: item.id,
-            },
-      },
-    ];
-    return card;
-  }
-
-  return card;
 }
 
 export function buildWorkbenchBroadcastActionFeedbackCard(input: {

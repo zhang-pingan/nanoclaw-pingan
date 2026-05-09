@@ -269,6 +269,12 @@ function upsertActionItem(params: {
     sourceType: params.sourceType,
     title: params.title,
     body: params.body ?? '',
+    sourceRefId: params.sourceRefId,
+    groupFolder: params.groupFolder ?? undefined,
+    stageKey: params.stageKey ?? undefined,
+    delegationId: params.delegationId ?? undefined,
+    replyable: params.replyable,
+    extra: params.extra,
     createdAt: existing?.created_at || params.createdAt,
     updatedAt: params.createdAt,
   });
@@ -420,6 +426,7 @@ function upsertStageActionItem(
     createdAt: pendingInterrupt.created_at,
     extra: {
       interruptId: pendingInterrupt.id,
+      workflowId: workflow.id,
       allowedActions: parseInterruptJsonArray(
         pendingInterrupt.allowed_actions_json,
       ),

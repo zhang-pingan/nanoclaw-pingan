@@ -86,23 +86,6 @@ sensors -> signal extraction -> priority scoring -> policy -> inbox -> investiga
 - 自动动作有风险边界
 - 所有动作可审计和可撤销
 ---
-
-## 4. Web 工作站优化
-
-### 4.3 Human Input 统一渲染
-
-Web 不应该特判每一种审批卡片，而应根据 interrupt schema 渲染：
-
-- approve / reject / revise
-- 文本输入
-- 文件上传
-- token 输入
-- enum 选择
-- checkbox
-- 日期时间
-
-这样未来新增 workflow state 时，Web 前端不用频繁加业务特判。
-
 ---
 
 ## 5. 飞书渠道优化
