@@ -541,52 +541,46 @@ var commands = [
 ];
 
 const MAIN_GROUP_AVATAR = "/assets/doraemon-face.png";
-const GROUP_AVATAR_POOL = [
-  "/assets/avatar-char-dorami.png",
-  "/assets/avatar-char-shizuka.png",
-  "/assets/avatar-char-suneo.png",
-  "/assets/avatar-char-gounda-takeshi.png",
-  "/assets/avatar-char-tamako-nobi-mother.png",
-  "/assets/avatar-char-nobisuke-nobi-father.png",
-  "/assets/avatar-char-teacher.png",
+const GROUP_INITIAL_TONES = [
+  "tone-ocean",
+  "tone-mint",
+  "tone-amber",
+  "tone-rose",
+  "tone-indigo",
+  "tone-cyan",
+  "tone-slate",
 ];
-
-var fixedGroupAvatarMap = null;
-
-function initFixedGroupAvatarMap() {
-  if (!Array.isArray(groups) || groups.length === 0) return;
-  if (fixedGroupAvatarMap) {
-    let stale = false;
-    for (const group of groups) {
-      if (!group || typeof group.jid !== "string" || group.isMain) continue;
-      const assigned = fixedGroupAvatarMap[group.jid];
-      if (assigned && !GROUP_AVATAR_POOL.includes(assigned)) {
-        stale = true;
-        break;
-      }
-    }
-    if (!stale) return;
-  }
-  fixedGroupAvatarMap = {};
-  let poolIndex = 0;
-  for (const group of groups) {
-    if (!group || typeof group.jid !== "string") continue;
-    if (group.isMain) {
-      fixedGroupAvatarMap[group.jid] = MAIN_GROUP_AVATAR;
-      continue;
-    }
-    if (poolIndex < GROUP_AVATAR_POOL.length) {
-      fixedGroupAvatarMap[group.jid] = GROUP_AVATAR_POOL[poolIndex];
-      poolIndex += 1;
-    }
-  }
-}
 
 function getFixedAvatar(group) {
   if (!group || typeof group.jid !== "string") return null;
   if (group.isMain) return MAIN_GROUP_AVATAR;
-  if (!fixedGroupAvatarMap) return null;
-  return fixedGroupAvatarMap[group.jid] || null;
+  return null;
+}
+
+function getGroupInitial(group) {
+  const label = String(group?.name || group?.folder || group?.jid || "?").trim();
+  const first = Array.from(label)[0] || "?";
+  return first.toUpperCase();
+}
+
+function getGroupInitialTone(group) {
+  const seed = String(group?.jid || group?.folder || group?.name || "");
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return GROUP_INITIAL_TONES[hash % GROUP_INITIAL_TONES.length];
+}
+
+function renderGroupListIcon(group) {
+  const avatar = getFixedAvatar(group);
+  if (avatar) {
+    const alt = `${group?.name || "Group"} avatar`;
+    return `<span class="item-icon item-avatar"><img src="${escapeAttribute(avatar)}" alt="${escapeAttribute(alt)}" /></span>`;
+  }
+  const initial = getGroupInitial(group);
+  const tone = getGroupInitialTone(group);
+  return `<span class="item-icon item-initial ${tone}" aria-hidden="true">${escapeHtml(initial)}</span>`;
 }
 
 function apiFetch(path, options) {
@@ -2168,18 +2162,13 @@ function openKnowledgeJobsPanel() {
 }
 
 function renderGroups() {
-  initFixedGroupAvatarMap();
   groupsList.innerHTML = "";
   for (const group of groups) {
     const el = document.createElement("div");
     el.className = `list-item${group.jid === currentGroupJid ? " active" : ""}`;
 
-    const avatar = getFixedAvatar(group);
-    const initial = (group.name || "?")[0].toUpperCase();
     const unread = unreadCounts[group.jid] || 0;
-    const iconHtml = avatar
-      ? `<span class="item-icon item-avatar"><img src="${avatar}" alt="Group avatar" /></span>`
-      : `<span class="item-icon">${escapeHtml(initial)}</span>`;
+    const iconHtml = renderGroupListIcon(group);
 
     el.innerHTML = `
       ${iconHtml}
@@ -2216,16 +2205,11 @@ function selectMemoryGroup(jid) {
 
 function renderMemoryGroups() {
   if (!memoryGroupsList) return;
-  initFixedGroupAvatarMap();
   memoryGroupsList.innerHTML = "";
   for (const group of groups) {
     const el = document.createElement("div");
     el.className = `list-item${group.jid === activeMemoryGroupJid ? " active" : ""}`;
-    const avatar = getFixedAvatar(group);
-    const initial = (group.name || "?")[0].toUpperCase();
-    const iconHtml = avatar
-      ? `<span class="item-icon item-avatar"><img src="${avatar}" alt="Group avatar" /></span>`
-      : `<span class="item-icon">${escapeHtml(initial)}</span>`;
+    const iconHtml = renderGroupListIcon(group);
     el.innerHTML = `
       ${iconHtml}
       <span class="item-name">${escapeHtml(group.name)}</span>
