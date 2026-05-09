@@ -498,6 +498,7 @@ var assistantState = null;
 var assistantInboxItems = [];
 var assistantActionLogs = [];
 var assistantInboxActionPendingItemIds = new Set();
+var assistantFlowDetailExpandedItems = {};
 var assistantLogDetailExpandedItems = {};
 var assistantLogDetailExpandedLogs = {};
 var assistantScanIntervalSaveTimer = null;
@@ -17975,6 +17976,7 @@ function renderAssistantInvestigationEvidence(evidence) {
 }
 
 function renderAssistantAutoFlowDetail(item) {
+  if (!assistantFlowDetailExpandedItems[item.id]) return "";
   const extra = item && item.extra ? item.extra : {};
   const investigation = getAssistantInvestigation(item);
   const repair = extra.repair || null;
@@ -18085,8 +18087,10 @@ function renderAssistantOnlineErrorLogDetails(item) {
 
 function renderAssistantInboxActions(item) {
   const investigation = getAssistantInvestigation(item);
+  const flowError = getAssistantInvestigationError(item) || (item && item.extra && (item.extra.lastAutoFlowError || item.extra.lastRepairError));
+  const hasFlowDetail = Boolean(investigation || flowError);
   return `
-    ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
+    ${hasFlowDetail ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-flow-detail="${escapeAttribute(item.id)}">${assistantFlowDetailExpandedItems[item.id] ? "收起结果" : "排查结果"}</button>` : ""}
     ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? "收起日志" : "日志详情"}</button>` : ""}
     ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}">${investigation ? "重新排查" : "排查"}</button>` : ""}
     ${canShowAssistantRepair(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="repair" data-assistant-item="${escapeAttribute(item.id)}">修复</button>` : ""}
@@ -18143,12 +18147,12 @@ function renderAssistantInbox() {
     </article>
   `).join("");
 
-  Array.from(assistantInboxList.querySelectorAll("[data-assistant-open]")).forEach((button) => {
+  Array.from(assistantInboxList.querySelectorAll("[data-assistant-flow-detail]")).forEach((button) => {
     button.addEventListener("click", () => {
-      const itemId = button.getAttribute("data-assistant-open") || "";
-      const item = assistantInboxItems.find((entry) => entry.id === itemId);
-      if (!item) return;
-      openAssistantItemTarget(item);
+      const itemId = button.getAttribute("data-assistant-flow-detail") || "";
+      if (!itemId) return;
+      assistantFlowDetailExpandedItems[itemId] = !assistantFlowDetailExpandedItems[itemId];
+      renderAssistantInbox();
     });
   });
   Array.from(assistantInboxList.querySelectorAll("[data-assistant-log-detail]")).forEach((button) => {
@@ -18320,6 +18324,9 @@ async function runAssistantInboxAction(itemId, action, triggerButton) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (action === "investigate" || action === "repair") {
+      assistantFlowDetailExpandedItems[itemId] = true;
+    }
     await loadAssistantState();
   } catch (err) {
     assistantInboxItems = previousItems;
