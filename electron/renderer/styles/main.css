@@ -4509,15 +4509,106 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .assistant-inbox-flow {
+  grid-column: 1 / -1;
+  min-width: 0;
   display: grid;
-  gap: 4px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(241, 245, 249, 0.76);
-  color: var(--text-muted);
+  gap: 10px;
+  margin-top: -2px;
+  padding: 12px;
+  border: 1px solid rgba(var(--assistant-accent-rgb), 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.assistant-inbox-flow.error {
+  border-color: rgba(var(--assistant-warning-rgb), 0.2);
+}
+
+.assistant-flow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.assistant-flow-head span {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.assistant-flow-head strong {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(var(--assistant-accent-rgb), 0.1);
+  color: var(--assistant-accent-strong);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.assistant-flow-summary {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.assistant-flow-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.assistant-flow-field {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.assistant-flow-field span,
+.assistant-flow-evidence-item span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.assistant-flow-field strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.assistant-flow-evidence {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-flow-evidence-item {
+  display: grid;
+  gap: 4px;
+}
+
+.assistant-flow-evidence-item code {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .assistant-inbox-list,
@@ -10031,6 +10122,10 @@ body.quick-chat-window .quick-chat-input {
   .assistant-inbox-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .assistant-flow-fields {
+    grid-template-columns: 1fr;
   }
 
   .assistant-hero-metrics,

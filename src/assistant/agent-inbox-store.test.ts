@@ -10,6 +10,7 @@ import {
 import { initAssistantAutoFlow } from './assistant-auto-flow.js';
 import { createOrContinueTodayPlan } from '../today-plan.js';
 import { initAssistantEvents } from './assistant-events.js';
+import { runAgentInboxAction } from './assistant-actions.js';
 import {
   createOrUpdateAgentInboxItem,
   getAgentInboxItem,
@@ -430,6 +431,52 @@ describe('agent inbox store', () => {
       (entry) => entry.dedupe_key === 'workbench:task-stale:wb-auto-stale-task',
     );
     expect(item?.extra.autoFlowStatus).toBe('investigated');
+  });
+
+  it('stores a parseable investigation result even when the runner reports an error status', async () => {
+    const runner = vi.fn(async () => ({
+      ok: false,
+      error: 'agent exited non-zero after final answer',
+      text: JSON.stringify({
+        ok: true,
+        summary: '用户信息缺失导致查询失败，不建议自动修复。',
+        root_cause: 'UserService.getUserInfo 未找到用户信息',
+        repairable: false,
+        repair_plan: null,
+        risk_level: 'medium',
+        required_user_action: '需要人工确认用户数据',
+        evidence: [{ label: '异常信息', value: 'BusinessException' }],
+      }),
+    }));
+    initAssistantAutoFlow({ agentRunner: runner });
+    const item = createOrUpdateAgentInboxItem({
+      dedupeKey: 'online-error-logs:catstory:test',
+      kind: 'risk',
+      priority: 'high',
+      title: '线上 error 日志：catstory',
+      triggerRuleKey: 'online.error_logs',
+      sourceType: 'online_error_log',
+      sourceRefId: 'catstory',
+      extra: {
+        onlineErrorLog: {
+          service: 'catstory',
+          logs: [{ rawLog: 'BusinessException: 用户信息未找到' }],
+        },
+      },
+    });
+
+    const result = await runAgentInboxAction({
+      itemId: item.id,
+      action: 'investigate',
+    });
+
+    expect(result.item.extra.autoFlowStatus).toBe('investigated');
+    expect(result.item.extra.lastInvestigationError).toBeNull();
+    expect(result.item.extra.investigation).toMatchObject({
+      summary: '用户信息缺失导致查询失败，不建议自动修复。',
+      repairable: false,
+      required_user_action: '需要人工确认用户数据',
+    });
   });
 
   it('resolves obsolete agent query inbox items after query succeeds', () => {

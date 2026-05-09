@@ -306,7 +306,7 @@ function activeInboxItems(): AgentInboxItem[] {
 }
 
 function primaryItem(): AgentInboxItem | null {
-  const items = activeInboxItems().filter((item) => item.status !== 'snoozed');
+  const items = activeInboxItems().filter((item) => item.status === 'unread');
   return items[0] || null;
 }
 

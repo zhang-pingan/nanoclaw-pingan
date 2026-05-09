@@ -17904,27 +17904,113 @@ function canShowAssistantInvestigate(item) {
 function canShowAssistantRepair(item) {
   const ruleKey = getAssistantInboxRuleKey(item);
   const rule = getAssistantRuleCapability(ruleKey);
-  const investigation = item && item.extra ? item.extra.investigation : null;
+  const investigation = getAssistantInvestigation(item);
   return Boolean(rule && rule.supportsRepair && investigation && investigation.repairable === true);
+}
+
+function parseAssistantInvestigationText(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const text = value.trim();
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace < 0 || lastBrace <= firstBrace) return null;
+  try {
+    const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getAssistantInvestigation(item) {
+  const extra = item && item.extra ? item.extra : {};
+  const investigation = extra.investigation || null;
+  if (investigation && typeof investigation === "object" && !Array.isArray(investigation)) {
+    return investigation;
+  }
+  const legacy = parseAssistantInvestigationText(extra.lastInvestigationError);
+  return legacy && legacy.ok !== false ? legacy : null;
+}
+
+function getAssistantInvestigationError(item) {
+  const extra = item && item.extra ? item.extra : {};
+  if (!extra.lastInvestigationError) return "";
+  return getAssistantInvestigation(item) ? "" : String(extra.lastInvestigationError);
+}
+
+function assistantRiskLevelLabel(level) {
+  if (level === "low") return "低";
+  if (level === "medium") return "中";
+  if (level === "high") return "高";
+  return "未知";
+}
+
+function renderAssistantFlowField(label, value) {
+  if (value === null || value === undefined || value === "") return "";
+  return `
+    <div class="assistant-flow-field">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value))}</strong>
+    </div>
+  `;
+}
+
+function renderAssistantInvestigationEvidence(evidence) {
+  if (!Array.isArray(evidence) || evidence.length === 0) return "";
+  return `
+    <div class="assistant-flow-evidence">
+      ${evidence.map((item) => {
+        const label = item && item.label ? String(item.label) : "证据";
+        const value = item && item.value ? String(item.value) : "";
+        if (!value) return "";
+        return `
+          <div class="assistant-flow-evidence-item">
+            <span>${escapeHtml(label)}</span>
+            <code>${escapeHtml(value)}</code>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 function renderAssistantAutoFlowDetail(item) {
   const extra = item && item.extra ? item.extra : {};
-  const investigation = extra.investigation || null;
+  const investigation = getAssistantInvestigation(item);
   const repair = extra.repair || null;
-  const lines = [];
-  if (extra.autoFlowStatus) lines.push(`状态：${extra.autoFlowStatus}`);
-  if (investigation && investigation.summary) lines.push(`排查：${investigation.summary}`);
-  if (investigation && investigation.root_cause) lines.push(`原因：${investigation.root_cause}`);
-  if (investigation && investigation.repair_plan) lines.push(`方案：${investigation.repair_plan}`);
-  if (investigation && investigation.required_user_action) lines.push(`需处理：${investigation.required_user_action}`);
-  if (repair && repair.summary) lines.push(`修复：${repair.summary}`);
-  if (repair && repair.next_action) lines.push(`后续：${repair.next_action}`);
-  if (extra.lastAutoFlowError) lines.push(`异常：${extra.lastAutoFlowError}`);
-  if (extra.lastInvestigationError) lines.push(`排查失败：${extra.lastInvestigationError}`);
-  if (extra.lastRepairError) lines.push(`修复失败：${extra.lastRepairError}`);
-  if (lines.length === 0) return "";
-  return `<div class="assistant-inbox-flow">${lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}</div>`;
+  const investigationError = getAssistantInvestigationError(item);
+  const hasDetail = investigation || repair || extra.lastAutoFlowError || investigationError || extra.lastRepairError;
+  if (!hasDetail) return "";
+
+  if (!investigation) {
+    const lines = [];
+    if (extra.autoFlowStatus) lines.push(`状态：${extra.autoFlowStatus}`);
+    if (extra.lastAutoFlowError) lines.push(`异常：${extra.lastAutoFlowError}`);
+    if (investigationError) lines.push(`排查失败：${investigationError}`);
+    if (extra.lastRepairError) lines.push(`修复失败：${extra.lastRepairError}`);
+    return `<div class="assistant-inbox-flow error">${lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}</div>`;
+  }
+
+  return `
+    <div class="assistant-inbox-flow">
+      <div class="assistant-flow-head">
+        <span>排查结果</span>
+        <strong>${investigation.repairable === true ? "可自动修复" : "需人工确认"}</strong>
+      </div>
+      ${investigation.summary ? `<div class="assistant-flow-summary">${escapeHtml(String(investigation.summary))}</div>` : ""}
+      <div class="assistant-flow-fields">
+        ${renderAssistantFlowField("状态", extra.autoFlowStatus === "failed" ? "已排查" : (extra.autoFlowStatus || "已排查"))}
+        ${renderAssistantFlowField("风险", assistantRiskLevelLabel(investigation.risk_level))}
+        ${renderAssistantFlowField("根因", investigation.root_cause)}
+        ${renderAssistantFlowField("修复建议", investigation.repair_plan || (investigation.repairable === true ? "" : "不建议自动修复"))}
+        ${renderAssistantFlowField("需处理", investigation.required_user_action)}
+        ${repair && repair.summary ? renderAssistantFlowField("修复", repair.summary) : ""}
+        ${repair && repair.next_action ? renderAssistantFlowField("后续", repair.next_action) : ""}
+        ${extra.lastRepairError ? renderAssistantFlowField("修复失败", extra.lastRepairError) : ""}
+      </div>
+      ${renderAssistantInvestigationEvidence(investigation.evidence)}
+    </div>
+  `;
 }
 
 function getAssistantOnlineErrorLogExtra(item) {
@@ -17998,10 +18084,11 @@ function renderAssistantOnlineErrorLogDetails(item) {
 }
 
 function renderAssistantInboxActions(item) {
+  const investigation = getAssistantInvestigation(item);
   return `
     ${item.action_url ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-open="${escapeAttribute(item.id)}">查看</button>` : ""}
     ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? "收起日志" : "日志详情"}</button>` : ""}
-    ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}">排查</button>` : ""}
+    ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}">${investigation ? "重新排查" : "排查"}</button>` : ""}
     ${canShowAssistantRepair(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="repair" data-assistant-item="${escapeAttribute(item.id)}">修复</button>` : ""}
     ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
     <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
@@ -18047,11 +18134,11 @@ function renderAssistantInbox() {
         <div class="assistant-inbox-meta">${escapeHtml(formatAssistantStatusText(item))}</div>
         <div class="assistant-inbox-title">${escapeHtml(item.title || "未命名事项")}</div>
         <div class="assistant-inbox-body">${escapeHtml(formatAssistantOnlineErrorLogBody(item))}</div>
-        ${renderAssistantAutoFlowDetail(item)}
       </div>
       <div class="assistant-inbox-actions">
         ${renderAssistantInboxActions(item)}
       </div>
+      ${renderAssistantAutoFlowDetail(item)}
       ${renderAssistantOnlineErrorLogDetails(item)}
     </article>
   `).join("");

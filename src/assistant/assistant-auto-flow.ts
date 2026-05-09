@@ -325,6 +325,38 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function resolveInvestigationOutput(
+  output: AssistantAgentRunResult,
+): InvestigationResult {
+  let result: InvestigationResult | null = null;
+  let parseError: unknown = null;
+  try {
+    result = parseInvestigationResult(output.text);
+  } catch (err) {
+    parseError = err;
+  }
+
+  if (!result) {
+    if (!output.ok) {
+      throw new Error(
+        output.error ||
+          output.text ||
+          errorMessage(parseError) ||
+          'Investigation failed',
+      );
+    }
+    throw parseError;
+  }
+
+  if (!result.ok) {
+    throw new Error(
+      result.summary || output.error || output.text || 'Investigation failed',
+    );
+  }
+
+  return result;
+}
+
 export async function investigateAgentInboxItem(
   itemId: string,
 ): Promise<{ item: AgentInboxItemView; result: InvestigationResult }> {
@@ -358,11 +390,8 @@ export async function investigateAgentInboxItem(
       item,
       prompt: buildInvestigationPrompt(item, context),
     });
-    if (!output.ok) {
-      throw new Error(output.error || output.text || 'Investigation failed');
-    }
 
-    const result = parseInvestigationResult(output.text);
+    const result = resolveInvestigationOutput(output);
     const updated = updateAgentInboxItemExtra(item.id, {
       autoFlowStatus: 'investigated',
       investigation: result as unknown as Record<string, unknown>,
