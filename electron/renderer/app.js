@@ -17967,7 +17967,7 @@ function renderAssistantOnlineErrorLogDetails(item) {
   const scanErrors = Array.isArray(detail.scanErrors) ? detail.scanErrors : [];
   const itemExpandedLogs = assistantLogDetailExpandedLogs[item.id] || {};
   return `
-    <div class="assistant-log-detail-panel">
+    <div class="assistant-log-detail-panel" data-assistant-log-panel="${escapeAttribute(item.id)}">
       <div class="assistant-log-detail-meta">
         <span>服务：${escapeHtml(String(detail.service || item.source_ref_id || "--"))}</span>
         <span>日志：${escapeHtml(String(detail.logPath || "--"))}</span>
@@ -18047,12 +18047,12 @@ function renderAssistantInbox() {
         <div class="assistant-inbox-meta">${escapeHtml(formatAssistantStatusText(item))}</div>
         <div class="assistant-inbox-title">${escapeHtml(item.title || "未命名事项")}</div>
         <div class="assistant-inbox-body">${escapeHtml(formatAssistantOnlineErrorLogBody(item))}</div>
-        ${renderAssistantOnlineErrorLogDetails(item)}
         ${renderAssistantAutoFlowDetail(item)}
       </div>
       <div class="assistant-inbox-actions">
         ${renderAssistantInboxActions(item)}
       </div>
+      ${renderAssistantOnlineErrorLogDetails(item)}
     </article>
   `).join("");
 
@@ -18280,6 +18280,15 @@ function openWorkstationTargetUrl(targetUrl) {
 
 function openAssistantItemTarget(item) {
   if (!item || !item.action_url) return;
+  if (isAssistantOnlineErrorLogItem(item)) {
+    setPrimaryNav("assistant");
+    assistantLogDetailExpandedItems[item.id] = true;
+    renderAssistantInbox();
+    const detailEl = assistantInboxList?.querySelector(`[data-assistant-log-panel="${CSS.escape(item.id)}"]`);
+    detailEl?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    runAssistantInboxAction(item.id, "mark_read");
+    return;
+  }
   if (!openWorkstationTargetUrl(item.action_url)) {
     window.open(item.action_url, "_blank");
   }

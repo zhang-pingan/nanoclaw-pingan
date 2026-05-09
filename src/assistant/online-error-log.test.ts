@@ -172,7 +172,11 @@ describe('online error log scan', () => {
       sourceType: 'online_error_log',
       sourceRefId: 'user-platform',
       triggerRuleKey: 'online.error_logs',
+      actionKind: 'open_online_error_log',
+      actionLabel: '查看日志',
     });
+    expect(items[0].actionUrl).toContain('assistantTarget=assistant');
+    expect(items[0].actionUrl).toContain('source=online_error_log');
     expect(items[0].body).toContain('最近 10 分钟扫描到 4 条 ERROR 日志');
     expect(items[0].extra?.onlineErrorLog).toMatchObject({
       service: 'user-platform',

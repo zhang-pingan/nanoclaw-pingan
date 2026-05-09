@@ -616,7 +616,8 @@ function buildDedupeKey(result: OnlineErrorLogScanResult): string {
 
 function buildActionUrl(service: string): string {
   const url = new URL('http://localhost:3000/');
-  url.searchParams.set('assistantTarget', 'configuration');
+  url.searchParams.set('assistantTarget', 'assistant');
+  url.searchParams.set('source', 'online_error_log');
   url.searchParams.set('service', service);
   return url.toString();
 }
@@ -674,8 +675,8 @@ export function scanOnlineErrorLogRule(input: {
       triggerRuleKey: ONLINE_ERROR_LOG_RULE_KEY,
       sourceType: 'online_error_log',
       sourceRefId: service,
-      actionKind: 'open_service_config',
-      actionLabel: '查看服务配置',
+      actionKind: 'open_online_error_log',
+      actionLabel: '查看日志',
       actionUrl: buildActionUrl(service),
       extra: {
         onlineErrorLog: buildInboxExtra(result),

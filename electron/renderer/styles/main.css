@@ -4142,6 +4142,14 @@ body.quick-chat-window .quick-chat-input {
   box-shadow: 0 18px 38px rgba(15, 23, 42, 0.06);
 }
 
+.assistant-inbox-panel {
+  overflow: visible;
+}
+
+.assistant-action-log-panel {
+  overflow: hidden;
+}
+
 .assistant-settings-panel {
   grid-row: span 2;
 }
@@ -4517,6 +4525,14 @@ body.quick-chat-window .quick-chat-input {
   display: grid;
   gap: 12px;
   padding: 14px;
+}
+
+.assistant-inbox-list {
+  max-height: none;
+  overflow: visible;
+}
+
+.assistant-log-list {
   max-height: 420px;
   overflow: auto;
 }
@@ -4580,9 +4596,11 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .assistant-log-detail-panel {
+  grid-column: 1 / -1;
+  min-width: 0;
   display: grid;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: -2px;
   padding: 10px;
   border: 1px solid rgba(var(--assistant-warning-rgb), 0.18);
   border-radius: 12px;
@@ -4601,9 +4619,11 @@ body.quick-chat-window .quick-chat-input {
 .assistant-log-detail-list {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .assistant-log-detail-entry {
+  min-width: 0;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 10px;
   overflow: hidden;
