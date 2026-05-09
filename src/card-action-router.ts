@@ -56,6 +56,26 @@ function askActionFingerprint(action: {
   ].join('|');
 }
 
+function parseNestedPayload(
+  formValue: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  const raw = formValue?.payload;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined;
+    }
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      ),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 export function createCardActionHandler(deps: {
   registeredGroups: () => Record<string, RegisteredGroup>;
   sendCard?: (
@@ -74,6 +94,7 @@ export function createCardActionHandler(deps: {
           sendCard: deps.sendCard,
           sendMessage: deps.sendMessage,
           userId: action.user_id || 'unknown',
+          actorChannel: action.actor_channel,
         });
       } catch (err) {
         logWorkbenchBroadcastActionFailure(action.action, err);
@@ -127,21 +148,25 @@ export function createCardActionHandler(deps: {
     }
     recentAskActionFingerprints.set(fp, now);
 
-    const answer = action.form_value?.answer;
-    const formValues = action.form_value
-      ? Object.fromEntries(
-          Object.entries(action.form_value).filter(
-            ([k]) =>
-              ![
-                'action',
-                'group_folder',
-                'request_id',
-                'question_id',
-                'answer',
-              ].includes(k),
-          ),
-        )
-      : undefined;
+    const nestedPayload = parseNestedPayload(action.form_value);
+    const answer = nestedPayload?.answer || action.form_value?.answer;
+    const formValues =
+      nestedPayload ||
+      (action.form_value
+        ? Object.fromEntries(
+            Object.entries(action.form_value).filter(
+              ([k]) =>
+                ![
+                  'action',
+                  'group_folder',
+                  'request_id',
+                  'question_id',
+                  'answer',
+                  'payload',
+                ].includes(k),
+            ),
+          )
+        : undefined);
     const registeredGroups = deps.registeredGroups();
     const chatJid = findChatJidByGroupFolder(groupFolder, registeredGroups);
 

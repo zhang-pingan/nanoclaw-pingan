@@ -884,6 +884,9 @@ class FeishuChannel implements Channel {
         const mergedFormValue: Record<string, string> = {
           ...(formValue || {}),
         };
+        if (formValue && Object.keys(formValue).length > 0) {
+          mergedFormValue.payload = JSON.stringify(formValue);
+        }
         for (const [key, candidate] of Object.entries(resolvedValue)) {
           if (typeof candidate === 'string' && candidate) {
             mergedFormValue[key] = candidate;
@@ -955,6 +958,7 @@ class FeishuChannel implements Channel {
           action: resolvedValue.action,
           user_id: userId,
           message_id: messageId,
+          actor_channel: 'feishu',
           group_folder: resolvedValue.group_folder,
           workflow_id: resolvedValue.workflow_id,
           form_value: mergedFormValue,

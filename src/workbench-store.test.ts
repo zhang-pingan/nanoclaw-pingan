@@ -49,6 +49,8 @@ import {
 import { buildWorkbenchBroadcastCard } from './workbench-broadcast-render.js';
 import { handleWorkbenchBroadcastCardAction } from './workbench-broadcast-actions.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
+import { buildHumanInputCard } from './human-input-card.js';
+import type { WorkbenchActionItem, WorkbenchTaskItem } from './workbench.js';
 
 const MAIN_GROUP: RegisteredGroup = {
   name: 'Main',
@@ -469,9 +471,7 @@ describe('workbench approval transition sync', () => {
     ]);
     expect(card?.form?.name).toBe('access_token_form');
     expect(card?.form?.submitButton.id).toBe('submit');
-    expect(card?.form?.submitButton.label).toBe(
-      '🔐 提交 Token 并开始测试',
-    );
+    expect(card?.form?.submitButton.label).toBe('🔐 提交 Token 并开始测试');
   });
 
   it('accepts testing_confirm submit actions when Feishu only returns action_item_id', async () => {
@@ -587,6 +587,283 @@ describe('workbench approval transition sync', () => {
     ).toMatchObject({
       access_token: 'demo-token',
       extra_token_note: 'keep-me',
+    });
+  });
+
+  it('uses an allowed action for schema-only default workflow forms', () => {
+    const item: WorkbenchActionItem = {
+      id: 'action-schema-approve',
+      item_type: 'human_input',
+      source_type: 'workflow_interrupt',
+      title: '补充审批信息',
+      body: '请填写数量',
+      status: 'pending',
+      source_ref_id: 'wi-schema-approve',
+      replyable: false,
+      extra: {
+        interruptId: 'wi-schema-approve',
+        workflowId: 'wf-schema-approve',
+        allowedActions: ['approve'],
+        payloadSchema: {
+          type: 'object',
+          required: ['count'],
+          properties: {
+            count: { type: 'integer', minimum: 1, maximum: 5 },
+          },
+        },
+      },
+    };
+    const task: WorkbenchTaskItem = {
+      id: 'wb-wf-schema-approve',
+      title: 'schema approve',
+      service: 'order-service',
+      start_from: 'plan',
+      workflow_type: 'dev_test',
+      workflow_status: 'custom_interrupt',
+      workflow_status_label: 'custom_interrupt',
+      task_state: 'running',
+      workflow_stage: 'custom_interrupt',
+      workflow_stage_label: 'custom_interrupt',
+      round: 0,
+      source_jid: 'main@g.us',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+      pending_approval: true,
+      pending_action_count: 1,
+      active_delegation_id: '',
+      context: {},
+    };
+
+    const card = buildHumanInputCard(item, task);
+
+    expect(card.form?.submitButton.value.resume_action).toBe('approve');
+    expect(card.form?.inputs).toMatchObject([
+      {
+        name: 'count',
+        type: 'integer',
+        required: true,
+        min: 1,
+        max: 5,
+      },
+    ]);
+  });
+
+  it('augments DSL form fields from resume payload schema', () => {
+    dbCreateWorkflow({
+      id: 'wf-dsl-schema-merge',
+      name: 'DSL Schema 合并',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/dsl-schema-merge',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_dsl_schema_merge',
+        staging_work_branch: 'staging-deploy/feature-dsl-schema-merge',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    const task: WorkbenchTaskItem = {
+      id: 'wb-wf-dsl-schema-merge',
+      title: 'DSL Schema 合并',
+      service: 'order-service',
+      start_from: 'testing',
+      workflow_type: 'dev_test',
+      workflow_status: 'testing_confirm',
+      workflow_status_label: '确认测试 Token',
+      task_state: 'running',
+      workflow_stage: 'testing_confirm',
+      workflow_stage_label: '确认测试 Token',
+      round: 0,
+      source_jid: 'main@g.us',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+      pending_approval: true,
+      pending_action_count: 1,
+      active_delegation_id: '',
+      context: {
+        deliverable: '2026-04-07_dsl_schema_merge',
+        work_branch: 'feature/dsl-schema-merge',
+        staging_base_branch: 'staging',
+        staging_work_branch: 'staging-deploy/feature-dsl-schema-merge',
+        access_token: '',
+      },
+    };
+    const item: WorkbenchActionItem = {
+      id: 'wb-action-wf-dsl-schema-merge-testing_confirm',
+      item_type: 'credential',
+      source_type: 'workflow_interrupt',
+      title: '确认测试 Token',
+      body: '请填写 token',
+      status: 'pending',
+      stage_key: 'testing_confirm',
+      source_ref_id: 'wi-missing-dsl-schema-merge',
+      replyable: false,
+      extra: {
+        workflowId: 'wf-dsl-schema-merge',
+        allowedActions: ['submit', 'skip'],
+        payloadSchema: {
+          type: 'object',
+          required: ['access_token', 'retry_count'],
+          properties: {
+            access_token: {
+              type: 'string',
+              minLength: 8,
+              format: 'password',
+            },
+            retry_count: { type: 'integer', minimum: 1, maximum: 3 },
+          },
+        },
+      },
+    };
+
+    const card = buildHumanInputCard(item, task);
+
+    expect(card.form?.inputs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'access_token',
+          type: 'text',
+          required: true,
+          min_length: 8,
+        }),
+        expect.objectContaining({
+          name: 'retry_count',
+          type: 'integer',
+          required: true,
+          min: 1,
+          max: 3,
+        }),
+      ]),
+    );
+  });
+
+  it('uses nested payload so form fields cannot override broadcast routing keys', async () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-payload-isolated',
+      name: '广播 payload 隔离',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/broadcast-payload-isolated',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_payload_isolated',
+        staging_work_branch:
+          'staging-deploy/feature-broadcast-payload-isolated',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    recoverWorkflowRuntimeForTest();
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-payload-isolated');
+
+    const actionItemId =
+      'wb-action-wf-broadcast-payload-isolated-testing_confirm';
+    const pendingInterrupt = getPendingWorkflowInterruptForState(
+      'wf-broadcast-payload-isolated',
+      'testing_confirm',
+    );
+    expect(pendingInterrupt).toBeDefined();
+
+    const result = await handleWorkbenchBroadcastCardAction({
+      action: 'wb_broadcast_resume',
+      formValue: {
+        action_item_id: actionItemId,
+        workbench_action: 'submit',
+        resume_action: 'submit',
+        payload: JSON.stringify({
+          access_token: 'demo-token',
+          action: 'user-action-value',
+          resume_action: 'user-resume-value',
+        }),
+      },
+      registeredGroups: getAllRegisteredGroups(),
+      sendMessage: async () => {},
+      userId: 'user-1',
+      actorChannel: 'feishu',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      JSON.parse(
+        getWorkflowInterrupt(pendingInterrupt!.id)!.resume_payload_json!,
+      ),
+    ).toMatchObject({
+      access_token: 'demo-token',
+      action: 'user-action-value',
+      resume_action: 'user-resume-value',
+    });
+  });
+
+  it('passes the real broadcast actor channel to workflow resume', async () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-feishu-channel',
+      name: '广播飞书渠道',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/broadcast-feishu-channel',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_feishu_channel',
+        staging_work_branch: 'staging-deploy/feature-broadcast-feishu-channel',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    recoverWorkflowRuntimeForTest();
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-feishu-channel');
+
+    const actionItemId =
+      'wb-action-wf-broadcast-feishu-channel-testing_confirm';
+    const pendingInterrupt = getPendingWorkflowInterruptForState(
+      'wf-broadcast-feishu-channel',
+      'testing_confirm',
+    );
+    expect(pendingInterrupt).toBeDefined();
+
+    const result = await handleWorkbenchBroadcastCardAction({
+      action: 'wb_broadcast_resume',
+      formValue: {
+        action_item_id: actionItemId,
+        workbench_action: 'submit',
+        payload: JSON.stringify({ access_token: 'demo-token' }),
+      },
+      registeredGroups: getAllRegisteredGroups(),
+      sendMessage: async () => {},
+      userId: 'feishu-user',
+      actorChannel: 'feishu',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      JSON.parse(getWorkflowInterrupt(pendingInterrupt!.id)!.resumed_by!),
+    ).toMatchObject({
+      channel: 'feishu',
+      userId: 'feishu-user',
     });
   });
 

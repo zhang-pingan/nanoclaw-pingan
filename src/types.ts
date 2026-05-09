@@ -833,7 +833,15 @@ export interface CardButton {
 export interface CardInput {
   name: string;
   placeholder?: string;
-  type?: 'text' | 'textarea' | 'number' | 'integer' | 'boolean' | 'enum';
+  type?:
+    | 'text'
+    | 'textarea'
+    | 'number'
+    | 'integer'
+    | 'boolean'
+    | 'enum'
+    | 'file'
+    | 'token';
   options?: Array<{ value: string; label?: string }>;
   required?: boolean;
   min?: number;
@@ -867,6 +875,7 @@ export type CardActionHandler = (action: {
   action: string;
   user_id: string;
   message_id: string;
+  actor_channel?: WorkflowInterruptActorChannel;
   group_folder?: string; // Plan item primary key
   workflow_id?: string; // Workflow operations primary key (approve/pause/resume)
   form_value?: Record<string, string>;

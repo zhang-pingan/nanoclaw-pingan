@@ -35,7 +35,15 @@ export interface CardFieldOption {
 export interface CardFieldConfig {
   name: string;
   label?: string;
-  type: 'text' | 'textarea' | 'number' | 'integer' | 'boolean' | 'enum';
+  type:
+    | 'text'
+    | 'textarea'
+    | 'number'
+    | 'integer'
+    | 'boolean'
+    | 'enum'
+    | 'file'
+    | 'token';
   placeholder?: string;
   required?: boolean;
   options?: CardFieldOption[];
@@ -140,8 +148,13 @@ export function validateCardConfig(
         errors.push(`${cardKey}.form field "${field.name}" is duplicated`);
       }
       fieldNames.add(field.name);
-      if (field.type === 'enum' && (!field.options || field.options.length === 0)) {
-        errors.push(`${cardKey}.form field "${field.name}" requires options for enum type`);
+      if (
+        field.type === 'enum' &&
+        (!field.options || field.options.length === 0)
+      ) {
+        errors.push(
+          `${cardKey}.form field "${field.name}" requires options for enum type`,
+        );
       }
     }
   }
@@ -154,7 +167,10 @@ export function validateCardConfig(
     errors.push(`${cardKey}.form is required for pattern=confirm_revise`);
   }
 
-  if (card.pattern === 'section_list' && (!card.sections || card.sections.length === 0)) {
+  if (
+    card.pattern === 'section_list' &&
+    (!card.sections || card.sections.length === 0)
+  ) {
     errors.push(`${cardKey}.sections is required for pattern=section_list`);
   }
 

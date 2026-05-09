@@ -1593,7 +1593,8 @@ function normalizeJsonSchemaPayload(
   if (!schema || value === undefined || value === null) return value;
 
   if (schema.type === 'object') {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return value;
     const input = value as Record<string, unknown>;
     const output: Record<string, unknown> = { ...input };
     for (const [key, childSchema] of Object.entries(schema.properties || {})) {
@@ -1622,6 +1623,36 @@ function normalizeJsonSchemaPayload(
     if (/^(false|0|no|off)$/i.test(text)) return false;
   }
   return value;
+}
+
+function parseCardActionPayload(
+  formValue: Record<string, string> | undefined,
+): Record<string, unknown> {
+  if (!formValue) return {};
+  const nestedPayload = formValue.payload;
+  if (typeof nestedPayload === 'string' && nestedPayload.trim()) {
+    try {
+      const parsed = JSON.parse(nestedPayload);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Fall through to legacy flat form parsing.
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(formValue).filter(
+      ([key]) =>
+        ![
+          'action',
+          'workflow_id',
+          'interrupt_id',
+          'resume_action',
+          'resume_payload_schema',
+          'payload',
+        ].includes(key),
+    ),
+  );
 }
 
 function buildInterruptPayloadPatch(
@@ -4245,6 +4276,7 @@ export function handleCardAction(action: {
   action: string;
   user_id: string;
   message_id: string;
+  actor_channel?: WorkflowInterruptActorChannel;
   group_folder?: string;
   workflow_id?: string;
   form_value?: Record<string, string>;
@@ -4287,24 +4319,13 @@ export function handleCardAction(action: {
       notifyMain('[操作失败] 缺少中断 ID 或恢复动作', wfSourceJid);
       return;
     }
-    const payload = Object.fromEntries(
-      Object.entries(action.form_value || {}).filter(
-        ([key]) =>
-          ![
-            'action',
-            'workflow_id',
-            'interrupt_id',
-            'resume_action',
-            'resume_payload_schema',
-          ].includes(key),
-      ),
-    );
+    const payload = parseCardActionPayload(action.form_value);
     const result = resumeWorkflowInterrupt({
       interruptId: resolvedInterruptId,
       action: resumeAction,
       payload,
       actor: {
-        channel: 'feishu',
+        channel: action.actor_channel || 'feishu',
         userId: action.user_id,
       },
       idempotencyKey: buildIdempotencyKey(resolvedInterruptId, resumeAction),

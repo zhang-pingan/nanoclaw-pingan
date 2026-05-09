@@ -131,6 +131,7 @@ describe('FeishuChannel card action callbacks', () => {
       action: 'wb_broadcast_submit',
       user_id: 'user-1',
       message_id: 'msg-1',
+      actor_channel: 'feishu',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
@@ -138,6 +139,7 @@ describe('FeishuChannel card action callbacks', () => {
         task_id: 'task-1',
         action_item_id: 'item-1',
         access_token: 'demo-token',
+        payload: JSON.stringify({ access_token: 'demo-token' }),
       },
     });
     expect(res.writeHead).toHaveBeenCalledWith(200, {
@@ -185,12 +187,14 @@ describe('FeishuChannel card action callbacks', () => {
       action: 'wb_broadcast_submit',
       user_id: 'user-2',
       message_id: 'msg-2',
+      actor_channel: 'feishu',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
         action: 'wb_broadcast_submit',
         action_item_id: 'item-1',
         access_token: 'demo-token',
+        payload: JSON.stringify({ access_token: 'demo-token' }),
       },
     });
   });
@@ -227,12 +231,14 @@ describe('FeishuChannel card action callbacks', () => {
       action: 'wb_broadcast_reply',
       user_id: 'user-3',
       message_id: 'msg-3',
+      actor_channel: 'feishu',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
         action: 'wb_broadcast_reply',
         request_id: 'aq-123',
         reply_text: '继续',
+        payload: JSON.stringify({ reply_text: '继续' }),
       },
     });
   });
@@ -269,12 +275,14 @@ describe('FeishuChannel card action callbacks', () => {
       action: 'wb_broadcast_submit',
       user_id: 'user-4',
       message_id: 'msg-4',
+      actor_channel: 'feishu',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
         action: 'wb_broadcast_submit',
         task_id: 'task-1',
         access_token: 'demo-token',
+        payload: JSON.stringify({ access_token: 'demo-token' }),
       },
     });
   });

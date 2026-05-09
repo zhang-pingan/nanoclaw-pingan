@@ -8,10 +8,7 @@ import type {
   InteractiveCard,
   Workflow,
 } from './types.js';
-import type {
-  WorkbenchActionItem,
-  WorkbenchTaskItem,
-} from './workbench.js';
+import type { WorkbenchActionItem, WorkbenchTaskItem } from './workbench.js';
 import {
   getCardConfig,
   getWorkflowTypeConfig,
@@ -26,7 +23,9 @@ const ASK_ACTION_SKIP = 'ask_question_skip';
 
 type JsonObject = Record<string, unknown>;
 
-function parseJsonObject(raw: string | null | undefined): JsonObject | undefined {
+function parseJsonObject(
+  raw: string | null | undefined,
+): JsonObject | undefined {
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw);
@@ -289,7 +288,12 @@ function schemaPropertyToInput(
           ? 'integer'
           : type === 'boolean'
             ? 'boolean'
-            : 'text';
+            : schema.format === 'binary' || schema.format === 'file'
+              ? 'file'
+              : schema.format === 'password' ||
+                  name.toLowerCase().includes('token')
+                ? 'token'
+                : 'text';
   return {
     name,
     type: inputType,
@@ -351,9 +355,12 @@ function buildDefaultWorkflowCard(
       type: actionButtonType(action),
       value: withResumeAction(base, action),
     }));
+  const inputs = schemaInputs(payloadSchema);
   const formAction =
     actions.find((action) => ['submit', 'revise'].includes(action)) ||
-    (schemaInputs(payloadSchema).length > 0 ? 'submit' : undefined);
+    (inputs.length > 0
+      ? actions.find((action) => !['skip', 'cancel', 'reject'].includes(action))
+      : undefined);
   const card: InteractiveCard = {
     header: {
       title: item.title,
@@ -366,12 +373,11 @@ function buildDefaultWorkflowCard(
     card.form = {
       name: `human-input-${item.id}`,
       inputs:
-        schemaInputs(payloadSchema).length > 0
-          ? schemaInputs(payloadSchema)
+        inputs.length > 0
+          ? inputs
           : [
               {
-                name:
-                  formAction === 'revise' ? 'revision_text' : 'reply_text',
+                name: formAction === 'revise' ? 'revision_text' : 'reply_text',
                 type: 'textarea',
                 placeholder:
                   formAction === 'revise' ? '输入修改意见' : '输入内容',
@@ -555,8 +561,10 @@ export function buildHumanInputCard(
   task: WorkbenchTaskItem,
 ): InteractiveCard {
   if (item.source_type === 'workflow_interrupt') {
-    return buildWorkflowCardFromDsl(item, task) ||
-      buildDefaultWorkflowCard(item, task);
+    return (
+      buildWorkflowCardFromDsl(item, task) ||
+      buildDefaultWorkflowCard(item, task)
+    );
   }
   if (
     item.source_type === 'ask_user_question' ||

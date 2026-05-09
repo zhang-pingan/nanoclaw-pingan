@@ -30,6 +30,7 @@ import {
   initWorkflow,
   onDelegationComplete,
   resumeWorkflowInterrupt,
+  handleCardAction,
   returnWorkflowToInterruptStage,
   runWorkflowWatchdogOnce,
   stopWorkflowRuntimeForTest,
@@ -432,8 +433,7 @@ describe('durable interrupt runtime', () => {
       expired_at: null,
     });
     const config = getWorkflowTypeConfig('dev_test')!;
-    const originalSchema =
-      config.states.awaiting_confirm.resume_payload_schema;
+    const originalSchema = config.states.awaiting_confirm.resume_payload_schema;
     config.states.awaiting_confirm.resume_payload_schema = {
       schema: {
         type: 'object',
@@ -463,6 +463,77 @@ describe('durable interrupt runtime', () => {
     } finally {
       config.states.awaiting_confirm.resume_payload_schema = originalSchema;
     }
+  });
+
+  it('isolates nested card payload and preserves the submitting channel', () => {
+    createWorkflowAtInterrupt({
+      id: 'wf-card-payload-isolated',
+      state: 'awaiting_confirm',
+    });
+    createWorkflowInterrupt({
+      id: 'wi-card-payload-isolated',
+      workflow_id: 'wf-card-payload-isolated',
+      state_key: 'awaiting_confirm',
+      kind: 'approval',
+      status: 'pending',
+      title: 'card payload isolated',
+      body: null,
+      resume_payload_schema_json: JSON.stringify({
+        type: 'object',
+        properties: {
+          action: { type: 'string' },
+          resume_action: { type: 'string' },
+          count: { type: 'integer' },
+        },
+      }),
+      allowed_actions_json: JSON.stringify(['approve']),
+      allowed_channels_json: JSON.stringify(['web']),
+      assigned_role: null,
+      action_payload_json: null,
+      created_by: 'test',
+      resumed_by: null,
+      resume_action: null,
+      resume_payload_json: null,
+      resume_error: null,
+      idempotency_key:
+        'workflow_interrupt:wf-card-payload-isolated:awaiting_confirm:0:card',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+      expires_at: null,
+      resumed_at: null,
+      cancelled_at: null,
+      expired_at: null,
+    });
+
+    handleCardAction({
+      action: 'workflow_interrupt_resume',
+      user_id: 'web-user',
+      message_id: 'web-card-1',
+      actor_channel: 'web',
+      workflow_id: 'wf-card-payload-isolated',
+      form_value: {
+        interrupt_id: 'wi-card-payload-isolated',
+        resume_action: 'approve',
+        payload: JSON.stringify({
+          action: 'business-action',
+          resume_action: 'business-resume',
+          count: '3',
+        }),
+      },
+    });
+
+    const interrupt = getWorkflowInterrupt('wi-card-payload-isolated')!;
+    expect(interrupt.status).toBe('resumed');
+    expect(interrupt.resume_action).toBe('approve');
+    expect(JSON.parse(interrupt.resume_payload_json!)).toEqual({
+      action: 'business-action',
+      resume_action: 'business-resume',
+      count: 3,
+    });
+    expect(JSON.parse(interrupt.resumed_by!)).toMatchObject({
+      channel: 'web',
+      userId: 'web-user',
+    });
   });
 
   it('executes due evaluator retries by creating a fresh delegation', () => {

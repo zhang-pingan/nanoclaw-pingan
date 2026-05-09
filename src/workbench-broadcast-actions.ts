@@ -10,6 +10,7 @@ import type {
   CardActionResult,
   InteractiveCard,
   RegisteredGroup,
+  WorkflowInterruptActorChannel,
 } from './types.js';
 import {
   runWorkbenchActionItemAction,
@@ -110,6 +111,17 @@ function buildResumePayload(
   formValue: Record<string, string> | undefined,
 ): Record<string, unknown> {
   if (!formValue) return {};
+  const nestedPayload = formValue.payload;
+  if (typeof nestedPayload === 'string' && nestedPayload.trim()) {
+    try {
+      const parsed = JSON.parse(nestedPayload);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Fall through to legacy flat form parsing.
+    }
+  }
   return Object.fromEntries(
     Object.entries(formValue).filter(
       ([key]) =>
@@ -126,12 +138,53 @@ function buildResumePayload(
           'source_type',
           'source_ref_id',
           'request_id',
+          'question_id',
+          'payload',
         ].includes(key),
     ),
   );
 }
 
-function isWorkbenchAction(value: string | undefined): value is
+function buildAskFormValues(
+  formValue: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!formValue) return undefined;
+  const nestedPayload = formValue.payload;
+  if (typeof nestedPayload === 'string' && nestedPayload.trim()) {
+    try {
+      const parsed = JSON.parse(nestedPayload);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return Object.fromEntries(
+          Object.entries(parsed).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        );
+      }
+    } catch {
+      // Fall through to legacy flat form parsing.
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(formValue).filter(
+      ([key]) =>
+        ![
+          'action',
+          'task_id',
+          'action_item_id',
+          'request_id',
+          'source_type',
+          'source_ref_id',
+          'reply_text',
+          'answer',
+          'payload',
+        ].includes(key),
+    ),
+  );
+}
+
+function isWorkbenchAction(
+  value: string | undefined,
+): value is
   | 'confirm'
   | 'approve'
   | 'reject'
@@ -195,6 +248,7 @@ export async function handleWorkbenchBroadcastCardAction(input: {
   ) => Promise<string | undefined>;
   sendMessage: (jid: string, text: string) => Promise<void>;
   userId: string;
+  actorChannel?: WorkflowInterruptActorChannel;
 }): Promise<WorkbenchBroadcastCardActionResult> {
   const resolvedAskItem = resolveAskActionItemByRequestId(
     input.formValue?.request_id,
@@ -207,29 +261,18 @@ export async function handleWorkbenchBroadcastCardAction(input: {
     (input.action === 'wb_broadcast_reply' ||
       input.action === 'wb_broadcast_skip_reply')
   ) {
-    const answer = input.formValue?.reply_text?.trim() || input.formValue?.answer?.trim();
+    const askFormValues = buildAskFormValues(input.formValue);
+    const answer =
+      askFormValues?.reply_text?.trim() ||
+      askFormValues?.answer?.trim() ||
+      input.formValue?.reply_text?.trim() ||
+      input.formValue?.answer?.trim();
     const result = await handleAskQuestionResponse({
       requestId: askQuestion.id,
       groupFolder: askQuestion.group_folder,
       userId: input.userId || 'unknown',
       answer,
-      formValues: input.formValue
-        ? Object.fromEntries(
-            Object.entries(input.formValue).filter(
-              ([key]) =>
-                ![
-                  'action',
-                  'task_id',
-                  'action_item_id',
-                  'request_id',
-                  'source_type',
-                  'source_ref_id',
-                  'reply_text',
-                  'answer',
-                ].includes(key),
-            ),
-          )
-        : undefined,
+      formValues: askFormValues,
       skip: input.action === 'wb_broadcast_skip_reply',
       registeredGroups: input.registeredGroups,
       sendCard: input.sendCard,
@@ -290,6 +333,10 @@ export async function handleWorkbenchBroadcastCardAction(input: {
         taskId: resolvedTaskId,
         actionItemId: resolvedActionItemId,
         action: 'confirm',
+        actor: {
+          channel: input.actorChannel || 'feishu',
+          userId: input.userId,
+        },
       });
       if (result.error) return errorResult(`确认失败：${result.error}`);
       return successResult(
@@ -307,6 +354,10 @@ export async function handleWorkbenchBroadcastCardAction(input: {
               taskId: resolvedTaskId,
               actionItemId: resolvedActionItemId,
               action: 'skip',
+              actor: {
+                channel: input.actorChannel || 'feishu',
+                userId: input.userId,
+              },
             })
           : runWorkbenchTaskAction({ taskId: resolvedTaskId, action: 'skip' });
       if (result.error) return errorResult(`跳过失败：${result.error}`);
@@ -323,6 +374,10 @@ export async function handleWorkbenchBroadcastCardAction(input: {
         actionItemId: resolvedActionItemId,
         action: 'revise',
         payload: buildResumePayload(input.formValue),
+        actor: {
+          channel: input.actorChannel || 'feishu',
+          userId: input.userId,
+        },
       });
       if (result.error) return errorResult(`提交修改意见失败：${result.error}`);
       return successResult(
@@ -338,9 +393,12 @@ export async function handleWorkbenchBroadcastCardAction(input: {
         actionItemId: resolvedActionItemId,
         action: 'submit',
         payload: buildResumePayload(input.formValue),
+        actor: {
+          channel: input.actorChannel || 'feishu',
+          userId: input.userId,
+        },
       });
-      if (result.error)
-        return errorResult(`提交表单失败：${result.error}`);
+      if (result.error) return errorResult(`提交表单失败：${result.error}`);
       return successResult(
         resolvedTaskId,
         resolvedActionItemId,
@@ -350,8 +408,7 @@ export async function handleWorkbenchBroadcastCardAction(input: {
     }
     case 'wb_broadcast_resume': {
       const action =
-        input.formValue?.workbench_action ||
-        input.formValue?.resume_action;
+        input.formValue?.workbench_action || input.formValue?.resume_action;
       if (!isWorkbenchAction(action)) {
         return errorResult(`不支持的恢复动作：${action || ''}`);
       }
@@ -360,6 +417,10 @@ export async function handleWorkbenchBroadcastCardAction(input: {
         actionItemId: resolvedActionItemId,
         action,
         payload: buildResumePayload(input.formValue),
+        actor: {
+          channel: input.actorChannel || 'feishu',
+          userId: input.userId,
+        },
       });
       if (result.error) return errorResult(`提交操作失败：${result.error}`);
       const text = successTextForAction(action);
@@ -379,42 +440,41 @@ export async function handleWorkbenchBroadcastCardAction(input: {
       if (!requestId || !groupFolder) {
         return errorResult('未找到原始问答请求，无法继续处理。');
       }
+      const askFormValues = buildAskFormValues(input.formValue);
       const result = await handleAskQuestionResponse({
         requestId,
         groupFolder,
         userId: input.userId || 'unknown',
         answer:
+          askFormValues?.reply_text?.trim() ||
+          askFormValues?.answer?.trim() ||
           input.formValue?.reply_text?.trim() ||
           input.formValue?.answer?.trim(),
-        formValues: input.formValue
-          ? Object.fromEntries(
-              Object.entries(input.formValue).filter(
-                ([key]) =>
-                  ![
-                    'action',
-                    'task_id',
-                    'action_item_id',
-                    'request_id',
-                    'source_type',
-                    'source_ref_id',
-                    'reply_text',
-                    'answer',
-                  ].includes(key),
-              ),
-            )
-          : undefined,
+        formValues: askFormValues,
         skip: input.action === 'wb_broadcast_skip_reply',
         registeredGroups: input.registeredGroups,
         sendCard: input.sendCard,
         sendMessage: input.sendMessage,
       });
       if (result.ok && result.completed) {
-        if (taskId && actionItemId) {
+        const completionAction =
+          input.action === 'wb_broadcast_skip_reply' ? 'skip' : 'confirm';
+        const targetItem =
+          taskId && actionItemId ? getWorkbenchActionItem(actionItemId) : null;
+        if (
+          taskId &&
+          actionItemId &&
+          targetItem?.status === 'pending' &&
+          targetItem.source_type === 'workflow_interrupt'
+        ) {
           runWorkbenchActionItemAction({
             taskId,
             actionItemId,
-            action:
-              input.action === 'wb_broadcast_skip_reply' ? 'skip' : 'confirm',
+            action: completionAction,
+            actor: {
+              channel: input.actorChannel || 'feishu',
+              userId: input.userId,
+            },
           });
         }
       }

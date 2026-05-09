@@ -35,6 +35,7 @@ import type {
   WorkbenchTaskRecord,
   WorkbenchTaskState,
   InteractiveCard,
+  WorkflowInterruptActorChannel,
   Workflow,
   WorkflowEvalEvidence,
   WorkflowEvalFinding,
@@ -164,6 +165,22 @@ export interface WorkbenchActionItem {
   card?: InteractiveCard;
 }
 
+type WorkbenchActionActor = {
+  channel: WorkflowInterruptActorChannel;
+  userId?: string;
+  displayName?: string;
+};
+
+type WorkbenchActionResult =
+  | { error?: string }
+  | {
+      error?: string;
+      workflowId: string;
+      resumeAction: string;
+      resumePayload: Record<string, unknown>;
+      actor: WorkbenchActionActor;
+    };
+
 export interface WorkbenchStageEvaluation {
   id: string;
   stage_key: string;
@@ -259,7 +276,8 @@ function toTaskItem(workflow: Workflow): WorkbenchTaskItem {
     source_jid: persisted?.source_jid || workflow.source_jid,
     created_at: persisted?.created_at || workflow.created_at,
     updated_at: persisted?.updated_at || workflow.updated_at,
-    pending_approval: stateConfig?.type === 'interrupt' || pendingActionCount > 0,
+    pending_approval:
+      stateConfig?.type === 'interrupt' || pendingActionCount > 0,
     pending_action_count: pendingActionCount,
     active_delegation_id: workflow.current_delegation_id || '',
     context: { ...workflow.context },
@@ -1107,7 +1125,12 @@ export function runWorkbenchActionItemAction(input: {
     | 'cancel'
     | 'resolve';
   payload?: Record<string, unknown>;
-}): { error?: string } {
+  actor?: {
+    channel: WorkflowInterruptActorChannel;
+    userId?: string;
+    displayName?: string;
+  };
+}): WorkbenchActionResult {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
   const item = getWorkbenchActionItem(input.actionItemId);
@@ -1123,17 +1146,29 @@ export function runWorkbenchActionItemAction(input: {
     if (input.action === 'cancel') {
       return cancelWorkflow(workflowId);
     }
+    const resumePayload = {
+      ...(input.action === 'skip' ? { skipped: true } : {}),
+      ...(input.payload || {}),
+    };
+    const actor = input.actor || {
+      channel: 'web' as const,
+      userId: 'workbench',
+    };
     const result = resumeWorkflowInterrupt({
       interruptId: item.source_ref_id,
       action: resumeAction,
-      payload: {
-        ...(input.action === 'skip' ? { skipped: true } : {}),
-        ...(input.payload || {}),
-      },
-      actor: { channel: 'web', userId: 'workbench' },
+      payload: resumePayload,
+      actor,
       idempotencyKey: `workbench:${input.actionItemId}:${input.action}:${Date.now()}`,
     });
-    return result.ok ? {} : { error: result.error };
+    return result.ok
+      ? {
+          workflowId,
+          resumeAction,
+          resumePayload,
+          actor,
+        }
+      : { error: result.error };
   }
 
   const nextStatus =

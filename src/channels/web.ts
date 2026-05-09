@@ -210,9 +210,7 @@ function readServiceConfigRegistry(): {
     return { services: {}, exists: false, path: servicesPath };
   }
 
-  const parsed = JSON.parse(
-    fs.readFileSync(servicesPath, 'utf-8'),
-  ) as unknown;
+  const parsed = JSON.parse(fs.readFileSync(servicesPath, 'utf-8')) as unknown;
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('services.json must be a JSON object');
   }
@@ -249,7 +247,10 @@ function validateServiceConfigRegistry(
 function writeServiceConfigRegistry(services: ServiceConfigRegistry): void {
   const servicesPath = getServicesConfigPath();
   fs.mkdirSync(path.dirname(servicesPath), { recursive: true });
-  fs.writeFileSync(`${servicesPath}.tmp`, `${JSON.stringify(services, null, 2)}\n`);
+  fs.writeFileSync(
+    `${servicesPath}.tmp`,
+    `${JSON.stringify(services, null, 2)}\n`,
+  );
   fs.renameSync(`${servicesPath}.tmp`, servicesPath);
 }
 
@@ -396,6 +397,7 @@ interface IncomingMsg {
   cardId?: string;
   value?: Record<string, string>;
   formValue?: Record<string, string>;
+  payload?: Record<string, string>;
   supported?: boolean;
   platform?: string;
   requestId?: string;
@@ -2497,9 +2499,7 @@ class WebChannel {
     );
   }
 
-  private async apiGetServiceConfigs(
-    res: http.ServerResponse,
-  ): Promise<void> {
+  private async apiGetServiceConfigs(res: http.ServerResponse): Promise<void> {
     try {
       const registry = readServiceConfigRegistry();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2517,7 +2517,9 @@ class WebChannel {
       res.end(
         JSON.stringify({
           error:
-            err instanceof Error ? err.message : 'Failed to read services config',
+            err instanceof Error
+              ? err.message
+              : 'Failed to read services config',
         }),
       );
     }
@@ -3642,6 +3644,7 @@ class WebChannel {
       value?: Record<string, string>;
       formValue?: Record<string, string>;
       form_value?: Record<string, string>;
+      payload?: Record<string, string>;
       task_id?: string;
       action_item_id?: string;
       action?:
@@ -3654,11 +3657,11 @@ class WebChannel {
         | 'cancel'
         | 'reply';
       reply_text?: string;
-      payload?: Record<string, unknown>;
     };
     if (data.value?.action) {
       const result = await this.apiWorkbenchCardAction({
         value: data.value,
+        payload: data.payload,
         formValue: data.formValue || data.form_value,
       });
       if (result.error) {
@@ -3802,12 +3805,15 @@ class WebChannel {
 
   private async apiWorkbenchCardAction(input: {
     value: Record<string, string>;
+    payload?: Record<string, string>;
     formValue?: Record<string, string>;
   }): Promise<{ error?: string }> {
+    const legacyFormValue = input.formValue || {};
     const merged = {
+      ...legacyFormValue,
       ...(input.value || {}),
-      ...(input.formValue || {}),
     };
+    const payload = input.payload || legacyFormValue;
     const taskId = merged.task_id;
     const actionItemId = merged.action_item_id;
     if (!taskId || !actionItemId) {
@@ -3832,9 +3838,9 @@ class WebChannel {
         requestId,
         groupFolder,
         userId: 'web_user',
-        answer: merged.answer || merged.reply_text,
+        answer: payload.answer || merged.answer || merged.reply_text,
         formValues: Object.fromEntries(
-          Object.entries(merged).filter(
+          Object.entries(payload).filter(
             ([key]) =>
               ![
                 'action',
@@ -3908,8 +3914,8 @@ class WebChannel {
     ) {
       return { error: `Unsupported action: ${action}` };
     }
-    const payload = Object.fromEntries(
-      Object.entries(merged).filter(
+    const resumePayload = Object.fromEntries(
+      Object.entries(payload).filter(
         ([key]) =>
           ![
             'action',
@@ -3928,7 +3934,8 @@ class WebChannel {
       taskId,
       actionItemId,
       action,
-      payload,
+      payload: resumePayload,
+      actor: { channel: 'web', userId: 'workbench' },
     });
     return result.error ? { error: result.error } : {};
   }
@@ -4056,10 +4063,11 @@ class WebChannel {
       chunks.push(Buffer.from(chunk));
     }
     const body = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
-    const { value, cardId, formValue } = body as {
+    const { value, cardId, formValue, payload } = body as {
       value?: Record<string, string>;
       cardId?: string;
       formValue?: Record<string, string>;
+      payload?: Record<string, string>;
     };
 
     if (!value?.action) {
@@ -4070,16 +4078,21 @@ class WebChannel {
 
     if (this.onCardAction) {
       const mergedFormValue = {
-        ...(value || {}),
         ...(formValue || {}),
+        ...(value || {}),
       };
+      const actionPayload = payload || formValue || {};
       this.onCardAction({
         action: value.action,
         user_id: 'web_user',
         message_id: cardId || '',
+        actor_channel: 'web',
         workflow_id: value.workflow_id,
         group_folder: value.group_folder,
-        form_value: mergedFormValue,
+        form_value: {
+          ...mergedFormValue,
+          payload: JSON.stringify(actionPayload),
+        },
       });
     }
 
@@ -4904,7 +4917,7 @@ class WebChannel {
         break;
       }
       case 'card_action': {
-        const { value, cardId, formValue } = msg as IncomingMsg;
+        const { value, cardId, formValue, payload } = msg as IncomingMsg;
         if (!value?.action) {
           send({
             type: 'error',
@@ -4914,16 +4927,21 @@ class WebChannel {
         }
         if (this.onCardAction) {
           const mergedFormValue = {
-            ...(value || {}),
             ...(formValue || {}),
+            ...(value || {}),
           };
+          const actionPayload = payload || formValue || {};
           this.onCardAction({
             action: value.action,
             user_id: 'web_user',
             message_id: cardId || '',
+            actor_channel: 'web',
             workflow_id: value.workflow_id,
             group_folder: value.group_folder,
-            form_value: mergedFormValue,
+            form_value: {
+              ...mergedFormValue,
+              payload: JSON.stringify(actionPayload),
+            },
           });
         }
         break;

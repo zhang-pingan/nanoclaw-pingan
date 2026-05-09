@@ -78,7 +78,12 @@ function mapBroadcastActionValue(
     return {
       ...value,
       action: 'wb_broadcast_reply',
-      ...(value.answer ? { reply_text: value.answer } : {}),
+      ...(value.answer
+        ? {
+            reply_text: value.answer,
+            payload: JSON.stringify({ answer: value.answer }),
+          }
+        : {}),
     };
   }
   if (value.action === 'ask_question_skip') {
@@ -111,9 +116,7 @@ function mapHumanInputCardForBroadcast(card: InteractiveCard): InteractiveCard {
       ? {
           ...card.form,
           inputs: card.form.inputs.map((input) =>
-            input.name === 'answer'
-              ? { ...input, name: 'reply_text' }
-              : input,
+            input.name === 'answer' ? { ...input, name: 'reply_text' } : input,
           ),
           submitButton: mapBroadcastButton(card.form.submitButton),
         }

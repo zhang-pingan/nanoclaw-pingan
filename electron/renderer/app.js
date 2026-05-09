@@ -1499,6 +1499,12 @@ function renderInteractiveCard(card, callbacks = {}) {
           inputEl.type = "number";
           inputEl.step = "1";
         }
+        if (input.type === "token") {
+          inputEl.type = "password";
+          inputEl.autocomplete = "off";
+          inputEl.spellcheck = false;
+        }
+        if (input.type === "file") inputEl.type = "file";
         if (input.format === "date") inputEl.type = "date";
         if (input.format === "date-time") inputEl.type = "datetime-local";
       } else {
@@ -1523,12 +1529,19 @@ function renderInteractiveCard(card, callbacks = {}) {
       for (const [name, item] of Object.entries(formInputs)) {
         if (item.type === "boolean") {
           formValue[name] = item.el.checked ? "true" : "false";
+        } else if (item.type === "file") {
+          const files = Array.from(item.el.files || []).map((file) => file.name);
+          formValue[name] = files.join(",");
         } else {
           formValue[name] = item.el.value;
         }
       }
       for (const [name, item] of Object.entries(formInputs)) {
-        const val = item.type === "boolean" ? (item.el.checked ? "true" : "false") : item.el.value;
+        const val = item.type === "boolean"
+          ? (item.el.checked ? "true" : "false")
+          : item.type === "file"
+            ? Array.from(item.el.files || []).map((file) => file.name).join(",")
+            : item.el.value;
         const err = validateCardFormField(item.meta || {}, val);
         if (err) {
           addInputError(item, err);
@@ -1560,6 +1573,7 @@ function sendCardAction(value, cardId, formValue) {
     type: "card_action",
     cardId: cardId,
     value: value,
+    payload: formValue || undefined,
     formValue: formValue || undefined,
   });
 }
@@ -12423,10 +12437,12 @@ function buildWorkbenchActionItemCardFallback(item, task) {
       body: item.body || "",
       buttons,
     };
+    const schemaInputs = buildWorkbenchSchemaInputs(payloadSchema);
     const formAction = allowedActions.find((action) => action === "submit" || action === "revise") ||
-      (item.action_mode === "input_required" ? "submit" : item.action_mode === "approve_or_revise" ? "revise" : "");
+      (schemaInputs.length > 0
+        ? allowedActions.find((action) => !["skip", "cancel", "reject"].includes(action))
+        : item.action_mode === "input_required" ? "submit" : item.action_mode === "approve_or_revise" ? "revise" : "");
     if (formAction) {
-      const schemaInputs = buildWorkbenchSchemaInputs(payloadSchema);
       card.form = {
         name: `workbench-${item.id}`,
         inputs: schemaInputs.length > 0
@@ -12572,6 +12588,7 @@ async function triggerWorkbenchActionItemCard(taskId, actionItemId, value, formV
           task_id: value?.task_id || taskId,
           action_item_id: value?.action_item_id || actionItemId,
         },
+        payload: formValue || undefined,
         formValue: formValue || undefined,
       }),
     });
