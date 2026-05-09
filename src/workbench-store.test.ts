@@ -13,6 +13,7 @@ import {
   getLatestWorkflowStageEvaluation,
   getPendingWorkflowInterruptForState,
   getWorkflowInterrupt,
+  getWorkflowInterruptResumeAttemptByIdempotency,
   createWorkbenchActionItem as dbCreateWorkbenchActionItem,
   getWorkbenchTaskByWorkflowId,
   getWorkbenchActionItem,
@@ -865,6 +866,93 @@ describe('workbench approval transition sync', () => {
       channel: 'feishu',
       userId: 'feishu-user',
     });
+  });
+
+  it('uses stable Feishu broadcast idempotency keys for interrupt resume', async () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-feishu-idempotency',
+      name: '广播飞书幂等',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/broadcast-feishu-idempotency',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_feishu_idempotency',
+        staging_work_branch:
+          'staging-deploy/feature-broadcast-feishu-idempotency',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    recoverWorkflowRuntimeForTest();
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-feishu-idempotency');
+
+    const actionItemId =
+      'wb-action-wf-broadcast-feishu-idempotency-testing_confirm';
+    const pendingInterrupt = getPendingWorkflowInterruptForState(
+      'wf-broadcast-feishu-idempotency',
+      'testing_confirm',
+    );
+    expect(pendingInterrupt).toBeDefined();
+
+    const result = await handleWorkbenchBroadcastCardAction({
+      action: 'wb_broadcast_resume',
+      formValue: {
+        action_item_id: actionItemId,
+        workbench_action: 'submit',
+        payload: JSON.stringify({ access_token: 'demo-token' }),
+      },
+      registeredGroups: getAllRegisteredGroups(),
+      sendMessage: async () => {},
+      userId: 'feishu-user',
+      actorChannel: 'feishu',
+      messageId: 'msg-feishu-1',
+    });
+
+    expect(result.ok).toBe(true);
+    const idempotencyKey = [
+      'feishu-broadcast',
+      'msg-feishu-1',
+      'feishu-user',
+      actionItemId,
+      'submit',
+      '0b5d9b76586dc481',
+    ].join(':');
+    const attempt = getWorkflowInterruptResumeAttemptByIdempotency(
+      pendingInterrupt!.id,
+      idempotencyKey,
+    );
+    expect(attempt?.status).toBe('accepted');
+
+    const duplicate = await handleWorkbenchBroadcastCardAction({
+      action: 'wb_broadcast_resume',
+      formValue: {
+        action_item_id: actionItemId,
+        workbench_action: 'submit',
+        payload: JSON.stringify({ access_token: 'demo-token' }),
+      },
+      registeredGroups: getAllRegisteredGroups(),
+      sendMessage: async () => {},
+      userId: 'feishu-user',
+      actorChannel: 'feishu',
+      messageId: 'msg-feishu-1',
+    });
+
+    expect(duplicate.ok).toBe(true);
+    expect(
+      getWorkflowInterruptResumeAttemptByIdempotency(
+        pendingInterrupt!.id,
+        idempotencyKey,
+      )?.id,
+    ).toBe(attempt?.id);
   });
 
   it('renders ask-question option buttons in broadcast cards', () => {

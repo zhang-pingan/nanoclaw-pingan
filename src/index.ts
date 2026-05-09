@@ -42,6 +42,12 @@ import {
 } from './container-runtime.js';
 import { agentQueryTraceManager } from './agent-query-trace.js';
 import {
+  ClassifiedFailure,
+  classifyFailure,
+  toAgentQueryFailurePatch,
+  toFailureEventPayload,
+} from './failure-taxonomy.js';
+import {
   backfillMessageModel,
   clearAssistantChatMessages,
   clearMessages,
@@ -98,6 +104,7 @@ import { initAssistantEvents } from './assistant/assistant-events.js';
 import { initAssistantAutoFlow } from './assistant/assistant-auto-flow.js';
 import { startProactiveEngine } from './assistant/proactive-engine.js';
 import {
+  AgentQueryRecord,
   Channel,
   InteractiveCard,
   NewMessage,
@@ -140,6 +147,8 @@ interface ActiveMessageQueryTraceState {
   finished: boolean;
   pipedIntoActiveSession: boolean;
   agentActivitySeen: boolean;
+  failure: ClassifiedFailure | null;
+  errorMessage: string | null;
 }
 
 const channels: Channel[] = [];
@@ -206,6 +215,35 @@ async function resetSessionsForScope(opts: {
 
 function createExecutionId(): string {
   return crypto.randomUUID();
+}
+
+function fallbackAgentExecutionFailure(error: string): ClassifiedFailure {
+  return classifyFailure(new Error(error), {
+    module: 'index',
+    action: 'run_agent',
+    defaultType: 'container_runtime_error',
+    defaultSubtype: 'agent_execution_failed',
+    defaultOrigin: 'container',
+    retryable: true,
+  });
+}
+
+function recordInactiveMessageQueryFailure(
+  queryId: string,
+  error: string,
+  failure: ClassifiedFailure,
+): void {
+  const query = agentQueryTraceManager.getQuery(queryId);
+  if (!query) return;
+  const patch = toAgentQueryFailurePatch(failure, error);
+  if (query.status === 'running') {
+    agentQueryTraceManager.finishQuery(queryId, 'error', patch);
+    return;
+  }
+  agentQueryTraceManager.updateQuery(queryId, {
+    status: 'error',
+    ...patch,
+  });
 }
 
 function rememberPendingQueryBatch(batch: PendingQueryBatch): void {
@@ -365,16 +403,29 @@ function createMessageQueryTrace(params: {
     finished: false,
     pipedIntoActiveSession: params.pipedIntoActiveSession ?? false,
     agentActivitySeen: false,
+    failure: null,
+    errorMessage: null,
   });
 }
 
 function finishMessageQueryTrace(
   queryId: string,
   status: 'success' | 'error',
-  patch?: Record<string, unknown>,
+  patch?: Partial<AgentQueryRecord>,
 ): void {
   const state = activeMessageQueryTraces.get(queryId);
   if (!state || state.finished) return;
+  const errorMessage =
+    status === 'error'
+      ? patch?.error_message || state.errorMessage || 'Agent execution failed'
+      : null;
+  const failurePatch =
+    status === 'error'
+      ? toAgentQueryFailurePatch(
+          state.failure ?? fallbackAgentExecutionFailure(errorMessage!),
+          errorMessage!,
+        )
+      : {};
   const activeStepId = state.resultDeliveryStepId || state.executionStepId;
   agentQueryTraceManager.completeStep(
     queryId,
@@ -402,7 +453,10 @@ function finishMessageQueryTrace(
     summary: status === 'error' ? 'Query failed' : 'Query completed',
   });
   agentQueryTraceManager.completeStep(queryId, finishStepId, status);
-  agentQueryTraceManager.finishQuery(queryId, status, patch as never);
+  agentQueryTraceManager.finishQuery(queryId, status, {
+    ...(patch || {}),
+    ...failurePatch,
+  });
   state.finished = true;
   activeMessageQueryTraces.delete(queryId);
 }
@@ -1013,6 +1067,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       }
 
       if (result.status === 'error') {
+        const error = result.error || 'Agent execution failed';
+        const failure = result.failure ?? fallbackAgentExecutionFailure(error);
         if (!traceState) {
           logger.warn(
             {
@@ -1020,10 +1076,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
               chatJid,
               queryId,
               runId: result.runId,
-              error: result.error,
+              error,
             },
             'Skipping error for inactive query trace',
           );
+          recordInactiveMessageQueryFailure(queryId, error, failure);
           sessionHadError = true;
           return;
         }
@@ -1034,12 +1091,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           eventType: 'error',
           eventName: 'query_failed',
           status: 'error',
-          summary: result.error || 'Agent execution failed',
+          summary: error,
           payload: {
-            error: result.error || 'Agent execution failed',
+            error,
+            ...toFailureEventPayload(failure),
           },
         });
         traceState.hadError = true;
+        traceState.errorMessage = error;
+        traceState.failure = failure;
         sessionHadError = true;
       }
     },
@@ -1090,7 +1150,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
             : 'Completed without channel output',
         error_message:
           output === 'error' || state.hadError
-            ? 'Agent execution failed'
+            ? state.errorMessage || 'Agent execution failed'
             : null,
       },
     );
@@ -1275,12 +1335,24 @@ async function runAgent(
         { group: group.name, error: output.error },
         'Container agent error',
       );
+      if (wrappedOnOutput) await wrappedOnOutput(output);
       return 'error';
     }
 
     return 'success';
   } catch (err) {
     logger.error({ group: group.name, err }, 'Agent error');
+    if (wrappedOnOutput) {
+      const error = err instanceof Error ? err.message : String(err);
+      await wrappedOnOutput({
+        status: 'error',
+        result: null,
+        error,
+        failure: fallbackAgentExecutionFailure(error),
+        runId: resolvedRunId,
+        queryId: resolvedInitialQueryId,
+      });
+    }
     return 'error';
   } finally {
     clearModelResolutionsForRun(resolvedRunId);

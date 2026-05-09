@@ -1130,6 +1130,7 @@ export function runWorkbenchActionItemAction(input: {
     userId?: string;
     displayName?: string;
   };
+  idempotencyKey?: string;
 }): WorkbenchActionResult {
   const workflowId = resolveWorkbenchWorkflowId(input.taskId);
   if (!workflowId) return { error: 'Task not found' };
@@ -1159,7 +1160,9 @@ export function runWorkbenchActionItemAction(input: {
       action: resumeAction,
       payload: resumePayload,
       actor,
-      idempotencyKey: `workbench:${input.actionItemId}:${input.action}:${Date.now()}`,
+      idempotencyKey:
+        input.idempotencyKey ||
+        `workbench:${input.actionItemId}:${input.action}:${Date.now()}`,
     });
     return result.ok
       ? {

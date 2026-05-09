@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { _initTestDatabase, createTask, getTaskById, listAgentQueries } from './db.js';
+import {
+  _initTestDatabase,
+  createTask,
+  getTaskById,
+  listAgentQueries,
+} from './db.js';
 import {
   _resetSchedulerLoopForTests,
   computeNextRun,
@@ -68,7 +73,10 @@ describe('task scheduler', () => {
     expect(queries).toHaveLength(1);
     expect(queries[0].query_id).toBe(task?.last_query_id);
     expect(queries[0].status).toBe('error');
-    expect(queries[0].failure_origin).toBe('scheduler_preflight');
+    expect(queries[0].failure_type).toBe('invalid_input');
+    expect(queries[0].failure_subtype).toBe('invalid_group_folder');
+    expect(queries[0].failure_origin).toBe('scheduler');
+    expect(queries[0].failure_retryable).toBe(0);
     expect(queries[0].error_message).toContain('Invalid group folder');
   });
 
@@ -114,7 +122,10 @@ describe('task scheduler', () => {
     expect(queries).toHaveLength(1);
     expect(queries[0].query_id).toBe(task?.last_query_id);
     expect(queries[0].status).toBe('error');
-    expect(queries[0].failure_origin).toBe('scheduler_preflight');
+    expect(queries[0].failure_type).toBe('invalid_input');
+    expect(queries[0].failure_subtype).toBe('group_not_found');
+    expect(queries[0].failure_origin).toBe('scheduler');
+    expect(queries[0].failure_retryable).toBe(0);
     expect(queries[0].error_message).toBe('Group not found: missing-group');
   });
 

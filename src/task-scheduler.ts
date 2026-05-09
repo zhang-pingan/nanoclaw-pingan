@@ -17,6 +17,12 @@ import {
   updateTask,
   updateTaskAfterRun,
 } from './db.js';
+import {
+  ClassifiedFailure,
+  classifyFailure,
+  toAgentQueryFailurePatch,
+  toFailureEventPayload,
+} from './failure-taxonomy.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
@@ -31,22 +37,34 @@ function finishScheduledTaskErrorQuery(
   queryId: string,
   error: string,
   options: {
-    failureOrigin?: string | null;
+    failure?: ClassifiedFailure;
     outputPreview?: string | null;
     summary?: string;
   } = {},
 ): void {
+  const failure =
+    options.failure ??
+    classifyFailure(new Error(error), {
+      module: 'task-scheduler',
+      action: 'run_scheduled_task',
+      defaultType: 'unknown_error',
+      defaultSubtype: 'scheduler_runtime_error',
+      defaultOrigin: 'scheduler',
+      retryable: true,
+    });
   const errorStepId = agentQueryTraceManager.startStep({
     queryId,
     stepType: 'error',
     stepName: 'run_error',
     summary: options.summary ?? 'Scheduled task failed',
+    payload: {
+      error,
+      ...toFailureEventPayload(failure),
+    },
   });
   agentQueryTraceManager.completeStep(queryId, errorStepId, 'error');
   agentQueryTraceManager.finishQuery(queryId, 'error', {
-    error_message: error,
-    failure_type: 'scheduled_task_error',
-    failure_origin: options.failureOrigin ?? null,
+    ...toAgentQueryFailurePatch(failure, error),
     output_preview: options.outputPreview ?? null,
   });
 }
@@ -130,7 +148,10 @@ async function runTask(
   let error: string | null = null;
   const runId = createExecutionId();
   const queryId = createExecutionId();
-  const promptHash = crypto.createHash('sha256').update(task.prompt).digest('hex');
+  const promptHash = crypto
+    .createHash('sha256')
+    .update(task.prompt)
+    .digest('hex');
 
   // For group context mode, use the group's current session
   const sessions = deps.getSessions();
@@ -169,7 +190,14 @@ async function runTask(
       'Task has invalid group folder',
     );
     finishScheduledTaskErrorQuery(queryId, error, {
-      failureOrigin: 'scheduler_preflight',
+      failure: classifyFailure(err, {
+        module: 'task-scheduler',
+        action: 'resolve_group_folder',
+        defaultType: 'invalid_input',
+        defaultSubtype: 'invalid_group_folder',
+        defaultOrigin: 'scheduler',
+        retryable: false,
+      }),
       summary: 'Scheduled task failed preflight validation',
     });
     updateTaskAfterRun(task.id, task.next_run, `Error: ${error}`, {
@@ -197,7 +225,14 @@ async function runTask(
       'Group not found for task',
     );
     finishScheduledTaskErrorQuery(queryId, error, {
-      failureOrigin: 'scheduler_preflight',
+      failure: classifyFailure(new Error(error), {
+        module: 'task-scheduler',
+        action: 'lookup_group',
+        defaultType: 'invalid_input',
+        defaultSubtype: 'group_not_found',
+        defaultOrigin: 'scheduler',
+        retryable: false,
+      }),
       summary: 'Scheduled task group lookup failed',
     });
     updateTaskAfterRun(task.id, task.next_run, `Error: ${error}`, {
@@ -386,6 +421,16 @@ async function runTask(
         }
         if (streamedOutput.status === 'error') {
           error = streamedOutput.error || 'Unknown error';
+          const failure =
+            streamedOutput.failure ??
+            classifyFailure(new Error(error), {
+              module: 'task-scheduler',
+              action: 'run_container_agent',
+              defaultType: 'container_runtime_error',
+              defaultSubtype: 'agent_execution_failed',
+              defaultOrigin: 'container',
+              retryable: true,
+            });
           agentQueryTraceManager.appendEvent({
             queryId,
             stepId: resultDeliveryStepId || executionStepId,
@@ -393,6 +438,10 @@ async function runTask(
             eventName: 'run_failed',
             status: 'error',
             summary: error,
+            payload: {
+              error,
+              ...toFailureEventPayload(failure),
+            },
           });
         }
       },
@@ -433,7 +482,16 @@ async function runTask(
     );
     if (error) {
       finishScheduledTaskErrorQuery(queryId, error, {
-        failureOrigin: 'agent_execution',
+        failure:
+          output.failure ??
+          classifyFailure(new Error(error), {
+            module: 'task-scheduler',
+            action: 'run_container_agent',
+            defaultType: 'container_runtime_error',
+            defaultSubtype: 'agent_execution_failed',
+            defaultOrigin: 'container',
+            retryable: true,
+          }),
         outputPreview: result ? result.slice(0, 200) : null,
       });
     } else {
@@ -444,7 +502,14 @@ async function runTask(
     error = err instanceof Error ? err.message : String(err);
     logger.error({ taskId: task.id, error }, 'Task failed');
     finishScheduledTaskErrorQuery(queryId, error, {
-      failureOrigin: 'scheduler_runtime',
+      failure: classifyFailure(err, {
+        module: 'task-scheduler',
+        action: 'run_scheduled_task',
+        defaultType: 'unknown_error',
+        defaultSubtype: 'scheduler_runtime_error',
+        defaultOrigin: 'scheduler',
+        retryable: true,
+      }),
     });
   }
 

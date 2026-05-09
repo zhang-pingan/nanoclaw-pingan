@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import {
   getAskQuestion,
   getWorkbenchActionItem,
@@ -204,6 +206,76 @@ function successTextForAction(action: string): {
   }
 }
 
+function canonicalJson(value: unknown): string {
+  if (!value || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
+  }
+  const objectValue = value as Record<string, unknown>;
+  return `{${Object.keys(objectValue)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(objectValue[key])}`)
+    .join(',')}}`;
+}
+
+function payloadDigest(payload: Record<string, unknown> | undefined): string {
+  return createHash('sha256')
+    .update(canonicalJson(payload || {}))
+    .digest('hex')
+    .slice(0, 16);
+}
+
+function buildBroadcastResumeCall(input: {
+  taskId: string;
+  actionItemId: string;
+  action:
+    | 'confirm'
+    | 'approve'
+    | 'reject'
+    | 'revise'
+    | 'submit'
+    | 'skip'
+    | 'cancel'
+    | 'resolve';
+  payload?: Record<string, unknown>;
+  actorChannel?: WorkflowInterruptActorChannel;
+  userId: string;
+  messageId?: string;
+}) {
+  const actor = {
+    channel: input.actorChannel || ('feishu' as const),
+    userId: input.userId || 'unknown',
+  };
+  const feishuIdempotencyKey = input.messageId
+    ? [
+        'feishu-broadcast',
+        input.messageId,
+        actor.userId,
+        input.actionItemId,
+        input.action,
+        payloadDigest(input.payload),
+      ].join(':')
+    : [
+        'feishu-broadcast',
+        actor.userId,
+        input.actionItemId,
+        input.action,
+        payloadDigest(input.payload),
+      ].join(':');
+  return {
+    taskId: input.taskId,
+    actionItemId: input.actionItemId,
+    action: input.action,
+    ...(input.payload ? { payload: input.payload } : {}),
+    actor,
+    ...(actor.channel === 'feishu'
+      ? {
+          idempotencyKey: feishuIdempotencyKey,
+        }
+      : {}),
+  };
+}
+
 export async function handleWorkbenchBroadcastCardAction(input: {
   action: string;
   formValue?: Record<string, string>;
@@ -215,6 +287,7 @@ export async function handleWorkbenchBroadcastCardAction(input: {
   sendMessage: (jid: string, text: string) => Promise<void>;
   userId: string;
   actorChannel?: WorkflowInterruptActorChannel;
+  messageId?: string;
 }): Promise<WorkbenchBroadcastCardActionResult> {
   const resolvedAskItem = resolveAskActionItemByRequestId(
     input.formValue?.request_id,
@@ -296,13 +369,14 @@ export async function handleWorkbenchBroadcastCardAction(input: {
         return errorResult('该待办不是 workflow interrupt，不能执行确认。');
       }
       const result = runWorkbenchActionItemAction({
-        taskId: resolvedTaskId,
-        actionItemId: resolvedActionItemId,
-        action: 'confirm',
-        actor: {
-          channel: input.actorChannel || 'feishu',
+        ...buildBroadcastResumeCall({
+          taskId: resolvedTaskId,
+          actionItemId: resolvedActionItemId,
+          action: 'confirm',
+          actorChannel: input.actorChannel,
           userId: input.userId,
-        },
+          messageId: input.messageId,
+        }),
       });
       if (result.error) return errorResult(`确认失败：${result.error}`);
       return successResult(
@@ -317,13 +391,14 @@ export async function handleWorkbenchBroadcastCardAction(input: {
       const result =
         item?.source_type === 'workflow_interrupt'
           ? runWorkbenchActionItemAction({
-              taskId: resolvedTaskId,
-              actionItemId: resolvedActionItemId,
-              action: 'skip',
-              actor: {
-                channel: input.actorChannel || 'feishu',
+              ...buildBroadcastResumeCall({
+                taskId: resolvedTaskId,
+                actionItemId: resolvedActionItemId,
+                action: 'skip',
+                actorChannel: input.actorChannel,
                 userId: input.userId,
-              },
+                messageId: input.messageId,
+              }),
             })
           : runWorkbenchTaskAction({ taskId: resolvedTaskId, action: 'skip' });
       if (result.error) return errorResult(`跳过失败：${result.error}`);
@@ -336,14 +411,15 @@ export async function handleWorkbenchBroadcastCardAction(input: {
     }
     case 'wb_broadcast_revise': {
       const result = runWorkbenchActionItemAction({
-        taskId: resolvedTaskId,
-        actionItemId: resolvedActionItemId,
-        action: 'revise',
-        payload: buildResumePayload(input.formValue),
-        actor: {
-          channel: input.actorChannel || 'feishu',
+        ...buildBroadcastResumeCall({
+          taskId: resolvedTaskId,
+          actionItemId: resolvedActionItemId,
+          action: 'revise',
+          payload: buildResumePayload(input.formValue),
+          actorChannel: input.actorChannel,
           userId: input.userId,
-        },
+          messageId: input.messageId,
+        }),
       });
       if (result.error) return errorResult(`提交修改意见失败：${result.error}`);
       return successResult(
@@ -355,14 +431,15 @@ export async function handleWorkbenchBroadcastCardAction(input: {
     }
     case 'wb_broadcast_submit': {
       const result = runWorkbenchActionItemAction({
-        taskId: resolvedTaskId,
-        actionItemId: resolvedActionItemId,
-        action: 'submit',
-        payload: buildResumePayload(input.formValue),
-        actor: {
-          channel: input.actorChannel || 'feishu',
+        ...buildBroadcastResumeCall({
+          taskId: resolvedTaskId,
+          actionItemId: resolvedActionItemId,
+          action: 'submit',
+          payload: buildResumePayload(input.formValue),
+          actorChannel: input.actorChannel,
           userId: input.userId,
-        },
+          messageId: input.messageId,
+        }),
       });
       if (result.error) return errorResult(`提交表单失败：${result.error}`);
       return successResult(
@@ -379,14 +456,15 @@ export async function handleWorkbenchBroadcastCardAction(input: {
         return errorResult(`不支持的恢复动作：${action || ''}`);
       }
       const result = runWorkbenchActionItemAction({
-        taskId: resolvedTaskId,
-        actionItemId: resolvedActionItemId,
-        action,
-        payload: buildResumePayload(input.formValue),
-        actor: {
-          channel: input.actorChannel || 'feishu',
+        ...buildBroadcastResumeCall({
+          taskId: resolvedTaskId,
+          actionItemId: resolvedActionItemId,
+          action,
+          payload: buildResumePayload(input.formValue),
+          actorChannel: input.actorChannel,
           userId: input.userId,
-        },
+          messageId: input.messageId,
+        }),
       });
       if (result.error) return errorResult(`提交操作失败：${result.error}`);
       const text = successTextForAction(action);
@@ -434,13 +512,14 @@ export async function handleWorkbenchBroadcastCardAction(input: {
           targetItem.source_type === 'workflow_interrupt'
         ) {
           runWorkbenchActionItemAction({
-            taskId,
-            actionItemId,
-            action: completionAction,
-            actor: {
-              channel: input.actorChannel || 'feishu',
+            ...buildBroadcastResumeCall({
+              taskId,
+              actionItemId,
+              action: completionAction,
+              actorChannel: input.actorChannel,
               userId: input.userId,
-            },
+              messageId: input.messageId,
+            }),
           });
         }
       }

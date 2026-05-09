@@ -18,9 +18,18 @@ vi.mock('./workflow.js', () => ({
   handleCardAction: vi.fn(),
 }));
 
+vi.mock('./workbench-broadcast-actions.js', () => ({
+  handleWorkbenchBroadcastCardAction: vi.fn(async () => ({
+    ok: true,
+    toast: { type: 'success', content: 'ok' },
+  })),
+  logWorkbenchBroadcastActionFailure: vi.fn(),
+}));
+
 import { createCardActionHandler } from './card-action-router.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
 import { handleCardAction } from './workflow.js';
+import { handleWorkbenchBroadcastCardAction } from './workbench-broadcast-actions.js';
 
 describe('card-action-router ask dedupe', () => {
   beforeEach(() => {
@@ -122,6 +131,42 @@ describe('card-action-router ask dedupe', () => {
     expect(result).toEqual({
       ok: false,
       toast: { type: 'error', content: 'channel not allowed' },
+    });
+  });
+
+  it('forwards broadcast message ids to the workbench handler', async () => {
+    const handler = createCardActionHandler({
+      registeredGroups: () => ({}),
+      sendMessage: async () => {},
+    });
+
+    const result = await handler({
+      action: 'wb_broadcast_submit',
+      user_id: 'u1',
+      message_id: 'msg-1',
+      actor_channel: 'feishu',
+      form_value: {
+        task_id: 'task-1',
+        action_item_id: 'item-1',
+      },
+    });
+
+    expect(handleWorkbenchBroadcastCardAction).toHaveBeenCalledWith({
+      action: 'wb_broadcast_submit',
+      formValue: {
+        task_id: 'task-1',
+        action_item_id: 'item-1',
+      },
+      registeredGroups: {},
+      sendCard: undefined,
+      sendMessage: expect.any(Function),
+      userId: 'u1',
+      actorChannel: 'feishu',
+      messageId: 'msg-1',
+    });
+    expect(result).toEqual({
+      ok: true,
+      toast: { type: 'success', content: 'ok' },
     });
   });
 });

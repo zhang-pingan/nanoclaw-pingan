@@ -181,6 +181,12 @@ describe('container-runner timeout behavior', () => {
     const result = await resultPromise;
     expect(result.status).toBe('error');
     expect(result.error).toContain('timed out');
+    expect(result.failure).toMatchObject({
+      failureType: 'timeout',
+      failureSubtype: 'container_timeout_no_output',
+      failureOrigin: 'container',
+      retryable: true,
+    });
     expect(onOutput).not.toHaveBeenCalled();
   });
 
@@ -210,5 +216,49 @@ describe('container-runner timeout behavior', () => {
     const result = await resultPromise;
     expect(result.status).toBe('success');
     expect(result.newSessionId).toBe('session-456');
+  });
+
+  it('returns structured failure when streamed output marker cannot be parsed', async () => {
+    const onOutput = vi.fn(async () => {});
+    const resultPromise = runContainerAgent(
+      testGroup,
+      testInput,
+      () => {},
+      onOutput,
+    );
+
+    fakeProc.stdout.push(
+      `${OUTPUT_START_MARKER}\n{"status":\n${OUTPUT_END_MARKER}\n`,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(result.status).toBe('error');
+    expect(result.failure).toMatchObject({
+      failureType: 'tool_contract_error',
+      failureSubtype: 'container_output_parse_failed',
+      failureOrigin: 'container',
+      retryable: false,
+    });
+    expect(onOutput).not.toHaveBeenCalled();
+  });
+
+  it('returns structured failure when the container exits non-zero', async () => {
+    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+
+    fakeProc.stderr.push('boom');
+    fakeProc.emit('close', 1);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(result.status).toBe('error');
+    expect(result.failure).toMatchObject({
+      failureType: 'container_runtime_error',
+      failureSubtype: 'container_exit_nonzero',
+      failureOrigin: 'container',
+      retryable: true,
+    });
   });
 });

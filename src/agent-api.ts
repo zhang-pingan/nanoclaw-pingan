@@ -85,6 +85,8 @@ export class OpenAiCompatRequestError extends Error {
   status: number;
   endpoint: string;
   responseBody: string;
+  provider = 'openai_compat';
+  failureSubtype = 'model_http_non_2xx';
 
   constructor(status: number, endpoint: string, responseBody: string) {
     const bodySuffix = responseBody
@@ -97,6 +99,48 @@ export class OpenAiCompatRequestError extends Error {
     this.status = status;
     this.endpoint = endpoint;
     this.responseBody = responseBody;
+  }
+}
+
+export class AnthropicRequestError extends Error {
+  status: number;
+  responseBody: string;
+  provider = 'anthropic';
+  failureSubtype = 'model_http_non_2xx';
+
+  constructor(status: number, responseBody: string) {
+    const bodySuffix = responseBody
+      ? ` body=${responseBody.slice(0, 2000)}`
+      : '';
+    super(`Anthropic API request failed with status ${status}${bodySuffix}`);
+    this.name = 'AnthropicRequestError';
+    this.status = status;
+    this.responseBody = responseBody;
+  }
+}
+
+export class AgentApiTimeoutError extends Error {
+  provider: string;
+  timeoutMs: number;
+  failureSubtype = 'model_fetch_timeout';
+
+  constructor(provider: string, timeoutMs: number) {
+    super(`${provider} API request timed out after ${timeoutMs}ms`);
+    this.name = 'AgentApiTimeoutError';
+    this.provider = provider;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export class AgentApiResponseError extends Error {
+  provider: string;
+  failureSubtype: string;
+
+  constructor(provider: string, failureSubtype: string, message: string) {
+    super(message);
+    this.name = 'AgentApiResponseError';
+    this.provider = provider;
+    this.failureSubtype = failureSubtype;
   }
 }
 
@@ -657,7 +701,9 @@ function aggregateAnthropicSseResponse(
   if (!text) {
     const contentPreview =
       JSON.stringify(content)?.slice(0, 500) ?? 'undefined';
-    throw new Error(
+    throw new AgentApiResponseError(
+      'anthropic',
+      'model_empty_text',
       `Anthropic API returned no text content (content=${contentPreview})`,
     );
   }
@@ -910,7 +956,11 @@ function convertChatCompletionsSse(
     });
   const text = extractTextFromBlocks(content);
   if (content.length === 0) {
-    throw new Error('OpenAI-compatible API returned no text content');
+    throw new AgentApiResponseError(
+      'openai_compat',
+      'openai_compat_response_invalid',
+      'OpenAI-compatible API returned no text content',
+    );
   }
 
   const anthropicResponse = buildAnthropicMessageResponse(
@@ -1142,7 +1192,11 @@ function convertResponsesSse(
 
   const text = extractTextFromBlocks(content);
   if (content.length === 0) {
-    throw new Error('OpenAI-compatible API returned no text content');
+    throw new AgentApiResponseError(
+      'openai_compat',
+      'openai_compat_response_invalid',
+      'OpenAI-compatible API returned no text content',
+    );
   }
 
   const anthropicResponse = buildAnthropicMessageResponse(
@@ -1262,9 +1316,7 @@ export async function forwardAnthropicRequestToOpenAi(
       if (externalSignal?.aborted) {
         throw err;
       }
-      throw new Error(
-        `OpenAI-compatible API request timed out after ${config.timeoutMs}ms`,
-      );
+      throw new AgentApiTimeoutError('OpenAI-compatible', config.timeoutMs);
     }
     throw err;
   } finally {
@@ -1361,9 +1413,7 @@ export async function callAnthropicMessages(
       const bodySuffix = responseBody
         ? ` body=${responseBody.slice(0, 2000)}`
         : '';
-      throw new Error(
-        `Anthropic API request failed with status ${response.status}${bodySuffix}`,
-      );
+      throw new AnthropicRequestError(response.status, responseBody);
     }
 
     const responseBody = await readResponseText(response);
@@ -1375,15 +1425,28 @@ export async function callAnthropicMessages(
       );
     }
 
-    const raw = JSON.parse(responseBody) as {
-      content?: unknown;
-      model?: unknown;
-    };
+    let raw: { content?: unknown; model?: unknown };
+    try {
+      raw = JSON.parse(responseBody) as {
+        content?: unknown;
+        model?: unknown;
+      };
+    } catch (err) {
+      throw new AgentApiResponseError(
+        'anthropic',
+        'model_json_parse_failed',
+        `Anthropic API returned invalid JSON: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
     const text = extractTextFromAnthropicContent(raw.content);
     if (!text) {
       const contentPreview =
         JSON.stringify(raw.content)?.slice(0, 500) ?? 'undefined';
-      throw new Error(
+      throw new AgentApiResponseError(
+        'anthropic',
+        'model_empty_text',
         `Anthropic API returned no text content (content=${contentPreview})`,
       );
     }
@@ -1399,9 +1462,7 @@ export async function callAnthropicMessages(
       if (externalSignal?.aborted) {
         throw err;
       }
-      throw new Error(
-        `Anthropic API request timed out after ${effectiveTimeoutMs}ms`,
-      );
+      throw new AgentApiTimeoutError('Anthropic', effectiveTimeoutMs);
     }
     throw err;
   } finally {

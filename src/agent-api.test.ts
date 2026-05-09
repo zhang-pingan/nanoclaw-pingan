@@ -9,9 +9,13 @@ vi.mock('./env.js', () => ({
 }));
 
 import {
+  AgentApiResponseError,
+  AgentApiTimeoutError,
+  AnthropicRequestError,
   callAnthropicMessages,
   forwardAnthropicRequestToOpenAi,
   getCredentialProxyOpenAiCompatConfig,
+  OpenAiCompatRequestError,
 } from './agent-api.js';
 
 describe('agent-api', () => {
@@ -116,6 +120,15 @@ describe('agent-api', () => {
         fetchMock as unknown as typeof fetch,
       ),
     ).rejects.toThrow('Anthropic API request failed with status 502');
+
+    await expect(
+      callAnthropicMessages(
+        {
+          messages: [{ role: 'user', content: 'hello' }],
+        },
+        fetchMock as unknown as typeof fetch,
+      ),
+    ).rejects.toBeInstanceOf(AnthropicRequestError);
   });
 
   it('aggregates anthropic sse responses for non-stream callers', async () => {
@@ -420,10 +433,73 @@ describe('agent-api', () => {
       await vi.advanceTimersByTimeAsync(15000);
       await promise;
       expect(outcome).toBeInstanceOf(Error);
+      expect(outcome).toBeInstanceOf(AgentApiTimeoutError);
       expect(String((outcome as Error).message)).toContain('45000ms');
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('throws structured response errors for invalid or empty model output', async () => {
+    readEnvFileMock.mockReturnValue({
+      NANOCLAW_AGENT_API_API_KEY: 'sk-test',
+      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test',
+      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
+    });
+
+    await expect(
+      callAnthropicMessages(
+        {
+          messages: [{ role: 'user', content: 'hello' }],
+        },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          text: async () => '{bad',
+        }) as unknown as typeof fetch,
+      ),
+    ).rejects.toMatchObject({
+      name: 'AgentApiResponseError',
+      failureSubtype: 'model_json_parse_failed',
+    });
+
+    await expect(
+      callAnthropicMessages(
+        {
+          messages: [{ role: 'user', content: 'hello' }],
+        },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          text: async () =>
+            JSON.stringify({ model: 'claude-test', content: [] }),
+        }) as unknown as typeof fetch,
+      ),
+    ).rejects.toBeInstanceOf(AgentApiResponseError);
+  });
+
+  it('throws structured openai-compatible request errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'rate limited',
+    });
+
+    await expect(
+      forwardAnthropicRequestToOpenAi(
+        {
+          messages: [{ role: 'user', content: 'hello' }],
+        },
+        {
+          apiKey: 'sk-openai',
+          baseUrl: 'https://example.test/api',
+          model: 'gpt-4.1',
+          timeoutMs: 30000,
+          openAiProtocol: 'chat_completions',
+        },
+        fetchMock as unknown as typeof fetch,
+      ),
+    ).rejects.toBeInstanceOf(OpenAiCompatRequestError);
   });
 
   it('returns anthropic-style sse when the request is stream=true', async () => {

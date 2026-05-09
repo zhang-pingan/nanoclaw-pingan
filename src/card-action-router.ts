@@ -79,6 +79,7 @@ export function createCardActionHandler(deps: {
           sendMessage: deps.sendMessage,
           userId: action.user_id || 'unknown',
           actorChannel: action.actor_channel,
+          messageId: action.message_id,
         });
       } catch (err) {
         logWorkbenchBroadcastActionFailure(action.action, err);
