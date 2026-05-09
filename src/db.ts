@@ -936,6 +936,22 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  for (const column of [
+    'handoff_role TEXT',
+    'handoff_skill TEXT',
+    'handoff_contract_json TEXT',
+    'handoff_input_json TEXT',
+    'handoff_result_json TEXT',
+    'handoff_validation_status TEXT',
+    'handoff_validation_errors_json TEXT',
+  ]) {
+    try {
+      database.exec(`ALTER TABLE delegations ADD COLUMN ${column}`);
+    } catch {
+      /* column already exists */
+    }
+  }
+
   // Add workflow_id column to messages (migration for existing DBs)
   try {
     database.exec(`ALTER TABLE messages ADD COLUMN workflow_id TEXT`);
@@ -2252,8 +2268,28 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
 
 export function createDelegation(delegation: Delegation): void {
   db.prepare(
-    `INSERT INTO delegations (id, source_jid, source_folder, target_jid, target_folder, task, status, result, requester_jid, workflow_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO delegations (
+      id,
+      source_jid,
+      source_folder,
+      target_jid,
+      target_folder,
+      task,
+      status,
+      result,
+      requester_jid,
+      workflow_id,
+      handoff_role,
+      handoff_skill,
+      handoff_contract_json,
+      handoff_input_json,
+      handoff_result_json,
+      handoff_validation_status,
+      handoff_validation_errors_json,
+      created_at,
+      updated_at
+    )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     delegation.id,
     delegation.source_jid,
@@ -2265,6 +2301,13 @@ export function createDelegation(delegation: Delegation): void {
     delegation.result,
     delegation.requester_jid,
     delegation.workflow_id ?? null,
+    delegation.handoff_role ?? null,
+    delegation.handoff_skill ?? null,
+    delegation.handoff_contract_json ?? null,
+    delegation.handoff_input_json ?? null,
+    delegation.handoff_result_json ?? null,
+    delegation.handoff_validation_status ?? null,
+    delegation.handoff_validation_errors_json ?? null,
     delegation.created_at,
     delegation.updated_at,
   );
@@ -2278,7 +2321,17 @@ export function getDelegation(id: string): Delegation | undefined {
 
 export function updateDelegation(
   id: string,
-  updates: Partial<Pick<Delegation, 'status' | 'result' | 'outcome'>>,
+  updates: Partial<
+    Pick<
+      Delegation,
+      | 'status'
+      | 'result'
+      | 'outcome'
+      | 'handoff_result_json'
+      | 'handoff_validation_status'
+      | 'handoff_validation_errors_json'
+    >
+  >,
 ): void {
   const fields: string[] = ['updated_at = ?'];
   const values: unknown[] = [Date.now().toString()];
@@ -2294,6 +2347,18 @@ export function updateDelegation(
   if (updates.outcome !== undefined) {
     fields.push('outcome = ?');
     values.push(updates.outcome);
+  }
+  if (updates.handoff_result_json !== undefined) {
+    fields.push('handoff_result_json = ?');
+    values.push(updates.handoff_result_json);
+  }
+  if (updates.handoff_validation_status !== undefined) {
+    fields.push('handoff_validation_status = ?');
+    values.push(updates.handoff_validation_status);
+  }
+  if (updates.handoff_validation_errors_json !== undefined) {
+    fields.push('handoff_validation_errors_json = ?');
+    values.push(updates.handoff_validation_errors_json);
   }
 
   values.push(id);
@@ -2574,9 +2639,7 @@ export function listWorkflowStageEvaluationsByWorkflow(
     .all(workflowId) as WorkflowStageEvaluationRecord[];
 }
 
-export function createWorkflowInterrupt(
-  record: WorkflowInterruptRecord,
-): void {
+export function createWorkflowInterrupt(record: WorkflowInterruptRecord): void {
   db.prepare(
     `INSERT OR IGNORE INTO workflow_interrupts (
       id, workflow_id, state_key, kind, status, title, body,

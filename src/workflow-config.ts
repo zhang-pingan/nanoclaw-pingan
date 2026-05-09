@@ -19,6 +19,7 @@ import {
   WorkflowCreateForm,
   WorkflowDefinitionArtifactContractRef,
   WorkflowDefinitionEvaluatorRef,
+  WorkflowDefinitionHandoff,
   WorkflowDefinitionJsonSchemaRef,
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionRollbackHintRef,
@@ -44,6 +45,8 @@ export interface StateTransition {
   skill?: string;
   /** Task template with {{var}} placeholders. */
   task_template?: string;
+  /** Typed handoff contract for this delegation. */
+  handoff?: WorkflowDefinitionHandoff;
   /** Increment the workflow round counter. */
   increment_round?: boolean;
   /** Notification template sent to main group. */
@@ -67,6 +70,7 @@ export interface StateConfig {
   role?: string;
   skill?: string;
   task_template?: string;
+  handoff?: WorkflowDefinitionHandoff;
   on_complete?: {
     success: StateTransition;
     failure?: StateTransition;

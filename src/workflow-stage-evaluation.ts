@@ -19,6 +19,7 @@ import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
+import { parseDelegationHandoffResult } from './workflow-handoff.js';
 
 interface ParsedDelegationPayload {
   service?: string;
@@ -86,6 +87,14 @@ function parseDelegationPayload(
   } catch {
     return {};
   }
+}
+
+function getDelegationPayload(
+  delegation: Delegation | null | undefined,
+): ParsedDelegationPayload {
+  const handoffPayload = parseDelegationHandoffResult(delegation);
+  if (handoffPayload) return handoffPayload as ParsedDelegationPayload;
+  return parseDelegationPayload(delegation?.result);
 }
 
 function trimText(value: string | null | undefined): string {
@@ -1209,7 +1218,7 @@ export function evaluateWorkflowStage(params: {
   stageKey: string;
   delegation?: Delegation | null;
 }): WorkflowStageEvalResult {
-  const payload = parseDelegationPayload(params.delegation?.result);
+  const payload = getDelegationPayload(params.delegation);
   switch (params.stageKey) {
     case 'plan':
       return evaluatePlanStage(

@@ -939,6 +939,15 @@ export function writeGroupsSnapshot(
  * Write delegation snapshot for the container to read.
  * Main group sees delegations it sent; other groups see delegations assigned to them.
  */
+function parseDelegationJsonField(raw: string | null | undefined): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function writeDelegationSnapshot(
   groupFolder: string,
   isMain: boolean,
@@ -973,6 +982,15 @@ export function writeDelegationSnapshot(
           status: d.status,
           result: d.result,
           workflow_id: d.workflow_id || null,
+          handoff_role: d.handoff_role || null,
+          handoff_skill: d.handoff_skill || null,
+          handoff_contract: parseDelegationJsonField(d.handoff_contract_json),
+          handoff_input: parseDelegationJsonField(d.handoff_input_json),
+          handoff_result: parseDelegationJsonField(d.handoff_result_json),
+          handoff_validation_status: d.handoff_validation_status || null,
+          handoff_validation_errors: parseDelegationJsonField(
+            d.handoff_validation_errors_json,
+          ),
           created_at: d.created_at,
           updated_at: d.updated_at,
         })),

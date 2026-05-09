@@ -4,6 +4,7 @@ import {
   WorkflowDefinitionState,
   WorkflowDefinitionTransition,
   WorkflowDefinitionEvaluatorRef,
+  WorkflowDefinitionHandoff,
   WorkflowDefinitionJsonSchemaRef,
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionTimeoutPolicy,
@@ -14,6 +15,7 @@ export interface CompiledWorkflowTransition {
   role?: string;
   skill?: string;
   task_template?: string;
+  handoff?: WorkflowDefinitionHandoff;
   increment_round?: boolean;
   notify?: string;
   card?: string;
@@ -24,6 +26,7 @@ export interface CompiledWorkflowState {
   role?: string;
   skill?: string;
   task_template?: string;
+  handoff?: WorkflowDefinitionHandoff;
   card?: string;
   label?: string;
   description?: string;
@@ -71,6 +74,7 @@ function compileTransition(
     role: transition.delegate?.role,
     skill: transition.delegate?.skill,
     task_template: transition.delegate?.task_template,
+    handoff: transition.delegate?.handoff,
     increment_round: transition.effects?.increment_round,
     notify: transition.notify?.template,
     card: transition.card?.ref,
@@ -95,6 +99,7 @@ function compileState(state: WorkflowDefinitionState): CompiledWorkflowState {
       role: state.delegate.role,
       skill: state.delegate.skill,
       task_template: state.delegate.task_template,
+      handoff: state.delegate.handoff,
       on_complete: {
         success: compileTransition(state.on_complete.success),
         failure: compileTransition(state.on_complete.failure),

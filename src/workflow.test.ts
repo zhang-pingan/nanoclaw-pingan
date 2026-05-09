@@ -548,6 +548,16 @@ describe('workflow metadata and branch flow', () => {
     );
     expect(delegations[0]?.task).toContain('- /tmp/nickname-prd.md');
     expect(delegations[0]?.task).toContain('- /tmp/nickname-ui.png');
+    expect(delegations[0]?.handoff_role).toBe('planner');
+    expect(delegations[0]?.handoff_skill).toBe('plan-requirement');
+    const contract = JSON.parse(delegations[0]?.handoff_contract_json || '{}');
+    expect(contract.input_schema).toBe('workflow.plan.input.v1');
+    expect(contract.output_schema).toBe('dev_test.plan.v1');
+    expect(contract.artifact_contract_ref).toBe('dev_test.plan.v1');
+    expect(contract.allowed_tools).toContain('artifact_writer');
+    const input = JSON.parse(delegations[0]?.handoff_input_json || '{}');
+    expect(input.stage_key).toBe('plan');
+    expect(input.rendered_task).toContain('需求描述：需要支持用户昵称输入表情');
   });
 
   it('starts fix_test from the single fix entry with bug context', () => {
@@ -1110,6 +1120,86 @@ describe('workflow metadata and branch flow', () => {
         'plan_examine',
       )?.status,
     ).toBe('needs_revision');
+  });
+
+  it('evaluates typed handoff result before falling back to raw result text', () => {
+    writeDoc(
+      '2026-04-08_feature',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 支持昵称规则改造\n\n## 验收标准\n- 支持完整技术方案输出\n\n## 风险\n- 需要兼容历史数据\n`,
+    );
+    createWorkflow({
+      id: 'wf-plan-review-typed-result',
+      name: 'Plan review typed result',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/test_20260408',
+        deliverable: '2026-04-08_feature',
+        staging_base_branch: 'staging',
+        staging_work_branch: 'staging-deploy/feature-test_20260408',
+        access_token: '',
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'del-plan-review-typed-result',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-plan-review-typed-result',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'plan-examine@g.us',
+      target_folder: 'web_plan_examine',
+      task: 'plan review task',
+      status: 'completed',
+      result: 'legacy text that is not json',
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-plan-review-typed-result',
+      handoff_result_json: buildStructuredResult({
+        deliverable: '2026-04-08_feature',
+        main_branch: 'main',
+        work_branch: 'feature/test_20260408',
+        verdict: 'needs_revision',
+        summary: 'typed handoff result says revision is required',
+        findings: [
+          {
+            code: 'typed_review_issue',
+            severity: 'high',
+            message: 'typed result was used',
+            stageKey: 'plan_examine',
+          },
+        ],
+        evidence: [
+          {
+            type: 'artifact',
+            path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+            summary: 'typed evidence',
+          },
+        ],
+      }),
+      handoff_validation_status: 'valid',
+      handoff_validation_errors_json: '[]',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+
+    onDelegationComplete('del-plan-review-typed-result');
+
+    const workflow = getWorkflow('wf-plan-review-typed-result');
+    expect(workflow?.status).toBe('plan_examine_confirm');
+    const evaluation = getLatestWorkflowStageEvaluation(
+      'wf-plan-review-typed-result',
+      'plan_examine',
+    );
+    expect(evaluation?.status).toBe('needs_revision');
+    expect(evaluation?.summary).toContain('typed handoff result');
   });
 
   it('keeps plan review pending when legacy outcome failure lacks eval contract', () => {

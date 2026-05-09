@@ -98,6 +98,12 @@ import {
 import { evaluateWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 import {
+  buildWorkflowHandoffEnvelope,
+  normalizeWorkflowHandoffEnvelope,
+  parseDelegationHandoffResult,
+  WorkflowHandoffEnvelope,
+} from './workflow-handoff.js';
+import {
   buildQueuedWorkflowLlmJudgeRecord,
   runWorkflowLlmJudgeSidecar,
   shouldRunWorkflowLlmJudgeNow,
@@ -182,6 +188,7 @@ interface DelegationIntent {
   targetJid: string;
   skillName: string;
   taskContent: string;
+  handoffEnvelope: WorkflowHandoffEnvelope;
 }
 
 let workflowRuntimeStarted = false;
@@ -330,13 +337,33 @@ function injectDelegation(
   workflowId: string,
   skillName: string,
   taskContent: string,
+  handoffEnvelope?: WorkflowHandoffEnvelope,
 ): void {
   const { enqueueMessageCheck } = getDeps();
   const now = Date.now().toString();
 
   storeChatMetadata(targetJid, now);
 
-  const syntheticContent = `${targetGroup.trigger} [委派任务 | ID:${delegationId} | 来自:流程引擎 | 流程:${workflowId}]\n\n请按照 ${skillName} 技能执行以下任务：\n\n${taskContent}\n\n完成后请调用 complete_delegation 工具报告结果，delegation_id 为 "${delegationId}"。`;
+  const contractText = handoffEnvelope
+    ? [
+        '[Typed Handoff]',
+        `role: ${handoffEnvelope.role}`,
+        `skill: ${handoffEnvelope.skill}`,
+        `input_schema: ${handoffEnvelope.contract.input_schema}`,
+        `output_schema: ${handoffEnvelope.contract.output_schema}`,
+        handoffEnvelope.contract.artifact_contract_ref
+          ? `artifact_contract: ${handoffEnvelope.contract.artifact_contract_ref}`
+          : '',
+        `allowed_tools: ${handoffEnvelope.contract.allowed_tools.join(', ') || '未限制'}`,
+        `success_criteria:\n${handoffEnvelope.contract.success_criteria.map((item) => `- ${item}`).join('\n')}`,
+        `failure_taxonomy: ${handoffEnvelope.contract.failure_taxonomy.join(', ')}`,
+        '',
+        'complete_delegation.result 必须返回 JSON object，至少包含 verdict、summary、findings、evidence，并包含本阶段 output_schema 要求的字段。',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : '';
+  const syntheticContent = `${targetGroup.trigger} [委派任务 | ID:${delegationId} | 来自:流程引擎 | 流程:${workflowId}]\n\n请按照 ${skillName} 技能执行以下任务：\n\n${contractText ? `${contractText}\n\n` : ''}${taskContent}\n\n完成后请调用 complete_delegation 工具报告结果，delegation_id 为 "${delegationId}"。`;
   const syntheticId = `wf-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   storeMessageDirect({
@@ -467,8 +494,14 @@ function createDurableDelegationIntent(input: {
   sourceJid: string;
   targetFolder: string;
   sourceFolder: string;
+  stageKey: string;
+  role: string;
   skillName: string;
   taskContent: string;
+  handoff?: StateTransition['handoff'];
+  artifactContractRef?: string;
+  evaluatorArtifactContractRef?: string;
+  workflowForHandoff?: Workflow;
   idempotencyKey: string;
 }): DelegationIntent {
   const groups = getDeps().registeredGroups();
@@ -481,6 +514,22 @@ function createDurableDelegationIntent(input: {
   const sourceJid = findJidByFolder(input.sourceFolder, groups) || '';
   const delegationId = `wf-del-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = Date.now().toString();
+  const workflow = input.workflowForHandoff || getWorkflow(input.workflowId);
+  if (!workflow) {
+    throw new Error(`Workflow: workflow "${input.workflowId}" not found`);
+  }
+  const handoffEnvelope = normalizeWorkflowHandoffEnvelope(
+    buildWorkflowHandoffEnvelope({
+      workflow,
+      stageKey: input.stageKey,
+      role: input.role,
+      skill: input.skillName,
+      taskContent: input.taskContent,
+      handoff: input.handoff,
+      artifactContractRef: input.artifactContractRef,
+      evaluatorArtifactContractRef: input.evaluatorArtifactContractRef,
+    }),
+  );
 
   createDelegation({
     id: delegationId,
@@ -493,6 +542,13 @@ function createDurableDelegationIntent(input: {
     result: null,
     outcome: null,
     workflow_id: input.workflowId,
+    handoff_role: handoffEnvelope.role,
+    handoff_skill: handoffEnvelope.skill,
+    handoff_contract_json: JSON.stringify(handoffEnvelope.contract),
+    handoff_input_json: JSON.stringify(handoffEnvelope.input),
+    handoff_result_json: null,
+    handoff_validation_status: null,
+    handoff_validation_errors_json: null,
     created_at: now,
     updated_at: now,
   });
@@ -507,6 +563,7 @@ function createDurableDelegationIntent(input: {
       targetFolder: input.targetFolder,
       skillName: input.skillName,
       taskContent: input.taskContent,
+      handoffEnvelope,
     },
     idempotencyKey: `workflow_outbox:inject_delegation:${input.idempotencyKey}`,
   });
@@ -518,6 +575,7 @@ function createDurableDelegationIntent(input: {
     targetJid,
     skillName: input.skillName,
     taskContent: input.taskContent,
+    handoffEnvelope,
   };
 }
 
@@ -632,6 +690,7 @@ function compileDefinitionTransitionToStateTransition(
     role: definitionTransition.delegate?.role,
     skill: definitionTransition.delegate?.skill,
     task_template: definitionTransition.delegate?.task_template,
+    handoff: definitionTransition.delegate?.handoff,
     increment_round: definitionTransition.effects?.increment_round,
     notify: definitionTransition.notify?.template,
     card: definitionTransition.card?.ref,
@@ -678,6 +737,12 @@ function executeWorkflowOutboxRecord(recordId: string): void {
         typeof payload.skillName === 'string' ? payload.skillName : '';
       const taskContent =
         typeof payload.taskContent === 'string' ? payload.taskContent : '';
+      const handoffEnvelope =
+        payload.handoffEnvelope &&
+        typeof payload.handoffEnvelope === 'object' &&
+        !Array.isArray(payload.handoffEnvelope)
+          ? (payload.handoffEnvelope as unknown as WorkflowHandoffEnvelope)
+          : undefined;
       const targetGroup = targetJid
         ? getDeps().registeredGroups()[targetJid]
         : undefined;
@@ -689,6 +754,7 @@ function executeWorkflowOutboxRecord(recordId: string): void {
           workflow.id,
           skillName,
           taskContent,
+          handoffEnvelope,
         );
       }
     } else if (record.effect_type === 'sync_workbench_action_item') {
@@ -1144,6 +1210,15 @@ function parseDelegationPayload(
   } catch {
     return {};
   }
+}
+
+function getDelegationPayload(
+  delegation: Delegation | null | undefined,
+): ParsedDelegationPayload {
+  const handoffPayload = parseDelegationHandoffResult(delegation);
+  if (handoffPayload)
+    return handoffPayload as unknown as ParsedDelegationPayload;
+  return parseDelegationPayload(delegation?.result);
 }
 
 /** Get terminal state names from a workflow type config. */
@@ -1988,8 +2063,15 @@ function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
     sourceJid: workflow.source_jid,
     targetFolder,
     sourceFolder: getMainFolder(workflow.source_jid),
+    stageKey: workflow.status,
+    role: state.role,
     skillName: state.skill,
     taskContent: finalTaskContent,
+    handoff: state.handoff,
+    artifactContractRef: state.artifact_contract?.ref,
+    evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
+      state.evaluator?.ref,
+    )?.deterministic?.artifact_contract,
     idempotencyKey,
   }).delegationId;
   updateWorkflow(workflow.id, { current_delegation_id: delegationId });
@@ -2576,6 +2658,12 @@ function applyTransition(
     },
     extra,
   );
+  const workflowForHandoff: Workflow = {
+    ...workflow,
+    ...updates,
+    context: mergeWorkflowContext(workflow.context, updates.context),
+    round,
+  };
 
   // 3. Create durable delegation intent if transition specifies a role + skill
   const delegateRole = transition.role;
@@ -2600,13 +2688,22 @@ function applyTransition(
     );
 
     const delegationKey = `workflow_delegation:${workflow.id}:${transition.target}:${round}:1`;
+    const targetStateConfig = config.states[transition.target];
     delegationIntent = createDurableDelegationIntent({
       workflowId: workflow.id,
       sourceJid: workflow.source_jid,
       targetFolder,
       sourceFolder: mainFolder,
+      stageKey: transition.target,
+      role: delegateRole,
       skillName: delegateSkill,
       taskContent: finalTaskContent,
+      handoff: transition.handoff,
+      artifactContractRef: targetStateConfig?.artifact_contract?.ref,
+      evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
+        targetStateConfig?.evaluator?.ref,
+      )?.deterministic?.artifact_contract,
+      workflowForHandoff,
       idempotencyKey: delegationKey,
     });
     updates.current_delegation_id = delegationIntent.delegationId;
@@ -2861,8 +2958,15 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           sourceJid: opts.sourceJid,
           targetFolder,
           sourceFolder: mainFolder,
+          stageKey: entryPoint.state,
+          role: entryStateConfig.role,
           skillName: entryStateConfig.skill,
           taskContent: finalTaskContent,
+          handoff: entryStateConfig.handoff,
+          artifactContractRef: entryStateConfig.artifact_contract?.ref,
+          evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
+            entryStateConfig.evaluator?.ref,
+          )?.deterministic?.artifact_contract,
           idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
         }).delegationId;
         updateWorkflow(workflowId, { current_delegation_id: delegationId });
@@ -2997,8 +3101,15 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         sourceJid: opts.sourceJid,
         targetFolder,
         sourceFolder: mainFolder,
+        stageKey: entryPoint.state,
+        role: entryStateConfig.role,
         skillName: entryStateConfig.skill,
         taskContent: finalTaskContent,
+        handoff: entryStateConfig.handoff,
+        artifactContractRef: entryStateConfig.artifact_contract?.ref,
+        evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
+          entryStateConfig.evaluator?.ref,
+        )?.deterministic?.artifact_contract,
         idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
       }).delegationId;
       updateWorkflow(workflowId, { current_delegation_id: delegationId });
@@ -3256,8 +3367,15 @@ export function retryWorkflowStage(
       sourceJid: workflow.source_jid,
       targetFolder,
       sourceFolder: getMainFolder(workflow.source_jid),
+      stageKey,
+      role: stateConfig.role,
       skillName: stateConfig.skill,
       taskContent: retriedTaskContent,
+      handoff: stateConfig.handoff,
+      artifactContractRef: stateConfig.artifact_contract?.ref,
+      evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
+        stateConfig.evaluator?.ref,
+      )?.deterministic?.artifact_contract,
       idempotencyKey: `workflow_delegation:${workflowId}:${stageKey}:${workflow.round}:${retryAttempt}`,
     }).delegationId;
 
@@ -3387,7 +3505,7 @@ export function onDelegationComplete(delegationId: string): void {
   // Parse result summary and persisted workflow fields
   let resultSummary = delegation.result || '';
   let testDoc = '';
-  const payload = parseDelegationPayload(delegation.result);
+  const payload = getDelegationPayload(delegation);
   const workflowUpdates: Parameters<typeof updateWorkflow>[1] = {};
   const contextUpdates: WorkflowContext = {};
   if (payload.summary) {

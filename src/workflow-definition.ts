@@ -4,6 +4,20 @@ export interface WorkflowDefinitionRole {
   channels: Record<string, string>;
 }
 
+export interface WorkflowDefinitionHandoff {
+  input_schema?: string;
+  output_schema?: string;
+  artifact_contract_ref?: string;
+  allowed_tools?: string[];
+  success_criteria?: string[];
+  failure_taxonomy?: string[];
+  auto_retry?: {
+    enabled?: boolean;
+    max_attempts?: number;
+    retryable_failures?: string[];
+  };
+}
+
 export interface WorkflowDefinitionEntryPoint {
   label?: string;
   description?: string;
@@ -16,6 +30,7 @@ export interface WorkflowDefinitionDelegate {
   role: string;
   skill?: string;
   task_template?: string;
+  handoff?: WorkflowDefinitionHandoff;
 }
 
 export interface WorkflowDefinitionNotify {

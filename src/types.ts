@@ -86,6 +86,13 @@ export interface Delegation {
   outcome: 'success' | 'failure' | null;
   requester_jid?: string | null;
   workflow_id?: string | null;
+  handoff_role?: string | null;
+  handoff_skill?: string | null;
+  handoff_contract_json?: string | null;
+  handoff_input_json?: string | null;
+  handoff_result_json?: string | null;
+  handoff_validation_status?: 'valid' | 'invalid' | 'not_json' | null;
+  handoff_validation_errors_json?: string | null;
   created_at: string;
   updated_at: string;
 }

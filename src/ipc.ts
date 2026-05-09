@@ -70,6 +70,7 @@ import {
   createWorkbenchInteractionItem,
   updateWorkbenchInteractionItemStatus,
 } from './workbench-store.js';
+import { validateWorkflowHandoffResult } from './workflow-handoff.js';
 import { runLocalHostScript } from './host-script-runner.js';
 import { getWikiPageDetail } from './wiki.js';
 import {
@@ -1937,6 +1938,10 @@ export async function processTaskIpc(
         break;
       }
 
+      const handoffValidation = delegation.handoff_contract_json
+        ? validateWorkflowHandoffResult(data.result, delegation)
+        : null;
+
       // Update delegation status
       updateDelegation(data.delegationId, {
         status: 'completed',
@@ -1946,6 +1951,13 @@ export async function processTaskIpc(
             | 'success'
             | 'failure'
             | null) || null,
+        handoff_result_json: handoffValidation?.payload
+          ? JSON.stringify(handoffValidation.payload)
+          : null,
+        handoff_validation_status: handoffValidation?.status || null,
+        handoff_validation_errors_json: handoffValidation
+          ? JSON.stringify(handoffValidation.errors)
+          : null,
       });
 
       // Find the target group name for the result message

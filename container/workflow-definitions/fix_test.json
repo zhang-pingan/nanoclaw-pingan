@@ -51,7 +51,55 @@
           "delegate": {
             "role": "dev",
             "skill": "fix-bug",
-            "task_template": "流程类型：{{workflow_type}}\n请修复以下 Bug：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n要求：在已确认或创建的工作分支上完成修复、提交并 push，输出结构化修复结果。"
+            "task_template": "流程类型：{{workflow_type}}\n请修复以下 Bug：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n要求：在已确认或创建的工作分支上完成修复、提交并 push，输出结构化修复结果。",
+            "handoff": {
+              "input_schema": "workflow.fix.input.v1",
+              "output_schema": "fix_test.bug_fix.v1",
+              "artifact_contract_ref": "fix_test.bug_fix.v1",
+              "allowed_tools": [
+                "bash",
+                "git",
+                "edit",
+                "test_runner",
+                "artifact_reader",
+                "artifact_writer"
+              ],
+              "success_criteria": [
+                "Bug 修复完成并位于指定或新建工作分支",
+                "修复文档写入指定交付目录",
+                "返回 deliverable、main_branch、work_branch、verdict、summary、findings、evidence"
+              ],
+              "failure_taxonomy": [
+                "model_api_error",
+                "model_output_invalid",
+                "tool_error",
+                "tool_contract_error",
+                "sandbox_error",
+                "container_runtime_error",
+                "timeout",
+                "routing_error",
+                "state_transition_error",
+                "workflow_transition_error",
+                "evaluation_failed",
+                "invalid_input",
+                "invalid_config",
+                "permission_error",
+                "db_error",
+                "unknown_error",
+                "requirement_unclear",
+                "artifact_missing",
+                "test_failed",
+                "review_failed",
+                "deployment_failed",
+                "blocked_by_dependency",
+                "permission_required"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
           },
           "on_complete": {
             "success": {
@@ -59,7 +107,55 @@
               "delegate": {
                 "role": "ops",
                 "skill": "ops-staging-deploy",
-                "task_template": "流程类型：{{workflow_type}}\n请部署以下 Bug 修复到预发环境：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n\n修复结果：\n{{delegation_result}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。"
+                "task_template": "流程类型：{{workflow_type}}\n请部署以下 Bug 修复到预发环境：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n\n修复结果：\n{{delegation_result}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。",
+                "handoff": {
+                  "input_schema": "workflow.deploy.input.v1",
+                  "output_schema": "fix_test.ops_deploy.v1",
+                  "artifact_contract_ref": "fix_test.ops_deploy.v1",
+                  "allowed_tools": [
+                    "bash",
+                    "git",
+                    "deploy_runner",
+                    "log_reader",
+                    "artifact_reader",
+                    "artifact_writer"
+                  ],
+                  "success_criteria": [
+                    "工作分支合并到预发工作分支并推送",
+                    "预发部署动作完成并记录结果",
+                    "返回 main_branch、work_branch、staging_base_branch、staging_work_branch、verdict、summary、findings、evidence"
+                  ],
+                  "failure_taxonomy": [
+                    "model_api_error",
+                    "model_output_invalid",
+                    "tool_error",
+                    "tool_contract_error",
+                    "sandbox_error",
+                    "container_runtime_error",
+                    "timeout",
+                    "routing_error",
+                    "state_transition_error",
+                    "workflow_transition_error",
+                    "evaluation_failed",
+                    "invalid_input",
+                    "invalid_config",
+                    "permission_error",
+                    "db_error",
+                    "unknown_error",
+                    "requirement_unclear",
+                    "artifact_missing",
+                    "test_failed",
+                    "review_failed",
+                    "deployment_failed",
+                    "blocked_by_dependency",
+                    "permission_required"
+                  ],
+                  "auto_retry": {
+                    "enabled": false,
+                    "max_attempts": 0,
+                    "retryable_failures": []
+                  }
+                }
               },
               "notify": {
                 "template": "[流程进展] Bug「{{name}}」({{id}}) 修复完成，已委派 {{role_folder:ops}} 部署预发环境。"
@@ -84,7 +180,55 @@
           },
           "delegate": {
             "role": "ops",
-            "skill": "ops-staging-deploy"
+            "skill": "ops-staging-deploy",
+            "handoff": {
+              "input_schema": "workflow.deploy.input.v1",
+              "output_schema": "fix_test.ops_deploy.v1",
+              "artifact_contract_ref": "fix_test.ops_deploy.v1",
+              "allowed_tools": [
+                "bash",
+                "git",
+                "deploy_runner",
+                "log_reader",
+                "artifact_reader",
+                "artifact_writer"
+              ],
+              "success_criteria": [
+                "工作分支合并到预发工作分支并推送",
+                "预发部署动作完成并记录结果",
+                "返回 main_branch、work_branch、staging_base_branch、staging_work_branch、verdict、summary、findings、evidence"
+              ],
+              "failure_taxonomy": [
+                "model_api_error",
+                "model_output_invalid",
+                "tool_error",
+                "tool_contract_error",
+                "sandbox_error",
+                "container_runtime_error",
+                "timeout",
+                "routing_error",
+                "state_transition_error",
+                "workflow_transition_error",
+                "evaluation_failed",
+                "invalid_input",
+                "invalid_config",
+                "permission_error",
+                "db_error",
+                "unknown_error",
+                "requirement_unclear",
+                "artifact_missing",
+                "test_failed",
+                "review_failed",
+                "deployment_failed",
+                "blocked_by_dependency",
+                "permission_required"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
           },
           "on_complete": {
             "success": {
@@ -92,7 +236,55 @@
               "delegate": {
                 "role": "test",
                 "skill": "fix-test-bug",
-                "task_template": "流程类型：{{workflow_type}}\n请验证以下 Bug 修复是否通过：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n预发部署结果：\n{{delegation_result}}"
+                "task_template": "流程类型：{{workflow_type}}\n请验证以下 Bug 修复是否通过：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n预发部署结果：\n{{delegation_result}}",
+                "handoff": {
+                  "input_schema": "workflow.test.input.v1",
+                  "output_schema": "fix_test.bug_test.v1",
+                  "artifact_contract_ref": "fix_test.bug_test.v1",
+                  "allowed_tools": [
+                    "bash",
+                    "test_runner",
+                    "browser",
+                    "log_reader",
+                    "artifact_reader",
+                    "artifact_writer"
+                  ],
+                  "success_criteria": [
+                    "Bug 修复验证完成或明确记录阻塞原因",
+                    "测试文档写入指定交付目录",
+                    "返回 total、passed、failed、blocked、bugs、verdict、summary、findings、evidence"
+                  ],
+                  "failure_taxonomy": [
+                    "model_api_error",
+                    "model_output_invalid",
+                    "tool_error",
+                    "tool_contract_error",
+                    "sandbox_error",
+                    "container_runtime_error",
+                    "timeout",
+                    "routing_error",
+                    "state_transition_error",
+                    "workflow_transition_error",
+                    "evaluation_failed",
+                    "invalid_input",
+                    "invalid_config",
+                    "permission_error",
+                    "db_error",
+                    "unknown_error",
+                    "requirement_unclear",
+                    "artifact_missing",
+                    "test_failed",
+                    "review_failed",
+                    "deployment_failed",
+                    "blocked_by_dependency",
+                    "permission_required"
+                  ],
+                  "auto_retry": {
+                    "enabled": false,
+                    "max_attempts": 0,
+                    "retryable_failures": []
+                  }
+                }
               },
               "notify": {
                 "template": "[流程进展] Bug「{{name}}」({{id}}) 预发部署成功，已委派 {{role_folder:test}} 进行测试验证。"
@@ -117,7 +309,55 @@
           },
           "delegate": {
             "role": "test",
-            "skill": "fix-test-bug"
+            "skill": "fix-test-bug",
+            "handoff": {
+              "input_schema": "workflow.test.input.v1",
+              "output_schema": "fix_test.bug_test.v1",
+              "artifact_contract_ref": "fix_test.bug_test.v1",
+              "allowed_tools": [
+                "bash",
+                "test_runner",
+                "browser",
+                "log_reader",
+                "artifact_reader",
+                "artifact_writer"
+              ],
+              "success_criteria": [
+                "Bug 修复验证完成或明确记录阻塞原因",
+                "测试文档写入指定交付目录",
+                "返回 total、passed、failed、blocked、bugs、verdict、summary、findings、evidence"
+              ],
+              "failure_taxonomy": [
+                "model_api_error",
+                "model_output_invalid",
+                "tool_error",
+                "tool_contract_error",
+                "sandbox_error",
+                "container_runtime_error",
+                "timeout",
+                "routing_error",
+                "state_transition_error",
+                "workflow_transition_error",
+                "evaluation_failed",
+                "invalid_input",
+                "invalid_config",
+                "permission_error",
+                "db_error",
+                "unknown_error",
+                "requirement_unclear",
+                "artifact_missing",
+                "test_failed",
+                "review_failed",
+                "deployment_failed",
+                "blocked_by_dependency",
+                "permission_required"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
           },
           "on_complete": {
             "success": {
@@ -131,7 +371,55 @@
               "delegate": {
                 "role": "dev",
                 "skill": "fix-refix-bug",
-                "task_template": "流程类型：{{workflow_type}}\n请复修以下测试未通过的 Bug（Round {{round}}）：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n测试验证结果：\n{{delegation_result}}"
+                "task_template": "流程类型：{{workflow_type}}\n请复修以下测试未通过的 Bug（Round {{round}}）：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n测试验证结果：\n{{delegation_result}}",
+                "handoff": {
+                  "input_schema": "workflow.refix.input.v1",
+                  "output_schema": "fix_test.bug_fix.v1",
+                  "artifact_contract_ref": "fix_test.bug_fix.v1",
+                  "allowed_tools": [
+                    "bash",
+                    "git",
+                    "edit",
+                    "test_runner",
+                    "artifact_reader",
+                    "artifact_writer"
+                  ],
+                  "success_criteria": [
+                    "按测试失败证据完成复修",
+                    "保留并更新既有工作分支和修复文档",
+                    "返回 deliverable、main_branch、work_branch、verdict、summary、findings、evidence"
+                  ],
+                  "failure_taxonomy": [
+                    "model_api_error",
+                    "model_output_invalid",
+                    "tool_error",
+                    "tool_contract_error",
+                    "sandbox_error",
+                    "container_runtime_error",
+                    "timeout",
+                    "routing_error",
+                    "state_transition_error",
+                    "workflow_transition_error",
+                    "evaluation_failed",
+                    "invalid_input",
+                    "invalid_config",
+                    "permission_error",
+                    "db_error",
+                    "unknown_error",
+                    "requirement_unclear",
+                    "artifact_missing",
+                    "test_failed",
+                    "review_failed",
+                    "deployment_failed",
+                    "blocked_by_dependency",
+                    "permission_required"
+                  ],
+                  "auto_retry": {
+                    "enabled": false,
+                    "max_attempts": 0,
+                    "retryable_failures": []
+                  }
+                }
               },
               "notify": {
                 "template": "[流程进展] Bug「{{name}}」({{id}}) 测试未通过 ❌\n{{result_summary}}\n进入 Round {{round}} 复修流程，已委派 {{role_folder:dev}} 处理。"
@@ -153,7 +441,55 @@
           },
           "delegate": {
             "role": "dev",
-            "skill": "fix-refix-bug"
+            "skill": "fix-refix-bug",
+            "handoff": {
+              "input_schema": "workflow.refix.input.v1",
+              "output_schema": "fix_test.bug_fix.v1",
+              "artifact_contract_ref": "fix_test.bug_fix.v1",
+              "allowed_tools": [
+                "bash",
+                "git",
+                "edit",
+                "test_runner",
+                "artifact_reader",
+                "artifact_writer"
+              ],
+              "success_criteria": [
+                "按测试失败证据完成复修",
+                "保留并更新既有工作分支和修复文档",
+                "返回 deliverable、main_branch、work_branch、verdict、summary、findings、evidence"
+              ],
+              "failure_taxonomy": [
+                "model_api_error",
+                "model_output_invalid",
+                "tool_error",
+                "tool_contract_error",
+                "sandbox_error",
+                "container_runtime_error",
+                "timeout",
+                "routing_error",
+                "state_transition_error",
+                "workflow_transition_error",
+                "evaluation_failed",
+                "invalid_input",
+                "invalid_config",
+                "permission_error",
+                "db_error",
+                "unknown_error",
+                "requirement_unclear",
+                "artifact_missing",
+                "test_failed",
+                "review_failed",
+                "deployment_failed",
+                "blocked_by_dependency",
+                "permission_required"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
           },
           "on_complete": {
             "success": {
@@ -161,7 +497,55 @@
               "delegate": {
                 "role": "ops",
                 "skill": "ops-staging-deploy",
-                "task_template": "流程类型：{{workflow_type}}\n请重新部署以下 Bug 复修结果到预发环境：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n\n复修结果：\n{{delegation_result}}\n\n注意：部署前必须先将最新工作分支合并到预发工作分支并推送，再执行部署。"
+                "task_template": "流程类型：{{workflow_type}}\n请重新部署以下 Bug 复修结果到预发环境：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n\n复修结果：\n{{delegation_result}}\n\n注意：部署前必须先将最新工作分支合并到预发工作分支并推送，再执行部署。",
+                "handoff": {
+                  "input_schema": "workflow.deploy.input.v1",
+                  "output_schema": "fix_test.ops_deploy.v1",
+                  "artifact_contract_ref": "fix_test.ops_deploy.v1",
+                  "allowed_tools": [
+                    "bash",
+                    "git",
+                    "deploy_runner",
+                    "log_reader",
+                    "artifact_reader",
+                    "artifact_writer"
+                  ],
+                  "success_criteria": [
+                    "工作分支合并到预发工作分支并推送",
+                    "预发部署动作完成并记录结果",
+                    "返回 main_branch、work_branch、staging_base_branch、staging_work_branch、verdict、summary、findings、evidence"
+                  ],
+                  "failure_taxonomy": [
+                    "model_api_error",
+                    "model_output_invalid",
+                    "tool_error",
+                    "tool_contract_error",
+                    "sandbox_error",
+                    "container_runtime_error",
+                    "timeout",
+                    "routing_error",
+                    "state_transition_error",
+                    "workflow_transition_error",
+                    "evaluation_failed",
+                    "invalid_input",
+                    "invalid_config",
+                    "permission_error",
+                    "db_error",
+                    "unknown_error",
+                    "requirement_unclear",
+                    "artifact_missing",
+                    "test_failed",
+                    "review_failed",
+                    "deployment_failed",
+                    "blocked_by_dependency",
+                    "permission_required"
+                  ],
+                  "auto_retry": {
+                    "enabled": false,
+                    "max_attempts": 0,
+                    "retryable_failures": []
+                  }
+                }
               },
               "notify": {
                 "template": "[流程进展] Bug「{{name}}」({{id}}) Round {{round}} 复修完成，已委派 {{role_folder:ops}} 重新部署预发。"
@@ -203,10 +587,7 @@
         "paused": "⏸ 已中断"
       },
       "metadata": {
-        "tags": [
-          "bugfix",
-          "testing"
-        ]
+        "tags": ["bugfix", "testing"]
       },
       "create_form": {
         "fields": [
