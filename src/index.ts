@@ -42,6 +42,7 @@ import {
 } from './container-runtime.js';
 import { agentQueryTraceManager } from './agent-query-trace.js';
 import { ASSISTANT_MAIN_JID } from './assistant/assistant-channel-bridge.js';
+import type { AgentInboxItemView } from './assistant/types.js';
 import {
   ClassifiedFailure,
   classifyFailure,
@@ -1362,38 +1363,173 @@ async function runAgent(
   }
 }
 
-async function runMainGroupAssistantAgent(input: {
+interface OneShotAgentInput {
+  chatJid: string;
   prompt: string;
-  itemSourceJid?: string | null;
-}): Promise<{ ok: boolean; text: string; error?: string }> {
-  const mainEntry =
-    registeredGroups[ASSISTANT_MAIN_JID]?.isMain === true
-      ? ([ASSISTANT_MAIN_JID, registeredGroups[ASSISTANT_MAIN_JID]] as const)
-      : Object.entries(registeredGroups).find(([, group]) => group.isMain) ||
-        null;
-  if (!mainEntry) {
-    return { ok: false, text: '', error: 'Main group not found' };
+  status: {
+    groupName?: string;
+    promptSummary?: string;
+    lastSender?: string;
+    lastContent?: string;
+    lastTime?: string;
+    isTask?: boolean;
+  };
+  selectedModel?: string;
+  closeOnFirstResult?: boolean;
+  collect?: 'first_result' | 'all_until_exit';
+}
+
+interface OneShotAgentResult {
+  ok: boolean;
+  text: string;
+  outputs: string[];
+  error?: string;
+}
+
+interface AssistantActionAgentInput {
+  prompt: string;
+  purpose: 'investigation' | 'repair';
+  item: AgentInboxItemView;
+  chatJid?: string;
+}
+
+function truncateStatusText(value: string | undefined, maxLength: number): string {
+  if (!value) return '';
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function resolveAssistantActionJid(preferredJid?: string): string | null {
+  if (preferredJid && registeredGroups[preferredJid]) return preferredJid;
+  if (registeredGroups[ASSISTANT_MAIN_JID]?.isMain === true) {
+    return ASSISTANT_MAIN_JID;
   }
-  const [mainJid, mainGroup] = mainEntry;
-  const chunks: string[] = [];
-  const status = await runAgent(
-    mainGroup,
-    input.prompt,
-    mainJid,
-    async (output) => {
-      if (!output.result) return;
-      chunks.push(String(output.result));
-    },
+  const fallback = Object.entries(registeredGroups).find(
+    ([, group]) => group.isMain,
   );
-  const text = chunks.join('\n').trim();
+  if (fallback) {
+    logger.warn(
+      { preferredJid, fallbackJid: fallback[0] },
+      'Assistant main group not found, falling back to first main group',
+    );
+    return fallback[0];
+  }
+  return null;
+}
+
+function assistantActionPurposeLabel(
+  purpose: AssistantActionAgentInput['purpose'],
+): string {
+  if (purpose === 'repair') return '修复';
+  return '排查';
+}
+
+async function runOneShotAgent(
+  input: OneShotAgentInput,
+): Promise<OneShotAgentResult> {
+  const group = registeredGroups[input.chatJid];
+  if (!group) {
+    return {
+      ok: false,
+      text: '',
+      outputs: [],
+      error: `Registered group not found: ${input.chatJid}`,
+    };
+  }
+
+  const outputs: string[] = [];
+  let closeRequested = false;
+  const collect = input.collect || 'first_result';
+
+  const status = await queue.runOneShot(
+    input.chatJid,
+    {
+      groupFolder: group.folder,
+      groupName: input.status.groupName || group.name,
+      promptSummary: truncateStatusText(
+        input.status.promptSummary || input.prompt,
+        100,
+      ),
+      lastSender: input.status.lastSender || '',
+      lastContent: truncateStatusText(input.status.lastContent, 200),
+      lastTime: input.status.lastTime || Date.now().toString(),
+      isTask: input.status.isTask ?? false,
+    },
+    () =>
+      runAgent(
+        group,
+        input.prompt,
+        input.chatJid,
+        async (output) => {
+          if (output.result) {
+            outputs.push(String(output.result));
+            if (input.closeOnFirstResult !== false && !closeRequested) {
+              closeRequested = true;
+              queue.closeStdin(input.chatJid);
+            }
+            if (collect === 'first_result') return;
+          }
+          if (
+            output.status === 'success' &&
+            !output.event &&
+            !output.result &&
+            input.closeOnFirstResult !== false &&
+            !closeRequested
+          ) {
+            closeRequested = true;
+            queue.closeStdin(input.chatJid);
+          }
+        },
+        input.selectedModel,
+      ),
+  );
+
+  const text = outputs.join('\n').trim();
   if (status === 'error') {
     return {
       ok: false,
       text,
-      error: text || 'Main group agent execution failed',
+      outputs,
+      error: text || 'One-shot agent execution failed',
     };
   }
-  return { ok: true, text };
+  return { ok: true, text, outputs };
+}
+
+async function runAssistantActionAgent(
+  input: AssistantActionAgentInput,
+): Promise<{ ok: boolean; text: string; error?: string }> {
+  const chatJid = resolveAssistantActionJid(input.chatJid);
+  if (!chatJid) {
+    return {
+      ok: false,
+      text: '',
+      error: 'Assistant action group not found',
+    };
+  }
+
+  const purposeLabel = assistantActionPurposeLabel(input.purpose);
+  const result = await runOneShotAgent({
+    chatJid,
+    prompt: input.prompt,
+    closeOnFirstResult: true,
+    collect: 'first_result',
+    status: {
+      groupName: '桌面个人助手',
+      promptSummary: `${purposeLabel}：${input.item.title}`,
+      lastSender: 'assistant action',
+      lastContent: input.item.body || input.item.title,
+      lastTime: Date.now().toString(),
+    },
+  });
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      text: result.text,
+      error: result.error || 'Assistant action agent execution failed',
+    };
+  }
+  return { ok: true, text: result.text };
 }
 
 async function startMessageLoop(): Promise<void> {
@@ -1568,15 +1704,18 @@ async function startMessageLoop(): Promise<void> {
           }
           const messagesToSend = allPending;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
+          const runId = activeRunIds.get(chatJid);
+          if (!runId || !queue.canPipeMessage(chatJid)) {
+            queue.enqueueMessageCheck(chatJid);
+            continue;
+          }
           const pipedSelection = await selectModel({
             prompt: formatted,
             isMain: isMainGroup,
           });
-          const runId = activeRunIds.get(chatJid);
           const queryId = createExecutionId();
 
           if (
-            runId &&
             queue.sendMessage(
               chatJid,
               formatted,
@@ -1646,10 +1785,8 @@ async function startMessageLoop(): Promise<void> {
               ?.catch((err) =>
                 logger.warn({ chatJid, err }, 'Failed to set typing indicator'),
               );
-          } else if (runId) {
-            forgetPendingQueryBatch(queryId);
           } else {
-            // No active container — enqueue for a new one
+            forgetPendingQueryBatch(queryId);
             queue.enqueueMessageCheck(chatJid);
           }
         }
@@ -2075,11 +2212,11 @@ async function main(): Promise<void> {
     }
   });
   initAssistantAutoFlow({
-    agentRunner: async ({ prompt, item }) =>
-      runMainGroupAssistantAgent({
+    agentRunner: async ({ prompt, purpose, item }) =>
+      runAssistantActionAgent({
         prompt,
-        itemSourceJid:
-          typeof item.extra.chatJid === 'string' ? item.extra.chatJid : null,
+        purpose,
+        item,
       }),
   });
   startProactiveEngine();

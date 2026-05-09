@@ -21,6 +21,16 @@ interface QueuedTask {
   fn: () => Promise<void>;
 }
 
+export interface OneShotAgentStatusInput {
+  groupFolder: string;
+  groupName: string;
+  promptSummary: string;
+  lastSender?: string;
+  lastContent?: string;
+  lastTime?: string;
+  isTask?: boolean;
+}
+
 const MAX_RETRIES = 5;
 const BASE_RETRY_MS = 5000;
 
@@ -28,6 +38,7 @@ interface GroupState {
   active: boolean;
   idleWaiting: boolean;
   isTaskContainer: boolean;
+  isOneShot: boolean;
   runningTaskId: string | null;
   pendingMessages: boolean;
   pendingTasks: QueuedTask[];
@@ -60,6 +71,7 @@ export class GroupQueue {
         active: false,
         idleWaiting: false,
         isTaskContainer: false,
+        isOneShot: false,
         runningTaskId: null,
         pendingMessages: false,
         pendingTasks: [],
@@ -217,6 +229,59 @@ export class GroupQueue {
     );
   }
 
+  async runOneShot<T>(
+    groupJid: string,
+    status: OneShotAgentStatusInput,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const state = this.getGroup(groupJid);
+    if (state.active) {
+      throw new Error(`Agent is already active for ${groupJid}`);
+    }
+    if (this.activeCount >= MAX_CONCURRENT_CONTAINERS) {
+      throw new Error('At concurrency limit, one-shot agent cannot start');
+    }
+
+    state.stopRequested = false;
+    state.active = true;
+    state.idleWaiting = false;
+    state.isTaskContainer = status.isTask ?? false;
+    state.isOneShot = true;
+    state.pendingMessages = false;
+    state.groupFolder = status.groupFolder;
+    state.groupName = status.groupName;
+    state.promptSummary = status.promptSummary;
+    state.lastSender = status.lastSender ?? null;
+    state.lastContent = status.lastContent ?? null;
+    state.lastTime = status.lastTime ?? null;
+    state.startedAt = Date.now();
+    this.activeCount++;
+    this.emitStatusChange();
+
+    try {
+      return await fn();
+    } finally {
+      state.active = false;
+      state.idleWaiting = false;
+      state.isTaskContainer = false;
+      state.isOneShot = false;
+      state.runningTaskId = null;
+      state.process = null;
+      state.containerName = null;
+      state.groupFolder = null;
+      state.startedAt = null;
+      state.promptSummary = null;
+      state.lastSender = null;
+      state.lastContent = null;
+      state.lastTime = null;
+      state.groupName = null;
+      state.stopRequested = false;
+      this.activeCount--;
+      this.emitStatusChange();
+      this.drainGroup(groupJid);
+    }
+  }
+
   registerProcess(
     groupJid: string,
     proc: ChildProcess,
@@ -234,6 +299,16 @@ export class GroupQueue {
    */
   isActive(groupJid: string): boolean {
     return this.getGroup(groupJid).active;
+  }
+
+  canPipeMessage(groupJid: string): boolean {
+    const state = this.getGroup(groupJid);
+    return Boolean(
+      state.active &&
+        state.groupFolder &&
+        !state.isTaskContainer &&
+        !state.isOneShot,
+    );
   }
 
   async stopAgent(groupJid: string): Promise<StopAgentResult> {
@@ -336,7 +411,12 @@ export class GroupQueue {
     queryId: string,
   ): boolean {
     const state = this.getGroup(groupJid);
-    if (!state.active || !state.groupFolder || state.isTaskContainer)
+    if (
+      !state.active ||
+      !state.groupFolder ||
+      state.isTaskContainer ||
+      state.isOneShot
+    )
       return false;
     const wasIdle = state.idleWaiting;
     state.idleWaiting = false; // Agent is about to receive work, no longer idle
@@ -386,6 +466,7 @@ export class GroupQueue {
     state.active = true;
     state.idleWaiting = false;
     state.isTaskContainer = false;
+    state.isOneShot = false;
     state.pendingMessages = false;
     state.startedAt = Date.now();
     this.activeCount++;
@@ -413,6 +494,7 @@ export class GroupQueue {
       }
     } finally {
       state.active = false;
+      state.isOneShot = false;
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
@@ -435,6 +517,7 @@ export class GroupQueue {
     state.active = true;
     state.idleWaiting = false;
     state.isTaskContainer = true;
+    state.isOneShot = false;
     state.runningTaskId = task.id;
     state.startedAt = Date.now();
     this.activeCount++;
@@ -453,6 +536,7 @@ export class GroupQueue {
     } finally {
       state.active = false;
       state.isTaskContainer = false;
+      state.isOneShot = false;
       state.runningTaskId = null;
       state.process = null;
       state.containerName = null;

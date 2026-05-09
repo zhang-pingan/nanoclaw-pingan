@@ -684,4 +684,43 @@ describe('GroupQueue', () => {
     resolveProcess!();
     await vi.advanceTimersByTimeAsync(10);
   });
+
+  it('shows and clears one-shot agent status without message processing', async () => {
+    let resolveOneShot: (value: string) => void;
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查：线上 error 日志',
+        lastSender: 'assistant action',
+        lastContent: '线上 error 日志：catstory',
+        lastTime: '12345',
+      },
+      () =>
+        new Promise<string>((resolve) => {
+          resolveOneShot = resolve;
+        }),
+    );
+
+    const activeAgents = queue.getActiveAgents();
+    expect(activeAgents).toHaveLength(1);
+    expect(activeAgents[0]).toMatchObject({
+      groupJid: 'assistant:main',
+      groupFolder: 'assistant_main',
+      groupName: '桌面个人助手',
+      promptSummary: '排查：线上 error 日志',
+      lastSender: 'assistant action',
+      lastContent: '线上 error 日志：catstory',
+      lastTime: '12345',
+      isTask: false,
+    });
+    expect(
+      queue.sendMessage('assistant:main', 'hello', 'test-model', 'query-1'),
+    ).toBe(false);
+
+    resolveOneShot!('ok');
+    await expect(oneShotPromise).resolves.toBe('ok');
+    expect(queue.getActiveAgents()).toEqual([]);
+  });
 });
