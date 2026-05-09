@@ -398,6 +398,20 @@ describe('agent inbox store', () => {
         risk_level: 'medium',
         required_user_action: '需要人工确认',
         evidence: [],
+        groups: [
+          {
+            id: 'stale-task',
+            title: '任务无进展',
+            log_indexes: [],
+            count: 1,
+            root_cause: '任务无进展',
+            repairable: false,
+            repair_plan: null,
+            risk_level: 'medium',
+            required_user_action: '需要人工确认',
+            evidence: [],
+          },
+        ],
       }),
     }));
     initAssistantAutoFlow({ agentRunner: runner });
@@ -446,6 +460,20 @@ describe('agent inbox store', () => {
         risk_level: 'medium',
         required_user_action: '需要人工确认用户数据',
         evidence: [{ label: '异常信息', value: 'BusinessException' }],
+        groups: [
+          {
+            id: 'user-info-missing',
+            title: '用户信息缺失',
+            log_indexes: [0],
+            count: 1,
+            root_cause: 'UserService.getUserInfo 未找到用户信息',
+            repairable: false,
+            repair_plan: null,
+            risk_level: 'medium',
+            required_user_action: '需要人工确认用户数据',
+            evidence: [{ label: '异常信息', value: 'BusinessException' }],
+          },
+        ],
       }),
     }));
     initAssistantAutoFlow({ agentRunner: runner });
@@ -476,6 +504,86 @@ describe('agent inbox store', () => {
       summary: '用户信息缺失导致查询失败，不建议自动修复。',
       repairable: false,
       required_user_action: '需要人工确认用户数据',
+      groups: [
+        {
+          id: 'user-info-missing',
+          log_indexes: [0],
+          repairable: false,
+        },
+      ],
+    });
+  });
+
+  it('requires a repair group id for grouped investigation repair', async () => {
+    const runner = vi.fn(async ({ purpose }) => ({
+      ok: true,
+      text:
+        purpose === 'investigation'
+          ? JSON.stringify({
+              ok: true,
+              summary: '发现一类可修复配置问题',
+              root_cause: '配置缺失',
+              repairable: true,
+              repair_plan: '补齐配置',
+              risk_level: 'medium',
+              required_user_action: null,
+              evidence: [],
+              groups: [
+                {
+                  id: 'missing-config',
+                  title: '配置缺失',
+                  log_indexes: [0],
+                  count: 1,
+                  root_cause: '配置缺失',
+                  repairable: true,
+                  repair_plan: '补齐配置',
+                  risk_level: 'medium',
+                  required_user_action: null,
+                  evidence: [],
+                },
+              ],
+            })
+          : JSON.stringify({
+              ok: true,
+              fixed: true,
+              summary: '已补齐配置',
+              result: 'done',
+              next_action: null,
+            }),
+    }));
+    initAssistantAutoFlow({ agentRunner: runner });
+    const item = createOrUpdateAgentInboxItem({
+      dedupeKey: 'online-error-logs:repairable:test',
+      kind: 'risk',
+      priority: 'high',
+      title: '线上 error 日志：repairable',
+      triggerRuleKey: 'online.error_logs',
+      sourceType: 'online_error_log',
+      sourceRefId: 'repairable',
+      extra: {
+        onlineErrorLog: {
+          service: 'repairable',
+          logs: [{ rawLog: 'MissingConfigException' }],
+        },
+      },
+    });
+
+    await runAgentInboxAction({ itemId: item.id, action: 'investigate' });
+
+    await expect(
+      runAgentInboxAction({ itemId: item.id, action: 'repair' }),
+    ).rejects.toThrow('group_id required');
+
+    const repaired = await runAgentInboxAction({
+      itemId: item.id,
+      action: 'repair',
+      payload: { group_id: 'missing-config' },
+    });
+
+    expect(repaired.item.extra.lastRepairGroupId).toBe('missing-config');
+    expect(repaired.item.extra.repair).toMatchObject({
+      fixed: true,
+      summary: '已补齐配置',
     });
   });
 

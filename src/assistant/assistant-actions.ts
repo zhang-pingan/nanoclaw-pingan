@@ -169,7 +169,12 @@ export async function runAgentInboxAction(input: {
     }
 
     if (input.action === 'repair') {
-      const result = await repairAgentInboxItem(item.id);
+      const groupId =
+        typeof payload.group_id === 'string' ? payload.group_id : '';
+      if (!groupId) {
+        throw new Error('group_id required');
+      }
+      const result = await repairAgentInboxItem(item.id, { groupId });
       return {
         ok: true,
         item: result.item,
@@ -184,7 +189,7 @@ export async function runAgentInboxAction(input: {
         item: result.item,
         result: {
           investigation: result.investigation,
-          repair: result.repair || null,
+          repairs: result.repairs || [],
         },
       };
     }

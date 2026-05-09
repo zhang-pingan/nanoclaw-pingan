@@ -4611,6 +4611,129 @@ body.quick-chat-window .quick-chat-input {
   word-break: break-word;
 }
 
+.assistant-flow-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-flow-group {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.assistant-flow-group-head {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.assistant-flow-group-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-flow-group-toggle span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.assistant-flow-group-toggle strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.assistant-flow-group-toggle small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.assistant-flow-group-toggle em {
+  flex: 0 0 auto;
+  color: var(--assistant-accent-strong);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.assistant-flow-repair-btn {
+  flex: 0 0 auto;
+  margin: 6px 6px 6px 0;
+  padding: 0 11px;
+  border: 1px solid rgba(var(--assistant-accent-rgb), 0.14);
+  border-radius: 9px;
+  background: var(--assistant-accent-strong);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.assistant-flow-group.expanded {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.assistant-flow-group.expanded > .assistant-flow-summary,
+.assistant-flow-group.expanded > .assistant-flow-fields,
+.assistant-flow-group.expanded > .assistant-flow-evidence,
+.assistant-flow-group.expanded > .assistant-flow-related-logs {
+  margin: 0 10px 10px;
+}
+
+.assistant-flow-related-logs {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-flow-related-logs > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.assistant-flow-related-log {
+  display: grid;
+  gap: 5px;
+}
+
+.assistant-flow-related-log strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.assistant-flow-related-log code {
+  display: block;
+  max-height: 220px;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .assistant-inbox-list,
 .assistant-log-list {
   display: grid;

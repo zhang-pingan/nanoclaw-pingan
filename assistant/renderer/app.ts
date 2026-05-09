@@ -507,32 +507,6 @@ function renderItem(item: AgentInboxItem): void {
     );
   }
 
-  if (canInvestigate(item)) {
-    bubbleActions.append(
-      button(
-        pendingAction === 'investigate' ? '排查中' : '排查',
-        'primary',
-        () => {
-          void runInboxAction(item.id, 'investigate');
-        },
-        { disabled: Boolean(pendingAction) },
-      ),
-    );
-  }
-
-  if (canRepair(item)) {
-    bubbleActions.append(
-      button(
-        pendingAction === 'repair' ? '修复中' : '修复',
-        'primary',
-        () => {
-          void runInboxAction(item.id, 'repair');
-        },
-        { disabled: Boolean(pendingAction) },
-      ),
-    );
-  }
-
   if (item.action_kind === 'continue_today_plan') {
     bubbleActions.append(
       button(item.action_label || '执行', '', () => {

@@ -39,6 +39,20 @@ interface InvestigationResult {
   risk_level: 'low' | 'medium' | 'high' | 'unknown';
   required_user_action: string | null;
   evidence: Array<{ label: string; value: string }>;
+  groups: InvestigationGroup[];
+}
+
+interface InvestigationGroup {
+  id: string;
+  title: string;
+  log_indexes: number[];
+  count: number;
+  root_cause: string | null;
+  repairable: boolean;
+  repair_plan: string | null;
+  risk_level: 'low' | 'medium' | 'high' | 'unknown';
+  required_user_action: string | null;
+  evidence: Array<{ label: string; value: string }>;
 }
 
 interface RepairResult {
@@ -100,23 +114,78 @@ function parseEvidence(
     .slice(0, 8);
 }
 
+function parseRiskLevel(value: unknown): InvestigationResult['risk_level'] {
+  return value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'unknown'
+    ? value
+    : 'unknown';
+}
+
+function parseLogIndexes(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const indexes = value
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item >= 0);
+  return Array.from(new Set(indexes)).slice(0, 50);
+}
+
+function slugifyGroupId(value: string, index: number): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return slug || `group-${index + 1}`;
+}
+
+function parseInvestigationGroups(value: unknown): InvestigationGroup[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error('Agent output groups is required');
+  }
+  return value
+    .map((item, index) => {
+      if (!isObject(item)) return null;
+      const title = stringValue(item.title, `异常分类 ${index + 1}`);
+      const logIndexes = parseLogIndexes(item.log_indexes);
+      return {
+        id: stringValue(item.id, slugifyGroupId(title, index)),
+        title,
+        log_indexes: logIndexes,
+        count: Math.max(
+          1,
+          Number.isFinite(Number(item.count))
+            ? Math.round(Number(item.count))
+            : logIndexes.length || 1,
+        ),
+        root_cause: stringOrNull(item.root_cause),
+        repairable: item.repairable === true,
+        repair_plan: stringOrNull(item.repair_plan),
+        risk_level: parseRiskLevel(item.risk_level),
+        required_user_action: stringOrNull(item.required_user_action),
+        evidence: parseEvidence(item.evidence),
+      };
+    })
+    .filter((item): item is InvestigationGroup => Boolean(item));
+}
+
 function parseInvestigationResult(text: string): InvestigationResult {
   const parsed = readJsonObject(text);
-  const risk =
-    parsed.risk_level === 'low' ||
-    parsed.risk_level === 'medium' ||
-    parsed.risk_level === 'high'
-      ? parsed.risk_level
-      : 'unknown';
+  const groups = parseInvestigationGroups(parsed.groups).slice(0, 20);
   return {
     ok: parsed.ok !== false,
     summary: stringValue(parsed.summary, '排查完成，但未返回摘要。'),
     root_cause: stringOrNull(parsed.root_cause),
-    repairable: parsed.repairable === true,
+    repairable:
+      parsed.repairable === true ||
+      (groups.length > 0 && groups.every((group) => group.repairable)),
     repair_plan: stringOrNull(parsed.repair_plan),
-    risk_level: risk,
+    risk_level: parseRiskLevel(parsed.risk_level),
     required_user_action: stringOrNull(parsed.required_user_action),
     evidence: parseEvidence(parsed.evidence),
+    groups,
   };
 }
 
@@ -238,13 +307,30 @@ function buildInvestigationPrompt(
   "repair_plan": "可修复时的修复方案，否则为 null",
   "risk_level": "low|medium|high|unknown",
   "required_user_action": "需要用户处理的动作，没有则为 null",
-  "evidence": [{"label":"证据名","value":"证据内容"}]
+  "evidence": [{"label":"证据名","value":"证据内容"}],
+  "groups": [
+    {
+      "id": "稳定短 id，只能包含字母数字中划线或下划线",
+      "title": "问题分类标题",
+      "log_indexes": [0],
+      "count": 1,
+      "root_cause": "该分类根因，无法判断时为 null",
+      "repairable": false,
+      "repair_plan": "该分类可修复时的修复方案，否则为 null",
+      "risk_level": "low|medium|high|unknown",
+      "required_user_action": "该分类需要用户处理的动作，没有则为 null",
+      "evidence": [{"label":"证据名","value":"证据内容"}]
+    }
+  ]
 }
 
 约束：
 - 不确定是否安全修复时，repairable 必须为 false。
 - 涉及审批、产品判断、权限变更、外部系统破坏性操作时，repairable 必须为 false。
 - 只根据给定上下文判断。
+- 如果上下文包含 onlineErrorLog.logs，多条日志可能属于不同问题，必须由你按语义自行归并分类后返回 groups。
+- groups[].log_indexes 必须引用 onlineErrorLog.logs 的 0-based 下标；不要在结果里复制完整 rawLog。
+- 顶层 repairable 只有在所有分类都可自动修复且修复方案不冲突时才为 true；任一分类需人工处理时为 false。
 
 触发项：${item.title}
 上下文：
@@ -256,6 +342,7 @@ function buildRepairPrompt(
   item: AgentInboxItemView,
   context: Record<string, unknown>,
   investigation: InvestigationResult,
+  group?: InvestigationGroup | null,
 ): string {
   return `你是 NanoClaw 主群个人助手的异常修复 Agent。请按排查结论尝试修复；如果无法安全修复，说明原因。
 
@@ -269,10 +356,11 @@ function buildRepairPrompt(
 }
 
 约束：
-- 只能执行排查结论中 repair_plan 描述的修复。
+- 只能执行${group ? '目标分类' : '排查结论'}中 repair_plan 描述的修复。
 - 不确定、风险升高或缺少权限时，fixed 必须为 false，并说明 next_action。
 
 触发项：${item.title}
+${group ? `目标分类：\n${stringifyContext(group)}\n` : ''}
 排查结论：
 ${stringifyContext(investigation)}
 上下文：
@@ -419,6 +507,7 @@ export async function investigateAgentInboxItem(
 
 export async function repairAgentInboxItem(
   itemId: string,
+  input: { groupId: string },
 ): Promise<{ item: AgentInboxItemView; result: RepairResult }> {
   const item = getAgentInboxItem(itemId);
   if (!item) throw new Error('Agent inbox item not found');
@@ -431,6 +520,19 @@ export async function repairAgentInboxItem(
 
   const investigation = item.extra
     .investigation as unknown as InvestigationResult;
+  const groupId = stringOrNull(input.groupId);
+  if (!groupId) {
+    throw new Error('group_id required');
+  }
+  const group = Array.isArray(investigation.groups)
+    ? investigation.groups.find((entry) => entry.id === groupId)
+    : null;
+  if (!group) {
+    throw new Error('Investigation group not found');
+  }
+  if (group.repairable !== true) {
+    throw new Error('This investigation group is not marked as repairable');
+  }
   const context = buildContext(item);
   updateAgentInboxItemExtra(item.id, {
     autoFlowStatus: 'repairing',
@@ -441,7 +543,7 @@ export async function repairAgentInboxItem(
     const output = await agentRunner({
       purpose: 'repair',
       item,
-      prompt: buildRepairPrompt(item, context, investigation),
+      prompt: buildRepairPrompt(item, context, investigation, group),
     });
     if (!output.ok) {
       throw new Error(output.error || output.text || 'Repair failed');
@@ -451,6 +553,7 @@ export async function repairAgentInboxItem(
     const updated = updateAgentInboxItemExtra(item.id, {
       autoFlowStatus: result.fixed ? 'fixed' : 'repair_failed',
       repair: result as unknown as Record<string, unknown>,
+      lastRepairGroupId: group?.id || null,
       lastRepairError: result.fixed
         ? null
         : result.next_action || result.result,
@@ -465,6 +568,7 @@ export async function repairAgentInboxItem(
       title: item.title,
       sourceType: item.source_type,
       sourceRefId: item.source_ref_id,
+      payload: { groupId: group.id, groupTitle: group.title },
       result: result as unknown as Record<string, unknown>,
     });
     return {
@@ -484,20 +588,29 @@ export async function repairAgentInboxItem(
 export async function autoProcessAgentInboxItem(itemId: string): Promise<{
   item: AgentInboxItemView;
   investigation: InvestigationResult;
-  repair?: RepairResult;
+  repairs?: RepairResult[];
 }> {
   const investigated = await investigateAgentInboxItem(itemId);
-  if (!investigated.result.repairable) {
+  const repairableGroups = investigated.result.groups.filter(
+    (group) => group.repairable,
+  );
+  if (repairableGroups.length === 0) {
     return {
       item: investigated.item,
       investigation: investigated.result,
     };
   }
-  const repaired = await repairAgentInboxItem(itemId);
+  const repairs: RepairResult[] = [];
+  let item = investigated.item;
+  for (const group of repairableGroups) {
+    const repaired = await repairAgentInboxItem(itemId, { groupId: group.id });
+    item = repaired.item;
+    repairs.push(repaired.result);
+  }
   return {
-    item: repaired.item,
+    item,
     investigation: investigated.result,
-    repair: repaired.result,
+    repairs,
   };
 }
 

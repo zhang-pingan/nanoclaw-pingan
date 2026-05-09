@@ -499,6 +499,7 @@ var assistantInboxItems = [];
 var assistantActionLogs = [];
 var assistantInboxActionPendingItemIds = new Set();
 var assistantFlowDetailExpandedItems = {};
+var assistantFlowGroupExpandedItems = {};
 var assistantLogDetailExpandedItems = {};
 var assistantLogDetailExpandedLogs = {};
 var assistantScanIntervalSaveTimer = null;
@@ -17902,41 +17903,23 @@ function canShowAssistantInvestigate(item) {
   return Boolean(rule && rule.supportsInvestigation && setting.investigationEnabled);
 }
 
-function canShowAssistantRepair(item) {
-  const ruleKey = getAssistantInboxRuleKey(item);
-  const rule = getAssistantRuleCapability(ruleKey);
-  const investigation = getAssistantInvestigation(item);
-  return Boolean(rule && rule.supportsRepair && investigation && investigation.repairable === true);
-}
-
-function parseAssistantInvestigationText(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const text = value.trim();
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace < 0 || lastBrace <= firstBrace) return null;
-  try {
-    const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 function getAssistantInvestigation(item) {
   const extra = item && item.extra ? item.extra : {};
   const investigation = extra.investigation || null;
-  if (investigation && typeof investigation === "object" && !Array.isArray(investigation)) {
+  if (
+    investigation &&
+    typeof investigation === "object" &&
+    !Array.isArray(investigation) &&
+    Array.isArray(investigation.groups)
+  ) {
     return investigation;
   }
-  const legacy = parseAssistantInvestigationText(extra.lastInvestigationError);
-  return legacy && legacy.ok !== false ? legacy : null;
+  return null;
 }
 
 function getAssistantInvestigationError(item) {
   const extra = item && item.extra ? item.extra : {};
-  if (!extra.lastInvestigationError) return "";
-  return getAssistantInvestigation(item) ? "" : String(extra.lastInvestigationError);
+  return extra.lastInvestigationError ? String(extra.lastInvestigationError) : "";
 }
 
 function assistantRiskLevelLabel(level) {
@@ -17944,6 +17927,16 @@ function assistantRiskLevelLabel(level) {
   if (level === "medium") return "中";
   if (level === "high") return "高";
   return "未知";
+}
+
+function assistantFlowGroupKey(itemId, groupId) {
+  return `${itemId}:${groupId || "default"}`;
+}
+
+function assistantInvestigationGroups(investigation) {
+  if (!investigation || typeof investigation !== "object") return [];
+  const groups = Array.isArray(investigation.groups) ? investigation.groups.filter((group) => group && typeof group === "object") : [];
+  return groups;
 }
 
 function renderAssistantFlowField(label, value) {
@@ -17972,6 +17965,62 @@ function renderAssistantInvestigationEvidence(evidence) {
         `;
       }).join("")}
     </div>
+  `;
+}
+
+function renderAssistantGroupLogs(item, group) {
+  const detail = getAssistantOnlineErrorLogExtra(item);
+  const logs = detail ? detail.logs : [];
+  const indexes = Array.isArray(group.log_indexes)
+    ? group.log_indexes.map((index) => Number(index)).filter((index) => Number.isInteger(index) && index >= 0 && index < logs.length)
+    : [];
+  if (indexes.length === 0) return "";
+  return `
+    <div class="assistant-flow-related-logs">
+      <span>关联日志</span>
+      ${indexes.map((index) => {
+        const log = logs[index] || {};
+        return `
+          <div class="assistant-flow-related-log">
+            <strong>${escapeHtml(formatAssistantOnlineErrorLogSummary(log, index))}</strong>
+            <code>${escapeHtml(String(log.rawLog || ""))}</code>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderAssistantInvestigationGroup(item, group, index) {
+  const itemId = item && item.id ? item.id : "";
+  const groupId = group && group.id ? String(group.id) : `group-${index + 1}`;
+  const expanded = Boolean(assistantFlowGroupExpandedItems[assistantFlowGroupKey(itemId, groupId)]);
+  const count = Number(group.count);
+  const safeCount = Number.isFinite(count) && count > 0 ? Math.round(count) : (Array.isArray(group.log_indexes) ? group.log_indexes.length : 1);
+  return `
+    <article class="assistant-flow-group${expanded ? " expanded" : ""}">
+      <div class="assistant-flow-group-head">
+        <button type="button" class="assistant-flow-group-toggle" data-assistant-flow-group="${escapeAttribute(itemId)}" data-assistant-flow-group-id="${escapeAttribute(groupId)}" aria-expanded="${expanded ? "true" : "false"}">
+          <span>
+            <strong>${escapeHtml(group.title || `异常分类 ${index + 1}`)}</strong>
+            <small>${escapeHtml(`${safeCount} 条 · 风险 ${assistantRiskLevelLabel(group.risk_level)} · ${group.repairable === true ? "可自动修复" : "需人工确认"}`)}</small>
+          </span>
+          <em>${expanded ? "收起" : "展开"}</em>
+        </button>
+        ${group.repairable === true ? `<button type="button" class="assistant-flow-repair-btn" data-assistant-action="repair" data-assistant-item="${escapeAttribute(itemId)}" data-assistant-group-id="${escapeAttribute(groupId)}">修复</button>` : ""}
+      </div>
+      ${expanded ? `
+        <div class="assistant-flow-summary">${escapeHtml(String(group.title || ""))}</div>
+        <div class="assistant-flow-fields">
+          ${renderAssistantFlowField("风险", assistantRiskLevelLabel(group.risk_level))}
+          ${renderAssistantFlowField("根因", group.root_cause)}
+          ${renderAssistantFlowField("修复建议", group.repair_plan || (group.repairable === true ? "" : "不建议自动修复"))}
+          ${renderAssistantFlowField("需处理", group.required_user_action)}
+        </div>
+        ${renderAssistantInvestigationEvidence(group.evidence)}
+        ${renderAssistantGroupLogs(item, group)}
+      ` : ""}
+    </article>
   `;
 }
 
@@ -18010,7 +18059,9 @@ function renderAssistantAutoFlowDetail(item) {
         ${repair && repair.next_action ? renderAssistantFlowField("后续", repair.next_action) : ""}
         ${extra.lastRepairError ? renderAssistantFlowField("修复失败", extra.lastRepairError) : ""}
       </div>
-      ${renderAssistantInvestigationEvidence(investigation.evidence)}
+      <div class="assistant-flow-groups">
+        ${assistantInvestigationGroups(investigation).map((group, index) => renderAssistantInvestigationGroup(item, group, index)).join("")}
+      </div>
     </div>
   `;
 }
@@ -18093,7 +18144,6 @@ function renderAssistantInboxActions(item) {
     ${hasFlowDetail ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-flow-detail="${escapeAttribute(item.id)}">${assistantFlowDetailExpandedItems[item.id] ? "收起结果" : "排查结果"}</button>` : ""}
     ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? "收起日志" : "日志详情"}</button>` : ""}
     ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}">${investigation ? "重新排查" : "排查"}</button>` : ""}
-    ${canShowAssistantRepair(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="repair" data-assistant-item="${escapeAttribute(item.id)}">修复</button>` : ""}
     ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
     <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
     <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
@@ -18176,11 +18226,22 @@ function renderAssistantInbox() {
       renderAssistantInbox();
     });
   });
+  Array.from(assistantInboxList.querySelectorAll("[data-assistant-flow-group]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const itemId = button.getAttribute("data-assistant-flow-group") || "";
+      const groupId = button.getAttribute("data-assistant-flow-group-id") || "";
+      if (!itemId || !groupId) return;
+      const key = assistantFlowGroupKey(itemId, groupId);
+      assistantFlowGroupExpandedItems[key] = !assistantFlowGroupExpandedItems[key];
+      renderAssistantInbox();
+    });
+  });
   Array.from(assistantInboxList.querySelectorAll("[data-assistant-action]")).forEach((button) => {
     button.addEventListener("click", async () => {
       const itemId = button.getAttribute("data-assistant-item") || "";
       const action = button.getAttribute("data-assistant-action") || "";
-      await runAssistantInboxAction(itemId, action, button);
+      const groupId = button.getAttribute("data-assistant-group-id") || "";
+      await runAssistantInboxAction(itemId, action, button, groupId ? { group_id: groupId } : {});
     });
   });
 }
@@ -18304,7 +18365,7 @@ async function clearAssistantData() {
   }
 }
 
-async function runAssistantInboxAction(itemId, action, triggerButton) {
+async function runAssistantInboxAction(itemId, action, triggerButton, payload = {}) {
   if (!itemId || !action) return;
   if (assistantInboxActionPendingItemIds.has(itemId)) return;
   assistantInboxActionPendingItemIds.add(itemId);
@@ -18317,15 +18378,18 @@ async function runAssistantInboxAction(itemId, action, triggerButton) {
   }
 
   try {
-    const payload = action === "snooze" ? { minutes: 60 } : {};
+    const actionPayload = action === "snooze" ? { minutes: 60, ...payload } : payload;
     const res = await apiFetch("/api/agent-inbox/action", {
       method: "POST",
-      body: JSON.stringify({ item_id: itemId, action, payload }),
+      body: JSON.stringify({ item_id: itemId, action, payload: actionPayload }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     if (action === "investigate" || action === "repair") {
       assistantFlowDetailExpandedItems[itemId] = true;
+      if (payload.group_id) {
+        assistantFlowGroupExpandedItems[assistantFlowGroupKey(itemId, payload.group_id)] = true;
+      }
     }
     await loadAssistantState();
   } catch (err) {
