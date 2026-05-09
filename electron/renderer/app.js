@@ -498,6 +498,7 @@ var assistantState = null;
 var assistantInboxItems = [];
 var assistantActionLogs = [];
 var assistantInboxActionPendingItemIds = new Set();
+var assistantInboxActionPendingItems = {};
 var assistantFlowDetailExpandedItems = {};
 var assistantFlowGroupExpandedItems = {};
 var assistantLogDetailExpandedItems = {};
@@ -17781,7 +17782,19 @@ function renderAssistantSourceRule(rule) {
 
 function formatAssistantStatusText(item) {
   if (!item) return "";
+  const pending = assistantInboxActionPendingItems[item.id || ""];
+  const extra = item.extra && typeof item.extra === "object" ? item.extra : {};
+  const flowStatus = pending && pending.status ? pending.status : extra.autoFlowStatus;
+  const flowLabelMap = {
+    investigating: "排查中",
+    investigated: "已排查",
+    repairing: "修复中",
+    fixed: "已修复",
+    repair_failed: "修复失败",
+    failed: "排查失败",
+  };
   const parts = [item.kind || "notification", item.priority || "normal", item.status || "unread"];
+  if (flowStatus && flowLabelMap[flowStatus]) parts.push(flowLabelMap[flowStatus]);
   return parts.filter(Boolean).join(" · ");
 }
 
@@ -17995,6 +18008,10 @@ function renderAssistantInvestigationGroup(item, group, index) {
   const itemId = item && item.id ? item.id : "";
   const groupId = group && group.id ? String(group.id) : `group-${index + 1}`;
   const expanded = Boolean(assistantFlowGroupExpandedItems[assistantFlowGroupKey(itemId, groupId)]);
+  const pending = assistantInboxActionPendingItems[itemId];
+  const flowStatus = item && item.extra ? item.extra.autoFlowStatus : "";
+  const repairPending = (pending && pending.action === "repair" && pending.groupId === groupId) || flowStatus === "repairing";
+  const itemPending = Boolean(pending) || flowStatus === "investigating" || flowStatus === "repairing";
   const count = Number(group.count);
   const safeCount = Number.isFinite(count) && count > 0 ? Math.round(count) : (Array.isArray(group.log_indexes) ? group.log_indexes.length : 1);
   return `
@@ -18007,7 +18024,7 @@ function renderAssistantInvestigationGroup(item, group, index) {
           </span>
           <em>${expanded ? "收起" : "展开"}</em>
         </button>
-        ${group.repairable === true ? `<button type="button" class="assistant-flow-repair-btn" data-assistant-action="repair" data-assistant-item="${escapeAttribute(itemId)}" data-assistant-group-id="${escapeAttribute(groupId)}">修复</button>` : ""}
+        ${group.repairable === true ? `<button type="button" class="assistant-flow-repair-btn${repairPending ? " is-pending" : ""}" data-assistant-action="repair" data-assistant-item="${escapeAttribute(itemId)}" data-assistant-group-id="${escapeAttribute(groupId)}" ${itemPending ? "disabled aria-disabled=\"true\"" : ""}>${repairPending ? "修复中..." : "修复"}</button>` : ""}
       </div>
       ${expanded ? `
         <div class="assistant-flow-summary">${escapeHtml(String(group.title || ""))}</div>
@@ -18027,19 +18044,26 @@ function renderAssistantInvestigationGroup(item, group, index) {
 function renderAssistantAutoFlowDetail(item) {
   if (!assistantFlowDetailExpandedItems[item.id]) return "";
   const extra = item && item.extra ? item.extra : {};
+  const flowStatus = extra.autoFlowStatus ? String(extra.autoFlowStatus) : "";
   const investigation = getAssistantInvestigation(item);
   const repair = extra.repair || null;
   const investigationError = getAssistantInvestigationError(item);
-  const hasDetail = investigation || repair || extra.lastAutoFlowError || investigationError || extra.lastRepairError;
+  const hasDetail = investigation || repair || flowStatus || extra.lastAutoFlowError || investigationError || extra.lastRepairError;
   if (!hasDetail) return "";
 
   if (!investigation) {
     const lines = [];
-    if (extra.autoFlowStatus) lines.push(`状态：${extra.autoFlowStatus}`);
+    if (flowStatus) lines.push(`状态：${assistantFlowStatusLabel(flowStatus) || flowStatus}`);
     if (extra.lastAutoFlowError) lines.push(`异常：${extra.lastAutoFlowError}`);
     if (investigationError) lines.push(`排查失败：${investigationError}`);
     if (extra.lastRepairError) lines.push(`修复失败：${extra.lastRepairError}`);
-    return `<div class="assistant-inbox-flow error">${lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}</div>`;
+    const pending = flowStatus === "investigating" || flowStatus === "repairing";
+    return `
+      <div class="assistant-inbox-flow${pending ? " is-pending" : " error"}">
+        ${lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}
+        ${pending ? '<div class="assistant-flow-pending-hint">后台正在执行，完成后会自动刷新结果。</div>' : ""}
+      </div>
+    `;
   }
 
   return `
@@ -18050,7 +18074,7 @@ function renderAssistantAutoFlowDetail(item) {
       </div>
       ${investigation.summary ? `<div class="assistant-flow-summary">${escapeHtml(String(investigation.summary))}</div>` : ""}
       <div class="assistant-flow-fields">
-        ${renderAssistantFlowField("状态", extra.autoFlowStatus === "failed" ? "已排查" : (extra.autoFlowStatus || "已排查"))}
+        ${renderAssistantFlowField("状态", assistantFlowStatusLabel(extra.autoFlowStatus) || "已排查")}
         ${renderAssistantFlowField("风险", assistantRiskLevelLabel(investigation.risk_level))}
         ${renderAssistantFlowField("根因", investigation.root_cause)}
         ${renderAssistantFlowField("修复建议", investigation.repair_plan || (investigation.repairable === true ? "" : "不建议自动修复"))}
@@ -18139,14 +18163,19 @@ function renderAssistantOnlineErrorLogDetails(item) {
 function renderAssistantInboxActions(item) {
   const investigation = getAssistantInvestigation(item);
   const flowError = getAssistantInvestigationError(item) || (item && item.extra && (item.extra.lastAutoFlowError || item.extra.lastRepairError));
-  const hasFlowDetail = Boolean(investigation || flowError);
+  const pending = assistantInboxActionPendingItems[item.id || ""];
+  const pendingFlowStatus = item && item.extra ? item.extra.autoFlowStatus : "";
+  const hasFlowDetail = Boolean(investigation || flowError || pendingFlowStatus === "investigating" || pendingFlowStatus === "repairing");
+  const isFlowPending = pendingFlowStatus === "investigating" || pendingFlowStatus === "repairing";
+  const pendingAction = pending && pending.action ? pending.action : (pendingFlowStatus === "investigating" ? "investigate" : (pendingFlowStatus === "repairing" ? "repair" : ""));
+  const disabledAttr = pending || isFlowPending ? 'disabled aria-disabled="true"' : "";
   return `
     ${hasFlowDetail ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-flow-detail="${escapeAttribute(item.id)}">${assistantFlowDetailExpandedItems[item.id] ? "收起结果" : "排查结果"}</button>` : ""}
     ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? "收起日志" : "日志详情"}</button>` : ""}
-    ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}">${investigation ? "重新排查" : "排查"}</button>` : ""}
-    ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}">${escapeHtml(item.action_label || "执行")}</button>` : ""}
-    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}">稍后</button>
-    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}">忽略</button>
+    ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "investigate" ? " is-pending" : ""}" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "investigate" ? assistantPendingLabel("investigate") : (investigation ? "重新排查" : "排查")}</button>` : ""}
+    ${item.action_kind === "continue_today_plan" ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "execute" ? " is-pending" : ""}" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "execute" ? assistantPendingLabel("execute") : escapeHtml(item.action_label || "执行")}</button>` : ""}
+    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "snooze" ? " is-pending" : ""}" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "snooze" ? assistantPendingLabel("snooze") : "稍后"}</button>
+    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "dismiss" ? " is-pending" : ""}" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "dismiss" ? assistantPendingLabel("dismiss") : "忽略"}</button>
   `;
 }
 
@@ -18183,7 +18212,7 @@ function renderAssistantInbox() {
     return;
   }
   assistantInboxList.innerHTML = assistantInboxItems.map((item) => `
-    <article class="assistant-inbox-item ${escapeAttribute(item.priority || "normal")}">
+    <article class="assistant-inbox-item ${escapeAttribute(item.priority || "normal")}${assistantInboxItemStateClass(item)}">
       <div class="assistant-inbox-main">
         <div class="assistant-inbox-meta">${escapeHtml(formatAssistantStatusText(item))}</div>
         <div class="assistant-inbox-title">${escapeHtml(item.title || "未命名事项")}</div>
@@ -18252,6 +18281,59 @@ function assistantLocalStatusForAction(action) {
   if (action === "mark_read") return "read";
   if (action === "resolve") return "done";
   return null;
+}
+
+function assistantFlowStatusLabel(status) {
+  if (status === "investigating") return "正在排查";
+  if (status === "repairing") return "正在修复";
+  if (status === "investigated") return "已排查";
+  if (status === "fixed") return "已修复";
+  if (status === "repair_failed") return "修复失败";
+  if (status === "failed") return "排查失败";
+  return status ? String(status) : "";
+}
+
+function assistantPendingLabel(action) {
+  if (action === "investigate") return "排查中...";
+  if (action === "repair") return "修复中...";
+  if (action === "execute") return "执行中...";
+  if (action === "snooze") return "处理中...";
+  if (action === "dismiss") return "处理中...";
+  if (action === "mark_read") return "处理中...";
+  if (action === "resolve") return "处理中...";
+  return "处理中...";
+}
+
+function assistantFlowStatusForAction(action) {
+  if (action === "investigate") return "investigating";
+  if (action === "repair") return "repairing";
+  return null;
+}
+
+function assistantInboxItemStateClass(item) {
+  if (!item) return "";
+  const pending = assistantInboxActionPendingItems[item.id || ""];
+  const extra = item.extra && typeof item.extra === "object" ? item.extra : {};
+  const flowStatus = pending && pending.status ? pending.status : extra.autoFlowStatus;
+  return flowStatus === "investigating" || flowStatus === "repairing" ? " is-pending" : "";
+}
+
+function patchAssistantInboxItemFlowStatus(itemId, status) {
+  if (!itemId || !status) return;
+  assistantInboxItems = assistantInboxItems.map((item) =>
+    item.id === itemId
+      ? {
+          ...item,
+          extra: {
+            ...(item.extra || {}),
+            autoFlowStatus: status,
+            ...(status === "investigating" ? { lastInvestigationError: null } : {}),
+            ...(status === "repairing" ? { lastRepairError: null } : {}),
+          },
+        }
+      : item
+  );
+  renderAssistantInbox();
 }
 
 function patchAssistantInboxItemStatus(itemId, status) {
@@ -18369,10 +18451,24 @@ async function runAssistantInboxAction(itemId, action, triggerButton, payload = 
   if (!itemId || !action) return;
   if (assistantInboxActionPendingItemIds.has(itemId)) return;
   assistantInboxActionPendingItemIds.add(itemId);
-  if (triggerButton) triggerButton.disabled = true;
+  assistantInboxActionPendingItems[itemId] = {
+    action,
+    groupId: payload.group_id || "",
+  };
 
-  const previousItems = assistantInboxItems.slice();
+  const previousItem = assistantInboxItems.find((item) => item.id === itemId);
   const localStatus = assistantLocalStatusForAction(action);
+  const flowStatus = assistantFlowStatusForAction(action);
+  if (flowStatus) {
+    assistantInboxActionPendingItems[itemId].status = flowStatus;
+    assistantFlowDetailExpandedItems[itemId] = true;
+    if (payload.group_id) {
+      assistantFlowGroupExpandedItems[assistantFlowGroupKey(itemId, payload.group_id)] = true;
+    }
+    patchAssistantInboxItemFlowStatus(itemId, flowStatus);
+  } else {
+    renderAssistantInbox();
+  }
   if (localStatus) {
     patchAssistantInboxItemStatus(itemId, localStatus);
   }
@@ -18393,13 +18489,20 @@ async function runAssistantInboxAction(itemId, action, triggerButton, payload = 
     }
     await loadAssistantState();
   } catch (err) {
-    assistantInboxItems = previousItems;
+    delete assistantInboxActionPendingItems[itemId];
+    if (previousItem) {
+      assistantInboxItems = assistantInboxItems.map((item) =>
+        item.id === itemId ? previousItem : item
+      );
+    }
     renderAssistantInbox();
+    await loadAssistantState();
     console.error("Failed to run assistant inbox action:", err);
     showToast(err instanceof Error ? err.message : "Inbox 动作失败", 2200);
   } finally {
     assistantInboxActionPendingItemIds.delete(itemId);
-    if (triggerButton) triggerButton.disabled = false;
+    delete assistantInboxActionPendingItems[itemId];
+    renderAssistantInbox();
   }
 }
 
