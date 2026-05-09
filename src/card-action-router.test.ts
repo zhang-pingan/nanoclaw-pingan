@@ -20,6 +20,7 @@ vi.mock('./workflow.js', () => ({
 
 import { createCardActionHandler } from './card-action-router.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
+import { handleCardAction } from './workflow.js';
 
 describe('card-action-router ask dedupe', () => {
   beforeEach(() => {
@@ -97,5 +98,30 @@ describe('card-action-router ask dedupe', () => {
 
     expect(handleAskQuestionResponse).toHaveBeenCalledTimes(2);
   });
-});
 
+  it('returns workflow card action results to the channel', async () => {
+    vi.mocked(handleCardAction).mockReturnValueOnce({
+      ok: false,
+      toast: { type: 'error', content: 'channel not allowed' },
+    });
+    const handler = createCardActionHandler({
+      registeredGroups: () => ({}),
+      sendMessage: async () => {},
+    });
+
+    const result = await handler({
+      action: 'workflow_interrupt_resume',
+      user_id: 'u1',
+      message_id: 'm3',
+      form_value: {
+        interrupt_id: 'wi-1',
+        resume_action: 'approve',
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      toast: { type: 'error', content: 'channel not allowed' },
+    });
+  });
+});

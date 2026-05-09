@@ -15,6 +15,10 @@ import {
   handleWorkbenchBroadcastCardAction,
   logWorkbenchBroadcastActionFailure,
 } from './workbench-broadcast-actions.js';
+import {
+  buildCardStringFormValues,
+  parseNestedCardStringPayload,
+} from './card-action-payload.js';
 
 const ASK_ACTION_DEDUPE_WINDOW_MS = 15_000;
 const recentAskActionFingerprints = new Map<string, number>();
@@ -56,26 +60,6 @@ function askActionFingerprint(action: {
   ].join('|');
 }
 
-function parseNestedPayload(
-  formValue: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  const raw = formValue?.payload;
-  if (typeof raw !== 'string' || !raw.trim()) return undefined;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return undefined;
-    }
-    return Object.fromEntries(
-      Object.entries(parsed).filter(
-        (entry): entry is [string, string] => typeof entry[1] === 'string',
-      ),
-    );
-  } catch {
-    return undefined;
-  }
-}
-
 export function createCardActionHandler(deps: {
   registeredGroups: () => Record<string, RegisteredGroup>;
   sendCard?: (
@@ -111,8 +95,7 @@ export function createCardActionHandler(deps: {
       action.action !== ASK_ACTION_ANSWER &&
       action.action !== ASK_ACTION_SKIP
     ) {
-      handleWorkflowCardAction(action);
-      return;
+      return handleWorkflowCardAction(action);
     }
 
     const requestId = action.form_value?.request_id;
@@ -148,61 +131,67 @@ export function createCardActionHandler(deps: {
     }
     recentAskActionFingerprints.set(fp, now);
 
-    const nestedPayload = parseNestedPayload(action.form_value);
+    const nestedPayload = parseNestedCardStringPayload(action.form_value);
     const answer = nestedPayload?.answer || action.form_value?.answer;
-    const formValues =
-      nestedPayload ||
-      (action.form_value
-        ? Object.fromEntries(
-            Object.entries(action.form_value).filter(
-              ([k]) =>
-                ![
-                  'action',
-                  'group_folder',
-                  'request_id',
-                  'question_id',
-                  'answer',
-                  'payload',
-                ].includes(k),
-            ),
-          )
-        : undefined);
+    const formValues = buildCardStringFormValues(action.form_value, [
+      'action',
+      'group_folder',
+      'request_id',
+      'question_id',
+      'answer',
+      'payload',
+    ]);
     const registeredGroups = deps.registeredGroups();
     const chatJid = findChatJidByGroupFolder(groupFolder, registeredGroups);
 
-    void handleAskQuestionResponse({
-      requestId,
-      groupFolder,
-      userId: action.user_id || 'unknown',
-      answer,
-      formValues,
-      skip: action.action === ASK_ACTION_SKIP,
-      registeredGroups,
-      sendCard: deps.sendCard,
-      sendMessage: deps.sendMessage,
-    })
-      .then(async (result) => {
-        if (!chatJid) return;
-        if (!result.ok) {
-          await deps.sendMessage(chatJid, result.userMessage);
-          if (!result.completed) {
-            await dispatchCurrentAskQuestion({
-              requestId,
-              groupFolder,
-              validationError: result.userMessage,
-              validationErrors: result.validationErrors,
-              registeredGroups,
-              sendCard: deps.sendCard,
-              sendMessage: deps.sendMessage,
-            });
-          }
-        }
-      })
-      .catch((err) => {
-        logger.warn(
-          { err, requestId, groupFolder },
-          'ask_question card action handling failed',
-        );
+    try {
+      const result = await handleAskQuestionResponse({
+        requestId,
+        groupFolder,
+        userId: action.user_id || 'unknown',
+        answer,
+        formValues,
+        skip: action.action === ASK_ACTION_SKIP,
+        registeredGroups,
+        sendCard: deps.sendCard,
+        sendMessage: deps.sendMessage,
       });
+      if (!result.ok) {
+        if (chatJid) {
+          await deps.sendMessage(chatJid, result.userMessage);
+        }
+        if (!result.completed) {
+          await dispatchCurrentAskQuestion({
+            requestId,
+            groupFolder,
+            validationError: result.userMessage,
+            validationErrors: result.validationErrors,
+            registeredGroups,
+            sendCard: deps.sendCard,
+            sendMessage: deps.sendMessage,
+          });
+        }
+        return {
+          ok: false,
+          toast: { type: 'error' as const, content: result.userMessage },
+        };
+      }
+      return {
+        ok: true,
+        toast: { type: 'success' as const, content: result.userMessage },
+      };
+    } catch (err) {
+      logger.warn(
+        { err, requestId, groupFolder },
+        'ask_question card action handling failed',
+      );
+      return {
+        ok: false,
+        toast: {
+          type: 'error' as const,
+          content: '处理问题卡片失败，请稍后重试。',
+        },
+      };
+    }
   };
 }

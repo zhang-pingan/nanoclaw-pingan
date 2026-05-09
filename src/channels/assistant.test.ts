@@ -55,6 +55,9 @@ describe('assistant channel', () => {
     groups = getAllRegisteredGroups();
     expect(groups[ASSISTANT_MAIN_JID]?.folder).toBe(ASSISTANT_MAIN_FOLDER);
     expect(groups[ASSISTANT_MAIN_JID]?.isMain).toBe(true);
+    expect(groups[ASSISTANT_MAIN_JID]?.description).toContain(
+      'assistant 桌面个人助手的沟通频道',
+    );
 
     const userMessage = sendAssistantUserMessage('帮我总结今天要做什么');
     expect(userMessage.chatJid).toBe(ASSISTANT_MAIN_JID);
@@ -97,6 +100,52 @@ describe('assistant channel', () => {
     expect(clearResult.total).toBeGreaterThan(0);
     expect(listAssistantChatMessages(10)).toEqual([]);
     expect(listStoredMessagesByChat(ASSISTANT_MAIN_JID, 10)).toEqual([]);
+
+    await channel.disconnect();
+  });
+
+  it('refreshes an existing assistant main group definition on connect', async () => {
+    const factory = getChannelFactory('assistant');
+    expect(factory).toBeTruthy();
+
+    let groups: Record<string, RegisteredGroup> = {
+      [ASSISTANT_MAIN_JID]: {
+        name: '旧桌面助手',
+        folder: ASSISTANT_MAIN_FOLDER,
+        trigger: '@old',
+        added_at: '2026-01-01T00:00:00.000Z',
+        requiresTrigger: true,
+        isMain: false,
+        description: '旧描述',
+      },
+    };
+
+    const channel = factory!({
+      onMessage: (_jid, msg) => storeMessage(msg),
+      onChatMetadata: (jid, timestamp, name, channelName, isGroup) =>
+        storeChatMetadata(jid, timestamp, name, channelName, isGroup),
+      registeredGroups: () => groups,
+      registerGroup: (jid, group) => {
+        groups[jid] = group;
+        setRegisteredGroup(jid, group);
+      },
+      enqueueMessageCheck: () => undefined,
+    });
+    expect(channel).toBeTruthy();
+    if (!channel) throw new Error('assistant channel factory returned null');
+
+    await channel.connect();
+
+    groups = getAllRegisteredGroups();
+    expect(groups[ASSISTANT_MAIN_JID]).toMatchObject({
+      folder: ASSISTANT_MAIN_FOLDER,
+      trigger: '',
+      requiresTrigger: false,
+      isMain: true,
+    });
+    expect(groups[ASSISTANT_MAIN_JID]?.description).toContain(
+      'assistant 桌面个人助手的沟通频道',
+    );
 
     await channel.disconnect();
   });

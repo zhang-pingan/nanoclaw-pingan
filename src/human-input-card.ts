@@ -1,5 +1,6 @@
 import { getWorkflow, getWorkflowInterrupt } from './db.js';
 import { buildInteractiveCard } from './card-builder.js';
+import { logger } from './logger.js';
 import type {
   AskQuestionField,
   AskQuestionItem,
@@ -7,6 +8,7 @@ import type {
   CardInput,
   InteractiveCard,
   Workflow,
+  WorkflowInterruptActorChannel,
 } from './types.js';
 import type { WorkbenchActionItem, WorkbenchTaskItem } from './workbench.js';
 import {
@@ -49,6 +51,16 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+function channelArray(value: unknown): WorkflowInterruptActorChannel[] {
+  return stringArray(value).filter(
+    (item): item is WorkflowInterruptActorChannel =>
+      item === 'web' ||
+      item === 'feishu' ||
+      item === 'assistant' ||
+      item === 'system',
+  );
 }
 
 function actionLabel(action: string): string {
@@ -254,7 +266,7 @@ function buildWorkflowCardFromDsl(
       ? (item.extra.payloadSchema as JsonObject)
       : undefined);
   try {
-    return buildInteractiveCard(cardConfig, {
+    const card = buildInteractiveCard(cardConfig, {
       workflowId: workflow.id,
       interruptId: interrupt?.id || interruptId || undefined,
       allowedActions: stringArray(
@@ -265,7 +277,21 @@ function buildWorkflowCardFromDsl(
       payloadSchema,
       vars: buildTemplateVars(task),
     });
-  } catch {
+    card.allowed_channels = interrupt
+      ? channelArray(interrupt.allowed_channels_json)
+      : channelArray(item.extra?.allowedChannels);
+    return card;
+  } catch (err) {
+    logger.warn(
+      {
+        err,
+        taskId: task.id,
+        actionItemId: item.id,
+        workflowId: workflow.id,
+        cardKey: state.card,
+      },
+      'Failed to build workflow card from DSL; falling back to default human input card',
+    );
     return null;
   }
 }
@@ -368,6 +394,7 @@ function buildDefaultWorkflowCard(
     },
     body: renderWorkflowBodyFallback(item, task),
     buttons: buttons.length > 0 ? buttons : undefined,
+    allowed_channels: channelArray(item.extra?.allowedChannels),
   };
   if (formAction) {
     card.form = {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   _initTestDatabase,
+  createWorkbenchActionItem,
   createWorkbenchTask,
   createWorkflow,
   getTodayPlanById,
@@ -38,7 +39,13 @@ describe('today-plan', () => {
   });
 
   it('lists only the latest 200 messages from the plan date', () => {
-    storeChatMetadata('web:main', String(Date.parse('2026-04-20T08:00:00.000Z')), 'Main Group', 'web', true);
+    storeChatMetadata(
+      'web:main',
+      String(Date.parse('2026-04-20T08:00:00.000Z')),
+      'Main Group',
+      'web',
+      true,
+    );
     storeWebMessage({
       id: 'old-day',
       chat_jid: 'web:main',
@@ -171,6 +178,26 @@ describe('today-plan', () => {
       updated_at: '2026-04-20T00:00:00.000Z',
       last_event_at: '2026-04-20T00:00:00.000Z',
     });
+    createWorkbenchActionItem({
+      id: 'wai-today-plan-1',
+      task_id: 'wb-wf-1',
+      workflow_id: 'wf-1',
+      subtask_id: null,
+      stage_key: 'dev',
+      delegation_id: null,
+      group_folder: null,
+      item_type: 'interactive',
+      status: 'pending',
+      title: '需要处理',
+      body: '请确认今日计划待办',
+      source_type: 'send_message',
+      source_ref_id: 'msg-1',
+      replyable: 0,
+      created_at: '2026-04-20T00:00:00.000Z',
+      updated_at: '2026-04-20T00:00:00.000Z',
+      resolved_at: null,
+      extra_json: JSON.stringify({ keep_visible_when_current_stage: true }),
+    });
 
     const plan = ensureTodayPlan('2026-04-20');
     const item = createTodayPlanItemForPlan(plan.id);
@@ -204,6 +231,19 @@ describe('today-plan', () => {
     expect(detail.items).toHaveLength(1);
     expect(detail.items[0].related_tasks).toHaveLength(1);
     expect(detail.items[0].related_tasks[0].description).toContain('今日计划');
+    expect(
+      detail.items[0].related_tasks[0].action_items[0]?.card,
+    ).toMatchObject({
+      header: { title: '需要处理' },
+      buttons: [
+        {
+          value: {
+            action: 'workbench_action_item',
+            workbench_action: 'resolve',
+          },
+        },
+      ],
+    });
     expect(detail.items[0].related_services).toHaveLength(1);
     expect(detail.items[0].related_services[0].service).toBe('catstory');
     expect(detail.items[0].related_services[0].branches[0].name).toBe(
@@ -323,7 +363,9 @@ describe('today-plan', () => {
     expect(payload?.prompt).toContain('# 邮件正文模板');
     expect(payload?.prompt).toContain('只输出邮件正文');
     expect(payload?.prompt).toContain('1. <计划标题 1>');
-    expect(payload?.prompt).toContain('- 根据`关联任务`、`关联群聊`、`关联服务分支` 信息汇总实际执行项列表');
+    expect(payload?.prompt).toContain(
+      '- 根据`关联任务`、`关联群聊`、`关联服务分支` 信息汇总实际执行项列表',
+    );
     expect(payload?.prompt).toContain('2. <计划标题 2>');
     expect(payload?.prompt).toContain('不要保留尖括号占位符');
     expect(payload?.prompt).not.toContain('wecom-mail');

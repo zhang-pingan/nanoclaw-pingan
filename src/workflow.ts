@@ -15,6 +15,7 @@ import path from 'path';
 import YAML from 'yaml';
 
 import { buildInteractiveCard } from './card-builder.js';
+import { buildCardActionPayload } from './card-action-payload.js';
 import { PROJECT_ROOT } from './config.js';
 import {
   closePendingWorkflowInterrupts,
@@ -56,6 +57,7 @@ import { logger } from './logger.js';
 import {
   Delegation,
   CardButton,
+  CardActionResult,
   CardSection,
   InteractiveCard,
   RegisteredGroup,
@@ -1503,6 +1505,18 @@ function parseJsonArray(raw: string | null | undefined): string[] {
   }
 }
 
+function parseChannelArray(
+  raw: string | null | undefined,
+): WorkflowInterruptActorChannel[] {
+  return parseJsonArray(raw).filter(
+    (item): item is WorkflowInterruptActorChannel =>
+      item === 'web' ||
+      item === 'feishu' ||
+      item === 'assistant' ||
+      item === 'system',
+  );
+}
+
 function jsonSchemaFromState(
   state: NonNullable<WorkflowTypeConfig['states'][string]>,
 ): Record<string, unknown> {
@@ -1623,36 +1637,6 @@ function normalizeJsonSchemaPayload(
     if (/^(false|0|no|off)$/i.test(text)) return false;
   }
   return value;
-}
-
-function parseCardActionPayload(
-  formValue: Record<string, string> | undefined,
-): Record<string, unknown> {
-  if (!formValue) return {};
-  const nestedPayload = formValue.payload;
-  if (typeof nestedPayload === 'string' && nestedPayload.trim()) {
-    try {
-      const parsed = JSON.parse(nestedPayload);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      // Fall through to legacy flat form parsing.
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(formValue).filter(
-      ([key]) =>
-        ![
-          'action',
-          'workflow_id',
-          'interrupt_id',
-          'resume_action',
-          'resume_payload_schema',
-          'payload',
-        ].includes(key),
-    ),
-  );
 }
 
 function buildInterruptPayloadPatch(
@@ -3871,7 +3855,7 @@ function buildConfigCard(
     ? parseSchema(interrupt.resume_payload_schema_json)
     : undefined;
 
-  return buildInteractiveCard(cardConfig, {
+  const card = buildInteractiveCard(cardConfig, {
     workflowId: workflow.id,
     interruptId: interrupt?.id,
     allowedActions: interrupt
@@ -3881,6 +3865,10 @@ function buildConfigCard(
     vars,
     roleFolders,
   });
+  if (interrupt) {
+    card.allowed_channels = parseChannelArray(interrupt.allowed_channels_json);
+  }
+  return card;
 }
 
 /** Send a card defined in config to the main group (scoped to workflow's source channel). */
@@ -4280,7 +4268,7 @@ export function handleCardAction(action: {
   group_folder?: string;
   workflow_id?: string;
   form_value?: Record<string, string>;
-}): void {
+}): CardActionResult {
   logger.info({ action }, 'Handling card action');
 
   // Resolve source_jid from the workflow for channel-aware notifications
@@ -4317,9 +4305,19 @@ export function handleCardAction(action: {
       '';
     if (!resolvedInterruptId || !resumeAction) {
       notifyMain('[操作失败] 缺少中断 ID 或恢复动作', wfSourceJid);
-      return;
+      return {
+        ok: false,
+        toast: { type: 'error', content: '缺少中断 ID 或恢复动作' },
+      };
     }
-    const payload = parseCardActionPayload(action.form_value);
+    const payload = buildCardActionPayload(action.form_value, [
+      'action',
+      'workflow_id',
+      'interrupt_id',
+      'resume_action',
+      'resume_payload_schema',
+      'payload',
+    ]);
     const result = resumeWorkflowInterrupt({
       interruptId: resolvedInterruptId,
       action: resumeAction,
@@ -4336,8 +4334,18 @@ export function handleCardAction(action: {
         wfSourceJid,
         action.workflow_id,
       );
+      return {
+        ok: false,
+        toast: {
+          type: 'error',
+          content: `恢复流程中断失败: ${result.error}`,
+        },
+      };
     }
-    return;
+    return {
+      ok: true,
+      toast: { type: 'success', content: '已提交操作，正在推进后续流程。' },
+    };
   }
 
   switch (action.action) {
@@ -4345,45 +4353,78 @@ export function handleCardAction(action: {
     case 'pause_workflow': {
       if (!action.workflow_id) {
         notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
-        break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: '缺少流程 ID' },
+        };
       }
       const result = pauseWorkflow(action.workflow_id);
-      if (result.error)
+      if (result.error) {
         notifyMain(
           `[操作失败] 中断流程失败: ${result.error}`,
           wfSourceJid,
           action.workflow_id,
         );
-      break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: `中断流程失败: ${result.error}` },
+        };
+      }
+      return {
+        ok: true,
+        toast: { type: 'success', content: '已提交中断流程操作。' },
+      };
     }
     case 'resume': {
       if (!action.workflow_id) {
         notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
-        break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: '缺少流程 ID' },
+        };
       }
       const result = resumeWorkflow(action.workflow_id);
-      if (result.error)
+      if (result.error) {
         notifyMain(
           `[操作失败] 恢复流程失败: ${result.error}`,
           wfSourceJid,
           action.workflow_id,
         );
-      break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: `恢复流程失败: ${result.error}` },
+        };
+      }
+      return {
+        ok: true,
+        toast: { type: 'success', content: '已提交恢复流程操作。' },
+      };
     }
     case 'cancel':
     case 'cancel_workflow': {
       if (!action.workflow_id) {
         notifyMain('[操作失败] 缺少流程 ID', wfSourceJid);
-        break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: '缺少流程 ID' },
+        };
       }
       const result = cancelWorkflow(action.workflow_id);
-      if (result.error)
+      if (result.error) {
         notifyMain(
           `[操作失败] 取消流程失败: ${result.error}`,
           wfSourceJid,
           action.workflow_id,
         );
-      break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: `取消流程失败: ${result.error}` },
+        };
+      }
+      return {
+        ok: true,
+        toast: { type: 'success', content: '已提交取消流程操作。' },
+      };
     }
     case 'memory_conflict_keep': {
       const folder = action.group_folder;
@@ -4391,7 +4432,10 @@ export function handleCardAction(action: {
       const deprecateId = action.form_value?.deprecate_id;
       if (!folder || !keepId || !deprecateId) {
         notifyMain('[操作失败] 记忆冲突处理缺少必要参数。', wfSourceJid);
-        break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: '记忆冲突处理缺少必要参数。' },
+        };
       }
       notifyGroupFolder(
         folder,
@@ -4402,7 +4446,10 @@ export function handleCardAction(action: {
           '完成后请反馈处理结果。',
         ].join('\n'),
       );
-      break;
+      return {
+        ok: true,
+        toast: { type: 'success', content: '已提交保留方案。' },
+      };
     }
     case 'memory_conflict_merge': {
       const folder = action.group_folder;
@@ -4411,11 +4458,17 @@ export function handleCardAction(action: {
       const mergeB = action.form_value?.merge_id_b;
       if (!folder || !mergeA || !mergeB) {
         notifyMain('[操作失败] 合并冲突缺少必要参数。', wfSourceJid);
-        break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: '合并冲突缺少必要参数。' },
+        };
       }
       if (!mergedContent) {
         notifyGroupFolder(folder, '记忆整理', '请填写合并内容后再提交。');
-        break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: '请填写合并内容后再提交。' },
+        };
       }
       notifyGroupFolder(
         folder,
@@ -4426,19 +4479,32 @@ export function handleCardAction(action: {
           '完成后请反馈处理结果。',
         ].join('\n'),
       );
-      break;
+      return {
+        ok: true,
+        toast: { type: 'success', content: '已提交合并方案。' },
+      };
     }
     case 'memory_conflict_skip': {
       const folder = action.group_folder;
       if (!folder) {
         notifyMain('[操作失败] 缺少 group_folder。', wfSourceJid);
-        break;
+        return {
+          ok: false,
+          toast: { type: 'error', content: '缺少 group_folder。' },
+        };
       }
       notifyGroupFolder(folder, '记忆整理', '已跳过该冲突，稍后可继续处理。');
-      break;
+      return {
+        ok: true,
+        toast: { type: 'success', content: '已跳过该冲突。' },
+      };
     }
     default:
       logger.warn({ action: action.action }, 'Unknown card action');
+      return {
+        ok: false,
+        toast: { type: 'error', content: `未知卡片操作: ${action.action}` },
+      };
   }
 }
 

@@ -5,6 +5,10 @@ import {
   listWorkbenchActionItemsBySource,
 } from './db.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
+import {
+  buildCardActionPayload,
+  buildCardStringFormValues,
+} from './card-action-payload.js';
 import { logger } from './logger.js';
 import type {
   CardActionResult,
@@ -110,76 +114,38 @@ function resolveActionItemBySource(input: {
 function buildResumePayload(
   formValue: Record<string, string> | undefined,
 ): Record<string, unknown> {
-  if (!formValue) return {};
-  const nestedPayload = formValue.payload;
-  if (typeof nestedPayload === 'string' && nestedPayload.trim()) {
-    try {
-      const parsed = JSON.parse(nestedPayload);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      // Fall through to legacy flat form parsing.
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(formValue).filter(
-      ([key]) =>
-        ![
-          'action',
-          'workbench_action',
-          'task_id',
-          'action_item_id',
-          'workflow_id',
-          'interrupt_id',
-          'resume_action',
-          'resume_payload_schema',
-          'group_folder',
-          'source_type',
-          'source_ref_id',
-          'request_id',
-          'question_id',
-          'payload',
-        ].includes(key),
-    ),
-  );
+  return buildCardActionPayload(formValue, [
+    'action',
+    'workbench_action',
+    'task_id',
+    'action_item_id',
+    'workflow_id',
+    'interrupt_id',
+    'resume_action',
+    'resume_payload_schema',
+    'group_folder',
+    'source_type',
+    'source_ref_id',
+    'request_id',
+    'question_id',
+    'payload',
+  ]);
 }
 
 function buildAskFormValues(
   formValue: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
-  if (!formValue) return undefined;
-  const nestedPayload = formValue.payload;
-  if (typeof nestedPayload === 'string' && nestedPayload.trim()) {
-    try {
-      const parsed = JSON.parse(nestedPayload);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return Object.fromEntries(
-          Object.entries(parsed).filter(
-            (entry): entry is [string, string] => typeof entry[1] === 'string',
-          ),
-        );
-      }
-    } catch {
-      // Fall through to legacy flat form parsing.
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(formValue).filter(
-      ([key]) =>
-        ![
-          'action',
-          'task_id',
-          'action_item_id',
-          'request_id',
-          'source_type',
-          'source_ref_id',
-          'reply_text',
-          'answer',
-          'payload',
-        ].includes(key),
-    ),
-  );
+  return buildCardStringFormValues(formValue, [
+    'action',
+    'task_id',
+    'action_item_id',
+    'request_id',
+    'source_type',
+    'source_ref_id',
+    'reply_text',
+    'answer',
+    'payload',
+  ]);
 }
 
 function isWorkbenchAction(

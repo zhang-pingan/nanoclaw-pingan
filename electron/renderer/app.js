@@ -18,6 +18,8 @@ var cmdPaletteIndex = -1;
 var multiSelectMode = false;
 var selectedMsgIds = new Set();
 var pendingFiles = []; // files staged for upload on next send
+var pendingCardActions = new Map();
+var cardActionSeq = 0;
 var modelSyncTimer = null;
 var INITIAL_MESSAGE_LIMIT = 100;
 var LIVE_MESSAGE_BUFFER_LIMIT = 250;
@@ -1284,6 +1286,17 @@ function unlockCardInteraction(container) {
   container.querySelectorAll(".card-submit-status").forEach((el) => el.remove());
 }
 
+function isCardAllowedOnWeb(card) {
+  const channels = Array.isArray(card?.allowed_channels) ? card.allowed_channels : [];
+  return channels.length === 0 || channels.includes("web");
+}
+
+function getCardChannelNotice(card) {
+  if (isCardAllowedOnWeb(card)) return "";
+  const channels = Array.isArray(card?.allowed_channels) ? card.allowed_channels.join(", ") : "";
+  return channels ? `该操作不支持 Web 渠道，可用渠道：${channels}` : "该操作不支持 Web 渠道";
+}
+
 function validateCardFormField(input, value) {
   const text = String(value || "").trim();
   const label = input.placeholder || input.name;
@@ -1334,9 +1347,22 @@ function renderInteractiveCard(card, callbacks = {}) {
   const pendingLabel = callbacks.pendingLabel || "已提交，处理中...";
   const formPendingLabel = callbacks.formPendingLabel || "表单已提交，处理中...";
   const lockOnAction = callbacks.lockOnAction !== false;
+  const uploadJid = callbacks.uploadJid || currentGroupJid || "web:main";
+  const channelNotice = getCardChannelNotice(card);
+  const disabledByChannel = Boolean(channelNotice);
 
   const runAction = async (value, formValue, pendingText) => {
     if (container.dataset.locked === "1") return;
+    if (disabledByChannel) {
+      const formError = container.querySelector(".card-form-error");
+      if (formError) {
+        formError.textContent = channelNotice;
+        formError.classList.remove("hidden");
+      } else {
+        showToast(channelNotice, 2200);
+      }
+      return;
+    }
     if (lockOnAction) lockCardInteraction(container, pendingText);
     try {
       await onAction(value, formValue);
@@ -1367,6 +1393,12 @@ function renderInteractiveCard(card, callbacks = {}) {
     body.innerHTML = renderMarkdown(card.body);
     container.appendChild(body);
   }
+  if (channelNotice) {
+    const notice = document.createElement("div");
+    notice.className = "card-channel-notice";
+    notice.textContent = channelNotice;
+    container.appendChild(notice);
+  }
 
   // Buttons
   if (card.buttons && card.buttons.length > 0) {
@@ -1376,6 +1408,10 @@ function renderInteractiveCard(card, callbacks = {}) {
       const button = document.createElement("button");
       button.className = `card-btn card-btn-${btn.type || "default"}`;
       button.textContent = btn.label;
+      if (btn.disabled || disabledByChannel) {
+        button.disabled = true;
+        button.title = btn.disabledReason || channelNotice || "";
+      }
       button.addEventListener("click", () => {
         runAction(btn.value, undefined, pendingLabel);
       });
@@ -1403,6 +1439,10 @@ function renderInteractiveCard(card, callbacks = {}) {
           const button = document.createElement("button");
           button.className = `card-btn card-btn-${btn.type || "default"}`;
           button.textContent = btn.label;
+          if (btn.disabled || disabledByChannel) {
+            button.disabled = true;
+            button.title = btn.disabledReason || channelNotice || "";
+          }
           button.addEventListener("click", () => {
             runAction(btn.value, undefined, pendingLabel);
           });
@@ -1523,15 +1563,16 @@ function renderInteractiveCard(card, callbacks = {}) {
     const submitBtn = document.createElement("button");
     submitBtn.className = `card-btn card-btn-${card.form.submitButton.type || "default"}`;
     submitBtn.textContent = card.form.submitButton.label;
-    submitBtn.addEventListener("click", () => {
+    if (card.form.submitButton.disabled || disabledByChannel) {
+      submitBtn.disabled = true;
+      submitBtn.title = card.form.submitButton.disabledReason || channelNotice || "";
+    }
+    submitBtn.addEventListener("click", async () => {
       clearInputErrors();
       const formValue = {};
       for (const [name, item] of Object.entries(formInputs)) {
         if (item.type === "boolean") {
           formValue[name] = item.el.checked ? "true" : "false";
-        } else if (item.type === "file") {
-          const files = Array.from(item.el.files || []).map((file) => file.name);
-          formValue[name] = files.join(",");
         } else {
           formValue[name] = item.el.value;
         }
@@ -1552,6 +1593,25 @@ function renderInteractiveCard(card, callbacks = {}) {
       }
       formError.textContent = "";
       formError.classList.add("hidden");
+      for (const [name, item] of Object.entries(formInputs)) {
+        if (item.type !== "file") continue;
+        const files = Array.from(item.el.files || []);
+        if (files.length === 0) {
+          formValue[name] = "";
+          continue;
+        }
+        try {
+          const uploaded = await uploadFilesForJid(files, uploadJid);
+          const paths = uploaded.map((file) => file.agentPath || file.hostPath || file.name).filter(Boolean);
+          formValue[name] = paths.length === 1 ? paths[0] : JSON.stringify(paths);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "文件上传失败";
+          addInputError(item, message);
+          formError.textContent = `${name}: ${message}`;
+          formError.classList.remove("hidden");
+          return;
+        }
+      }
       runAction(card.form.submitButton.value, formValue, formPendingLabel);
     });
     formEl.appendChild(submitBtn);
@@ -1564,17 +1624,30 @@ function renderInteractiveCard(card, callbacks = {}) {
 function renderCardElement(card, msgId) {
   return renderInteractiveCard(card, {
     cardId: msgId,
+    uploadJid: currentGroupJid || "web:main",
     onAction: (value, formValue) => sendCardAction(value, msgId, formValue),
   });
 }
 
 function sendCardAction(value, cardId, formValue) {
-  sendWs({
-    type: "card_action",
-    cardId: cardId,
-    value: value,
-    payload: formValue || undefined,
-    formValue: formValue || undefined,
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return Promise.reject(new Error("WebSocket 未连接，无法提交操作"));
+  }
+  const requestId = `card_action_${Date.now()}_${cardActionSeq += 1}`;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingCardActions.delete(requestId);
+      reject(new Error("操作提交超时，请稍后重试"));
+    }, 15000);
+    pendingCardActions.set(requestId, { resolve, reject, timer });
+    sendWs({
+      type: "card_action",
+      requestId,
+      cardId: cardId,
+      value: value,
+      payload: formValue || undefined,
+      formValue: formValue || undefined,
+    });
   });
 }
 
@@ -14740,6 +14813,19 @@ function handleWsMessage(msg) {
     case "workbench_event":
       handleWorkbenchRealtimeEvent(msg.event);
       break;
+    case "card_action_result": {
+      const pending = pendingCardActions.get(msg.requestId);
+      if (!pending) break;
+      clearTimeout(pending.timer);
+      pendingCardActions.delete(msg.requestId);
+      if (msg.ok === false) {
+        pending.reject(new Error(msg.error || msg.toast?.content || "操作提交失败"));
+      } else {
+        if (msg.toast?.content) showToast(msg.toast.content, 1800);
+        pending.resolve(msg);
+      }
+      break;
+    }
     case "assistant_state":
       assistantState = msg.state || null;
       assistantInboxItems = Array.isArray(msg.state?.latestInboxItems) ? msg.state.latestInboxItems : assistantInboxItems;
@@ -15759,26 +15845,40 @@ function removePendingFile(index) {
 }
 
 // Upload all pending files and return the prefix string to prepend to the message
-async function uploadPendingFiles() {
-  if (pendingFiles.length === 0) return "";
-
+async function uploadFilesForJid(files, jid) {
+  const safeFiles = Array.isArray(files) ? files : [];
+  if (safeFiles.length === 0) return [];
+  if (!jid) throw new Error("缺少上传目标");
   const agentPaths = [];
-  for (const file of pendingFiles) {
+  const uploadedFiles = [];
+  for (const file of safeFiles) {
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch(
-      `http://localhost:3000/api/upload?jid=${encodeURIComponent(currentGroupJid)}`,
+      `http://localhost:3000/api/upload?jid=${encodeURIComponent(jid)}`,
       { method: "POST", body: formData }
     );
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-    const data = await res.json();
-    if (data.files && data.files[0]) {
-      agentPaths.push(data.files[0].agentPath);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
+    if (Array.isArray(data.files)) {
+      uploadedFiles.push(...data.files);
+      for (const uploaded of data.files) {
+        if (uploaded?.agentPath) agentPaths.push(uploaded.agentPath);
+      }
     }
   }
+  return uploadedFiles.length > 0 ? uploadedFiles : agentPaths.map((agentPath) => ({ agentPath }));
+}
+
+// Upload all pending files and return the prefix string to prepend to the message
+async function uploadPendingFiles() {
+  if (pendingFiles.length === 0) return "";
+
+  const uploadedFiles = await uploadFilesForJid(pendingFiles, currentGroupJid);
   pendingFiles = [];
   renderPendingFiles();
 
+  const agentPaths = uploadedFiles.map((file) => file.agentPath).filter(Boolean);
   if (agentPaths.length === 0) return "";
   return (
     "【附件】\n" +
@@ -16291,56 +16391,85 @@ function renderTodayPlanTaskActions(task, options = {}) {
     return '<div class="today-plan-empty-inline">当前没有待处理项</div>';
   }
   const readonly = Boolean(options.readonly);
-  return `
-    <div class="today-plan-action-items">
-      ${task.action_items.map((item) => {
-        const actionButtons = [];
-        if (!readonly && item.source_type === "workflow_interrupt") {
-          const labels = getWorkbenchApprovalLabels(task.task, {
-            approval_type: item.stage_key || task.task.workflow_status,
-            action_mode: item.action_mode || "approve_only",
-          });
-          if (item.action_mode !== "input_required") {
-            actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="approve">${escapeHtml(labels.approve || "通过")}</button>`);
-          }
-          actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="skip">${escapeHtml(labels.skip || "跳过此节点")}</button>`);
-          if (item.action_mode === "approve_or_revise" || item.action_mode === "input_required") {
-            const actionName = item.action_mode === "input_required" ? "submit" : "revise";
-            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="${escapeAttribute(actionName)}">${escapeHtml(labels.revise || "驳回并修改")}</button>`);
-          }
-        } else if (!readonly) {
-          const askQuestion = item.source_type === "ask_user_question"
-            ? item.extra && (item.extra.current_question || (Array.isArray(item.extra.questions) ? item.extra.questions[0] : null))
-            : null;
-          const askOptions = askQuestion && Array.isArray(askQuestion.options) ? askQuestion.options : null;
-          if (Array.isArray(askOptions) && askOptions.length > 0) {
-            askOptions.forEach((opt) => {
-              actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="reply" data-today-plan-prefill="${escapeAttribute(opt.label || "")}">${escapeHtml(opt.label || "回复")}</button>`);
-            });
-            actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="reply">自定义回复</button>`);
-            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="skip">跳过</button>`);
-          } else {
-            if (item.replyable) {
-              actionButtons.push(`<button type="button" class="btn-primary btn-soft-primary" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="reply">回复</button>`);
-            }
-            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="confirm">确认</button>`);
-            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="skip">跳过</button>`);
-            actionButtons.push(`<button type="button" class="btn-ghost" data-today-plan-action-item="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}" data-today-plan-action="cancel">取消</button>`);
-          }
-        }
-        return `
+  if (readonly) {
+    return `
+      <div class="today-plan-action-items">
+        ${task.action_items.map((item) => `
           <div class="today-plan-action-item">
             <div class="today-plan-action-item-head">
               <div class="today-plan-option-title">${escapeHtml(item.title || "待处理项")}</div>
               <div class="today-plan-meta-pill">${escapeHtml(item.status || "pending")}</div>
             </div>
             <div class="today-plan-description">${escapeHtml(item.body || "暂无描述")}</div>
-            ${readonly ? "" : `<div class="today-plan-action-item-actions">${actionButtons.join("")}</div>`}
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+  return `
+    <div class="today-plan-action-items">
+      ${task.action_items.map((item) => {
+        return `
+          <div class="today-plan-action-item">
+            <div class="today-plan-action-item-head">
+              <div class="today-plan-option-title">${escapeHtml(item.title || "待处理项")}</div>
+              <div class="today-plan-meta-pill">${escapeHtml(item.status || "pending")}</div>
+            </div>
+            <div data-today-plan-action-card="${escapeAttribute(item.id)}" data-today-plan-task="${escapeAttribute(task.task_id)}"></div>
           </div>
         `;
       }).join("")}
     </div>
   `;
+}
+
+function findTodayPlanTaskActionItem(taskId, actionItemId) {
+  const searchSections = [];
+  if (currentTodayPlan && Array.isArray(currentTodayPlan.items)) {
+    searchSections.push(currentTodayPlan.items);
+  }
+  if (currentTodayPlan?.continued_from && Array.isArray(currentTodayPlan.continued_from.items)) {
+    searchSections.push(currentTodayPlan.continued_from.items);
+  }
+  for (const items of searchSections) {
+    for (const planItem of items) {
+      const relatedTasks = Array.isArray(planItem.related_tasks) ? planItem.related_tasks : [];
+      const task = relatedTasks.find((entry) => entry.task_id === taskId);
+      if (!task) continue;
+      const actionItem = Array.isArray(task.action_items)
+        ? task.action_items.find((entry) => entry.id === actionItemId)
+        : null;
+      if (actionItem) return { task, actionItem };
+    }
+  }
+  return null;
+}
+
+function renderTodayPlanActionCards() {
+  if (!todayPlanItems) return;
+  Array.from(todayPlanItems.querySelectorAll("[data-today-plan-action-card]")).forEach((placeholder) => {
+    const taskId = placeholder.getAttribute("data-today-plan-task") || "";
+    const actionItemId = placeholder.getAttribute("data-today-plan-action-card") || "";
+    const found = findTodayPlanTaskActionItem(taskId, actionItemId);
+    if (!found) {
+      placeholder.innerHTML = '<div class="today-plan-empty-inline">待处理项已不可用</div>';
+      return;
+    }
+    const card = renderInteractiveCard(getWorkbenchActionItemCard(found.actionItem, found.task.task), {
+      cardId: actionItemId,
+      uploadJid: "web:main",
+      pendingLabel: "已提交，刷新今日计划...",
+      formPendingLabel: "表单已提交，刷新今日计划...",
+      onAction: async (value, formValue) => {
+        await triggerWorkbenchActionItemCard(taskId, actionItemId, value, formValue);
+        if (currentTodayPlanId) {
+          await loadTodayPlan(currentTodayPlanId);
+        }
+      },
+    });
+    card.classList.add("today-plan-action-card");
+    placeholder.replaceChildren(card);
+  });
 }
 
 function renderTodayPlanItemActionIcon(kind) {
@@ -16675,6 +16804,7 @@ function renderTodayPlanItems() {
   todayPlanItems.innerHTML = sections.join("");
   if (editable) {
     bindEditableTodayPlanItemInteractions();
+    renderTodayPlanActionCards();
   }
   bindTodayPlanCommitInteractions();
 }

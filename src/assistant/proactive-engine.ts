@@ -429,6 +429,10 @@ export function runProactiveScan(input: { now?: Date } = {}): {
   const settings = getAssistantSettings();
   const scannedAt = Date.now().toString();
   if (!settings.enabled) {
+    logger.info(
+      { scannedAt, count: 0 },
+      'Assistant proactive scan completed',
+    );
     emitAssistantEvent({
       type: 'scan_completed',
       createdOrUpdated: 0,
@@ -465,6 +469,10 @@ export function runProactiveScan(input: { now?: Date } = {}): {
     }
   }
 
+  logger.info(
+    { scannedAt, count: candidates.length },
+    'Assistant proactive scan completed',
+  );
   emitAssistantEvent({
     type: 'scan_completed',
     createdOrUpdated: candidates.length,

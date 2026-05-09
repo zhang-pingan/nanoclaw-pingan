@@ -22,6 +22,9 @@ import type {
 } from '../types.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 
+const ASSISTANT_MAIN_DESCRIPTION =
+  'assistant 桌面个人助手的沟通频道；用于与桌面个人助手进行自然语言沟通、查看主动事项、发起日常协助、调度、工作台任务查询、文件/网页/本地工作处理与跨群任务协调。';
+
 function nowTs(): string {
   return Date.now().toString();
 }
@@ -38,7 +41,20 @@ function assistantMainGroup(): RegisteredGroup {
     added_at: new Date().toISOString(),
     requiresTrigger: false,
     isMain: true,
-    description: '桌面个人助手自然语言主群',
+    description: ASSISTANT_MAIN_DESCRIPTION,
+  };
+}
+
+function ensureAssistantMainGroup(group?: RegisteredGroup): RegisteredGroup {
+  if (!group) return assistantMainGroup();
+  return {
+    ...group,
+    name: ASSISTANT_MAIN_NAME,
+    folder: ASSISTANT_MAIN_FOLDER,
+    trigger: '',
+    requiresTrigger: false,
+    isMain: true,
+    description: ASSISTANT_MAIN_DESCRIPTION,
   };
 }
 
@@ -79,11 +95,16 @@ class AssistantChannel {
 
   async connect(): Promise<void> {
     const groups = this.opts.registeredGroups();
-    if (!groups[ASSISTANT_MAIN_JID]) {
-      if (!this.opts.registerGroup) {
-        throw new Error('assistant channel requires registerGroup callback');
-      }
-      this.opts.registerGroup(ASSISTANT_MAIN_JID, assistantMainGroup());
+    const nextMainGroup = ensureAssistantMainGroup(groups[ASSISTANT_MAIN_JID]);
+    if (!this.opts.registerGroup) {
+      throw new Error('assistant channel requires registerGroup callback');
+    }
+    if (
+      !groups[ASSISTANT_MAIN_JID] ||
+      JSON.stringify(groups[ASSISTANT_MAIN_JID]) !==
+        JSON.stringify(nextMainGroup)
+    ) {
+      this.opts.registerGroup(ASSISTANT_MAIN_JID, nextMainGroup);
     }
 
     const now = nowTs();

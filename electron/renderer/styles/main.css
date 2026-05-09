@@ -3323,6 +3323,29 @@ body.quick-chat-window .quick-chat-input {
   margin-top: 10px;
 }
 
+.today-plan-action-card {
+  margin-top: 10px;
+  min-width: 0;
+  max-width: 100%;
+  box-shadow: none;
+}
+
+.today-plan-action-card .card-header {
+  display: none;
+}
+
+.today-plan-action-card .card-body {
+  padding: 10px 0;
+  color: var(--text-secondary);
+}
+
+.today-plan-action-card .card-actions,
+.today-plan-action-card .card-form {
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+}
+
 .today-plan-chat-messages {
   display: flex;
   flex-direction: column;
@@ -13315,6 +13338,17 @@ body.quick-chat-window .quick-chat-input {
   border: 1px solid rgba(220, 38, 38, 0.25);
   background: rgba(220, 38, 38, 0.08);
   color: #b91c1c;
+  border-radius: var(--radius);
+  font-size: 12px;
+  padding: 8px 10px;
+  line-height: 1.4;
+}
+
+.card-channel-notice {
+  margin: 10px 18px 0;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  background: rgba(245, 158, 11, 0.1);
+  color: #92400e;
   border-radius: var(--radius);
   font-size: 12px;
   padding: 8px 10px;

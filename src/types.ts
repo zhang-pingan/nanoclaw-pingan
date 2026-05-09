@@ -809,6 +809,7 @@ export interface CardActionToast {
 }
 
 export interface CardActionResult {
+  ok?: boolean;
   toast?: CardActionToast;
   replacementCard?: InteractiveCard;
 }
@@ -828,6 +829,8 @@ export interface CardButton {
   label: string;
   type?: 'primary' | 'danger' | 'default';
   value: Record<string, string>;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 export interface CardInput {
@@ -869,6 +872,7 @@ export interface InteractiveCard {
   buttons?: CardButton[];
   form?: CardForm;
   sections?: CardSection[];
+  allowed_channels?: WorkflowInterruptActorChannel[];
 }
 
 export type CardActionHandler = (action: {

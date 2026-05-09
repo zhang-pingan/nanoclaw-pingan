@@ -18,6 +18,7 @@ import {
   updateTodayPlanItem,
 } from './db.js';
 import { logger } from './logger.js';
+import { buildHumanInputCard } from './human-input-card.js';
 import {
   type RegisteredGroup,
   type StoredChatMessageRecord,
@@ -29,7 +30,10 @@ import {
   listWebMessagesByIds,
   type WebMessage,
 } from './web-db.js';
-import { getWorkbenchTaskDetail, type WorkbenchTaskDetail } from './workbench.js';
+import {
+  getWorkbenchTaskDetail,
+  type WorkbenchTaskDetail,
+} from './workbench.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 
 export interface ServiceConfig {
@@ -158,7 +162,9 @@ function normalizePlanTitle(planDate: string): string {
   return `${planDate} 今日计划`;
 }
 
-function getPlanStatus(plan: TodayPlanRecord | null | undefined): TodayPlanRecord['status'] {
+function getPlanStatus(
+  plan: TodayPlanRecord | null | undefined,
+): TodayPlanRecord['status'] {
   if (plan?.status === 'completed' || plan?.status === 'continued') {
     return plan.status;
   }
@@ -196,7 +202,8 @@ function sortMessagesChronologically<T extends { timestamp: string }>(
   messages: T[],
 ): T[] {
   return [...messages].sort((a, b) => {
-    const timeDiff = toMessageTimestamp(a.timestamp) - toMessageTimestamp(b.timestamp);
+    const timeDiff =
+      toMessageTimestamp(a.timestamp) - toMessageTimestamp(b.timestamp);
     if (timeDiff !== 0) return timeDiff;
     return a.timestamp.localeCompare(b.timestamp);
   });
@@ -256,7 +263,9 @@ function isWebChatJid(chatJid: string): boolean {
 }
 
 function isMessageOnPlanDate(
-  message: Pick<StoredChatMessageRecord, 'timestamp'> | Pick<WebMessage, 'timestamp'>,
+  message:
+    | Pick<StoredChatMessageRecord, 'timestamp'>
+    | Pick<WebMessage, 'timestamp'>,
   planDate: string,
 ): boolean {
   const timestamp = toMessageTimestamp(message.timestamp);
@@ -312,7 +321,10 @@ function normalizeAssociations(
             group_jid: item.group_jid,
             message_ids: Array.from(
               new Set(
-                (Array.isArray(item.message_ids) ? item.message_ids : []).filter(
+                (Array.isArray(item.message_ids)
+                  ? item.message_ids
+                  : []
+                ).filter(
                   (entry): entry is string =>
                     typeof entry === 'string' && entry.trim().length > 0,
                 ),
@@ -388,10 +400,12 @@ export function ensureTodayPlan(planDate: string = getTodayPlanDateKey()) {
   );
 }
 
-export function createOrContinueTodayPlan(input: {
-  planDate?: string;
-  continueFromPlanId?: string;
-} = {}): TodayPlanRecord {
+export function createOrContinueTodayPlan(
+  input: {
+    planDate?: string;
+    continueFromPlanId?: string;
+  } = {},
+): TodayPlanRecord {
   const planDate = input.planDate || getTodayPlanDateKey();
   const existing = getTodayPlanByDate(planDate);
   if (existing) {
@@ -457,9 +471,12 @@ function getTodayPlanRecord(input: {
 
 function getTaskDescription(detail: WorkbenchTaskDetail): string {
   const description =
-    typeof detail.task.context?.[WORKFLOW_CONTEXT_KEYS.requirementDescription] ===
-    'string'
-      ? String(detail.task.context[WORKFLOW_CONTEXT_KEYS.requirementDescription])
+    typeof detail.task.context?.[
+      WORKFLOW_CONTEXT_KEYS.requirementDescription
+    ] === 'string'
+      ? String(
+          detail.task.context[WORKFLOW_CONTEXT_KEYS.requirementDescription],
+        )
       : '';
   return description.trim();
 }
@@ -572,7 +589,10 @@ function runGit(repoPath: string, args: string[]): string {
   });
 }
 
-function safeRunGit(repoPath: string, args: string[]): {
+function safeRunGit(
+  repoPath: string,
+  args: string[],
+): {
   ok: boolean;
   output?: string;
   error?: string;
@@ -676,9 +696,9 @@ export function listTodayPlanServiceBranches(
 
   return parseTodayPlanServiceBranchOptions({
     rows: result.output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean),
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
     config,
   });
 }
@@ -737,7 +757,8 @@ export function listTodayPlanServiceCommits(input: {
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [hash, shortHash, author, committedAt, subject] = line.split('\t');
+        const [hash, shortHash, author, committedAt, subject] =
+          line.split('\t');
         return {
           hash,
           short_hash: shortHash,
@@ -814,14 +835,20 @@ export function listTodayPlanChatMessages(
   if (isWebChatJid(chatJid)) {
     const messages = listWebMessagesByChat(chatJid, 2000)
       .filter((message) => isMessageOnPlanDate(message, planDate))
-      .sort((a, b) => toMessageTimestamp(b.timestamp) - toMessageTimestamp(a.timestamp))
+      .sort(
+        (a, b) =>
+          toMessageTimestamp(b.timestamp) - toMessageTimestamp(a.timestamp),
+      )
       .slice(0, 200);
     return dedupeAndSortChatMessages(toWebConversationMessages(messages));
   }
 
   const messages = listStoredMessagesByChat(chatJid, 2000)
     .filter((message) => isMessageOnPlanDate(message, planDate))
-    .sort((a, b) => toMessageTimestamp(b.timestamp) - toMessageTimestamp(a.timestamp))
+    .sort(
+      (a, b) =>
+        toMessageTimestamp(b.timestamp) - toMessageTimestamp(a.timestamp),
+    )
     .slice(0, 200)
     .map(toConversationMessage);
   return dedupeAndSortChatMessages(messages);
@@ -839,7 +866,10 @@ function getTodayPlanChatMessagesBySelection(
       new Set(
         directMessages
           .map((message) => message.reply_to_id || '')
-          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0),
+          .filter(
+            (id): id is string =>
+              typeof id === 'string' && id.trim().length > 0,
+          ),
       ),
     );
     const replySourceMessages =
@@ -924,7 +954,10 @@ function buildTodayPlanItemDetail(input: {
       workflow_status_label: detail.task.workflow_status_label,
       task_state: detail.task.task_state,
       task: detail.task,
-      action_items: detail.action_items,
+      action_items: detail.action_items.map((item) => ({
+        ...item,
+        card: buildHumanInputCard(item, detail.task),
+      })),
     }),
   );
   const relatedChats = associations.chat_selections
@@ -1007,7 +1040,9 @@ export function getTodayPlanDetail(input: {
   };
 }
 
-export function createTodayPlanItemForPlan(planId: string): TodayPlanItemRecord {
+export function createTodayPlanItemForPlan(
+  planId: string,
+): TodayPlanItemRecord {
   const plan = getTodayPlanById(planId);
   if (!isPlanEditable(plan)) {
     throw new Error('当前计划不可编辑');
@@ -1064,18 +1099,23 @@ export function removeTodayPlanItem(itemId: string): number {
 function formatChatGroupForMail(group: TodayPlanChatGroupDetail): string {
   const lines = group.messages.slice(0, 120).map((message) => {
     const sender = message.sender_name || message.sender || '未知';
-    const content = truncateText(message.content.replace(/\s+/g, ' ').trim(), 240);
+    const content = truncateText(
+      message.content.replace(/\s+/g, ' ').trim(),
+      240,
+    );
     return `- [${message.timestamp}] ${sender}: ${content}`;
   });
   const suffix =
     group.messages.length > 120
       ? `\n- ... 其余 ${group.messages.length - 120} 条消息已省略`
       : '';
-  return [
-    `群聊：${group.group_name}`,
-    `消息数：${group.message_count}`,
-    ...lines,
-  ].join('\n') + suffix;
+  return (
+    [
+      `群聊：${group.group_name}`,
+      `消息数：${group.message_count}`,
+      ...lines,
+    ].join('\n') + suffix
+  );
 }
 
 function formatTaskForMail(task: TodayPlanTaskAssociationDetail): string {

@@ -21,6 +21,10 @@ import {
   DesktopCaptureResult,
 } from '../types.js';
 import type { WorkbenchRealtimeEvent } from '../workbench-events.js';
+import {
+  buildCardActionPayload,
+  buildCardStringFormValues,
+} from '../card-action-payload.js';
 import { validateCardConfig } from '../card-config.js';
 import type { CardConfig } from '../card-config.js';
 import { validateCardRegistryKey } from '../card-files.js';
@@ -36,7 +40,12 @@ import {
 } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
-import { CardActionHandler, InteractiveCard, NewMessage } from '../types.js';
+import {
+  CardActionHandler,
+  CardActionResult,
+  InteractiveCard,
+  NewMessage,
+} from '../types.js';
 import { resolveGroupFolderPath } from '../group-folder.js';
 import {
   initWebDb,
@@ -395,12 +404,12 @@ interface IncomingMsg {
   replyToId?: string;
   // card_action fields
   cardId?: string;
+  requestId?: string;
   value?: Record<string, string>;
   formValue?: Record<string, string>;
   payload?: Record<string, string>;
   supported?: boolean;
   platform?: string;
-  requestId?: string;
   ok?: boolean;
   error?: string;
   details?: string;
@@ -429,7 +438,8 @@ interface OutgoingMsg {
     | 'assistant_state'
     | 'assistant_event'
     | 'config_event'
-    | 'desktop_capture_request';
+    | 'desktop_capture_request'
+    | 'card_action_result';
   [key: string]: unknown;
 }
 
@@ -3813,7 +3823,29 @@ class WebChannel {
       ...legacyFormValue,
       ...(input.value || {}),
     };
-    const payload = input.payload || legacyFormValue;
+    const payloadSource =
+      input.payload ||
+      buildCardActionPayload(legacyFormValue, [
+        'action',
+        'workbench_action',
+        'task_id',
+        'action_item_id',
+        'workflow_id',
+        'interrupt_id',
+        'resume_action',
+        'resume_payload_schema',
+        'group_folder',
+        'source_type',
+        'source_ref_id',
+        'request_id',
+        'question_id',
+        'payload',
+      ]);
+    const actionFormValue = {
+      ...merged,
+      payload: JSON.stringify(payloadSource),
+    };
+    const payload = buildCardActionPayload(actionFormValue);
     const taskId = merged.task_id;
     const actionItemId = merged.action_item_id;
     if (!taskId || !actionItemId) {
@@ -3838,22 +3870,20 @@ class WebChannel {
         requestId,
         groupFolder,
         userId: 'web_user',
-        answer: payload.answer || merged.answer || merged.reply_text,
-        formValues: Object.fromEntries(
-          Object.entries(payload).filter(
-            ([key]) =>
-              ![
-                'action',
-                'task_id',
-                'action_item_id',
-                'request_id',
-                'group_folder',
-                'question_id',
-                'answer',
-                'reply_text',
-              ].includes(key),
-          ),
-        ),
+        answer:
+          typeof payload.answer === 'string'
+            ? payload.answer
+            : merged.answer || merged.reply_text,
+        formValues: buildCardStringFormValues(actionFormValue, [
+          'action',
+          'task_id',
+          'action_item_id',
+          'request_id',
+          'group_folder',
+          'question_id',
+          'answer',
+          'reply_text',
+        ]),
         registeredGroups: this.opts.registeredGroups(),
         sendMessage: async () => {},
       });
@@ -3914,22 +3944,17 @@ class WebChannel {
     ) {
       return { error: `Unsupported action: ${action}` };
     }
-    const resumePayload = Object.fromEntries(
-      Object.entries(payload).filter(
-        ([key]) =>
-          ![
-            'action',
-            'workbench_action',
-            'task_id',
-            'action_item_id',
-            'workflow_id',
-            'interrupt_id',
-            'resume_action',
-            'resume_payload_schema',
-            'group_folder',
-          ].includes(key),
-      ),
-    );
+    const resumePayload = buildCardActionPayload(actionFormValue, [
+      'action',
+      'workbench_action',
+      'task_id',
+      'action_item_id',
+      'workflow_id',
+      'interrupt_id',
+      'resume_action',
+      'resume_payload_schema',
+      'group_folder',
+    ]);
     const result = runWorkbenchActionItemAction({
       taskId,
       actionItemId,
@@ -4081,8 +4106,8 @@ class WebChannel {
         ...(formValue || {}),
         ...(value || {}),
       };
-      const actionPayload = payload || formValue || {};
-      this.onCardAction({
+      const actionPayload = payload || buildCardActionPayload(formValue);
+      const result = await this.onCardAction({
         action: value.action,
         user_id: 'web_user',
         message_id: cardId || '',
@@ -4094,6 +4119,20 @@ class WebChannel {
           payload: JSON.stringify(actionPayload),
         },
       });
+      if (result?.toast?.type === 'error' || result?.ok === false) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: result.toast?.content || 'Card action failed',
+            toast: result.toast,
+          }),
+        );
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+      return;
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -4805,7 +4844,13 @@ class WebChannel {
     ws.on('message', (data: unknown) => {
       try {
         const msg = JSON.parse(String(data)) as IncomingMsg;
-        this.handleWsMessage(ws, msg, send);
+        void this.handleWsMessage(ws, msg, send).catch((err) => {
+          logger.warn({ err, type: msg.type }, 'Web channel WS handler error');
+          send({
+            type: 'error',
+            message: err instanceof Error ? err.message : 'WebSocket error',
+          });
+        });
       } catch (err) {
         logger.warn({ err }, 'Web channel WS parse error');
         send({ type: 'error', message: 'Invalid JSON' });
@@ -4831,11 +4876,11 @@ class WebChannel {
     });
   }
 
-  private handleWsMessage(
+  private async handleWsMessage(
     ws: WebSocket,
     msg: IncomingMsg,
     send: (p: OutgoingMsg) => void,
-  ): void {
+  ): Promise<void> {
     switch (msg.type) {
       case 'message': {
         const chatJid = msg.chatJid;
@@ -4917,21 +4962,35 @@ class WebChannel {
         break;
       }
       case 'card_action': {
-        const { value, cardId, formValue, payload } = msg as IncomingMsg;
+        const { value, cardId, formValue, payload, requestId } =
+          msg as IncomingMsg;
         if (!value?.action) {
-          send({
-            type: 'error',
-            message: 'value.action required for card_action',
-          });
+          const error = 'value.action required for card_action';
+          send(
+            requestId
+              ? {
+                  type: 'card_action_result',
+                  requestId,
+                  cardId,
+                  ok: false,
+                  error,
+                  toast: { type: 'error', content: error },
+                }
+              : {
+                  type: 'error',
+                  message: error,
+                },
+          );
           return;
         }
+        let result: void | CardActionResult = undefined;
         if (this.onCardAction) {
           const mergedFormValue = {
             ...(formValue || {}),
             ...(value || {}),
           };
-          const actionPayload = payload || formValue || {};
-          this.onCardAction({
+          const actionPayload = payload || buildCardActionPayload(formValue);
+          result = await this.onCardAction({
             action: value.action,
             user_id: 'web_user',
             message_id: cardId || '',
@@ -4942,6 +5001,20 @@ class WebChannel {
               ...mergedFormValue,
               payload: JSON.stringify(actionPayload),
             },
+          });
+        }
+        if (requestId) {
+          const ok = result?.ok !== false && result?.toast?.type !== 'error';
+          send({
+            type: 'card_action_result',
+            requestId,
+            cardId,
+            ok,
+            error: ok
+              ? undefined
+              : result?.toast?.content || 'Card action failed',
+            toast: result?.toast,
+            replacementCard: result?.replacementCard,
           });
         }
         break;
