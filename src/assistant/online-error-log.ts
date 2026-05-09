@@ -286,6 +286,20 @@ function runSshCommand(cfg: SshConfig, remoteCommand: string): string {
   return (proc.stdout || Buffer.alloc(0)).toString('utf-8');
 }
 
+export function parseRemoteLogFileLineForTests(
+  line: string,
+): RemoteLogFile | null {
+  const parts = line.includes('\t') ? line.split('\t') : line.split('\\t');
+  if (parts.length < 3) return null;
+  const mtime = Number(parts[0]);
+  const size = Number(parts[1]);
+  const filePath = parts.slice(2).join('\t').trim();
+  if (!Number.isFinite(mtime) || !Number.isFinite(size) || !filePath) {
+    return null;
+  }
+  return { path: filePath, size, mtime };
+}
+
 function listRemoteLogFiles(
   cfg: SshConfig,
   remotePath: string,
@@ -293,29 +307,22 @@ function listRemoteLogFiles(
   assertSafeRemoteGlob(remotePath);
   const remoteCommand = containsWildcard(remotePath)
     ? `sh -lc ${shellQuote(
-        `set -- ${remotePath}; ` +
+          `set -- ${remotePath}; ` +
           `if [ "$#" -eq 0 ] || [ "$1" = ${shellQuote(remotePath)} ]; then ` +
           `echo "no files matched: ${remotePath}" >&2; exit 1; fi; ` +
-          'for f in "$@"; do [ -f "$f" ] || continue; stat -c \'%Y\\t%s\\t%n\' "$f"; done | sort -n -k1,1 -k3,3',
+          'for f in "$@"; do [ -f "$f" ] || continue; ' +
+          'printf \'%s\\t%s\\t%s\\n\' "$(stat -c %Y "$f")" "$(stat -c %s "$f")" "$f"; ' +
+          'done | sort -n -k1,1 -k3,3',
       )}`
     : `sh -lc ${shellQuote(
         `f=${shellQuote(remotePath)}; ` +
           `[ -f "$f" ] || { echo "file not found: ${remotePath}" >&2; exit 1; }; ` +
-          'stat -c \'%Y\\t%s\\t%n\' "$f"',
+          'printf \'%s\\t%s\\t%s\\n\' "$(stat -c %Y "$f")" "$(stat -c %s "$f")" "$f"',
       )}`;
 
   return runSshCommand(cfg, remoteCommand)
     .split('\n')
-    .map((line) => {
-      const parts = line.split('\t');
-      if (parts.length < 3) return null;
-      const mtime = Number(parts[0]);
-      const size = Number(parts[1]);
-      const filePath = parts.slice(2).join('\t').trim();
-      if (!Number.isFinite(mtime) || !Number.isFinite(size) || !filePath)
-        return null;
-      return { path: filePath, size, mtime };
-    })
+    .map(parseRemoteLogFileLineForTests)
     .filter((item): item is RemoteLogFile => Boolean(item));
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   listOnlineLogServiceOptions,
+  parseRemoteLogFileLineForTests,
   parseOnlineErrorLogText,
   scanOnlineErrorLogRule,
 } from './online-error-log.js';
@@ -109,6 +110,18 @@ describe('online error log scan', () => {
         disabledReason: null,
       },
     ]);
+  });
+
+  it('parses remote log file metadata with literal slash-t separators', () => {
+    expect(
+      parseRemoteLogFileLineForTests(
+        '1778306659\\t40568\\t/data/log/catstory/error.log',
+      ),
+    ).toEqual({
+      mtime: 1778306659,
+      size: 40568,
+      path: '/data/log/catstory/error.log',
+    });
   });
 
   it('creates inbox candidates only for selected services with recent errors', () => {
