@@ -41,6 +41,7 @@ import {
   PROXY_BIND_HOST,
 } from './container-runtime.js';
 import { agentQueryTraceManager } from './agent-query-trace.js';
+import { ASSISTANT_MAIN_JID } from './assistant/assistant-channel-bridge.js';
 import {
   ClassifiedFailure,
   classifyFailure,
@@ -1366,7 +1367,10 @@ async function runMainGroupAssistantAgent(input: {
   itemSourceJid?: string | null;
 }): Promise<{ ok: boolean; text: string; error?: string }> {
   const mainEntry =
-    Object.entries(registeredGroups).find(([, group]) => group.isMain) || null;
+    registeredGroups[ASSISTANT_MAIN_JID]?.isMain === true
+      ? ([ASSISTANT_MAIN_JID, registeredGroups[ASSISTANT_MAIN_JID]] as const)
+      : Object.entries(registeredGroups).find(([, group]) => group.isMain) ||
+        null;
   if (!mainEntry) {
     return { ok: false, text: '', error: 'Main group not found' };
   }
