@@ -3647,6 +3647,7 @@ class WebChannel {
       action?:
         | 'confirm'
         | 'approve'
+        | 'reject'
         | 'revise'
         | 'submit'
         | 'skip'
@@ -3898,6 +3899,7 @@ class WebChannel {
     if (
       action !== 'confirm' &&
       action !== 'approve' &&
+      action !== 'reject' &&
       action !== 'revise' &&
       action !== 'submit' &&
       action !== 'skip' &&

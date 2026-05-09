@@ -36,7 +36,12 @@ import type {
   WorkflowEvalEvidence,
   WorkflowEvalFinding,
 } from './types.js';
+import type {
+  WorkbenchActionItem,
+  WorkbenchTaskItem,
+} from './workbench.js';
 import { WORKFLOW_ARTIFACT_DEFINITIONS } from './workflow-artifacts.js';
+import { buildHumanInputCard } from './human-input-card.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 import {
   getCardConfig,
@@ -239,6 +244,73 @@ function upsertActionItem(params: {
   const task = getWorkbenchTaskByWorkflowId(params.workflowId);
   if (!task) return;
   const existing = getWorkbenchActionItem(params.id);
+  const actionMode: WorkbenchActionItem['action_mode'] =
+    params.extra?.action_mode === 'approve_only' ||
+    params.extra?.action_mode === 'approve_or_revise' ||
+    params.extra?.action_mode === 'input_required'
+      ? params.extra.action_mode
+      : undefined;
+  const workflow = getWorkflow(params.workflowId);
+  const typeConfig = getWorkflowTypeConfig(
+    workflow?.workflow_type || task.workflow_type,
+  );
+  const workflowStatus = workflow?.status || task.status;
+  const taskItemForCard: WorkbenchTaskItem = {
+    id: task.id,
+    title: task.title,
+    service: task.service,
+    start_from: task.start_from,
+    workflow_type: task.workflow_type,
+    workflow_status: workflowStatus,
+    workflow_status_label:
+      typeConfig?.status_labels[workflowStatus] || workflowStatus,
+    task_state: task.task_state,
+    workflow_stage: task.current_stage,
+    workflow_stage_label:
+      typeConfig?.status_labels[task.current_stage] || task.current_stage,
+    round: workflow?.round || 0,
+    source_jid: task.source_jid,
+    created_at: task.created_at,
+    updated_at: task.updated_at,
+    pending_approval: true,
+    pending_action_count: 1,
+    active_delegation_id: workflow?.current_delegation_id || '',
+    context: workflow?.context || {},
+  };
+  const actionItemPayload: WorkbenchActionItem = {
+    id: params.id,
+    item_type: params.itemType as
+      | 'approval'
+      | 'revision_request'
+      | 'credential'
+      | 'human_input'
+      | 'external_blocker'
+      | 'interactive',
+    source_type: params.sourceType as
+      | 'workflow_interrupt'
+      | 'request_human_input'
+      | 'ask_user_question'
+      | 'send_message',
+    title: params.title,
+    body: params.body ?? '',
+    status: (existing?.status && existing.status !== 'resolved'
+      ? existing.status
+      : 'pending') as
+      | 'pending'
+      | 'confirmed'
+      | 'resolved'
+      | 'skipped'
+      | 'cancelled'
+      | 'expired',
+    stage_key: params.stageKey ?? undefined,
+    delegation_id: params.delegationId ?? undefined,
+    group_folder: params.groupFolder ?? undefined,
+    source_ref_id: params.sourceRefId,
+    replyable: params.replyable,
+    action_mode: actionMode,
+    created_at: existing?.created_at || params.createdAt,
+    extra: params.extra,
+  };
   createWorkbenchActionItem({
     id: params.id,
     task_id: task.id,
@@ -275,6 +347,7 @@ function upsertActionItem(params: {
     delegationId: params.delegationId ?? undefined,
     replyable: params.replyable,
     extra: params.extra,
+    card: buildHumanInputCard(actionItemPayload, taskItemForCard),
     createdAt: existing?.created_at || params.createdAt,
     updatedAt: params.createdAt,
   });

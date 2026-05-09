@@ -1100,6 +1100,7 @@ export function runWorkbenchActionItemAction(input: {
   action:
     | 'confirm'
     | 'approve'
+    | 'reject'
     | 'revise'
     | 'submit'
     | 'skip'

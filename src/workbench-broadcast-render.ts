@@ -56,16 +56,22 @@ function mapBroadcastActionValue(
 ): Record<string, string> {
   if (value.action === 'workflow_interrupt_resume') {
     const resumeAction = value.resume_action;
+    if (resumeAction === 'approve') {
+      return { ...value, action: 'wb_broadcast_confirm' };
+    }
+    if (resumeAction === 'skip') {
+      return { ...value, action: 'wb_broadcast_skip' };
+    }
+    if (resumeAction) {
+      return {
+        ...value,
+        action: 'wb_broadcast_resume',
+        workbench_action: resumeAction,
+      };
+    }
     return {
       ...value,
-      action:
-        resumeAction === 'revise'
-          ? 'wb_broadcast_revise'
-          : resumeAction === 'submit'
-            ? 'wb_broadcast_submit'
-            : resumeAction === 'skip'
-              ? 'wb_broadcast_skip'
-              : 'wb_broadcast_confirm',
+      action: 'wb_broadcast_resume',
     };
   }
   if (value.action === 'ask_question_answer') {

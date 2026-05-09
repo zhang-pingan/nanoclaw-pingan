@@ -106,6 +106,85 @@ function resolveActionItemBySource(input: {
   return items.find((entry) => entry.status === 'pending') || items[0];
 }
 
+function buildResumePayload(
+  formValue: Record<string, string> | undefined,
+): Record<string, unknown> {
+  if (!formValue) return {};
+  return Object.fromEntries(
+    Object.entries(formValue).filter(
+      ([key]) =>
+        ![
+          'action',
+          'workbench_action',
+          'task_id',
+          'action_item_id',
+          'workflow_id',
+          'interrupt_id',
+          'resume_action',
+          'resume_payload_schema',
+          'group_folder',
+          'source_type',
+          'source_ref_id',
+          'request_id',
+        ].includes(key),
+    ),
+  );
+}
+
+function isWorkbenchAction(value: string | undefined): value is
+  | 'confirm'
+  | 'approve'
+  | 'reject'
+  | 'revise'
+  | 'submit'
+  | 'skip'
+  | 'cancel'
+  | 'resolve' {
+  return (
+    value === 'confirm' ||
+    value === 'approve' ||
+    value === 'reject' ||
+    value === 'revise' ||
+    value === 'submit' ||
+    value === 'skip' ||
+    value === 'cancel' ||
+    value === 'resolve'
+  );
+}
+
+function successTextForAction(action: string): {
+  toast: string;
+  status: string;
+} {
+  switch (action) {
+    case 'revise':
+      return {
+        toast: '已提交修改意见，正在回退并重新处理。',
+        status: '已提交修改意见，正在回退并重新处理。',
+      };
+    case 'submit':
+      return {
+        toast: '已提交表单，正在推进后续流程。',
+        status: '已提交表单，正在推进后续流程。',
+      };
+    case 'reject':
+      return {
+        toast: '已提交拒绝操作。',
+        status: '已提交拒绝操作。',
+      };
+    case 'cancel':
+      return {
+        toast: '已提交取消操作。',
+        status: '已提交取消操作。',
+      };
+    default:
+      return {
+        toast: '已提交操作，正在推进后续流程。',
+        status: '已提交操作，正在推进后续流程。',
+      };
+  }
+}
+
 export async function handleWorkbenchBroadcastCardAction(input: {
   action: string;
   formValue?: Record<string, string>;
@@ -239,12 +318,11 @@ export async function handleWorkbenchBroadcastCardAction(input: {
       );
     }
     case 'wb_broadcast_revise': {
-      const revisionText = input.formValue?.revision_text?.trim();
       const result = runWorkbenchActionItemAction({
         taskId: resolvedTaskId,
         actionItemId: resolvedActionItemId,
         action: 'revise',
-        payload: { revision_text: revisionText },
+        payload: buildResumePayload(input.formValue),
       });
       if (result.error) return errorResult(`提交修改意见失败：${result.error}`);
       return successResult(
@@ -255,20 +333,41 @@ export async function handleWorkbenchBroadcastCardAction(input: {
       );
     }
     case 'wb_broadcast_submit': {
-      const accessToken = input.formValue?.access_token?.trim();
       const result = runWorkbenchActionItemAction({
         taskId: resolvedTaskId,
         actionItemId: resolvedActionItemId,
         action: 'submit',
-        payload: { access_token: accessToken },
+        payload: buildResumePayload(input.formValue),
       });
       if (result.error)
-        return errorResult(`提交 access_token 失败：${result.error}`);
+        return errorResult(`提交表单失败：${result.error}`);
       return successResult(
         resolvedTaskId,
         resolvedActionItemId,
-        '已提交 access_token，正在开始测试。',
-        '已提交 access_token，正在开始测试。',
+        '已提交表单，正在推进后续流程。',
+        '已提交表单，正在推进后续流程。',
+      );
+    }
+    case 'wb_broadcast_resume': {
+      const action =
+        input.formValue?.workbench_action ||
+        input.formValue?.resume_action;
+      if (!isWorkbenchAction(action)) {
+        return errorResult(`不支持的恢复动作：${action || ''}`);
+      }
+      const result = runWorkbenchActionItemAction({
+        taskId: resolvedTaskId,
+        actionItemId: resolvedActionItemId,
+        action,
+        payload: buildResumePayload(input.formValue),
+      });
+      if (result.error) return errorResult(`提交操作失败：${result.error}`);
+      const text = successTextForAction(action);
+      return successResult(
+        resolvedTaskId,
+        resolvedActionItemId,
+        text.toast,
+        text.status,
       );
     }
     case 'wb_broadcast_reply':

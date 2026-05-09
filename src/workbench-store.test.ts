@@ -12,6 +12,8 @@ import {
   getAllRegisteredGroups,
   getLatestWorkflowStageEvaluation,
   getPendingWorkflowInterruptForState,
+  getWorkflowInterrupt,
+  createWorkbenchActionItem as dbCreateWorkbenchActionItem,
   getWorkbenchTaskByWorkflowId,
   getWorkbenchActionItem,
   listWorkbenchEventsByTask,
@@ -516,7 +518,75 @@ describe('workbench approval transition sync', () => {
     expect(result.ok).toBe(true);
     expect(result.toast).toEqual({
       type: 'success',
-      content: '已提交 access_token，正在开始测试。',
+      content: '已提交表单，正在推进后续流程。',
+    });
+  });
+
+  it('keeps broadcast resume actions generic and preserves schema form payload', async () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-generic-submit',
+      name: '广播通用表单提交',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/broadcast-generic-submit',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_generic_submit',
+        staging_work_branch: 'staging-deploy/feature-broadcast-generic-submit',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    recoverWorkflowRuntimeForTest();
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-generic-submit');
+
+    const actionItemId =
+      'wb-action-wf-broadcast-generic-submit-testing_confirm';
+    const card = buildWorkbenchBroadcastCard({
+      taskId: 'wb-wf-broadcast-generic-submit',
+      actionItemId,
+    });
+
+    expect(card?.form?.submitButton.value).toMatchObject({
+      action: 'wb_broadcast_resume',
+      workbench_action: 'submit',
+      resume_action: 'submit',
+    });
+    const pendingInterrupt = getPendingWorkflowInterruptForState(
+      'wf-broadcast-generic-submit',
+      'testing_confirm',
+    );
+    expect(pendingInterrupt).toBeDefined();
+
+    const result = await handleWorkbenchBroadcastCardAction({
+      action: 'wb_broadcast_resume',
+      formValue: {
+        action_item_id: actionItemId,
+        workbench_action: 'submit',
+        access_token: 'demo-token',
+        extra_token_note: 'keep-me',
+      },
+      registeredGroups: getAllRegisteredGroups(),
+      sendMessage: async () => {},
+      userId: 'user-1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      JSON.parse(
+        getWorkflowInterrupt(pendingInterrupt!.id)!.resume_payload_json!,
+      ),
+    ).toMatchObject({
+      access_token: 'demo-token',
+      extra_token_note: 'keep-me',
     });
   });
 
@@ -739,6 +809,71 @@ describe('workbench approval transition sync', () => {
     ]);
   });
 
+  it('maps reject workflow broadcast buttons to a generic resume action', () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-reject-action',
+      name: '广播拒绝动作',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/broadcast-reject-action',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_reject_action',
+        staging_work_branch: 'staging-deploy/feature-broadcast-reject-action',
+        access_token: '',
+      },
+      status: 'awaiting_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-reject-action');
+    dbCreateWorkbenchActionItem({
+      id: 'wb-action-wf-broadcast-reject-action-custom',
+      task_id: 'wb-wf-broadcast-reject-action',
+      workflow_id: 'wf-broadcast-reject-action',
+      subtask_id: null,
+      stage_key: 'awaiting_confirm',
+      delegation_id: null,
+      group_folder: null,
+      item_type: 'approval',
+      status: 'pending',
+      title: '自定义拒绝',
+      body: '请确认',
+      source_type: 'workflow_interrupt',
+      source_ref_id: 'wi-broadcast-reject-action',
+      replyable: 0,
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+      resolved_at: null,
+      extra_json: JSON.stringify({
+        interruptId: 'wi-broadcast-reject-action',
+        workflowId: 'wf-broadcast-reject-action',
+        allowedActions: ['reject'],
+        payloadSchema: { type: 'object' },
+      }),
+    });
+
+    const card = buildWorkbenchBroadcastCard({
+      taskId: 'wb-wf-broadcast-reject-action',
+      actionItemId: 'wb-action-wf-broadcast-reject-action-custom',
+    });
+    const rejectButton = card?.buttons?.find((button) =>
+      button.label.includes('拒绝'),
+    );
+
+    expect(rejectButton?.value).toMatchObject({
+      action: 'wb_broadcast_resume',
+      workbench_action: 'reject',
+      resume_action: 'reject',
+    });
+  });
+
   it('emits task update before subtask updates during approve transition', () => {
     dbCreateWorkflow({
       id: 'wf-approve-event-order',
@@ -859,6 +994,60 @@ describe('workbench approval transition sync', () => {
         }),
       ]),
     );
+  });
+
+  it('includes server-built cards in pending action item realtime updates', () => {
+    dbCreateWorkflow({
+      id: 'wf-action-item-card-event',
+      name: '实时卡片事件',
+      service: 'order-service',
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/action-item-card-event',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_action_item_card_event',
+        staging_work_branch: 'staging-deploy/feature-action-item-card-event',
+        access_token: '',
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'wf-del-action-item-card-event',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-action-item-card-event');
+
+    let cardTitle = '';
+    initWorkbenchEvents((event) => {
+      if (
+        event.type === 'action_item_updated' &&
+        event.payload.id ===
+          'wb-action-wf-action-item-card-event-plan_examine-send_message-msg-card-event'
+      ) {
+        cardTitle = String(
+          (event.payload.card as { header?: { title?: string } })?.header
+            ?.title || '',
+        );
+      }
+    });
+
+    createWorkbenchInteractionItem({
+      workflowId: 'wf-action-item-card-event',
+      stageKey: 'plan_examine',
+      delegationId: 'wf-del-action-item-card-event',
+      groupFolder: 'web_plan_examine',
+      sourceType: 'send_message',
+      sourceRefId: 'msg-card-event',
+      title: '通知确认',
+      body: '请阅读通知',
+      createdAt: '2026-04-07T00:01:00.000Z',
+    });
+
+    expect(cardTitle).toBe('通知确认');
   });
 
   it('emits human-readable labels in realtime task updates', () => {

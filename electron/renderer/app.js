@@ -12649,6 +12649,7 @@ function applyWorkbenchActionItemRealtimeUpdate(payload) {
         action_mode: typeof payload.actionMode === "string" ? payload.actionMode : undefined,
         created_at: typeof payload.createdAt === "string" ? payload.createdAt : new Date().toISOString(),
         extra: payload.extra && typeof payload.extra === "object" ? payload.extra : undefined,
+        card: payload.card && typeof payload.card === "object" ? payload.card : undefined,
       };
 
   if (typeof payload.title === "string") nextItem.title = payload.title;
@@ -12665,6 +12666,7 @@ function applyWorkbenchActionItemRealtimeUpdate(payload) {
   if (typeof payload.sourceType === "string") nextItem.source_type = payload.sourceType;
   if (typeof payload.createdAt === "string") nextItem.created_at = payload.createdAt;
   if (payload.extra && typeof payload.extra === "object") nextItem.extra = payload.extra;
+  if (payload.card && typeof payload.card === "object") nextItem.card = payload.card;
   nextItem.status = "pending";
 
   if (existingIdx >= 0) {

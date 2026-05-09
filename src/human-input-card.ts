@@ -254,17 +254,21 @@ function buildWorkflowCardFromDsl(
     !Array.isArray(item.extra.payloadSchema)
       ? (item.extra.payloadSchema as JsonObject)
       : undefined);
-  return buildInteractiveCard(cardConfig, {
-    workflowId: workflow.id,
-    interruptId: interrupt?.id || interruptId || undefined,
-    allowedActions: stringArray(
-      interrupt
-        ? JSON.parse(interrupt.allowed_actions_json)
-        : item.extra?.allowedActions,
-    ),
-    payloadSchema,
-    vars: buildTemplateVars(task),
-  });
+  try {
+    return buildInteractiveCard(cardConfig, {
+      workflowId: workflow.id,
+      interruptId: interrupt?.id || interruptId || undefined,
+      allowedActions: stringArray(
+        interrupt
+          ? JSON.parse(interrupt.allowed_actions_json)
+          : item.extra?.allowedActions,
+      ),
+      payloadSchema,
+      vars: buildTemplateVars(task),
+    });
+  } catch {
+    return null;
+  }
 }
 
 function schemaPropertyToInput(

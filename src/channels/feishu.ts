@@ -914,7 +914,8 @@ class FeishuChannel implements Channel {
           !mergedFormValue.action_item_id &&
           typeof mergedFormValue.task_id === 'string' &&
           (resolvedValue.action === 'wb_broadcast_revise' ||
-            resolvedValue.action === 'wb_broadcast_submit')
+            resolvedValue.action === 'wb_broadcast_submit' ||
+            resolvedValue.action === 'wb_broadcast_resume')
         ) {
           try {
             const resolvedItem = this.resolvePendingWorkflowActionItemByTaskId(

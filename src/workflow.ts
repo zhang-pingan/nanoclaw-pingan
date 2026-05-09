@@ -169,6 +169,8 @@ type JsonSchema = {
   properties?: Record<string, JsonSchema>;
   minLength?: number;
   maxLength?: number;
+  minimum?: number;
+  maximum?: number;
   enum?: unknown[];
 };
 
@@ -1553,10 +1555,24 @@ function validateJsonSchemaSubset(
   } else if (expectedType === 'number') {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       errors.push(`${pathName} must be a number`);
+    } else {
+      if (schema.minimum !== undefined && value < schema.minimum) {
+        errors.push(`${pathName} must be at least ${schema.minimum}`);
+      }
+      if (schema.maximum !== undefined && value > schema.maximum) {
+        errors.push(`${pathName} must be at most ${schema.maximum}`);
+      }
     }
   } else if (expectedType === 'integer') {
     if (typeof value !== 'number' || !Number.isInteger(value)) {
       errors.push(`${pathName} must be an integer`);
+    } else {
+      if (schema.minimum !== undefined && value < schema.minimum) {
+        errors.push(`${pathName} must be at least ${schema.minimum}`);
+      }
+      if (schema.maximum !== undefined && value > schema.maximum) {
+        errors.push(`${pathName} must be at most ${schema.maximum}`);
+      }
     }
   } else if (expectedType === 'boolean') {
     if (typeof value !== 'boolean') {
@@ -1568,6 +1584,44 @@ function validateJsonSchemaSubset(
     errors.push(`${pathName} must be one of ${schema.enum.join(', ')}`);
   }
   return errors;
+}
+
+function normalizeJsonSchemaPayload(
+  schema: JsonSchema | undefined,
+  value: unknown,
+): unknown {
+  if (!schema || value === undefined || value === null) return value;
+
+  if (schema.type === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    const input = value as Record<string, unknown>;
+    const output: Record<string, unknown> = { ...input };
+    for (const [key, childSchema] of Object.entries(schema.properties || {})) {
+      if (input[key] !== undefined) {
+        output[key] = normalizeJsonSchemaPayload(childSchema, input[key]);
+      }
+    }
+    return output;
+  }
+
+  if (typeof value !== 'string') return value;
+  const text = value.trim();
+  if (!text) return value;
+
+  if (schema.type === 'number') {
+    const parsed = Number(text);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+  if (schema.type === 'integer') {
+    if (!/^[-+]?\d+$/.test(text)) return value;
+    const parsed = Number.parseInt(text, 10);
+    return Number.isSafeInteger(parsed) ? parsed : value;
+  }
+  if (schema.type === 'boolean') {
+    if (/^(true|1|yes|on)$/i.test(text)) return true;
+    if (/^(false|0|no|off)$/i.test(text)) return false;
+  }
+  return value;
 }
 
 function buildInterruptPayloadPatch(
@@ -2454,16 +2508,18 @@ export function resumeWorkflowInterrupt(input: {
         } as const;
       }
 
-      const schemaErrors = validateJsonSchemaSubset(
-        parseSchema(interrupt.resume_payload_schema_json),
+      const schema = parseSchema(interrupt.resume_payload_schema_json);
+      const normalizedPayload = normalizeJsonSchemaPayload(
+        schema,
         payload,
-      );
+      ) as Record<string, unknown>;
+      const schemaErrors = validateJsonSchemaSubset(schema, normalizedPayload);
       if (schemaErrors.length > 0) {
         createResumeAttempt({
           interrupt,
           actor: input.actor,
           action: input.action,
-          payload,
+          payload: normalizedPayload,
           idempotencyKey: input.idempotencyKey,
           status: 'rejected',
           conflictReason: schemaErrors.join('; '),
@@ -2480,7 +2536,7 @@ export function resumeWorkflowInterrupt(input: {
           interrupt,
           actor: input.actor,
           action: input.action,
-          payload,
+          payload: normalizedPayload,
           idempotencyKey: input.idempotencyKey,
           status: 'rejected',
           conflictReason: 'transition_missing',
@@ -2497,7 +2553,7 @@ export function resumeWorkflowInterrupt(input: {
         interruptId: interrupt.id,
         resumedBy: actorJson,
         resumeAction: input.action,
-        resumePayloadJson: JSON.stringify(payload),
+        resumePayloadJson: JSON.stringify(normalizedPayload),
         updatedAt: now,
       });
       if (!marked) {
@@ -2505,7 +2561,7 @@ export function resumeWorkflowInterrupt(input: {
           interrupt,
           actor: input.actor,
           action: input.action,
-          payload,
+          payload: normalizedPayload,
           idempotencyKey: input.idempotencyKey,
           status: 'conflict',
           conflictReason: 'interrupt_cas_failed',
@@ -2517,7 +2573,7 @@ export function resumeWorkflowInterrupt(input: {
         interrupt,
         actor: input.actor,
         action: input.action,
-        payload,
+        payload: normalizedPayload,
         idempotencyKey: input.idempotencyKey,
         status: 'accepted',
         result: { workflowId: workflow.id, target: transition.target },
@@ -2537,7 +2593,7 @@ export function resumeWorkflowInterrupt(input: {
           interrupt_id: interrupt.id,
           resume_action: input.action,
           actor: input.actor,
-          payload,
+          payload: normalizedPayload,
         },
         createdAt: now,
       });
@@ -2545,7 +2601,7 @@ export function resumeWorkflowInterrupt(input: {
       const contextPatch = buildInterruptPayloadPatch(
         interrupt.state_key,
         input.action,
-        payload,
+        normalizedPayload,
       );
       try {
         applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {

@@ -15,6 +15,7 @@ import {
   getLatestWorkflowStageEvaluation,
   listWorkflowStageEvaluationsByWorkflow,
   getPendingWorkflowInterruptForState,
+  getWorkflowInterrupt,
   listWorkflowInterruptsByWorkflow,
   getWorkflow,
   setRegisteredGroup,
@@ -236,7 +237,7 @@ describe('durable interrupt runtime', () => {
       title: 'awaiting confirm',
       body: null,
       resume_payload_schema_json: JSON.stringify({ type: 'object' }),
-      allowed_actions_json: JSON.stringify(['approve']),
+      allowed_actions_json: JSON.stringify(['skip']),
       allowed_channels_json: JSON.stringify(['web', 'feishu', 'assistant']),
       assigned_role: null,
       action_payload_json: null,
@@ -327,7 +328,7 @@ describe('durable interrupt runtime', () => {
       title: 'expired',
       body: null,
       resume_payload_schema_json: JSON.stringify({ type: 'object' }),
-      allowed_actions_json: JSON.stringify(['skip']),
+      allowed_actions_json: JSON.stringify(['approve']),
       allowed_channels_json: JSON.stringify(['web', 'feishu', 'assistant']),
       assigned_role: null,
       action_payload_json: null,
@@ -387,6 +388,80 @@ describe('durable interrupt runtime', () => {
     expect(second.ok).toBe(false);
     if (!second.ok) {
       expect(second.error).toContain('不能再次提交');
+    }
+  });
+
+  it('normalizes string form values using resume payload schema before validation', () => {
+    createWorkflowAtInterrupt({
+      id: 'wf-normalize-payload',
+      state: 'awaiting_confirm',
+    });
+    createWorkflowInterrupt({
+      id: 'wi-normalize-payload',
+      workflow_id: 'wf-normalize-payload',
+      state_key: 'awaiting_confirm',
+      kind: 'approval',
+      status: 'pending',
+      title: 'normalize payload',
+      body: null,
+      resume_payload_schema_json: JSON.stringify({
+        type: 'object',
+        required: ['count', 'enabled'],
+        properties: {
+          count: { type: 'integer', minimum: 2, maximum: 5 },
+          ratio: { type: 'number' },
+          enabled: { type: 'boolean' },
+        },
+      }),
+      allowed_actions_json: JSON.stringify(['approve']),
+      allowed_channels_json: JSON.stringify(['web', 'feishu', 'assistant']),
+      assigned_role: null,
+      action_payload_json: null,
+      created_by: 'test',
+      resumed_by: null,
+      resume_action: null,
+      resume_payload_json: null,
+      resume_error: null,
+      idempotency_key:
+        'workflow_interrupt:wf-normalize-payload:awaiting_confirm:0:normalize',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+      expires_at: null,
+      resumed_at: null,
+      cancelled_at: null,
+      expired_at: null,
+    });
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalSchema =
+      config.states.awaiting_confirm.resume_payload_schema;
+    config.states.awaiting_confirm.resume_payload_schema = {
+      schema: {
+        type: 'object',
+        required: ['count', 'enabled'],
+        properties: {
+          count: { type: 'integer', minimum: 2, maximum: 5 },
+          ratio: { type: 'number' },
+          enabled: { type: 'boolean' },
+        },
+      },
+    };
+
+    try {
+      const result = resumeWorkflowInterrupt({
+        interruptId: 'wi-normalize-payload',
+        action: 'approve',
+        payload: { count: '3', ratio: '0.5', enabled: 'true' },
+        actor: { channel: 'web', userId: 'tester' },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(
+        JSON.parse(
+          getWorkflowInterrupt('wi-normalize-payload')!.resume_payload_json!,
+        ),
+      ).toEqual({ count: 3, ratio: 0.5, enabled: true });
+    } finally {
+      config.states.awaiting_confirm.resume_payload_schema = originalSchema;
     }
   });
 
