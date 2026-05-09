@@ -9,18 +9,9 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link
     rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css"
+    href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css"
   />
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
-  <script>
-    // Load common languages for syntax highlighting
-    const hljsLanguages = ['javascript', 'typescript', 'python', 'bash', 'json', 'yaml', 'xml', 'sql', 'go', 'rust', 'java'];
-    hljsLanguages.forEach((lang) => {
-      const script = document.createElement('script');
-      script.src = `https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/${lang}.min.js`;
-      document.head.appendChild(script);
-    });
-  </script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
 </head>
 <body>
   <div id="app">

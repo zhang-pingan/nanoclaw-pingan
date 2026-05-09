@@ -130,6 +130,8 @@ let suppressNextMascotClick = false;
 let pendingFiles: File[] = [];
 let dragDepth = 0;
 const pendingInboxActionItemIds = new Set<string>();
+const pendingInboxActionByItemId = new Map<string, string>();
+const inboxActionErrorsByItemId = new Map<string, string>();
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
 let scene: AssistantScene | null = null;
@@ -186,6 +188,10 @@ function setMousePassthrough(enabled: boolean): void {
 }
 
 function syncMousePassthrough(event?: MouseEvent): void {
+  if (chatOpen || primaryItem()) {
+    setMousePassthrough(false);
+    return;
+  }
   if (event) {
     lastMouseClientX = event.clientX;
     lastMouseClientY = event.clientY;
@@ -396,13 +402,65 @@ function button(
   label: string,
   className: string,
   onClick: () => void,
+  options: { disabled?: boolean } = {},
 ): HTMLButtonElement {
   const el = document.createElement('button');
   el.type = 'button';
   el.textContent = label;
   el.className = className;
+  el.disabled = Boolean(options.disabled);
   el.addEventListener('click', onClick);
   return el;
+}
+
+function pendingInboxActionLabel(action: string): string {
+  if (action === 'investigate') return '排查中';
+  if (action === 'repair') return '修复中';
+  if (action === 'execute') return '执行中';
+  if (action === 'snooze') return '稍后处理中';
+  if (action === 'dismiss') return '忽略处理中';
+  if (action === 'mark_read') return '标记中';
+  return '处理中';
+}
+
+function inboxItemBody(item: AgentInboxItem): string {
+  const pendingAction = pendingInboxActionByItemId.get(item.id) || '';
+  if (pendingAction) {
+    return `${pendingInboxActionLabel(pendingAction)}，完成后会自动更新。`;
+  }
+
+  const actionError = inboxActionErrorsByItemId.get(item.id);
+  if (actionError) {
+    return `动作执行失败：${actionError}`;
+  }
+
+  const extra = item.extra || {};
+  const investigation = extra.investigation;
+  if (
+    investigation &&
+    typeof investigation === 'object' &&
+    !Array.isArray(investigation)
+  ) {
+    const summary = (investigation as Record<string, unknown>).summary;
+    if (typeof summary === 'string' && summary.trim()) {
+      return `排查：${summary.trim()}`;
+    }
+  }
+
+  const lastInvestigationError = extra.lastInvestigationError;
+  if (
+    typeof lastInvestigationError === 'string' &&
+    lastInvestigationError.trim()
+  ) {
+    return `排查失败：${lastInvestigationError.trim()}`;
+  }
+
+  const lastAutoFlowError = extra.lastAutoFlowError;
+  if (typeof lastAutoFlowError === 'string' && lastAutoFlowError.trim()) {
+    return `自动处理失败：${lastAutoFlowError.trim()}`;
+  }
+
+  return item.body || '我发现了一条需要关注的信息。';
 }
 
 function renderIdle(): void {
@@ -436,31 +494,42 @@ function renderItem(item: AgentInboxItem): void {
   syncScene();
   bubbleKicker.textContent = `${item.kind} · ${item.priority}`;
   bubbleTitle.textContent = item.title || '新的主动事项';
-  bubbleBody.textContent = item.body || '我发现了一条需要关注的信息。';
+  bubbleBody.textContent = inboxItemBody(item);
   bubbleActions.innerHTML = '';
+  const pendingAction = pendingInboxActionByItemId.get(item.id) || '';
 
   if (item.action_url) {
     bubbleActions.append(
       button('查看', 'primary', () => {
         window.assistantHost?.openWorkstation(item.action_url || undefined);
         void runInboxAction(item.id, 'mark_read');
-      }),
+      }, { disabled: Boolean(pendingAction) }),
     );
   }
 
   if (canInvestigate(item)) {
     bubbleActions.append(
-      button('排查', 'primary', () => {
-        void runInboxAction(item.id, 'investigate');
-      }),
+      button(
+        pendingAction === 'investigate' ? '排查中' : '排查',
+        'primary',
+        () => {
+          void runInboxAction(item.id, 'investigate');
+        },
+        { disabled: Boolean(pendingAction) },
+      ),
     );
   }
 
   if (canRepair(item)) {
     bubbleActions.append(
-      button('修复', 'primary', () => {
-        void runInboxAction(item.id, 'repair');
-      }),
+      button(
+        pendingAction === 'repair' ? '修复中' : '修复',
+        'primary',
+        () => {
+          void runInboxAction(item.id, 'repair');
+        },
+        { disabled: Boolean(pendingAction) },
+      ),
     );
   }
 
@@ -468,17 +537,17 @@ function renderItem(item: AgentInboxItem): void {
     bubbleActions.append(
       button(item.action_label || '执行', '', () => {
         void runInboxAction(item.id, 'execute');
-      }),
+      }, { disabled: Boolean(pendingAction) }),
     );
   }
 
   bubbleActions.append(
     button('稍后', '', () => {
       void runInboxAction(item.id, 'snooze', { minutes: 60 });
-    }),
+    }, { disabled: Boolean(pendingAction) }),
     button('忽略', '', () => {
       void runInboxAction(item.id, 'dismiss');
-    }),
+    }, { disabled: Boolean(pendingAction) }),
   );
   updateAlertLayout();
 }
@@ -491,7 +560,7 @@ function render(): void {
     return;
   }
   renderItem(item);
-  syncMousePassthrough();
+  setMousePassthrough(false);
 }
 
 function basename(filePath: string): string {
@@ -881,11 +950,14 @@ async function runInboxAction(
 ): Promise<void> {
   if (pendingInboxActionItemIds.has(itemId)) return;
   pendingInboxActionItemIds.add(itemId);
+  pendingInboxActionByItemId.set(itemId, action);
+  inboxActionErrorsByItemId.delete(itemId);
 
   const previousItems = state ? [...state.latestInboxItems] : null;
   const localStatus = localStatusForInboxAction(action);
   if (localStatus) {
     patchLocalInboxItemStatus(itemId, localStatus);
+  } else {
     render();
   }
 
@@ -894,18 +966,30 @@ async function runInboxAction(
       method: 'POST',
       body: JSON.stringify({ item_id: itemId, action, payload }),
     });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: unknown;
+    };
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+      throw new Error(
+        typeof data.error === 'string' && data.error.trim()
+          ? data.error.trim()
+          : `HTTP ${res.status}`,
+      );
     }
+    inboxActionErrorsByItemId.delete(itemId);
     await loadState();
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    inboxActionErrorsByItemId.set(itemId, message || '未知错误');
     if (previousItems && state) {
       state = { ...state, latestInboxItems: previousItems };
       render();
     }
-    bubbleBody.textContent = '动作执行失败，请到工作站查看详情。';
+    bubbleBody.textContent = `动作执行失败：${message || '未知错误'}`;
   } finally {
     pendingInboxActionItemIds.delete(itemId);
+    pendingInboxActionByItemId.delete(itemId);
+    render();
   }
 }
 
@@ -1060,7 +1144,10 @@ mascotTrigger.addEventListener('keydown', (event) => {
 window.addEventListener('blur', scheduleChatAutoHide);
 window.addEventListener('focus', clearChatAutoHideTimer);
 window.addEventListener('mousemove', syncMousePassthrough);
-window.addEventListener('mouseleave', () => setMousePassthrough(true));
+window.addEventListener('mouseleave', () => {
+  if (chatOpen || primaryItem()) return;
+  setMousePassthrough(true);
+});
 setMousePassthrough(true);
 document.addEventListener('pointerdown', clearChatAutoHideTimer);
 document.addEventListener('keydown', clearChatAutoHideTimer);
