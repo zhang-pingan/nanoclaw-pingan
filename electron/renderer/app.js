@@ -18757,7 +18757,7 @@ async function runAssistantScan() {
 }
 
 async function clearAssistantData() {
-  if (!confirm("确定清除个人助手的聊天记录、Inbox、动作日志和稍后提醒？运行设置会保留。")) {
+  if (!confirm("确定清除个人助手的聊天记录、Inbox、动作日志、稍后提醒和自我进化事项/记录？运行设置会保留。")) {
     return;
   }
   if (assistantClearDataBtn) assistantClearDataBtn.disabled = true;
