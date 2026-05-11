@@ -4125,12 +4125,8 @@ body.quick-chat-window .quick-chat-input {
 .assistant-grid {
   display: grid;
   grid-template-columns: minmax(300px, 420px) minmax(380px, 1fr);
-  grid-template-areas:
-    "settings inbox"
-    "settings logs"
-    "settings evolution";
+  grid-template-areas: "settings main";
   column-gap: 18px;
-  row-gap: 28px;
   align-items: start;
   min-height: 0;
 }
@@ -4147,27 +4143,31 @@ body.quick-chat-window .quick-chat-input {
   box-shadow: 0 18px 38px rgba(15, 23, 42, 0.06);
 }
 
+.assistant-main-stack {
+  grid-area: main;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
 .assistant-inbox-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  grid-area: inbox;
 }
 
 .assistant-action-log-panel {
   display: flex;
   flex-direction: column;
   min-height: 236px;
-  margin-bottom: 6px;
   overflow: hidden;
-  grid-area: logs;
 }
 
 .assistant-evolution-list-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  grid-area: evolution;
 }
 
 .assistant-settings-panel {
@@ -10432,6 +10432,7 @@ body.quick-chat-window .quick-chat-input {
 
   .assistant-hero-metrics,
   .assistant-grid,
+  .assistant-main-stack,
   .assistant-panel {
     width: 100%;
   }
@@ -10442,9 +10443,7 @@ body.quick-chat-window .quick-chat-input {
   }
 
   .assistant-settings-panel,
-  .assistant-inbox-panel,
-  .assistant-action-log-panel,
-  .assistant-evolution-list-panel {
+  .assistant-main-stack {
     grid-area: auto;
   }
 

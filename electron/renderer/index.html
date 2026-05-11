@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MixClaw</title>
-  <link rel="stylesheet" href="/styles/main.css?v=assistant-panel-layout-20260511" />
+  <link rel="stylesheet" href="/styles/main.css?v=assistant-main-stack-20260511" />
   <!-- Markdown rendering via CDN (no bundle needed for Electron) -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link
@@ -668,35 +668,37 @@
               <div id="assistant-source-grid" class="assistant-source-grid"></div>
             </section>
 
-            <section class="assistant-panel assistant-inbox-panel">
-              <div class="assistant-panel-head">
-                <div>
-                  <div class="assistant-section-title">Agent Inbox</div>
-                  <div id="assistant-inbox-summary" class="assistant-section-subtitle">暂无数据</div>
+            <div class="assistant-main-stack">
+              <section class="assistant-panel assistant-inbox-panel">
+                <div class="assistant-panel-head">
+                  <div>
+                    <div class="assistant-section-title">Agent Inbox</div>
+                    <div id="assistant-inbox-summary" class="assistant-section-subtitle">暂无数据</div>
+                  </div>
                 </div>
-              </div>
-              <div id="assistant-inbox-list" class="assistant-inbox-list"></div>
-            </section>
+                <div id="assistant-inbox-list" class="assistant-inbox-list"></div>
+              </section>
 
-            <section class="assistant-panel assistant-action-log-panel">
-              <div class="assistant-panel-head">
-                <div>
-                  <div class="assistant-section-title">动作日志</div>
-                  <div class="assistant-section-subtitle">记录助手执行、忽略和稍后处理的动作。</div>
+              <section class="assistant-panel assistant-action-log-panel">
+                <div class="assistant-panel-head">
+                  <div>
+                    <div class="assistant-section-title">动作日志</div>
+                    <div class="assistant-section-subtitle">记录助手执行、忽略和稍后处理的动作。</div>
+                  </div>
                 </div>
-              </div>
-              <div id="assistant-log-list" class="assistant-log-list"></div>
-            </section>
+                <div id="assistant-log-list" class="assistant-log-list"></div>
+              </section>
 
-            <section class="assistant-panel assistant-evolution-list-panel">
-              <div class="assistant-panel-head">
-                <div>
-                  <div class="assistant-section-title">自我进化事项</div>
-                  <div id="assistant-evolution-summary" class="assistant-section-subtitle">加载中</div>
+              <section class="assistant-panel assistant-evolution-list-panel">
+                <div class="assistant-panel-head">
+                  <div>
+                    <div class="assistant-section-title">自我进化事项</div>
+                    <div id="assistant-evolution-summary" class="assistant-section-subtitle">加载中</div>
+                  </div>
                 </div>
-              </div>
-              <div id="assistant-evolution-panel" class="assistant-evolution-list"></div>
-            </section>
+                <div id="assistant-evolution-panel" class="assistant-evolution-list"></div>
+              </section>
+            </div>
           </section>
         </main>
       </section>
@@ -1862,6 +1864,6 @@
     </div>
   </div>
 
-  <script type="module" src="/dist/app.js?v=assistant-panel-layout-20260511"></script>
+  <script type="module" src="/dist/app.js?v=assistant-main-stack-20260511"></script>
 </body>
 </html>
