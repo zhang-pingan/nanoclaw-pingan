@@ -80,6 +80,19 @@ function toJson(value: unknown): string | null {
   return JSON.stringify(value);
 }
 
+function isErrorTerminalStatus(status: AgentQueryStatus): boolean {
+  return status === 'error' || status === 'timeout';
+}
+
+function hasErrorEvent(events: AgentQueryEventRecord[]): boolean {
+  return events.some(
+    (event) =>
+      event.event_type === 'error' ||
+      event.status === 'error' ||
+      event.event_name === 'query_failed',
+  );
+}
+
 export class AgentQueryTraceManager {
   private activeQueries = new Map<string, LiveQueryState>();
   private listeners: Array<() => void> = [];
@@ -325,6 +338,7 @@ export class AgentQueryTraceManager {
     const query = this.activeQueries.get(queryId);
     const endedAt = nowIso();
     if (!query) {
+      this.appendTerminalErrorEventIfMissing(queryId, status, patch, endedAt);
       updateAgentQuery(queryId, {
         status,
         ended_at: endedAt,
@@ -334,6 +348,13 @@ export class AgentQueryTraceManager {
       return;
     }
     const latencyMs = Date.parse(endedAt) - Date.parse(query.startedAt);
+    this.appendTerminalErrorEventIfMissing(
+      queryId,
+      status,
+      patch,
+      endedAt,
+      query,
+    );
     updateAgentQuery(queryId, {
       status,
       ended_at: endedAt,
@@ -345,6 +366,62 @@ export class AgentQueryTraceManager {
     });
     this.activeQueries.delete(queryId);
     this.emitChange();
+  }
+
+  private appendTerminalErrorEventIfMissing(
+    queryId: string,
+    status: AgentQueryStatus,
+    patch: Partial<AgentQueryRecord> | undefined,
+    endedAt: string,
+    query?: LiveQueryState,
+  ): void {
+    if (!isErrorTerminalStatus(status)) return;
+
+    const events = listAgentQueryEvents(queryId);
+    if (hasErrorEvent(events)) return;
+
+    const record = getAgentQuery(queryId);
+    const lastEventIndex = events.reduce(
+      (max, event) => Math.max(max, event.event_index),
+      query?.eventIndex ?? 0,
+    );
+    const errorMessage =
+      patch?.error_message ||
+      record?.error_message ||
+      patch?.output_preview ||
+      `Query finished with ${status}`;
+
+    const event: AgentQueryEventRecord = {
+      id: makeId(),
+      query_id: queryId,
+      step_id: query?.currentStepId ?? record?.current_step_id ?? null,
+      event_index: lastEventIndex + 1,
+      event_type: 'error',
+      event_name: status === 'timeout' ? 'query_timeout' : 'query_failed',
+      status: 'error',
+      summary: errorMessage,
+      payload_json: toJson({
+        error: errorMessage,
+        terminalStatus: status,
+        failureType: patch?.failure_type ?? record?.failure_type ?? null,
+        failureSubtype: patch?.failure_subtype ?? record?.failure_subtype ?? null,
+        failureOrigin: patch?.failure_origin ?? record?.failure_origin ?? null,
+        failureRetryable:
+          patch?.failure_retryable ?? record?.failure_retryable ?? null,
+      }),
+      started_at: endedAt,
+      ended_at: endedAt,
+      latency_ms: null,
+      created_at: endedAt,
+    };
+    createAgentQueryEvent(event);
+
+    if (query) {
+      query.eventIndex = event.event_index;
+      query.lastEventAt = endedAt;
+      query.recentEvents = [...query.recentEvents, event].slice(-25);
+      query.currentAction = errorMessage;
+    }
   }
 
   getActiveQueries(): ActiveAgentQueryTrace[] {
