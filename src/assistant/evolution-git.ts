@@ -23,6 +23,7 @@ export interface EvolutionGitAdapter {
   createBranch(branch: string): Promise<CommandResult>;
   addAll(): Promise<CommandResult>;
   commit(message: string): Promise<CommandResult>;
+  stashPush(message: string): Promise<CommandResult>;
   mergeNoFfNoCommit(branch: string): Promise<CommandResult>;
   mergeAbort(): Promise<CommandResult>;
   changedFiles(baseRef?: string): Promise<string[]>;
@@ -140,6 +141,9 @@ export function createDefaultEvolutionGitAdapter(): EvolutionGitAdapter {
     commit(message: string) {
       return runCommand('git', ['commit', '-m', message]);
     },
+    stashPush(message: string) {
+      return runCommand('git', ['stash', 'push', '-u', '-m', message]);
+    },
     mergeNoFfNoCommit(branch: string) {
       return runCommand('git', ['merge', '--no-ff', '--no-commit', branch]);
     },
@@ -160,7 +164,7 @@ export function createDefaultEvolutionGitAdapter(): EvolutionGitAdapter {
       );
     },
     async diff(baseRef?: string) {
-      const args = baseRef ? ['diff', baseRef, 'HEAD'] : ['diff'];
+      const args = baseRef ? ['diff', baseRef] : ['diff'];
       const result = await runCommand('git', args);
       if (!result.ok) throw new Error(result.stderr || 'git diff failed');
       return result.stdout;

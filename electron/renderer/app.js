@@ -18420,7 +18420,7 @@ function renderAssistantEvolution() {
   }
   if (!assistantEvolutionPanel) return;
   if (items.length === 0) {
-    assistantEvolutionPanel.innerHTML = '<div class="assistant-empty">暂无自我进化事项</div>';
+    assistantEvolutionPanel.innerHTML = '<div class="assistant-empty assistant-panel-empty">暂无自我进化事项</div>';
     return;
   }
   assistantEvolutionPanel.innerHTML = items.map((item) => `
@@ -18602,7 +18602,7 @@ function patchAssistantInboxItemStatus(itemId, status) {
 function renderAssistantLogs() {
   if (!assistantLogList) return;
   if (assistantActionLogs.length === 0) {
-    assistantLogList.innerHTML = '<div class="assistant-empty">暂无动作日志</div>';
+    assistantLogList.innerHTML = '<div class="assistant-empty assistant-panel-empty">暂无动作日志</div>';
     return;
   }
   assistantLogList.innerHTML = assistantActionLogs.map((log) => `

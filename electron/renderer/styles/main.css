@@ -4154,6 +4154,7 @@ body.quick-chat-window .quick-chat-input {
 .assistant-action-log-panel {
   display: flex;
   flex-direction: column;
+  min-height: 236px;
   overflow: hidden;
   grid-area: logs;
 }
@@ -4880,7 +4881,7 @@ body.quick-chat-window .quick-chat-input {
 
 .assistant-log-list {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 154px;
   max-height: 420px;
   overflow: auto;
 }
@@ -5102,6 +5103,10 @@ body.quick-chat-window .quick-chat-input {
   text-align: center;
   border-style: dashed;
   background: linear-gradient(180deg, rgba(246, 250, 255, 0.92), rgba(255, 255, 255, 0.82));
+}
+
+.assistant-panel-empty {
+  min-height: 190px;
 }
 
 #memory-management-screen {
@@ -10426,6 +10431,14 @@ body.quick-chat-window .quick-chat-input {
 
   .assistant-grid {
     align-items: stretch;
+    gap: 16px;
+  }
+
+  .assistant-settings-panel,
+  .assistant-inbox-panel,
+  .assistant-action-log-panel,
+  .assistant-evolution-list-panel {
+    grid-area: auto;
   }
 
   .workflow-definitions-main {

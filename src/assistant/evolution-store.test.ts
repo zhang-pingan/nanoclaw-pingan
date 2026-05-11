@@ -5,10 +5,12 @@ import { initAssistantEvents } from './assistant-events.js';
 import {
   createEvolutionItem,
   getActiveEvolutionItem,
+  getEvolutionItem,
   releaseEvolutionLease,
   renewEvolutionLease,
   transitionEvolutionItem,
   tryAcquireEvolutionLease,
+  updateEvolutionItemIfStatus,
 } from './evolution-store.js';
 
 beforeEach(() => {
@@ -67,5 +69,26 @@ describe('evolution store', () => {
     ).toBe(false);
 
     expect(getActiveEvolutionItem()?.id).toBe(item.id);
+  });
+
+  it('updates an item only when the expected status still matches', () => {
+    const item = createEvolutionItem({ direction: 'cas' });
+
+    const missed = updateEvolutionItemIfStatus(
+      item.id,
+      'checking',
+      { status: 'reviewing' },
+      'cas_missed',
+    );
+    const updated = updateEvolutionItemIfStatus(
+      item.id,
+      'discovering',
+      { status: 'proposal_evaluating' },
+      'cas_hit',
+    );
+
+    expect(missed).toBeNull();
+    expect(updated?.status).toBe('proposal_evaluating');
+    expect(getEvolutionItem(item.id)?.status).toBe('proposal_evaluating');
   });
 });

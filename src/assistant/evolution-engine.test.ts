@@ -6,6 +6,7 @@ import {
   _resetEvolutionEngineForTests,
   adoptEvolutionItem,
   approveEvolutionImplementation,
+  cancelEvolutionItem,
   configureEvolutionEngine,
   pauseEvolutionItem,
   resumeEvolutionItem,
@@ -91,6 +92,15 @@ function gitAdapter(): EvolutionGitAdapter {
         stdout: '',
         stderr: '',
         command: `git commit -m ${message}`,
+      };
+    },
+    stashPush: async (message) => {
+      dirty = false;
+      return {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        command: `git stash push -u -m ${message}`,
       };
     },
     mergeNoFfNoCommit: async (next) => {
@@ -416,12 +426,22 @@ describe('evolution engine', () => {
     expect(getActiveEvolutionItem()?.auto_implement).toBe(false);
   });
 
-  it('fails checking when the current branch is not the work branch', async () => {
+  it('checks out the work branch before checking', async () => {
+    let branch = 'main';
     configureEvolutionEngine({
       settingsProvider: () => settings(),
       git: {
         ...gitAdapter(),
-        currentBranch: async () => 'main',
+        currentBranch: async () => branch,
+        checkout: async (next) => {
+          branch = next;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git checkout ${next}`,
+          };
+        },
       },
     });
     await runEvolutionTick();
@@ -435,11 +455,9 @@ describe('evolution engine', () => {
 
     const result = await runEvolutionTick();
 
-    expect(result.ok).toBe(false);
-    expect(result.status).toBe('failed');
-    expect(getEvolutionItem(item.id)?.blocked_reason).toContain(
-      'does not match',
-    );
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe('reviewing');
+    expect(branch).toBe('evolution/test');
   });
 
   it('resumes adoption_failed items into fixing', async () => {
@@ -458,5 +476,198 @@ describe('evolution engine', () => {
 
     expect(resumed.item.status).toBe('fixing');
     expect(resumed.item.adoption_error).toBeNull();
+  });
+
+  it('does not overwrite a paused item when a long-running phase returns', async () => {
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: gitAdapter(),
+      agentRunner: async ({ item }) => {
+        pauseEvolutionItem(item.id);
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            module_scope: 'assistant',
+            direction: 'late proposal',
+            risk_level: 'low',
+            proposal: '# Plan',
+            requires_user_approval: false,
+            blocked_by_policy: false,
+            blocked_reason: null,
+          }),
+        };
+      },
+    });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+
+    const result = await runEvolutionTick();
+
+    expect(result.action).toBe('interrupted');
+    expect(getEvolutionItem(item.id)?.status).toBe('paused');
+  });
+
+  it('rejects pause and cancel for terminal and adopting items', async () => {
+    configureEvolutionEngine({ settingsProvider: () => settings() });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, { status: 'completed' });
+
+    expect(() => pauseEvolutionItem(item.id)).toThrow(/terminal/);
+    expect(() => cancelEvolutionItem(item.id)).toThrow(/terminal/);
+
+    updateEvolutionItem(item.id, { status: 'adopting' });
+    expect(() => pauseEvolutionItem(item.id)).toThrow(/adoption/);
+    expect(() => cancelEvolutionItem(item.id)).toThrow(/adopting/);
+  });
+
+  it('blocks unknown-risk reviews instead of marking them ready for adoption', async () => {
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => 'evolution/test',
+      },
+      agentRunner: async () => ({
+        ok: true,
+        text: JSON.stringify({
+          ok: true,
+          review_complete: true,
+          implementation_coverage: 'covered',
+          bug_report: null,
+          required_fixes: [],
+          risk_level: 'unknown',
+        }),
+      }),
+    });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, {
+      status: 'reviewing',
+      work_branch: 'evolution/test',
+      base_commit: 'base-work',
+    });
+
+    const result = await runEvolutionTick();
+
+    expect(result.action).toBe('blocked_unknown_risk_review');
+    expect(result.status).toBe('blocked_by_policy');
+  });
+
+  it('stores diff artifacts before policy-blocking forbidden paths', async () => {
+    let dirty = true;
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => 'evolution/test',
+        hasDirtyWorktree: async () => dirty,
+        changedFiles: async () => ['.env'],
+        worktreeChangedFiles: async () => (dirty ? ['.env'] : []),
+        stashPush: async () => {
+          dirty = false;
+          return {
+            ok: true,
+            stdout: 'Saved working directory',
+            stderr: '',
+            command: 'git stash push -u -m blocked',
+          };
+        },
+        diff: async () => 'diff --git a/.env b/.env',
+      },
+      agentRunner: async () => ({
+        ok: true,
+        text: JSON.stringify({
+          ok: true,
+          implementation_summary: 'changed env',
+          changed_files: ['.env'],
+          requires_followup: false,
+        }),
+      }),
+    });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, {
+      status: 'implementing',
+      work_branch: 'evolution/test',
+      base_commit: 'base-work',
+    });
+
+    const result = await runEvolutionTick();
+    const updated = getEvolutionItem(item.id, { includeDetails: true });
+
+    expect(result.action).toBe('blocked_forbidden_path');
+    expect(updated?.status).toBe('blocked_by_policy');
+    expect(updated?.artifacts?.some((artifact) => artifact.artifact_type === 'diff')).toBe(
+      true,
+    );
+    expect(
+      updated?.artifacts?.some(
+        (artifact) => artifact.artifact_type === 'blocked_worktree_cleanup',
+      ),
+    ).toBe(true);
+    expect(dirty).toBe(false);
+  });
+
+  it('cleans dirty worktree when implementation reports a policy block', async () => {
+    let dirty = true;
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => 'evolution/test',
+        hasDirtyWorktree: async () => dirty,
+        changedFiles: async () => ['src/assistant/example.ts'],
+        worktreeChangedFiles: async () =>
+          dirty ? ['src/assistant/example.ts'] : [],
+        stashPush: async () => {
+          dirty = false;
+          return {
+            ok: true,
+            stdout: 'Saved working directory',
+            stderr: '',
+            command: 'git stash push -u -m blocked',
+          };
+        },
+        diff: async () =>
+          'diff --git a/src/assistant/example.ts b/src/assistant/example.ts',
+      },
+      agentRunner: async () => ({
+        ok: true,
+        text: JSON.stringify({
+          ok: false,
+          implementation_summary: 'blocked',
+          changed_files: ['src/assistant/example.ts'],
+          requires_followup: true,
+          blocked_by_policy: true,
+          blocked_reason: 'needs permission changes',
+        }),
+      }),
+    });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, {
+      status: 'implementing',
+      work_branch: 'evolution/test',
+      base_commit: 'base-work',
+    });
+
+    const result = await runEvolutionTick();
+    const updated = getEvolutionItem(item.id, { includeDetails: true });
+
+    expect(result.action).toBe('blocked_by_policy');
+    expect(updated?.status).toBe('blocked_by_policy');
+    expect(
+      updated?.artifacts?.some(
+        (artifact) => artifact.artifact_type === 'blocked_worktree_cleanup',
+      ),
+    ).toBe(true);
+    expect(dirty).toBe(false);
   });
 });

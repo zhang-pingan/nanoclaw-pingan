@@ -109,6 +109,35 @@ export interface AssistantEvolutionStateView {
   latestEvents: AssistantEvolutionEventView[];
 }
 
+export type AssistantEvolutionItemPatch = Partial<{
+  status: AssistantEvolutionStatus;
+  module_scope: string;
+  direction: string;
+  proposal: string | null;
+  proposal_evaluation: string | null;
+  implementation_summary: string | null;
+  check_summary: string | null;
+  review_summary: string | null;
+  bug_report: string | null;
+  risk_level: AssistantEvolutionRiskLevel;
+  auto_implement: boolean;
+  auto_adopt: boolean;
+  review_round: number;
+  max_review_rounds: number;
+  base_branch: string;
+  work_branch: string | null;
+  base_commit: string | null;
+  head_commit: string | null;
+  merge_commit: string | null;
+  adoption_status: string | null;
+  adoption_error: string | null;
+  resume_status: AssistantEvolutionStatus | null;
+  locked_by: string | null;
+  lease_until: string | null;
+  blocked_reason: string | null;
+  completed_at: string | null;
+}>;
+
 export const RUNNING_EVOLUTION_STATUSES: AssistantEvolutionStatus[] = [
   'discovering',
   'proposal_drafting',
@@ -181,6 +210,43 @@ function normalizeRiskLevel(value: unknown): AssistantEvolutionRiskLevel {
   return typeof value === 'string' && VALID_RISK_LEVELS.has(value as never)
     ? (value as AssistantEvolutionRiskLevel)
     : 'unknown';
+}
+
+function normalizeExpectedStatuses(
+  expectedStatus: AssistantEvolutionStatus | AssistantEvolutionStatus[],
+): AssistantEvolutionStatus[] {
+  const statuses = Array.isArray(expectedStatus)
+    ? expectedStatus
+    : [expectedStatus];
+  for (const status of statuses) assertStatus(status);
+  return statuses;
+}
+
+function buildUpdateAssignments(patch: AssistantEvolutionItemPatch): {
+  assignments: string[];
+  values: unknown[];
+} {
+  const assignments: string[] = [];
+  const values: unknown[] = [];
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (key === 'status') assertStatus(value as AssistantEvolutionStatus);
+    if (key === 'resume_status' && value !== null) {
+      assertStatus(value as AssistantEvolutionStatus);
+    }
+    if (key === 'risk_level') normalizeRiskLevel(value);
+    if (key === 'auto_implement' || key === 'auto_adopt') {
+      assignments.push(`${key} = ?`);
+      values.push(value ? 1 : 0);
+      continue;
+    }
+    assignments.push(`${key} = ?`);
+    values.push(value);
+  }
+
+  assignments.push('updated_at = ?');
+  values.push(nowTs());
+  return { assignments, values };
 }
 
 function toItemView(
@@ -418,54 +484,11 @@ export function getEvolutionState(): AssistantEvolutionStateView {
 
 export function updateEvolutionItem(
   id: string,
-  patch: Partial<{
-    status: AssistantEvolutionStatus;
-    module_scope: string;
-    direction: string;
-    proposal: string | null;
-    proposal_evaluation: string | null;
-    implementation_summary: string | null;
-    check_summary: string | null;
-    review_summary: string | null;
-    bug_report: string | null;
-    risk_level: AssistantEvolutionRiskLevel;
-    auto_implement: boolean;
-    auto_adopt: boolean;
-    review_round: number;
-    max_review_rounds: number;
-    base_branch: string;
-    work_branch: string | null;
-    base_commit: string | null;
-    head_commit: string | null;
-    merge_commit: string | null;
-    adoption_status: string | null;
-    adoption_error: string | null;
-    resume_status: AssistantEvolutionStatus | null;
-    locked_by: string | null;
-    lease_until: string | null;
-    blocked_reason: string | null;
-    completed_at: string | null;
-  }>,
+  patch: AssistantEvolutionItemPatch,
   eventType: string = 'item_updated',
   eventPayload: Record<string, unknown> = {},
 ): AssistantEvolutionItemView {
-  const assignments: string[] = [];
-  const values: unknown[] = [];
-
-  for (const [key, value] of Object.entries(patch)) {
-    if (key === 'status') assertStatus(value as AssistantEvolutionStatus);
-    if (key === 'risk_level') normalizeRiskLevel(value);
-    if (key === 'auto_implement' || key === 'auto_adopt') {
-      assignments.push(`${key} = ?`);
-      values.push(value ? 1 : 0);
-      continue;
-    }
-    assignments.push(`${key} = ?`);
-    values.push(value);
-  }
-
-  assignments.push('updated_at = ?');
-  values.push(nowTs());
+  const { assignments, values } = buildUpdateAssignments(patch);
   values.push(id);
 
   getDatabase()
@@ -475,6 +498,41 @@ export function updateEvolutionItem(
        WHERE id = ?`,
     )
     .run(...values);
+
+  createEvolutionEvent({
+    itemId: id,
+    eventType,
+    payload: eventPayload,
+  });
+
+  const item = getEvolutionItem(id);
+  if (!item) throw new Error('Evolution item not found');
+  syncEvolutionInbox(item);
+  return item;
+}
+
+export function updateEvolutionItemIfStatus(
+  id: string,
+  expectedStatus: AssistantEvolutionStatus | AssistantEvolutionStatus[],
+  patch: AssistantEvolutionItemPatch,
+  eventType: string = 'item_updated',
+  eventPayload: Record<string, unknown> = {},
+): AssistantEvolutionItemView | null {
+  const expectedStatuses = normalizeExpectedStatuses(expectedStatus);
+  const { assignments, values } = buildUpdateAssignments(patch);
+  const statusPlaceholders = expectedStatuses.map(() => '?').join(', ');
+  values.push(id, ...expectedStatuses);
+
+  const result = getDatabase()
+    .prepare(
+      `UPDATE assistant_evolution_items
+       SET ${assignments.join(', ')}
+       WHERE id = ?
+         AND status IN (${statusPlaceholders})`,
+    )
+    .run(...values);
+
+  if (result.changes === 0) return null;
 
   createEvolutionEvent({
     itemId: id,
@@ -498,6 +556,27 @@ export function transitionEvolutionItem(
     : null;
   return updateEvolutionItem(
     id,
+    {
+      status,
+      ...(completedAt ? { completed_at: completedAt } : {}),
+    },
+    'status_changed',
+    { status, ...payload },
+  );
+}
+
+export function transitionEvolutionItemIfStatus(
+  id: string,
+  expectedStatus: AssistantEvolutionStatus | AssistantEvolutionStatus[],
+  status: AssistantEvolutionStatus,
+  payload: Record<string, unknown> = {},
+): AssistantEvolutionItemView | null {
+  const completedAt = TERMINAL_EVOLUTION_STATUSES.includes(status)
+    ? nowTs()
+    : null;
+  return updateEvolutionItemIfStatus(
+    id,
+    expectedStatus,
     {
       status,
       ...(completedAt ? { completed_at: completedAt } : {}),
