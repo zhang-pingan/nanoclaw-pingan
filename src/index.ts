@@ -102,6 +102,10 @@ import {
   isSessionResetEpochCurrent,
 } from './session-reset-guard.js';
 import { startSchedulerLoop } from './task-scheduler.js';
+import {
+  finalizeOneShotAgentResult,
+  type OneShotAgentResult,
+} from './one-shot-agent.js';
 import { initAssistantEvents } from './assistant/assistant-events.js';
 import { initAssistantAutoFlow } from './assistant/assistant-auto-flow.js';
 import { startProactiveEngine } from './assistant/proactive-engine.js';
@@ -1386,13 +1390,6 @@ interface OneShotAgentInput {
   collect?: 'first_result' | 'all_until_exit';
 }
 
-interface OneShotAgentResult {
-  ok: boolean;
-  text: string;
-  outputs: string[];
-  error?: string;
-}
-
 interface AssistantActionAgentInput {
   prompt: string;
   purpose: 'investigation' | 'repair';
@@ -1492,16 +1489,7 @@ async function runOneShotAgent(
       ),
   );
 
-  const text = outputs.join('\n').trim();
-  if (status === 'error') {
-    return {
-      ok: false,
-      text,
-      outputs,
-      error: text || 'One-shot agent execution failed',
-    };
-  }
-  return { ok: true, text, outputs };
+  return finalizeOneShotAgentResult({ status, outputs });
 }
 
 async function runAssistantActionAgent(
