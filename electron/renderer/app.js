@@ -18229,6 +18229,66 @@ function assistantEvolutionStatusLabel(status) {
   return labels[status] || status || "无";
 }
 
+function formatAssistantEvolutionTime(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  try {
+    return new Date(numeric).toLocaleString();
+  } catch {
+    return String(value || "");
+  }
+}
+
+function renderAssistantEvolutionField(label, value) {
+  if (value === null || value === undefined || value === "") return "";
+  return `
+    <div class="assistant-evolution-field">
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(String(value))}</span>
+    </div>
+  `;
+}
+
+function renderAssistantEvolutionPre(title, content) {
+  if (!content) return "";
+  return `
+    <details class="assistant-evolution-detail">
+      <summary>${escapeHtml(title)}</summary>
+      <pre>${escapeHtml(String(content))}</pre>
+    </details>
+  `;
+}
+
+function renderAssistantEvolutionArtifacts(active) {
+  const artifacts = Array.isArray(active.artifacts) ? active.artifacts : [];
+  if (!artifacts.length) return "";
+  return `
+    <div class="assistant-evolution-details">
+      <div class="assistant-inbox-meta">产物</div>
+      ${artifacts.slice(-6).map((artifact) => renderAssistantEvolutionPre(
+        artifact.title || artifact.artifact_type || "artifact",
+        artifact.content || artifact.path || "",
+      )).join("")}
+    </div>
+  `;
+}
+
+function renderAssistantEvolutionTimeline(active) {
+  const events = Array.isArray(active.events) ? active.events : [];
+  if (!events.length) return "";
+  return `
+    <div class="assistant-evolution-timeline">
+      <div class="assistant-inbox-meta">时间线</div>
+      ${events.slice(-8).map((event) => `
+        <div class="assistant-evolution-timeline-item">
+          <strong>${escapeHtml(event.event_type || "event")}</strong>
+          <span>${escapeHtml(formatAssistantEvolutionTime(event.created_at))}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderAssistantEvolution() {
   const evolution = getAssistantEvolutionSettings();
   const state = getAssistantEvolutionState();
@@ -18259,6 +18319,21 @@ function renderAssistantEvolution() {
       <div class="assistant-inbox-title">${escapeHtml(active.direction || "待发现")}</div>
       <div class="assistant-inbox-body">${escapeHtml(active.proposal || active.blocked_reason || "等待下一次推进")}</div>
       <div class="assistant-inbox-meta">${escapeHtml(active.work_branch || active.base_branch || "")}</div>
+      <div class="assistant-evolution-fields">
+        ${renderAssistantEvolutionField("模块", active.module_scope || "unknown")}
+        ${renderAssistantEvolutionField("base", active.base_commit)}
+        ${renderAssistantEvolutionField("head", active.head_commit)}
+        ${renderAssistantEvolutionField("merge", active.merge_commit)}
+        ${renderAssistantEvolutionField("阻断", active.blocked_reason)}
+        ${renderAssistantEvolutionField("采纳错误", active.adoption_error)}
+      </div>
+      ${renderAssistantEvolutionPre("方案评估", active.proposal_evaluation)}
+      ${renderAssistantEvolutionPre("实现摘要", active.implementation_summary)}
+      ${renderAssistantEvolutionPre("检查输出", active.check_summary)}
+      ${renderAssistantEvolutionPre("复核结论", active.review_summary)}
+      ${renderAssistantEvolutionPre("Bug 报告", active.bug_report)}
+      ${renderAssistantEvolutionArtifacts(active)}
+      ${renderAssistantEvolutionTimeline(active)}
       <div class="assistant-inbox-actions">
         <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="tick">推进一次</button>
         ${canApprove ? '<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="approve-implementation">确认实现</button>' : ""}

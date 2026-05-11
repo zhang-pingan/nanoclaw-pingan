@@ -786,6 +786,7 @@ function createSchema(database: Database.Database): void {
       merge_commit TEXT,
       adoption_status TEXT,
       adoption_error TEXT,
+      resume_status TEXT,
       locked_by TEXT,
       lease_until TEXT,
       blocked_reason TEXT,
@@ -824,6 +825,13 @@ function createSchema(database: Database.Database): void {
   try {
     database.exec(
       `ALTER TABLE assistant_chat_messages ADD COLUMN file_path TEXT`,
+    );
+  } catch {
+    /* column already exists */
+  }
+  try {
+    database.exec(
+      `ALTER TABLE assistant_evolution_items ADD COLUMN resume_status TEXT`,
     );
   } catch {
     /* column already exists */
@@ -1860,6 +1868,9 @@ export function clearAssistantData(): {
   agent_inbox_items: number;
   assistant_action_logs: number;
   assistant_snoozes: number;
+  assistant_evolution_items: number;
+  assistant_evolution_events: number;
+  assistant_evolution_artifacts: number;
   total: number;
 } {
   const tx = db.transaction(() => {
@@ -1876,6 +1887,18 @@ export function clearAssistantData(): {
     const inboxItems = db
       .prepare(`DELETE FROM agent_inbox_items`)
       .run().changes;
+    const evolutionArtifacts = db
+      .prepare(`DELETE FROM assistant_evolution_artifacts`)
+      .run().changes;
+    const evolutionEvents = db
+      .prepare(`DELETE FROM assistant_evolution_events`)
+      .run().changes;
+    const evolutionItems = db
+      .prepare(`DELETE FROM assistant_evolution_items`)
+      .run().changes;
+    db.prepare(
+      `DELETE FROM assistant_runtime_locks WHERE key = 'assistant_evolution'`,
+    ).run();
 
     return {
       assistant_chat_messages: assistantChatMessages,
@@ -1883,8 +1906,18 @@ export function clearAssistantData(): {
       agent_inbox_items: inboxItems,
       assistant_action_logs: actionLogs,
       assistant_snoozes: snoozes,
+      assistant_evolution_items: evolutionItems,
+      assistant_evolution_events: evolutionEvents,
+      assistant_evolution_artifacts: evolutionArtifacts,
       total:
-        assistantChatMessages + messages + inboxItems + actionLogs + snoozes,
+        assistantChatMessages +
+        messages +
+        inboxItems +
+        actionLogs +
+        snoozes +
+        evolutionItems +
+        evolutionEvents +
+        evolutionArtifacts,
     };
   });
 

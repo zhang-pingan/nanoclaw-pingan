@@ -52,6 +52,21 @@ export interface EvolutionTickResult {
 
 const DEFAULT_LEASE_MS = 2 * 60 * 60 * 1000;
 const ENGINE_LOCK_OWNER = `assistant-evolution:${os.hostname()}:${process.pid}`;
+const PAUSABLE_RUNNING_STATUSES = [
+  'discovering',
+  'proposal_drafting',
+  'proposal_evaluating',
+  'proposal_refining',
+  'waiting_user_approval',
+  'branch_preparing',
+  'implementing',
+  'checking',
+  'reviewing',
+  'fixing',
+  'ready_for_adoption',
+  'blocked_by_policy',
+  'adoption_failed',
+] satisfies AssistantEvolutionItemView['status'][];
 const FORBIDDEN_CHANGED_PATHS = [
   '.env',
   '.ssh',
@@ -87,18 +102,17 @@ function clearEvolutionLoopTimer(): void {
 
 function scheduleNextEvolutionTick(): void {
   const settings = deps.settingsProvider();
-  evolutionLoopTimer = setTimeout(
-    runEvolutionLoop,
-    evolutionDelayMs(settings),
-  );
+  evolutionLoopTimer = setTimeout(runEvolutionLoop, evolutionDelayMs(settings));
 }
 
 function runEvolutionLoop(): void {
-  void runEvolutionTick().catch((err) => {
-    logger.error({ err }, 'Assistant evolution tick failed');
-  }).finally(() => {
-    scheduleNextEvolutionTick();
-  });
+  void runEvolutionTick()
+    .catch((err) => {
+      logger.error({ err }, 'Assistant evolution tick failed');
+    })
+    .finally(() => {
+      scheduleNextEvolutionTick();
+    });
 }
 
 function riskRank(level: AssistantEvolutionRiskLevel): number {
@@ -147,6 +161,30 @@ function hasForbiddenPath(files: string[]): string | null {
   return null;
 }
 
+async function changedFilesSinceBase(
+  baseCommit: string | null,
+): Promise<string[]> {
+  const committed = await deps.git.changedFiles(baseCommit || undefined);
+  const worktree = await deps.git.worktreeChangedFiles();
+  return Array.from(new Set([...committed, ...worktree])).sort();
+}
+
+async function commitWorkBranchChanges(
+  item: AssistantEvolutionItemView,
+): Promise<string> {
+  const add = await deps.git.addAll();
+  if (!add.ok) {
+    throw new Error(summarizeCommandResult(add));
+  }
+  const commit = await deps.git.commit(
+    `assistant evolution: ${item.direction}`,
+  );
+  if (!commit.ok) {
+    throw new Error(summarizeCommandResult(commit));
+  }
+  return deps.git.currentCommit();
+}
+
 async function getBranchAndCommit(): Promise<{
   branch: string;
   commit: string;
@@ -177,8 +215,7 @@ function updateFromProposal(
         direction: output.direction,
         proposal: output.proposal,
         risk_level: output.risk_level,
-        blocked_reason:
-          output.blocked_reason || '方案触发高风险或策略阻断',
+        blocked_reason: output.blocked_reason || '方案触发高风险或策略阻断',
         status: 'blocked_by_policy',
       },
       'blocked_by_policy',
@@ -219,8 +256,7 @@ function updateFromEvaluation(
       {
         proposal_evaluation: output.evaluation,
         risk_level: output.risk_level,
-        blocked_reason:
-          output.blocked_reason || '方案评估触发高风险或策略阻断',
+        blocked_reason: output.blocked_reason || '方案评估触发高风险或策略阻断',
         status: 'blocked_by_policy',
       },
       'blocked_by_policy',
@@ -250,7 +286,8 @@ function updateFromEvaluation(
       proposal_evaluation: output.evaluation,
       risk_level: output.risk_level,
       auto_implement: canAutoImplement,
-      auto_adopt: settings.evolution.autoAdoptEnabled && output.risk_level === 'low',
+      auto_adopt:
+        settings.evolution.autoAdoptEnabled && output.risk_level === 'low',
       status: canAutoImplement ? 'branch_preparing' : 'waiting_user_approval',
     },
     'proposal_evaluated',
@@ -266,9 +303,7 @@ async function handleProposalPhase(
   const output = (await runEvolutionPhase({
     item,
     phase:
-      item.status === 'proposal_refining'
-        ? 'proposal_refinement'
-        : 'proposal',
+      item.status === 'proposal_refining' ? 'proposal_refinement' : 'proposal',
     agentRunner: assertAgentRunner(),
     currentBranch: branchInfo.branch,
     currentCommit: branchInfo.commit,
@@ -392,8 +427,7 @@ async function handleImplementation(
       `Agent left expected work branch ${item.work_branch}; current ${currentBranch}`,
     );
   }
-  const headCommit = await deps.git.currentCommit();
-  const changedFiles = await deps.git.changedFiles(item.base_commit || undefined);
+  const changedFiles = await changedFilesSinceBase(item.base_commit);
   const forbidden = hasForbiddenPath(changedFiles);
   if (forbidden) {
     const updated = updateEvolutionItem(
@@ -402,7 +436,7 @@ async function handleImplementation(
         status: 'blocked_by_policy',
         blocked_reason: `实现修改了禁止路径：${forbidden}`,
         implementation_summary: output.implementation_summary,
-        head_commit: headCommit,
+        head_commit: await deps.git.currentCommit(),
       },
       'blocked_by_policy',
       { forbiddenPath: forbidden, changedFiles },
@@ -414,6 +448,9 @@ async function handleImplementation(
       status: updated.status,
     };
   }
+  const headCommit = (await deps.git.hasDirtyWorktree())
+    ? await commitWorkBranchChanges(item)
+    : await deps.git.currentCommit();
 
   createEvolutionArtifact({
     itemId: item.id,
@@ -444,7 +481,7 @@ async function handleImplementation(
 async function handleChecking(
   item: AssistantEvolutionItemView,
 ): Promise<EvolutionTickResult> {
-  const changedFiles = await deps.git.changedFiles(item.base_commit || undefined);
+  const changedFiles = await changedFilesSinceBase(item.base_commit);
   const docsOnly =
     changedFiles.length > 0 &&
     changedFiles.every((file) => /\.(md|mdx|txt)$/i.test(file));
@@ -465,8 +502,7 @@ async function handleChecking(
   });
   if (!result.ok) {
     const nextRound = item.review_round + 1;
-    const status =
-      nextRound > item.max_review_rounds ? 'failed' : 'fixing';
+    const status = nextRound > item.max_review_rounds ? 'failed' : 'fixing';
     const updated = updateEvolutionItem(
       item.id,
       {
@@ -524,8 +560,7 @@ async function handleReviewing(
 
   if (!output.ok || !output.review_complete || output.required_fixes.length) {
     const nextRound = item.review_round + 1;
-    const status =
-      nextRound > item.max_review_rounds ? 'failed' : 'fixing';
+    const status = nextRound > item.max_review_rounds ? 'failed' : 'fixing';
     const updated = updateEvolutionItem(
       item.id,
       {
@@ -738,9 +773,22 @@ export function pauseEvolutionItem(itemId: string): {
 } {
   const item = getEvolutionItem(itemId);
   if (!item) throw new Error('Evolution item not found');
+  if (item.status === 'paused') {
+    return { ok: true, item };
+  }
   return {
     ok: true,
-    item: transitionEvolutionItem(item.id, 'paused'),
+    item: updateEvolutionItem(
+      item.id,
+      {
+        status: 'paused',
+        resume_status: PAUSABLE_RUNNING_STATUSES.includes(item.status as never)
+          ? item.status
+          : null,
+      },
+      'status_changed',
+      { status: 'paused', resumeStatus: item.status },
+    ),
   };
 }
 
@@ -753,9 +801,15 @@ export function resumeEvolutionItem(itemId: string): {
   if (item.status !== 'paused') {
     throw new Error(`Cannot resume from ${item.status}`);
   }
+  const nextStatus = item.resume_status || 'proposal_evaluating';
   return {
     ok: true,
-    item: transitionEvolutionItem(item.id, 'proposal_evaluating'),
+    item: updateEvolutionItem(
+      item.id,
+      { status: nextStatus, resume_status: null },
+      'status_changed',
+      { status: nextStatus },
+    ),
   };
 }
 
@@ -789,15 +843,21 @@ export async function adoptEvolutionItem(itemId: string): Promise<{
     'adoption_started',
   );
 
+  let mergePrepared = false;
+  let mergeCommitted = false;
   try {
     if (await deps.git.hasDirtyWorktree()) {
       throw new Error('Worktree is dirty before adoption');
     }
     const checkout = await deps.git.checkout(item.base_branch);
     if (!checkout.ok) throw new Error(summarizeCommandResult(checkout));
-    const merge = await deps.git.mergeNoFf(item.work_branch);
+    const merge = await deps.git.mergeNoFfNoCommit(item.work_branch);
+    mergePrepared = true;
     if (!merge.ok) throw new Error(summarizeCommandResult(merge));
-    const check = await deps.checkRunner({ itemId: item.id, phase: 'adoption' });
+    const check = await deps.checkRunner({
+      itemId: item.id,
+      phase: 'adoption',
+    });
     createEvolutionArtifact({
       itemId: item.id,
       artifactType: 'adoption_summary',
@@ -805,6 +865,11 @@ export async function adoptEvolutionItem(itemId: string): Promise<{
       content: summarizeCommandResult(check),
     });
     if (!check.ok) throw new Error(summarizeCommandResult(check));
+    const commit = await deps.git.commit(
+      `adopt assistant evolution: ${item.direction}`,
+    );
+    if (!commit.ok) throw new Error(summarizeCommandResult(commit));
+    mergeCommitted = true;
     const mergeCommit = await deps.git.currentCommit();
     const adopted = updateEvolutionItem(
       item.id,
@@ -819,6 +884,15 @@ export async function adoptEvolutionItem(itemId: string): Promise<{
     );
     return { ok: true, item: adopted };
   } catch (err) {
+    if (mergePrepared && !mergeCommitted) {
+      const abort = await deps.git.mergeAbort();
+      createEvolutionArtifact({
+        itemId: item.id,
+        artifactType: 'adoption_summary',
+        title: abort.command,
+        content: summarizeCommandResult(abort),
+      });
+    }
     const failed = updateEvolutionItem(
       item.id,
       {

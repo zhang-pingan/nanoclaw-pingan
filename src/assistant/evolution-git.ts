@@ -17,19 +17,49 @@ export interface EvolutionGitAdapter {
   currentBranch(): Promise<string>;
   currentCommit(): Promise<string>;
   hasDirtyWorktree(): Promise<boolean>;
+  worktreeChangedFiles(): Promise<string[]>;
   branchExists(branch: string): Promise<boolean>;
   checkout(branch: string): Promise<CommandResult>;
   createBranch(branch: string): Promise<CommandResult>;
-  mergeNoFf(branch: string): Promise<CommandResult>;
+  addAll(): Promise<CommandResult>;
+  commit(message: string): Promise<CommandResult>;
+  mergeNoFfNoCommit(branch: string): Promise<CommandResult>;
+  mergeAbort(): Promise<CommandResult>;
   changedFiles(baseRef?: string): Promise<string[]>;
 }
 
 export interface EvolutionCheckRunner {
-  (input: { itemId: string; phase: 'check' | 'adoption' }): Promise<CommandResult>;
+  (input: {
+    itemId: string;
+    phase: 'check' | 'adoption';
+  }): Promise<CommandResult>;
 }
 
 function formatCommand(command: string, args: string[]): string {
   return [command, ...args].join(' ');
+}
+
+function uniqueFiles(files: string[]): string[] {
+  return Array.from(new Set(files.map((file) => file.trim()).filter(Boolean)));
+}
+
+function parsePorcelainZ(stdout: string): string[] {
+  const entries = stdout.split('\0').filter(Boolean);
+  const files: string[] = [];
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const status = entry.slice(0, 2);
+    const path = entry.slice(3);
+    if (!path) continue;
+    files.push(path);
+
+    if (status.includes('R') || status.includes('C')) {
+      index += 1;
+    }
+  }
+
+  return uniqueFiles(files);
 }
 
 async function runCommand(
@@ -83,6 +113,11 @@ export function createDefaultEvolutionGitAdapter(): EvolutionGitAdapter {
       if (!result.ok) throw new Error(result.stderr || 'git status failed');
       return result.stdout.trim().length > 0;
     },
+    async worktreeChangedFiles() {
+      const result = await runCommand('git', ['status', '--porcelain', '-z']);
+      if (!result.ok) throw new Error(result.stderr || 'git status failed');
+      return parsePorcelainZ(result.stdout);
+    },
     async branchExists(branch: string) {
       const result = await runCommand('git', [
         'rev-parse',
@@ -98,8 +133,17 @@ export function createDefaultEvolutionGitAdapter(): EvolutionGitAdapter {
     createBranch(branch: string) {
       return runCommand('git', ['checkout', '-b', branch]);
     },
-    mergeNoFf(branch: string) {
-      return runCommand('git', ['merge', '--no-ff', branch]);
+    addAll() {
+      return runCommand('git', ['add', '-A']);
+    },
+    commit(message: string) {
+      return runCommand('git', ['commit', '-m', message]);
+    },
+    mergeNoFfNoCommit(branch: string) {
+      return runCommand('git', ['merge', '--no-ff', '--no-commit', branch]);
+    },
+    mergeAbort() {
+      return runCommand('git', ['merge', '--abort']);
     },
     async changedFiles(baseRef?: string) {
       const args = baseRef
@@ -107,10 +151,12 @@ export function createDefaultEvolutionGitAdapter(): EvolutionGitAdapter {
         : ['diff', '--name-only'];
       const result = await runCommand('git', args);
       if (!result.ok) throw new Error(result.stderr || 'git diff failed');
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean);
+      return uniqueFiles(
+        result.stdout
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean),
+      );
     },
   };
 }

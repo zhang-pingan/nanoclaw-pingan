@@ -1,13 +1,12 @@
 import { randomUUID } from 'crypto';
 
 import { getDatabase } from '../db.js';
-import { createOrUpdateAgentInboxItem } from './agent-inbox-store.js';
+import {
+  createOrUpdateAgentInboxItem,
+  resolveActiveAgentInboxItemByDedupeKey,
+} from './agent-inbox-store.js';
 
-export type AssistantEvolutionRiskLevel =
-  | 'unknown'
-  | 'low'
-  | 'medium'
-  | 'high';
+export type AssistantEvolutionRiskLevel = 'unknown' | 'low' | 'medium' | 'high';
 
 export type AssistantEvolutionStatus =
   | 'discovering'
@@ -52,6 +51,7 @@ export interface AssistantEvolutionItemRecord {
   merge_commit: string | null;
   adoption_status: string | null;
   adoption_error: string | null;
+  resume_status: AssistantEvolutionStatus | null;
   locked_by: string | null;
   lease_until: string | null;
   blocked_reason: string | null;
@@ -79,21 +79,27 @@ export interface AssistantEvolutionArtifactRecord {
   created_at: string;
 }
 
-export interface AssistantEvolutionItemView
-  extends Omit<AssistantEvolutionItemRecord, 'auto_implement' | 'auto_adopt'> {
+export interface AssistantEvolutionItemView extends Omit<
+  AssistantEvolutionItemRecord,
+  'auto_implement' | 'auto_adopt'
+> {
   auto_implement: boolean;
   auto_adopt: boolean;
   events?: AssistantEvolutionEventView[];
   artifacts?: AssistantEvolutionArtifactView[];
 }
 
-export interface AssistantEvolutionEventView
-  extends Omit<AssistantEvolutionEventRecord, 'payload_json'> {
+export interface AssistantEvolutionEventView extends Omit<
+  AssistantEvolutionEventRecord,
+  'payload_json'
+> {
   payload: Record<string, unknown>;
 }
 
-export interface AssistantEvolutionArtifactView
-  extends Omit<AssistantEvolutionArtifactRecord, 'payload_json'> {
+export interface AssistantEvolutionArtifactView extends Omit<
+  AssistantEvolutionArtifactRecord,
+  'payload_json'
+> {
   payload: Record<string, unknown>;
 }
 
@@ -218,7 +224,13 @@ export function createEvolutionEvent(input: {
         id, item_id, event_type, payload_json, created_at
       ) VALUES (?, ?, ?, ?, ?)`,
     )
-    .run(id, input.itemId, input.eventType, writeJson(input.payload), createdAt);
+    .run(
+      id,
+      input.itemId,
+      input.eventType,
+      writeJson(input.payload),
+      createdAt,
+    );
   const row = getDatabase()
     .prepare('SELECT * FROM assistant_evolution_events WHERE id = ?')
     .get(id) as AssistantEvolutionEventRecord;
@@ -322,9 +334,11 @@ export function getEvolutionItem(
   return item;
 }
 
-export function listEvolutionItems(input: {
-  limit?: number;
-} = {}): AssistantEvolutionItemView[] {
+export function listEvolutionItems(
+  input: {
+    limit?: number;
+  } = {},
+): AssistantEvolutionItemView[] {
   const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 500);
   const rows = getDatabase()
     .prepare(
@@ -385,14 +399,18 @@ export function listLatestEvolutionEvents(
        ORDER BY created_at DESC
        LIMIT ?`,
     )
-    .all(Math.min(Math.max(Math.trunc(limit), 1), 200)) as
-    AssistantEvolutionEventRecord[];
+    .all(
+      Math.min(Math.max(Math.trunc(limit), 1), 200),
+    ) as AssistantEvolutionEventRecord[];
   return rows.map(toEventView);
 }
 
 export function getEvolutionState(): AssistantEvolutionStateView {
+  const activeItem = getActiveEvolutionItem();
   return {
-    activeItem: getActiveEvolutionItem(),
+    activeItem: activeItem
+      ? getEvolutionItem(activeItem.id, { includeDetails: true })
+      : null,
     latestItems: listEvolutionItems({ limit: 20 }),
     latestEvents: listLatestEvolutionEvents(30),
   };
@@ -422,6 +440,7 @@ export function updateEvolutionItem(
     merge_commit: string | null;
     adoption_status: string | null;
     adoption_error: string | null;
+    resume_status: AssistantEvolutionStatus | null;
     locked_by: string | null;
     lease_until: string | null;
     blocked_reason: string | null;
@@ -522,12 +541,7 @@ export function tryAcquireEvolutionLease(input: {
          SET locked_by = ?, lease_until = ?, updated_at = ?
          WHERE status NOT IN (${terminalPlaceholders()})`,
       )
-      .run(
-        input.lockOwner,
-        leaseUntil,
-        now,
-        ...TERMINAL_EVOLUTION_STATUSES,
-      );
+      .run(input.lockOwner, leaseUntil, now, ...TERMINAL_EVOLUTION_STATUSES);
     return true;
   });
   return tx();
@@ -552,10 +566,12 @@ export function releaseEvolutionLease(lockOwner: string): void {
     .run(nowTs(), lockOwner);
 }
 
-export function syncEvolutionInbox(
-  item: AssistantEvolutionItemView,
-): void {
-  if (TERMINAL_EVOLUTION_STATUSES.includes(item.status)) return;
+export function syncEvolutionInbox(item: AssistantEvolutionItemView): void {
+  const dedupeKey = `assistant_evolution:${item.id}`;
+  if (TERMINAL_EVOLUTION_STATUSES.includes(item.status)) {
+    resolveActiveAgentInboxItemByDedupeKey(dedupeKey);
+    return;
+  }
 
   const title =
     item.status === 'ready_for_adoption'
@@ -575,7 +591,7 @@ export function syncEvolutionInbox(
     .join('\n');
 
   createOrUpdateAgentInboxItem({
-    dedupeKey: `assistant_evolution:${item.id}`,
+    dedupeKey,
     kind:
       item.status === 'blocked_by_policy' || item.status === 'adoption_failed'
         ? 'risk'

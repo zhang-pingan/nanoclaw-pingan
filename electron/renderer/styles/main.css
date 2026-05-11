@@ -4201,6 +4201,72 @@ body.quick-chat-window .quick-chat-input {
   background: rgba(255, 255, 255, 0.84);
 }
 
+.assistant-evolution-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.assistant-evolution-field {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.assistant-evolution-field strong,
+.assistant-evolution-timeline-item strong {
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.62);
+}
+
+.assistant-evolution-field span,
+.assistant-evolution-timeline-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.assistant-evolution-detail {
+  min-width: 0;
+  border: 1px solid rgba(var(--assistant-accent-rgb), 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.assistant-evolution-detail summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.assistant-evolution-detail pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 0 10px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.assistant-evolution-details,
+.assistant-evolution-timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-evolution-timeline-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .assistant-switch-row,
 .assistant-field {
   display: grid;

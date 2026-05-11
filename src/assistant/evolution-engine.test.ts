@@ -4,8 +4,11 @@ import { _initTestDatabase } from '../db.js';
 import { initAssistantEvents } from './assistant-events.js';
 import {
   _resetEvolutionEngineForTests,
+  adoptEvolutionItem,
   approveEvolutionImplementation,
   configureEvolutionEngine,
+  pauseEvolutionItem,
+  resumeEvolutionItem,
   runEvolutionTick,
 } from './evolution-engine.js';
 import type { EvolutionGitAdapter } from './evolution-git.js';
@@ -47,23 +50,61 @@ function settings(
 function gitAdapter(): EvolutionGitAdapter {
   let branch = 'main';
   let commit = 'commit-main';
+  let dirty = false;
   return {
     currentBranch: async () => branch,
     currentCommit: async () => commit,
-    hasDirtyWorktree: async () => false,
+    hasDirtyWorktree: async () => dirty,
+    worktreeChangedFiles: async () =>
+      dirty ? ['src/assistant/example.ts'] : [],
     branchExists: async () => false,
     checkout: async (next) => {
       branch = next;
-      return { ok: true, stdout: '', stderr: '', command: `git checkout ${next}` };
+      return {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        command: `git checkout ${next}`,
+      };
     },
     createBranch: async (next) => {
       branch = next;
       commit = 'commit-work';
-      return { ok: true, stdout: '', stderr: '', command: `git checkout -b ${next}` };
+      return {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        command: `git checkout -b ${next}`,
+      };
     },
-    mergeNoFf: async (next) => {
-      commit = `merge-${next}`;
-      return { ok: true, stdout: '', stderr: '', command: `git merge ${next}` };
+    addAll: async () => ({
+      ok: true,
+      stdout: '',
+      stderr: '',
+      command: 'git add -A',
+    }),
+    commit: async (message) => {
+      dirty = false;
+      commit = `commit-${message}`;
+      return {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        command: `git commit -m ${message}`,
+      };
+    },
+    mergeNoFfNoCommit: async (next) => {
+      dirty = true;
+      return {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        command: `git merge --no-ff --no-commit ${next}`,
+      };
+    },
+    mergeAbort: async () => {
+      dirty = false;
+      return { ok: true, stdout: '', stderr: '', command: 'git merge --abort' };
     },
     changedFiles: async () => ['local/docs/example.md'],
   };
@@ -170,5 +211,118 @@ describe('evolution engine', () => {
 
     expect(result.status).toBe('blocked_by_policy');
     expect(getEvolutionItem(item.id)?.blocked_reason).toContain('未提交改动');
+  });
+
+  it('commits dirty implementation output before checking', async () => {
+    let dirty = false;
+    let committed = false;
+    let branch = 'evolution/test';
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => branch,
+        currentCommit: async () => (committed ? 'committed-work' : 'base-work'),
+        hasDirtyWorktree: async () => dirty,
+        worktreeChangedFiles: async () =>
+          dirty ? ['src/assistant/example.ts'] : [],
+        addAll: async () => ({
+          ok: true,
+          stdout: '',
+          stderr: '',
+          command: 'git add -A',
+        }),
+        commit: async () => {
+          dirty = false;
+          committed = true;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: 'git commit -m test',
+          };
+        },
+        changedFiles: async () => ['src/assistant/example.ts'],
+      },
+      agentRunner: async () => {
+        dirty = true;
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            implementation_summary: 'done',
+            changed_files: ['src/assistant/example.ts'],
+            requires_followup: false,
+          }),
+        };
+      },
+    });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, {
+      status: 'implementing',
+      work_branch: branch,
+      base_commit: 'base-work',
+    });
+
+    const result = await runEvolutionTick();
+
+    expect(result.status).toBe('checking');
+    expect(committed).toBe(true);
+    expect(getEvolutionItem(item.id)?.head_commit).toBe('committed-work');
+  });
+
+  it('aborts prepared adoption merge when checks fail', async () => {
+    let mergeAborted = false;
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        mergeAbort: async () => {
+          mergeAborted = true;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: 'git merge --abort',
+          };
+        },
+      },
+      checkRunner: async () => ({
+        ok: false,
+        stdout: '',
+        stderr: 'failed checks',
+        command: 'npm test',
+      }),
+    });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, {
+      status: 'ready_for_adoption',
+      work_branch: 'evolution/test',
+      base_branch: 'main',
+    });
+
+    const result = await adoptEvolutionItem(item.id);
+
+    expect(result.ok).toBe(false);
+    expect(result.item.status).toBe('adoption_failed');
+    expect(mergeAborted).toBe(true);
+  });
+
+  it('resumes paused items to their original status', async () => {
+    configureEvolutionEngine({ settingsProvider: () => settings() });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, { status: 'checking' });
+
+    const paused = pauseEvolutionItem(item.id);
+    const resumed = resumeEvolutionItem(item.id);
+
+    expect(paused.item.status).toBe('paused');
+    expect(resumed.item.status).toBe('checking');
   });
 });
