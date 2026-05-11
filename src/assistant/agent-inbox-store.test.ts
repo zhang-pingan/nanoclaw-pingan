@@ -134,6 +134,24 @@ describe('agent inbox store', () => {
     expect(getAssistantSettings().enabled).toBe(false);
   });
 
+  it('merges assistant evolution settings without enabling automation by default', () => {
+    const settings = updateAssistantSettings({
+      evolution: {
+        enabled: true,
+        autoImplementEnabled: true,
+        scanIntervalMinutes: 30,
+      },
+    });
+
+    expect(settings.evolution.enabled).toBe(true);
+    expect(settings.evolution.autoImplementEnabled).toBe(true);
+    expect(settings.evolution.autoAdoptEnabled).toBe(false);
+    expect(settings.evolution.scanIntervalMinutes).toBe(30);
+    expect(settings.evolution.maxConcurrentItems).toBe(1);
+    expect(settings.evolution.maxReviewRounds).toBe(2);
+    expect(settings.evolution.allowedRiskLevel).toBe('medium');
+  });
+
   it('normalizes old assistant data source settings into trigger rules', () => {
     getDatabase()
       .prepare(

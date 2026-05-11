@@ -490,6 +490,12 @@ var assistantScanIntervalInput = document.getElementById("assistant-scan-interva
 var assistantAutostartToggle = document.getElementById("assistant-autostart-toggle");
 var assistantAlwaysOnTopToggle = document.getElementById("assistant-always-on-top-toggle");
 var assistantMovementToggle = document.getElementById("assistant-movement-toggle");
+var assistantEvolutionSummary = document.getElementById("assistant-evolution-summary");
+var assistantEvolutionEnabledToggle = document.getElementById("assistant-evolution-enabled-toggle");
+var assistantEvolutionAutoImplementToggle = document.getElementById("assistant-evolution-auto-implement-toggle");
+var assistantEvolutionAutoAdoptToggle = document.getElementById("assistant-evolution-auto-adopt-toggle");
+var assistantEvolutionScanIntervalInput = document.getElementById("assistant-evolution-scan-interval-input");
+var assistantEvolutionPanel = document.getElementById("assistant-evolution-panel");
 var assistantSourceGrid = document.getElementById("assistant-source-grid");
 var assistantSourceInputs = [];
 var assistantServiceInputs = [];
@@ -504,6 +510,7 @@ var assistantFlowGroupExpandedItems = {};
 var assistantLogDetailExpandedItems = {};
 var assistantLogDetailExpandedLogs = {};
 var assistantScanIntervalSaveTimer = null;
+var assistantEvolutionScanIntervalSaveTimer = null;
 var mentionSearchInput = null;
 var mentionOptionsEl = null;
 var mentionPickerVisible = false;
@@ -17653,6 +17660,17 @@ function getAssistantOnlineLogServiceOptions() {
     : [];
 }
 
+function getAssistantEvolutionSettings() {
+  const settings = getAssistantSettings();
+  return settings && settings.evolution ? settings.evolution : null;
+}
+
+function getAssistantEvolutionState() {
+  return assistantState && assistantState.evolution && typeof assistantState.evolution === "object"
+    ? assistantState.evolution
+    : null;
+}
+
 function getAssistantSourceGroupKey(rule) {
   return rule && rule.sourceLabel ? String(rule.sourceLabel) : "其他";
 }
@@ -18167,6 +18185,7 @@ function renderAssistantSettings() {
   const settings = getAssistantSettings();
   if (!settings) {
     if (assistantSettingsSummary) assistantSettingsSummary.textContent = "加载中";
+    if (assistantEvolutionSummary) assistantEvolutionSummary.textContent = "加载中";
     renderAssistantHeroMetrics();
     return;
   }
@@ -18181,8 +18200,81 @@ function renderAssistantSettings() {
   if (assistantAutostartToggle) assistantAutostartToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.autostart);
   if (assistantAlwaysOnTopToggle) assistantAlwaysOnTopToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.alwaysOnTop);
   if (assistantMovementToggle) assistantMovementToggle.checked = Boolean(settings.desktopAssistant && settings.desktopAssistant.allowMovement);
+  renderAssistantEvolution();
   renderAssistantSourceRules();
   renderAssistantHeroMetrics();
+}
+
+function assistantEvolutionStatusLabel(status) {
+  const labels = {
+    discovering: "发现方向",
+    proposal_drafting: "写方案",
+    proposal_evaluating: "评估方案",
+    proposal_refining: "完善方案",
+    waiting_user_approval: "待确认实现",
+    branch_preparing: "准备分支",
+    implementing: "实现中",
+    checking: "检查中",
+    reviewing: "复核中",
+    fixing: "修复中",
+    ready_for_adoption: "待采纳",
+    adopting: "采纳中",
+    paused: "已暂停",
+    blocked_by_policy: "策略阻断",
+    adoption_failed: "采纳失败",
+    completed: "已完成",
+    failed: "失败",
+    cancelled: "已取消",
+  };
+  return labels[status] || status || "无";
+}
+
+function renderAssistantEvolution() {
+  const evolution = getAssistantEvolutionSettings();
+  const state = getAssistantEvolutionState();
+  const active = state && state.activeItem ? state.activeItem : null;
+  if (assistantEvolutionSummary) {
+    const enabledLabel = evolution && evolution.enabled ? "已启用" : "已关闭";
+    const statusLabel = active ? assistantEvolutionStatusLabel(active.status) : "无 active item";
+    assistantEvolutionSummary.textContent = `${enabledLabel} · ${statusLabel}`;
+  }
+  if (assistantEvolutionEnabledToggle) assistantEvolutionEnabledToggle.checked = Boolean(evolution && evolution.enabled);
+  if (assistantEvolutionAutoImplementToggle) assistantEvolutionAutoImplementToggle.checked = Boolean(evolution && evolution.autoImplementEnabled);
+  if (assistantEvolutionAutoAdoptToggle) assistantEvolutionAutoAdoptToggle.checked = Boolean(evolution && evolution.autoAdoptEnabled);
+  if (assistantEvolutionScanIntervalInput && document.activeElement !== assistantEvolutionScanIntervalInput) {
+    assistantEvolutionScanIntervalInput.value = String((evolution && evolution.scanIntervalMinutes) || 60);
+  }
+  if (!assistantEvolutionPanel) return;
+  if (!active) {
+    assistantEvolutionPanel.innerHTML = '<div class="assistant-empty">暂无自我进化事项</div>';
+    return;
+  }
+  const canApprove = active.status === "waiting_user_approval";
+  const canAdopt = active.status === "ready_for_adoption";
+  const canPause = !["completed", "failed", "cancelled", "paused"].includes(active.status);
+  const canResume = active.status === "paused";
+  assistantEvolutionPanel.innerHTML = `
+    <article class="assistant-evolution-item">
+      <div class="assistant-inbox-meta">${escapeHtml(assistantEvolutionStatusLabel(active.status))} · ${escapeHtml(active.risk_level || "unknown")}</div>
+      <div class="assistant-inbox-title">${escapeHtml(active.direction || "待发现")}</div>
+      <div class="assistant-inbox-body">${escapeHtml(active.proposal || active.blocked_reason || "等待下一次推进")}</div>
+      <div class="assistant-inbox-meta">${escapeHtml(active.work_branch || active.base_branch || "")}</div>
+      <div class="assistant-inbox-actions">
+        <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="tick">推进一次</button>
+        ${canApprove ? '<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="approve-implementation">确认实现</button>' : ""}
+        ${canAdopt ? '<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="adopt">采纳方案</button>' : ""}
+        ${canPause ? '<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="pause">暂停</button>' : ""}
+        ${canResume ? '<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="resume">继续</button>' : ""}
+        <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="cancel">取消</button>
+      </div>
+    </article>
+  `;
+  Array.from(assistantEvolutionPanel.querySelectorAll("[data-assistant-evolution-action]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const action = button.getAttribute("data-assistant-evolution-action") || "";
+      await runAssistantEvolutionAction(action, active.id, button);
+    });
+  });
 }
 
 function renderAssistantInbox() {
@@ -18392,6 +18484,39 @@ function scheduleAssistantScanIntervalSave() {
       scanIntervalMinutes: Number(assistantScanIntervalInput.value) || 10,
     });
   }, 350);
+}
+
+function scheduleAssistantEvolutionScanIntervalSave() {
+  if (!assistantEvolutionScanIntervalInput) return;
+  if (assistantEvolutionScanIntervalSaveTimer) clearTimeout(assistantEvolutionScanIntervalSaveTimer);
+  assistantEvolutionScanIntervalSaveTimer = setTimeout(() => {
+    assistantEvolutionScanIntervalSaveTimer = null;
+    updateAssistantSettingsPatch({
+      evolution: {
+        scanIntervalMinutes: Number(assistantEvolutionScanIntervalInput.value) || 60,
+      },
+    });
+  }, 350);
+}
+
+async function runAssistantEvolutionAction(action, itemId, triggerButton) {
+  if (!action) return;
+  if (triggerButton) triggerButton.disabled = true;
+  try {
+    const url = action === "tick"
+      ? "/api/assistant/evolution/tick"
+      : `/api/assistant/evolution/items/${encodeURIComponent(itemId || "")}/${action}`;
+    const res = await apiFetch(url, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(action === "tick" ? "自我进化已推进" : "自我进化动作已执行", 1800);
+    await loadAssistantState();
+  } catch (err) {
+    console.error("Failed to run assistant evolution action:", err);
+    showToast(err instanceof Error ? err.message : "自我进化动作失败", 2600);
+  } finally {
+    if (triggerButton) triggerButton.disabled = false;
+  }
 }
 
 async function runAssistantScan() {
@@ -19119,6 +19244,48 @@ if (assistantMovementToggle) {
   assistantMovementToggle.addEventListener("change", () => {
     updateAssistantSettingsPatch({
       desktopAssistant: { allowMovement: assistantMovementToggle.checked },
+    });
+  });
+}
+if (assistantEvolutionEnabledToggle) {
+  assistantEvolutionEnabledToggle.addEventListener("change", () => {
+    updateAssistantSettingsPatch({
+      evolution: { enabled: assistantEvolutionEnabledToggle.checked },
+    });
+  });
+}
+if (assistantEvolutionAutoImplementToggle) {
+  assistantEvolutionAutoImplementToggle.addEventListener("change", () => {
+    updateAssistantSettingsPatch({
+      evolution: {
+        autoImplementEnabled: assistantEvolutionAutoImplementToggle.checked,
+      },
+    });
+  });
+}
+if (assistantEvolutionAutoAdoptToggle) {
+  assistantEvolutionAutoAdoptToggle.addEventListener("change", () => {
+    updateAssistantSettingsPatch({
+      evolution: {
+        autoAdoptEnabled: assistantEvolutionAutoAdoptToggle.checked,
+      },
+    });
+  });
+}
+if (assistantEvolutionScanIntervalInput) {
+  assistantEvolutionScanIntervalInput.addEventListener("input", () => {
+    scheduleAssistantEvolutionScanIntervalSave();
+  });
+  assistantEvolutionScanIntervalInput.addEventListener("change", () => {
+    if (assistantEvolutionScanIntervalSaveTimer) {
+      clearTimeout(assistantEvolutionScanIntervalSaveTimer);
+      assistantEvolutionScanIntervalSaveTimer = null;
+    }
+    updateAssistantSettingsPatch({
+      evolution: {
+        scanIntervalMinutes:
+          Number(assistantEvolutionScanIntervalInput.value) || 60,
+      },
     });
   });
 }

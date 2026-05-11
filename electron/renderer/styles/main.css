@@ -4184,6 +4184,23 @@ body.quick-chat-window .quick-chat-input {
   padding: 16px 18px;
 }
 
+.assistant-evolution-settings {
+  padding-top: 12px;
+}
+
+.assistant-evolution-panel {
+  padding: 0 18px 16px;
+}
+
+.assistant-evolution-item {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(var(--assistant-accent-rgb), 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
 .assistant-switch-row,
 .assistant-field {
   display: grid;

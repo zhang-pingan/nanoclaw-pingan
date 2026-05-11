@@ -16,6 +16,20 @@ import {
   rescheduleProactiveEngine,
   runProactiveScan,
 } from './proactive-engine.js';
+import {
+  adoptEvolutionItem,
+  approveEvolutionImplementation,
+  cancelEvolutionItem,
+  getEvolutionStateForApi,
+  pauseEvolutionItem,
+  rescheduleEvolutionEngine,
+  resumeEvolutionItem,
+  runEvolutionTick,
+} from './evolution-engine.js';
+import {
+  getEvolutionItem,
+  listEvolutionItems,
+} from './evolution-store.js';
 import { resolveTodayPlanInboxItemsIfPlanExists } from './today-plan-inbox.js';
 import { listOnlineLogServiceOptions } from './online-error-log.js';
 import {
@@ -60,6 +74,7 @@ export function getAssistantState(): AssistantState {
     inboxCounts: getAgentInboxCounts(),
     latestInboxItems: listAgentInboxItems({ status: 'active', limit: 20 }),
     latestActionLogs: listAssistantActionLogs(20),
+    evolution: getEvolutionStateForApi(),
   };
 }
 
@@ -80,6 +95,7 @@ export function listAgentInboxForApi(input: {
 export function updateAssistantSettingsForApi(body: unknown) {
   const settings = updateAssistantSettings(toRecord(body));
   rescheduleProactiveEngine();
+  rescheduleEvolutionEngine();
   return settings;
 }
 
@@ -96,6 +112,46 @@ export async function runAgentInboxActionForApi(body: unknown) {
 
 export function runAssistantScanForApi() {
   return runProactiveScan();
+}
+
+export function getAssistantEvolutionStateForApi() {
+  return getEvolutionStateForApi();
+}
+
+export function listAssistantEvolutionItemsForApi(input: { limit?: unknown }) {
+  return {
+    items: listEvolutionItems({ limit: toLimit(input.limit, 50) }),
+  };
+}
+
+export function getAssistantEvolutionItemForApi(id: string) {
+  const item = getEvolutionItem(id, { includeDetails: true });
+  if (!item) throw new Error('Evolution item not found');
+  return { item };
+}
+
+export async function runAssistantEvolutionTickForApi() {
+  return runEvolutionTick();
+}
+
+export function approveAssistantEvolutionImplementationForApi(id: string) {
+  return approveEvolutionImplementation(id);
+}
+
+export function pauseAssistantEvolutionItemForApi(id: string) {
+  return pauseEvolutionItem(id);
+}
+
+export function resumeAssistantEvolutionItemForApi(id: string) {
+  return resumeEvolutionItem(id);
+}
+
+export function cancelAssistantEvolutionItemForApi(id: string) {
+  return cancelEvolutionItem(id);
+}
+
+export async function adoptAssistantEvolutionItemForApi(id: string) {
+  return adoptEvolutionItem(id);
 }
 
 export function clearAssistantDataForApi() {

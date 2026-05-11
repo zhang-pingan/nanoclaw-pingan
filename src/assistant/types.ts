@@ -100,6 +100,15 @@ export interface AssistantSettings {
   enabled: boolean;
   proactiveLevel: 'quiet' | 'balanced' | 'active';
   scanIntervalMinutes: number;
+  evolution: {
+    enabled: boolean;
+    autoImplementEnabled: boolean;
+    autoAdoptEnabled: boolean;
+    scanIntervalMinutes: number;
+    maxConcurrentItems: number;
+    maxReviewRounds: number;
+    allowedRiskLevel: 'low' | 'medium' | 'high';
+  };
   quietHours: {
     enabled: boolean;
     start: string;
@@ -193,6 +202,15 @@ export const DEFAULT_ASSISTANT_SETTINGS: AssistantSettings = {
   enabled: true,
   proactiveLevel: 'balanced',
   scanIntervalMinutes: 10,
+  evolution: {
+    enabled: false,
+    autoImplementEnabled: false,
+    autoAdoptEnabled: false,
+    scanIntervalMinutes: 60,
+    maxConcurrentItems: 1,
+    maxReviewRounds: 2,
+    allowedRiskLevel: 'medium',
+  },
   quietHours: {
     enabled: false,
     start: '22:30',
@@ -236,4 +254,5 @@ export interface AssistantState {
   inboxCounts: Record<AgentInboxStatus, number>;
   latestInboxItems: AgentInboxItemView[];
   latestActionLogs: AssistantActionLogView[];
+  evolution: unknown;
 }

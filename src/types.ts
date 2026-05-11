@@ -339,7 +339,8 @@ export type AgentQuerySourceType =
   | 'message'
   | 'scheduled_task'
   | 'workflow_delegation'
-  | 'web_action';
+  | 'web_action'
+  | 'assistant_evolution';
 
 export interface AgentQueryRecord {
   id: string;
