@@ -123,6 +123,18 @@ export interface AssistantSettings {
   maxInboxItems: number;
 }
 
+export interface AssistantScanScheduleState {
+  loopStarted: boolean;
+  scanRunning: boolean;
+  intervalMinutes: number;
+  lastScanStartedAt: string | null;
+  lastScanFinishedAt: string | null;
+  lastScanCreatedOrUpdated: number | null;
+  lastScanOk: boolean | null;
+  lastScanError: string | null;
+  nextScanAt: string | null;
+}
+
 export const ASSISTANT_TRIGGER_RULE_CAPABILITIES: AssistantTriggerRuleCapability[] =
   [
     {
@@ -249,6 +261,7 @@ export interface AssistantActionLogView extends Omit<
 
 export interface AssistantState {
   settings: AssistantSettings;
+  schedule: AssistantScanScheduleState;
   triggerRuleCapabilities: AssistantTriggerRuleCapability[];
   onlineLogServiceOptions: AssistantOnlineLogServiceOption[];
   inboxCounts: Record<AgentInboxStatus, number>;

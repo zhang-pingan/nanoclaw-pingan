@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { _initTestDatabase } from '../db.js';
 import { initAssistantEvents } from './assistant-events.js';
@@ -8,15 +8,20 @@ import {
   approveEvolutionImplementation,
   cancelEvolutionItem,
   configureEvolutionEngine,
+  getEvolutionScheduleState,
+  getEvolutionStateForApi,
   pauseEvolutionItem,
   resumeEvolutionItem,
   runEvolutionTick,
+  startEvolutionEngine,
 } from './evolution-engine.js';
 import type { EvolutionGitAdapter } from './evolution-git.js';
 import type { AssistantSettings } from './types.js';
 import {
+  createEvolutionItem,
   getActiveEvolutionItem,
   getEvolutionItem,
+  listEvolutionItems,
   updateEvolutionItem,
 } from './evolution-store.js';
 
@@ -121,10 +126,47 @@ function gitAdapter(): EvolutionGitAdapter {
   };
 }
 
+function proposalRunner(direction: string = '补充测试') {
+  return async ({ phase }: { phase: string }) => {
+    if (phase === 'proposal' || phase === 'proposal_refinement') {
+      return {
+        ok: true,
+        text: JSON.stringify({
+          ok: true,
+          module_scope: 'assistant',
+          direction,
+          risk_level: 'low',
+          proposal: '# Plan',
+          requires_user_approval: false,
+          blocked_by_policy: false,
+          blocked_reason: null,
+        }),
+      };
+    }
+    return {
+      ok: true,
+      text: JSON.stringify({
+        ok: true,
+        approved_for_implementation: true,
+        risk_level: 'low',
+        evaluation: 'ok',
+        required_changes: [],
+        blocked_by_policy: false,
+        blocked_reason: null,
+      }),
+    };
+  };
+}
+
 beforeEach(() => {
   _initTestDatabase();
   initAssistantEvents(() => {});
   _resetEvolutionEngineForTests();
+});
+
+afterEach(() => {
+  _resetEvolutionEngineForTests();
+  vi.useRealTimers();
 });
 
 describe('evolution engine', () => {
@@ -139,15 +181,50 @@ describe('evolution engine', () => {
     expect(getActiveEvolutionItem()).toBeNull();
   });
 
-  it('creates an item on first enabled tick', async () => {
+  it('creates and advances an item to the configured decision point', async () => {
     configureEvolutionEngine({
       settingsProvider: () => settings(),
+      git: gitAdapter(),
+      agentRunner: proposalRunner(),
     });
 
     const result = await runEvolutionTick();
 
-    expect(result.action).toBe('item_created');
-    expect(getActiveEvolutionItem()?.status).toBe('discovering');
+    expect(result.action).toBe('item_created_proposal_evaluation');
+    expect(result.status).toBe('waiting_user_approval');
+    expect(getActiveEvolutionItem()?.status).toBe('waiting_user_approval');
+  });
+
+  it('exposes last and next evolution trigger times', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-11T09:00:00.000Z'));
+    configureEvolutionEngine({
+      settingsProvider: () => settings({ scanIntervalMinutes: 30 }),
+      git: gitAdapter(),
+      agentRunner: proposalRunner(),
+    });
+
+    startEvolutionEngine();
+    expect(getEvolutionScheduleState()).toMatchObject({
+      loopStarted: true,
+      nextTickAt: String(Date.parse('2026-05-11T09:00:10.000Z')),
+      lastTickStartedAt: null,
+    });
+
+    await runEvolutionTick();
+
+    const state = getEvolutionStateForApi();
+    expect(state.schedule).toMatchObject({
+      loopStarted: true,
+      intervalMinutes: 30,
+      lastTickStartedAt: String(Date.parse('2026-05-11T09:00:00.000Z')),
+      lastTickFinishedAt: String(Date.parse('2026-05-11T09:00:00.000Z')),
+      lastTickAction: 'item_created_proposal_evaluation',
+      lastTickStatus: 'waiting_user_approval',
+      lastTickOk: true,
+      lastTickError: null,
+      nextTickAt: String(Date.parse('2026-05-11T09:00:10.000Z')),
+    });
   });
 
   it('advances proposal and waits for user approval when auto implement is off', async () => {
@@ -185,20 +262,170 @@ describe('evolution engine', () => {
       },
     });
 
-    await runEvolutionTick();
-    await runEvolutionTick();
     const result = await runEvolutionTick();
 
     expect(result.status).toBe('waiting_user_approval');
     expect(getActiveEvolutionItem()?.proposal).toBe('# Plan');
   });
 
+  it('creates a new item when existing items are only waiting for manual adoption', async () => {
+    let proposalIndex = 0;
+    configureEvolutionEngine({
+      settingsProvider: () => settings({ autoImplementEnabled: true }),
+      git: gitAdapter(),
+      agentRunner: async ({ phase }) => {
+        if (phase === 'proposal') {
+          proposalIndex += 1;
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              module_scope: 'docs',
+              direction: `docs plan ${proposalIndex}`,
+              risk_level: 'low',
+              proposal: '# Plan',
+              requires_user_approval: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        if (phase === 'proposal_evaluation') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              approved_for_implementation: true,
+              risk_level: 'low',
+              evaluation: 'ok',
+              required_changes: [],
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        if (phase === 'implementation') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              implementation_summary: 'docs updated',
+              changed_files: ['local/docs/example.md'],
+              requires_followup: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            review_complete: true,
+            implementation_coverage: 'covered',
+            bug_report: null,
+            required_fixes: [],
+            risk_level: 'low',
+          }),
+        };
+      },
+    });
+
+    const first = await runEvolutionTick();
+    const second = await runEvolutionTick();
+    const items = listEvolutionItems({ limit: 10 });
+
+    expect(first.status).toBe('ready_for_adoption');
+    expect(second.status).toBe('ready_for_adoption');
+    expect(items).toHaveLength(2);
+    expect(items.every((item) => item.status === 'ready_for_adoption')).toBe(
+      true,
+    );
+  });
+
+  it('does not create a new item while low-risk adoption is auto-enabled', async () => {
+    let adoptCount = 0;
+    configureEvolutionEngine({
+      settingsProvider: () =>
+        settings({ autoImplementEnabled: true, autoAdoptEnabled: true }),
+      git: gitAdapter(),
+      checkRunner: async () => ({
+        ok: true,
+        stdout: '',
+        stderr: '',
+        command: 'check',
+      }),
+      agentRunner: async ({ phase }) => {
+        if (phase === 'proposal') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              module_scope: 'docs',
+              direction: 'auto adopt docs',
+              risk_level: 'low',
+              proposal: '# Plan',
+              requires_user_approval: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        if (phase === 'proposal_evaluation') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              approved_for_implementation: true,
+              risk_level: 'low',
+              evaluation: 'ok',
+              required_changes: [],
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        if (phase === 'implementation') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              implementation_summary: 'docs updated',
+              changed_files: ['local/docs/example.md'],
+              requires_followup: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        adoptCount += 1;
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            review_complete: true,
+            implementation_coverage: 'covered',
+            bug_report: null,
+            required_fixes: [],
+            risk_level: 'low',
+          }),
+        };
+      },
+    });
+
+    const result = await runEvolutionTick();
+    const items = listEvolutionItems({ limit: 10 });
+
+    expect(result.action).toBe('item_created_auto_adopted');
+    expect(result.status).toBe('completed');
+    expect(items).toHaveLength(1);
+    expect(items[0].status).toBe('completed');
+    expect(adoptCount).toBe(1);
+  });
+
   it('approval moves waiting item to branch preparation', () => {
     configureEvolutionEngine({ settingsProvider: () => settings() });
-    void runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, { status: 'waiting_user_approval' });
+    const item = createEvolutionItem({ status: 'waiting_user_approval' });
 
     const approved = approveEvolutionImplementation(item.id);
 
@@ -213,10 +440,7 @@ describe('evolution engine', () => {
         hasDirtyWorktree: async () => true,
       },
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, { status: 'branch_preparing' });
+    const item = createEvolutionItem({ status: 'branch_preparing' });
 
     const result = await runEvolutionTick();
 
@@ -257,7 +481,26 @@ describe('evolution engine', () => {
         diff: async () =>
           'diff --git a/src/assistant/example.ts b/src/assistant/example.ts',
       },
+      checkRunner: async () => ({
+        ok: true,
+        stdout: '',
+        stderr: '',
+        command: 'check',
+      }),
       agentRunner: async () => {
+        if (!dirty && committed) {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              review_complete: true,
+              implementation_coverage: 'covered',
+              bug_report: null,
+              required_fixes: [],
+              risk_level: 'low',
+            }),
+          };
+        }
         dirty = true;
         return {
           ok: true,
@@ -270,18 +513,14 @@ describe('evolution engine', () => {
         };
       },
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, {
+    const item = createEvolutionItem({
       status: 'implementing',
-      work_branch: branch,
-      base_commit: 'base-work',
     });
+    updateEvolutionItem(item.id, { work_branch: branch, base_commit: 'base-work' });
 
     const result = await runEvolutionTick();
 
-    expect(result.status).toBe('checking');
+    expect(result.status).toBe('ready_for_adoption');
     expect(committed).toBe(true);
     expect(getEvolutionItem(item.id)?.head_commit).toBe('committed-work');
   });
@@ -309,11 +548,10 @@ describe('evolution engine', () => {
         command: 'npm test',
       }),
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, {
+    const item = createEvolutionItem({
       status: 'ready_for_adoption',
+    });
+    updateEvolutionItem(item.id, {
       work_branch: 'evolution/test',
       base_branch: 'main',
     });
@@ -327,10 +565,7 @@ describe('evolution engine', () => {
 
   it('resumes paused items to their original status', async () => {
     configureEvolutionEngine({ settingsProvider: () => settings() });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, { status: 'checking' });
+    const item = createEvolutionItem({ status: 'checking' });
 
     const paused = pauseEvolutionItem(item.id);
     const resumed = resumeEvolutionItem(item.id);
@@ -375,8 +610,6 @@ describe('evolution engine', () => {
       },
     });
 
-    await runEvolutionTick();
-    await runEvolutionTick();
     const result = await runEvolutionTick();
 
     expect(result.status).toBe('waiting_user_approval');
@@ -418,8 +651,6 @@ describe('evolution engine', () => {
       },
     });
 
-    await runEvolutionTick();
-    await runEvolutionTick();
     const result = await runEvolutionTick();
 
     expect(result.status).toBe('waiting_user_approval');
@@ -433,6 +664,8 @@ describe('evolution engine', () => {
       git: {
         ...gitAdapter(),
         currentBranch: async () => branch,
+        currentCommit: async () =>
+          branch === 'evolution/test' ? 'base-work' : 'commit-main',
         checkout: async (next) => {
           branch = next;
           return {
@@ -443,12 +676,22 @@ describe('evolution engine', () => {
           };
         },
       },
+      agentRunner: async () => ({
+        ok: true,
+        text: JSON.stringify({
+          ok: true,
+          review_complete: true,
+          implementation_coverage: 'covered',
+          bug_report: null,
+          required_fixes: [],
+          risk_level: 'low',
+        }),
+      }),
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, {
+    const item = createEvolutionItem({
       status: 'checking',
+    });
+    updateEvolutionItem(item.id, {
       work_branch: 'evolution/test',
       base_commit: 'base-work',
     });
@@ -456,17 +699,16 @@ describe('evolution engine', () => {
     const result = await runEvolutionTick();
 
     expect(result.ok).toBe(true);
-    expect(result.status).toBe('reviewing');
+    expect(result.status).toBe('ready_for_adoption');
     expect(branch).toBe('evolution/test');
   });
 
   it('resumes adoption_failed items into fixing', async () => {
     configureEvolutionEngine({ settingsProvider: () => settings() });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, {
+    const item = createEvolutionItem({
       status: 'adoption_failed',
+    });
+    updateEvolutionItem(item.id, {
       work_branch: 'evolution/test',
       adoption_status: 'failed',
       adoption_error: 'checks failed',
@@ -499,9 +741,7 @@ describe('evolution engine', () => {
         };
       },
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
+    const item = createEvolutionItem({});
 
     const result = await runEvolutionTick();
 
@@ -511,10 +751,7 @@ describe('evolution engine', () => {
 
   it('rejects pause and cancel for terminal and adopting items', async () => {
     configureEvolutionEngine({ settingsProvider: () => settings() });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, { status: 'completed' });
+    const item = createEvolutionItem({ status: 'completed' });
 
     expect(() => pauseEvolutionItem(item.id)).toThrow(/terminal/);
     expect(() => cancelEvolutionItem(item.id)).toThrow(/terminal/);
@@ -543,11 +780,10 @@ describe('evolution engine', () => {
         }),
       }),
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, {
+    const item = createEvolutionItem({
       status: 'reviewing',
+    });
+    updateEvolutionItem(item.id, {
       work_branch: 'evolution/test',
       base_commit: 'base-work',
     });
@@ -589,11 +825,10 @@ describe('evolution engine', () => {
         }),
       }),
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, {
+    const item = createEvolutionItem({
       status: 'implementing',
+    });
+    updateEvolutionItem(item.id, {
       work_branch: 'evolution/test',
       base_commit: 'base-work',
     });
@@ -649,11 +884,10 @@ describe('evolution engine', () => {
         }),
       }),
     });
-    await runEvolutionTick();
-    const item = getActiveEvolutionItem();
-    if (!item) throw new Error('missing item');
-    updateEvolutionItem(item.id, {
+    const item = createEvolutionItem({
       status: 'implementing',
+    });
+    updateEvolutionItem(item.id, {
       work_branch: 'evolution/test',
       base_commit: 'base-work',
     });

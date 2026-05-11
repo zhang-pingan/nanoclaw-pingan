@@ -443,17 +443,25 @@ export function listEvolutionArtifacts(
 }
 
 export function getActiveEvolutionItem(): AssistantEvolutionItemView | null {
-  const row = getDatabase()
+  return listActiveEvolutionItems({ limit: 1 })[0] || null;
+}
+
+export function listActiveEvolutionItems(
+  input: {
+    limit?: number;
+  } = {},
+): AssistantEvolutionItemView[] {
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 500), 1), 1000);
+  const rows = getDatabase()
     .prepare(
       `SELECT * FROM assistant_evolution_items
        WHERE status NOT IN (${terminalPlaceholders()})
        ORDER BY created_at ASC
-       LIMIT 1`,
+       LIMIT ?`,
     )
-    .get(...TERMINAL_EVOLUTION_STATUSES) as
-    | AssistantEvolutionItemRecord
-    | undefined;
-  return row ? toItemView(row) : null;
+    .all(...TERMINAL_EVOLUTION_STATUSES, limit) as
+    AssistantEvolutionItemRecord[];
+  return rows.map(toItemView);
 }
 
 export function listLatestEvolutionEvents(

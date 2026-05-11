@@ -13,6 +13,7 @@ import {
 import { clearAssistantData } from '../db.js';
 import { emitAssistantEvent } from './assistant-events.js';
 import {
+  getProactiveScheduleState,
   rescheduleProactiveEngine,
   runProactiveScan,
 } from './proactive-engine.js';
@@ -69,6 +70,7 @@ export function getAssistantState(): AssistantState {
   resolveTodayPlanInboxItemsIfPlanExists();
   return {
     settings: getAssistantSettings(),
+    schedule: getProactiveScheduleState(),
     triggerRuleCapabilities: ASSISTANT_TRIGGER_RULE_CAPABILITIES,
     onlineLogServiceOptions: listOnlineLogServiceOptions(),
     inboxCounts: getAgentInboxCounts(),

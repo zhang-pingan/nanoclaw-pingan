@@ -33,6 +33,7 @@ import { scanOnlineErrorLogRule } from './online-error-log.js';
 import { resolveTodayPlanInboxItemsForDate } from './today-plan-inbox.js';
 import type {
   AgentInboxPriority,
+  AssistantScanScheduleState,
   AssistantSettings,
   AssistantTriggerRuleKey,
   UpsertAgentInboxItemInput,
@@ -43,26 +44,39 @@ const DEFAULT_STALE_TASK_HOURS = 4;
 
 let proactiveLoopStarted = false;
 let proactiveLoopTimer: NodeJS.Timeout | null = null;
+let proactiveNextScanAt: string | null = null;
+let proactiveScanRunning = false;
+let proactiveLastScanStartedAt: string | null = null;
+let proactiveLastScanFinishedAt: string | null = null;
+let proactiveLastScanCreatedOrUpdated: number | null = null;
+let proactiveLastScanOk: boolean | null = null;
+let proactiveLastScanError: string | null = null;
 
 function proactiveScanDelayMs(settings: AssistantSettings): number {
   return Math.max(settings.scanIntervalMinutes, 1) * 60 * 1000;
 }
 
 function clearProactiveLoopTimer(): void {
-  if (!proactiveLoopTimer) return;
-  clearTimeout(proactiveLoopTimer);
-  proactiveLoopTimer = null;
+  if (proactiveLoopTimer) {
+    clearTimeout(proactiveLoopTimer);
+    proactiveLoopTimer = null;
+  }
+  proactiveNextScanAt = null;
 }
 
 function scheduleNextProactiveScan(): void {
   const settings = getAssistantSettings();
+  const delayMs = proactiveScanDelayMs(settings);
+  proactiveNextScanAt = String(Date.now() + delayMs);
   proactiveLoopTimer = setTimeout(
     runProactiveLoop,
-    proactiveScanDelayMs(settings),
+    delayMs,
   );
 }
 
 function runProactiveLoop(): void {
+  proactiveLoopTimer = null;
+  proactiveNextScanAt = null;
   try {
     runProactiveScan();
   } catch (err) {
@@ -426,59 +440,78 @@ export function runProactiveScan(input: { now?: Date } = {}): {
   createdOrUpdated: number;
   scannedAt: string;
 } {
-  const settings = getAssistantSettings();
-  const scannedAt = Date.now().toString();
-  if (!settings.enabled) {
+  proactiveLastScanStartedAt = Date.now().toString();
+  proactiveScanRunning = true;
+  let result: { createdOrUpdated: number; scannedAt: string } | null = null;
+  let scanError: string | null = null;
+
+  try {
+    const settings = getAssistantSettings();
+    const scannedAt = Date.now().toString();
+    if (!settings.enabled) {
+      logger.info(
+        { scannedAt, count: 0 },
+        'Assistant proactive scan completed',
+      );
+      emitAssistantEvent({
+        type: 'scan_completed',
+        createdOrUpdated: 0,
+        scannedAt,
+      });
+      result = { createdOrUpdated: 0, scannedAt };
+      return result;
+    }
+
+    const candidates: UpsertAgentInboxItemInput[] = [];
+    const now = input.now || new Date();
+
+    deleteLegacyActiveAgentInboxItemsWithoutTriggerRule();
+    scanTodayPlanRules(candidates, now, settings);
+    scanWorkbenchRules(candidates, now, settings);
+    scanSchedulerRules(candidates, settings);
+    scanAgentRunRules(candidates, settings);
+    if (!resolveDisabledRule(settings, 'online.error_logs')) {
+      candidates.push(...scanOnlineErrorLogRule({ settings, now }));
+    }
+
+    for (const item of candidates) {
+      const inboxItem = createOrUpdateAgentInboxItem(item);
+      const ruleKey =
+        typeof inboxItem.extra.ruleKey === 'string'
+          ? inboxItem.extra.ruleKey
+          : '';
+      if (
+        ruleKey &&
+        settings.triggerRules[ruleKey as AssistantTriggerRuleKey]
+          ?.autoEnabled &&
+        canInvestigateInboxItem(inboxItem) &&
+        shouldAutoProcessInboxItem(inboxItem)
+      ) {
+        scheduleAutoProcessAgentInboxItem(inboxItem.id);
+      }
+    }
+
     logger.info(
-      { scannedAt, count: 0 },
+      { scannedAt, count: candidates.length },
       'Assistant proactive scan completed',
     );
     emitAssistantEvent({
       type: 'scan_completed',
-      createdOrUpdated: 0,
+      createdOrUpdated: candidates.length,
       scannedAt,
     });
-    return { createdOrUpdated: 0, scannedAt };
+    result = { createdOrUpdated: candidates.length, scannedAt };
+    return result;
+  } catch (err) {
+    scanError = err instanceof Error ? err.message : String(err);
+    throw err;
+  } finally {
+    proactiveScanRunning = false;
+    proactiveLastScanFinishedAt = Date.now().toString();
+    proactiveLastScanCreatedOrUpdated = result?.createdOrUpdated ?? null;
+    proactiveLastScanOk = result ? true : false;
+    proactiveLastScanError = scanError;
   }
-
-  const candidates: UpsertAgentInboxItemInput[] = [];
-  const now = input.now || new Date();
-
-  deleteLegacyActiveAgentInboxItemsWithoutTriggerRule();
-  scanTodayPlanRules(candidates, now, settings);
-  scanWorkbenchRules(candidates, now, settings);
-  scanSchedulerRules(candidates, settings);
-  scanAgentRunRules(candidates, settings);
-  if (!resolveDisabledRule(settings, 'online.error_logs')) {
-    candidates.push(...scanOnlineErrorLogRule({ settings, now }));
-  }
-
-  for (const item of candidates) {
-    const inboxItem = createOrUpdateAgentInboxItem(item);
-    const ruleKey =
-      typeof inboxItem.extra.ruleKey === 'string'
-        ? inboxItem.extra.ruleKey
-        : '';
-    if (
-      ruleKey &&
-      settings.triggerRules[ruleKey as AssistantTriggerRuleKey]?.autoEnabled &&
-      canInvestigateInboxItem(inboxItem) &&
-      shouldAutoProcessInboxItem(inboxItem)
-    ) {
-      scheduleAutoProcessAgentInboxItem(inboxItem.id);
-    }
-  }
-
-  logger.info(
-    { scannedAt, count: candidates.length },
-    'Assistant proactive scan completed',
-  );
-  emitAssistantEvent({
-    type: 'scan_completed',
-    createdOrUpdated: candidates.length,
-    scannedAt,
-  });
-  return { createdOrUpdated: candidates.length, scannedAt };
 }
 
 export function startProactiveEngine(): void {
@@ -497,8 +530,30 @@ export function rescheduleProactiveEngine(): void {
   scheduleNextProactiveScan();
 }
 
+export function getProactiveScheduleState(): AssistantScanScheduleState {
+  const settings = getAssistantSettings();
+  return {
+    loopStarted: proactiveLoopStarted,
+    scanRunning: proactiveScanRunning,
+    intervalMinutes: settings.scanIntervalMinutes,
+    lastScanStartedAt: proactiveLastScanStartedAt,
+    lastScanFinishedAt: proactiveLastScanFinishedAt,
+    lastScanCreatedOrUpdated: proactiveLastScanCreatedOrUpdated,
+    lastScanOk: proactiveLastScanOk,
+    lastScanError: proactiveLastScanError,
+    nextScanAt:
+      proactiveLoopStarted && settings.enabled ? proactiveNextScanAt : null,
+  };
+}
+
 /** @internal - for tests only. */
 export function _resetProactiveEngineForTests(): void {
   clearProactiveLoopTimer();
   proactiveLoopStarted = false;
+  proactiveScanRunning = false;
+  proactiveLastScanStartedAt = null;
+  proactiveLastScanFinishedAt = null;
+  proactiveLastScanCreatedOrUpdated = null;
+  proactiveLastScanOk = null;
+  proactiveLastScanError = null;
 }

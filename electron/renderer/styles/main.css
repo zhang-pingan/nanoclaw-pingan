@@ -4199,6 +4199,14 @@ body.quick-chat-window .quick-chat-input {
   font-size: 12px;
 }
 
+.assistant-evolution-schedule {
+  margin-top: -2px;
+  padding: 0 2px 4px 34px;
+  color: rgba(15, 23, 42, 0.64);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .assistant-settings-grid {
   display: grid;
   gap: 12px;
@@ -4412,6 +4420,10 @@ body.quick-chat-window .quick-chat-input {
   margin-top: 4px;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+.assistant-scan-schedule {
+  color: rgba(15, 23, 42, 0.64);
 }
 
 .assistant-field span {

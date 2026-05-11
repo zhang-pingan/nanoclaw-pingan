@@ -485,6 +485,7 @@ var assistantInboxSummary = document.getElementById("assistant-inbox-summary");
 var assistantInboxList = document.getElementById("assistant-inbox-list");
 var assistantLogList = document.getElementById("assistant-log-list");
 var assistantEnabledToggle = document.getElementById("assistant-enabled-toggle");
+var assistantScanSchedule = document.getElementById("assistant-scan-schedule");
 var assistantLevelSelect = document.getElementById("assistant-level-select");
 var assistantScanIntervalInput = document.getElementById("assistant-scan-interval-input");
 var assistantAutostartToggle = document.getElementById("assistant-autostart-toggle");
@@ -495,6 +496,7 @@ var assistantEvolutionEnabledToggle = document.getElementById("assistant-evoluti
 var assistantEvolutionAutoImplementToggle = document.getElementById("assistant-evolution-auto-implement-toggle");
 var assistantEvolutionAutoAdoptToggle = document.getElementById("assistant-evolution-auto-adopt-toggle");
 var assistantEvolutionScanIntervalInput = document.getElementById("assistant-evolution-scan-interval-input");
+var assistantEvolutionSchedule = document.getElementById("assistant-evolution-schedule");
 var assistantEvolutionPanel = document.getElementById("assistant-evolution-panel");
 var assistantSourceGrid = document.getElementById("assistant-source-grid");
 var assistantSourceInputs = [];
@@ -17656,6 +17658,12 @@ function getAssistantRuleCapability(ruleKey) {
   return getAssistantRuleCapabilities().find((rule) => rule.key === ruleKey) || null;
 }
 
+function getAssistantScanScheduleState() {
+  return assistantState && assistantState.schedule && typeof assistantState.schedule === "object"
+    ? assistantState.schedule
+    : null;
+}
+
 function getAssistantOnlineLogServiceOptions() {
   return assistantState && Array.isArray(assistantState.onlineLogServiceOptions)
     ? assistantState.onlineLogServiceOptions
@@ -18190,6 +18198,7 @@ function renderAssistantSettings() {
   const settings = getAssistantSettings();
   if (!settings) {
     if (assistantSettingsSummary) assistantSettingsSummary.textContent = "加载中";
+    if (assistantScanSchedule) assistantScanSchedule.textContent = "加载中";
     if (assistantEvolutionSummary) assistantEvolutionSummary.textContent = "加载中";
     renderAssistantHeroMetrics();
     return;
@@ -18197,6 +18206,7 @@ function renderAssistantSettings() {
   if (assistantSettingsSummary) {
     assistantSettingsSummary.textContent = `${settings.enabled ? "已启用" : "已暂停"} · ${settings.proactiveLevel} · 每 ${settings.scanIntervalMinutes} 分钟扫描`;
   }
+  renderAssistantScanSchedule(settings);
   if (assistantEnabledToggle) assistantEnabledToggle.checked = Boolean(settings.enabled);
   if (assistantLevelSelect) assistantLevelSelect.value = settings.proactiveLevel || "balanced";
   if (assistantScanIntervalInput && document.activeElement !== assistantScanIntervalInput) {
@@ -18234,6 +18244,19 @@ function assistantEvolutionStatusLabel(status) {
   return labels[status] || status || "无";
 }
 
+function renderAssistantScanSchedule(settings) {
+  if (!assistantScanSchedule) return;
+  const schedule = getAssistantScanScheduleState() || {};
+  const lastScan = formatDateTime(schedule.lastScanStartedAt);
+  const nextScan = settings && settings.enabled ? formatDateTime(schedule.nextScanAt) : "";
+  const parts = [
+    `上次扫描：${lastScan === "--" ? "尚未扫描" : lastScan}`,
+    `下次扫描：${settings && settings.enabled ? (nextScan === "--" ? "等待调度" : nextScan) : "已关闭"}`,
+    schedule.scanRunning ? "正在扫描" : "",
+  ].filter(Boolean);
+  assistantScanSchedule.textContent = parts.join(" · ");
+}
+
 function formatAssistantEvolutionTime(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return "";
@@ -18242,6 +18265,22 @@ function formatAssistantEvolutionTime(value) {
   } catch {
     return String(value || "");
   }
+}
+
+function renderAssistantEvolutionSchedule(evolution, state) {
+  if (!assistantEvolutionSchedule) return;
+  const schedule = state && state.schedule && typeof state.schedule === "object" ? state.schedule : {};
+  const enabled = Boolean(evolution && evolution.enabled);
+  const lastTick = formatAssistantEvolutionTime(schedule.lastTickStartedAt);
+  const nextTick = enabled ? formatAssistantEvolutionTime(schedule.nextTickAt) : "";
+  const interval = evolution && evolution.scanIntervalMinutes ? `${evolution.scanIntervalMinutes} 分钟` : "";
+  const parts = [
+    `上次触发：${lastTick || "尚未触发"}`,
+    `下次触发：${enabled ? (nextTick || "等待调度") : "已关闭"}`,
+    interval ? `间隔：${interval}` : "",
+    schedule.tickRunning ? "正在推进" : "",
+  ].filter(Boolean);
+  assistantEvolutionSchedule.textContent = parts.join(" · ");
 }
 
 function renderAssistantEvolutionField(label, value) {
@@ -18412,6 +18451,7 @@ function renderAssistantEvolution() {
     const statusLabel = active ? assistantEvolutionStatusLabel(active.status) : "无进行中事项";
     assistantEvolutionSummary.textContent = `${enabledLabel} · ${statusLabel} · ${items.length} 条`;
   }
+  renderAssistantEvolutionSchedule(evolution, state);
   if (assistantEvolutionEnabledToggle) assistantEvolutionEnabledToggle.checked = Boolean(evolution && evolution.enabled);
   if (assistantEvolutionAutoImplementToggle) assistantEvolutionAutoImplementToggle.checked = Boolean(evolution && evolution.autoImplementEnabled);
   if (assistantEvolutionAutoAdoptToggle) assistantEvolutionAutoAdoptToggle.checked = Boolean(evolution && evolution.autoAdoptEnabled);
@@ -18649,6 +18689,7 @@ async function updateAssistantSettingsPatch(patch) {
       settings: data.settings,
     };
     renderAssistantScreen();
+    await loadAssistantState();
   } catch (err) {
     console.error("Failed to update assistant settings:", err);
     showToast(err instanceof Error ? err.message : "个人助手设置保存失败", 2200);

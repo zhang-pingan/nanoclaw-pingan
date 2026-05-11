@@ -25,9 +25,9 @@ import {
   TERMINAL_EVOLUTION_STATUSES,
   createEvolutionArtifact,
   createEvolutionItem,
-  getActiveEvolutionItem,
   getEvolutionItem,
   getEvolutionState,
+  listActiveEvolutionItems,
   releaseEvolutionLease,
   renewEvolutionLease,
   transitionEvolutionItemIfStatus,
@@ -53,9 +53,23 @@ export interface EvolutionTickResult {
   error?: string;
 }
 
+export interface EvolutionScheduleState {
+  loopStarted: boolean;
+  tickRunning: boolean;
+  intervalMinutes: number;
+  lastTickStartedAt: string | null;
+  lastTickFinishedAt: string | null;
+  lastTickAction: string | null;
+  lastTickStatus: string | null;
+  lastTickOk: boolean | null;
+  lastTickError: string | null;
+  nextTickAt: string | null;
+}
+
 const DEFAULT_LEASE_MS = 2 * 60 * 60 * 1000;
 const ENGINE_LOCK_OWNER = `assistant-evolution:${os.hostname()}:${process.pid}`;
 const LEASE_RENEW_INTERVAL_MS = 60_000;
+const MAX_AUTO_ADVANCE_STEPS = 20;
 const PAUSABLE_RUNNING_STATUSES = [
   'discovering',
   'proposal_drafting',
@@ -74,6 +88,17 @@ const PAUSABLE_RUNNING_STATUSES = [
 const CANCELLABLE_STATUSES = [
   ...PAUSABLE_RUNNING_STATUSES,
 ] satisfies AssistantEvolutionItemView['status'][];
+const NON_BLOCKING_MANUAL_WAIT_STATUSES = [
+  'ready_for_adoption',
+] satisfies AssistantEvolutionItemView['status'][];
+const AUTO_ADVANCE_STOP_STATUSES = [
+  'waiting_user_approval',
+  'ready_for_adoption',
+  'paused',
+  'blocked_by_policy',
+  'adoption_failed',
+  ...TERMINAL_EVOLUTION_STATUSES,
+] satisfies AssistantEvolutionItemView['status'][];
 const FORBIDDEN_CHANGED_PATHS = [
   '.env',
   '.ssh',
@@ -86,6 +111,14 @@ const FORBIDDEN_CHANGED_PATHS = [
 
 let evolutionLoopStarted = false;
 let evolutionLoopTimer: NodeJS.Timeout | null = null;
+let evolutionNextTickAt: string | null = null;
+let evolutionTickRunning = false;
+let evolutionLastTickStartedAt: string | null = null;
+let evolutionLastTickFinishedAt: string | null = null;
+let evolutionLastTickAction: string | null = null;
+let evolutionLastTickStatus: string | null = null;
+let evolutionLastTickOk: boolean | null = null;
+let evolutionLastTickError: string | null = null;
 let deps: Required<Omit<EvolutionEngineDeps, 'agentRunner'>> & {
   agentRunner: EvolutionAgentRunner | null;
 } = {
@@ -102,17 +135,23 @@ function evolutionDelayMs(settings: AssistantSettings): number {
 }
 
 function clearEvolutionLoopTimer(): void {
-  if (!evolutionLoopTimer) return;
-  clearTimeout(evolutionLoopTimer);
-  evolutionLoopTimer = null;
+  if (evolutionLoopTimer) {
+    clearTimeout(evolutionLoopTimer);
+    evolutionLoopTimer = null;
+  }
+  evolutionNextTickAt = null;
 }
 
 function scheduleNextEvolutionTick(): void {
   const settings = deps.settingsProvider();
-  evolutionLoopTimer = setTimeout(runEvolutionLoop, evolutionDelayMs(settings));
+  const delayMs = evolutionDelayMs(settings);
+  evolutionNextTickAt = String(Date.now() + delayMs);
+  evolutionLoopTimer = setTimeout(runEvolutionLoop, delayMs);
 }
 
 function runEvolutionLoop(): void {
+  evolutionLoopTimer = null;
+  evolutionNextTickAt = null;
   void runEvolutionTick()
     .catch((err) => {
       logger.error({ err }, 'Assistant evolution tick failed');
@@ -222,6 +261,34 @@ function completeExpectedStatusUpdate(
 
 function isTerminalStatus(status: AssistantEvolutionStatus): boolean {
   return TERMINAL_EVOLUTION_STATUSES.includes(status);
+}
+
+function isAutoAdvanceStopStatus(status: AssistantEvolutionStatus): boolean {
+  return AUTO_ADVANCE_STOP_STATUSES.includes(status);
+}
+
+function isNonBlockingManualWaitStatus(
+  item: AssistantEvolutionItemView,
+  settings: AssistantSettings,
+): boolean {
+  return (
+    NON_BLOCKING_MANUAL_WAIT_STATUSES.includes(item.status as never) &&
+    !(
+      item.risk_level === 'low' &&
+      settings.evolution.autoAdoptEnabled
+    )
+  );
+}
+
+function findBlockingEvolutionItem(
+  settings: AssistantSettings,
+): AssistantEvolutionItemView | null {
+  const items = listActiveEvolutionItems();
+  for (const item of items) {
+    if (isNonBlockingManualWaitStatus(item, settings)) continue;
+    return item;
+  }
+  return null;
 }
 
 async function changedFilesSinceBase(
@@ -771,7 +838,6 @@ async function advanceItem(
   }
   if (
     item.status === 'ready_for_adoption' &&
-    item.auto_adopt &&
     settings.evolution.autoAdoptEnabled &&
     item.risk_level === 'low'
   ) {
@@ -799,6 +865,62 @@ async function advanceItem(
   };
 }
 
+async function advanceItemUntilStop(
+  initialItem: AssistantEvolutionItemView,
+  settings: AssistantSettings,
+): Promise<EvolutionTickResult> {
+  let item: AssistantEvolutionItemView | null = initialItem;
+  let lastResult: EvolutionTickResult = {
+    ok: true,
+    action: 'noop',
+    itemId: initialItem.id,
+    status: initialItem.status,
+  };
+  let steps = 0;
+
+  while (item && !isAutoAdvanceStopStatus(item.status)) {
+    steps += 1;
+    if (steps > MAX_AUTO_ADVANCE_STEPS) {
+      const failed = transitionEvolutionItemIfStatus(
+        item.id,
+        item.status,
+        'failed',
+        { reason: 'auto advance step limit exceeded' },
+      );
+      return {
+        ok: false,
+        action: 'auto_advance_step_limit_exceeded',
+        itemId: item.id,
+        status: failed?.status || getEvolutionItem(item.id)?.status,
+        error: 'Evolution auto advance step limit exceeded',
+      };
+    }
+    lastResult = await advanceItem(item, settings);
+    const latest = getEvolutionItem(item.id);
+    if (!latest) {
+      return {
+        ok: true,
+        action: 'interrupted',
+        itemId: item.id,
+        status: 'missing',
+      };
+    }
+    item = latest;
+  }
+
+  if (item && item.status === 'ready_for_adoption') {
+    lastResult = await advanceItem(item, settings);
+    const latest = getEvolutionItem(item.id);
+    if (latest) item = latest;
+  }
+
+  return {
+    ...lastResult,
+    itemId: item?.id || lastResult.itemId,
+    status: item?.status || lastResult.status,
+  };
+}
+
 export function configureEvolutionEngine(input: EvolutionEngineDeps): void {
   deps = {
     agentRunner:
@@ -812,87 +934,112 @@ export function configureEvolutionEngine(input: EvolutionEngineDeps): void {
 }
 
 export async function runEvolutionTick(): Promise<EvolutionTickResult> {
-  const settings = deps.settingsProvider();
-  if (!settings.evolution.enabled) {
-    return { ok: true, action: 'disabled' };
-  }
-  if (
-    !tryAcquireEvolutionLease({
-      lockOwner: ENGINE_LOCK_OWNER,
-      leaseMs: deps.leaseMs,
-    })
-  ) {
-    return { ok: true, action: 'lease_busy' };
-  }
-
-  const heartbeatMs = Math.max(
-    50,
-    Math.min(LEASE_RENEW_INTERVAL_MS, Math.floor(deps.leaseMs / 3)),
-  );
-  const leaseHeartbeat = setInterval(() => {
-    const renewed = renewEvolutionLease({
-      lockOwner: ENGINE_LOCK_OWNER,
-      leaseMs: deps.leaseMs,
-    });
-    if (!renewed) {
-      logger.warn('Assistant evolution lease heartbeat lost ownership');
-    }
-  }, heartbeatMs);
+  evolutionLastTickStartedAt = Date.now().toString();
+  evolutionTickRunning = true;
+  let tickResult: EvolutionTickResult | null = null;
 
   try {
-    let item = getActiveEvolutionItem();
-    if (!item) {
-      item = createEvolutionItem({
+    const settings = deps.settingsProvider();
+    if (!settings.evolution.enabled) {
+      tickResult = { ok: true, action: 'disabled' };
+      return tickResult;
+    }
+    if (
+      !tryAcquireEvolutionLease({
+        lockOwner: ENGINE_LOCK_OWNER,
+        leaseMs: deps.leaseMs,
+      })
+    ) {
+      tickResult = { ok: true, action: 'lease_busy' };
+      return tickResult;
+    }
+
+    const heartbeatMs = Math.max(
+      50,
+      Math.min(LEASE_RENEW_INTERVAL_MS, Math.floor(deps.leaseMs / 3)),
+    );
+    const leaseHeartbeat = setInterval(() => {
+      const renewed = renewEvolutionLease({
+        lockOwner: ENGINE_LOCK_OWNER,
+        leaseMs: deps.leaseMs,
+      });
+      if (!renewed) {
+        logger.warn('Assistant evolution lease heartbeat lost ownership');
+      }
+    }, heartbeatMs);
+
+    try {
+      const blockingItem = findBlockingEvolutionItem(settings);
+      if (blockingItem) {
+        tickResult = await advanceItemUntilStop(blockingItem, settings);
+        return tickResult;
+      }
+
+      const item = createEvolutionItem({
         status: 'discovering',
         autoImplement: settings.evolution.autoImplementEnabled,
         autoAdopt: settings.evolution.autoAdoptEnabled,
         maxReviewRounds: settings.evolution.maxReviewRounds,
         baseBranch: deps.baseBranch,
       });
-      return {
-        ok: true,
-        action: 'item_created',
-        itemId: item.id,
-        status: item.status,
+      tickResult = await advanceItemUntilStop(item, settings);
+      tickResult = {
+        ...tickResult,
+        action:
+          tickResult.action === 'noop'
+            ? 'item_created'
+            : `item_created_${tickResult.action}`,
+        itemId: tickResult.itemId || item.id,
+        status: tickResult.status || item.status,
       };
-    }
-    return await advanceItem(item, settings);
-  } catch (err) {
-    const active = getActiveEvolutionItem();
-    let failedStatus = active?.status;
-    if (active) {
-      if (active.status === 'paused') {
-        return {
-          ok: true,
-          action: 'interrupted',
-          itemId: active.id,
-          status: active.status,
-        };
+      return tickResult;
+    } catch (err) {
+      const active = findBlockingEvolutionItem(settings);
+      let failedStatus = active?.status;
+      if (active) {
+        if (active.status === 'paused') {
+          tickResult = {
+            ok: true,
+            action: 'interrupted',
+            itemId: active.id,
+            status: active.status,
+          };
+          return tickResult;
+        }
+        const failed = updateEvolutionItemIfStatus(
+          active.id,
+          active.status,
+          {
+            status: 'failed',
+            blocked_reason: err instanceof Error ? err.message : String(err),
+            completed_at: Date.now().toString(),
+          },
+          'engine_failed',
+          { error: err instanceof Error ? err.message : String(err) },
+        );
+        failedStatus = failed?.status || getEvolutionItem(active.id)?.status;
       }
-      const failed = updateEvolutionItemIfStatus(
-        active.id,
-        active.status,
-        {
-          status: 'failed',
-          blocked_reason: err instanceof Error ? err.message : String(err),
-          completed_at: Date.now().toString(),
-        },
-        'engine_failed',
-        { error: err instanceof Error ? err.message : String(err) },
-      );
-      failedStatus = failed?.status || getEvolutionItem(active.id)?.status;
+      logger.error({ err }, 'Assistant evolution tick failed');
+      tickResult = {
+        ok: false,
+        action: 'error',
+        itemId: active?.id,
+        status: failedStatus,
+        error: err instanceof Error ? err.message : String(err),
+      };
+      return tickResult;
+    } finally {
+      clearInterval(leaseHeartbeat);
+      releaseEvolutionLease(ENGINE_LOCK_OWNER);
     }
-    logger.error({ err }, 'Assistant evolution tick failed');
-    return {
-      ok: false,
-      action: 'error',
-      itemId: active?.id,
-      status: failedStatus,
-      error: err instanceof Error ? err.message : String(err),
-    };
   } finally {
-    clearInterval(leaseHeartbeat);
-    releaseEvolutionLease(ENGINE_LOCK_OWNER);
+    evolutionTickRunning = false;
+    evolutionLastTickFinishedAt = Date.now().toString();
+    evolutionLastTickAction = tickResult?.action || 'unknown';
+    evolutionLastTickStatus = tickResult?.status || null;
+    evolutionLastTickOk = tickResult?.ok ?? false;
+    evolutionLastTickError =
+      tickResult?.error || (tickResult ? null : 'Evolution tick ended abruptly');
   }
 }
 
@@ -1127,8 +1274,36 @@ export async function adoptEvolutionItem(itemId: string): Promise<{
   }
 }
 
+export function getEvolutionScheduleState(): EvolutionScheduleState {
+  const settings = deps.settingsProvider();
+  return {
+    loopStarted: evolutionLoopStarted,
+    tickRunning: evolutionTickRunning,
+    intervalMinutes: settings.evolution.scanIntervalMinutes,
+    lastTickStartedAt: evolutionLastTickStartedAt,
+    lastTickFinishedAt: evolutionLastTickFinishedAt,
+    lastTickAction: evolutionLastTickAction,
+    lastTickStatus: evolutionLastTickStatus,
+    lastTickOk: evolutionLastTickOk,
+    lastTickError: evolutionLastTickError,
+    nextTickAt:
+      evolutionLoopStarted && settings.evolution.enabled
+        ? evolutionNextTickAt
+        : null,
+  };
+}
+
 export function getEvolutionStateForApi() {
-  return getEvolutionState();
+  const settings = deps.settingsProvider();
+  const state = getEvolutionState();
+  const blockingItem = findBlockingEvolutionItem(settings);
+  return {
+    ...state,
+    activeItem: blockingItem
+      ? getEvolutionItem(blockingItem.id, { includeDetails: true })
+      : null,
+    schedule: getEvolutionScheduleState(),
+  };
 }
 
 export function startEvolutionEngine(): void {
@@ -1138,6 +1313,7 @@ export function startEvolutionEngine(): void {
   }
   evolutionLoopStarted = true;
   logger.info('Assistant evolution engine started');
+  evolutionNextTickAt = String(Date.now() + 10_000);
   evolutionLoopTimer = setTimeout(runEvolutionLoop, 10_000);
 }
 
@@ -1151,6 +1327,13 @@ export function rescheduleEvolutionEngine(): void {
 export function _resetEvolutionEngineForTests(): void {
   clearEvolutionLoopTimer();
   evolutionLoopStarted = false;
+  evolutionTickRunning = false;
+  evolutionLastTickStartedAt = null;
+  evolutionLastTickFinishedAt = null;
+  evolutionLastTickAction = null;
+  evolutionLastTickStatus = null;
+  evolutionLastTickOk = null;
+  evolutionLastTickError = null;
   deps = {
     agentRunner: null,
     git: createDefaultEvolutionGitAdapter(),
