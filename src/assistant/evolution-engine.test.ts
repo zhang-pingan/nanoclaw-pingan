@@ -12,6 +12,7 @@ import {
   getEvolutionStateForApi,
   pauseEvolutionItem,
   resumeEvolutionItem,
+  runEvolutionItem,
   runEvolutionTick,
   startEvolutionEngine,
 } from './evolution-engine.js';
@@ -181,7 +182,7 @@ describe('evolution engine', () => {
     expect(getActiveEvolutionItem()).toBeNull();
   });
 
-  it('creates and advances an item to the configured decision point', async () => {
+  it('tick creates an item without advancing it inline', async () => {
     configureEvolutionEngine({
       settingsProvider: () => settings(),
       git: gitAdapter(),
@@ -190,9 +191,9 @@ describe('evolution engine', () => {
 
     const result = await runEvolutionTick();
 
-    expect(result.action).toBe('item_created_proposal_evaluation');
-    expect(result.status).toBe('waiting_user_approval');
-    expect(getActiveEvolutionItem()?.status).toBe('waiting_user_approval');
+    expect(result.action).toBe('item_created');
+    expect(result.status).toBe('discovering');
+    expect(getActiveEvolutionItem()?.status).toBe('discovering');
   });
 
   it('exposes last and next evolution trigger times', async () => {
@@ -219,8 +220,8 @@ describe('evolution engine', () => {
       intervalMinutes: 30,
       lastTickStartedAt: String(Date.parse('2026-05-11T09:00:00.000Z')),
       lastTickFinishedAt: String(Date.parse('2026-05-11T09:00:00.000Z')),
-      lastTickAction: 'item_created_proposal_evaluation',
-      lastTickStatus: 'waiting_user_approval',
+      lastTickAction: 'item_created',
+      lastTickStatus: 'discovering',
       lastTickOk: true,
       lastTickError: null,
       nextTickAt: String(Date.parse('2026-05-11T09:00:10.000Z')),
@@ -262,7 +263,8 @@ describe('evolution engine', () => {
       },
     });
 
-    const result = await runEvolutionTick();
+    const item = createEvolutionItem({ status: 'discovering' });
+    const result = await runEvolutionItem(item.id);
 
     expect(result.status).toBe('waiting_user_approval');
     expect(getActiveEvolutionItem()?.proposal).toBe('# Plan');
@@ -332,11 +334,13 @@ describe('evolution engine', () => {
     });
 
     const first = await runEvolutionTick();
+    await runEvolutionItem(first.itemId!);
     const second = await runEvolutionTick();
+    await runEvolutionItem(second.itemId!);
     const items = listEvolutionItems({ limit: 10 });
 
-    expect(first.status).toBe('ready_for_adoption');
-    expect(second.status).toBe('ready_for_adoption');
+    expect(first.status).toBe('discovering');
+    expect(second.status).toBe('discovering');
     expect(items).toHaveLength(2);
     expect(items.every((item) => item.status === 'ready_for_adoption')).toBe(
       true,
@@ -413,10 +417,15 @@ describe('evolution engine', () => {
       },
     });
 
-    const result = await runEvolutionTick();
+    const item = createEvolutionItem({
+      status: 'discovering',
+      autoImplement: true,
+      autoAdopt: true,
+    });
+    const result = await runEvolutionItem(item.id);
     const items = listEvolutionItems({ limit: 10 });
 
-    expect(result.action).toBe('item_created_auto_adopted');
+    expect(result.action).toBe('auto_adopted');
     expect(result.status).toBe('completed');
     expect(items).toHaveLength(1);
     expect(items[0].status).toBe('completed');
@@ -442,7 +451,7 @@ describe('evolution engine', () => {
     });
     const item = createEvolutionItem({ status: 'branch_preparing' });
 
-    const result = await runEvolutionTick();
+    const result = await runEvolutionItem(item.id);
 
     expect(result.status).toBe('blocked_by_policy');
     expect(getEvolutionItem(item.id)?.blocked_reason).toContain('未提交改动');
@@ -518,7 +527,7 @@ describe('evolution engine', () => {
     });
     updateEvolutionItem(item.id, { work_branch: branch, base_commit: 'base-work' });
 
-    const result = await runEvolutionTick();
+    const result = await runEvolutionItem(item.id);
 
     expect(result.status).toBe('ready_for_adoption');
     expect(committed).toBe(true);
@@ -610,7 +619,11 @@ describe('evolution engine', () => {
       },
     });
 
-    const result = await runEvolutionTick();
+    const item = createEvolutionItem({
+      status: 'discovering',
+      autoImplement: true,
+    });
+    const result = await runEvolutionItem(item.id);
 
     expect(result.status).toBe('waiting_user_approval');
     expect(getActiveEvolutionItem()?.auto_implement).toBe(false);
@@ -651,7 +664,11 @@ describe('evolution engine', () => {
       },
     });
 
-    const result = await runEvolutionTick();
+    const item = createEvolutionItem({
+      status: 'discovering',
+      autoImplement: true,
+    });
+    const result = await runEvolutionItem(item.id);
 
     expect(result.status).toBe('waiting_user_approval');
     expect(getActiveEvolutionItem()?.auto_implement).toBe(false);
@@ -696,7 +713,7 @@ describe('evolution engine', () => {
       base_commit: 'base-work',
     });
 
-    const result = await runEvolutionTick();
+    const result = await runEvolutionItem(item.id);
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe('ready_for_adoption');
@@ -743,7 +760,7 @@ describe('evolution engine', () => {
     });
     const item = createEvolutionItem({});
 
-    const result = await runEvolutionTick();
+    const result = await runEvolutionItem(item.id);
 
     expect(result.action).toBe('interrupted');
     expect(getEvolutionItem(item.id)?.status).toBe('paused');
@@ -788,7 +805,7 @@ describe('evolution engine', () => {
       base_commit: 'base-work',
     });
 
-    const result = await runEvolutionTick();
+    const result = await runEvolutionItem(item.id);
 
     expect(result.action).toBe('blocked_unknown_risk_review');
     expect(result.status).toBe('blocked_by_policy');
@@ -833,7 +850,7 @@ describe('evolution engine', () => {
       base_commit: 'base-work',
     });
 
-    const result = await runEvolutionTick();
+    const result = await runEvolutionItem(item.id);
     const updated = getEvolutionItem(item.id, { includeDetails: true });
 
     expect(result.action).toBe('blocked_forbidden_path');
@@ -892,7 +909,7 @@ describe('evolution engine', () => {
       base_commit: 'base-work',
     });
 
-    const result = await runEvolutionTick();
+    const result = await runEvolutionItem(item.id);
     const updated = getEvolutionItem(item.id, { includeDetails: true });
 
     expect(result.action).toBe('blocked_by_policy');

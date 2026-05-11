@@ -4217,6 +4217,11 @@ body.quick-chat-window .quick-chat-input {
   padding-top: 12px;
 }
 
+.assistant-evolution-trigger-btn {
+  width: 100%;
+  min-height: 38px;
+}
+
 .assistant-evolution-list {
   flex: 1 1 auto;
   min-height: 0;

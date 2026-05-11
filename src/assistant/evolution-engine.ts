@@ -119,6 +119,7 @@ let evolutionLastTickAction: string | null = null;
 let evolutionLastTickStatus: string | null = null;
 let evolutionLastTickOk: boolean | null = null;
 let evolutionLastTickError: string | null = null;
+const queuedEvolutionItemRunTimers = new Map<string, NodeJS.Timeout>();
 let deps: Required<Omit<EvolutionEngineDeps, 'agentRunner'>> & {
   agentRunner: EvolutionAgentRunner | null;
 } = {
@@ -159,6 +160,24 @@ function runEvolutionLoop(): void {
     .finally(() => {
       scheduleNextEvolutionTick();
     });
+}
+
+function clearQueuedEvolutionItemRuns(): void {
+  for (const timer of queuedEvolutionItemRunTimers.values()) {
+    clearTimeout(timer);
+  }
+  queuedEvolutionItemRunTimers.clear();
+}
+
+function queueEvolutionItemRun(itemId: string): void {
+  if (!itemId || queuedEvolutionItemRunTimers.has(itemId)) return;
+  const timer = setTimeout(() => {
+    queuedEvolutionItemRunTimers.delete(itemId);
+    void runEvolutionItem(itemId).catch((err) => {
+      logger.error({ err, itemId }, 'Assistant evolution item run failed');
+    });
+  }, 0);
+  queuedEvolutionItemRunTimers.set(itemId, timer);
 }
 
 function riskRank(level: AssistantEvolutionRiskLevel): number {
@@ -937,6 +956,7 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
   evolutionLastTickStartedAt = Date.now().toString();
   evolutionTickRunning = true;
   let tickResult: EvolutionTickResult | null = null;
+  let itemToRun: string | null = null;
 
   try {
     const settings = deps.settingsProvider();
@@ -971,7 +991,12 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
     try {
       const blockingItem = findBlockingEvolutionItem(settings);
       if (blockingItem) {
-        tickResult = await advanceItemUntilStop(blockingItem, settings);
+        tickResult = {
+          ok: true,
+          action: 'waiting',
+          itemId: blockingItem.id,
+          status: blockingItem.status,
+        };
         return tickResult;
       }
 
@@ -982,15 +1007,12 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
         maxReviewRounds: settings.evolution.maxReviewRounds,
         baseBranch: deps.baseBranch,
       });
-      tickResult = await advanceItemUntilStop(item, settings);
+      itemToRun = item.id;
       tickResult = {
-        ...tickResult,
-        action:
-          tickResult.action === 'noop'
-            ? 'item_created'
-            : `item_created_${tickResult.action}`,
-        itemId: tickResult.itemId || item.id,
-        status: tickResult.status || item.status,
+        ok: true,
+        action: 'item_created',
+        itemId: item.id,
+        status: item.status,
       };
       return tickResult;
     } catch (err) {
@@ -1031,6 +1053,7 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
     } finally {
       clearInterval(leaseHeartbeat);
       releaseEvolutionLease(ENGINE_LOCK_OWNER);
+      if (itemToRun) queueEvolutionItemRun(itemToRun);
     }
   } finally {
     evolutionTickRunning = false;
@@ -1040,6 +1063,99 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
     evolutionLastTickOk = tickResult?.ok ?? false;
     evolutionLastTickError =
       tickResult?.error || (tickResult ? null : 'Evolution tick ended abruptly');
+  }
+}
+
+export async function runEvolutionItem(
+  itemId: string,
+): Promise<EvolutionTickResult> {
+  evolutionTickRunning = true;
+  let result: EvolutionTickResult | null = null;
+
+  try {
+    const settings = deps.settingsProvider();
+    if (!settings.evolution.enabled) {
+      result = { ok: true, action: 'disabled', itemId };
+      return result;
+    }
+    if (
+      !tryAcquireEvolutionLease({
+        lockOwner: ENGINE_LOCK_OWNER,
+        leaseMs: deps.leaseMs,
+      })
+    ) {
+      result = { ok: true, action: 'lease_busy', itemId };
+      return result;
+    }
+
+    const heartbeatMs = Math.max(
+      50,
+      Math.min(LEASE_RENEW_INTERVAL_MS, Math.floor(deps.leaseMs / 3)),
+    );
+    const leaseHeartbeat = setInterval(() => {
+      const renewed = renewEvolutionLease({
+        lockOwner: ENGINE_LOCK_OWNER,
+        leaseMs: deps.leaseMs,
+      });
+      if (!renewed) {
+        logger.warn('Assistant evolution lease heartbeat lost ownership');
+      }
+    }, heartbeatMs);
+
+    try {
+      const item = getEvolutionItem(itemId);
+      if (!item) {
+        result = {
+          ok: true,
+          action: 'interrupted',
+          itemId,
+          status: 'missing',
+        };
+        return result;
+      }
+      result = await advanceItemUntilStop(item, settings);
+      return result;
+    } catch (err) {
+      const active = getEvolutionItem(itemId);
+      let failedStatus = active?.status;
+      if (active) {
+        if (active.status === 'paused') {
+          result = {
+            ok: true,
+            action: 'interrupted',
+            itemId: active.id,
+            status: active.status,
+          };
+          return result;
+        }
+        const failed = updateEvolutionItemIfStatus(
+          active.id,
+          active.status,
+          {
+            status: 'failed',
+            blocked_reason: err instanceof Error ? err.message : String(err),
+            completed_at: Date.now().toString(),
+          },
+          'engine_failed',
+          { error: err instanceof Error ? err.message : String(err) },
+        );
+        failedStatus = failed?.status || getEvolutionItem(active.id)?.status;
+      }
+      logger.error({ err, itemId }, 'Assistant evolution item run failed');
+      result = {
+        ok: false,
+        action: 'error',
+        itemId,
+        status: failedStatus,
+        error: err instanceof Error ? err.message : String(err),
+      };
+      return result;
+    } finally {
+      clearInterval(leaseHeartbeat);
+      releaseEvolutionLease(ENGINE_LOCK_OWNER);
+    }
+  } finally {
+    evolutionTickRunning = false;
   }
 }
 
@@ -1064,6 +1180,7 @@ export function approveEvolutionImplementation(itemId: string): {
       `Cannot approve implementation from ${latest?.status || 'missing'}`,
     );
   }
+  queueEvolutionItemRun(updated.id);
   return {
     ok: true,
     item: updated,
@@ -1129,6 +1246,7 @@ export function resumeEvolutionItem(itemId: string): {
       const latest = getEvolutionItem(item.id);
       throw new Error(`Cannot resume from ${latest?.status || 'missing'}`);
     }
+    queueEvolutionItemRun(updated.id);
     return {
       ok: true,
       item: updated,
@@ -1149,6 +1267,7 @@ export function resumeEvolutionItem(itemId: string): {
     const latest = getEvolutionItem(item.id);
     throw new Error(`Cannot resume from ${latest?.status || 'missing'}`);
   }
+  queueEvolutionItemRun(updated.id);
   return {
     ok: true,
     item: updated,
@@ -1326,6 +1445,7 @@ export function rescheduleEvolutionEngine(): void {
 /** @internal - for tests only. */
 export function _resetEvolutionEngineForTests(): void {
   clearEvolutionLoopTimer();
+  clearQueuedEvolutionItemRuns();
   evolutionLoopStarted = false;
   evolutionTickRunning = false;
   evolutionLastTickStartedAt = null;

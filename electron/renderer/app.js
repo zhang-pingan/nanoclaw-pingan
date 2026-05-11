@@ -497,6 +497,7 @@ var assistantEvolutionAutoImplementToggle = document.getElementById("assistant-e
 var assistantEvolutionAutoAdoptToggle = document.getElementById("assistant-evolution-auto-adopt-toggle");
 var assistantEvolutionScanIntervalInput = document.getElementById("assistant-evolution-scan-interval-input");
 var assistantEvolutionSchedule = document.getElementById("assistant-evolution-schedule");
+var assistantEvolutionTriggerBtn = document.getElementById("assistant-evolution-trigger-btn");
 var assistantEvolutionPanel = document.getElementById("assistant-evolution-panel");
 var assistantSourceGrid = document.getElementById("assistant-source-grid");
 var assistantSourceInputs = [];
@@ -18406,7 +18407,6 @@ function renderAssistantEvolutionActions(item, isActive) {
   const canCancel = !["completed", "failed", "cancelled"].includes(item.status);
   return `
     <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-detail="${escapeAttribute(item.id)}">${assistantEvolutionDetailExpandedItems[item.id] ? "收起详情" : "详情"}</button>
-    ${isActive ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="tick" data-assistant-evolution-item="${escapeAttribute(item.id)}">推进一次</button>` : ""}
     ${canApprove ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="approve-implementation" data-assistant-evolution-item="${escapeAttribute(item.id)}">确认实现</button>` : ""}
     ${canAdopt ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="adopt" data-assistant-evolution-item="${escapeAttribute(item.id)}">采纳方案</button>` : ""}
     ${canPause ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="pause" data-assistant-evolution-item="${escapeAttribute(item.id)}">暂停</button>` : ""}
@@ -18724,17 +18724,31 @@ async function runAssistantEvolutionAction(action, itemId, triggerButton) {
   if (!action) return;
   if (triggerButton) triggerButton.disabled = true;
   try {
-    const url = action === "tick"
-      ? "/api/assistant/evolution/tick"
-      : `/api/assistant/evolution/items/${encodeURIComponent(itemId || "")}/${action}`;
+    const url = `/api/assistant/evolution/items/${encodeURIComponent(itemId || "")}/${action}`;
     const res = await apiFetch(url, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    showToast(action === "tick" ? "自我进化已推进" : "自我进化动作已执行", 1800);
+    showToast("自我进化动作已执行", 1800);
     await loadAssistantState();
   } catch (err) {
     console.error("Failed to run assistant evolution action:", err);
     showToast(err instanceof Error ? err.message : "自我进化动作失败", 2600);
+  } finally {
+    if (triggerButton) triggerButton.disabled = false;
+  }
+}
+
+async function triggerAssistantEvolutionTick(triggerButton) {
+  if (triggerButton) triggerButton.disabled = true;
+  try {
+    const res = await apiFetch("/api/assistant/evolution/tick", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(data.action === "item_created" ? "已创建自我进化事项" : "自我进化轮询已触发", 1800);
+    await loadAssistantState();
+  } catch (err) {
+    console.error("Failed to trigger assistant evolution tick:", err);
+    showToast(err instanceof Error ? err.message : "自我进化触发失败", 2600);
   } finally {
     if (triggerButton) triggerButton.disabled = false;
   }
@@ -19508,6 +19522,11 @@ if (assistantEvolutionScanIntervalInput) {
           Number(assistantEvolutionScanIntervalInput.value) || 60,
       },
     });
+  });
+}
+if (assistantEvolutionTriggerBtn) {
+  assistantEvolutionTriggerBtn.addEventListener("click", async () => {
+    await triggerAssistantEvolutionTick(assistantEvolutionTriggerBtn);
   });
 }
 if (todayPlanRefreshBtn) {
