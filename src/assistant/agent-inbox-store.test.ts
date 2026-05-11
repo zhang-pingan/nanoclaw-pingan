@@ -533,6 +533,72 @@ describe('agent inbox store', () => {
     });
   });
 
+  it('asks agent run investigation to gather logs, trace, and source evidence', async () => {
+    createStoredAgentQuery({ queryId: 'query-container-137', status: 'error' });
+    let capturedPrompt = '';
+    const runner = vi.fn(async ({ prompt }) => {
+      capturedPrompt = prompt;
+      return {
+        ok: true,
+        text: JSON.stringify({
+          ok: true,
+          summary: '证据不足，无法确认根因。',
+          root_cause: null,
+          repairable: false,
+          repair_plan: null,
+          risk_level: 'unknown',
+          required_user_action: '需要进一步日志',
+          evidence: [{ label: 'query_id', value: 'query-container-137' }],
+          groups: [
+            {
+              id: 'container-137',
+              title: '容器 137 退出',
+              log_indexes: [],
+              count: 1,
+              root_cause: null,
+              repairable: false,
+              repair_plan: null,
+              risk_level: 'unknown',
+              required_user_action: '需要进一步日志',
+              evidence: [
+                { label: 'query_id', value: 'query-container-137' },
+              ],
+            },
+          ],
+        }),
+      };
+    });
+    initAssistantAutoFlow({ agentRunner: runner });
+
+    const item = createOrUpdateAgentInboxItem({
+      dedupeKey: 'agent-query:error:query-container-137',
+      kind: 'risk',
+      title: 'Agent 执行异常',
+      body: 'Container exited with code 137',
+      triggerRuleKey: 'agent_runs.query_failed',
+      sourceType: 'agent_query',
+      sourceRefId: 'query-container-137',
+      extra: {
+        runId: 'run-query-container-137',
+        groupFolder: 'assistant_main',
+      },
+    });
+
+    await runAgentInboxAction({ itemId: item.id, action: 'investigate' });
+
+    expect(capturedPrompt).toContain('必须先用工具主动取证');
+    expect(capturedPrompt).toContain('/workspace/project/logs/nanoclaw.log');
+    expect(capturedPrompt).toContain('/workspace/group/logs');
+    expect(capturedPrompt).toContain('logFile');
+    expect(capturedPrompt).toContain('/workspace/project/src/container-runner.ts');
+    expect(capturedPrompt).toContain(
+      '/workspace/project/container/agent-runner/src/index.ts',
+    );
+    expect(capturedPrompt).toContain('agent_query_events 的 event_index');
+    expect(capturedPrompt).toContain('没有证据时 root_cause 必须为 null');
+    expect(capturedPrompt).toContain('不要凭常见经验补根因');
+  });
+
   it('requires a repair group id for grouped investigation repair', async () => {
     const runner = vi.fn(async ({ purpose }) => ({
       ok: true,

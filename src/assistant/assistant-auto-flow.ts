@@ -204,6 +204,44 @@ function stringifyContext(value: unknown): string {
   return JSON.stringify(value, null, 2).slice(0, 20000);
 }
 
+function buildInvestigationWorkflowInstructions(
+  item: AgentInboxItemView,
+): string {
+  const ruleKey = toRuleKey(item.extra.ruleKey);
+
+  if (ruleKey === 'agent_runs.query_failed') {
+    return `调查流程：
+- 你运行在容器 agent 中，可以使用 Bash/Read/Grep/Glob 等工具；最终回复只返回 JSON，但在最终回复前必须先用工具主动取证。
+- 先从上下文中的 agentQuery.query / steps / events 提取 query_id、runId、session_id、时间点、failure_type、failure_subtype、error_message、lastAssistantUuid 等线索。
+- 使用这些线索搜索并读取相关日志：优先查 /workspace/project/logs/nanoclaw.log 和 /workspace/group/logs；如果日志里出现 logFile 或容器日志路径，继续读取对应文件。宿主项目路径可按 /workspace/project 映射，当前群目录可按 /workspace/group 映射。
+- 根据失败类型阅读相关源码。容器退出、137、stdin/close、idle/timeout、trace 更新等问题至少检查 /workspace/project/src/container-runner.ts、/workspace/project/container/agent-runner/src/index.ts，以及必要时的 /workspace/project/src/index.ts、/workspace/project/src/agent-query-trace.ts、/workspace/project/src/assistant/proactive-engine.ts。
+- 对 code 137 不能只写 OOM/SIGKILL/外部回收。必须结合日志和源码判断它发生在 query 过程中、结果投递前、结果投递后、关闭哨兵后，还是 trace 已结束后；没有证据时 root_cause 必须为 null。
+- evidence 必须包含具体证据来源，例如日志路径和行号、源码路径和行号、agent_query_events 的 event_index、关键 stdout/stderr 片段或无法读取某证据的错误。
+- 如果工具取证失败或证据不足，summary 要说明“证据不足”，root_cause 为 null，repairable 为 false，并把还缺哪些日志/权限/上下文写入 required_user_action。`;
+  }
+
+  if (
+    ruleKey === 'workbench.task_failed_or_cancelled' ||
+    ruleKey === 'workbench.task_stale' ||
+    ruleKey === 'scheduler.task_failed'
+  ) {
+    return `调查流程：
+- 你运行在容器 agent 中，可以使用 Bash/Read/Grep/Glob 等工具；最终回复只返回 JSON，但在最终回复前应先用工具验证关键事实。
+- 结合上下文中的任务、事件和状态，必要时读取 /workspace/project/logs、/workspace/group/logs 以及相关源码，确认失败阶段、最近动作和可恢复性。
+- evidence 必须写清楚证据来源；如果无法查到足够证据，root_cause 必须为 null，repairable 为 false。`;
+  }
+
+  if (ruleKey === 'online.error_logs') {
+    return `调查流程：
+- 先基于 onlineErrorLog.logs 对日志分组；必要时使用工具查看 /workspace/project 中对应服务配置、源码或辅助文档。
+- evidence 必须引用日志下标、关键异常类/traceId/业务字段；没有足够证据时 root_cause 必须为 null，repairable 为 false。`;
+  }
+
+  return `调查流程：
+- 先核实上下文中的关键事实；必要时使用工具查日志和源码。
+- evidence 必须写清楚证据来源；没有足够证据时 root_cause 必须为 null，repairable 为 false。`;
+}
+
 function normalizeOnlineErrorLogContext(
   value: unknown,
 ): Record<string, unknown> | null {
@@ -327,10 +365,13 @@ function buildInvestigationPrompt(
 约束：
 - 不确定是否安全修复时，repairable 必须为 false。
 - 涉及审批、产品判断、权限变更、外部系统破坏性操作时，repairable 必须为 false。
-- 只根据给定上下文判断。
+- 只能根据上下文和你实际使用工具查到的证据判断；不要凭常见经验补根因。
+- 最终回复只返回 JSON；工具调查过程不要向用户发送说明性自然语言。
 - 如果上下文包含 onlineErrorLog.logs，多条日志可能属于不同问题，必须由你按语义自行归并分类后返回 groups。
 - groups[].log_indexes 必须引用 onlineErrorLog.logs 的 0-based 下标；不要在结果里复制完整 rawLog。
 - 顶层 repairable 只有在所有分类都可自动修复且修复方案不冲突时才为 true；任一分类需人工处理时为 false。
+
+${buildInvestigationWorkflowInstructions(item)}
 
 触发项：${item.title}
 上下文：
