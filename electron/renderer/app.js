@@ -18464,7 +18464,7 @@ function renderAssistantInbox() {
   assistantInboxSummary.textContent = `${activeItems.length} 条活跃 · ${unreadCount} 条未读`;
   renderAssistantHeroMetrics();
   if (assistantInboxItems.length === 0) {
-    assistantInboxList.innerHTML = '<div class="assistant-empty">暂无主动事项</div>';
+    assistantInboxList.innerHTML = '<div class="assistant-empty assistant-panel-empty">暂无主动事项</div>';
     return;
   }
   assistantInboxList.innerHTML = assistantInboxItems.map((item) => `

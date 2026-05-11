@@ -4129,7 +4129,8 @@ body.quick-chat-window .quick-chat-input {
     "settings inbox"
     "settings logs"
     "settings evolution";
-  gap: 18px;
+  column-gap: 18px;
+  row-gap: 28px;
   align-items: start;
   min-height: 0;
 }
@@ -4147,7 +4148,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .assistant-inbox-panel {
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   grid-area: inbox;
 }
 
@@ -4155,6 +4158,7 @@ body.quick-chat-window .quick-chat-input {
   display: flex;
   flex-direction: column;
   min-height: 236px;
+  margin-bottom: 6px;
   overflow: hidden;
   grid-area: logs;
 }
@@ -4177,6 +4181,7 @@ body.quick-chat-window .quick-chat-input {
   gap: 12px;
   padding: 18px 18px 14px;
   border-bottom: 1px solid rgba(var(--assistant-accent-rgb), 0.08);
+  border-radius: 21px 21px 0 0;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 44%),
     linear-gradient(135deg, rgba(var(--assistant-accent-rgb), 0.08), rgba(255, 255, 255, 0.7) 70%);
@@ -4875,13 +4880,15 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .assistant-inbox-list {
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: none;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .assistant-log-list {
   flex: 1 1 auto;
-  min-height: 154px;
+  min-height: 0;
   max-height: 420px;
   overflow: auto;
 }
@@ -5106,7 +5113,7 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .assistant-panel-empty {
-  min-height: 190px;
+  min-height: 154px;
 }
 
 #memory-management-screen {
@@ -10431,7 +10438,7 @@ body.quick-chat-window .quick-chat-input {
 
   .assistant-grid {
     align-items: stretch;
-    gap: 16px;
+    gap: 30px;
   }
 
   .assistant-settings-panel,
