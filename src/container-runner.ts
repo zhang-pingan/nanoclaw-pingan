@@ -52,6 +52,8 @@ export interface ContainerInput {
   selectedModel?: string;
   runId?: string;
   queryId?: string;
+  requireResult?: boolean;
+  isolatedSession?: boolean;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -114,6 +116,21 @@ function makeContainerErrorOutput(
     error,
     failure,
   };
+}
+
+function makeMissingRequiredResultOutput(): ContainerOutput {
+  const error = 'Container completed without required text result';
+  return makeContainerErrorOutput(
+    error,
+    classifyFailure(new Error(error), {
+      module: 'container-runner',
+      action: 'wait_for_required_result',
+      defaultType: 'model_output_invalid',
+      defaultSubtype: 'agent_result_missing',
+      defaultOrigin: 'model',
+      retryable: true,
+    }),
+  );
 }
 
 function buildVolumeMounts(
@@ -564,6 +581,8 @@ export async function runContainerAgent(
     let streamingParseFailure: ClassifiedFailure | null = null;
     let streamingParseError: string | null = null;
     let hadValidStreamingOutput = false;
+    let hadTextResult = false;
+    let lastErrorOutput: ContainerOutput | null = null;
     let outputChain = Promise.resolve();
 
     container.stdout.on('data', (data) => {
@@ -604,6 +623,16 @@ export async function runContainerAgent(
             }
             if (parsed.selectedModel) {
               selectedModel = parsed.selectedModel;
+            }
+            if (
+              parsed.status === 'success' &&
+              typeof parsed.result === 'string' &&
+              parsed.result.trim()
+            ) {
+              hadTextResult = true;
+            }
+            if (parsed.status === 'error') {
+              lastErrorOutput = parsed;
             }
             hadStreamingOutput = true;
             hadValidStreamingOutput = true;
@@ -721,6 +750,26 @@ export async function runContainerAgent(
         // The agent already sent its response; this is just the
         // container being reaped after the idle period expired.
         if (hadValidStreamingOutput) {
+          if (lastErrorOutput && !hadTextResult) {
+            logger.warn(
+              { group: group.name, containerName, duration, code },
+              'Container timed out after streamed error output',
+            );
+            outputChain.then(() => {
+              resolve(lastErrorOutput!);
+            });
+            return;
+          }
+          if (input.requireResult && !hadTextResult) {
+            logger.warn(
+              { group: group.name, containerName, duration, code },
+              'Container timed out without required text result',
+            );
+            outputChain.then(() => {
+              resolve(makeMissingRequiredResultOutput());
+            });
+            return;
+          }
           logger.info(
             { group: group.name, containerName, duration, code },
             'Container timed out after output (idle cleanup)',
@@ -818,7 +867,7 @@ export async function runContainerAgent(
         logLines.push(
           `=== Input Summary ===`,
           `Prompt length: ${input.prompt.length} chars`,
-          `Session ID: ${input.sessionId || 'new'}`,
+          `Session ID: ${input.isolatedSession ? 'isolated' : input.sessionId || 'new'}`,
           ``,
           `=== Mounts ===`,
           mounts
@@ -876,6 +925,22 @@ export async function runContainerAgent(
       // Streaming mode: wait for output chain to settle, return completion marker
       if (onOutput) {
         outputChain.then(() => {
+          if (lastErrorOutput && !hadTextResult) {
+            logger.warn(
+              { group: group.name, duration, newSessionId },
+              'Container completed after streamed error output',
+            );
+            resolve(lastErrorOutput!);
+            return;
+          }
+          if (input.requireResult && !hadTextResult) {
+            logger.warn(
+              { group: group.name, duration, newSessionId },
+              'Container completed without required text result',
+            );
+            resolve(makeMissingRequiredResultOutput());
+            return;
+          }
           logger.info(
             { group: group.name, duration, newSessionId },
             'Container completed (streaming mode)',

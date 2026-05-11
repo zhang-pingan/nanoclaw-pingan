@@ -103,6 +103,7 @@ import {
 } from './session-reset-guard.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import {
+  buildOneShotEmptyOutputError,
   finalizeOneShotAgentResult,
   type OneShotAgentResult,
 } from './one-shot-agent.js';
@@ -1212,9 +1213,11 @@ async function runAgent(
     stageKey?: string;
     delegationId?: string;
   },
+  requireResult?: boolean,
+  isolatedSession?: boolean,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
-  const sessionId = sessions[group.folder];
+  const sessionId = isolatedSession ? undefined : sessions[group.folder];
   const sessionResetEpoch = getSessionResetEpoch(group.folder);
   const isSessionWriteCurrent = () =>
     isSessionResetEpochCurrent(group.folder, sessionResetEpoch);
@@ -1289,9 +1292,13 @@ async function runAgent(
   writeDelegationSnapshot(group.folder, isMain, registeredGroups);
 
   // Wrap onOutput to track session ID from streamed results
+  let streamedErrorOutputSeen = false;
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
-        if (output.newSessionId) {
+        if (output.status === 'error') {
+          streamedErrorOutputSeen = true;
+        }
+        if (output.newSessionId && !isolatedSession) {
           const didWrite = writeSessionIfCurrent(output.newSessionId);
           if (!didWrite) {
             await onOutput({ ...output, newSessionId: undefined });
@@ -1311,6 +1318,8 @@ async function runAgent(
         sessionId,
         runId: resolvedRunId,
         queryId: resolvedInitialQueryId,
+        requireResult,
+        isolatedSession,
         groupFolder: group.folder,
         chatJid,
         isMain,
@@ -1325,6 +1334,7 @@ async function runAgent(
 
     // Handle "No conversation found" error - session is invalid, clear it
     const isSessionInvalid =
+      !isolatedSession &&
       output.status === 'error' &&
       output.error?.includes('No conversation found');
 
@@ -1337,7 +1347,7 @@ async function runAgent(
       delete sessions[group.folder];
       bumpSessionResetEpoch(group.folder);
       // Don't save the invalid session ID - let retry create a new one
-    } else if (output.newSessionId) {
+    } else if (output.newSessionId && !isolatedSession) {
       writeSessionIfCurrent(output.newSessionId);
     }
 
@@ -1346,7 +1356,9 @@ async function runAgent(
         { group: group.name, error: output.error },
         'Container agent error',
       );
-      if (wrappedOnOutput) await wrappedOnOutput(output);
+      if (wrappedOnOutput && !streamedErrorOutputSeen) {
+        await wrappedOnOutput(output);
+      }
       return 'error';
     }
 
@@ -1388,6 +1400,8 @@ interface OneShotAgentInput {
   initialQueryId?: string;
   closeOnFirstResult?: boolean;
   collect?: 'first_result' | 'all_until_exit';
+  requireResult?: boolean;
+  isolatedSession?: boolean;
 }
 
 interface AssistantActionAgentInput {
@@ -1442,6 +1456,12 @@ async function runOneShotAgent(
 
   const outputs: string[] = [];
   let closeRequested = false;
+  let resultMarkerCount = 0;
+  let eventMarkerCount = 0;
+  let sessionOnlyMarkerCount = 0;
+  let errorMarkerCount = 0;
+  let executionError: string | undefined;
+  let executionFailure: ClassifiedFailure | undefined;
   const collect = input.collect || 'first_result';
 
   const status = await queue.runOneShot(
@@ -1464,7 +1484,14 @@ async function runOneShotAgent(
         input.prompt,
         input.chatJid,
         async (output) => {
+          if (output.event) eventMarkerCount += 1;
+          if (output.status === 'error') {
+            errorMarkerCount += 1;
+            executionError = output.error || executionError;
+            executionFailure = output.failure || executionFailure;
+          }
           if (output.result) {
+            resultMarkerCount += 1;
             outputs.push(String(output.result));
             if (input.closeOnFirstResult !== false && !closeRequested) {
               closeRequested = true;
@@ -1475,7 +1502,15 @@ async function runOneShotAgent(
           if (
             output.status === 'success' &&
             !output.event &&
+            !output.result
+          ) {
+            sessionOnlyMarkerCount += 1;
+          }
+          if (
+            output.status === 'success' &&
+            !output.event &&
             !output.result &&
+            (!input.requireResult || resultMarkerCount > 0) &&
             input.closeOnFirstResult !== false &&
             !closeRequested
           ) {
@@ -1486,10 +1521,24 @@ async function runOneShotAgent(
         input.selectedModel,
         input.runId,
         input.initialQueryId,
+        undefined,
+        input.requireResult,
+        input.isolatedSession,
       ),
   );
 
-  return finalizeOneShotAgentResult({ status, outputs });
+  return finalizeOneShotAgentResult({
+    status,
+    outputs,
+    executionError,
+    failure: executionFailure,
+    emptyOutputError: buildOneShotEmptyOutputError({
+      resultMarkerCount,
+      eventMarkerCount,
+      sessionOnlyMarkerCount,
+      errorMarkerCount,
+    }),
+  });
 }
 
 async function runAssistantActionAgent(
@@ -1577,6 +1626,8 @@ const runEvolutionActionAgent: EvolutionAgentRunner = async (input) => {
     initialQueryId: queryId,
     closeOnFirstResult: true,
     collect: 'first_result',
+    requireResult: true,
+    isolatedSession: true,
     status: {
       groupName: '自我进化',
       promptSummary: `自我进化 ${input.phase}：${input.item.direction}`,
@@ -1587,14 +1638,18 @@ const runEvolutionActionAgent: EvolutionAgentRunner = async (input) => {
     },
   });
   if (!result.ok) {
+    const error =
+      result.error || 'Assistant evolution agent execution failed';
     agentQueryTraceManager.finishQuery(queryId, 'error', {
-      error_message: result.error || 'Assistant evolution agent execution failed',
+      ...(result.failure
+        ? toAgentQueryFailurePatch(result.failure, error)
+        : { error_message: error }),
       output_preview: result.text.slice(0, 500),
     });
     return {
       ok: false,
       text: result.text,
-      error: result.error || 'Assistant evolution agent execution failed',
+      error,
     };
   }
   agentQueryTraceManager.finishQuery(queryId, 'success', {

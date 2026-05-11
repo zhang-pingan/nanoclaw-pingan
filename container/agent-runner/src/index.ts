@@ -34,6 +34,8 @@ interface ContainerInput {
   selectedModel?: string;
   runId?: string;
   queryId?: string;
+  requireResult?: boolean;
+  isolatedSession?: boolean;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -51,6 +53,13 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  failure?: {
+    failureType: string;
+    failureSubtype?: string;
+    failureOrigin: string;
+    retryable: boolean;
+    details?: Record<string, unknown>;
+  };
   selectedModel?: string;
   runId?: string;
   queryId?: string;
@@ -163,6 +172,18 @@ function writeEvent(output: NonNullable<ContainerOutput['event']>, meta: {
     queryId: meta.queryId,
     event: output,
   });
+}
+
+function makeMissingResultFailure(
+  details: Record<string, unknown>,
+): NonNullable<ContainerOutput['failure']> {
+  return {
+    failureType: 'model_output_invalid',
+    failureSubtype: 'agent_result_missing',
+    failureOrigin: 'model',
+    retryable: true,
+    details,
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -1129,11 +1150,14 @@ function buildQueryOptions(
   const resolvedModel = selectedModel || MODEL_DEFAULT;
   log(`Model from host: model=${resolvedModel}`);
 
+  const useIsolatedSession = containerInput.isolatedSession === true;
+
   return {
     cwd: '/workspace/group',
     additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
-    resume: overrides.sessionId,
-    resumeSessionAt: overrides.resumeAt,
+    resume: useIsolatedSession ? undefined : overrides.sessionId,
+    resumeSessionAt: useIsolatedSession ? undefined : overrides.resumeAt,
+    persistSession: useIsolatedSession ? false : undefined,
     systemPrompt: globalClaudeMd
       ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
       : undefined,
@@ -1173,7 +1197,7 @@ function buildQueryOptions(
       PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
       PreToolUse: [{
         hooks: [createPreToolHook({
-          getSessionId: () => overrides.sessionId,
+          getSessionId: () => (useIsolatedSession ? undefined : overrides.sessionId),
           getSelectedModel: () => resolvedModel,
           runId: containerInput.runId,
           queryId,
@@ -1181,7 +1205,7 @@ function buildQueryOptions(
       }],
       PostToolUse: [{
         hooks: [createPostToolHook({
-          getSessionId: () => overrides.sessionId,
+          getSessionId: () => (useIsolatedSession ? undefined : overrides.sessionId),
           getSelectedModel: () => resolvedModel,
           runId: containerInput.runId,
           queryId,
@@ -1189,7 +1213,7 @@ function buildQueryOptions(
       }],
       PostToolUseFailure: [{
         hooks: [createPostToolFailureHook({
-          getSessionId: () => overrides.sessionId,
+          getSessionId: () => (useIsolatedSession ? undefined : overrides.sessionId),
           getSelectedModel: () => resolvedModel,
           runId: containerInput.runId,
           queryId,
@@ -1205,16 +1229,25 @@ async function iterateQuery(
   stream: MessageStream,
   options: ReturnType<typeof buildQueryOptions>,
   identifiers: { runId?: string; queryId?: string },
-): Promise<{ newSessionId?: string; lastAssistantUuid?: string; planResult?: string }> {
+): Promise<{
+  newSessionId?: string;
+  lastAssistantUuid?: string;
+  planResult?: string;
+  messageCount: number;
+  resultCount: number;
+  lastMessageType?: string;
+}> {
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
   let planResult: string | undefined;
   let messageCount = 0;
   let resultCount = 0;
+  let lastMessageType: string | undefined;
 
   for await (const message of query({ prompt: stream, options })) {
     messageCount++;
     const msgType = message.type === 'system' ? `system/${(message as { subtype?: string }).subtype}` : message.type;
+    lastMessageType = msgType;
     log(`[msg #${messageCount}] type=${msgType}`);
 
     if (message.type === 'assistant' && 'uuid' in message) {
@@ -1270,7 +1303,14 @@ async function iterateQuery(
   }
 
   log(`Query phase done. Messages: ${messageCount}, results: ${resultCount}`);
-  return { newSessionId, lastAssistantUuid, planResult };
+  return {
+    newSessionId,
+    lastAssistantUuid,
+    planResult,
+    messageCount,
+    resultCount,
+    lastMessageType,
+  };
 }
 
 /**
@@ -1293,6 +1333,7 @@ async function runQuery(
   newSessionId?: string;
   lastAssistantUuid?: string;
   closedDuringQuery: boolean;
+  missingSdkResult: boolean;
   selectedModel: string;
   queryId?: string;
 }> {
@@ -1362,11 +1403,38 @@ async function runQuery(
   lastAssistantUuid = result.lastAssistantUuid;
 
   ipcPolling = false;
-  log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}`);
+  const missingSdkResult = result.resultCount === 0 && !closedDuringQuery;
+  if (missingSdkResult) {
+    const error = 'SDK query ended without result message';
+    const details = {
+      module: 'agent-runner',
+      action: 'iterate_sdk_query',
+      messageCount: result.messageCount,
+      lastMessageType: result.lastMessageType ?? null,
+      lastAssistantUuid: lastAssistantUuid ?? null,
+      isolatedSession: containerInput.isolatedSession === true,
+      resumeSession: Boolean(sessionId && !containerInput.isolatedSession),
+      resumeAt: resumeAt ?? null,
+    };
+    log(`ERROR: ${error}. details=${JSON.stringify(details)}`);
+    writeOutput({
+      status: 'error',
+      result: null,
+      error,
+      failure: makeMissingResultFailure(details),
+      newSessionId,
+      selectedModel: options.model,
+      runId: containerInput.runId,
+      queryId,
+    });
+  }
+
+  log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}, missingSdkResult: ${missingSdkResult}`);
   return {
     newSessionId,
     lastAssistantUuid,
     closedDuringQuery,
+    missingSdkResult,
     selectedModel: options.model,
     queryId,
   };
@@ -1575,6 +1643,10 @@ async function main(): Promise<void> {
       // idle timer and cause a 30-min delay before the next _close).
       if (queryResult.closedDuringQuery) {
         log('Close sentinel consumed during query, exiting');
+        break;
+      }
+      if (queryResult.missingSdkResult) {
+        log('SDK query ended without result; error marker emitted, exiting');
         break;
       }
 

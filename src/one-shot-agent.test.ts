@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { finalizeOneShotAgentResult } from './one-shot-agent.js';
+import {
+  buildOneShotEmptyOutputError,
+  finalizeOneShotAgentResult,
+} from './one-shot-agent.js';
 
 describe('finalizeOneShotAgentResult', () => {
   it('returns success when the one-shot agent produced text output', () => {
@@ -43,5 +46,65 @@ describe('finalizeOneShotAgentResult', () => {
       outputs: ['   \n\t  '],
       error: 'empty',
     });
+  });
+
+  it('preserves execution errors when no text output was produced', () => {
+    const failure = {
+      failureType: 'model_output_invalid',
+      failureSubtype: 'agent_result_missing',
+      failureOrigin: 'model',
+      retryable: true,
+    } as const;
+
+    expect(
+      finalizeOneShotAgentResult({
+        status: 'success',
+        outputs: [],
+        executionError: 'Container completed without required text result',
+        emptyOutputError: 'One-shot agent completed without text result',
+        failure,
+      }),
+    ).toEqual({
+      ok: false,
+      text: '',
+      outputs: [],
+      error: 'Container completed without required text result',
+      failure,
+    });
+  });
+
+  it('preserves streamed error status even when final status is error', () => {
+    const failure = {
+      failureType: 'model_output_invalid',
+      failureSubtype: 'agent_result_missing',
+      failureOrigin: 'model',
+      retryable: true,
+    } as const;
+
+    expect(
+      finalizeOneShotAgentResult({
+        status: 'error',
+        outputs: [],
+        executionError: 'SDK query ended without result message',
+        failure,
+      }),
+    ).toEqual({
+      ok: false,
+      text: '',
+      outputs: [],
+      error: 'SDK query ended without result message',
+      failure,
+    });
+  });
+
+  it('includes marker diagnostics in empty-output errors', () => {
+    expect(
+      buildOneShotEmptyOutputError({
+        eventMarkerCount: 3,
+        sessionOnlyMarkerCount: 1,
+      }),
+    ).toBe(
+      'One-shot agent completed without text result (session-only markers=1, event markers=3)',
+    );
   });
 });

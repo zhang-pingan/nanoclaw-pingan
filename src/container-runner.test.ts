@@ -218,6 +218,71 @@ describe('container-runner timeout behavior', () => {
     expect(result.newSessionId).toBe('session-456');
   });
 
+  it('returns structured failure when a required text result is missing', async () => {
+    const onOutput = vi.fn(async () => {});
+    const resultPromise = runContainerAgent(
+      testGroup,
+      { ...testInput, requireResult: true },
+      () => {},
+      onOutput,
+    );
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: null,
+      newSessionId: 'session-789',
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(result.status).toBe('error');
+    expect(result.error).toBe('Container completed without required text result');
+    expect(result.failure).toMatchObject({
+      failureType: 'model_output_invalid',
+      failureSubtype: 'agent_result_missing',
+      failureOrigin: 'model',
+      retryable: true,
+    });
+    expect(onOutput).toHaveBeenCalledWith(
+      expect.objectContaining({ result: null, newSessionId: 'session-789' }),
+    );
+  });
+
+  it('returns streamed error output instead of treating it as idle success', async () => {
+    const onOutput = vi.fn(async () => {});
+    const resultPromise = runContainerAgent(
+      testGroup,
+      { ...testInput, requireResult: true },
+      () => {},
+      onOutput,
+    );
+
+    const streamedError: ContainerOutput = {
+      status: 'error',
+      result: null,
+      error: 'SDK query ended without result message',
+      failure: {
+        failureType: 'model_output_invalid',
+        failureSubtype: 'agent_result_missing',
+        failureOrigin: 'model',
+        retryable: true,
+        details: { messageCount: 2, lastMessageType: 'attachment' },
+      },
+      newSessionId: 'session-error',
+    };
+    emitOutputMarker(fakeProc, streamedError);
+
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expect(resultPromise).resolves.toEqual(streamedError);
+    expect(onOutput).toHaveBeenCalledWith(streamedError);
+  });
+
   it('returns structured failure when streamed output marker cannot be parsed', async () => {
     const onOutput = vi.fn(async () => {});
     const resultPromise = runContainerAgent(
