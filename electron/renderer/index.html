@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MixClaw</title>
-  <link rel="stylesheet" href="/styles/main.css?v=assistant-log-detail-20260509" />
+  <link rel="stylesheet" href="/styles/main.css?v=assistant-evolution-list-20260511" />
   <!-- Markdown rendering via CDN (no bundle needed for Electron) -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link
@@ -628,7 +628,7 @@
 
               <div class="assistant-source-heading">
                 <div class="assistant-section-title">自我进化</div>
-                <div id="assistant-evolution-summary" class="assistant-section-subtitle">加载中</div>
+                <div class="assistant-section-subtitle">配置自我进化运行策略。</div>
               </div>
               <div class="assistant-settings-grid assistant-evolution-settings">
                 <label class="assistant-switch-row">
@@ -660,7 +660,6 @@
                   <input id="assistant-evolution-scan-interval-input" type="number" min="5" max="1440" step="5" />
                 </label>
               </div>
-              <div id="assistant-evolution-panel" class="assistant-evolution-panel"></div>
 
               <div class="assistant-source-heading">
                 <div class="assistant-section-title">主动触发源</div>
@@ -687,6 +686,16 @@
                 </div>
               </div>
               <div id="assistant-log-list" class="assistant-log-list"></div>
+            </section>
+
+            <section class="assistant-panel assistant-evolution-list-panel">
+              <div class="assistant-panel-head">
+                <div>
+                  <div class="assistant-section-title">自我进化事项</div>
+                  <div id="assistant-evolution-summary" class="assistant-section-subtitle">加载中</div>
+                </div>
+              </div>
+              <div id="assistant-evolution-panel" class="assistant-evolution-list"></div>
             </section>
           </section>
         </main>
@@ -1853,6 +1862,6 @@
     </div>
   </div>
 
-  <script type="module" src="/dist/app.js?v=assistant-log-detail-20260509"></script>
+  <script type="module" src="/dist/app.js?v=assistant-evolution-list-20260511"></script>
 </body>
 </html>

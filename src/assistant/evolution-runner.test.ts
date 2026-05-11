@@ -43,4 +43,23 @@ describe('evolution runner output validation', () => {
       ),
     ).toThrow(/invalid risk_level/);
   });
+
+  it('accepts implementation policy blocks', () => {
+    const result = validateEvolutionRunnerOutput(
+      'implementation',
+      JSON.stringify({
+        ok: false,
+        implementation_summary: 'blocked',
+        changed_files: [],
+        requires_followup: true,
+        blocked_by_policy: true,
+        blocked_reason: 'needs secrets',
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(
+      'blocked_by_policy' in result && result.blocked_by_policy,
+    ).toBe(true);
+  });
 });

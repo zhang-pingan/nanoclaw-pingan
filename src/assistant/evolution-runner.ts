@@ -52,6 +52,8 @@ export interface EvolutionImplementationOutput {
   implementation_summary: string;
   changed_files: string[];
   requires_followup?: boolean;
+  blocked_by_policy?: boolean;
+  blocked_reason?: string | null;
 }
 
 export interface EvolutionReviewOutput {
@@ -154,17 +156,27 @@ function validateProposalEvaluationOutput(
 function validateImplementationOutput(
   value: Record<string, unknown>,
 ): EvolutionImplementationOutput {
+  const blocked = value.blocked_by_policy === true;
   return {
     ok: asBoolean(value.ok, 'ok'),
-    implementation_summary: asString(
-      value.implementation_summary,
-      'implementation_summary',
-    ),
-    changed_files: asStringArray(value.changed_files, 'changed_files'),
+    implementation_summary:
+      typeof value.implementation_summary === 'string'
+        ? value.implementation_summary
+        : blocked
+          ? ''
+          : asString(value.implementation_summary, 'implementation_summary'),
+    changed_files: Array.isArray(value.changed_files)
+      ? asStringArray(value.changed_files, 'changed_files')
+      : blocked
+        ? []
+        : asStringArray(value.changed_files, 'changed_files'),
     requires_followup:
       typeof value.requires_followup === 'boolean'
         ? value.requires_followup
         : false,
+    blocked_by_policy: blocked,
+    blocked_reason:
+      typeof value.blocked_reason === 'string' ? value.blocked_reason : null,
   };
 }
 
@@ -232,7 +244,8 @@ function phaseInstruction(phase: EvolutionRunnerPhase): string {
       ? '根据检查或复核反馈在当前工作分支修复问题。'
       : '在当前工作分支按方案完成最小必要实现。',
     '不要切换或合并主分支，不要 push，不要访问外部账号或密钥。',
-    '输出 JSON: {"ok":true,"implementation_summary":"...","changed_files":["src/example.ts"],"requires_followup":false}',
+    '如果发现高风险或越权事项，输出 JSON: {"ok":false,"implementation_summary":"...","changed_files":[],"requires_followup":true,"blocked_by_policy":true,"blocked_reason":"..."}',
+    '正常输出 JSON: {"ok":true,"implementation_summary":"...","changed_files":["src/example.ts"],"requires_followup":false,"blocked_by_policy":false,"blocked_reason":null}',
   ].join('\n');
 }
 

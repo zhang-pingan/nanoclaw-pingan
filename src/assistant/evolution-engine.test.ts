@@ -107,6 +107,7 @@ function gitAdapter(): EvolutionGitAdapter {
       return { ok: true, stdout: '', stderr: '', command: 'git merge --abort' };
     },
     changedFiles: async () => ['local/docs/example.md'],
+    diff: async () => 'diff --git a/local/docs/example.md b/local/docs/example.md',
   };
 }
 
@@ -243,6 +244,8 @@ describe('evolution engine', () => {
           };
         },
         changedFiles: async () => ['src/assistant/example.ts'],
+        diff: async () =>
+          'diff --git a/src/assistant/example.ts b/src/assistant/example.ts',
       },
       agentRunner: async () => {
         dirty = true;
@@ -324,5 +327,136 @@ describe('evolution engine', () => {
 
     expect(paused.item.status).toBe('paused');
     expect(resumed.item.status).toBe('checking');
+  });
+
+  it('does not auto-implement unknown risk proposals', async () => {
+    configureEvolutionEngine({
+      settingsProvider: () =>
+        settings({ autoImplementEnabled: true, allowedRiskLevel: 'medium' }),
+      git: gitAdapter(),
+      agentRunner: async ({ phase }) => {
+        if (phase === 'proposal') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              module_scope: 'assistant',
+              direction: '风险不明方案',
+              risk_level: 'unknown',
+              proposal: '# Plan',
+              requires_user_approval: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            approved_for_implementation: true,
+            risk_level: 'unknown',
+            evaluation: 'risk unknown',
+            required_changes: [],
+            blocked_by_policy: false,
+            blocked_reason: null,
+          }),
+        };
+      },
+    });
+
+    await runEvolutionTick();
+    await runEvolutionTick();
+    const result = await runEvolutionTick();
+
+    expect(result.status).toBe('waiting_user_approval');
+    expect(getActiveEvolutionItem()?.auto_implement).toBe(false);
+  });
+
+  it('honors proposal requires_user_approval even when auto implement is enabled', async () => {
+    configureEvolutionEngine({
+      settingsProvider: () => settings({ autoImplementEnabled: true }),
+      git: gitAdapter(),
+      agentRunner: async ({ phase }) => {
+        if (phase === 'proposal') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              module_scope: 'assistant',
+              direction: '需要人工确认',
+              risk_level: 'low',
+              proposal: '# Plan',
+              requires_user_approval: true,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            approved_for_implementation: true,
+            risk_level: 'low',
+            evaluation: 'ok',
+            required_changes: [],
+            blocked_by_policy: false,
+            blocked_reason: null,
+          }),
+        };
+      },
+    });
+
+    await runEvolutionTick();
+    await runEvolutionTick();
+    const result = await runEvolutionTick();
+
+    expect(result.status).toBe('waiting_user_approval');
+    expect(getActiveEvolutionItem()?.auto_implement).toBe(false);
+  });
+
+  it('fails checking when the current branch is not the work branch', async () => {
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => 'main',
+      },
+    });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, {
+      status: 'checking',
+      work_branch: 'evolution/test',
+      base_commit: 'base-work',
+    });
+
+    const result = await runEvolutionTick();
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe('failed');
+    expect(getEvolutionItem(item.id)?.blocked_reason).toContain(
+      'does not match',
+    );
+  });
+
+  it('resumes adoption_failed items into fixing', async () => {
+    configureEvolutionEngine({ settingsProvider: () => settings() });
+    await runEvolutionTick();
+    const item = getActiveEvolutionItem();
+    if (!item) throw new Error('missing item');
+    updateEvolutionItem(item.id, {
+      status: 'adoption_failed',
+      work_branch: 'evolution/test',
+      adoption_status: 'failed',
+      adoption_error: 'checks failed',
+    });
+
+    const resumed = resumeEvolutionItem(item.id);
+
+    expect(resumed.item.status).toBe('fixing');
+    expect(resumed.item.adoption_error).toBeNull();
   });
 });

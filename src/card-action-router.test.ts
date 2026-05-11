@@ -26,6 +26,18 @@ vi.mock('./workbench-broadcast-actions.js', () => ({
   logWorkbenchBroadcastActionFailure: vi.fn(),
 }));
 
+const handleAssistantEvolutionCardActionMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    ok: true,
+    toast: { type: 'success', content: 'evolution ok' },
+  })),
+);
+
+vi.mock('./assistant/evolution-card-actions.js', () => ({
+  ASSISTANT_EVOLUTION_CARD_ACTION: 'assistant_evolution_action',
+  handleAssistantEvolutionCardAction: handleAssistantEvolutionCardActionMock,
+}));
+
 import { createCardActionHandler } from './card-action-router.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
 import { handleCardAction } from './workflow.js';
@@ -167,6 +179,32 @@ describe('card-action-router ask dedupe', () => {
     expect(result).toEqual({
       ok: true,
       toast: { type: 'success', content: 'ok' },
+    });
+  });
+
+  it('routes assistant evolution card actions', async () => {
+    const handler = createCardActionHandler({
+      registeredGroups: () => ({}),
+      sendMessage: async () => {},
+    });
+
+    const result = await handler({
+      action: 'assistant_evolution_action',
+      user_id: 'u1',
+      message_id: 'msg-evo',
+      form_value: {
+        item_id: 'evo-1',
+        evolution_action: 'adopt',
+      },
+    });
+
+    expect(handleAssistantEvolutionCardActionMock).toHaveBeenCalledWith({
+      itemId: 'evo-1',
+      evolutionAction: 'adopt',
+    });
+    expect(result).toEqual({
+      ok: true,
+      toast: { type: 'success', content: 'evolution ok' },
     });
   });
 });

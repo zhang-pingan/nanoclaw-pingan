@@ -547,6 +547,38 @@ export function tryAcquireEvolutionLease(input: {
   return tx();
 }
 
+export function renewEvolutionLease(input: {
+  lockOwner: string;
+  leaseMs: number;
+}): boolean {
+  const now = nowTs();
+  const leaseUntil = String(Date.now() + input.leaseMs);
+  const tx = getDatabase().transaction(() => {
+    const updated = getDatabase()
+      .prepare(
+        `UPDATE assistant_runtime_locks
+         SET lease_until = ?,
+             updated_at = ?
+         WHERE key = 'assistant_evolution'
+           AND locked_by = ?`,
+      )
+      .run(leaseUntil, now, input.lockOwner);
+    if (updated.changes === 0) return false;
+
+    getDatabase()
+      .prepare(
+        `UPDATE assistant_evolution_items
+         SET lease_until = ?,
+             updated_at = ?
+         WHERE locked_by = ?
+           AND status NOT IN (${terminalPlaceholders()})`,
+      )
+      .run(leaseUntil, now, input.lockOwner, ...TERMINAL_EVOLUTION_STATUSES);
+    return true;
+  });
+  return tx();
+}
+
 export function releaseEvolutionLease(lockOwner: string): void {
   getDatabase()
     .prepare(
@@ -578,6 +610,8 @@ export function syncEvolutionInbox(item: AssistantEvolutionItemView): void {
       ? `自我进化待采纳：${item.direction}`
       : item.status === 'waiting_user_approval'
         ? `自我进化方案待确认：${item.direction}`
+        : item.status === 'adoption_failed'
+          ? `自我进化采纳失败：${item.direction}`
         : item.status === 'blocked_by_policy'
           ? `自我进化被策略阻断：${item.direction}`
           : `自我进化进行中：${item.direction}`;
@@ -589,6 +623,20 @@ export function syncEvolutionInbox(item: AssistantEvolutionItemView): void {
   ]
     .filter(Boolean)
     .join('\n');
+  const primaryAction =
+    item.status === 'waiting_user_approval'
+      ? {
+          kind: 'assistant_evolution_approve_implementation',
+          label: '确认实现',
+        }
+      : item.status === 'ready_for_adoption'
+        ? { kind: 'assistant_evolution_adopt', label: '采纳方案' }
+        : item.status === 'adoption_failed' || item.status === 'paused'
+          ? { kind: 'assistant_evolution_resume', label: '继续' }
+          : !TERMINAL_EVOLUTION_STATUSES.includes(item.status) &&
+              item.status !== 'blocked_by_policy'
+            ? { kind: 'assistant_evolution_pause', label: '暂停' }
+            : { kind: 'open_assistant_evolution', label: '查看详情' };
 
   createOrUpdateAgentInboxItem({
     dedupeKey,
@@ -607,12 +655,65 @@ export function syncEvolutionInbox(item: AssistantEvolutionItemView): void {
     body,
     sourceType: 'assistant_evolution',
     sourceRefId: item.id,
-    actionKind: 'open_assistant_evolution',
-    actionLabel: '查看详情',
+    actionKind: primaryAction.kind,
+    actionLabel: primaryAction.label,
     actionUrl: `/api/assistant/evolution/items/${encodeURIComponent(item.id)}`,
+    actionPayload: { evolutionItemId: item.id, actionKind: primaryAction.kind },
     extra: {
       evolutionStatus: item.status,
       riskLevel: item.risk_level,
+      evolutionActions: {
+        canApprove: item.status === 'waiting_user_approval',
+        canAdopt: item.status === 'ready_for_adoption',
+        canPause:
+          !TERMINAL_EVOLUTION_STATUSES.includes(item.status) &&
+          item.status !== 'paused',
+        canResume: item.status === 'paused' || item.status === 'adoption_failed',
+        canCancel: !TERMINAL_EVOLUTION_STATUSES.includes(item.status),
+      },
+      cardActions: [
+        item.status === 'waiting_user_approval'
+          ? {
+              action: 'assistant_evolution_action',
+              item_id: item.id,
+              evolution_action: 'approve-implementation',
+              label: '确认实现',
+            }
+          : null,
+        item.status === 'ready_for_adoption'
+          ? {
+              action: 'assistant_evolution_action',
+              item_id: item.id,
+              evolution_action: 'adopt',
+              label: '采纳方案',
+            }
+          : null,
+        item.status === 'paused' || item.status === 'adoption_failed'
+          ? {
+              action: 'assistant_evolution_action',
+              item_id: item.id,
+              evolution_action: 'resume',
+              label: '继续',
+            }
+          : null,
+        !TERMINAL_EVOLUTION_STATUSES.includes(item.status) &&
+        item.status !== 'paused'
+          ? {
+              action: 'assistant_evolution_action',
+              item_id: item.id,
+              evolution_action: 'pause',
+              label: '暂停',
+            }
+          : null,
+        !TERMINAL_EVOLUTION_STATUSES.includes(item.status)
+          ? {
+              action: 'assistant_evolution_action',
+              item_id: item.id,
+              evolution_action: 'cancel',
+              label: '取消',
+            }
+          : null,
+      ].filter(Boolean),
     },
   });
 }

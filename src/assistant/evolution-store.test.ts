@@ -6,6 +6,7 @@ import {
   createEvolutionItem,
   getActiveEvolutionItem,
   releaseEvolutionLease,
+  renewEvolutionLease,
   transitionEvolutionItem,
   tryAcquireEvolutionLease,
 } from './evolution-store.js';
@@ -50,5 +51,21 @@ describe('evolution store', () => {
     expect(
       tryAcquireEvolutionLease({ lockOwner: 'owner-b', leaseMs: 60_000 }),
     ).toBe(true);
+  });
+
+  it('renews an owned lease', () => {
+    const item = createEvolutionItem({ direction: 'lease renewal' });
+
+    expect(
+      tryAcquireEvolutionLease({ lockOwner: 'owner-a', leaseMs: 60_000 }),
+    ).toBe(true);
+    expect(
+      renewEvolutionLease({ lockOwner: 'owner-a', leaseMs: 120_000 }),
+    ).toBe(true);
+    expect(
+      renewEvolutionLease({ lockOwner: 'owner-b', leaseMs: 120_000 }),
+    ).toBe(false);
+
+    expect(getActiveEvolutionItem()?.id).toBe(item.id);
   });
 });

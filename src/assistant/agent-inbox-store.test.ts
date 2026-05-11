@@ -19,6 +19,7 @@ import {
   updateAssistantSettings,
 } from './agent-inbox-store.js';
 import { getAssistantState } from './assistant-api.js';
+import { createEvolutionItem, updateEvolutionItem } from './evolution-store.js';
 import { runProactiveScan } from './proactive-engine.js';
 
 beforeEach(() => {
@@ -623,5 +624,32 @@ describe('agent inbox store', () => {
     runProactiveScan();
 
     expect(getAgentInboxItem(item?.id || '')?.status).toBe('done');
+  });
+
+  it('executes assistant evolution inbox actions', async () => {
+    const evolution = createEvolutionItem({
+      direction: '待确认方案',
+      riskLevel: 'low',
+    });
+    updateEvolutionItem(evolution.id, {
+      status: 'waiting_user_approval',
+    });
+    const inbox = listAgentInboxItems({ status: 'active' }).find(
+      (entry) => entry.source_type === 'assistant_evolution',
+    );
+
+    expect(inbox?.action_kind).toBe(
+      'assistant_evolution_approve_implementation',
+    );
+
+    const result = await runAgentInboxAction({
+      itemId: inbox?.id || '',
+      action: 'execute',
+    });
+
+    expect(result.result.evolution).toMatchObject({
+      id: evolution.id,
+      status: 'branch_preparing',
+    });
   });
 });

@@ -1,5 +1,12 @@
 import { createOrContinueTodayPlan } from '../today-plan.js';
 import {
+  adoptEvolutionItem,
+  approveEvolutionImplementation,
+  cancelEvolutionItem,
+  pauseEvolutionItem,
+  resumeEvolutionItem,
+} from './evolution-engine.js';
+import {
   autoProcessAgentInboxItem,
   investigateAgentInboxItem,
   repairAgentInboxItem,
@@ -34,6 +41,36 @@ function getSnoozeUntil(payload: Record<string, unknown>): string {
       ? Math.min(Math.max(Math.round(payload.minutes), 1), 60 * 24 * 7)
       : 60;
   return String(Date.now() + minutes * 60 * 1000);
+}
+
+async function runEvolutionInboxAction(
+  actionKind: string,
+  item: AgentInboxItemView,
+): Promise<Record<string, unknown> | null> {
+  if (item.source_type !== 'assistant_evolution' || !item.source_ref_id) {
+    return null;
+  }
+  if (actionKind === 'assistant_evolution_approve_implementation') {
+    const result = approveEvolutionImplementation(item.source_ref_id);
+    return { evolution: result.item };
+  }
+  if (actionKind === 'assistant_evolution_pause') {
+    const result = pauseEvolutionItem(item.source_ref_id);
+    return { evolution: result.item };
+  }
+  if (actionKind === 'assistant_evolution_resume') {
+    const result = resumeEvolutionItem(item.source_ref_id);
+    return { evolution: result.item };
+  }
+  if (actionKind === 'assistant_evolution_cancel') {
+    const result = cancelEvolutionItem(item.source_ref_id);
+    return { evolution: result.item };
+  }
+  if (actionKind === 'assistant_evolution_adopt') {
+    const result = await adoptEvolutionItem(item.source_ref_id);
+    return { evolution: result.item, adopted: result.ok };
+  }
+  return null;
 }
 
 export async function runAgentInboxAction(input: {
@@ -114,6 +151,27 @@ export async function runAgentInboxAction(input: {
     }
 
     if (input.action === 'execute') {
+      if (item.action_kind) {
+        const evolutionResult = await runEvolutionInboxAction(
+          item.action_kind,
+          item,
+        );
+        if (evolutionResult) {
+          const updated = requireItem(item.id);
+          createAssistantActionLog({
+            itemId: item.id,
+            action: item.action_kind,
+            status: 'success',
+            title: item.title,
+            sourceType: item.source_type,
+            sourceRefId: item.source_ref_id,
+            payload,
+            result: evolutionResult,
+          });
+          return { ok: true, item: updated, result: evolutionResult };
+        }
+      }
+
       if (item.action_kind === 'continue_today_plan') {
         const continueFromPlanId =
           typeof item.action_payload.continueFromPlanId === 'string'

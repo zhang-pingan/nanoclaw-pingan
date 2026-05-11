@@ -4144,14 +4144,22 @@ body.quick-chat-window .quick-chat-input {
 
 .assistant-inbox-panel {
   overflow: visible;
+  grid-column: 2;
 }
 
 .assistant-action-log-panel {
   overflow: hidden;
+  grid-column: 2;
+}
+
+.assistant-evolution-list-panel {
+  overflow: hidden;
+  grid-column: 2;
 }
 
 .assistant-settings-panel {
-  grid-row: span 2;
+  grid-column: 1;
+  grid-row: 1 / span 3;
 }
 
 .assistant-panel-head {
@@ -4188,17 +4196,49 @@ body.quick-chat-window .quick-chat-input {
   padding-top: 12px;
 }
 
-.assistant-evolution-panel {
-  padding: 0 18px 16px;
+.assistant-evolution-list {
+  display: grid;
+  gap: 12px;
+  max-height: 520px;
+  overflow: auto;
+  padding: 14px;
 }
 
 .assistant-evolution-item {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 14px;
   border: 1px solid rgba(var(--assistant-accent-rgb), 0.12);
-  border-radius: 12px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.045);
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.assistant-evolution-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--assistant-accent-rgb), 0.24);
+  box-shadow: 0 18px 34px rgba(var(--assistant-accent-rgb), 0.08);
+}
+
+.assistant-evolution-item.is-active {
+  border-color: rgba(var(--assistant-accent-rgb), 0.32);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.78), transparent 34%),
+    linear-gradient(180deg, rgba(240, 249, 255, 0.98), rgba(255, 255, 255, 0.94));
+}
+
+.assistant-evolution-expanded {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  margin-top: -2px;
+  padding: 10px;
+  border: 1px solid rgba(var(--assistant-accent-rgb), 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .assistant-evolution-fields {
@@ -10351,7 +10391,8 @@ body.quick-chat-window .quick-chat-input {
 
   .assistant-hero,
   .assistant-grid,
-  .assistant-inbox-item {
+  .assistant-inbox-item,
+  .assistant-evolution-item {
     display: flex;
     flex-direction: column;
   }

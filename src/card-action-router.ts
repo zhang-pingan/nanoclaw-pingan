@@ -19,6 +19,10 @@ import {
   buildCardStringFormValues,
   parseNestedCardStringPayload,
 } from './card-action-payload.js';
+import {
+  ASSISTANT_EVOLUTION_CARD_ACTION,
+  handleAssistantEvolutionCardAction,
+} from './assistant/evolution-card-actions.js';
 
 const ASK_ACTION_DEDUPE_WINDOW_MS = 15_000;
 const recentAskActionFingerprints = new Map<string, number>();
@@ -69,6 +73,14 @@ export function createCardActionHandler(deps: {
   sendMessage: (jid: string, text: string) => Promise<void>;
 }): CardActionHandler {
   return async (action) => {
+    if (action.action === ASSISTANT_EVOLUTION_CARD_ACTION) {
+      return handleAssistantEvolutionCardAction({
+        itemId:
+          action.form_value?.item_id || action.form_value?.source_ref_id || '',
+        evolutionAction: action.form_value?.evolution_action || '',
+      });
+    }
+
     if (action.action.startsWith('wb_broadcast_')) {
       try {
         return await handleWorkbenchBroadcastCardAction({

@@ -26,6 +26,7 @@ export interface EvolutionGitAdapter {
   mergeNoFfNoCommit(branch: string): Promise<CommandResult>;
   mergeAbort(): Promise<CommandResult>;
   changedFiles(baseRef?: string): Promise<string[]>;
+  diff(baseRef?: string): Promise<string>;
 }
 
 export interface EvolutionCheckRunner {
@@ -157,6 +158,12 @@ export function createDefaultEvolutionGitAdapter(): EvolutionGitAdapter {
           .map((line) => line.trim())
           .filter(Boolean),
       );
+    },
+    async diff(baseRef?: string) {
+      const args = baseRef ? ['diff', baseRef, 'HEAD'] : ['diff'];
+      const result = await runCommand('git', args);
+      if (!result.ok) throw new Error(result.stderr || 'git diff failed');
+      return result.stdout;
     },
   };
 }

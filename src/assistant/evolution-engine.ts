@@ -27,6 +27,7 @@ import {
   getEvolutionItem,
   getEvolutionState,
   releaseEvolutionLease,
+  renewEvolutionLease,
   transitionEvolutionItem,
   tryAcquireEvolutionLease,
   updateEvolutionItem,
@@ -52,6 +53,7 @@ export interface EvolutionTickResult {
 
 const DEFAULT_LEASE_MS = 2 * 60 * 60 * 1000;
 const ENGINE_LOCK_OWNER = `assistant-evolution:${os.hostname()}:${process.pid}`;
+const LEASE_RENEW_INTERVAL_MS = 60_000;
 const PAUSABLE_RUNNING_STATUSES = [
   'discovering',
   'proposal_drafting',
@@ -126,6 +128,7 @@ function isRiskAllowed(
   risk: AssistantEvolutionRiskLevel,
   allowed: AssistantSettings['evolution']['allowedRiskLevel'],
 ): boolean {
+  if (risk === 'unknown') return false;
   return riskRank(risk) <= riskRank(allowed);
 }
 
@@ -169,6 +172,16 @@ async function changedFilesSinceBase(
   return Array.from(new Set([...committed, ...worktree])).sort();
 }
 
+async function assertOnWorkBranch(item: AssistantEvolutionItemView): Promise<void> {
+  if (!item.work_branch) return;
+  const branch = await deps.git.currentBranch();
+  if (branch !== item.work_branch) {
+    throw new Error(
+      `Current branch ${branch} does not match ${item.work_branch}`,
+    );
+  }
+}
+
 async function commitWorkBranchChanges(
   item: AssistantEvolutionItemView,
 ): Promise<string> {
@@ -183,6 +196,32 @@ async function commitWorkBranchChanges(
     throw new Error(summarizeCommandResult(commit));
   }
   return deps.git.currentCommit();
+}
+
+async function createDiffArtifacts(
+  item: AssistantEvolutionItemView,
+  changedFiles: string[],
+  runnerChangedFiles?: string[],
+): Promise<void> {
+  createEvolutionArtifact({
+    itemId: item.id,
+    artifactType: 'diff_summary',
+    title: 'Changed files',
+    content: changedFiles.join('\n'),
+    payload: { changedFiles, runnerChangedFiles: runnerChangedFiles || [] },
+  });
+
+  const diffText = await deps.git.diff(item.base_commit || undefined);
+  createEvolutionArtifact({
+    itemId: item.id,
+    artifactType: 'diff',
+    title: 'Full diff',
+    content: diffText.slice(-200_000),
+    payload: {
+      truncated: diffText.length > 200_000,
+      byteLength: diffText.length,
+    },
+  });
 }
 
 async function getBranchAndCommit(): Promise<{
@@ -235,9 +274,13 @@ function updateFromProposal(
       proposal: output.proposal,
       risk_level: output.risk_level,
       auto_implement:
+        !output.requires_user_approval &&
         settings.evolution.autoImplementEnabled &&
         isRiskAllowed(output.risk_level, settings.evolution.allowedRiskLevel),
-      auto_adopt: settings.evolution.autoAdoptEnabled,
+      auto_adopt:
+        settings.evolution.autoAdoptEnabled &&
+        !output.requires_user_approval &&
+        output.risk_level === 'low',
       status: 'proposal_evaluating',
     },
     'proposal_written',
@@ -278,6 +321,7 @@ function updateFromEvaluation(
   }
 
   const canAutoImplement =
+    item.auto_implement &&
     settings.evolution.autoImplementEnabled &&
     isRiskAllowed(output.risk_level, settings.evolution.allowedRiskLevel);
   return updateEvolutionItem(
@@ -287,7 +331,9 @@ function updateFromEvaluation(
       risk_level: output.risk_level,
       auto_implement: canAutoImplement,
       auto_adopt:
-        settings.evolution.autoAdoptEnabled && output.risk_level === 'low',
+        item.auto_adopt &&
+        settings.evolution.autoAdoptEnabled &&
+        output.risk_level === 'low',
       status: canAutoImplement ? 'branch_preparing' : 'waiting_user_approval',
     },
     'proposal_evaluated',
@@ -397,12 +443,17 @@ async function handleImplementation(
   item: AssistantEvolutionItemView,
   fixing: boolean = false,
 ): Promise<EvolutionTickResult> {
-  const branchInfo = await getBranchAndCommit();
-  if (item.work_branch && branchInfo.branch !== item.work_branch) {
-    throw new Error(
-      `Current branch ${branchInfo.branch} does not match ${item.work_branch}`,
-    );
+  if (fixing && item.work_branch) {
+    const branch = await deps.git.currentBranch();
+    if (branch !== item.work_branch) {
+      const checkout = await deps.git.checkout(item.work_branch);
+      if (!checkout.ok) {
+        throw new Error(summarizeCommandResult(checkout));
+      }
+    }
   }
+  await assertOnWorkBranch(item);
+  const branchInfo = await getBranchAndCommit();
   const output = (await runEvolutionPhase({
     item,
     phase: fixing ? 'fixing' : 'implementation',
@@ -410,6 +461,25 @@ async function handleImplementation(
     currentBranch: branchInfo.branch,
     currentCommit: branchInfo.commit,
   })) as EvolutionImplementationOutput;
+  if (output.blocked_by_policy) {
+    const updated = updateEvolutionItem(
+      item.id,
+      {
+        status: 'blocked_by_policy',
+        blocked_reason: output.blocked_reason || '实现阶段触发策略阻断',
+        implementation_summary: output.implementation_summary,
+        head_commit: await deps.git.currentCommit(),
+      },
+      'blocked_by_policy',
+      { reason: output.blocked_reason || null },
+    );
+    return {
+      ok: true,
+      action: 'blocked_by_policy',
+      itemId: updated.id,
+      status: updated.status,
+    };
+  }
   if (!output.ok) {
     transitionEvolutionItem(item.id, 'failed', {
       reason: 'implementation output ok=false',
@@ -421,12 +491,7 @@ async function handleImplementation(
       status: 'failed',
     };
   }
-  const currentBranch = await deps.git.currentBranch();
-  if (item.work_branch && currentBranch !== item.work_branch) {
-    throw new Error(
-      `Agent left expected work branch ${item.work_branch}; current ${currentBranch}`,
-    );
-  }
+  await assertOnWorkBranch(item);
   const changedFiles = await changedFilesSinceBase(item.base_commit);
   const forbidden = hasForbiddenPath(changedFiles);
   if (forbidden) {
@@ -452,13 +517,7 @@ async function handleImplementation(
     ? await commitWorkBranchChanges(item)
     : await deps.git.currentCommit();
 
-  createEvolutionArtifact({
-    itemId: item.id,
-    artifactType: 'diff_summary',
-    title: 'Changed files',
-    content: changedFiles.join('\n'),
-    payload: { changedFiles, runnerChangedFiles: output.changed_files },
-  });
+  await createDiffArtifacts(item, changedFiles, output.changed_files);
 
   const updated = updateEvolutionItem(
     item.id,
@@ -466,6 +525,7 @@ async function handleImplementation(
       implementation_summary: output.implementation_summary,
       head_commit: headCommit,
       status: 'checking',
+      ...(fixing ? { adoption_status: null, adoption_error: null } : {}),
     },
     fixing ? 'fix_completed' : 'implementation_completed',
     { changedFiles },
@@ -481,6 +541,7 @@ async function handleImplementation(
 async function handleChecking(
   item: AssistantEvolutionItemView,
 ): Promise<EvolutionTickResult> {
+  await assertOnWorkBranch(item);
   const changedFiles = await changedFilesSinceBase(item.base_commit);
   const docsOnly =
     changedFiles.length > 0 &&
@@ -540,6 +601,7 @@ async function handleChecking(
 async function handleReviewing(
   item: AssistantEvolutionItemView,
 ): Promise<EvolutionTickResult> {
+  await assertOnWorkBranch(item);
   const branchInfo = await getBranchAndCommit();
   const output = (await runEvolutionPhase({
     item,
@@ -703,6 +765,20 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
     return { ok: true, action: 'lease_busy' };
   }
 
+  const heartbeatMs = Math.max(
+    50,
+    Math.min(LEASE_RENEW_INTERVAL_MS, Math.floor(deps.leaseMs / 3)),
+  );
+  const leaseHeartbeat = setInterval(() => {
+    const renewed = renewEvolutionLease({
+      lockOwner: ENGINE_LOCK_OWNER,
+      leaseMs: deps.leaseMs,
+    });
+    if (!renewed) {
+      logger.warn('Assistant evolution lease heartbeat lost ownership');
+    }
+  }, heartbeatMs);
+
   try {
     let item = getActiveEvolutionItem();
     if (!item) {
@@ -723,8 +799,9 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
     return await advanceItem(item, settings);
   } catch (err) {
     const active = getActiveEvolutionItem();
+    let failedStatus = active?.status;
     if (active) {
-      updateEvolutionItem(
+      const failed = updateEvolutionItem(
         active.id,
         {
           status: 'failed',
@@ -734,16 +811,18 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
         'engine_failed',
         { error: err instanceof Error ? err.message : String(err) },
       );
+      failedStatus = failed.status;
     }
     logger.error({ err }, 'Assistant evolution tick failed');
     return {
       ok: false,
       action: 'error',
       itemId: active?.id,
-      status: active?.status,
+      status: failedStatus,
       error: err instanceof Error ? err.message : String(err),
     };
   } finally {
+    clearInterval(leaseHeartbeat);
     releaseEvolutionLease(ENGINE_LOCK_OWNER);
   }
 }
@@ -798,6 +877,21 @@ export function resumeEvolutionItem(itemId: string): {
 } {
   const item = getEvolutionItem(itemId);
   if (!item) throw new Error('Evolution item not found');
+  if (item.status === 'adoption_failed') {
+    return {
+      ok: true,
+      item: updateEvolutionItem(
+        item.id,
+        {
+          status: 'fixing',
+          adoption_status: null,
+          adoption_error: null,
+          resume_status: null,
+        },
+        'adoption_repair_requested',
+      ),
+    };
+  }
   if (item.status !== 'paused') {
     throw new Error(`Cannot resume from ${item.status}`);
   }
