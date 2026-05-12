@@ -43,13 +43,14 @@ Run `bash setup.sh` and parse the status block.
 
 Run `npx tsx setup/index.ts --step environment` and parse the status block.
 
-- Record APPLE_CONTAINER and DOCKER values for step 5
+- Record APPLE_CONTAINER and DOCKER values for step 6
 
 ## 3. Check .env
 
 Check `.env` against the configuration keys currently used by the project. Do not print secret values; only report key names and whether they are configured, missing, placeholder, or using defaults.
 
 If `.env` is missing:
+
 - If `.env.example` exists, copy it to `.env`.
 - If `.env.example` does not exist, create an empty `.env`.
 - Tell the user which required values must be filled outside chat. Do not ask the user to paste secrets into chat.
@@ -57,6 +58,7 @@ If `.env` is missing:
 Treat empty values and placeholder values as missing. Placeholder examples: `#`, `TODO`, `CHANGEME`, `your-key`, `your_token`, `xxx`.
 
 Refresh the key list from current code when needed:
+
 ```bash
 rg -n "readEnvFile\\(|process\\.env\\." src setup container/agent-runner/src --glob '!**/*.test.ts' --glob '!**/dist/**' --glob '!**/node_modules/**'
 ```
@@ -134,25 +136,65 @@ Do not register raw `oc_...` Feishu JIDs without the `feishu:` prefix. `src/chan
 
 If the user does not want Feishu enabled, stop setup and explain that this setup profile requires the Feishu main group. Do not silently downgrade to web-only.
 
-## 5. Container Runtime
+## 5. Register Workflow Role Groups
 
-### 5a. Choose runtime
+Before building the container, offer to register workflow role groups. This is
+not required for the service to start, but `dev_test` and `fix_test` cannot run
+end-to-end until the role groups exist.
+
+Run the web role group registration by default:
+
+```bash
+npx tsx setup/index.ts --step workflow-groups
+```
+
+This creates/updates the stable local web groups:
+
+- `web:plan` -> `web_plan`
+- `web:plan_examine` -> `web_plan_examine`
+- `web:dev` -> `web_dev`
+- `web:dev_examine` -> `web_dev_examine`
+- `web:ops` -> `web_ops`
+- `web:test` -> `web_test`
+
+It writes the DB rows, creates `groups/<folder>/logs`, and creates
+`groups/<folder>/CLAUDE.md` when missing. It preserves existing `CLAUDE.md`
+files unless `--overwrite-claude` is passed, and preserves existing DB rows
+unless `--overwrite-db` is passed.
+
+For Feishu workflow role groups, real `oc_...` chat ids are required. If the
+user wants Feishu workflow delegation enabled now, ask them for the mapping and
+run:
+
+```bash
+npx tsx setup/index.ts --step workflow-groups -- \
+  --include-feishu \
+  --feishu-map '{"plan":"oc_xxx","plan_examine":"oc_xxx","dev":"oc_xxx","dev_examine":"oc_xxx","ops":"oc_xxx","test":"oc_xxx"}'
+```
+
+The script accepts either raw `oc_...` values or `feishu:oc_...` values. If the
+user does not have the Feishu role chat ids yet, continue with web role groups
+and report that Feishu role groups can be registered later with the same command.
+
+## 6. Container Runtime
+
+### 6a. Choose runtime
 
 Check the preflight results for `APPLE_CONTAINER` and `DOCKER`, and the PLATFORM from step 1.
 
 - PLATFORM=linux → Docker (only option)
-- PLATFORM=macos + APPLE_CONTAINER=installed → Use `AskUserQuestion: Docker (cross-platform) or Apple Container (native macOS)?` If Apple Container, run `/convert-to-apple-container` now, then skip to 5d.
+- PLATFORM=macos + APPLE_CONTAINER=installed → Use `AskUserQuestion: Docker (cross-platform) or Apple Container (native macOS)?` If Apple Container, run `/convert-to-apple-container` now, then skip to 6d.
 - PLATFORM=macos + APPLE_CONTAINER=not_found → Docker
 
-### 5b. Install Docker
+### 6b. Install Docker
 
-- DOCKER=running → continue to 5d
+- DOCKER=running → continue to 6d
 - DOCKER=installed_not_running → start Docker: `open -a Docker` (macOS) or `sudo systemctl start docker` (Linux). Wait 15s, re-check with `docker info`.
 - DOCKER=not_found → Use `AskUserQuestion: Docker is required for running agents. Would you like me to install it?` If confirmed:
   - macOS: install via `brew install --cask docker`, then `open -a Docker` and wait for it to start. If brew not available, direct to Docker Desktop download at https://docker.com/products/docker-desktop
   - Linux: install with `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER`. Note: user may need to log out/in for group membership.
 
-### 5c. Apple Container conversion gate (if needed)
+### 6c. Apple Container conversion gate (if needed)
 
 **If the chosen runtime is Apple Container**, you MUST check whether the source code has already been converted from Docker to Apple Container. Do NOT skip this step. Run:
 
@@ -162,30 +204,32 @@ grep -q "CONTAINER_RUNTIME_BIN = 'container'" src/container-runtime.ts && echo "
 
 **If NEEDS_CONVERSION**, the source code still uses Docker as the runtime. You MUST run the `/convert-to-apple-container` skill NOW, before proceeding to the build step.
 
-**If ALREADY_CONVERTED**, the code already uses Apple Container. Continue to 5d.
+**If ALREADY_CONVERTED**, the code already uses Apple Container. Continue to 6d.
 
-**If the chosen runtime is Docker**, no conversion is needed. Continue to 5d.
+**If the chosen runtime is Docker**, no conversion is needed. Continue to 6d.
 
-### 5d. Build and test
+### 6d. Build and test
 
 Run `npx tsx setup/index.ts --step container -- --runtime <chosen>` and parse the status block.
 
 **If BUILD_OK=false:** Read `logs/setup.log` tail for the build error.
+
 - Cache issue (stale layers): `docker builder prune -f` (Docker) or `container builder stop && container builder rm && container builder start` (Apple Container). Retry.
 - Dockerfile syntax or missing files: diagnose from the log and fix, then retry.
 
 **If TEST_OK=false but BUILD_OK=true:** The image built but won't run. Check logs — common cause is runtime not fully started. Wait a moment and retry the test.
 
-## 6. Mount Allowlist
+## 7. Mount Allowlist
 
 AskUserQuestion: Agent access to external directories?
 
 **No:** `npx tsx setup/index.ts --step mounts -- --empty`
 **Yes:** Collect paths/permissions. `npx tsx setup/index.ts --step mounts -- --json '{"allowedRoots":[...],"blockedPatterns":[],"nonMainReadOnly":true}'`
 
-## 7. Start Service
+## 8. Start Service
 
 If service already running: unload first.
+
 - macOS: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist`
 - Linux: `systemctl --user stop nanoclaw` (or `systemctl stop nanoclaw` if root)
 
@@ -197,6 +241,7 @@ Run `npx tsx setup/index.ts --step service` and parse the status block.
 
 1. Immediate fix: `sudo setfacl -m u:$(whoami):rw /var/run/docker.sock`
 2. Persistent fix (re-applies after every Docker restart):
+
 ```bash
 sudo mkdir -p /etc/systemd/system/docker.service.d
 sudo tee /etc/systemd/system/docker.service.d/socket-acl.conf << 'EOF'
@@ -205,15 +250,17 @@ ExecStartPost=/usr/bin/setfacl -m u:USERNAME:rw /var/run/docker.sock
 EOF
 sudo systemctl daemon-reload
 ```
+
 Replace `USERNAME` with the actual username (from `whoami`). Run the two `sudo` commands separately — the `tee` heredoc first, then `daemon-reload`. After user confirms setfacl ran, re-run the service step.
 
 **If SERVICE_LOADED=false:**
+
 - Read `logs/setup.log` for the error.
 - macOS: check `launchctl list | grep nanoclaw`. If PID=`-` and status non-zero, read `logs/nanoclaw.error.log`.
 - Linux: check `systemctl --user status nanoclaw`.
 - Re-run the service step after fixing.
 
-## 8. Verify
+## 9. Verify
 
 Run `npx tsx setup/index.ts --step verify` and parse the status block.
 
@@ -241,8 +288,9 @@ EOF
 ```
 
 **If setup/verify or explicit checks fail, fix each:**
+
 - SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` (macOS) or `systemctl --user restart nanoclaw` (Linux) or `bash start-nanoclaw.sh` (WSL nohup)
-- SERVICE=not_found → re-run step 7
+- SERVICE=not_found → re-run step 8
 - Required `.env` values missing → re-run step 3
 - Missing required main group → re-run step 4
 - MOUNT_ALLOWLIST=missing → `npx tsx setup/index.ts --step mounts -- --empty`
@@ -256,13 +304,13 @@ Expected non-main role folders from current workflow definitions:
 - `dev_test`: `feishu_plan`, `feishu_plan_examine`, `feishu_dev`, `feishu_dev_examine`, `feishu_ops`, `feishu_test`, or the web equivalents `web_plan`, `web_plan_examine`, `web_dev`, `web_dev_examine`, `web_ops`, `web_test`
 - `fix_test`: `feishu_dev`, `feishu_ops`, `feishu_test`, or the web equivalents `web_dev`, `web_ops`, `web_test`
 
-If any are missing, report them as warnings only. Tell the user they can register them later from the main group with the `register_group` tool or by running `npx tsx setup/index.ts --step register`.
+If any are missing, report them as warnings only. Tell the user they can register them later with `npx tsx setup/index.ts --step workflow-groups` (web groups) or the same command with `--include-feishu --feishu-map ...` for Feishu groups.
 
 Show logs with: `tail -f logs/nanoclaw.log`
 
 ## Troubleshooting
 
-**Service not starting:** Check `logs/nanoclaw.error.log`. Common: wrong Node path (re-run step 7), missing `.env`, invalid Feishu credentials, or port conflicts on `WEB_PORT`, `CREDENTIAL_PROXY_PORT`, `MYSQL_PROXY_PORT`, or `FEISHU_WEBHOOK_PORT`.
+**Service not starting:** Check `logs/nanoclaw.error.log`. Common: wrong Node path (re-run step 8), missing `.env`, invalid Feishu credentials, or port conflicts on `WEB_PORT`, `CREDENTIAL_PROXY_PORT`, `MYSQL_PROXY_PORT`, or `FEISHU_WEBHOOK_PORT`.
 
 **Container agent fails ("Claude Code process exited with code 1"):** Ensure the container runtime is running — `open -a Docker` (macOS Docker), `container system start` (Apple Container), or `sudo systemctl start docker` (Linux). Check container logs under the relevant group folder, such as `groups/assistant_main/logs/`, `groups/web_main/logs/`, or `groups/feishu_main/logs/`.
 
