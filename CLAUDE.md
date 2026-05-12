@@ -1,21 +1,22 @@
 # NanoClaw Project Context
 
-NanoClaw is a personal Agent work system. It combines a user-driven Web workbench, a proactive desktop personal assistant, a trusted host service, and isolated container agents.
+NanoClaw is a personal Agent work system. It combines a user-driven Web workbench, a proactive desktop personal assistant, a mobile channel currently implemented through Feishu, a trusted host service, and isolated container agents.
 
 The most important product boundary:
 
 - **Web workbench client**: user-initiated. The user opens the workbench, creates tasks, reviews progress, adds context, approves actions, and inspects traces. Agent is a passive tool in this surface.
 - **Personal assistant client**: agent-initiated. The assistant proactively notices missing plans, stuck tasks, failed agent runs, scheduler failures, and online errors. It reminds the user and may investigate or prepare fixes under policy.
+- **Mobile channel**: currently Feishu. This is a lightweight fallback for when the user is away from the computer: task lookup, approval handling, reminder delivery, simple task creation, and short follow-up instructions. It is not a full mobile workbench.
 - **Host service**: trusted orchestration layer. It owns routing, workflow state, SQLite, scheduling, IPC authorization, credential proxying, workbench APIs, proactive scans, and container lifecycle.
 - **Container agent**: isolated high-capability executor. It performs real agent work inside Docker or Apple Container, with explicit mounts and no real API secrets.
 
 ## Current Architecture
 
 ```text
-Web Workbench / Electron client       Personal Assistant / tray client
-              |                                      |
-              | HTTP, WebSocket, local APIs           |
-              v                                      v
+Web Workbench / Electron     Personal Assistant / tray     Mobile channel / Feishu
+          |                              |                              |
+          | HTTP, WebSocket              | HTTP, IPC                    | Webhook, API
+          v                              v                              v
         Host Node.js process: src/index.ts
         - channel registry and message loop
         - workflow engine and workbench store
@@ -41,6 +42,7 @@ Web Workbench / Electron client       Personal Assistant / tray client
 | `src/channels/index.ts` | Barrel imports that activate installed channels |
 | `src/channels/web.ts` | Local web workbench HTTP/WebSocket channel and API routes |
 | `src/channels/assistant.ts` | Personal assistant channel bridge into host routing |
+| `src/channels/feishu.ts` | Current mobile channel: Feishu bot, webhook, message sending, and interactive cards |
 | `src/workbench.ts` | Workbench API/view model for tasks, actions, artifacts, comments |
 | `src/workflow.ts` | Configuration-driven workflow engine |
 | `src/workflow-config.ts` | Loads workflow definitions and card config |
@@ -72,6 +74,7 @@ Web Workbench / Electron client       Personal Assistant / tray client
 - Use `apply_patch` for manual edits.
 - When changing frontend behavior, account for both browser workbench and Electron wrapper behavior.
 - When changing assistant behavior, keep the active/passive boundary clear: workbench is the control surface; assistant is the proactive layer.
+- When changing mobile-channel behavior, keep Feishu lightweight: task lookup, approval handling, reminder delivery, simple task creation, and short follow-up instructions. Complex configuration, heavy artifact review, knowledge-base editing, and risky operations should return the user to the Web workbench.
 - When changing container execution, check host-side `src/container-runner.ts` and container-side `container/agent-runner/src/index.ts` together.
 - When changing workflow behavior, check the workflow definition/card config and the workbench synchronization path.
 
@@ -120,7 +123,7 @@ npx tsx setup/index.ts --step verify
 - `WEB_TOKEN` protects web APIs and WebSocket when configured.
 - Host credential proxy defaults to port `3001`.
 - MySQL proxy defaults to port `3003`.
-- Feishu webhook server is provided by the Feishu channel when configured.
+- Feishu webhook server is provided by the Feishu channel when configured; Feishu is the current mobile supplement channel.
 - Containers receive placeholder credentials and call the host credential proxy.
 - `.env` must not be exposed to containers.
 - Project root is mounted read-only into the container as `/workspace/project`.
@@ -163,6 +166,7 @@ When updating workflows:
 - Ensure workbench sync captures task, subtasks, action items, artifacts, comments, context assets, evaluations, and timeline events.
 - Preserve traceability through `agent_queries`, `agent_query_steps`, and `agent_query_events`.
 - If a user-facing action can pause, retry, skip, approve, revise, or return to a stage, keep workbench and card behavior aligned.
+- Mobile approval actions from Feishu cards must write back to the same workflow/workbench state; do not create a separate task state that only exists in chat.
 
 ## Personal Assistant Guidance
 
