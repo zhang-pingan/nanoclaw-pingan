@@ -73,7 +73,11 @@ const API_BASE = 'http://localhost:3000';
 const ASSISTANT_CHAT_JID = 'assistant:main';
 const CHAT_AUTO_HIDE_DELAY_MS = 5_000;
 const CHAT_PANEL_TRANSITION_MS = 110;
+const COLLAPSED_CHAT_MESSAGE_BUBBLE_TTL_MS = 5_000;
 const MASCOT_DRAG_START_DISTANCE_PX = 4;
+const BUBBLE_KICKER_TEXT_LIMIT = 36;
+const BUBBLE_TITLE_TEXT_LIMIT = 42;
+const BUBBLE_BODY_TEXT_LIMIT = 96;
 const MOUSE_CAPTURE_SELECTOR =
   '.assistant-mascot-wrap, .assistant-bubble, .assistant-chat, .image-preview-overlay';
 const shell = document.getElementById('assistant-shell') as HTMLElement;
@@ -115,6 +119,8 @@ let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
 let chatOpen = false;
 let sceneChatOpen = false;
+let collapsedChatMessage: AssistantChatMessage | null = null;
+let collapsedChatMessageTimer: number | null = null;
 let chatTransitionToken = 0;
 let chatAutoHideTimer: number | null = null;
 let mousePassthrough = false;
@@ -214,6 +220,22 @@ function clearChatAutoHideTimer(): void {
   chatAutoHideTimer = null;
 }
 
+function clearCollapsedChatMessageTimer(): void {
+  if (!collapsedChatMessageTimer) return;
+  window.clearTimeout(collapsedChatMessageTimer);
+  collapsedChatMessageTimer = null;
+}
+
+function scheduleCollapsedChatMessageAutoHide(messageId: string): void {
+  clearCollapsedChatMessageTimer();
+  collapsedChatMessageTimer = window.setTimeout(() => {
+    if (collapsedChatMessage?.id !== messageId) return;
+    collapsedChatMessage = null;
+    collapsedChatMessageTimer = null;
+    render();
+  }, COLLAPSED_CHAT_MESSAGE_BUBBLE_TTL_MS);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -239,6 +261,9 @@ function setChatOpen(open: boolean): void {
   mascotTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
 
   if (open) {
+    clearCollapsedChatMessageTimer();
+    collapsedChatMessage = null;
+    render();
     clearChatAutoHideTimer();
     assistantChat.setAttribute('aria-hidden', 'false');
     renderChat();
@@ -463,6 +488,37 @@ function inboxItemBody(item: AgentInboxItem): string {
   return item.body || '我发现了一条需要关注的信息。';
 }
 
+function normalizePreviewText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ');
+}
+
+function truncatePreviewText(text: string, maxLength: number): string {
+  const normalized = normalizePreviewText(text);
+  const chars = Array.from(normalized);
+  if (chars.length <= maxLength) return normalized;
+  return `${chars
+    .slice(0, Math.max(0, maxLength - 3))
+    .join('')
+    .trimEnd()}...`;
+}
+
+function chatMessagePreviewBody(message: AssistantChatMessage): string {
+  const content = normalizePreviewText(message.content);
+  if (content) {
+    return truncatePreviewText(content, BUBBLE_BODY_TEXT_LIMIT);
+  }
+
+  const fileInfo = chatFileInfo(message);
+  const fileName = truncatePreviewText(fileInfo?.fileName || '未命名附件', 54);
+  if (fileInfo && IMAGE_EXTENSIONS.has(fileInfo.extension)) {
+    return `收到图片：${fileName}`;
+  }
+  if (fileInfo) {
+    return `收到附件：${fileName}`;
+  }
+  return '收到一条新消息。';
+}
+
 function renderIdle(): void {
   shell.classList.remove('attention');
   const hideIdleBubble = Boolean(state?.settings.enabled);
@@ -487,14 +543,38 @@ function renderIdle(): void {
   updateAlertLayout();
 }
 
+function renderChatMessageBubble(message: AssistantChatMessage): void {
+  shell.classList.add('attention');
+  shell.classList.remove('bubble-hidden');
+  bubble.setAttribute('aria-hidden', 'false');
+  syncScene();
+  bubbleKicker.textContent = truncatePreviewText(
+    message.senderName || 'Personal Assistant',
+    BUBBLE_KICKER_TEXT_LIMIT,
+  );
+  bubbleTitle.textContent = '收到新的助手消息';
+  bubbleBody.textContent = chatMessagePreviewBody(message);
+  bubbleActions.innerHTML = '';
+  updateAlertLayout();
+}
+
 function renderItem(item: AgentInboxItem): void {
   shell.classList.add('attention');
   shell.classList.remove('bubble-hidden');
   bubble.setAttribute('aria-hidden', 'false');
   syncScene();
-  bubbleKicker.textContent = `${item.kind} · ${item.priority}`;
-  bubbleTitle.textContent = item.title || '新的主动事项';
-  bubbleBody.textContent = inboxItemBody(item);
+  bubbleKicker.textContent = truncatePreviewText(
+    `${item.kind} · ${item.priority}`,
+    BUBBLE_KICKER_TEXT_LIMIT,
+  );
+  bubbleTitle.textContent = truncatePreviewText(
+    item.title || '新的主动事项',
+    BUBBLE_TITLE_TEXT_LIMIT,
+  );
+  bubbleBody.textContent = truncatePreviewText(
+    inboxItemBody(item),
+    BUBBLE_BODY_TEXT_LIMIT,
+  );
   bubbleActions.innerHTML = '';
   const pendingAction = pendingInboxActionByItemId.get(item.id) || '';
 
@@ -529,6 +609,11 @@ function renderItem(item: AgentInboxItem): void {
 function render(): void {
   const item = primaryItem();
   if (!item) {
+    if (!chatOpen && collapsedChatMessage) {
+      renderChatMessageBubble(collapsedChatMessage);
+      setMousePassthrough(false);
+      return;
+    }
     renderIdle();
     syncMousePassthrough();
     return;
@@ -696,6 +781,16 @@ function upsertChatMessage(message: AssistantChatMessage): void {
     chatMessages = chatMessages.slice(-80);
   }
   renderChat();
+}
+
+function handleIncomingChatMessage(message: AssistantChatMessage): void {
+  upsertChatMessage(message);
+  if (message.isFromMe || chatOpen || message.chatJid !== ASSISTANT_CHAT_JID) {
+    return;
+  }
+  collapsedChatMessage = message;
+  scheduleCollapsedChatMessageAutoHide(message.id);
+  render();
 }
 
 async function loadState(): Promise<void> {
@@ -959,7 +1054,10 @@ async function runInboxAction(
       state = { ...state, latestInboxItems: previousItems };
       render();
     }
-    bubbleBody.textContent = `动作执行失败：${message || '未知错误'}`;
+    bubbleBody.textContent = truncatePreviewText(
+      `动作执行失败：${message || '未知错误'}`,
+      BUBBLE_BODY_TEXT_LIMIT,
+    );
   } finally {
     pendingInboxActionItemIds.delete(itemId);
     pendingInboxActionByItemId.delete(itemId);
@@ -1009,7 +1107,7 @@ async function connectWs(): Promise<void> {
           return;
         }
         if (message.event?.type === 'chat_message' && message.event.message) {
-          upsertChatMessage(message.event.message);
+          handleIncomingChatMessage(message.event.message);
           chatTyping = false;
           renderChat();
           return;

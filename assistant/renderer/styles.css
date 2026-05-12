@@ -110,6 +110,8 @@ button {
   box-sizing: border-box;
   width: 314px;
   min-height: 112px;
+  max-height: 192px;
+  overflow: hidden;
   padding: 14px 14px 12px;
   border: 1px solid rgba(17, 24, 39, 0.08);
   border-radius: 14px;
@@ -208,6 +210,9 @@ button {
   max-height: 40px;
   overflow: auto;
   color: #b6c6d6;
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
 }
 
 .assistant-shell.chat-open .icon-btn {
@@ -228,6 +233,10 @@ button {
 }
 
 .bubble-kicker {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #64748b;
   font-size: 10px;
   font-weight: 700;
@@ -255,6 +264,9 @@ button {
 
 .assistant-bubble h1 {
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #101827;
   font-size: 15px;
   line-height: 1.25;
@@ -264,10 +276,16 @@ button {
 
 .assistant-bubble p {
   min-height: 36px;
+  max-height: 54px;
   margin: 7px 0 10px;
+  overflow: hidden;
   color: #475569;
   font-size: 12px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .bubble-actions {
