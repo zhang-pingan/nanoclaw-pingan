@@ -13,6 +13,7 @@ import {
   ATTACHMENTS_DIR,
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
+  CONTAINER_NODE_MODULES_DIR,
   CONTAINER_TIMEOUT,
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
@@ -150,6 +151,13 @@ function buildVolumeMounts(
     mounts.push({
       hostPath: projectRoot,
       containerPath: '/workspace/project',
+      readonly: false,
+    });
+
+    fs.mkdirSync(CONTAINER_NODE_MODULES_DIR, { recursive: true });
+    mounts.push({
+      hostPath: CONTAINER_NODE_MODULES_DIR,
+      containerPath: '/workspace/project/node_modules',
       readonly: false,
     });
 

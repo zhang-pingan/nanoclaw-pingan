@@ -10,9 +10,11 @@ const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 vi.mock('./config.js', () => ({
   CONTAINER_IMAGE: 'nanoclaw-agent:latest',
   CONTAINER_MAX_OUTPUT_SIZE: 10485760,
+  CONTAINER_NODE_MODULES_DIR: '/tmp/nanoclaw-test-container-node-modules',
   CONTAINER_TIMEOUT: 1800000, // 30min
   CREDENTIAL_PROXY_PORT: 3001,
   MYSQL_PROXY_PORT: 3307,
+  SSH_KEY_PATH: null,
   AI_IMAGES_DIR: '/tmp/nanoclaw-test-ai-images',
   ATTACHMENTS_DIR: '/tmp/nanoclaw-test-attachments',
   DATA_DIR: '/tmp/nanoclaw-test-data',
@@ -105,6 +107,14 @@ const testInput = {
   groupFolder: 'test-group',
   chatJid: 'test@g.us',
   isMain: false,
+};
+
+const mainGroup: RegisteredGroup = {
+  name: 'Main Group',
+  folder: 'main',
+  trigger: '@Andy',
+  added_at: new Date().toISOString(),
+  isMain: true,
 };
 
 function emitOutputMarker(
@@ -239,7 +249,9 @@ describe('container-runner timeout behavior', () => {
 
     const result = await resultPromise;
     expect(result.status).toBe('error');
-    expect(result.error).toBe('Container completed without required text result');
+    expect(result.error).toBe(
+      'Container completed without required text result',
+    );
     expect(result.failure).toMatchObject({
       failureType: 'model_output_invalid',
       failureSubtype: 'agent_result_missing',
@@ -325,5 +337,30 @@ describe('container-runner timeout behavior', () => {
       failureOrigin: 'container',
       retryable: true,
     });
+  });
+
+  it('mounts isolated Linux node_modules over the main project node_modules', async () => {
+    const { spawn } = await import('child_process');
+    const resultPromise = runContainerAgent(
+      mainGroup,
+      { ...testInput, isMain: true },
+      () => {},
+    );
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'ok',
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const calls = vi.mocked(spawn).mock.calls;
+    const args = calls[calls.length - 1][1] as string[];
+    expect(args).toContain('-v');
+    expect(args).toContain(
+      '/tmp/nanoclaw-test-container-node-modules:/workspace/project/node_modules',
+    );
   });
 });

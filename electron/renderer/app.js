@@ -18325,8 +18325,8 @@ function renderAssistantEvolutionTimeline(active) {
   const events = Array.isArray(active.events) ? active.events : [];
   if (!events.length) return "";
   return `
-    <div class="assistant-evolution-timeline">
-      <div class="assistant-inbox-meta">时间线</div>
+    <details class="assistant-evolution-detail assistant-evolution-timeline">
+      <summary>时间线</summary>
       ${events.slice(-8).map((event) => `
         <div class="assistant-evolution-timeline-item">
           <strong>${escapeHtml(event.event_type || "event")}</strong>
@@ -18334,7 +18334,7 @@ function renderAssistantEvolutionTimeline(active) {
           ${event.payload && Object.keys(event.payload).length ? `<pre>${escapeHtml(JSON.stringify(event.payload, null, 2))}</pre>` : ""}
         </div>
       `).join("")}
-    </div>
+    </details>
   `;
 }
 
