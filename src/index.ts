@@ -1402,6 +1402,7 @@ interface OneShotAgentInput {
   collect?: 'first_result' | 'all_until_exit';
   requireResult?: boolean;
   isolatedSession?: boolean;
+  onOutput?: (output: ContainerOutput) => Promise<void>;
 }
 
 interface AssistantActionAgentInput {
@@ -1411,7 +1412,10 @@ interface AssistantActionAgentInput {
   chatJid?: string;
 }
 
-function truncateStatusText(value: string | undefined, maxLength: number): string {
+function truncateStatusText(
+  value: string | undefined,
+  maxLength: number,
+): string {
   if (!value) return '';
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
@@ -1441,6 +1445,18 @@ function assistantActionPurposeLabel(
   return '排查';
 }
 
+function assistantActionStepName(
+  purpose: AssistantActionAgentInput['purpose'],
+): string {
+  return purpose === 'repair'
+    ? 'assistant_repair_request'
+    : 'assistant_investigation_request';
+}
+
+function stripInternalBlocks(value: string): string {
+  return value.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+}
+
 async function runOneShotAgent(
   input: OneShotAgentInput,
 ): Promise<OneShotAgentResult> {
@@ -1463,6 +1479,17 @@ async function runOneShotAgent(
   let executionError: string | undefined;
   let executionFailure: ClassifiedFailure | undefined;
   const collect = input.collect || 'first_result';
+  const forwardOutput = async (output: ContainerOutput) => {
+    if (!input.onOutput) return;
+    try {
+      await input.onOutput(output);
+    } catch (err) {
+      logger.error(
+        { err, chatJid: input.chatJid },
+        'One-shot output hook failed',
+      );
+    }
+  };
 
   const status = await queue.runOneShot(
     input.chatJid,
@@ -1493,19 +1520,17 @@ async function runOneShotAgent(
           if (output.result) {
             resultMarkerCount += 1;
             outputs.push(String(output.result));
+            await forwardOutput(output);
             if (input.closeOnFirstResult !== false && !closeRequested) {
               closeRequested = true;
               queue.closeStdin(input.chatJid);
             }
             if (collect === 'first_result') return;
           }
-          if (
-            output.status === 'success' &&
-            !output.event &&
-            !output.result
-          ) {
+          if (output.status === 'success' && !output.event && !output.result) {
             sessionOnlyMarkerCount += 1;
           }
+          await forwardOutput(output);
           if (
             output.status === 'success' &&
             !output.event &&
@@ -1553,28 +1578,245 @@ async function runAssistantActionAgent(
     };
   }
 
+  const group = registeredGroups[chatJid];
+  const runId = createExecutionId();
+  const queryId = createExecutionId();
   const purposeLabel = assistantActionPurposeLabel(input.purpose);
-  const result = await runOneShotAgent({
-    chatJid,
+  const promptSummary = `${purposeLabel}：${input.item.title}`;
+  const selectedModel = await selectModel({
     prompt: input.prompt,
-    closeOnFirstResult: true,
-    collect: 'first_result',
-    status: {
-      groupName: '桌面个人助手',
-      promptSummary: `${purposeLabel}：${input.item.title}`,
-      lastSender: 'assistant action',
-      lastContent: input.item.body || input.item.title,
-      lastTime: Date.now().toString(),
+    isMain: group?.isMain === true,
+  });
+  agentQueryTraceManager.startQuery({
+    queryId,
+    runId,
+    sourceType: 'assistant_action',
+    sourceRefId: input.item.id,
+    chatJid,
+    groupFolder: group?.folder || null,
+    selectedModel: selectedModel.selectedModel,
+    selectedModelReason: selectedModel.reason,
+    promptSummary,
+    promptHash: crypto.createHash('sha256').update(input.prompt).digest('hex'),
+  });
+  const inputStepId = agentQueryTraceManager.startStep({
+    queryId,
+    stepType: 'input',
+    stepName: assistantActionStepName(input.purpose),
+    summary: promptSummary,
+    payload: {
+      itemId: input.item.id,
+      purpose: input.purpose,
+      sourceType: input.item.source_type,
+      sourceRefId: input.item.source_ref_id,
+      actionKind: input.item.action_kind,
+      ruleKey: input.item.extra.ruleKey,
     },
   });
+  agentQueryTraceManager.completeStep(queryId, inputStepId, 'success');
+  const modelStepId = agentQueryTraceManager.startStep({
+    queryId,
+    stepType: 'model_select',
+    stepName: 'select_model',
+    summary: 'Selecting assistant action model',
+  });
+  agentQueryTraceManager.updateQuery(queryId, {
+    selected_model: selectedModel.selectedModel,
+    selected_model_reason: selectedModel.reason,
+    current_action: `Using ${selectedModel.selectedModel}`,
+  });
+  agentQueryTraceManager.completeStep(
+    queryId,
+    modelStepId,
+    'success',
+    `Selected ${selectedModel.selectedModel}`,
+  );
+  const executionStepId = agentQueryTraceManager.startStep({
+    queryId,
+    stepType: 'agent_execution',
+    stepName: 'run_assistant_action_agent',
+    summary: 'Starting assistant action agent',
+    payload: { queryId, purpose: input.purpose },
+  });
+  agentQueryTraceManager.appendEvent({
+    queryId,
+    stepId: executionStepId,
+    eventType: 'phase',
+    eventName: 'phase_waiting_output',
+    status: 'running',
+    summary: 'Waiting for assistant action output',
+  });
+
+  let executionStepCompleted = false;
+  let resultDeliveryStepId: string | null = null;
+  let resultDeliveryStepCompleted = false;
+  let outputPreview = '';
+  const ensureResultDeliveryStep = () => {
+    if (!executionStepCompleted) {
+      agentQueryTraceManager.completeStep(
+        queryId,
+        executionStepId,
+        'success',
+        'Assistant action agent produced output',
+      );
+      executionStepCompleted = true;
+    }
+    if (!resultDeliveryStepId) {
+      resultDeliveryStepId = agentQueryTraceManager.startStep({
+        queryId,
+        stepType: 'result_delivery',
+        stepName: 'collect_result',
+        summary: 'Collecting assistant action result',
+      });
+    }
+    return resultDeliveryStepId;
+  };
+
+  const completeOpenSteps = (status: 'success' | 'error') => {
+    if (resultDeliveryStepId && !resultDeliveryStepCompleted) {
+      agentQueryTraceManager.completeStep(
+        queryId,
+        resultDeliveryStepId,
+        status,
+        status === 'success'
+          ? 'Assistant action result collected'
+          : 'Assistant action result failed',
+      );
+      resultDeliveryStepCompleted = true;
+    } else if (!executionStepCompleted) {
+      agentQueryTraceManager.completeStep(
+        queryId,
+        executionStepId,
+        status,
+        status === 'success'
+          ? 'Assistant action execution completed'
+          : 'Assistant action execution failed',
+      );
+      executionStepCompleted = true;
+    }
+  };
+
+  const handleTraceOutput = async (output: ContainerOutput) => {
+    const outputQueryId = output.queryId || queryId;
+    if (outputQueryId !== queryId) {
+      logger.warn(
+        { queryId, outputQueryId, runId: output.runId },
+        'Assistant action output used unexpected query id',
+      );
+    }
+    if (output.newSessionId) {
+      agentQueryTraceManager.updateQuery(queryId, {
+        session_id: output.newSessionId,
+      });
+    }
+    if (output.selectedModel) {
+      agentQueryTraceManager.updateQuery(queryId, {
+        actual_model: output.selectedModel,
+      });
+    }
+    if (output.event) {
+      agentQueryTraceManager.appendEvent({
+        queryId,
+        stepId: resultDeliveryStepId || executionStepId,
+        eventType: output.event.type,
+        eventName: output.event.name,
+        status: output.event.status ?? null,
+        summary: output.event.summary ?? null,
+        payload: output.event.payload || {},
+      });
+    }
+    if (output.result) {
+      const resultStepId = ensureResultDeliveryStep();
+      const raw =
+        typeof output.result === 'string'
+          ? output.result
+          : JSON.stringify(output.result);
+      const text = stripInternalBlocks(raw);
+      outputPreview = text.slice(0, 500);
+      agentQueryTraceManager.appendEvent({
+        queryId,
+        stepId: resultStepId,
+        eventType: 'output',
+        eventName: 'assistant_action_output',
+        status: 'success',
+        summary: text
+          ? `Output: ${text.slice(0, 120)}`
+          : 'Received assistant action output',
+        payload: {
+          text,
+          rawLength: raw.length,
+        },
+      });
+    }
+    if (output.status === 'error') {
+      const error = output.error || 'Assistant action agent execution failed';
+      const failure = output.failure ?? fallbackAgentExecutionFailure(error);
+      agentQueryTraceManager.appendEvent({
+        queryId,
+        stepId: resultDeliveryStepId || executionStepId,
+        eventType: 'error',
+        eventName: 'query_failed',
+        status: 'error',
+        summary: error,
+        payload: {
+          error,
+          ...toFailureEventPayload(failure),
+        },
+      });
+    }
+  };
+
+  let result: OneShotAgentResult;
+  try {
+    result = await runOneShotAgent({
+      chatJid,
+      prompt: input.prompt,
+      selectedModel: selectedModel.selectedModel,
+      runId,
+      initialQueryId: queryId,
+      closeOnFirstResult: true,
+      collect: 'first_result',
+      requireResult: true,
+      status: {
+        groupName: '桌面个人助手',
+        promptSummary,
+        lastSender: 'assistant action',
+        lastContent: input.item.body || input.item.title,
+        lastTime: Date.now().toString(),
+        isTask: true,
+      },
+      onOutput: handleTraceOutput,
+    });
+  } catch (err) {
+    const error =
+      err instanceof Error ? err.message : 'Assistant action agent failed';
+    completeOpenSteps('error');
+    agentQueryTraceManager.finishQuery(queryId, 'error', {
+      error_message: error,
+      output_preview: outputPreview || null,
+    });
+    return { ok: false, text: '', error };
+  }
 
   if (!result.ok) {
+    const error = result.error || 'Assistant action agent execution failed';
+    completeOpenSteps('error');
+    agentQueryTraceManager.finishQuery(queryId, 'error', {
+      ...(result.failure
+        ? toAgentQueryFailurePatch(result.failure, error)
+        : { error_message: error }),
+      output_preview: result.text.slice(0, 500) || outputPreview || null,
+    });
     return {
       ok: false,
       text: result.text,
-      error: result.error || 'Assistant action agent execution failed',
+      error,
     };
   }
+  completeOpenSteps('success');
+  agentQueryTraceManager.finishQuery(queryId, 'success', {
+    output_preview: result.text.slice(0, 500) || outputPreview,
+  });
   return { ok: true, text: result.text };
 }
 
@@ -1638,8 +1880,7 @@ const runEvolutionActionAgent: EvolutionAgentRunner = async (input) => {
     },
   });
   if (!result.ok) {
-    const error =
-      result.error || 'Assistant evolution agent execution failed';
+    const error = result.error || 'Assistant evolution agent execution failed';
     agentQueryTraceManager.finishQuery(queryId, 'error', {
       ...(result.failure
         ? toAgentQueryFailurePatch(result.failure, error)

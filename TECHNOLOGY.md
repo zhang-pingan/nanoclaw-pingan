@@ -47,7 +47,7 @@ NanoClaw 的 harness 不是单独的目录，而是一组工程化封装：容�
 - **标准化输入**：宿主机把 prompt、sessionId、model、runId、queryId、groupFolder、workflowId、stageKey、delegationId 等执行元数据打包传给容器。
 - **标准化执行环境**：容器 runner 统一挂载目录、注入占位凭证、配置模型代理、加载 Skill、启动 MCP、设置允许工具。
 - **流式输出解析**：容器 Agent 用固定 marker 输出结构化结果，宿主机实时解析 success/error/event，写入 Query Trace 和工作台状态。
-- **Agent SDK Harness**：容器内通过 Claude Agent SDK `query()` 执行，配置工具白名单、MCP server、hooks、session resume、isolated session、PreToolUse/PostToolUse 事件。
+- **Agent Harness**：容器内通过 Claude Agent `query()` 执行，配置工具白名单、MCP server、hooks、session resume、isolated session、PreToolUse/PostToolUse 事件。
 - **工程产物契约**：`container/artifact-contracts/` 定义不同阶段必须返回的字段、文档路径、front matter、文件大小和允许根目录，避免 Agent 只给自然语言结论。
 - **阶段评估器**：`workflow-stage-evaluation` 和 `workflow-evaluator-registry` 对交付结果做结构化判定，区分 passed、needs_revision、failed、pending 等结果。
 - **失败分类**：`failure-taxonomy` 把模型错误、工具错误、沙箱错误、超时、配置错误、权限错误、部署失败、测试失败等分类，方便重试、提醒和复盘。
@@ -135,7 +135,46 @@ Web 工作台是用户主动控制台，负责创建任务、查看阶段进度�
 - **工程上下文稳定**：结构化 handoff、产物契约、Wiki 和 memory pack 共同减少“靠聊天历史猜上下文”的不稳定性。
 - **支持持续改进**：自我进化模块把问题发现、方案生成、分支实现、检查、复核和等待采纳纳入状态机，形成受控的系统自优化路径。
 
-## 8. 前沿 Agent 技术在本项目中的体现
+## 8. 与已有 Agent 架构相比的核心优点
+
+以下比较基于 2026-05-12 查询到的公开文档和仓库 README：OpenClaw 官方文档/仓库、Claude Code 文档、OpenAI Codex/Agents 文档，以及 Hermes Agent 官方文档/仓库。
+
+### 相比 OpenClaw
+
+OpenClaw 的公开定位是 local-first 个人 AI 助手：一个长期运行的 Gateway 管理多渠道、客户端、节点、会话和工具；多 Agent 通过 `agentId` 路由到独立 workspace、agentDir 和 session store；沙箱是可配置能力，工具可在 Docker/SSH/OpenShell 等后端中执行，未启用时工具运行在宿主机。它的优势在于多渠道覆盖、个人助理体验、快速接入和丰富技能生态。
+
+NanoClaw 的核心优势不是“更多渠道”，而是更强的工程控制面：
+
+- **沙箱默认进入执行主路径**：NanoClaw 把容器 Agent 作为执行面基础设施，而不是只把 sandbox 当成某类工具后端。Agent 的 Bash、文件读写、浏览器和 MCP 调用都在容器边界内完成，宿主机只暴露受控 IPC、凭证代理和明确挂载目录。
+- **凭证和执行彻底分离**：OpenClaw 文档强调 Gateway、工具策略、DM pairing、sandbox 等边界；NanoClaw 进一步把模型 API Key 和 OAuth Token 留在宿主机 `credential-proxy`，容器只拿占位凭证，避免“Agent 读到真实密钥后再约束它不要外泄”的脆弱模式。
+- **面向交付的工作流状态机**：OpenClaw 的多 Agent 路由更像“多个隔离人格/账号/渠道”的路由系统；NanoClaw 的多 Agent 是 planner、dev、reviewer、ops、test 等工程角色围绕 workflow state、artifact contract、stage evaluation、failure taxonomy 和 interrupt/resume 协作。
+- **交付边界更可审计**：NanoClaw 要求阶段产物、handoff envelope、评估结果、Query Trace、失败分类进入统一数据库和工作台视图，目标是让 Agent 任务可以被暂停、复核、退回、重跑和复盘，而不仅是完成一次会话回复。
+
+### 相比 Claude Code、Codex 这类编程 Agent
+
+Claude Code 和 Codex 的公开文档都已经支持 subagent、工具权限、上下文隔离、approval/sandbox、并行工作等能力。Claude Code subagent 强调独立上下文窗口、专门系统提示、独立权限和前台/后台执行；Codex CLI 是本地终端编程 Agent，可以读写代码、运行命令，并可显式 spawn subagents；OpenAI Agents SDK 也有 sandbox、handoff、guardrail 和 eval 文档。
+
+NanoClaw 的优势在于它不是“一个更会写代码的 CLI”，而是把编程 Agent 放进完整研发运行时：
+
+- **从代码会话升级为工程流程**：Claude Code/Codex 的强项是 repo 内探索、编辑、测试和 review；NanoClaw 把这些能力作为工作流中的一个阶段，前后还有需求澄清、计划、评审、部署、测试验证、线上日志调查、人类审批和产物归档。
+- **跨端入口和统一状态**：编程 CLI 通常围绕终端、IDE 或云任务运行；NanoClaw 把 Web 工作台、桌面 Assistant、飞书移动端、定时任务和 Agent Trace 收敛到同一个宿主机状态机，用户可以在不同入口继续处理同一任务。
+- **角色隔离不只靠提示词**：Claude Code/Codex 的 subagent 主要隔离上下文、提示和工具权限；NanoClaw 还隔离容器、`.claude` 会话目录、IPC 来源、挂载目录、Skill 包、workflow metadata 和 group queue 资源配额。
+- **评估和失败归因是内建闭环**：OpenAI Agents 文档提供 traces、graders、guardrails 等通用能力；NanoClaw 在项目层把 artifact contract、stage evaluator、failure taxonomy 和 workbench timeline 固化为研发交付协议，减少“Agent 说完成了，但无法判断是否可交付”的问题。
+
+### 相比 Hermes Agent
+
+Hermes Agent 的公开定位是自改进、常驻、跨平台个人 Agent：它强调 persistent memory、session search、自动技能创建、技能自我改进、gateway、多 terminal backends、subagents、cron、trajectory/RL 数据生成等能力。它的优势是长期陪伴、自学习和个人自动化生态。
+
+NanoClaw 与 Hermes 的取舍不同：NanoClaw 不把“越用越会自己长技能”放在唯一中心，而是把“工程任务可控交付”放在中心。
+
+- **知识沉淀更偏证据化**：Hermes 的 built-in memory 是 bounded、agent-curated 的 `MEMORY.md`/`USER.md` 加 session search，也支持外部 memory provider；NanoClaw 同时维护结构化 memory 和 LLM Wiki，把 materials、claims、evidence、relations、pages 分开，让项目知识可以被检索、引用和追溯证据。
+- **自我进化受状态机约束**：Hermes 强调 agent 从经验中自动创建和改进技能；NanoClaw 的自我进化更保守，问题发现、方案、分支实现、检查、复核和采纳都走 workflow、Trace 和人工确认，适合对稳定性要求更高的工程系统。
+- **执行权限更集中在可信宿主机控制面**：Hermes 支持多种运行后端和安全机制；NanoClaw 的设计重点是“控制面不进容器，执行面不越过控制面”，容器通过 IPC 向宿主机申请受控能力，宿主机按 group/main、workflow、stage 和 allowlist 判定。
+- **研发协作对象更明确**：Hermes 是一个泛化常驻个人 Agent；NanoClaw 把 planner/dev/reviewer/ops/test/wiki/assistant 等角色、产物契约和工作台操作面组合成研发团队语义，更适合需求开发、Bug 修复、预发部署、测试验证和线上故障处理这类多人/多阶段工程任务。
+
+总结来说，OpenClaw 更像多渠道 local-first 个人助手平台，Claude Code/Codex 更像强大的编程 Agent 工作台，Hermes 更像会长期学习的个人自动化 Agent；NanoClaw 的核心差异是把这些能力收束成“可信宿主机控制面 + 容器化执行面 + 状态机工作流 + 可审计交付契约”的工程运行时。
+
+## 9. 前沿 Agent 技术在本项目中的体现
 
 NanoClaw 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工程化落地：
 
@@ -151,6 +190,24 @@ NanoClaw 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路�
 
 - 本项目文档：`README.md`、`docs/SECURITY.md`、`docs/SPEC.md`、`docs/SDK_DEEP_DIVE.md`
 - 核心实现：`src/container-runner.ts`、`container/agent-runner/src/index.ts`、`src/workflow.ts`、`src/memory-pack.ts`、`src/wiki.ts`、`src/credential-proxy.ts`、`src/ipc.ts`
+- OpenClaw GitHub README, https://github.com/openclaw/openclaw
+- OpenClaw Gateway architecture, https://docs.openclaw.ai/concepts/architecture
+- OpenClaw Agent runtime, https://docs.openclaw.ai/concepts/agent
+- OpenClaw Sandboxing, https://docs.openclaw.ai/gateway/sandboxing
+- OpenClaw Multi-Agent Routing, https://docs.openclaw.ai/concepts/multi-agent
+- Anthropic Claude Code Docs, Create custom subagents, https://code.claude.com/docs/en/subagents
+- OpenAI Codex CLI, https://developers.openai.com/codex/cli
+- OpenAI Codex Subagents, https://developers.openai.com/codex/subagents
+- OpenAI Agents SDK, Sandbox Agents, https://developers.openai.com/api/docs/guides/agents/sandboxes
+- OpenAI Agents SDK, Orchestration and handoffs, https://developers.openai.com/api/docs/guides/agents/orchestration
+- OpenAI Agents SDK, Guardrails and human review, https://developers.openai.com/api/docs/guides/agents/guardrails-approvals
+- OpenAI Agents SDK, Evaluate agent workflows, https://developers.openai.com/api/docs/guides/agent-evals
+- Hermes Agent GitHub README, https://github.com/NousResearch/hermes-agent
+- Hermes Agent Documentation, https://hermes-agent.nousresearch.com/docs/
+- Hermes Agent Architecture, https://hermes-agent.nousresearch.com/docs/developer-guide/architecture
+- Hermes Agent Persistent Memory, https://hermes-agent.nousresearch.com/docs/user-guide/features/memory/
+- Hermes Agent Security, https://hermes-agent.nousresearch.com/docs/zh-Hans/user-guide/security
+- Hermes Agent Skills Hub, https://hermes-agent.nousresearch.com/docs/skills
 - Anthropic, How we built our multi-agent research system, https://www.anthropic.com/engineering/built-multi-agent-research-system
 - Anthropic, Building effective agents, https://www.anthropic.com/engineering/building-effective-agents
 - Anthropic Claude Code Docs, Create custom subagents, https://code.claude.com/docs/en/sub-agents

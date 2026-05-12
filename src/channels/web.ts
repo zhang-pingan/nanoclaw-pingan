@@ -2426,6 +2426,8 @@ class WebChannel {
         | 'scheduled_task'
         | 'workflow_delegation'
         | 'web_action'
+        | 'assistant_evolution'
+        | 'assistant_action'
         | undefined,
       sourceRefId,
     });

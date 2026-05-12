@@ -340,7 +340,8 @@ export type AgentQuerySourceType =
   | 'scheduled_task'
   | 'workflow_delegation'
   | 'web_action'
-  | 'assistant_evolution';
+  | 'assistant_evolution'
+  | 'assistant_action';
 
 export interface AgentQueryRecord {
   id: string;
