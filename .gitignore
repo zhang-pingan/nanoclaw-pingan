@@ -23,7 +23,6 @@ groups/global/*
 !groups/global/services.json.example
 
 # Secrets
-*.keys.json
 .env
 
 # Temp files
@@ -37,7 +36,6 @@ groups/global/*
 .vscode/
 
 # Skills system (local per-installation state)
-agents-sdk-docs
 
 tmp/
 
