@@ -8,6 +8,23 @@ import path from 'path';
  * without actually loading services.
  */
 
+function servicePath(nodePath: string, homeDir: string): string {
+  return [
+    path.dirname(nodePath),
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/home/linuxbrew/.linuxbrew/bin',
+    '/home/linuxbrew/.linuxbrew/sbin',
+    '/usr/local/bin',
+    '/usr/local/sbin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+    path.join(homeDir, '.local', 'bin'),
+  ].join(':');
+}
+
 // Helper: generate a plist string the same way service.ts does
 function generatePlist(
   nodePath: string,
@@ -34,7 +51,7 @@ function generatePlist(
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin</string>
+        <string>${servicePath(nodePath, homeDir)}</string>
         <key>HOME</key>
         <string>${homeDir}</string>
     </dict>
@@ -63,7 +80,7 @@ WorkingDirectory=${projectRoot}
 Restart=always
 RestartSec=5
 Environment=HOME=${homeDir}
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin
+Environment=PATH=${servicePath(nodePath, homeDir)}
 StandardOutput=append:${projectRoot}/logs/nanoclaw.log
 StandardError=append:${projectRoot}/logs/nanoclaw.error.log
 
@@ -107,6 +124,17 @@ describe('plist generation', () => {
     );
     expect(plist).toContain('nanoclaw.log');
     expect(plist).toContain('nanoclaw.error.log');
+  });
+
+  it('includes node and Homebrew binary paths', () => {
+    const plist = generatePlist(
+      '/opt/homebrew/bin/node',
+      '/home/user/nanoclaw',
+      '/home/user',
+    );
+    expect(plist).toContain(
+      '<string>/opt/homebrew/bin:/opt/homebrew/bin:/opt/homebrew/sbin:',
+    );
   });
 });
 
@@ -152,6 +180,19 @@ describe('systemd unit generation', () => {
     expect(unit).toContain(
       'ExecStart=/usr/bin/node /srv/nanoclaw/dist/index.js',
     );
+  });
+
+  it('includes node and package-manager binary paths', () => {
+    const unit = generateSystemdUnit(
+      '/home/linuxbrew/.linuxbrew/bin/node',
+      '/home/user/nanoclaw',
+      '/home/user',
+      false,
+    );
+    expect(unit).toContain(
+      'Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/opt/homebrew/bin:',
+    );
+    expect(unit).toContain('/home/user/.local/bin');
   });
 });
 

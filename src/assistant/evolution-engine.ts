@@ -292,10 +292,7 @@ function isNonBlockingManualWaitStatus(
 ): boolean {
   return (
     NON_BLOCKING_MANUAL_WAIT_STATUSES.includes(item.status as never) &&
-    !(
-      item.risk_level === 'low' &&
-      settings.evolution.autoAdoptEnabled
-    )
+    !(item.risk_level === 'low' && settings.evolution.autoAdoptEnabled)
   );
 }
 
@@ -318,7 +315,9 @@ async function changedFilesSinceBase(
   return Array.from(new Set([...committed, ...worktree])).sort();
 }
 
-async function assertOnWorkBranch(item: AssistantEvolutionItemView): Promise<void> {
+async function assertOnWorkBranch(
+  item: AssistantEvolutionItemView,
+): Promise<void> {
   if (!item.work_branch) return;
   const branch = await deps.git.currentBranch();
   if (branch !== item.work_branch) {
@@ -409,6 +408,88 @@ async function getBranchAndCommit(): Promise<{
     branch: await deps.git.currentBranch(),
     commit: await deps.git.currentCommit(),
   };
+}
+
+async function saveDirtyWorktreeBeforeBaseCheckout(input: {
+  item?: AssistantEvolutionItemView | null;
+  baseBranch: string;
+  reason: string;
+}): Promise<void> {
+  if (!(await deps.git.hasDirtyWorktree())) return;
+
+  const currentBranch = await deps.git.currentBranch();
+  const protectedBranches = new Set([input.baseBranch, 'main', 'master']);
+  const saveLabel = input.item?.id || input.reason;
+
+  if (!currentBranch || protectedBranches.has(currentBranch)) {
+    const stash = await deps.git.stashPush(
+      `assistant evolution: save ${currentBranch || 'detached'} before ${saveLabel}`,
+    );
+    if (!stash.ok) {
+      throw new Error(summarizeCommandResult(stash));
+    }
+    if (input.item) {
+      createEvolutionArtifact({
+        itemId: input.item.id,
+        artifactType: 'pre_base_checkout_dirty_stash',
+        title: stash.command,
+        content: summarizeCommandResult(stash),
+        payload: {
+          currentBranch,
+          baseBranch: input.baseBranch,
+          reason: input.reason,
+        },
+      });
+    }
+    return;
+  }
+
+  const add = await deps.git.addAll();
+  if (!add.ok) {
+    throw new Error(summarizeCommandResult(add));
+  }
+  const commit = await deps.git.commit(
+    `assistant evolution: save ${currentBranch} before ${saveLabel}`,
+  );
+  if (!commit.ok) {
+    throw new Error(summarizeCommandResult(commit));
+  }
+  if (input.item) {
+    createEvolutionArtifact({
+      itemId: input.item.id,
+      artifactType: 'pre_base_checkout_dirty_commit',
+      title: commit.command,
+      content: summarizeCommandResult(commit),
+      payload: {
+        currentBranch,
+        baseBranch: input.baseBranch,
+        reason: input.reason,
+      },
+    });
+  }
+}
+
+async function checkoutBaseBranchForEvolution(input: {
+  item?: AssistantEvolutionItemView | null;
+  baseBranch?: string;
+  reason: string;
+}): Promise<string> {
+  const baseBranch =
+    input.baseBranch || input.item?.base_branch || deps.baseBranch;
+  await saveDirtyWorktreeBeforeBaseCheckout({
+    item: input.item,
+    baseBranch,
+    reason: input.reason,
+  });
+
+  const currentBranch = await deps.git.currentBranch();
+  if (currentBranch === baseBranch) return baseBranch;
+
+  const checkout = await deps.git.checkout(baseBranch);
+  if (!checkout.ok) {
+    throw new Error(summarizeCommandResult(checkout));
+  }
+  return baseBranch;
 }
 
 function assertAgentRunner(): EvolutionAgentRunner {
@@ -559,25 +640,10 @@ async function handleEvaluationPhase(
 async function handleBranchPreparing(
   item: AssistantEvolutionItemView,
 ): Promise<EvolutionTickResult> {
-  if (await deps.git.hasDirtyWorktree()) {
-    const updated = updateEvolutionItemIfStatus(
-      item.id,
-      item.status,
-      {
-        status: 'blocked_by_policy',
-        blocked_reason: '主仓库存在未提交改动，无法安全创建自我进化工作分支',
-      },
-      'blocked_by_policy',
-      { reason: 'dirty_worktree' },
-    );
-    return completeExpectedStatusUpdate(item, updated, 'blocked_dirty_worktree');
-  }
-
-  const baseBranch = item.base_branch || deps.baseBranch;
-  const checkout = await deps.git.checkout(baseBranch);
-  if (!checkout.ok) {
-    throw new Error(summarizeCommandResult(checkout));
-  }
+  const baseBranch = await checkoutBaseBranchForEvolution({
+    item,
+    reason: 'branch_preparing',
+  });
   const baseCommit = await deps.git.currentCommit();
   const workBranch =
     item.work_branch || `evolution/${item.id}-${slugify(item.direction)}`;
@@ -668,7 +734,11 @@ async function handleImplementation(
       'blocked_by_policy',
       { forbiddenPath: forbidden, changedFiles },
     );
-    return completeExpectedStatusUpdate(item, updated, 'blocked_forbidden_path');
+    return completeExpectedStatusUpdate(
+      item,
+      updated,
+      'blocked_forbidden_path',
+    );
   }
   const headCommit = (await deps.git.hasDirtyWorktree())
     ? await commitWorkBranchChanges(item)
@@ -799,7 +869,9 @@ async function handleReviewing(
         risk_level: output.risk_level,
         status: 'blocked_by_policy',
         blocked_reason:
-          output.risk_level === 'high' ? '复核结果为高风险' : '复核结果风险未知',
+          output.risk_level === 'high'
+            ? '复核结果为高风险'
+            : '复核结果风险未知',
       },
       'blocked_by_policy',
       { reason: `${output.risk_level}_risk_review` },
@@ -989,6 +1061,11 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
     }, heartbeatMs);
 
     try {
+      await checkoutBaseBranchForEvolution({
+        baseBranch: deps.baseBranch,
+        reason: 'tick_start',
+      });
+
       const blockingItem = findBlockingEvolutionItem(settings);
       if (blockingItem) {
         tickResult = {
@@ -1062,7 +1139,8 @@ export async function runEvolutionTick(): Promise<EvolutionTickResult> {
     evolutionLastTickStatus = tickResult?.status || null;
     evolutionLastTickOk = tickResult?.ok ?? false;
     evolutionLastTickError =
-      tickResult?.error || (tickResult ? null : 'Evolution tick ended abruptly');
+      tickResult?.error ||
+      (tickResult ? null : 'Evolution tick ended abruptly');
   }
 }
 
@@ -1113,6 +1191,10 @@ export async function runEvolutionItem(
         };
         return result;
       }
+      await checkoutBaseBranchForEvolution({
+        item,
+        reason: 'item_start',
+      });
       result = await advanceItemUntilStop(item, settings);
       return result;
     } catch (err) {
@@ -1330,11 +1412,10 @@ export async function adoptEvolutionItem(itemId: string): Promise<{
   let mergePrepared = false;
   let mergeCommitted = false;
   try {
-    if (await deps.git.hasDirtyWorktree()) {
-      throw new Error('Worktree is dirty before adoption');
-    }
-    const checkout = await deps.git.checkout(item.base_branch);
-    if (!checkout.ok) throw new Error(summarizeCommandResult(checkout));
+    await checkoutBaseBranchForEvolution({
+      item,
+      reason: 'adoption_start',
+    });
     const merge = await deps.git.mergeNoFfNoCommit(item.work_branch);
     mergePrepared = true;
     if (!merge.ok) throw new Error(summarizeCommandResult(merge));

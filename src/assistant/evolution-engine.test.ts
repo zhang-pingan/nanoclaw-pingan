@@ -123,7 +123,8 @@ function gitAdapter(): EvolutionGitAdapter {
       return { ok: true, stdout: '', stderr: '', command: 'git merge --abort' };
     },
     changedFiles: async () => ['local/docs/example.md'],
-    diff: async () => 'diff --git a/local/docs/example.md b/local/docs/example.md',
+    diff: async () =>
+      'diff --git a/local/docs/example.md b/local/docs/example.md',
   };
 }
 
@@ -194,6 +195,107 @@ describe('evolution engine', () => {
     expect(result.action).toBe('item_created');
     expect(result.status).toBe('discovering');
     expect(getActiveEvolutionItem()?.status).toBe('discovering');
+  });
+
+  it('tick saves dirty old work branch and checks out base before creating a new item', async () => {
+    let branch = 'evolution/old';
+    let dirty = true;
+    const commits: string[] = [];
+    const checkouts: string[] = [];
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => branch,
+        hasDirtyWorktree: async () => dirty,
+        checkout: async (next) => {
+          checkouts.push(next);
+          branch = next;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git checkout ${next}`,
+          };
+        },
+        commit: async (message) => {
+          commits.push(message);
+          dirty = false;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git commit -m ${message}`,
+          };
+        },
+      },
+      agentRunner: proposalRunner(),
+    });
+
+    const result = await runEvolutionTick();
+
+    expect(result.action).toBe('item_created');
+    expect(commits).toEqual([
+      'assistant evolution: save evolution/old before tick_start',
+    ]);
+    expect(checkouts).toEqual(['main']);
+  });
+
+  it('manual item run checks out base before runner interaction', async () => {
+    let branch = 'evolution/old';
+    const runnerBranches: string[] = [];
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => branch,
+        checkout: async (next) => {
+          branch = next;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git checkout ${next}`,
+          };
+        },
+      },
+      agentRunner: async ({ phase }) => {
+        runnerBranches.push(branch);
+        if (phase === 'proposal') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              module_scope: 'assistant',
+              direction: '补充测试',
+              risk_level: 'low',
+              proposal: '# Plan',
+              requires_user_approval: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            approved_for_implementation: true,
+            risk_level: 'low',
+            evaluation: 'ok',
+            required_changes: [],
+            blocked_by_policy: false,
+            blocked_reason: null,
+          }),
+        };
+      },
+    });
+    const item = createEvolutionItem({ status: 'discovering' });
+
+    const result = await runEvolutionItem(item.id);
+
+    expect(result.status).toBe('waiting_user_approval');
+    expect(runnerBranches[0]).toBe('main');
   });
 
   it('exposes last and next evolution trigger times', async () => {
@@ -441,20 +543,176 @@ describe('evolution engine', () => {
     expect(approved.item.status).toBe('branch_preparing');
   });
 
-  it('blocks dirty worktree during branch preparation', async () => {
+  it('commits dirty non-main worktree during branch preparation before continuing', async () => {
+    let branch = 'evolution/previous';
+    let dirty = true;
+    const commits: string[] = [];
+    const checkouts: string[] = [];
     configureEvolutionEngine({
       settingsProvider: () => settings(),
       git: {
         ...gitAdapter(),
-        hasDirtyWorktree: async () => true,
+        currentBranch: async () => branch,
+        currentCommit: async () => 'commit-current',
+        hasDirtyWorktree: async () => dirty,
+        worktreeChangedFiles: async () =>
+          dirty ? ['src/assistant/previous.ts'] : [],
+        checkout: async (next) => {
+          checkouts.push(next);
+          branch = next;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git checkout ${next}`,
+          };
+        },
+        createBranch: async (next) => {
+          branch = next;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git checkout -b ${next}`,
+          };
+        },
+        commit: async (message) => {
+          commits.push(message);
+          dirty = false;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git commit -m ${message}`,
+          };
+        },
+      },
+      agentRunner: async ({ phase }) => {
+        if (phase === 'implementation') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              implementation_summary: 'done',
+              changed_files: ['local/docs/example.md'],
+              requires_followup: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            review_complete: true,
+            implementation_coverage: 'covered',
+            bug_report: null,
+            required_fixes: [],
+            risk_level: 'low',
+          }),
+        };
       },
     });
     const item = createEvolutionItem({ status: 'branch_preparing' });
 
     const result = await runEvolutionItem(item.id);
 
-    expect(result.status).toBe('blocked_by_policy');
-    expect(getEvolutionItem(item.id)?.blocked_reason).toContain('未提交改动');
+    expect(result.status).toBe('ready_for_adoption');
+    expect(commits).toEqual([
+      `assistant evolution: save evolution/previous before ${item.id}`,
+    ]);
+    expect(checkouts[0]).toBe('main');
+    expect(getEvolutionItem(item.id)?.work_branch).toMatch(/^evolution\//);
+  });
+
+  it('stashes dirty main worktree during branch preparation without committing', async () => {
+    let commitCalled = false;
+    let stashMessage = '';
+    let branch = 'main';
+    let dirty = true;
+    configureEvolutionEngine({
+      settingsProvider: () => settings(),
+      git: {
+        ...gitAdapter(),
+        currentBranch: async () => branch,
+        hasDirtyWorktree: async () => dirty,
+        worktreeChangedFiles: async () =>
+          dirty ? ['src/assistant/main-dirty.ts'] : [],
+        checkout: async (next) => {
+          branch = next;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git checkout ${next}`,
+          };
+        },
+        createBranch: async (next) => {
+          branch = next;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git checkout -b ${next}`,
+          };
+        },
+        commit: async () => {
+          commitCalled = true;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: 'git commit -m test',
+          };
+        },
+        stashPush: async (message) => {
+          stashMessage = message;
+          dirty = false;
+          return {
+            ok: true,
+            stdout: '',
+            stderr: '',
+            command: `git stash push -u -m ${message}`,
+          };
+        },
+      },
+      agentRunner: async ({ phase }) => {
+        if (phase === 'implementation') {
+          return {
+            ok: true,
+            text: JSON.stringify({
+              ok: true,
+              implementation_summary: 'done',
+              changed_files: ['local/docs/example.md'],
+              requires_followup: false,
+              blocked_by_policy: false,
+              blocked_reason: null,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          text: JSON.stringify({
+            ok: true,
+            review_complete: true,
+            implementation_coverage: 'covered',
+            bug_report: null,
+            required_fixes: [],
+            risk_level: 'low',
+          }),
+        };
+      },
+    });
+    const item = createEvolutionItem({ status: 'branch_preparing' });
+
+    const result = await runEvolutionItem(item.id);
+
+    expect(result.status).toBe('ready_for_adoption');
+    expect(commitCalled).toBe(false);
+    expect(stashMessage).toBe(
+      `assistant evolution: save main before ${item.id}`,
+    );
   });
 
   it('commits dirty implementation output before checking', async () => {
@@ -525,7 +783,10 @@ describe('evolution engine', () => {
     const item = createEvolutionItem({
       status: 'implementing',
     });
-    updateEvolutionItem(item.id, { work_branch: branch, base_commit: 'base-work' });
+    updateEvolutionItem(item.id, {
+      work_branch: branch,
+      base_commit: 'base-work',
+    });
 
     const result = await runEvolutionItem(item.id);
 
@@ -855,9 +1116,9 @@ describe('evolution engine', () => {
 
     expect(result.action).toBe('blocked_forbidden_path');
     expect(updated?.status).toBe('blocked_by_policy');
-    expect(updated?.artifacts?.some((artifact) => artifact.artifact_type === 'diff')).toBe(
-      true,
-    );
+    expect(
+      updated?.artifacts?.some((artifact) => artifact.artifact_type === 'diff'),
+    ).toBe(true);
     expect(
       updated?.artifacts?.some(
         (artifact) => artifact.artifact_type === 'blocked_worktree_cleanup',

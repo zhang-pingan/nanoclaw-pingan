@@ -21,6 +21,23 @@ import {
 import { emitStatus } from './status.js';
 import { renderLaunchdPlist } from './launchd.js';
 
+function servicePath(nodePath: string, homeDir: string): string {
+  return [
+    path.dirname(nodePath),
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/home/linuxbrew/.linuxbrew/bin',
+    '/home/linuxbrew/.linuxbrew/sbin',
+    '/usr/local/bin',
+    '/usr/local/sbin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+    path.join(homeDir, '.local', 'bin'),
+  ].join(':');
+}
+
 export async function run(_args: string[]): Promise<void> {
   const projectRoot = process.cwd();
   const platform = getPlatform();
@@ -216,7 +233,7 @@ WorkingDirectory=${projectRoot}
 Restart=always
 RestartSec=5
 Environment=HOME=${homeDir}
-Environment=PATH=/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin
+Environment=PATH=${servicePath(nodePath, homeDir)}
 StandardOutput=append:${projectRoot}/logs/nanoclaw.log
 StandardError=append:${projectRoot}/logs/nanoclaw.error.log
 

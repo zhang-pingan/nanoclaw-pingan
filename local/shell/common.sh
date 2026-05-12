@@ -51,6 +51,7 @@ escape_sed_replacement() {
 
 install_launch_agent_plist() {
   local node_escaped
+  local node_bin_dir_escaped
   local root_escaped
   local home_escaped
   local rendered
@@ -60,12 +61,14 @@ install_launch_agent_plist() {
   mkdir -p "$LAUNCH_AGENT_DIR"
 
   node_escaped="$(escape_sed_replacement "$NODE_BIN")"
+  node_bin_dir_escaped="$(escape_sed_replacement "$(dirname "$NODE_BIN")")"
   root_escaped="$(escape_sed_replacement "$ROOT_DIR")"
   home_escaped="$(escape_sed_replacement "$HOME")"
   rendered="$(mktemp)"
 
   sed \
     -e "s/{{NODE_PATH}}/$node_escaped/g" \
+    -e "s/{{NODE_BIN_DIR}}/$node_bin_dir_escaped/g" \
     -e "s/{{PROJECT_ROOT}}/$root_escaped/g" \
     -e "s/{{HOME}}/$home_escaped/g" \
     "$LAUNCH_AGENT_TEMPLATE" > "$rendered"

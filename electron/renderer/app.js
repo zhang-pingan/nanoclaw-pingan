@@ -18338,6 +18338,31 @@ function renderAssistantEvolutionTimeline(active) {
   `;
 }
 
+function getAssistantEvolutionFailureReason(item) {
+  if (!item || typeof item !== "object") return "";
+  const directReason =
+    item.adoption_error ||
+    item.blocked_reason ||
+    (item.status === "failed" ? item.bug_report || item.review_summary || item.check_summary : "");
+  if (directReason) return String(directReason);
+  const events = Array.isArray(item.events) ? item.events : [];
+  for (const event of events.slice().reverse()) {
+    const eventType = String(event && event.event_type || "");
+    const payload = event && event.payload && typeof event.payload === "object" ? event.payload : {};
+    const error = payload.error || payload.reason || payload.message;
+    if ((eventType.includes("failed") || eventType.includes("error")) && error) {
+      return String(error);
+    }
+  }
+  return "";
+}
+
+function getAssistantEvolutionItemBody(item) {
+  const failureReason = getAssistantEvolutionFailureReason(item);
+  if (failureReason) return `失败原因：${failureReason}`;
+  return item.proposal || "等待下一次推进";
+}
+
 function getAssistantEvolutionItems(state, active) {
   const latestItems = state && Array.isArray(state.latestItems) ? state.latestItems : [];
   if (!active) return latestItems;
@@ -18385,9 +18410,11 @@ function renderAssistantEvolutionDetails(item) {
         ${renderAssistantEvolutionField("base", item.base_commit)}
         ${renderAssistantEvolutionField("head", item.head_commit)}
         ${renderAssistantEvolutionField("merge", item.merge_commit)}
+        ${renderAssistantEvolutionField("失败原因", getAssistantEvolutionFailureReason(item))}
         ${renderAssistantEvolutionField("阻断", item.blocked_reason)}
         ${renderAssistantEvolutionField("采纳错误", item.adoption_error)}
       </div>
+      ${renderAssistantEvolutionPre("方案", item.proposal)}
       ${renderAssistantEvolutionPre("方案评估", item.proposal_evaluation)}
       ${renderAssistantEvolutionPre("实现摘要", item.implementation_summary)}
       ${renderAssistantEvolutionPre("检查输出", item.check_summary)}
@@ -18468,7 +18495,7 @@ function renderAssistantEvolution() {
       <div class="assistant-inbox-main">
         <div class="assistant-inbox-meta">${escapeHtml(formatAssistantEvolutionItemMeta(item))}</div>
         <div class="assistant-inbox-title">${escapeHtml(item.direction || "待发现")}</div>
-        <div class="assistant-inbox-body">${escapeHtml(item.proposal || item.blocked_reason || "等待下一次推进")}</div>
+        <div class="assistant-inbox-body">${escapeHtml(getAssistantEvolutionItemBody(item))}</div>
         <div class="assistant-inbox-meta">${escapeHtml(item.work_branch || item.base_branch || "")}</div>
       </div>
       <div class="assistant-inbox-actions">
