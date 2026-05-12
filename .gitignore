@@ -39,8 +39,6 @@ groups/global/*
 .vscode/
 
 # Skills system (local per-installation state)
-.nanoclaw/
-
 agents-sdk-docs
 
 tmp/
