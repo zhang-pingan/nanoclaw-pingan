@@ -221,7 +221,7 @@ function setAssistantWindowExpanded(expanded: boolean): void {
 
 function createTray(): void {
   const image = nativeImage
-    .createFromPath(assetPath('nanoclaw-icon.png'))
+    .createFromPath(assetPath('claw-icon.png'))
     .resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
   tray = new Tray(image);
   tray.setToolTip('NanoClaw Personal Assistant');
