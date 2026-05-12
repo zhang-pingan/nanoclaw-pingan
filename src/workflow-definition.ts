@@ -24,6 +24,18 @@ export interface WorkflowDefinitionEntryPoint {
   state: string;
   requires_deliverable?: boolean;
   deliverable_role?: string;
+  manual_requirement_create?: WorkflowManualRequirementCreateConfig;
+}
+
+export interface WorkflowManualRequirementCreateFile {
+  filename: string;
+  label?: string;
+  required?: boolean;
+}
+
+export interface WorkflowManualRequirementCreateConfig {
+  enabled?: boolean;
+  files?: WorkflowManualRequirementCreateFile[];
 }
 
 export interface WorkflowDefinitionDelegate {

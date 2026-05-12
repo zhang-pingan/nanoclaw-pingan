@@ -6,6 +6,7 @@ import {
   WorkflowDefinitionEvaluatorRef,
   WorkflowDefinitionHandoff,
   WorkflowDefinitionJsonSchemaRef,
+  WorkflowManualRequirementCreateConfig,
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionTimeoutPolicy,
 } from './workflow-definition.js';
@@ -59,6 +60,7 @@ export interface CompiledWorkflowConfig {
       state: string;
       requires_deliverable?: boolean;
       deliverable_role?: string;
+      manual_requirement_create?: WorkflowManualRequirementCreateConfig;
     }
   >;
   states: Record<string, CompiledWorkflowState>;
@@ -171,6 +173,62 @@ export function validateWorkflowDefinition(
       errors.push(
         `${definition.key}.entry_points.${entryKey}.state "${entry.state}" does not exist`,
       );
+    }
+    const manualCreate = entry.manual_requirement_create;
+    if (manualCreate !== undefined) {
+      const basePath = `${definition.key}.entry_points.${entryKey}.manual_requirement_create`;
+      if (
+        !manualCreate ||
+        typeof manualCreate !== 'object' ||
+        Array.isArray(manualCreate)
+      ) {
+        errors.push(`${basePath} must be an object`);
+      } else {
+        if (
+          manualCreate.enabled !== undefined &&
+          typeof manualCreate.enabled !== 'boolean'
+        ) {
+          errors.push(`${basePath}.enabled must be a boolean`);
+        }
+        if (
+          manualCreate.files !== undefined &&
+          !Array.isArray(manualCreate.files)
+        ) {
+          errors.push(`${basePath}.files must be an array`);
+        }
+        const seenFiles = new Set<string>();
+        for (const [index, file] of (Array.isArray(manualCreate.files)
+          ? manualCreate.files
+          : []
+        ).entries()) {
+          const filePath = `${basePath}.files[${index}]`;
+          if (!file || typeof file !== 'object' || Array.isArray(file)) {
+            errors.push(`${filePath} must be an object`);
+            continue;
+          }
+          if (!file.filename?.trim()) {
+            errors.push(`${filePath}.filename is required`);
+          } else {
+            const filename = file.filename.trim();
+            if (filename !== filename.split(/[\\/]/).pop()) {
+              errors.push(`${filePath}.filename must be a base filename`);
+            }
+            if (!filename.toLowerCase().endsWith('.md')) {
+              errors.push(`${filePath}.filename must end with .md`);
+            }
+            if (seenFiles.has(filename)) {
+              errors.push(`${filePath}.filename "${filename}" is duplicated`);
+            }
+            seenFiles.add(filename);
+          }
+          if (
+            file.required !== undefined &&
+            typeof file.required !== 'boolean'
+          ) {
+            errors.push(`${filePath}.required must be a boolean`);
+          }
+        }
+      }
     }
   }
 
@@ -392,6 +450,7 @@ export function compileWorkflowDefinition(
           state: entry.state,
           requires_deliverable: entry.requires_deliverable,
           deliverable_role: entry.deliverable_role,
+          manual_requirement_create: entry.manual_requirement_create,
         },
       ]),
     ),

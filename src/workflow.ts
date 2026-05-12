@@ -81,6 +81,7 @@ import {
 import {
   WorkflowCreateForm,
   WorkflowDefinitionTransition,
+  WorkflowManualRequirementCreateConfig,
 } from './workflow-definition.js';
 import { getDeliverableFileNameForRole } from './workflow-artifacts.js';
 import {
@@ -4537,6 +4538,7 @@ export function getAvailableWorkflowTypes(): Array<{
       requires_deliverable: boolean;
       deliverable_role?: string;
       required_deliverable_file?: string;
+      manual_requirement_create?: WorkflowManualRequirementCreateConfig;
     }
   >;
   role_channels: Record<string, Record<string, string>>;
@@ -4558,6 +4560,7 @@ export function getAvailableWorkflowTypes(): Array<{
           required_deliverable_file: ep.requires_deliverable
             ? getDeliverableFileNameForRole(ep.deliverable_role)
             : undefined,
+          manual_requirement_create: ep.manual_requirement_create,
         },
       ]),
     ),

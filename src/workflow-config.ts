@@ -21,6 +21,7 @@ import {
   WorkflowDefinitionEvaluatorRef,
   WorkflowDefinitionHandoff,
   WorkflowDefinitionJsonSchemaRef,
+  WorkflowManualRequirementCreateConfig,
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionRollbackHintRef,
   WorkflowDefinitionTimeoutPolicy,
@@ -106,6 +107,8 @@ export interface EntryPointConfig {
   requires_deliverable?: boolean;
   /** Which role's deliverable to look up (e.g. 'plan' or 'dev'). Defaults to 'dev'. */
   deliverable_role?: string;
+  /** Optional config-driven manual requirement creation for this entry point. */
+  manual_requirement_create?: WorkflowManualRequirementCreateConfig;
 }
 
 export interface WorkflowTypeConfig {

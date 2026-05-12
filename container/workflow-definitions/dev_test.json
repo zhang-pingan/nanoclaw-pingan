@@ -62,12 +62,37 @@
           "label": "从开发开始",
           "state": "dev",
           "requires_deliverable": true,
-          "deliverable_role": "planner"
+          "deliverable_role": "planner",
+          "manual_requirement_create": {
+            "enabled": true,
+            "files": [
+              {
+                "filename": "plan.md",
+                "label": "方案文档",
+                "required": true
+              }
+            ]
+          }
         },
         "testing": {
           "label": "从测试前确认开始",
           "state": "awaiting_confirm",
-          "requires_deliverable": true
+          "requires_deliverable": true,
+          "manual_requirement_create": {
+            "enabled": true,
+            "files": [
+              {
+                "filename": "dev.md",
+                "label": "开发文档",
+                "required": true
+              },
+              {
+                "filename": "plan.md",
+                "label": "方案文档",
+                "required": false
+              }
+            ]
+          }
         }
       },
       "states": {

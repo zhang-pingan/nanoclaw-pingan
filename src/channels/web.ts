@@ -46,6 +46,7 @@ import {
   DESKTOP_CAPTURES_DIR,
   GROUPS_DIR,
   DATA_DIR,
+  PROJECT_ROOT,
 } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
@@ -101,7 +102,10 @@ import {
   compileWorkflowDefinition,
   validateWorkflowDefinition,
 } from '../workflow-compiler.js';
-import { loadWorkflowConfigs } from '../workflow-config.js';
+import {
+  getWorkflowTypeConfig,
+  loadWorkflowConfigs,
+} from '../workflow-config.js';
 import {
   cancelWorkflow,
   pauseWorkflow,
@@ -273,7 +277,14 @@ function writeServiceConfigRegistry(services: ServiceConfigRegistry): void {
 }
 
 type MultipartFilePart = {
+  name: string;
   filename: string;
+  data: Buffer;
+};
+
+type MultipartPart = {
+  name: string;
+  filename?: string;
   data: Buffer;
 };
 
@@ -286,9 +297,22 @@ export function parseMultipartFileParts(
   body: Buffer,
   boundary: string,
 ): MultipartFilePart[] {
+  return parseMultipartParts(body, boundary)
+    .filter((part) => part.filename)
+    .map((part) => ({
+      name: part.name,
+      filename: part.filename || '',
+      data: part.data,
+    }));
+}
+
+export function parseMultipartParts(
+  body: Buffer,
+  boundary: string,
+): MultipartPart[] {
   const boundaryBuffer = Buffer.from(`--${boundary}`);
   const headerSeparator = Buffer.from('\r\n\r\n');
-  const parts: MultipartFilePart[] = [];
+  const parts: MultipartPart[] = [];
   let searchIndex = 0;
 
   while (searchIndex < body.length) {
@@ -306,6 +330,7 @@ export function parseMultipartFileParts(
     const headerEnd = body.indexOf(headerSeparator, cursor);
     if (headerEnd === -1) break;
     const headerText = body.slice(cursor, headerEnd).toString('utf-8');
+    const nameMatch = headerText.match(/name="([^"]+)"/i);
     const filenameMatch =
       headerText.match(/filename\*=UTF-8''([^\r\n;]+)/i) ||
       headerText.match(/filename="([^"]+)"/i);
@@ -319,15 +344,19 @@ export function parseMultipartFileParts(
       contentEnd -= 2;
     }
 
-    if (filenameMatch?.[1]) {
-      let rawFilename = filenameMatch[1];
-      try {
-        rawFilename = decodeURIComponent(rawFilename);
-      } catch {}
-      parts.push({
-        filename: rawFilename,
+    if (nameMatch?.[1]) {
+      const part: MultipartPart = {
+        name: nameMatch[1],
         data: body.slice(contentStart, contentEnd),
-      });
+      };
+      if (filenameMatch?.[1]) {
+        let rawFilename = filenameMatch[1];
+        try {
+          rawFilename = decodeURIComponent(rawFilename);
+        } catch {}
+        part.filename = rawFilename;
+      }
+      parts.push(part);
     }
 
     searchIndex = nextBoundaryIndex;
@@ -358,6 +387,30 @@ function ensureUniqueUploadPath(baseDir: string, filename: string): string {
     index += 1;
   }
   return candidate;
+}
+
+function getMultipartTextField(parts: MultipartPart[], name: string): string {
+  const part = parts.find((item) => item.name === name && !item.filename);
+  return part ? part.data.toString('utf-8').trim() : '';
+}
+
+function sanitizeRequirementDirName(rawName: string): string {
+  const name = String(rawName || '').trim();
+  if (!name || name === '.' || name === '..' || /[\u0000/\\]/.test(name)) {
+    throw new Error('需求名称不能为空，且不能包含路径分隔符');
+  }
+  return name;
+}
+
+function normalizeManualRequirementFilename(rawFilename: string): string {
+  const filename = String(rawFilename || '').trim();
+  if (!filename || filename !== path.basename(filename)) {
+    throw new Error('交付物文件名必须是不含路径的文件名');
+  }
+  if (path.extname(filename).toLowerCase() !== '.md') {
+    throw new Error('交付物文件名必须是 .md 文件');
+  }
+  return filename;
 }
 
 function sanitizeDesktopCaptureRequestId(requestId: string): string {
@@ -1009,16 +1062,28 @@ class WebChannel {
       if (pathname === '/api/assistant/scan' && req.method === 'POST') {
         return this.apiRunAssistantScan(res);
       }
-      if (pathname === '/api/assistant/evolution/state' && req.method === 'GET') {
+      if (
+        pathname === '/api/assistant/evolution/state' &&
+        req.method === 'GET'
+      ) {
         return this.apiGetAssistantEvolutionState(res);
       }
-      if (pathname === '/api/assistant/evolution/items' && req.method === 'GET') {
+      if (
+        pathname === '/api/assistant/evolution/items' &&
+        req.method === 'GET'
+      ) {
         return this.apiListAssistantEvolutionItems(reqUrl, res);
       }
-      if (pathname === '/api/assistant/evolution/settings' && req.method === 'POST') {
+      if (
+        pathname === '/api/assistant/evolution/settings' &&
+        req.method === 'POST'
+      ) {
         return this.apiUpdateAssistantSettings(req, res);
       }
-      if (pathname === '/api/assistant/evolution/tick' && req.method === 'POST') {
+      if (
+        pathname === '/api/assistant/evolution/tick' &&
+        req.method === 'POST'
+      ) {
         return this.apiRunAssistantEvolutionTick(res);
       }
       const evolutionItemActionMatch = pathname.match(
@@ -1078,6 +1143,9 @@ class WebChannel {
       }
       if (pathname === '/api/workflow/create-options') {
         return this.apiGetWorkflowCreateOptions(res);
+      }
+      if (pathname === '/api/workflow/requirement' && req.method === 'POST') {
+        return this.apiCreateWorkflowRequirement(req, res);
       }
       if (pathname === '/api/config/services' && req.method === 'GET') {
         return this.apiGetServiceConfigs(res);
@@ -1587,7 +1655,8 @@ class WebChannel {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: err instanceof Error ? err.message : 'Evolution item not found',
+          error:
+            err instanceof Error ? err.message : 'Evolution item not found',
         }),
       );
     }
@@ -2637,6 +2706,168 @@ class WebChannel {
         requirements_by_service: requirementsByService,
       }),
     );
+  }
+
+  private async apiCreateWorkflowRequirement(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const contentType = req.headers['content-type'] || '';
+    if (!contentType.includes('multipart/form-data')) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'multipart/form-data required' }));
+      return;
+    }
+
+    const boundary = parseMultipartBoundary(contentType);
+    if (!boundary) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'missing boundary' }));
+      return;
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const parts = parseMultipartParts(Buffer.concat(chunks), boundary);
+
+    try {
+      const workflowType = getMultipartTextField(parts, 'workflow_type');
+      const entryPoint = getMultipartTextField(parts, 'entry_point');
+      const service = getMultipartTextField(parts, 'service');
+      const requirementName = sanitizeRequirementDirName(
+        getMultipartTextField(parts, 'requirement_name'),
+      );
+
+      if (!workflowType || !entryPoint || !service) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error:
+              'workflow_type, entry_point, service, requirement_name required',
+          }),
+        );
+        return;
+      }
+
+      const services = readServiceConfigRegistry().services;
+      if (!Object.prototype.hasOwnProperty.call(services, service)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `未知服务: ${service}` }));
+        return;
+      }
+
+      const workflowConfig = getWorkflowTypeConfig(workflowType);
+      const entryConfig = workflowConfig?.entry_points[entryPoint];
+      const manualCreate = entryConfig?.manual_requirement_create;
+      if (!manualCreate?.enabled) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '当前入口点不允许手动创建需求' }));
+        return;
+      }
+
+      const fileConfigs = (manualCreate.files || []).map((file) => ({
+        filename: normalizeManualRequirementFilename(file.filename),
+        required: file.required !== false,
+      }));
+      if (fileConfigs.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '当前入口点未配置交付物上传规则' }));
+        return;
+      }
+
+      const filePartsByName = new Map(
+        parts
+          .filter((part) => part.filename)
+          .map((part) => [part.name, part] as const),
+      );
+      const writes: Array<{ filename: string; data: Buffer }> = [];
+      for (const [index, fileConfig] of fileConfigs.entries()) {
+        const part = filePartsByName.get(`file_${index}`);
+        if (!part) {
+          if (fileConfig.required) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                error: `缺少必需交付物 ${fileConfig.filename}`,
+              }),
+            );
+            return;
+          }
+          continue;
+        }
+        if (path.extname(part.filename || '').toLowerCase() !== '.md') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error: `仅支持上传 .md 文件: ${part.filename || fileConfig.filename}`,
+            }),
+          );
+          return;
+        }
+        writes.push({ filename: fileConfig.filename, data: part.data });
+      }
+
+      const iterationDir = path.resolve(
+        PROJECT_ROOT,
+        'projects',
+        service,
+        'iteration',
+      );
+      const requirementDir = path.resolve(iterationDir, requirementName);
+      if (!isPathInsideBase(iterationDir, requirementDir)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '需求名称非法' }));
+        return;
+      }
+      if (fs.existsSync(requirementDir)) {
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '需求目录已存在' }));
+        return;
+      }
+
+      fs.mkdirSync(iterationDir, { recursive: true });
+      fs.mkdirSync(requirementDir);
+      try {
+        for (const item of writes) {
+          fs.writeFileSync(path.join(requirementDir, item.filename), item.data);
+        }
+      } catch (err) {
+        fs.rmSync(requirementDir, { recursive: true, force: true });
+        throw err;
+      }
+
+      const deliverables = writes
+        .map((item) => item.filename)
+        .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+      logger.info(
+        {
+          workflowType,
+          entryPoint,
+          service,
+          requirementName,
+          deliverables,
+          requirementDir,
+        },
+        'Workbench requirement created from web client',
+      );
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          requirement: {
+            requirement_name: requirementName,
+            deliverables,
+          },
+        }),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
+    }
   }
 
   private async apiGetServiceConfigs(res: http.ServerResponse): Promise<void> {

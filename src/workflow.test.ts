@@ -1706,10 +1706,21 @@ describe('workflow metadata and branch flow', () => {
       requires_deliverable: true,
       deliverable_role: 'planner',
       required_deliverable_file: 'plan.md',
+      manual_requirement_create: {
+        enabled: true,
+        files: [{ filename: 'plan.md', required: true }],
+      },
     });
     expect(workflowType?.entry_points_detail.testing).toMatchObject({
       requires_deliverable: true,
       required_deliverable_file: 'dev.md',
+      manual_requirement_create: {
+        enabled: true,
+        files: [
+          { filename: 'dev.md', required: true },
+          { filename: 'plan.md', required: false },
+        ],
+      },
     });
   });
 

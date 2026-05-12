@@ -13808,6 +13808,235 @@ async function openWorkbenchCreateTaskModal() {
     state.formValues[key] = value;
   }
 
+  function getManualRequirementCreateConfig() {
+    const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
+    const config = detail?.manual_requirement_create;
+    if (!config?.enabled || !Array.isArray(config.files) || config.files.length === 0) return null;
+    const files = config.files
+      .map((file) => ({
+        filename: typeof file?.filename === "string" ? file.filename.trim() : "",
+        label: typeof file?.label === "string" ? file.label.trim() : "",
+        required: file?.required !== false,
+      }))
+      .filter((file) => file.filename && file.filename.toLowerCase().endsWith(".md"));
+    return files.length > 0 ? { ...config, files } : null;
+  }
+
+  function isMarkdownFile(file) {
+    return !!file && typeof file.name === "string" && file.name.toLowerCase().endsWith(".md");
+  }
+
+  function upsertRequirementOption(requirement) {
+    if (!requirement?.requirement_name) return;
+    const rows = Array.isArray(requirementsByService[state.service])
+      ? requirementsByService[state.service]
+      : [];
+    requirementsByService[state.service] = [
+      requirement,
+      ...rows.filter((item) => item.requirement_name !== requirement.requirement_name),
+    ].sort((a, b) => b.requirement_name.localeCompare(a.requirement_name, "zh-CN"));
+  }
+
+  function openManualRequirementCreateDialog(fieldKey, config) {
+    if (!config) return;
+    const existing = document.getElementById("manual-requirement-create-overlay");
+    if (existing) existing.remove();
+
+    const dialogState = {
+      requirementName: "",
+      files: {},
+      submitting: false,
+    };
+
+    const promptOverlay = document.createElement("div");
+    promptOverlay.id = "manual-requirement-create-overlay";
+    promptOverlay.className = "app-prompt-overlay";
+    document.body.appendChild(promptOverlay);
+
+    function getTrimmedName() {
+      return (dialogState.requirementName || "").trim();
+    }
+
+    function hasInvalidRequirementName() {
+      const name = getTrimmedName();
+      return !name || name === "." || name === ".." || /[\/\\]/.test(name);
+    }
+
+    function requirementExists() {
+      const name = getTrimmedName();
+      return !!name && getRequirements().some((item) => item.requirement_name === name);
+    }
+
+    function getMissingFile() {
+      return config.files.find((file, index) => file.required && !dialogState.files[index]) || null;
+    }
+
+    function canSubmit() {
+      return !dialogState.submitting && !hasInvalidRequirementName() && !requirementExists() && !getMissingFile();
+    }
+
+    function closeDialog() {
+      promptOverlay.remove();
+    }
+
+    async function submitManualRequirement() {
+      if (!canSubmit()) return;
+      dialogState.submitting = true;
+      render();
+      try {
+        const formData = new FormData();
+        formData.append("workflow_type", state.workflowType);
+        formData.append("entry_point", state.entryPoint);
+        formData.append("service", state.service);
+        formData.append("requirement_name", getTrimmedName());
+        config.files.forEach((file, index) => {
+          const selectedFile = dialogState.files[index];
+          if (selectedFile) formData.append(`file_${index}`, selectedFile, selectedFile.name);
+        });
+        const res = await fetch("http://localhost:3000/api/workflow/requirement", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        const requirement = data.requirement || {
+          requirement_name: getTrimmedName(),
+          deliverables: config.files
+            .filter((_, index) => dialogState.files[index])
+            .map((file) => file.filename),
+        };
+        upsertRequirementOption(requirement);
+        setFieldValue(fieldKey, requirement.requirement_name);
+        invalidateWorkflowCreateOptionsCache();
+        closeDialog();
+        refreshWorkbenchCreateModal();
+        showToast(`已创建需求：${requirement.requirement_name}`, 2200);
+      } catch (err) {
+        console.error("Failed to create manual requirement:", err);
+        alert(err.message || "创建需求失败");
+      } finally {
+        dialogState.submitting = false;
+        if (document.body.contains(promptOverlay)) render();
+      }
+    }
+
+    function render() {
+      const missingFile = getMissingFile();
+      const nameInvalid = hasInvalidRequirementName();
+      const duplicate = requirementExists();
+      const status = !getTrimmedName()
+        ? "请输入需求名称"
+        : nameInvalid
+          ? "需求名称不能包含路径分隔符"
+          : duplicate
+            ? "同名需求已存在"
+            : missingFile
+              ? `请上传 ${missingFile.filename}`
+              : "确认后将创建需求目录并写入交付物";
+      promptOverlay.innerHTML = `
+        <div class="app-prompt-dialog manual-requirement-dialog" role="dialog" aria-modal="true" aria-label="手动新建需求">
+          <div class="app-prompt-title">手动新建需求</div>
+          <div class="app-prompt-message">确认前不会创建目录或上传文件；文件将按交付物名称写入需求目录。</div>
+          <div class="manual-requirement-form">
+            <label class="workflow-definition-field">
+              <span>需求名称</span>
+              <input id="manual-requirement-name" type="text" value="${escapeAttribute(dialogState.requirementName)}" placeholder="例如 2026-05-12_支付流程优化" maxlength="120" />
+            </label>
+            <div class="manual-requirement-file-grid">
+              ${config.files.map((file, index) => {
+                const selectedFile = dialogState.files[index];
+                return `
+                  <div class="manual-requirement-file-zone" data-file-index="${index}" data-required="${file.required ? "true" : "false"}">
+                    <div class="manual-requirement-file-head">
+                      <span>
+                        <strong>${escapeHtml(file.label || file.filename)}</strong>
+                        <small>${escapeHtml(file.required ? "必传" : "可选")}</small>
+                      </span>
+                      <button type="button" class="workflow-wizard-upload-icon-btn manual-requirement-file-pick" data-file-pick="${index}" title="选择 Markdown 文件" aria-label="选择 Markdown 文件">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V7"/><path d="M8.5 10.5 12 7l3.5 3.5"/><path d="M5 17.5v.5A2 2 0 0 0 7 20h10a2 2 0 0 0 2-2v-.5"/><path d="M8 20h8"/></svg>
+                      </button>
+                    </div>
+                    ${selectedFile
+                      ? `
+                        <div class="workflow-wizard-file-card manual-requirement-file-card">
+                          <div class="workflow-wizard-file-card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+                          </div>
+                          <div class="workflow-wizard-file-card-body">
+                            <span>${escapeHtml(selectedFile.name)}</span>
+                            <strong>${selectedFile.name === file.filename ? "将按原文件名保存" : `将保存为 ${escapeHtml(file.filename)}`}</strong>
+                          </div>
+                          <button type="button" class="workflow-wizard-file-remove-btn" data-file-clear="${index}" title="移除文件" aria-label="移除文件">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
+                          </button>
+                        </div>
+                      `
+                      : `<div class="manual-requirement-file-empty">未选择文件，最终文件名为 ${escapeHtml(file.filename)}</div>`}
+                  </div>
+                `;
+              }).join("")}
+            </div>
+            <div class="workflow-wizard-hint">${escapeHtml(status)}</div>
+          </div>
+          <div class="app-prompt-actions">
+            <button type="button" class="btn-ghost" data-action="cancel">取消</button>
+            <button type="button" class="btn-primary" data-action="confirm" ${canSubmit() ? "" : "disabled"}>${dialogState.submitting ? "创建中..." : "确认"}</button>
+          </div>
+        </div>
+      `;
+      const nameInput = promptOverlay.querySelector("#manual-requirement-name");
+      if (nameInput) {
+        nameInput.focus();
+        nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
+        nameInput.addEventListener("input", () => {
+          dialogState.requirementName = nameInput.value;
+          render();
+        });
+      }
+      promptOverlay.querySelector("[data-action='cancel']")?.addEventListener("click", closeDialog);
+      promptOverlay.querySelector("[data-action='confirm']")?.addEventListener("click", submitManualRequirement);
+      Array.from(promptOverlay.querySelectorAll("[data-file-pick]")).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const index = Number(btn.getAttribute("data-file-pick"));
+          if (Number.isNaN(index)) return;
+          const picker = document.createElement("input");
+          picker.type = "file";
+          picker.accept = ".md,text/markdown,text/plain";
+          picker.onchange = () => {
+            const file = picker.files && picker.files[0];
+            if (!file) return;
+            if (!isMarkdownFile(file)) {
+              alert("只能上传 .md 文件");
+              return;
+            }
+            dialogState.files[index] = file;
+            render();
+          };
+          picker.click();
+        });
+      });
+      Array.from(promptOverlay.querySelectorAll("[data-file-clear]")).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const index = Number(btn.getAttribute("data-file-clear"));
+          if (Number.isNaN(index)) return;
+          delete dialogState.files[index];
+          render();
+        });
+      });
+    }
+
+    promptOverlay.addEventListener("click", (event) => {
+      if (event.target === promptOverlay && !dialogState.submitting) closeDialog();
+    });
+    promptOverlay.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !dialogState.submitting) {
+        event.preventDefault();
+        closeDialog();
+      }
+    });
+    render();
+  }
+
   async function uploadWorkbenchCreateFiles(files) {
     if (!files || files.length === 0) return [];
     state.uploadingFiles += files.length;
@@ -14066,7 +14295,23 @@ async function openWorkbenchCreateTaskModal() {
       section.className = "workflow-wizard-section";
       const label = document.createElement("div");
       label.className = "workflow-wizard-label";
-      label.textContent = `${idx + 5}. ${fieldLabel}`;
+      const manualRequirementConfig = field.type === "requirement_select" ? getManualRequirementCreateConfig() : null;
+      if (manualRequirementConfig) {
+        label.classList.add("workflow-wizard-label-action-row");
+        const labelText = document.createElement("span");
+        labelText.textContent = `${idx + 5}. ${fieldLabel}`;
+        const createBtn = document.createElement("button");
+        createBtn.type = "button";
+        createBtn.className = "workflow-wizard-upload-icon-btn workflow-wizard-requirement-create-btn";
+        createBtn.title = "手动新建需求";
+        createBtn.setAttribute("aria-label", "手动新建需求");
+        createBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/><path d="M5 5h14v14H5z"/></svg>';
+        createBtn.addEventListener("click", () => openManualRequirementCreateDialog(field.key, manualRequirementConfig));
+        label.appendChild(labelText);
+        label.appendChild(createBtn);
+      } else {
+        label.textContent = `${idx + 5}. ${fieldLabel}`;
+      }
       section.appendChild(label);
 
       const wrap = document.createElement("div");
