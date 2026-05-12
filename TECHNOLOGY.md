@@ -1,0 +1,160 @@
+# NanoClaw 核心技术介绍
+
+NanoClaw 是一套面向个人和小团队工程场景的 Agent 工作系统。它不是把大模型简单接入聊天窗口，而是把 Agent 执行、安全隔离、工作流编排、长期记忆、知识库、产物评估和多端交互组合成一套可落地的工程运行时。
+
+项目的核心价值可以概括为：让 Agent 有足够强的执行能力，同时把执行边界、权限边界、会话边界和交付边界做清楚。Agent 可以读代码、写文档、跑命令、调用工具、推进流程；但密钥、宿主机权限、跨会话上下文和高风险操作都由宿主机可信控制面统一约束。
+
+## 1. 安全性：容器化沙箱和宿主机代理
+
+NanoClaw 的首要设计原则是“高权限能力必须运行在隔离环境内”。Agent 不直接在宿主机进程里执行命令，而是由宿主机服务按需启动容器 Agent，容器只看到明确挂载的目录、工具和 IPC 命名空间。
+
+核心安全设计包括：
+
+- **容器化沙箱执行**：Agent 的 Bash、文件读写、浏览器自动化、WebFetch/WebSearch 等能力都在容器内执行。即使 Agent 拿到强工具权限，影响面也被限制在容器挂载目录内。
+- **按需启动、用完销毁**：容器通过 `run --rm` 模式按任务启动，空闲或关闭后销毁。系统不会长期保留一个混杂多任务上下文的执行进程。
+- **最小挂载原则**：群组工作目录、附件目录、图片目录、IPC 目录按需挂载；项目根目录和额外挂载有明确规则，`.env`、私钥、云厂商凭证、Kube 配置等敏感路径默认阻止进入容器。
+- **外部挂载白名单**：额外挂载由项目外部的 `~/.config/nanoclaw/mount-allowlist.json` 控制，容器无法修改自己的安全策略。
+- **会话目录隔离**：每个群组拥有独立的 `.claude` 会话目录，避免不同用户、不同任务、不同角色之间发生上下文串扰。
+- **IPC 授权**：容器通过 `/workspace/ipc` 向宿主机请求发送消息、创建任务、查询记忆、查询 Wiki 或执行受控宿主机脚本；宿主机根据来源群组和主群/非主群身份做权限判断。
+- **凭证代理**：真实模型 API Key 和 OAuth Token 不进入容器。容器只拿到占位凭证，请求被转发到宿主机 `credential-proxy`，由宿主机注入真实认证头后访问上游模型服务。
+
+这种模型把“Agent 能力强”和“宿主机安全”拆开处理：Agent 在容器里可以大胆使用工具，敏感数据和宿主机权限则通过受控 IPC 或凭证代理留在宿主机执行。
+
+## 2. Agent 蜂窝架构：主调度与子 Agent 能力边界
+
+NanoClaw 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的单体 Agent。宿主机服务和主调度 Agent 负责统一编排，多个角色子 Agent 分别承担方案、开发、复核、部署、测试、知识库、自我进化等职责。
+
+蜂窝架构的关键点是：
+
+- **主 Agent 统一调度**：工作流引擎、任务队列、频道路由和个人助理主动引擎都运行在宿主机控制面。它们负责决定何时启动哪个角色 Agent、传入什么上下文、接收什么产物、如何进入下一阶段。
+- **子 Agent 有明确能力边界**：角色通过工作流定义、Skill 分配、MCP 工具、挂载目录和任务模板共同限定。例如开发 Agent 获得代码修复 Skill，测试 Agent 获得测试验证 Skill，知识库 Agent 获得项目知识库 Skill。
+- **Agent 独立容器化**：每个群组或角色执行单元拥有自己的容器实例、会话目录、IPC 目录和工作目录。执行时启动，不需要时销毁。
+- **会话隔离**：`data/sessions/{group}/.claude` 将不同角色、群组和渠道的 Claude 会话分开保存。工作流需要共享的信息通过结构化 handoff、产物和数据库传递，而不是依赖隐式聊天历史。
+- **Skill 隔离**：`container/skills/skills.json` 按角色文件夹分配 Skill。Agent 只加载当前角色需要的方法论包，减少提示污染，也让角色职责更稳定。
+- **MCP 和工具隔离**：容器内统一挂载 `nanoclaw` MCP 服务，但每次执行都会带上 `NANOCLAW_GROUP_FOLDER`、`NANOCLAW_IS_MAIN`、`NANOCLAW_WORKFLOW_ID`、`NANOCLAW_STAGE_KEY` 等上下文，宿主机按来源做授权。
+- **并发队列控制**：`GroupQueue` 管理活跃容器数量、等待队列、空闲状态、后续消息注入和停止请求，避免 Agent swarm 把本机资源耗尽。
+
+这个设计的巧妙之处在于：系统保留了多 Agent 协作的弹性，但没有让所有 Agent 共享一个混乱的上下文池。每个蜂窝单元都可以强执行、可追踪、可销毁，跨单元协作通过结构化协议完成。
+
+## 3. Harness 工程应用：把 Agent 变成可运行、可观测、可评估的执行单元
+
+NanoClaw 的 harness 不是单独的目录，而是一组工程化封装：容器 runner、Agent SDK 调用、MCP 工具面、Trace、产物契约、工作流评估和失败分类共同构成 Agent Harness。
+
+它解决的是工程落地中最关键的问题：同一个 Agent 任务不能只是“聊完了”，而要能被启动、监控、回放、评价、失败归因和继续推进。
+
+主要能力包括：
+
+- **标准化输入**：宿主机把 prompt、sessionId、model、runId、queryId、groupFolder、workflowId、stageKey、delegationId 等执行元数据打包传给容器。
+- **标准化执行环境**：容器 runner 统一挂载目录、注入占位凭证、配置模型代理、加载 Skill、启动 MCP、设置允许工具。
+- **流式输出解析**：容器 Agent 用固定 marker 输出结构化结果，宿主机实时解析 success/error/event，写入 Query Trace 和工作台状态。
+- **Agent SDK Harness**：容器内通过 Claude Agent SDK `query()` 执行，配置工具白名单、MCP server、hooks、session resume、isolated session、PreToolUse/PostToolUse 事件。
+- **工程产物契约**：`container/artifact-contracts/` 定义不同阶段必须返回的字段、文档路径、front matter、文件大小和允许根目录，避免 Agent 只给自然语言结论。
+- **阶段评估器**：`workflow-stage-evaluation` 和 `workflow-evaluator-registry` 对交付结果做结构化判定，区分 passed、needs_revision、failed、pending 等结果。
+- **失败分类**：`failure-taxonomy` 把模型错误、工具错误、沙箱错误、超时、配置错误、权限错误、部署失败、测试失败等分类，方便重试、提醒和复盘。
+- **可观测 Trace**：`agent_queries`、`agent_query_steps`、`agent_query_events` 记录 Agent 查询、工具步骤、系统事件、模型解析和错误上下文。
+
+这套 harness 将 Agent 从“不可控的聊天模型”提升为“工程执行器”。它可以失败，但失败会被归类；可以中断，但能恢复；可以交付，但交付要满足契约。
+
+## 4. 记忆机制和 LLM Wiki
+
+NanoClaw 同时维护两类长期上下文：面向行为偏好的结构化记忆，以及面向项目知识的 LLM Wiki。两者互补，避免把所有历史都塞进对话上下文。
+
+### 结构化记忆
+
+记忆系统按层级和类型组织：
+
+- **canonical**：稳定事实、规则、长期偏好。
+- **episodic**：阶段性事件、任务经验、过往决策。
+- **working**：近期上下文、短期状态。
+- **memory_type**：preference、rule、fact、summary。
+
+`memory-pack` 会根据检索分数、直接匹配次数、记忆层级、记忆类型和更新时间排序，并按层级配额打包进 Agent 上下文。新用户指令优先于旧记忆，冲突记忆可通过 doctor/gc/resolve 机制清理。
+
+### LLM Wiki
+
+Wiki 面向更稳定、更可引用的项目知识，核心对象包括：
+
+- **materials**：原始材料，支持 Markdown、代码、日志、CSV、PDF 等输入。
+- **drafts**：由 LLM 基于材料生成的页面草稿。
+- **pages**：正式 Wiki 页面，保存 slug、标题、类型、摘要和正文。
+- **claims**：页面中的关键断言。
+- **evidence**：断言对应的材料证据和 excerpt。
+- **relations**：页面之间的关系图谱。
+- **jobs**：异步生成、重试和状态管理。
+
+LLM Wiki 的价值不只是“能搜索文档”，而是把非结构化材料沉淀为可检索、可引用、可追溯证据的知识网络。Agent 在执行任务时可以通过 `wiki_search` 和 `wiki_get_page` 获取稳定知识，而不是依赖模糊记忆或历史聊天。
+
+## 5. 工作流机制：配置驱动的 Agent 协作状态机
+
+NanoClaw 的工作流引擎把复杂研发活动建模为配置驱动的状态机。工作流定义位于 `container/workflow-definitions/`，卡片、产物契约、评估器和角色映射独立配置。
+
+一个工作流通常包含：
+
+- **roles**：定义 planner、dev、reviewer、ops、test 等角色，并按渠道映射到具体 group folder。
+- **entry_points**：支持从方案、开发、测试、Bug 修复等不同入口开始。
+- **states**：状态类型包括 delegation、interrupt、system、terminal。
+- **delegation**：把任务交给某个角色 Agent，附带 Skill、任务模板、输入输出 schema、允许工具、成功标准和失败分类。
+- **interrupt**：需要人类审批、补充输入、凭证确认或外部条件时中断，并通过 Web、飞书或 Assistant 恢复。
+- **checkpoint**：保存 workflowId、stateKey、round、context、delegationId 和 pending interrupt，支持中断恢复和异常重启。
+- **outbox**：把通知、卡片刷新、工作台 action item、助手 inbox、产物索引等副作用放入 outbox 异步处理，降低状态迁移和外部发送的耦合。
+- **evaluation**：阶段完成后运行产物契约和评估器，决定进入下一阶段、退回修改、等待人工确认或失败终止。
+
+这让需求开发、Bug 修复、预发部署、测试验证等流程从“一次性 prompt”变成可审计的工程闭环。Agent 可以负责执行，但流程所有权在宿主机状态机手里。
+
+## 6. 五大核心模块分工与巧妙设计
+
+### Web 工作台客户端
+
+Web 工作台是用户主动控制台，负责创建任务、查看阶段进度、审批中断、浏览产物、管理知识库、查看 Trace 和配置流程。它的优势是把 Agent 的黑盒执行展开成可操作的工程视图：任务状态、当前阶段、待处理项、产出物、评论、时间线和失败信息都能集中查看。
+
+### 个人助理客户端
+
+个人助理是 Agent 主动入口，常驻桌面，扫描今日计划、工作台任务、定时任务、Agent Runs 和线上日志。它不会替代工作台，而是负责发现“应该被注意”的问题，并在策略允许时发起调查、准备修复或进入受控自我进化流程。它把 Agent 从被动工具推进到主动协作者。
+
+### 移动端渠道
+
+移动端渠道当前由飞书承载，定位是离开电脑时的轻量补充入口。它适合查询任务、处理审批、接收提醒、补充说明和简单下发任务，不承载复杂配置和高风险操作。这个边界避免移动端变成第二套工作台，也保证状态最终回写宿主机和 Web 工作台。
+
+### 宿主机服务
+
+宿主机服务是可信控制面，负责频道接入、消息路由、SQLite 状态、工作流引擎、任务调度、容器队列、IPC Watcher、凭证代理、MySQL 代理、Wiki、记忆、Trace 和审计。它的设计重点是“控制面不进入容器，执行面不越过控制面”。
+
+### 容器 Agent
+
+容器 Agent 是隔离执行面，负责调用 Claude Agent SDK、使用工具、读写挂载目录、执行命令、浏览网页、生成产物，并通过 IPC 与宿主机通信。它可以强执行，但没有真实模型密钥，也没有直接宿主机控制权限，离开容器挂载边界后无法影响系统。
+
+这五个模块的分工清晰：Web 负责主动操作，Assistant 负责主动发现，移动端负责碎片化处理，宿主机负责可信编排，容器负责隔离执行。每个模块都只做自己最适合做的事。
+
+## 7. 其他核心优点
+
+- **多端一致状态**：Web、Assistant、飞书都不是孤立入口，最终状态统一写入 SQLite、workflow、workbench 和 Trace。
+- **人机协作边界清晰**：interrupt/resume 把审批、修改意见、凭证、人类输入建模为正式状态，而不是临时聊天消息。
+- **可扩展但不失控**：新增频道走 Channel Registry，新增流程走 workflow definition，新增角色方法论走 Skill，新增知识走 Wiki，避免把扩展全部塞进主流程代码。
+- **主动性可控**：个人助理支持 quiet、balanced、active 等策略，自我进化默认关闭自动实现和自动采纳，避免 Agent 主动性越权。
+- **交付可审计**：每次 Agent 执行都有 runId/queryId、模型解析、工具事件、产物、评估结果和失败分类。
+- **工程上下文稳定**：结构化 handoff、产物契约、Wiki 和 memory pack 共同减少“靠聊天历史猜上下文”的不稳定性。
+- **支持持续改进**：自我进化模块把问题发现、方案生成、分支实现、检查、复核和等待采纳纳入状态机，形成受控的系统自优化路径。
+
+## 8. 前沿 Agent 技术在本项目中的体现
+
+NanoClaw 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工程化落地：
+
+- **Anthropic Multi-Agent Research / Orchestrator-Workers**：Anthropic 没有以 arXiv 论文形式发布这套架构，但在官方 Engineering 文章 `How we built our multi-agent research system` 中系统介绍过 multi-agent research system：由 lead agent 分析任务、制定策略，并创建 specialized subagents 并行探索不同方向；在 `Building effective agents` 中也把 orchestrator-workers 总结为中心 LLM 动态拆解任务、委派 worker LLM、再综合结果的模式。NanoClaw 的“蜂窝架构”与这个方向高度一致，但更偏工程交付：主调度在宿主机工作流中完成，子 Agent 以角色、Skill、容器、IPC、会话和工具边界隔离，最终通过 handoff envelope、产物契约和阶段评估回收结果。
+- **Claude Code Subagents / Agent Teams**：Anthropic 的 Claude Code 文档强调 subagent 拥有独立上下文窗口、可配置工具权限和专门系统提示，并适合隔离高输出操作、并行研究和链式协作。NanoClaw 把这一思想进一步运行时化：每个角色 Agent 不只是提示隔离，还拥有独立容器、独立 `.claude` 会话、独立 IPC 命名空间和按角色分配的 Skill。
+- **ReAct**：ReAct 强调推理与行动交替进行。NanoClaw 中 Agent 通过工具调用、MCP、Bash、Web、浏览器和结构化 handoff 在“思考-行动-观察-再行动”的循环里推进任务，同时 Trace 记录过程，提升可解释性。
+- **Reflexion**：Reflexion 的核心是利用语言反馈和 episodic memory 改善后续决策。NanoClaw 的阶段评估、失败分类、记忆提取、memory pack 和自我进化日志提供了类似的反馈沉淀机制。
+- **Voyager**：Voyager 强调自动课程、Skill Library 和可组合技能。NanoClaw 通过工作流入口、角色 Skill、项目知识库和自我进化，把技能沉淀为可复用的执行方法论。
+- **SWE-agent / ACI**：SWE-agent 证明 Agent-Computer Interface 会显著影响软件工程 Agent 表现。NanoClaw 的 harness、工作区挂载、工具白名单、产物契约、测试/部署工具、Trace 和工作台视图，本质上是在为工程 Agent 构建专用 ACI。
+- **多 Agent 协作框架**：AutoGen、MetaGPT 等工作强调角色化协作和对话式编排。NanoClaw 采用更工程化的方式：角色 Agent 不靠自由聊天协作，而是通过状态机、handoff envelope、产物契约和评估器协作。
+
+## 参考资料
+
+- 本项目文档：`README.md`、`docs/SECURITY.md`、`docs/SPEC.md`、`docs/SDK_DEEP_DIVE.md`
+- 核心实现：`src/container-runner.ts`、`container/agent-runner/src/index.ts`、`src/workflow.ts`、`src/memory-pack.ts`、`src/wiki.ts`、`src/credential-proxy.ts`、`src/ipc.ts`
+- Anthropic, How we built our multi-agent research system, https://www.anthropic.com/engineering/built-multi-agent-research-system
+- Anthropic, Building effective agents, https://www.anthropic.com/engineering/building-effective-agents
+- Anthropic Claude Code Docs, Create custom subagents, https://code.claude.com/docs/en/sub-agents
+- ReAct: Synergizing Reasoning and Acting in Language Models, arXiv:2210.03629, https://arxiv.org/abs/2210.03629
+- Reflexion: Language Agents with Verbal Reinforcement Learning, arXiv:2303.11366, https://arxiv.org/abs/2303.11366
+- Voyager: An Open-Ended Embodied Agent with Large Language Models, arXiv:2305.16291, https://arxiv.org/abs/2305.16291
+- SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering, arXiv:2405.15793, https://arxiv.org/abs/2405.15793
