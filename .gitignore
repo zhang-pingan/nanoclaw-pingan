@@ -1,11 +1,9 @@
 # Dependencies
 node_modules/
-.npm-cache/
 # Build output
 dist/
 dist-electron/
 dist-assistant/
-release/
 electron/renderer/dist/
 assistant/renderer/dist/
 
