@@ -36,7 +36,6 @@ import {
   stopContainer,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
-import { getDelegationsBySource, getDelegationsByTarget } from './db.js';
 import { ClassifiedFailure, classifyFailure } from './failure-taxonomy.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
@@ -1096,73 +1095,6 @@ export function writeGroupsSnapshot(
     JSON.stringify(
       {
         groups: visibleGroups,
-        lastSync: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-  );
-}
-
-/**
- * Write delegation snapshot for the container to read.
- * Main group sees delegations it sent; other groups see delegations assigned to them.
- */
-function parseDelegationJsonField(raw: string | null | undefined): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-export function writeDelegationSnapshot(
-  groupFolder: string,
-  isMain: boolean,
-  registeredGroups: Record<string, RegisteredGroup>,
-): void {
-  const groupIpcDir = resolveGroupIpcPath(groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
-
-  // Main sees delegations it sent; others see delegations assigned to them
-  const delegations = isMain
-    ? getDelegationsBySource(groupFolder)
-    : getDelegationsByTarget(groupFolder);
-
-  // Build a JID→name lookup for readable output
-  const jidToName: Record<string, string> = {};
-  for (const [jid, group] of Object.entries(registeredGroups)) {
-    jidToName[jid] = group.name;
-  }
-
-  const delegationsFile = path.join(groupIpcDir, 'current_delegations.json');
-  fs.writeFileSync(
-    delegationsFile,
-    JSON.stringify(
-      {
-        delegations: delegations.map((d) => ({
-          id: d.id,
-          source_folder: d.source_folder,
-          target_jid: d.target_jid,
-          target_folder: d.target_folder,
-          target_name: jidToName[d.target_jid] || d.target_folder,
-          task: d.task,
-          status: d.status,
-          result: d.result,
-          workflow_id: d.workflow_id || null,
-          handoff_role: d.handoff_role || null,
-          handoff_skill: d.handoff_skill || null,
-          handoff_contract: parseDelegationJsonField(d.handoff_contract_json),
-          handoff_input: parseDelegationJsonField(d.handoff_input_json),
-          handoff_result: parseDelegationJsonField(d.handoff_result_json),
-          handoff_validation_status: d.handoff_validation_status || null,
-          handoff_validation_errors: parseDelegationJsonField(
-            d.handoff_validation_errors_json,
-          ),
-          created_at: d.created_at,
-          updated_at: d.updated_at,
-        })),
         lastSync: new Date().toISOString(),
       },
       null,

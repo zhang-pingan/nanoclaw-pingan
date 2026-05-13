@@ -31,7 +31,6 @@ import {
 import {
   ContainerOutput,
   runContainerAgent,
-  writeDelegationSnapshot,
   writeGroupsSnapshot,
   writeTasksSnapshot,
 } from './container-runner.js';
@@ -1287,9 +1286,6 @@ async function runAgent(
     filteredGroups,
     new Set(Object.keys(registeredGroups)),
   );
-
-  // Update delegation snapshot for container to read
-  writeDelegationSnapshot(group.folder, isMain, registeredGroups);
 
   // Wrap onOutput to track session ID from streamed results
   let streamedErrorOutputSeen = false;

@@ -139,6 +139,22 @@ type DesktopCaptureMcpResult = {
   details?: string;
 };
 
+type DelegationListItem = {
+  id: string;
+  source_folder?: string;
+  target_name?: string;
+  task: string;
+  status: string;
+  result: string | null;
+  created_at: string;
+};
+
+type DelegationListMcpResult = {
+  status?: 'success' | 'error';
+  delegations?: DelegationListItem[];
+  error?: string;
+};
+
 function aiImageToolResponse(
   result: AiImageMcpResult | null,
   requestId: string,
@@ -2023,61 +2039,69 @@ Be thorough in your result — include all relevant findings, data, and conclusi
 
 server.tool(
   'list_delegations',
-  'List delegation tasks. Main group sees tasks it delegated; other groups see tasks assigned to them.',
+  'List delegation tasks from the host database. Main group sees tasks it delegated; other groups see tasks assigned to them.',
   {},
   async () => {
-    const delegationsFile = path.join(IPC_DIR, 'current_delegations.json');
+    const requestId = `listdel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'list_delegations',
+      requestId,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    });
 
-    try {
-      if (!fs.existsSync(delegationsFile)) {
-        return {
-          content: [{ type: 'text' as const, text: '没有找到委派任务。' }],
-        };
-      }
-
-      const data = JSON.parse(fs.readFileSync(delegationsFile, 'utf-8'));
-      const delegations = data.delegations;
-
-      if (!delegations || delegations.length === 0) {
-        return {
-          content: [{ type: 'text' as const, text: '没有找到委派任务。' }],
-        };
-      }
-
-      const formatted = delegations
-        .map(
-          (d: {
-            id: string;
-            target_name: string;
-            task: string;
-            status: string;
-            result: string | null;
-            created_at: string;
-          }) => {
-            let line = `- [${d.id}] → ${d.target_name}: ${d.task.slice(0, 80)}... (${d.status})`;
-            if (d.result) {
-              line += `\n  结果: ${d.result.slice(0, 100)}...`;
-            }
-            return line;
-          },
-        )
-        .join('\n');
-
+    const resultPath = path.join(
+      IPC_DIR,
+      'delegation-results',
+      `${requestId}.json`,
+    );
+    const result = await waitForIpcResult<DelegationListMcpResult>(resultPath);
+    if (!result) {
       return {
-        content: [
-          { type: 'text' as const, text: `委派任务列表:\n${formatted}` },
-        ],
+        content: [{ type: 'text' as const, text: '读取委派任务超时。' }],
+        isError: true,
       };
-    } catch (err) {
+    }
+    if (result.status === 'error' || result.error) {
       return {
         content: [
           {
             type: 'text' as const,
-            text: `读取委派任务失败: ${err instanceof Error ? err.message : String(err)}`,
+            text: `读取委派任务失败: ${result.error || 'unknown error'}`,
           },
         ],
+        isError: true,
       };
     }
+
+    const delegations = Array.isArray(result.delegations)
+      ? result.delegations
+      : [];
+    if (delegations.length === 0) {
+      return {
+        content: [{ type: 'text' as const, text: '没有找到委派任务。' }],
+      };
+    }
+
+    const formatted = delegations
+      .map((d) => {
+        const target = isMain
+          ? d.target_name || '未知目标'
+          : d.source_folder || '来源';
+        const arrow = isMain ? '→' : '←';
+        let line = `- [${d.id}] ${arrow} ${target}: ${d.task.slice(0, 80)}... (${d.status})`;
+        if (d.result) {
+          line += `\n  结果: ${d.result.slice(0, 100)}...`;
+        }
+        return line;
+      })
+      .join('\n');
+
+    return {
+      content: [
+        { type: 'text' as const, text: `委派任务列表:\n${formatted}` },
+      ],
+    };
   },
 );
 

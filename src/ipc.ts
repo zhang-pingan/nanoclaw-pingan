@@ -44,6 +44,8 @@ import {
   gcMemories,
   getMemoryExtractConfig,
   getDelegation,
+  getDelegationsBySource,
+  getDelegationsByTarget,
   getMemoryById,
   getTaskById,
   recordMemoryMetric,
@@ -1035,6 +1037,23 @@ export async function processTaskIpc(
     fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
     fs.renameSync(tempPath, responsePath);
   };
+  const writeDelegationResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'delegation-results',
+    );
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
   const writeWorkbenchResult = (
     groupFolder: string,
     requestId: string,
@@ -1904,6 +1923,40 @@ export async function processTaskIpc(
         },
         'Task delegated via IPC',
       );
+      break;
+    }
+
+    case 'list_delegations': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn({ sourceGroup }, 'list_delegations missing requestId');
+        break;
+      }
+
+      const delegations = isMain
+        ? getDelegationsBySource(sourceGroup)
+        : getDelegationsByTarget(sourceGroup);
+      const jidToName: Record<string, string> = {};
+      for (const [jid, group] of Object.entries(registeredGroups)) {
+        jidToName[jid] = group.name;
+      }
+
+      writeDelegationResult(sourceGroup, data.requestId, {
+        status: 'success',
+        delegations: delegations.map((d) => ({
+          id: d.id,
+          source_folder: d.source_folder,
+          target_jid: d.target_jid,
+          target_folder: d.target_folder,
+          target_name: jidToName[d.target_jid] || d.target_folder,
+          task: d.task,
+          status: d.status,
+          result: d.result,
+          outcome: d.outcome || null,
+          workflow_id: d.workflow_id || null,
+          created_at: d.created_at,
+          updated_at: d.updated_at,
+        })),
+      });
       break;
     }
 

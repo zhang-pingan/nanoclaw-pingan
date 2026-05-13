@@ -22,6 +22,7 @@ import {
   setMemoryExtractConfig,
   storeChatMetadata,
   storeMessage,
+  updateDelegation,
 } from './db.js';
 import { DATA_DIR } from './config.js';
 import { callAnthropicMessages } from './agent-api.js';
@@ -78,6 +79,20 @@ function readAskIpcResult(sourceGroup: string, requestId: string): any {
     'ipc',
     sourceGroup,
     'ask-results',
+    `${requestId}.json`,
+  );
+  expect(fs.existsSync(p)).toBe(true);
+  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+  fs.unlinkSync(p);
+  return data;
+}
+
+function readDelegationIpcResult(sourceGroup: string, requestId: string): any {
+  const p = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    'delegation-results',
     `${requestId}.json`,
   );
   expect(fs.existsSync(p)).toBe(true);
@@ -2037,6 +2052,110 @@ describe('complete_delegation requester auto-copy', () => {
       '[委派结果 | 来自:Third | ID:del-no-dup]',
     );
     expect(enqueued).toEqual(['main@g.us']);
+  });
+});
+
+// --- list_delegations db query ---
+
+describe('list_delegations', () => {
+  it('main group lists delegations it sourced from the database', async () => {
+    createDelegation({
+      id: 'del-main-visible',
+      source_jid: 'main@g.us',
+      source_folder: 'whatsapp_main',
+      target_jid: 'other@g.us',
+      target_folder: 'other-group',
+      task: 'visible to main',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      created_at: '100',
+      updated_at: '100',
+    });
+    createDelegation({
+      id: 'del-main-hidden',
+      source_jid: 'other@g.us',
+      source_folder: 'other-group',
+      target_jid: 'third@g.us',
+      target_folder: 'third-group',
+      task: 'hidden from main',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      created_at: '101',
+      updated_at: '101',
+    });
+
+    await processTaskIpc(
+      {
+        type: 'list_delegations',
+        requestId: 'list-main',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    const result = readDelegationIpcResult('whatsapp_main', 'list-main');
+    expect(result.status).toBe('success');
+    expect(result.delegations.map((d: any) => d.id)).toEqual([
+      'del-main-visible',
+    ]);
+    expect(result.delegations[0].target_name).toBe('Other');
+  });
+
+  it('non-main group lists delegations assigned to it from the database', async () => {
+    createDelegation({
+      id: 'del-target-visible',
+      source_jid: 'main@g.us',
+      source_folder: 'whatsapp_main',
+      target_jid: 'other@g.us',
+      target_folder: 'other-group',
+      task: 'visible to target',
+      status: 'completed',
+      result: 'done',
+      outcome: 'success',
+      created_at: '100',
+      updated_at: '101',
+    });
+    updateDelegation('del-target-visible', {
+      outcome: 'success',
+    });
+    createDelegation({
+      id: 'del-target-hidden',
+      source_jid: 'main@g.us',
+      source_folder: 'whatsapp_main',
+      target_jid: 'third@g.us',
+      target_folder: 'third-group',
+      task: 'hidden from target',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      created_at: '102',
+      updated_at: '102',
+    });
+
+    await processTaskIpc(
+      {
+        type: 'list_delegations',
+        requestId: 'list-target',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const result = readDelegationIpcResult('other-group', 'list-target');
+    expect(result.status).toBe('success');
+    expect(result.delegations.map((d: any) => d.id)).toEqual([
+      'del-target-visible',
+    ]);
+    expect(result.delegations[0]).toMatchObject({
+      source_folder: 'whatsapp_main',
+      target_name: 'Other',
+      result: 'done',
+      outcome: 'success',
+    });
   });
 });
 
