@@ -5542,6 +5542,26 @@ function collectWorkflowDefinitionTransitionEntries(state) {
   return entries;
 }
 
+function replaceWorkflowDefinitionRoleFolderPlaceholders(value, oldRoleKey, newRoleKey) {
+  if (!oldRoleKey || !newRoleKey) return value;
+  if (typeof value === "string") {
+    return value.replace(/\{\{\s*role_folder\s*:\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (match, roleKey) =>
+      roleKey === oldRoleKey ? `{{role_folder:${newRoleKey}}}` : match,
+    );
+  }
+  if (!value || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      value[index] = replaceWorkflowDefinitionRoleFolderPlaceholders(item, oldRoleKey, newRoleKey);
+    });
+    return value;
+  }
+  Object.keys(value).forEach((key) => {
+    value[key] = replaceWorkflowDefinitionRoleFolderPlaceholders(value[key], oldRoleKey, newRoleKey);
+  });
+  return value;
+}
+
 function getWorkflowDefinitionInterruptActions(state) {
   const actions = [];
   const add = (action) => {
@@ -6431,6 +6451,7 @@ async function renameWorkflowDefinitionRole() {
       collectWorkflowDefinitionTransitionEntries(state).forEach(({ transition }) => {
         if (transition.delegate?.role === oldKey) transition.delegate.role = newKey;
       });
+      replaceWorkflowDefinitionRoleFolderPlaceholders(state, oldKey, newKey);
     });
     updateRolesEditor(nextRoles);
     updateEntryPointsEditor(entryPoints);
