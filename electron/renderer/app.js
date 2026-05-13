@@ -366,6 +366,7 @@ var workflowDefinitionSelectedCreateFormFieldKey = "";
 var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRoleGroupOptions = [];
 var workflowDefinitionRequestSeq = 0;
+var workflowDefinitionSelectGlobalEventsBound = false;
 var cardsRegistry = {};
 var currentCardSelection = null;
 var cardsManagementExpandedGroups = {};
@@ -5075,6 +5076,10 @@ function applyWorkflowDefinitionEditorControlState(isReadonly) {
     if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || el instanceof HTMLButtonElement)) {
       return;
     }
+    if (el.hasAttribute("data-workflow-definition-select-button")) {
+      el.disabled = !!isReadonly;
+      return;
+    }
     if (el === workflowDefinitionKeyInput || el === workflowDefinitionVersionInput) {
       el.disabled = true;
       return;
@@ -7152,21 +7157,126 @@ function focusWorkflowDefinitionJsonField(textarea, key) {
   textarea.scrollTop = Math.max(0, lineIndex * lineHeight - lineHeight * 2);
 }
 
-function buildStateTransitionInspectorHtml(prefix, transition) {
+function getWorkflowDefinitionSelectItems(options, selectedValue, placeholder = "请选择") {
+  const selected = String(selectedValue || "");
+  const seen = new Set();
+  const items = [{ value: "", label: placeholder }];
+  (Array.isArray(options) ? options : []).forEach((option) => {
+    const value = String(option || "");
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    items.push({ value, label: value });
+  });
+  if (selected && !seen.has(selected)) {
+    items.push({ value: selected, label: `${selected}（未找到）` });
+  }
+  return items;
+}
+
+function renderWorkflowDefinitionSelectControl(attributeName, attributeValue, options, selectedValue, placeholder = "请选择") {
+  const selected = String(selectedValue || "");
+  const items = getWorkflowDefinitionSelectItems(options, selected, placeholder);
+  const selectedItem = items.find((item) => item.value === selected) || items[0] || { value: "", label: placeholder };
+  return `
+    <div class="workflow-definition-select" data-workflow-definition-select>
+      <button
+        type="button"
+        class="workflow-definition-select-button"
+        data-workflow-definition-select-button
+        ${attributeName}="${escapeAttribute(attributeValue)}"
+        data-workflow-definition-select-value="${escapeAttribute(selected)}"
+        aria-haspopup="listbox"
+        aria-expanded="false"
+      >
+        <span>${escapeHtml(selectedItem.label)}</span>
+      </button>
+      <div class="workflow-definition-select-menu" data-workflow-definition-select-menu role="listbox">
+        ${items.map((item) => `
+          <button
+            type="button"
+            class="workflow-definition-select-option${item.value === selected ? " selected" : ""}"
+            data-workflow-definition-select-option="${escapeAttribute(item.value)}"
+            role="option"
+            aria-selected="${item.value === selected ? "true" : "false"}"
+          >${escapeHtml(item.label)}</button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function closeWorkflowDefinitionSelectMenus(root = document) {
+  root.querySelectorAll("[data-workflow-definition-select].open").forEach((select) => {
+    select.classList.remove("open");
+    const button = select.querySelector("[data-workflow-definition-select-button]");
+    if (button) button.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindWorkflowDefinitionSelectControls(root) {
+  if (!root) return;
+  if (!workflowDefinitionSelectGlobalEventsBound) {
+    workflowDefinitionSelectGlobalEventsBound = true;
+    document.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest("[data-workflow-definition-select]")) {
+        closeWorkflowDefinitionSelectMenus();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeWorkflowDefinitionSelectMenus();
+    });
+  }
+  root.querySelectorAll("[data-workflow-definition-select-button]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const select = button.closest("[data-workflow-definition-select]");
+      if (!select) return;
+      const isOpen = select.classList.contains("open");
+      closeWorkflowDefinitionSelectMenus(root);
+      select.classList.toggle("open", !isOpen);
+      button.setAttribute("aria-expanded", isOpen ? "false" : "true");
+    });
+  });
+  root.querySelectorAll("[data-workflow-definition-select-option]").forEach((option) => {
+    option.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const select = option.closest("[data-workflow-definition-select]");
+      const button = select?.querySelector("[data-workflow-definition-select-button]");
+      if (!(select && button)) return;
+      const value = option.getAttribute("data-workflow-definition-select-option") || "";
+      button.setAttribute("data-workflow-definition-select-value", value);
+      const label = option.textContent || "";
+      const textEl = button.querySelector("span");
+      if (textEl) textEl.textContent = label;
+      select.querySelectorAll("[data-workflow-definition-select-option]").forEach((item) => {
+        const active = item === option;
+        item.classList.toggle("selected", active);
+        item.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      closeWorkflowDefinitionSelectMenus(root);
+      button.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+}
+
+function buildStateTransitionInspectorHtml(prefix, transition, options = {}) {
   const safe = transition || {};
+  const stateOptions = Array.isArray(options.stateOptions) ? options.stateOptions : Object.keys(getStatesFromEditor());
+  const roleOptions = Array.isArray(options.roleOptions) ? options.roleOptions : Object.keys(getRolesFromEditor());
+  const cardOptions = Array.isArray(options.cardOptions) ? options.cardOptions : getCurrentWorkflowCardRefs();
   return `
     <div class="workflow-definition-state-inspector-grid">
       <label class="workflow-definition-field">
         <span>Target</span>
-        <input list="workflow-definition-state-options" data-state-field="${escapeAttribute(prefix)}.target" type="text" value="${escapeAttribute(safe.target || "")}" />
+        ${renderWorkflowDefinitionSelectControl("data-state-select-field", `${prefix}.target`, stateOptions, safe.target || "", "选择 state")}
       </label>
       <label class="workflow-definition-field">
         <span>Card Ref</span>
-        <input list="workflow-definition-card-options" data-state-field="${escapeAttribute(prefix)}.card.ref" type="text" value="${escapeAttribute(safe.card?.ref || "")}" />
+        ${renderWorkflowDefinitionSelectControl("data-state-select-field", `${prefix}.card.ref`, cardOptions, safe.card?.ref || "", "选择 card")}
       </label>
       <label class="workflow-definition-field">
         <span>Delegate Role</span>
-        <input list="workflow-definition-role-options" data-state-field="${escapeAttribute(prefix)}.delegate.role" type="text" value="${escapeAttribute(safe.delegate?.role || "")}" />
+        ${renderWorkflowDefinitionSelectControl("data-state-select-field", `${prefix}.delegate.role`, roleOptions, safe.delegate?.role || "", "选择 role")}
       </label>
       <label class="workflow-definition-field">
         <span>Delegate Skill</span>
@@ -7195,7 +7305,7 @@ function buildStateTransitionInspectorHtml(prefix, transition) {
   `;
 }
 
-function buildInterruptResumeTransitionsInspectorHtml(state) {
+function buildInterruptResumeTransitionsInspectorHtml(state, options = {}) {
   const actions = getWorkflowDefinitionInterruptActions(state);
   if (!actions.length) {
     return '<div class="workflow-definition-state-inspector-empty">先填写 allowed_actions，再为每个 action 配置 on_resume transition。</div>';
@@ -7204,7 +7314,7 @@ function buildInterruptResumeTransitionsInspectorHtml(state) {
     .map((action) => `
       <section class="workflow-definition-state-inspector-section">
         <div class="workflow-definition-state-inspector-title">On Resume · ${escapeHtml(action)}</div>
-        ${buildStateTransitionInspectorHtml(`on_resume.${action}`, state?.on_resume?.[action])}
+        ${buildStateTransitionInspectorHtml(`on_resume.${action}`, state?.on_resume?.[action], options)}
       </section>
     `)
     .join("");
@@ -7291,15 +7401,17 @@ function updateWorkflowDefinitionSelectedState(stateKey) {
 
 function bindWorkflowDefinitionStateInspectorEvents() {
   if (!workflowDefinitionStateInspector) return;
-  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-state-field]")).forEach((el) => {
-    const eventName = el.tagName === "SELECT" ? "change" : el.type === "checkbox" ? "change" : "input";
+  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-state-field], [data-state-select-field]")).forEach((el) => {
+    const eventName = el.tagName === "SELECT" || el.hasAttribute("data-workflow-definition-select-button") ? "change" : el.type === "checkbox" ? "change" : "input";
     el.addEventListener(eventName, () => {
-      const path = el.getAttribute("data-state-field") || "";
+      const path = el.getAttribute("data-state-field") || el.getAttribute("data-state-select-field") || "";
       if (!path || !workflowDefinitionSelectedStateKey) return;
       const selection = captureWorkflowDefinitionInspectorSelection(el);
       applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
         if (path === "type") {
-          const nextType = el.value;
+          const nextType = el.hasAttribute("data-workflow-definition-select-button")
+            ? el.getAttribute("data-workflow-definition-select-value") || ""
+            : el.value;
           const nextState = createWorkflowDefinitionStateTemplate(nextType);
           nextState.label = state.label || nextState.label;
           if (state.description) nextState.description = state.description;
@@ -7320,12 +7432,17 @@ function bindWorkflowDefinitionStateInspectorEvents() {
           }
           return cleanupStateObject(state);
         }
-        setNestedValue(state, path, el.type === "checkbox" ? el.checked : el.value, {
+        const fieldValue = el.hasAttribute("data-workflow-definition-select-button")
+          ? el.getAttribute("data-workflow-definition-select-value") || ""
+          : el.type === "checkbox"
+            ? el.checked
+            : el.value;
+        setNestedValue(state, path, fieldValue, {
           boolean: el.type === "checkbox",
         });
         return cleanupStateObject(state);
       });
-      if (el.tagName !== "SELECT" && el.type !== "checkbox" && path !== "type") {
+      if (el.tagName !== "SELECT" && !el.hasAttribute("data-workflow-definition-select-button") && el.type !== "checkbox" && path !== "type") {
         restoreWorkflowDefinitionInspectorFocus(
           workflowDefinitionStateInspector,
           getWorkflowDefinitionInspectorSelector("data-state-field", path),
@@ -7565,7 +7682,7 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
         </label>
         <label class="workflow-definition-field">
           <span>State</span>
-          <input list="workflow-definition-state-options-entry" data-entry-point-field="state" type="text" value="${escapeAttribute(selectedEntry?.state || "")}" />
+          ${renderWorkflowDefinitionSelectControl("data-entry-point-select-field", "state", stateOptions, selectedEntry?.state || "", "选择 state")}
         </label>
       </div>
       <label class="workflow-definition-field">
@@ -7575,7 +7692,7 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
       <div class="workflow-definition-state-inspector-grid">
         <label class="workflow-definition-field">
           <span>Deliverable Role</span>
-          <input list="workflow-definition-role-options-entry" data-entry-point-field="deliverable_role" type="text" value="${escapeAttribute(selectedEntry?.deliverable_role || "")}" />
+          ${renderWorkflowDefinitionSelectControl("data-entry-point-select-field", "deliverable_role", roleOptions, selectedEntry?.deliverable_role || "", "选择 role")}
         </label>
         <label class="workflow-definition-field workflow-definition-checkbox-field">
           <span class="workflow-definition-checkbox-title">Requires Deliverable</span>
@@ -7589,27 +7706,28 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
           </span>
         </label>
       </div>
-      <datalist id="workflow-definition-state-options-entry">${stateOptions.map((stateKey) => `<option value="${escapeAttribute(stateKey)}"></option>`).join("")}</datalist>
-      <datalist id="workflow-definition-role-options-entry">${roleOptions.map((roleKey) => `<option value="${escapeAttribute(roleKey)}"></option>`).join("")}</datalist>
     </div>
   `;
-  Array.from(workflowDefinitionEntryPointInspector.querySelectorAll("[data-entry-point-field]")).forEach((el) => {
-    const path = el.getAttribute("data-entry-point-field") || "";
-    const eventName = el.type === "checkbox" ? "change" : "input";
+  bindWorkflowDefinitionSelectControls(workflowDefinitionEntryPointInspector);
+  Array.from(workflowDefinitionEntryPointInspector.querySelectorAll("[data-entry-point-field], [data-entry-point-select-field]")).forEach((el) => {
+    const path = el.getAttribute("data-entry-point-field") || el.getAttribute("data-entry-point-select-field") || "";
+    const eventName = el.tagName === "SELECT" || el.hasAttribute("data-workflow-definition-select-button") || el.type === "checkbox" ? "change" : "input";
     el.addEventListener(eventName, () => {
       const selection = captureWorkflowDefinitionInspectorSelection(el);
       applyWorkflowDefinitionEntryPointPatch(workflowDefinitionSelectedEntryPointKey, (entry) => {
         if (el.type === "checkbox") {
           if (el.checked) entry[path] = true;
           else delete entry[path];
-        } else if (el.value) {
-          entry[path] = el.value;
         } else {
-          delete entry[path];
+          const value = el.hasAttribute("data-workflow-definition-select-button")
+            ? el.getAttribute("data-workflow-definition-select-value") || ""
+            : el.value;
+          if (value) entry[path] = value;
+          else delete entry[path];
         }
         return cleanupStateObject(entry);
       });
-      if (el.type !== "checkbox") {
+      if (el.tagName !== "SELECT" && !el.hasAttribute("data-workflow-definition-select-button") && el.type !== "checkbox") {
         restoreWorkflowDefinitionInspectorFocus(
           workflowDefinitionEntryPointInspector,
           getWorkflowDefinitionInspectorSelector("data-entry-point-field", path),
@@ -7760,6 +7878,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
   const roleOptions = Object.keys(getRolesFromEditor());
   const stateOptions = Object.keys(states);
   const cardOptions = getCurrentWorkflowCardRefs();
+  const selectOptions = { roleOptions, stateOptions, cardOptions };
   const validationItems = [];
   if (selectedState.type === "delegation") {
     if (selectedState.delegate?.role && !roleOptions.includes(selectedState.delegate.role)) {
@@ -7837,12 +7956,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
       <div class="workflow-definition-state-inspector-grid">
         <label class="workflow-definition-field">
           <span>Type</span>
-          <select data-state-field="type">
-            <option value="delegation" ${selectedState.type === "delegation" ? "selected" : ""}>delegation</option>
-            <option value="interrupt" ${selectedState.type === "interrupt" ? "selected" : ""}>interrupt</option>
-            <option value="terminal" ${selectedState.type === "terminal" ? "selected" : ""}>terminal</option>
-            <option value="system" ${selectedState.type === "system" ? "selected" : ""}>system</option>
-          </select>
+          ${renderWorkflowDefinitionSelectControl("data-state-select-field", "type", ["delegation", "interrupt", "terminal", "system"], selectedState.type || "", "选择 type")}
         </label>
         <label class="workflow-definition-field">
           <span>Label</span>
@@ -7872,7 +7986,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
         <div class="workflow-definition-state-inspector-grid">
           <label class="workflow-definition-field">
             <span>Role</span>
-            <input list="workflow-definition-role-options" data-state-field="delegate.role" type="text" value="${escapeAttribute(selectedState.delegate?.role || "")}" />
+            ${renderWorkflowDefinitionSelectControl("data-state-select-field", "delegate.role", roleOptions, selectedState.delegate?.role || "", "选择 role")}
           </label>
           <label class="workflow-definition-field">
             <span>Skill</span>
@@ -7886,11 +8000,11 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
       </section>
       <section class="workflow-definition-state-inspector-section">
         <div class="workflow-definition-state-inspector-title">On Complete Success</div>
-        ${buildStateTransitionInspectorHtml("on_complete.success", selectedState.on_complete?.success)}
+        ${buildStateTransitionInspectorHtml("on_complete.success", selectedState.on_complete?.success, selectOptions)}
       </section>
       <section class="workflow-definition-state-inspector-section">
         <div class="workflow-definition-state-inspector-title">On Complete Failure</div>
-        ${buildStateTransitionInspectorHtml("on_complete.failure", selectedState.on_complete?.failure)}
+        ${buildStateTransitionInspectorHtml("on_complete.failure", selectedState.on_complete?.failure, selectOptions)}
       </section>
     `;
   } else if (selectedState.type === "interrupt") {
@@ -7900,9 +8014,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
         <div class="workflow-definition-state-inspector-grid">
           <label class="workflow-definition-field">
             <span>Kind</span>
-            <select data-state-field="kind">
-              ${["approval", "revision_request", "credential", "human_input", "external_blocker"].map((kind) => `<option value="${kind}"${selectedState.kind === kind ? " selected" : ""}>${kind}</option>`).join("")}
-            </select>
+            ${renderWorkflowDefinitionSelectControl("data-state-select-field", "kind", ["approval", "revision_request", "credential", "human_input", "external_blocker"], selectedState.kind || "", "选择 kind")}
           </label>
           <label class="workflow-definition-field">
             <span>Title</span>
@@ -7918,7 +8030,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
         <div class="workflow-definition-state-inspector-title">Card</div>
         <label class="workflow-definition-field">
           <span>Card Ref</span>
-          <input list="workflow-definition-card-options" data-state-field="card.ref" type="text" value="${escapeAttribute(selectedState.card?.ref || "")}" />
+          ${renderWorkflowDefinitionSelectControl("data-state-select-field", "card.ref", cardOptions, selectedState.card?.ref || "", "选择 card")}
         </label>
       </section>
       <section class="workflow-definition-state-inspector-section">
@@ -7939,36 +8051,13 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
           <textarea data-state-field="resume_payload_schema.schema" rows="5" spellcheck="false">${escapeHtml(stringifyPrettyJson(selectedState.resume_payload_schema?.schema || { type: "object" }))}</textarea>
         </label>
       </section>
-      ${buildInterruptResumeTransitionsInspectorHtml(selectedState)}
+      ${buildInterruptResumeTransitionsInspectorHtml(selectedState, selectOptions)}
     `;
   }
 
   inspectorHtml += "</div>";
-  workflowDefinitionStateInspector.innerHTML = `
-    ${inspectorHtml}
-    <datalist id="workflow-definition-role-options"></datalist>
-    <datalist id="workflow-definition-state-options"></datalist>
-    <datalist id="workflow-definition-card-options"></datalist>
-  `;
-
-  const roleDatalist = workflowDefinitionStateInspector.querySelector("#workflow-definition-role-options");
-  if (roleDatalist) {
-    roleDatalist.innerHTML = roleOptions
-      .map((role) => `<option value="${escapeAttribute(role)}"></option>`)
-      .join("");
-  }
-  const stateDatalist = workflowDefinitionStateInspector.querySelector("#workflow-definition-state-options");
-  if (stateDatalist) {
-    stateDatalist.innerHTML = stateOptions
-      .map((stateKey) => `<option value="${escapeAttribute(stateKey)}"></option>`)
-      .join("");
-  }
-  const cardDatalist = workflowDefinitionStateInspector.querySelector("#workflow-definition-card-options");
-  if (cardDatalist) {
-    cardDatalist.innerHTML = cardOptions
-      .map((cardKey) => `<option value="${escapeAttribute(cardKey)}"></option>`)
-      .join("");
-  }
+  workflowDefinitionStateInspector.innerHTML = inspectorHtml;
+  bindWorkflowDefinitionSelectControls(workflowDefinitionStateInspector);
   bindWorkflowDefinitionStateInspectorEvents();
   applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
