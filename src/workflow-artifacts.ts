@@ -32,10 +32,40 @@ export const WORKFLOW_ARTIFACT_DEFINITIONS: WorkflowArtifactDefinition[] = [
   },
 ];
 
-export function getDeliverableFileNameForRole(role?: string): string {
+export function getDefaultDeliverableFileNameForRole(role?: string): string {
   const matched = WORKFLOW_ARTIFACT_DEFINITIONS.find(
     (item) => item.source_role === role,
   );
   if (matched) return matched.file;
   return 'dev.md';
+}
+
+export function isValidDeliverableFileName(fileName: string): boolean {
+  return (
+    fileName.trim().length > 0 &&
+    fileName === fileName.split(/[\\/]/).pop() &&
+    fileName.toLowerCase().endsWith('.md')
+  );
+}
+
+export function getDeliverableFileNameForRole(
+  role?: string,
+  roleConfigs?: Record<string, { deliverable_file?: string }>,
+): string {
+  const configuredFile = role ? roleConfigs?.[role]?.deliverable_file : '';
+  if (configuredFile && isValidDeliverableFileName(configuredFile)) {
+    return configuredFile;
+  }
+  return getDefaultDeliverableFileNameForRole(role);
+}
+
+export function resolveWorkflowArtifactDefinitions(
+  roleConfigs?: Record<string, { deliverable_file?: string }>,
+): WorkflowArtifactDefinition[] {
+  return WORKFLOW_ARTIFACT_DEFINITIONS.map((definition) => ({
+    ...definition,
+    file: definition.source_role
+      ? getDeliverableFileNameForRole(definition.source_role, roleConfigs)
+      : definition.file,
+  }));
 }

@@ -664,6 +664,26 @@ describe('workflow metadata and branch flow', () => {
     ).toBe('staging-deploy/feature-test_20260408');
   });
 
+  it('rejects deliverable entry when required role file is missing', () => {
+    writeDoc(
+      '2026-04-08_feature',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\n---\n\n# Plan\n`,
+    );
+
+    const result = createNewWorkflow({
+      title: 'Test feature',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'testing',
+      workflowType: 'dev_test',
+      deliverable: '2026-04-08_feature',
+    });
+
+    expect(result.error).toContain('需要交付物 dev.md');
+    expect(getWorkflow(result.workflowId)).toBeUndefined();
+  });
+
   it('injects requirement description and attachment paths into the plan delegation task', () => {
     const result = createNewWorkflow({
       title: '用户昵称支持表情并限制长度',
@@ -1713,6 +1733,7 @@ describe('workflow metadata and branch flow', () => {
     });
     expect(workflowType?.entry_points_detail.testing).toMatchObject({
       requires_deliverable: true,
+      deliverable_role: 'dev',
       required_deliverable_file: 'dev.md',
       manual_requirement_create: {
         enabled: true,

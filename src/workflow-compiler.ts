@@ -10,6 +10,7 @@ import {
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionTimeoutPolicy,
 } from './workflow-definition.js';
+import { isValidDeliverableFileName } from './workflow-artifacts.js';
 
 export interface CompiledWorkflowTransition {
   target: string;
@@ -53,7 +54,10 @@ export interface CompiledWorkflowState {
 
 export interface CompiledWorkflowConfig {
   name: string;
-  roles: Record<string, { channels: Record<string, string> }>;
+  roles: Record<
+    string,
+    { channels: Record<string, string>; deliverable_file?: string }
+  >;
   entry_points: Record<
     string,
     {
@@ -174,6 +178,11 @@ export function validateWorkflowDefinition(
         `${definition.key}.entry_points.${entryKey}.state "${entry.state}" does not exist`,
       );
     }
+    if (entry.deliverable_role && !roleNames.has(entry.deliverable_role)) {
+      errors.push(
+        `${definition.key}.entry_points.${entryKey}.deliverable_role "${entry.deliverable_role}" not defined in roles`,
+      );
+    }
     const manualCreate = entry.manual_requirement_create;
     if (manualCreate !== undefined) {
       const basePath = `${definition.key}.entry_points.${entryKey}.manual_requirement_create`;
@@ -229,6 +238,16 @@ export function validateWorkflowDefinition(
           }
         }
       }
+    }
+  }
+
+  for (const [roleKey, role] of Object.entries(definition.roles)) {
+    const basePath = `${definition.key}.roles.${roleKey}`;
+    if (
+      role.deliverable_file !== undefined &&
+      !isValidDeliverableFileName(role.deliverable_file)
+    ) {
+      errors.push(`${basePath}.deliverable_file must be a base .md filename`);
     }
   }
 
@@ -440,6 +459,7 @@ export function compileWorkflowDefinition(
         roleName,
         {
           channels: role.channels,
+          deliverable_file: role.deliverable_file,
         },
       ]),
     ),

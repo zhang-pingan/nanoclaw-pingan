@@ -135,6 +135,11 @@ function withResumeAction(
 
 function buildTemplateVars(task: WorkbenchTaskItem): TemplateVars {
   const context = task.context || {};
+  const workflowConfig = task.workflow_type
+    ? getWorkflowTypeConfig(task.workflow_type)
+    : null;
+  const deliverableFile = (role: string) =>
+    getDeliverableFileNameForRole(role, workflowConfig?.roles);
   const contextVars = Object.fromEntries(
     Object.entries(context).map(([key, value]) => [
       key,
@@ -197,17 +202,17 @@ function buildTemplateVars(task: WorkbenchTaskItem): TemplateVars {
       typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
         ? (context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
         : ''
-    }/${getDeliverableFileNameForRole('planner')}`,
+    }/${deliverableFile('planner')}`,
     dev_doc: `/workspace/projects/${task.service}/iteration/${
       typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
         ? (context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
         : ''
-    }/${getDeliverableFileNameForRole('dev')}`,
+    }/${deliverableFile('dev')}`,
     test_doc: `/workspace/projects/${task.service}/iteration/${
       typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
         ? (context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
         : ''
-    }/${getDeliverableFileNameForRole('test')}`,
+    }/${deliverableFile('test')}`,
     delegation_result: '',
     result_summary: '',
     revision_text: '',

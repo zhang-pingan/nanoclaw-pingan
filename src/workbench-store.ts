@@ -40,7 +40,7 @@ import type {
   WorkbenchActionItem,
   WorkbenchTaskItem,
 } from './workbench.js';
-import { WORKFLOW_ARTIFACT_DEFINITIONS } from './workflow-artifacts.js';
+import { resolveWorkflowArtifactDefinitions } from './workflow-artifacts.js';
 import { buildHumanInputCard } from './human-input-card.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 import {
@@ -417,7 +417,10 @@ function ensureArtifacts(workflow: Workflow): void {
     'iteration',
     deliverable,
   );
-  for (const def of WORKFLOW_ARTIFACT_DEFINITIONS) {
+  const artifactDefinitions = resolveWorkflowArtifactDefinitions(
+    getWorkflowTypeConfig(workflow.workflow_type)?.roles,
+  );
+  for (const def of artifactDefinitions) {
     const fullPath = path.join(baseDir, def.file);
     if (!fs.existsSync(fullPath)) continue;
     createWorkbenchArtifact({

@@ -650,6 +650,16 @@ function buildSummary(
   return `${stageLabel}评测失败${suffix}`;
 }
 
+function getWorkflowDeliverableFileName(
+  workflow: Workflow,
+  role: string,
+): string {
+  return getDeliverableFileNameForRole(
+    role,
+    getWorkflowTypeConfig(workflow.workflow_type)?.roles,
+  );
+}
+
 function evaluatePlanStage(
   workflow: Workflow,
   stageKey: string,
@@ -662,7 +672,7 @@ function evaluatePlanStage(
   const evidence = collectPayloadEvidence(payload);
   const planDoc = inspectStageDocument(
     workflow,
-    getDeliverableFileNameForRole('planner'),
+    getWorkflowDeliverableFileName(workflow, 'planner'),
   );
   const payloadSummary = contract.payloadSummary;
   let hasRuleRevisionIssue = false;
@@ -856,7 +866,7 @@ function evaluateDevStage(
   const evidence = collectPayloadEvidence(payload);
   const devDoc = inspectStageDocument(
     workflow,
-    getDeliverableFileNameForRole('dev'),
+    getWorkflowDeliverableFileName(workflow, 'dev'),
   );
   const payloadSummary = contract.payloadSummary;
   const outcome = normalizeDelegationOutcome(delegation);
@@ -1097,7 +1107,7 @@ function evaluateTestingStage(
   const evidence = collectPayloadEvidence(payload);
   const testDoc = inspectStageDocument(
     workflow,
-    getDeliverableFileNameForRole('test'),
+    getWorkflowDeliverableFileName(workflow, 'test'),
     payload.test_doc || null,
   );
   const payloadSummary = contract.payloadSummary;
@@ -1233,7 +1243,7 @@ export function evaluateWorkflowStage(params: {
         params.stageKey,
         params.delegation,
         payload,
-        getDeliverableFileNameForRole('planner'),
+        getWorkflowDeliverableFileName(params.workflow, 'planner'),
       );
     case 'dev':
     case 'fixing':
@@ -1257,7 +1267,7 @@ export function evaluateWorkflowStage(params: {
         params.stageKey,
         params.delegation,
         payload,
-        getDeliverableFileNameForRole('dev'),
+        getWorkflowDeliverableFileName(params.workflow, 'dev'),
       );
     case 'ops_deploy':
       return evaluateOpsStage(

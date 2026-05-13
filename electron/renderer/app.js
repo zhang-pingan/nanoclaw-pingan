@@ -5301,6 +5301,7 @@ function createWorkflowDefinitionRoleTemplate() {
   return {
     label: "新角色",
     description: "",
+    deliverable_file: "",
     channels: {
       web: "",
     },
@@ -5330,6 +5331,23 @@ function getWorkflowDefinitionGroupChannel(group) {
   if (folderChannel) return folderChannel;
   const jid = String(group?.jid || "").trim();
   return jid.includes(":") ? jid.split(":")[0] : "";
+}
+
+function getDefaultWorkflowDefinitionDeliverableFile(roleKey = "") {
+  if (roleKey === "planner") return "plan.md";
+  if (roleKey === "test") return "test.md";
+  return "dev.md";
+}
+
+function isWorkflowDefinitionDeliverableFileName(value) {
+  const fileName = String(value || "").trim();
+  return !!fileName && fileName === fileName.split(/[\\/]/).pop() && fileName.toLowerCase().endsWith(".md");
+}
+
+function resolveWorkflowDefinitionDeliverableFileForRole(roles, roleKey) {
+  const configured = String(roles?.[roleKey]?.deliverable_file || "").trim();
+  if (isWorkflowDefinitionDeliverableFileName(configured)) return configured;
+  return getDefaultWorkflowDefinitionDeliverableFile(roleKey || "dev");
 }
 
 function getWorkflowDefinitionRoleGroupOptions(channelKey = "", selectedFolder = "") {
@@ -5616,6 +5634,12 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
     }
     if (entry?.deliverable_role && !roleOptions.includes(entry.deliverable_role)) {
       pushItem("entry_points", `entry_points.${entryKey}.deliverable_role 引用了不存在的 role: ${entry.deliverable_role}`);
+    }
+  });
+
+  Object.entries(roles).forEach(([roleKey, role]) => {
+    if (role?.deliverable_file && !isWorkflowDefinitionDeliverableFileName(role.deliverable_file)) {
+      pushItem("roles", `roles.${roleKey}.deliverable_file 必须是不含路径的 .md 文件名`);
     }
   });
 
@@ -7561,6 +7585,10 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
           <span>Label</span>
           <input data-role-field="label" type="text" value="${escapeAttribute(selectedRole?.label || "")}" />
         </label>
+        <label class="workflow-definition-field">
+          <span>Deliverable File</span>
+          <input data-role-field="deliverable_file" type="text" value="${escapeAttribute(selectedRole?.deliverable_file || "")}" placeholder="${escapeAttribute(getDefaultWorkflowDefinitionDeliverableFile(workflowDefinitionSelectedRoleKey))}" />
+        </label>
       </div>
       <label class="workflow-definition-field">
         <span>Description</span>
@@ -7695,8 +7723,12 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
     });
   });
   const selectedEntry = entryPoints[workflowDefinitionSelectedEntryPointKey];
-  const roleOptions = Object.keys(getRolesFromEditor());
+  const roles = getRolesFromEditor();
+  const roleOptions = Object.keys(roles);
   const stateOptions = Object.keys(getStatesFromEditor());
+  const requiredDeliverableFile = selectedEntry?.requires_deliverable
+    ? resolveWorkflowDefinitionDeliverableFileForRole(roles, selectedEntry?.deliverable_role || "dev")
+    : "";
   const warnings = [];
   if (selectedEntry?.state && !stateOptions.includes(selectedEntry.state)) warnings.push(`state 引用了不存在的 state: ${selectedEntry.state}`);
   if (selectedEntry?.deliverable_role && !roleOptions.includes(selectedEntry.deliverable_role)) warnings.push(`deliverable_role 引用了不存在的 role: ${selectedEntry.deliverable_role}`);
@@ -7734,6 +7766,7 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
         <label class="workflow-definition-field">
           <span>Deliverable Role</span>
           ${renderWorkflowDefinitionSelectControl("data-entry-point-select-field", "deliverable_role", roleOptions, selectedEntry?.deliverable_role || "", "选择 role")}
+          <small>${selectedEntry?.requires_deliverable ? `Required file: ${escapeHtml(requiredDeliverableFile)}` : "Requires Deliverable 启用后按该 role 的 Deliverable File 校验"}</small>
         </label>
         <label class="workflow-definition-field workflow-definition-checkbox-field">
           <span class="workflow-definition-checkbox-title">Requires Deliverable</span>
@@ -16193,8 +16226,7 @@ function resolveRequiredDeliverableFile(detail) {
   if (typeof detail.required_deliverable_file === "string" && detail.required_deliverable_file.trim()) {
     return detail.required_deliverable_file.trim();
   }
-  if (detail.deliverable_role === "planner") return "plan.md";
-  return `${detail.deliverable_role || "dev"}.md`;
+  return getDefaultWorkflowDefinitionDeliverableFile(detail.deliverable_role || "dev");
 }
 
 function invalidateWorkflowCreateOptionsCache() {
@@ -16263,6 +16295,7 @@ async function openWorkflowDefinitionCreateFormPreview() {
   const roleChannels = Object.fromEntries(
     Object.entries(selectedVersion.roles || {}).map(([role, rc]) => [role, rc.channels || {}]),
   );
+  const selectedRoles = selectedVersion.roles || {};
   const workflowType = {
     type: selectedVersion.key || currentWorkflowDefinitionKey || "preview",
     name: selectedVersion.name || selectedVersion.key || "预览流程",
@@ -16273,7 +16306,9 @@ async function openWorkflowDefinitionCreateFormPreview() {
         {
           requires_deliverable: !!ep?.requires_deliverable,
           deliverable_role: ep?.deliverable_role,
-          required_deliverable_file: resolveRequiredDeliverableFile(ep),
+          required_deliverable_file: ep?.requires_deliverable
+            ? resolveWorkflowDefinitionDeliverableFileForRole(selectedRoles, ep?.deliverable_role || "dev")
+            : "",
         },
       ]),
     ),

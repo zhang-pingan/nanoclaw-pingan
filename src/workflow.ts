@@ -1204,6 +1204,21 @@ function buildDocPath(
   return `/workspace/projects/${workflow.service}/iteration/${deliverable}/${fileName}`;
 }
 
+function getWorkflowDeliverableFileName(
+  workflowType: string,
+  role?: string,
+): string {
+  const config = getWorkflowTypeConfig(workflowType);
+  return getDeliverableFileNameForRole(role, config?.roles);
+}
+
+function getWorkflowEntryPointDeliverableFileName(
+  config: WorkflowTypeConfig,
+  role?: string,
+): string {
+  return getDeliverableFileNameForRole(role, config.roles);
+}
+
 function parseDelegationPayload(
   result: string | null | undefined,
 ): ParsedDelegationPayload {
@@ -1328,11 +1343,20 @@ function buildTemplateVars(
           .map((item) => `- ${item}`)
           .join('\n') || '无'
       : '无',
-    plan_doc: buildDocPath(workflow, getDeliverableFileNameForRole('planner')),
-    dev_doc: buildDocPath(workflow, getDeliverableFileNameForRole('dev')),
+    plan_doc: buildDocPath(
+      workflow,
+      getWorkflowDeliverableFileName(workflow.workflow_type, 'planner'),
+    ),
+    dev_doc: buildDocPath(
+      workflow,
+      getWorkflowDeliverableFileName(workflow.workflow_type, 'dev'),
+    ),
     test_doc:
       extra?.testDoc ||
-      buildDocPath(workflow, getDeliverableFileNameForRole('test')),
+      buildDocPath(
+        workflow,
+        getWorkflowDeliverableFileName(workflow.workflow_type, 'test'),
+      ),
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
@@ -1350,7 +1374,10 @@ function finalizeDelegationTaskContent(
   if (skill === 'dev-bugfix') {
     const testDoc =
       extra?.testDoc ||
-      buildDocPath(workflow, getDeliverableFileNameForRole('test'));
+      buildDocPath(
+        workflow,
+        getWorkflowDeliverableFileName(workflow.workflow_type, 'test'),
+      );
     const testDocLine = `测试文档：${testDoc}`;
     const hasTestDocLine = taskContent.includes('测试文档：');
     let finalContent = hasTestDocLine
@@ -1366,7 +1393,10 @@ function finalizeDelegationTaskContent(
         '[分支缺失警告]',
         '当前 workflow 未记录明确的工作分支。',
         '请先从以下交付文档确认工作分支后再修复：',
-        buildDocPath(workflow, getDeliverableFileNameForRole('dev')),
+        buildDocPath(
+          workflow,
+          getWorkflowDeliverableFileName(workflow.workflow_type, 'dev'),
+        ),
         '本轮修复记录应更新到以下测试文档：',
         testDoc,
         '若仍无法确定，请不要猜测或直接在主干分支修改；请停止修改并反馈失败原因。',
@@ -2947,6 +2977,16 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       return {
         workflowId,
         error: `交付文档目录 "${opts.deliverable}" 不存在 (projects/${opts.service}/iteration/${opts.deliverable}/)`,
+      };
+    }
+    const requiredDeliverableFile = getWorkflowEntryPointDeliverableFileName(
+      config,
+      entryPoint.deliverable_role,
+    );
+    if (!deliverable.files.includes(requiredDeliverableFile)) {
+      return {
+        workflowId,
+        error: `入口 "${opts.startFrom}" 需要交付物 ${requiredDeliverableFile}，但目录 projects/${opts.service}/iteration/${opts.deliverable}/ 中未找到。`,
       };
     }
 
@@ -4558,7 +4598,10 @@ export function getAvailableWorkflowTypes(): Array<{
           requires_deliverable: ep.requires_deliverable || false,
           deliverable_role: ep.deliverable_role,
           required_deliverable_file: ep.requires_deliverable
-            ? getDeliverableFileNameForRole(ep.deliverable_role)
+            ? getWorkflowEntryPointDeliverableFileName(
+                config,
+                ep.deliverable_role,
+              )
             : undefined,
           manual_requirement_create: ep.manual_requirement_create,
         },

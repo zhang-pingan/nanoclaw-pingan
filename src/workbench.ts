@@ -60,7 +60,7 @@ import {
   getWorkflowTypeConfig,
   renderTemplate,
 } from './workflow-config.js';
-import { WORKFLOW_ARTIFACT_DEFINITIONS } from './workflow-artifacts.js';
+import { resolveWorkflowArtifactDefinitions } from './workflow-artifacts.js';
 import { syncWorkbenchFromWorkflow } from './workbench-store.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 import {
@@ -599,7 +599,10 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
     deliverable,
   );
 
-  return WORKFLOW_ARTIFACT_DEFINITIONS.map((candidate) => {
+  const artifactDefinitions = resolveWorkflowArtifactDefinitions(
+    getWorkflowTypeConfig(workflow.workflow_type)?.roles,
+  );
+  return artifactDefinitions.map((candidate) => {
     const fullPath = path.join(baseDir, candidate.file);
     return {
       id: `${workflow.id}-${candidate.file}`,

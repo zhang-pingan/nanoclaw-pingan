@@ -1,6 +1,8 @@
 export interface WorkflowDefinitionRole {
   label?: string;
   description?: string;
+  /** Optional deliverable filename produced by this role, e.g. plan.md. */
+  deliverable_file?: string;
   channels: Record<string, string>;
 }
 

@@ -33,6 +33,7 @@ import {
 } from './workflow-definition-files.js';
 import { getPublishedWorkflowDefinitions } from './workflow-definition-registry.js';
 import { compileWorkflowDefinitions } from './workflow-compiler.js';
+import { isValidDeliverableFileName } from './workflow-artifacts.js';
 
 // -------------------------------------------------------
 // Config types
@@ -98,6 +99,8 @@ export interface StateConfig {
 export interface RoleConfig {
   /** Channel → group folder mapping, e.g. { feishu: "feishu_plan", web: "web_plan" } */
   channels: Record<string, string>;
+  /** Optional deliverable filename produced by this role, e.g. plan.md. */
+  deliverable_file?: string;
 }
 
 export interface EntryPointConfig {
@@ -340,6 +343,27 @@ export function validateConfig(
     ) {
       errors.push(
         `${typeName}.roles.${roleName}.channels must be a non-empty object mapping channel names to group folders`,
+      );
+    }
+    if (
+      roleConfig.deliverable_file !== undefined &&
+      !isValidDeliverableFileName(roleConfig.deliverable_file)
+    ) {
+      errors.push(
+        `${typeName}.roles.${roleName}.deliverable_file must be a base .md filename`,
+      );
+    }
+  }
+
+  for (const [entryPointName, entryPoint] of Object.entries(
+    config.entry_points,
+  )) {
+    if (
+      entryPoint.deliverable_role &&
+      !config.roles[entryPoint.deliverable_role]
+    ) {
+      errors.push(
+        `${typeName}.entry_points.${entryPointName}.deliverable_role "${entryPoint.deliverable_role}" not defined in roles`,
       );
     }
   }

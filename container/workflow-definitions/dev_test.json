@@ -12,6 +12,7 @@
       "roles": {
         "planner": {
           "label": "方案设计",
+          "deliverable_file": "plan.md",
           "channels": {
             "feishu": "feishu_plan",
             "web": "web_plan"
@@ -26,6 +27,7 @@
         },
         "dev": {
           "label": "开发",
+          "deliverable_file": "dev.md",
           "channels": {
             "feishu": "feishu_dev",
             "web": "web_dev"
@@ -47,6 +49,7 @@
         },
         "test": {
           "label": "测试",
+          "deliverable_file": "test.md",
           "channels": {
             "feishu": "feishu_test",
             "web": "web_test"
@@ -78,6 +81,7 @@
           "label": "从测试前确认开始",
           "state": "awaiting_confirm",
           "requires_deliverable": true,
+          "deliverable_role": "dev",
           "manual_requirement_create": {
             "enabled": true,
             "files": [
