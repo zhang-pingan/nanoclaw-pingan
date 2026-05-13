@@ -54,6 +54,7 @@ import {
   updateWorkflow,
 } from './db.js';
 import { logger } from './logger.js';
+import { getWorkflowActionHandler } from './workflow-actions/index.js';
 import {
   Delegation,
   CardButton,
@@ -80,6 +81,7 @@ import {
 } from './workflow-config.js';
 import {
   WorkflowCreateForm,
+  WorkflowDefinitionSystemRunStep,
   WorkflowDefinitionTransition,
   WorkflowManualRequirementCreateConfig,
 } from './workflow-definition.js';
@@ -197,6 +199,14 @@ interface DelegationIntent {
   skillName: string;
   taskContent: string;
   handoffEnvelope: WorkflowHandoffEnvelope;
+}
+
+interface SystemRunResult {
+  status: 'success' | 'failure' | 'pending';
+  output: Record<string, unknown>;
+  contextPatch: WorkflowContext;
+  summary?: string;
+  error?: string;
 }
 
 let workflowRuntimeStarted = false;
@@ -763,6 +773,103 @@ function parseOutboxPayload(payloadJson: string): Record<string, unknown> {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getNestedValue(
+  value: unknown,
+  pathParts: string[],
+): unknown | undefined {
+  let current = value;
+  for (const part of pathParts) {
+    if (!isPlainObject(current)) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+function resolveSystemTemplateExpression(
+  expression: string,
+  vars: TemplateVars,
+  roles: Record<string, string>,
+  steps: Record<string, unknown>,
+): unknown {
+  if (expression.startsWith('role_folder:')) {
+    return roles[expression.slice('role_folder:'.length)] || '';
+  }
+  if (expression.startsWith('steps.')) {
+    return getNestedValue(steps, expression.slice('steps.'.length).split('.'));
+  }
+  return vars[expression];
+}
+
+function stringifySystemTemplateValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function renderSystemParamValue(
+  value: unknown,
+  vars: TemplateVars,
+  roles: Record<string, string>,
+  steps: Record<string, unknown>,
+): unknown {
+  if (typeof value === 'string') {
+    const exact = value.match(/^\{\{([^{}]+)\}\}$/);
+    if (exact) {
+      const resolved = resolveSystemTemplateExpression(
+        exact[1].trim(),
+        vars,
+        roles,
+        steps,
+      );
+      return resolved === undefined ? '' : resolved;
+    }
+    return value.replace(/\{\{([^{}]+)\}\}/g, (_match, expression: string) =>
+      stringifySystemTemplateValue(
+        resolveSystemTemplateExpression(expression.trim(), vars, roles, steps),
+      ),
+    );
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      renderSystemParamValue(item, vars, roles, steps),
+    );
+  }
+
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, childValue]) => [
+        key,
+        renderSystemParamValue(childValue, vars, roles, steps),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function renderSystemStepParams(
+  params: Record<string, unknown> | undefined,
+  workflow: Workflow,
+  roles: Record<string, string>,
+  steps: Record<string, unknown>,
+): Record<string, unknown> {
+  const vars = buildTemplateVars(workflow);
+  const rendered = renderSystemParamValue(params || {}, vars, roles, steps);
+  return isPlainObject(rendered) ? rendered : {};
+}
+
 function compileDefinitionTransitionToStateTransition(
   transition: WorkflowDefinitionTransition | StateTransition,
 ): StateTransition {
@@ -983,6 +1090,15 @@ function recoverActiveWorkflow(workflow: Workflow): void {
       { resultSummary: null },
       `recovery:${workflow.status}:${workflow.round}`,
     );
+  } else if (state?.type === 'system') {
+    const attempts = parseCheckpointAttempts(workflow.id);
+    const attempt = attempts[workflow.status] || 1;
+    const idempotencyKey = `workflow_system:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`;
+    if (!getWorkflowEventByIdempotencyKey(idempotencyKey)) {
+      runSystemState(workflow, 'transition');
+    } else {
+      writeWorkflowCheckpoint({ workflow });
+    }
   } else if (state?.type === 'terminal') {
     closePendingWorkflowInterrupts(
       workflow.id,
@@ -1961,22 +2077,218 @@ function runSystemState(
     idempotencyKey,
     createdAt: now,
   });
-  writeWorkflowCheckpoint({ workflow, attempts });
+  let workflowForTransition = workflow;
+  let systemResult: SystemRunResult = {
+    status: 'success',
+    output: {},
+    contextPatch: {},
+  };
+  if (state.run?.steps?.length) {
+    systemResult = runSystemSteps({
+      workflow,
+      steps: state.run.steps,
+      attempt,
+    });
+    writeWorkflowEvent({
+      workflowId: workflow.id,
+      eventType: 'system_completed',
+      stateKey: workflow.status,
+      payload: {
+        status: systemResult.status,
+        summary: systemResult.summary || null,
+        error: systemResult.error || null,
+        output: systemResult.output,
+      },
+      idempotencyKey: `workflow_system_completed:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`,
+      createdAt: new Date().toISOString(),
+    });
+    if (Object.keys(systemResult.contextPatch).length > 0) {
+      updateWorkflow(workflow.id, {
+        context: systemResult.contextPatch,
+      });
+      workflowForTransition = getWorkflow(workflow.id) || {
+        ...workflow,
+        context: mergeWorkflowContext(
+          workflow.context,
+          systemResult.contextPatch,
+        ),
+      };
+    }
+  }
 
-  const transition = state.on_complete?.success;
+  writeWorkflowCheckpoint({
+    workflow: workflowForTransition,
+    attempts,
+  });
+
+  if (systemResult.status === 'pending') {
+    updateWorkflow(workflow.id, { current_delegation_id: '' });
+    enqueueWorkflowWorkbenchSync(
+      workflow.id,
+      'workflow_updated',
+      { resultSummary: systemResult.summary || '系统节点等待外部结果' },
+      `system_pending:${workflow.status}:${workflow.round}:${attempt}`,
+    );
+    return;
+  }
+
+  const transition =
+    systemResult.status === 'success'
+      ? state.on_complete?.success
+      : state.on_complete?.failure;
   if (!transition) return;
-  applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
-    fallbackToTargetDelegate: true,
-    workflowUpdates: {
-      context: {
-        last_system_state: {
-          state_key: workflow.status,
-          executed_at: now,
-          attempt,
+  applyTransition(
+    workflowForTransition,
+    transition,
+    resolveRolesOrEmpty(workflow),
+    {
+      fallbackToTargetDelegate: true,
+      workflowUpdates: {
+        context: {
+          last_system_state: {
+            state_key: workflow.status,
+            executed_at: now,
+            attempt,
+            status: systemResult.status,
+            summary: systemResult.summary || '',
+            error: systemResult.error || '',
+          },
         },
       },
     },
-  });
+  );
+}
+
+function runSystemSteps(input: {
+  workflow: Workflow;
+  steps: WorkflowDefinitionSystemRunStep[];
+  attempt: number;
+}): SystemRunResult {
+  const roles = resolveRolesOrEmpty(input.workflow);
+  const stepOutputs: Record<string, unknown> = {};
+  let context = cloneWorkflowContextForSystem(input.workflow.context);
+  let contextPatch: WorkflowContext = {};
+  const output: Record<string, unknown> = {};
+  const summaries: string[] = [];
+
+  for (const [index, step] of input.steps.entries()) {
+    const stepId = step.id || `step_${index + 1}`;
+    const handler = getWorkflowActionHandler(step.uses);
+    const params = renderSystemStepParams(
+      step.with,
+      { ...input.workflow, context },
+      roles,
+      stepOutputs,
+    );
+
+    if (!handler) {
+      const error = `Workflow action handler "${step.uses}" is not registered`;
+      writeWorkflowEvent({
+        workflowId: input.workflow.id,
+        eventType: 'system_step_failed',
+        stateKey: input.workflow.status,
+        payload: {
+          step_id: stepId,
+          uses: step.uses,
+          error,
+        },
+        idempotencyKey: `workflow_system_step:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.attempt}:${index + 1}`,
+      });
+      return {
+        status: 'failure',
+        output: {
+          ...output,
+          [stepId]: { status: 'failure', error },
+        },
+        contextPatch,
+        error,
+      };
+    }
+
+    writeWorkflowEvent({
+      workflowId: input.workflow.id,
+      eventType: 'system_step_started',
+      stateKey: input.workflow.status,
+      payload: {
+        step_id: stepId,
+        uses: step.uses,
+      },
+      idempotencyKey: `workflow_system_step_started:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.attempt}:${index + 1}`,
+    });
+
+    let result: ReturnType<typeof handler.run>;
+    try {
+      result = handler.run({
+        workflow: { ...input.workflow, context },
+        stateKey: input.workflow.status,
+        params,
+        context,
+        steps: stepOutputs,
+      });
+    } catch (err) {
+      result = {
+        status: 'failure',
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    const stepOutput = result.output || {};
+    stepOutputs[stepId] = stepOutput;
+    output[stepId] = {
+      status: result.status,
+      output: stepOutput,
+      summary: result.summary || '',
+      error: result.error || '',
+    };
+    if (result.summary) summaries.push(result.summary);
+    if (result.contextPatch) {
+      contextPatch = mergeWorkflowContext(contextPatch, result.contextPatch);
+      context = mergeWorkflowContext(context, result.contextPatch);
+    }
+
+    writeWorkflowEvent({
+      workflowId: input.workflow.id,
+      eventType:
+        result.status === 'success'
+          ? 'system_step_completed'
+          : result.status === 'pending'
+            ? 'system_step_pending'
+            : 'system_step_failed',
+      stateKey: input.workflow.status,
+      payload: {
+        step_id: stepId,
+        uses: step.uses,
+        status: result.status,
+        output: stepOutput,
+        summary: result.summary || null,
+        error: result.error || null,
+      },
+      idempotencyKey: `workflow_system_step:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.attempt}:${index + 1}`,
+    });
+
+    if (result.status !== 'success') {
+      return {
+        status: result.status,
+        output,
+        contextPatch,
+        summary: result.summary,
+        error: result.error,
+      };
+    }
+  }
+
+  return {
+    status: 'success',
+    output,
+    contextPatch,
+    summary: summaries.join('\n'),
+  };
+}
+
+function cloneWorkflowContextForSystem(
+  context: WorkflowContext,
+): WorkflowContext {
+  return mergeWorkflowContext({}, context);
 }
 
 function actorToJson(actor: ResumeActor): string {
@@ -3138,6 +3450,13 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       }
     }
 
+    if (entryStateConfig?.type === 'system') {
+      const createdWorkflow = getWorkflow(workflowId);
+      if (createdWorkflow) {
+        runSystemState(createdWorkflow, 'create');
+      }
+    }
+
     // If entry state is a delegation state, delegate immediately
     if (
       entryStateConfig?.type === 'delegation' &&
@@ -3280,6 +3599,10 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     ensureWorkflowStateDurableRecords(createdWorkflow, 'create');
   }
   enqueueWorkflowCreatedSync(workflowId);
+
+  if (entryStateConfig?.type === 'system' && createdWorkflow) {
+    runSystemState(createdWorkflow, 'create');
+  }
 
   // If entry state is a delegation state, delegate immediately
   if (

@@ -53,6 +53,16 @@ export interface WorkflowDefinitionCardRef {
   ref: string;
 }
 
+export interface WorkflowDefinitionSystemRunStep {
+  id?: string;
+  uses: string;
+  with?: Record<string, unknown>;
+}
+
+export interface WorkflowDefinitionSystemRun {
+  steps: WorkflowDefinitionSystemRunStep[];
+}
+
 export interface WorkflowDefinitionEffects {
   increment_round?: boolean;
 }
@@ -155,6 +165,7 @@ export interface WorkflowDefinitionTerminalState extends WorkflowDefinitionState
 
 export interface WorkflowDefinitionSystemState extends WorkflowDefinitionStateBase {
   type: 'system';
+  run?: WorkflowDefinitionSystemRun;
   on_complete?: {
     success: WorkflowDefinitionTransition;
     failure?: WorkflowDefinitionTransition;

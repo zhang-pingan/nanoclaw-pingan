@@ -24,6 +24,7 @@ import {
   WorkflowManualRequirementCreateConfig,
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionRollbackHintRef,
+  WorkflowDefinitionSystemRun,
   WorkflowDefinitionTimeoutPolicy,
 } from './workflow-definition.js';
 import {
@@ -77,6 +78,7 @@ export interface StateConfig {
     success: StateTransition;
     failure?: StateTransition;
   };
+  run?: WorkflowDefinitionSystemRun;
 
   // --- interrupt fields ---
   card?: string;
@@ -489,6 +491,54 @@ export function validateConfig(
       errors.push(
         `${typeName}.states.${stateName}.role "${state.role}" not defined in roles`,
       );
+    }
+    if (state.type === 'system' && state.run !== undefined) {
+      const basePath = `${typeName}.states.${stateName}.run`;
+      if (
+        !state.run ||
+        typeof state.run !== 'object' ||
+        Array.isArray(state.run)
+      ) {
+        errors.push(`${basePath} must be an object`);
+      } else if (
+        !Array.isArray(state.run.steps) ||
+        state.run.steps.length === 0
+      ) {
+        errors.push(`${basePath}.steps must contain at least one step`);
+      } else {
+        const seenStepIds = new Set<string>();
+        for (const [index, step] of state.run.steps.entries()) {
+          const stepPath = `${basePath}.steps[${index}]`;
+          if (!step || typeof step !== 'object' || Array.isArray(step)) {
+            errors.push(`${stepPath} must be an object`);
+            continue;
+          }
+          if (!step.uses?.trim()) {
+            errors.push(`${stepPath}.uses is required`);
+          }
+          if (step.id !== undefined) {
+            if (!step.id.trim()) {
+              errors.push(`${stepPath}.id must be a non-empty string`);
+            } else if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(step.id)) {
+              errors.push(
+                `${stepPath}.id must start with a letter or underscore and contain only letters, numbers, "_" or "-"`,
+              );
+            } else if (seenStepIds.has(step.id)) {
+              errors.push(`${stepPath}.id "${step.id}" is duplicated`);
+            } else {
+              seenStepIds.add(step.id);
+            }
+          }
+          if (
+            step.with !== undefined &&
+            (!step.with ||
+              typeof step.with !== 'object' ||
+              Array.isArray(step.with))
+          ) {
+            errors.push(`${stepPath}.with must be an object`);
+          }
+        }
+      }
     }
   }
 

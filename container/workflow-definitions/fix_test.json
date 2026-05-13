@@ -136,26 +136,6 @@
           "on_complete": {
             "success": {
               "target": "bug_test",
-              "delegate": {
-                "role": "test",
-                "skill": "fix-test-bug",
-                "task_template": "流程类型：{{workflow_type}}\n请验证以下 Bug 修复是否通过：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n预发部署结果：\n{{delegation_result}}",
-                "handoff": {
-                  "input_schema": "workflow.test.input.v1",
-                  "output_schema": "fix_test.bug_test.v1",
-                  "artifact_contract_ref": "fix_test.bug_test.v1",
-                  "success_criteria": [
-                    "Bug 修复验证完成或明确记录阻塞原因",
-                    "测试文档写入指定交付目录",
-                    "返回 total、passed、failed、blocked、bugs、verdict、summary、findings、evidence"
-                  ],
-                  "auto_retry": {
-                    "enabled": false,
-                    "max_attempts": 0,
-                    "retryable_failures": []
-                  }
-                }
-              },
               "notify": {
                 "template": "[流程进展] Bug「{{name}}」({{id}}) 预发部署成功，已委派 {{role_folder:test}} 进行测试验证。"
               }
@@ -180,6 +160,7 @@
           "delegate": {
             "role": "test",
             "skill": "fix-test-bug",
+            "task_template": "流程类型：{{workflow_type}}\n请验证以下 Bug 修复是否通过：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n预发部署结果：\n{{delegation_result}}",
             "handoff": {
               "input_schema": "workflow.test.input.v1",
               "output_schema": "fix_test.bug_test.v1",

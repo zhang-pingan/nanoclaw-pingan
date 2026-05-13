@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -234,4 +234,98 @@ export async function runLocalHostScript(
       setTimeout(() => child.kill('SIGKILL'), 2000).unref();
     }, timeoutMs);
   });
+}
+
+export function runLocalHostScriptSync(
+  containerScriptPath: string,
+  args: string[],
+  options: RunLocalHostScriptOptions = {},
+): RunLocalHostScriptResult {
+  const timeoutMs = options.timeoutMs ?? HOST_SCRIPT_TIMEOUT_MS;
+  const maxOutputBytes = options.maxOutputBytes ?? HOST_SCRIPT_MAX_OUTPUT_BYTES;
+  const startedAt = Date.now();
+  const resolved = resolveLocalHostScript(
+    containerScriptPath,
+    options.hostRootDir,
+  );
+
+  const result = spawnSync(resolved.realScriptPath, args, {
+    cwd: path.dirname(resolved.realScriptPath),
+    env: buildMinimalEnv(),
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: timeoutMs,
+    maxBuffer: maxOutputBytes * 2,
+  });
+  const stdoutChunk = buildOutputChunk(
+    '',
+    Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(''),
+    maxOutputBytes,
+  );
+  const stderrChunk = buildOutputChunk(
+    '',
+    Buffer.isBuffer(result.stderr) ? result.stderr : Buffer.from(''),
+    maxOutputBytes,
+  );
+  const stdout = stdoutChunk.truncated
+    ? `${stdoutChunk.next}\n[stdout truncated]`
+    : stdoutChunk.next;
+  const stderr = stderrChunk.truncated
+    ? `${stderrChunk.next}\n[stderr truncated]`
+    : stderrChunk.next;
+  const exitCode =
+    typeof result.status === 'number' && Number.isFinite(result.status)
+      ? result.status
+      : null;
+  const durationMs = Date.now() - startedAt;
+
+  if (result.error) {
+    const timedOut =
+      typeof (result.error as NodeJS.ErrnoException).code === 'string' &&
+      (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
+    return {
+      status: 'error',
+      exitCode,
+      stdout,
+      stderr,
+      durationMs,
+      scriptPath: resolved.realScriptPath,
+      error: timedOut
+        ? `Script timed out after ${timeoutMs}ms`
+        : `Failed to run script: ${result.error.message}`,
+    };
+  }
+
+  if (result.signal) {
+    return {
+      status: 'error',
+      exitCode,
+      stdout,
+      stderr,
+      durationMs,
+      scriptPath: resolved.realScriptPath,
+      error: `Script terminated by signal ${result.signal}`,
+    };
+  }
+
+  if (exitCode !== 0) {
+    return {
+      status: 'error',
+      exitCode,
+      stdout,
+      stderr,
+      durationMs,
+      scriptPath: resolved.realScriptPath,
+      error: `Script exited with code ${exitCode}`,
+    };
+  }
+
+  return {
+    status: 'success',
+    exitCode: exitCode ?? 0,
+    stdout,
+    stderr,
+    durationMs,
+    scriptPath: resolved.realScriptPath,
+  };
 }

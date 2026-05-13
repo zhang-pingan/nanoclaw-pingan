@@ -1,0 +1,24 @@
+import { registerWorkflowActionHandler } from './registry.js';
+
+export function registerAssertWorkflowActions(): void {
+  registerWorkflowActionHandler({
+    name: 'assert.equals',
+    run(input) {
+      const actual = input.params.actual;
+      const expected = input.params.expected;
+      if (actual !== expected) {
+        return {
+          status: 'failure',
+          output: { actual, expected },
+          summary: `Assertion failed: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+          error: 'assert.equals failed',
+        };
+      }
+      return {
+        status: 'success',
+        output: { actual, expected },
+        summary: 'Assertion passed',
+      };
+    },
+  });
+}

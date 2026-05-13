@@ -16,6 +16,7 @@ import {
   listWorkflowStageEvaluationsByWorkflow,
   getPendingWorkflowInterruptForState,
   getWorkflowInterrupt,
+  listWorkflowEvents,
   listWorkflowInterruptsByWorkflow,
   getWorkflow,
   setRegisteredGroup,
@@ -299,7 +300,10 @@ describe('durable interrupt runtime', () => {
     });
     expect(firstResult.ok).toBe(true);
 
-    returnWorkflowToInterruptStage('wf-reenter-interrupt', 'plan_examine_confirm');
+    returnWorkflowToInterruptStage(
+      'wf-reenter-interrupt',
+      'plan_examine_confirm',
+    );
     const second = getPendingWorkflowInterruptForState(
       'wf-reenter-interrupt',
       'plan_examine_confirm',
@@ -1771,5 +1775,139 @@ describe('workflow metadata and branch flow', () => {
       'fix_test.bug_test.v1',
     );
     expect(getWorkflowArtifactContract('fix_test.bug_test.v1')).toBeDefined();
+  });
+});
+
+describe('system workflow action nodes', () => {
+  it('runs configured system steps before transitioning to a delegation state', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalPrepare = config.states.prepare_context;
+    const originalPlan = config.states.plan;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'prepare_context',
+    };
+    config.states.prepare_context = {
+      type: 'system',
+      label: '准备上下文',
+      run: {
+        steps: [
+          {
+            id: 'prepare',
+            uses: 'context.set',
+            with: {
+              values: {
+                work_branch: 'feature/{{service}}',
+                system_marker: 'prepared:{{name}}',
+              },
+            },
+          },
+        ],
+      },
+      on_complete: {
+        success: { target: 'plan' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'System prepared feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'system node prepares context',
+      });
+
+      expect(result.error).toBeUndefined();
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.status).toBe('plan');
+      expect(workflow?.context.work_branch).toBe(`feature/${TEST_SERVICE}`);
+      expect(workflow?.context.system_marker).toBe(
+        'prepared:System prepared feature',
+      );
+
+      const delegations = getDelegationsByWorkflow(result.workflowId);
+      expect(delegations).toHaveLength(1);
+      expect(delegations[0]?.task).toContain(
+        `工作分支：feature/${TEST_SERVICE}`,
+      );
+
+      const events = listWorkflowEvents(result.workflowId);
+      expect(events.map((event) => event.event_type)).toContain(
+        'system_step_completed',
+      );
+      expect(events.map((event) => event.event_type)).toContain(
+        'system_completed',
+      );
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalPrepare) {
+        config.states.prepare_context = originalPrepare;
+      } else {
+        delete config.states.prepare_context;
+      }
+      config.states.plan = originalPlan;
+    }
+  });
+
+  it('routes system step failures through the configured failure transition', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalPrepare = config.states.prepare_failure_check;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'prepare_failure_check',
+    };
+    config.states.prepare_failure_check = {
+      type: 'system',
+      label: '失败检查',
+      run: {
+        steps: [
+          {
+            id: 'check',
+            uses: 'context.require',
+            with: {
+              keys: ['missing_required_key'],
+            },
+          },
+        ],
+      },
+      on_complete: {
+        success: { target: 'plan' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'System failure flow',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'missing key should fail',
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(getWorkflow(result.workflowId)?.status).toBe('cancelled');
+      expect(getDelegationsByWorkflow(result.workflowId)).toHaveLength(0);
+
+      const failedStep = listWorkflowEvents(result.workflowId).find(
+        (event) => event.event_type === 'system_step_failed',
+      );
+      expect(failedStep?.payload_json).toContain('missing_required_key');
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalPrepare) {
+        config.states.prepare_failure_check = originalPrepare;
+      } else {
+        delete config.states.prepare_failure_check;
+      }
+    }
   });
 });
