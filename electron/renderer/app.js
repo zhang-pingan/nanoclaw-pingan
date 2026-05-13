@@ -365,6 +365,7 @@ var workflowDefinitionSelectedStatusLabelKey = "";
 var workflowDefinitionSelectedCreateFormFieldKey = "";
 var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRoleGroupOptions = [];
+var workflowDefinitionSkillOptions = [];
 var workflowDefinitionRequestSeq = 0;
 var workflowDefinitionSelectGlobalEventsBound = false;
 var cardsRegistry = {};
@@ -5612,6 +5613,10 @@ function getCurrentWorkflowCardRefs() {
   return Object.keys(workflowCards);
 }
 
+function getWorkflowDefinitionSkillOptions() {
+  return Array.isArray(workflowDefinitionSkillOptions) ? workflowDefinitionSkillOptions : [];
+}
+
 function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   const items = [];
   const roles = definition?.roles || {};
@@ -7324,6 +7329,7 @@ function buildStateTransitionInspectorHtml(prefix, transition, options = {}) {
   const stateOptions = Array.isArray(options.stateOptions) ? options.stateOptions : Object.keys(getStatesFromEditor());
   const roleOptions = Array.isArray(options.roleOptions) ? options.roleOptions : Object.keys(getRolesFromEditor());
   const cardOptions = Array.isArray(options.cardOptions) ? options.cardOptions : getCurrentWorkflowCardRefs();
+  const skillOptions = Array.isArray(options.skillOptions) ? options.skillOptions : getWorkflowDefinitionSkillOptions();
   return `
     <div class="workflow-definition-state-inspector-grid">
       <label class="workflow-definition-field">
@@ -7340,7 +7346,7 @@ function buildStateTransitionInspectorHtml(prefix, transition, options = {}) {
       </label>
       <label class="workflow-definition-field">
         <span>Delegate Skill</span>
-        <input data-state-field="${escapeAttribute(prefix)}.delegate.skill" type="text" value="${escapeAttribute(safe.delegate?.skill || "")}" />
+        ${renderWorkflowDefinitionSelectControl("data-state-select-field", `${prefix}.delegate.skill`, skillOptions, safe.delegate?.skill || "", "选择 skill")}
       </label>
     </div>
     <label class="workflow-definition-field workflow-definition-field-block">
@@ -7952,7 +7958,8 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
   const roleOptions = Object.keys(getRolesFromEditor());
   const stateOptions = Object.keys(states);
   const cardOptions = getCurrentWorkflowCardRefs();
-  const selectOptions = { roleOptions, stateOptions, cardOptions };
+  const skillOptions = getWorkflowDefinitionSkillOptions();
+  const selectOptions = { roleOptions, stateOptions, cardOptions, skillOptions };
   const validationItems = [];
   if (selectedState.type === "delegation") {
     if (selectedState.delegate?.role && !roleOptions.includes(selectedState.delegate.role)) {
@@ -8064,7 +8071,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
           </label>
           <label class="workflow-definition-field">
             <span>Skill</span>
-            <input data-state-field="delegate.skill" type="text" value="${escapeAttribute(selectedState.delegate?.skill || "")}" />
+            ${renderWorkflowDefinitionSelectControl("data-state-select-field", "delegate.skill", skillOptions, selectedState.delegate?.skill || "", "选择 skill")}
           </label>
         </div>
         <label class="workflow-definition-field workflow-definition-field-block">
@@ -9100,19 +9107,22 @@ async function loadWorkflowDefinitions(options = {}) {
     workflowDefinitionRefreshBtn.classList.add("spinning");
   }
   try {
-    const [definitionsRes, cardsRes, groupsRes] = await Promise.all([
+    const [definitionsRes, cardsRes, groupsRes, skillsRes] = await Promise.all([
       apiFetch("/api/workflow-definitions"),
       apiFetch("/api/cards"),
       apiFetch("/api/groups?scope=all"),
+      apiFetch("/api/skills"),
     ]);
     const data = await definitionsRes.json();
     const cardsData = await cardsRes.json();
     const groupsData = await groupsRes.json().catch(() => ({}));
+    const skillsData = await skillsRes.json().catch(() => ({}));
     if (!definitionsRes.ok) {
       throw new Error(data?.error || `HTTP ${definitionsRes.status}`);
     }
     workflowDefinitionCardsRegistry = cardsRes.ok ? cardsData?.cards || {} : {};
     workflowDefinitionRoleGroupOptions = groupsRes.ok && Array.isArray(groupsData?.groups) ? groupsData.groups : groups;
+    workflowDefinitionSkillOptions = skillsRes.ok && Array.isArray(skillsData?.skills) ? skillsData.skills : [];
     workflowDefinitionBundles = Array.isArray(data.definitions) ? data.definitions : [];
     if (!preserveSelection || !workflowDefinitionBundles.some((bundle) => bundle.key === currentWorkflowDefinitionKey)) {
       currentWorkflowDefinitionKey = workflowDefinitionBundles[0]?.key || "";

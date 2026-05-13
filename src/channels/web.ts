@@ -218,6 +218,21 @@ function getServicesConfigPath(): string {
   return path.join(GROUPS_DIR, 'global', 'services.json');
 }
 
+function getContainerSkillsDir(): string {
+  return path.join(PROJECT_ROOT, 'container', 'skills');
+}
+
+function listContainerSkillNames(): string[] {
+  const skillsDir = getContainerSkillsDir();
+  if (!fs.existsSync(skillsDir)) return [];
+  return fs
+    .readdirSync(skillsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => fs.existsSync(path.join(skillsDir, name, 'SKILL.md')))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 function sortServiceNames(services: ServiceConfigRegistry): string[] {
   return Object.keys(services).sort((a, b) => a.localeCompare(b, 'zh-CN'));
 }
@@ -1155,6 +1170,9 @@ class WebChannel {
       }
       if (pathname === '/api/workflow-definitions' && req.method === 'GET') {
         return this.apiListWorkflowDefinitions(res);
+      }
+      if (pathname === '/api/skills' && req.method === 'GET') {
+        return this.apiGetSkills(res);
       }
       if (pathname === '/api/cards' && req.method === 'GET') {
         return this.apiGetCards(res);
@@ -2967,6 +2985,12 @@ class WebChannel {
     const bundles = listWorkflowDefinitionBundles();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ definitions: bundles }));
+  }
+
+  private async apiGetSkills(res: http.ServerResponse): Promise<void> {
+    const skills = listContainerSkillNames();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ skills }));
   }
 
   private async apiGetWorkflowDefinition(
