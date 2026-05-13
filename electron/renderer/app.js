@@ -5604,27 +5604,6 @@ function parseWorkflowDefinitionListText(raw) {
     .filter(Boolean);
 }
 
-function formatWorkflowDefinitionListText(value) {
-  if (Array.isArray(value)) return value.join("\n");
-  return String(value || "");
-}
-
-function isWorkflowDefinitionHandoffListField(path) {
-  return (
-    path === "delegate.handoff.success_criteria" ||
-    path === "delegate.handoff.auto_retry.retryable_failures" ||
-    path.endsWith(".delegate.handoff.success_criteria") ||
-    path.endsWith(".delegate.handoff.auto_retry.retryable_failures")
-  );
-}
-
-function isWorkflowDefinitionHandoffNumberField(path) {
-  return (
-    path === "delegate.handoff.auto_retry.max_attempts" ||
-    path.endsWith(".delegate.handoff.auto_retry.max_attempts")
-  );
-}
-
 function getCurrentWorkflowCardRefs() {
   const workflowCards = workflowDefinitionCardsRegistry?.[currentWorkflowDefinitionKey] || {};
   return Object.keys(workflowCards);
@@ -7348,53 +7327,6 @@ function buildStateTransitionInspectorHtml(prefix, transition, options = {}) {
         <span class="workflow-definition-checkbox-text">${safe.effects?.increment_round ? "已启用" : "未启用"}</span>
       </span>
     </label>
-    ${buildWorkflowDefinitionHandoffInspectorHtml(`${prefix}.delegate.handoff`, safe.delegate?.handoff)}
-  `;
-}
-
-function buildWorkflowDefinitionHandoffInspectorHtml(prefix, handoff) {
-  const safe = handoff || {};
-  return `
-    <div class="workflow-definition-handoff-inspector">
-      <div class="workflow-definition-state-inspector-title">Handoff</div>
-      <div class="workflow-definition-state-inspector-grid">
-        <label class="workflow-definition-field">
-          <span>Input Schema</span>
-          <input data-state-field="${escapeAttribute(prefix)}.input_schema" type="text" value="${escapeAttribute(safe.input_schema || "")}" />
-        </label>
-        <label class="workflow-definition-field">
-          <span>Output Schema</span>
-          <input data-state-field="${escapeAttribute(prefix)}.output_schema" type="text" value="${escapeAttribute(safe.output_schema || "")}" />
-        </label>
-        <label class="workflow-definition-field">
-          <span>Artifact Contract Ref</span>
-          <input data-state-field="${escapeAttribute(prefix)}.artifact_contract_ref" type="text" value="${escapeAttribute(safe.artifact_contract_ref || "")}" />
-        </label>
-        <label class="workflow-definition-field workflow-definition-checkbox-field">
-          <span class="workflow-definition-checkbox-title">Auto Retry</span>
-          <span class="workflow-definition-checkbox-control">
-            <input data-state-field="${escapeAttribute(prefix)}.auto_retry.enabled" type="checkbox" ${safe.auto_retry?.enabled ? "checked" : ""} />
-            <span class="workflow-definition-switch" aria-hidden="true">
-              <span class="workflow-definition-switch-track"></span>
-              <span class="workflow-definition-switch-thumb"></span>
-            </span>
-            <span class="workflow-definition-checkbox-text">${safe.auto_retry?.enabled ? "已启用" : "未启用"}</span>
-          </span>
-        </label>
-        <label class="workflow-definition-field">
-          <span>Max Attempts</span>
-          <input data-state-field="${escapeAttribute(prefix)}.auto_retry.max_attempts" type="number" min="0" step="1" value="${escapeAttribute(safe.auto_retry?.max_attempts ?? "")}" />
-        </label>
-      </div>
-      <label class="workflow-definition-field workflow-definition-field-block">
-        <span>Success Criteria</span>
-        <textarea data-state-field="${escapeAttribute(prefix)}.success_criteria" rows="3">${escapeHtml(formatWorkflowDefinitionListText(safe.success_criteria))}</textarea>
-      </label>
-      <label class="workflow-definition-field workflow-definition-field-block">
-        <span>Retryable Failures</span>
-        <textarea data-state-field="${escapeAttribute(prefix)}.auto_retry.retryable_failures" rows="2" placeholder="transient_error&#10;evaluator_pending">${escapeHtml(formatWorkflowDefinitionListText(safe.auto_retry?.retryable_failures))}</textarea>
-      </label>
-    </div>
   `;
 }
 
@@ -7535,21 +7467,9 @@ function bindWorkflowDefinitionStateInspectorEvents() {
           if (state.description) nextState.description = state.description;
           return cleanupStateObject(nextState);
         }
-        if (path === "allowed_actions" || path === "allowed_channels" || isWorkflowDefinitionHandoffListField(path)) {
-          if (isWorkflowDefinitionHandoffListField(path)) {
-            setNestedValue(state, path, parseWorkflowDefinitionListText(el.value), {
-              array: true,
-            });
-            return cleanupStateObject(state);
-          }
+        if (path === "allowed_actions" || path === "allowed_channels") {
           state[path] = parseWorkflowDefinitionListText(el.value);
           if (path === "allowed_actions") syncInterruptResumeTransitions(state);
-          return cleanupStateObject(state);
-        }
-        if (isWorkflowDefinitionHandoffNumberField(path)) {
-          setNestedValue(state, path, el.value, {
-            number: true,
-          });
           return cleanupStateObject(state);
         }
         if (path === "resume_payload_schema.schema") {
@@ -8072,7 +7992,6 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
           <span>Task Template</span>
           <textarea data-state-field="delegate.task_template" rows="3">${escapeHtml(selectedState.delegate?.task_template || "")}</textarea>
         </label>
-        ${buildWorkflowDefinitionHandoffInspectorHtml("delegate.handoff", selectedState.delegate?.handoff)}
       </section>
       <section class="workflow-definition-state-inspector-section">
         <div class="workflow-definition-state-inspector-title">On Complete Success</div>
@@ -8517,8 +8436,6 @@ function buildWorkflowDefinitionGraphNodeHtml(stateKey, state, layout, entryStat
   const meta = [];
   if (state.delegate?.role) meta.push(`<span>role: ${escapeHtml(state.delegate.role)}</span>`);
   if (state.delegate?.skill) meta.push(`<span>skill: ${escapeHtml(state.delegate.skill)}</span>`);
-  if (state.delegate?.handoff?.output_schema) meta.push(`<span>handoff: ${escapeHtml(state.delegate.handoff.output_schema)}</span>`);
-  else if (state.delegate?.handoff?.artifact_contract_ref) meta.push(`<span>handoff: ${escapeHtml(state.delegate.handoff.artifact_contract_ref)}</span>`);
   if (state.card?.ref) meta.push(`<span>card: ${escapeHtml(state.card.ref)}</span>`);
 
   return `
