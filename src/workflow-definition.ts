@@ -11,7 +11,6 @@ export interface WorkflowDefinitionHandoff {
   output_schema?: string;
   artifact_contract_ref?: string;
   success_criteria?: string[];
-  failure_taxonomy?: string[];
   auto_retry?: {
     enabled?: boolean;
     max_attempts?: number;

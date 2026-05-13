@@ -5612,10 +5612,8 @@ function formatWorkflowDefinitionListText(value) {
 function isWorkflowDefinitionHandoffListField(path) {
   return (
     path === "delegate.handoff.success_criteria" ||
-    path === "delegate.handoff.failure_taxonomy" ||
     path === "delegate.handoff.auto_retry.retryable_failures" ||
     path.endsWith(".delegate.handoff.success_criteria") ||
-    path.endsWith(".delegate.handoff.failure_taxonomy") ||
     path.endsWith(".delegate.handoff.auto_retry.retryable_failures")
   );
 }
@@ -7391,10 +7389,6 @@ function buildWorkflowDefinitionHandoffInspectorHtml(prefix, handoff) {
       <label class="workflow-definition-field workflow-definition-field-block">
         <span>Success Criteria</span>
         <textarea data-state-field="${escapeAttribute(prefix)}.success_criteria" rows="3">${escapeHtml(formatWorkflowDefinitionListText(safe.success_criteria))}</textarea>
-      </label>
-      <label class="workflow-definition-field workflow-definition-field-block">
-        <span>Failure Taxonomy</span>
-        <textarea data-state-field="${escapeAttribute(prefix)}.failure_taxonomy" rows="2" placeholder="needs_revision&#10;blocked">${escapeHtml(formatWorkflowDefinitionListText(safe.failure_taxonomy))}</textarea>
       </label>
       <label class="workflow-definition-field workflow-definition-field-block">
         <span>Retryable Failures</span>

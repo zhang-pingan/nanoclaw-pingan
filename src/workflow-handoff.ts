@@ -7,7 +7,6 @@ export interface WorkflowHandoffContract {
   output_schema: string;
   artifact_contract_ref?: string;
   success_criteria: string[];
-  failure_taxonomy: string[];
   auto_retry: {
     enabled: boolean;
     max_attempts: number;
@@ -40,25 +39,6 @@ export interface WorkflowHandoffResultValidation {
   payload: Record<string, unknown> | null;
   errors: string[];
 }
-
-const CORE_FAILURE_TAXONOMY = [
-  'model_api_error',
-  'model_output_invalid',
-  'tool_error',
-  'tool_contract_error',
-  'sandbox_error',
-  'container_runtime_error',
-  'timeout',
-  'routing_error',
-  'state_transition_error',
-  'workflow_transition_error',
-  'evaluation_failed',
-  'invalid_input',
-  'invalid_config',
-  'permission_error',
-  'db_error',
-  'unknown_error',
-];
 
 function uniqueStrings(values: unknown[] | undefined): string[] {
   return Array.from(
@@ -140,7 +120,6 @@ export function buildWorkflowHandoffEnvelope(input: {
         ? { artifact_contract_ref: artifactContractRef }
         : {}),
       success_criteria: uniqueStrings(configured.success_criteria) || [],
-      failure_taxonomy: uniqueStrings(configured.failure_taxonomy) || [],
       auto_retry: {
         enabled: configured.auto_retry?.enabled ?? false,
         max_attempts: configured.auto_retry?.max_attempts ?? 0,
@@ -175,10 +154,6 @@ export function normalizeWorkflowHandoffEnvelope(
         envelope.contract.success_criteria.length > 0
           ? envelope.contract.success_criteria
           : defaultSuccessCriteria(envelope.skill),
-      failure_taxonomy:
-        envelope.contract.failure_taxonomy.length > 0
-          ? envelope.contract.failure_taxonomy
-          : CORE_FAILURE_TAXONOMY,
     },
   };
 }
