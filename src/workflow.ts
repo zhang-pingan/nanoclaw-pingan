@@ -1966,6 +1966,7 @@ function runSystemState(
   const transition = state.on_complete?.success;
   if (!transition) return;
   applyTransition(workflow, transition, resolveRolesOrEmpty(workflow), {
+    fallbackToTargetDelegate: true,
     workflowUpdates: {
       context: {
         last_system_state: {
@@ -2795,6 +2796,7 @@ function applyTransition(
     accessToken?: string;
     testDoc?: string;
     workflowUpdates?: Parameters<typeof updateWorkflow>[1];
+    fallbackToTargetDelegate?: boolean;
   },
 ): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
@@ -2847,9 +2849,27 @@ function applyTransition(
     round,
   };
 
-  // 3. Create durable delegation intent if transition specifies a role + skill
-  const delegateRole = transition.role;
-  const delegateSkill = transition.skill;
+  const targetStateConfig = config.states[transition.target];
+  const useTargetDelegate =
+    extra?.fallbackToTargetDelegate === true &&
+    !transition.role &&
+    !transition.skill &&
+    targetStateConfig?.type === 'delegation';
+
+  // 3. Create durable delegation intent from the transition, or from the
+  // target state when explicitly allowed.
+  const delegateRole = useTargetDelegate
+    ? targetStateConfig?.role
+    : transition.role;
+  const delegateSkill = useTargetDelegate
+    ? targetStateConfig?.skill
+    : transition.skill;
+  const delegateTaskTemplate = useTargetDelegate
+    ? targetStateConfig?.task_template
+    : transition.task_template;
+  const delegateHandoff = useTargetDelegate
+    ? targetStateConfig?.handoff
+    : transition.handoff;
   let delegationIntent: DelegationIntent | null = null;
 
   if (delegateRole && delegateSkill) {
@@ -2859,8 +2879,8 @@ function applyTransition(
         `Workflow: role "${delegateRole}" has no resolved target folder`,
       );
     }
-    const taskContent = transition.task_template
-      ? renderTemplate(transition.task_template, vars, roles)
+    const taskContent = delegateTaskTemplate
+      ? renderTemplate(delegateTaskTemplate, vars, roles)
       : '';
     const finalTaskContent = finalizeDelegationTaskContent(
       delegateSkill,
@@ -2870,7 +2890,6 @@ function applyTransition(
     );
 
     const delegationKey = `workflow_delegation:${workflow.id}:${transition.target}:${round}:1`;
-    const targetStateConfig = config.states[transition.target];
     delegationIntent = createDurableDelegationIntent({
       workflowId: workflow.id,
       sourceJid: workflow.source_jid,
@@ -2880,7 +2899,7 @@ function applyTransition(
       role: delegateRole,
       skillName: delegateSkill,
       taskContent: finalTaskContent,
-      handoff: transition.handoff,
+      handoff: delegateHandoff,
       artifactContractRef: targetStateConfig?.artifact_contract?.ref,
       evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
         targetStateConfig?.evaluator?.ref,
@@ -3430,6 +3449,7 @@ export function skipWorkflowStage(
   createWorkbenchManualSkipEvent(workflowId, stageKey);
   applyTransition(workflow, transition, rolesResult.roles, {
     fromStatusOverride: stageKey,
+    fallbackToTargetDelegate: stateConfig.type === 'delegation',
   });
   return {};
 }
@@ -3931,6 +3951,8 @@ export function onDelegationComplete(delegationId: string): void {
     resultSummary,
     testDoc,
     workflowUpdates,
+    fallbackToTargetDelegate:
+      evaluation.status === 'passed' && !stateConfig.evaluator?.on_pass,
   });
 
   if (shouldCreateEvaluationActionItem) {

@@ -1112,6 +1112,9 @@ describe('workflow metadata and branch flow', () => {
 
     onDelegationComplete('del-plan');
 
+    const planState = getWorkflowTypeConfig('dev_test')?.states.plan;
+    expect(planState?.on_complete?.success.role).toBeUndefined();
+
     const workflow = getWorkflow('wf-plan');
     expect(workflow?.status).toBe('plan_examine');
     expect(getLatestWorkflowStageEvaluation('wf-plan', 'plan')?.status).toBe(
@@ -1141,6 +1144,8 @@ describe('workflow metadata and branch flow', () => {
 
     const delegations = getDelegationsByWorkflow('wf-plan');
     const latest = delegations.find((item) => item.id !== 'del-plan');
+    expect(latest?.handoff_role).toBe('plan_examiner');
+    expect(latest?.handoff_skill).toBe('plan-examine');
     expect(latest?.task).toContain(
       `方案文件：/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
     );

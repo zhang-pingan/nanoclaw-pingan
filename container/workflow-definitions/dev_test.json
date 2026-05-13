@@ -132,26 +132,6 @@
           "on_complete": {
             "success": {
               "target": "plan_examine",
-              "delegate": {
-                "role": "plan_examiner",
-                "skill": "plan-examine",
-                "task_template": "流程类型：{{workflow_type}}\n请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}",
-                "handoff": {
-                  "input_schema": "workflow.review.input.v1",
-                  "output_schema": "dev_test.plan.v1",
-                  "artifact_contract_ref": "dev_test.plan.v1",
-                  "success_criteria": [
-                    "完成方案复核",
-                    "返回明确 review verdict",
-                    "findings 和 evidence 支撑复核结论"
-                  ],
-                  "auto_retry": {
-                    "enabled": false,
-                    "max_attempts": 0,
-                    "retryable_failures": []
-                  }
-                }
-              },
               "notify": {
                 "template": "[流程进展] 需求「{{name}}」({{id}}) 方案设计完成，已委派 {{role_folder:plan_examiner}} 进行方案审核。"
               }
@@ -193,27 +173,6 @@
           "on_complete": {
             "success": {
               "target": "dev",
-              "delegate": {
-                "role": "dev",
-                "skill": "dev-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}",
-                "handoff": {
-                  "input_schema": "workflow.dev.input.v1",
-                  "output_schema": "dev_test.dev.v1",
-                  "artifact_contract_ref": "dev_test.dev.v1",
-                  "success_criteria": [
-                    "代码改动完成并位于指定工作分支",
-                    "相关验证或测试已执行并记录",
-                    "开发文档写入指定交付目录",
-                    "返回 deliverable、main_branch、work_branch、verdict、summary、findings、evidence"
-                  ],
-                  "auto_retry": {
-                    "enabled": false,
-                    "max_attempts": 0,
-                    "retryable_failures": []
-                  }
-                }
-              },
               "notify": {
                 "template": "[流程进展] 需求「{{name}}」({{id}}) 方案审核通过，已自动进入开发阶段，已委派 {{role_folder:dev}} 开始执行。"
               }
@@ -346,26 +305,6 @@
           "on_complete": {
             "success": {
               "target": "dev_examine",
-              "delegate": {
-                "role": "dev_examiner",
-                "skill": "dev-examine",
-                "task_template": "流程类型：{{workflow_type}}\n请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}",
-                "handoff": {
-                  "input_schema": "workflow.review.input.v1",
-                  "output_schema": "dev_test.dev.v1",
-                  "artifact_contract_ref": "dev_test.dev.v1",
-                  "success_criteria": [
-                    "完成实现和文档复核",
-                    "返回 passed 或 needs_revision verdict",
-                    "findings 和 evidence 指向具体问题或通过依据"
-                  ],
-                  "auto_retry": {
-                    "enabled": false,
-                    "max_attempts": 0,
-                    "retryable_failures": []
-                  }
-                }
-              },
               "notify": {
                 "template": "[流程进展] 需求「{{name}}」({{id}}) 开发已完成，已委派 {{role_folder:dev_examiner}} 进行开发复核与 Code Review。"
               }
