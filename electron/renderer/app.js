@@ -75,10 +75,7 @@ var workflowDefinitionStatesInput = document.getElementById("workflow-definition
 var workflowDefinitionStateAddBtn = document.getElementById("workflow-definition-state-add-btn");
 var workflowDefinitionStateList = document.getElementById("workflow-definition-state-list");
 var workflowDefinitionStateInspector = document.getElementById("workflow-definition-state-inspector");
-var workflowDefinitionStatusLabelAddBtn = document.getElementById("workflow-definition-status-label-add-btn");
 var workflowDefinitionStatusLabelsInput = document.getElementById("workflow-definition-status-labels");
-var workflowDefinitionStatusLabelList = document.getElementById("workflow-definition-status-label-list");
-var workflowDefinitionStatusLabelInspector = document.getElementById("workflow-definition-status-label-inspector");
 var workflowDefinitionCreateFormFieldAddBtn = document.getElementById("workflow-definition-create-form-field-add-btn");
 var workflowDefinitionCreateFormFieldList = document.getElementById("workflow-definition-create-form-field-list");
 var workflowDefinitionCreateFormInspector = document.getElementById("workflow-definition-create-form-inspector");
@@ -361,7 +358,6 @@ var workflowDefinitionGraphSuppressClick = false;
 var workflowDefinitionSelectedRoleKey = "";
 var workflowDefinitionSelectedEntryPointKey = "";
 var workflowDefinitionSelectedStateKey = "";
-var workflowDefinitionSelectedStatusLabelKey = "";
 var workflowDefinitionSelectedCreateFormFieldKey = "";
 var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRoleGroupOptions = [];
@@ -5057,7 +5053,6 @@ const WORKFLOW_DEFINITION_READONLY_NAV_BUTTON_SELECTOR = [
   "[data-role-select]",
   "[data-entry-point-select]",
   "[data-state-select]",
-  "[data-status-label-select]",
   "[data-create-form-field-select]",
 ].join(",");
 
@@ -5617,6 +5612,14 @@ function getWorkflowDefinitionSkillOptions() {
   return Array.isArray(workflowDefinitionSkillOptions) ? workflowDefinitionSkillOptions : [];
 }
 
+function getStatusLabelsFromEditorOrEmpty() {
+  try {
+    return getStatusLabelsFromEditor();
+  } catch {
+    return {};
+  }
+}
+
 function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   const items = [];
   const roles = definition?.roles || {};
@@ -5932,11 +5935,13 @@ function applyWorkflowDefinitionStatusLabelPatch(stateKey, updater) {
   if (!stateKey) return;
   try {
     const statusLabels = getStatusLabelsFromEditor();
-    statusLabels[stateKey] = updater(statusLabels[stateKey] || "");
+    const nextLabel = String(updater(statusLabels[stateKey] || "") || "").trim();
+    if (nextLabel) statusLabels[stateKey] = nextLabel;
+    else delete statusLabels[stateKey];
     updateStatusLabelsEditor(statusLabels);
     const editable = getEditableWorkflowDefinition();
     if (editable) editable.status_labels = statusLabels;
-    renderWorkflowDefinitionStatusLabelEditor(statusLabels);
+    renderWorkflowDefinitionStateEditor();
   } catch (err) {
     showToast(err instanceof Error ? err.message : "Status Label 配置解析失败", 2200);
   }
@@ -6653,52 +6658,6 @@ async function deleteWorkflowDefinitionEntryPoint() {
   }
 }
 
-async function addWorkflowDefinitionStatusLabel() {
-  const sourceStateKey = workflowDefinitionSelectedStateKey || Object.keys(getStatesFromEditor())[0] || "";
-  const rawKey = await openTextPrompt("输入要绑定的 state key", sourceStateKey, {
-    title: "新增 Status Label",
-  });
-  const stateKey = (rawKey || "").trim();
-  if (!stateKey) return;
-  try {
-    const statusLabels = getStatusLabelsFromEditor();
-    if (statusLabels[stateKey]) {
-      alert(`status label "${stateKey}" 已存在`);
-      return;
-    }
-    statusLabels[stateKey] = "";
-    updateStatusLabelsEditor(statusLabels);
-    const editable = getEditableWorkflowDefinition();
-    if (editable) editable.status_labels = statusLabels;
-    workflowDefinitionSelectedStatusLabelKey = stateKey;
-    renderWorkflowDefinitionStatusLabelEditor(statusLabels);
-    showToast(`已新增 status label: ${stateKey}`);
-  } catch (err) {
-    alert(err instanceof Error ? err.message : "新增 status label 失败");
-  }
-}
-
-async function deleteWorkflowDefinitionStatusLabel() {
-  if (!workflowDefinitionSelectedStatusLabelKey) return;
-  try {
-    const statusLabels = getStatusLabelsFromEditor();
-    if (
-      !(await openConfirmDialog(`确认删除 status label "${workflowDefinitionSelectedStatusLabelKey}" 吗？`, {
-        title: "删除 Status Label",
-      }))
-    ) return;
-    delete statusLabels[workflowDefinitionSelectedStatusLabelKey];
-    updateStatusLabelsEditor(statusLabels);
-    const editable = getEditableWorkflowDefinition();
-    if (editable) editable.status_labels = statusLabels;
-    workflowDefinitionSelectedStatusLabelKey = Object.keys(statusLabels)[0] || "";
-    renderWorkflowDefinitionStatusLabelEditor(statusLabels);
-    showToast("已删除 status label");
-  } catch (err) {
-    alert(err instanceof Error ? err.message : "删除 status label 失败");
-  }
-}
-
 async function renameWorkflowDefinitionState() {
   if (!workflowDefinitionSelectedStateKey) return;
   const oldKey = workflowDefinitionSelectedStateKey;
@@ -6921,7 +6880,6 @@ function renderWorkflowDefinitionEditor(definition, bundle) {
   renderWorkflowDefinitionRoleEditor(definition.roles || {});
   renderWorkflowDefinitionEntryPointEditor(definition.entry_points || {});
   renderWorkflowDefinitionStateEditor(definition.states || {});
-  renderWorkflowDefinitionStatusLabelEditor(definition.status_labels || {});
   renderWorkflowDefinitionCreateFormEditor(definition.create_form || { fields: [] });
 }
 
@@ -7135,9 +7093,9 @@ function jumpToWorkflowValidationItem(item) {
   }
   const statusMatch = message.match(/^status_labels\.([^. ]+)/);
   if (statusMatch) {
-    workflowDefinitionSelectedStatusLabelKey = statusMatch[1];
-    renderWorkflowDefinitionStatusLabelEditor();
-    focusWorkflowDefinitionJsonField(workflowDefinitionStatusLabelsInput, statusMatch[1]);
+    updateWorkflowDefinitionSelectedState(statusMatch[1]);
+    const input = workflowDefinitionStateInspector?.querySelector("[data-state-status-label-field]");
+    if (input) input.focus();
     return;
   }
   if (String(item?.group || "") === "roles") {
@@ -7467,6 +7425,18 @@ function updateWorkflowDefinitionSelectedState(stateKey) {
 
 function bindWorkflowDefinitionStateInspectorEvents() {
   if (!workflowDefinitionStateInspector) return;
+  const statusLabelInput = workflowDefinitionStateInspector.querySelector("[data-state-status-label-field]");
+  if (statusLabelInput) {
+    statusLabelInput.addEventListener("input", () => {
+      const selection = captureWorkflowDefinitionInspectorSelection(statusLabelInput);
+      applyWorkflowDefinitionStatusLabelPatch(workflowDefinitionSelectedStateKey, () => statusLabelInput.value || "");
+      restoreWorkflowDefinitionInspectorFocus(
+        workflowDefinitionStateInspector,
+        getWorkflowDefinitionInspectorSelector("data-state-status-label-field", "value"),
+        selection,
+      );
+    });
+  }
   Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-state-field], [data-state-select-field]")).forEach((el) => {
     const eventName = el.tagName === "SELECT" || el.hasAttribute("data-workflow-definition-select-button") ? "change" : el.type === "checkbox" ? "change" : "input";
     el.addEventListener(eventName, () => {
@@ -7823,82 +7793,6 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
   applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
 
-function renderWorkflowDefinitionStatusLabelEditor(statusLabelsArg) {
-  if (!workflowDefinitionStatusLabelList || !workflowDefinitionStatusLabelInspector) return;
-  let statusLabels = statusLabelsArg;
-  try {
-    statusLabels = statusLabels || getStatusLabelsFromEditor();
-  } catch (err) {
-    workflowDefinitionStatusLabelList.innerHTML =
-      '<div class="workflow-definition-state-list-empty">Status Label 配置解析失败，暂时无法渲染结构化编辑器。</div>';
-    workflowDefinitionStatusLabelInspector.innerHTML =
-      `<div class="workflow-definition-state-inspector-empty">${escapeHtml(err instanceof Error ? err.message : "Status Label 配置解析失败")}</div>`;
-    return;
-  }
-  const labelEntries = Object.entries(statusLabels || {});
-  if (!labelEntries.length) {
-    workflowDefinitionStatusLabelList.innerHTML = '<div class="workflow-definition-state-list-empty">暂无 status label，可先新增。</div>';
-    workflowDefinitionStatusLabelInspector.innerHTML =
-      '<div class="workflow-definition-state-inspector-empty">选择一个 status label 查看结构化编辑面板。</div>';
-    return;
-  }
-  if (!workflowDefinitionSelectedStatusLabelKey || !Object.prototype.hasOwnProperty.call(statusLabels, workflowDefinitionSelectedStatusLabelKey)) {
-    workflowDefinitionSelectedStatusLabelKey = labelEntries[0][0];
-  }
-  workflowDefinitionStatusLabelList.innerHTML = labelEntries
-    .map(
-      ([stateKey, value]) => `
-        <button type="button" class="workflow-definition-state-list-item${workflowDefinitionSelectedStatusLabelKey === stateKey ? " active" : ""}" data-status-label-select="${escapeAttribute(stateKey)}">
-          <strong>${escapeHtml(stateKey)}</strong>
-          <span>${escapeHtml(String(value || ""))}</span>
-        </button>
-      `,
-    )
-    .join("");
-  Array.from(workflowDefinitionStatusLabelList.querySelectorAll("[data-status-label-select]")).forEach((button) => {
-    button.addEventListener("click", () => {
-      workflowDefinitionSelectedStatusLabelKey = button.getAttribute("data-status-label-select") || "";
-      renderWorkflowDefinitionStatusLabelEditor(statusLabels);
-    });
-  });
-  const stateOptions = Object.keys(getStatesFromEditor());
-  const missingState = workflowDefinitionSelectedStatusLabelKey && !stateOptions.includes(workflowDefinitionSelectedStatusLabelKey);
-  workflowDefinitionStatusLabelInspector.innerHTML = `
-    <div class="workflow-definition-state-inspector-head">
-      <span>${escapeHtml(workflowDefinitionSelectedStatusLabelKey)}</span>
-      <div class="workflow-definition-state-head-actions">
-        <button type="button" class="btn-ghost" data-status-label-action="delete">删除</button>
-      </div>
-    </div>
-    <div class="workflow-definition-state-inspector-body">
-      ${
-        missingState
-          ? `<section class="workflow-definition-state-validation"><div class="workflow-definition-state-validation-item">当前 status label 对应的 state 不存在：${escapeHtml(workflowDefinitionSelectedStatusLabelKey)}</div></section>`
-          : ""
-      }
-      <label class="workflow-definition-field">
-        <span>Label Text</span>
-        <textarea data-status-label-field="value" rows="3">${escapeHtml(statusLabels[workflowDefinitionSelectedStatusLabelKey] || "")}</textarea>
-      </label>
-    </div>
-  `;
-  const valueInput = workflowDefinitionStatusLabelInspector.querySelector("[data-status-label-field='value']");
-  if (valueInput) {
-    valueInput.addEventListener("input", () => {
-      const selection = captureWorkflowDefinitionInspectorSelection(valueInput);
-      applyWorkflowDefinitionStatusLabelPatch(workflowDefinitionSelectedStatusLabelKey, () => valueInput.value || "");
-      restoreWorkflowDefinitionInspectorFocus(
-        workflowDefinitionStatusLabelInspector,
-        getWorkflowDefinitionInspectorSelector("data-status-label-field", "value"),
-        selection,
-      );
-    });
-  }
-  const deleteBtn = workflowDefinitionStatusLabelInspector.querySelector("[data-status-label-action='delete']");
-  if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionStatusLabel());
-  applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
-}
-
 function renderWorkflowDefinitionStateEditor(statesArg) {
   if (!workflowDefinitionStateList || !workflowDefinitionStateInspector) return;
   let states = statesArg;
@@ -7959,6 +7853,8 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
   const stateOptions = Object.keys(states);
   const cardOptions = getCurrentWorkflowCardRefs();
   const skillOptions = getWorkflowDefinitionSkillOptions();
+  const statusLabels = getStatusLabelsFromEditorOrEmpty();
+  const selectedStatusLabel = statusLabels[workflowDefinitionSelectedStateKey] || "";
   const selectOptions = { roleOptions, stateOptions, cardOptions, skillOptions };
   const validationItems = [];
   if (selectedState.type === "delegation") {
@@ -8042,6 +7938,10 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
         <label class="workflow-definition-field">
           <span>Label</span>
           <input data-state-field="label" type="text" value="${escapeAttribute(selectedState.label || "")}" />
+        </label>
+        <label class="workflow-definition-field">
+          <span>Status Label</span>
+          <input data-state-status-label-field="value" type="text" value="${escapeAttribute(selectedStatusLabel)}" placeholder="${escapeAttribute(selectedState.label || workflowDefinitionSelectedStateKey)}" />
         </label>
       </div>
       <label class="workflow-definition-field">
@@ -9085,7 +8985,6 @@ async function loadWorkflowDefinitionDetail(key) {
     workflowDefinitionSelectedRoleKey = "";
     workflowDefinitionSelectedEntryPointKey = "";
     workflowDefinitionSelectedStateKey = "";
-    workflowDefinitionSelectedStatusLabelKey = "";
     const versions = getWorkflowDefinitionVersionList();
     if (!versions.some((version) => version.version === workflowDefinitionSelectedVersion)) {
       workflowDefinitionSelectedVersion = versions[0]?.version ?? null;
@@ -20920,11 +20819,6 @@ if (workflowDefinitionEntryPointAddBtn) {
     addWorkflowDefinitionEntryPoint();
   });
 }
-if (workflowDefinitionStatusLabelAddBtn) {
-  workflowDefinitionStatusLabelAddBtn.addEventListener("click", () => {
-    addWorkflowDefinitionStatusLabel();
-  });
-}
 if (workflowDefinitionPreviewCreateFormBtn) {
   workflowDefinitionPreviewCreateFormBtn.addEventListener("click", () => {
     openWorkflowDefinitionCreateFormPreview();
@@ -21007,7 +20901,7 @@ if (workflowDefinitionStatusLabelsInput) {
       }
     })();
     if (editable) editable.status_labels = parsedStatusLabels;
-    renderWorkflowDefinitionStatusLabelEditor(parsedStatusLabels);
+    renderWorkflowDefinitionStateEditor();
   });
 }
 if (workbenchCommentSubmit) {
