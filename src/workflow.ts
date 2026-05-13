@@ -98,7 +98,10 @@ import {
   buildWorkflowStageEvaluationRecord,
   evaluateWorkflowStage,
 } from './workflow-stage-evaluation.js';
-import { evaluateWorkflowArtifactContract } from './workflow-artifact-contract.js';
+import {
+  evaluateWorkflowArtifactContract,
+  getWorkflowArtifactContract,
+} from './workflow-artifact-contract.js';
 import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 import {
   buildWorkflowHandoffEnvelope,
@@ -334,6 +337,87 @@ function getMainFolder(sourceJid?: string): string {
   return Object.values(groups).find((g) => g.isMain)?.folder || '';
 }
 
+function describeSchemaForPrompt(schema: unknown): string {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return 'any';
+  }
+  const typed = schema as {
+    type?: unknown;
+    minLength?: unknown;
+    maxLength?: unknown;
+    enum?: unknown;
+  };
+  const parts: string[] = [];
+  if (typeof typed.type === 'string') parts.push(typed.type);
+  if (typeof typed.minLength === 'number') {
+    parts.push(`minLength=${typed.minLength}`);
+  }
+  if (typeof typed.maxLength === 'number') {
+    parts.push(`maxLength=${typed.maxLength}`);
+  }
+  if (Array.isArray(typed.enum) && typed.enum.length > 0) {
+    parts.push(`enum=${typed.enum.map((item) => String(item)).join('|')}`);
+  }
+  return parts.join(', ') || 'any';
+}
+
+function buildArtifactContractPrompt(contractRef?: string): string {
+  if (!contractRef) return '';
+  const contract = getWorkflowArtifactContract(contractRef);
+  if (!contract) {
+    return [
+      'artifact_contract:',
+      `- id: ${contractRef}`,
+      '- details: 未找到契约定义，请按 success_criteria 交付。',
+    ].join('\n');
+  }
+
+  const lines = ['artifact_contract:', `- id: ${contract.id}`];
+  if (contract.description)
+    lines.push(`- description: ${contract.description}`);
+
+  lines.push('- result_required:');
+  for (const field of ['verdict', 'summary', 'findings', 'evidence']) {
+    const type =
+      field === 'verdict'
+        ? 'passed | failed | needs_revision | pending'
+        : field === 'summary'
+          ? 'string'
+          : 'array';
+    lines.push(`  - ${field}: ${type}`);
+  }
+  const payloadRequired = Array.from(
+    new Set(
+      (contract.payload?.required || []).filter(
+        (field): field is string => typeof field === 'string' && !!field,
+      ),
+    ),
+  );
+  for (const field of payloadRequired) {
+    const schema = contract.payload?.properties?.[field];
+    lines.push(`  - ${field}: ${describeSchemaForPrompt(schema)}`);
+  }
+
+  const files = contract.files || [];
+  if (files.length > 0) {
+    lines.push('- files:');
+    for (const file of files) {
+      const requirement =
+        file.required || file.must_exist ? 'required' : 'optional';
+      lines.push(`  - path: ${file.path}`);
+      lines.push(`    required: ${requirement}`);
+      if (file.frontmatter_required?.length) {
+        lines.push(
+          `    frontmatter_required: ${file.frontmatter_required.join(', ')}`,
+        );
+      }
+      if (file.max_bytes) lines.push(`    max_bytes: ${file.max_bytes}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
 /** Inject a message into a group's chat to trigger the agent. */
 function injectDelegation(
   targetJid: string,
@@ -349,21 +433,17 @@ function injectDelegation(
 
   storeChatMetadata(targetJid, now);
 
+  const artifactContractText = buildArtifactContractPrompt(
+    handoffEnvelope?.contract.artifact_contract_ref,
+  );
   const contractText = handoffEnvelope
     ? [
         '[Typed Handoff]',
-        `role: ${handoffEnvelope.role}`,
         `skill: ${handoffEnvelope.skill}`,
-        `input_schema: ${handoffEnvelope.contract.input_schema}`,
-        `output_schema: ${handoffEnvelope.contract.output_schema}`,
-        handoffEnvelope.contract.artifact_contract_ref
-          ? `artifact_contract: ${handoffEnvelope.contract.artifact_contract_ref}`
-          : '',
-        `allowed_tools: ${handoffEnvelope.contract.allowed_tools.join(', ') || '未限制'}`,
         `success_criteria:\n${handoffEnvelope.contract.success_criteria.map((item) => `- ${item}`).join('\n')}`,
-        `failure_taxonomy: ${handoffEnvelope.contract.failure_taxonomy.join(', ')}`,
+        artifactContractText,
         '',
-        'complete_delegation.result 必须返回 JSON object，至少包含 verdict、summary、findings、evidence，并包含本阶段 output_schema 要求的字段。',
+        'complete_delegation.result 必须返回 JSON object，包含 result_required 中列出的字段，并满足文件产物要求。',
       ]
         .filter(Boolean)
         .join('\n')
