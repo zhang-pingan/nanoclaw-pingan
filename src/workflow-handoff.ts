@@ -1,4 +1,5 @@
 import type { Delegation, Workflow } from './types.js';
+import { validateWorkflowArtifactContractPayload } from './workflow-artifact-contract.js';
 import type { WorkflowDefinitionHandoff } from './workflow-definition.js';
 
 export interface WorkflowHandoffContract {
@@ -95,10 +96,8 @@ export function buildWorkflowHandoffEnvelope(input: {
   taskContent: string;
   handoff?: WorkflowDefinitionHandoff;
   artifactContractRef?: string;
-  evaluatorArtifactContractRef?: string;
 }): WorkflowHandoffEnvelope {
-  const fallbackContractRef =
-    input.artifactContractRef || input.evaluatorArtifactContractRef;
+  const fallbackContractRef = input.artifactContractRef;
   const configured = input.handoff || {};
   const outputSchema =
     configured.output_schema ||
@@ -219,9 +218,19 @@ export function validateWorkflowHandoffResult(
     errors.push('evidence must be an array');
   }
 
-  const contract = parseHandoffContract(delegation);
+  const contract = parseWorkflowHandoffContract(delegation);
   const schemaRef = contract?.artifact_contract_ref || contract?.output_schema;
-  if (schemaRef && schemaRef.includes('.testing.')) {
+  const payloadContractIssues = validateWorkflowArtifactContractPayload({
+    contractRef: contract?.artifact_contract_ref,
+    payload,
+  });
+  errors.push(...payloadContractIssues.map((issue) => issue.message));
+
+  if (
+    !contract?.artifact_contract_ref &&
+    schemaRef &&
+    schemaRef.includes('.testing.')
+  ) {
     for (const key of ['total', 'passed', 'failed', 'blocked']) {
       if (typeof payload[key] !== 'number')
         errors.push(`${key} must be a number`);
@@ -235,7 +244,7 @@ export function validateWorkflowHandoffResult(
   };
 }
 
-function parseHandoffContract(
+export function parseWorkflowHandoffContract(
   delegation: Delegation | null | undefined,
 ): WorkflowHandoffContract | null {
   if (!delegation?.handoff_contract_json) return null;
@@ -247,4 +256,11 @@ function parseHandoffContract(
   } catch {
     return null;
   }
+}
+
+export function getDelegationArtifactContractRef(
+  delegation: Delegation | null | undefined,
+): string | undefined {
+  const contract = parseWorkflowHandoffContract(delegation);
+  return contract?.artifact_contract_ref || undefined;
 }

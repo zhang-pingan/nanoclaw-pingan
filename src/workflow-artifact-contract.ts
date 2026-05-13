@@ -44,6 +44,14 @@ interface WorkflowArtifactContract {
   allowed_artifact_roots?: string[];
 }
 
+export interface WorkflowArtifactPayloadValidationIssue {
+  code:
+    | 'artifact_contract.payload_missing'
+    | 'artifact_contract.payload_schema_invalid';
+  message: string;
+  field?: string;
+}
+
 let cachedContracts: Record<string, WorkflowArtifactContract> | null = null;
 
 function contractsDir(): string {
@@ -202,6 +210,44 @@ function validateJsonSchemaSubset(
   return errors;
 }
 
+export function validateWorkflowArtifactContractPayload(input: {
+  contractRef: string | undefined;
+  payload: Record<string, unknown>;
+}): WorkflowArtifactPayloadValidationIssue[] {
+  const contract = getWorkflowArtifactContract(input.contractRef);
+  if (!contract) return [];
+
+  const issues: WorkflowArtifactPayloadValidationIssue[] = [];
+  for (const requiredKey of contract.payload?.required || []) {
+    if (input.payload[requiredKey] === undefined) {
+      issues.push({
+        code: 'artifact_contract.payload_missing',
+        field: requiredKey,
+        message: `Payload missing required field "${requiredKey}"`,
+      });
+    }
+  }
+
+  for (const [key, schema] of Object.entries(
+    contract.payload?.properties || {},
+  )) {
+    if (input.payload[key] === undefined) continue;
+    for (const error of validateJsonSchemaSubset(
+      schema as JsonSchema,
+      input.payload[key],
+      `payload.${key}`,
+    )) {
+      issues.push({
+        code: 'artifact_contract.payload_schema_invalid',
+        field: key,
+        message: error,
+      });
+    }
+  }
+
+  return issues;
+}
+
 export function evaluateWorkflowArtifactContract(input: {
   workflow: Workflow;
   contractRef: string | undefined;
@@ -213,32 +259,16 @@ export function evaluateWorkflowArtifactContract(input: {
   const findings: WorkflowEvalFinding[] = [];
   const evidence: WorkflowEvalEvidence[] = [];
 
-  for (const requiredKey of contract.payload?.required || []) {
-    if (input.payload[requiredKey] === undefined) {
-      findings.push({
-        code: 'artifact_contract.payload_missing',
-        severity: 'high',
-        message: `Payload missing required field "${requiredKey}"`,
-        stageKey: input.workflow.status,
-      });
-    }
-  }
-  for (const [key, schema] of Object.entries(
-    contract.payload?.properties || {},
-  )) {
-    if (input.payload[key] === undefined) continue;
-    for (const error of validateJsonSchemaSubset(
-      schema as JsonSchema,
-      input.payload[key],
-      `payload.${key}`,
-    )) {
-      findings.push({
-        code: 'artifact_contract.payload_schema_invalid',
-        severity: 'high',
-        message: error,
-        stageKey: input.workflow.status,
-      });
-    }
+  for (const issue of validateWorkflowArtifactContractPayload({
+    contractRef: input.contractRef,
+    payload: input.payload,
+  })) {
+    findings.push({
+      code: issue.code,
+      severity: 'high',
+      message: issue.message,
+      stageKey: input.workflow.status,
+    });
   }
 
   for (const file of contract.files || []) {

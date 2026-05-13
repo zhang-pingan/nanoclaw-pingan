@@ -8,7 +8,6 @@ export interface WorkflowEvaluatorConfig {
   id: string;
   type: 'deterministic' | 'ai' | 'hybrid';
   deterministic?: {
-    artifact_contract?: string;
     required_checks?: string[];
   };
   ai?: {

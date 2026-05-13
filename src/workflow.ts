@@ -107,6 +107,7 @@ import {
 import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 import {
   buildWorkflowHandoffEnvelope,
+  getDelegationArtifactContractRef,
   normalizeWorkflowHandoffEnvelope,
   parseDelegationHandoffResult,
   WorkflowHandoffEnvelope,
@@ -595,7 +596,6 @@ function createDurableDelegationIntent(input: {
   taskContent: string;
   handoff?: StateTransition['handoff'];
   artifactContractRef?: string;
-  evaluatorArtifactContractRef?: string;
   workflowForHandoff?: Workflow;
   idempotencyKey: string;
 }): DelegationIntent {
@@ -622,7 +622,6 @@ function createDurableDelegationIntent(input: {
       taskContent: input.taskContent,
       handoff: input.handoff,
       artifactContractRef: input.artifactContractRef,
-      evaluatorArtifactContractRef: input.evaluatorArtifactContractRef,
     }),
   );
 
@@ -2562,9 +2561,6 @@ function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
     taskContent: finalTaskContent,
     handoff: state.handoff,
     artifactContractRef: state.artifact_contract?.ref,
-    evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
-      state.evaluator?.ref,
-    )?.deterministic?.artifact_contract,
     idempotencyKey,
   }).delegationId;
   updateWorkflow(workflow.id, { current_delegation_id: delegationId });
@@ -3213,9 +3209,6 @@ function applyTransition(
       taskContent: finalTaskContent,
       handoff: delegateHandoff,
       artifactContractRef: targetStateConfig?.artifact_contract?.ref,
-      evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
-        targetStateConfig?.evaluator?.ref,
-      )?.deterministic?.artifact_contract,
       workflowForHandoff,
       idempotencyKey: delegationKey,
     });
@@ -3494,9 +3487,6 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           taskContent: finalTaskContent,
           handoff: entryStateConfig.handoff,
           artifactContractRef: entryStateConfig.artifact_contract?.ref,
-          evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
-            entryStateConfig.evaluator?.ref,
-          )?.deterministic?.artifact_contract,
           idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
         }).delegationId;
         updateWorkflow(workflowId, { current_delegation_id: delegationId });
@@ -3641,9 +3631,6 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         taskContent: finalTaskContent,
         handoff: entryStateConfig.handoff,
         artifactContractRef: entryStateConfig.artifact_contract?.ref,
-        evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
-          entryStateConfig.evaluator?.ref,
-        )?.deterministic?.artifact_contract,
         idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
       }).delegationId;
       updateWorkflow(workflowId, { current_delegation_id: delegationId });
@@ -3908,9 +3895,6 @@ export function retryWorkflowStage(
       taskContent: retriedTaskContent,
       handoff: stateConfig.handoff,
       artifactContractRef: stateConfig.artifact_contract?.ref,
-      evaluatorArtifactContractRef: getWorkflowEvaluatorConfig(
-        stateConfig.evaluator?.ref,
-      )?.deterministic?.artifact_contract,
       idempotencyKey: `workflow_delegation:${workflowId}:${stageKey}:${workflow.round}:${retryAttempt}`,
     }).delegationId;
 
@@ -4091,9 +4075,7 @@ export function onDelegationComplete(delegationId: string): void {
   const evaluatorConfig = getWorkflowEvaluatorConfig(
     stateConfig.evaluator?.ref,
   );
-  const artifactContractRef =
-    stateConfig.artifact_contract?.ref ||
-    evaluatorConfig?.deterministic?.artifact_contract;
+  const artifactContractRef = getDelegationArtifactContractRef(delegation);
   const contractEvaluation = evaluateWorkflowArtifactContract({
     workflow: evaluationWorkflow,
     contractRef: artifactContractRef,

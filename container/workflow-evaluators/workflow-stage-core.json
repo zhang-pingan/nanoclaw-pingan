@@ -3,7 +3,6 @@
     "id": "dev_test.plan.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "dev_test.plan.v1",
       "required_checks": [
         "plan_doc",
         "frontmatter",
@@ -28,7 +27,6 @@
     "id": "dev_test.plan_review.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "dev_test.plan.v1",
       "required_checks": ["review_verdict", "findings", "evidence"]
     },
     "ai": {
@@ -47,7 +45,6 @@
     "id": "dev_test.dev.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "dev_test.dev.v1",
       "required_checks": [
         "dev_doc",
         "plan_reference",
@@ -71,7 +68,6 @@
     "id": "dev_test.dev_review.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "dev_test.dev.v1",
       "required_checks": ["review_verdict", "findings", "evidence"]
     },
     "ai": {
@@ -90,7 +86,6 @@
     "id": "dev_test.ops_deploy.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "dev_test.ops_deploy.v1",
       "required_checks": [
         "deploy_branch_metadata",
         "deploy_result",
@@ -113,7 +108,6 @@
     "id": "dev_test.testing.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "dev_test.testing.v1",
       "required_checks": [
         "test_summary",
         "failure_breakdown",
@@ -138,7 +132,6 @@
     "id": "fix_test.bug_fix.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "fix_test.bug_fix.v1",
       "required_checks": ["fix_summary", "work_branch", "validation_notes"]
     },
     "ai": {
@@ -157,7 +150,6 @@
     "id": "fix_test.ops_deploy.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "fix_test.ops_deploy.v1",
       "required_checks": ["deploy_branch_metadata", "deploy_result"]
     },
     "ai": {
@@ -176,7 +168,6 @@
     "id": "fix_test.bug_test.v1",
     "type": "hybrid",
     "deterministic": {
-      "artifact_contract": "fix_test.bug_test.v1",
       "required_checks": ["test_counts", "bug_verification", "evidence"]
     },
     "ai": {
