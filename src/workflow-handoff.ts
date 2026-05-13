@@ -6,7 +6,6 @@ export interface WorkflowHandoffContract {
   input_schema: string;
   output_schema: string;
   artifact_contract_ref?: string;
-  allowed_tools: string[];
   success_criteria: string[];
   failure_taxonomy: string[];
   auto_retry: {
@@ -70,22 +69,6 @@ function uniqueStrings(values: unknown[] | undefined): string[] {
         .filter(Boolean),
     ),
   );
-}
-
-function defaultAllowedTools(skill: string): string[] {
-  if (/deploy|ops/i.test(skill)) {
-    return ['bash', 'git', 'deploy_runner', 'log_reader'];
-  }
-  if (/test/i.test(skill)) {
-    return ['bash', 'test_runner', 'browser', 'log_reader', 'artifact_writer'];
-  }
-  if (/examine|review/i.test(skill)) {
-    return ['bash', 'git', 'diff_reader', 'artifact_reader', 'artifact_writer'];
-  }
-  if (/plan/i.test(skill)) {
-    return ['bash', 'artifact_reader', 'artifact_writer'];
-  }
-  return ['bash', 'git', 'edit', 'test_runner', 'artifact_writer'];
 }
 
 function defaultSuccessCriteria(skill: string): string[] {
@@ -156,7 +139,6 @@ export function buildWorkflowHandoffEnvelope(input: {
       ...(artifactContractRef
         ? { artifact_contract_ref: artifactContractRef }
         : {}),
-      allowed_tools: uniqueStrings(configured.allowed_tools) || [],
       success_criteria: uniqueStrings(configured.success_criteria) || [],
       failure_taxonomy: uniqueStrings(configured.failure_taxonomy) || [],
       auto_retry: {
@@ -189,10 +171,6 @@ export function normalizeWorkflowHandoffEnvelope(
     ...envelope,
     contract: {
       ...envelope.contract,
-      allowed_tools:
-        envelope.contract.allowed_tools.length > 0
-          ? envelope.contract.allowed_tools
-          : defaultAllowedTools(envelope.skill),
       success_criteria:
         envelope.contract.success_criteria.length > 0
           ? envelope.contract.success_criteria

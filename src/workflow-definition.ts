@@ -10,7 +10,6 @@ export interface WorkflowDefinitionHandoff {
   input_schema?: string;
   output_schema?: string;
   artifact_contract_ref?: string;
-  allowed_tools?: string[];
   success_criteria?: string[];
   failure_taxonomy?: string[];
   auto_retry?: {

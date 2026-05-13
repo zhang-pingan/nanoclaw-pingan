@@ -5611,11 +5611,9 @@ function formatWorkflowDefinitionListText(value) {
 
 function isWorkflowDefinitionHandoffListField(path) {
   return (
-    path === "delegate.handoff.allowed_tools" ||
     path === "delegate.handoff.success_criteria" ||
     path === "delegate.handoff.failure_taxonomy" ||
     path === "delegate.handoff.auto_retry.retryable_failures" ||
-    path.endsWith(".delegate.handoff.allowed_tools") ||
     path.endsWith(".delegate.handoff.success_criteria") ||
     path.endsWith(".delegate.handoff.failure_taxonomy") ||
     path.endsWith(".delegate.handoff.auto_retry.retryable_failures")
@@ -7390,10 +7388,6 @@ function buildWorkflowDefinitionHandoffInspectorHtml(prefix, handoff) {
           <input data-state-field="${escapeAttribute(prefix)}.auto_retry.max_attempts" type="number" min="0" step="1" value="${escapeAttribute(safe.auto_retry?.max_attempts ?? "")}" />
         </label>
       </div>
-      <label class="workflow-definition-field workflow-definition-field-block">
-        <span>Allowed Tools</span>
-        <textarea data-state-field="${escapeAttribute(prefix)}.allowed_tools" rows="2" placeholder="artifact_writer&#10;bash">${escapeHtml(formatWorkflowDefinitionListText(safe.allowed_tools))}</textarea>
-      </label>
       <label class="workflow-definition-field workflow-definition-field-block">
         <span>Success Criteria</span>
         <textarea data-state-field="${escapeAttribute(prefix)}.success_criteria" rows="3">${escapeHtml(formatWorkflowDefinitionListText(safe.success_criteria))}</textarea>

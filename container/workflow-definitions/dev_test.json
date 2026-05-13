@@ -117,11 +117,6 @@
               "input_schema": "workflow.plan.input.v1",
               "output_schema": "dev_test.plan.v1",
               "artifact_contract_ref": "dev_test.plan.v1",
-              "allowed_tools": [
-                "bash",
-                "artifact_reader",
-                "artifact_writer"
-              ],
               "success_criteria": [
                 "方案文档写入指定交付目录",
                 "返回 deliverable、main_branch、work_branch",
@@ -170,11 +165,6 @@
                   "input_schema": "workflow.review.input.v1",
                   "output_schema": "dev_test.plan.v1",
                   "artifact_contract_ref": "dev_test.plan.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "完成方案复核",
                     "返回明确 review verdict",
@@ -238,11 +228,6 @@
               "input_schema": "workflow.review.input.v1",
               "output_schema": "dev_test.plan.v1",
               "artifact_contract_ref": "dev_test.plan.v1",
-              "allowed_tools": [
-                "bash",
-                "artifact_reader",
-                "artifact_writer"
-              ],
               "success_criteria": [
                 "完成方案复核",
                 "返回明确 review verdict",
@@ -291,14 +276,6 @@
                   "input_schema": "workflow.dev.input.v1",
                   "output_schema": "dev_test.dev.v1",
                   "artifact_contract_ref": "dev_test.dev.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "git",
-                    "edit",
-                    "test_runner",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "代码改动完成并位于指定工作分支",
                     "相关验证或测试已执行并记录",
@@ -386,14 +363,6 @@
                   "input_schema": "workflow.dev.input.v1",
                   "output_schema": "dev_test.dev.v1",
                   "artifact_contract_ref": "dev_test.dev.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "git",
-                    "edit",
-                    "test_runner",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "代码改动完成并位于指定工作分支",
                     "相关验证或测试已执行并记录",
@@ -446,11 +415,6 @@
                   "input_schema": "workflow.plan.input.v1",
                   "output_schema": "dev_test.plan.v1",
                   "artifact_contract_ref": "dev_test.plan.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "方案文档写入指定交付目录",
                     "返回 deliverable、main_branch、work_branch",
@@ -516,14 +480,6 @@
               "input_schema": "workflow.dev.input.v1",
               "output_schema": "dev_test.dev.v1",
               "artifact_contract_ref": "dev_test.dev.v1",
-              "allowed_tools": [
-                "bash",
-                "git",
-                "edit",
-                "test_runner",
-                "artifact_reader",
-                "artifact_writer"
-              ],
               "success_criteria": [
                 "代码改动完成并位于指定工作分支",
                 "相关验证或测试已执行并记录",
@@ -573,13 +529,6 @@
                   "input_schema": "workflow.review.input.v1",
                   "output_schema": "dev_test.dev.v1",
                   "artifact_contract_ref": "dev_test.dev.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "git",
-                    "diff_reader",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "完成实现和文档复核",
                     "返回 passed 或 needs_revision verdict",
@@ -643,13 +592,6 @@
               "input_schema": "workflow.review.input.v1",
               "output_schema": "dev_test.dev.v1",
               "artifact_contract_ref": "dev_test.dev.v1",
-              "allowed_tools": [
-                "bash",
-                "git",
-                "diff_reader",
-                "artifact_reader",
-                "artifact_writer"
-              ],
               "success_criteria": [
                 "完成实现和文档复核",
                 "返回 passed 或 needs_revision verdict",
@@ -751,14 +693,6 @@
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "dev_test.dev.v1",
                   "artifact_contract_ref": "dev_test.dev.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "git",
-                    "edit",
-                    "test_runner",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "修复或回修完成并保持在指定工作分支",
                     "相关验证或回归测试已执行并记录",
@@ -840,14 +774,6 @@
                   "input_schema": "workflow.deploy.input.v1",
                   "output_schema": "dev_test.ops_deploy.v1",
                   "artifact_contract_ref": "dev_test.ops_deploy.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "git",
-                    "deploy_runner",
-                    "log_reader",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "工作分支合并到预发工作分支并推送",
                     "预发部署动作完成并记录结果",
@@ -912,14 +838,6 @@
               "input_schema": "workflow.deploy.input.v1",
               "output_schema": "dev_test.ops_deploy.v1",
               "artifact_contract_ref": "dev_test.ops_deploy.v1",
-              "allowed_tools": [
-                "bash",
-                "git",
-                "deploy_runner",
-                "log_reader",
-                "artifact_reader",
-                "artifact_writer"
-              ],
               "success_criteria": [
                 "工作分支合并到预发工作分支并推送",
                 "预发部署动作完成并记录结果",
@@ -1012,14 +930,6 @@
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
                   "artifact_contract_ref": "dev_test.testing.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "test_runner",
-                    "browser",
-                    "log_reader",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "测试完成或明确记录阻塞原因",
                     "测试文档写入指定交付目录",
@@ -1071,14 +981,6 @@
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
                   "artifact_contract_ref": "dev_test.testing.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "test_runner",
-                    "browser",
-                    "log_reader",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "测试完成或明确记录阻塞原因",
                     "测试文档写入指定交付目录",
@@ -1140,14 +1042,6 @@
               "input_schema": "workflow.test.input.v1",
               "output_schema": "dev_test.testing.v1",
               "artifact_contract_ref": "dev_test.testing.v1",
-              "allowed_tools": [
-                "bash",
-                "test_runner",
-                "browser",
-                "log_reader",
-                "artifact_reader",
-                "artifact_writer"
-              ],
               "success_criteria": [
                 "测试完成或明确记录阻塞原因",
                 "测试文档写入指定交付目录",
@@ -1202,14 +1096,6 @@
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "dev_test.dev.v1",
                   "artifact_contract_ref": "dev_test.dev.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "git",
-                    "edit",
-                    "test_runner",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "修复或回修完成并保持在指定工作分支",
                     "相关验证或回归测试已执行并记录",
@@ -1266,14 +1152,6 @@
               "input_schema": "workflow.fix.input.v1",
               "output_schema": "dev_test.dev.v1",
               "artifact_contract_ref": "dev_test.dev.v1",
-              "allowed_tools": [
-                "bash",
-                "git",
-                "edit",
-                "test_runner",
-                "artifact_reader",
-                "artifact_writer"
-              ],
               "success_criteria": [
                 "修复或回修完成并保持在指定工作分支",
                 "相关验证或回归测试已执行并记录",
@@ -1322,14 +1200,6 @@
                   "input_schema": "workflow.deploy.input.v1",
                   "output_schema": "dev_test.ops_deploy.v1",
                   "artifact_contract_ref": "dev_test.ops_deploy.v1",
-                  "allowed_tools": [
-                    "bash",
-                    "git",
-                    "deploy_runner",
-                    "log_reader",
-                    "artifact_reader",
-                    "artifact_writer"
-                  ],
                   "success_criteria": [
                     "工作分支合并到预发工作分支并推送",
                     "预发部署动作完成并记录结果",

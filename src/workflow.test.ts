@@ -720,7 +720,6 @@ describe('workflow metadata and branch flow', () => {
     expect(contract.input_schema).toBe('workflow.plan.input.v1');
     expect(contract.output_schema).toBe('dev_test.plan.v1');
     expect(contract.artifact_contract_ref).toBe('dev_test.plan.v1');
-    expect(contract.allowed_tools).toContain('artifact_writer');
     const input = JSON.parse(delegations[0]?.handoff_input_json || '{}');
     expect(input.stage_key).toBe('plan');
     expect(input.rendered_task).toContain('需求描述：需要支持用户昵称输入表情');
