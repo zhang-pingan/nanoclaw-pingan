@@ -201,7 +201,7 @@ Evaluator transition 规则：
 ```json
 {
   "type": "confirmation",
-  "card": { "ref": "plan_confirm" },
+  "card": { "ref": "plan_examine_confirm" },
   "on_approve": { "target": "dev" },
   "on_revise": { "target": "plan" }
 }
@@ -213,8 +213,8 @@ Evaluator transition 规则：
 {
   "type": "interrupt",
   "kind": "approval",
-  "card": { "ref": "plan_confirm" },
-  "title": "确认方案后进入开发",
+  "card": { "ref": "plan_examine_confirm" },
+  "title": "确认方案修改或继续开发",
   "resume_payload_schema": {
     "schema": {
       "type": "object",

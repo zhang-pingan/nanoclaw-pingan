@@ -1,46 +1,4 @@
 {
-  "plan_confirm": {
-    "pattern": "confirm_revise",
-    "header": {
-      "title_template": "📋 确认方案后进入开发",
-      "color": "green"
-    },
-    "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接进入开发\n2) 提交修改意见，回到 Plan 重新设计",
-    "actions": [
-      {
-        "id": "approve",
-        "label": "✅ 进入开发",
-        "type": "primary",
-        "action_kind": "interrupt_resume",
-        "resume_action": "approve"
-      },
-      {
-        "id": "cancel_workflow",
-        "label": "❌ 取消流程",
-        "type": "danger",
-        "action_kind": "workflow_control",
-        "workflow_control_action": "cancel_workflow"
-      }
-    ],
-    "form": {
-      "name": "revision_form",
-      "submit_action": {
-        "id": "revise",
-        "label": "✏️ 返回方案修改",
-        "action_kind": "interrupt_resume",
-        "resume_action": "revise"
-      },
-      "fields": [
-        {
-          "name": "revision_text",
-          "label": "修改意见",
-          "type": "textarea",
-          "placeholder": "如需修改方案，请输入修改意见...",
-          "required": true
-        }
-      ]
-    }
-  },
   "plan_examine_confirm": {
     "pattern": "confirm_revise",
     "header": {

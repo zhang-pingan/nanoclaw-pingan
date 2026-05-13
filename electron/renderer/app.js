@@ -355,6 +355,9 @@ var currentWorkflowDefinitionDetail = null;
 var workflowDefinitionSelectedVersion = null;
 var workflowDefinitionDiffFocus = null;
 var workflowDefinitionViewMode = "form";
+var workflowDefinitionGraphNodeDrag = null;
+var workflowDefinitionGraphTransitionDrag = null;
+var workflowDefinitionGraphSuppressClick = false;
 var workflowDefinitionSelectedRoleKey = "";
 var workflowDefinitionSelectedEntryPointKey = "";
 var workflowDefinitionSelectedStateKey = "";
@@ -5044,7 +5047,7 @@ function isSelectedWorkflowDefinitionDraft() {
 }
 
 function getWorkflowDefinitionModeAllowsEditing() {
-  return workflowDefinitionViewMode === "form" || workflowDefinitionViewMode === "json";
+  return ["form", "json", "graph"].includes(workflowDefinitionViewMode);
 }
 
 function buildWorkflowDefinitionJsonDocument(version) {
@@ -5093,6 +5096,7 @@ function syncWorkflowDefinitionJsonFromForm() {
       entry_points: payload.definition.entry_points || {},
       states: payload.definition.states || {},
       status_labels: payload.definition.status_labels || {},
+      create_form: payload.definition.create_form || {},
       metadata: payload.definition.metadata || {},
     });
   } catch {
@@ -5114,8 +5118,10 @@ function syncWorkflowDefinitionFormFromJson() {
     entry_points: parsed.entry_points && typeof parsed.entry_points === "object" ? parsed.entry_points : {},
     states: parsed.states && typeof parsed.states === "object" ? parsed.states : {},
     status_labels: parsed.status_labels && typeof parsed.status_labels === "object" ? parsed.status_labels : {},
+    create_form: parsed.create_form && typeof parsed.create_form === "object" ? parsed.create_form : {},
     metadata: parsed.metadata && typeof parsed.metadata === "object" ? parsed.metadata : {},
   };
+  Object.assign(selectedVersion, nextDefinition);
   renderWorkflowDefinitionEditor(nextDefinition, bundle);
 }
 
@@ -6215,8 +6221,8 @@ function renderWorkflowDefinitionCreateFormEditor(createFormArg) {
   });
 }
 
-async function addWorkflowDefinitionState() {
-  const rawKey = await openTextPrompt("输入新的 state key", "", { title: "新增 State" });
+async function addWorkflowDefinitionStateWithType(type = "", presetKey = "") {
+  const rawKey = presetKey || (await openTextPrompt("输入新的 state key", "", { title: "新增 State" }));
   const stateKey = (rawKey || "").trim();
   if (!stateKey) return;
   if (!/^[a-zA-Z0-9_-]+$/.test(stateKey)) {
@@ -6229,17 +6235,12 @@ async function addWorkflowDefinitionState() {
       alert(`state "${stateKey}" 已存在`);
       return;
     }
-    const rawType = await openTextPrompt(
-      "输入 state type（delegation / interrupt / terminal / system）",
-      "delegation",
-      { title: "新增 State" },
-    );
-    const type = (rawType || "delegation").trim();
-    if (!["delegation", "interrupt", "terminal", "system"].includes(type)) {
+    const nextType = (type || "delegation").trim();
+    if (!["delegation", "interrupt", "terminal", "system"].includes(nextType)) {
       alert("state type 不合法");
       return;
     }
-    states[stateKey] = createWorkflowDefinitionStateTemplate(type);
+    states[stateKey] = createWorkflowDefinitionStateTemplate(nextType);
     updateStatesEditor(states);
     const editable = getEditableWorkflowDefinition();
     if (editable) editable.states = states;
@@ -6248,6 +6249,18 @@ async function addWorkflowDefinitionState() {
   } catch (err) {
     alert(err instanceof Error ? err.message : "新增 state 失败");
   }
+}
+
+async function addWorkflowDefinitionState() {
+  const rawKey = await openTextPrompt("输入新的 state key", "", { title: "新增 State" });
+  const stateKey = (rawKey || "").trim();
+  if (!stateKey) return;
+  const rawType = await openTextPrompt(
+    "输入 state type（delegation / interrupt / terminal / system）",
+    "delegation",
+    { title: "新增 State" },
+  );
+  await addWorkflowDefinitionStateWithType(rawType || "delegation", stateKey);
 }
 
 async function addWorkflowDefinitionRole() {
@@ -7137,7 +7150,7 @@ function cleanupWorkflowDefinitionRoleObject(role) {
 function updateWorkflowDefinitionSelectedState(stateKey) {
   workflowDefinitionSelectedStateKey = stateKey || "";
   renderWorkflowDefinitionStateEditor();
-  const graphSource = getEditableWorkflowDefinition() || {};
+  const graphSource = getEditableWorkflowDefinition() || getSelectedWorkflowDefinitionVersion() || {};
   renderWorkflowDefinitionGraph(graphSource);
   if (workflowDefinitionSelectedStateKey) {
     focusWorkflowDefinitionStateInEditor(workflowDefinitionSelectedStateKey);
@@ -7817,32 +7830,543 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
   bindWorkflowDefinitionStateInspectorEvents();
 }
 
-function buildWorkflowTransitionSummary(label, transition) {
-  if (!transition) return "";
-  const lines = [];
-  lines.push(`<div><strong>${escapeHtml(label)}</strong>→ ${escapeHtml(transition.target || "--")}</div>`);
-  if (transition.delegate?.role || transition.delegate?.skill) {
-    lines.push(
-      `<span>delegate: ${escapeHtml(
-        [transition.delegate?.role, transition.delegate?.skill].filter(Boolean).join(" / ") || "--",
-      )}</span>`,
-    );
+const WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH = 260;
+const WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT = 132;
+const WORKFLOW_DEFINITION_GRAPH_COLUMN_GAP = 380;
+const WORKFLOW_DEFINITION_GRAPH_ROW_GAP = 190;
+const WORKFLOW_DEFINITION_GRAPH_PADDING = 32;
+
+function isWorkflowDefinitionGraphEditable() {
+  return workflowDefinitionViewMode === "graph" && isSelectedWorkflowDefinitionDraft();
+}
+
+function getWorkflowDefinitionGraphStoredNodes(definition) {
+  const layout = definition?.metadata?.graph_layout;
+  if (!layout || typeof layout !== "object" || Array.isArray(layout)) return {};
+  if (layout.mode !== "flow_lr") return {};
+  const nodes = layout.nodes;
+  if (!nodes || typeof nodes !== "object" || Array.isArray(nodes)) return {};
+  return nodes;
+}
+
+function normalizeWorkflowDefinitionGraphPosition(position) {
+  if (!position || typeof position !== "object") return null;
+  const x = Number(position.x);
+  const y = Number(position.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
+    x: Math.max(0, Math.round(x)),
+    y: Math.max(0, Math.round(y)),
+  };
+}
+
+function getWorkflowDefinitionGraphTransitionLabel(path) {
+  if (path === "on_complete.success") return "success";
+  if (path === "on_complete.failure") return "failure";
+  if (path.startsWith("on_resume.")) return `resume:${path.slice("on_resume.".length)}`;
+  if (path === "on_cancel") return "cancel";
+  if (path === "on_expire") return "expire";
+  if (path === "timeout_policy.on_timeout") return "timeout";
+  if (path === "retry_policy.on_exhausted") return "retry exhausted";
+  if (path === "evaluator.on_pass") return "eval pass";
+  if (path === "evaluator.on_needs_revision") return "eval revision";
+  if (path === "evaluator.on_fail") return "eval fail";
+  if (path === "evaluator.on_pending") return "eval pending";
+  return path;
+}
+
+function getWorkflowDefinitionGraphStateClass(type) {
+  const safe = String(type || "unknown").replace(/[^a-zA-Z0-9_-]/g, "-");
+  return safe || "unknown";
+}
+
+function getWorkflowDefinitionGraphTransitionsForState(state) {
+  return collectWorkflowDefinitionTransitionEntries(state)
+    .filter(({ transition }) => transition && typeof transition === "object" && !Array.isArray(transition))
+    .map(({ path, transition }) => ({
+      path,
+      label: getWorkflowDefinitionGraphTransitionLabel(path),
+      target: String(transition.target || ""),
+      transition,
+    }));
+}
+
+function getWorkflowDefinitionGraphTransitionKind(path) {
+  if (path === "on_complete.success" || path === "evaluator.on_pass") return "success";
+  if (path === "on_complete.failure" || path === "evaluator.on_fail") return "failure";
+  if (path.startsWith("on_resume.")) {
+    const action = path.slice("on_resume.".length);
+    if (["approve", "pass", "continue", "accept"].includes(action)) return "success";
+    if (["revise", "reject", "retry", "rework"].includes(action)) return "revision";
+    return "resume";
   }
-  if (transition.card?.ref) {
-    lines.push(`<span>card: ${escapeHtml(transition.card.ref)}</span>`);
+  if (path === "on_cancel" || path === "on_expire" || path === "timeout_policy.on_timeout") return "exception";
+  if (path === "retry_policy.on_exhausted") return "failure";
+  if (path === "evaluator.on_needs_revision") return "revision";
+  return "default";
+}
+
+function getWorkflowDefinitionGraphPrimaryTransition(state, states, visited) {
+  const transitions = getWorkflowDefinitionGraphTransitionsForState(state).filter(
+    (item) => item.target && states[item.target] && item.target !== visited,
+  );
+  const candidates = [
+    "on_complete.success",
+    "evaluator.on_pass",
+    "on_resume.approve",
+    "on_resume.pass",
+    "on_resume.continue",
+  ];
+  for (const path of candidates) {
+    const match = transitions.find((item) => item.path === path);
+    if (match) return match;
   }
-  if (transition.notify?.template) {
-    lines.push(`<span>notify: ${escapeHtml(transition.notify.template.slice(0, 72))}</span>`);
+  return transitions.find((item) => getWorkflowDefinitionGraphTransitionKind(item.path) === "success") ||
+    transitions.find((item) => !["failure", "revision", "exception"].includes(getWorkflowDefinitionGraphTransitionKind(item.path))) ||
+    null;
+}
+
+function computeWorkflowDefinitionGraphLayout(definition, options = {}) {
+  const states = definition?.states || {};
+  const stateKeys = Object.keys(states);
+  const storedNodes = options.ignoreStored ? {} : getWorkflowDefinitionGraphStoredNodes(definition);
+  const entryStateKeys = Object.values(definition?.entry_points || {})
+    .map((entry) => entry?.state)
+    .filter((stateKey) => stateKey && states[stateKey]);
+  const firstEntryStateKey = entryStateKeys[0] || stateKeys[0] || "";
+  const rankByState = {};
+  const desiredRowByState = {};
+  const primaryStates = new Set();
+  let cursor = firstEntryStateKey;
+  while (cursor && states[cursor] && !primaryStates.has(cursor)) {
+    primaryStates.add(cursor);
+    rankByState[cursor] = primaryStates.size - 1;
+    desiredRowByState[cursor] = 0;
+    const nextTransition = getWorkflowDefinitionGraphPrimaryTransition(states[cursor], states, cursor);
+    if (!nextTransition?.target || primaryStates.has(nextTransition.target)) break;
+    cursor = nextTransition.target;
   }
-  if (transition.effects?.increment_round) {
-    lines.push("<span>effects: increment_round</span>");
+
+  const queue = [];
+  Object.keys(rankByState).forEach((stateKey) => queue.push(stateKey));
+  if (!queue.length && stateKeys[0]) {
+    rankByState[stateKeys[0]] = 0;
+    desiredRowByState[stateKeys[0]] = 0;
+    queue.push(stateKeys[0]);
   }
+
+  const assignTarget = (sourceStateKey, transition) => {
+    if (!transition?.target || !states[transition.target]) return;
+    if (rankByState[transition.target] !== undefined) return;
+    const sourceRank = rankByState[sourceStateKey] ?? 0;
+    const sourceRow = desiredRowByState[sourceStateKey] ?? 0;
+    const kind = getWorkflowDefinitionGraphTransitionKind(transition.path);
+    rankByState[transition.target] = sourceRank + 1;
+    desiredRowByState[transition.target] =
+      kind === "success" || kind === "default"
+        ? sourceRow
+        : sourceRow + (kind === "revision" ? 1 : 2);
+    queue.push(transition.target);
+  };
+
+  while (queue.length) {
+    const stateKey = queue.shift();
+    const transitions = getWorkflowDefinitionGraphTransitionsForState(states[stateKey]);
+    transitions
+      .filter((transition) => getWorkflowDefinitionGraphTransitionKind(transition.path) === "success")
+      .forEach((transition) => assignTarget(stateKey, transition));
+    transitions
+      .filter((transition) => getWorkflowDefinitionGraphTransitionKind(transition.path) !== "success")
+      .forEach((transition) => assignTarget(stateKey, transition));
+  }
+
+  let fallbackRank = Math.max(0, ...Object.values(rankByState));
+  stateKeys.forEach((stateKey) => {
+    if (rankByState[stateKey] !== undefined) return;
+    fallbackRank += 1;
+    rankByState[stateKey] = fallbackRank;
+    desiredRowByState[stateKey] = 0;
+  });
+
+  const occupiedRowsByRank = {};
+  const finalRowByState = {};
+  stateKeys
+    .slice()
+    .sort((a, b) => {
+      const rankDelta = (rankByState[a] ?? 0) - (rankByState[b] ?? 0);
+      if (rankDelta) return rankDelta;
+      return (desiredRowByState[a] ?? 0) - (desiredRowByState[b] ?? 0);
+    })
+    .forEach((stateKey) => {
+      const rank = rankByState[stateKey] ?? 0;
+      const occupied = occupiedRowsByRank[rank] || new Set();
+      occupiedRowsByRank[rank] = occupied;
+      let row = Math.max(0, desiredRowByState[stateKey] ?? 0);
+      while (occupied.has(row)) row += 1;
+      occupied.add(row);
+      finalRowByState[stateKey] = row;
+    });
+
+  const positions = {};
+  let maxRight = WORKFLOW_DEFINITION_GRAPH_PADDING + WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH;
+  let maxBottom = WORKFLOW_DEFINITION_GRAPH_PADDING + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT;
+  stateKeys.forEach((stateKey) => {
+    const storedPosition = normalizeWorkflowDefinitionGraphPosition(storedNodes[stateKey]);
+    if (storedPosition) {
+      positions[stateKey] = storedPosition;
+    } else {
+      positions[stateKey] = {
+        x: WORKFLOW_DEFINITION_GRAPH_PADDING + (rankByState[stateKey] ?? 0) * WORKFLOW_DEFINITION_GRAPH_COLUMN_GAP,
+        y: WORKFLOW_DEFINITION_GRAPH_PADDING + (finalRowByState[stateKey] ?? 0) * WORKFLOW_DEFINITION_GRAPH_ROW_GAP,
+      };
+    }
+    maxRight = Math.max(maxRight, positions[stateKey].x + WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH);
+    maxBottom = Math.max(maxBottom, positions[stateKey].y + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT);
+  });
+
+  return {
+    positions,
+    width: maxRight + WORKFLOW_DEFINITION_GRAPH_PADDING + 140,
+    height: maxBottom + WORKFLOW_DEFINITION_GRAPH_PADDING + 140,
+  };
+}
+
+function updateWorkflowDefinitionGraphLayoutNodes(nodes) {
+  const editable = getEditableWorkflowDefinition();
+  if (!editable) return;
+  editable.metadata = editable.metadata && typeof editable.metadata === "object" ? editable.metadata : {};
+  editable.metadata.graph_layout =
+    editable.metadata.graph_layout && typeof editable.metadata.graph_layout === "object"
+      ? editable.metadata.graph_layout
+      : {};
+  editable.metadata.graph_layout.mode = "flow_lr";
+  editable.metadata.graph_layout.nodes = cloneJson(nodes || {});
+  if (workflowDefinitionMetadataInput) {
+    workflowDefinitionMetadataInput.value = stringifyPrettyJson(editable.metadata);
+  }
+}
+
+function setWorkflowDefinitionGraphNodePosition(stateKey, x, y) {
+  const editable = getEditableWorkflowDefinition();
+  if (!editable?.states?.[stateKey]) return;
+  const layout = computeWorkflowDefinitionGraphLayout(editable);
+  const nextNodes = {};
+  Object.entries(layout.positions).forEach(([key, position]) => {
+    nextNodes[key] = normalizeWorkflowDefinitionGraphPosition(position) || { x: 0, y: 0 };
+  });
+  nextNodes[stateKey] = {
+    x: Math.max(0, Math.round(Number(x) || 0)),
+    y: Math.max(0, Math.round(Number(y) || 0)),
+  };
+  updateWorkflowDefinitionGraphLayoutNodes(nextNodes);
+  renderWorkflowDefinitionGraph(editable);
+}
+
+function autoLayoutWorkflowDefinitionGraph() {
+  const editable = getEditableWorkflowDefinition();
+  if (!editable) return;
+  const layout = computeWorkflowDefinitionGraphLayout(editable, { ignoreStored: true });
+  updateWorkflowDefinitionGraphLayoutNodes(layout.positions);
+  renderWorkflowDefinitionGraph(editable);
+  showToast("已重新布局流程视图");
+}
+
+function ensureWorkflowDefinitionTransitionAtPath(state, path) {
+  const parts = String(path || "").split(".").filter(Boolean);
+  let cursor = state;
+  for (let i = 0; i < parts.length; i += 1) {
+    const key = parts[i];
+    if (!cursor[key] || typeof cursor[key] !== "object" || Array.isArray(cursor[key])) {
+      cursor[key] = {};
+    }
+    cursor = cursor[key];
+  }
+  return cursor;
+}
+
+function updateWorkflowDefinitionGraphTransitionTarget(sourceStateKey, transitionPath, targetStateKey) {
+  if (!sourceStateKey || !transitionPath || !targetStateKey) return;
+  const states = getStatesFromEditor();
+  if (!states[sourceStateKey] || !states[targetStateKey]) return;
+  applyWorkflowDefinitionStatePatch(sourceStateKey, (state) => {
+    const transition = ensureWorkflowDefinitionTransitionAtPath(state, transitionPath);
+    transition.target = targetStateKey;
+    return cleanupStateObject(state);
+  });
+  showToast(`已连接 ${sourceStateKey} -> ${targetStateKey}`);
+}
+
+function buildWorkflowDefinitionGraphEdges(stateEntries, layout, states) {
+  const edgePaths = [];
+  const edgeLabels = [];
+  const edgeRouteCounts = {};
+  const pushEdgeLabel = ({ sourceStateKey, transition, kind, x, y, missing = false }) => {
+    const label = missing ? `${transition.label} -> --` : transition.label;
+    edgeLabels.push(`
+      <button
+        type="button"
+        class="workflow-definition-graph-edge-label ${escapeAttribute(kind)}${isWorkflowDefinitionGraphEditable() ? " editable" : ""}${missing ? " missing-target" : ""}"
+        data-graph-transition-source="${escapeAttribute(sourceStateKey)}"
+        data-graph-transition-path="${escapeAttribute(transition.path)}"
+        draggable="${isWorkflowDefinitionGraphEditable() ? "true" : "false"}"
+        style="left: ${escapeAttribute(Math.round(x))}px; top: ${escapeAttribute(Math.round(y))}px;"
+        title="${escapeAttribute(`${sourceStateKey}.${transition.path} -> ${transition.target || "--"}`)}"
+      >${escapeHtml(label)}</button>
+    `);
+  };
+
+  stateEntries.forEach(([sourceStateKey, state]) => {
+    const sourcePosition = layout.positions[sourceStateKey];
+    if (!sourcePosition) return;
+    getWorkflowDefinitionGraphTransitionsForState(state).forEach((transition, transitionIndex) => {
+      const { target, label } = transition;
+      const kind = getWorkflowDefinitionGraphTransitionKind(transition.path);
+      const targetPosition = layout.positions[target];
+      if (!target || !states[target] || !targetPosition) {
+        pushEdgeLabel({
+          sourceStateKey,
+          transition,
+          kind,
+          missing: true,
+          x: sourcePosition.x + WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH + 18,
+          y: sourcePosition.y + 18 + transitionIndex * 34,
+        });
+        return;
+      }
+      const routeKey = `${sourceStateKey}->${target}`;
+      const routeIndex = edgeRouteCounts[routeKey] || 0;
+      edgeRouteCounts[routeKey] = routeIndex + 1;
+      const sourceOffset = (routeIndex - 0.5) * 16;
+      let d = "";
+      let labelX = 0;
+      let labelY = 0;
+      let edgeClass = kind;
+      if (sourceStateKey === target) {
+        const sx = sourcePosition.x + WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH;
+        const sy = sourcePosition.y + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT * 0.58 + sourceOffset;
+        const loopX = sx + 84 + routeIndex * 18;
+        const loopY = sourcePosition.y + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT + 54 + routeIndex * 18;
+        d = `M ${sx} ${sy} C ${loopX} ${sy}, ${loopX} ${loopY}, ${sx - 24} ${loopY} C ${sourcePosition.x - 30} ${loopY}, ${sourcePosition.x - 30} ${sy + 34}, ${sourcePosition.x} ${sy + 34}`;
+        labelX = loopX - 18;
+        labelY = loopY - 28;
+        edgeClass += " self";
+      } else {
+        const forward = targetPosition.x > sourcePosition.x + 10;
+        if (forward) {
+          const sx = sourcePosition.x + WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH;
+          const tx = targetPosition.x;
+          const sy = sourcePosition.y + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT * 0.5 + sourceOffset;
+          const ty = targetPosition.y + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT * 0.5;
+          const midX = sx + Math.max(72, (tx - sx) * 0.52);
+          d = `M ${sx} ${sy} C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`;
+          labelX = midX - 28;
+          labelY = (sy + ty) / 2 - 24;
+          edgeClass += " forward";
+        } else {
+          const sx = sourcePosition.x + WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH * 0.5 + sourceOffset;
+          const tx = targetPosition.x + WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH * 0.5;
+          const sy = sourcePosition.y + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT;
+          const ty = targetPosition.y + WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT;
+          const routeY =
+            Math.max(sourcePosition.y, targetPosition.y) +
+            WORKFLOW_DEFINITION_GRAPH_NODE_HEIGHT +
+            64 +
+            routeIndex * 24;
+          d = `M ${sx} ${sy} L ${sx} ${routeY} L ${tx} ${routeY} L ${tx} ${ty}`;
+          labelX = (sx + tx) / 2 - 28;
+          labelY = routeY - 28;
+          edgeClass += " backward";
+        }
+      }
+      edgePaths.push(
+        `<path class="workflow-definition-graph-edge ${escapeAttribute(edgeClass)}" d="${escapeAttribute(d)}" data-edge-label="${escapeAttribute(label)}" marker-end="url(#workflow-definition-graph-arrow)" />`,
+      );
+      pushEdgeLabel({ sourceStateKey, transition, kind, x: labelX, y: labelY });
+    });
+  });
+
   return `
-    <div class="workflow-definition-graph-transition">
-      ${lines[0]}
-      <div class="workflow-definition-graph-transition-lines">${lines.slice(1).join("")}</div>
-    </div>
+    <svg class="workflow-definition-graph-edges" viewBox="0 0 ${escapeAttribute(layout.width)} ${escapeAttribute(layout.height)}" aria-hidden="true">
+      <defs>
+        <marker id="workflow-definition-graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" class="workflow-definition-graph-arrow" />
+        </marker>
+      </defs>
+      ${edgePaths.join("")}
+    </svg>
+    <div class="workflow-definition-graph-edge-labels">${edgeLabels.join("")}</div>
   `;
+}
+
+function buildWorkflowDefinitionGraphNodeHtml(stateKey, state, layout, entryStateNames, canEdit) {
+  const position = layout.positions[stateKey] || { x: WORKFLOW_DEFINITION_GRAPH_PADDING, y: WORKFLOW_DEFINITION_GRAPH_PADDING };
+  const badges = [
+    `<span class="workflow-definition-graph-badge">${escapeHtml(state.type || "--")}</span>`,
+  ];
+  if (entryStateNames.has(stateKey)) {
+    badges.push('<span class="workflow-definition-graph-badge">entry</span>');
+  }
+  const meta = [];
+  if (state.delegate?.role) meta.push(`<span>role: ${escapeHtml(state.delegate.role)}</span>`);
+  if (state.delegate?.skill) meta.push(`<span>skill: ${escapeHtml(state.delegate.skill)}</span>`);
+  if (state.card?.ref) meta.push(`<span>card: ${escapeHtml(state.card.ref)}</span>`);
+
+  return `
+    <article
+      class="workflow-definition-graph-node ${escapeHtml(getWorkflowDefinitionGraphStateClass(state.type))}${entryStateNames.has(stateKey) ? " entry" : ""}${workflowDefinitionSelectedStateKey === stateKey ? " active" : ""}${canEdit ? " editable" : ""}"
+      data-graph-node
+      data-state-key="${escapeAttribute(stateKey)}"
+      style="left: ${escapeAttribute(position.x)}px; top: ${escapeAttribute(position.y)}px;"
+    >
+      <div class="workflow-definition-graph-node-head">
+        <div>
+          <div class="workflow-definition-graph-node-title">${escapeHtml(state.label || stateKey)}</div>
+          <div class="workflow-definition-graph-node-subtitle">${escapeHtml(stateKey)}</div>
+        </div>
+        <div class="workflow-definition-graph-node-badges">${badges.join("")}</div>
+      </div>
+      ${meta.length ? `<div class="workflow-definition-graph-meta">${meta.join("")}</div>` : ""}
+    </article>
+  `;
+}
+
+function getWorkflowDefinitionGraphTransitionDragPayload(event) {
+  if (workflowDefinitionGraphTransitionDrag) return workflowDefinitionGraphTransitionDrag;
+  const raw = event?.dataTransfer?.getData("application/x-nanoclaw-workflow-transition") ||
+    event?.dataTransfer?.getData("text/plain") ||
+    "";
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed?.sourceStateKey || !parsed?.path) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearWorkflowDefinitionGraphDragClasses() {
+  workflowDefinitionGraph?.classList.remove("is-linking");
+  Array.from(workflowDefinitionGraph?.querySelectorAll(".drop-target") || []).forEach((node) => {
+    node.classList.remove("drop-target");
+  });
+}
+
+function bindWorkflowDefinitionGraphNodeDrag(node) {
+  node.addEventListener("pointerdown", (event) => {
+    if (!isWorkflowDefinitionGraphEditable()) return;
+    if (event.button !== 0) return;
+    if (event.target?.closest?.("[data-graph-transition-source], button, input, textarea, select, a")) return;
+    const stateKey = node.getAttribute("data-state-key") || "";
+    if (!stateKey) return;
+    workflowDefinitionGraphNodeDrag = {
+      node,
+      stateKey,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: Number.parseFloat(node.style.left || "0") || 0,
+      originY: Number.parseFloat(node.style.top || "0") || 0,
+      moved: false,
+    };
+    node.classList.add("dragging");
+    node.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+  node.addEventListener("pointermove", (event) => {
+    const drag = workflowDefinitionGraphNodeDrag;
+    if (!drag || drag.node !== node || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) drag.moved = true;
+    node.style.left = `${Math.max(0, drag.originX + dx)}px`;
+    node.style.top = `${Math.max(0, drag.originY + dy)}px`;
+  });
+  const finishDrag = (event) => {
+    const drag = workflowDefinitionGraphNodeDrag;
+    if (!drag || drag.node !== node || drag.pointerId !== event.pointerId) return;
+    node.classList.remove("dragging");
+    node.releasePointerCapture?.(event.pointerId);
+    workflowDefinitionGraphNodeDrag = null;
+    if (drag.moved) {
+      workflowDefinitionGraphSuppressClick = true;
+      setWorkflowDefinitionGraphNodePosition(
+        drag.stateKey,
+        Number.parseFloat(node.style.left || "0") || 0,
+        Number.parseFloat(node.style.top || "0") || 0,
+      );
+      setTimeout(() => {
+        workflowDefinitionGraphSuppressClick = false;
+      }, 0);
+    }
+  };
+  node.addEventListener("pointerup", finishDrag);
+  node.addEventListener("pointercancel", finishDrag);
+}
+
+function bindWorkflowDefinitionGraphEvents(canEdit) {
+  if (!workflowDefinitionGraph) return;
+  Array.from(workflowDefinitionGraph.querySelectorAll("[data-graph-node]")).forEach((node) => {
+    node.addEventListener("click", () => {
+      if (workflowDefinitionGraphSuppressClick) return;
+      const stateKey = node.getAttribute("data-state-key") || "";
+      if (!stateKey) return;
+      updateWorkflowDefinitionSelectedState(stateKey);
+    });
+    if (!canEdit) return;
+    bindWorkflowDefinitionGraphNodeDrag(node);
+    node.addEventListener("dragover", (event) => {
+      if (!getWorkflowDefinitionGraphTransitionDragPayload(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "link";
+      node.classList.add("drop-target");
+    });
+    node.addEventListener("dragleave", () => {
+      node.classList.remove("drop-target");
+    });
+    node.addEventListener("drop", (event) => {
+      const payload = getWorkflowDefinitionGraphTransitionDragPayload(event);
+      if (!payload) return;
+      event.preventDefault();
+      const targetStateKey = node.getAttribute("data-state-key") || "";
+      workflowDefinitionGraphTransitionDrag = null;
+      clearWorkflowDefinitionGraphDragClasses();
+      updateWorkflowDefinitionGraphTransitionTarget(payload.sourceStateKey, payload.path, targetStateKey);
+    });
+  });
+
+  Array.from(workflowDefinitionGraph.querySelectorAll("[data-graph-transition-source]")).forEach((transitionEl) => {
+    if (!canEdit) return;
+    transitionEl.addEventListener("dragstart", (event) => {
+      const payload = {
+        sourceStateKey: transitionEl.getAttribute("data-graph-transition-source") || "",
+        path: transitionEl.getAttribute("data-graph-transition-path") || "",
+      };
+      if (!payload.sourceStateKey || !payload.path) {
+        event.preventDefault();
+        return;
+      }
+      workflowDefinitionGraphTransitionDrag = payload;
+      event.dataTransfer.effectAllowed = "link";
+      event.dataTransfer.setData("application/x-nanoclaw-workflow-transition", JSON.stringify(payload));
+      event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+      workflowDefinitionGraph.classList.add("is-linking");
+    });
+    transitionEl.addEventListener("dragend", () => {
+      workflowDefinitionGraphTransitionDrag = null;
+      clearWorkflowDefinitionGraphDragClasses();
+    });
+  });
+
+  Array.from(workflowDefinitionGraph.querySelectorAll("[data-graph-state-type]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      addWorkflowDefinitionStateWithType(button.getAttribute("data-graph-state-type") || "delegation");
+    });
+  });
+  const autoLayoutBtn = workflowDefinitionGraph.querySelector("[data-graph-action='auto-layout']");
+  if (autoLayoutBtn) {
+    autoLayoutBtn.addEventListener("click", () => autoLayoutWorkflowDefinitionGraph());
+  }
 }
 
 function renderWorkflowDefinitionGraph(definition) {
@@ -7853,7 +8377,6 @@ function renderWorkflowDefinitionGraph(definition) {
       .map((entry) => entry?.state)
       .filter(Boolean),
   );
-
   const stateEntries = Object.entries(states);
   if (stateEntries.length === 0) {
     workflowDefinitionGraph.innerHTML =
@@ -7861,74 +8384,46 @@ function renderWorkflowDefinitionGraph(definition) {
     return;
   }
 
-  workflowDefinitionGraph.innerHTML = stateEntries
-    .map(([stateKey, state]) => {
-      const badges = [
-        `<span class="workflow-definition-graph-badge">${escapeHtml(state.type || "--")}</span>`,
-      ];
-      if (entryStateNames.has(stateKey)) {
-        badges.push('<span class="workflow-definition-graph-badge">entry</span>');
-      }
-      const meta = [];
-      if (state.delegate?.role) {
-        meta.push(`<span>role: ${escapeHtml(state.delegate.role)}</span>`);
-      }
-      if (state.delegate?.skill) {
-        meta.push(`<span>skill: ${escapeHtml(state.delegate.skill)}</span>`);
-      }
-      if (state.card?.ref) {
-        meta.push(`<span>card: ${escapeHtml(state.card.ref)}</span>`);
-      }
-
-      const transitions = [];
-      if (state.on_complete?.success) {
-        transitions.push(buildWorkflowTransitionSummary("success", state.on_complete.success));
-      }
-      if (state.on_complete?.failure) {
-        transitions.push(buildWorkflowTransitionSummary("failure", state.on_complete.failure));
-      }
-      if (state.on_resume && typeof state.on_resume === "object" && !Array.isArray(state.on_resume)) {
-        Object.entries(state.on_resume).forEach(([action, transition]) => {
-          transitions.push(buildWorkflowTransitionSummary(`resume:${action}`, transition));
-        });
-      }
-      if (state.on_cancel) {
-        transitions.push(buildWorkflowTransitionSummary("cancel", state.on_cancel));
-      }
-      if (state.on_expire) {
-        transitions.push(buildWorkflowTransitionSummary("expire", state.on_expire));
-      }
-
-      return `
-        <article
-          class="workflow-definition-graph-node ${escapeHtml(state.type || "unknown")}${entryStateNames.has(stateKey) ? " entry" : ""}${workflowDefinitionSelectedStateKey === stateKey ? " active" : ""}"
-          data-state-key="${escapeHtml(stateKey)}"
-        >
-          <div class="workflow-definition-graph-node-head">
-            <div>
-              <div class="workflow-definition-graph-node-title">${escapeHtml(state.label || stateKey)}</div>
-              <div class="workflow-definition-graph-node-subtitle">${escapeHtml(stateKey)}</div>
-            </div>
-            <div class="workflow-definition-graph-node-badges">${badges.join("")}</div>
-          </div>
-          ${meta.length ? `<div class="workflow-definition-graph-meta">${meta.join("")}</div>` : ""}
-          ${
-            transitions.length
-              ? `<div class="workflow-definition-graph-transitions">${transitions.join("")}</div>`
-              : '<div class="workflow-definition-graph-empty">无后续 transition</div>'
-          }
-        </article>
-      `;
-    })
-    .join("");
-
-  Array.from(workflowDefinitionGraph.querySelectorAll("[data-state-key]")).forEach((node) => {
-    node.addEventListener("click", () => {
-      const stateKey = node.getAttribute("data-state-key") || "";
-      if (!stateKey) return;
-      updateWorkflowDefinitionSelectedState(stateKey);
-    });
-  });
+  const canEdit = isWorkflowDefinitionGraphEditable();
+  const layout = computeWorkflowDefinitionGraphLayout(definition);
+  const transitionCount = stateEntries.reduce(
+    (count, [, state]) => count + getWorkflowDefinitionGraphTransitionsForState(state).length,
+    0,
+  );
+  const toolbar = `
+    <div class="workflow-definition-graph-toolbar">
+      <div class="workflow-definition-graph-toolbar-group">
+        ${
+          canEdit
+            ? `
+              <button type="button" class="btn-ghost" data-graph-state-type="delegation">Delegation</button>
+              <button type="button" class="btn-ghost" data-graph-state-type="interrupt">Interrupt</button>
+              <button type="button" class="btn-ghost" data-graph-state-type="terminal">Terminal</button>
+              <button type="button" class="btn-ghost" data-graph-state-type="system">System</button>
+              <button type="button" class="btn-ghost" data-graph-action="auto-layout">自动布局</button>
+            `
+            : ""
+        }
+      </div>
+      <div class="workflow-definition-graph-stats">${escapeHtml(String(stateEntries.length))} states · ${escapeHtml(String(transitionCount))} transitions</div>
+    </div>
+  `;
+  workflowDefinitionGraph.innerHTML = `
+    <div class="workflow-definition-graph-shell${canEdit ? " editable" : ""}">
+      ${toolbar}
+      <div class="workflow-definition-graph-scroll">
+        <div class="workflow-definition-graph-canvas" style="width: ${escapeAttribute(layout.width)}px; height: ${escapeAttribute(layout.height)}px;">
+          ${buildWorkflowDefinitionGraphEdges(stateEntries, layout, states)}
+          ${stateEntries
+            .map(([stateKey, state]) =>
+              buildWorkflowDefinitionGraphNodeHtml(stateKey, state, layout, entryStateNames, canEdit),
+            )
+            .join("")}
+        </div>
+      </div>
+    </div>
+  `;
+  bindWorkflowDefinitionGraphEvents(canEdit);
 }
 
 function getWorkflowDefinitionDiffComparable(version) {
@@ -8497,6 +8992,7 @@ async function copyPublishedWorkflowDefinitionToDraft() {
           entry_points: cloneJson(published.entry_points || {}),
           states: cloneJson(published.states || {}),
           status_labels: cloneJson(published.status_labels || {}),
+          create_form: cloneJson(published.create_form || {}),
           metadata: nextMetadata,
         },
       }),
@@ -8541,6 +9037,7 @@ async function copySelectedWorkflowDefinitionVersionToDraft(selectedVersion) {
           entry_points: cloneJson(selected.entry_points || {}),
           states: cloneJson(selected.states || {}),
           status_labels: cloneJson(selected.status_labels || {}),
+          create_form: cloneJson(selected.create_form || {}),
           metadata: nextMetadata,
         },
       }),
@@ -8629,6 +9126,7 @@ async function createWorkflowDefinition() {
           entry_points: template.entry_points,
           states: template.states,
           status_labels: template.status_labels,
+          create_form: template.create_form,
           metadata: template.metadata,
         },
       }),
@@ -12403,8 +12901,6 @@ function getWorkbenchSubtaskStatusIcon(status) {
 function getWorkbenchApprovalLabels(task, approval) {
   const approvalType = approval.approval_type || task.workflow_status;
   switch (approvalType) {
-    case "plan_confirm":
-      return { approve: "进入开发", revise: "返回方案修改", skip: "跳过此节点" };
     case "plan_examine_confirm":
       return { approve: "继续开发", revise: "返回方案修改", skip: "跳过此节点" };
     case "dev_examine_confirm":

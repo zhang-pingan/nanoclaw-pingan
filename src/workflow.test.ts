@@ -279,7 +279,7 @@ describe('durable interrupt runtime', () => {
   it('creates a fresh pending interrupt when re-entering the same state', () => {
     createWorkflowAtInterrupt({
       id: 'wf-reenter-interrupt',
-      state: 'plan_confirm',
+      state: 'plan_examine_confirm',
     });
     initWorkflow({
       registeredGroups: () => getAllRegisteredGroups(),
@@ -287,7 +287,7 @@ describe('durable interrupt runtime', () => {
     });
     const first = getPendingWorkflowInterruptForState(
       'wf-reenter-interrupt',
-      'plan_confirm',
+      'plan_examine_confirm',
     );
     expect(first).toBeDefined();
 
@@ -299,17 +299,17 @@ describe('durable interrupt runtime', () => {
     });
     expect(firstResult.ok).toBe(true);
 
-    returnWorkflowToInterruptStage('wf-reenter-interrupt', 'plan_confirm');
+    returnWorkflowToInterruptStage('wf-reenter-interrupt', 'plan_examine_confirm');
     const second = getPendingWorkflowInterruptForState(
       'wf-reenter-interrupt',
-      'plan_confirm',
+      'plan_examine_confirm',
     );
 
     expect(second).toBeDefined();
     expect(second!.id).not.toBe(first!.id);
     expect(
       listWorkflowInterruptsByWorkflow('wf-reenter-interrupt').filter(
-        (interrupt) => interrupt.state_key === 'plan_confirm',
+        (interrupt) => interrupt.state_key === 'plan_examine_confirm',
       ),
     ).toHaveLength(2);
   });
@@ -359,7 +359,7 @@ describe('durable interrupt runtime', () => {
   it('treats same-action resume with different payload as a conflict', () => {
     createWorkflowAtInterrupt({
       id: 'wf-resume-conflict',
-      state: 'plan_confirm',
+      state: 'plan_examine_confirm',
     });
     initWorkflow({
       registeredGroups: () => getAllRegisteredGroups(),
@@ -367,7 +367,7 @@ describe('durable interrupt runtime', () => {
     });
     const interrupt = getPendingWorkflowInterruptForState(
       'wf-resume-conflict',
-      'plan_confirm',
+      'plan_examine_confirm',
     );
     expect(interrupt).toBeDefined();
 
