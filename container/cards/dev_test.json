@@ -2,14 +2,14 @@
   "plan_examine_confirm": {
     "pattern": "confirm_revise",
     "header": {
-      "title_template": "📋 确认方案修改或继续开发",
+      "title_template": "📋 方案复核审批",
       "color": "orange"
     },
     "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接继续后续流程（进入开发）\n2) 回到 Plan 修改（可填写补充修改意见）",
     "actions": [
       {
         "id": "approve",
-        "label": "✅ 继续开发",
+        "label": "✅ 进入开发",
         "type": "primary",
         "action_kind": "interrupt_resume",
         "resume_action": "approve"

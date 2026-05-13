@@ -342,12 +342,12 @@
         },
         "plan_examine_confirm": {
           "type": "interrupt",
-          "label": "确认方案修改或继续开发",
+          "label": "方案复核审批",
           "card": {
             "ref": "plan_examine_confirm"
           },
           "kind": "approval",
-          "title": "确认方案修改或继续开发",
+          "title": "方案复核审批",
           "allowed_actions": ["approve", "revise"],
           "resume_payload_schema": {
             "schema": {
@@ -1360,7 +1360,7 @@
       "status_labels": {
         "plan": "📝 方案设计中",
         "plan_examine": "🧭 方案审核中",
-        "plan_examine_confirm": "📋 确认方案修改或继续开发",
+        "plan_examine_confirm": "📋 方案复核审批",
         "dev": "🔧 开发中",
         "dev_examine": "🧾 开发复核中",
         "dev_examine_confirm": "📋 确认回修或继续后续流程",

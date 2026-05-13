@@ -12902,7 +12902,7 @@ function getWorkbenchApprovalLabels(task, approval) {
   const approvalType = approval.approval_type || task.workflow_status;
   switch (approvalType) {
     case "plan_examine_confirm":
-      return { approve: "继续开发", revise: "返回方案修改", skip: "跳过此节点" };
+      return { approve: "进入开发", revise: "返回方案修改", skip: "跳过此节点" };
     case "dev_examine_confirm":
       return { approve: "继续后续流程", revise: "返回开发修正", skip: "跳过此节点" };
     case "awaiting_confirm":

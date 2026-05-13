@@ -425,9 +425,9 @@ describe('workbench approval transition sync', () => {
 
     const card = buildWorkbenchBroadcastCard({ taskId, actionItemId });
 
-    expect(card?.header.title).toContain('确认方案修改或继续开发');
+    expect(card?.header.title).toContain('方案复核审批');
     expect(card?.buttons?.map((button) => button.label)).toEqual([
-      '✅ 继续开发',
+      '✅ 进入开发',
       '❌ 取消流程',
     ]);
     expect(card?.form?.submitButton.label).toBe('✏️ 返回方案修改');
