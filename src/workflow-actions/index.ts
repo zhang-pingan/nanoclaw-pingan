@@ -5,6 +5,7 @@ import { registerScriptWorkflowActions } from './script.js';
 
 export {
   getWorkflowActionHandler,
+  listWorkflowActionHandlerDetails,
   listWorkflowActionHandlers,
   registerWorkflowActionHandler,
 } from './registry.js';

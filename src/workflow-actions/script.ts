@@ -5,6 +5,7 @@ import { asStringArray } from './utils.js';
 export function registerScriptWorkflowActions(): void {
   registerWorkflowActionHandler({
     name: 'script.run_local',
+    description: 'Run an allowed local shell script under local/shell.',
     run(input) {
       const scriptPath = input.params.script_path;
       if (typeof scriptPath !== 'string' || !scriptPath.trim()) {

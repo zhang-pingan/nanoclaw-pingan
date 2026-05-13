@@ -107,6 +107,7 @@ import {
   getWorkflowTypeConfig,
   loadWorkflowConfigs,
 } from '../workflow-config.js';
+import { listWorkflowActionHandlerDetails } from '../workflow-actions/index.js';
 import {
   cancelWorkflow,
   pauseWorkflow,
@@ -1171,6 +1172,9 @@ class WebChannel {
       }
       if (pathname === '/api/workflow-definitions' && req.method === 'GET') {
         return this.apiListWorkflowDefinitions(res);
+      }
+      if (pathname === '/api/workflow-actions' && req.method === 'GET') {
+        return this.apiListWorkflowActions(res);
       }
       if (pathname === '/api/skills' && req.method === 'GET') {
         return this.apiGetSkills(res);
@@ -2997,6 +3001,13 @@ class WebChannel {
     const skills = listContainerSkillNames();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ skills }));
+  }
+
+  private async apiListWorkflowActions(
+    res: http.ServerResponse,
+  ): Promise<void> {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ actions: listWorkflowActionHandlerDetails() }));
   }
 
   private async apiGetWorkflowDefinition(

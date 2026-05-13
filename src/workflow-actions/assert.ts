@@ -3,6 +3,7 @@ import { registerWorkflowActionHandler } from './registry.js';
 export function registerAssertWorkflowActions(): void {
   registerWorkflowActionHandler({
     name: 'assert.equals',
+    description: 'Fail unless actual and expected are strictly equal.',
     run(input) {
       const actual = input.params.actual;
       const expected = input.params.expected;

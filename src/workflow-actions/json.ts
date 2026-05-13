@@ -4,6 +4,7 @@ import { getPathValue } from './utils.js';
 export function registerJsonWorkflowActions(): void {
   registerWorkflowActionHandler({
     name: 'json.parse',
+    description: 'Parse JSON text and optionally pick a dotted path.',
     run(input) {
       const source = input.params.source;
       if (typeof source !== 'string') {

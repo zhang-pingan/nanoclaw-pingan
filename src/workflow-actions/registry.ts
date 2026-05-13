@@ -21,6 +21,7 @@ export interface WorkflowActionResult {
 
 export interface WorkflowActionHandler {
   name: string;
+  description?: string;
   run(input: WorkflowActionRunInput): WorkflowActionResult;
 }
 
@@ -40,4 +41,16 @@ export function getWorkflowActionHandler(
 
 export function listWorkflowActionHandlers(): string[] {
   return Array.from(handlers.keys()).sort();
+}
+
+export function listWorkflowActionHandlerDetails(): Array<{
+  name: string;
+  description?: string;
+}> {
+  return Array.from(handlers.values())
+    .map((handler) => ({
+      name: handler.name,
+      description: handler.description,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

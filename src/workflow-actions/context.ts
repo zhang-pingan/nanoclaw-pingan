@@ -4,6 +4,7 @@ import { asStringArray, isRecord } from './utils.js';
 export function registerContextWorkflowActions(): void {
   registerWorkflowActionHandler({
     name: 'context.set',
+    description: 'Set workflow context keys from values or top-level params.',
     run(input) {
       const values = isRecord(input.params.values)
         ? input.params.values
@@ -19,6 +20,7 @@ export function registerContextWorkflowActions(): void {
 
   registerWorkflowActionHandler({
     name: 'context.require',
+    description: 'Fail unless all listed workflow context keys are present.',
     run(input) {
       const keys = asStringArray(input.params.keys);
       const missing = keys.filter((key) => {
