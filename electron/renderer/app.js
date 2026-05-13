@@ -5050,6 +5050,42 @@ function getWorkflowDefinitionModeAllowsEditing() {
   return ["form", "json", "graph"].includes(workflowDefinitionViewMode);
 }
 
+const WORKFLOW_DEFINITION_READONLY_NAV_BUTTON_SELECTOR = [
+  "[data-role-select]",
+  "[data-entry-point-select]",
+  "[data-state-select]",
+  "[data-status-label-select]",
+  "[data-create-form-field-select]",
+].join(",");
+
+function canEditCurrentWorkflowDefinitionView() {
+  return getWorkflowDefinitionModeAllowsEditing() && isSelectedWorkflowDefinitionDraft();
+}
+
+function isWorkflowDefinitionReadonlyNavigationButton(el) {
+  return el instanceof HTMLButtonElement && el.matches(WORKFLOW_DEFINITION_READONLY_NAV_BUTTON_SELECTOR);
+}
+
+function applyWorkflowDefinitionEditorControlState(isReadonly) {
+  if (!workflowDefinitionEditorGrid) return;
+  Array.from(
+    workflowDefinitionEditorGrid.querySelectorAll("input, textarea, select, button"),
+  ).forEach((el) => {
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || el instanceof HTMLButtonElement)) {
+      return;
+    }
+    if (el === workflowDefinitionKeyInput || el === workflowDefinitionVersionInput) {
+      el.disabled = true;
+      return;
+    }
+    if (isReadonly && isWorkflowDefinitionReadonlyNavigationButton(el)) {
+      el.disabled = false;
+      return;
+    }
+    el.disabled = !!isReadonly;
+  });
+}
+
 function buildWorkflowDefinitionJsonDocument(version) {
   if (!version) return {};
   return {
@@ -5168,20 +5204,7 @@ function setWorkflowDefinitionEditorReadonly(isReadonly, selectedVersion) {
     }
   }
 
-  if (workflowDefinitionEditorGrid) {
-    Array.from(
-      workflowDefinitionEditorGrid.querySelectorAll("input, textarea, select, button"),
-    ).forEach((el) => {
-      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || el instanceof HTMLButtonElement)) {
-        return;
-      }
-      if (el === workflowDefinitionKeyInput || el === workflowDefinitionVersionInput) {
-        el.disabled = true;
-        return;
-      }
-      el.disabled = !!isReadonly;
-    });
-  }
+  applyWorkflowDefinitionEditorControlState(isReadonly);
 }
 
 function parseWorkflowDefinitionJsonField(label, rawValue, fallback) {
@@ -6219,6 +6242,7 @@ function renderWorkflowDefinitionCreateFormEditor(createFormArg) {
       });
     });
   });
+  applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
 
 async function addWorkflowDefinitionStateWithType(type = "", presetKey = "") {
@@ -7356,6 +7380,7 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   if (renameBtn) renameBtn.addEventListener("click", () => renameWorkflowDefinitionRole());
   if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionRole());
   if (addChannelBtn) addChannelBtn.addEventListener("click", () => addWorkflowDefinitionRoleChannelFromButton());
+  applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
 
 function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
@@ -7482,6 +7507,7 @@ function renderWorkflowDefinitionEntryPointEditor(entryPointsArg) {
   const deleteBtn = workflowDefinitionEntryPointInspector.querySelector("[data-entry-point-action='delete']");
   if (renameBtn) renameBtn.addEventListener("click", () => renameWorkflowDefinitionEntryPoint());
   if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionEntryPoint());
+  applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
 
 function renderWorkflowDefinitionStatusLabelEditor(statusLabelsArg) {
@@ -7557,6 +7583,7 @@ function renderWorkflowDefinitionStatusLabelEditor(statusLabelsArg) {
   }
   const deleteBtn = workflowDefinitionStatusLabelInspector.querySelector("[data-status-label-action='delete']");
   if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionStatusLabel());
+  applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
 
 function renderWorkflowDefinitionStateEditor(statesArg) {
@@ -7828,6 +7855,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
       .join("");
   }
   bindWorkflowDefinitionStateInspectorEvents();
+  applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
 
 const WORKFLOW_DEFINITION_GRAPH_NODE_WIDTH = 260;
@@ -8631,10 +8659,9 @@ function renderWorkflowDefinitionDetailPane() {
   const detail = currentWorkflowDefinitionDetail;
   const bundle = detail.bundle || {};
   const selectedVersion = getSelectedWorkflowDefinitionVersion();
-  const isDraftSelected = selectedVersion?.status === "draft";
   const isGraphMode = workflowDefinitionViewMode === "graph";
   const isJsonMode = workflowDefinitionViewMode === "json";
-  const canEditCurrentView = getWorkflowDefinitionModeAllowsEditing() && isDraftSelected;
+  const canEditCurrentView = canEditCurrentWorkflowDefinitionView();
   const displayDefinition = selectedVersion || null;
   const graphSource = displayDefinition;
   workflowDefinitionEmpty.classList.add("hidden");
