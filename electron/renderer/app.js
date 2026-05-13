@@ -362,6 +362,7 @@ var workflowDefinitionSelectedCreateFormFieldKey = "";
 var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRoleGroupOptions = [];
 var workflowDefinitionSkillOptions = [];
+var workflowDefinitionCreateFieldTypes = ["text", "textarea", "choice", "requirement_select", "file_uploads"];
 var workflowDefinitionRequestSeq = 0;
 var workflowDefinitionSelectGlobalEventsBound = false;
 var cardsRegistry = {};
@@ -6113,7 +6114,7 @@ function renderWorkflowDefinitionCreateFormEditor(createFormArg) {
               </label>
               <label class="workflow-definition-field">
                 <span>Type</span>
-                ${renderWorkflowDefinitionSelectControl("data-create-form-select-field", "type", ["text", "choice", "requirement_select"], selectedField.type || "text", "选择 type")}
+                ${renderWorkflowDefinitionSelectControl("data-create-form-select-field", "type", workflowDefinitionCreateFieldTypes, selectedField.type || "text", "选择 type")}
               </label>
             </div>
             <div class="workflow-definition-state-inspector-grid">
@@ -8977,6 +8978,9 @@ async function loadWorkflowDefinitionDetail(key) {
       throw new Error(data?.error || `HTTP ${res.status}`);
     }
     currentWorkflowDefinitionDetail = data;
+    if (Array.isArray(data.workflow_create_field_types) && data.workflow_create_field_types.length > 0) {
+      workflowDefinitionCreateFieldTypes = data.workflow_create_field_types;
+    }
     workflowDefinitionReferenceDetails[safeKey] = data;
     clearWorkflowDefinitionVersionDiffFocus();
     if (workflowDefinitionDiffModal) {
@@ -9018,6 +9022,9 @@ async function loadWorkflowDefinitions(options = {}) {
     const skillsData = await skillsRes.json().catch(() => ({}));
     if (!definitionsRes.ok) {
       throw new Error(data?.error || `HTTP ${definitionsRes.status}`);
+    }
+    if (Array.isArray(data.workflow_create_field_types) && data.workflow_create_field_types.length > 0) {
+      workflowDefinitionCreateFieldTypes = data.workflow_create_field_types;
     }
     workflowDefinitionCardsRegistry = cardsRes.ok ? cardsData?.cards || {} : {};
     workflowDefinitionRoleGroupOptions = groupsRes.ok && Array.isArray(groupsData?.groups) ? groupsData.groups : groups;

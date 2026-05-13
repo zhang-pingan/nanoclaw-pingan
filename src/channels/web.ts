@@ -37,6 +37,7 @@ import {
 import { validateCardConfig } from '../card-config.js';
 import type { CardConfig } from '../card-config.js';
 import { validateCardRegistryKey } from '../card-files.js';
+import { WORKFLOW_CREATE_FIELD_TYPES } from '../workflow-definition.js';
 import type { WorkflowDefinition } from '../workflow-definition.js';
 import { registerChannel, ChannelFactory, ChannelOpts } from './registry.js';
 import {
@@ -2984,7 +2985,12 @@ class WebChannel {
   ): Promise<void> {
     const bundles = listWorkflowDefinitionBundles();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ definitions: bundles }));
+    res.end(
+      JSON.stringify({
+        definitions: bundles,
+        workflow_create_field_types: WORKFLOW_CREATE_FIELD_TYPES,
+      }),
+    );
   }
 
   private async apiGetSkills(res: http.ServerResponse): Promise<void> {
@@ -3024,6 +3030,7 @@ class WebChannel {
         published_definition: published,
         draft_definition: draft,
         preview,
+        workflow_create_field_types: WORKFLOW_CREATE_FIELD_TYPES,
       }),
     );
   }

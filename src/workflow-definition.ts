@@ -187,10 +187,21 @@ export interface WorkflowCreateFieldOption {
   label: string;
 }
 
+export const WORKFLOW_CREATE_FIELD_TYPES = [
+  'text',
+  'textarea',
+  'choice',
+  'requirement_select',
+  'file_uploads',
+] as const;
+
+export type WorkflowCreateFieldType =
+  (typeof WORKFLOW_CREATE_FIELD_TYPES)[number];
+
 export interface WorkflowCreateField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'choice' | 'requirement_select' | 'file_uploads';
+  type: WorkflowCreateFieldType;
   placeholder?: string;
   helper_text?: string;
   default_value?: string;

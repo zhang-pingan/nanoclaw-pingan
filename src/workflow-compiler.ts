@@ -1,6 +1,7 @@
 import {
   WorkflowDefinition,
   WorkflowCreateForm,
+  WORKFLOW_CREATE_FIELD_TYPES,
   WorkflowDefinitionState,
   WorkflowDefinitionTransition,
   WorkflowDefinitionEvaluatorRef,
@@ -267,15 +268,7 @@ export function validateWorkflowDefinition(
         if (!field.label?.trim()) {
           errors.push(`${fieldPath}.label is required`);
         }
-        if (
-          ![
-            'text',
-            'textarea',
-            'choice',
-            'requirement_select',
-            'file_uploads',
-          ].includes(field.type)
-        ) {
+        if (!WORKFLOW_CREATE_FIELD_TYPES.includes(field.type)) {
           errors.push(`${fieldPath}.type "${field.type}" is invalid`);
         }
         if (
