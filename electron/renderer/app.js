@@ -5364,28 +5364,25 @@ function getWorkflowDefinitionRoleGroupOptions(channelKey = "", selectedFolder =
   });
 }
 
-function renderWorkflowDefinitionRoleChannelOptions(selectedChannel) {
+function getWorkflowDefinitionRoleChannelSelectOptions(selectedChannel) {
   const selected = String(selectedChannel || "").trim();
   const optionKeys = [...WORKFLOW_DEFINITION_ROLE_CHANNEL_OPTIONS];
   if (selected && !optionKeys.includes(selected)) optionKeys.push(selected);
-  return [
-    '<option value="">选择渠道</option>',
-    ...optionKeys.map((channel) => `<option value="${escapeAttribute(channel)}" ${channel === selected ? "selected" : ""}>${escapeHtml(channel)}</option>`),
-  ].join("");
+  return optionKeys;
 }
 
-function renderWorkflowDefinitionRoleGroupOptions(channelKey, selectedFolder) {
+function getWorkflowDefinitionRoleGroupSelectOptions(channelKey, selectedFolder) {
   const selected = String(selectedFolder || "").trim();
   const options = getWorkflowDefinitionRoleGroupOptions(channelKey, selected);
-  return [
-    '<option value="">选择群组</option>',
-    ...options.map((group) => {
-      const label = group.name && group.name !== group.folder
-        ? `${group.name} · ${group.folder}`
-        : group.folder;
-      return `<option value="${escapeAttribute(group.folder)}" ${group.folder === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
-    }),
-  ].join("");
+  return options.map((group) => {
+    const label = group.name && group.name !== group.folder
+      ? `${group.name} · ${group.folder}`
+      : group.folder;
+    return {
+      value: group.folder,
+      label,
+    };
+  });
 }
 
 function createWorkflowDefinitionDraftChannelKey(channels) {
@@ -5430,14 +5427,14 @@ function updateWorkflowDefinitionRoleChannelValue(channelKey, value) {
 }
 
 function renameWorkflowDefinitionRoleChannel(oldKey, newKey) {
-  if (!workflowDefinitionSelectedRoleKey || !oldKey) return;
+  if (!workflowDefinitionSelectedRoleKey || !oldKey) return false;
   const safeNewKey = (newKey || "").trim();
   const keyPattern = /^[a-zA-Z0-9_-]+$/;
-  if (!safeNewKey || safeNewKey === oldKey) return;
+  if (!safeNewKey || safeNewKey === oldKey) return true;
   if (!keyPattern.test(safeNewKey)) {
     throw new Error("channel key 仅支持字母、数字、_ 和 -");
   }
-  applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
+  return applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
     role.channels = role.channels || {};
     if (!Object.prototype.hasOwnProperty.call(role.channels, oldKey)) {
       throw new Error(`channel "${oldKey}" 不存在`);
@@ -5459,28 +5456,31 @@ function addWorkflowDefinitionRoleChannelFromButton(channelKey = "") {
   try {
     const requestedKey = String(channelKey || "").trim();
     const addedKey = addWorkflowDefinitionRoleChannel(requestedKey, "");
-    const selector = requestedKey
-      ? getWorkflowDefinitionInspectorSelector("data-role-channel", addedKey)
-      : `[data-role-channel-storage-key="${escapeAttribute(addedKey)}"]`;
+    if (!addedKey) return;
+    const selector = getWorkflowDefinitionInspectorSelector("data-role-channel-key", addedKey);
     const channelSelect = workflowDefinitionRoleInspector.querySelector(selector);
-    if (channelSelect instanceof HTMLSelectElement) channelSelect.focus();
+    if (channelSelect instanceof HTMLElement) channelSelect.focus();
   } catch (err) {
     alert(err instanceof Error ? err.message : "新增 channel 失败");
   }
 }
 
 function handleWorkflowDefinitionRoleChannelSelect(select, nextTarget = null) {
-  const oldKey = select.getAttribute("data-role-channel-key-original") || "";
-  const newKey = String(select.value || "").trim();
+  const oldKey = select.getAttribute("data-role-channel-key-original") || select.getAttribute("data-role-channel-key") || "";
+  const newKey = getWorkflowDefinitionControlValue(select).trim();
   if (!oldKey || newKey === oldKey) {
     return;
   }
   if (!newKey) {
-    select.value = getWorkflowDefinitionRoleChannelValue(oldKey);
+    setWorkflowDefinitionControlValue(select, getWorkflowDefinitionRoleChannelValue(oldKey), "选择渠道");
     return;
   }
   try {
-    renameWorkflowDefinitionRoleChannel(oldKey, newKey);
+    const renamed = renameWorkflowDefinitionRoleChannel(oldKey, newKey);
+    if (!renamed) {
+      setWorkflowDefinitionControlValue(select, getWorkflowDefinitionRoleChannelValue(oldKey), "选择渠道");
+      return;
+    }
     select.setAttribute("data-role-channel-key-original", newKey);
     if (
       nextTarget instanceof Element &&
@@ -5489,10 +5489,10 @@ function handleWorkflowDefinitionRoleChannelSelect(select, nextTarget = null) {
       const valueSelect = workflowDefinitionRoleInspector?.querySelector(
         getWorkflowDefinitionInspectorSelector("data-role-channel", newKey),
       );
-      if (valueSelect instanceof HTMLSelectElement) valueSelect.focus();
+      if (valueSelect instanceof HTMLElement) valueSelect.focus();
     }
   } catch (err) {
-    select.value = getWorkflowDefinitionRoleChannelValue(oldKey);
+    setWorkflowDefinitionControlValue(select, getWorkflowDefinitionRoleChannelValue(oldKey), "选择渠道");
     alert(err instanceof Error ? err.message : "重命名 channel 失败");
   }
 }
@@ -5803,7 +5803,7 @@ function applyWorkflowDefinitionStatePatch(stateKey, updater) {
 }
 
 function applyWorkflowDefinitionRolePatch(roleKey, updater) {
-  if (!roleKey) return;
+  if (!roleKey) return false;
   try {
     const roles = getRolesFromEditor();
     roles[roleKey] = updater(cloneJson(roles[roleKey] || {})) || roles[roleKey];
@@ -5812,8 +5812,10 @@ function applyWorkflowDefinitionRolePatch(roleKey, updater) {
     if (editable) editable.roles = roles;
     renderWorkflowDefinitionRoleEditor(roles);
     renderWorkflowDefinitionStateEditor();
+    return true;
   } catch (err) {
     showToast(err instanceof Error ? err.message : "Role 配置解析失败", 2200);
+    return false;
   }
 }
 
@@ -5845,6 +5847,38 @@ function restoreWorkflowDefinitionInspectorFocus(root, selector, selection) {
   ) {
     nextField.setSelectionRange(selection.start, selection.end);
   }
+}
+
+function getWorkflowDefinitionControlValue(el) {
+  if (!el) return "";
+  if (el.hasAttribute?.("data-workflow-definition-select-button")) {
+    return el.getAttribute("data-workflow-definition-select-value") || "";
+  }
+  return typeof el.value === "string" ? el.value : "";
+}
+
+function setWorkflowDefinitionControlValue(el, value, fallbackLabel = "") {
+  if (!el) return;
+  const nextValue = String(value || "");
+  if (el.hasAttribute?.("data-workflow-definition-select-button")) {
+    el.setAttribute("data-workflow-definition-select-value", nextValue);
+    const select = el.closest("[data-workflow-definition-select]");
+    let selectedOption = null;
+    if (select) {
+      Array.from(select.querySelectorAll("[data-workflow-definition-select-option]")).forEach((option) => {
+        const isSelected = (option.getAttribute("data-workflow-definition-select-option") || "") === nextValue;
+        option.classList.toggle("selected", isSelected);
+        option.setAttribute("aria-selected", isSelected ? "true" : "false");
+        if (isSelected) selectedOption = option;
+      });
+    }
+    const textEl = el.querySelector("span");
+    if (textEl) {
+      textEl.textContent = selectedOption?.textContent || fallbackLabel || nextValue || "请选择";
+    }
+    return;
+  }
+  if (typeof el.value === "string") el.value = nextValue;
 }
 
 function applyWorkflowDefinitionEntryPointPatch(entryKey, updater) {
@@ -6045,11 +6079,7 @@ function renderWorkflowDefinitionCreateFormEditor(createFormArg) {
               </label>
               <label class="workflow-definition-field">
                 <span>Type</span>
-                <select data-create-form-field="type">
-                  ${["text", "choice", "requirement_select"]
-                    .map((type) => `<option value="${type}" ${selectedField.type === type ? "selected" : ""}>${type}</option>`)
-                    .join("")}
-                </select>
+                ${renderWorkflowDefinitionSelectControl("data-create-form-select-field", "type", ["text", "choice", "requirement_select"], selectedField.type || "text", "选择 type")}
               </label>
             </div>
             <div class="workflow-definition-state-inspector-grid">
@@ -6184,10 +6214,11 @@ function renderWorkflowDefinitionCreateFormEditor(createFormArg) {
       }
     </div>
   `;
+  bindWorkflowDefinitionSelectControls(workflowDefinitionCreateFormInspector);
 
-  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-field]")).forEach((el) => {
-    const path = el.getAttribute("data-create-form-field") || "";
-    const eventName = el.type === "checkbox" ? "change" : "input";
+  Array.from(workflowDefinitionCreateFormInspector.querySelectorAll("[data-create-form-field], [data-create-form-select-field]")).forEach((el) => {
+    const path = el.getAttribute("data-create-form-field") || el.getAttribute("data-create-form-select-field") || "";
+    const eventName = el.type === "checkbox" || el.hasAttribute("data-workflow-definition-select-button") ? "change" : "input";
     el.addEventListener(eventName, () => {
       applyWorkflowDefinitionCreateFormPatch((nextCreateForm) => {
         const field = (nextCreateForm.fields || []).find((item) => item?.key === workflowDefinitionSelectedCreateFormFieldKey);
@@ -6195,7 +6226,7 @@ function renderWorkflowDefinitionCreateFormEditor(createFormArg) {
         if (el.type === "checkbox") {
           field[path] = !!el.checked;
         } else if (path === "type") {
-          field.type = el.value || "text";
+          field.type = getWorkflowDefinitionControlValue(el) || "text";
         } else if (el.value) {
           field[path] = el.value;
         } else {
@@ -7162,10 +7193,15 @@ function getWorkflowDefinitionSelectItems(options, selectedValue, placeholder = 
   const seen = new Set();
   const items = [{ value: "", label: placeholder }];
   (Array.isArray(options) ? options : []).forEach((option) => {
-    const value = String(option || "");
+    const value = typeof option === "object" && option !== null
+      ? String(option.value || "")
+      : String(option || "");
+    const label = typeof option === "object" && option !== null
+      ? String(option.label || value)
+      : value;
     if (!value || seen.has(value)) return;
     seen.add(value);
-    items.push({ value, label: value });
+    items.push({ value, label });
   });
   if (selected && !seen.has(selected)) {
     items.push({ value: selected, label: `${selected}（未找到）` });
@@ -7545,16 +7581,20 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
                     <label class="workflow-definition-field workflow-definition-field-block">
                       <span>Channel</span>
                       <div class="workflow-definition-role-channel-row">
-                        <select
-                          data-role-channel-key="${escapeAttribute(channelKey)}"
-                          data-role-channel-key-original="${escapeAttribute(channelKey)}"
-                          data-role-channel-storage-key="${escapeAttribute(channelKey)}"
-                        >
-                          ${renderWorkflowDefinitionRoleChannelOptions(getWorkflowDefinitionRoleChannelValue(channelKey))}
-                        </select>
-                        <select data-role-channel="${escapeAttribute(channelKey)}">
-                          ${renderWorkflowDefinitionRoleGroupOptions(getWorkflowDefinitionRoleChannelValue(channelKey), value || "")}
-                        </select>
+                        ${renderWorkflowDefinitionSelectControl(
+                          "data-role-channel-key",
+                          channelKey,
+                          getWorkflowDefinitionRoleChannelSelectOptions(getWorkflowDefinitionRoleChannelValue(channelKey)),
+                          getWorkflowDefinitionRoleChannelValue(channelKey),
+                          "选择渠道",
+                        )}
+                        ${renderWorkflowDefinitionSelectControl(
+                          "data-role-channel",
+                          channelKey,
+                          getWorkflowDefinitionRoleGroupSelectOptions(getWorkflowDefinitionRoleChannelValue(channelKey), value || ""),
+                          value || "",
+                          "选择群组",
+                        )}
                         <button type="button" class="btn-ghost" data-role-channel-delete="${escapeAttribute(channelKey)}">删除</button>
                       </div>
                     </label>
@@ -7566,6 +7606,7 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
       </section>
     </div>
   `;
+  bindWorkflowDefinitionSelectControls(workflowDefinitionRoleInspector);
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-field]")).forEach((el) => {
     const path = el.getAttribute("data-role-field") || "";
     el.addEventListener(el.tagName === "TEXTAREA" ? "input" : "input", () => {
@@ -7584,7 +7625,7 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel]")).forEach((el) => {
     const channelKey = el.getAttribute("data-role-channel") || "";
     el.addEventListener("change", () => {
-      updateWorkflowDefinitionRoleChannelValue(channelKey, el.value || "");
+      updateWorkflowDefinitionRoleChannelValue(channelKey, getWorkflowDefinitionControlValue(el) || "");
     });
   });
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel-key]")).forEach((el) => {
