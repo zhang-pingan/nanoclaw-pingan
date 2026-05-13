@@ -43,7 +43,7 @@ Run `bash setup.sh` and parse the status block.
 
 Run `npx tsx setup/index.ts --step environment` and parse the status block.
 
-- Record APPLE_CONTAINER and DOCKER values for step 6
+- Record APPLE_CONTAINER and DOCKER values for step 7
 
 ## 3. Check .env
 
@@ -142,6 +142,15 @@ Before building the container, offer to register workflow role groups. This is
 not required for the service to start, but `dev_test` and `fix_test` cannot run
 end-to-end until the role groups exist.
 
+The built-in role group registration and the script below are the recommended
+setup path, not a hard requirement. If the user prefers to register their own
+workflow role groups or use different folders, explain the current risk before
+continuing: workflow role routing is hard-coded in
+`container/workflow-definitions/*.json` under each workflow version's
+`roles.<role>.channels` map. Custom role groups must be reflected there, or
+`dev_test` / `fix_test` will still delegate to the default folders such as
+`web_dev`, `feishu_dev`, `web_ops`, and `feishu_ops`.
+
 Run the web role group registration by default:
 
 ```bash
@@ -176,25 +185,73 @@ The script accepts either raw `oc_...` values or `feishu:oc_...` values. If the
 user does not have the Feishu role chat ids yet, continue with web role groups
 and report that Feishu role groups can be registered later with the same command.
 
-## 6. Container Runtime
+## 6. Configure Service Catalog (Optional)
 
-### 6a. Choose runtime
+Only configure `groups/global/services.json` when the user wants DevOps,
+workflow service integration, service repo access, Jenkins deployment, log
+inspection, MySQL proxying, or today-plan service association. Start from
+`groups/global/services.json.example` and keep the real file local.
+
+Important service path rules:
+
+- The top-level JSON keys are service names used by workflow/UI/group config,
+  for example `catstory`.
+- Each service's `repo_path` is the service directory name under the host
+  `REPOS_DIR`, and it is also the directory name used inside containers.
+- Runtime maps `${REPOS_DIR}/${repo_path}` on the host to
+  `/workspace/repos/${repo_path}` in the group container.
+- `repo_path` is not a full host path and not the git URL. If the host checkout
+  is in a differently named directory, either rename/check out the repo under
+  `REPOS_DIR` with the matching name or update `repo_path` to match the real
+  mounted service directory.
+- A service repo is mounted only when the host directory exists and the target
+  group's registered DB row has `containerConfig.services` containing that
+  service name, or `["*"]` for all services.
+
+When registering or updating groups that need service repos, add
+`containerConfig.services`. Example:
+
+```json
+{
+  "services": ["catstory", "push-service"]
+}
+```
+
+Use `["*"]` only for trusted groups that should access every service in
+`services.json`.
+
+Container mount reference:
+
+- Main group: project root is mounted at `/workspace/project`; its own group
+  folder is mounted at `/workspace/group`; `groups/global/services.json` is
+  available through `/workspace/project/groups/global/services.json`.
+- Non-main groups: their own folder is mounted at `/workspace/group`; global
+  config is mounted read-only at `/workspace/global`; service repos are mounted
+  at `/workspace/repos/{repo_path}` when `containerConfig.services` allows them.
+- `/workspace/projects/{service}` is for project knowledge, plans, and
+  deliverables. It is not the git repository.
+- Arbitrary extra directories require both `containerConfig.additionalMounts`
+  on the group and the mount allowlist in step 8.
+
+## 7. Container Runtime
+
+### 7a. Choose runtime
 
 Check the preflight results for `APPLE_CONTAINER` and `DOCKER`, and the PLATFORM from step 1.
 
 - PLATFORM=linux → Docker (only option)
-- PLATFORM=macos + APPLE_CONTAINER=installed → Use `AskUserQuestion: Docker (cross-platform) or Apple Container (native macOS)?` If Apple Container, run `/convert-to-apple-container` now, then skip to 6d.
+- PLATFORM=macos + APPLE_CONTAINER=installed → Use `AskUserQuestion: Docker (cross-platform) or Apple Container (native macOS)?` If Apple Container, run `/convert-to-apple-container` now, then skip to 7d.
 - PLATFORM=macos + APPLE_CONTAINER=not_found → Docker
 
-### 6b. Install Docker
+### 7b. Install Docker
 
-- DOCKER=running → continue to 6d
+- DOCKER=running → continue to 7d
 - DOCKER=installed_not_running → start Docker: `open -a Docker` (macOS) or `sudo systemctl start docker` (Linux). Wait 15s, re-check with `docker info`.
 - DOCKER=not_found → Use `AskUserQuestion: Docker is required for running agents. Would you like me to install it?` If confirmed:
   - macOS: install via `brew install --cask docker`, then `open -a Docker` and wait for it to start. If brew not available, direct to Docker Desktop download at https://docker.com/products/docker-desktop
   - Linux: install with `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER`. Note: user may need to log out/in for group membership.
 
-### 6c. Apple Container conversion gate (if needed)
+### 7c. Apple Container conversion gate (if needed)
 
 **If the chosen runtime is Apple Container**, you MUST check whether the source code has already been converted from Docker to Apple Container. Do NOT skip this step. Run:
 
@@ -204,11 +261,11 @@ grep -q "CONTAINER_RUNTIME_BIN = 'container'" src/container-runtime.ts && echo "
 
 **If NEEDS_CONVERSION**, the source code still uses Docker as the runtime. You MUST run the `/convert-to-apple-container` skill NOW, before proceeding to the build step.
 
-**If ALREADY_CONVERTED**, the code already uses Apple Container. Continue to 6d.
+**If ALREADY_CONVERTED**, the code already uses Apple Container. Continue to 7d.
 
-**If the chosen runtime is Docker**, no conversion is needed. Continue to 6d.
+**If the chosen runtime is Docker**, no conversion is needed. Continue to 7d.
 
-### 6d. Build and test
+### 7d. Build and test
 
 Run `npx tsx setup/index.ts --step container -- --runtime <chosen>` and parse the status block.
 
@@ -219,14 +276,14 @@ Run `npx tsx setup/index.ts --step container -- --runtime <chosen>` and parse th
 
 **If TEST_OK=false but BUILD_OK=true:** The image built but won't run. Check logs — common cause is runtime not fully started. Wait a moment and retry the test.
 
-## 7. Mount Allowlist
+## 8. Mount Allowlist
 
 AskUserQuestion: Agent access to external directories?
 
 **No:** `npx tsx setup/index.ts --step mounts -- --empty`
 **Yes:** Collect paths/permissions. `npx tsx setup/index.ts --step mounts -- --json '{"allowedRoots":[...],"blockedPatterns":[],"nonMainReadOnly":true}'`
 
-## 8. Start Service
+## 9. Start Service
 
 If service already running: unload first.
 
@@ -260,7 +317,7 @@ Replace `USERNAME` with the actual username (from `whoami`). Run the two `sudo` 
 - Linux: check `systemctl --user status nanoclaw`.
 - Re-run the service step after fixing.
 
-## 9. Verify
+## 10. Verify
 
 Run `npx tsx setup/index.ts --step verify` and parse the status block.
 
@@ -290,7 +347,7 @@ EOF
 **If setup/verify or explicit checks fail, fix each:**
 
 - SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` (macOS) or `systemctl --user restart nanoclaw` (Linux) or `bash start-nanoclaw.sh` (WSL nohup)
-- SERVICE=not_found → re-run step 8
+- SERVICE=not_found → re-run step 9
 - Required `.env` values missing → re-run step 3
 - Missing required main group → re-run step 4
 - MOUNT_ALLOWLIST=missing → `npx tsx setup/index.ts --step mounts -- --empty`
@@ -310,7 +367,7 @@ Show logs with: `tail -f logs/nanoclaw.log`
 
 ## Troubleshooting
 
-**Service not starting:** Check `logs/nanoclaw.error.log`. Common: wrong Node path (re-run step 8), missing `.env`, invalid Feishu credentials, or port conflicts on `WEB_PORT`, `CREDENTIAL_PROXY_PORT`, `MYSQL_PROXY_PORT`, or `FEISHU_WEBHOOK_PORT`.
+**Service not starting:** Check `logs/nanoclaw.error.log`. Common: wrong Node path (re-run step 9), missing `.env`, invalid Feishu credentials, or port conflicts on `WEB_PORT`, `CREDENTIAL_PROXY_PORT`, `MYSQL_PROXY_PORT`, or `FEISHU_WEBHOOK_PORT`.
 
 **Container agent fails ("Claude Code process exited with code 1"):** Ensure the container runtime is running — `open -a Docker` (macOS Docker), `container system start` (Apple Container), or `sudo systemctl start docker` (Linux). Check container logs under the relevant group folder, such as `groups/assistant_main/logs/`, `groups/web_main/logs/`, or `groups/feishu_main/logs/`.
 
