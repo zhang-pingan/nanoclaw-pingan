@@ -364,6 +364,7 @@ var workflowDefinitionSelectedStateKey = "";
 var workflowDefinitionSelectedStatusLabelKey = "";
 var workflowDefinitionSelectedCreateFormFieldKey = "";
 var workflowDefinitionCardsRegistry = {};
+var workflowDefinitionRoleGroupOptions = [];
 var workflowDefinitionRequestSeq = 0;
 var cardsRegistry = {};
 var currentCardSelection = null;
@@ -5082,6 +5083,10 @@ function applyWorkflowDefinitionEditorControlState(isReadonly) {
       el.disabled = false;
       return;
     }
+    if (!isReadonly && el.hasAttribute("data-workflow-definition-force-disabled")) {
+      el.disabled = true;
+      return;
+    }
     el.disabled = !!isReadonly;
   });
 }
@@ -5298,13 +5303,84 @@ function createWorkflowDefinitionRoleTemplate() {
 }
 
 const WORKFLOW_DEFINITION_DRAFT_CHANNEL_PREFIX = "__workflow_definition_draft_channel__";
+const WORKFLOW_DEFINITION_ROLE_CHANNEL_OPTIONS = ["web", "feishu", "assistant"];
 
 function isWorkflowDefinitionDraftChannelKey(channelKey) {
   return typeof channelKey === "string" && channelKey.startsWith(WORKFLOW_DEFINITION_DRAFT_CHANNEL_PREFIX);
 }
 
-function getWorkflowDefinitionRoleChannelDisplayKey(channelKey) {
+function getWorkflowDefinitionRoleChannelValue(channelKey) {
   return isWorkflowDefinitionDraftChannelKey(channelKey) ? "" : channelKey;
+}
+
+function getWorkflowDefinitionChannelFromFolder(folder) {
+  const value = String(folder || "").trim();
+  return value.includes("_") ? value.split("_")[0] || "" : "";
+}
+
+function getWorkflowDefinitionGroupChannel(group) {
+  const explicit = String(group?.channel || "").trim();
+  if (explicit) return explicit;
+  const folderChannel = getWorkflowDefinitionChannelFromFolder(group?.folder || "");
+  if (folderChannel) return folderChannel;
+  const jid = String(group?.jid || "").trim();
+  return jid.includes(":") ? jid.split(":")[0] : "";
+}
+
+function getWorkflowDefinitionRoleGroupOptions(channelKey = "", selectedFolder = "") {
+  const channel = String(channelKey || "").trim();
+  const selected = String(selectedFolder || "").trim();
+  const seen = new Set();
+  const options = [];
+  const sourceGroups = Array.isArray(workflowDefinitionRoleGroupOptions) && workflowDefinitionRoleGroupOptions.length
+    ? workflowDefinitionRoleGroupOptions
+    : groups;
+  sourceGroups.forEach((group) => {
+    const folder = String(group?.folder || "").trim();
+    if (!folder || seen.has(folder)) return;
+    const groupChannel = getWorkflowDefinitionGroupChannel(group);
+    if (channel && groupChannel && groupChannel !== channel && folder !== selected) return;
+    seen.add(folder);
+    options.push({
+      folder,
+      name: String(group?.name || group?.jid || folder),
+      channel: groupChannel,
+    });
+  });
+  if (selected && !seen.has(selected)) {
+    seen.add(selected);
+    options.push({ folder: selected, name: selected, channel });
+  }
+  return options.sort((left, right) => {
+    const leftMain = left.folder.endsWith("_main") ? 0 : 1;
+    const rightMain = right.folder.endsWith("_main") ? 0 : 1;
+    if (leftMain !== rightMain) return leftMain - rightMain;
+    return left.folder.localeCompare(right.folder, "zh-CN");
+  });
+}
+
+function renderWorkflowDefinitionRoleChannelOptions(selectedChannel) {
+  const selected = String(selectedChannel || "").trim();
+  const optionKeys = [...WORKFLOW_DEFINITION_ROLE_CHANNEL_OPTIONS];
+  if (selected && !optionKeys.includes(selected)) optionKeys.push(selected);
+  return [
+    '<option value="">选择渠道</option>',
+    ...optionKeys.map((channel) => `<option value="${escapeAttribute(channel)}" ${channel === selected ? "selected" : ""}>${escapeHtml(channel)}</option>`),
+  ].join("");
+}
+
+function renderWorkflowDefinitionRoleGroupOptions(channelKey, selectedFolder) {
+  const selected = String(selectedFolder || "").trim();
+  const options = getWorkflowDefinitionRoleGroupOptions(channelKey, selected);
+  return [
+    '<option value="">选择群组</option>',
+    ...options.map((group) => {
+      const label = group.name && group.name !== group.folder
+        ? `${group.name} · ${group.folder}`
+        : group.folder;
+      return `<option value="${escapeAttribute(group.folder)}" ${group.folder === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }),
+  ].join("");
 }
 
 function createWorkflowDefinitionDraftChannelKey(channels) {
@@ -5339,6 +5415,15 @@ function addWorkflowDefinitionRoleChannel(channelKey = "", initialValue = "") {
   return addedKey;
 }
 
+function updateWorkflowDefinitionRoleChannelValue(channelKey, value) {
+  if (!workflowDefinitionSelectedRoleKey || !channelKey) return;
+  applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
+    role.channels = role.channels || {};
+    role.channels[channelKey] = String(value || "");
+    return cleanupWorkflowDefinitionRoleObject(role);
+  });
+}
+
 function renameWorkflowDefinitionRoleChannel(oldKey, newKey) {
   if (!workflowDefinitionSelectedRoleKey || !oldKey) return;
   const safeNewKey = (newKey || "").trim();
@@ -5356,51 +5441,53 @@ function renameWorkflowDefinitionRoleChannel(oldKey, newKey) {
       throw new Error(`channel "${safeNewKey}" 已存在`);
     }
     const previousValue = role.channels[oldKey];
+    const previousValueChannel = getWorkflowDefinitionChannelFromFolder(previousValue);
     delete role.channels[oldKey];
-    role.channels[safeNewKey] = previousValue;
+    role.channels[safeNewKey] =
+      previousValueChannel && previousValueChannel !== safeNewKey ? "" : previousValue;
     return cleanupWorkflowDefinitionRoleObject(role);
   });
 }
 
-function addWorkflowDefinitionRoleChannelFromButton() {
+function addWorkflowDefinitionRoleChannelFromButton(channelKey = "") {
   if (!workflowDefinitionRoleInspector) return;
   try {
-    const addedKey = addWorkflowDefinitionRoleChannel("", "");
-    const keyInput = workflowDefinitionRoleInspector.querySelector(
-      `[data-role-channel-storage-key="${escapeAttribute(addedKey)}"]`,
-    );
-    if (keyInput instanceof HTMLInputElement) keyInput.focus();
+    const requestedKey = String(channelKey || "").trim();
+    const addedKey = addWorkflowDefinitionRoleChannel(requestedKey, "");
+    const selector = requestedKey
+      ? getWorkflowDefinitionInspectorSelector("data-role-channel", addedKey)
+      : `[data-role-channel-storage-key="${escapeAttribute(addedKey)}"]`;
+    const channelSelect = workflowDefinitionRoleInspector.querySelector(selector);
+    if (channelSelect instanceof HTMLSelectElement) channelSelect.focus();
   } catch (err) {
     alert(err instanceof Error ? err.message : "新增 channel 失败");
   }
 }
 
-function handleWorkflowDefinitionRoleChannelRename(input, nextTarget = null) {
-  const oldKey = input.getAttribute("data-role-channel-key-original") || "";
-  const newKey = (input.value || "").trim();
-  if (!oldKey) {
-    input.value = newKey;
+function handleWorkflowDefinitionRoleChannelSelect(select, nextTarget = null) {
+  const oldKey = select.getAttribute("data-role-channel-key-original") || "";
+  const newKey = String(select.value || "").trim();
+  if (!oldKey || newKey === oldKey) {
     return;
   }
   if (!newKey) {
-    input.value = isWorkflowDefinitionDraftChannelKey(oldKey) ? "" : oldKey;
+    select.value = getWorkflowDefinitionRoleChannelValue(oldKey);
     return;
   }
-  if (newKey === oldKey) return;
   try {
     renameWorkflowDefinitionRoleChannel(oldKey, newKey);
-    input.setAttribute("data-role-channel-key-original", newKey);
+    select.setAttribute("data-role-channel-key-original", newKey);
     if (
       nextTarget instanceof Element &&
       nextTarget.getAttribute("data-role-channel") === oldKey
     ) {
-      const valueInput = workflowDefinitionRoleInspector?.querySelector(
+      const valueSelect = workflowDefinitionRoleInspector?.querySelector(
         getWorkflowDefinitionInspectorSelector("data-role-channel", newKey),
       );
-      if (valueInput instanceof HTMLInputElement) valueInput.focus();
+      if (valueSelect instanceof HTMLSelectElement) valueSelect.focus();
     }
   } catch (err) {
-    input.value = isWorkflowDefinitionDraftChannelKey(oldKey) ? "" : oldKey;
+    select.value = getWorkflowDefinitionRoleChannelValue(oldKey);
     alert(err instanceof Error ? err.message : "重命名 channel 失败");
   }
 }
@@ -7280,6 +7367,12 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   });
   const selectedRole = roles[workflowDefinitionSelectedRoleKey];
   const channelEntries = Object.entries(selectedRole?.channels || {});
+  const channelOptionSet = new Set(
+    channelEntries
+      .map(([channelKey]) => getWorkflowDefinitionRoleChannelValue(channelKey))
+      .filter(Boolean),
+  );
+  const nextChannelKey = WORKFLOW_DEFINITION_ROLE_CHANNEL_OPTIONS.find((channel) => !channelOptionSet.has(channel)) || "";
   workflowDefinitionRoleInspector.innerHTML = `
     <div class="workflow-definition-state-inspector-head">
       <span>${escapeHtml(selectedRole.label || workflowDefinitionSelectedRoleKey)} · ${escapeHtml(workflowDefinitionSelectedRoleKey)}</span>
@@ -7303,7 +7396,7 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
         <div class="workflow-definition-state-inspector-title">
           <span>Channels</span>
           <span class="workflow-definition-inline-actions">
-            <button type="button" class="btn-ghost" data-role-action="add-channel">新增 Channel</button>
+            <button type="button" class="btn-ghost" data-role-action="add-channel" ${nextChannelKey ? `data-role-next-channel="${escapeAttribute(nextChannelKey)}"` : "disabled data-workflow-definition-force-disabled title=\"标准渠道均已配置\""}>新增 Channel</button>
           </span>
         </div>
         ${
@@ -7313,15 +7406,17 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
                   ([channelKey, value]) => `
                     <label class="workflow-definition-field workflow-definition-field-block">
                       <span>Channel</span>
-                      <div class="workflow-definition-inline-actions">
-                        <input
+                      <div class="workflow-definition-role-channel-row">
+                        <select
                           data-role-channel-key="${escapeAttribute(channelKey)}"
                           data-role-channel-key-original="${escapeAttribute(channelKey)}"
                           data-role-channel-storage-key="${escapeAttribute(channelKey)}"
-                          type="text"
-                          value="${escapeAttribute(getWorkflowDefinitionRoleChannelDisplayKey(channelKey))}"
-                        />
-                        <input data-role-channel="${escapeAttribute(channelKey)}" type="text" value="${escapeAttribute(value || "")}" />
+                        >
+                          ${renderWorkflowDefinitionRoleChannelOptions(getWorkflowDefinitionRoleChannelValue(channelKey))}
+                        </select>
+                        <select data-role-channel="${escapeAttribute(channelKey)}">
+                          ${renderWorkflowDefinitionRoleGroupOptions(getWorkflowDefinitionRoleChannelValue(channelKey), value || "")}
+                        </select>
                         <button type="button" class="btn-ghost" data-role-channel-delete="${escapeAttribute(channelKey)}">删除</button>
                       </div>
                     </label>
@@ -7350,23 +7445,13 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   });
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel]")).forEach((el) => {
     const channelKey = el.getAttribute("data-role-channel") || "";
-    el.addEventListener("input", () => {
-      const selection = captureWorkflowDefinitionInspectorSelection(el);
-      applyWorkflowDefinitionRolePatch(workflowDefinitionSelectedRoleKey, (role) => {
-        role.channels = role.channels || {};
-        role.channels[channelKey] = el.value || "";
-        return cleanupWorkflowDefinitionRoleObject(role);
-      });
-      restoreWorkflowDefinitionInspectorFocus(
-        workflowDefinitionRoleInspector,
-        getWorkflowDefinitionInspectorSelector("data-role-channel", channelKey),
-        selection,
-      );
+    el.addEventListener("change", () => {
+      updateWorkflowDefinitionRoleChannelValue(channelKey, el.value || "");
     });
   });
   Array.from(workflowDefinitionRoleInspector.querySelectorAll("[data-role-channel-key]")).forEach((el) => {
-    el.addEventListener("blur", (event) => {
-      handleWorkflowDefinitionRoleChannelRename(el, event.relatedTarget || null);
+    el.addEventListener("change", (event) => {
+      handleWorkflowDefinitionRoleChannelSelect(el, event.relatedTarget || null);
     });
   });
   const renameBtn = workflowDefinitionRoleInspector.querySelector("[data-role-action='rename']");
@@ -7379,7 +7464,16 @@ function renderWorkflowDefinitionRoleEditor(rolesArg) {
   });
   if (renameBtn) renameBtn.addEventListener("click", () => renameWorkflowDefinitionRole());
   if (deleteBtn) deleteBtn.addEventListener("click", () => deleteWorkflowDefinitionRole());
-  if (addChannelBtn) addChannelBtn.addEventListener("click", () => addWorkflowDefinitionRoleChannelFromButton());
+  if (addChannelBtn) {
+    addChannelBtn.addEventListener("click", () => {
+      const nextChannel = addChannelBtn.getAttribute("data-role-next-channel") || "";
+      if (!nextChannel) {
+        showToast("标准渠道均已配置", 1800);
+        return;
+      }
+      addWorkflowDefinitionRoleChannelFromButton(nextChannel);
+    });
+  }
   applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
 }
 
@@ -8822,16 +8916,19 @@ async function loadWorkflowDefinitions(options = {}) {
     workflowDefinitionRefreshBtn.classList.add("spinning");
   }
   try {
-    const [definitionsRes, cardsRes] = await Promise.all([
+    const [definitionsRes, cardsRes, groupsRes] = await Promise.all([
       apiFetch("/api/workflow-definitions"),
       apiFetch("/api/cards"),
+      apiFetch("/api/groups?scope=all"),
     ]);
     const data = await definitionsRes.json();
     const cardsData = await cardsRes.json();
+    const groupsData = await groupsRes.json().catch(() => ({}));
     if (!definitionsRes.ok) {
       throw new Error(data?.error || `HTTP ${definitionsRes.status}`);
     }
     workflowDefinitionCardsRegistry = cardsRes.ok ? cardsData?.cards || {} : {};
+    workflowDefinitionRoleGroupOptions = groupsRes.ok && Array.isArray(groupsData?.groups) ? groupsData.groups : groups;
     workflowDefinitionBundles = Array.isArray(data.definitions) ? data.definitions : [];
     if (!preserveSelection || !workflowDefinitionBundles.some((bundle) => bundle.key === currentWorkflowDefinitionKey)) {
       currentWorkflowDefinitionKey = workflowDefinitionBundles[0]?.key || "";

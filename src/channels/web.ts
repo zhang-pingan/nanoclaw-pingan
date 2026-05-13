@@ -1003,7 +1003,7 @@ class WebChannel {
         return this.serveFile('/index.html', 'text/html', res);
       }
       if (pathname.startsWith('/api/groups')) {
-        return this.apiGetGroups(res);
+        return this.apiGetGroups(reqUrl, res);
       }
       if (pathname === '/api/memories' && req.method === 'GET') {
         return this.apiGetMemories(reqUrl, res);
@@ -1468,14 +1468,22 @@ class WebChannel {
     res.end(data);
   }
 
-  private apiGetGroups(res: http.ServerResponse): void {
+  private getRegisteredGroupChannel(jid: string, folder: string): string {
+    const folderChannel = folder.includes('_') ? folder.split('_')[0] : '';
+    if (folderChannel) return folderChannel;
+    return jid.includes(':') ? jid.split(':')[0] : '';
+  }
+
+  private apiGetGroups(reqUrl: URL, res: http.ServerResponse): void {
     const registered = this.opts.registeredGroups();
+    const includeAll = reqUrl.searchParams.get('scope') === 'all';
     const groups = Object.entries(registered)
-      .filter(([jid]) => jid.startsWith('web:'))
+      .filter(([jid]) => includeAll || jid.startsWith('web:'))
       .map(([jid, g]) => ({
         jid,
         name: g.name,
         folder: g.folder,
+        channel: this.getRegisteredGroupChannel(jid, g.folder),
         isMain: g.isMain ?? false,
       }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5316,6 +5324,7 @@ class WebChannel {
               jid,
               name: g.name,
               folder: g.folder,
+              channel: this.getRegisteredGroupChannel(jid, g.folder),
               isMain: g.isMain ?? false,
             })),
           selectedJid: chatJid,
