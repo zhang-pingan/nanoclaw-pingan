@@ -1006,6 +1006,15 @@
               <h2>流程定义</h2>
             </div>
             <div class="workflow-definitions-sidebar-actions">
+              <button id="workflow-definition-contracts-toggle-btn" class="icon-btn" title="契约管理" aria-label="契约管理">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <path d="M14 2v6h6"></path>
+                  <path d="M9 13h6"></path>
+                  <path d="M9 17h6"></path>
+                  <path d="M9 9h1"></path>
+                </svg>
+              </button>
               <button id="workflow-definition-refresh-btn" class="icon-btn" title="刷新流程定义">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="23 4 23 10 17 10"></polyline>
@@ -1065,7 +1074,6 @@
                     <button id="workflow-definition-view-form-btn" type="button" class="btn-ghost">表单</button>
                     <button id="workflow-definition-view-json-btn" type="button" class="btn-ghost">JSON</button>
                     <button id="workflow-definition-view-graph-btn" type="button" class="btn-ghost">流程视图</button>
-                    <button id="workflow-definition-contracts-toggle-btn" type="button" class="btn-ghost">契约</button>
                   </div>
                 </div>
               </div>
@@ -1199,24 +1207,6 @@
               <textarea id="workflow-definition-json-editor" class="workflow-definition-json-editor" spellcheck="false"></textarea>
             </section>
 
-            <section id="workflow-definition-contracts-panel" class="workflow-definition-panel workflow-definition-contracts-panel hidden">
-              <div class="workflow-definition-panel-head">
-                <div class="workflow-definition-panel-title">Artifact Contracts</div>
-                <div id="workflow-definition-contracts-note" class="workflow-definition-panel-note"></div>
-              </div>
-              <div class="workflow-definition-state-editor workflow-definition-contracts-editor">
-                <div class="workflow-definition-state-list-wrap">
-                  <div class="workflow-definition-state-list-head">
-                    <span>Contract List</span>
-                  </div>
-                  <div id="workflow-definition-contract-list" class="workflow-definition-state-list"></div>
-                </div>
-                <div id="workflow-definition-contract-editor" class="workflow-definition-state-inspector">
-                  <div class="workflow-definition-state-inspector-empty">选择一个 contract 查看 JSON。</div>
-                </div>
-              </div>
-            </section>
-
             <div class="hidden" aria-hidden="true">
               <textarea id="workflow-definition-roles" rows="8" spellcheck="false"></textarea>
               <textarea id="workflow-definition-entry-points" rows="8" spellcheck="false"></textarea>
@@ -1235,6 +1225,24 @@
               </div>
             </div>
           </div>
+
+          <section id="workflow-definition-contracts-panel" class="workflow-definition-panel workflow-definition-contracts-panel hidden">
+            <div class="workflow-definition-panel-head">
+              <div class="workflow-definition-panel-title">Artifact Contracts</div>
+              <div id="workflow-definition-contracts-note" class="workflow-definition-panel-note"></div>
+            </div>
+            <div class="workflow-definition-state-editor workflow-definition-contracts-editor">
+              <div class="workflow-definition-state-list-wrap">
+                <div class="workflow-definition-state-list-head">
+                  <span>Contract List</span>
+                </div>
+                <div id="workflow-definition-contract-list" class="workflow-definition-state-list"></div>
+              </div>
+              <div id="workflow-definition-contract-editor" class="workflow-definition-state-inspector">
+                <div class="workflow-definition-state-inspector-empty">选择一个 contract 查看表单。</div>
+              </div>
+            </div>
+          </section>
         </main>
       </section>
 

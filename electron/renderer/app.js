@@ -7405,7 +7405,12 @@ function renderWorkflowDefinitionHandoffFields(prefix, handoff, options = {}) {
     </div>
     <label class="workflow-definition-field workflow-definition-field-block">
       <span>Success Criteria</span>
-      <textarea data-state-field="${escapeAttribute(prefix)}.success_criteria" rows="3" placeholder="每行一个验收条件">${escapeHtml(formatWorkflowDefinitionListText(handoff?.success_criteria || []))}</textarea>
+      ${renderWorkflowArtifactContractListEditor(
+        `${prefix}.success_criteria`,
+        handoff?.success_criteria || [],
+        "输入验收条件后回车",
+        `data-state-list-field="${escapeAttribute(prefix)}.success_criteria"`,
+      )}
     </label>
   `;
 }
@@ -7649,6 +7654,14 @@ function updateWorkflowDefinitionSelectedState(stateKey) {
 
 function bindWorkflowDefinitionStateInspectorEvents() {
   if (!workflowDefinitionStateInspector) return;
+  bindWorkflowArtifactContractListEditors(workflowDefinitionStateInspector, (editor) => {
+    const path = editor.getAttribute("data-state-list-field") || "";
+    if (!path || !workflowDefinitionSelectedStateKey) return;
+    applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
+      setNestedValue(state, path, getWorkflowArtifactContractListValues(editor), { array: true });
+      return cleanupStateObject(state);
+    });
+  });
   const statusLabelInput = workflowDefinitionStateInspector.querySelector("[data-state-status-label-field]");
   if (statusLabelInput) {
     statusLabelInput.addEventListener("input", () => {
@@ -9215,15 +9228,481 @@ function getEditableWorkflowArtifactContract(contract) {
   return editable;
 }
 
+function renderWorkflowArtifactContractHelp(text) {
+  return `<span class="workflow-definition-field-help">${escapeHtml(text)}</span>`;
+}
+
+function renderWorkflowArtifactContractListEditor(listKey, values, placeholder, extraAttributes = "") {
+  const items = Array.isArray(values)
+    ? values.map((item) => String(item || "").trim()).filter(Boolean)
+    : parseWorkflowDefinitionListText(values);
+  const uniqueItems = Array.from(new Set(items));
+  return `
+    <div class="workflow-artifact-contract-chip-editor" data-artifact-contract-list="${escapeAttribute(listKey)}"${extraAttributes ? ` ${extraAttributes}` : ""}>
+      ${uniqueItems
+        .map(
+          (item) => `
+            <span class="workflow-artifact-contract-chip" data-artifact-contract-list-item="${escapeAttribute(item)}">
+              <span>${escapeHtml(item)}</span>
+              <button type="button" data-artifact-contract-list-remove="${escapeAttribute(item)}" title="删除"> &times; </button>
+            </span>
+          `,
+        )
+        .join("")}
+      <input data-artifact-contract-list-input type="text" placeholder="${escapeAttribute(placeholder || "输入后回车添加")}" />
+    </div>
+  `;
+}
+
+function getWorkflowArtifactContractListValues(editor) {
+  if (!editor) return [];
+  const values = [];
+  const addValues = (raw) => {
+    parseWorkflowDefinitionListText(raw).forEach((value) => {
+      if (value && !values.includes(value)) values.push(value);
+    });
+  };
+  Array.from(editor.querySelectorAll("[data-artifact-contract-list-item]")).forEach((item) => {
+    addValues(item.getAttribute("data-artifact-contract-list-item") || item.textContent || "");
+  });
+  addValues(editor.querySelector("[data-artifact-contract-list-input]")?.value || "");
+  return values;
+}
+
+function getWorkflowArtifactContractListValuesByKey(root, listKey) {
+  return getWorkflowArtifactContractListValues(root?.querySelector(`[data-artifact-contract-list="${listKey}"]`));
+}
+
+function createWorkflowArtifactContractChip(value) {
+  const chip = document.createElement("span");
+  chip.className = "workflow-artifact-contract-chip";
+  chip.setAttribute("data-artifact-contract-list-item", value);
+  chip.innerHTML = `
+    <span>${escapeHtml(value)}</span>
+    <button type="button" data-artifact-contract-list-remove="${escapeAttribute(value)}" title="删除"> &times; </button>
+  `;
+  return chip;
+}
+
+function markWorkflowArtifactContractListEditorChanged(editor, onChange) {
+  if (typeof onChange === "function") {
+    onChange(editor);
+  } else {
+    workflowArtifactContractEditorDirty = true;
+  }
+}
+
+function addWorkflowArtifactContractChipValues(editor, rawValue, onChange) {
+  if (!editor) return false;
+  const input = editor.querySelector("[data-artifact-contract-list-input]");
+  const values = parseWorkflowDefinitionListText(rawValue);
+  if (!values.length) return false;
+  const existing = new Set(
+    Array.from(editor.querySelectorAll("[data-artifact-contract-list-item]"))
+      .map((item) => item.getAttribute("data-artifact-contract-list-item") || "")
+      .filter(Boolean),
+  );
+  let changed = false;
+  values.forEach((value) => {
+    if (existing.has(value)) return;
+    existing.add(value);
+    editor.insertBefore(createWorkflowArtifactContractChip(value), input || null);
+    changed = true;
+  });
+  if (input) input.value = "";
+  if (changed) markWorkflowArtifactContractListEditorChanged(editor, onChange);
+  return changed;
+}
+
+function bindWorkflowArtifactContractListEditors(root, onChange) {
+  Array.from(root?.querySelectorAll("[data-artifact-contract-list]") || []).forEach((editor) => {
+    const input = editor.querySelector("[data-artifact-contract-list-input]");
+    editor.addEventListener("click", (event) => {
+      const removeBtn = event.target?.closest?.("[data-artifact-contract-list-remove]");
+      if (removeBtn) {
+        removeBtn.closest("[data-artifact-contract-list-item]")?.remove();
+        markWorkflowArtifactContractListEditorChanged(editor, onChange);
+        input?.focus();
+        return;
+      }
+      input?.focus();
+    });
+    if (!input) return;
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === "Tab" || event.key === ",") {
+        if (input.value.trim()) {
+          event.preventDefault();
+          addWorkflowArtifactContractChipValues(editor, input.value, onChange);
+        }
+        return;
+      }
+      if (event.key === "Backspace" && !input.value) {
+        const chips = editor.querySelectorAll("[data-artifact-contract-list-item]");
+        const lastChip = chips[chips.length - 1];
+        if (lastChip) {
+          lastChip.remove();
+          markWorkflowArtifactContractListEditorChanged(editor, onChange);
+        }
+      }
+    });
+    input.addEventListener("paste", (event) => {
+      const text = event.clipboardData?.getData("text") || "";
+      if (/[\n,]/.test(text)) {
+        event.preventDefault();
+        addWorkflowArtifactContractChipValues(editor, text, onChange);
+      }
+    });
+    input.addEventListener("blur", () => {
+      if (input.value.trim()) addWorkflowArtifactContractChipValues(editor, input.value, onChange);
+    });
+    input.addEventListener("input", () => {
+      if (typeof onChange !== "function") workflowArtifactContractEditorDirty = true;
+    });
+  });
+}
+
+function getWorkflowArtifactContractObjectExtra(value, knownKeys) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const extra = cloneJson(value) || {};
+  knownKeys.forEach((key) => delete extra[key]);
+  return extra;
+}
+
+function stringifyWorkflowArtifactContractExtra(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length === 0) return "";
+  return stringifyPrettyJson(value);
+}
+
+function parseWorkflowArtifactContractJsonObject(rawValue, label) {
+  const text = String(rawValue || "").trim();
+  if (!text) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`${label} JSON 解析失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} 必须是 JSON object`);
+  }
+  return parsed;
+}
+
+function parseWorkflowArtifactContractOptionalNumber(rawValue, label) {
+  const text = String(rawValue ?? "").trim();
+  if (!text) return undefined;
+  const value = Number(text);
+  if (!Number.isFinite(value)) {
+    throw new Error(`${label} 必须是数字`);
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function replaceSelectedWorkflowArtifactContractDraft(contract) {
+  const index = workflowArtifactContracts.findIndex((item) => item.id === workflowArtifactContractSelectedId);
+  if (index < 0) return;
+  workflowArtifactContracts[index] = {
+    ...contract,
+    source_file: workflowArtifactContracts[index].source_file || contract.source_file || null,
+  };
+}
+
+function collectWorkflowArtifactContractFromEditor() {
+  if (!workflowDefinitionContractEditor) return null;
+  const selectedContract = getSelectedWorkflowArtifactContract();
+  const ref =
+    workflowDefinitionContractEditor
+      .querySelector("[data-artifact-contract-editor-ref]")
+      ?.getAttribute("data-artifact-contract-editor-ref") ||
+    workflowArtifactContractSelectedId;
+  if (!selectedContract || !ref) return null;
+
+  const contract = getEditableWorkflowArtifactContract(selectedContract);
+  contract.id = selectedContract.id || ref;
+  contract.version = Number.isFinite(Number(selectedContract.version)) ? Number(selectedContract.version) : 1;
+
+  const description = workflowDefinitionContractEditor
+    .querySelector("[data-artifact-contract-field='description']")
+    ?.value?.trim();
+  if (description) contract.description = description;
+  else delete contract.description;
+
+  const allowedRoots = getWorkflowArtifactContractListValuesByKey(workflowDefinitionContractEditor, "allowed_artifact_roots");
+  if (allowedRoots.length) contract.allowed_artifact_roots = allowedRoots;
+  else delete contract.allowed_artifact_roots;
+
+  const payloadRequired = [];
+  const properties = {};
+  const seenPropertyNames = new Set();
+  Array.from(workflowDefinitionContractEditor.querySelectorAll("[data-artifact-contract-property-row]")).forEach((row, index) => {
+    const name = row.querySelector("[data-artifact-contract-property-name]")?.value?.trim();
+    if (!name) {
+      throw new Error(`Payload 字段 #${index + 1} 的名称不能为空`);
+    }
+    if (seenPropertyNames.has(name)) {
+      throw new Error(`Payload 字段名称重复：${name}`);
+    }
+    seenPropertyNames.add(name);
+    if (row.querySelector("[data-artifact-contract-property-required]")?.checked) {
+      payloadRequired.push(name);
+    }
+    const schema = {
+      ...parseWorkflowArtifactContractJsonObject(
+        row.querySelector("[data-artifact-contract-property-extra]")?.value || "",
+        `${name} 的其他 Schema`,
+      ),
+    };
+    const type = row.querySelector("[data-artifact-contract-property-type]")?.value || "";
+    if (type) schema.type = type;
+    else delete schema.type;
+    const minLength = parseWorkflowArtifactContractOptionalNumber(
+      row.querySelector("[data-artifact-contract-property-min-length]")?.value,
+      `${name}.minLength`,
+    );
+    if (minLength !== undefined) schema.minLength = minLength;
+    else delete schema.minLength;
+    const maxLength = parseWorkflowArtifactContractOptionalNumber(
+      row.querySelector("[data-artifact-contract-property-max-length]")?.value,
+      `${name}.maxLength`,
+    );
+    if (maxLength !== undefined) schema.maxLength = maxLength;
+    else delete schema.maxLength;
+    const enumValues = getWorkflowArtifactContractListValuesByKey(row, "property_enum");
+    if (enumValues.length) schema.enum = enumValues;
+    else delete schema.enum;
+    properties[name] = schema;
+  });
+  if (payloadRequired.length || Object.keys(properties).length) {
+    contract.payload = {
+      ...(contract.payload && typeof contract.payload === "object" && !Array.isArray(contract.payload)
+        ? contract.payload
+        : {}),
+    };
+    if (payloadRequired.length) contract.payload.required = payloadRequired;
+    else delete contract.payload.required;
+    if (Object.keys(properties).length) contract.payload.properties = properties;
+    else delete contract.payload.properties;
+  } else {
+    delete contract.payload;
+  }
+
+  const files = [];
+  Array.from(workflowDefinitionContractEditor.querySelectorAll("[data-artifact-contract-file-row]")).forEach((row, index) => {
+    const path = row.querySelector("[data-artifact-contract-file-path]")?.value?.trim();
+    if (!path) {
+      throw new Error(`文件约束 #${index + 1} 的 path 不能为空`);
+    }
+    const file = {
+      ...parseWorkflowArtifactContractJsonObject(
+        row.querySelector("[data-artifact-contract-file-extra]")?.value || "",
+        `${path} 的其他文件约束`,
+      ),
+      path,
+      required: !!row.querySelector("[data-artifact-contract-file-required]")?.checked,
+    };
+    const mustExist = !!row.querySelector("[data-artifact-contract-file-must-exist]")?.checked;
+    if (mustExist) file.must_exist = true;
+    else delete file.must_exist;
+    const maxBytes = parseWorkflowArtifactContractOptionalNumber(
+      row.querySelector("[data-artifact-contract-file-max-bytes]")?.value,
+      `${path}.max_bytes`,
+    );
+    if (maxBytes !== undefined) file.max_bytes = maxBytes;
+    else delete file.max_bytes;
+    const allowedRootsForFile = getWorkflowArtifactContractListValuesByKey(row, "file_allowed_roots");
+    if (allowedRootsForFile.length) file.allowed_roots = allowedRootsForFile;
+    else delete file.allowed_roots;
+    const frontmatterRequired = getWorkflowArtifactContractListValuesByKey(row, "file_frontmatter_required");
+    if (frontmatterRequired.length) file.frontmatter_required = frontmatterRequired;
+    else delete file.frontmatter_required;
+    const frontmatterSchema = parseWorkflowArtifactContractJsonObject(
+      row.querySelector("[data-artifact-contract-file-frontmatter-schema]")?.value || "",
+      `${path}.frontmatter_schema`,
+    );
+    if (Object.keys(frontmatterSchema).length) file.frontmatter_schema = frontmatterSchema;
+    else delete file.frontmatter_schema;
+    files.push(file);
+  });
+  if (files.length) contract.files = files;
+  else delete contract.files;
+
+  return contract;
+}
+
+function renderWorkflowArtifactContractPayloadProperties(properties, requiredFields) {
+  const requiredSet = new Set(Array.isArray(requiredFields) ? requiredFields : []);
+  const propertyMap =
+    properties && typeof properties === "object" && !Array.isArray(properties)
+      ? { ...properties }
+      : {};
+  requiredSet.forEach((fieldName) => {
+    if (fieldName && !propertyMap[fieldName]) propertyMap[fieldName] = {};
+  });
+  const entries = Object.entries(propertyMap);
+  if (!entries.length) {
+    return '<div class="workflow-definition-state-inspector-empty">当前没有 payload properties，可点击右上角新增字段。</div>';
+  }
+  return entries
+    .map(([fieldName, rawSchema], index) => {
+      const schema = rawSchema && typeof rawSchema === "object" && !Array.isArray(rawSchema) ? rawSchema : {};
+      const extra = getWorkflowArtifactContractObjectExtra(schema, ["type", "minLength", "maxLength", "enum"]);
+      const typeOptions = ["", "string", "number", "integer", "boolean", "object", "array"];
+      return `
+        <section class="workflow-artifact-contract-row" data-artifact-contract-property-row="${index}">
+          <div class="workflow-artifact-contract-row-head">
+            <div>
+              <strong>${escapeHtml(fieldName)}</strong>
+              <span>Payload Field</span>
+            </div>
+            <button type="button" class="btn-ghost" data-artifact-contract-property-delete="${index}">删除</button>
+          </div>
+          <div class="workflow-definition-state-inspector-grid">
+            <label class="workflow-definition-field">
+              <span>字段名</span>
+              <input data-artifact-contract-property-name type="text" value="${escapeAttribute(fieldName)}" />
+              ${renderWorkflowArtifactContractHelp("Agent 在 complete_delegation payload 中返回的字段名，通常要和必填字段列表保持一致。")}
+            </label>
+            <label class="workflow-definition-field">
+              <span>类型</span>
+              <select data-artifact-contract-property-type>
+                ${typeOptions
+                  .map((type) => `<option value="${escapeAttribute(type)}"${(schema.type || "") === type ? " selected" : ""}>${escapeHtml(type || "未指定")}</option>`)
+                  .join("")}
+              </select>
+              ${renderWorkflowArtifactContractHelp("JSON Schema 的 type，用来校验字段值的数据类型。")}
+            </label>
+            <label class="workflow-definition-field">
+              <span>最小长度</span>
+              <input data-artifact-contract-property-min-length type="number" min="0" step="1" value="${escapeAttribute(schema.minLength ?? "")}" />
+              ${renderWorkflowArtifactContractHelp("字符串字段的最小长度；留空表示不限制。")}
+            </label>
+            <label class="workflow-definition-field">
+              <span>最大长度</span>
+              <input data-artifact-contract-property-max-length type="number" min="0" step="1" value="${escapeAttribute(schema.maxLength ?? "")}" />
+              ${renderWorkflowArtifactContractHelp("字符串字段的最大长度；留空表示不限制。")}
+            </label>
+          </div>
+          <label class="workflow-definition-checkbox-row workflow-artifact-contract-required-row">
+            <input data-artifact-contract-property-required type="checkbox"${requiredSet.has(fieldName) ? " checked" : ""} />
+            <span class="workflow-definition-switch" aria-hidden="true">
+              <span class="workflow-definition-switch-track"></span>
+              <span class="workflow-definition-switch-thumb"></span>
+            </span>
+            <span class="workflow-definition-checkbox-copy">
+              <strong>必填字段</strong>
+              <span>开启后 complete_delegation payload 必须包含这个字段。</span>
+            </span>
+          </label>
+          <label class="workflow-definition-field workflow-definition-field-block">
+            <span>枚举值</span>
+            ${renderWorkflowArtifactContractListEditor("property_enum", Array.isArray(schema.enum) ? schema.enum.map((item) => String(item)) : [], "输入枚举值后回车")}
+            ${renderWorkflowArtifactContractHelp("限制字段只能取这些字符串值；留空表示不做枚举限制。")}
+          </label>
+          <label class="workflow-definition-field workflow-definition-field-block">
+            <span>其他 Schema JSON</span>
+            <textarea data-artifact-contract-property-extra rows="3" spellcheck="false" placeholder="{ }">${escapeHtml(stringifyWorkflowArtifactContractExtra(extra))}</textarea>
+            ${renderWorkflowArtifactContractHelp("用于保留更复杂的 JSON Schema 约束，例如 pattern、items、properties 等；必须是 JSON object。")}
+          </label>
+        </section>
+      `;
+    })
+    .join("");
+}
+
+function renderWorkflowArtifactContractFiles(files) {
+  const rows = Array.isArray(files) ? files : [];
+  if (!rows.length) {
+    return '<div class="workflow-definition-state-inspector-empty">当前没有文件约束，可点击右上角新增文件。</div>';
+  }
+  return rows
+    .map((rawFile, index) => {
+      const file = rawFile && typeof rawFile === "object" && !Array.isArray(rawFile) ? rawFile : {};
+      const extra = getWorkflowArtifactContractObjectExtra(file, [
+        "path",
+        "required",
+        "allowed_roots",
+        "must_exist",
+        "frontmatter_required",
+        "frontmatter_schema",
+        "max_bytes",
+      ]);
+      return `
+        <section class="workflow-artifact-contract-row" data-artifact-contract-file-row="${index}">
+          <div class="workflow-artifact-contract-row-head">
+            <div>
+              <strong>${escapeHtml(file.path || `文件约束 ${index + 1}`)}</strong>
+              <span>Artifact File</span>
+            </div>
+            <button type="button" class="btn-ghost" data-artifact-contract-file-delete="${index}">删除</button>
+          </div>
+          <label class="workflow-definition-field">
+            <span>文件路径</span>
+            <input data-artifact-contract-file-path type="text" value="${escapeAttribute(file.path || "")}" placeholder="projects/{{service}}/iteration/{{deliverable}}/plan.md" />
+            ${renderWorkflowArtifactContractHelp("相对容器工作区的产物路径，可使用 {{service}}、{{deliverable}} 等上下文占位符。")}
+          </label>
+          <div class="workflow-definition-state-inspector-grid workflow-artifact-contract-checkbox-grid">
+            <label class="workflow-definition-checkbox-row">
+              <input data-artifact-contract-file-required type="checkbox"${file.required !== false ? " checked" : ""} />
+              <span class="workflow-definition-switch" aria-hidden="true">
+                <span class="workflow-definition-switch-track"></span>
+                <span class="workflow-definition-switch-thumb"></span>
+              </span>
+              <span class="workflow-definition-checkbox-copy">
+                <strong>必需文件</strong>
+                <span>开启后阶段验收必须找到该文件。</span>
+              </span>
+            </label>
+            <label class="workflow-definition-checkbox-row">
+              <input data-artifact-contract-file-must-exist type="checkbox"${file.must_exist ? " checked" : ""} />
+              <span class="workflow-definition-switch" aria-hidden="true">
+                <span class="workflow-definition-switch-track"></span>
+                <span class="workflow-definition-switch-thumb"></span>
+              </span>
+              <span class="workflow-definition-checkbox-copy">
+                <strong>强制存在</strong>
+                <span>兼容更严格的存在性检查；通常必需文件不需要额外开启。</span>
+              </span>
+            </label>
+          </div>
+          <div class="workflow-definition-state-inspector-grid">
+            <label class="workflow-definition-field">
+              <span>最大字节数</span>
+              <input data-artifact-contract-file-max-bytes type="number" min="0" step="1" value="${escapeAttribute(file.max_bytes ?? "")}" />
+              ${renderWorkflowArtifactContractHelp("限制文件大小，避免过大的产物进入验收；留空表示不限制。")}
+            </label>
+            <label class="workflow-definition-field">
+              <span>文件允许根目录</span>
+              ${renderWorkflowArtifactContractListEditor("file_allowed_roots", file.allowed_roots, "输入根目录后回车")}
+              ${renderWorkflowArtifactContractHelp("仅对这个文件生效的允许根目录；留空则使用契约级配置。")}
+            </label>
+          </div>
+          <label class="workflow-definition-field workflow-definition-field-block">
+            <span>Front Matter 必填字段</span>
+            ${renderWorkflowArtifactContractListEditor("file_frontmatter_required", file.frontmatter_required, "输入字段名后回车")}
+            ${renderWorkflowArtifactContractHelp("Markdown front matter 中必须存在的字段名。")}
+          </label>
+          <label class="workflow-definition-field workflow-definition-field-block">
+            <span>Front Matter Schema JSON</span>
+            <textarea data-artifact-contract-file-frontmatter-schema rows="3" spellcheck="false" placeholder="{ }">${escapeHtml(stringifyWorkflowArtifactContractExtra(file.frontmatter_schema))}</textarea>
+            ${renderWorkflowArtifactContractHelp("用于校验 front matter 的 JSON Schema 片段；必须是 JSON object。")}
+          </label>
+          <label class="workflow-definition-field workflow-definition-field-block">
+            <span>其他文件约束 JSON</span>
+            <textarea data-artifact-contract-file-extra rows="3" spellcheck="false" placeholder="{ }">${escapeHtml(stringifyWorkflowArtifactContractExtra(extra))}</textarea>
+            ${renderWorkflowArtifactContractHelp("保留未来扩展或手写配置中的额外字段；必须是 JSON object。")}
+          </label>
+        </section>
+      `;
+    })
+    .join("");
+}
+
 function syncWorkflowDefinitionContractsPanelState() {
   if (workflowDefinitionContractsToggleBtn) {
     workflowDefinitionContractsToggleBtn.classList.toggle("active", workflowDefinitionContractsExpanded);
   }
   if (workflowDefinitionContractsPanel) {
-    workflowDefinitionContractsPanel.classList.toggle(
-      "hidden",
-      !workflowDefinitionContractsExpanded || !currentWorkflowDefinitionDetail,
-    );
+    workflowDefinitionContractsPanel.classList.toggle("hidden", !workflowDefinitionContractsExpanded);
   }
 }
 
@@ -9272,7 +9751,7 @@ function renderWorkflowDefinitionContractEditor() {
   const selectedContract = getSelectedWorkflowArtifactContract();
   if (!selectedContract) {
     workflowDefinitionContractEditor.innerHTML =
-      '<div class="workflow-definition-state-inspector-empty">选择一个 contract 查看 JSON。</div>';
+      '<div class="workflow-definition-state-inspector-empty">选择一个 contract 查看表单。</div>';
     return;
   }
   const editableContract = getEditableWorkflowArtifactContract(selectedContract);
@@ -9283,26 +9762,169 @@ function renderWorkflowDefinitionContractEditor() {
         <button type="button" class="btn-ghost" data-artifact-contract-save="${escapeAttribute(selectedContract.id)}">保存</button>
       </div>
     </div>
-    <div class="workflow-definition-state-inspector-body">
-      <div class="workflow-definition-panel-note">${escapeHtml(selectedContract.source_file || "")}</div>
-      <label class="workflow-definition-field workflow-definition-field-block">
-        <span>Contract JSON</span>
-        <textarea data-artifact-contract-json="${escapeAttribute(selectedContract.id)}" rows="22" spellcheck="false">${escapeHtml(stringifyPrettyJson(editableContract))}</textarea>
-      </label>
+    <div class="workflow-definition-state-inspector-body" data-artifact-contract-editor-ref="${escapeAttribute(selectedContract.id || "")}">
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">基础信息</div>
+        <div class="workflow-definition-state-inspector-grid">
+          <label class="workflow-definition-field">
+            <span>ID</span>
+            <input data-artifact-contract-readonly="id" type="text" value="${escapeAttribute(editableContract.id || "")}" readonly />
+          </label>
+          <label class="workflow-definition-field">
+            <span>Version</span>
+            <input data-artifact-contract-readonly="version" type="number" value="${escapeAttribute(editableContract.version ?? 1)}" readonly />
+          </label>
+        </div>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>Source File</span>
+          <input data-artifact-contract-readonly="source_file" type="text" value="${escapeAttribute(selectedContract.source_file || "")}" readonly />
+        </label>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>Description</span>
+          <textarea data-artifact-contract-field="description" rows="2">${escapeHtml(editableContract.description || "")}</textarea>
+          ${renderWorkflowArtifactContractHelp("描述这个契约约束的阶段职责和交付物，会用于管理界面和 Agent 提示上下文。")}
+        </label>
+        <label class="workflow-definition-field workflow-definition-field-block">
+          <span>Allowed Artifact Roots</span>
+          ${renderWorkflowArtifactContractListEditor("allowed_artifact_roots", editableContract.allowed_artifact_roots, "输入根目录后回车")}
+          ${renderWorkflowArtifactContractHelp("限制产物文件必须位于这些容器根目录下；用于防止路径越界。")}
+        </label>
+      </section>
+
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">
+          <span>Payload Properties</span>
+          <span class="workflow-definition-inline-actions">
+            <button type="button" class="btn-ghost" data-artifact-contract-action="add-property">新增字段</button>
+          </span>
+        </div>
+        ${renderWorkflowArtifactContractPayloadProperties(editableContract.payload?.properties, editableContract.payload?.required)}
+      </section>
+
+      <section class="workflow-definition-state-inspector-section">
+        <div class="workflow-definition-state-inspector-title">
+          <span>Files</span>
+          <span class="workflow-definition-inline-actions">
+            <button type="button" class="btn-ghost" data-artifact-contract-action="add-file">新增文件</button>
+          </span>
+        </div>
+        ${renderWorkflowArtifactContractFiles(editableContract.files)}
+      </section>
     </div>
   `;
-  const textarea = workflowDefinitionContractEditor.querySelector("[data-artifact-contract-json]");
-  if (textarea) {
-    textarea.addEventListener("input", () => {
+  bindWorkflowDefinitionContractEditorEvents();
+}
+
+function bindWorkflowDefinitionContractEditorEvents() {
+  if (!workflowDefinitionContractEditor) return;
+  bindWorkflowArtifactContractListEditors(workflowDefinitionContractEditor);
+  Array.from(
+    workflowDefinitionContractEditor.querySelectorAll(
+      "[data-artifact-contract-field], [data-artifact-contract-property-name], [data-artifact-contract-property-type], [data-artifact-contract-property-required], [data-artifact-contract-property-min-length], [data-artifact-contract-property-max-length], [data-artifact-contract-property-extra], [data-artifact-contract-file-path], [data-artifact-contract-file-required], [data-artifact-contract-file-must-exist], [data-artifact-contract-file-max-bytes], [data-artifact-contract-file-frontmatter-schema], [data-artifact-contract-file-extra]",
+    ),
+  ).forEach((el) => {
+    const eventName = el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input";
+    el.addEventListener(eventName, () => {
       workflowArtifactContractEditorDirty = true;
     });
-  }
+  });
   const saveBtn = workflowDefinitionContractEditor.querySelector("[data-artifact-contract-save]");
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       await saveWorkflowArtifactContractFromEditor();
     });
   }
+  const addPropertyBtn = workflowDefinitionContractEditor.querySelector("[data-artifact-contract-action='add-property']");
+  if (addPropertyBtn) {
+    addPropertyBtn.addEventListener("click", async () => {
+      let draft;
+      try {
+        draft = collectWorkflowArtifactContractFromEditor();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "当前表单存在无效配置", 2400);
+        return;
+      }
+      if (!draft) return;
+      const rawName = await openTextPrompt("输入 payload 字段名", "", { title: "新增 Payload 字段" });
+      const name = String(rawName || "").trim();
+      if (!name) return;
+      draft.payload = draft.payload || {};
+      draft.payload.properties = draft.payload.properties || {};
+      if (draft.payload.properties[name]) {
+        showToast(`Payload 字段已存在：${name}`, 2200);
+        return;
+      }
+      draft.payload.properties[name] = { type: "string", minLength: 1 };
+      replaceSelectedWorkflowArtifactContractDraft(draft);
+      workflowArtifactContractEditorDirty = true;
+      renderWorkflowDefinitionContractsPanel();
+    });
+  }
+  const addFileBtn = workflowDefinitionContractEditor.querySelector("[data-artifact-contract-action='add-file']");
+  if (addFileBtn) {
+    addFileBtn.addEventListener("click", () => {
+      let draft;
+      try {
+        draft = collectWorkflowArtifactContractFromEditor();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "当前表单存在无效配置", 2400);
+        return;
+      }
+      if (!draft) return;
+      draft.files = Array.isArray(draft.files) ? draft.files : [];
+      draft.files.push({
+        path: "projects/{{service}}/iteration/{{deliverable}}/artifact.md",
+        required: true,
+      });
+      replaceSelectedWorkflowArtifactContractDraft(draft);
+      workflowArtifactContractEditorDirty = true;
+      renderWorkflowDefinitionContractsPanel();
+    });
+  }
+  Array.from(workflowDefinitionContractEditor.querySelectorAll("[data-artifact-contract-property-delete]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.getAttribute("data-artifact-contract-property-delete"));
+      let draft;
+      try {
+        draft = collectWorkflowArtifactContractFromEditor();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "当前表单存在无效配置", 2400);
+        return;
+      }
+      if (!draft?.payload?.properties || !Number.isInteger(index)) return;
+      const fieldName = Object.keys(draft.payload.properties)[index] || "";
+      if (!fieldName) return;
+      delete draft.payload.properties[fieldName];
+      if (Array.isArray(draft.payload.required)) {
+        draft.payload.required = draft.payload.required.filter((item) => item !== fieldName);
+        if (!draft.payload.required.length) delete draft.payload.required;
+      }
+      if (!Object.keys(draft.payload.properties).length) delete draft.payload.properties;
+      if (!draft.payload.required?.length && !draft.payload.properties) delete draft.payload;
+      replaceSelectedWorkflowArtifactContractDraft(draft);
+      workflowArtifactContractEditorDirty = true;
+      renderWorkflowDefinitionContractsPanel();
+    });
+  });
+  Array.from(workflowDefinitionContractEditor.querySelectorAll("[data-artifact-contract-file-delete]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.getAttribute("data-artifact-contract-file-delete"));
+      if (!Number.isInteger(index)) return;
+      let draft;
+      try {
+        draft = collectWorkflowArtifactContractFromEditor();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "当前表单存在无效配置", 2400);
+        return;
+      }
+      if (!Array.isArray(draft?.files)) return;
+      draft.files.splice(index, 1);
+      if (!draft.files.length) delete draft.files;
+      replaceSelectedWorkflowArtifactContractDraft(draft);
+      workflowArtifactContractEditorDirty = true;
+      renderWorkflowDefinitionContractsPanel();
+    });
+  });
 }
 
 function renderWorkflowDefinitionContractsPanel() {
@@ -9318,17 +9940,17 @@ function renderWorkflowDefinitionContractsPanel() {
 }
 
 async function saveWorkflowArtifactContractFromEditor() {
-  const textarea = workflowDefinitionContractEditor?.querySelector("[data-artifact-contract-json]");
-  const ref = textarea?.getAttribute("data-artifact-contract-json") || workflowArtifactContractSelectedId;
-  if (!textarea || !ref) return;
+  const ref =
+    workflowDefinitionContractEditor
+      ?.querySelector("[data-artifact-contract-save]")
+      ?.getAttribute("data-artifact-contract-save") || workflowArtifactContractSelectedId;
+  if (!ref) return;
   let contract;
   try {
-    contract = JSON.parse(textarea.value || "{}");
-    if (!contract || typeof contract !== "object" || Array.isArray(contract)) {
-      throw new Error("Contract JSON 必须是对象");
-    }
+    contract = collectWorkflowArtifactContractFromEditor();
+    if (!contract) return;
   } catch (err) {
-    showToast(err instanceof Error ? err.message : "Contract JSON 格式不合法", 2400);
+    showToast(err instanceof Error ? err.message : "Contract 表单配置不合法", 2600);
     return;
   }
 
@@ -9396,6 +10018,16 @@ function renderWorkflowDefinitionVersions() {
 
 function renderWorkflowDefinitionDetailPane() {
   if (!workflowDefinitionEmpty || !workflowDefinitionDetail) return;
+  if (workflowDefinitionContractsExpanded) {
+    workflowDefinitionEmpty.classList.add("hidden");
+    workflowDefinitionDetail.classList.add("hidden");
+    if (workflowArtifactContractEditorDirty) {
+      syncWorkflowDefinitionContractsPanelState();
+    } else {
+      renderWorkflowDefinitionContractsPanel();
+    }
+    return;
+  }
   if (!currentWorkflowDefinitionDetail) {
     workflowDefinitionEmpty.classList.remove("hidden");
     workflowDefinitionDetail.classList.add("hidden");
@@ -9475,9 +10107,6 @@ function renderWorkflowDefinitionDetailPane() {
     workflowDefinitionViewGraphBtn.classList.toggle("active", workflowDefinitionViewMode === "graph");
   }
   syncWorkflowDefinitionContractsPanelState();
-  if (workflowDefinitionContractsExpanded && !workflowArtifactContractEditorDirty) {
-    renderWorkflowDefinitionContractsPanel();
-  }
   if (displayDefinition) {
     renderWorkflowDefinitionEditor(displayDefinition, bundle);
   }
@@ -21379,10 +22008,7 @@ if (workflowDefinitionViewGraphBtn) {
 if (workflowDefinitionContractsToggleBtn) {
   workflowDefinitionContractsToggleBtn.addEventListener("click", () => {
     workflowDefinitionContractsExpanded = !workflowDefinitionContractsExpanded;
-    syncWorkflowDefinitionContractsPanelState();
-    if (workflowDefinitionContractsExpanded) {
-      renderWorkflowDefinitionContractsPanel();
-    }
+    renderWorkflowDefinitionDetailPane();
   });
 }
 if (workflowDefinitionDiffCloseBtn) {
