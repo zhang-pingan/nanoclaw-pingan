@@ -128,7 +128,10 @@ describe('agent inbox store', () => {
     expect(settings.triggerRules['workbench.task_stale'].enabled).toBe(false);
     expect(
       settings.triggerRules['workbench.task_stale'].investigationEnabled,
-    ).toBe(false);
+    ).toBe(true);
+    expect(settings.triggerRules['workbench.task_stale'].autoEnabled).toBe(
+      true,
+    );
     expect(settings.triggerRules['today_plan.missing_today_plan'].enabled).toBe(
       true,
     );
