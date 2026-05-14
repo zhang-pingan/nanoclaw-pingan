@@ -7174,6 +7174,7 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-state-list-head .btn-ghost,
 .workflow-definition-state-head-actions .btn-ghost,
 .workflow-definition-inline-actions .btn-ghost,
+.workflow-definition-system-step-summary .btn-ghost,
 .workflow-definition-role-channel-row .btn-ghost {
   height: 30px;
   padding: 0 12px;
@@ -7189,6 +7190,7 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-state-list-head .btn-ghost:hover,
 .workflow-definition-state-head-actions .btn-ghost:hover,
 .workflow-definition-inline-actions .btn-ghost:hover,
+.workflow-definition-system-step-summary .btn-ghost:hover,
 .workflow-definition-role-channel-row .btn-ghost:hover {
   border-color: rgba(249, 115, 22, 0.28);
   background: linear-gradient(180deg, rgba(255, 237, 213, 0.98), rgba(255, 247, 237, 0.94));
@@ -7200,6 +7202,7 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-state-list-head .btn-ghost:active,
 .workflow-definition-state-head-actions .btn-ghost:active,
 .workflow-definition-inline-actions .btn-ghost:active,
+.workflow-definition-system-step-summary .btn-ghost:active,
 .workflow-definition-role-channel-row .btn-ghost:active {
   transform: translateY(0);
 }
@@ -7294,6 +7297,98 @@ body.quick-chat-window .quick-chat-input {
   margin-top: 12px;
 }
 
+.workflow-definition-system-step-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-definition-system-step {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  overflow: visible;
+}
+
+.workflow-definition-system-step[open] {
+  border-color: rgba(0, 132, 201, 0.18);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+
+.workflow-definition-system-step-summary {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(260px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 50px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.workflow-definition-system-step-summary::-webkit-details-marker {
+  display: none;
+}
+
+.workflow-definition-system-step-summary::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(71, 85, 105, 0.76);
+  border-bottom: 2px solid rgba(71, 85, 105, 0.76);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.workflow-definition-system-step[open] .workflow-definition-system-step-summary::before {
+  transform: rotate(45deg);
+}
+
+.workflow-definition-system-step-summary-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-left: 20px;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.workflow-definition-system-step-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.workflow-definition-system-step-id,
+.workflow-definition-system-step-uses {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-definition-system-step-summary-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.workflow-definition-system-step-body {
+  padding: 0 12px 12px;
+}
+
+.workflow-definition-system-step-grid {
+  grid-template-columns: minmax(160px, 0.36fr) minmax(320px, 1fr);
+}
+
 .workflow-definition-handoff-inspector {
   margin-top: 12px;
   padding-top: 12px;
@@ -7362,6 +7457,14 @@ body.quick-chat-window .quick-chat-input {
   transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
+.workflow-definition-select-button span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workflow-definition-select-button::after {
   content: "";
   position: absolute;
@@ -7423,6 +7526,8 @@ body.quick-chat-window .quick-chat-input {
   background: transparent;
   color: var(--text-primary);
   font: inherit;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
   text-align: left;
   cursor: pointer;
 }
@@ -11094,11 +11199,23 @@ body.quick-chat-window .quick-chat-input {
 
   .workflow-definition-state-editor,
   .workflow-definition-subeditor,
+  .workflow-definition-system-step-summary,
+  .workflow-definition-system-step-grid,
   .workflow-definition-state-inspector-grid,
   .workflow-definition-role-channel-row,
   .cards-management-row-grid,
   .cards-management-row-grid.compact {
     grid-template-columns: 1fr;
+  }
+
+  .workflow-definition-system-step-summary-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .workflow-definition-system-step-summary-side {
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .workbench-task-header {

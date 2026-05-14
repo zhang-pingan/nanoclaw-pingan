@@ -500,14 +500,17 @@ export function validateConfig(
         Array.isArray(state.run)
       ) {
         errors.push(`${basePath} must be an object`);
-      } else if (
-        !Array.isArray(state.run.steps) ||
-        state.run.steps.length === 0
-      ) {
-        errors.push(`${basePath}.steps must contain at least one step`);
       } else {
+        if (
+          state.run.steps !== undefined &&
+          !Array.isArray(state.run.steps)
+        ) {
+          errors.push(`${basePath}.steps must be an array`);
+          continue;
+        }
         const seenStepIds = new Set<string>();
-        for (const [index, step] of state.run.steps.entries()) {
+        const steps = state.run.steps || [];
+        for (const [index, step] of steps.entries()) {
           const stepPath = `${basePath}.steps[${index}]`;
           if (!step || typeof step !== 'object' || Array.isArray(step)) {
             errors.push(`${stepPath} must be an object`);

@@ -60,7 +60,7 @@ export interface WorkflowDefinitionSystemRunStep {
 }
 
 export interface WorkflowDefinitionSystemRun {
-  steps: WorkflowDefinitionSystemRunStep[];
+  steps?: WorkflowDefinitionSystemRunStep[];
 }
 
 export interface WorkflowDefinitionEffects {

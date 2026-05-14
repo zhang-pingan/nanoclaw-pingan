@@ -41,6 +41,8 @@ import {
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
 import { getWorkflowTypeConfig } from './workflow-config.js';
+import type { WorkflowDefinition } from './workflow-definition.js';
+import { validateWorkflowDefinition } from './workflow-compiler.js';
 import { getWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 
@@ -1779,6 +1781,96 @@ describe('workflow metadata and branch flow', () => {
 });
 
 describe('system workflow action nodes', () => {
+  it('allows system run steps to be omitted or empty', () => {
+    const definition: WorkflowDefinition = {
+      key: 'empty_system_test',
+      name: 'Empty system test',
+      version: 1,
+      status: 'draft',
+      roles: {},
+      entry_points: {
+        start: {
+          state: 'noop_without_run',
+        },
+      },
+      states: {
+        noop_without_run: {
+          type: 'system',
+          label: 'No-op without run',
+          on_complete: {
+            success: { target: 'noop_empty_steps' },
+          },
+        },
+        noop_empty_steps: {
+          type: 'system',
+          label: 'No-op empty steps',
+          run: {
+            steps: [],
+          },
+          on_complete: {
+            success: { target: 'done' },
+          },
+        },
+        done: {
+          type: 'terminal',
+          label: 'Done',
+        },
+      },
+      status_labels: {},
+    };
+
+    expect(validateWorkflowDefinition(definition)).toEqual([]);
+  });
+
+  it('treats system states without steps as successful no-ops', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalPrepare = config.states.prepare_noop;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'prepare_noop',
+    };
+    config.states.prepare_noop = {
+      type: 'system',
+      label: '无动作准备节点',
+      on_complete: {
+        success: { target: 'plan' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'System no-op feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'system node has no actions',
+      });
+
+      expect(result.error).toBeUndefined();
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.status).toBe('plan');
+
+      const events = listWorkflowEvents(result.workflowId);
+      expect(events.map((event) => event.event_type)).toContain(
+        'system_executed',
+      );
+      expect(events.map((event) => event.event_type)).not.toContain(
+        'system_step_completed',
+      );
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalPrepare) {
+        config.states.prepare_noop = originalPrepare;
+      } else {
+        delete config.states.prepare_noop;
+      }
+    }
+  });
+
   it('runs configured system steps before transitioning to a delegation state', () => {
     const config = getWorkflowTypeConfig('dev_test')!;
     const originalEntry = config.entry_points.plan;

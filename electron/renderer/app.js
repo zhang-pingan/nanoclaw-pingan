@@ -364,6 +364,7 @@ var workflowDefinitionSelectedRoleKey = "";
 var workflowDefinitionSelectedEntryPointKey = "";
 var workflowDefinitionSelectedStateKey = "";
 var workflowDefinitionSelectedCreateFormFieldKey = "";
+var workflowDefinitionCollapsedSystemStepKeys = new Set();
 var workflowDefinitionCardsRegistry = {};
 var workflowDefinitionRoleGroupOptions = [];
 var workflowDefinitionSkillOptions = [];
@@ -5795,12 +5796,13 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
       pushItem("states", `states.${stateKey}.run 必须是 object`);
       return;
     }
-    if (!Array.isArray(state.run.steps) || state.run.steps.length === 0) {
-      pushItem("states", `states.${stateKey}.run.steps 不能为空`);
+    if (state.run.steps !== undefined && !Array.isArray(state.run.steps)) {
+      pushItem("states", `states.${stateKey}.run.steps 必须是 array`);
       return;
     }
+    const steps = Array.isArray(state.run.steps) ? state.run.steps : [];
     const seenStepIds = new Set();
-    state.run.steps.forEach((step, index) => {
+    steps.forEach((step, index) => {
       const path = `states.${stateKey}.run.steps[${index}]`;
       if (!step || typeof step !== "object" || Array.isArray(step)) {
         pushItem("states", `${path} 必须是 object`);
@@ -5874,15 +5876,6 @@ function createWorkflowDefinitionStateTemplate(type) {
     return {
       type: "system",
       label: "新系统状态",
-      run: {
-        steps: [
-          {
-            id: "step_1",
-            uses: "context.set",
-            with: {},
-          },
-        ],
-      },
       on_complete: {
         success: {
           target: "",
@@ -7537,6 +7530,21 @@ function syncInterruptResumeTransitions(state) {
   return state;
 }
 
+function getWorkflowDefinitionSystemStepKey(stateKey, step, index) {
+  return `${stateKey || "state"}:${index}:${String(step?.id || "")}`;
+}
+
+function getWorkflowDefinitionSystemStepUsesLabel(actionOptions, uses) {
+  const value = String(uses || "");
+  if (!value) return "未选择 action";
+  const option = (Array.isArray(actionOptions) ? actionOptions : []).find((item) => {
+    if (item && typeof item === "object") return String(item.value || "") === value;
+    return String(item || "") === value;
+  });
+  if (option && typeof option === "object") return String(option.label || value);
+  return value;
+}
+
 function buildSystemRunStepsInspectorHtml(state) {
   const actionOptions = getWorkflowDefinitionActionOptions();
   const steps = Array.isArray(state?.run?.steps) ? state.run.steps : [];
@@ -7550,34 +7558,47 @@ function buildSystemRunStepsInspectorHtml(state) {
       </div>
       ${
         steps.length
-          ? steps
-              .map(
-                (step, index) => `
-                  <div class="workflow-definition-subeditor">
-                    <div class="workflow-definition-state-inspector-title">
-                      <span>Step ${index + 1}</span>
-                      <span class="workflow-definition-inline-actions">
+          ? `<div class="workflow-definition-system-step-list">${steps
+              .map((step, index) => {
+                const stepKey = getWorkflowDefinitionSystemStepKey(workflowDefinitionSelectedStateKey, step, index);
+                const expanded = !workflowDefinitionCollapsedSystemStepKeys.has(stepKey);
+                const usesLabel = getWorkflowDefinitionSystemStepUsesLabel(actionOptions, step?.uses || "");
+                return `
+                  <details
+                    class="workflow-definition-system-step"
+                    data-system-step-key="${escapeAttribute(stepKey)}"
+                    ${expanded ? "open" : ""}
+                  >
+                    <summary class="workflow-definition-system-step-summary">
+                      <span class="workflow-definition-system-step-summary-main">
+                        <span class="workflow-definition-system-step-title">Step ${index + 1}</span>
+                        <span class="workflow-definition-system-step-id">${escapeHtml(step?.id || `step_${index + 1}`)}</span>
+                      </span>
+                      <span class="workflow-definition-system-step-summary-side">
+                        <span class="workflow-definition-system-step-uses" title="${escapeAttribute(usesLabel)}">${escapeHtml(usesLabel)}</span>
                         <button type="button" class="btn-ghost" data-system-step-delete="${index}">删除</button>
                       </span>
-                    </div>
-                    <div class="workflow-definition-state-inspector-grid">
-                      <label class="workflow-definition-field">
-                        <span>ID</span>
-                        <input data-system-step-field="${index}.id" type="text" value="${escapeAttribute(step?.id || "")}" placeholder="step_${index + 1}" />
+                    </summary>
+                    <div class="workflow-definition-system-step-body">
+                      <div class="workflow-definition-state-inspector-grid workflow-definition-system-step-grid">
+                        <label class="workflow-definition-field">
+                          <span>ID</span>
+                          <input data-system-step-field="${index}.id" type="text" value="${escapeAttribute(step?.id || "")}" placeholder="step_${index + 1}" />
+                        </label>
+                        <label class="workflow-definition-field">
+                          <span>Uses</span>
+                          ${renderWorkflowDefinitionSelectControl("data-system-step-select-field", `${index}.uses`, actionOptions, step?.uses || "", "选择 action")}
+                        </label>
+                      </div>
+                      <label class="workflow-definition-field workflow-definition-field-block">
+                        <span>With JSON</span>
+                        <textarea data-system-step-with="${index}" rows="6" spellcheck="false">${escapeHtml(stringifyPrettyJson(step?.with || {}))}</textarea>
                       </label>
-                      <label class="workflow-definition-field">
-                        <span>Uses</span>
-                        ${renderWorkflowDefinitionSelectControl("data-system-step-select-field", `${index}.uses`, actionOptions, step?.uses || "", "选择 action")}
-                      </label>
                     </div>
-                    <label class="workflow-definition-field workflow-definition-field-block">
-                      <span>With JSON</span>
-                      <textarea data-system-step-with="${index}" rows="6" spellcheck="false">${escapeHtml(stringifyPrettyJson(step?.with || {}))}</textarea>
-                    </label>
-                  </div>
-                `,
-              )
-              .join("")
+                  </details>
+                `;
+              })
+              .join("")}</div>`
           : '<div class="workflow-definition-state-inspector-empty">当前没有 system step，可点击新增。</div>'
       }
     </section>
@@ -7588,9 +7609,6 @@ function ensureSystemRunSteps(state) {
   if (!state || state.type !== "system") return state;
   state.run = state.run && typeof state.run === "object" && !Array.isArray(state.run) ? state.run : {};
   state.run.steps = Array.isArray(state.run.steps) ? state.run.steps : [];
-  if (!state.run.steps.length) {
-    state.run.steps.push({ id: "step_1", uses: "context.set", with: {} });
-  }
   state.run.steps = state.run.steps.map((step, index) => {
     const nextStep = step && typeof step === "object" && !Array.isArray(step) ? step : {};
     if (!String(nextStep.id || "").trim()) nextStep.id = `step_${index + 1}`;
@@ -7728,6 +7746,14 @@ function bindWorkflowDefinitionStateInspectorEvents() {
       }
     });
   });
+  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-system-step-key]")).forEach((details) => {
+    details.addEventListener("toggle", () => {
+      const stepKey = details.getAttribute("data-system-step-key") || "";
+      if (!stepKey) return;
+      if (details.open) workflowDefinitionCollapsedSystemStepKeys.delete(stepKey);
+      else workflowDefinitionCollapsedSystemStepKeys.add(stepKey);
+    });
+  });
   Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-system-step-field], [data-system-step-select-field]")).forEach((el) => {
     const eventName = el.hasAttribute("data-workflow-definition-select-button") ? "change" : "input";
     el.addEventListener(eventName, () => {
@@ -7789,21 +7815,31 @@ function bindWorkflowDefinitionStateInspectorEvents() {
         ensureSystemRunSteps(state);
         const nextIndex = state.run.steps.length + 1;
         const defaultUses = getWorkflowDefinitionActionOptions()[0]?.value || getWorkflowDefinitionActionOptions()[0] || "context.set";
-        state.run.steps.push({
+        const nextStep = {
           id: `step_${nextIndex}`,
           uses: defaultUses,
           with: {},
-        });
+        };
+        state.run.steps.push(nextStep);
+        workflowDefinitionCollapsedSystemStepKeys.delete(
+          getWorkflowDefinitionSystemStepKey(workflowDefinitionSelectedStateKey, nextStep, nextIndex - 1),
+        );
         return cleanupStateObject(state);
       });
     });
   }
   Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-system-step-delete]")).forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       const index = Number(button.getAttribute("data-system-step-delete"));
       if (!Number.isInteger(index) || !workflowDefinitionSelectedStateKey) return;
       applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
         ensureSystemRunSteps(state);
+        const step = state.run.steps[index];
+        workflowDefinitionCollapsedSystemStepKeys.delete(
+          getWorkflowDefinitionSystemStepKey(workflowDefinitionSelectedStateKey, step, index),
+        );
         state.run.steps.splice(index, 1);
         ensureSystemRunSteps(state);
         return cleanupStateObject(state);
@@ -8263,10 +8299,10 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
     });
   }
   if (selectedState.type === "system") {
-    const steps = Array.isArray(selectedState.run?.steps) ? selectedState.run.steps : [];
-    if (!steps.length) {
-      validationItems.push("run.steps 不能为空");
+    if (selectedState.run?.steps !== undefined && !Array.isArray(selectedState.run.steps)) {
+      validationItems.push("run.steps 必须是 array");
     }
+    const steps = Array.isArray(selectedState.run?.steps) ? selectedState.run.steps : [];
     const seenStepIds = new Set();
     steps.forEach((step, index) => {
       if (!String(step?.uses || "").trim()) {
