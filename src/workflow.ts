@@ -75,6 +75,7 @@ import {
   getWorkflowTypeConfig,
   loadWorkflowConfigs,
   renderTemplate,
+  StateConfig,
   StateTransition,
   TemplateVars,
   WorkflowTypeConfig,
@@ -212,6 +213,19 @@ interface SystemRunResult {
   contextPatch: WorkflowContext;
   summary?: string;
   error?: string;
+}
+
+type WorkflowActionStepScope = 'system' | 'before_delegate' | 'after_complete';
+
+interface WorkflowTransitionExtra {
+  fromStatusOverride?: string;
+  delegationResult?: string;
+  resultSummary?: string;
+  revisionText?: string;
+  accessToken?: string;
+  testDoc?: string;
+  workflowUpdates?: Parameters<typeof updateWorkflow>[1];
+  fallbackToTargetDelegate?: boolean;
 }
 
 let workflowRuntimeStarted = false;
@@ -2128,10 +2142,11 @@ function runSystemState(
     contextPatch: {},
   };
   if (state.run?.steps?.length) {
-    systemResult = runSystemSteps({
+    systemResult = runWorkflowActionSteps({
       workflow,
       steps: state.run.steps,
       attempt,
+      scope: 'system',
     });
     writeWorkflowEvent({
       workflowId: workflow.id,
@@ -2203,10 +2218,45 @@ function runSystemState(
   );
 }
 
-function runSystemSteps(input: {
+function workflowActionStepEventType(
+  scope: WorkflowActionStepScope,
+  phase: 'started' | 'completed' | 'failed' | 'pending',
+): string {
+  if (scope === 'system') {
+    if (phase === 'started') return 'system_step_started';
+    if (phase === 'completed') return 'system_step_completed';
+    if (phase === 'pending') return 'system_step_pending';
+    return 'system_step_failed';
+  }
+  if (phase === 'started') return 'workflow_hook_step_started';
+  if (phase === 'completed') return 'workflow_hook_step_completed';
+  if (phase === 'pending') return 'workflow_hook_step_pending';
+  return 'workflow_hook_step_failed';
+}
+
+function workflowActionStepIdempotencyKey(input: {
+  workflow: Workflow;
+  scope: WorkflowActionStepScope;
+  attempt: number;
+  index: number;
+  phase?: 'started';
+}): string {
+  const prefix =
+    input.scope === 'system'
+      ? input.phase === 'started'
+        ? 'workflow_system_step_started'
+        : 'workflow_system_step'
+      : input.phase === 'started'
+        ? 'workflow_hook_step_started'
+        : 'workflow_hook_step';
+  return `${prefix}:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.scope}:${input.attempt}:${input.index + 1}`;
+}
+
+function runWorkflowActionSteps(input: {
   workflow: Workflow;
   steps: WorkflowDefinitionSystemRunStep[];
   attempt: number;
+  scope: WorkflowActionStepScope;
 }): SystemRunResult {
   const roles = resolveRolesOrEmpty(input.workflow);
   const stepOutputs: Record<string, unknown> = {};
@@ -2229,14 +2279,20 @@ function runSystemSteps(input: {
       const error = `Workflow action handler "${step.uses}" is not registered`;
       writeWorkflowEvent({
         workflowId: input.workflow.id,
-        eventType: 'system_step_failed',
+        eventType: workflowActionStepEventType(input.scope, 'failed'),
         stateKey: input.workflow.status,
         payload: {
+          scope: input.scope,
           step_id: stepId,
           uses: step.uses,
           error,
         },
-        idempotencyKey: `workflow_system_step:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.attempt}:${index + 1}`,
+        idempotencyKey: workflowActionStepIdempotencyKey({
+          workflow: input.workflow,
+          scope: input.scope,
+          attempt: input.attempt,
+          index,
+        }),
       });
       return {
         status: 'failure',
@@ -2251,13 +2307,20 @@ function runSystemSteps(input: {
 
     writeWorkflowEvent({
       workflowId: input.workflow.id,
-      eventType: 'system_step_started',
+      eventType: workflowActionStepEventType(input.scope, 'started'),
       stateKey: input.workflow.status,
       payload: {
+        scope: input.scope,
         step_id: stepId,
         uses: step.uses,
       },
-      idempotencyKey: `workflow_system_step_started:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.attempt}:${index + 1}`,
+      idempotencyKey: workflowActionStepIdempotencyKey({
+        workflow: input.workflow,
+        scope: input.scope,
+        attempt: input.attempt,
+        index,
+        phase: 'started',
+      }),
     });
 
     let result: ReturnType<typeof handler.run>;
@@ -2294,12 +2357,13 @@ function runSystemSteps(input: {
       workflowId: input.workflow.id,
       eventType:
         result.status === 'success'
-          ? 'system_step_completed'
+          ? workflowActionStepEventType(input.scope, 'completed')
           : result.status === 'pending'
-            ? 'system_step_pending'
-            : 'system_step_failed',
+            ? workflowActionStepEventType(input.scope, 'pending')
+            : workflowActionStepEventType(input.scope, 'failed'),
       stateKey: input.workflow.status,
       payload: {
+        scope: input.scope,
         step_id: stepId,
         uses: step.uses,
         status: result.status,
@@ -2307,7 +2371,12 @@ function runSystemSteps(input: {
         summary: result.summary || null,
         error: result.error || null,
       },
-      idempotencyKey: `workflow_system_step:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.attempt}:${index + 1}`,
+      idempotencyKey: workflowActionStepIdempotencyKey({
+        workflow: input.workflow,
+        scope: input.scope,
+        attempt: input.attempt,
+        index,
+      }),
     });
 
     if (result.status !== 'success') {
@@ -2333,6 +2402,191 @@ function cloneWorkflowContextForSystem(
   context: WorkflowContext,
 ): WorkflowContext {
   return mergeWorkflowContext({}, context);
+}
+
+function runDelegationHook(input: {
+  workflow: Workflow;
+  stateKey: string;
+  stateConfig: StateConfig;
+  hook: Extract<WorkflowActionStepScope, 'before_delegate' | 'after_complete'>;
+  attempt: number;
+}): SystemRunResult {
+  const run = input.stateConfig[input.hook];
+  const steps = run?.steps || [];
+  if (steps.length === 0) {
+    return {
+      status: 'success',
+      output: {},
+      contextPatch: {},
+    };
+  }
+
+  const workflowForHook: Workflow = {
+    ...input.workflow,
+    status: input.stateKey as Workflow['status'],
+  };
+  writeWorkflowEvent({
+    workflowId: workflowForHook.id,
+    eventType: 'workflow_hook_started',
+    stateKey: input.stateKey,
+    payload: {
+      hook: input.hook,
+      attempt: input.attempt,
+      step_count: steps.length,
+    },
+    idempotencyKey: `workflow_hook_started:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.attempt}`,
+  });
+
+  const result = runWorkflowActionSteps({
+    workflow: workflowForHook,
+    steps,
+    attempt: input.attempt,
+    scope: input.hook,
+  });
+  writeWorkflowEvent({
+    workflowId: workflowForHook.id,
+    eventType:
+      result.status === 'success'
+        ? 'workflow_hook_completed'
+        : result.status === 'pending'
+          ? 'workflow_hook_pending'
+          : 'workflow_hook_failed',
+    stateKey: input.stateKey,
+    payload: {
+      hook: input.hook,
+      attempt: input.attempt,
+      status: result.status,
+      summary: result.summary || null,
+      error: result.error || null,
+      output: result.output,
+    },
+    idempotencyKey: `workflow_hook:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.attempt}`,
+  });
+  return result;
+}
+
+function buildHookFailureMessage(
+  hook: 'before_delegate' | 'after_complete',
+  stateKey: string,
+  result: SystemRunResult,
+): string {
+  const reason = result.error || result.summary || result.status;
+  return `Workflow ${hook} hook failed for state "${stateKey}": ${reason}`;
+}
+
+function stopWorkflowAfterHookBlock(input: {
+  workflow: Workflow;
+  stateKey: string;
+  hook: 'before_delegate' | 'after_complete';
+  result: SystemRunResult;
+  contextPatch?: WorkflowContext;
+}): void {
+  updateWorkflow(input.workflow.id, {
+    current_delegation_id: '',
+    ...(input.contextPatch && Object.keys(input.contextPatch).length > 0
+      ? { context: input.contextPatch }
+      : {}),
+  });
+  const updated = getWorkflow(input.workflow.id) || input.workflow;
+  writeWorkflowCheckpoint({
+    workflow: updated,
+    currentDelegationId: null,
+  });
+  enqueueWorkflowWorkbenchSync(
+    input.workflow.id,
+    'workflow_updated',
+    {
+      resultSummary: buildHookFailureMessage(
+        input.hook,
+        input.stateKey,
+        input.result,
+      ),
+    },
+    `workflow_hook_blocked:${input.stateKey}:${input.hook}:${updated.round}`,
+  );
+}
+
+function createDelegationForState(input: {
+  workflow: Workflow;
+  stateKey: string;
+  stateConfig: StateConfig;
+  roles: Record<string, string>;
+  sourceFolder: string;
+  role: string;
+  skill: string;
+  taskTemplate?: string;
+  handoff?: StateTransition['handoff'];
+  artifactContractRef?: string;
+  idempotencyKey: string;
+  attempt: number;
+  extra?: WorkflowTransitionExtra;
+  retryNote?: string;
+}): {
+  intent: DelegationIntent;
+  contextPatch: WorkflowContext;
+  workflow: Workflow;
+} {
+  const targetFolder = input.roles[input.role];
+  if (!targetFolder) {
+    throw new Error(
+      `Workflow: role "${input.role}" has no resolved target folder`,
+    );
+  }
+
+  const beforeHook = runDelegationHook({
+    workflow: input.workflow,
+    stateKey: input.stateKey,
+    stateConfig: input.stateConfig,
+    hook: 'before_delegate',
+    attempt: input.attempt,
+  });
+  if (beforeHook.status !== 'success') {
+    throw new Error(
+      buildHookFailureMessage('before_delegate', input.stateKey, beforeHook),
+    );
+  }
+
+  const workflowForDelegate: Workflow = {
+    ...input.workflow,
+    status: input.stateKey as Workflow['status'],
+    context: mergeWorkflowContext(
+      input.workflow.context,
+      beforeHook.contextPatch,
+    ),
+  };
+  const vars = buildTemplateVars(workflowForDelegate, input.extra);
+  const taskContent = input.taskTemplate
+    ? renderTemplate(input.taskTemplate, vars, input.roles)
+    : '';
+  const finalTaskContent = appendRetryNote(
+    finalizeDelegationTaskContent(
+      input.skill,
+      taskContent,
+      workflowForDelegate,
+      input.extra,
+    ),
+    input.retryNote,
+  );
+  const intent = createDurableDelegationIntent({
+    workflowId: input.workflow.id,
+    sourceJid: input.workflow.source_jid,
+    targetFolder,
+    sourceFolder: input.sourceFolder,
+    stageKey: input.stateKey,
+    role: input.role,
+    skillName: input.skill,
+    taskContent: finalTaskContent,
+    handoff: input.handoff,
+    artifactContractRef: input.artifactContractRef,
+    workflowForHandoff: workflowForDelegate,
+    idempotencyKey: input.idempotencyKey,
+  });
+
+  return {
+    intent,
+    contextPatch: beforeHook.contextPatch,
+    workflow: workflowForDelegate,
+  };
 }
 
 function actorToJson(actor: ResumeActor): string {
@@ -2577,38 +2831,31 @@ function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
 
   if (!state.role || !state.skill) return;
   const roles = resolveRolesOrEmpty(workflow);
-  const targetFolder = roles[state.role];
-  if (!targetFolder) return;
-
-  const vars = buildTemplateVars(workflow);
-  const taskContent = state.task_template
-    ? renderTemplate(state.task_template, vars, roles)
-    : '';
-  const finalTaskContent = finalizeDelegationTaskContent(
-    state.skill,
-    appendRetryNote(
-      taskContent,
-      `Evaluator pending retry attempt ${attempt}. Previous evaluation: ${String(
-        latestEvaluator.summary || '',
-      )}`,
-    ),
-    workflow,
-  );
   const idempotencyKey = `workflow_delegation:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`;
-  const delegationId = createDurableDelegationIntent({
-    workflowId: workflow.id,
-    sourceJid: workflow.source_jid,
-    targetFolder,
+  const prepared = createDelegationForState({
+    workflow,
+    stateKey: workflow.status,
+    stateConfig: state,
+    roles,
     sourceFolder: getMainFolder(workflow.source_jid),
-    stageKey: workflow.status,
     role: state.role,
-    skillName: state.skill,
-    taskContent: finalTaskContent,
+    skill: state.skill,
+    taskTemplate: state.task_template,
     handoff: state.handoff,
     artifactContractRef: state.artifact_contract?.ref,
+    attempt,
     idempotencyKey,
-  }).delegationId;
-  updateWorkflow(workflow.id, { current_delegation_id: delegationId });
+    retryNote: `Evaluator pending retry attempt ${attempt}. Previous evaluation: ${String(
+      latestEvaluator.summary || '',
+    )}`,
+  });
+  const delegationId = prepared.intent.delegationId;
+  updateWorkflow(workflow.id, {
+    current_delegation_id: delegationId,
+    ...(Object.keys(prepared.contextPatch).length > 0
+      ? { context: prepared.contextPatch }
+      : {}),
+  });
   const updated = getWorkflow(workflow.id) || workflow;
   writeWorkflowEvent({
     workflowId: workflow.id,
@@ -2634,7 +2881,7 @@ function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
       delegation_id: delegationId,
       idempotency_key: idempotencyKey,
       attempt,
-      target_folder: targetFolder,
+      target_folder: prepared.intent.targetFolder,
     },
     createdAt: nowIso,
   });
@@ -3141,16 +3388,7 @@ function applyTransition(
   workflow: Workflow,
   transition: StateTransition,
   roles: Record<string, string>,
-  extra?: {
-    fromStatusOverride?: string;
-    delegationResult?: string;
-    resultSummary?: string;
-    revisionText?: string;
-    accessToken?: string;
-    testDoc?: string;
-    workflowUpdates?: Parameters<typeof updateWorkflow>[1];
-    fallbackToTargetDelegate?: boolean;
-  },
+  extra?: WorkflowTransitionExtra,
 ): void {
   const config = getWorkflowTypeConfig(workflow.workflow_type);
   if (!config) return;
@@ -3185,23 +3423,6 @@ function applyTransition(
     updates.round = round;
   }
 
-  // Build template vars with updated values
-  const vars = buildTemplateVars(
-    {
-      ...workflow,
-      ...updates,
-      context: mergeWorkflowContext(workflow.context, updates.context),
-      round,
-    },
-    extra,
-  );
-  const workflowForHandoff: Workflow = {
-    ...workflow,
-    ...updates,
-    context: mergeWorkflowContext(workflow.context, updates.context),
-    round,
-  };
-
   const targetStateConfig = config.states[transition.target];
   const useTargetDelegate =
     extra?.fallbackToTargetDelegate === true &&
@@ -3226,37 +3447,41 @@ function applyTransition(
   let delegationIntent: DelegationIntent | null = null;
 
   if (delegateRole && delegateSkill) {
-    const targetFolder = roles[delegateRole];
-    if (!targetFolder) {
-      throw new Error(
-        `Workflow: role "${delegateRole}" has no resolved target folder`,
-      );
-    }
-    const taskContent = delegateTaskTemplate
-      ? renderTemplate(delegateTaskTemplate, vars, roles)
-      : '';
-    const finalTaskContent = finalizeDelegationTaskContent(
-      delegateSkill,
-      taskContent,
-      { ...workflow, ...updates, round },
-      extra,
-    );
-
     const delegationKey = `workflow_delegation:${workflow.id}:${transition.target}:${round}:1`;
-    delegationIntent = createDurableDelegationIntent({
-      workflowId: workflow.id,
-      sourceJid: workflow.source_jid,
-      targetFolder,
+    const workflowForDelegate: Workflow = {
+      ...workflow,
+      ...updates,
+      status: transition.target as Workflow['status'],
+      context: mergeWorkflowContext(workflow.context, updates.context),
+      round,
+    };
+    const prepared = createDelegationForState({
+      workflow: workflowForDelegate,
+      stateKey: transition.target,
+      stateConfig:
+        targetStateConfig?.type === 'delegation'
+          ? targetStateConfig
+          : {
+              type: 'delegation',
+              role: delegateRole,
+              skill: delegateSkill,
+            },
+      roles,
       sourceFolder: mainFolder,
-      stageKey: transition.target,
       role: delegateRole,
-      skillName: delegateSkill,
-      taskContent: finalTaskContent,
+      skill: delegateSkill,
+      taskTemplate: delegateTaskTemplate,
       handoff: delegateHandoff,
       artifactContractRef: targetStateConfig?.artifact_contract?.ref,
-      workflowForHandoff,
       idempotencyKey: delegationKey,
+      attempt: 1,
+      extra,
     });
+    delegationIntent = prepared.intent;
+    updates.context = mergeWorkflowContext(
+      updates.context || {},
+      prepared.contextPatch,
+    );
     updates.current_delegation_id = delegationIntent.delegationId;
   } else {
     // No delegation — clear current_delegation_id
@@ -3328,6 +3553,15 @@ function applyTransition(
 
   // 5. Send notification
   if (transition.notify) {
+    const vars = buildTemplateVars(
+      {
+        ...workflow,
+        ...updates,
+        context: mergeWorkflowContext(workflow.context, updates.context),
+        round,
+      },
+      extra,
+    );
     enqueueWorkflowNotification(
       {
         ...workflow,
@@ -3511,30 +3745,27 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
       try {
         const createdWorkflow = getWorkflow(workflowId)!;
-        const vars = buildTemplateVars(createdWorkflow);
-        const taskContent = entryStateConfig.task_template
-          ? renderTemplate(entryStateConfig.task_template, vars, roles)
-          : '';
-        const finalTaskContent = finalizeDelegationTaskContent(
-          entryStateConfig.skill,
-          taskContent,
-          createdWorkflow,
-        );
-
-        const delegationId = createDurableDelegationIntent({
-          workflowId,
-          sourceJid: opts.sourceJid,
-          targetFolder,
+        const prepared = createDelegationForState({
+          workflow: createdWorkflow,
+          stateKey: entryPoint.state,
+          stateConfig: entryStateConfig,
+          roles,
           sourceFolder: mainFolder,
-          stageKey: entryPoint.state,
           role: entryStateConfig.role,
-          skillName: entryStateConfig.skill,
-          taskContent: finalTaskContent,
+          skill: entryStateConfig.skill,
+          taskTemplate: entryStateConfig.task_template,
           handoff: entryStateConfig.handoff,
           artifactContractRef: entryStateConfig.artifact_contract?.ref,
+          attempt: 1,
           idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
-        }).delegationId;
-        updateWorkflow(workflowId, { current_delegation_id: delegationId });
+        });
+        const delegationId = prepared.intent.delegationId;
+        updateWorkflow(workflowId, {
+          current_delegation_id: delegationId,
+          ...(Object.keys(prepared.contextPatch).length > 0
+            ? { context: prepared.contextPatch }
+            : {}),
+        });
         enqueueWorkflowWorkbenchSync(
           workflowId,
           'delegation_created',
@@ -3655,30 +3886,27 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
     try {
       const createdWorkflow = getWorkflow(workflowId)!;
-      const vars = buildTemplateVars(createdWorkflow);
-      const taskContent = entryStateConfig.task_template
-        ? renderTemplate(entryStateConfig.task_template, vars, roles)
-        : '';
-      const finalTaskContent = finalizeDelegationTaskContent(
-        entryStateConfig.skill,
-        taskContent,
-        createdWorkflow,
-      );
-
-      const delegationId = createDurableDelegationIntent({
-        workflowId,
-        sourceJid: opts.sourceJid,
-        targetFolder,
+      const prepared = createDelegationForState({
+        workflow: createdWorkflow,
+        stateKey: entryPoint.state,
+        stateConfig: entryStateConfig,
+        roles,
         sourceFolder: mainFolder,
-        stageKey: entryPoint.state,
         role: entryStateConfig.role,
-        skillName: entryStateConfig.skill,
-        taskContent: finalTaskContent,
+        skill: entryStateConfig.skill,
+        taskTemplate: entryStateConfig.task_template,
         handoff: entryStateConfig.handoff,
         artifactContractRef: entryStateConfig.artifact_contract?.ref,
+        attempt: 1,
         idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
-      }).delegationId;
-      updateWorkflow(workflowId, { current_delegation_id: delegationId });
+      });
+      const delegationId = prepared.intent.delegationId;
+      updateWorkflow(workflowId, {
+        current_delegation_id: delegationId,
+        ...(Object.keys(prepared.contextPatch).length > 0
+          ? { context: prepared.contextPatch }
+          : {}),
+      });
       enqueueWorkflowWorkbenchSync(
         workflowId,
         'delegation_created',
@@ -3912,42 +4140,35 @@ export function retryWorkflowStage(
   }
 
   try {
-    const vars = buildTemplateVars(workflow);
-    const taskContent = stateConfig.task_template
-      ? renderTemplate(stateConfig.task_template, vars, roles)
-      : '';
-    const finalTaskContent = finalizeDelegationTaskContent(
-      stateConfig.skill,
-      taskContent,
-      workflow,
-    );
-    const retriedTaskContent = appendRetryNote(
-      finalTaskContent,
-      extra?.retryNote,
-    );
     const retryAttempt =
       listWorkflowInterruptsByWorkflow(workflowId).length +
       getDelegationsByWorkflow(workflowId).length +
       1;
-    const delegationId = createDurableDelegationIntent({
-      workflowId,
-      sourceJid: workflow.source_jid,
-      targetFolder,
+    const prepared = createDelegationForState({
+      workflow: { ...workflow, status: stageKey as Workflow['status'] },
+      stateKey: stageKey,
+      stateConfig,
+      roles,
       sourceFolder: getMainFolder(workflow.source_jid),
-      stageKey,
       role: stateConfig.role,
-      skillName: stateConfig.skill,
-      taskContent: retriedTaskContent,
+      skill: stateConfig.skill,
+      taskTemplate: stateConfig.task_template,
       handoff: stateConfig.handoff,
       artifactContractRef: stateConfig.artifact_contract?.ref,
+      attempt: retryAttempt,
       idempotencyKey: `workflow_delegation:${workflowId}:${stageKey}:${workflow.round}:${retryAttempt}`,
-    }).delegationId;
+      retryNote: extra?.retryNote,
+    });
+    const delegationId = prepared.intent.delegationId;
 
     const fromStatus = workflow.status;
     updateWorkflow(workflowId, {
       status: stageKey,
       current_delegation_id: delegationId,
       paused_from: null,
+      ...(Object.keys(prepared.contextPatch).length > 0
+        ? { context: prepared.contextPatch }
+        : {}),
     });
     enqueueWorkflowWorkbenchSync(
       workflowId,
@@ -3979,7 +4200,7 @@ export function retryWorkflowStage(
         delegation_id: delegationId,
         idempotency_key: `workflow_delegation:${workflowId}:${stageKey}:${workflow.round}:${retryAttempt}`,
         attempt: retryAttempt,
-        target_folder: targetFolder,
+        target_folder: prepared.intent.targetFolder,
       },
     });
     enqueueWorkflowNotification(
@@ -4112,10 +4333,42 @@ export function onDelegationComplete(delegationId: string): void {
     testDoc = payload.test_doc.trim();
   }
 
-  const evaluationWorkflow: Workflow = {
+  let evaluationWorkflow: Workflow = {
     ...workflow,
     context: mergeWorkflowContext(workflow.context, contextUpdates),
   };
+  const afterHook = runDelegationHook({
+    workflow: evaluationWorkflow,
+    stateKey: workflow.status,
+    stateConfig,
+    hook: 'after_complete',
+    attempt: 1,
+  });
+  if (Object.keys(afterHook.contextPatch).length > 0) {
+    Object.assign(contextUpdates, afterHook.contextPatch);
+    workflowUpdates.context = mergeWorkflowContext(
+      workflowUpdates.context || {},
+      afterHook.contextPatch,
+    );
+    evaluationWorkflow = {
+      ...evaluationWorkflow,
+      context: mergeWorkflowContext(
+        evaluationWorkflow.context,
+        afterHook.contextPatch,
+      ),
+    };
+  }
+  if (afterHook.status !== 'success') {
+    stopWorkflowAfterHookBlock({
+      workflow,
+      stateKey: workflow.status,
+      hook: 'after_complete',
+      result: afterHook,
+      contextPatch: workflowUpdates.context,
+    });
+    return;
+  }
+
   const stageEvaluation = evaluateWorkflowStage({
     workflow: evaluationWorkflow,
     stageKey: workflow.status,

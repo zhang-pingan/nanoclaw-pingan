@@ -32,6 +32,8 @@ export interface CompiledWorkflowState {
   skill?: string;
   task_template?: string;
   handoff?: WorkflowDefinitionHandoff;
+  before_delegate?: WorkflowDefinitionSystemRun;
+  after_complete?: WorkflowDefinitionSystemRun;
   card?: string;
   label?: string;
   description?: string;
@@ -110,6 +112,8 @@ function compileState(state: WorkflowDefinitionState): CompiledWorkflowState {
       skill: state.delegate.skill,
       task_template: state.delegate.task_template,
       handoff: state.delegate.handoff,
+      before_delegate: state.before_delegate,
+      after_complete: state.after_complete,
       on_complete: {
         success: compileTransition(state.on_complete.success),
         failure: compileTransition(state.on_complete.failure),
@@ -190,6 +194,53 @@ export function validateWorkflowDefinition(
       `${basePath}.artifact_contract_ref`,
       handoff?.artifact_contract_ref,
     );
+  };
+  const validateActionRun = (
+    basePath: string,
+    run: WorkflowDefinitionSystemRun | undefined,
+  ): void => {
+    if (run === undefined) return;
+    if (!run || typeof run !== 'object' || Array.isArray(run)) {
+      errors.push(`${basePath} must be an object`);
+      return;
+    }
+    if (run.steps !== undefined && !Array.isArray(run.steps)) {
+      errors.push(`${basePath}.steps must be an array`);
+      return;
+    }
+    const seenStepIds = new Set<string>();
+    const steps = run.steps || [];
+    for (const [index, step] of steps.entries()) {
+      const stepPath = `${basePath}.steps[${index}]`;
+      if (!step || typeof step !== 'object' || Array.isArray(step)) {
+        errors.push(`${stepPath} must be an object`);
+        continue;
+      }
+      if (!step.uses?.trim()) {
+        errors.push(`${stepPath}.uses is required`);
+      }
+      if (step.id !== undefined) {
+        if (!step.id.trim()) {
+          errors.push(`${stepPath}.id must be a non-empty string`);
+        } else if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(step.id)) {
+          errors.push(
+            `${stepPath}.id must start with a letter or underscore and contain only letters, numbers, "_" or "-"`,
+          );
+        } else if (seenStepIds.has(step.id)) {
+          errors.push(`${stepPath}.id "${step.id}" is duplicated`);
+        } else {
+          seenStepIds.add(step.id);
+        }
+      }
+      if (
+        step.with !== undefined &&
+        (!step.with ||
+          typeof step.with !== 'object' ||
+          Array.isArray(step.with))
+      ) {
+        errors.push(`${stepPath}.with must be an object`);
+      }
+    }
   };
 
   if (!definition.key?.trim()) errors.push('definition.key is required');
@@ -348,6 +399,14 @@ export function validateWorkflowDefinition(
         `${definition.key}.states.${stateKey}.delegate.handoff`,
         state.delegate.handoff,
       );
+      validateActionRun(
+        `${definition.key}.states.${stateKey}.before_delegate`,
+        state.before_delegate,
+      );
+      validateActionRun(
+        `${definition.key}.states.${stateKey}.after_complete`,
+        state.after_complete,
+      );
       if (!roleNames.has(state.delegate.role)) {
         errors.push(
           `${definition.key}.states.${stateKey}.delegate.role "${state.delegate.role}" not defined in roles`,
@@ -391,56 +450,8 @@ export function validateWorkflowDefinition(
       }
     }
 
-    if (state.type === 'system' && state.run !== undefined) {
-      const basePath = `${definition.key}.states.${stateKey}.run`;
-      if (
-        !state.run ||
-        typeof state.run !== 'object' ||
-        Array.isArray(state.run)
-      ) {
-        errors.push(`${basePath} must be an object`);
-      } else {
-        if (
-          state.run.steps !== undefined &&
-          !Array.isArray(state.run.steps)
-        ) {
-          errors.push(`${basePath}.steps must be an array`);
-          continue;
-        }
-        const seenStepIds = new Set<string>();
-        const steps = state.run.steps || [];
-        for (const [index, step] of steps.entries()) {
-          const stepPath = `${basePath}.steps[${index}]`;
-          if (!step || typeof step !== 'object' || Array.isArray(step)) {
-            errors.push(`${stepPath} must be an object`);
-            continue;
-          }
-          if (!step.uses?.trim()) {
-            errors.push(`${stepPath}.uses is required`);
-          }
-          if (step.id !== undefined) {
-            if (!step.id.trim()) {
-              errors.push(`${stepPath}.id must be a non-empty string`);
-            } else if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(step.id)) {
-              errors.push(
-                `${stepPath}.id must start with a letter or underscore and contain only letters, numbers, "_" or "-"`,
-              );
-            } else if (seenStepIds.has(step.id)) {
-              errors.push(`${stepPath}.id "${step.id}" is duplicated`);
-            } else {
-              seenStepIds.add(step.id);
-            }
-          }
-          if (
-            step.with !== undefined &&
-            (!step.with ||
-              typeof step.with !== 'object' ||
-              Array.isArray(step.with))
-          ) {
-            errors.push(`${stepPath}.with must be an object`);
-          }
-        }
-      }
+    if (state.type === 'system') {
+      validateActionRun(`${definition.key}.states.${stateKey}.run`, state.run);
     }
 
     if (state.type === 'interrupt') {

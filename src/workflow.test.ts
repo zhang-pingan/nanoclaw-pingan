@@ -1822,6 +1822,54 @@ describe('system workflow action nodes', () => {
     expect(validateWorkflowDefinition(definition)).toEqual([]);
   });
 
+  it('allows delegation action hooks to be omitted or empty', () => {
+    const definition: WorkflowDefinition = {
+      key: 'delegation_hook_test',
+      name: 'Delegation hook test',
+      version: 1,
+      status: 'draft',
+      roles: {
+        planner: {
+          channels: {
+            web: 'web_plan',
+          },
+        },
+      },
+      entry_points: {
+        start: {
+          state: 'plan',
+        },
+      },
+      states: {
+        plan: {
+          type: 'delegation',
+          label: 'Plan',
+          delegate: {
+            role: 'planner',
+            skill: 'plan-requirement',
+          },
+          before_delegate: {
+            steps: [],
+          },
+          after_complete: {
+            steps: [],
+          },
+          on_complete: {
+            success: { target: 'done' },
+            failure: { target: 'done' },
+          },
+        },
+        done: {
+          type: 'terminal',
+          label: 'Done',
+        },
+      },
+      status_labels: {},
+    };
+
+    expect(validateWorkflowDefinition(definition)).toEqual([]);
+  });
+
   it('treats system states without steps as successful no-ops', () => {
     const config = getWorkflowTypeConfig('dev_test')!;
     const originalEntry = config.entry_points.plan;
@@ -1943,6 +1991,168 @@ describe('system workflow action nodes', () => {
         delete config.states.prepare_context;
       }
       config.states.plan = originalPlan;
+    }
+  });
+
+  it('runs before_delegate hooks before creating a delegation', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalPlan = config.states.plan;
+
+    config.states.plan = {
+      ...originalPlan,
+      before_delegate: {
+        steps: [
+          {
+            id: 'prepare_branch',
+            uses: 'context.set',
+            with: {
+              values: {
+                work_branch: 'feature/hook-{{service}}',
+                before_hook_marker: 'before:{{name}}',
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'Before hook feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'before hook prepares context',
+      });
+
+      expect(result.error).toBeUndefined();
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.context.work_branch).toBe(
+        `feature/hook-${TEST_SERVICE}`,
+      );
+      expect(workflow?.context.before_hook_marker).toBe(
+        'before:Before hook feature',
+      );
+
+      const delegations = getDelegationsByWorkflow(result.workflowId);
+      expect(delegations).toHaveLength(1);
+      expect(delegations[0]?.task).toContain(
+        `工作分支：feature/hook-${TEST_SERVICE}`,
+      );
+
+      const events = listWorkflowEvents(result.workflowId);
+      expect(events.map((event) => event.event_type)).toContain(
+        'workflow_hook_completed',
+      );
+      const hookStep = events.find(
+        (event) => event.event_type === 'workflow_hook_step_completed',
+      );
+      expect(hookStep?.payload_json).toContain('before_delegate');
+    } finally {
+      config.states.plan = originalPlan;
+    }
+  });
+
+  it('runs after_complete hooks before evaluating and transitioning', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalCapture = config.states.capture_after_hook;
+    const originalNext = config.states.next_after_hook;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'capture_after_hook',
+    };
+    config.states.capture_after_hook = {
+      type: 'delegation',
+      label: '采集并后处理',
+      role: 'planner',
+      skill: 'plan-requirement',
+      task_template: '返回结构化阶段结果',
+      after_complete: {
+        steps: [
+          {
+            id: 'copy_payload',
+            uses: 'context.set',
+            with: {
+              values: {
+                after_hook_build:
+                  '{{context.latest_delegation_result.payload.build_id}}',
+                after_hook_summary:
+                  '{{context.latest_delegation_result.payload.summary}}',
+              },
+            },
+          },
+        ],
+      },
+      on_complete: {
+        success: { target: 'next_after_hook' },
+        failure: { target: 'cancelled' },
+      },
+    };
+    config.states.next_after_hook = {
+      type: 'delegation',
+      label: '读取后处理结果',
+      role: 'planner',
+      skill: 'plan-requirement',
+      task_template:
+        'after_build={{after_hook_build}}\nafter_summary={{after_hook_summary}}',
+      on_complete: {
+        success: { target: 'passed' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'After hook feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'after hook normalizes result',
+      });
+
+      expect(result.error).toBeUndefined();
+      const [delegation] = getDelegationsByWorkflow(result.workflowId);
+      expect(delegation).toBeDefined();
+
+      updateDelegation(delegation!.id, {
+        status: 'completed',
+        outcome: 'success',
+        result: buildStructuredResult({
+          build_id: 'build-after-123',
+        }),
+      });
+      onDelegationComplete(delegation!.id);
+
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.status).toBe('next_after_hook');
+      expect(workflow?.context.after_hook_build).toBe('build-after-123');
+      expect(workflow?.context.after_hook_summary).toBe('阶段完成');
+
+      const delegations = getDelegationsByWorkflow(result.workflowId);
+      expect(delegations).toHaveLength(2);
+      expect(delegations[1]?.task).toContain('after_build=build-after-123');
+      expect(delegations[1]?.task).toContain('after_summary=阶段完成');
+
+      const hookStep = listWorkflowEvents(result.workflowId).find(
+        (event) => event.event_type === 'workflow_hook_step_completed',
+      );
+      expect(hookStep?.payload_json).toContain('after_complete');
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalCapture) {
+        config.states.capture_after_hook = originalCapture;
+      } else {
+        delete config.states.capture_after_hook;
+      }
+      if (originalNext) {
+        config.states.next_after_hook = originalNext;
+      } else {
+        delete config.states.next_after_hook;
+      }
     }
   });
 

@@ -130,6 +130,8 @@ export interface WorkflowDefinitionStateBase {
 export interface WorkflowDefinitionDelegationState extends WorkflowDefinitionStateBase {
   type: 'delegation';
   delegate: WorkflowDefinitionDelegate;
+  before_delegate?: WorkflowDefinitionSystemRun;
+  after_complete?: WorkflowDefinitionSystemRun;
   on_complete: {
     success: WorkflowDefinitionTransition;
     failure: WorkflowDefinitionTransition;

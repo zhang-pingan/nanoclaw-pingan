@@ -74,6 +74,8 @@ export interface StateConfig {
   skill?: string;
   task_template?: string;
   handoff?: WorkflowDefinitionHandoff;
+  before_delegate?: WorkflowDefinitionSystemRun;
+  after_complete?: WorkflowDefinitionSystemRun;
   on_complete?: {
     success: StateTransition;
     failure?: StateTransition;
@@ -543,10 +545,7 @@ export function validateConfig(
       ) {
         errors.push(`${basePath} must be an object`);
       } else {
-        if (
-          state.run.steps !== undefined &&
-          !Array.isArray(state.run.steps)
-        ) {
+        if (state.run.steps !== undefined && !Array.isArray(state.run.steps)) {
           errors.push(`${basePath}.steps must be an array`);
           continue;
         }
