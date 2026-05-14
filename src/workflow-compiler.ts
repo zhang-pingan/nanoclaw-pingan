@@ -12,6 +12,7 @@ import {
   WorkflowDefinitionTimeoutPolicy,
   WorkflowDefinitionSystemRun,
 } from './workflow-definition.js';
+import { getWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { isValidDeliverableFileName } from './workflow-artifacts.js';
 
 export interface CompiledWorkflowTransition {
@@ -172,6 +173,24 @@ export function validateWorkflowDefinition(
   const roleNames = new Set(Object.keys(definition.roles));
   const entryPointNames = new Set(Object.keys(definition.entry_points));
   const createFieldKeys = new Set<string>();
+  const validateArtifactContractRef = (
+    basePath: string,
+    ref: string | undefined,
+  ): void => {
+    const value = ref?.trim();
+    if (value && !getWorkflowArtifactContract(value)) {
+      errors.push(`${basePath} "${value}" not found in artifact contracts`);
+    }
+  };
+  const validateHandoffArtifactContractRef = (
+    basePath: string,
+    handoff: WorkflowDefinitionHandoff | undefined,
+  ): void => {
+    validateArtifactContractRef(
+      `${basePath}.artifact_contract_ref`,
+      handoff?.artifact_contract_ref,
+    );
+  };
 
   if (!definition.key?.trim()) errors.push('definition.key is required');
   if (!definition.name?.trim()) errors.push('definition.name is required');
@@ -319,8 +338,16 @@ export function validateWorkflowDefinition(
       );
       continue;
     }
+    validateArtifactContractRef(
+      `${definition.key}.states.${stateKey}.artifact_contract.ref`,
+      state.artifact_contract?.ref,
+    );
 
     if (state.type === 'delegation') {
+      validateHandoffArtifactContractRef(
+        `${definition.key}.states.${stateKey}.delegate.handoff`,
+        state.delegate.handoff,
+      );
       if (!roleNames.has(state.delegate.role)) {
         errors.push(
           `${definition.key}.states.${stateKey}.delegate.role "${state.delegate.role}" not defined in roles`,
@@ -337,6 +364,10 @@ export function validateWorkflowDefinition(
             `${definition.key}.states.${stateKey}.on_complete.${outcome}.delegate.role "${transition.delegate.role}" not defined in roles`,
           );
         }
+        validateHandoffArtifactContractRef(
+          `${definition.key}.states.${stateKey}.on_complete.${outcome}.delegate.handoff`,
+          transition.delegate?.handoff,
+        );
       }
     }
 
@@ -353,6 +384,10 @@ export function validateWorkflowDefinition(
             `${definition.key}.states.${stateKey}.on_complete.${outcome}.delegate.role "${transition.delegate.role}" not defined in roles`,
           );
         }
+        validateHandoffArtifactContractRef(
+          `${definition.key}.states.${stateKey}.on_complete.${outcome}.delegate.handoff`,
+          transition.delegate?.handoff,
+        );
       }
     }
 
@@ -447,6 +482,10 @@ export function validateWorkflowDefinition(
             `${definition.key}.states.${stateKey}.on_resume.${action}.delegate.role "${transition.delegate.role}" not defined in roles`,
           );
         }
+        validateHandoffArtifactContractRef(
+          `${definition.key}.states.${stateKey}.on_resume.${action}.delegate.handoff`,
+          transition.delegate?.handoff,
+        );
       }
       for (const [fieldName, transition] of [
         ['on_cancel', state.on_cancel],
@@ -463,7 +502,21 @@ export function validateWorkflowDefinition(
             `${definition.key}.states.${stateKey}.${fieldName}.delegate.role "${transition.delegate.role}" not defined in roles`,
           );
         }
+        validateHandoffArtifactContractRef(
+          `${definition.key}.states.${stateKey}.${fieldName}.delegate.handoff`,
+          transition.delegate?.handoff,
+        );
       }
+    }
+
+    for (const [fieldName, transition] of [
+      ['timeout_policy.on_timeout', state.timeout_policy?.on_timeout],
+      ['retry_policy.on_exhausted', state.retry_policy?.on_exhausted],
+    ] as const) {
+      validateHandoffArtifactContractRef(
+        `${definition.key}.states.${stateKey}.${fieldName}.delegate.handoff`,
+        transition?.delegate?.handoff,
+      );
     }
 
     const evaluatorTransitions = state.evaluator
@@ -488,6 +541,10 @@ export function validateWorkflowDefinition(
           `${definition.key}.states.${stateKey}.evaluator.${fieldName}.delegate.role "${transition.delegate.role}" not defined in roles`,
         );
       }
+      validateHandoffArtifactContractRef(
+        `${definition.key}.states.${stateKey}.evaluator.${fieldName}.delegate.handoff`,
+        transition.delegate?.handoff,
+      );
     }
   }
 

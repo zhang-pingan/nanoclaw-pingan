@@ -51,12 +51,17 @@ var workflowDefinitionViewModeWrap = document.getElementById("workflow-definitio
 var workflowDefinitionViewFormBtn = document.getElementById("workflow-definition-view-form-btn");
 var workflowDefinitionViewJsonBtn = document.getElementById("workflow-definition-view-json-btn");
 var workflowDefinitionViewGraphBtn = document.getElementById("workflow-definition-view-graph-btn");
+var workflowDefinitionContractsToggleBtn = document.getElementById("workflow-definition-contracts-toggle-btn");
 var workflowDefinitionEditorGrid = document.getElementById("workflow-definition-editor-grid");
 var workflowDefinitionFormPanel = document.getElementById("workflow-definition-form-panel");
 var workflowDefinitionEditorNote = document.getElementById("workflow-definition-editor-note");
 var workflowDefinitionJsonPanel = document.getElementById("workflow-definition-json-panel");
 var workflowDefinitionJsonNote = document.getElementById("workflow-definition-json-note");
 var workflowDefinitionJsonEditor = document.getElementById("workflow-definition-json-editor");
+var workflowDefinitionContractsPanel = document.getElementById("workflow-definition-contracts-panel");
+var workflowDefinitionContractsNote = document.getElementById("workflow-definition-contracts-note");
+var workflowDefinitionContractList = document.getElementById("workflow-definition-contract-list");
+var workflowDefinitionContractEditor = document.getElementById("workflow-definition-contract-editor");
 var workflowDefinitionBundleLabelInput = document.getElementById("workflow-definition-bundle-label");
 var workflowDefinitionKeyInput = document.getElementById("workflow-definition-key");
 var workflowDefinitionNameInput = document.getElementById("workflow-definition-name");
@@ -366,6 +371,10 @@ var workflowDefinitionActionOptions = [];
 var workflowDefinitionCreateFieldTypes = ["text", "textarea", "choice", "requirement_select", "file_uploads"];
 var workflowDefinitionRequestSeq = 0;
 var workflowDefinitionSelectGlobalEventsBound = false;
+var workflowDefinitionContractsExpanded = false;
+var workflowArtifactContracts = [];
+var workflowArtifactContractSelectedId = "";
+var workflowArtifactContractEditorDirty = false;
 var cardsRegistry = {};
 var currentCardSelection = null;
 var cardsManagementExpandedGroups = {};
@@ -5605,6 +5614,12 @@ function parseWorkflowDefinitionListText(raw) {
     .filter(Boolean);
 }
 
+function formatWorkflowDefinitionListText(value) {
+  if (Array.isArray(value)) return value.join("\n");
+  if (typeof value === "string") return value;
+  return "";
+}
+
 function getCurrentWorkflowCardRefs() {
   const workflowCards = workflowDefinitionCardsRegistry?.[currentWorkflowDefinitionKey] || {};
   return Object.keys(workflowCards);
@@ -5616,6 +5631,12 @@ function getWorkflowDefinitionSkillOptions() {
 
 function getWorkflowDefinitionActionOptions() {
   return Array.isArray(workflowDefinitionActionOptions) ? workflowDefinitionActionOptions : [];
+}
+
+function getWorkflowArtifactContractOptions() {
+  return (Array.isArray(workflowArtifactContracts) ? workflowArtifactContracts : [])
+    .map((contract) => contract?.id || "")
+    .filter(Boolean);
 }
 
 function getStatusLabelsFromEditorOrEmpty() {
@@ -5638,8 +5659,16 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   const stateOptions = Object.keys(states);
   const entryPointOptions = Object.keys(entryPoints);
   const workflowCards = Object.keys(workflowDefinitionCardsRegistry?.[bundleKey || ""] || {});
+  const artifactContractOptions = getWorkflowArtifactContractOptions();
+  const artifactContractSet = new Set(artifactContractOptions);
   const pushItem = (group, message) => {
     items.push({ group, message });
+  };
+  const pushArtifactContractRefItem = (path, ref) => {
+    const value = String(ref || "").trim();
+    if (value && !artifactContractSet.has(value)) {
+      pushItem("artifact_contract", `${path} 引用了不存在的 artifact contract: ${value}`);
+    }
   };
 
   Object.entries(entryPoints).forEach(([entryKey, entry]) => {
@@ -5658,12 +5687,17 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   });
 
   Object.entries(states).forEach(([stateKey, state]) => {
+    pushArtifactContractRefItem(`states.${stateKey}.artifact_contract.ref`, state?.artifact_contract?.ref);
     if (state?.type === "confirmation") {
       pushItem("states", `states.${stateKey}.type confirmation 已废弃，请改用 interrupt`);
     }
     if (state?.delegate?.role && !roleOptions.includes(state.delegate.role)) {
       pushItem("states", `states.${stateKey}.delegate.role 引用了不存在的 role: ${state.delegate.role}`);
     }
+    pushArtifactContractRefItem(
+      `states.${stateKey}.delegate.handoff.artifact_contract_ref`,
+      state?.delegate?.handoff?.artifact_contract_ref,
+    );
     if (state?.card?.ref && !workflowCards.includes(state.card.ref)) {
       pushItem("cards", `states.${stateKey}.card.ref 引用了不存在的 card: ${state.card.ref}`);
     }
@@ -5710,6 +5744,10 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
       if (transition.card?.ref && !workflowCards.includes(transition.card.ref)) {
         pushItem("cards", `states.${stateKey}.${path}.card.ref 引用了不存在的 card: ${transition.card.ref}`);
       }
+      pushArtifactContractRefItem(
+        `states.${stateKey}.${path}.delegate.handoff.artifact_contract_ref`,
+        transition.delegate?.handoff?.artifact_contract_ref,
+      );
     });
   });
 
@@ -7348,12 +7386,39 @@ function bindWorkflowDefinitionSelectControls(root) {
   });
 }
 
+function renderWorkflowDefinitionHandoffFields(prefix, handoff, options = {}) {
+  const artifactContractOptions = Array.isArray(options.artifactContractOptions)
+    ? options.artifactContractOptions
+    : getWorkflowArtifactContractOptions();
+  return `
+    <div class="workflow-definition-state-inspector-grid">
+      <label class="workflow-definition-field">
+        <span>Artifact Contract</span>
+        ${renderWorkflowDefinitionSelectControl(
+          "data-state-select-field",
+          `${prefix}.artifact_contract_ref`,
+          artifactContractOptions,
+          handoff?.artifact_contract_ref || "",
+          "选择 contract",
+        )}
+      </label>
+    </div>
+    <label class="workflow-definition-field workflow-definition-field-block">
+      <span>Success Criteria</span>
+      <textarea data-state-field="${escapeAttribute(prefix)}.success_criteria" rows="3" placeholder="每行一个验收条件">${escapeHtml(formatWorkflowDefinitionListText(handoff?.success_criteria || []))}</textarea>
+    </label>
+  `;
+}
+
 function buildStateTransitionInspectorHtml(prefix, transition, options = {}) {
   const safe = transition || {};
   const stateOptions = Array.isArray(options.stateOptions) ? options.stateOptions : Object.keys(getStatesFromEditor());
   const roleOptions = Array.isArray(options.roleOptions) ? options.roleOptions : Object.keys(getRolesFromEditor());
   const cardOptions = Array.isArray(options.cardOptions) ? options.cardOptions : getCurrentWorkflowCardRefs();
   const skillOptions = Array.isArray(options.skillOptions) ? options.skillOptions : getWorkflowDefinitionSkillOptions();
+  const artifactContractOptions = Array.isArray(options.artifactContractOptions)
+    ? options.artifactContractOptions
+    : getWorkflowArtifactContractOptions();
   return `
     <div class="workflow-definition-state-inspector-grid">
       <label class="workflow-definition-field">
@@ -7377,6 +7442,12 @@ function buildStateTransitionInspectorHtml(prefix, transition, options = {}) {
       <span>Task Template</span>
       <textarea data-state-field="${escapeAttribute(prefix)}.delegate.task_template" rows="3">${escapeHtml(safe.delegate?.task_template || "")}</textarea>
     </label>
+    <div class="workflow-definition-handoff-inspector">
+      <div class="workflow-definition-state-inspector-title">Delegate Handoff</div>
+      ${renderWorkflowDefinitionHandoffFields(`${prefix}.delegate.handoff`, safe.delegate?.handoff, {
+        artifactContractOptions,
+      })}
+    </div>
     <label class="workflow-definition-field workflow-definition-field-block">
       <span>Notify Template</span>
       <textarea data-state-field="${escapeAttribute(prefix)}.notify.template" rows="3">${escapeHtml(safe.notify?.template || "")}</textarea>
@@ -7619,6 +7690,10 @@ function bindWorkflowDefinitionStateInspectorEvents() {
             state.resume_payload_schema = state.resume_payload_schema || {};
             state.resume_payload_schema.schema = JSON.parse(text);
           }
+          return cleanupStateObject(state);
+        }
+        if (path === "delegate.handoff.success_criteria" || path.endsWith(".delegate.handoff.success_criteria")) {
+          setNestedValue(state, path, parseWorkflowDefinitionListText(el.value), { array: true });
           return cleanupStateObject(state);
         }
         const fieldValue = el.hasAttribute("data-workflow-definition-select-button")
@@ -8088,14 +8163,24 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
   const stateOptions = Object.keys(states);
   const cardOptions = getCurrentWorkflowCardRefs();
   const skillOptions = getWorkflowDefinitionSkillOptions();
+  const artifactContractOptions = getWorkflowArtifactContractOptions();
+  const artifactContractSet = new Set(artifactContractOptions);
   const statusLabels = getStatusLabelsFromEditorOrEmpty();
   const selectedStatusLabel = statusLabels[workflowDefinitionSelectedStateKey] || "";
-  const selectOptions = { roleOptions, stateOptions, cardOptions, skillOptions };
+  const selectOptions = { roleOptions, stateOptions, cardOptions, skillOptions, artifactContractOptions };
   const validationItems = [];
+  const pushUnknownArtifactContract = (path, ref) => {
+    const value = String(ref || "").trim();
+    if (value && !artifactContractSet.has(value)) {
+      validationItems.push(`${path} 引用了不存在的 artifact contract: ${value}`);
+    }
+  };
+  pushUnknownArtifactContract("artifact_contract.ref", selectedState.artifact_contract?.ref);
   if (selectedState.type === "delegation") {
     if (selectedState.delegate?.role && !roleOptions.includes(selectedState.delegate.role)) {
       validationItems.push(`delegate.role 引用了不存在的 role: ${selectedState.delegate.role}`);
     }
+    pushUnknownArtifactContract("delegate.handoff.artifact_contract_ref", selectedState.delegate?.handoff?.artifact_contract_ref);
     if (selectedState.on_complete?.success?.target && !stateOptions.includes(selectedState.on_complete.success.target)) {
       validationItems.push(`success.target 引用了不存在的 state: ${selectedState.on_complete.success.target}`);
     }
@@ -8126,6 +8211,14 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
     ) {
       validationItems.push(`failure.card.ref 引用了不存在的 card: ${selectedState.on_complete.failure.card.ref}`);
     }
+    pushUnknownArtifactContract(
+      "success.delegate.handoff.artifact_contract_ref",
+      selectedState.on_complete?.success?.delegate?.handoff?.artifact_contract_ref,
+    );
+    pushUnknownArtifactContract(
+      "failure.delegate.handoff.artifact_contract_ref",
+      selectedState.on_complete?.failure?.delegate?.handoff?.artifact_contract_ref,
+    );
   }
   if (selectedState.type === "confirmation") {
     validationItems.push("confirmation 已废弃，请将 Type 改为 interrupt");
@@ -8153,6 +8246,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
       if (transition.card?.ref && !cardOptions.includes(transition.card.ref)) {
         validationItems.push(`${path}.card.ref 引用了不存在的 card: ${transition.card.ref}`);
       }
+      pushUnknownArtifactContract(`${path}.delegate.handoff.artifact_contract_ref`, transition.delegate?.handoff?.artifact_contract_ref);
     });
   }
   if (selectedState.type === "system") {
@@ -8191,6 +8285,7 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
       if (transition.card?.ref && !cardOptions.includes(transition.card.ref)) {
         validationItems.push(`${path}.card.ref 引用了不存在的 card: ${transition.card.ref}`);
       }
+      pushUnknownArtifactContract(`${path}.delegate.handoff.artifact_contract_ref`, transition.delegate?.handoff?.artifact_contract_ref);
     });
   }
 
@@ -8215,6 +8310,10 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
         <label class="workflow-definition-field">
           <span>Status Label</span>
           <input data-state-status-label-field="value" type="text" value="${escapeAttribute(selectedStatusLabel)}" placeholder="${escapeAttribute(selectedState.label || workflowDefinitionSelectedStateKey)}" />
+        </label>
+        <label class="workflow-definition-field">
+          <span>Artifact Contract</span>
+          ${renderWorkflowDefinitionSelectControl("data-state-select-field", "artifact_contract.ref", artifactContractOptions, selectedState.artifact_contract?.ref || "", "选择 contract")}
         </label>
       </div>
       <label class="workflow-definition-field">
@@ -8251,6 +8350,10 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
           <span>Task Template</span>
           <textarea data-state-field="delegate.task_template" rows="3">${escapeHtml(selectedState.delegate?.task_template || "")}</textarea>
         </label>
+        <div class="workflow-definition-handoff-inspector">
+          <div class="workflow-definition-state-inspector-title">Delegate Handoff</div>
+          ${renderWorkflowDefinitionHandoffFields("delegate.handoff", selectedState.delegate?.handoff, selectOptions)}
+        </div>
       </section>
       <section class="workflow-definition-state-inspector-section">
         <div class="workflow-definition-state-inspector-title">On Complete Success</div>
@@ -9079,6 +9182,179 @@ function showWorkflowDefinitionVersionContextMenu(e, version) {
   requestAnimationFrame(() => document.addEventListener("click", closeHandler));
 }
 
+function setWorkflowArtifactContracts(rawContracts) {
+  workflowArtifactContracts = (Array.isArray(rawContracts) ? rawContracts : [])
+    .filter((contract) => contract && typeof contract === "object" && contract.id)
+    .sort((a, b) => String(a.id || "").localeCompare(String(b.id || "")));
+  if (
+    !workflowArtifactContractSelectedId ||
+    !workflowArtifactContracts.some((contract) => contract.id === workflowArtifactContractSelectedId)
+  ) {
+    workflowArtifactContractSelectedId = workflowArtifactContracts[0]?.id || "";
+  }
+}
+
+async function loadWorkflowArtifactContracts() {
+  const res = await apiFetch("/api/workflow-artifact-contracts");
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || `HTTP ${res.status}`);
+  }
+  setWorkflowArtifactContracts(data?.contracts || []);
+  workflowArtifactContractEditorDirty = false;
+  return workflowArtifactContracts;
+}
+
+function getSelectedWorkflowArtifactContract() {
+  return workflowArtifactContracts.find((contract) => contract.id === workflowArtifactContractSelectedId) || null;
+}
+
+function getEditableWorkflowArtifactContract(contract) {
+  const editable = cloneJson(contract || {});
+  if (editable && typeof editable === "object") delete editable.source_file;
+  return editable;
+}
+
+function syncWorkflowDefinitionContractsPanelState() {
+  if (workflowDefinitionContractsToggleBtn) {
+    workflowDefinitionContractsToggleBtn.classList.toggle("active", workflowDefinitionContractsExpanded);
+  }
+  if (workflowDefinitionContractsPanel) {
+    workflowDefinitionContractsPanel.classList.toggle(
+      "hidden",
+      !workflowDefinitionContractsExpanded || !currentWorkflowDefinitionDetail,
+    );
+  }
+}
+
+function renderWorkflowDefinitionContractList() {
+  if (!workflowDefinitionContractList) return;
+  if (!workflowArtifactContracts.length) {
+    workflowDefinitionContractList.innerHTML =
+      '<div class="workflow-definition-state-list-empty">暂无 artifact contract。</div>';
+    return;
+  }
+  workflowDefinitionContractList.innerHTML = workflowArtifactContracts
+    .map(
+      (contract) => `
+        <button
+          type="button"
+          class="workflow-definition-state-list-item${workflowArtifactContractSelectedId === contract.id ? " active" : ""}"
+          data-artifact-contract-select="${escapeAttribute(contract.id)}"
+        >
+          <strong>${escapeHtml(contract.id || "")}</strong>
+          <span>${escapeHtml(contract.source_file || contract.description || "--")}</span>
+        </button>
+      `,
+    )
+    .join("");
+  Array.from(workflowDefinitionContractList.querySelectorAll("[data-artifact-contract-select]")).forEach((button) => {
+    button.addEventListener("click", async () => {
+      const contractId = button.getAttribute("data-artifact-contract-select") || "";
+      if (!contractId || contractId === workflowArtifactContractSelectedId) return;
+      if (
+        workflowArtifactContractEditorDirty &&
+        !(await openConfirmDialog("当前 contract 有未保存修改，切换后会丢失。继续吗？", {
+          title: "切换 Contract",
+        }))
+      ) {
+        return;
+      }
+      workflowArtifactContractSelectedId = contractId;
+      workflowArtifactContractEditorDirty = false;
+      renderWorkflowDefinitionContractsPanel();
+    });
+  });
+}
+
+function renderWorkflowDefinitionContractEditor() {
+  if (!workflowDefinitionContractEditor) return;
+  const selectedContract = getSelectedWorkflowArtifactContract();
+  if (!selectedContract) {
+    workflowDefinitionContractEditor.innerHTML =
+      '<div class="workflow-definition-state-inspector-empty">选择一个 contract 查看 JSON。</div>';
+    return;
+  }
+  const editableContract = getEditableWorkflowArtifactContract(selectedContract);
+  workflowDefinitionContractEditor.innerHTML = `
+    <div class="workflow-definition-state-inspector-head">
+      <span>${escapeHtml(selectedContract.id || "")}</span>
+      <div class="workflow-definition-state-head-actions">
+        <button type="button" class="btn-ghost" data-artifact-contract-save="${escapeAttribute(selectedContract.id)}">保存</button>
+      </div>
+    </div>
+    <div class="workflow-definition-state-inspector-body">
+      <div class="workflow-definition-panel-note">${escapeHtml(selectedContract.source_file || "")}</div>
+      <label class="workflow-definition-field workflow-definition-field-block">
+        <span>Contract JSON</span>
+        <textarea data-artifact-contract-json="${escapeAttribute(selectedContract.id)}" rows="22" spellcheck="false">${escapeHtml(stringifyPrettyJson(editableContract))}</textarea>
+      </label>
+    </div>
+  `;
+  const textarea = workflowDefinitionContractEditor.querySelector("[data-artifact-contract-json]");
+  if (textarea) {
+    textarea.addEventListener("input", () => {
+      workflowArtifactContractEditorDirty = true;
+    });
+  }
+  const saveBtn = workflowDefinitionContractEditor.querySelector("[data-artifact-contract-save]");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      await saveWorkflowArtifactContractFromEditor();
+    });
+  }
+}
+
+function renderWorkflowDefinitionContractsPanel() {
+  syncWorkflowDefinitionContractsPanelState();
+  if (!workflowDefinitionContractsPanel || workflowDefinitionContractsPanel.classList.contains("hidden")) return;
+  if (workflowDefinitionContractsNote) {
+    workflowDefinitionContractsNote.textContent = workflowArtifactContracts.length
+      ? `${workflowArtifactContracts.length} 个 contract`
+      : "暂无 contract";
+  }
+  renderWorkflowDefinitionContractList();
+  renderWorkflowDefinitionContractEditor();
+}
+
+async function saveWorkflowArtifactContractFromEditor() {
+  const textarea = workflowDefinitionContractEditor?.querySelector("[data-artifact-contract-json]");
+  const ref = textarea?.getAttribute("data-artifact-contract-json") || workflowArtifactContractSelectedId;
+  if (!textarea || !ref) return;
+  let contract;
+  try {
+    contract = JSON.parse(textarea.value || "{}");
+    if (!contract || typeof contract !== "object" || Array.isArray(contract)) {
+      throw new Error("Contract JSON 必须是对象");
+    }
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Contract JSON 格式不合法", 2400);
+    return;
+  }
+
+  const saveBtn = workflowDefinitionContractEditor?.querySelector("[data-artifact-contract-save]");
+  if (saveBtn) saveBtn.disabled = true;
+  try {
+    const res = await apiFetch(`/api/workflow-artifact-contracts/${encodeURIComponent(ref)}`, {
+      method: "POST",
+      body: JSON.stringify({ contract }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    workflowArtifactContractSelectedId = data?.contract?.id || ref;
+    workflowArtifactContractEditorDirty = false;
+    await loadWorkflowArtifactContracts();
+    showToast(`已保存 ${ref}`);
+    renderWorkflowDefinitionContractsPanel();
+  } catch (err) {
+    console.error("Failed to save workflow artifact contract:", err);
+    alert(err instanceof Error ? err.message : "保存 artifact contract 失败");
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
 function renderWorkflowDefinitionVersions() {
   if (!workflowDefinitionVersions || !workflowDefinitionVersionSummary) return;
   const versions = getWorkflowDefinitionVersionList();
@@ -9123,6 +9399,7 @@ function renderWorkflowDefinitionDetailPane() {
   if (!currentWorkflowDefinitionDetail) {
     workflowDefinitionEmpty.classList.remove("hidden");
     workflowDefinitionDetail.classList.add("hidden");
+    syncWorkflowDefinitionContractsPanelState();
     return;
   }
 
@@ -9196,6 +9473,10 @@ function renderWorkflowDefinitionDetailPane() {
   }
   if (workflowDefinitionViewGraphBtn) {
     workflowDefinitionViewGraphBtn.classList.toggle("active", workflowDefinitionViewMode === "graph");
+  }
+  syncWorkflowDefinitionContractsPanelState();
+  if (workflowDefinitionContractsExpanded && !workflowArtifactContractEditorDirty) {
+    renderWorkflowDefinitionContractsPanel();
   }
   if (displayDefinition) {
     renderWorkflowDefinitionEditor(displayDefinition, bundle);
@@ -9294,18 +9575,20 @@ async function loadWorkflowDefinitions(options = {}) {
     workflowDefinitionRefreshBtn.classList.add("spinning");
   }
   try {
-    const [definitionsRes, cardsRes, groupsRes, skillsRes, actionsRes] = await Promise.all([
+    const [definitionsRes, cardsRes, groupsRes, skillsRes, actionsRes, contractsRes] = await Promise.all([
       apiFetch("/api/workflow-definitions"),
       apiFetch("/api/cards"),
       apiFetch("/api/groups?scope=all"),
       apiFetch("/api/skills"),
       apiFetch("/api/workflow-actions"),
+      apiFetch("/api/workflow-artifact-contracts"),
     ]);
     const data = await definitionsRes.json();
     const cardsData = await cardsRes.json();
     const groupsData = await groupsRes.json().catch(() => ({}));
     const skillsData = await skillsRes.json().catch(() => ({}));
     const actionsData = await actionsRes.json().catch(() => ({}));
+    const contractsData = await contractsRes.json().catch(() => ({}));
     if (!definitionsRes.ok) {
       throw new Error(data?.error || `HTTP ${definitionsRes.status}`);
     }
@@ -9322,6 +9605,7 @@ async function loadWorkflowDefinitions(options = {}) {
             label: action.description ? `${action.name} - ${action.description}` : action.name || "",
           }))
         : [];
+    setWorkflowArtifactContracts(contractsRes.ok && Array.isArray(contractsData?.contracts) ? contractsData.contracts : []);
     workflowDefinitionBundles = Array.isArray(data.definitions) ? data.definitions : [];
     if (!preserveSelection || !workflowDefinitionBundles.some((bundle) => bundle.key === currentWorkflowDefinitionKey)) {
       currentWorkflowDefinitionKey = workflowDefinitionBundles[0]?.key || "";
@@ -21090,6 +21374,15 @@ if (workflowDefinitionViewJsonBtn) {
 if (workflowDefinitionViewGraphBtn) {
   workflowDefinitionViewGraphBtn.addEventListener("click", () => {
     setWorkflowDefinitionViewMode("graph");
+  });
+}
+if (workflowDefinitionContractsToggleBtn) {
+  workflowDefinitionContractsToggleBtn.addEventListener("click", () => {
+    workflowDefinitionContractsExpanded = !workflowDefinitionContractsExpanded;
+    syncWorkflowDefinitionContractsPanelState();
+    if (workflowDefinitionContractsExpanded) {
+      renderWorkflowDefinitionContractsPanel();
+    }
   });
 }
 if (workflowDefinitionDiffCloseBtn) {

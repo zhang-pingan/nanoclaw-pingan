@@ -6932,6 +6932,18 @@ body.quick-chat-window .quick-chat-input {
   cursor: default;
 }
 
+.workflow-definition-contracts-editor {
+  margin-bottom: 0;
+}
+
+.workflow-definition-contracts-panel .workflow-definition-state-list {
+  max-height: 520px;
+}
+
+.workflow-definition-contracts-panel textarea {
+  font: 13px/1.65 SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
 .workflow-definition-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

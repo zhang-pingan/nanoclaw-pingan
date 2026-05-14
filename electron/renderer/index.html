@@ -1065,6 +1065,7 @@
                     <button id="workflow-definition-view-form-btn" type="button" class="btn-ghost">表单</button>
                     <button id="workflow-definition-view-json-btn" type="button" class="btn-ghost">JSON</button>
                     <button id="workflow-definition-view-graph-btn" type="button" class="btn-ghost">流程视图</button>
+                    <button id="workflow-definition-contracts-toggle-btn" type="button" class="btn-ghost">契约</button>
                   </div>
                 </div>
               </div>
@@ -1196,6 +1197,24 @@
                 <div id="workflow-definition-json-note" class="workflow-definition-panel-note"></div>
               </div>
               <textarea id="workflow-definition-json-editor" class="workflow-definition-json-editor" spellcheck="false"></textarea>
+            </section>
+
+            <section id="workflow-definition-contracts-panel" class="workflow-definition-panel workflow-definition-contracts-panel hidden">
+              <div class="workflow-definition-panel-head">
+                <div class="workflow-definition-panel-title">Artifact Contracts</div>
+                <div id="workflow-definition-contracts-note" class="workflow-definition-panel-note"></div>
+              </div>
+              <div class="workflow-definition-state-editor workflow-definition-contracts-editor">
+                <div class="workflow-definition-state-list-wrap">
+                  <div class="workflow-definition-state-list-head">
+                    <span>Contract List</span>
+                  </div>
+                  <div id="workflow-definition-contract-list" class="workflow-definition-state-list"></div>
+                </div>
+                <div id="workflow-definition-contract-editor" class="workflow-definition-state-inspector">
+                  <div class="workflow-definition-state-inspector-empty">选择一个 contract 查看 JSON。</div>
+                </div>
+              </div>
             </section>
 
             <div class="hidden" aria-hidden="true">

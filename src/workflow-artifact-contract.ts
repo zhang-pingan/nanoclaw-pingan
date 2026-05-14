@@ -24,7 +24,7 @@ type JsonSchema = {
   enum?: unknown[];
 };
 
-interface WorkflowArtifactContract {
+export interface WorkflowArtifactContract {
   id: string;
   version: number;
   description?: string;
@@ -53,6 +53,7 @@ export interface WorkflowArtifactPayloadValidationIssue {
 }
 
 let cachedContracts: Record<string, WorkflowArtifactContract> | null = null;
+let cachedContractSources: Record<string, string> | null = null;
 
 function contractsDir(): string {
   return path.join(PROJECT_ROOT, 'container', 'artifact-contracts');
@@ -65,8 +66,10 @@ export function loadWorkflowArtifactContracts(): Record<
   if (cachedContracts) return cachedContracts;
   const dir = contractsDir();
   const registry: Record<string, WorkflowArtifactContract> = {};
+  const sources: Record<string, string> = {};
   if (!fs.existsSync(dir)) {
     cachedContracts = registry;
+    cachedContractSources = sources;
     return registry;
   }
 
@@ -81,6 +84,7 @@ export function loadWorkflowArtifactContracts(): Record<
       for (const contract of contracts) {
         if (!contract?.id) continue;
         registry[contract.id] = contract;
+        sources[contract.id] = fullPath;
       }
     } catch (err) {
       logger.error(
@@ -91,6 +95,7 @@ export function loadWorkflowArtifactContracts(): Record<
   }
 
   cachedContracts = registry;
+  cachedContractSources = sources;
   return registry;
 }
 
@@ -99,6 +104,124 @@ export function getWorkflowArtifactContract(
 ): WorkflowArtifactContract | undefined {
   if (!ref) return undefined;
   return loadWorkflowArtifactContracts()[ref];
+}
+
+export function listWorkflowArtifactContracts(): Array<{
+  contract: WorkflowArtifactContract;
+  source_file: string | null;
+}> {
+  const registry = loadWorkflowArtifactContracts();
+  return Object.entries(registry)
+    .map(([id, contract]) => ({
+      contract,
+      source_file: cachedContractSources?.[id] || null,
+    }))
+    .sort((a, b) => a.contract.id.localeCompare(b.contract.id));
+}
+
+function normalizeWorkflowArtifactContract(
+  value: unknown,
+): WorkflowArtifactContract {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('contract must be a JSON object');
+  }
+  const rawContract = value as Record<string, unknown>;
+  delete rawContract.source_file;
+  const contract = rawContract as unknown as WorkflowArtifactContract;
+  if (typeof contract.id !== 'string' || !contract.id.trim()) {
+    throw new Error('contract.id is required');
+  }
+  if (
+    contract.version !== undefined &&
+    (typeof contract.version !== 'number' || !Number.isFinite(contract.version))
+  ) {
+    throw new Error('contract.version must be a number');
+  }
+  if (contract.payload !== undefined) {
+    if (
+      !contract.payload ||
+      typeof contract.payload !== 'object' ||
+      Array.isArray(contract.payload)
+    ) {
+      throw new Error('contract.payload must be an object');
+    }
+    if (
+      contract.payload.required !== undefined &&
+      !Array.isArray(contract.payload.required)
+    ) {
+      throw new Error('contract.payload.required must be an array');
+    }
+  }
+  if (contract.files !== undefined && !Array.isArray(contract.files)) {
+    throw new Error('contract.files must be an array');
+  }
+  return {
+    ...contract,
+    id: contract.id.trim(),
+    version: contract.version ?? 1,
+  };
+}
+
+export function saveWorkflowArtifactContract(input: {
+  ref: string;
+  contract: unknown;
+}): { contract?: WorkflowArtifactContract; source_file?: string; error?: string } {
+  const ref = input.ref.trim();
+  if (!ref) return { error: 'contract id required' };
+
+  let contract: WorkflowArtifactContract;
+  try {
+    contract = normalizeWorkflowArtifactContract(input.contract);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+  if (contract.id !== ref) {
+    return { error: 'contract.id cannot be changed from this editor' };
+  }
+
+  loadWorkflowArtifactContracts();
+  const sourceFile = cachedContractSources?.[ref];
+  if (!sourceFile) {
+    return { error: `Artifact contract "${ref}" not found` };
+  }
+
+  let parsed: WorkflowArtifactContract | WorkflowArtifactContract[];
+  try {
+    parsed = JSON.parse(fs.readFileSync(sourceFile, 'utf-8')) as
+      | WorkflowArtifactContract
+      | WorkflowArtifactContract[];
+  } catch (err) {
+    return {
+      error: `Failed to read source file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  let next: WorkflowArtifactContract | WorkflowArtifactContract[];
+  if (Array.isArray(parsed)) {
+    let found = false;
+    next = parsed.map((item) => {
+      if (item?.id !== ref) return item;
+      found = true;
+      return contract;
+    });
+    if (!found) {
+      return { error: `Artifact contract "${ref}" not found in source file` };
+    }
+  } else if (parsed?.id === ref) {
+    next = contract;
+  } else {
+    return { error: `Artifact contract "${ref}" not found in source file` };
+  }
+
+  try {
+    fs.writeFileSync(sourceFile, `${JSON.stringify(next, null, 2)}\n`);
+    clearWorkflowArtifactContractCache();
+    return { contract, source_file: sourceFile };
+  } catch (err) {
+    return {
+      error: `Failed to save artifact contract: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 function resolveContractPath(workflow: Workflow, rawPath: string): string {
@@ -380,6 +503,11 @@ export function evaluateWorkflowArtifactContract(input: {
   };
 }
 
-export function clearWorkflowArtifactContractCacheForTest(): void {
+export function clearWorkflowArtifactContractCache(): void {
   cachedContracts = null;
+  cachedContractSources = null;
+}
+
+export function clearWorkflowArtifactContractCacheForTest(): void {
+  clearWorkflowArtifactContractCache();
 }

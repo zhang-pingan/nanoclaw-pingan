@@ -107,6 +107,10 @@ import {
   getWorkflowTypeConfig,
   loadWorkflowConfigs,
 } from '../workflow-config.js';
+import {
+  listWorkflowArtifactContracts,
+  saveWorkflowArtifactContract,
+} from '../workflow-artifact-contract.js';
 import { listWorkflowActionHandlerDetails } from '../workflow-actions/index.js';
 import {
   cancelWorkflow,
@@ -1172,6 +1176,18 @@ class WebChannel {
       }
       if (pathname === '/api/workflow-definitions' && req.method === 'GET') {
         return this.apiListWorkflowDefinitions(res);
+      }
+      if (
+        pathname === '/api/workflow-artifact-contracts' &&
+        req.method === 'GET'
+      ) {
+        return this.apiListWorkflowArtifactContracts(res);
+      }
+      if (pathname.startsWith('/api/workflow-artifact-contracts/')) {
+        const suffix = pathname.slice('/api/workflow-artifact-contracts/'.length);
+        if (req.method === 'POST') {
+          return this.apiSaveWorkflowArtifactContract(suffix, req, res);
+        }
       }
       if (pathname === '/api/workflow-actions' && req.method === 'GET') {
         return this.apiListWorkflowActions(res);
@@ -2993,6 +3009,55 @@ class WebChannel {
       JSON.stringify({
         definitions: bundles,
         workflow_create_field_types: WORKFLOW_CREATE_FIELD_TYPES,
+      }),
+    );
+  }
+
+  private apiListWorkflowArtifactContracts(res: http.ServerResponse): void {
+    const contracts = listWorkflowArtifactContracts().map((entry) => ({
+      ...entry.contract,
+      source_file: entry.source_file
+        ? path.relative(PROJECT_ROOT, entry.source_file)
+        : null,
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ contracts }));
+  }
+
+  private async apiSaveWorkflowArtifactContract(
+    encodedRef: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    const data = body as { contract?: unknown };
+    const ref = decodeURIComponent(encodedRef || '');
+    const result = saveWorkflowArtifactContract({
+      ref,
+      contract: data.contract ?? body,
+    });
+    if (result.error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: result.error }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        contract: result.contract,
+        source_file: result.source_file
+          ? path.relative(PROJECT_ROOT, result.source_file)
+          : null,
       }),
     );
   }
