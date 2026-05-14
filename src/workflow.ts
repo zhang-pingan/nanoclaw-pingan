@@ -154,6 +154,10 @@ interface ParsedDelegationPayload {
   }>;
 }
 
+const WORKFLOW_CONTEXT_STAGE_RESULTS_KEY = 'stage_results';
+const WORKFLOW_CONTEXT_LATEST_DELEGATION_RESULT_KEY =
+  'latest_delegation_result';
+
 interface WorkflowCheckpointPayload {
   workflowId: string;
   workflowType: string;
@@ -800,6 +804,15 @@ function resolveSystemTemplateExpression(
   if (expression.startsWith('steps.')) {
     return getNestedValue(steps, expression.slice('steps.'.length).split('.'));
   }
+  if (expression.startsWith('context.')) {
+    return getNestedValue(
+      vars.context,
+      expression.slice('context.'.length).split('.'),
+    );
+  }
+  if (expression.includes('.')) {
+    return getNestedValue(vars, expression.split('.'));
+  }
   return vars[expression];
 }
 
@@ -1436,6 +1449,36 @@ function getDelegationPayload(
   return parseDelegationPayload(delegation?.result);
 }
 
+function buildDelegationResultContextPatch(
+  workflow: Workflow,
+  delegation: Delegation,
+  payload: unknown,
+): WorkflowContext {
+  if (!isPlainObject(payload) || Object.keys(payload).length === 0) return {};
+
+  const existingStageResults = isPlainObject(
+    workflow.context[WORKFLOW_CONTEXT_STAGE_RESULTS_KEY],
+  )
+    ? (workflow.context[WORKFLOW_CONTEXT_STAGE_RESULTS_KEY] as Record<
+        string,
+        unknown
+      >)
+    : {};
+  const payloadRecord = { ...payload };
+
+  return {
+    [WORKFLOW_CONTEXT_STAGE_RESULTS_KEY]: {
+      ...existingStageResults,
+      [workflow.status]: payloadRecord,
+    },
+    [WORKFLOW_CONTEXT_LATEST_DELEGATION_RESULT_KEY]: {
+      state_key: workflow.status,
+      delegation_id: delegation.id,
+      payload: payloadRecord,
+    },
+  };
+}
+
 /** Get terminal state names from a workflow type config. */
 function getTerminalStates(config: WorkflowTypeConfig): string[] {
   return Object.entries(config.states)
@@ -1493,6 +1536,8 @@ function buildTemplateVars(
   },
 ): TemplateVars {
   return {
+    ...workflow.context,
+    context: workflow.context,
     ...buildContextTemplateVars(workflow.context),
     name: workflow.name,
     workflow_type: workflow.workflow_type,
@@ -4027,6 +4072,10 @@ export function onDelegationComplete(delegationId: string): void {
   const payload = getDelegationPayload(delegation);
   const workflowUpdates: Parameters<typeof updateWorkflow>[1] = {};
   const contextUpdates: WorkflowContext = {};
+  Object.assign(
+    contextUpdates,
+    buildDelegationResultContextPatch(workflow, delegation, payload),
+  );
   if (payload.summary) {
     resultSummary = payload.summary;
   } else if (payload.total !== undefined) {

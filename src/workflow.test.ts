@@ -2002,4 +2002,155 @@ describe('system workflow action nodes', () => {
       }
     }
   });
+
+  it('stores delegation payloads under stage context and resolves dotted paths', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalCapture = config.states.capture_result;
+    const originalConsume = config.states.consume_stage_result;
+    const originalNext = config.states.next_stage_from_result;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'capture_result',
+    };
+    config.states.capture_result = {
+      type: 'delegation',
+      label: '采集阶段结果',
+      role: 'planner',
+      skill: 'plan-requirement',
+      task_template: '返回结构化阶段结果',
+      on_complete: {
+        success: { target: 'consume_stage_result' },
+        failure: { target: 'cancelled' },
+      },
+    };
+    config.states.consume_stage_result = {
+      type: 'system',
+      label: '消费阶段结果',
+      run: {
+        steps: [
+          {
+            id: 'copy',
+            uses: 'context.set',
+            with: {
+              values: {
+                stage_result_url:
+                  '{{context.stage_results.capture_result.deploy.url}}',
+                latest_result_build_id:
+                  '{{latest_delegation_result.payload.build_id}}',
+                latest_result_summary:
+                  '{{context.latest_delegation_result.payload.summary}}',
+                deploy_object:
+                  '{{context.stage_results.capture_result.deploy}}',
+              },
+            },
+          },
+        ],
+      },
+      on_complete: {
+        success: { target: 'next_stage_from_result' },
+        failure: { target: 'cancelled' },
+      },
+    };
+    config.states.next_stage_from_result = {
+      type: 'delegation',
+      label: '读取阶段结果',
+      role: 'planner',
+      skill: 'plan-requirement',
+      task_template:
+        '部署地址：{{context.stage_results.capture_result.deploy.url}}\n构建：{{latest_delegation_result.payload.build_id}}',
+      on_complete: {
+        success: { target: 'passed' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'Stage result flow',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'stage result should be namespaced',
+      });
+
+      expect(result.error).toBeUndefined();
+      const [delegation] = getDelegationsByWorkflow(result.workflowId);
+      expect(delegation).toBeDefined();
+
+      updateDelegation(delegation!.id, {
+        status: 'completed',
+        outcome: 'success',
+        result: buildStructuredResult({
+          main_branch: 'main-from-result',
+          build_id: 'build-123',
+          deploy: {
+            url: 'https://staging.example.com',
+            env: 'staging',
+          },
+        }),
+      });
+      onDelegationComplete(delegation!.id);
+
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.status).toBe('next_stage_from_result');
+      expect(workflow?.context.main_branch).toBe('main-from-result');
+      expect(workflow?.context.stage_result_url).toBe(
+        'https://staging.example.com',
+      );
+      expect(workflow?.context.latest_result_build_id).toBe('build-123');
+      expect(workflow?.context.latest_result_summary).toBe('阶段完成');
+      expect(workflow?.context.deploy_object).toEqual({
+        url: 'https://staging.example.com',
+        env: 'staging',
+      });
+      expect(workflow?.context.stage_results).toMatchObject({
+        capture_result: {
+          verdict: 'passed',
+          summary: '阶段完成',
+          main_branch: 'main-from-result',
+          build_id: 'build-123',
+          deploy: {
+            url: 'https://staging.example.com',
+            env: 'staging',
+          },
+        },
+      });
+      expect(workflow?.context.latest_delegation_result).toMatchObject({
+        state_key: 'capture_result',
+        delegation_id: delegation!.id,
+        payload: {
+          build_id: 'build-123',
+          deploy: {
+            url: 'https://staging.example.com',
+          },
+        },
+      });
+      const delegations = getDelegationsByWorkflow(result.workflowId);
+      expect(delegations).toHaveLength(2);
+      expect(delegations[1]?.task).toContain(
+        '部署地址：https://staging.example.com',
+      );
+      expect(delegations[1]?.task).toContain('构建：build-123');
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalCapture) {
+        config.states.capture_result = originalCapture;
+      } else {
+        delete config.states.capture_result;
+      }
+      if (originalConsume) {
+        config.states.consume_stage_result = originalConsume;
+      } else {
+        delete config.states.consume_stage_result;
+      }
+      if (originalNext) {
+        config.states.next_stage_from_result = originalNext;
+      } else {
+        delete config.states.next_stage_from_result;
+      }
+    }
+  });
 });

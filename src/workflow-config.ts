@@ -302,26 +302,68 @@ export interface TemplateVars {
   delegation_result?: string;
   result_summary?: string;
   revision_text?: string;
-  [key: string]: string | number | undefined;
+  context?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 /**
  * Render a template string, replacing {{key}} placeholders with values.
  * Also supports {{role_folder:ROLE_NAME}} to insert a role's group folder.
  */
+function isTemplateRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getTemplatePathValue(value: unknown, pathName: string): unknown {
+  if (!pathName) return undefined;
+  let current = value;
+  for (const part of pathName.split('.')) {
+    if (!isTemplateRecord(current)) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+function stringifyTemplateValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function resolveTemplateValue(
+  expression: string,
+  vars: TemplateVars,
+  roleFolders?: Record<string, string>,
+): unknown {
+  const key = expression.trim();
+  if (key.startsWith('role_folder:') && roleFolders) {
+    const roleName = key.slice('role_folder:'.length);
+    return roleFolders[roleName] || '';
+  }
+  if (key.startsWith('context.')) {
+    return getTemplatePathValue(vars.context, key.slice('context.'.length));
+  }
+  if (key.includes('.')) {
+    return getTemplatePathValue(vars, key);
+  }
+  return vars[key];
+}
+
 export function renderTemplate(
   template: string,
   vars: TemplateVars,
   roleFolders?: Record<string, string>,
 ): string {
-  return template.replace(/\{\{(\w+(?::\w+)?)\}\}/g, (_match, key: string) => {
-    if (key.startsWith('role_folder:') && roleFolders) {
-      const roleName = key.slice('role_folder:'.length);
-      return roleFolders[roleName] || '';
-    }
-    const val = vars[key];
-    return val !== undefined ? String(val) : '';
-  });
+  return template.replace(/\{\{([^{}]+)\}\}/g, (_match, key: string) =>
+    stringifyTemplateValue(resolveTemplateValue(key, vars, roleFolders)),
+  );
 }
 
 // -------------------------------------------------------
