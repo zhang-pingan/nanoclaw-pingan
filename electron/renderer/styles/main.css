@@ -7113,6 +7113,10 @@ body.quick-chat-window .quick-chat-input {
   margin-bottom: 12px;
 }
 
+.workflow-definition-delegation-hook-editor .workflow-definition-state-list {
+  max-height: 300px;
+}
+
 .workflow-definition-subeditor {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
