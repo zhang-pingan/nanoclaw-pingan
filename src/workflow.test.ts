@@ -2156,6 +2156,105 @@ describe('system workflow action nodes', () => {
     }
   });
 
+  it('records after_complete hook events per completed delegation', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalCapture = config.states.capture_after_hook_retry;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'capture_after_hook_retry',
+    };
+    config.states.capture_after_hook_retry = {
+      type: 'delegation',
+      label: '采集并后处理重试',
+      role: 'planner',
+      skill: 'plan-requirement',
+      task_template: '返回结构化阶段结果',
+      after_complete: {
+        steps: [
+          {
+            id: 'copy_payload',
+            uses: 'context.set',
+            with: {
+              values: {
+                after_hook_build:
+                  '{{context.latest_delegation_result.payload.build_id}}',
+              },
+            },
+          },
+        ],
+      },
+      on_complete: {
+        success: { target: 'capture_after_hook_retry' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'After hook retry feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'after hook events should not collide',
+      });
+
+      expect(result.error).toBeUndefined();
+      const firstDelegation = getDelegationsByWorkflow(result.workflowId)[0];
+      expect(firstDelegation).toBeDefined();
+
+      updateDelegation(firstDelegation!.id, {
+        status: 'completed',
+        outcome: 'success',
+        result: buildStructuredResult({
+          build_id: 'build-after-1',
+        }),
+      });
+      onDelegationComplete(firstDelegation!.id);
+
+      const secondDelegation = getDelegationsByWorkflow(result.workflowId)[1];
+      expect(secondDelegation).toBeDefined();
+      updateDelegation(secondDelegation!.id, {
+        status: 'completed',
+        outcome: 'success',
+        result: buildStructuredResult({
+          build_id: 'build-after-2',
+        }),
+      });
+      onDelegationComplete(secondDelegation!.id);
+
+      const events = listWorkflowEvents(result.workflowId);
+      const completedHooks = events.filter(
+        (event) =>
+          event.event_type === 'workflow_hook_completed' &&
+          event.payload_json?.includes('after_complete'),
+      );
+      expect(completedHooks).toHaveLength(2);
+      expect(completedHooks.map((event) => event.ref_id).sort()).toEqual(
+        [firstDelegation!.id, secondDelegation!.id].sort(),
+      );
+
+      const completedSteps = events.filter(
+        (event) =>
+          event.event_type === 'workflow_hook_step_completed' &&
+          event.payload_json?.includes('after_complete'),
+      );
+      expect(completedSteps).toHaveLength(2);
+      expect(completedSteps.map((event) => event.ref_id).sort()).toEqual(
+        [firstDelegation!.id, secondDelegation!.id].sort(),
+      );
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalCapture) {
+        config.states.capture_after_hook_retry = originalCapture;
+      } else {
+        delete config.states.capture_after_hook_retry;
+      }
+    }
+  });
+
   it('routes system step failures through the configured failure transition', () => {
     const config = getWorkflowTypeConfig('dev_test')!;
     const originalEntry = config.entry_points.plan;

@@ -2240,6 +2240,7 @@ function workflowActionStepIdempotencyKey(input: {
   attempt: number;
   index: number;
   phase?: 'started';
+  invocationKey?: string;
 }): string {
   const prefix =
     input.scope === 'system'
@@ -2249,6 +2250,9 @@ function workflowActionStepIdempotencyKey(input: {
       : input.phase === 'started'
         ? 'workflow_hook_step_started'
         : 'workflow_hook_step';
+  if (input.invocationKey) {
+    return `${prefix}:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.scope}:${input.invocationKey}:${input.attempt}:${input.index + 1}`;
+  }
   return `${prefix}:${input.workflow.id}:${input.workflow.status}:${input.workflow.round}:${input.scope}:${input.attempt}:${input.index + 1}`;
 }
 
@@ -2257,6 +2261,9 @@ function runWorkflowActionSteps(input: {
   steps: WorkflowDefinitionSystemRunStep[];
   attempt: number;
   scope: WorkflowActionStepScope;
+  invocationKey?: string;
+  refType?: string;
+  refId?: string;
 }): SystemRunResult {
   const roles = resolveRolesOrEmpty(input.workflow);
   const stepOutputs: Record<string, unknown> = {};
@@ -2281,8 +2288,11 @@ function runWorkflowActionSteps(input: {
         workflowId: input.workflow.id,
         eventType: workflowActionStepEventType(input.scope, 'failed'),
         stateKey: input.workflow.status,
+        refType: input.refType,
+        refId: input.refId,
         payload: {
           scope: input.scope,
+          invocation_key: input.invocationKey || null,
           step_id: stepId,
           uses: step.uses,
           error,
@@ -2292,6 +2302,7 @@ function runWorkflowActionSteps(input: {
           scope: input.scope,
           attempt: input.attempt,
           index,
+          invocationKey: input.invocationKey,
         }),
       });
       return {
@@ -2309,8 +2320,11 @@ function runWorkflowActionSteps(input: {
       workflowId: input.workflow.id,
       eventType: workflowActionStepEventType(input.scope, 'started'),
       stateKey: input.workflow.status,
+      refType: input.refType,
+      refId: input.refId,
       payload: {
         scope: input.scope,
+        invocation_key: input.invocationKey || null,
         step_id: stepId,
         uses: step.uses,
       },
@@ -2320,6 +2334,7 @@ function runWorkflowActionSteps(input: {
         attempt: input.attempt,
         index,
         phase: 'started',
+        invocationKey: input.invocationKey,
       }),
     });
 
@@ -2362,8 +2377,11 @@ function runWorkflowActionSteps(input: {
             ? workflowActionStepEventType(input.scope, 'pending')
             : workflowActionStepEventType(input.scope, 'failed'),
       stateKey: input.workflow.status,
+      refType: input.refType,
+      refId: input.refId,
       payload: {
         scope: input.scope,
+        invocation_key: input.invocationKey || null,
         step_id: stepId,
         uses: step.uses,
         status: result.status,
@@ -2376,6 +2394,7 @@ function runWorkflowActionSteps(input: {
         scope: input.scope,
         attempt: input.attempt,
         index,
+        invocationKey: input.invocationKey,
       }),
     });
 
@@ -2410,6 +2429,9 @@ function runDelegationHook(input: {
   stateConfig: StateConfig;
   hook: Extract<WorkflowActionStepScope, 'before_delegate' | 'after_complete'>;
   attempt: number;
+  invocationKey?: string;
+  refType?: string;
+  refId?: string;
 }): SystemRunResult {
   const run = input.stateConfig[input.hook];
   const steps = run?.steps || [];
@@ -2429,12 +2451,17 @@ function runDelegationHook(input: {
     workflowId: workflowForHook.id,
     eventType: 'workflow_hook_started',
     stateKey: input.stateKey,
+    refType: input.refType,
+    refId: input.refId,
     payload: {
       hook: input.hook,
       attempt: input.attempt,
+      invocation_key: input.invocationKey || null,
       step_count: steps.length,
     },
-    idempotencyKey: `workflow_hook_started:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.attempt}`,
+    idempotencyKey: input.invocationKey
+      ? `workflow_hook_started:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.invocationKey}:${input.attempt}`
+      : `workflow_hook_started:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.attempt}`,
   });
 
   const result = runWorkflowActionSteps({
@@ -2442,6 +2469,9 @@ function runDelegationHook(input: {
     steps,
     attempt: input.attempt,
     scope: input.hook,
+    invocationKey: input.invocationKey,
+    refType: input.refType,
+    refId: input.refId,
   });
   writeWorkflowEvent({
     workflowId: workflowForHook.id,
@@ -2452,15 +2482,20 @@ function runDelegationHook(input: {
           ? 'workflow_hook_pending'
           : 'workflow_hook_failed',
     stateKey: input.stateKey,
+    refType: input.refType,
+    refId: input.refId,
     payload: {
       hook: input.hook,
       attempt: input.attempt,
+      invocation_key: input.invocationKey || null,
       status: result.status,
       summary: result.summary || null,
       error: result.error || null,
       output: result.output,
     },
-    idempotencyKey: `workflow_hook:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.attempt}`,
+    idempotencyKey: input.invocationKey
+      ? `workflow_hook:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.invocationKey}:${input.attempt}`
+      : `workflow_hook:${workflowForHook.id}:${input.stateKey}:${workflowForHook.round}:${input.hook}:${input.attempt}`,
   });
   return result;
 }
@@ -4343,6 +4378,9 @@ export function onDelegationComplete(delegationId: string): void {
     stateConfig,
     hook: 'after_complete',
     attempt: 1,
+    invocationKey: `delegation:${delegation.id}`,
+    refType: 'delegation',
+    refId: delegation.id,
   });
   if (Object.keys(afterHook.contextPatch).length > 0) {
     Object.assign(contextUpdates, afterHook.contextPatch);
