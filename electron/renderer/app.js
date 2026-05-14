@@ -519,6 +519,7 @@ var assistantEvolutionPanel = document.getElementById("assistant-evolution-panel
 var assistantSourceGrid = document.getElementById("assistant-source-grid");
 var assistantSourceInputs = [];
 var assistantServiceInputs = [];
+var assistantLookbackInputs = [];
 var assistantSourceExpandedGroups = {};
 var assistantState = null;
 var assistantInboxItems = [];
@@ -20470,7 +20471,7 @@ function getAssistantRuleSetting(ruleKey) {
   const settings = getAssistantSettings();
   return settings && settings.triggerRules && settings.triggerRules[ruleKey]
     ? settings.triggerRules[ruleKey]
-    : { enabled: false, investigationEnabled: false, autoEnabled: false };
+    : { enabled: false, investigationEnabled: false, autoEnabled: false, lookbackDays: 3 };
 }
 
 function getAssistantRuleCapability(ruleKey) {
@@ -20537,7 +20538,27 @@ function formatAssistantRuleCapabilitySummary(rule) {
   const parts = [];
   if (rule.supportsInvestigation) parts.push("可排查");
   if (rule.supportsRepair) parts.push("可自动");
+  if (rule.key === "today_plan.service_coding_anomaly") parts.push("异常后入箱");
   return parts.length > 0 ? parts.join(" · ") : "纯提醒";
+}
+
+function renderAssistantLookbackControl(rule, ruleSetting) {
+  if (!rule || rule.key !== "today_plan.service_coding_anomaly") return "";
+  const value = Number(ruleSetting.lookbackDays);
+  return `
+    <label class="assistant-field assistant-rule-lookback">
+      <span>天数</span>
+      <input
+        data-assistant-rule-lookback="${escapeAttribute(rule.key)}"
+        type="number"
+        min="1"
+        max="30"
+        step="1"
+        value="${escapeAttribute(String(Number.isFinite(value) ? value : 3))}"
+        ${ruleSetting.enabled ? "" : "disabled"}
+      />
+    </label>
+  `;
 }
 
 function renderAssistantOnlineLogServicePicker(rule, ruleSetting) {
@@ -20592,6 +20613,7 @@ function renderAssistantSourceRule(rule) {
         </label>
       </div>
       <div class="assistant-rule-options">
+        ${renderAssistantLookbackControl(rule, ruleSetting)}
         ${rule.supportsInvestigation ? `
           <label>
             <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="investigationEnabled" type="checkbox" ${ruleSetting.investigationEnabled ? "checked" : ""} ${investigateDisabled ? "disabled" : ""} />
@@ -20657,6 +20679,7 @@ function renderAssistantSourceRules() {
     assistantSourceGrid.innerHTML = '<div class="assistant-empty">加载中</div>';
     assistantSourceInputs = [];
     assistantServiceInputs = [];
+    assistantLookbackInputs = [];
     return;
   }
   const groups = groupAssistantRuleCapabilities(capabilities);
@@ -20697,11 +20720,14 @@ function renderAssistantSourceRules() {
         investigationEnabled: Boolean(current.investigationEnabled),
         autoEnabled: Boolean(current.autoEnabled),
         selectedServices: Array.isArray(current.selectedServices) ? current.selectedServices.slice() : [],
+        lookbackDays: Number(current.lookbackDays) || 3,
         [field]: input.checked,
       };
       if (field === "autoEnabled" && input.checked) {
         next.enabled = true;
-        next.investigationEnabled = true;
+        if (getAssistantRuleCapability(ruleKey)?.supportsInvestigation) {
+          next.investigationEnabled = true;
+        }
       }
       if (field === "enabled" && !input.checked) {
         next.investigationEnabled = false;
@@ -20729,6 +20755,28 @@ function renderAssistantSourceRules() {
             investigationEnabled: Boolean(current.investigationEnabled),
             autoEnabled: Boolean(current.autoEnabled),
             selectedServices: Array.from(selected),
+            lookbackDays: Number(current.lookbackDays) || 3,
+          },
+        },
+      });
+    });
+  });
+  assistantLookbackInputs = Array.from(assistantSourceGrid.querySelectorAll("[data-assistant-rule-lookback]"));
+  assistantLookbackInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      const ruleKey = input.getAttribute("data-assistant-rule-lookback") || "";
+      if (!ruleKey) return;
+      const current = getAssistantRuleSetting(ruleKey);
+      const lookbackDays = Math.min(Math.max(Math.round(Number(input.value) || 3), 1), 30);
+      input.value = String(lookbackDays);
+      updateAssistantSettingsPatch({
+        triggerRules: {
+          [ruleKey]: {
+            enabled: Boolean(current.enabled),
+            investigationEnabled: Boolean(current.investigationEnabled),
+            autoEnabled: Boolean(current.autoEnabled),
+            selectedServices: Array.isArray(current.selectedServices) ? current.selectedServices.slice() : [],
+            lookbackDays,
           },
         },
       });
@@ -20793,6 +20841,11 @@ function renderAssistantFlowField(label, value) {
   `;
 }
 
+function renderAssistantRevisionField(revisions) {
+  if (!Array.isArray(revisions) || revisions.length === 0) return "";
+  return renderAssistantFlowField("修订号", revisions.join(", "));
+}
+
 function renderAssistantInvestigationEvidence(evidence) {
   if (!Array.isArray(evidence) || evidence.length === 0) return "";
   return `
@@ -20845,13 +20898,14 @@ function renderAssistantInvestigationGroup(item, group, index) {
   const itemPending = Boolean(pending) || flowStatus === "investigating" || flowStatus === "repairing";
   const count = Number(group.count);
   const safeCount = Number.isFinite(count) && count > 0 ? Math.round(count) : (Array.isArray(group.log_indexes) ? group.log_indexes.length : 1);
+  const countLabel = Array.isArray(group.revisions) && group.revisions.length > 0 ? `${safeCount} 个修订` : `${safeCount} 条`;
   return `
     <article class="assistant-flow-group${expanded ? " expanded" : ""}">
       <div class="assistant-flow-group-head">
         <button type="button" class="assistant-flow-group-toggle" data-assistant-flow-group="${escapeAttribute(itemId)}" data-assistant-flow-group-id="${escapeAttribute(groupId)}" aria-expanded="${expanded ? "true" : "false"}">
           <span>
             <strong>${escapeHtml(group.title || `异常分类 ${index + 1}`)}</strong>
-            <small>${escapeHtml(`${safeCount} 条 · 风险 ${assistantRiskLevelLabel(group.risk_level)} · ${group.repairable === true ? "可自动修复" : "需人工确认"}`)}</small>
+            <small>${escapeHtml(`${countLabel} · 风险 ${assistantRiskLevelLabel(group.risk_level)} · ${group.repairable === true ? "可自动修复" : "需人工确认"}`)}</small>
           </span>
           <em>${expanded ? "收起" : "展开"}</em>
         </button>
@@ -20860,6 +20914,10 @@ function renderAssistantInvestigationGroup(item, group, index) {
       ${expanded ? `
         <div class="assistant-flow-summary">${escapeHtml(String(group.title || ""))}</div>
         <div class="assistant-flow-fields">
+          ${renderAssistantFlowField("服务", group.service)}
+          ${renderAssistantFlowField("需求", group.requirement)}
+          ${renderAssistantRevisionField(group.revisions)}
+          ${renderAssistantFlowField("摘要", group.summary)}
           ${renderAssistantFlowField("风险", assistantRiskLevelLabel(group.risk_level))}
           ${renderAssistantFlowField("根因", group.root_cause)}
           ${renderAssistantFlowField("修复建议", group.repair_plan || (group.repairable === true ? "" : "不建议自动修复"))}

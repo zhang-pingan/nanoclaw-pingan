@@ -24,9 +24,14 @@ export interface AssistantAgentRunResult {
   error?: string;
 }
 
+export type AssistantAgentPurpose =
+  | 'investigation'
+  | 'repair'
+  | 'coding_anomaly_scan';
+
 export type AssistantAgentRunner = (input: {
   prompt: string;
-  purpose: 'investigation' | 'repair';
+  purpose: AssistantAgentPurpose;
   item: AgentInboxItemView;
 }) => Promise<AssistantAgentRunResult>;
 
@@ -46,6 +51,10 @@ interface InvestigationGroup {
   id: string;
   title: string;
   log_indexes: number[];
+  service?: string;
+  requirement?: string;
+  revisions?: string[];
+  summary?: string | null;
   count: number;
   root_cause: string | null;
   repairable: boolean;
@@ -131,6 +140,17 @@ function parseLogIndexes(value: unknown): number[] {
   return Array.from(new Set(indexes)).slice(0, 50);
 }
 
+function parseStringArray(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean),
+    ),
+  ).slice(0, limit);
+}
+
 function slugifyGroupId(value: string, index: number): string {
   const slug = value
     .trim()
@@ -146,7 +166,7 @@ function parseInvestigationGroups(value: unknown): InvestigationGroup[] {
     throw new Error('Agent output groups is required');
   }
   return value
-    .map((item, index) => {
+    .map((item, index): InvestigationGroup | null => {
       if (!isObject(item)) return null;
       const title = stringValue(item.title, `异常分类 ${index + 1}`);
       const logIndexes = parseLogIndexes(item.log_indexes);
@@ -154,6 +174,10 @@ function parseInvestigationGroups(value: unknown): InvestigationGroup[] {
         id: stringValue(item.id, slugifyGroupId(title, index)),
         title,
         log_indexes: logIndexes,
+        service: stringOrNull(item.service) || undefined,
+        requirement: stringOrNull(item.requirement) || undefined,
+        revisions: parseStringArray(item.revisions, 100),
+        summary: stringOrNull(item.summary),
         count: Math.max(
           1,
           Number.isFinite(Number(item.count))
@@ -327,6 +351,12 @@ function buildContext(item: AgentInboxItemView): Record<string, unknown> {
     );
   }
 
+  if (ruleKey === 'today_plan.service_coding_anomaly') {
+    context.todayPlanCoding = isObject(item.extra.todayPlanCoding)
+      ? item.extra.todayPlanCoding
+      : null;
+  }
+
   return context;
 }
 
@@ -351,6 +381,9 @@ function buildInvestigationPrompt(
       "id": "稳定短 id，只能包含字母数字中划线或下划线",
       "title": "问题分类标题",
       "log_indexes": [0],
+      "service": "服务名，可选",
+      "requirement": "需求名，可选",
+      "revisions": ["相关修订号，可选"],
       "count": 1,
       "root_cause": "该分类根因，无法判断时为 null",
       "repairable": false,
@@ -369,6 +402,7 @@ function buildInvestigationPrompt(
 - 最终回复只返回 JSON；工具调查过程不要向用户发送说明性自然语言。
 - 如果上下文包含 onlineErrorLog.logs，多条日志可能属于不同问题，必须由你按语义自行归并分类后返回 groups。
 - groups[].log_indexes 必须引用 onlineErrorLog.logs 的 0-based 下标；不要在结果里复制完整 rawLog。
+- 如果上下文包含 todayPlanCoding.anomalies，groups 必须对应这些异常项，并保留每个异常项的 service、requirement、revisions。
 - 顶层 repairable 只有在所有分类都可自动修复且修复方案不冲突时才为 true；任一分类需人工处理时为 false。
 
 ${buildInvestigationWorkflowInstructions(item)}
@@ -415,6 +449,17 @@ export function initAssistantAutoFlow(input: {
   agentRunner = input.agentRunner || null;
 }
 
+export async function runAssistantAgent(input: {
+  prompt: string;
+  purpose: AssistantAgentPurpose;
+  item: AgentInboxItemView;
+}): Promise<AssistantAgentRunResult> {
+  if (!agentRunner) {
+    throw new Error('Assistant action agent runner is not initialized');
+  }
+  return agentRunner(input);
+}
+
 export function canInvestigateInboxItem(item: AgentInboxItemView): boolean {
   const ruleKey = toRuleKey(item.extra.ruleKey);
   return (
@@ -422,7 +467,8 @@ export function canInvestigateInboxItem(item: AgentInboxItemView): boolean {
     ruleKey === 'workbench.task_stale' ||
     ruleKey === 'scheduler.task_failed' ||
     ruleKey === 'agent_runs.query_failed' ||
-    ruleKey === 'online.error_logs'
+    ruleKey === 'online.error_logs' ||
+    ruleKey === 'today_plan.service_coding_anomaly'
   );
 }
 
@@ -431,7 +477,11 @@ export function canRepairInboxItem(item: AgentInboxItemView): boolean {
   return (
     canInvestigateInboxItem(item) &&
     isObject(investigation) &&
-    investigation.repairable === true
+    (investigation.repairable === true ||
+      (Array.isArray(investigation.groups) &&
+        investigation.groups.some(
+          (group) => isObject(group) && group.repairable === true,
+        )))
   );
 }
 
@@ -514,7 +564,7 @@ export async function investigateAgentInboxItem(
   });
 
   try {
-    const output = await agentRunner({
+    const output = await runAssistantAgent({
       purpose: 'investigation',
       item,
       prompt: buildInvestigationPrompt(item, context),
@@ -581,7 +631,7 @@ export async function repairAgentInboxItem(
   });
 
   try {
-    const output = await agentRunner({
+    const output = await runAssistantAgent({
       purpose: 'repair',
       item,
       prompt: buildRepairPrompt(item, context, investigation, group),
@@ -631,10 +681,17 @@ export async function autoProcessAgentInboxItem(itemId: string): Promise<{
   investigation: InvestigationResult;
   repairs?: RepairResult[];
 }> {
-  const investigated = await investigateAgentInboxItem(itemId);
-  const repairableGroups = investigated.result.groups.filter(
-    (group) => group.repairable,
-  );
+  const existing = getAgentInboxItem(itemId);
+  if (!existing) throw new Error('Agent inbox item not found');
+  const existingInvestigation = isObject(existing.extra.investigation)
+    ? (existing.extra.investigation as unknown as InvestigationResult)
+    : null;
+  const investigated = existingInvestigation
+    ? { item: existing, result: existingInvestigation }
+    : await investigateAgentInboxItem(itemId);
+  const repairableGroups = Array.isArray(investigated.result.groups)
+    ? investigated.result.groups.filter((group) => group.repairable)
+    : [];
   if (repairableGroups.length === 0) {
     return {
       item: investigated.item,

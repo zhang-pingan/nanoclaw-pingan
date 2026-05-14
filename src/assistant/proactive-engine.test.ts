@@ -33,12 +33,17 @@ function scanCompletedCount(): number {
   return events.filter((event) => event.type === 'scan_completed').length;
 }
 
+function flushAsyncWork(): Promise<void> {
+  return Promise.resolve().then(() => undefined);
+}
+
 describe('proactive engine scheduler', () => {
   it('reschedules the next scan when settings change at runtime', async () => {
     vi.useFakeTimers();
     updateAssistantSettings({ scanIntervalMinutes: 120 });
 
     startProactiveEngine();
+    await flushAsyncWork();
     expect(scanCompletedCount()).toBe(1);
 
     updateAssistantSettings({ scanIntervalMinutes: 1 });
@@ -51,12 +56,13 @@ describe('proactive engine scheduler', () => {
     expect(scanCompletedCount()).toBe(2);
   });
 
-  it('exposes last and next proactive scan times', () => {
+  it('exposes last and next proactive scan times', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-11T09:00:00.000Z'));
     updateAssistantSettings({ scanIntervalMinutes: 15 });
 
     startProactiveEngine();
+    await flushAsyncWork();
     expect(getProactiveScheduleState()).toMatchObject({
       loopStarted: true,
       intervalMinutes: 15,
@@ -69,7 +75,7 @@ describe('proactive engine scheduler', () => {
     });
 
     vi.setSystemTime(new Date('2026-05-11T09:05:00.000Z'));
-    const result = runProactiveScan();
+    const result = await runProactiveScan();
 
     expect(result.scannedAt).toBe(
       String(Date.parse('2026-05-11T09:05:00.000Z')),

@@ -125,6 +125,12 @@ function normalizeTriggerRuleSettings(
         ),
       )
     : [];
+  const lookbackDays = clampNumber(
+    input.lookbackDays,
+    DEFAULT_ASSISTANT_SETTINGS.triggerRules[ruleKey].lookbackDays,
+    1,
+    30,
+  );
   return {
     enabled,
     investigationEnabled:
@@ -136,6 +142,8 @@ function normalizeTriggerRuleSettings(
           : false)),
     autoEnabled,
     selectedServices: ruleKey === 'online.error_logs' ? selectedServices : [],
+    lookbackDays:
+      ruleKey === 'today_plan.service_coding_anomaly' ? lookbackDays : 3,
   };
 }
 
@@ -499,6 +507,7 @@ export function deleteLegacyActiveAgentInboxItemsWithoutTriggerRule(): number {
       `DELETE FROM agent_inbox_items
        WHERE source_type IN (
            'today_plan',
+           'today_plan_coding_anomaly',
            'workbench_action_item',
            'workbench_task',
            'scheduled_task',

@@ -4597,8 +4597,21 @@ body.quick-chat-window .quick-chat-input {
 .assistant-rule-options {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.assistant-rule-options .assistant-rule-lookback {
+  grid-template-columns: auto 76px;
+  align-items: center;
+  gap: 6px;
+}
+
+.assistant-rule-options .assistant-rule-lookback input {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
 }
 
 .assistant-rule-muted {

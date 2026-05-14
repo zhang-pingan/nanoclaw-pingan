@@ -117,6 +117,8 @@ describe('agent inbox store', () => {
           enabled: false,
           investigationEnabled: true,
           autoEnabled: true,
+          selectedServices: [],
+          lookbackDays: 3,
         },
       },
       desktopAssistant: { allowMovement: false },
@@ -246,9 +248,9 @@ describe('agent inbox store', () => {
     });
   });
 
-  it('creates a today-plan inbox item without direct create action', () => {
+  it('creates a today-plan inbox item without direct create action', async () => {
     const now = new Date(2026, 3, 28, 9, 0, 0);
-    const scan = runProactiveScan({ now });
+    const scan = await runProactiveScan({ now });
     expect(scan.createdOrUpdated).toBeGreaterThanOrEqual(1);
 
     const item = listAgentInboxItems({ status: 'active' }).find(
@@ -260,7 +262,7 @@ describe('agent inbox store', () => {
     expect(item?.action_payload).toEqual({});
   });
 
-  it('deletes legacy active inbox items before creating rule-keyed replacements', () => {
+  it('deletes legacy active inbox items before creating rule-keyed replacements', async () => {
     const now = new Date(2026, 3, 28, 9, 0, 0);
     const legacy = createOrUpdateAgentInboxItem({
       dedupeKey: 'today-plan:missing:2026-04-28',
@@ -271,7 +273,7 @@ describe('agent inbox store', () => {
       sourceRefId: '2026-04-28',
     });
 
-    runProactiveScan({ now });
+    await runProactiveScan({ now });
 
     expect(getAgentInboxItem(legacy.id)).toBeNull();
     const replacement = listAgentInboxItems({ status: 'active' }).find(
@@ -282,7 +284,7 @@ describe('agent inbox store', () => {
     expect(replacement?.extra.ruleKey).toBe('today_plan.missing_today_plan');
   });
 
-  it('does not create inbox items for disabled fine-grained trigger rules', () => {
+  it('does not create inbox items for disabled fine-grained trigger rules', async () => {
     const now = new Date(2026, 3, 28, 9, 0, 0);
     updateAssistantSettings({
       triggerRules: {
@@ -290,11 +292,13 @@ describe('agent inbox store', () => {
           enabled: false,
           investigationEnabled: false,
           autoEnabled: false,
+          selectedServices: [],
+          lookbackDays: 3,
         },
       },
     });
 
-    runProactiveScan({ now });
+    await runProactiveScan({ now });
 
     expect(
       listAgentInboxItems({ status: 'active' }).some(
@@ -303,7 +307,7 @@ describe('agent inbox store', () => {
     ).toBe(false);
   });
 
-  it('resolves obsolete today-plan inbox items after today plan exists', () => {
+  it('resolves obsolete today-plan inbox items after today plan exists', async () => {
     const now = new Date(2026, 3, 28, 9, 0, 0);
     const missing = createOrUpdateAgentInboxItem({
       dedupeKey: 'today-plan:missing:2026-04-28',
@@ -325,7 +329,7 @@ describe('agent inbox store', () => {
     });
 
     createOrContinueTodayPlan({ planDate: '2026-04-28' });
-    runProactiveScan({ now });
+    await runProactiveScan({ now });
 
     expect(getAgentInboxItem(missing.id)?.status).toBe('done');
     expect(getAgentInboxItem(continuation.id)?.status).toBe('done');
@@ -360,7 +364,7 @@ describe('agent inbox store', () => {
     ).toBe(false);
   });
 
-  it('does not stale-alert successful workbench tasks', () => {
+  it('does not stale-alert successful workbench tasks', async () => {
     const now = new Date(2026, 3, 28, 9, 0, 0);
     const updatedAt = String(now.getTime() - 6 * 60 * 60 * 1000);
     createStoredWorkbenchTask({
@@ -370,7 +374,7 @@ describe('agent inbox store', () => {
       updatedAt,
     });
 
-    runProactiveScan({ now });
+    await runProactiveScan({ now });
 
     expect(
       listAgentInboxItems({ status: 'active' }).some(
@@ -379,7 +383,7 @@ describe('agent inbox store', () => {
     ).toBe(false);
   });
 
-  it('resolves obsolete workbench stale inbox items after task success', () => {
+  it('resolves obsolete workbench stale inbox items after task success', async () => {
     const now = new Date(2026, 3, 28, 9, 0, 0);
     const updatedAt = String(now.getTime() - 6 * 60 * 60 * 1000);
     const stale = createOrUpdateAgentInboxItem({
@@ -398,7 +402,7 @@ describe('agent inbox store', () => {
       updatedAt,
     });
 
-    runProactiveScan({ now });
+    await runProactiveScan({ now });
 
     expect(getAgentInboxItem(stale.id)?.status).toBe('done');
   });
@@ -440,6 +444,8 @@ describe('agent inbox store', () => {
           enabled: true,
           investigationEnabled: true,
           autoEnabled: true,
+          selectedServices: [],
+          lookbackDays: 3,
         },
       },
     });
@@ -450,13 +456,13 @@ describe('agent inbox store', () => {
       updatedAt,
     });
 
-    runProactiveScan({ now });
+    await runProactiveScan({ now });
     await flushAsyncWork();
 
     expect(runner).toHaveBeenCalledTimes(1);
     runner.mockClear();
 
-    runProactiveScan({ now });
+    await runProactiveScan({ now });
     await flushAsyncWork();
 
     expect(runner).not.toHaveBeenCalled();
@@ -672,9 +678,88 @@ describe('agent inbox store', () => {
     });
   });
 
-  it('resolves obsolete agent query inbox items after query succeeds', () => {
+  it('auto-repairs pre-investigated coding anomaly groups without re-investigating', async () => {
+    const purposes: string[] = [];
+    const runner = vi.fn(async ({ purpose }) => {
+      purposes.push(purpose);
+      return {
+        ok: true,
+        text:
+          purpose === 'repair'
+            ? JSON.stringify({
+                ok: true,
+                fixed: true,
+                summary: '已修复异常需求',
+                result: '补齐边界判断',
+                next_action: null,
+              })
+            : JSON.stringify({
+                ok: true,
+                summary: '不应触发重新排查',
+                root_cause: null,
+                repairable: false,
+                repair_plan: null,
+                risk_level: 'unknown',
+                required_user_action: null,
+                evidence: [],
+                groups: [],
+              }),
+      };
+    });
+    initAssistantAutoFlow({ agentRunner: runner });
+    const item = createOrUpdateAgentInboxItem({
+      dedupeKey: 'today-plan-coding-anomaly:test',
+      kind: 'risk',
+      priority: 'high',
+      title: '服务 coding 异常：1 个需求',
+      triggerRuleKey: 'today_plan.service_coding_anomaly',
+      sourceType: 'today_plan_coding_anomaly',
+      sourceRefId: 'test',
+      extra: {
+        autoFlowStatus: 'investigated',
+        investigation: {
+          ok: true,
+          summary: '发现异常',
+          root_cause: null,
+          repairable: true,
+          repair_plan: null,
+          risk_level: 'high',
+          required_user_action: null,
+          evidence: [],
+          groups: [
+            {
+              id: 'catstory-risk',
+              title: 'catstory · 修复库存扣减',
+              service: 'catstory',
+              requirement: '修复库存扣减',
+              revisions: ['abc123'],
+              log_indexes: [],
+              count: 1,
+              root_cause: '未加锁',
+              repairable: true,
+              repair_plan: '补齐事务保护',
+              risk_level: 'high',
+              required_user_action: null,
+              evidence: [],
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await runAgentInboxAction({
+      itemId: item.id,
+      action: 'auto',
+    });
+
+    expect(purposes).toEqual(['repair']);
+    expect(result.item.status).toBe('done');
+    expect(result.item.extra.lastRepairGroupId).toBe('catstory-risk');
+  });
+
+  it('resolves obsolete agent query inbox items after query succeeds', async () => {
     createStoredAgentQuery({ queryId: 'query-recovered', status: 'error' });
-    runProactiveScan();
+    await runProactiveScan();
     const item = listAgentInboxItems({ status: 'active' }).find(
       (entry) => entry.dedupe_key === 'agent-query:error:query-recovered',
     );
@@ -687,7 +772,7 @@ describe('agent inbox store', () => {
       failure_retryable: null,
       updated_at: String(Date.now()),
     });
-    runProactiveScan();
+    await runProactiveScan();
 
     expect(getAgentInboxItem(item?.id || '')?.status).toBe('done');
   });

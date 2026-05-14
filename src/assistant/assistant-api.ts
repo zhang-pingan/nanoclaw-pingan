@@ -112,7 +112,7 @@ export async function runAgentInboxActionForApi(body: unknown) {
   return runAgentInboxAction({ itemId, action, payload });
 }
 
-export function runAssistantScanForApi() {
+export async function runAssistantScanForApi() {
   return runProactiveScan();
 }
 

@@ -16,6 +16,7 @@ export type AgentInboxPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type AssistantTriggerRuleKey =
   | 'today_plan.missing_today_plan'
   | 'today_plan.unfinished_previous_plan'
+  | 'today_plan.service_coding_anomaly'
   | 'workbench.pending_action_item'
   | 'workbench.task_failed_or_cancelled'
   | 'workbench.task_stale'
@@ -28,6 +29,7 @@ export interface AssistantTriggerRuleSettings {
   investigationEnabled: boolean;
   autoEnabled: boolean;
   selectedServices: string[];
+  lookbackDays: number;
 }
 
 export interface AssistantTriggerRuleCapability {
@@ -152,6 +154,13 @@ export const ASSISTANT_TRIGGER_RULE_CAPABILITIES: AssistantTriggerRuleCapability
       supportsRepair: false,
     },
     {
+      key: 'today_plan.service_coding_anomaly',
+      label: '服务 coding 异常排查',
+      sourceLabel: '今日计划',
+      supportsInvestigation: false,
+      supportsRepair: true,
+    },
+    {
       key: 'workbench.pending_action_item',
       label: '工作台待处理项',
       sourceLabel: '工作台',
@@ -202,10 +211,11 @@ export const ASSISTANT_TRIGGER_RULE_DEFAULTS: Record<
   ASSISTANT_TRIGGER_RULE_CAPABILITIES.map((rule) => [
     rule.key,
     {
-      enabled: true,
+      enabled: rule.key === 'today_plan.service_coding_anomaly' ? false : true,
       investigationEnabled: false,
       autoEnabled: false,
       selectedServices: [],
+      lookbackDays: 3,
     },
   ]),
 ) as unknown as Record<AssistantTriggerRuleKey, AssistantTriggerRuleSettings>;

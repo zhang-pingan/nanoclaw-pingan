@@ -30,6 +30,7 @@ import {
   shouldAutoProcessInboxItem,
 } from './assistant-auto-flow.js';
 import { scanOnlineErrorLogRule } from './online-error-log.js';
+import { scanTodayPlanCodingAnomalyRule } from './today-plan-coding-anomaly.js';
 import { resolveTodayPlanInboxItemsForDate } from './today-plan-inbox.js';
 import type {
   AgentInboxPriority,
@@ -74,16 +75,16 @@ function scheduleNextProactiveScan(): void {
   );
 }
 
-function runProactiveLoop(): void {
+async function runProactiveLoop(): Promise<void> {
   proactiveLoopTimer = null;
   proactiveNextScanAt = null;
   try {
-    runProactiveScan();
+    await runProactiveScan();
   } catch (err) {
     logger.error({ err }, 'Assistant proactive scan failed');
+  } finally {
+    scheduleNextProactiveScan();
   }
-
-  scheduleNextProactiveScan();
 }
 
 function workstationUrl(
@@ -436,10 +437,10 @@ function scanAgentRunRules(
   }
 }
 
-export function runProactiveScan(input: { now?: Date } = {}): {
+export async function runProactiveScan(input: { now?: Date } = {}): Promise<{
   createdOrUpdated: number;
   scannedAt: string;
-} {
+}> {
   proactiveLastScanStartedAt = Date.now().toString();
   proactiveScanRunning = true;
   let result: { createdOrUpdated: number; scannedAt: string } | null = null;
@@ -473,6 +474,11 @@ export function runProactiveScan(input: { now?: Date } = {}): {
     if (!resolveDisabledRule(settings, 'online.error_logs')) {
       candidates.push(...scanOnlineErrorLogRule({ settings, now }));
     }
+    if (!resolveDisabledRule(settings, 'today_plan.service_coding_anomaly')) {
+      candidates.push(
+        ...(await scanTodayPlanCodingAnomalyRule({ settings, now })),
+      );
+    }
 
     for (const item of candidates) {
       const inboxItem = createOrUpdateAgentInboxItem(item);
@@ -485,7 +491,8 @@ export function runProactiveScan(input: { now?: Date } = {}): {
         settings.triggerRules[ruleKey as AssistantTriggerRuleKey]
           ?.autoEnabled &&
         canInvestigateInboxItem(inboxItem) &&
-        shouldAutoProcessInboxItem(inboxItem)
+        (ruleKey === 'today_plan.service_coding_anomaly' ||
+          shouldAutoProcessInboxItem(inboxItem))
       ) {
         scheduleAutoProcessAgentInboxItem(inboxItem.id);
       }
@@ -521,7 +528,7 @@ export function startProactiveEngine(): void {
   }
   proactiveLoopStarted = true;
   logger.info('Assistant proactive engine started');
-  runProactiveLoop();
+  void runProactiveLoop();
 }
 
 export function rescheduleProactiveEngine(): void {

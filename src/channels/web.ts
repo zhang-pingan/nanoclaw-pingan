@@ -1081,7 +1081,7 @@ class WebChannel {
         return this.apiUpdateAssistantSettings(req, res);
       }
       if (pathname === '/api/assistant/scan' && req.method === 'POST') {
-        return this.apiRunAssistantScan(res);
+        return void this.apiRunAssistantScan(res);
       }
       if (
         pathname === '/api/assistant/evolution/state' &&
@@ -1659,9 +1659,9 @@ class WebChannel {
     }
   }
 
-  private apiRunAssistantScan(res: http.ServerResponse): void {
+  private async apiRunAssistantScan(res: http.ServerResponse): Promise<void> {
     try {
-      const result = runAssistantScanForApi();
+      const result = await runAssistantScanForApi();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, ...result }));
     } catch (err) {

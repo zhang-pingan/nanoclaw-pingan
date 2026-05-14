@@ -41,6 +41,7 @@ import {
 } from './container-runtime.js';
 import { agentQueryTraceManager } from './agent-query-trace.js';
 import { ASSISTANT_MAIN_JID } from './assistant/assistant-channel-bridge.js';
+import type { AssistantAgentPurpose } from './assistant/assistant-auto-flow.js';
 import type { AgentInboxItemView } from './assistant/types.js';
 import {
   ClassifiedFailure,
@@ -1490,7 +1491,7 @@ interface OneShotAgentInput {
 
 interface AssistantActionAgentInput {
   prompt: string;
-  purpose: 'investigation' | 'repair';
+  purpose: AssistantAgentPurpose;
   item: AgentInboxItemView;
   chatJid?: string;
 }
@@ -1524,6 +1525,7 @@ function resolveAssistantActionJid(preferredJid?: string): string | null {
 function assistantActionPurposeLabel(
   purpose: AssistantActionAgentInput['purpose'],
 ): string {
+  if (purpose === 'coding_anomaly_scan') return 'Coding 异常扫描';
   if (purpose === 'repair') return '修复';
   return '排查';
 }
@@ -1531,6 +1533,9 @@ function assistantActionPurposeLabel(
 function assistantActionStepName(
   purpose: AssistantActionAgentInput['purpose'],
 ): string {
+  if (purpose === 'coding_anomaly_scan') {
+    return 'assistant_coding_anomaly_scan_request';
+  }
   return purpose === 'repair'
     ? 'assistant_repair_request'
     : 'assistant_investigation_request';
