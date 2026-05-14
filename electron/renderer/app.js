@@ -20555,7 +20555,6 @@ function renderAssistantLookbackControl(rule, ruleSetting) {
         max="30"
         step="1"
         value="${escapeAttribute(String(Number.isFinite(value) ? value : 3))}"
-        ${ruleSetting.enabled ? "" : "disabled"}
       />
     </label>
   `;
@@ -20583,7 +20582,7 @@ function renderAssistantOnlineLogServicePicker(rule, ruleSetting) {
               data-assistant-service="${escapeAttribute(service.service || "")}"
               type="checkbox"
               ${checked ? "checked" : ""}
-              ${configured && ruleSetting.enabled ? "" : "disabled"}
+              ${configured ? "" : "disabled"}
             />
             <span>
               <strong>${escapeHtml(service.service || "--")}</strong>
@@ -20598,8 +20597,8 @@ function renderAssistantOnlineLogServicePicker(rule, ruleSetting) {
 
 function renderAssistantSourceRule(rule) {
   const ruleSetting = getAssistantRuleSetting(rule.key);
-  const investigateDisabled = !rule.supportsInvestigation || !ruleSetting.enabled;
-  const autoDisabled = !rule.supportsRepair || !ruleSetting.enabled;
+  const investigateDisabled = !rule.supportsInvestigation;
+  const autoDisabled = !rule.supportsRepair;
   return `
     <article class="assistant-rule-card">
       <div class="assistant-rule-main">
@@ -20724,14 +20723,9 @@ function renderAssistantSourceRules() {
         [field]: input.checked,
       };
       if (field === "autoEnabled" && input.checked) {
-        next.enabled = true;
         if (getAssistantRuleCapability(ruleKey)?.supportsInvestigation) {
           next.investigationEnabled = true;
         }
-      }
-      if (field === "enabled" && !input.checked) {
-        next.investigationEnabled = false;
-        next.autoEnabled = false;
       }
       updateAssistantSettingsPatch({
         triggerRules: { [ruleKey]: next },

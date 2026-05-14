@@ -4604,9 +4604,9 @@ body.quick-chat-window .quick-chat-input {
 
 .assistant-rule-options .assistant-rule-lookback {
   display: inline-grid;
-  grid-template-columns: auto 72px;
+  grid-template-columns: auto 46px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -4616,11 +4616,13 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .assistant-rule-options .assistant-rule-lookback input {
-  width: 72px;
-  min-width: 72px;
-  height: 30px;
-  padding: 0 8px;
-  border-radius: 8px;
+  width: 46px;
+  min-width: 46px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
   text-align: center;
   appearance: textfield;
   -moz-appearance: textfield;
