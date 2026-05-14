@@ -160,6 +160,8 @@ interface ActiveMessageQueryTraceState {
   agentActivitySeen: boolean;
   failure: ClassifiedFailure | null;
   errorMessage: string | null;
+  cursorBefore: string | null;
+  messageCursor: string | null;
 }
 
 const channels: Channel[] = [];
@@ -274,6 +276,44 @@ function forgetPendingQueryBatchesForRun(runId: string | undefined): void {
   }
 }
 
+function isEarlierCursor(candidate: string, current: string | null): boolean {
+  if (current === null) return true;
+  const candidateNumber = Number(candidate || '0');
+  const currentNumber = Number(current || '0');
+  if (Number.isFinite(candidateNumber) && Number.isFinite(currentNumber)) {
+    return candidateNumber < currentNumber;
+  }
+  return candidate < current;
+}
+
+function removeQueuedIpcMessagesForQuery(
+  groupFolder: string,
+  queryId: string,
+): number {
+  const inputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
+  if (!fs.existsSync(inputDir)) return 0;
+
+  let removed = 0;
+  for (const file of fs.readdirSync(inputDir)) {
+    if (!file.endsWith('.json')) continue;
+    const filePath = path.join(inputDir, file);
+    try {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as {
+        queryId?: unknown;
+      };
+      if (data.queryId !== queryId) continue;
+      fs.unlinkSync(filePath);
+      removed += 1;
+    } catch (err) {
+      logger.warn(
+        { err, groupFolder, queryId, file },
+        'Failed to inspect queued IPC message during retry recovery',
+      );
+    }
+  }
+  return removed;
+}
+
 function finalizePendingQueryBatch(result: ContainerOutput): {
   applied: boolean;
   batch?: PendingQueryBatch;
@@ -334,6 +374,8 @@ function createMessageQueryTrace(params: {
   inputPayload: Record<string, unknown>;
   contextPayload?: Record<string, unknown> | null;
   pipedIntoActiveSession?: boolean;
+  cursorBefore?: string | null;
+  messageCursor?: string | null;
 }): void {
   agentQueryTraceManager.startQuery({
     queryId: params.queryId,
@@ -416,6 +458,8 @@ function createMessageQueryTrace(params: {
     agentActivitySeen: false,
     failure: null,
     errorMessage: null,
+    cursorBefore: params.cursorBefore ?? null,
+    messageCursor: params.messageCursor ?? null,
   });
 }
 
@@ -852,6 +896,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     selectedModelReason: modelSelection.reason,
     promptSummary: prompt.slice(0, 140),
     promptHash,
+    cursorBefore: previousCursor,
+    messageCursor: lastMsg.timestamp,
     inputSummary: `Received ${missedMessages.length} pending messages`,
     inputPayload: {
       messageIds: missedMessages.map((m) => m.id),
@@ -1122,6 +1168,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+  let shouldRetryUnconsumedPipedMessages = false;
+  let retryCursor: string | null = null;
   for (const [queryId, state] of activeMessageQueryTraces) {
     if (state.runId !== runId) continue;
     if (
@@ -1139,14 +1187,46 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         summary:
           'Piped message was not consumed before the active container exited',
       });
+      const removedIpcMessages = removeQueuedIpcMessagesForQuery(
+        group.folder,
+        queryId,
+      );
+      const errorMessage =
+        'Piped message was not consumed before the active container exited; retrying from chat history';
+      state.hadError = true;
+      state.errorMessage = errorMessage;
+      state.failure = classifyFailure(new Error(errorMessage), {
+        module: 'index',
+        action: 'retry_unconsumed_piped_message',
+        defaultType: 'routing_error',
+        defaultSubtype: 'piped_message_not_consumed',
+        defaultOrigin: 'router',
+        retryable: true,
+      });
+      if (
+        state.cursorBefore !== null &&
+        isEarlierCursor(state.cursorBefore, retryCursor)
+      ) {
+        retryCursor = state.cursorBefore;
+      }
+      shouldRetryUnconsumedPipedMessages = true;
+      finishMessageQueryTrace(queryId, 'error', {
+        error_message: errorMessage,
+        output_preview:
+          removedIpcMessages > 0
+            ? `Removed ${removedIpcMessages} stale IPC message(s) before retry`
+            : null,
+      });
       logger.warn(
         {
           group: group.name,
           chatJid,
           queryId,
           runId,
+          retryCursor: state.cursorBefore,
+          removedIpcMessages,
         },
-        'Leaving unconsumed piped query trace active for next container handoff',
+        'Retrying unconsumed piped message from chat history',
       );
       continue;
     }
@@ -1165,6 +1245,13 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
             : null,
       },
     );
+  }
+  if (shouldRetryUnconsumedPipedMessages) {
+    if (retryCursor !== null) {
+      lastAgentTimestamp[chatJid] = retryCursor;
+      saveState();
+    }
+    queue.enqueueMessageCheck(chatJid);
   }
 
   // Deferred .claude/ cleanup: safe now that the container has exited
@@ -2072,6 +2159,9 @@ async function startMessageLoop(): Promise<void> {
             queue.enqueueMessageCheck(chatJid);
             continue;
           }
+          const pipedCursorBefore = lastAgentTimestamp[chatJid] || '';
+          const pipedMessageCursor =
+            messagesToSend[messagesToSend.length - 1].timestamp;
           const pipedSelection = await selectModel({
             prompt: formatted,
             isMain: isMainGroup,
@@ -2100,6 +2190,8 @@ async function startMessageLoop(): Promise<void> {
                 .createHash('sha256')
                 .update(formatted)
                 .digest('hex'),
+              cursorBefore: pipedCursorBefore,
+              messageCursor: pipedMessageCursor,
               inputSummary: `Queued ${messagesToSend.length} piped messages`,
               inputPayload: {
                 messageIds: messagesToSend.map((m) => m.id),
@@ -2139,8 +2231,7 @@ async function startMessageLoop(): Promise<void> {
               },
               'Piped messages to active container',
             );
-            lastAgentTimestamp[chatJid] =
-              messagesToSend[messagesToSend.length - 1].timestamp;
+            lastAgentTimestamp[chatJid] = pipedMessageCursor;
             saveState();
             // Show typing indicator while the container processes the piped message
             channel
