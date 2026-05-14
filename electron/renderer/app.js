@@ -7323,6 +7323,20 @@ function focusWorkflowDefinitionStateInEditor(stateKey) {
   workflowDefinitionStatesInput.scrollTop = Math.max(0, lineIndex * lineHeight - lineHeight * 2);
 }
 
+function revealWorkflowDefinitionStateInForm(stateKey) {
+  if (!workflowDefinitionStateList || !stateKey) return;
+  const stateSection = workflowDefinitionStateList.closest(".workflow-definition-field-block");
+  const stateButton = workflowDefinitionStateList.querySelector(
+    getWorkflowDefinitionInspectorSelector("data-state-select", stateKey),
+  );
+  const scrollOptions = { behavior: "smooth", block: "start", inline: "nearest" };
+  (stateSection || workflowDefinitionStateList).scrollIntoView(scrollOptions);
+  requestAnimationFrame(() => {
+    stateButton?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    stateButton?.focus?.({ preventScroll: true });
+  });
+}
+
 function focusWorkflowDefinitionJsonField(textarea, key) {
   if (!textarea || !key) return;
   const source = textarea.value || "";
@@ -8258,12 +8272,14 @@ function cleanupWorkflowDefinitionRoleObject(role) {
   return cleanedRole;
 }
 
-function updateWorkflowDefinitionSelectedState(stateKey) {
+function updateWorkflowDefinitionSelectedState(stateKey, options = {}) {
   workflowDefinitionSelectedStateKey = stateKey || "";
   renderWorkflowDefinitionStateEditor();
   const graphSource = getEditableWorkflowDefinition() || getSelectedWorkflowDefinitionVersion() || {};
   renderWorkflowDefinitionGraph(graphSource);
-  if (workflowDefinitionSelectedStateKey) {
+  if (workflowDefinitionSelectedStateKey && options.revealForm === true) {
+    revealWorkflowDefinitionStateInForm(workflowDefinitionSelectedStateKey);
+  } else if (workflowDefinitionSelectedStateKey) {
     focusWorkflowDefinitionStateInEditor(workflowDefinitionSelectedStateKey);
   }
 }
@@ -8345,7 +8361,7 @@ function renderWorkflowDefinitionDelegationHookEditor(statesArg) {
     <div class="workflow-definition-state-inspector-head">
       <span>${escapeHtml(selectedState.label || workflowDefinitionSelectedDelegationHookStateKey)} · ${escapeHtml(workflowDefinitionSelectedDelegationHookStateKey)}</span>
       <div class="workflow-definition-state-head-actions">
-        <button type="button" class="btn-ghost" data-delegation-hook-open-state="${escapeAttribute(workflowDefinitionSelectedDelegationHookStateKey)}">打开 State</button>
+        <button type="button" class="btn-ghost" data-delegation-hook-open-state="${escapeAttribute(workflowDefinitionSelectedDelegationHookStateKey)}">定位 State</button>
       </div>
     </div>
     <div class="workflow-definition-state-inspector-body">
@@ -8372,7 +8388,10 @@ function renderWorkflowDefinitionDelegationHookEditor(statesArg) {
   const openStateBtn = workflowDefinitionDelegationHookInspector.querySelector("[data-delegation-hook-open-state]");
   if (openStateBtn) {
     openStateBtn.addEventListener("click", () => {
-      updateWorkflowDefinitionSelectedState(openStateBtn.getAttribute("data-delegation-hook-open-state") || "");
+      updateWorkflowDefinitionSelectedState(
+        openStateBtn.getAttribute("data-delegation-hook-open-state") || "",
+        { revealForm: true },
+      );
     });
   }
   applyWorkflowDefinitionEditorControlState(!canEditCurrentWorkflowDefinitionView());
