@@ -123,6 +123,36 @@ describe('GroupQueue', () => {
     expect(maxConcurrent).toBe(1);
   });
 
+  it('distinguishes active message processing from a registered container', async () => {
+    let resolveProcess: () => void;
+    queue.setProcessMessagesFn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveProcess = () => resolve(true);
+        }),
+    );
+
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(queue.isActive('group1@g.us')).toBe(true);
+    expect(queue.hasActiveContainer('group1@g.us')).toBe(false);
+
+    queue.registerProcess(
+      'group1@g.us',
+      {} as any,
+      'container-1',
+      'test-group',
+    );
+    expect(queue.hasActiveContainer('group1@g.us')).toBe(true);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(queue.isActive('group1@g.us')).toBe(false);
+    expect(queue.hasActiveContainer('group1@g.us')).toBe(false);
+  });
+
   // --- Global concurrency limit ---
 
   it('respects global concurrency limit', async () => {

@@ -301,6 +301,15 @@ export class GroupQueue {
     return this.getGroup(groupJid).active;
   }
 
+  /**
+   * Check whether this group has a real container process registered.
+   * A group can be active while it is only pre-processing messages.
+   */
+  hasActiveContainer(groupJid: string): boolean {
+    const state = this.getGroup(groupJid);
+    return Boolean(state.active && (state.process || state.containerName));
+  }
+
   canPipeMessage(groupJid: string): boolean {
     const state = this.getGroup(groupJid);
     return Boolean(

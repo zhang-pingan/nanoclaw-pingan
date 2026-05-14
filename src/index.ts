@@ -191,14 +191,14 @@ function resetGroupSession(
   const group = registeredGroups[groupJid];
   if (!group) return { reset: false };
 
-  const isActive = queue.isActive(groupJid);
+  const hasActiveContainer = queue.hasActiveContainer(groupJid);
 
   clearSession(group.folder);
   delete sessions[group.folder];
   bumpSessionResetEpoch(group.folder);
 
   if (opts.deleteSessionDir) {
-    if (isActive) pendingSessionCleanup.add(group.folder);
+    if (hasActiveContainer) pendingSessionCleanup.add(group.folder);
     else removeSessionDir(group.folder);
   }
 
@@ -1321,6 +1321,13 @@ async function runAgent(
       );
       return false;
     }
+    if (pendingSessionCleanup.has(group.folder)) {
+      logger.info(
+        { group: group.name, sessionId: sessionIdToWrite },
+        'Skipping session update while session cleanup is pending',
+      );
+      return false;
+    }
     sessions[group.folder] = sessionIdToWrite;
     setSession(group.folder, sessionIdToWrite);
     return true;
@@ -2109,7 +2116,7 @@ async function startMessageLoop(): Promise<void> {
                 groupMessages[groupMessages.length - 1].timestamp;
               saveState();
 
-              if (queue.isActive(chatJid)) {
+              if (pendingSessionCleanup.has(group.folder)) {
                 // Container still running — defer .claude/ removal until exit
                 await channel.sendMessage(chatJid, '数据清理中，请等待');
                 logger.info(

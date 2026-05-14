@@ -4603,15 +4603,34 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .assistant-rule-options .assistant-rule-lookback {
-  grid-template-columns: auto 76px;
+  display: inline-grid;
+  grid-template-columns: auto 72px;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.assistant-rule-options .assistant-rule-lookback span {
+  white-space: nowrap;
 }
 
 .assistant-rule-options .assistant-rule-lookback input {
+  width: 72px;
+  min-width: 72px;
   height: 30px;
   padding: 0 8px;
   border-radius: 8px;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.assistant-rule-options .assistant-rule-lookback input::-webkit-outer-spin-button,
+.assistant-rule-options .assistant-rule-lookback input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .assistant-rule-muted {
