@@ -6,6 +6,34 @@ export function registerScriptWorkflowActions(): void {
   registerWorkflowActionHandler({
     name: 'script.run_local',
     description: 'Run an allowed local shell script under local/shell.',
+    params: [
+      {
+        name: 'script_path',
+        type: 'string',
+        required: true,
+        description: 'Script path under local/shell.',
+        placeholder: 'restart.sh',
+      },
+      {
+        name: 'args',
+        type: 'string[]',
+        required: false,
+        description: 'Arguments passed to the script.',
+        defaultValue: [],
+      },
+      {
+        name: 'timeout_ms',
+        type: 'number',
+        required: false,
+        description: 'Optional timeout in milliseconds.',
+      },
+      {
+        name: 'max_output_bytes',
+        type: 'number',
+        required: false,
+        description: 'Optional maximum captured output size in bytes.',
+      },
+    ],
     run(input) {
       const scriptPath = input.params.script_path;
       if (typeof scriptPath !== 'string' || !scriptPath.trim()) {

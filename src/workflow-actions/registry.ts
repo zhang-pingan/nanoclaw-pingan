@@ -19,9 +19,27 @@ export interface WorkflowActionResult {
   error?: string;
 }
 
+export type WorkflowActionParamType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'string[]'
+  | 'object'
+  | 'any';
+
+export interface WorkflowActionParamDefinition {
+  name: string;
+  type: WorkflowActionParamType;
+  required?: boolean;
+  description?: string;
+  defaultValue?: unknown;
+  placeholder?: string;
+}
+
 export interface WorkflowActionHandler {
   name: string;
   description?: string;
+  params?: WorkflowActionParamDefinition[];
   run(input: WorkflowActionRunInput): WorkflowActionResult;
 }
 
@@ -46,11 +64,13 @@ export function listWorkflowActionHandlers(): string[] {
 export function listWorkflowActionHandlerDetails(): Array<{
   name: string;
   description?: string;
+  params?: WorkflowActionParamDefinition[];
 }> {
   return Array.from(handlers.values())
     .map((handler) => ({
       name: handler.name,
       description: handler.description,
+      params: handler.params,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

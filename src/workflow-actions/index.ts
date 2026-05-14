@@ -11,6 +11,8 @@ export {
 } from './registry.js';
 export type {
   WorkflowActionHandler,
+  WorkflowActionParamDefinition,
+  WorkflowActionParamType,
   WorkflowActionResult,
   WorkflowActionRunInput,
   WorkflowActionStatus,

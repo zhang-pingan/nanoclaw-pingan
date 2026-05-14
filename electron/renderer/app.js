@@ -5826,6 +5826,17 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
       if (step.with !== undefined && (!step.with || typeof step.with !== "object" || Array.isArray(step.with))) {
         pushItem("states", `${path}.with 必须是 JSON object`);
       }
+      const actionParams = getWorkflowDefinitionActionParamDefinitions(step.uses || "");
+      if (actionParams.length) {
+        const withParams = isWorkflowDefinitionPlainObject(step.with) ? step.with : {};
+        actionParams
+          .filter((param) => param?.required)
+          .forEach((param) => {
+            if (!Object.prototype.hasOwnProperty.call(withParams, param.name)) {
+              pushItem("states", `${path}.with.${param.name} 是必填参数`);
+            }
+          });
+      }
     });
   });
   return items;
@@ -6003,7 +6014,7 @@ function setWorkflowDefinitionControlValue(el, value, fallbackLabel = "") {
     }
     const textEl = el.querySelector("span");
     if (textEl) {
-      textEl.textContent = selectedOption?.textContent || fallbackLabel || nextValue || "请选择";
+      textEl.textContent = selectedOption?.getAttribute("data-workflow-definition-select-label") || fallbackLabel || nextValue || "请选择";
     }
     return;
   }
@@ -7283,9 +7294,12 @@ function getWorkflowDefinitionSelectItems(options, selectedValue, placeholder = 
     const label = typeof option === "object" && option !== null
       ? String(option.label || value)
       : value;
+    const description = typeof option === "object" && option !== null
+      ? String(option.description || "")
+      : "";
     if (!value || seen.has(value)) return;
     seen.add(value);
-    items.push({ value, label });
+    items.push({ value, label, description });
   });
   if (selected && !seen.has(selected)) {
     items.push({ value: selected, label: `${selected}（未找到）` });
@@ -7293,10 +7307,11 @@ function getWorkflowDefinitionSelectItems(options, selectedValue, placeholder = 
   return items;
 }
 
-function renderWorkflowDefinitionSelectControl(attributeName, attributeValue, options, selectedValue, placeholder = "请选择") {
+function renderWorkflowDefinitionSelectControl(attributeName, attributeValue, options, selectedValue, placeholder = "请选择", config = {}) {
   const selected = String(selectedValue || "");
   const items = getWorkflowDefinitionSelectItems(options, selected, placeholder);
   const selectedItem = items.find((item) => item.value === selected) || items[0] || { value: "", label: placeholder };
+  const disabled = Boolean(config.disabled);
   return `
     <div class="workflow-definition-select" data-workflow-definition-select>
       <button
@@ -7307,6 +7322,7 @@ function renderWorkflowDefinitionSelectControl(attributeName, attributeValue, op
         data-workflow-definition-select-value="${escapeAttribute(selected)}"
         aria-haspopup="listbox"
         aria-expanded="false"
+        ${disabled ? "disabled" : ""}
       >
         <span>${escapeHtml(selectedItem.label)}</span>
       </button>
@@ -7316,9 +7332,13 @@ function renderWorkflowDefinitionSelectControl(attributeName, attributeValue, op
             type="button"
             class="workflow-definition-select-option${item.value === selected ? " selected" : ""}"
             data-workflow-definition-select-option="${escapeAttribute(item.value)}"
+            data-workflow-definition-select-label="${escapeAttribute(item.label)}"
             role="option"
             aria-selected="${item.value === selected ? "true" : "false"}"
-          >${escapeHtml(item.label)}</button>
+          >
+            <span class="workflow-definition-select-option-title">${escapeHtml(item.label)}</span>
+            ${item.description ? `<span class="workflow-definition-select-option-desc">${escapeHtml(item.description)}</span>` : ""}
+          </button>
         `).join("")}
       </div>
     </div>
@@ -7365,7 +7385,7 @@ function bindWorkflowDefinitionSelectControls(root) {
       if (!(select && button)) return;
       const value = option.getAttribute("data-workflow-definition-select-option") || "";
       button.setAttribute("data-workflow-definition-select-value", value);
-      const label = option.textContent || "";
+      const label = option.getAttribute("data-workflow-definition-select-label") || option.textContent || "";
       const textEl = button.querySelector("span");
       if (textEl) textEl.textContent = label;
       select.querySelectorAll("[data-workflow-definition-select-option]").forEach((item) => {
@@ -7545,6 +7565,193 @@ function getWorkflowDefinitionSystemStepUsesLabel(actionOptions, uses) {
   return value;
 }
 
+function getWorkflowDefinitionActionDefinition(uses) {
+  const value = String(uses || "");
+  return getWorkflowDefinitionActionOptions().find((item) => item && typeof item === "object" && String(item.value || "") === value) || null;
+}
+
+function isWorkflowDefinitionPlainObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function getWorkflowDefinitionActionParamDefinitions(uses) {
+  const action = getWorkflowDefinitionActionDefinition(uses);
+  return Array.isArray(action?.params) ? action.params : [];
+}
+
+function getWorkflowDefinitionActionParamDefault(param) {
+  if (param && Object.prototype.hasOwnProperty.call(param, "defaultValue")) {
+    return cloneJson(param.defaultValue);
+  }
+  if (param?.type === "object") return {};
+  if (param?.type === "string[]") return [];
+  if (param?.type === "boolean") return false;
+  if (param?.type === "number") return undefined;
+  if (param?.type === "any") return null;
+  return "";
+}
+
+function buildWorkflowDefinitionActionDefaultParams(uses, currentParams = {}) {
+  const schema = getWorkflowDefinitionActionParamDefinitions(uses);
+  const current = isWorkflowDefinitionPlainObject(currentParams) ? currentParams : {};
+  const next = {};
+  schema.forEach((param) => {
+    if (!param?.required) return;
+    if (Object.prototype.hasOwnProperty.call(current, param.name)) {
+      next[param.name] = current[param.name];
+    } else {
+      next[param.name] = getWorkflowDefinitionActionParamDefault(param);
+    }
+  });
+  return next;
+}
+
+function getWorkflowDefinitionSystemStepParamRows(step) {
+  const schema = getWorkflowDefinitionActionParamDefinitions(step?.uses || "");
+  const params = isWorkflowDefinitionPlainObject(step?.with) ? step.with : {};
+  const rows = [];
+  const rowNames = new Set();
+  schema.filter((param) => param?.required).forEach((param) => {
+    rows.push(param);
+    rowNames.add(param.name);
+  });
+  Object.keys(params).forEach((name) => {
+    if (rowNames.has(name)) return;
+    const param = schema.find((item) => item?.name === name) || {
+      name,
+      type: "any",
+      required: false,
+      description: "未在当前 action schema 中声明的参数。",
+    };
+    rows.push(param);
+    rowNames.add(name);
+  });
+  return rows;
+}
+
+function getWorkflowDefinitionSystemStepParamOptions(step, currentName = "") {
+  const schema = getWorkflowDefinitionActionParamDefinitions(step?.uses || "");
+  const params = isWorkflowDefinitionPlainObject(step?.with) ? step.with : {};
+  const used = new Set(Object.keys(params));
+  return schema
+    .filter((param) => param?.name && (param.name === currentName || !used.has(param.name)))
+    .map((param) => ({
+      value: param.name,
+      label: `${param.name}${param.required ? " *" : ""}`,
+      description: `${param.type || "any"}${param.description ? ` - ${param.description}` : ""}`,
+    }));
+}
+
+function formatWorkflowDefinitionParamType(type) {
+  if (type === "string[]") return "string[]";
+  return String(type || "any");
+}
+
+function getWorkflowDefinitionSystemStepParamValue(step, param) {
+  const params = isWorkflowDefinitionPlainObject(step?.with) ? step.with : {};
+  if (Object.prototype.hasOwnProperty.call(params, param.name)) return params[param.name];
+  return getWorkflowDefinitionActionParamDefault(param);
+}
+
+function renderWorkflowDefinitionSystemStepParamValueControl(index, param, value) {
+  const rawPath = `${index}.${param.name}`;
+  const placeholder = param.placeholder ? ` placeholder="${escapeAttribute(param.placeholder)}"` : "";
+  if (param.type === "number") {
+    const numberValue = typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+    return `<input data-system-step-param-value="${escapeAttribute(rawPath)}" data-system-step-param-type="number" type="number" value="${escapeAttribute(numberValue)}"${placeholder} />`;
+  }
+  if (param.type === "boolean") {
+    return `
+      <label class="workflow-definition-param-boolean">
+        <input data-system-step-param-value="${escapeAttribute(rawPath)}" data-system-step-param-type="boolean" type="checkbox" ${value ? "checked" : ""} />
+        <span>${value ? "true" : "false"}</span>
+      </label>
+    `;
+  }
+  if (param.type === "string[]") {
+    return `<textarea data-system-step-param-value="${escapeAttribute(rawPath)}" data-system-step-param-type="string[]" rows="3" spellcheck="false"${placeholder}>${escapeHtml(formatWorkflowDefinitionListText(value))}</textarea>`;
+  }
+  if (param.type === "object" || param.type === "any") {
+    return `<textarea data-system-step-param-value="${escapeAttribute(rawPath)}" data-system-step-param-type="${escapeAttribute(param.type || "any")}" rows="4" spellcheck="false">${escapeHtml(stringifyPrettyJson(value))}</textarea>`;
+  }
+  return `<input data-system-step-param-value="${escapeAttribute(rawPath)}" data-system-step-param-type="string" type="text" value="${escapeAttribute(typeof value === "string" ? value : value == null ? "" : String(value))}"${placeholder} />`;
+}
+
+function renderWorkflowDefinitionSystemStepParamsEditor(index, step) {
+  const schema = getWorkflowDefinitionActionParamDefinitions(step?.uses || "");
+  if (!schema.length) {
+    return `
+      <label class="workflow-definition-field workflow-definition-field-block">
+        <span>With JSON</span>
+        <textarea data-system-step-with="${index}" rows="6" spellcheck="false">${escapeHtml(stringifyPrettyJson(step?.with || {}))}</textarea>
+      </label>
+    `;
+  }
+
+  const rows = getWorkflowDefinitionSystemStepParamRows(step);
+  const usedNames = new Set(rows.map((param) => param.name));
+  const addOptions = schema
+    .filter((param) => param?.name && !param.required && !usedNames.has(param.name))
+    .map((param) => ({
+      value: param.name,
+      label: param.name,
+      description: `${param.type || "any"}${param.description ? ` - ${param.description}` : ""}`,
+    }));
+
+  return `
+    <div class="workflow-definition-system-param-editor">
+      <div class="workflow-definition-system-param-head">
+        <span>With Params</span>
+        ${
+          addOptions.length
+            ? `<span class="workflow-definition-system-param-add">
+                ${renderWorkflowDefinitionSelectControl("data-system-step-param-add", String(index), addOptions, "", "新增参数")}
+              </span>`
+            : ""
+        }
+      </div>
+      ${
+        rows.length
+          ? `<div class="workflow-definition-system-param-list">${rows
+              .map((param) => {
+                const value = getWorkflowDefinitionSystemStepParamValue(step, param);
+                const paramOptions = getWorkflowDefinitionSystemStepParamOptions(step, param.name);
+                return `
+                  <div class="workflow-definition-system-param-row">
+                    <label class="workflow-definition-field workflow-definition-param-name">
+                      <span>Field</span>
+                      ${renderWorkflowDefinitionSelectControl(
+                        "data-system-step-param-name",
+                        `${index}.${param.name}`,
+                        paramOptions,
+                        param.name,
+                        "选择字段",
+                        { disabled: Boolean(param.required) },
+                      )}
+                    </label>
+                    <label class="workflow-definition-field workflow-definition-param-value">
+                      <span>Value · ${escapeHtml(formatWorkflowDefinitionParamType(param.type))}</span>
+                      ${renderWorkflowDefinitionSystemStepParamValueControl(index, param, value)}
+                    </label>
+                    <div class="workflow-definition-system-param-actions">
+                      <span class="workflow-definition-system-param-required">${param.required ? "必填" : "可选"}</span>
+                      ${
+                        param.required
+                          ? ""
+                          : `<button type="button" class="btn-ghost" data-system-step-param-delete="${escapeAttribute(`${index}.${param.name}`)}">删除</button>`
+                      }
+                    </div>
+                    ${param.description ? `<div class="workflow-definition-system-param-desc">${escapeHtml(param.description)}</div>` : ""}
+                  </div>
+                `;
+              })
+              .join("")}</div>`
+          : '<div class="workflow-definition-state-inspector-empty">当前 action 没有已配置参数。</div>'
+      }
+    </div>
+  `;
+}
+
 function buildSystemRunStepsInspectorHtml(state) {
   const actionOptions = getWorkflowDefinitionActionOptions();
   const steps = Array.isArray(state?.run?.steps) ? state.run.steps : [];
@@ -7590,10 +7797,7 @@ function buildSystemRunStepsInspectorHtml(state) {
                           ${renderWorkflowDefinitionSelectControl("data-system-step-select-field", `${index}.uses`, actionOptions, step?.uses || "", "选择 action")}
                         </label>
                       </div>
-                      <label class="workflow-definition-field workflow-definition-field-block">
-                        <span>With JSON</span>
-                        <textarea data-system-step-with="${index}" rows="6" spellcheck="false">${escapeHtml(stringifyPrettyJson(step?.with || {}))}</textarea>
-                      </label>
+                      ${renderWorkflowDefinitionSystemStepParamsEditor(index, step)}
                     </div>
                   </details>
                 `;
@@ -7613,10 +7817,18 @@ function ensureSystemRunSteps(state) {
     const nextStep = step && typeof step === "object" && !Array.isArray(step) ? step : {};
     if (!String(nextStep.id || "").trim()) nextStep.id = `step_${index + 1}`;
     if (!String(nextStep.uses || "").trim()) nextStep.uses = "context.set";
-    if (nextStep.with === undefined) nextStep.with = {};
+    const defaults = buildWorkflowDefinitionActionDefaultParams(nextStep.uses, nextStep.with);
+    nextStep.with = isWorkflowDefinitionPlainObject(nextStep.with)
+      ? { ...defaults, ...nextStep.with }
+      : defaults;
     return nextStep;
   });
   return state;
+}
+
+function cleanupWorkflowDefinitionSystemStateObject(state) {
+  cleanupStateObject(state);
+  return ensureSystemRunSteps(state);
 }
 
 function parseWorkflowDefinitionJsonObjectField(label, rawValue, fallback = {}) {
@@ -7627,6 +7839,28 @@ function parseWorkflowDefinitionJsonObjectField(label, rawValue, fallback = {}) 
     throw new Error(`${label} 必须是 JSON object`);
   }
   return parsed;
+}
+
+function parseWorkflowDefinitionSystemParamValue(type, rawValue, checked) {
+  if (type === "number") {
+    const text = String(rawValue ?? "").trim();
+    if (!text) return undefined;
+    const numberValue = Number(text);
+    if (!Number.isFinite(numberValue)) throw new Error("number 参数必须是有效数字");
+    return numberValue;
+  }
+  if (type === "boolean") return Boolean(checked);
+  if (type === "string[]") return parseWorkflowDefinitionListText(rawValue);
+  if (type === "object") {
+    const parsed = parseWorkflowDefinitionJsonObjectField("object 参数", rawValue || "{}", {});
+    return parsed;
+  }
+  if (type === "any") {
+    const text = String(rawValue || "").trim();
+    if (!text) return null;
+    return JSON.parse(text);
+  }
+  return String(rawValue || "");
 }
 
 function cleanupStateObject(obj) {
@@ -7765,13 +7999,16 @@ function bindWorkflowDefinitionStateInspectorEvents() {
       applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
         ensureSystemRunSteps(state);
         const step = state.run.steps[index];
-        if (!step) return cleanupStateObject(state);
+        if (!step) return cleanupWorkflowDefinitionSystemStateObject(state);
         const value = el.hasAttribute("data-workflow-definition-select-button")
           ? el.getAttribute("data-workflow-definition-select-value") || ""
           : el.value;
         if (value) step[field] = value;
         else delete step[field];
-        return cleanupStateObject(ensureSystemRunSteps(state));
+        if (field === "uses") {
+          step.with = buildWorkflowDefinitionActionDefaultParams(value, step.with);
+        }
+        return cleanupWorkflowDefinitionSystemStateObject(state);
       });
       if (!el.hasAttribute("data-workflow-definition-select-button")) {
         restoreWorkflowDefinitionInspectorFocus(
@@ -7797,15 +8034,109 @@ function bindWorkflowDefinitionStateInspectorEvents() {
       applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
         ensureSystemRunSteps(state);
         const step = state.run.steps[index];
-        if (!step) return cleanupStateObject(state);
+        if (!step) return cleanupWorkflowDefinitionSystemStateObject(state);
         step.with = nextWith;
-        return cleanupStateObject(ensureSystemRunSteps(state));
+        return cleanupWorkflowDefinitionSystemStateObject(state);
       });
       restoreWorkflowDefinitionInspectorFocus(
         workflowDefinitionStateInspector,
         getWorkflowDefinitionInspectorSelector("data-system-step-with", String(index)),
         selection,
       );
+    });
+  });
+  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-system-step-param-add]")).forEach((el) => {
+    el.addEventListener("change", () => {
+      const index = Number(el.getAttribute("data-system-step-param-add"));
+      const paramName = el.getAttribute("data-workflow-definition-select-value") || "";
+      if (!Number.isInteger(index) || !paramName || !workflowDefinitionSelectedStateKey) return;
+      applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
+        ensureSystemRunSteps(state);
+        const step = state.run.steps[index];
+        if (!step) return cleanupWorkflowDefinitionSystemStateObject(state);
+        const param = getWorkflowDefinitionActionParamDefinitions(step.uses).find((item) => item?.name === paramName);
+        if (!param) return cleanupWorkflowDefinitionSystemStateObject(state);
+        step.with = isWorkflowDefinitionPlainObject(step.with) ? step.with : {};
+        step.with[paramName] = getWorkflowDefinitionActionParamDefault(param);
+        return cleanupWorkflowDefinitionSystemStateObject(state);
+      });
+    });
+  });
+  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-system-step-param-name]")).forEach((el) => {
+    el.addEventListener("change", () => {
+      const rawPath = el.getAttribute("data-system-step-param-name") || "";
+      const [rawIndex, oldName] = rawPath.split(".");
+      const index = Number(rawIndex);
+      const newName = el.getAttribute("data-workflow-definition-select-value") || "";
+      if (!Number.isInteger(index) || !oldName || !newName || oldName === newName || !workflowDefinitionSelectedStateKey) return;
+      applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
+        ensureSystemRunSteps(state);
+        const step = state.run.steps[index];
+        if (!step) return cleanupWorkflowDefinitionSystemStateObject(state);
+        step.with = isWorkflowDefinitionPlainObject(step.with) ? step.with : {};
+        const param = getWorkflowDefinitionActionParamDefinitions(step.uses).find((item) => item?.name === newName);
+        const value = Object.prototype.hasOwnProperty.call(step.with, oldName)
+          ? step.with[oldName]
+          : param
+            ? getWorkflowDefinitionActionParamDefault(param)
+            : undefined;
+        delete step.with[oldName];
+        step.with[newName] = value;
+        return cleanupWorkflowDefinitionSystemStateObject(state);
+      });
+    });
+  });
+  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-system-step-param-value]")).forEach((el) => {
+    const eventName = el.getAttribute("data-system-step-param-type") === "object" || el.getAttribute("data-system-step-param-type") === "any"
+      ? "input"
+      : el.type === "checkbox"
+        ? "change"
+        : "input";
+    el.addEventListener(eventName, () => {
+      const rawPath = el.getAttribute("data-system-step-param-value") || "";
+      const [rawIndex, paramName] = rawPath.split(".");
+      const index = Number(rawIndex);
+      const paramType = el.getAttribute("data-system-step-param-type") || "string";
+      if (!Number.isInteger(index) || !paramName || !workflowDefinitionSelectedStateKey) return;
+      let nextValue;
+      try {
+        nextValue = parseWorkflowDefinitionSystemParamValue(paramType, el.value, el.checked);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "参数值格式不合法", 1800);
+        return;
+      }
+      const selection = captureWorkflowDefinitionInspectorSelection(el);
+      applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
+        ensureSystemRunSteps(state);
+        const step = state.run.steps[index];
+        if (!step) return cleanupWorkflowDefinitionSystemStateObject(state);
+        step.with = isWorkflowDefinitionPlainObject(step.with) ? step.with : {};
+        if (nextValue === undefined) delete step.with[paramName];
+        else step.with[paramName] = nextValue;
+        return cleanupWorkflowDefinitionSystemStateObject(state);
+      });
+      if (el.type !== "checkbox") {
+        restoreWorkflowDefinitionInspectorFocus(
+          workflowDefinitionStateInspector,
+          getWorkflowDefinitionInspectorSelector("data-system-step-param-value", rawPath),
+          selection,
+        );
+      }
+    });
+  });
+  Array.from(workflowDefinitionStateInspector.querySelectorAll("[data-system-step-param-delete]")).forEach((button) => {
+    button.addEventListener("click", () => {
+      const rawPath = button.getAttribute("data-system-step-param-delete") || "";
+      const [rawIndex, paramName] = rawPath.split(".");
+      const index = Number(rawIndex);
+      if (!Number.isInteger(index) || !paramName || !workflowDefinitionSelectedStateKey) return;
+      applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
+        ensureSystemRunSteps(state);
+        const step = state.run.steps[index];
+        if (!step || !isWorkflowDefinitionPlainObject(step.with)) return cleanupWorkflowDefinitionSystemStateObject(state);
+        delete step.with[paramName];
+        return cleanupWorkflowDefinitionSystemStateObject(state);
+      });
     });
   });
   const addSystemStepBtn = workflowDefinitionStateInspector.querySelector("[data-system-step-action='add']");
@@ -7818,13 +8149,13 @@ function bindWorkflowDefinitionStateInspectorEvents() {
         const nextStep = {
           id: `step_${nextIndex}`,
           uses: defaultUses,
-          with: {},
+          with: buildWorkflowDefinitionActionDefaultParams(defaultUses),
         };
         state.run.steps.push(nextStep);
         workflowDefinitionCollapsedSystemStepKeys.delete(
           getWorkflowDefinitionSystemStepKey(workflowDefinitionSelectedStateKey, nextStep, nextIndex - 1),
         );
-        return cleanupStateObject(state);
+        return cleanupWorkflowDefinitionSystemStateObject(state);
       });
     });
   }
@@ -7842,7 +8173,7 @@ function bindWorkflowDefinitionStateInspectorEvents() {
         );
         state.run.steps.splice(index, 1);
         ensureSystemRunSteps(state);
-        return cleanupStateObject(state);
+        return cleanupWorkflowDefinitionSystemStateObject(state);
       });
     });
   });
@@ -8322,6 +8653,17 @@ function renderWorkflowDefinitionStateEditor(statesArg) {
       }
       if (step?.with !== undefined && (!step.with || typeof step.with !== "object" || Array.isArray(step.with))) {
         validationItems.push(`run.steps[${index}].with 必须是 JSON object`);
+      }
+      const actionParams = getWorkflowDefinitionActionParamDefinitions(step?.uses || "");
+      if (actionParams.length) {
+        const withParams = isWorkflowDefinitionPlainObject(step?.with) ? step.with : {};
+        actionParams
+          .filter((param) => param?.required)
+          .forEach((param) => {
+            if (!Object.prototype.hasOwnProperty.call(withParams, param.name)) {
+              validationItems.push(`run.steps[${index}].with.${param.name} 是必填参数`);
+            }
+          });
       }
     });
     collectWorkflowDefinitionTransitionEntries(selectedState).forEach(({ path, transition }) => {
@@ -10267,7 +10609,9 @@ async function loadWorkflowDefinitions(options = {}) {
       actionsRes.ok && Array.isArray(actionsData?.actions)
         ? actionsData.actions.map((action) => ({
             value: action.name || "",
-            label: action.description ? `${action.name} - ${action.description}` : action.name || "",
+            label: action.name || "",
+            description: action.description || "",
+            params: Array.isArray(action.params) ? action.params : [],
           }))
         : [];
     setWorkflowArtifactContracts(contractsRes.ok && Array.isArray(contractsData?.contracts) ? contractsData.contracts : []);
