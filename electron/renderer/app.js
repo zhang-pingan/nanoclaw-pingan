@@ -7637,7 +7637,7 @@ function getWorkflowDefinitionSystemStepParamOptions(step, currentName = "") {
     .filter((param) => param?.name && (param.name === currentName || !used.has(param.name)))
     .map((param) => ({
       value: param.name,
-      label: `${param.name}${param.required ? " *" : ""}`,
+      label: param.name,
       description: `${param.type || "any"}${param.description ? ` - ${param.description}` : ""}`,
     }));
 }
@@ -7669,7 +7669,12 @@ function renderWorkflowDefinitionSystemStepParamValueControl(index, param, value
     `;
   }
   if (param.type === "string[]") {
-    return `<textarea data-system-step-param-value="${escapeAttribute(rawPath)}" data-system-step-param-type="string[]" rows="3" spellcheck="false"${placeholder}>${escapeHtml(formatWorkflowDefinitionListText(value))}</textarea>`;
+    return renderWorkflowArtifactContractListEditor(
+      `system_step_param_${rawPath}`,
+      value,
+      param.placeholder || "输入后回车添加",
+      `data-system-step-param-list-value="${escapeAttribute(rawPath)}"`,
+    );
   }
   if (param.type === "object" || param.type === "any") {
     return `<textarea data-system-step-param-value="${escapeAttribute(rawPath)}" data-system-step-param-type="${escapeAttribute(param.type || "any")}" rows="4" spellcheck="false">${escapeHtml(stringifyPrettyJson(value))}</textarea>`;
@@ -7907,6 +7912,21 @@ function updateWorkflowDefinitionSelectedState(stateKey) {
 function bindWorkflowDefinitionStateInspectorEvents() {
   if (!workflowDefinitionStateInspector) return;
   bindWorkflowArtifactContractListEditors(workflowDefinitionStateInspector, (editor) => {
+    const rawParamPath = editor.getAttribute("data-system-step-param-list-value") || "";
+    if (rawParamPath) {
+      const [rawIndex, paramName] = rawParamPath.split(".");
+      const index = Number(rawIndex);
+      if (!Number.isInteger(index) || !paramName || !workflowDefinitionSelectedStateKey) return;
+      applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
+        ensureSystemRunSteps(state);
+        const step = state.run.steps[index];
+        if (!step) return cleanupWorkflowDefinitionSystemStateObject(state);
+        step.with = isWorkflowDefinitionPlainObject(step.with) ? step.with : {};
+        step.with[paramName] = getWorkflowArtifactContractListValues(editor);
+        return cleanupWorkflowDefinitionSystemStateObject(state);
+      });
+      return;
+    }
     const path = editor.getAttribute("data-state-list-field") || "";
     if (!path || !workflowDefinitionSelectedStateKey) return;
     applyWorkflowDefinitionStatePatch(workflowDefinitionSelectedStateKey, (state) => {
