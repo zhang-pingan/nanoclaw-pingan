@@ -2509,26 +2509,48 @@ function buildHookFailureMessage(
   return `Workflow ${hook} hook failed for state "${stateKey}": ${reason}`;
 }
 
-function stopWorkflowAfterHookBlock(input: {
+function stopWorkflowOnHookBlock(input: {
   workflow: Workflow;
   stateKey: string;
   hook: 'before_delegate' | 'after_complete';
   result: SystemRunResult;
   contextPatch?: WorkflowContext;
-}): void {
-  updateWorkflow(input.workflow.id, {
+  workflowUpdates?: Parameters<typeof updateWorkflow>[1];
+  syncKeySuffix?: string;
+  writeCheckpoint?: boolean;
+}): Workflow {
+  const updates: Parameters<typeof updateWorkflow>[1] = {
+    ...(input.workflowUpdates || {}),
     current_delegation_id: '',
-    ...(input.contextPatch && Object.keys(input.contextPatch).length > 0
-      ? { context: input.contextPatch }
-      : {}),
-  });
-  const updated = getWorkflow(input.workflow.id) || input.workflow;
-  writeWorkflowCheckpoint({
-    workflow: updated,
-    currentDelegationId: null,
-  });
+  };
+  const contextPatch = mergeWorkflowContext(
+    (updates.context as WorkflowContext | undefined) || {},
+    input.contextPatch,
+  );
+  if (Object.keys(contextPatch).length > 0) {
+    updates.context = contextPatch;
+  }
+
+  updateWorkflow(input.workflow.id, updates);
+  const updated =
+    getWorkflow(input.workflow.id) ||
+    ({
+      ...input.workflow,
+      ...updates,
+      context: mergeWorkflowContext(
+        input.workflow.context,
+        updates.context as WorkflowContext | undefined,
+      ),
+    } as Workflow);
+
+  if (input.writeCheckpoint !== false) {
+    writeWorkflowCheckpoint({
+      workflow: updated,
+      currentDelegationId: null,
+    });
+  }
   enqueueWorkflowWorkbenchSync(
-    input.workflow.id,
+    updated.id,
     'workflow_updated',
     {
       resultSummary: buildHookFailureMessage(
@@ -2537,8 +2559,11 @@ function stopWorkflowAfterHookBlock(input: {
         input.result,
       ),
     },
-    `workflow_hook_blocked:${input.stateKey}:${input.hook}:${updated.round}`,
+    `workflow_hook_blocked:${input.stateKey}:${input.hook}:${
+      input.syncKeySuffix || updated.round
+    }`,
   );
+  return updated;
 }
 
 function createDelegationForState(input: {
@@ -2556,11 +2581,20 @@ function createDelegationForState(input: {
   attempt: number;
   extra?: WorkflowTransitionExtra;
   retryNote?: string;
-}): {
-  intent: DelegationIntent;
-  contextPatch: WorkflowContext;
-  workflow: Workflow;
-} {
+}):
+  | {
+      status: 'created';
+      intent: DelegationIntent;
+      contextPatch: WorkflowContext;
+      workflow: Workflow;
+    }
+  | {
+      status: 'blocked';
+      hook: 'before_delegate';
+      result: SystemRunResult;
+      contextPatch: WorkflowContext;
+      workflow: Workflow;
+    } {
   const targetFolder = input.roles[input.role];
   if (!targetFolder) {
     throw new Error(
@@ -2576,9 +2610,20 @@ function createDelegationForState(input: {
     attempt: input.attempt,
   });
   if (beforeHook.status !== 'success') {
-    throw new Error(
-      buildHookFailureMessage('before_delegate', input.stateKey, beforeHook),
-    );
+    return {
+      status: 'blocked',
+      hook: 'before_delegate',
+      result: beforeHook,
+      contextPatch: beforeHook.contextPatch,
+      workflow: {
+        ...input.workflow,
+        status: input.stateKey as Workflow['status'],
+        context: mergeWorkflowContext(
+          input.workflow.context,
+          beforeHook.contextPatch,
+        ),
+      },
+    };
   }
 
   const workflowForDelegate: Workflow = {
@@ -2618,6 +2663,7 @@ function createDelegationForState(input: {
   });
 
   return {
+    status: 'created',
     intent,
     contextPatch: beforeHook.contextPatch,
     workflow: workflowForDelegate,
@@ -2884,6 +2930,29 @@ function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
       latestEvaluator.summary || '',
     )}`,
   });
+  if (prepared.status === 'blocked') {
+    stopWorkflowOnHookBlock({
+      workflow: prepared.workflow,
+      stateKey: workflow.status,
+      hook: prepared.hook,
+      result: prepared.result,
+      contextPatch: prepared.contextPatch,
+      syncKeySuffix: `${workflow.round}:${attempt}`,
+    });
+    writeWorkflowEvent({
+      workflowId: workflow.id,
+      eventType: 'retry_scheduled',
+      stateKey: workflow.status,
+      payload: {
+        reason: 'evaluator_pending_retry_blocked',
+        blocked_by_hook: prepared.hook,
+        attempt,
+      },
+      idempotencyKey: `workflow_retry_executed:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`,
+      createdAt: nowIso,
+    });
+    return;
+  }
   const delegationId = prepared.intent.delegationId;
   updateWorkflow(workflow.id, {
     current_delegation_id: delegationId,
@@ -3512,6 +3581,46 @@ function applyTransition(
       attempt: 1,
       extra,
     });
+    if (prepared.status === 'blocked') {
+      const blockedUpdates = mergeWorkflowContext(
+        updates.context || {},
+        prepared.contextPatch,
+      );
+      const blockedWorkflow = stopWorkflowOnHookBlock({
+        workflow: workflowForDelegate,
+        stateKey: transition.target,
+        hook: prepared.hook,
+        result: prepared.result,
+        workflowUpdates: {
+          ...updates,
+          context: blockedUpdates,
+        },
+        syncKeySuffix: `${round}:transition`,
+      });
+      writeWorkflowEvent({
+        workflowId: workflow.id,
+        eventType: 'transition_applied',
+        stateKey: fromStatus,
+        payload: {
+          source_state_key: fromStatus,
+          target_state_key: transition.target,
+          transition,
+          blocked_by_hook: prepared.hook,
+        },
+      });
+      enqueueWorkflowWorkbenchSync(
+        workflow.id,
+        'transition',
+        { fromStatus, toStatus: transition.target, delegationId: '' },
+        `transition:${fromStatus}:${transition.target}:${round}`,
+      );
+      ensureWorkflowStateDurableRecords(
+        blockedWorkflow,
+        'transition',
+        fromStatus,
+      );
+      return;
+    }
     delegationIntent = prepared.intent;
     updates.context = mergeWorkflowContext(
       updates.context || {},
@@ -3794,6 +3903,23 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           attempt: 1,
           idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
         });
+        if (prepared.status === 'blocked') {
+          stopWorkflowOnHookBlock({
+            workflow: prepared.workflow,
+            stateKey: entryPoint.state,
+            hook: prepared.hook,
+            result: prepared.result,
+            contextPatch: prepared.contextPatch,
+            syncKeySuffix: '0:create',
+          });
+          throw new Error(
+            buildHookFailureMessage(
+              prepared.hook,
+              entryPoint.state,
+              prepared.result,
+            ),
+          );
+        }
         const delegationId = prepared.intent.delegationId;
         updateWorkflow(workflowId, {
           current_delegation_id: delegationId,
@@ -3935,6 +4061,23 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         attempt: 1,
         idempotencyKey: `workflow_delegation:${workflowId}:${entryPoint.state}:0:1`,
       });
+      if (prepared.status === 'blocked') {
+        stopWorkflowOnHookBlock({
+          workflow: prepared.workflow,
+          stateKey: entryPoint.state,
+          hook: prepared.hook,
+          result: prepared.result,
+          contextPatch: prepared.contextPatch,
+          syncKeySuffix: '0:create',
+        });
+        throw new Error(
+          buildHookFailureMessage(
+            prepared.hook,
+            entryPoint.state,
+            prepared.result,
+          ),
+        );
+      }
       const delegationId = prepared.intent.delegationId;
       updateWorkflow(workflowId, {
         current_delegation_id: delegationId,
@@ -4194,6 +4337,21 @@ export function retryWorkflowStage(
       idempotencyKey: `workflow_delegation:${workflowId}:${stageKey}:${workflow.round}:${retryAttempt}`,
       retryNote: extra?.retryNote,
     });
+    if (prepared.status === 'blocked') {
+      stopWorkflowOnHookBlock({
+        workflow: prepared.workflow,
+        stateKey: stageKey,
+        hook: prepared.hook,
+        result: prepared.result,
+        workflowUpdates: {
+          status: stageKey,
+          paused_from: null,
+          context: prepared.contextPatch,
+        },
+        syncKeySuffix: `${workflow.round}:${retryAttempt}`,
+      });
+      return {};
+    }
     const delegationId = prepared.intent.delegationId;
 
     const fromStatus = workflow.status;
@@ -4397,7 +4555,7 @@ export function onDelegationComplete(delegationId: string): void {
     };
   }
   if (afterHook.status !== 'success') {
-    stopWorkflowAfterHookBlock({
+    stopWorkflowOnHookBlock({
       workflow,
       stateKey: workflow.status,
       hook: 'after_complete',

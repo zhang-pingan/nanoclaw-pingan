@@ -2255,6 +2255,107 @@ describe('system workflow action nodes', () => {
     }
   });
 
+  it('blocks transition delegation creation when before_delegate fails', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalCapture = config.states.capture_before_block;
+    const originalBlocked = config.states.blocked_before_hook;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'capture_before_block',
+    };
+    config.states.capture_before_block = {
+      type: 'delegation',
+      label: '采集后转入失败 hook',
+      role: 'planner',
+      skill: 'plan-requirement',
+      task_template: '返回结构化阶段结果',
+      on_complete: {
+        success: { target: 'blocked_before_hook' },
+        failure: { target: 'cancelled' },
+      },
+    };
+    config.states.blocked_before_hook = {
+      type: 'delegation',
+      label: '前置 hook 失败',
+      role: 'planner',
+      skill: 'plan-requirement',
+      task_template: '不应创建委派',
+      before_delegate: {
+        steps: [
+          {
+            id: 'need_missing_context',
+            uses: 'context.require',
+            with: {
+              keys: ['missing_before_delegate_key'],
+            },
+          },
+        ],
+      },
+      on_complete: {
+        success: { target: 'passed' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'Before hook blocked feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'before hook should block transition',
+      });
+
+      expect(result.error).toBeUndefined();
+      const firstDelegation = getDelegationsByWorkflow(result.workflowId)[0];
+      expect(firstDelegation).toBeDefined();
+
+      updateDelegation(firstDelegation!.id, {
+        status: 'completed',
+        outcome: 'success',
+        result: buildStructuredResult({
+          build_id: 'build-before-block',
+        }),
+      });
+      onDelegationComplete(firstDelegation!.id);
+
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.status).toBe('blocked_before_hook');
+      expect(workflow?.current_delegation_id).toBe('');
+      expect(workflow?.context.latest_delegation_result).toMatchObject({
+        delegation_id: firstDelegation!.id,
+      });
+      expect(getDelegationsByWorkflow(result.workflowId)).toHaveLength(1);
+
+      const events = listWorkflowEvents(result.workflowId);
+      const failedHookStep = events.find(
+        (event) => event.event_type === 'workflow_hook_step_failed',
+      );
+      expect(failedHookStep?.payload_json).toContain(
+        'missing_before_delegate_key',
+      );
+      const transition = events.find(
+        (event) => event.event_type === 'transition_applied',
+      );
+      expect(transition?.payload_json).toContain('blocked_by_hook');
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalCapture) {
+        config.states.capture_before_block = originalCapture;
+      } else {
+        delete config.states.capture_before_block;
+      }
+      if (originalBlocked) {
+        config.states.blocked_before_hook = originalBlocked;
+      } else {
+        delete config.states.blocked_before_hook;
+      }
+    }
+  });
+
   it('routes system step failures through the configured failure transition', () => {
     const config = getWorkflowTypeConfig('dev_test')!;
     const originalEntry = config.entry_points.plan;
