@@ -15,6 +15,8 @@ import { registerChannel, type ChannelOpts } from './registry.js';
 import { registerWebhookRoute } from './webhook-ingress.js';
 
 const WECOM_API_BASE = 'https://qyapi.weixin.qq.com/cgi-bin';
+const WECOM_MESSAGE_SEND_URL =
+  'http://callback.chelaile.net.cn/cgi-bin/message/send';
 const WECOM_USER_JID_PREFIX = 'wecom:user:';
 const PKCS7_BLOCK_SIZE = 32;
 
@@ -311,7 +313,7 @@ export class WeComChannel implements Channel {
 
     const accessToken = await this.getAccessToken();
     const response = await axios.post(
-      `${WECOM_API_BASE}/message/send`,
+      WECOM_MESSAGE_SEND_URL,
       {
         touser: userid,
         msgtype: 'text',
