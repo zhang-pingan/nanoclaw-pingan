@@ -1,6 +1,6 @@
 import axios from 'axios';
 import crypto from 'crypto';
-import http from 'http';
+import type { IncomingMessage, ServerResponse } from 'http';
 
 import type {
   Channel,
@@ -12,10 +12,10 @@ import type {
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, type ChannelOpts } from './registry.js';
+import { registerWebhookRoute } from './webhook-ingress.js';
 
 const WECOM_API_BASE = 'https://qyapi.weixin.qq.com/cgi-bin';
 const WECOM_USER_JID_PREFIX = 'wecom:user:';
-const DEFAULT_WEBHOOK_PORT = 3004;
 const PKCS7_BLOCK_SIZE = 32;
 
 export interface WeComConfig {
@@ -24,7 +24,6 @@ export interface WeComConfig {
   appSecret: string;
   token: string;
   encodingAesKey: string;
-  webhookPort?: number;
   allowedUserIds?: string[];
 }
 
@@ -44,11 +43,6 @@ function parseCsvList(value?: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function parseWebhookPort(value?: string): number {
-  const parsed = Number.parseInt(value || '', 10);
-  return Number.isFinite(parsed) ? parsed : DEFAULT_WEBHOOK_PORT;
 }
 
 function toAgentId(value: string): string | number {
@@ -251,16 +245,14 @@ export class WeComChannel implements Channel {
   private token: string | null = null;
   private tokenExpiry = 0;
   private connected = false;
-  private server: http.Server | null = null;
+  private unregisterWebhookRoute: (() => Promise<void>) | null = null;
   private readonly allowedUserIds: Set<string>;
-  private readonly webhookPort: number;
 
   constructor(
     private readonly config: WeComConfig,
     private readonly opts: ChannelOpts,
   ) {
     this.allowedUserIds = new Set(config.allowedUserIds || []);
-    this.webhookPort = config.webhookPort || DEFAULT_WEBHOOK_PORT;
   }
 
   async connect(): Promise<void> {
@@ -270,13 +262,10 @@ export class WeComChannel implements Channel {
   }
 
   async disconnect(): Promise<void> {
-    const server = this.server;
-    this.server = null;
+    const unregisterWebhookRoute = this.unregisterWebhookRoute;
+    this.unregisterWebhookRoute = null;
     this.connected = false;
-    if (!server) return;
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    });
+    if (unregisterWebhookRoute) await unregisterWebhookRoute();
   }
 
   isConnected(): boolean {
@@ -342,35 +331,19 @@ export class WeComChannel implements Channel {
   }
 
   private async startWebhookServer(): Promise<void> {
-    if (this.server) return;
-    this.server = http.createServer((req, res) => {
-      void this.handleHttpRequest(req, res);
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      const onError = (err: Error) => {
-        this.server?.off('listening', onListening);
-        reject(err);
-      };
-      const onListening = () => {
-        this.server?.off('error', onError);
-        logger.info(
-          { port: this.webhookPort, path: '/webhook/wecom/app' },
-          'WeCom webhook server listening',
-        );
-        resolve();
-      };
-      this.server!.once('error', onError);
-      this.server!.once('listening', onListening);
-      this.server!.listen(this.webhookPort, '0.0.0.0');
+    if (this.unregisterWebhookRoute) return;
+    this.unregisterWebhookRoute = await registerWebhookRoute({
+      name: 'wecom',
+      pathPrefix: '/webhook/wecom/app',
+      handler: ({ req, res, url }) => this.handleHttpRequest(req, res, url),
     });
   }
 
   private async handleHttpRequest(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
+    req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
   ): Promise<void> {
-    const url = new URL(req.url || '/', `http://localhost:${this.webhookPort}`);
     if (url.pathname !== '/webhook/wecom/app') {
       res.writeHead(404);
       res.end();
@@ -397,7 +370,7 @@ export class WeComChannel implements Channel {
   }
 
   private writeWebhookResponse(
-    res: http.ServerResponse,
+    res: ServerResponse,
     response: WebhookResponse,
   ): void {
     res.writeHead(response.statusCode, {
@@ -406,7 +379,7 @@ export class WeComChannel implements Channel {
     res.end(response.body);
   }
 
-  private readRequestBody(req: http.IncomingMessage): Promise<string> {
+  private readRequestBody(req: IncomingMessage): Promise<string> {
     return new Promise((resolve, reject) => {
       let body = '';
       req.setEncoding('utf-8');
@@ -624,7 +597,6 @@ registerChannel('wecom', (opts) => {
     'WECOM_APP_SECRET',
     'WECOM_APP_TOKEN',
     'WECOM_APP_ENCODING_AES_KEY',
-    'WECOM_WEBHOOK_PORT',
     'WECOM_ALLOWED_USER_IDS',
     'WECOM_USER_ALLOWLIST',
   ]);
@@ -633,9 +605,6 @@ registerChannel('wecom', (opts) => {
   const appSecret = env.WECOM_APP_SECRET;
   const token = env.WECOM_APP_TOKEN;
   const encodingAesKey = env.WECOM_APP_ENCODING_AES_KEY;
-  const webhookPort = parseWebhookPort(
-    process.env.WECOM_WEBHOOK_PORT || env.WECOM_WEBHOOK_PORT,
-  );
   const allowedUserIds = parseCsvList(
     env.WECOM_ALLOWED_USER_IDS || env.WECOM_USER_ALLOWLIST,
   );
@@ -647,7 +616,6 @@ registerChannel('wecom', (opts) => {
       appSecret,
       token,
       encodingAesKey,
-      webhookPort,
       allowedUserIds,
     },
     opts,

@@ -21,7 +21,8 @@ if [ -f "${PID_FILE}" ]; then
     url="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "${LOG_FILE}" | tail -n 1 || true)"
     if [ -n "${url}" ]; then
       echo "tunnel url: ${url}"
-      echo "webhook url: ${url}/webhook/feishu"
+      echo "feishu webhook url: ${url}/webhook/feishu"
+      echo "wecom webhook url: ${url}/webhook/wecom/app"
     else
       echo "log file: ${LOG_FILE}"
     fi
@@ -54,9 +55,9 @@ done
 
 if [ -n "${url}" ]; then
   echo "tunnel ready: ${url}"
-  echo "webhook url: ${url}/webhook/feishu"
+  echo "feishu webhook url: ${url}/webhook/feishu"
+  echo "wecom webhook url: ${url}/webhook/wecom/app"
 else
   echo "tunnel started but url is not available yet"
   echo "check logs: ${LOG_FILE}"
 fi
-

@@ -19,7 +19,7 @@ launchd 启动 dist/index.js  (plist: ~/Library/LaunchAgents/com.nanoclaw.plist)
   │
   ├─ 4. 频道连接
   │     遍历已注册频道 → 从 .env 读取凭据 → 创建实例 → connect()
-  │     飞书：启动 Webhook 服务器 (端口 3002)
+  │     飞书/企微：注册到共享 Webhook 入口 (端口 3002)
   │
   ├─ 5. 子系统启动
   │     任务调度器   → 每 60s 检查到期任务
@@ -35,9 +35,9 @@ launchd 启动 dist/index.js  (plist: ~/Library/LaunchAgents/com.nanoclaw.plist)
 ```
 用户在飞书发消息
   ↓
-飞书服务器 → Cloudflare Tunnel → localhost:3002/webhook/feishu
+飞书/企微服务器 → Cloudflare Tunnel → localhost:3002/webhook/{channel}
   ↓
-FeishuChannel.handleWebhook() → 存入 SQLite messages 表
+Channel webhook handler → 存入 SQLite messages 表
   ↓
 消息轮询 (每 2s) → getNewMessages() 发现新消息
   ↓

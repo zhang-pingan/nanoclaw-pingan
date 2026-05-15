@@ -1,7 +1,7 @@
 import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
-import http from 'http';
+import type { ServerResponse } from 'http';
 import path from 'path';
 import {
   CardActionHandler,
@@ -22,16 +22,10 @@ import { ATTACHMENTS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel } from './registry.js';
+import { registerWebhookRoute } from './webhook-ingress.js';
 
 const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis';
 const FEISHU_API_BASE_V2 = 'https://open.feishu.cn/open-apis/v2';
-const feishuEnv = readEnvFile(['FEISHU_WEBHOOK_PORT']);
-const webhookPortRaw =
-  process.env.FEISHU_WEBHOOK_PORT || feishuEnv.FEISHU_WEBHOOK_PORT || '3002';
-const parsedWebhookPort = Number.parseInt(webhookPortRaw, 10);
-const WEBHOOK_PORT = Number.isFinite(parsedWebhookPort)
-  ? parsedWebhookPort
-  : 3002;
 
 interface FeishuConfig {
   appId: string;
@@ -49,7 +43,7 @@ class FeishuChannel implements Channel {
   private onChatMetadata: OnChatMetadata;
   private registeredGroups: () => Record<string, RegisteredGroup>;
   private connected = false;
-  private server: http.Server | null = null;
+  private unregisterWebhookRoute: (() => Promise<void>) | null = null;
   onCardAction: CardActionHandler | null = null;
 
   constructor(
@@ -68,99 +62,100 @@ class FeishuChannel implements Channel {
 
   async connect(): Promise<void> {
     await this.getTenantAccessToken();
-    this.startWebhookServer();
+    await this.startWebhookServer();
     this.connected = true;
   }
 
-  private startWebhookServer(): void {
-    this.server = http.createServer((req, res) => {
-      if (req.method === 'GET' && req.url?.startsWith('/webhook/feishu')) {
-        // Verification challenge from Feishu - return the verification_token from URL params
-        const url = new URL(req.url, `http://localhost:${WEBHOOK_PORT}`);
-        const verificationToken = url.searchParams.get('verification_token');
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end(verificationToken || '');
-        return;
-      }
+  private async startWebhookServer(): Promise<void> {
+    if (this.unregisterWebhookRoute) return;
+    this.unregisterWebhookRoute = await registerWebhookRoute({
+      name: 'feishu',
+      pathPrefix: '/webhook/feishu',
+      handler: ({ req, res, url }) => {
+        if (req.method === 'GET' && req.url?.startsWith('/webhook/feishu')) {
+          // Verification challenge from Feishu - return the verification_token from URL params
+          const verificationToken = url.searchParams.get('verification_token');
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(verificationToken || '');
+          return;
+        }
 
-      if (req.method === 'POST' && req.url?.startsWith('/webhook/feishu')) {
-        let body = '';
-        req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
-          try {
-            const payload = JSON.parse(body);
-            const eventType = payload.event?.type || payload.header?.event_type;
-            logger.debug(
-              {
-                eventType,
-                hasEncrypt: !!payload.encrypt,
-                hasHeader: !!payload.header,
-              },
-              'Feishu webhook received',
-            );
-
-            // If this is a verification challenge (type = "url_verification"), return the challenge
-            if (payload.type === 'url_verification') {
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(
-                JSON.stringify({
-                  challenge: payload.challenge,
-                }),
+        if (req.method === 'POST' && req.url?.startsWith('/webhook/feishu')) {
+          let body = '';
+          req.on('data', (chunk) => (body += chunk));
+          req.on('end', () => {
+            try {
+              const payload = JSON.parse(body);
+              const eventType =
+                payload.event?.type || payload.header?.event_type;
+              logger.debug(
+                {
+                  eventType,
+                  hasEncrypt: !!payload.encrypt,
+                  hasHeader: !!payload.header,
+                },
+                'Feishu webhook received',
               );
-              return;
-            }
 
-            // Verify token if configured (v1.0: payload.verification_token, v2.0: payload.header.token)
-            if (this.config.verificationToken) {
-              const reqToken =
-                payload.verification_token || payload.header?.token;
-              if (reqToken !== this.config.verificationToken) {
-                logger.warn(
-                  {
-                    eventType,
-                    chatId: payload.event?.message?.chat_id,
-                  },
-                  'Feishu webhook rejected: invalid verification token',
-                );
-                res.writeHead(401, { 'Content-Type': 'application/json' });
+              // If this is a verification challenge (type = "url_verification"), return the challenge
+              if (payload.type === 'url_verification') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(
-                  JSON.stringify({ error: 'Invalid verification token' }),
+                  JSON.stringify({
+                    challenge: payload.challenge,
+                  }),
                 );
                 return;
               }
+
+              // Verify token if configured (v1.0: payload.verification_token, v2.0: payload.header.token)
+              if (this.config.verificationToken) {
+                const reqToken =
+                  payload.verification_token || payload.header?.token;
+                if (reqToken !== this.config.verificationToken) {
+                  logger.warn(
+                    {
+                      eventType,
+                      chatId: payload.event?.message?.chat_id,
+                    },
+                    'Feishu webhook rejected: invalid verification token',
+                  );
+                  res.writeHead(401, { 'Content-Type': 'application/json' });
+                  res.end(
+                    JSON.stringify({ error: 'Invalid verification token' }),
+                  );
+                  return;
+                }
+              }
+              // Card action callbacks need synchronous response with updated card
+              if (eventType === 'card.action.trigger') {
+                void this.handleCardActionEvent(payload, res);
+                return;
+              }
+
+              this.handleWebhook(payload).catch((err) => {
+                console.error('[feishu] handleWebhook error:', err);
+              });
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ code: 0, msg: 'success' }));
+            } catch (e) {
+              logger.error(
+                {
+                  error: e,
+                  bodyPreview: body.slice(0, 500),
+                },
+                '[feishu] Webhook error',
+              );
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid payload' }));
             }
-            // Card action callbacks need synchronous response with updated card
-            if (eventType === 'card.action.trigger') {
-              void this.handleCardActionEvent(payload, res);
-              return;
-            }
+          });
+          return;
+        }
 
-            this.handleWebhook(payload).catch((err) => {
-              console.error('[feishu] handleWebhook error:', err);
-            });
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ code: 0, msg: 'success' }));
-          } catch (e) {
-            logger.error(
-              {
-                error: e,
-                bodyPreview: body.slice(0, 500),
-              },
-              '[feishu] Webhook error',
-            );
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid payload' }));
-          }
-        });
-        return;
-      }
-
-      res.writeHead(404);
-      res.end();
-    });
-
-    this.server.listen(WEBHOOK_PORT, '0.0.0.0', () => {
-      console.log(`[feishu] Webhook server listening on port ${WEBHOOK_PORT}`);
+        res.writeHead(404);
+        res.end();
+      },
     });
   }
 
@@ -675,9 +670,9 @@ class FeishuChannel implements Channel {
   }
 
   async disconnect(): Promise<void> {
-    if (this.server) {
-      this.server.close();
-      this.server = null;
+    if (this.unregisterWebhookRoute) {
+      await this.unregisterWebhookRoute();
+      this.unregisterWebhookRoute = null;
     }
     this.connected = false;
   }
@@ -859,7 +854,7 @@ class FeishuChannel implements Channel {
   // Handle card action callback from Feishu
   private async handleCardActionEvent(
     payload: any,
-    res: http.ServerResponse,
+    res: ServerResponse,
   ): Promise<void> {
     const action = payload.event?.action;
     const actionName =
