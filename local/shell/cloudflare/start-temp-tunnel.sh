@@ -5,7 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="${SCRIPT_DIR}/.runtime"
 PID_FILE="${RUNTIME_DIR}/cloudflared.pid"
 LOG_FILE="${RUNTIME_DIR}/cloudflared.log"
-ORIGIN_URL="${1:-http://localhost:3002}"
+MODE="${1:-named}"
+ORIGIN_URL="${2:-http://localhost:3002}"
+CONFIG_FILE="${CLOUDFLARED_CONFIG:-${HOME}/.cloudflared/config.yml}"
+TUNNEL_NAME="${CLOUDFLARED_TUNNEL:-nanoclaw}"
+PUBLIC_HOSTNAME="${CLOUDFLARED_HOSTNAME:-webhook.zwqbb.com}"
 
 mkdir -p "${RUNTIME_DIR}"
 
@@ -18,8 +22,8 @@ if [ -f "${PID_FILE}" ]; then
   old_pid="$(cat "${PID_FILE}")"
   if kill -0 "${old_pid}" >/dev/null 2>&1; then
     echo "cloudflared already running (pid=${old_pid})"
-    url="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "${LOG_FILE}" | tail -n 1 || true)"
-    if [ -n "${url}" ]; then
+    if [ -f "${RUNTIME_DIR}/cloudflared.url" ]; then
+      url="$(cat "${RUNTIME_DIR}/cloudflared.url")"
       echo "tunnel url: ${url}"
       echo "feishu webhook url: ${url}/webhook/feishu"
       echo "wecom webhook url: ${url}/webhook/wecom/app"
@@ -31,12 +35,25 @@ if [ -f "${PID_FILE}" ]; then
   rm -f "${PID_FILE}"
 fi
 
-nohup cloudflared tunnel --url "${ORIGIN_URL}" >"${LOG_FILE}" 2>&1 &
+if [ "${MODE}" = "temp" ]; then
+  nohup cloudflared tunnel --url "${ORIGIN_URL}" >"${LOG_FILE}" 2>&1 &
+  url_pattern='https://[a-z0-9-]+\.trycloudflare\.com'
+  echo "origin: ${ORIGIN_URL}"
+else
+  if [ ! -f "${CONFIG_FILE}" ]; then
+    echo "cloudflared config not found: ${CONFIG_FILE}"
+    exit 1
+  fi
+  nohup cloudflared tunnel --config "${CONFIG_FILE}" run "${TUNNEL_NAME}" >"${LOG_FILE}" 2>&1 &
+  url_pattern=''
+  echo "config: ${CONFIG_FILE}"
+  echo "tunnel: ${TUNNEL_NAME}"
+fi
+
 pid="$!"
 echo "${pid}" >"${PID_FILE}"
 
 echo "starting cloudflared (pid=${pid}) ..."
-echo "origin: ${ORIGIN_URL}"
 
 url=""
 for _ in $(seq 1 30); do
@@ -46,7 +63,13 @@ for _ in $(seq 1 30); do
     rm -f "${PID_FILE}"
     exit 1
   fi
-  url="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "${LOG_FILE}" | tail -n 1 || true)"
+  if [ "${MODE}" = "temp" ]; then
+    url="$(grep -Eo "${url_pattern}" "${LOG_FILE}" | tail -n 1 || true)"
+  else
+    if grep -q 'Registered tunnel connection' "${LOG_FILE}"; then
+      url="https://${PUBLIC_HOSTNAME}"
+    fi
+  fi
   if [ -n "${url}" ]; then
     break
   fi
@@ -54,6 +77,7 @@ for _ in $(seq 1 30); do
 done
 
 if [ -n "${url}" ]; then
+  echo "${url}" >"${RUNTIME_DIR}/cloudflared.url"
   echo "tunnel ready: ${url}"
   echo "feishu webhook url: ${url}/webhook/feishu"
   echo "wecom webhook url: ${url}/webhook/wecom/app"
