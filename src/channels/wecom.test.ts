@@ -140,7 +140,7 @@ describe('WeComChannel', () => {
       },
     );
     expect(axiosPostMock).toHaveBeenCalledWith(
-      'http://callback.chelaile.net.cn/cgi-bin/message/send',
+      'https://qyapi.weixin.qq.com/cgi-bin/message/send',
       {
         touser: 'zhangsan',
         msgtype: 'text',
