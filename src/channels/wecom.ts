@@ -857,7 +857,7 @@ export class WeComChannel implements Channel {
       sender_name: senderName,
       content,
       timestamp,
-      is_from_me: false,
+      is_from_me: jid.startsWith(WECOM_USER_JID_PREFIX),
       is_bot_message: false,
     };
     this.opts.onMessage(jid, message);

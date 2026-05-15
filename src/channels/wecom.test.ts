@@ -327,7 +327,7 @@ describe('WeComChannel', () => {
       sender_name: '张三',
       content: '帮我查一下今天任务状态',
       timestamp: '1700000000000',
-      is_from_me: false,
+      is_from_me: true,
       is_bot_message: false,
     });
   });
@@ -387,6 +387,7 @@ describe('WeComChannel', () => {
         id: 'wecom-987654322',
         chat_jid: 'wecom:user:zhangsan',
         content: expect.stringContaining('/workspace/attachments/'),
+        is_from_me: true,
       }),
     );
     const delivered = onMessage.mock.calls[0][1].content as string;
@@ -504,6 +505,7 @@ describe('WeComChannel', () => {
         chat_jid: 'wecom:user:lisi',
         sender: 'lisi',
         content: 'hello',
+        is_from_me: true,
       }),
     );
   });
