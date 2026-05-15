@@ -1,9 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
-const { axiosGetMock, axiosPostMock } = vi.hoisted(() => ({
-  axiosGetMock: vi.fn(),
-  axiosPostMock: vi.fn(),
-}));
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { axiosGetMock, axiosPostMock, attachmentsDir } = vi.hoisted(() => {
+  const tmpBase = process.env.TMPDIR || '/tmp';
+  return {
+    axiosGetMock: vi.fn(),
+    axiosPostMock: vi.fn(),
+    attachmentsDir: `${tmpBase.replace(/\/$/, '')}/nanoclaw-wecom-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  };
+});
 
 vi.mock('axios', () => ({
   default: {
@@ -11,6 +19,15 @@ vi.mock('axios', () => ({
     post: axiosPostMock,
   },
 }));
+
+vi.mock('../config.js', async () => {
+  const actual =
+    await vi.importActual<typeof import('../config.js')>('../config.js');
+  return {
+    ...actual,
+    ATTACHMENTS_DIR: attachmentsDir,
+  };
+});
 
 import type {
   OnChatMetadata,
@@ -104,8 +121,13 @@ function encryptedPostBody(xml: string): {
 }
 
 beforeEach(() => {
+  fs.mkdirSync(attachmentsDir, { recursive: true });
   axiosGetMock.mockReset();
   axiosPostMock.mockReset();
+});
+
+afterAll(() => {
+  fs.rmSync(attachmentsDir, { recursive: true, force: true });
 });
 
 describe('WeComChannel', () => {
@@ -151,6 +173,73 @@ describe('WeComChannel', () => {
         params: { access_token: 'access-token-1' },
       },
     );
+  });
+
+  it('uploads temporary media and sends a self-built app file message', async () => {
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'nanoclaw-wecom-send-'),
+    );
+    const filePath = path.join(tmpDir, 'report.txt');
+    fs.writeFileSync(filePath, 'hello file', 'utf-8');
+    const channel = createChannel();
+    axiosGetMock.mockResolvedValue({
+      data: {
+        errcode: 0,
+        access_token: 'access-token-1',
+        expires_in: 7200,
+      },
+    });
+    axiosPostMock
+      .mockResolvedValueOnce({
+        data: { errcode: 0, media_id: 'media-file-1' },
+      })
+      .mockResolvedValueOnce({ data: { errcode: 0 } })
+      .mockResolvedValueOnce({ data: { errcode: 0 } });
+
+    await channel.sendFile('wecom:user:zhangsan', filePath, '请查收');
+
+    expect(axiosPostMock).toHaveBeenNthCalledWith(
+      1,
+      'https://qyapi.weixin.qq.com/cgi-bin/media/upload',
+      expect.anything(),
+      expect.objectContaining({
+        params: {
+          access_token: 'access-token-1',
+          type: 'file',
+        },
+        headers: expect.objectContaining({
+          'content-type': expect.stringContaining('multipart/form-data'),
+        }),
+      }),
+    );
+    expect(axiosPostMock).toHaveBeenNthCalledWith(
+      2,
+      'https://qyapi.weixin.qq.com/cgi-bin/message/send',
+      {
+        touser: 'zhangsan',
+        msgtype: 'file',
+        agentid: 1000002,
+        file: { media_id: 'media-file-1' },
+      },
+      {
+        params: { access_token: 'access-token-1' },
+      },
+    );
+    expect(axiosPostMock).toHaveBeenNthCalledWith(
+      3,
+      'https://qyapi.weixin.qq.com/cgi-bin/message/send',
+      {
+        touser: 'zhangsan',
+        msgtype: 'text',
+        agentid: 1000002,
+        text: { content: '请查收' },
+      },
+      {
+        params: { access_token: 'access-token-1' },
+      },
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it('caches access tokens until expiry', async () => {
@@ -243,12 +332,124 @@ describe('WeComChannel', () => {
     });
   });
 
-  it('does not trigger the agent for unregistered and unallowlisted users', () => {
+  it('downloads inbound media and exposes an attachments container path', async () => {
+    const groups = {
+      'wecom:user:zhangsan': registeredUserGroup('张三'),
+    };
+    const onMessage = vi.fn();
+    const onChatMetadata = vi.fn();
+    const channel = createChannel({ groups, onMessage, onChatMetadata });
+    axiosGetMock
+      .mockResolvedValueOnce({
+        data: {
+          errcode: 0,
+          access_token: 'access-token-1',
+          expires_in: 7200,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: Buffer.from('file bytes'),
+        headers: {
+          'content-type': 'application/octet-stream',
+          'content-disposition': 'attachment; filename="需求文档.pdf"',
+        },
+      });
+    const { body, params } = encryptedPostBody(`
+      <xml>
+        <ToUserName><![CDATA[ww-demo-corp]]></ToUserName>
+        <FromUserName><![CDATA[zhangsan]]></FromUserName>
+        <CreateTime>1700000000</CreateTime>
+        <MsgType><![CDATA[file]]></MsgType>
+        <MediaId><![CDATA[media-file-1]]></MediaId>
+        <FileName><![CDATA[fallback.txt]]></FileName>
+        <MsgId>987654322</MsgId>
+        <AgentID>1000002</AgentID>
+      </xml>
+    `);
+
+    const response = await (channel as any).handlePostWebhook(body, params);
+
+    expect(response).toMatchObject({ statusCode: 200, body: 'success' });
+    expect(axiosGetMock).toHaveBeenNthCalledWith(
+      2,
+      'https://qyapi.weixin.qq.com/cgi-bin/media/get',
+      {
+        params: {
+          access_token: 'access-token-1',
+          media_id: 'media-file-1',
+        },
+        responseType: 'arraybuffer',
+      },
+    );
+    expect(onMessage).toHaveBeenCalledWith(
+      'wecom:user:zhangsan',
+      expect.objectContaining({
+        id: 'wecom-987654322',
+        chat_jid: 'wecom:user:zhangsan',
+        content: expect.stringContaining('/workspace/attachments/'),
+      }),
+    );
+    const delivered = onMessage.mock.calls[0][1].content as string;
+    expect(delivered).toContain('[文件: 需求文档.pdf]');
+    const containerPath = delivered.match(
+      /\/workspace\/attachments\/[^)]+/,
+    )?.[0];
+    expect(containerPath).toBeTruthy();
+    const storedName = path.basename(containerPath!);
+    expect(
+      fs.readFileSync(path.join(attachmentsDir, storedName), 'utf-8'),
+    ).toBe('file bytes');
+  });
+
+  it('reports media download failures as inbound messages', async () => {
+    const groups = {
+      'wecom:user:zhangsan': registeredUserGroup('张三'),
+    };
+    const onMessage = vi.fn();
+    const channel = createChannel({ groups, onMessage });
+    axiosGetMock
+      .mockResolvedValueOnce({
+        data: {
+          errcode: 0,
+          access_token: 'access-token-1',
+          expires_in: 7200,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: Buffer.from(
+          JSON.stringify({ errcode: 40007, errmsg: 'invalid media_id' }),
+        ),
+        headers: {
+          'content-type': 'application/json',
+        },
+      });
+    const { body, params } = encryptedPostBody(`
+      <xml>
+        <FromUserName><![CDATA[zhangsan]]></FromUserName>
+        <CreateTime>1700000000</CreateTime>
+        <MsgType><![CDATA[image]]></MsgType>
+        <MediaId><![CDATA[bad-media]]></MediaId>
+        <MsgId>987654323</MsgId>
+        <AgentID>1000002</AgentID>
+      </xml>
+    `);
+
+    await (channel as any).handlePostWebhook(body, params);
+
+    expect(onMessage).toHaveBeenCalledWith(
+      'wecom:user:zhangsan',
+      expect.objectContaining({
+        content: expect.stringContaining('(下载失败)'),
+      }),
+    );
+  });
+
+  it('does not trigger the agent for unregistered and unallowlisted users', async () => {
     const onMessage = vi.fn();
     const onChatMetadata = vi.fn();
     const channel = createChannel({ onMessage, onChatMetadata });
 
-    (channel as any).handleInboundXml(`
+    await (channel as any).handleInboundXml(`
       <xml>
         <FromUserName><![CDATA[unknown-user]]></FromUserName>
         <CreateTime>1700000000</CreateTime>
@@ -263,7 +464,7 @@ describe('WeComChannel', () => {
     expect(onMessage).not.toHaveBeenCalled();
   });
 
-  it('auto-registers allowlisted users with isolated defaults', () => {
+  it('auto-registers allowlisted users with isolated defaults', async () => {
     const groups: Record<string, RegisteredGroup> = {};
     const onMessage = vi.fn();
     const registerGroup = vi.fn((jid: string, group: RegisteredGroup) => {
@@ -276,7 +477,7 @@ describe('WeComChannel', () => {
       registerGroup,
     });
 
-    (channel as any).handleInboundXml(`
+    await (channel as any).handleInboundXml(`
       <xml>
         <FromUserName><![CDATA[lisi]]></FromUserName>
         <CreateTime>1700000000</CreateTime>

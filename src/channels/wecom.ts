@@ -1,6 +1,9 @@
 import axios from 'axios';
 import crypto from 'crypto';
+import FormData from 'form-data';
+import fs from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
+import path from 'path';
 
 import type {
   Channel,
@@ -9,6 +12,7 @@ import type {
   OnInboundMessage,
   RegisteredGroup,
 } from '../types.js';
+import { ATTACHMENTS_DIR } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, type ChannelOpts } from './registry.js';
@@ -16,8 +20,11 @@ import { registerWebhookRoute } from './webhook-ingress.js';
 
 const WECOM_API_BASE = 'https://qyapi.weixin.qq.com/cgi-bin';
 const WECOM_MESSAGE_SEND_URL = `${WECOM_API_BASE}/message/send`;
+const WECOM_MEDIA_UPLOAD_URL = `${WECOM_API_BASE}/media/upload`;
+const WECOM_MEDIA_GET_URL = `${WECOM_API_BASE}/media/get`;
 const WECOM_USER_JID_PREFIX = 'wecom:user:';
 const PKCS7_BLOCK_SIZE = 32;
+const WECOM_MAX_FILE_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 export interface WeComConfig {
   corpId: string;
@@ -37,6 +44,12 @@ interface WebhookResponse {
 interface DecryptedWeComPayload {
   xml: string;
   receiveId: string;
+}
+
+interface DownloadedWeComMedia {
+  fileName: string;
+  hostPath: string;
+  containerPath: string;
 }
 
 function parseCsvList(value?: string): string[] {
@@ -240,6 +253,137 @@ function timestampFromCreateTime(createTime?: string): string {
   return String(Date.now());
 }
 
+function sanitizeFileName(rawFilename: string, fallback: string): string {
+  const raw = String(rawFilename || '').trim();
+  const trimmed = path.basename(raw) || fallback;
+  const ext = path.extname(trimmed);
+  const stem = path.basename(trimmed, ext);
+  const safeStem =
+    stem
+      .normalize('NFKC')
+      .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]+/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120) || fallback;
+  const safeExt = ext
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]+/g, '_')
+    .trim()
+    .slice(0, 24);
+  return `${safeStem}${safeExt}`;
+}
+
+function sanitizePathPart(value: string, fallback: string): string {
+  const safe =
+    String(value || '')
+      .normalize('NFKC')
+      .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>.\s]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80) || fallback;
+  return safe;
+}
+
+function contentTypeExtension(contentType?: string): string {
+  const normalized = (contentType || '').split(';')[0].trim().toLowerCase();
+  const map: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/bmp': '.bmp',
+    'image/webp': '.webp',
+    'audio/amr': '.amr',
+    'audio/mpeg': '.mp3',
+    'audio/mp4': '.m4a',
+    'video/mp4': '.mp4',
+    'application/pdf': '.pdf',
+    'text/plain': '.txt',
+  };
+  return map[normalized] || '';
+}
+
+function defaultMediaExtension(msgType: string, contentType?: string): string {
+  const contentExt = contentTypeExtension(contentType);
+  if (contentExt) return contentExt;
+  const map: Record<string, string> = {
+    image: '.jpg',
+    voice: '.amr',
+    video: '.mp4',
+  };
+  return map[msgType] || '';
+}
+
+function ensureFileExtension(
+  filename: string,
+  msgType: string,
+  contentType?: string,
+): string {
+  if (path.extname(filename)) return filename;
+  return `${filename}${defaultMediaExtension(msgType, contentType)}`;
+}
+
+function headerValue(headers: unknown, name: string): string | undefined {
+  if (!headers || typeof headers !== 'object') return undefined;
+  const record = headers as Record<string, unknown>;
+  const lowerName = name.toLowerCase();
+  const direct = record[name] ?? record[lowerName];
+  if (typeof direct === 'string') return direct;
+  if (Array.isArray(direct)) {
+    const first = direct.find((item) => typeof item === 'string');
+    return typeof first === 'string' ? first : undefined;
+  }
+  return undefined;
+}
+
+function filenameFromContentDisposition(value?: string): string | null {
+  if (!value) return null;
+  const encoded = value.match(/filename\*=UTF-8''([^;\r\n]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return encoded;
+    }
+  }
+  return (
+    value.match(/filename="([^"]+)"/i)?.[1] ||
+    value.match(/filename=([^;\r\n]+)/i)?.[1]?.trim() ||
+    null
+  );
+}
+
+function toBuffer(data: unknown): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data);
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
+  if (typeof data === 'string') return Buffer.from(data, 'utf-8');
+  return Buffer.from(JSON.stringify(data ?? ''), 'utf-8');
+}
+
+function parseJsonBuffer(buffer: Buffer): Record<string, unknown> | null {
+  const text = buffer.toString('utf-8').trim();
+  if (!text.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object'
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function mediaLabel(msgType: string): string {
+  const map: Record<string, string> = {
+    file: '文件',
+    image: '图片',
+    voice: '语音消息',
+    video: '视频',
+  };
+  return map[msgType] || msgType || '媒体消息';
+}
+
 export class WeComChannel implements Channel {
   name = 'wecom';
 
@@ -305,10 +449,7 @@ export class WeComChannel implements Channel {
     if (!this.ownsJid(jid)) {
       throw new Error(`WeComChannel cannot send to JID: ${jid}`);
     }
-    const userid = jid.slice(WECOM_USER_JID_PREFIX.length);
-    if (!userid) {
-      throw new Error('WeCom user JID is missing userid');
-    }
+    const userid = this.useridFromJid(jid);
 
     const accessToken = await this.getAccessToken();
     const response = await axios.post(
@@ -328,6 +469,163 @@ export class WeComChannel implements Channel {
       throw new Error(
         `WeCom message send failed: errcode=${data.errcode} errmsg=${data.errmsg}`,
       );
+    }
+  }
+
+  async sendFile(
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
+    const userid = this.useridFromJid(jid);
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) {
+      throw new Error(`WeCom file send path is not a file: ${filePath}`);
+    }
+    if (stat.size > WECOM_MAX_FILE_UPLOAD_BYTES) {
+      throw new Error(
+        `WeCom file send failed: file exceeds ${WECOM_MAX_FILE_UPLOAD_BYTES} bytes`,
+      );
+    }
+
+    const mediaId = await this.uploadTemporaryMedia(filePath, 'file');
+    const accessToken = await this.getAccessToken();
+    const response = await axios.post(
+      WECOM_MESSAGE_SEND_URL,
+      {
+        touser: userid,
+        msgtype: 'file',
+        agentid: toAgentId(this.config.agentId),
+        file: { media_id: mediaId },
+      },
+      {
+        params: { access_token: accessToken },
+      },
+    );
+    const data = response.data || {};
+    if (data.errcode !== 0) {
+      throw new Error(
+        `WeCom file send failed: errcode=${data.errcode} errmsg=${data.errmsg}`,
+      );
+    }
+
+    if (caption) {
+      await this.sendMessage(jid, caption);
+    }
+  }
+
+  private useridFromJid(jid: string): string {
+    if (!this.ownsJid(jid)) {
+      throw new Error(`WeComChannel cannot send to JID: ${jid}`);
+    }
+    const userid = jid.slice(WECOM_USER_JID_PREFIX.length);
+    if (!userid) {
+      throw new Error('WeCom user JID is missing userid');
+    }
+    return userid;
+  }
+
+  private async uploadTemporaryMedia(
+    filePath: string,
+    type: 'file' | 'image' | 'voice' | 'video',
+  ): Promise<string> {
+    const accessToken = await this.getAccessToken();
+    const form = new FormData();
+    form.append('media', fs.createReadStream(filePath));
+
+    const response = await axios.post(WECOM_MEDIA_UPLOAD_URL, form, {
+      params: {
+        access_token: accessToken,
+        type,
+      },
+      headers: form.getHeaders(),
+    });
+    const data = response.data || {};
+    if (data.errcode !== 0) {
+      throw new Error(
+        `WeCom media upload failed: errcode=${data.errcode} errmsg=${data.errmsg}`,
+      );
+    }
+    if (!data.media_id) {
+      throw new Error('WeCom media upload failed: missing media_id');
+    }
+    return String(data.media_id);
+  }
+
+  private async downloadTemporaryMedia(input: {
+    mediaId: string;
+    msgType: string;
+    messageId: string;
+    groupFolder: string;
+    filename?: string;
+  }): Promise<DownloadedWeComMedia | null> {
+    try {
+      const accessToken = await this.getAccessToken();
+      const response = await axios.get(WECOM_MEDIA_GET_URL, {
+        params: {
+          access_token: accessToken,
+          media_id: input.mediaId,
+        },
+        responseType: 'arraybuffer',
+      });
+      const buffer = toBuffer(response.data);
+      const contentType = headerValue(response.headers, 'content-type');
+      const contentDisposition = headerValue(
+        response.headers,
+        'content-disposition',
+      );
+      const maybeError =
+        !contentDisposition &&
+        contentType?.toLowerCase().includes('json') === true
+          ? parseJsonBuffer(buffer)
+          : null;
+      if (
+        maybeError &&
+        typeof maybeError.errcode === 'number' &&
+        maybeError.errcode !== 0
+      ) {
+        logger.warn(
+          {
+            mediaId: input.mediaId,
+            errcode: maybeError.errcode,
+            errmsg: maybeError.errmsg,
+          },
+          'WeCom media get returned API error',
+        );
+        return null;
+      }
+
+      fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+      const dispositionFileName =
+        filenameFromContentDisposition(contentDisposition);
+      const fallbackBase =
+        dispositionFileName ||
+        input.filename ||
+        `${mediaLabel(input.msgType)}-${input.mediaId}`;
+      const fileName = ensureFileExtension(
+        sanitizeFileName(fallbackBase, `wecom-${input.msgType}`),
+        input.msgType,
+        contentType,
+      );
+      const safePrefix = [
+        sanitizePathPart(input.groupFolder, 'group'),
+        sanitizePathPart(input.messageId, 'message'),
+      ].join('_');
+      const storedName = sanitizeFileName(`${safePrefix}_${fileName}`, 'wecom');
+      const hostPath = path.join(ATTACHMENTS_DIR, storedName);
+      fs.writeFileSync(hostPath, buffer);
+
+      return {
+        fileName,
+        hostPath,
+        containerPath: `/workspace/attachments/${storedName}`,
+      };
+    } catch (err) {
+      logger.warn(
+        { err, mediaId: input.mediaId, msgType: input.msgType },
+        'Failed to download WeCom media',
+      );
+      return null;
     }
   }
 
@@ -469,7 +767,7 @@ export class WeComChannel implements Channel {
         this.config.encodingAesKey,
         this.config.corpId,
       );
-      this.handleInboundXml(xml);
+      await this.handleInboundXml(xml);
       return {
         statusCode: 200,
         contentType: 'text/plain; charset=utf-8',
@@ -485,7 +783,7 @@ export class WeComChannel implements Channel {
     }
   }
 
-  private handleInboundXml(xml: string): void {
+  private async handleInboundXml(xml: string): Promise<void> {
     const fields = parseWeComXml(xml);
     const msgType = fields.MsgType;
     const userid = fields.FromUserName;
@@ -508,17 +806,17 @@ export class WeComChannel implements Channel {
       return;
     }
 
-    if (msgType !== 'text') {
+    if (
+      msgType !== 'text' &&
+      msgType !== 'file' &&
+      msgType !== 'image' &&
+      msgType !== 'voice' &&
+      msgType !== 'video'
+    ) {
       logger.debug(
         { userid, msgType },
         'WeCom webhook ignored: unsupported message',
       );
-      return;
-    }
-
-    const content = fields.Content || '';
-    if (!content) {
-      logger.debug({ userid }, 'WeCom webhook ignored: empty text message');
       return;
     }
 
@@ -537,6 +835,21 @@ export class WeComChannel implements Channel {
     const senderName = group.name || userid;
     this.opts.onChatMetadata(jid, timestamp, senderName, 'wecom', false);
 
+    const content = await this.buildInboundContent({
+      fields,
+      msgType,
+      messageId,
+      groupFolder: group.folder,
+      userid,
+    });
+    if (!content) {
+      logger.debug(
+        { userid, msgType },
+        'WeCom webhook ignored: empty inbound message',
+      );
+      return;
+    }
+
     const message: NewMessage = {
       id: `wecom-${messageId}`,
       chat_jid: jid,
@@ -548,6 +861,46 @@ export class WeComChannel implements Channel {
       is_bot_message: false,
     };
     this.opts.onMessage(jid, message);
+  }
+
+  private async buildInboundContent(input: {
+    fields: Record<string, string>;
+    msgType: string;
+    messageId: string;
+    groupFolder: string;
+    userid: string;
+  }): Promise<string> {
+    if (input.msgType === 'text') {
+      return input.fields.Content || '';
+    }
+
+    const mediaId = input.fields.MediaId || input.fields.MediaID || '';
+    if (!mediaId) {
+      logger.debug(
+        { userid: input.userid, msgType: input.msgType },
+        'WeCom media message ignored: missing MediaId',
+      );
+      return '';
+    }
+
+    const fileName =
+      input.fields.FileName ||
+      input.fields.Title ||
+      input.fields.PicUrl ||
+      `${mediaLabel(input.msgType)}-${mediaId}`;
+    const downloaded = await this.downloadTemporaryMedia({
+      mediaId,
+      msgType: input.msgType,
+      messageId: input.messageId,
+      groupFolder: input.groupFolder,
+      filename: fileName,
+    });
+    const label = mediaLabel(input.msgType);
+    const displayName = sanitizeFileName(fileName, `wecom-${input.msgType}`);
+    if (!downloaded) {
+      return `[${label}: ${displayName}] (下载失败)`;
+    }
+    return `[${label}: ${downloaded.fileName}] (已下载到 ${downloaded.containerPath})`;
   }
 
   private ensureAuthorizedGroup(userid: string): RegisteredGroup | null {
