@@ -80,6 +80,7 @@ import { initWorkbenchEvents } from './workbench-events.js';
 import { WorkbenchBroadcastService } from './workbench-broadcast.js';
 import { resolveAskAnswerGroupFolder } from './workbench-broadcast-actions.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
+import { isAllowedCrossChannelDelegationTargetFolder } from './delegation-policy.js';
 import {
   restoreRemoteControl,
   startRemoteControl,
@@ -1372,7 +1373,14 @@ async function runAgent(
   if (isMain) {
     const mainCh = findChannel(channels, chatJid);
     if (mainCh) {
-      filteredGroups = availableGroups.filter((g) => mainCh.ownsJid(g.jid));
+      filteredGroups = availableGroups.filter((g) => {
+        const targetGroup = registeredGroups[g.jid];
+        return (
+          mainCh.ownsJid(g.jid) ||
+          (targetGroup &&
+            isAllowedCrossChannelDelegationTargetFolder(targetGroup.folder))
+        );
+      });
     }
   }
   writeGroupsSnapshot(
@@ -2606,7 +2614,16 @@ async function main(): Promise<void> {
         if (mainJid) {
           const mainCh = findChannel(channels, mainJid);
           if (mainCh) {
-            filtered = ag.filter((g) => mainCh.ownsJid(g.jid));
+            filtered = ag.filter((g) => {
+              const targetGroup = registeredGroups[g.jid];
+              return (
+                mainCh.ownsJid(g.jid) ||
+                (targetGroup &&
+                  isAllowedCrossChannelDelegationTargetFolder(
+                    targetGroup.folder,
+                  ))
+              );
+            });
           }
         }
       }

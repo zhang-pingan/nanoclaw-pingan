@@ -60,6 +60,7 @@ import {
 import type { MemoryExtractConfig } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
+import { canDelegateToFolder, getFolderChannel } from './delegation-policy.js';
 import { retrieveStructuredMemories } from './memory-retrieval.js';
 import {
   DesktopCaptureOptions,
@@ -1816,10 +1817,11 @@ export async function processTaskIpc(
         break;
       }
 
-      // Enforce same-channel delegation
-      const mainChannel = sourceGroup.split('_')[0];
-      const targetChannel = targetGroup.folder.split('_')[0];
-      if (mainChannel !== targetChannel) {
+      // Enforce same-channel delegation, with explicit cross-channel target
+      // channel allowlist for controlled handoffs such as WeCom employee DMs.
+      const mainChannel = getFolderChannel(sourceGroup);
+      const targetChannel = getFolderChannel(targetGroup.folder);
+      if (!canDelegateToFolder(sourceGroup, targetGroup.folder)) {
         logger.warn(
           {
             mainChannel,
