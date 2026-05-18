@@ -166,6 +166,12 @@ interface ActiveMessageQueryTraceState {
   messageCursor: string | null;
 }
 
+type AgentExecutionContext = {
+  workflowId?: string;
+  stageKey?: string;
+  delegationId?: string;
+};
+
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 const pendingSessionCleanup = new Set<string>();
@@ -357,6 +363,22 @@ function finalizePendingQueryBatch(result: ContainerOutput): {
 
   pendingQueryBatches.delete(result.queryId);
   return { applied: true, batch, actualModel, updatedRows, updatedWebRows };
+}
+
+function isWorkflowDelegationExecutionContext(
+  executionContext?: AgentExecutionContext,
+): boolean {
+  return Boolean(
+    executionContext?.workflowId && executionContext?.delegationId,
+  );
+}
+
+function isCompleteDelegationToolResult(output: ContainerOutput): boolean {
+  return Boolean(
+    output.status === 'success' &&
+    output.event?.name === 'tool_result' &&
+    output.event.payload?.toolName === 'complete_delegation',
+  );
 }
 
 function createMessageQueryTrace(params: {
@@ -713,6 +735,13 @@ export function _setRegisteredGroups(
   registeredGroups = groups;
 }
 
+/** @internal - exported for testing */
+export function _setSessionsForTest(
+  nextSessions: Record<string, string>,
+): void {
+  sessions = { ...nextSessions };
+}
+
 /**
  * Process all pending messages for a group.
  * Called by the GroupQueue when it's this group's turn.
@@ -881,6 +910,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const initialQueryId = createExecutionId();
   const promptHash = crypto.createHash('sha256').update(prompt).digest('hex');
   const executionContext = resolveExecutionContext(group, missedMessages);
+  const isWorkflowDelegationRun =
+    isWorkflowDelegationExecutionContext(executionContext);
   const modelSelection = await selectModel({
     prompt,
     isMain: isMainGroup,
@@ -973,6 +1004,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         // keep query traces in sync with the latest resumed session id
       }
       if (result.event) {
+        if (isWorkflowDelegationRun && isCompleteDelegationToolResult(result)) {
+          queue.closeStdin(chatJid);
+        }
         if (!traceState) {
           logger.warn(
             {
@@ -1111,7 +1145,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       }
 
       if (result.status === 'success' && !result.event && !result.result) {
-        queue.notifyIdle(chatJid);
+        if (isWorkflowDelegationRun) {
+          queue.closeStdin(chatJid);
+        } else {
+          queue.notifyIdle(chatJid);
+        }
         if (traceState) {
           finishMessageQueryTrace(
             queryId,
@@ -1126,6 +1164,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       }
 
       if (result.status === 'error') {
+        if (isWorkflowDelegationRun) {
+          queue.closeStdin(chatJid);
+        }
         const error = result.error || 'Agent execution failed';
         const failure = result.failure ?? fallbackAgentExecutionFailure(error);
         if (!traceState) {
@@ -1166,10 +1207,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     runId,
     initialQueryId,
     executionContext,
+    undefined,
+    isWorkflowDelegationRun,
   );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+  if (isWorkflowDelegationRun) {
+    queue.closeStdin(chatJid);
+  }
   let shouldRetryUnconsumedPipedMessages = false;
   let retryCursor: string | null = null;
   for (const [queryId, state] of activeMessageQueryTraces) {
@@ -1296,11 +1342,7 @@ async function runAgent(
   selectedModel?: string,
   runId?: string,
   initialQueryId?: string,
-  executionContext?: {
-    workflowId?: string;
-    stageKey?: string;
-    delegationId?: string;
-  },
+  executionContext?: AgentExecutionContext,
   requireResult?: boolean,
   isolatedSession?: boolean,
 ): Promise<'success' | 'error'> {
@@ -2161,6 +2203,12 @@ async function startMessageLoop(): Promise<void> {
             lastAgentTimestamp[chatJid] || '',
             ASSISTANT_NAME,
           );
+          const loopExecutionContext = resolveExecutionContext(
+            group,
+            allPending,
+          );
+          const isWorkflowDelegationRun =
+            isWorkflowDelegationExecutionContext(loopExecutionContext);
           if (allPending.length === 0) {
             logger.debug(
               {
@@ -2175,7 +2223,11 @@ async function startMessageLoop(): Promise<void> {
           const messagesToSend = allPending;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
           const runId = activeRunIds.get(chatJid);
-          if (!runId || !queue.canPipeMessage(chatJid)) {
+          if (
+            isWorkflowDelegationRun ||
+            !runId ||
+            !queue.canPipeMessage(chatJid)
+          ) {
             queue.enqueueMessageCheck(chatJid);
             continue;
           }
@@ -2298,9 +2350,7 @@ function ensureContainerSystemRunning(): void {
 function resolveExecutionContext(
   group: RegisteredGroup,
   messages: NewMessage[],
-):
-  | { workflowId?: string; stageKey?: string; delegationId?: string }
-  | undefined {
+): AgentExecutionContext | undefined {
   const workflowId = [...messages]
     .reverse()
     .find(
@@ -2726,4 +2776,27 @@ if (isDirectRun) {
     logger.error({ err }, 'Failed to start NanoClaw');
     process.exit(1);
   });
+}
+
+/** @internal - exported for testing */
+export async function _runAgentForTest(input: {
+  group: RegisteredGroup;
+  prompt?: string;
+  chatJid?: string;
+  onOutput?: (output: ContainerOutput) => Promise<void>;
+  executionContext?: AgentExecutionContext;
+  isolatedSession?: boolean;
+}): Promise<'success' | 'error'> {
+  return runAgent(
+    input.group,
+    input.prompt || 'test prompt',
+    input.chatJid || 'test@g.us',
+    input.onOutput,
+    'test-model',
+    'test-run',
+    'test-query',
+    input.executionContext,
+    undefined,
+    input.isolatedSession,
+  );
 }
