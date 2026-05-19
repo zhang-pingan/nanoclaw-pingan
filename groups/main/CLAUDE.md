@@ -32,15 +32,6 @@ Returned task objects use the unified field names:
 - `workflow_stage_label`: 当前流程阶段文案
 - `task_state`: 任务聚合态
 
-Examples:
-
-```json
-query_workbench_tasks({ "task_state": "running" })
-query_workbench_tasks({ "workflow_status": "plan_review" })
-query_workbench_tasks({ "task_state": "running", "workflow_status": "dev", "keyword": "支付" })
-query_workbench_tasks({ "task_id": "wb-wf-xxxx" })
-```
-
 Compatibility note:
 - `status` is still supported for backward compatibility, but it is ambiguous because it may match task state, workflow status, or workflow stage
 - Prefer `task_state` and `workflow_status` in all new queries
@@ -79,6 +70,17 @@ Text inside `<internal>` tags is logged but not sent to the user. If you've alre
 When working as a sub-agent or teammate, only use `send_message` if instructed to by the main agent.
 
 ---
+
+## Service Repos
+
+For groups that have service access:
+
+- Read `/workspace/project/groups/global/services.json` to find the service's `repo_path`
+- Business code repositories are mounted at `/workspace/repos/{repo_path}/`
+- Example: service `catstory` with `repo_path: "catstory"` is mounted at `/workspace/repos/catstory/`
+- `/workspace/projects/{service}/` is for project knowledge, plans, and deliverables; it is not the git repository
+- Before claiming a repo is unavailable or not mounted, actually check whether `/workspace/repos/{repo_path}/` exists
+
 
 ## Memory
 

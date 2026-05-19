@@ -1819,6 +1819,12 @@ export async function processTaskIpc(
           { sourceGroup },
           'Unauthorized delegate_task attempt blocked',
         );
+        if (data.requestId) {
+          writeDelegationResult(sourceGroup, data.requestId, {
+            status: 'error',
+            error: 'Only main group can delegate tasks',
+          });
+        }
         break;
       }
 
@@ -1827,6 +1833,12 @@ export async function processTaskIpc(
           { sourceGroup },
           'delegate_task missing targetGroupJid or task',
         );
+        if (data.requestId) {
+          writeDelegationResult(sourceGroup, data.requestId, {
+            status: 'error',
+            error: 'delegate_task requires targetGroupJid and task',
+          });
+        }
         break;
       }
 
@@ -1836,6 +1848,12 @@ export async function processTaskIpc(
           { targetGroupJid: data.targetGroupJid },
           'delegate_task: target group not registered',
         );
+        if (data.requestId) {
+          writeDelegationResult(sourceGroup, data.requestId, {
+            status: 'error',
+            error: `Target group is not registered: ${data.targetGroupJid}`,
+          });
+        }
         break;
       }
 
@@ -1852,24 +1870,11 @@ export async function processTaskIpc(
           },
           'delegate_task blocked: cross-channel delegation not allowed',
         );
-        // Write error response if requestId exists
         if (data.requestId) {
-          const errDir = path.join(
-            DATA_DIR,
-            'ipc',
-            sourceGroup,
-            'delegation-results',
-          );
-          fs.mkdirSync(errDir, { recursive: true });
-          const errPath = path.join(errDir, `${data.requestId}.json`);
-          const tmpPath = `${errPath}.tmp`;
-          fs.writeFileSync(
-            tmpPath,
-            JSON.stringify({
-              error: `Cross-channel delegation not allowed (main: ${mainChannel}, target: ${targetChannel})`,
-            }),
-          );
-          fs.renameSync(tmpPath, errPath);
+          writeDelegationResult(sourceGroup, data.requestId, {
+            status: 'error',
+            error: `Cross-channel delegation not allowed (main: ${mainChannel}, target: ${targetChannel})`,
+          });
         }
         break;
       }

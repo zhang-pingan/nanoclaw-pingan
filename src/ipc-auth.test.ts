@@ -2175,6 +2175,83 @@ describe('list_delegations', () => {
   });
 });
 
+describe('delegate_task IPC result', () => {
+  it('returns an error result when the target group is not registered', async () => {
+    await processTaskIpc(
+      {
+        type: 'delegate_task',
+        requestId: 'del-missing-target',
+        targetGroupJid: 'missing@g.us',
+        task: 'do work',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    const result = readDelegationIpcResult(
+      'whatsapp_main',
+      'del-missing-target',
+    );
+    expect(result).toMatchObject({
+      status: 'error',
+      error: 'Target group is not registered: missing@g.us',
+    });
+  });
+
+  it('returns an error result when a non-main group delegates directly', async () => {
+    await processTaskIpc(
+      {
+        type: 'delegate_task',
+        requestId: 'del-non-main',
+        targetGroupJid: 'third@g.us',
+        task: 'do work',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const result = readDelegationIpcResult('other-group', 'del-non-main');
+    expect(result).toMatchObject({
+      status: 'error',
+      error: 'Only main group can delegate tasks',
+    });
+  });
+
+  it('returns an error result when cross-channel delegation is blocked', async () => {
+    const targetJid = 'feishu:test';
+    groups[targetJid] = {
+      name: 'Feishu Target',
+      folder: 'feishu_target',
+      trigger: '@Andy',
+      added_at: '2024-01-01T00:00:00.000Z',
+    };
+
+    await processTaskIpc(
+      {
+        type: 'delegate_task',
+        requestId: 'del-cross-channel',
+        targetGroupJid: targetJid,
+        task: 'do work',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    const result = readDelegationIpcResult(
+      'whatsapp_main',
+      'del-cross-channel',
+    );
+    expect(result).toMatchObject({
+      status: 'error',
+      error:
+        'Cross-channel delegation not allowed (main: whatsapp, target: feishu)',
+    });
+  });
+});
+
 // --- request_delegation target parsing ---
 
 describe('request_delegation target parsing', () => {

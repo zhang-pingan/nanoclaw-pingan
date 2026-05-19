@@ -1872,6 +1872,17 @@ server.tool(
         try {
           const result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
           fs.unlinkSync(resultPath);
+          if (result?.error) {
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `委派失败: ${result.error}`,
+                },
+              ],
+              isError: true,
+            };
+          }
           return {
             content: [
               {
