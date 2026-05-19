@@ -46,7 +46,6 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
   - `findings`
   - `evidence`
 - 如果本轮自动创建了工作分支，`work_branch` 必须返回最终创建或复用的分支名，`summary` 或 `evidence` 中说明其基于哪个主分支创建。
-- 如果已确认 `staging_base_branch` 或 `staging_work_branch`，也一并返回，但它们不是 Bug 修复阶段的必填字段。
 - `verdict=passed` 表示本轮修复已完成，可以部署预发。
 - `deliverable` 是目录名，不含文件名。
 
@@ -57,8 +56,6 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
   "service": "catstory",
   "main_branch": "main",
   "work_branch": "bugfix/login-500",
-  "staging_base_branch": "staging",
-  "staging_work_branch": "staging-deploy/bugfix-login-500",
   "deliverable": "2026-04-27_bugfix_login-500",
   "verdict": "passed",
   "summary": "已修复登录态为空时接口返回 500 的问题，并完成本地验证。",
@@ -79,7 +76,6 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
 {
   "service": "catstory",
   "work_branch": "bugfix/login-500",
-  "staging_work_branch": "staging-deploy/bugfix-login-500",
   "verdict": "failed",
   "summary": "无法确认服务仓库，未执行修复。",
   "error": "services.json 中未找到服务配置，且 /workspace/repos/catstory 不存在。",

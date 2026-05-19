@@ -465,8 +465,6 @@ const WORKBENCH_CONTEXT_BADGES = [
   { key: "requirement_preset", label: "关联需求" },
   { key: "main_branch", label: "主分支" },
   { key: "work_branch", label: "工作分支" },
-  { key: "staging_base_branch", label: "预发分支" },
-  { key: "staging_work_branch", label: "预发工作分支" },
 ];
 var memoryQueryText = "";
 var memoryRequestSeq = 0;
@@ -15943,22 +15941,10 @@ async function openWorkbenchCreateTaskModal() {
             placeholder: "例如：main",
           },
           {
-            key: "staging_base_branch",
-            label: "staging_base_branch（预发分支，可选）",
-            type: "text",
-            placeholder: "例如：staging",
-          },
-          {
             key: "work_branch",
             label: "work_branch（工作分支，可选）",
             type: "text",
             placeholder: "例如：feature/xxx",
-          },
-          {
-            key: "staging_work_branch",
-            label: "staging_work_branch（预发工作分支，可选）",
-            type: "text",
-            placeholder: "例如：staging-deploy/feature-xxx",
           },
         ],
       };

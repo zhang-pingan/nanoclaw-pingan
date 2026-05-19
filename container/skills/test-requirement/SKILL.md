@@ -30,7 +30,7 @@ description: Use only in the dev_test workflow. Test implemented features in fir
    - 接口和数据库变更
    - 文档中的测试要点
    - 如任务中提供了 `access_token`，提取该值，并在后续接口测试中统一拼装为 `Authorization: Bearer {access_token}` 请求头
-   - 优先采用任务消息中明确给出的 `主分支`、`预发分支`、`工作分支`、`预发工作分支`；若文档中的分支信息与消息不一致，以消息为准，并在测试报告中说明
+   - 优先采用任务消息中明确给出的 `主分支`、`工作分支`；若文档中的分支信息与消息不一致，以消息为准，并在测试报告中说明
 2. 确认测试文档路径，优先使用任务中明确给出的 `测试文档：xxx`；若未给出，则默认使用 `/workspace/projects/{服务名}/iteration/{文件夹名}/test.md`
 3. 阅读项目代码中对应的变更文件，理解实际实现
 4. 如有不清楚或者缺失测试信息(比如接口需要登录鉴权，则需要提供 `access_token`，需要具体的业务id等)的地方，优先使用提问工具向用户确认：
@@ -104,8 +104,6 @@ service: {服务名}
 deliverable: {日期}_{需求简称}
 main_branch: {主分支}
 work_branch: {工作分支}
-staging_base_branch: {预发分支}
-staging_work_branch: {预发工作分支}
 doc_type: test
 ---
 
@@ -117,8 +115,6 @@ doc_type: test
 - 测试环境：{staging.domain}
 - 主分支：{主分支}
 - 工作分支：{工作分支}
-- 预发分支：{预发分支}
-- 预发工作分支：{预发工作分支}
 - 测试依据：{需求实现文档名}
 
 ## 测试概况
@@ -160,7 +156,7 @@ doc_type: test
 3. 调用 `complete_delegation` 返回结果：
    - 测试已执行完成并得出业务结论时，统一使用 `outcome=success`
    - `outcome=failure` 只用于执行层失败或阻塞，例如：缺少关键鉴权信息且无法继续、预发环境不可用、工具异常、测试报告无法形成
-4. result JSON 应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`test_doc`、`verdict`、`summary`、`findings`、`evidence`
+4. result JSON 应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`test_doc`、`verdict`、`summary`、`findings`、`evidence`
    - `deliverable` 是文件夹名，不含 `.md` 后缀
    - `bugs` 中每个对象建议包含：`id`、`title`、`severity`、`related_case`
    - `id` 必须与测试报告中的 BUG 编号一致，例如 `BUG-001`
@@ -182,8 +178,6 @@ doc_type: test
   "deliverable": "2026-03-20_用户昵称功能",
   "main_branch": "已确认主分支",
   "work_branch": "已确认工作分支",
-  "staging_base_branch": "已确认预发分支",
-  "staging_work_branch": "已确认预发工作分支",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "verdict": "passed",
   "summary": "共 10 条，通过 10 条，失败 0 条，阻塞 0 条",
@@ -223,8 +217,6 @@ doc_type: test
   "deliverable": "2026-03-20_用户昵称功能",
   "main_branch": "已确认主分支",
   "work_branch": "已确认工作分支",
-  "staging_base_branch": "已确认预发分支",
-  "staging_work_branch": "已确认预发工作分支",
   "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
   "verdict": "failed",
   "summary": "共 10 条，通过 8 条，失败 2 条，阻塞 0 条",
@@ -248,7 +240,7 @@ doc_type: test
 }
 ```
 
-返回结果中的 `main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch` 必须沿用当前任务已确认的真实值；若任务消息已提供，则优先原样返回，不要替换成示例里的默认命名。
+返回结果中的 `main_branch`、`work_branch` 必须沿用当前任务已确认的真实值；若任务消息已提供，则优先原样返回，不要替换成示例里的默认命名。
 
 ## 复测工作流程
 
@@ -257,7 +249,7 @@ doc_type: test
 1. 从任务描述中确认：
    - 交付文档 `dev.md`
    - 测试文档 `test.md`
-   - 主分支、预发分支、工作分支、预发工作分支（若消息中提供）
+   - 主分支、工作分支（若消息中提供）
    - 如有提供，读取 `access_token`
    - 如有提供，读取历史测试结果中的 BUG 列表和修复记录
 2. 读取已有 `test.md`，重点提取：
@@ -320,7 +312,7 @@ doc_type: test
 2. 调用 `complete_delegation` 返回结果：
    - 复测已执行完成并得出结论时，统一使用 `outcome=success`
    - `outcome=failure` 只用于执行层失败或阻塞
-3. result JSON 仍应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`staging_base_branch`、`staging_work_branch`、`test_doc`、`verdict`、`summary`、`findings`、`evidence`
+3. result JSON 仍应包含：`total`、`passed`、`failed`、`blocked`、`bugs`、`deliverable`、`main_branch`、`work_branch`、`test_doc`、`verdict`、`summary`、`findings`、`evidence`
 4. 复测模式下的额外要求：
    - 对“旧问题未修复”的情况，必须继续使用原 `BUG ID`
    - 对“已修复”的问题，不要继续保留在 `bugs` 中

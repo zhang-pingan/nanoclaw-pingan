@@ -282,16 +282,12 @@ function getStagePayloadFieldRequirements(
       return [
         { name: 'main_branch', type: 'string' },
         { name: 'work_branch', type: 'string' },
-        { name: 'staging_base_branch', type: 'string' },
-        { name: 'staging_work_branch', type: 'string' },
       ];
     case 'testing':
       return [
         { name: 'deliverable', type: 'string' },
         { name: 'main_branch', type: 'string' },
         { name: 'work_branch', type: 'string' },
-        { name: 'staging_base_branch', type: 'string' },
-        { name: 'staging_work_branch', type: 'string' },
         { name: 'test_doc', type: 'string' },
         { name: 'total', type: 'number' },
         { name: 'passed', type: 'number' },
@@ -304,8 +300,6 @@ function getStagePayloadFieldRequirements(
         { name: 'deliverable', type: 'string' },
         { name: 'main_branch', type: 'string' },
         { name: 'work_branch', type: 'string' },
-        { name: 'staging_base_branch', type: 'string' },
-        { name: 'staging_work_branch', type: 'string' },
         { name: 'test_doc', type: 'string' },
         { name: 'fixed_bugs', type: 'array' },
       ];
@@ -555,14 +549,9 @@ function addWorkflowContextEvidence(
     workflow,
     WORKFLOW_CONTEXT_KEYS.workBranch,
   );
-  const stagingBranch = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
-  );
   const parts = [
     deliverable ? `deliverable=${deliverable}` : '',
     workBranch ? `work_branch=${workBranch}` : '',
-    stagingBranch ? `staging_work_branch=${stagingBranch}` : '',
   ].filter(Boolean);
   if (parts.length > 0) {
     pushEvidence(evidence, {
@@ -1028,32 +1017,24 @@ function evaluateOpsStage(
   const evidence = collectPayloadEvidence(payload);
   const payloadSummary = contract.payloadSummary;
   const outcome = normalizeDelegationOutcome(delegation);
-  const stagingBaseBranch =
-    trimText(payload.staging_base_branch) ||
-    getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.stagingBaseBranch);
-  const stagingWorkBranch =
-    trimText(payload.staging_work_branch) ||
-    getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.stagingWorkBranch);
+  const deployedWorkBranch =
+    trimText(payload.work_branch) ||
+    getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch);
 
   addWorkflowContextEvidence(workflow, evidence);
   addStructuredVerdictEvidence(evidence, contract.verdict);
-  if (stagingBaseBranch || stagingWorkBranch) {
+  if (deployedWorkBranch) {
     pushEvidence(evidence, {
       type: 'workflow_state',
-      summary: [
-        stagingBaseBranch ? `staging_base_branch=${stagingBaseBranch}` : '',
-        stagingWorkBranch ? `staging_work_branch=${stagingWorkBranch}` : '',
-      ]
-        .filter(Boolean)
-        .join(', '),
+      summary: `deployed_work_branch=${deployedWorkBranch}`,
     });
   } else {
     pushFinding(findings, {
       code: 'missing_deployment_branch_info',
       severity: 'high',
-      message: '部署阶段未记录预发分支信息，无法确认部署证据。',
+      message: '部署阶段未记录工作分支信息，无法确认部署证据。',
       stageKey,
-      suggestion: '补齐 staging_base_branch / staging_work_branch 后重跑。',
+      suggestion: '补齐 work_branch 后重跑。',
     });
   }
 
@@ -1072,7 +1053,7 @@ function evaluateOpsStage(
         stageKey,
       });
     }
-  } else if (!contract.valid || (!stagingBaseBranch && !stagingWorkBranch)) {
+  } else if (!contract.valid || !deployedWorkBranch) {
     status = 'pending';
   } else if (contract.verdict === 'pending') {
     status = 'pending';

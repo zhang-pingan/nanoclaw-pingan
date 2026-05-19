@@ -739,7 +739,6 @@ describe('workflow metadata and branch flow', () => {
       startFrom: 'fix',
       workflowType: 'fix_test',
       workBranch: 'bugfix/login-empty-500',
-      stagingWorkBranch: 'staging-deploy/bugfix-login-empty-500',
       context: {
         bug_description: '用户未登录访问资料接口时返回 500，预期应返回 401。',
         bug_files: ['/tmp/login-500.log', '/tmp/login-500.png'],
@@ -753,13 +752,6 @@ describe('workflow metadata and branch flow', () => {
       workflow &&
         getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch),
     ).toBe('bugfix/login-empty-500');
-    expect(
-      workflow &&
-        getWorkflowContextValue(
-          workflow,
-          WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
-        ),
-    ).toBe('staging-deploy/bugfix-login-empty-500');
 
     const delegations = getDelegationsByWorkflow(result.workflowId);
     expect(delegations).toHaveLength(1);
@@ -770,12 +762,11 @@ describe('workflow metadata and branch flow', () => {
     );
     expect(delegations[0]?.task).toContain('- /tmp/login-500.log');
     expect(delegations[0]?.task).toContain('工作分支：bugfix/login-empty-500');
-    expect(delegations[0]?.task).toContain(
-      '预发工作分支：staging-deploy/bugfix-login-empty-500',
-    );
+    expect(delegations[0]?.task).not.toContain('预发分支：');
+    expect(delegations[0]?.task).not.toContain('预发工作分支：');
   });
 
-  it('allows fix_test creation without work branches and passes blank branch lines', () => {
+  it('allows fix_test creation without work branch and omits staging branch lines', () => {
     const result = createNewWorkflow({
       title: '登录态为空时接口返回 500',
       service: TEST_SERVICE,
@@ -783,7 +774,6 @@ describe('workflow metadata and branch flow', () => {
       startFrom: 'fix',
       workflowType: 'fix_test',
       mainBranch: 'main',
-      stagingBaseBranch: 'staging',
       context: {
         bug_description: '用户未登录访问资料接口时返回 500，预期应返回 401。',
         bug_files: ['/tmp/login-500.log'],
@@ -808,13 +798,13 @@ describe('workflow metadata and branch flow', () => {
     expect(delegations).toHaveLength(1);
     const taskLines = delegations[0]?.task.split('\n') || [];
     expect(taskLines).toContain('主分支：main');
-    expect(taskLines).toContain('预发分支：staging');
     expect(taskLines).toContain('工作分支：');
-    expect(taskLines).toContain('预发工作分支：');
+    expect(taskLines).not.toContain('预发分支：');
+    expect(taskLines).not.toContain('预发工作分支：');
     expect(delegations[0]?.task).not.toContain('工作分支：N/A');
   });
 
-  it('carries fix_test branches returned by bug fix into deploy task', () => {
+  it('carries fix_test work branch returned by bug fix into deploy task', () => {
     const result = createNewWorkflow({
       title: '登录态为空时接口返回 500',
       service: TEST_SERVICE,
@@ -822,7 +812,6 @@ describe('workflow metadata and branch flow', () => {
       startFrom: 'fix',
       workflowType: 'fix_test',
       mainBranch: 'main',
-      stagingBaseBranch: 'staging',
       context: {
         bug_description: '用户未登录访问资料接口时返回 500，预期应返回 401。',
         bug_files: ['/tmp/login-500.log'],
@@ -838,8 +827,6 @@ describe('workflow metadata and branch flow', () => {
         service: TEST_SERVICE,
         main_branch: 'main',
         work_branch: 'bugfix/login-empty-500_20260408',
-        staging_base_branch: 'staging',
-        staging_work_branch: 'staging-deploy/bugfix-login-empty-500_20260408',
         deliverable: '2026-04-08_bugfix_login-empty-500',
         verdict: 'passed',
         summary: '已基于 main 创建工作分支并完成修复。',
@@ -854,25 +841,16 @@ describe('workflow metadata and branch flow', () => {
       workflow &&
         getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch),
     ).toBe('bugfix/login-empty-500_20260408');
-    expect(
-      workflow &&
-        getWorkflowContextValue(
-          workflow,
-          WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
-        ),
-    ).toBe('staging-deploy/bugfix-login-empty-500_20260408');
 
     const deployDelegation = getDelegationsByWorkflow(result.workflowId).find(
       (delegation) => delegation.target_folder === 'web_ops',
     );
     expect(deployDelegation?.task).toContain('主分支：main');
-    expect(deployDelegation?.task).toContain('预发分支：staging');
     expect(deployDelegation?.task).toContain(
       '工作分支：bugfix/login-empty-500_20260408',
     );
-    expect(deployDelegation?.task).toContain(
-      '预发工作分支：staging-deploy/bugfix-login-empty-500_20260408',
-    );
+    expect(deployDelegation?.task).not.toContain('预发分支：');
+    expect(deployDelegation?.task).not.toContain('预发工作分支：');
   });
 
   it('keeps fix_test bug fix pending when result omits final work branch', () => {
@@ -940,7 +918,7 @@ describe('workflow metadata and branch flow', () => {
         work_branch: 'bugfix/login-empty-500_20260408',
         deliverable: '2026-04-08_bugfix_login-empty-500',
         verdict: 'passed',
-        summary: '已完成修复，预发分支留给部署阶段确认。',
+        summary: '已完成修复，可以进入部署阶段。',
       }),
     });
 
@@ -957,11 +935,11 @@ describe('workflow metadata and branch flow', () => {
     );
     const taskLines = deployDelegation?.task.split('\n') || [];
     expect(taskLines).toContain('工作分支：bugfix/login-empty-500_20260408');
-    expect(taskLines).toContain('预发分支：');
-    expect(taskLines).toContain('预发工作分支：');
+    expect(taskLines).not.toContain('预发分支：');
+    expect(taskLines).not.toContain('预发工作分支：');
   });
 
-  it('marks fix_test work branch fields optional in create form', () => {
+  it('marks fix_test work branch optional and omits staging branch fields in create form', () => {
     const fixTestConfig = getAvailableWorkflowTypes().find(
       (workflowType) => workflowType.type === 'fix_test',
     );
@@ -976,11 +954,10 @@ describe('workflow metadata and branch flow', () => {
     );
 
     expect(mainBranchField?.required).not.toBe(true);
-    expect(stagingBaseBranchField?.required).not.toBe(true);
+    expect(stagingBaseBranchField).toBeUndefined();
     expect(workBranchField?.required).not.toBe(true);
-    expect(stagingWorkBranchField?.required).not.toBe(true);
+    expect(stagingWorkBranchField).toBeUndefined();
     expect(workBranchField?.label).toContain('可选');
-    expect(stagingWorkBranchField?.label).toContain('可选');
   });
 
   it('routes fix_test bug verification failure to refix and increments round', () => {
@@ -1438,7 +1415,7 @@ describe('workflow metadata and branch flow', () => {
     ).toBe('pending');
   });
 
-  it('persists staging branches from ops result and sends them to testing', () => {
+  it('omits staging branches from testing delegation after ops result', () => {
     createWorkflow({
       id: 'wf-ops',
       name: 'Ops flow',
@@ -1473,8 +1450,6 @@ describe('workflow metadata and branch flow', () => {
         service: TEST_SERVICE,
         main_branch: 'main',
         work_branch: 'feature/test_20260408',
-        staging_base_branch: 'staging',
-        staging_work_branch: 'staging-deploy/feature-test_20260408',
         summary: '预发部署完成，可以进入测试确认',
       }),
       outcome: 'success',
@@ -1491,20 +1466,6 @@ describe('workflow metadata and branch flow', () => {
       workflow &&
         getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.mainBranch),
     ).toBe('main');
-    expect(
-      workflow &&
-        getWorkflowContextValue(
-          workflow,
-          WORKFLOW_CONTEXT_KEYS.stagingBaseBranch,
-        ),
-    ).toBe('staging');
-    expect(
-      workflow &&
-        getWorkflowContextValue(
-          workflow,
-          WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
-        ),
-    ).toBe('staging-deploy/feature-test_20260408');
 
     resumePendingInterruptForTest('wf-ops', 'testing_confirm');
 
@@ -1516,10 +1477,8 @@ describe('workflow metadata and branch flow', () => {
     expect(testingDelegation?.task).toContain(
       '工作分支：feature/test_20260408',
     );
-    expect(testingDelegation?.task).toContain('预发分支：staging');
-    expect(testingDelegation?.task).toContain(
-      '预发工作分支：staging-deploy/feature-test_20260408',
-    );
+    expect(testingDelegation?.task).not.toContain('预发分支：');
+    expect(testingDelegation?.task).not.toContain('预发工作分支：');
   });
 
   it('routes testing failure verdict to fixing while keeping outcome success', () => {

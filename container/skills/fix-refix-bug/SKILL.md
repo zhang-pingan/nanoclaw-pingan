@@ -16,9 +16,7 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
    - Bug 附件
    - 服务名称
    - 主分支
-   - 预发分支
    - 工作分支
-   - 预发工作分支
    - 修复文档 `fix.md`
    - 测试文档 `fix-test.md`
    - 本轮测试验证结果
@@ -43,7 +41,6 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
   - `summary`
   - `findings`
   - `evidence`
-- 如果已确认 `staging_base_branch` 或 `staging_work_branch`，也一并返回，但它们不是 Bug 复修阶段的必填字段。
 - `verdict=passed` 表示复修完成，可以重新部署预发。
 
 成功返回示例：
@@ -53,8 +50,6 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
   "service": "catstory",
   "main_branch": "main",
   "work_branch": "bugfix/login-500",
-  "staging_base_branch": "staging",
-  "staging_work_branch": "staging-deploy/bugfix-login-500",
   "deliverable": "2026-04-27_bugfix_login-500",
   "verdict": "passed",
   "summary": "已按 Round 1 测试反馈完成复修，并追加修复记录。",
@@ -75,7 +70,6 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
 {
   "service": "catstory",
   "work_branch": "bugfix/login-500",
-  "staging_work_branch": "staging-deploy/bugfix-login-500",
   "deliverable": "2026-04-27_bugfix_login-500",
   "verdict": "failed",
   "summary": "测试反馈缺少可定位的问题描述，未执行复修。",

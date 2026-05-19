@@ -1661,19 +1661,7 @@ function finalizeDelegationTaskContent(
     return finalContent;
   }
 
-  const stagingWorkBranch = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
-  );
-  if (skill !== 'ops-staging-deploy' || !stagingWorkBranch) {
-    return taskContent;
-  }
-
-  if (taskContent.includes('预发工作分支：')) {
-    return taskContent;
-  }
-  const suffix = `预发工作分支：${stagingWorkBranch}`;
-  return taskContent ? `${taskContent}\n${suffix}` : suffix;
+  return taskContent;
 }
 
 function appendRetryNote(taskContent: string, retryNote?: string): string {
@@ -4875,12 +4863,7 @@ function buildWorkflowListCard(workflows: Workflow[]): InteractiveCard {
       w,
       WORKFLOW_CONTEXT_KEYS.workBranch,
     );
-    const stagingWorkBranch = getWorkflowContextValue(
-      w,
-      WORKFLOW_CONTEXT_KEYS.stagingWorkBranch,
-    );
-
-    const body = `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${workBranch ? `\n工作分支：${workBranch}` : ''}${stagingWorkBranch ? `\n预发工作分支：${stagingWorkBranch}` : ''}`;
+    const body = `**${w.id}** ${w.name} (${w.service})\n状态：${statusLabel}${w.round > 0 ? ` | Round ${w.round}` : ''}${workBranch ? `\n工作分支：${workBranch}` : ''}`;
 
     const buttons: CardButton[] = [];
     const interruptStates = config ? getInterruptStates(config) : [];

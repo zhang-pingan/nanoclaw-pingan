@@ -87,7 +87,7 @@
     "type": "hybrid",
     "deterministic": {
       "required_checks": [
-        "deploy_branch_metadata",
+        "work_branch",
         "deploy_result",
         "verification_evidence"
       ]
@@ -95,7 +95,7 @@
     "ai": {
       "enabled": true,
       "model": "default",
-      "rubric": "Judge whether deployment evidence clearly identifies the target environment, source and staging branches, deployment result, verification evidence, and rollback or risk note when relevant.",
+      "rubric": "Judge whether deployment evidence clearly identifies the target environment, deployed work branch, deployment result, verification evidence, and rollback or risk note when relevant.",
       "max_context_bytes": 12000
     },
     "status_mapping": {
@@ -150,12 +150,12 @@
     "id": "fix_test.ops_deploy.v1",
     "type": "hybrid",
     "deterministic": {
-      "required_checks": ["deploy_branch_metadata", "deploy_result"]
+      "required_checks": ["work_branch", "deploy_result"]
     },
     "ai": {
       "enabled": true,
       "model": "default",
-      "rubric": "Judge whether the bug-fix deployment result includes branch metadata, target environment, deployment result, and verification evidence.",
+      "rubric": "Judge whether the bug-fix deployment result includes the deployed work branch, target environment, deployment result, and verification evidence.",
       "max_context_bytes": 12000
     },
     "status_mapping": {

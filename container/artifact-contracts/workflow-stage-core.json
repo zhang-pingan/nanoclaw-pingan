@@ -46,19 +46,12 @@
   {
     "id": "dev_test.ops_deploy.v1",
     "version": 1,
-    "description": "Deployment stage must return pre-production branch metadata.",
+    "description": "Deployment stage must return deployment branch metadata.",
     "payload": {
-      "required": [
-        "main_branch",
-        "work_branch",
-        "staging_base_branch",
-        "staging_work_branch"
-      ],
+      "required": ["main_branch", "work_branch"],
       "properties": {
         "main_branch": { "type": "string", "minLength": 1 },
-        "work_branch": { "type": "string", "minLength": 1 },
-        "staging_base_branch": { "type": "string", "minLength": 1 },
-        "staging_work_branch": { "type": "string", "minLength": 1 }
+        "work_branch": { "type": "string", "minLength": 1 }
       }
     }
   },
@@ -101,19 +94,12 @@
   {
     "id": "fix_test.ops_deploy.v1",
     "version": 1,
-    "description": "Bug deployment stage must return pre-production branch metadata.",
+    "description": "Bug deployment stage must return deployment branch metadata.",
     "payload": {
-      "required": [
-        "main_branch",
-        "work_branch",
-        "staging_base_branch",
-        "staging_work_branch"
-      ],
+      "required": ["main_branch", "work_branch"],
       "properties": {
         "main_branch": { "type": "string", "minLength": 1 },
-        "work_branch": { "type": "string", "minLength": 1 },
-        "staging_base_branch": { "type": "string", "minLength": 1 },
-        "staging_work_branch": { "type": "string", "minLength": 1 }
+        "work_branch": { "type": "string", "minLength": 1 }
       }
     }
   },

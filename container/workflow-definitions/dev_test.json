@@ -112,7 +112,7 @@
           "delegate": {
             "role": "planner",
             "skill": "plan-requirement",
-            "task_template": "流程类型：{{workflow_type}}\n请为以下需求设计实现方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}",
+            "task_template": "流程类型：{{workflow_type}}\n请为以下需求设计实现方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}",
             "handoff": {
               "input_schema": "workflow.plan.input.v1",
               "output_schema": "dev_test.plan.v1",
@@ -153,7 +153,7 @@
           "delegate": {
             "role": "plan_examiner",
             "skill": "plan-examine",
-            "task_template": "流程类型：{{workflow_type}}\n请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}",
+            "task_template": "流程类型：{{workflow_type}}\n请审核以下需求方案并给出结论与修改建议：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文件：{{plan_doc}}",
             "handoff": {
               "input_schema": "workflow.review.input.v1",
               "output_schema": "dev_test.plan.v1",
@@ -217,7 +217,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "dev-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}",
+                "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文件：{{plan_doc}}",
                 "handoff": {
                   "input_schema": "workflow.dev.input.v1",
                   "output_schema": "dev_test.dev.v1",
@@ -244,7 +244,7 @@
               "delegate": {
                 "role": "planner",
                 "skill": "plan-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n{{revision_text}}",
+                "task_template": "流程类型：{{workflow_type}}\n请根据以下修改意见重新设计方案：\n\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n\n{{revision_text}}",
                 "handoff": {
                   "input_schema": "workflow.plan.input.v1",
                   "output_schema": "dev_test.plan.v1",
@@ -284,7 +284,7 @@
           "delegate": {
             "role": "dev",
             "skill": "dev-requirement",
-            "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文件：{{plan_doc}}",
+            "task_template": "流程类型：{{workflow_type}}\n请按照方案执行开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文件：{{plan_doc}}",
             "handoff": {
               "input_schema": "workflow.dev.input.v1",
               "output_schema": "dev_test.dev.v1",
@@ -326,7 +326,7 @@
           "delegate": {
             "role": "dev_examiner",
             "skill": "dev-examine",
-            "task_template": "流程类型：{{workflow_type}}\n请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}",
+            "task_template": "流程类型：{{workflow_type}}\n请对以下开发结果执行复核（重点：与方案一致性、实现质量、代码审查）：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}",
             "handoff": {
               "input_schema": "workflow.review.input.v1",
               "output_schema": "dev_test.dev.v1",
@@ -402,7 +402,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "dev-bugfix",
-                "task_template": "流程类型：{{workflow_type}}\n请根据开发复核意见修正实现：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}",
+                "task_template": "流程类型：{{workflow_type}}\n请根据开发复核意见修正实现：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n补充修改意见：\n{{revision_text}}",
                 "handoff": {
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "dev_test.dev.v1",
@@ -458,15 +458,15 @@
               "delegate": {
                 "role": "ops",
                 "skill": "ops-staging-deploy",
-                "task_template": "流程类型：{{workflow_type}}\n请部署以下服务到预发环境：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前必须先将工作分支合并到预发工作分支并推送，再基于该预发工作分支部署。",
+                "task_template": "流程类型：{{workflow_type}}\n请部署以下服务到预发环境：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n\n注意：请基于工作分支部署到预发环境，并记录部署结果。",
                 "handoff": {
                   "input_schema": "workflow.deploy.input.v1",
                   "output_schema": "dev_test.ops_deploy.v1",
                   "artifact_contract_ref": "dev_test.ops_deploy.v1",
                   "success_criteria": [
-                    "工作分支合并到预发工作分支并推送",
+                    "基于工作分支执行预发部署",
                     "预发部署动作完成并记录结果",
-                    "返回 main_branch、work_branch、staging_base_branch、staging_work_branch、verdict、summary、findings、evidence"
+                    "返回 main_branch、work_branch、verdict、summary、findings、evidence"
                   ],
                   "auto_retry": {
                     "enabled": false,
@@ -503,9 +503,9 @@
               "output_schema": "dev_test.ops_deploy.v1",
               "artifact_contract_ref": "dev_test.ops_deploy.v1",
               "success_criteria": [
-                "工作分支合并到预发工作分支并推送",
+                "基于工作分支执行预发部署",
                 "预发部署动作完成并记录结果",
-                "返回 main_branch、work_branch、staging_base_branch、staging_work_branch、verdict、summary、findings、evidence"
+                "返回 main_branch、work_branch、verdict、summary、findings、evidence"
               ],
               "auto_retry": {
                 "enabled": false,
@@ -564,7 +564,7 @@
               "delegate": {
                 "role": "test",
                 "skill": "test-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}",
                 "handoff": {
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
@@ -590,7 +590,7 @@
               "delegate": {
                 "role": "test",
                 "skill": "test-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}",
                 "handoff": {
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
@@ -655,7 +655,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "dev-bugfix",
-                "task_template": "流程类型：{{workflow_type}}\n请修复以下测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
+                "task_template": "流程类型：{{workflow_type}}\n请修复以下测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
                 "handoff": {
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "dev_test.dev.v1",
@@ -709,15 +709,15 @@
               "delegate": {
                 "role": "ops",
                 "skill": "ops-staging-deploy",
-                "task_template": "流程类型：{{workflow_type}}\n请部署以下服务到预发环境（修复后重新部署）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n预发分支：{{staging_base_branch}}\n工作分支：{{work_branch}}\n预发工作分支：{{staging_work_branch}}\n\n注意：部署前也必须先把最新工作分支合并进预发工作分支并推送，再执行部署。",
+                "task_template": "流程类型：{{workflow_type}}\n请部署以下服务到预发环境（修复后重新部署）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n\n注意：请基于最新工作分支重新部署到预发环境，并记录部署结果。",
                 "handoff": {
                   "input_schema": "workflow.deploy.input.v1",
                   "output_schema": "dev_test.ops_deploy.v1",
                   "artifact_contract_ref": "dev_test.ops_deploy.v1",
                   "success_criteria": [
-                    "工作分支合并到预发工作分支并推送",
+                    "基于工作分支执行预发部署",
                     "预发部署动作完成并记录结果",
-                    "返回 main_branch、work_branch、staging_base_branch、staging_work_branch、verdict、summary、findings、evidence"
+                    "返回 main_branch、work_branch、verdict、summary、findings、evidence"
                   ],
                   "auto_retry": {
                     "enabled": false,
@@ -824,22 +824,10 @@
             "placeholder": "例如：main"
           },
           {
-            "key": "staging_base_branch",
-            "label": "staging_base_branch（预发分支，可选）",
-            "type": "text",
-            "placeholder": "例如：staging"
-          },
-          {
             "key": "work_branch",
             "label": "work_branch（工作分支，可选）",
             "type": "text",
             "placeholder": "填写实际工作分支，如 erp_manhua 或 feature/xxx"
-          },
-          {
-            "key": "staging_work_branch",
-            "label": "staging_work_branch（预发工作分支，可选）",
-            "type": "text",
-            "placeholder": "填写实际预发工作分支，如 erp_manhua 或 staging-deploy/feature-xxx"
           }
         ]
       }

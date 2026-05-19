@@ -41,7 +41,6 @@ description: Use only in the fix_test workflow. Verify a fix_test bug fix on sta
 service: {服务名}
 deliverable: {交付目录}
 work_branch: {工作分支}
-staging_work_branch: {预发工作分支}
 doc_type: fix-test
 ---
 
@@ -70,7 +69,7 @@ doc_type: fix-test
 {是否通过}
 ```
 
-如果已确认 `main_branch` 或 `staging_base_branch`，可以一并写入 front matter，但它们不是 Bug 测试验证阶段的必填字段。
+如果已确认 `main_branch`，可以一并写入 front matter，但它不是 Bug 测试验证阶段的必填字段。
 
 ## 返回结果要求
 
@@ -79,7 +78,6 @@ doc_type: fix-test
 - `result` 必须是 JSON，至少包含：
   - `service`
   - `work_branch`
-  - `staging_work_branch`
   - `deliverable`
   - `test_doc`
   - `total`
@@ -91,7 +89,7 @@ doc_type: fix-test
   - `summary`
   - `findings`
   - `evidence`
-- 如果已确认 `main_branch` 或 `staging_base_branch`，也一并返回，但它们不是 Bug 测试验证阶段的必填字段。
+- 如果已确认 `main_branch`，也一并返回，但它不是 Bug 测试验证阶段的必填字段。
 - 全部通过时 `verdict=passed`。
 - 只要存在失败用例或仍未修复的问题，`verdict=failed`。
 - 信息不足但已形成结构化阶段结论时，`verdict=pending`。
@@ -102,7 +100,6 @@ doc_type: fix-test
 {
   "service": "catstory",
   "work_branch": "bugfix/login-500",
-  "staging_work_branch": "staging-deploy/bugfix-login-500",
   "deliverable": "2026-04-27_bugfix_login-500",
   "test_doc": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix-test.md",
   "total": 5,
@@ -129,7 +126,6 @@ doc_type: fix-test
 {
   "service": "catstory",
   "work_branch": "bugfix/login-500",
-  "staging_work_branch": "staging-deploy/bugfix-login-500",
   "deliverable": "2026-04-27_bugfix_login-500",
   "test_doc": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix-test.md",
   "total": 5,
