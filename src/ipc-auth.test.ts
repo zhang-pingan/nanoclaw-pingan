@@ -10,6 +10,8 @@ import {
   _initTestDatabase,
   createDelegation,
   createTask,
+  createTodayPlan,
+  createTodayPlanItem,
   createWorkflow,
   getAllTasks,
   getAskQuestion,
@@ -124,6 +126,20 @@ function readDesktopCaptureIpcResult(
     'ipc',
     sourceGroup,
     'desktop-capture-results',
+    `${requestId}.json`,
+  );
+  expect(fs.existsSync(p)).toBe(true);
+  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+  fs.unlinkSync(p);
+  return data;
+}
+
+function readTodayPlanIpcResult(sourceGroup: string, requestId: string): any {
+  const p = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    'today-plan-results',
     `${requestId}.json`,
   );
   expect(fs.existsSync(p)).toBe(true);
@@ -2322,5 +2338,79 @@ describe('desktop_capture authorization', () => {
     const result = readDesktopCaptureIpcResult('other-group', requestId);
     expect(result.status).toBe('error');
     expect(result.error).toContain('main group');
+  });
+});
+
+describe('query_recent_today_plan_details authorization', () => {
+  it('main group can query recent today plan details', async () => {
+    const requestId = rid('today-plan');
+    const plan = createTodayPlan({
+      plan_date: '2026-05-12',
+      title: '今日计划',
+      status: 'active',
+    });
+    createTodayPlanItem({
+      plan_id: plan.id,
+      title: '整理上下文',
+      associations_json: JSON.stringify({
+        workbench_task_ids: [],
+        chat_selections: [],
+        services: [{ service: 'nanoclaw', branches: [] }],
+      }),
+    });
+
+    await processTaskIpc(
+      {
+        type: 'query_recent_today_plan_details',
+        requestId,
+        days: 1,
+        date: '2026-05-12',
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    const result = readTodayPlanIpcResult('whatsapp_main', requestId);
+    expect(result.query.days).toBe(1);
+    expect(result.query.mode).toBe('date');
+    expect(result.query.date).toBe('2026-05-12');
+    expect(result.plans).toHaveLength(1);
+    expect(result.plans[0].items[0].title).toBe('整理上下文');
+    expect(result.services[0].service).toBe('nanoclaw');
+  });
+
+  it('non-main group can query recent today plan details', async () => {
+    const requestId = rid('today-plan');
+    const plan = createTodayPlan({
+      plan_date: '2026-05-13',
+      title: '非主群可查计划',
+      status: 'active',
+    });
+    createTodayPlanItem({
+      plan_id: plan.id,
+      title: '同步上下文',
+      associations_json: JSON.stringify({
+        workbench_task_ids: [],
+        chat_selections: [],
+        services: [],
+      }),
+    });
+
+    await processTaskIpc(
+      {
+        type: 'query_recent_today_plan_details',
+        requestId,
+        date: '2026-05-13',
+      },
+      'other-group',
+      false,
+      deps,
+    );
+
+    const result = readTodayPlanIpcResult('other-group', requestId);
+    expect(result.query.mode).toBe('date');
+    expect(result.plans).toHaveLength(1);
+    expect(result.plans[0].items[0].title).toBe('同步上下文');
   });
 });

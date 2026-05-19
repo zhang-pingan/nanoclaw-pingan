@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import path from 'path';
+import { execFileSync } from 'child_process';
 
 import {
   _initTestDatabase,
@@ -15,6 +19,7 @@ import {
   createOrContinueTodayPlan,
   createTodayPlanItemForPlan,
   ensureTodayPlan,
+  getRecentTodayPlanDetails,
   getTodayPlanDetail,
   listTodayPlanChatMessages,
   mergeTodayPlanServiceRegistry,
@@ -24,9 +29,62 @@ import {
 import { _initTestWebDb, storeWebMessage } from './web-db.js';
 
 describe('today-plan', () => {
+  let tempDir = '';
+
+  function git(repoPath: string, args: string[]): string {
+    return execFileSync('git', args, {
+      cwd: repoPath,
+      encoding: 'utf-8',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Test User',
+        GIT_AUTHOR_EMAIL: 'test@example.com',
+        GIT_COMMITTER_NAME: 'Test User',
+        GIT_COMMITTER_EMAIL: 'test@example.com',
+      },
+    }).trim();
+  }
+
+  function createRepoWithDatedCommit(input: {
+    service: string;
+    branch: string;
+    date: string;
+  }): { repoPath: string; commit: string; shortCommit: string } {
+    const repoPath = path.join(tempDir, input.service);
+    execFileSync('git', ['init', repoPath], { encoding: 'utf-8' });
+    git(repoPath, ['checkout', '-b', input.branch]);
+    writeFileSync(path.join(repoPath, 'file.txt'), `${input.service}\n`);
+    execFileSync('git', ['add', 'file.txt'], { cwd: repoPath });
+    execFileSync('git', ['commit', '-m', `${input.service} change`], {
+      cwd: repoPath,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Test User',
+        GIT_AUTHOR_EMAIL: 'test@example.com',
+        GIT_COMMITTER_NAME: 'Test User',
+        GIT_COMMITTER_EMAIL: 'test@example.com',
+        GIT_AUTHOR_DATE: `${input.date}T10:00:00+08:00`,
+        GIT_COMMITTER_DATE: `${input.date}T10:00:00+08:00`,
+      },
+    });
+    const commit = git(repoPath, ['rev-parse', 'HEAD']);
+    return {
+      repoPath,
+      commit,
+      shortCommit: commit.slice(0, 7),
+    };
+  }
+
   beforeEach(() => {
     _initTestDatabase();
     _initTestWebDb();
+    if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+    tempDir = mkdtempSync(path.join(tmpdir(), 'nanoclaw-today-plan-'));
+  });
+
+  afterEach(() => {
+    if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+    tempDir = '';
   });
 
   it('reuses the same today plan for the same date', () => {
@@ -252,6 +310,198 @@ describe('today-plan', () => {
     expect(detail.items[0].related_services[0].branches[0].source).toBe(
       'workbench',
     );
+  });
+
+  it('summarizes recent today plans by deduped service branches and task list', () => {
+    const repo = createRepoWithDatedCommit({
+      service: 'catstory',
+      branch: 'feature/recent',
+      date: '2026-05-13',
+    });
+    createWorkflow({
+      id: 'wf-recent',
+      name: 'Recent Task',
+      service: 'catstory',
+      start_from: 'dev',
+      context: {
+        work_branch: 'feature/recent',
+        requirement_description: '补充最近计划上下文查询',
+      },
+      status: 'dev',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'web:main',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-05-13T00:00:00.000Z',
+      updated_at: '2026-05-13T01:00:00.000Z',
+    });
+    createWorkbenchTask({
+      id: 'wb-wf-recent',
+      workflow_id: 'wf-recent',
+      source_jid: 'web:main',
+      title: 'Recent Task',
+      service: 'catstory',
+      start_from: 'dev',
+      workflow_type: 'dev_test',
+      status: 'dev',
+      task_state: 'running',
+      current_stage: 'dev',
+      summary: null,
+      created_at: '2026-05-13T00:00:00.000Z',
+      updated_at: '2026-05-13T01:00:00.000Z',
+      last_event_at: '2026-05-13T01:00:00.000Z',
+    });
+
+    const firstPlan = ensureTodayPlan('2026-05-13');
+    const firstItem = createTodayPlanItemForPlan(firstPlan.id);
+    patchTodayPlanItem({
+      itemId: firstItem.id,
+      title: '实现查询工具',
+      detail: '给 agent 补充最近上下文',
+      associations: {
+        workbench_task_ids: ['wb-wf-recent'],
+        chat_selections: [],
+        services: [
+          {
+            service: 'catstory',
+            branches: ['feature/recent'],
+          },
+        ],
+      },
+    });
+    const secondItem = createTodayPlanItemForPlan(firstPlan.id);
+    patchTodayPlanItem({
+      itemId: secondItem.id,
+      title: '重复关联服务',
+      associations: {
+        workbench_task_ids: [],
+        chat_selections: [],
+        services: [
+          {
+            service: 'catstory',
+            branches: ['feature/recent'],
+          },
+        ],
+      },
+    });
+    const secondPlan = ensureTodayPlan('2026-05-12');
+    const oldItem = createTodayPlanItemForPlan(secondPlan.id);
+    patchTodayPlanItem({
+      itemId: oldItem.id,
+      title: '另一个服务',
+      associations: {
+        workbench_task_ids: [],
+        chat_selections: [],
+        services: [
+          {
+            service: 'dogstory',
+            branches: [],
+          },
+        ],
+      },
+    });
+
+    const summary = getRecentTodayPlanDetails({
+      now: new Date(2026, 4, 14, 10, 0, 0),
+      days: 3,
+      registry: {
+        catstory: {
+          repo_path: repo.repoPath,
+        },
+      },
+    });
+
+    expect(summary.query.dates).toEqual([
+      '2026-05-14',
+      '2026-05-13',
+      '2026-05-12',
+    ]);
+    expect(summary.query.mode).toBe('recent');
+    expect(summary.plans.map((plan) => plan.plan_date)).toEqual([
+      '2026-05-13',
+      '2026-05-12',
+    ]);
+    const catstory = summary.services.find(
+      (service) => service.service === 'catstory',
+    );
+    expect(catstory).toBeTruthy();
+    expect(catstory?.repo_path).toBe(repo.repoPath);
+    expect(catstory?.task_ids).toEqual(['wb-wf-recent']);
+    expect(catstory?.plan_items.map((item) => item.title)).toEqual([
+      '实现查询工具',
+      '重复关联服务',
+    ]);
+    expect(catstory?.branches).toHaveLength(1);
+    expect(catstory?.branches[0]).toMatchObject({
+      name: 'feature/recent',
+      sources: ['manual', 'workbench'],
+      task_ids: ['wb-wf-recent'],
+    });
+    expect(catstory?.branches[0].commits[0]).toMatchObject({
+      hash: repo.commit,
+      short_hash: repo.shortCommit,
+      subject: 'catstory change',
+    });
+    expect(summary.tasks).toHaveLength(1);
+    expect(summary.tasks[0]).toMatchObject({
+      task_id: 'wb-wf-recent',
+      title: 'Recent Task',
+      service: 'catstory',
+      work_branch: 'feature/recent',
+      description: '补充最近计划上下文查询',
+      plan_dates: ['2026-05-13'],
+    });
+  });
+
+  it('supports querying today plan details by exact date and date range', () => {
+    for (const date of ['2026-05-10', '2026-05-11', '2026-05-12']) {
+      const plan = ensureTodayPlan(date);
+      const item = createTodayPlanItemForPlan(plan.id);
+      patchTodayPlanItem({
+        itemId: item.id,
+        title: `${date} 计划`,
+        associations: {
+          workbench_task_ids: [],
+          chat_selections: [],
+          services: [],
+        },
+      });
+    }
+
+    const exact = getRecentTodayPlanDetails({
+      now: new Date(2026, 4, 14, 10, 0, 0),
+      date: '2026-05-11',
+      days: 3,
+    });
+    expect(exact.query).toMatchObject({
+      mode: 'date',
+      days: 1,
+      dates: ['2026-05-11'],
+      from_date: '2026-05-11',
+      to_date: '2026-05-11',
+      date: '2026-05-11',
+    });
+    expect(exact.plans.map((plan) => plan.plan_date)).toEqual(['2026-05-11']);
+
+    const range = getRecentTodayPlanDetails({
+      startDate: '2026-05-10',
+      endDate: '2026-05-12',
+    });
+    expect(range.query).toMatchObject({
+      mode: 'range',
+      days: 3,
+      dates: ['2026-05-12', '2026-05-11', '2026-05-10'],
+      from_date: '2026-05-10',
+      to_date: '2026-05-12',
+      start_date: '2026-05-10',
+      end_date: '2026-05-12',
+    });
+    expect(range.plans.map((plan) => plan.plan_date)).toEqual([
+      '2026-05-12',
+      '2026-05-11',
+      '2026-05-10',
+    ]);
   });
 
   it('keeps manually selected services even before a branch is chosen', () => {

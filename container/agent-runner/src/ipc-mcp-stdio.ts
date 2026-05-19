@@ -155,6 +155,74 @@ type DelegationListMcpResult = {
   error?: string;
 };
 
+type RecentTodayPlanMcpResult = {
+  error?: string;
+  query?: {
+    mode: 'recent' | 'date' | 'range';
+    days: number;
+    dates: string[];
+    from_date: string;
+    to_date: string;
+    date?: string;
+    start_date?: string;
+    end_date?: string;
+  };
+  plans?: Array<{
+    id: string;
+    plan_date: string;
+    title: string;
+    status: string;
+    completed_at: string | null;
+    item_count: number;
+    items: Array<{
+      id: string;
+      title: string;
+      detail: string;
+      order_index: number;
+      workbench_task_ids: string[];
+      services: Array<{ service: string; branches: string[] }>;
+    }>;
+  }>;
+  services?: Array<{
+    service: string;
+    repo_path: string | null;
+    repo_exists: boolean;
+    plan_dates: string[];
+    plan_items: Array<{ plan_date: string; item_id: string; title: string }>;
+    task_ids: string[];
+    branches: Array<{
+      name: string;
+      sources: Array<'manual' | 'workbench'>;
+      plan_dates: string[];
+      plan_items: Array<{ plan_date: string; item_id: string; title: string }>;
+      task_ids: string[];
+      ref: string | null;
+      commits: Array<{
+        hash: string;
+        short_hash: string;
+        author: string;
+        committed_at: string;
+        subject: string;
+      }>;
+      errors: string[];
+    }>;
+  }>;
+  tasks?: Array<{
+    task_id: string;
+    found: boolean;
+    title: string;
+    description: string;
+    service: string;
+    work_branch: string | null;
+    workflow_stage_label: string;
+    workflow_status_label: string;
+    task_state: string;
+    updated_at: string | null;
+    plan_dates: string[];
+    plan_items: Array<{ plan_date: string; item_id: string; title: string }>;
+  }>;
+};
+
 function aiImageToolResponse(
   result: AiImageMcpResult | null,
   requestId: string,
@@ -798,6 +866,189 @@ server.tool(
           lines.push(
             `- ${item.title} | ${item.artifact_type} | ${item.exists ? 'exists' : 'missing'} | ${item.path}`,
           );
+        }
+      }
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: lines.join('\n') }],
+    };
+  },
+);
+
+server.tool(
+  'query_recent_today_plan_details',
+  '查询今日计划详情，用于了解用户最近在做什么。默认查最近 3 天；也可用 date 查询单日，或用 start_date/end_date 查询闭区间（最多 30 天）。按关联服务与分支去重汇总提交、计划项和相关任务，并按关联任务汇总任务列表。',
+  {
+    days: z
+      .number()
+      .int()
+      .min(1)
+      .max(30)
+      .optional()
+      .default(3)
+      .describe(
+        '查询最近多少天的今日计划，1-30，默认 3；当 date 或 start_date/end_date 存在时忽略。',
+      ),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe('查询指定日期，格式 YYYY-MM-DD；优先级高于日期范围和 days。'),
+    start_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe(
+        '查询日期范围开始日期，格式 YYYY-MM-DD；需和 end_date 同时传。',
+      ),
+    end_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe(
+        '查询日期范围结束日期，格式 YYYY-MM-DD；需和 start_date 同时传。',
+      ),
+  },
+  async (args) => {
+    const requestId = `tpq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeIpcFile(TASKS_DIR, {
+      type: 'query_recent_today_plan_details',
+      requestId,
+      days: args.days || 3,
+      date: args.date,
+      start_date: args.start_date,
+      end_date: args.end_date,
+      timestamp: new Date().toISOString(),
+    });
+
+    const resultPath = path.join(
+      IPC_DIR,
+      'today-plan-results',
+      `${requestId}.json`,
+    );
+    const result = await waitForIpcResult<RecentTodayPlanMcpResult>(resultPath);
+
+    if (!result) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `query_recent_today_plan_details timed out waiting for response (requestId=${requestId}).`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    if (result.error) {
+      return {
+        content: [{ type: 'text' as const, text: result.error }],
+        isError: true,
+      };
+    }
+
+    const lines: string[] = [];
+    const query = result.query;
+    const queryTitle =
+      query?.mode === 'date'
+        ? `${query.date || query.from_date} 今日计划详情`
+        : query?.mode === 'range'
+          ? `${query.from_date || ''} ~ ${query.to_date || ''} 今日计划详情`
+          : `最近 ${query?.days ?? args.days ?? 3} 天今日计划详情（${query?.from_date || ''} ~ ${query?.to_date || ''}）`;
+    lines.push(`${queryTitle}：`);
+
+    const plans = Array.isArray(result.plans) ? result.plans : [];
+    lines.push('');
+    lines.push(`计划：${plans.length} 天`);
+    if (plans.length === 0) {
+      lines.push('- 未找到今日计划');
+    } else {
+      for (const plan of plans) {
+        lines.push(
+          `- ${plan.plan_date} ${plan.title || '今日计划'} | 状态:${plan.status} | 计划项:${plan.item_count}`,
+        );
+        for (const item of plan.items.slice(0, 8)) {
+          const taskSuffix =
+            item.workbench_task_ids.length > 0
+              ? ` | 任务:${item.workbench_task_ids.join(',')}`
+              : '';
+          const serviceSuffix =
+            item.services.length > 0
+              ? ` | 服务:${item.services
+                  .map(
+                    (service) =>
+                      `${service.service}${service.branches.length > 0 ? `(${service.branches.join(',')})` : ''}`,
+                  )
+                  .join(';')}`
+              : '';
+          lines.push(
+            `  - ${item.title || '未命名计划项'}${item.detail ? `：${item.detail}` : ''}${taskSuffix}${serviceSuffix}`,
+          );
+        }
+        if (plan.items.length > 8) {
+          lines.push(`  - ... 其余 ${plan.items.length - 8} 个计划项已省略`);
+        }
+      }
+    }
+
+    const services = Array.isArray(result.services) ? result.services : [];
+    lines.push('');
+    lines.push(`关联服务与分支（去重）：${services.length} 个服务`);
+    if (services.length === 0) {
+      lines.push('- 未关联服务分支');
+    } else {
+      for (const service of services) {
+        lines.push(
+          `- ${service.service} | 仓库:${service.repo_path || '未配置'} | 日期:${service.plan_dates.join(',') || '-'} | 任务:${service.task_ids.join(',') || '-'}`,
+        );
+        if (service.branches.length === 0) {
+          lines.push('  - 未关联分支');
+        }
+        for (const branch of service.branches) {
+          const sourceText =
+            branch.sources.length > 0 ? branch.sources.join('+') : 'unknown';
+          const commitText =
+            branch.commits.length > 0
+              ? branch.commits
+                  .slice(0, 10)
+                  .map(
+                    (commit) =>
+                      `${commit.short_hash} ${commit.subject} (${commit.committed_at})`,
+                  )
+                  .join('; ')
+              : branch.errors.length > 0
+                ? `错误:${branch.errors.join('; ')}`
+                : '无提交';
+          lines.push(
+            `  - ${branch.name} | 来源:${sourceText} | 日期:${branch.plan_dates.join(',') || '-'} | 任务:${branch.task_ids.join(',') || '-'} | 提交:${commitText}`,
+          );
+          if (branch.commits.length > 10) {
+            lines.push(
+              `    - ... 其余 ${branch.commits.length - 10} 个提交已省略`,
+            );
+          }
+        }
+      }
+    }
+
+    const tasks = Array.isArray(result.tasks) ? result.tasks : [];
+    lines.push('');
+    lines.push(`关联任务：${tasks.length} 个`);
+    if (tasks.length === 0) {
+      lines.push('- 未关联工作台任务');
+    } else {
+      for (const task of tasks) {
+        if (!task.found) {
+          lines.push(
+            `- [${task.task_id}] 任务不存在 | 日期:${task.plan_dates.join(',') || '-'}`,
+          );
+          continue;
+        }
+        lines.push(
+          `- [${task.task_id}] ${task.title} | 服务:${task.service || '未设置'}${task.work_branch ? ` | 分支:${task.work_branch}` : ''} | 任务态:${task.task_state} | 阶段:${task.workflow_stage_label || task.workflow_status_label} | 日期:${task.plan_dates.join(',') || '-'} | 更新时间:${task.updated_at || '-'}`,
+        );
+        if (task.description) {
+          lines.push(`  描述:${task.description}`);
         }
       }
     }
@@ -2098,9 +2349,7 @@ server.tool(
       .join('\n');
 
     return {
-      content: [
-        { type: 'text' as const, text: `委派任务列表:\n${formatted}` },
-      ],
+      content: [{ type: 'text' as const, text: `委派任务列表:\n${formatted}` }],
     };
   },
 );
@@ -2124,7 +2373,9 @@ if (isMain) {
       include_image: z
         .boolean()
         .optional()
-        .describe('是否捕获并保存截图图片，默认 true。设为 false 时只返回 display/window 信息。'),
+        .describe(
+          '是否捕获并保存截图图片，默认 true。设为 false 时只返回 display/window 信息。',
+        ),
       include_windows: z
         .boolean()
         .optional()

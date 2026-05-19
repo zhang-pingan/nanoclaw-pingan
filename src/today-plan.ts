@@ -137,6 +137,81 @@ export interface TodayPlanDetail {
   } | null;
 }
 
+export interface RecentTodayPlanItemRef {
+  plan_date: string;
+  item_id: string;
+  title: string;
+}
+
+export interface RecentTodayPlanTaskSummary {
+  task_id: string;
+  found: boolean;
+  title: string;
+  description: string;
+  service: string;
+  work_branch: string | null;
+  workflow_stage_label: string;
+  workflow_status_label: string;
+  task_state: string;
+  updated_at: string | null;
+  plan_dates: string[];
+  plan_items: RecentTodayPlanItemRef[];
+}
+
+export interface RecentTodayPlanServiceBranchSummary {
+  name: string;
+  sources: Array<'manual' | 'workbench'>;
+  plan_dates: string[];
+  plan_items: RecentTodayPlanItemRef[];
+  task_ids: string[];
+  ref: string | null;
+  commits: TodayPlanServiceCommit[];
+  errors: string[];
+}
+
+export interface RecentTodayPlanServiceSummary {
+  service: string;
+  repo_path: string | null;
+  repo_exists: boolean;
+  plan_dates: string[];
+  plan_items: RecentTodayPlanItemRef[];
+  task_ids: string[];
+  branches: RecentTodayPlanServiceBranchSummary[];
+}
+
+export interface RecentTodayPlanPlanSummary {
+  id: string;
+  plan_date: string;
+  title: string;
+  status: TodayPlanRecord['status'];
+  completed_at: string | null;
+  item_count: number;
+  items: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    order_index: number;
+    workbench_task_ids: string[];
+    services: TodayPlanServiceSelection[];
+  }>;
+}
+
+export interface RecentTodayPlanDetails {
+  query: {
+    mode: 'recent' | 'date' | 'range';
+    days: number;
+    dates: string[];
+    from_date: string;
+    to_date: string;
+    date?: string;
+    start_date?: string;
+    end_date?: string;
+  };
+  plans: RecentTodayPlanPlanSummary[];
+  services: RecentTodayPlanServiceSummary[];
+  tasks: RecentTodayPlanTaskSummary[];
+}
+
 export interface TodayPlanServiceOption {
   service: string;
   repo_path: string | null;
@@ -575,9 +650,12 @@ function getTodayPlanServiceRegistry(): Record<string, ServiceConfig> {
   });
 }
 
-function resolveRepoPath(service: string): string | null {
-  const registry = getTodayPlanServiceRegistry();
-  const config = registry[service];
+function resolveRepoPath(
+  service: string,
+  registry?: Record<string, ServiceConfig>,
+): string | null {
+  const registryToUse = registry || getTodayPlanServiceRegistry();
+  const config = registryToUse[service];
   return resolveRepoPathFromConfig(config);
 }
 
@@ -707,8 +785,9 @@ export function listTodayPlanServiceCommits(input: {
   service: string;
   branches: string[];
   planDate: string;
+  registry?: Record<string, ServiceConfig>;
 }): TodayPlanServiceDetail {
-  const repoPath = resolveRepoPath(input.service);
+  const repoPath = resolveRepoPath(input.service, input.registry);
   const repoExists = Boolean(repoPath && fs.existsSync(repoPath));
   const branchDetails: TodayPlanServiceBranchDetail[] = [];
 
@@ -1037,6 +1116,417 @@ export function getTodayPlanDetail(input: {
           }),
         }
       : null,
+  };
+}
+
+function dateKeyFromOffset(now: Date, offsetDays: number): string {
+  const date = new Date(now);
+  date.setDate(date.getDate() - offsetDays);
+  return getTodayPlanDateKey(date);
+}
+
+function getRecentPlanDates(input: { now: Date; days: number }): string[] {
+  const days = Math.max(1, Math.min(Math.round(input.days), 30));
+  const dates: string[] = [];
+  for (let offset = 0; offset < days; offset += 1) {
+    dates.push(dateKeyFromOffset(input.now, offset));
+  }
+  return dates;
+}
+
+function normalizePlanDateInput(value: string | undefined): string | null {
+  const normalized = (value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
+}
+
+function addDaysToPlanDate(planDate: string, offsetDays: number): string {
+  const date = new Date(`${planDate}T00:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  return getTodayPlanDateKey(date);
+}
+
+function getDateRangePlanDates(input: {
+  startDate: string;
+  endDate: string;
+}): string[] {
+  const dates: string[] = [];
+  let current =
+    input.startDate <= input.endDate ? input.endDate : input.startDate;
+  const minDate =
+    input.startDate <= input.endDate ? input.startDate : input.endDate;
+  for (let index = 0; current >= minDate && index < 30; index += 1) {
+    dates.push(current);
+    current = addDaysToPlanDate(current, -1);
+  }
+  return dates;
+}
+
+function resolveTodayPlanQuery(input: {
+  days?: number;
+  now: Date;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+}): RecentTodayPlanDetails['query'] {
+  const date = normalizePlanDateInput(input.date);
+  if (date) {
+    return {
+      mode: 'date',
+      days: 1,
+      dates: [date],
+      from_date: date,
+      to_date: date,
+      date,
+    };
+  }
+
+  const startDate = normalizePlanDateInput(input.startDate);
+  const endDate = normalizePlanDateInput(input.endDate);
+  if (startDate && endDate) {
+    const dates = getDateRangePlanDates({ startDate, endDate });
+    return {
+      mode: 'range',
+      days: dates.length,
+      dates,
+      from_date: dates[dates.length - 1] || startDate,
+      to_date: dates[0] || endDate,
+      start_date: startDate <= endDate ? startDate : endDate,
+      end_date: startDate <= endDate ? endDate : startDate,
+    };
+  }
+
+  const days = Math.max(1, Math.min(Math.round(Number(input.days) || 3), 30));
+  const dates = getRecentPlanDates({ now: input.now, days });
+  return {
+    mode: 'recent',
+    days,
+    dates,
+    from_date: dates[dates.length - 1] || getTodayPlanDateKey(input.now),
+    to_date: dates[0] || getTodayPlanDateKey(input.now),
+  };
+}
+
+function addUniqueString(target: string[], value: string): void {
+  if (!value || target.includes(value)) return;
+  target.push(value);
+}
+
+function addPlanItemRef(
+  target: RecentTodayPlanItemRef[],
+  ref: RecentTodayPlanItemRef,
+): void {
+  if (
+    target.some(
+      (item) =>
+        item.plan_date === ref.plan_date && item.item_id === ref.item_id,
+    )
+  ) {
+    return;
+  }
+  target.push(ref);
+}
+
+type MutableRecentTodayPlanServiceSummary = Omit<
+  RecentTodayPlanServiceSummary,
+  'branches'
+> & {
+  branches: Map<string, MutableRecentTodayPlanServiceBranchSummary>;
+};
+
+type MutableRecentTodayPlanServiceBranchSummary = Omit<
+  RecentTodayPlanServiceBranchSummary,
+  'sources' | 'commits'
+> & {
+  sources: Set<'manual' | 'workbench'>;
+  commits: Map<string, TodayPlanServiceCommit>;
+};
+
+function ensureRecentServiceSummary(
+  services: Map<string, MutableRecentTodayPlanServiceSummary>,
+  service: string,
+  registry?: Record<string, ServiceConfig>,
+): MutableRecentTodayPlanServiceSummary {
+  const existing = services.get(service);
+  if (existing) return existing;
+  const repoPath = resolveRepoPath(service, registry);
+  const created: MutableRecentTodayPlanServiceSummary = {
+    service,
+    repo_path: repoPath,
+    repo_exists: Boolean(repoPath && fs.existsSync(repoPath)),
+    plan_dates: [],
+    plan_items: [],
+    task_ids: [],
+    branches: new Map(),
+  };
+  services.set(service, created);
+  return created;
+}
+
+function ensureRecentServiceBranchSummary(
+  service: MutableRecentTodayPlanServiceSummary,
+  branch: string,
+): MutableRecentTodayPlanServiceBranchSummary {
+  const existing = service.branches.get(branch);
+  if (existing) return existing;
+  const created: MutableRecentTodayPlanServiceBranchSummary = {
+    name: branch,
+    sources: new Set(),
+    plan_dates: [],
+    plan_items: [],
+    task_ids: [],
+    ref: null,
+    commits: new Map(),
+    errors: [],
+  };
+  service.branches.set(branch, created);
+  return created;
+}
+
+function attachRecentServicePlanRef(input: {
+  services: Map<string, MutableRecentTodayPlanServiceSummary>;
+  registry?: Record<string, ServiceConfig>;
+  service: string;
+  planDate: string;
+  itemRef: RecentTodayPlanItemRef;
+  branch?: string;
+  source?: 'manual' | 'workbench';
+  taskId?: string;
+}): void {
+  const serviceName = input.service.trim();
+  if (!serviceName) return;
+  const service = ensureRecentServiceSummary(
+    input.services,
+    serviceName,
+    input.registry,
+  );
+  addUniqueString(service.plan_dates, input.planDate);
+  addPlanItemRef(service.plan_items, input.itemRef);
+  if (input.taskId) addUniqueString(service.task_ids, input.taskId);
+
+  const branchName = input.branch?.trim();
+  if (!branchName) return;
+  const branch = ensureRecentServiceBranchSummary(service, branchName);
+  if (input.source) branch.sources.add(input.source);
+  addUniqueString(branch.plan_dates, input.planDate);
+  addPlanItemRef(branch.plan_items, input.itemRef);
+  if (input.taskId) addUniqueString(branch.task_ids, input.taskId);
+}
+
+function sortDateKeysDescending(values: string[]): string[] {
+  return [...values].sort((a, b) => b.localeCompare(a));
+}
+
+function sortPlanItemRefs(values: RecentTodayPlanItemRef[]) {
+  return [...values].sort((a, b) => {
+    const dateDiff = b.plan_date.localeCompare(a.plan_date);
+    if (dateDiff !== 0) return dateDiff;
+    return a.title.localeCompare(b.title, 'zh-CN');
+  });
+}
+
+function populateRecentServiceCommits(
+  service: MutableRecentTodayPlanServiceSummary,
+  registry?: Record<string, ServiceConfig>,
+): void {
+  for (const branch of service.branches.values()) {
+    for (const planDate of branch.plan_dates) {
+      const detail = listTodayPlanServiceCommits({
+        service: service.service,
+        branches: [branch.name],
+        planDate,
+        registry,
+      });
+      service.repo_path = detail.repo_path;
+      service.repo_exists = detail.repo_exists;
+      const branchDetail = detail.branches.find(
+        (item) => item.name === branch.name,
+      );
+      if (!branchDetail) continue;
+      if (branchDetail.ref && !branch.ref) {
+        branch.ref = branchDetail.ref;
+      }
+      if (branchDetail.error) {
+        addUniqueString(branch.errors, `${planDate}: ${branchDetail.error}`);
+      }
+      for (const commit of branchDetail.commits) {
+        if (!commit.hash || branch.commits.has(commit.hash)) continue;
+        branch.commits.set(commit.hash, commit);
+      }
+    }
+  }
+}
+
+function finalizeRecentServiceSummary(
+  service: MutableRecentTodayPlanServiceSummary,
+  registry?: Record<string, ServiceConfig>,
+): RecentTodayPlanServiceSummary {
+  populateRecentServiceCommits(service, registry);
+  return {
+    service: service.service,
+    repo_path: service.repo_path,
+    repo_exists: service.repo_exists,
+    plan_dates: sortDateKeysDescending(service.plan_dates),
+    plan_items: sortPlanItemRefs(service.plan_items),
+    task_ids: [...service.task_ids].sort(),
+    branches: Array.from(service.branches.values())
+      .map((branch) => ({
+        name: branch.name,
+        sources: Array.from(branch.sources).sort(),
+        plan_dates: sortDateKeysDescending(branch.plan_dates),
+        plan_items: sortPlanItemRefs(branch.plan_items),
+        task_ids: [...branch.task_ids].sort(),
+        ref: branch.ref,
+        commits: Array.from(branch.commits.values())
+          .sort((a, b) => b.committed_at.localeCompare(a.committed_at))
+          .slice(0, 100),
+        errors: [...branch.errors],
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+  };
+}
+
+export function getRecentTodayPlanDetails(
+  input: {
+    days?: number;
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+    now?: Date;
+    registry?: Record<string, ServiceConfig>;
+  } = {},
+): RecentTodayPlanDetails {
+  const now = input.now || new Date();
+  const query = resolveTodayPlanQuery({
+    days: input.days,
+    now,
+    date: input.date,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
+  const dates = query.dates;
+  const services = new Map<string, MutableRecentTodayPlanServiceSummary>();
+  const tasks = new Map<string, RecentTodayPlanTaskSummary>();
+  const plans: RecentTodayPlanPlanSummary[] = [];
+
+  for (const planDate of dates) {
+    const plan = getTodayPlanByDate(planDate);
+    if (!plan) continue;
+    const items = listTodayPlanItems(plan.id);
+    const planSummary: RecentTodayPlanPlanSummary = {
+      id: plan.id,
+      plan_date: plan.plan_date,
+      title: plan.title,
+      status: getPlanStatus(plan),
+      completed_at: plan.completed_at || null,
+      item_count: items.length,
+      items: [],
+    };
+
+    for (const item of items) {
+      const associations = normalizeAssociations(item.associations_json);
+      const itemRef: RecentTodayPlanItemRef = {
+        plan_date: plan.plan_date,
+        item_id: item.id,
+        title: item.title || '未命名计划项',
+      };
+      planSummary.items.push({
+        id: item.id,
+        title: item.title || '',
+        detail: item.detail || '',
+        order_index: item.order_index,
+        workbench_task_ids: associations.workbench_task_ids,
+        services: associations.services,
+      });
+
+      for (const selection of associations.services) {
+        attachRecentServicePlanRef({
+          services,
+          registry: input.registry,
+          service: selection.service,
+          planDate: plan.plan_date,
+          itemRef,
+        });
+        for (const branch of selection.branches) {
+          attachRecentServicePlanRef({
+            services,
+            registry: input.registry,
+            service: selection.service,
+            branch,
+            source: 'manual',
+            planDate: plan.plan_date,
+            itemRef,
+          });
+        }
+      }
+
+      for (const taskId of associations.workbench_task_ids) {
+        const detail = getWorkbenchTaskDetail(taskId);
+        const workBranch = detail ? getTaskWorkBranch(detail) : '';
+        let summary = tasks.get(taskId);
+        if (!summary) {
+          summary = detail
+            ? {
+                task_id: taskId,
+                found: true,
+                title: detail.task.title,
+                description: getTaskDescription(detail),
+                service: detail.task.service,
+                work_branch: workBranch || null,
+                workflow_stage_label: detail.task.workflow_stage_label,
+                workflow_status_label: detail.task.workflow_status_label,
+                task_state: detail.task.task_state,
+                updated_at: detail.task.updated_at,
+                plan_dates: [],
+                plan_items: [],
+              }
+            : {
+                task_id: taskId,
+                found: false,
+                title: '',
+                description: '',
+                service: '',
+                work_branch: null,
+                workflow_stage_label: '',
+                workflow_status_label: '',
+                task_state: '',
+                updated_at: null,
+                plan_dates: [],
+                plan_items: [],
+              };
+          tasks.set(taskId, summary);
+        }
+        addUniqueString(summary.plan_dates, plan.plan_date);
+        addPlanItemRef(summary.plan_items, itemRef);
+
+        if (detail && detail.task.service && workBranch) {
+          attachRecentServicePlanRef({
+            services,
+            registry: input.registry,
+            service: detail.task.service,
+            branch: workBranch,
+            source: 'workbench',
+            planDate: plan.plan_date,
+            itemRef,
+            taskId,
+          });
+        }
+      }
+    }
+
+    plans.push(planSummary);
+  }
+
+  return {
+    query,
+    plans,
+    services: Array.from(services.values())
+      .map((service) => finalizeRecentServiceSummary(service, input.registry))
+      .sort((a, b) => a.service.localeCompare(b.service, 'zh-CN')),
+    tasks: Array.from(tasks.values()).map((task) => ({
+      ...task,
+      plan_dates: sortDateKeysDescending(task.plan_dates),
+      plan_items: sortPlanItemRefs(task.plan_items),
+    })),
   };
 }
 

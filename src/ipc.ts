@@ -81,6 +81,7 @@ import {
   generateAiImage,
   getAiImageWaitTimeoutMs,
 } from './ai-image.js';
+import { getRecentTodayPlanDetails } from './today-plan.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -966,6 +967,10 @@ export async function processTaskIpc(
     task_state?: 'running' | 'success' | 'failed' | 'cancelled';
     workflow_status?: string;
     keyword?: string;
+    days?: number;
+    date?: string;
+    start_date?: string;
+    end_date?: string;
     // For memory
     content?: string;
     layer?: 'working' | 'episodic' | 'canonical';
@@ -1065,6 +1070,23 @@ export async function processTaskIpc(
       'ipc',
       groupFolder,
       'workbench-results',
+    );
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
+  const writeTodayPlanResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'today-plan-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
@@ -2302,6 +2324,37 @@ export async function processTaskIpc(
           workflowStatus: data.workflow_status,
         },
         'query_workbench_tasks completed',
+      );
+      break;
+    }
+
+    case 'query_recent_today_plan_details': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn(
+          { sourceGroup },
+          'query_recent_today_plan_details missing requestId',
+        );
+        break;
+      }
+
+      const result = getRecentTodayPlanDetails({
+        days: typeof data.days === 'number' ? data.days : undefined,
+        date: typeof data.date === 'string' ? data.date : undefined,
+        startDate:
+          typeof data.start_date === 'string' ? data.start_date : undefined,
+        endDate: typeof data.end_date === 'string' ? data.end_date : undefined,
+      });
+      writeTodayPlanResult(sourceGroup, data.requestId, result);
+      logger.info(
+        {
+          sourceGroup,
+          requestId: data.requestId,
+          days: result.query.days,
+          planCount: result.plans.length,
+          serviceCount: result.services.length,
+          taskCount: result.tasks.length,
+        },
+        'query_recent_today_plan_details completed',
       );
       break;
     }
