@@ -568,7 +568,8 @@ var commands = [
   { name: "/new", desc: "Start a fresh session for the next task" },
 ];
 
-const MAIN_GROUP_AVATAR = "/assets/doraemon-face.png";
+const ASSISTANT_AVATAR = "/assets/avatar-assistant.png";
+const MAIN_GROUP_AVATAR = ASSISTANT_AVATAR;
 const GROUP_INITIAL_TONES = [
   "tone-ocean",
   "tone-mint",
@@ -1677,8 +1678,8 @@ function sendCardAction(value, cardId, formValue) {
 }
 
 function getMessageAvatarHtml(isUser) {
-  const avatarSrc = isUser ? "/assets/nobita.png" : "/assets/doraemon-face.png";
-  const avatarAlt = isUser ? "Nobita" : "Doraemon";
+  const avatarSrc = isUser ? "/assets/avatar-user.png" : ASSISTANT_AVATAR;
+  const avatarAlt = isUser ? "User" : "Assistant";
   return `<div class="msg-avatar"><img src="${avatarSrc}" alt="${avatarAlt}" /></div>`;
 }
 

@@ -9094,7 +9094,7 @@ body.quick-chat-window .quick-chat-input {
   width: 96px;
   height: 96px;
   border-radius: 50%;
-  background: url("/assets/doraemon-face.png") center / contain no-repeat;
+  background: url("/assets/avatar-assistant.png") center / contain no-repeat;
   opacity: 0.12;
   z-index: 0;
 }
@@ -15785,12 +15785,13 @@ body::after {
 }
 
 .doraemon-mini {
-  width: 28px;
-  height: 28px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 5px 12px rgba(0, 118, 179, 0.25);
   animation: doraFloat 2.6s ease-in-out infinite;
+  object-fit: cover;
 }
 
 #chat-header {
@@ -15836,6 +15837,8 @@ body::after {
 #messages-empty-mascot {
   width: 144px;
   max-width: 45vw;
+  border-radius: 50%;
+  object-fit: cover;
   filter: drop-shadow(0 8px 18px rgba(0, 132, 201, 0.26));
   animation: doraFloat 3s ease-in-out infinite;
 }
@@ -15854,7 +15857,7 @@ body::after {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: url("/assets/doraemon-face.png") center / contain no-repeat;
+  background: url("/assets/avatar-assistant.png") center / contain no-repeat;
   opacity: 0.12;
   pointer-events: none;
   z-index: 0;
