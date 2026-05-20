@@ -2877,9 +2877,15 @@ async function main(): Promise<void> {
   const sendCardFn = anySupportsCards
     ? (jid: string, card: InteractiveCard) => {
         const ch = findChannel(channels, jid);
-        return ch?.sendCard
-          ? ch.sendCard(jid, card)
-          : Promise.resolve(undefined);
+        if (!ch) {
+          return Promise.reject(new Error(`No channel for JID: ${jid}`));
+        }
+        if (!ch.sendCard) {
+          return Promise.reject(
+            new Error(`Channel ${ch.name} does not support cards for ${jid}`),
+          );
+        }
+        return ch.sendCard(jid, card);
       }
     : undefined;
 

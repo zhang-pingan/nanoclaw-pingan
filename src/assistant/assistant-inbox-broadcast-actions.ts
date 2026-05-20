@@ -7,6 +7,10 @@ import {
 } from './agent-inbox-store.js';
 import { runAgentInboxAction } from './assistant-actions.js';
 import {
+  canInvestigateInboxItem,
+  canRepairInboxItem,
+} from './assistant-auto-flow.js';
+import {
   buildAssistantInboxBroadcastActionFeedbackCard,
   isAssistantInboxActionKindExecutableOnMobile,
 } from './assistant-inbox-broadcast-render.js';
@@ -276,10 +280,16 @@ export async function handleAssistantInboxBroadcastCardAction(input: {
       `该执行动作不允许在移动端触发：${item.action_kind || 'unknown'}`,
     );
   }
+  if (action === 'investigate' && !canInvestigateInboxItem(item)) {
+    return errorResult('该事项当前不支持移动端排查。');
+  }
 
   const groupId = input.formValue?.group_id || '';
   if (action === 'repair') {
     if (!groupId) return errorResult('缺少修复分类 group_id。');
+    if (!canRepairInboxItem(item)) {
+      return errorResult('该事项当前不支持移动端自动修复。');
+    }
     if (!findRepairableGroup(item, groupId)) {
       return errorResult('该修复分类不存在或不可自动修复。');
     }

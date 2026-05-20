@@ -110,6 +110,34 @@ describe('handleAssistantInboxBroadcastCardAction', () => {
     expect(result.toast?.content).toContain('不允许在移动端触发');
   });
 
+  it('rejects async actions before mutating unsupported inbox items', async () => {
+    const item = createOrUpdateAgentInboxItem({
+      dedupeKey: 'unsupported-async',
+      kind: 'notification',
+      title: '普通通知',
+      sourceType: 'test',
+    });
+
+    const investigate = await handleAssistantInboxBroadcastCardAction(
+      baseInput('assistant_inbox_broadcast_investigate', item.id),
+    );
+    const repair = await handleAssistantInboxBroadcastCardAction({
+      ...baseInput('assistant_inbox_broadcast_repair', item.id),
+      formValue: {
+        action: 'assistant_inbox_broadcast_repair',
+        item_id: item.id,
+        group_id: 'g1',
+      },
+    });
+
+    expect(investigate.ok).toBe(false);
+    expect(investigate.toast?.content).toContain('不支持移动端排查');
+    expect(repair.ok).toBe(false);
+    expect(repair.toast?.content).toContain('不支持移动端自动修复');
+    expect(getAgentInboxItem(item.id)?.extra.autoFlowStatus).toBeUndefined();
+    expect(listAssistantActionLogs(10)).toHaveLength(0);
+  });
+
   it('requires repair group_id and repairable group', async () => {
     const item = createOrUpdateAgentInboxItem({
       dedupeKey: 'repair-group',
@@ -124,6 +152,11 @@ describe('handleAssistantInboxBroadcastCardAction', () => {
             {
               id: 'g1',
               title: '配置缺失',
+              repairable: true,
+            },
+            {
+              id: 'g2',
+              title: '人工处理',
               repairable: false,
             },
           ],
@@ -139,7 +172,7 @@ describe('handleAssistantInboxBroadcastCardAction', () => {
       formValue: {
         action: 'assistant_inbox_broadcast_repair',
         item_id: item.id,
-        group_id: 'g1',
+        group_id: 'g2',
       },
     });
 
