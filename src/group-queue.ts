@@ -2,7 +2,11 @@ import { ChildProcess, exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { DATA_DIR, MAX_CONCURRENT_CONTAINERS } from './config.js';
+import {
+  DATA_DIR,
+  MAX_CONCURRENT_CONTAINERS,
+  ONE_SHOT_AGENT_SLOT_TIMEOUT_MS,
+} from './config.js';
 import { AgentStatusInfo, StopAgentResult } from './types.js';
 export { AgentStatusInfo, StopAgentResult } from './types.js';
 import {
@@ -29,6 +33,40 @@ export interface OneShotAgentStatusInput {
   lastContent?: string;
   lastTime?: string;
   isTask?: boolean;
+  traceKey?: string;
+}
+
+export type OneShotAgentSlotEventName =
+  | 'waiting_for_agent_slot'
+  | 'agent_slot_idle_detected'
+  | 'closing_idle_container'
+  | 'agent_slot_acquired'
+  | 'agent_slot_timeout';
+
+export interface OneShotAgentSlotEvent {
+  eventName: OneShotAgentSlotEventName;
+  groupJid: string;
+  oneShotId: string;
+  traceKey?: string;
+  waitMs: number;
+  idleWaiting: boolean;
+  pendingQueueLength: number;
+  activeCount: number;
+  timeoutMs: number;
+}
+
+interface QueuedOneShot<T = any> {
+  id: string;
+  groupJid: string;
+  status: OneShotAgentStatusInput;
+  fn: () => Promise<T>;
+  resolve: (value: T) => void;
+  reject: (err: unknown) => void;
+  enqueuedAt: number;
+  timeoutAt: number;
+  timeoutMs: number;
+  timeoutHandle: ReturnType<typeof setTimeout>;
+  closeRequested: boolean;
 }
 
 const MAX_RETRIES = 5;
@@ -42,6 +80,7 @@ interface GroupState {
   runningTaskId: string | null;
   pendingMessages: boolean;
   pendingTasks: QueuedTask[];
+  pendingOneShots: QueuedOneShot[];
   process: ChildProcess | null;
   containerName: string | null;
   groupFolder: string | null;
@@ -68,6 +107,9 @@ export class GroupQueue {
     null;
   private shuttingDown = false;
   private statusChangeCallbacks: (() => void)[] = [];
+  private oneShotSlotEventCallbacks: Array<
+    (event: OneShotAgentSlotEvent) => void
+  > = [];
 
   private getGroup(groupJid: string): GroupState {
     let state = this.groups.get(groupJid);
@@ -80,6 +122,7 @@ export class GroupQueue {
         runningTaskId: null,
         pendingMessages: false,
         pendingTasks: [],
+        pendingOneShots: [],
         process: null,
         containerName: null,
         groupFolder: null,
@@ -104,13 +147,16 @@ export class GroupQueue {
   /**
    * Record extra agent info when an agent starts processing.
    */
-  setAgentInfo(groupJid: string, info: {
-    promptSummary: string;
-    groupName: string;
-    lastSender?: string;
-    lastContent?: string;
-    lastTime?: string;
-  }): void {
+  setAgentInfo(
+    groupJid: string,
+    info: {
+      promptSummary: string;
+      groupName: string;
+      lastSender?: string;
+      lastContent?: string;
+      lastTime?: string;
+    },
+  ): void {
     const state = this.getGroup(groupJid);
     state.promptSummary = info.promptSummary;
     state.groupName = info.groupName;
@@ -123,7 +169,8 @@ export class GroupQueue {
    * Return all currently active agents with their status info.
    */
   getActiveAgents(): AgentStatusInfo[] {
-    const activeWorkflowByTargetFolder = this.getActiveWorkflowCountByTargetFolder();
+    const activeWorkflowByTargetFolder =
+      this.getActiveWorkflowCountByTargetFolder();
     const result: AgentStatusInfo[] = [];
     for (const [groupJid, state] of this.groups) {
       if (!state.active || !state.startedAt) continue;
@@ -141,6 +188,7 @@ export class GroupQueue {
         runningTaskId: state.runningTaskId,
         pendingMessages: state.pendingMessages,
         pendingTaskCount: state.pendingTasks.length,
+        pendingOneShotCount: state.pendingOneShots.length,
         activeWorkflowCount:
           activeWorkflowByTargetFolder.get(state.groupFolder || '') || 0,
       });
@@ -155,9 +203,43 @@ export class GroupQueue {
     this.statusChangeCallbacks.push(callback);
   }
 
+  onOneShotSlotEvent(callback: (event: OneShotAgentSlotEvent) => void): void {
+    this.oneShotSlotEventCallbacks.push(callback);
+  }
+
   private emitStatusChange(): void {
     for (const cb of this.statusChangeCallbacks) {
-      try { cb(); } catch { /* ignore */ }
+      try {
+        cb();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  private emitOneShotSlotEvent(
+    groupJid: string,
+    item: QueuedOneShot,
+    eventName: OneShotAgentSlotEventName,
+  ): void {
+    const state = this.getGroup(groupJid);
+    const event: OneShotAgentSlotEvent = {
+      eventName,
+      groupJid,
+      oneShotId: item.id,
+      traceKey: item.status.traceKey,
+      waitMs: Math.max(0, Date.now() - item.enqueuedAt),
+      idleWaiting: state.idleWaiting,
+      pendingQueueLength: state.pendingOneShots.length,
+      activeCount: this.activeCount,
+      timeoutMs: item.timeoutMs,
+    };
+    for (const cb of this.oneShotSlotEventCallbacks) {
+      try {
+        cb(event);
+      } catch {
+        // ignore listener errors
+      }
     }
   }
 
@@ -186,6 +268,23 @@ export class GroupQueue {
       logger.debug(
         { groupJid, activeCount: this.activeCount },
         'At concurrency limit, message queued',
+      );
+      return;
+    }
+
+    if (state.pendingTasks.length > 0 || state.pendingOneShots.length > 0) {
+      state.pendingMessages = true;
+      if (!this.waitingGroups.includes(groupJid)) {
+        this.waitingGroups.push(groupJid);
+      }
+      this.drainWaiting();
+      logger.debug(
+        {
+          groupJid,
+          pendingTasks: state.pendingTasks.length,
+          pendingOneShots: state.pendingOneShots.length,
+        },
+        'Message queued behind pending group work',
       );
       return;
     }
@@ -234,6 +333,24 @@ export class GroupQueue {
       return;
     }
 
+    if (state.pendingMessages || state.pendingOneShots.length > 0) {
+      state.pendingTasks.push({ id: taskId, groupJid, fn });
+      if (!this.waitingGroups.includes(groupJid)) {
+        this.waitingGroups.push(groupJid);
+      }
+      this.drainWaiting();
+      logger.debug(
+        {
+          groupJid,
+          taskId,
+          pendingMessages: state.pendingMessages,
+          pendingOneShots: state.pendingOneShots.length,
+        },
+        'Task queued behind pending group work',
+      );
+      return;
+    }
+
     // Run immediately
     this.runTask(groupJid, { id: taskId, groupJid, fn }).catch((err) =>
       logger.error({ groupJid, taskId, err }, 'Unhandled error in runTask'),
@@ -246,11 +363,136 @@ export class GroupQueue {
     fn: () => Promise<T>,
   ): Promise<T> {
     const state = this.getGroup(groupJid);
-    if (state.active) {
-      throw new Error(`Agent is already active for ${groupJid}`);
+    if (
+      !state.active &&
+      this.activeCount < MAX_CONCURRENT_CONTAINERS &&
+      state.pendingTasks.length === 0 &&
+      !state.pendingMessages &&
+      state.pendingOneShots.length === 0
+    ) {
+      return this.executeOneShot(groupJid, status, fn);
     }
-    if (this.activeCount >= MAX_CONCURRENT_CONTAINERS) {
-      throw new Error('At concurrency limit, one-shot agent cannot start');
+
+    return new Promise<T>((resolve, reject) => {
+      const now = Date.now();
+      const item: QueuedOneShot<T> = {
+        id: this.createOneShotId(),
+        groupJid,
+        status,
+        fn,
+        resolve,
+        reject,
+        enqueuedAt: now,
+        timeoutAt: now + ONE_SHOT_AGENT_SLOT_TIMEOUT_MS,
+        timeoutMs: ONE_SHOT_AGENT_SLOT_TIMEOUT_MS,
+        timeoutHandle: setTimeout(() => {
+          this.timeoutOneShot(groupJid, item.id);
+        }, ONE_SHOT_AGENT_SLOT_TIMEOUT_MS),
+        closeRequested: false,
+      };
+      state.pendingOneShots.push(item as QueuedOneShot);
+      if (!state.active && !this.waitingGroups.includes(groupJid)) {
+        this.waitingGroups.push(groupJid);
+      }
+      logger.info(
+        {
+          groupJid,
+          oneShotId: item.id,
+          active: state.active,
+          idleWaiting: state.idleWaiting,
+          activeCount: this.activeCount,
+          pendingQueueLength: state.pendingOneShots.length,
+          timeoutMs: item.timeoutMs,
+        },
+        'One-shot agent queued waiting for slot',
+      );
+      this.emitOneShotSlotEvent(groupJid, item, 'waiting_for_agent_slot');
+      this.emitStatusChange();
+      this.requestIdleCloseForOneShot(groupJid, item);
+      this.drainWaiting();
+    });
+  }
+
+  registerProcess(
+    groupJid: string,
+    proc: ChildProcess,
+    containerName: string,
+    groupFolder?: string,
+  ): void {
+    const state = this.getGroup(groupJid);
+    state.process = proc;
+    state.containerName = containerName;
+    if (groupFolder) state.groupFolder = groupFolder;
+  }
+
+  private createOneShotId(): string {
+    return `oneshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private requestIdleCloseForOneShot(
+    groupJid: string,
+    item: QueuedOneShot,
+  ): void {
+    const state = this.getGroup(groupJid);
+    if (!state.active || !state.idleWaiting || item.closeRequested) return;
+
+    item.closeRequested = true;
+    this.emitOneShotSlotEvent(groupJid, item, 'agent_slot_idle_detected');
+    this.emitOneShotSlotEvent(groupJid, item, 'closing_idle_container');
+    this.closeStdin(groupJid, {
+      reason: 'one_shot_waiting_for_idle_slot',
+      details: {
+        oneShotId: item.id,
+        waitMs: Math.max(0, Date.now() - item.enqueuedAt),
+        pendingOneShots: state.pendingOneShots.length,
+      },
+    });
+  }
+
+  private requestIdleCloseForPendingOneShot(groupJid: string): void {
+    const state = this.getGroup(groupJid);
+    const item = state.pendingOneShots[0];
+    if (!item) return;
+    this.requestIdleCloseForOneShot(groupJid, item);
+  }
+
+  private timeoutOneShot(groupJid: string, oneShotId: string): void {
+    const state = this.getGroup(groupJid);
+    const index = state.pendingOneShots.findIndex(
+      (item) => item.id === oneShotId,
+    );
+    if (index === -1) return;
+
+    const [item] = state.pendingOneShots.splice(index, 1);
+    clearTimeout(item.timeoutHandle);
+    const waitMs = Math.max(0, Date.now() - item.enqueuedAt);
+    logger.warn(
+      {
+        groupJid,
+        oneShotId: item.id,
+        waitMs,
+        timeoutMs: item.timeoutMs,
+        idleWaiting: state.idleWaiting,
+        pendingQueueLength: state.pendingOneShots.length,
+      },
+      'One-shot agent timed out waiting for slot',
+    );
+    this.emitOneShotSlotEvent(groupJid, item, 'agent_slot_timeout');
+    item.reject(new Error(`Agent busy timeout for ${groupJid}`));
+    this.emitStatusChange();
+    this.drainGroup(groupJid);
+  }
+
+  private async executeOneShot<T>(
+    groupJid: string,
+    status: OneShotAgentStatusInput,
+    fn: () => Promise<T>,
+    item?: QueuedOneShot<T>,
+  ): Promise<T> {
+    const state = this.getGroup(groupJid);
+    if (item) {
+      clearTimeout(item.timeoutHandle);
+      this.emitOneShotSlotEvent(groupJid, item, 'agent_slot_acquired');
     }
 
     state.stopRequested = false;
@@ -293,18 +535,6 @@ export class GroupQueue {
     }
   }
 
-  registerProcess(
-    groupJid: string,
-    proc: ChildProcess,
-    containerName: string,
-    groupFolder?: string,
-  ): void {
-    const state = this.getGroup(groupJid);
-    state.process = proc;
-    state.containerName = containerName;
-    if (groupFolder) state.groupFolder = groupFolder;
-  }
-
   /**
    * Check whether a container is currently active for this group.
    */
@@ -325,9 +555,9 @@ export class GroupQueue {
     const state = this.getGroup(groupJid);
     return Boolean(
       state.active &&
-        state.groupFolder &&
-        !state.isTaskContainer &&
-        !state.isOneShot,
+      state.groupFolder &&
+      !state.isTaskContainer &&
+      !state.isOneShot,
     );
   }
 
@@ -340,6 +570,13 @@ export class GroupQueue {
     state.stopRequested = true;
     state.pendingMessages = false;
     state.pendingTasks = [];
+    for (const item of state.pendingOneShots.splice(0)) {
+      clearTimeout(item.timeoutHandle);
+      item.reject(
+        new Error(`Agent stopped before one-shot could run for ${groupJid}`),
+      );
+    }
+    this.emitStatusChange();
 
     const stoppedTaskId = state.runningTaskId;
     if (stoppedTaskId) {
@@ -365,7 +602,10 @@ export class GroupQueue {
 
       const forceKillTimer = setTimeout(() => {
         if (proc && !proc.killed) {
-          logger.warn({ groupJid, containerName }, 'Agent stop timed out, force killing process');
+          logger.warn(
+            { groupJid, containerName },
+            'Agent stop timed out, force killing process',
+          );
           proc.kill('SIGKILL');
         }
         finish();
@@ -419,6 +659,7 @@ export class GroupQueue {
         wasIdle,
         pendingMessages: state.pendingMessages,
         pendingTasks: state.pendingTasks.length,
+        pendingOneShots: state.pendingOneShots.length,
         hasProcess: Boolean(state.process),
         containerName: state.containerName,
       },
@@ -427,7 +668,9 @@ export class GroupQueue {
     if (!wasIdle) {
       this.emitStatusChange();
     }
-    if (state.pendingTasks.length > 0 || state.pendingMessages) {
+    if (state.pendingOneShots.length > 0) {
+      this.requestIdleCloseForPendingOneShot(groupJid);
+    } else if (state.pendingTasks.length > 0 || state.pendingMessages) {
       this.closeStdin(groupJid, {
         reason: 'idle_has_pending_work',
         details: {
@@ -531,6 +774,7 @@ export class GroupQueue {
           idleWaiting: state.idleWaiting,
           pendingMessages: state.pendingMessages,
           pendingTasks: state.pendingTasks.length,
+          pendingOneShots: state.pendingOneShots.length,
         },
         'Skipping container close sentinel because no active group folder exists',
       );
@@ -551,6 +795,7 @@ export class GroupQueue {
           idleWaiting: state.idleWaiting,
           pendingMessages: state.pendingMessages,
           pendingTasks: state.pendingTasks.length,
+          pendingOneShots: state.pendingOneShots.length,
           isTaskContainer: state.isTaskContainer,
           isOneShot: state.isOneShot,
           runningTaskId: state.runningTaskId,
@@ -587,7 +832,12 @@ export class GroupQueue {
     this.activeCount++;
 
     logger.debug(
-      { groupJid, reason, activeCount: this.activeCount },
+      {
+        groupJid,
+        reason,
+        activeCount: this.activeCount,
+        pendingOneShots: state.pendingOneShots.length,
+      },
       'Starting container for group',
     );
 
@@ -638,7 +888,12 @@ export class GroupQueue {
     this.activeCount++;
 
     logger.debug(
-      { groupJid, taskId: task.id, activeCount: this.activeCount },
+      {
+        groupJid,
+        taskId: task.id,
+        activeCount: this.activeCount,
+        pendingOneShots: state.pendingOneShots.length,
+      },
       'Running queued task',
     );
 
@@ -696,7 +951,20 @@ export class GroupQueue {
     if (this.shuttingDown) return;
 
     const state = this.getGroup(groupJid);
+    if (state.active) {
+      this.requestIdleCloseForPendingOneShot(groupJid);
+      return;
+    }
     if (state.stopRequested) return;
+    if (this.activeCount >= MAX_CONCURRENT_CONTAINERS) {
+      if (
+        this.groupHasPendingWork(state) &&
+        !this.waitingGroups.includes(groupJid)
+      ) {
+        this.waitingGroups.push(groupJid);
+      }
+      return;
+    }
 
     // Tasks first (they won't be re-discovered from SQLite like messages)
     if (state.pendingTasks.length > 0) {
@@ -721,8 +989,26 @@ export class GroupQueue {
       return;
     }
 
+    if (state.pendingOneShots.length > 0) {
+      const item = state.pendingOneShots.shift()!;
+      this.executeOneShot(groupJid, item.status, item.fn, item).then(
+        item.resolve,
+        item.reject,
+      );
+      this.emitStatusChange();
+      return;
+    }
+
     // Nothing pending for this group; check if other groups are waiting for a slot
     this.drainWaiting();
+  }
+
+  private groupHasPendingWork(state: GroupState): boolean {
+    return (
+      state.pendingTasks.length > 0 ||
+      state.pendingMessages ||
+      state.pendingOneShots.length > 0
+    );
   }
 
   private cancelActiveWorkflowsForGroup(state: GroupState): string[] {
@@ -806,6 +1092,13 @@ export class GroupQueue {
             'Unhandled error in runForGroup (waiting)',
           ),
         );
+      } else if (state.pendingOneShots.length > 0) {
+        const item = state.pendingOneShots.shift()!;
+        this.executeOneShot(nextJid, item.status, item.fn, item).then(
+          item.resolve,
+          item.reject,
+        );
+        this.emitStatusChange();
       }
       // If neither pending, skip this group
     }
@@ -813,6 +1106,17 @@ export class GroupQueue {
 
   async shutdown(_gracePeriodMs: number): Promise<void> {
     this.shuttingDown = true;
+
+    for (const [groupJid, state] of this.groups) {
+      for (const item of state.pendingOneShots.splice(0)) {
+        clearTimeout(item.timeoutHandle);
+        item.reject(
+          new Error(
+            `GroupQueue shutting down before one-shot could run for ${groupJid}`,
+          ),
+        );
+      }
+    }
 
     // Count active containers but don't kill them — they'll finish on their own
     // via idle timeout or container timeout. The --rm flag cleans them up on exit.

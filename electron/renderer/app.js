@@ -13271,6 +13271,7 @@ function renderAgentStatus(agents) {
         <span class="agent-status-type">${typeLabel}</span>
         ${agent.activeWorkflowCount > 0 ? `<span class="agent-status-workflow-count">workflow ${escapeHtml(String(agent.activeWorkflowCount))}</span>` : ""}
         ${agent.pendingTaskCount > 0 ? `<span class="agent-status-pending">${agent.pendingTaskCount} pending</span>` : ""}
+        ${agent.pendingOneShotCount > 0 ? `<span class="agent-status-pending">${agent.pendingOneShotCount} one-shot</span>` : ""}
         ${agent.isTask && agent.runningTaskId ? `<span class="agent-status-task-id">${escapeHtml(agent.runningTaskId.slice(0, 8))}…</span>` : ""}
       </div>
       <div class="agent-status-actions">

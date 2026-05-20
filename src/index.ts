@@ -72,7 +72,7 @@ import {
   getWorkflow,
 } from './db.js';
 import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
-import { GroupQueue } from './group-queue.js';
+import { GroupQueue, OneShotAgentSlotEvent } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { initWorkflow } from './workflow.js';
@@ -167,6 +167,13 @@ interface ActiveMessageQueryTraceState {
   messageCursor: string | null;
 }
 
+interface OneShotTraceContext {
+  queryId: string;
+  stepId: string;
+  runId?: string;
+  traceKey?: string;
+}
+
 type AgentExecutionContext = {
   workflowId?: string;
   stageKey?: string;
@@ -182,6 +189,7 @@ const activeMessageQueryTraces = new Map<
   string,
   ActiveMessageQueryTraceState
 >();
+const oneShotTraceContexts = new Map<string, OneShotTraceContext[]>();
 
 function removeSessionDir(groupFolder: string): void {
   const sessionDir = path.join(DATA_DIR, 'sessions', groupFolder, '.claude');
@@ -248,6 +256,99 @@ function fallbackAgentExecutionFailure(error: string): ClassifiedFailure {
     defaultOrigin: 'container',
     retryable: true,
   });
+}
+
+function oneShotAgentSlotTimeoutFailure(
+  error: string,
+  details: Record<string, unknown> = {},
+): ClassifiedFailure {
+  return {
+    failureType: 'timeout',
+    failureSubtype: 'one_shot_agent_slot_timeout',
+    failureOrigin: 'scheduler',
+    retryable: true,
+    details: {
+      module: 'index',
+      action: 'run_one_shot_agent',
+      ...details,
+    },
+  };
+}
+
+function addOneShotTraceContext(
+  chatJid: string,
+  context: OneShotTraceContext,
+): void {
+  const contexts = oneShotTraceContexts.get(chatJid) || [];
+  contexts.push(context);
+  oneShotTraceContexts.set(chatJid, contexts);
+}
+
+function removeOneShotTraceContext(chatJid: string, queryId: string): void {
+  const contexts = oneShotTraceContexts.get(chatJid);
+  if (!contexts) return;
+  const remaining = contexts.filter((context) => context.queryId !== queryId);
+  if (remaining.length > 0) {
+    oneShotTraceContexts.set(chatJid, remaining);
+  } else {
+    oneShotTraceContexts.delete(chatJid);
+  }
+}
+
+function handleOneShotSlotTraceEvent(event: OneShotAgentSlotEvent): void {
+  const contexts = oneShotTraceContexts.get(event.groupJid);
+  if (!contexts?.length) return;
+
+  for (const context of contexts) {
+    if (
+      event.traceKey &&
+      context.traceKey &&
+      event.traceKey !== context.traceKey
+    ) {
+      continue;
+    }
+    try {
+      agentQueryTraceManager.appendEvent({
+        queryId: context.queryId,
+        stepId: context.stepId,
+        eventType:
+          event.eventName === 'agent_slot_timeout' ? 'error' : 'lifecycle',
+        eventName: event.eventName,
+        status:
+          event.eventName === 'agent_slot_timeout'
+            ? 'error'
+            : event.eventName === 'agent_slot_acquired'
+              ? 'success'
+              : 'running',
+        summary:
+          event.eventName === 'agent_slot_timeout'
+            ? `Agent busy timeout for ${event.groupJid}`
+            : event.eventName === 'agent_slot_acquired'
+              ? 'One-shot agent slot acquired'
+              : 'Waiting for one-shot agent slot',
+        payload: {
+          groupJid: event.groupJid,
+          runId: context.runId ?? null,
+          oneShotId: event.oneShotId,
+          waitMs: event.waitMs,
+          idleWaiting: event.idleWaiting,
+          pendingQueueLength: event.pendingQueueLength,
+          activeCount: event.activeCount,
+          timeoutMs: event.timeoutMs,
+        },
+      });
+    } catch (err) {
+      logger.warn(
+        {
+          err,
+          groupJid: event.groupJid,
+          queryId: context.queryId,
+          eventName: event.eventName,
+        },
+        'Failed to append one-shot slot trace event',
+      );
+    }
+  }
 }
 
 function recordInactiveMessageQueryFailure(
@@ -1665,81 +1766,109 @@ async function runOneShotAgent(
     }
   };
 
-  const status = await queue.runOneShot(
-    input.chatJid,
-    {
-      groupFolder: group.folder,
-      groupName: input.status.groupName || group.name,
-      promptSummary: truncateStatusText(
-        input.status.promptSummary || input.prompt,
-        100,
-      ),
-      lastSender: input.status.lastSender || '',
-      lastContent: truncateStatusText(input.status.lastContent, 200),
-      lastTime: input.status.lastTime || Date.now().toString(),
-      isTask: input.status.isTask ?? false,
-    },
-    () =>
-      runAgent(
-        group,
-        input.prompt,
-        input.chatJid,
-        async (output) => {
-          if (output.event) eventMarkerCount += 1;
-          if (output.status === 'error') {
-            errorMarkerCount += 1;
-            executionError = output.error || executionError;
-            executionFailure = output.failure || executionFailure;
-          }
-          if (output.result) {
-            resultMarkerCount += 1;
-            outputs.push(String(output.result));
+  let status: 'success' | 'error';
+  try {
+    status = await queue.runOneShot(
+      input.chatJid,
+      {
+        groupFolder: group.folder,
+        groupName: input.status.groupName || group.name,
+        promptSummary: truncateStatusText(
+          input.status.promptSummary || input.prompt,
+          100,
+        ),
+        lastSender: input.status.lastSender || '',
+        lastContent: truncateStatusText(input.status.lastContent, 200),
+        lastTime: input.status.lastTime || Date.now().toString(),
+        isTask: input.status.isTask ?? false,
+        traceKey: input.initialQueryId,
+      },
+      () =>
+        runAgent(
+          group,
+          input.prompt,
+          input.chatJid,
+          async (output) => {
+            if (output.event) eventMarkerCount += 1;
+            if (output.status === 'error') {
+              errorMarkerCount += 1;
+              executionError = output.error || executionError;
+              executionFailure = output.failure || executionFailure;
+            }
+            if (output.result) {
+              resultMarkerCount += 1;
+              outputs.push(String(output.result));
+              await forwardOutput(output);
+              if (input.closeOnFirstResult !== false && !closeRequested) {
+                closeRequested = true;
+                queue.closeStdin(input.chatJid, {
+                  reason: 'one_shot_first_result',
+                  details: {
+                    runId: input.runId,
+                    initialQueryId: input.initialQueryId,
+                  },
+                });
+              }
+              if (collect === 'first_result') return;
+            }
+            if (
+              output.status === 'success' &&
+              !output.event &&
+              !output.result
+            ) {
+              sessionOnlyMarkerCount += 1;
+            }
             await forwardOutput(output);
-            if (input.closeOnFirstResult !== false && !closeRequested) {
+            if (
+              output.status === 'success' &&
+              !output.event &&
+              !output.result &&
+              (!input.requireResult || resultMarkerCount > 0) &&
+              input.closeOnFirstResult !== false &&
+              !closeRequested
+            ) {
               closeRequested = true;
               queue.closeStdin(input.chatJid, {
-                reason: 'one_shot_first_result',
+                reason: 'one_shot_session_update_after_result',
                 details: {
                   runId: input.runId,
                   initialQueryId: input.initialQueryId,
+                  requireResult: input.requireResult,
                 },
               });
             }
-            if (collect === 'first_result') return;
-          }
-          if (output.status === 'success' && !output.event && !output.result) {
-            sessionOnlyMarkerCount += 1;
-          }
-          await forwardOutput(output);
-          if (
-            output.status === 'success' &&
-            !output.event &&
-            !output.result &&
-            (!input.requireResult || resultMarkerCount > 0) &&
-            input.closeOnFirstResult !== false &&
-            !closeRequested
-          ) {
-            closeRequested = true;
-            queue.closeStdin(input.chatJid, {
-              reason: 'one_shot_session_update_after_result',
-              details: {
-                runId: input.runId,
-                initialQueryId: input.initialQueryId,
-                requireResult: input.requireResult,
-              },
-            });
-          }
-        },
-        input.selectedModel,
-        input.runId,
-        input.initialQueryId,
-        undefined,
-        input.requireResult,
-        input.isolatedSession,
-      ),
-  );
+          },
+          input.selectedModel,
+          input.runId,
+          input.initialQueryId,
+          undefined,
+          input.requireResult,
+          input.isolatedSession,
+        ),
+    );
+  } catch (err) {
+    status = 'error';
+    executionError =
+      err instanceof Error ? err.message : 'One-shot agent execution failed';
+    if (executionError.includes('Agent busy timeout')) {
+      executionFailure = oneShotAgentSlotTimeoutFailure(executionError, {
+        chatJid: input.chatJid,
+        runId: input.runId,
+        queryId: input.initialQueryId,
+      });
+    } else {
+      executionFailure = classifyFailure(new Error(executionError), {
+        module: 'index',
+        action: 'run_one_shot_agent',
+        defaultType: 'container_runtime_error',
+        defaultSubtype: 'one_shot_agent_failed',
+        defaultOrigin: 'container',
+        retryable: true,
+      });
+    }
+  }
 
-  return finalizeOneShotAgentResult({
+  const result = finalizeOneShotAgentResult({
     status,
     outputs,
     executionError,
@@ -1751,6 +1880,20 @@ async function runOneShotAgent(
       errorMarkerCount,
     }),
   });
+
+  if (
+    !result.ok &&
+    !result.failure &&
+    result.error?.includes('Agent busy timeout')
+  ) {
+    result.failure = oneShotAgentSlotTimeoutFailure(result.error, {
+      chatJid: input.chatJid,
+      runId: input.runId,
+      queryId: input.initialQueryId,
+    });
+  }
+
+  return result;
 }
 
 async function runAssistantActionAgent(
@@ -1954,6 +2097,12 @@ async function runAssistantActionAgent(
   };
 
   let result: OneShotAgentResult;
+  addOneShotTraceContext(chatJid, {
+    queryId,
+    stepId: executionStepId,
+    runId,
+    traceKey: queryId,
+  });
   try {
     result = await runOneShotAgent({
       chatJid,
@@ -1983,6 +2132,8 @@ async function runAssistantActionAgent(
       output_preview: outputPreview || null,
     });
     return { ok: false, text: '', error };
+  } finally {
+    removeOneShotTraceContext(chatJid, queryId);
   }
 
   if (!result.ok) {
@@ -2047,25 +2198,36 @@ const runEvolutionActionAgent: EvolutionAgentRunner = async (input) => {
     },
   });
   agentQueryTraceManager.completeStep(queryId, inputStepId, 'success');
-  const result = await runOneShotAgent({
-    chatJid,
-    prompt: input.prompt,
-    selectedModel: selectedModel.selectedModel,
+  addOneShotTraceContext(chatJid, {
+    queryId,
+    stepId: inputStepId,
     runId,
-    initialQueryId: queryId,
-    closeOnFirstResult: true,
-    collect: 'first_result',
-    requireResult: true,
-    isolatedSession: true,
-    status: {
-      groupName: '自我进化',
-      promptSummary: `自我进化 ${input.phase}：${input.item.direction}`,
-      lastSender: 'assistant evolution',
-      lastContent: input.item.status,
-      lastTime: Date.now().toString(),
-      isTask: true,
-    },
+    traceKey: queryId,
   });
+  let result: OneShotAgentResult;
+  try {
+    result = await runOneShotAgent({
+      chatJid,
+      prompt: input.prompt,
+      selectedModel: selectedModel.selectedModel,
+      runId,
+      initialQueryId: queryId,
+      closeOnFirstResult: true,
+      collect: 'first_result',
+      requireResult: true,
+      isolatedSession: true,
+      status: {
+        groupName: '自我进化',
+        promptSummary: `自我进化 ${input.phase}：${input.item.direction}`,
+        lastSender: 'assistant evolution',
+        lastContent: input.item.status,
+        lastTime: Date.now().toString(),
+        isTask: true,
+      },
+    });
+  } finally {
+    removeOneShotTraceContext(chatJid, queryId);
+  }
   if (!result.ok) {
     const error = result.error || 'Assistant evolution agent execution failed';
     agentQueryTraceManager.finishQuery(queryId, 'error', {
@@ -2610,6 +2772,9 @@ async function main(): Promise<void> {
   // Wire up agent status change → web channel broadcast
   queue.onStatusChange(() => {
     channelOpts.onAgentStatusChange?.();
+  });
+  queue.onOneShotSlotEvent((event) => {
+    handleOneShotSlotTraceEvent(event);
   });
   agentQueryTraceManager.onChange(() => {
     channelOpts.onAgentQueryTraceChange?.();

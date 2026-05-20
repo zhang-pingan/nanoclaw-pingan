@@ -89,6 +89,11 @@ export const MAX_CONCURRENT_CONTAINERS = Math.max(
   1,
   parseInt(process.env.MAX_CONCURRENT_CONTAINERS || '5', 10) || 5,
 );
+export const ONE_SHOT_AGENT_SLOT_TIMEOUT_MS = Math.max(
+  1,
+  parseInt(process.env.ONE_SHOT_AGENT_SLOT_TIMEOUT_MS || '120000', 10) ||
+    120000,
+);
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

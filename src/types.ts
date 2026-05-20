@@ -325,6 +325,7 @@ export interface AgentStatusInfo {
   runningTaskId: string | null;
   pendingMessages: boolean;
   pendingTaskCount: number;
+  pendingOneShotCount?: number;
   activeWorkflowCount: number;
 }
 

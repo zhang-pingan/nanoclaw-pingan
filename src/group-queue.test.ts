@@ -22,10 +22,12 @@ const {
 vi.mock('./config.js', () => ({
   DATA_DIR: '/tmp/nanoclaw-test-data',
   MAX_CONCURRENT_CONTAINERS: 2,
+  ONE_SHOT_AGENT_SLOT_TIMEOUT_MS: 1000,
 }));
 
 vi.mock('child_process', async () => {
-  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  const actual =
+    await vi.importActual<typeof import('child_process')>('child_process');
   return {
     ...actual,
     exec: mockExec,
@@ -58,7 +60,8 @@ vi.mock('./db.js', async () => {
 });
 
 vi.mock('./workflow.js', async () => {
-  const actual = await vi.importActual<typeof import('./workflow.js')>('./workflow.js');
+  const actual =
+    await vi.importActual<typeof import('./workflow.js')>('./workflow.js');
   return {
     ...actual,
     cancelWorkflow: mockCancelWorkflow,
@@ -66,7 +69,9 @@ vi.mock('./workflow.js', async () => {
 });
 
 vi.mock('./container-runtime.js', async () => {
-  const actual = await vi.importActual<typeof import('./container-runtime.js')>('./container-runtime.js');
+  const actual = await vi.importActual<typeof import('./container-runtime.js')>(
+    './container-runtime.js',
+  );
   return {
     ...actual,
     stopContainer: vi.fn((name: string) => `docker stop ${name}`),
@@ -643,7 +648,12 @@ describe('GroupQueue', () => {
       });
     });
     await vi.advanceTimersByTimeAsync(10);
-    queue.registerProcess('group1@g.us', proc as any, 'container-1', 'test-group');
+    queue.registerProcess(
+      'group1@g.us',
+      proc as any,
+      'container-1',
+      'test-group',
+    );
 
     const resultPromise = queue.stopAgent('group1@g.us');
     await vi.advanceTimersByTimeAsync(10);
@@ -695,7 +705,12 @@ describe('GroupQueue', () => {
     });
     queue.enqueueMessageCheck('group1@g.us');
     await vi.advanceTimersByTimeAsync(10);
-    queue.registerProcess('group1@g.us', proc as any, 'container-1', 'test-group');
+    queue.registerProcess(
+      'group1@g.us',
+      proc as any,
+      'container-1',
+      'test-group',
+    );
 
     const resultPromise = queue.stopAgent('group1@g.us');
     await vi.advanceTimersByTimeAsync(10);
@@ -752,5 +767,270 @@ describe('GroupQueue', () => {
     resolveOneShot!('ok');
     await expect(oneShotPromise).resolves.toBe('ok');
     expect(queue.getActiveAgents()).toEqual([]);
+  });
+
+  it('queues one-shot while active non-idle without closing the working container', async () => {
+    const fs = await import('fs');
+    let resolveProcess: () => void;
+    const oneShotFn = vi.fn(async () => 'one-shot-result');
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'assistant:main',
+      {} as any,
+      'container-1',
+      'assistant_main',
+    );
+
+    const writeFileSync = vi.mocked(fs.default.writeFileSync);
+    writeFileSync.mockClear();
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      oneShotFn,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(oneShotFn).not.toHaveBeenCalled();
+    expect(
+      writeFileSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
+      ),
+    ).toHaveLength(0);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(oneShotPromise).resolves.toBe('one-shot-result');
+    expect(oneShotFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes one close sentinel when queued one-shot sees an idle active container', async () => {
+    const fs = await import('fs');
+    let resolveProcess: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'assistant:main',
+      {} as any,
+      'container-1',
+      'assistant_main',
+    );
+    queue.notifyIdle('assistant:main');
+
+    const writeFileSync = vi.mocked(fs.default.writeFileSync);
+    writeFileSync.mockClear();
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      async () => 'ok',
+    );
+    await vi.advanceTimersByTimeAsync(10);
+
+    let closeWrites = writeFileSync.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
+    );
+    expect(closeWrites).toHaveLength(1);
+
+    queue.notifyIdle('assistant:main');
+    closeWrites = writeFileSync.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
+    );
+    expect(closeWrites).toHaveLength(1);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(oneShotPromise).resolves.toBe('ok');
+  });
+
+  it('closes idle container when queued one-shot becomes idle later', async () => {
+    const fs = await import('fs');
+    let resolveProcess: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'assistant:main',
+      {} as any,
+      'container-1',
+      'assistant_main',
+    );
+
+    const writeFileSync = vi.mocked(fs.default.writeFileSync);
+    writeFileSync.mockClear();
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      async () => 'ok',
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    expect(
+      writeFileSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
+      ),
+    ).toHaveLength(0);
+
+    queue.notifyIdle('assistant:main');
+    expect(
+      writeFileSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
+      ),
+    ).toHaveLength(1);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(oneShotPromise).resolves.toBe('ok');
+  });
+
+  it('rejects timed-out queued one-shot and does not run it later', async () => {
+    let resolveProcess: () => void;
+    const oneShotFn = vi.fn(async () => 'late');
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      oneShotFn,
+    );
+    const rejectionExpectation = expect(oneShotPromise).rejects.toThrow(
+      'Agent busy timeout for assistant:main',
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await rejectionExpectation;
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(oneShotFn).not.toHaveBeenCalled();
+  });
+
+  it('drains pending messages before queued one-shot for the same group', async () => {
+    const executionOrder: string[] = [];
+    let resolveFirst: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      if (executionOrder.length === 0) {
+        await new Promise<void>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      executionOrder.push('messages');
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      async () => {
+        executionOrder.push('one-shot');
+        return 'ok';
+      },
+    );
+    queue.enqueueMessageCheck('assistant:main');
+
+    resolveFirst!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(oneShotPromise).resolves.toBe('ok');
+    expect(executionOrder).toEqual(['messages', 'messages', 'one-shot']);
+  });
+
+  it('rejects queued one-shot when active agent is stopped', async () => {
+    let resolveProcess: () => void;
+    const proc = {
+      killed: false,
+      once: vi.fn((event: string, handler: () => void) => {
+        if (event === 'close') proc._onClose = handler;
+      }),
+      kill: vi.fn(() => {
+        proc.killed = true;
+        proc._onClose?.();
+        return true;
+      }),
+      _onClose: undefined as undefined | (() => void),
+    };
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'assistant:main',
+      proc as any,
+      'container-1',
+      'assistant_main',
+    );
+
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      async () => 'should-not-run',
+    );
+    const stopPromise = queue.stopAgent('assistant:main');
+    proc._onClose?.();
+
+    await expect(oneShotPromise).rejects.toThrow(
+      'Agent stopped before one-shot could run for assistant:main',
+    );
+    await expect(stopPromise).resolves.toMatchObject({ ok: true });
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
   });
 });
