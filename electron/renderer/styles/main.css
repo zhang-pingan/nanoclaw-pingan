@@ -330,6 +330,7 @@ body.quick-chat-window #app {
 #primary-sidebar {
   width: var(--primary-sidebar-width);
   min-width: var(--primary-sidebar-width);
+  height: 100vh;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -339,6 +340,7 @@ body.quick-chat-window #app {
 }
 
 .primary-sidebar-header {
+  flex: 0 0 88px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -362,16 +364,52 @@ body.quick-chat-window #app {
 }
 
 .primary-nav {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.primary-nav.is-scrolling {
+  scrollbar-width: thin;
+}
+
+.primary-nav::-webkit-scrollbar {
+  width: 0;
+}
+
+.primary-nav.is-scrolling::-webkit-scrollbar {
+  width: 6px;
+}
+
+.primary-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.primary-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.primary-nav.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.primary-nav.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
 }
 
 .primary-sidebar-tools {
+  flex: 0 0 auto;
   display: flex;
   margin-top: auto;
-  padding: 8px 8px 12px;
+  padding: 8px 8px 28px;
   border-top: 1px solid var(--border);
   flex-direction: column;
 }
@@ -15864,19 +15902,6 @@ body::after {
   opacity: 0.12;
   pointer-events: none;
   z-index: 0;
-}
-
-#input-area::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -2px;
-  transform: translateX(-50%);
-  width: 84px;
-  height: 10px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #f14f4f 0%, #f65050 60%, #e33f3f 100%);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55), 0 3px 8px rgba(189, 43, 43, 0.25);
 }
 
 @keyframes doraFloat {
