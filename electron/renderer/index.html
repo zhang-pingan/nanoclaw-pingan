@@ -526,15 +526,15 @@
               </div>
               <p>管理桌面个人助手、主动触发源和 Agent Inbox。桌面助手只负责轻量提醒，完整详情仍回到工作站处理。</p>
               <div class="assistant-hero-actions">
-                <button id="assistant-refresh-btn" class="btn-primary btn-soft-primary assistant-icon-action-btn" title="刷新个人助手" aria-label="刷新个人助手">
+                <button id="assistant-refresh-btn" class="assistant-hero-action-btn assistant-icon-action-btn" title="刷新个人助手" aria-label="刷新个人助手">
                   <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="23 4 23 10 17 10"></polyline>
                     <polyline points="1 20 1 14 7 14"></polyline>
                     <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                   </svg>
                 </button>
-                <button id="assistant-scan-btn" class="btn-primary btn-soft-primary">立即扫描</button>
-                <button id="assistant-clear-data-btn" class="btn-primary btn-soft-primary">清除数据</button>
+                <button id="assistant-scan-btn" class="assistant-hero-action-btn">立即扫描</button>
+                <button id="assistant-clear-data-btn" class="assistant-hero-action-btn">清除数据</button>
               </div>
             </div>
             <div class="assistant-hero-metrics" aria-label="个人助手概览">
@@ -628,7 +628,7 @@
                   </span>
                 </label>
                 <div id="assistant-evolution-schedule" class="assistant-evolution-schedule">加载中</div>
-                <button id="assistant-evolution-trigger-btn" type="button" class="btn-primary btn-soft-primary assistant-evolution-trigger-btn">手动触发</button>
+                <button id="assistant-evolution-trigger-btn" type="button" class="assistant-evolution-trigger-btn">手动触发</button>
 
                 <label class="assistant-switch-row">
                   <input id="assistant-evolution-auto-implement-toggle" type="checkbox" />
@@ -929,7 +929,7 @@
             <select id="knowledge-page-kind-filter" class="knowledge-filter-select">
               <option value="all">全部页面类型</option>
             </select>
-            <button id="knowledge-search-btn" class="btn-primary btn-soft-primary">搜索页面</button>
+            <button id="knowledge-search-btn" class="knowledge-mini-btn">搜索页面</button>
           </div>
           <div class="knowledge-grid">
             <section class="workflow-definition-panel knowledge-panel">
@@ -1537,10 +1537,10 @@
                 <div id="configuration-service-meta" class="workflow-definition-meta"></div>
               </div>
               <div class="configuration-service-hero-side">
-                <span id="configuration-service-save-status" class="configuration-save-status">加载中</span>
-                <div class="configuration-service-actions">
-                  <button id="configuration-service-delete-btn" class="configuration-action-btn configuration-danger-btn">删除</button>
-                  <button id="configuration-service-save-btn" class="configuration-action-btn configuration-primary-btn">保存并生效</button>
+                <span id="configuration-service-save-status" class="workflow-definition-pill configuration-save-status">加载中</span>
+                <div class="workflow-definition-hero-actions configuration-service-actions">
+                  <button id="configuration-service-delete-btn" class="btn-ghost">删除</button>
+                  <button id="configuration-service-save-btn" class="btn-primary">保存并生效</button>
                 </div>
               </div>
             </section>
@@ -1685,9 +1685,9 @@
                     <div class="workflow-definition-panel-title">高级 JSON</div>
                     <div class="workflow-definition-panel-note">当前服务完整 JSON，保留表单未覆盖字段</div>
                   </div>
-                  <div class="configuration-json-actions">
-                    <button id="configuration-service-json-format-btn" type="button" class="configuration-action-btn">格式化</button>
-                    <button id="configuration-service-json-apply-btn" type="button" class="configuration-action-btn">同步到表单</button>
+                  <div class="workflow-definition-hero-actions configuration-json-actions">
+                    <button id="configuration-service-json-format-btn" type="button" class="btn-ghost">格式化</button>
+                    <button id="configuration-service-json-apply-btn" type="button" class="btn-ghost">同步到表单</button>
                   </div>
                 </div>
                 <textarea id="configuration-service-json-editor" class="configuration-json-editor" spellcheck="false"></textarea>

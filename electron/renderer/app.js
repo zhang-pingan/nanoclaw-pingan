@@ -12214,10 +12214,10 @@ function renderCardsList() {
     const isExpanded = Boolean(cardsManagementExpandedGroups[workflowType]);
     const toggle = document.createElement("button");
     toggle.type = "button";
-    toggle.className = `cards-management-group-toggle${isExpanded ? " expanded" : ""}`;
+    toggle.className = `workflow-definition-list-item cards-management-group-toggle${isExpanded ? " expanded" : ""}`;
     toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
     toggle.innerHTML = `
-      <span class="cards-management-group-title">${escapeHtml(workflowType)}</span>
+      <span class="workflow-definition-list-title cards-management-group-title">${escapeHtml(workflowType)}</span>
       <span class="cards-management-group-chevron">${isExpanded ? "▾" : "▸"}</span>
     `;
     toggle.addEventListener("click", () => {
@@ -13531,7 +13531,7 @@ function renderTraceMonitorList() {
     const item = document.createElement("button");
     item.type = "button";
     item.className = `trace-monitor-list-item${runId === currentTraceRunId ? " active" : ""}`;
-    const statusClass = String(run.status || "idle").toLowerCase();
+    const statusClass = getTraceStatusClass(run.status);
     const primaryTime = run.startedAt ? formatDateTime(run.startedAt) : "--";
     const secondaryTime = run.lastEventAt ? formatRelativeTime(run.lastEventAt) : "--";
     item.innerHTML = `
@@ -13568,6 +13568,15 @@ function renderTraceMonitorList() {
     }
     traceMonitorList.appendChild(footer);
   }
+}
+
+function getTraceStatusClass(status) {
+  const normalized = String(status || "idle").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  return normalized === "error" ? "status-error" : normalized;
+}
+
+function getTraceCategoryBadgeClass(className) {
+  return className === "error" ? "trace-monitor-category-badge-error" : className;
 }
 
 function renderTraceMonitorDetailEmpty() {
@@ -13720,7 +13729,7 @@ function renderTraceHighlightSummary(items) {
         <span class="trace-monitor-highlight-label">工具调用</span>
         <strong>${escapeHtml(String(counts.tool))}</strong>
       </button>
-      <button type="button" class="trace-monitor-highlight-card error" data-trace-jump="error">
+      <button type="button" class="trace-monitor-highlight-card trace-monitor-highlight-card-error" data-trace-jump="error">
         <span class="trace-monitor-highlight-label">错误事件</span>
         <strong>${escapeHtml(String(counts.error))}</strong>
       </button>
@@ -13783,8 +13792,8 @@ function renderTraceStepTimelineItem(step, category) {
           <div class="trace-monitor-timeline-title">
             <span class="trace-monitor-timeline-kind">Step</span>
             <strong>${escapeHtml(step.step_name || step.step_type || "Step")}</strong>
-            ${category.label ? `<span class="trace-monitor-category-badge ${escapeHtml(category.className)}">${escapeHtml(category.label)}</span>` : ""}
-            <span class="trace-monitor-status ${escapeHtml(String(step.status || "idle").toLowerCase())}">${escapeHtml(step.status || "--")}</span>
+            ${category.label ? `<span class="trace-monitor-category-badge ${escapeHtml(getTraceCategoryBadgeClass(category.className))}">${escapeHtml(category.label)}</span>` : ""}
+            <span class="trace-monitor-status ${escapeHtml(getTraceStatusClass(step.status))}">${escapeHtml(step.status || "--")}</span>
           </div>
           <div class="trace-monitor-timeline-time">
             <div>${escapeHtml(formatDateTime(step.started_at))}</div>
@@ -13809,8 +13818,8 @@ function renderTraceEventTimelineItem(event, category) {
           <div class="trace-monitor-timeline-title">
             <span class="trace-monitor-timeline-kind">${escapeHtml(event.event_type || "event")}</span>
             <strong>${escapeHtml(event.summary || event.event_name || "Event")}</strong>
-            ${category.label ? `<span class="trace-monitor-category-badge ${escapeHtml(category.className)}">${escapeHtml(category.label)}</span>` : ""}
-            ${event.status ? `<span class="trace-monitor-status ${escapeHtml(String(event.status).toLowerCase())}">${escapeHtml(event.status)}</span>` : ""}
+            ${category.label ? `<span class="trace-monitor-category-badge ${escapeHtml(getTraceCategoryBadgeClass(category.className))}">${escapeHtml(category.label)}</span>` : ""}
+            ${event.status ? `<span class="trace-monitor-status ${escapeHtml(getTraceStatusClass(event.status))}">${escapeHtml(event.status)}</span>` : ""}
           </div>
           <div class="trace-monitor-timeline-time">
             <div>${escapeHtml(formatDateTime(event.created_at || event.started_at))}</div>
@@ -20797,12 +20806,12 @@ function renderAssistantInboxActions(item) {
     item.action_kind === "continue_today_plan" ||
     (typeof item.action_kind === "string" && item.action_kind.startsWith("assistant_evolution_"));
   return `
-    ${hasFlowDetail ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-flow-detail="${escapeAttribute(item.id)}">${assistantFlowDetailExpandedItems[item.id] ? "收起结果" : "排查结果"}</button>` : ""}
-    ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? "收起日志" : "日志详情"}</button>` : ""}
-    ${canShowAssistantInvestigate(item) ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "investigate" ? " is-pending" : ""}" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "investigate" ? assistantPendingLabel("investigate") : (investigation ? "重新排查" : "排查")}</button>` : ""}
-    ${isExecutable ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "execute" ? " is-pending" : ""}" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "execute" ? assistantPendingLabel("execute") : escapeHtml(item.action_label || "执行")}</button>` : ""}
-    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "snooze" ? " is-pending" : ""}" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "snooze" ? assistantPendingLabel("snooze") : "稍后"}</button>
-    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn${pendingAction === "dismiss" ? " is-pending" : ""}" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "dismiss" ? assistantPendingLabel("dismiss") : "忽略"}</button>
+    ${hasFlowDetail ? `<button type="button" class="assistant-action-btn" data-assistant-flow-detail="${escapeAttribute(item.id)}">${assistantFlowDetailExpandedItems[item.id] ? "收起结果" : "排查结果"}</button>` : ""}
+    ${isAssistantOnlineErrorLogItem(item) ? `<button type="button" class="assistant-action-btn" data-assistant-log-detail="${escapeAttribute(item.id)}">${assistantLogDetailExpandedItems[item.id] ? "收起日志" : "日志详情"}</button>` : ""}
+    ${canShowAssistantInvestigate(item) ? `<button type="button" class="assistant-action-btn${pendingAction === "investigate" ? " is-pending" : ""}" data-assistant-action="investigate" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "investigate" ? assistantPendingLabel("investigate") : (investigation ? "重新排查" : "排查")}</button>` : ""}
+    ${isExecutable ? `<button type="button" class="assistant-action-btn${pendingAction === "execute" ? " is-pending" : ""}" data-assistant-action="execute" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "execute" ? assistantPendingLabel("execute") : escapeHtml(item.action_label || "执行")}</button>` : ""}
+    <button type="button" class="assistant-action-btn${pendingAction === "snooze" ? " is-pending" : ""}" data-assistant-action="snooze" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "snooze" ? assistantPendingLabel("snooze") : "稍后"}</button>
+    <button type="button" class="assistant-action-btn${pendingAction === "dismiss" ? " is-pending" : ""}" data-assistant-action="dismiss" data-assistant-item="${escapeAttribute(item.id)}" ${disabledAttr}>${pendingAction === "dismiss" ? assistantPendingLabel("dismiss") : "忽略"}</button>
   `;
 }
 
@@ -21044,12 +21053,12 @@ function renderAssistantEvolutionActions(item, isActive) {
   const canResume = item.status === "paused" || item.status === "adoption_failed";
   const canCancel = !["completed", "failed", "cancelled"].includes(item.status);
   return `
-    <button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-detail="${escapeAttribute(item.id)}">${assistantEvolutionDetailExpandedItems[item.id] ? "收起详情" : "详情"}</button>
-    ${canApprove ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="approve-implementation" data-assistant-evolution-item="${escapeAttribute(item.id)}">确认实现</button>` : ""}
-    ${canAdopt ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="adopt" data-assistant-evolution-item="${escapeAttribute(item.id)}">采纳方案</button>` : ""}
-    ${canPause ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="pause" data-assistant-evolution-item="${escapeAttribute(item.id)}">暂停</button>` : ""}
-    ${canResume ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="resume" data-assistant-evolution-item="${escapeAttribute(item.id)}">继续</button>` : ""}
-    ${canCancel ? `<button type="button" class="btn-primary btn-soft-primary assistant-action-btn" data-assistant-evolution-action="cancel" data-assistant-evolution-item="${escapeAttribute(item.id)}">取消</button>` : ""}
+    <button type="button" class="assistant-action-btn" data-assistant-evolution-detail="${escapeAttribute(item.id)}">${assistantEvolutionDetailExpandedItems[item.id] ? "收起详情" : "详情"}</button>
+    ${canApprove ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="approve-implementation" data-assistant-evolution-item="${escapeAttribute(item.id)}">确认实现</button>` : ""}
+    ${canAdopt ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="adopt" data-assistant-evolution-item="${escapeAttribute(item.id)}">采纳方案</button>` : ""}
+    ${canPause ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="pause" data-assistant-evolution-item="${escapeAttribute(item.id)}">暂停</button>` : ""}
+    ${canResume ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="resume" data-assistant-evolution-item="${escapeAttribute(item.id)}">继续</button>` : ""}
+    ${canCancel ? `<button type="button" class="assistant-action-btn" data-assistant-evolution-action="cancel" data-assistant-evolution-item="${escapeAttribute(item.id)}">取消</button>` : ""}
   `;
 }
 
