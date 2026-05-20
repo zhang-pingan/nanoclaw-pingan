@@ -483,6 +483,25 @@ function isCompleteDelegationToolResult(output: ContainerOutput): boolean {
   );
 }
 
+function isSendMessageToolResult(output: ContainerOutput): boolean {
+  const toolName = output.event?.payload?.toolName;
+  return Boolean(
+    output.status === 'success' &&
+      output.event?.name === 'tool_result' &&
+      (toolName === 'mcp__nanoclaw__send_message' ||
+        toolName === 'send_message'),
+  );
+}
+
+function isNaturalConfirmationText(text: string): boolean {
+  const normalized = text.replace(/\s+/g, '').trim();
+  return (
+    normalized.length > 0 &&
+    normalized.length < 30 &&
+    /(转告|反馈|回复|通知|发送|告知|完成)/.test(normalized)
+  );
+}
+
 function createMessageQueryTrace(params: {
   queryId: string;
   runId: string;
@@ -1026,6 +1045,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const executionContext = resolveExecutionContext(group, missedMessages);
   const isWorkflowDelegationRun =
     isWorkflowDelegationExecutionContext(executionContext);
+  const isWecomDelegationRun =
+    channel.name === 'wecom' &&
+    missedMessages.some((message) =>
+      /\[委派任务\s*\|\s*ID:/.test(message.content),
+    );
+  let sentMessageInWecomDelegationRun = false;
   const modelSelection = await selectModel({
     prompt,
     isMain: isMainGroup,
@@ -1124,6 +1149,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
             details: { groupName: group.name, runId, queryId },
           });
         }
+        if (isWecomDelegationRun && isSendMessageToolResult(result)) {
+          sentMessageInWecomDelegationRun = true;
+        }
         if (!traceState) {
           logger.warn(
             {
@@ -1214,27 +1242,47 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           `Agent output: ${raw.slice(0, 200)}`,
         );
         if (text) {
-          agentQueryTraceManager.appendEvent({
-            queryId,
-            stepId: traceState.resultDeliveryStepId,
-            eventType: 'lifecycle',
-            eventName: 'channel_send_started',
-            status: 'running',
-            summary: `Sending response to ${channel.name}`,
-            payload: { channel: channel.name },
-          });
-          await channel.sendMessage(chatJid, text);
-          agentQueryTraceManager.appendEvent({
-            queryId,
-            stepId: traceState.resultDeliveryStepId,
-            eventType: 'lifecycle',
-            eventName: 'channel_send_finished',
-            status: 'success',
-            summary: `Delivered response to ${channel.name}`,
-            payload: { channel: channel.name },
-          });
-          traceState.outputSent = true;
-          sessionOutputSent = true;
+          const suppressFinalOutput =
+            isWecomDelegationRun &&
+            sentMessageInWecomDelegationRun &&
+            isNaturalConfirmationText(text);
+          if (suppressFinalOutput) {
+            agentQueryTraceManager.appendEvent({
+              queryId,
+              stepId: traceState.resultDeliveryStepId,
+              eventType: 'lifecycle',
+              eventName: 'channel_send_suppressed',
+              status: 'success',
+              summary: 'Suppressed duplicate WeCom delegation confirmation',
+              payload: {
+                channel: channel.name,
+                reason: 'wecom_delegation_send_message_confirmation',
+                text,
+              },
+            });
+          } else {
+            agentQueryTraceManager.appendEvent({
+              queryId,
+              stepId: traceState.resultDeliveryStepId,
+              eventType: 'lifecycle',
+              eventName: 'channel_send_started',
+              status: 'running',
+              summary: `Sending response to ${channel.name}`,
+              payload: { channel: channel.name },
+            });
+            await channel.sendMessage(chatJid, text);
+            agentQueryTraceManager.appendEvent({
+              queryId,
+              stepId: traceState.resultDeliveryStepId,
+              eventType: 'lifecycle',
+              eventName: 'channel_send_finished',
+              status: 'success',
+              summary: `Delivered response to ${channel.name}`,
+              payload: { channel: channel.name },
+            });
+            traceState.outputSent = true;
+            sessionOutputSent = true;
+          }
         }
         // Only reset idle timer on actual results, not session-update markers (result: null)
         resetIdleTimer();
