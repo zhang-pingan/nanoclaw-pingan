@@ -340,10 +340,9 @@ body.quick-chat-window #app {
 
 .primary-sidebar-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  height: 88px;
-  padding-top: 10px;
+  height: 68px;
   border-bottom: 1px solid var(--border);
 }
 
