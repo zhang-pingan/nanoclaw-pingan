@@ -1,0 +1,2088 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MixClaw 项目汇报</title>
+    <style>
+      :root {
+        --bg: #f5f7fa;
+        --paper: #ffffff;
+        --ink: #1d2733;
+        --muted: #647184;
+        --line: #d8dee8;
+        --teal: #197a73;
+        --coral: #c8503e;
+        --amber: #b47a15;
+        --blue: #345c8c;
+        --green: #3f7d48;
+        --soft-teal: #e7f3f1;
+        --soft-coral: #f8eae6;
+        --soft-amber: #fff2d7;
+        --soft-blue: #e8eef8;
+        --soft-green: #e9f3ea;
+        --shadow: 0 18px 45px rgba(29, 39, 51, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          'Noto Sans SC',
+          'Microsoft YaHei',
+          sans-serif;
+        line-height: 1.65;
+        overflow-x: hidden;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .topbar {
+        position: sticky;
+        overflow: hidden;
+        --scroll-progress: 0;
+        --nav-fill: rgba(29, 39, 51, 0.08);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        min-height: 64px;
+        padding: 0 28px;
+        border-bottom: 1px solid rgba(216, 222, 232, 0.9);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(18px);
+      }
+
+      .topbar::after {
+        content: '';
+        position: absolute;
+        inset: auto 0 0;
+        height: 3px;
+        transform-origin: left;
+        transform: scaleX(var(--scroll-progress));
+        background: linear-gradient(
+          90deg,
+          var(--teal),
+          var(--blue),
+          var(--coral)
+        );
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        font-weight: 700;
+      }
+
+      .brand img {
+        width: 32px;
+        height: 32px;
+        border-radius: 7px;
+      }
+
+      .brand span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+
+      .nav a {
+        padding: 7px 10px;
+        border-radius: 7px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+        transition:
+          background-color 0.22s ease,
+          color 0.22s ease,
+          transform 0.22s ease;
+      }
+
+      .nav a:hover {
+        background: #eef2f6;
+        color: var(--ink);
+        transform: translateY(-1px);
+      }
+
+      .nav a[aria-current='page'] {
+        background: var(--ink);
+        color: #fff;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+        gap: 28px;
+        align-items: stretch;
+        max-width: 1220px;
+        margin: 0 auto;
+        padding: 54px 28px 30px;
+      }
+
+      .hero-copy {
+        min-width: 0;
+        padding: 18px 0;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 16px;
+        color: var(--teal);
+        font-size: 13px;
+        font-weight: 760;
+        letter-spacing: 0;
+      }
+
+      .eyebrow::before {
+        content: '';
+        width: 24px;
+        height: 2px;
+        background: var(--teal);
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.18;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 880px;
+        font-size: 66px;
+      }
+
+      h2 {
+        font-size: 40px;
+      }
+
+      h3 {
+        font-size: 19px;
+      }
+
+      .lead {
+        max-width: 760px;
+        margin: 20px 0 0;
+        color: #425064;
+        font-size: 19px;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 26px 0 0;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 5px 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.74);
+        color: #435064;
+        font-size: 13px;
+        font-weight: 680;
+      }
+
+      .hero-visual {
+        min-width: 0;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background:
+          linear-gradient(rgba(29, 39, 51, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(29, 39, 51, 0.04) 1px, transparent 1px),
+          #fff;
+        background-size: 22px 22px;
+        box-shadow: var(--shadow);
+        animation: drift 7s ease-in-out infinite;
+      }
+
+      .architecture-stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .layer {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.92);
+        overflow: hidden;
+        transition:
+          transform 0.25s ease,
+          box-shadow 0.25s ease,
+          border-color 0.25s ease;
+      }
+
+      .layer:hover {
+        transform: translateY(-3px);
+        border-color: rgba(52, 92, 140, 0.24);
+        box-shadow: 0 16px 32px rgba(29, 39, 51, 0.12);
+      }
+
+      .layer-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 13px;
+        border-bottom: 1px solid var(--line);
+        font-weight: 760;
+      }
+
+      .layer-title small {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .layer-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 12px;
+      }
+
+      .unit {
+        min-height: 48px;
+        padding: 9px;
+        border-radius: 7px;
+        background: #f7f9fb;
+        color: #334053;
+        font-size: 13px;
+        font-weight: 650;
+        transition:
+          transform 0.22s ease,
+          background-color 0.22s ease,
+          border-color 0.22s ease;
+      }
+
+      .unit:hover {
+        transform: translateY(-2px);
+        background: #fff;
+      }
+
+      .arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 22px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .main {
+        padding: 16px 0 64px;
+      }
+
+      .section {
+        position: relative;
+        border-top: 1px solid rgba(216, 222, 232, 0.88);
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.95),
+          rgba(247, 249, 252, 0.95)
+        );
+        overflow: hidden;
+      }
+
+      .section::before {
+        content: '';
+        position: absolute;
+        inset: 0 0 auto;
+        height: 6px;
+        background: linear-gradient(
+          90deg,
+          var(--teal),
+          var(--blue),
+          var(--coral)
+        );
+        opacity: 0.28;
+      }
+
+      .section-inner {
+        position: relative;
+        z-index: 1;
+        max-width: 1220px;
+        margin: 0 auto;
+        padding: 58px 28px;
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 0.72fr) minmax(280px, 0.28fr);
+        gap: 28px;
+        align-items: end;
+        margin-bottom: 28px;
+      }
+
+      .section-head-single {
+        grid-template-columns: 1fr;
+      }
+
+      .section-head p {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .source-note {
+        padding: 12px 13px;
+        border-left: 3px solid var(--teal);
+        background: var(--soft-teal);
+        color: #27524f;
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .grid-2,
+      .grid-3,
+      .grid-4 {
+        display: grid;
+        gap: 14px;
+      }
+
+      .grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .grid-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .card {
+        min-width: 0;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        transition:
+          transform 0.24s ease,
+          box-shadow 0.24s ease,
+          border-color 0.24s ease;
+      }
+
+      .card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(25, 122, 115, 0.22);
+        box-shadow: 0 18px 36px rgba(29, 39, 51, 0.1);
+      }
+
+      .card h3 {
+        margin-bottom: 9px;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .metric {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-height: 120px;
+      }
+
+      .metric strong {
+        color: var(--ink);
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      .tag {
+        display: inline-flex;
+        width: fit-content;
+        max-width: 100%;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .tag.teal {
+        background: var(--soft-teal);
+        color: var(--teal);
+      }
+
+      .tag.coral {
+        background: var(--soft-coral);
+        color: var(--coral);
+      }
+
+      .tag.amber {
+        background: var(--soft-amber);
+        color: var(--amber);
+      }
+
+      .tag.blue {
+        background: var(--soft-blue);
+        color: var(--blue);
+      }
+
+      .tag.green {
+        background: var(--soft-green);
+        color: var(--green);
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        align-items: stretch;
+      }
+
+      .flow-step {
+        position: relative;
+        min-height: 124px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        transition:
+          transform 0.24s ease,
+          box-shadow 0.24s ease,
+          border-color 0.24s ease;
+      }
+
+      .flow-step::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: -10px;
+        width: 10px;
+        height: 2px;
+        background: var(--line);
+      }
+
+      .flow-step:last-child::after {
+        display: none;
+      }
+
+      .flow-step:hover {
+        transform: translateY(-4px);
+        border-color: rgba(52, 92, 140, 0.24);
+        box-shadow: 0 18px 34px rgba(29, 39, 51, 0.1);
+      }
+
+      .flow-step b {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--ink);
+      }
+
+      .flow-step span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: minmax(0, 0.44fr) minmax(0, 0.56fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .diagram {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        transition:
+          transform 0.24s ease,
+          box-shadow 0.24s ease,
+          border-color 0.24s ease;
+      }
+
+      .diagram:hover {
+        transform: translateY(-3px);
+        border-color: rgba(200, 80, 62, 0.18);
+        box-shadow: 0 18px 36px rgba(29, 39, 51, 0.1);
+      }
+
+      .runtime-map {
+        display: grid;
+        gap: 12px;
+      }
+
+      .runtime-row {
+        display: grid;
+        grid-template-columns: 150px minmax(0, 1fr);
+        gap: 12px;
+        align-items: stretch;
+      }
+
+      .runtime-label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        border-radius: 8px;
+        background: #eef2f6;
+        color: #344154;
+        font-weight: 780;
+        text-align: center;
+      }
+
+      .runtime-items {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .runtime-items span {
+        min-height: 48px;
+        padding: 9px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fff;
+        color: #415066;
+        font-size: 13px;
+        font-weight: 650;
+        transition:
+          transform 0.22s ease,
+          box-shadow 0.22s ease,
+          border-color 0.22s ease;
+      }
+
+      .runtime-items span:hover {
+        transform: translateY(-2px);
+        border-color: rgba(52, 92, 140, 0.24);
+        box-shadow: 0 12px 24px rgba(29, 39, 51, 0.08);
+      }
+
+      .architecture-bands {
+        display: grid;
+        gap: 18px;
+      }
+
+      .architecture-band {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: var(--shadow);
+        transition:
+          transform 0.24s ease,
+          box-shadow 0.24s ease,
+          border-color 0.24s ease;
+      }
+
+      .architecture-band:hover {
+        transform: translateY(-4px);
+        border-color: rgba(52, 92, 140, 0.2);
+        box-shadow: 0 22px 42px rgba(29, 39, 51, 0.12);
+      }
+
+      .architecture-band--loop {
+        background: linear-gradient(
+          180deg,
+          rgba(231, 243, 241, 0.95),
+          #fff 52%
+        );
+      }
+
+      .architecture-band--runtime {
+        background: linear-gradient(
+          180deg,
+          rgba(232, 238, 248, 0.92),
+          #fff 54%
+        );
+      }
+
+      .band-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .band-kicker {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 36px;
+        min-height: 36px;
+        padding: 0 10px;
+        border-radius: 8px;
+        background: #eef2f6;
+        color: #344154;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .band-title {
+        margin-top: 4px;
+        font-size: 28px;
+        font-weight: 820;
+      }
+
+      .band-subtitle {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .band-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .band-card {
+        min-height: 118px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      .band-card strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      .band-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .band-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .band-divider::before,
+      .band-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--line);
+      }
+
+      .band-divider span {
+        padding: 7px 11px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fff;
+      }
+
+      .workflow-abstract-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .workflow-builder {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: var(--shadow);
+      }
+
+      .workflow-builder-rail {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 7px;
+        background: linear-gradient(
+          90deg,
+          rgba(231, 243, 241, 0.85),
+          rgba(232, 238, 248, 0.9),
+          rgba(248, 234, 230, 0.88)
+        );
+        color: #304252;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .workflow-builder-text {
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .workflow-actions-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .workflow-action-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .workflow-action-item {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .workflow-action-item b {
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .workflow-action-item span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .workflow-quick-start {
+        display: grid;
+        gap: 10px;
+      }
+
+      .workflow-quick-step {
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      .workflow-quick-step .dot {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--soft-teal);
+        color: var(--teal);
+      }
+
+      .workflow-quick-step .timeline-body {
+        border-bottom: 1px solid var(--line);
+      }
+
+      @keyframes drift {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+
+        50% {
+          transform: translateY(-3px);
+        }
+      }
+
+      @keyframes fade-in-up {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+          scroll-behavior: auto !important;
+        }
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 760px;
+      }
+
+      th,
+      td {
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f0f4f8;
+        color: #334053;
+        font-size: 13px;
+        font-weight: 780;
+      }
+
+      td {
+        color: #4a586c;
+        font-size: 14px;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 1px 5px;
+        border: 1px solid #d9e0e9;
+        border-radius: 5px;
+        background: #f7f9fb;
+        color: #27354a;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          'Liberation Mono', monospace;
+        font-size: 0.92em;
+      }
+
+      .code-block {
+        overflow-x: auto;
+        margin: 0;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #17212d;
+        color: #edf4f8;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          'Liberation Mono', monospace;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 10px;
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      .dot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--soft-blue);
+        color: var(--blue);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .timeline-body {
+        padding: 2px 0 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .timeline-body b {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .timeline-body span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .callout {
+        padding: 18px 20px;
+        border: 1px solid #f0d6a3;
+        border-left: 4px solid var(--amber);
+        border-radius: 8px;
+        background: var(--soft-amber);
+        color: #5a4320;
+      }
+
+      .callout strong {
+        color: #3f2e14;
+      }
+
+      .footer {
+        max-width: 1220px;
+        margin: 0 auto;
+        padding: 28px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 980px) {
+        .hero,
+        .section-head,
+        .split {
+          grid-template-columns: 1fr;
+        }
+
+        .grid-3,
+        .grid-4,
+        .flow {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .flow-step::after {
+          display: none;
+        }
+
+        .runtime-row {
+          grid-template-columns: 1fr;
+        }
+
+        .runtime-items {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .topbar {
+          position: static;
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 14px 18px;
+        }
+
+        .nav {
+          justify-content: flex-start;
+        }
+
+        .hero,
+        .section-inner,
+        .footer {
+          padding-left: 18px;
+          padding-right: 18px;
+        }
+
+        .hero {
+          padding-top: 30px;
+        }
+
+        h1 {
+          font-size: 40px;
+        }
+
+        .lead {
+          font-size: 17px;
+        }
+
+        .grid-2,
+        .grid-3,
+        .grid-4,
+        .flow,
+        .layer-grid,
+        .runtime-items {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .topbar {
+          position: static;
+        }
+
+        .section-inner,
+        .hero {
+          max-width: none;
+          padding: 28px 18px;
+        }
+
+        .card,
+        .diagram,
+        .hero-visual,
+        .table-wrap,
+        .callout {
+          box-shadow: none;
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="MixClaw 项目汇报">
+        <img src="../assets/claw-icon.png" alt="" />
+        <span>MixClaw 项目汇报</span>
+      </a>
+      <nav class="nav" aria-label="页面导航">
+        <a href="#summary">概括</a>
+        <a href="#modules">核心模块</a>
+        <a href="#architecture">系统架构</a>
+        <a href="#runtime">Runtime</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#delivery">交付闭环</a>
+        <a href="#advantages">核心优势</a>
+        <a href="#extension">扩展</a>
+        <a href="#references">概念校准</a>
+      </nav>
+    </header>
+
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <p class="eyebrow">Personal Agent Operating System</p>
+        <h1>MixClaw：面向工程交付的个人 Agent 工作系统</h1>
+        <p class="lead">
+          MixClaw 把 Agent 从“会话工具”提升为“工程运行时”：多端入口负责触达，
+          宿主机负责可信编排，容器负责隔离执行，Workflow 负责交付闭环。
+        </p>
+        <div class="chips" aria-label="核心模块">
+          <span class="chip">Web 工作台</span>
+          <span class="chip">个人助理</span>
+          <span class="chip">飞书移动端</span>
+          <span class="chip">企微私人客服</span>
+          <span class="chip">宿主机服务</span>
+          <span class="chip">容器 Agent</span>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-label="MixClaw 总体架构图">
+        <div class="architecture-stack">
+          <div class="layer">
+            <div class="layer-title">
+              <span>用户界面层</span>
+              <small>多入口，同一状态</small>
+            </div>
+            <div class="layer-grid">
+              <div class="unit">Web 工作台<br />任务、审批、Trace</div>
+              <div class="unit">桌面助理<br />主动扫描、Inbox</div>
+              <div class="unit">飞书<br />查询、审批、提醒</div>
+              <div class="unit">企微私聊<br />信息收集、员工客服</div>
+            </div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="layer">
+            <div class="layer-title">
+              <span>宿主机服务层</span>
+              <small>可信控制面</small>
+            </div>
+            <div class="layer-grid">
+              <div class="unit">Channel Registry</div>
+              <div class="unit">Workflow Engine</div>
+              <div class="unit">SQLite / Trace</div>
+              <div class="unit">Queue / Scheduler / IPC</div>
+            </div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="layer">
+            <div class="layer-title">
+              <span>容器 Agent 层</span>
+              <small>隔离执行面</small>
+            </div>
+            <div class="layer-grid">
+              <div class="unit">Claude Agent SDK</div>
+              <div class="unit">Tool Use / MCP / Skill</div>
+              <div class="unit">Bash / Browser / Files</div>
+              <div class="unit">Typed Handoff / Artifact</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="main">
+      <section class="section" id="summary">
+        <div class="section-inner">
+          <div class="section-head">
+            <div>
+              <h2>概括</h2>
+              <p>
+                MixClaw 的核心结论是：Agent
+                能力必须被工程化。它不是单个聊天窗口，
+                而是一套具备状态、权限、隔离、恢复、评估和审计能力的个人 Agent
+                操作系统。
+              </p>
+            </div>
+          </div>
+
+          <div class="grid-4">
+            <article class="card metric">
+              <span class="tag teal">定位</span>
+              <strong>个人 Agent 操作系统</strong>
+              <p>
+                工作台、助理、移动端和企微只是入口，最终都收敛到同一套宿主机状态。
+              </p>
+            </article>
+            <article class="card metric">
+              <span class="tag coral">边界</span>
+              <strong>控制面与执行面分离</strong>
+              <p>宿主机保留状态、权限、凭证和审计；容器只承担受控工具执行。</p>
+            </article>
+            <article class="card metric">
+              <span class="tag amber">流程</span>
+              <strong>状态机驱动交付</strong>
+              <p>
+                需求、修复、部署、测试都被建模为可 checkpoint 的 durable
+                workflow。
+              </p>
+            </article>
+            <article class="card metric">
+              <span class="tag blue">质量</span>
+              <strong>Harness 化 Agent</strong>
+              <p>
+                标准输入、结构化输出、Trace、产物契约、评估器和失败分类共同约束交付。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="modules">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>核心模块介绍</h2>
+              <p>
+                MixClaw
+                的模块边界很明确：入口层负责交互，宿主机负责控制，容器负责执行，
+                Workflow 负责把执行结果推进成可审计的工程交付。
+              </p>
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag teal">Web 工作台</span>
+              <h3>用户主动操作台</h3>
+              <p>
+                承载任务创建、阶段进度、待处理项、产物、Trace、知识库与配置管理，是主操作界面。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag blue">个人助理</span>
+              <h3>Agent 主动层</h3>
+              <p>
+                常驻桌面，扫描计划、任务、定时执行和异常日志，把“需要注意的事”主动推给用户。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag coral">移动端 / 企微</span>
+              <h3>轻量入口与私人客服</h3>
+              <p>
+                飞书用于移动端查询、审批和提醒；企微用于一对一收集上下文和处理员工请求。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">宿主机服务</span>
+              <h3>可信控制面</h3>
+              <p>
+                统一管理频道、SQLite、Workflow
+                Engine、Queue、IPC、Trace、凭证代理和调度器。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag green">容器 Agent</span>
+              <h3>隔离执行面</h3>
+              <p>
+                运行 Claude Agent
+                SDK、工具调用、浏览器、文件和命令执行，并把结果回传宿主机。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag blue">Workflow</span>
+              <h3>流程编排器</h3>
+              <p>
+                把需求、修复、测试、部署和审批建模为可恢复状态机，统一管理中断与恢复。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>系统架构</h2>
+              <p>
+                系统架构分成两层：Agent Loop 负责智能执行，Agent Runtime
+                Infrastructure 负责让执行可运行、可恢复、可追踪、可审计。
+              </p>
+            </div>
+          </div>
+
+          <div class="architecture-bands">
+            <section class="architecture-band architecture-band--loop">
+              <div class="band-head">
+                <div>
+                  <span class="band-kicker">A</span>
+                  <div class="band-title">Agent Loop</div>
+                  <div class="band-subtitle">
+                    LLM 做决策，工具做动作，ReAct 串联观察反馈，Agent Teams
+                    承担角色协作。
+                  </div>
+                </div>
+                <div class="band-divider"><span>执行内核</span></div>
+              </div>
+
+              <div class="band-grid">
+                <article class="band-card">
+                  <strong>LLM</strong>
+                  <p>
+                    Claude Agent SDK 的 query()
+                    驱动推理和输出，是每轮循环的核心决策点。
+                  </p>
+                </article>
+                <article class="band-card">
+                  <strong>Tool Use</strong>
+                  <p>
+                    Bash、MCP、浏览器、文件操作和 Skill 把模型推理接到真实动作。
+                  </p>
+                </article>
+                <article class="band-card">
+                  <strong>ReAct</strong>
+                  <p>
+                    Agent
+                    在“思考-行动-观察-再行动”的闭环里推进任务，而不是一次性给结论。
+                  </p>
+                </article>
+                <article class="band-card">
+                  <strong>Agent Teams</strong>
+                  <p>
+                    subagents 和角色分工把 planner、dev、reviewer、ops、test
+                    组织成协作队列。
+                  </p>
+                </article>
+              </div>
+            </section>
+
+            <section class="architecture-band architecture-band--runtime">
+              <div class="band-head">
+                <div>
+                  <span class="band-kicker">B</span>
+                  <div class="band-title">Agent Runtime Infrastructure</div>
+                  <div class="band-subtitle">
+                    Workflow、容器 harness、checkpoint、interrupt、outbox
+                    组成可恢复运行时。
+                  </div>
+                </div>
+                <div class="band-divider"><span>执行平台</span></div>
+              </div>
+
+              <div class="band-grid">
+                <article class="band-card">
+                  <strong>Workflow</strong>
+                  <p>状态机驱动节点迁移，把复杂工程任务拆成可恢复的阶段。</p>
+                </article>
+                <article class="band-card">
+                  <strong>Checkpoint</strong>
+                  <p>
+                    保存状态、上下文、当前委派和 pending
+                    interrupt，支持重启后继续推进。
+                  </p>
+                </article>
+                <article class="band-card">
+                  <strong>Harness</strong>
+                  <p>
+                    容器 runner、SDK、hooks 和 marker
+                    输出解析构成工程执行器外壳。
+                  </p>
+                </article>
+                <article class="band-card">
+                  <strong>Safety</strong>
+                  <p>
+                    凭证代理、挂载白名单、SQLite、Trace 和 failure taxonomy
+                    收束风险面。
+                  </p>
+                </article>
+              </div>
+            </section>
+          </div>
+
+          <div style="height: 18px"></div>
+
+          <div class="split">
+            <div class="diagram">
+              <h3>主动工作流链路</h3>
+              <div style="height: 14px"></div>
+              <pre class="code-block">
+用户在 Web 工作台新建任务
+  -> 宿主机创建 workflow / workbench_task
+  -> Workflow Engine 按状态机推进
+  -> delegation 节点创建委派并注入角色群组
+  -> GroupQueue 启动或复用容器 Agent
+  -> Agent 使用 Tool / MCP / Skill 完成交付
+  -> 宿主机解析结果、写 Trace、产物和评估
+  -> interrupt 节点等待用户审批或补充输入
+  -> resume 后继续状态迁移，直到 terminal</pre
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="runtime">
+        <div class="section-inner">
+          <div class="section-head">
+            <div>
+              <h2>Agent Runtime Infrastructure</h2>
+              <p>
+                Runtime 的目标不是“让 Agent
+                能调用工具”，而是把每次执行变成可启动、
+                可约束、可恢复、可评价的工程单元。
+              </p>
+            </div>
+          </div>
+
+          <div class="runtime-map" aria-label="Agent Runtime Infrastructure">
+            <div class="runtime-row">
+              <div class="runtime-label">Channel Runtime</div>
+              <div class="runtime-items">
+                <span>Web / Assistant / Feishu / WeCom 自注册</span>
+                <span>消息入库与轮询</span>
+                <span>卡片动作路由</span>
+                <span>多端状态同步</span>
+              </div>
+            </div>
+            <div class="runtime-row">
+              <div class="runtime-label">Workflow Runtime</div>
+              <div class="runtime-items">
+                <span>状态机定义</span>
+                <span>checkpoint</span>
+                <span>interrupt / resume</span>
+                <span>outbox 幂等副作用</span>
+              </div>
+            </div>
+            <div class="runtime-row">
+              <div class="runtime-label">Agent Harness</div>
+              <div class="runtime-items">
+                <span>Container Runner</span>
+                <span>Claude SDK query()</span>
+                <span>Tool hooks / MCP</span>
+                <span>marker 输出解析</span>
+              </div>
+            </div>
+            <div class="runtime-row">
+              <div class="runtime-label">Safety & State</div>
+              <div class="runtime-items">
+                <span>SQLite 运行态</span>
+                <span>凭证代理</span>
+                <span>挂载白名单</span>
+                <span>Trace / failure taxonomy</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="grid-2">
+            <article class="card">
+              <span class="tag blue">类 LangGraph 架构</span>
+              <h3>状态机 + checkpoint + interrupt</h3>
+              <p>
+                MixClaw 已在宿主机实现 workflow state、durable
+                checkpoint、pending interrupt、resume attempt、workflow
+                event、outbox 和 watchdog。它类似 LangGraph
+                的地方在于：状态可持久化，
+                节点可恢复，副作用可重试，人类输入是一等节点。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag coral">为什么不直接用 LangGraph</span>
+              <h3>Claude 已承担内层 Agent Loop</h3>
+              <p>
+                当前系统已有状态机、checkpoint、interrupt、outbox
+                和工作台同步机制；内层 Agent Loop 又由 Claude Agent SDK/Claude
+                Code 执行。直接引入 LangGraph
+                会带来额外适配成本，而收益不如保持现有 TypeScript runtime 统一。
+              </p>
+            </article>
+          </div>
+
+          <div style="height: 14px"></div>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag teal">Harness 输入</span>
+              <h3>标准化上下文</h3>
+              <p>
+                宿主机把
+                prompt、sessionId、model、runId、queryId、groupFolder、workflowId、
+                stageKey、delegationId 等元数据传入容器。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">Harness 执行</span>
+              <h3>一致的沙箱环境</h3>
+              <p>
+                容器统一挂载目录、注入占位凭证、配置 MCP、加载 Skill、启用
+                hooks，支持 session resume 和 agent teams。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag green">Harness 输出</span>
+              <h3>可观测交付</h3>
+              <p>
+                结果通过固定 marker 输出，宿主机解析 success/error/event，并写入
+                Trace、工作台和失败分类。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="workflow">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>Workflow 详解</h2>
+              <p>
+                Workflow 的重点不在具体配置字段，而在抽象层。MixClaw
+                通过节点、待处理输入、卡片和 steps
+                四类抽象，让新工作流可以快速拼装， 而不是重写 runtime。
+              </p>
+            </div>
+          </div>
+
+          <div class="workflow-abstract-grid">
+            <article class="workflow-builder">
+              <div class="workflow-builder-rail">
+                <span>节点抽象化</span>
+                <span>待处理输入抽象化</span>
+                <span>卡片抽象化</span>
+                <span>steps 抽象化</span>
+              </div>
+              <p class="workflow-builder-text">
+                节点只分
+                <code>delegation</code
+                >、<code>interrupt</code>、<code>system</code>、<code
+                  >terminal</code
+                >
+                四类。
+                新工作流只需要决定每个阶段属于哪种节点，而不是重新设计整个
+                runtime。
+              </p>
+              <div class="workflow-builder-rail">
+                <span>快速新建新的工作流</span>
+                <span>只要组合抽象</span>
+              </div>
+            </article>
+            <article class="workflow-builder">
+              <div class="workflow-builder-rail">
+                <span>从需求到交付</span>
+                <span>从修复到验证</span>
+                <span>从审批到恢复</span>
+              </div>
+              <p class="workflow-builder-text">
+                新流程的差异主要体现在角色、卡片、契约和评估策略，节点引擎保持稳定。
+                这是 MixClaw 能快速扩展新流程类型的基础。
+              </p>
+              <div class="workflow-builder-rail">
+                <span>低成本复用</span>
+                <span>统一审计与恢复</span>
+              </div>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="workflow-actions-grid">
+            <div class="workflow-action-list">
+              <div class="workflow-action-item">
+                <b>节点抽象化</b>
+                <span
+                  >每个节点只定义自己的职责和迁移规则，避免把业务逻辑散落到
+                  runtime 代码里。</span
+                >
+              </div>
+              <div class="workflow-action-item">
+                <b>待处理输入抽象化</b>
+                <span
+                  >审批、补充输入、凭证和外部阻塞都统一成
+                  interrupt，不再拆成多个临时模型。</span
+                >
+              </div>
+              <div class="workflow-action-item">
+                <b>卡片抽象化</b>
+                <span
+                  >卡片只是交互外壳，真正的业务语义通过 resume action 和 payload
+                  schema 表达。</span
+                >
+              </div>
+              <div class="workflow-action-item">
+                <b>steps 抽象化</b>
+                <span
+                  >system / before_delegate / after_complete 都是在编排可注册
+                  handler，复用方式一致。</span
+                >
+              </div>
+            </div>
+
+            <div class="diagram">
+              <h3>新建工作流路径</h3>
+              <div style="height: 12px"></div>
+              <div class="workflow-quick-start">
+                <div class="workflow-quick-step">
+                  <div class="dot">1</div>
+                  <div class="timeline-body">
+                    <b>定义阶段</b>
+                    <span
+                      >决定每个阶段是 delegation、interrupt、system 还是
+                      terminal。</span
+                    >
+                  </div>
+                </div>
+                <div class="workflow-quick-step">
+                  <div class="dot">2</div>
+                  <div class="timeline-body">
+                    <b>挂接卡片与动作</b>
+                    <span
+                      >让待处理输入通过卡片和 resume action
+                      进入同一恢复链路。</span
+                    >
+                  </div>
+                </div>
+                <div class="workflow-quick-step">
+                  <div class="dot">3</div>
+                  <div class="timeline-body">
+                    <b>复用 steps</b>
+                    <span
+                      >用统一 handler 注册表拼装 system
+                      任务、前置检查和后置整理。</span
+                    >
+                  </div>
+                </div>
+                <div class="workflow-quick-step">
+                  <div class="dot">4</div>
+                  <div class="timeline-body">
+                    <b>得到新工作流</b>
+                    <span
+                      >不用重写 runtime，只新增 definition，就能生成新的
+                      workflow 类型。</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="callout">
+            <strong>Resume 的事务边界：</strong>
+            <code>resumeWorkflowInterrupt()</code>
+            在同一事务内完成幂等检查、interrupt 状态校验、action/channel/schema
+            校验、mark resumed、写 resume attempt、写 event、合并 context
+            patch、apply transition 和
+            checkpoint。通知、卡片刷新、工作台同步等副作用走 outbox。
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="delivery">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>交付闭环</h2>
+              <p>
+                MixClaw 把 Agent
+                输出从“自然语言回答”升级为“有契约、有证据、有评估、
+                有追踪的工程交付”。
+              </p>
+            </div>
+          </div>
+
+          <div class="flow">
+            <div class="flow-step">
+              <b>Typed Handoff</b>
+              <span
+                >每次委派附带输入/输出 schema、成功标准和 artifact
+                contract。</span
+              >
+            </div>
+            <div class="flow-step">
+              <b>Artifact Contract</b>
+              <span
+                >约束交付字段、文件路径、front matter、大小和允许目录。</span
+              >
+            </div>
+            <div class="flow-step">
+              <b>Stage Evaluation</b>
+              <span
+                >阶段评估输出 passed、needs_revision、failed 或 pending。</span
+              >
+            </div>
+            <div class="flow-step">
+              <b>Failure Taxonomy</b>
+              <span
+                >区分模型、工具、沙箱、配置、权限、超时、测试或部署失败。</span
+              >
+            </div>
+            <div class="flow-step">
+              <b>Trace & Workbench</b>
+              <span>Query、Step、Event、产物、时间线和待办统一展示。</span>
+            </div>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="grid-2">
+            <article class="card">
+              <span class="tag teal">开发测试流程</span>
+              <h3><code>dev_test</code></h3>
+              <p>
+                从方案设计开始，经过方案审核、开发、开发复核、预发部署和测试验证。
+                角色包括 planner、plan_examiner、dev、dev_examiner、ops、test；
+                支持从方案、开发或测试前确认入口进入。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">Bug 修复测试流程</span>
+              <h3><code>fix_test</code></h3>
+              <p>
+                从 Bug 修复开始，进入预发部署和测试验证。测试失败时进入复修
+                Round， 再次部署和验证；部署失败、通过、取消等状态进入
+                terminal。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="advantages">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>核心优势</h2>
+              <p>
+                这些优势基本对应 TECHNOLOGY.md 的主线：安全隔离、Agent
+                蜂窝架构、harness 工程、记忆与知识库、 workflow
+                机制和可审计交付。
+              </p>
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag coral">安全性</span>
+              <h3>容器化沙箱与凭证代理</h3>
+              <p>
+                高权限执行放在容器内，真实密钥留在宿主机；挂载白名单、会话隔离和
+                IPC 授权把风险收紧到明确边界。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag blue">Agent 蜂窝架构</span>
+              <h3>主调度与角色 Agent 分离</h3>
+              <p>
+                宿主机统一调度 planner、dev、reviewer、ops、test
+                等角色，避免多个 Agent 共用一个混乱上下文池。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">Harness 工程</span>
+              <h3>让 Agent 可运行、可观测、可评估</h3>
+              <p>
+                统一输入、统一执行环境、流式输出解析、产物契约、阶段评估和失败分类，构成完整工程闭环。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag green">记忆与 Wiki</span>
+              <h3>结构化记忆 + 可引用知识</h3>
+              <p>
+                MixClaw
+                不只存对话历史，还把长期偏好、项目知识、证据链和关系图分开建模，减少上下文漂移。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag teal">Workflow 抽象</span>
+              <h3>快速拼装新流程</h3>
+              <p>
+                节点、pending input、卡片和 steps
+                都是可复用抽象，所以新工作流可以低成本快速创建，而不是复制
+                runtime。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag coral">交付审计</span>
+              <h3>Trace、事件和回放</h3>
+              <p>
+                每次执行都沉淀
+                Query、Step、Event、产物、评估结果和错误分类，便于复盘和继续推进。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="extension">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>扩展与演进</h2>
+              <p>
+                项目的扩展点围绕“新增入口、新增流程、新增能力、新增知识”展开，
+                避免把所有变化塞进单一主流程。
+              </p>
+            </div>
+          </div>
+
+          <div class="grid-4">
+            <article class="card">
+              <span class="tag blue">新增频道</span>
+              <h3>Channel Registry</h3>
+              <p>
+                实现 <code>Channel</code> 接口，模块加载时注册
+                factory；凭证缺失时返回 null。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag teal">新增流程</span>
+              <h3>Workflow Definition</h3>
+              <p>
+                新增 roles、entry_points、states、cards、artifact contract 和
+                evaluator。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">新增技能</span>
+              <h3>Container Skill</h3>
+              <p>
+                用
+                <code>container/skills</code>
+                固化角色方法论，权限仍由宿主机和容器边界控制。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag green">新增步骤</span>
+              <h3>Action Handler</h3>
+              <p>
+                通过 registry 注册 <code>WorkflowActionHandler</code>，即可被
+                system/hook steps 调用。
+              </p>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>核心文件</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>src/workflow.ts</code></td>
+                  <td>
+                    Workflow
+                    runtime、transition、checkpoint、interrupt/resume、outbox、watchdog。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>src/workflow-definition.ts</code></td>
+                  <td>
+                    Workflow definition schema，定义节点类型、interrupt
+                    kind、system run steps。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>src/workflow-actions/*</code></td>
+                  <td>Action handler registry 和内置 steps。</td>
+                </tr>
+                <tr>
+                  <td><code>src/container-runner.ts</code></td>
+                  <td>
+                    容器生命周期、挂载、凭证代理环境、输出 marker
+                    解析和失败分类。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>container/agent-runner/src/index.ts</code></td>
+                  <td>
+                    容器内 Claude Agent SDK 调用、消息流、hooks、事件输出。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>src/workbench-store.ts</code></td>
+                  <td>
+                    workflow/delegation/interrupt/evaluation
+                    到工作台任务、子任务、待办和时间线的同步。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="references">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>概念校准</h2>
+              <p>
+                文中涉及的外部概念先用官方文档和论文校准定义，再映射到 MixClaw
+                的实现和设计选择。
+              </p>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>概念</th>
+                  <th>校准来源</th>
+                  <th>MixClaw 中的落地</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Claude Code subagents / agent teams</td>
+                  <td>
+                    <a
+                      href="https://code.claude.com/docs/en/subagents"
+                      target="_blank"
+                      rel="noreferrer"
+                      >Anthropic 官方文档</a
+                    >
+                  </td>
+                  <td>用于解释角色 Agent 的独立上下文、能力边界和协作分工。</td>
+                </tr>
+                <tr>
+                  <td>MCP</td>
+                  <td>
+                    <a
+                      href="https://modelcontextprotocol.io/docs/getting-started/intro"
+                      target="_blank"
+                      rel="noreferrer"
+                      >MCP 官方文档</a
+                    >
+                  </td>
+                  <td>
+                    用于解释容器 Agent
+                    如何通过标准工具面访问宿主机能力和外部资源。
+                  </td>
+                </tr>
+                <tr>
+                  <td>LangGraph / checkpoint / state graph</td>
+                  <td>
+                    <a
+                      href="https://docs.langchain.com/oss/javascript/langgraph/persistence"
+                      target="_blank"
+                      rel="noreferrer"
+                      >LangChain 官方文档</a
+                    >
+                  </td>
+                  <td>
+                    用于校准状态机、checkpoint、interrupt/resume 这类 durable
+                    runtime 设计。
+                  </td>
+                </tr>
+                <tr>
+                  <td>ReAct</td>
+                  <td>
+                    <a
+                      href="https://arxiv.org/abs/2210.03629"
+                      target="_blank"
+                      rel="noreferrer"
+                      >arXiv 论文</a
+                    >
+                  </td>
+                  <td>
+                    用于解释 Agent Loop 中推理、工具行动、观察反馈的交替推进。
+                  </td>
+                </tr>
+                <tr>
+                  <td>SWE-agent / ACI</td>
+                  <td>
+                    <a
+                      href="https://arxiv.org/abs/2405.15793"
+                      target="_blank"
+                      rel="noreferrer"
+                      >arXiv 论文</a
+                    >
+                  </td>
+                  <td>
+                    用于解释 harness、工具白名单、挂载目录、Trace
+                    和工作台视图为何重要。
+                  </td>
+                </tr>
+                <tr>
+                  <td>Reflexion / Voyager</td>
+                  <td>
+                    <a
+                      href="https://arxiv.org/abs/2303.11366"
+                      target="_blank"
+                      rel="noreferrer"
+                      >Reflexion</a
+                    >
+                    /
+                    <a
+                      href="https://arxiv.org/abs/2305.16291"
+                      target="_blank"
+                      rel="noreferrer"
+                      >Voyager</a
+                    >
+                  </td>
+                  <td>
+                    用于解释记忆、阶段评估、自我进化和 Skill 沉淀的相关思路。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="height: 18px"></div>
+
+          <div class="grid-2">
+            <article class="card">
+              <span class="tag blue">外部概念使用原则</span>
+              <h3>先校准定义，再说明落地</h3>
+              <p>
+                文中关于 subagents、MCP、LangGraph、ReAct、SWE-agent、Reflexion
+                和 Voyager 的表述，先按官方文档或论文校正，再映射到 MixClaw
+                的实现和设计选择。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag teal">内部文档</span>
+              <h3>README 与 TECHNOLOGY 作为主线</h3>
+              <p>
+                项目内文档负责定义 MixClaw
+                的产品边界、架构边界、工作流边界和安全边界，
+                外部来源负责校准概念定义。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      资料来源：README.md、TECHNOLOGY.md、docs/SPEC.md、docs/SDK_DEEP_DIVE.md、
+      docs/startup-flow.md、docs/SECURITY.md、docs/workflow-durable-interrupt-resume-full-migration-plan.md
+      以及当前源码实现和外部官方文档/论文参考。
+    </footer>
+    <script>
+      (() => {
+        const sections = [...document.querySelectorAll('main .section[id]')];
+        const navLinks = [...document.querySelectorAll('.nav a[href^="#"]')];
+        const topbar = document.querySelector('.topbar');
+        const reduceMotion =
+          window.matchMedia &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        const update = () => {
+          const scrollTop =
+            window.scrollY || document.documentElement.scrollTop;
+          const max =
+            document.documentElement.scrollHeight -
+            document.documentElement.clientHeight;
+          const progress = max > 0 ? Math.min(scrollTop / max, 1) : 0;
+          topbar?.style.setProperty('--scroll-progress', progress.toFixed(4));
+
+          let current = sections[0]?.id || '';
+          const marker = window.innerHeight * 0.28;
+          for (const section of sections) {
+            const top = section.getBoundingClientRect().top;
+            if (top <= marker) current = section.id;
+          }
+
+          navLinks.forEach((link) => {
+            const active = link.getAttribute('href') === `#${current}`;
+            if (active) link.setAttribute('aria-current', 'page');
+            else link.removeAttribute('aria-current');
+          });
+        };
+
+        if (!reduceMotion) {
+          const observer = new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (entry.isIntersecting) {
+                  entry.target.animate(
+                    [
+                      { opacity: 0, transform: 'translateY(12px)' },
+                      { opacity: 1, transform: 'translateY(0)' },
+                    ],
+                    { duration: 500, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+                  );
+                  observer.unobserve(entry.target);
+                }
+              }
+            },
+            { threshold: 0.15 },
+          );
+          document
+            .querySelectorAll(
+              '.card, .diagram, .architecture-band, .workflow-builder',
+            )
+            .forEach((node) => observer.observe(node));
+        }
+
+        update();
+        window.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+      })();
+    </script>
+  </body>
+</html>
