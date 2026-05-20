@@ -1383,8 +1383,10 @@
               <h2>Agent Runtime Infrastructure</h2>
               <p>
                 Runtime 的目标不是“让 Agent
-                能调用工具”，而是把每次执行变成可启动、
-                可约束、可恢复、可评价的工程单元。
+                能调用工具”，而是把每次执行变成可启动、可约束、可恢复、
+                可评价的工程单元。这里的 Harness Engine
+                不是单纯的容器包装，而是把模型调用、工具面、沙箱、输出协议、
+                Trace 和评估串成一次可复现 run 的执行层。
               </p>
             </div>
           </div>
@@ -1409,12 +1411,13 @@
               </div>
             </div>
             <div class="runtime-row">
-              <div class="runtime-label">Agent Harness</div>
+              <div class="runtime-label">Harness Engine</div>
               <div class="runtime-items">
                 <span>Container Runner</span>
                 <span>Claude SDK query()</span>
                 <span>Tool hooks / MCP</span>
-                <span>marker 输出解析</span>
+                <span>结构化输出协议</span>
+                <span>Trace / failure taxonomy</span>
               </div>
             </div>
             <div class="runtime-row">
@@ -1423,7 +1426,7 @@
                 <span>SQLite 运行态</span>
                 <span>凭证代理</span>
                 <span>挂载白名单</span>
-                <span>Trace / failure taxonomy</span>
+                <span>权限校验</span>
               </div>
             </div>
           </div>
@@ -1458,28 +1461,30 @@
 
           <div class="grid-3">
             <article class="card">
-              <span class="tag teal">Harness 输入</span>
-              <h3>标准化上下文</h3>
+              <span class="tag teal">Harness Engine 输入</span>
+              <h3>统一单次运行的输入契约</h3>
               <p>
                 宿主机把
                 prompt、sessionId、model、runId、queryId、groupFolder、workflowId、
-                stageKey、delegationId 等元数据传入容器。
+                stageKey、delegationId 等元数据收束成一次 run 的标准输入。
               </p>
             </article>
             <article class="card">
-              <span class="tag amber">Harness 执行</span>
-              <h3>一致的沙箱环境</h3>
+              <span class="tag amber">Agent-Computer Interface</span>
+              <h3>让 Agent 真正碰到受控系统</h3>
               <p>
-                容器统一挂载目录、注入占位凭证、配置 MCP、加载 Skill、启用
-                hooks，支持 session resume 和 agent teams。
+                容器 runner、挂载目录、占位凭证、MCP、Skill 和 hooks 组成专用
+                ACI；SWE-agent 的结果也说明，接口设计会直接影响 Agent
+                完成代码编辑、仓库导航和测试执行的能力。
               </p>
             </article>
             <article class="card">
-              <span class="tag green">Harness 输出</span>
-              <h3>可观测交付</h3>
+              <span class="tag green">Trace / Eval</span>
+              <h3>输出先结构化，再进入评估</h3>
               <p>
-                结果通过固定 marker 输出，宿主机解析 success/error/event，并写入
-                Trace、工作台和失败分类。
+                固定 marker、success/error/event 解析、Trace、failure taxonomy
+                和阶段评估一起工作；OpenAI 的 agent evals 和 trace grading
+                也把运行记录当成可评分、可回归的对象。
               </p>
             </article>
           </div>
