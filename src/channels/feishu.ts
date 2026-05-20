@@ -868,6 +868,13 @@ class FeishuChannel implements Channel {
     const userId = payload.event?.operator?.user_id || '';
     const operatorOpenId = payload.event?.operator?.open_id || '';
     const messageId = payload.event?.context?.open_message_id || '';
+    const chatId =
+      payload.event?.context?.open_chat_id ||
+      payload.event?.context?.chat_id ||
+      payload.event?.message?.chat_id ||
+      payload.event?.chat_id ||
+      '';
+    const groupJid = chatId ? `feishu:${chatId}` : undefined;
 
     const formValue = action?.form_value as Record<string, string> | undefined;
 
@@ -954,6 +961,7 @@ class FeishuChannel implements Channel {
           user_id: userId,
           message_id: messageId,
           actor_channel: 'feishu',
+          group_jid: groupJid,
           group_folder: resolvedValue.group_folder,
           workflow_id: resolvedValue.workflow_id,
           form_value: mergedFormValue,

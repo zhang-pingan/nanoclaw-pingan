@@ -111,7 +111,7 @@ describe('FeishuChannel card action callbacks', () => {
       {
         event: {
           operator: { user_id: 'user-1' },
-          context: { open_message_id: 'msg-1' },
+          context: { open_message_id: 'msg-1', open_chat_id: 'oc_demo' },
           action: {
             value: {
               action: 'wb_broadcast_submit',
@@ -132,6 +132,7 @@ describe('FeishuChannel card action callbacks', () => {
       user_id: 'user-1',
       message_id: 'msg-1',
       actor_channel: 'feishu',
+      group_jid: 'feishu:oc_demo',
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
@@ -188,6 +189,7 @@ describe('FeishuChannel card action callbacks', () => {
       user_id: 'user-2',
       message_id: 'msg-2',
       actor_channel: 'feishu',
+      group_jid: undefined,
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
@@ -232,6 +234,7 @@ describe('FeishuChannel card action callbacks', () => {
       user_id: 'user-3',
       message_id: 'msg-3',
       actor_channel: 'feishu',
+      group_jid: undefined,
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {
@@ -276,6 +279,7 @@ describe('FeishuChannel card action callbacks', () => {
       user_id: 'user-4',
       message_id: 'msg-4',
       actor_channel: 'feishu',
+      group_jid: undefined,
       group_folder: undefined,
       workflow_id: undefined,
       form_value: {

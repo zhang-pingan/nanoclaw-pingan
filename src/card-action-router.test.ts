@@ -38,6 +38,20 @@ vi.mock('./assistant/evolution-card-actions.js', () => ({
   handleAssistantEvolutionCardAction: handleAssistantEvolutionCardActionMock,
 }));
 
+const handleAssistantInboxBroadcastCardActionMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    ok: true,
+    toast: { type: 'success', content: 'inbox ok' },
+  })),
+);
+
+vi.mock('./assistant/assistant-inbox-broadcast-actions.js', () => ({
+  ASSISTANT_INBOX_BROADCAST_ACTION_PREFIX: 'assistant_inbox_broadcast_',
+  handleAssistantInboxBroadcastCardAction:
+    handleAssistantInboxBroadcastCardActionMock,
+  logAssistantInboxBroadcastActionFailure: vi.fn(),
+}));
+
 import { createCardActionHandler } from './card-action-router.js';
 import { handleAskQuestionResponse } from './ask-user-question.js';
 import { handleCardAction } from './workflow.js';
@@ -205,6 +219,56 @@ describe('card-action-router ask dedupe', () => {
     expect(result).toEqual({
       ok: true,
       toast: { type: 'success', content: 'evolution ok' },
+    });
+  });
+
+  it('routes assistant inbox broadcast card actions with source group', async () => {
+    const handler = createCardActionHandler({
+      registeredGroups: () => ({
+        'feishu:oc_allowed': {
+          name: '主群',
+          folder: 'main',
+          trigger: '',
+          added_at: '1',
+        },
+      }),
+      sendMessage: async () => {},
+    });
+
+    const result = await handler({
+      action: 'assistant_inbox_broadcast_dismiss',
+      user_id: 'u1',
+      message_id: 'msg-inbox',
+      actor_channel: 'feishu',
+      group_jid: 'feishu:oc_allowed',
+      form_value: {
+        item_id: 'agent-inbox-1',
+      },
+    });
+
+    expect(handleAssistantInboxBroadcastCardActionMock).toHaveBeenCalledWith({
+      action: 'assistant_inbox_broadcast_dismiss',
+      formValue: {
+        item_id: 'agent-inbox-1',
+      },
+      registeredGroups: {
+        'feishu:oc_allowed': {
+          name: '主群',
+          folder: 'main',
+          trigger: '',
+          added_at: '1',
+        },
+      },
+      sendCard: undefined,
+      sendMessage: expect.any(Function),
+      userId: 'u1',
+      actorChannel: 'feishu',
+      messageId: 'msg-inbox',
+      targetJid: 'feishu:oc_allowed',
+    });
+    expect(result).toEqual({
+      ok: true,
+      toast: { type: 'success', content: 'inbox ok' },
     });
   });
 });

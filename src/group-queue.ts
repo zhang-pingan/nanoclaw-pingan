@@ -55,6 +55,11 @@ interface GroupState {
   stopRequested: boolean;
 }
 
+export interface CloseStdinContext {
+  reason?: string;
+  details?: Record<string, unknown>;
+}
+
 export class GroupQueue {
   private groups = new Map<string, GroupState>();
   private activeCount = 0;
@@ -164,7 +169,10 @@ export class GroupQueue {
     if (state.active) {
       state.pendingMessages = true;
       if (state.idleWaiting) {
-        this.closeStdin(groupJid);
+        this.closeStdin(groupJid, {
+          reason: 'message_check_while_idle',
+          details: { pendingMessages: true },
+        });
       }
       logger.debug({ groupJid }, 'Container active, message queued');
       return;
@@ -205,7 +213,10 @@ export class GroupQueue {
     if (state.active) {
       state.pendingTasks.push({ id: taskId, groupJid, fn });
       if (state.idleWaiting) {
-        this.closeStdin(groupJid);
+        this.closeStdin(groupJid, {
+          reason: 'task_enqueue_while_idle',
+          details: { taskId, pendingTasks: state.pendingTasks.length },
+        });
       }
       logger.debug({ groupJid, taskId }, 'Container active, task queued');
       return;
@@ -401,11 +412,29 @@ export class GroupQueue {
     const state = this.getGroup(groupJid);
     const wasIdle = state.idleWaiting;
     state.idleWaiting = true;
+    logger.info(
+      {
+        groupJid,
+        groupFolder: state.groupFolder,
+        wasIdle,
+        pendingMessages: state.pendingMessages,
+        pendingTasks: state.pendingTasks.length,
+        hasProcess: Boolean(state.process),
+        containerName: state.containerName,
+      },
+      'Agent marked idle waiting for IPC',
+    );
     if (!wasIdle) {
       this.emitStatusChange();
     }
     if (state.pendingTasks.length > 0 || state.pendingMessages) {
-      this.closeStdin(groupJid);
+      this.closeStdin(groupJid, {
+        reason: 'idle_has_pending_work',
+        details: {
+          pendingMessages: state.pendingMessages,
+          pendingTasks: state.pendingTasks.length,
+        },
+      });
     }
   }
 
@@ -425,8 +454,20 @@ export class GroupQueue {
       !state.groupFolder ||
       state.isTaskContainer ||
       state.isOneShot
-    )
+    ) {
+      logger.warn(
+        {
+          groupJid,
+          active: state.active,
+          groupFolder: state.groupFolder,
+          isTaskContainer: state.isTaskContainer,
+          isOneShot: state.isOneShot,
+          queryId,
+        },
+        'IPC message not written because container cannot receive messages',
+      );
       return false;
+    }
     const wasIdle = state.idleWaiting;
     state.idleWaiting = false; // Agent is about to receive work, no longer idle
 
@@ -441,11 +482,35 @@ export class GroupQueue {
         JSON.stringify({ type: 'message', text, selectedModel, queryId }),
       );
       fs.renameSync(tempPath, filepath);
+      logger.info(
+        {
+          groupJid,
+          groupFolder: state.groupFolder,
+          containerName: state.containerName,
+          queryId,
+          selectedModel,
+          wasIdle,
+          inputFile: path.basename(filepath),
+          textLength: text.length,
+          pendingMessages: state.pendingMessages,
+          pendingTasks: state.pendingTasks.length,
+        },
+        'IPC message written to active container',
+      );
       if (wasIdle) {
         this.emitStatusChange();
       }
       return true;
-    } catch {
+    } catch (err) {
+      logger.warn(
+        {
+          groupJid,
+          groupFolder: state.groupFolder,
+          queryId,
+          err,
+        },
+        'Failed to write IPC message to active container',
+      );
       return false;
     }
   }
@@ -453,16 +518,57 @@ export class GroupQueue {
   /**
    * Signal the active container to wind down by writing a close sentinel.
    */
-  closeStdin(groupJid: string): void {
+  closeStdin(groupJid: string, context: CloseStdinContext = {}): void {
     const state = this.getGroup(groupJid);
-    if (!state.active || !state.groupFolder) return;
+    if (!state.active || !state.groupFolder) {
+      logger.info(
+        {
+          groupJid,
+          reason: context.reason || 'unspecified',
+          details: context.details,
+          active: state.active,
+          groupFolder: state.groupFolder,
+          idleWaiting: state.idleWaiting,
+          pendingMessages: state.pendingMessages,
+          pendingTasks: state.pendingTasks.length,
+        },
+        'Skipping container close sentinel because no active group folder exists',
+      );
+      return;
+    }
 
     const inputDir = path.join(DATA_DIR, 'ipc', state.groupFolder, 'input');
     try {
       fs.mkdirSync(inputDir, { recursive: true });
       fs.writeFileSync(path.join(inputDir, '_close'), '');
-    } catch {
-      // ignore
+      logger.info(
+        {
+          groupJid,
+          groupFolder: state.groupFolder,
+          containerName: state.containerName,
+          reason: context.reason || 'unspecified',
+          details: context.details,
+          idleWaiting: state.idleWaiting,
+          pendingMessages: state.pendingMessages,
+          pendingTasks: state.pendingTasks.length,
+          isTaskContainer: state.isTaskContainer,
+          isOneShot: state.isOneShot,
+          runningTaskId: state.runningTaskId,
+          stopRequested: state.stopRequested,
+        },
+        'Container close sentinel written',
+      );
+    } catch (err) {
+      logger.warn(
+        {
+          groupJid,
+          groupFolder: state.groupFolder,
+          reason: context.reason || 'unspecified',
+          details: context.details,
+          err,
+        },
+        'Failed to write container close sentinel',
+      );
     }
   }
 

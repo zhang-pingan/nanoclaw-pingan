@@ -23,6 +23,11 @@ import {
   ASSISTANT_EVOLUTION_CARD_ACTION,
   handleAssistantEvolutionCardAction,
 } from './assistant/evolution-card-actions.js';
+import {
+  ASSISTANT_INBOX_BROADCAST_ACTION_PREFIX,
+  handleAssistantInboxBroadcastCardAction,
+  logAssistantInboxBroadcastActionFailure,
+} from './assistant/assistant-inbox-broadcast-actions.js';
 
 const ASK_ACTION_DEDUPE_WINDOW_MS = 15_000;
 const recentAskActionFingerprints = new Map<string, number>();
@@ -99,6 +104,30 @@ export function createCardActionHandler(deps: {
           toast: {
             type: 'error' as const,
             content: '处理工作台广播卡片失败，请稍后重试。',
+          },
+        };
+      }
+    }
+
+    if (action.action.startsWith(ASSISTANT_INBOX_BROADCAST_ACTION_PREFIX)) {
+      try {
+        return await handleAssistantInboxBroadcastCardAction({
+          action: action.action,
+          formValue: action.form_value,
+          registeredGroups: deps.registeredGroups(),
+          sendCard: deps.sendCard,
+          sendMessage: deps.sendMessage,
+          userId: action.user_id || 'unknown',
+          actorChannel: action.actor_channel,
+          messageId: action.message_id,
+          targetJid: action.group_jid,
+        });
+      } catch (err) {
+        logAssistantInboxBroadcastActionFailure(action.action, err);
+        return {
+          toast: {
+            type: 'error' as const,
+            content: '处理个人助手广播卡片失败，请稍后重试。',
           },
         };
       }

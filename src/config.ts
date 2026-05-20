@@ -12,6 +12,7 @@ const envConfig = readEnvFile([
   'REPOS_DIR',
   'SSH_KEY_PATH',
   'WORKBENCH_BROADCAST_TARGETS',
+  'ASSISTANT_INBOX_BROADCAST_TARGETS',
 ]);
 
 export const ASSISTANT_NAME =
@@ -113,4 +114,9 @@ function parseCsvList(value?: string): string[] {
 export const WORKBENCH_BROADCAST_TARGETS = parseCsvList(
   process.env.WORKBENCH_BROADCAST_TARGETS ||
     envConfig.WORKBENCH_BROADCAST_TARGETS,
+);
+
+export const ASSISTANT_INBOX_BROADCAST_TARGETS = parseCsvList(
+  process.env.ASSISTANT_INBOX_BROADCAST_TARGETS ||
+    envConfig.ASSISTANT_INBOX_BROADCAST_TARGETS,
 );

@@ -882,6 +882,7 @@ export type CardActionHandler = (action: {
   user_id: string;
   message_id: string;
   actor_channel?: WorkflowInterruptActorChannel;
+  group_jid?: string;
   group_folder?: string; // Plan item primary key
   workflow_id?: string; // Workflow operations primary key (approve/pause/resume)
   form_value?: Record<string, string>;

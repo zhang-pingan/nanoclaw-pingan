@@ -95,6 +95,7 @@ export async function runAgentInboxAction(input: {
         title: item.title,
         sourceType: item.source_type,
         sourceRefId: item.source_ref_id,
+        payload,
       });
       return { ok: true, item: updated, result: { status: 'read' } };
     }
@@ -108,6 +109,7 @@ export async function runAgentInboxAction(input: {
         title: item.title,
         sourceType: item.source_type,
         sourceRefId: item.source_ref_id,
+        payload,
       });
       return { ok: true, item: updated, result: { status: 'dismissed' } };
     }
@@ -121,6 +123,7 @@ export async function runAgentInboxAction(input: {
         title: item.title,
         sourceType: item.source_type,
         sourceRefId: item.source_ref_id,
+        payload,
       });
       return { ok: true, item: updated, result: { status: 'done' } };
     }

@@ -3,6 +3,8 @@ export const CARD_ACTION_RESERVED_FIELDS = new Set([
   'workbench_action',
   'task_id',
   'action_item_id',
+  'item_id',
+  'group_id',
   'workflow_id',
   'interrupt_id',
   'resume_action',

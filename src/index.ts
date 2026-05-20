@@ -109,6 +109,7 @@ import {
   type OneShotAgentResult,
 } from './one-shot-agent.js';
 import { initAssistantEvents } from './assistant/assistant-events.js';
+import { AssistantInboxBroadcastService } from './assistant/assistant-inbox-broadcast.js';
 import { initAssistantAutoFlow } from './assistant/assistant-auto-flow.js';
 import { startProactiveEngine } from './assistant/proactive-engine.js';
 import {
@@ -823,7 +824,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         channel.setTyping?.(chatJid, typing) ?? Promise.resolve(),
       runAgent: (prompt, onOutput) =>
         runAgent(group, prompt, chatJid, onOutput),
-      closeStdin: () => queue.closeStdin(chatJid),
+      closeStdin: () =>
+        queue.closeStdin(chatJid, {
+          reason: 'session_command_handler',
+          details: { groupName: group.name },
+        }),
       advanceCursor: (ts) => {
         lastAgentTimestamp[chatJid] = ts;
         saveState();
@@ -899,7 +904,15 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         { group: group.name },
         'Idle timeout, closing container stdin',
       );
-      queue.closeStdin(chatJid);
+      queue.closeStdin(chatJid, {
+        reason: 'idle_timeout',
+        details: {
+          groupName: group.name,
+          idleTimeoutMs: IDLE_TIMEOUT,
+          runId,
+          initialQueryId,
+        },
+      });
     }, IDLE_TIMEOUT);
   };
 
@@ -1005,7 +1018,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       }
       if (result.event) {
         if (isWorkflowDelegationRun && isCompleteDelegationToolResult(result)) {
-          queue.closeStdin(chatJid);
+          queue.closeStdin(chatJid, {
+            reason: 'workflow_delegation_complete_tool_result',
+            details: { groupName: group.name, runId, queryId },
+          });
         }
         if (!traceState) {
           logger.warn(
@@ -1146,7 +1162,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
       if (result.status === 'success' && !result.event && !result.result) {
         if (isWorkflowDelegationRun) {
-          queue.closeStdin(chatJid);
+          queue.closeStdin(chatJid, {
+            reason: 'workflow_delegation_session_update',
+            details: { groupName: group.name, runId, queryId },
+          });
         } else {
           queue.notifyIdle(chatJid);
         }
@@ -1165,7 +1184,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
       if (result.status === 'error') {
         if (isWorkflowDelegationRun) {
-          queue.closeStdin(chatJid);
+          queue.closeStdin(chatJid, {
+            reason: 'workflow_delegation_error',
+            details: { groupName: group.name, runId, queryId },
+          });
         }
         const error = result.error || 'Agent execution failed';
         const failure = result.failure ?? fallbackAgentExecutionFailure(error);
@@ -1214,7 +1236,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
   if (isWorkflowDelegationRun) {
-    queue.closeStdin(chatJid);
+    queue.closeStdin(chatJid, {
+      reason: 'workflow_delegation_run_finished',
+      details: { groupName: group.name, runId, initialQueryId },
+    });
   }
   let shouldRetryUnconsumedPipedMessages = false;
   let retryCursor: string | null = null;
@@ -1672,7 +1697,13 @@ async function runOneShotAgent(
             await forwardOutput(output);
             if (input.closeOnFirstResult !== false && !closeRequested) {
               closeRequested = true;
-              queue.closeStdin(input.chatJid);
+              queue.closeStdin(input.chatJid, {
+                reason: 'one_shot_first_result',
+                details: {
+                  runId: input.runId,
+                  initialQueryId: input.initialQueryId,
+                },
+              });
             }
             if (collect === 'first_result') return;
           }
@@ -1689,7 +1720,14 @@ async function runOneShotAgent(
             !closeRequested
           ) {
             closeRequested = true;
-            queue.closeStdin(input.chatJid);
+            queue.closeStdin(input.chatJid, {
+              reason: 'one_shot_session_update_after_result',
+              details: {
+                runId: input.runId,
+                initialQueryId: input.initialQueryId,
+                requireResult: input.requireResult,
+              },
+            });
           }
         },
         input.selectedModel,
@@ -2122,7 +2160,10 @@ async function startMessageLoop(): Promise<void> {
               TRIGGER_PATTERN,
             );
             if (command && isSessionCommandAllowed(!!loopCmdMsg.is_from_me)) {
-              queue.closeStdin(chatJid);
+              queue.closeStdin(chatJid, {
+                reason: 'loop_session_command',
+                details: { command, messageId: loopCmdMsg.id },
+              });
             }
             // Enqueue so processGroupMessages handles auth + cursor advancement.
             // Don't pipe via IPC — slash commands need a fresh container with
@@ -2158,7 +2199,10 @@ async function startMessageLoop(): Promise<void> {
           });
           if (clearMsg) {
             if (isSessionCommandAllowed(!!clearMsg.is_from_me)) {
-              queue.closeStdin(chatJid);
+              queue.closeStdin(chatJid, {
+                reason: 'loop_clear_command',
+                details: { messageId: clearMsg.id },
+              });
               clearMessages(chatJid);
               if (channel.name === 'web') clearWebMessages(chatJid);
               if (channel.name === 'assistant')
@@ -2700,7 +2744,7 @@ async function main(): Promise<void> {
     reloadContainer: (jid) => {
       // closeStdin triggers container exit, enqueueMessageCheck ensures
       // a new container starts and resumes the session via sessionId.
-      queue.closeStdin(jid);
+      queue.closeStdin(jid, { reason: 'mcp_reload_container' });
       queue.enqueueMessageCheck(jid);
     },
     captureDesktop: (options) => {
@@ -2717,6 +2761,15 @@ async function main(): Promise<void> {
     sendCard: sendCardFn,
   });
   const workbenchBroadcast = new WorkbenchBroadcastService({
+    registeredGroups: () => registeredGroups,
+    sendCard: sendCardFn,
+    sendMessage: async (jid, text) => {
+      const ch = findChannel(channels, jid);
+      if (!ch) return;
+      await ch.sendMessage(jid, text);
+    },
+  });
+  const assistantInboxBroadcast = new AssistantInboxBroadcastService({
     registeredGroups: () => registeredGroups,
     sendCard: sendCardFn,
     sendMessage: async (jid, text) => {
@@ -2747,6 +2800,7 @@ async function main(): Promise<void> {
         ).broadcastAssistantEvent(event);
       }
     }
+    void assistantInboxBroadcast.handleEvent(event);
   });
   initAssistantAutoFlow({
     agentRunner: async ({ prompt, purpose, item }) =>

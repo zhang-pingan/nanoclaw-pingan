@@ -1184,7 +1184,9 @@ class WebChannel {
         return this.apiListWorkflowArtifactContracts(res);
       }
       if (pathname.startsWith('/api/workflow-artifact-contracts/')) {
-        const suffix = pathname.slice('/api/workflow-artifact-contracts/'.length);
+        const suffix = pathname.slice(
+          '/api/workflow-artifact-contracts/'.length,
+        );
         if (req.method === 'POST') {
           return this.apiSaveWorkflowArtifactContract(suffix, req, res);
         }
@@ -4588,6 +4590,7 @@ class WebChannel {
         user_id: 'web_user',
         message_id: cardId || '',
         actor_channel: 'web',
+        group_jid: value.group_jid,
         workflow_id: value.workflow_id,
         group_folder: value.group_folder,
         form_value: {
@@ -5472,6 +5475,7 @@ class WebChannel {
             user_id: 'web_user',
             message_id: cardId || '',
             actor_channel: 'web',
+            group_jid: value.group_jid,
             workflow_id: value.workflow_id,
             group_folder: value.group_folder,
             form_value: {
