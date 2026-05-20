@@ -25,6 +25,7 @@ import {
   resolveActiveAgentInboxItemsBySource,
 } from './agent-inbox-store.js';
 import {
+  canAutoHandleWorkbenchActionItem,
   canInvestigateInboxItem,
   scheduleAutoProcessAgentInboxItem,
   shouldAutoProcessInboxItem,
@@ -69,10 +70,7 @@ function scheduleNextProactiveScan(): void {
   const settings = getAssistantSettings();
   const delayMs = proactiveScanDelayMs(settings);
   proactiveNextScanAt = String(Date.now() + delayMs);
-  proactiveLoopTimer = setTimeout(
-    runProactiveLoop,
-    delayMs,
-  );
+  proactiveLoopTimer = setTimeout(runProactiveLoop, delayMs);
 }
 
 async function runProactiveLoop(): Promise<void> {
@@ -490,9 +488,11 @@ export async function runProactiveScan(input: { now?: Date } = {}): Promise<{
         ruleKey &&
         settings.triggerRules[ruleKey as AssistantTriggerRuleKey]
           ?.autoEnabled &&
-        canInvestigateInboxItem(inboxItem) &&
-        (ruleKey === 'today_plan.service_coding_anomaly' ||
-          shouldAutoProcessInboxItem(inboxItem))
+        ((canInvestigateInboxItem(inboxItem) &&
+          (ruleKey === 'today_plan.service_coding_anomaly' ||
+            shouldAutoProcessInboxItem(inboxItem))) ||
+          (canAutoHandleWorkbenchActionItem(inboxItem) &&
+            shouldAutoProcessInboxItem(inboxItem)))
       ) {
         scheduleAutoProcessAgentInboxItem(inboxItem.id);
       }

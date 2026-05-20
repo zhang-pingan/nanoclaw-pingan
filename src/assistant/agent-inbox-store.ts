@@ -107,13 +107,15 @@ function normalizeTriggerRuleSettings(
     (rule) => rule.key === ruleKey,
   );
   const supportsInvestigation = Boolean(capability?.supportsInvestigation);
-  const supportsRepair = Boolean(capability?.supportsRepair);
+  const supportsAutomation = Boolean(
+    capability?.supportsRepair || capability?.supportsAutoAction,
+  );
   const enabled =
     typeof input.enabled === 'boolean'
       ? input.enabled
       : DEFAULT_ASSISTANT_SETTINGS.triggerRules[ruleKey].enabled;
   const autoEnabled =
-    supportsRepair && typeof input.autoEnabled === 'boolean'
+    supportsAutomation && typeof input.autoEnabled === 'boolean'
       ? input.autoEnabled
       : false;
   const selectedServices = Array.isArray(input.selectedServices)

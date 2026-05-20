@@ -20268,6 +20268,7 @@ function formatAssistantRuleCapabilitySummary(rule) {
   const parts = [];
   if (rule.supportsInvestigation) parts.push("可排查");
   if (rule.supportsRepair) parts.push("可自动");
+  if (rule.supportsAutoAction) parts.push("可自动处理");
   if (rule.key === "today_plan.service_coding_anomaly") parts.push("异常后入箱");
   return parts.length > 0 ? parts.join(" · ") : "纯提醒";
 }
@@ -20328,7 +20329,8 @@ function renderAssistantOnlineLogServicePicker(rule, ruleSetting) {
 function renderAssistantSourceRule(rule) {
   const ruleSetting = getAssistantRuleSetting(rule.key);
   const investigateDisabled = !rule.supportsInvestigation;
-  const autoDisabled = !rule.supportsRepair;
+  const supportsAutomation = Boolean(rule.supportsRepair || rule.supportsAutoAction);
+  const autoDisabled = !supportsAutomation;
   return `
     <article class="assistant-rule-card">
       <div class="assistant-rule-main">
@@ -20349,13 +20351,13 @@ function renderAssistantSourceRule(rule) {
             <span>排查</span>
           </label>
         ` : ""}
-        ${rule.supportsRepair ? `
+        ${supportsAutomation ? `
           <label>
             <input data-assistant-rule="${escapeAttribute(rule.key)}" data-assistant-rule-field="autoEnabled" type="checkbox" ${ruleSetting.autoEnabled ? "checked" : ""} ${autoDisabled ? "disabled" : ""} />
-            <span>自动</span>
+            <span>${rule.supportsAutoAction ? "自动处理" : "自动"}</span>
           </label>
         ` : ""}
-        ${!rule.supportsInvestigation && !rule.supportsRepair ? '<span class="assistant-rule-muted">纯提醒</span>' : ""}
+        ${!rule.supportsInvestigation && !rule.supportsRepair && !rule.supportsAutoAction ? '<span class="assistant-rule-muted">纯提醒</span>' : ""}
       </div>
       ${renderAssistantOnlineLogServicePicker(rule, ruleSetting)}
     </article>

@@ -248,6 +248,7 @@ export async function runAgentInboxAction(input: {
         result: {
           investigation: result.investigation,
           repairs: result.repairs || [],
+          workbenchAction: result.workbenchAction || null,
         },
       };
     }

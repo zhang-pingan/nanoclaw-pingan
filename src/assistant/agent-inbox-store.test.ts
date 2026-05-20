@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   _initTestDatabase,
   createAgentQuery,
+  createWorkbenchActionItem,
   createWorkbenchTask,
+  getWorkbenchActionItem,
   getDatabase,
   updateAgentQuery,
 } from '../db.js';
@@ -53,6 +55,38 @@ function createStoredWorkbenchTask(input: {
     created_at: input.updatedAt,
     updated_at: input.updatedAt,
     last_event_at: input.updatedAt,
+  });
+}
+
+function createStoredWorkbenchActionItem(input: {
+  id: string;
+  taskId: string;
+  workflowId: string;
+  stageKey: string;
+  sourceType?: string;
+  title?: string;
+  body?: string;
+  extra?: Record<string, unknown>;
+}): void {
+  createWorkbenchActionItem({
+    id: input.id,
+    task_id: input.taskId,
+    workflow_id: input.workflowId,
+    subtask_id: null,
+    stage_key: input.stageKey,
+    delegation_id: null,
+    group_folder: null,
+    item_type: 'interactive',
+    status: 'pending',
+    title: input.title || '自动处理测试待办',
+    body: input.body || '这是一条工作台待处理项',
+    source_type: input.sourceType || 'send_message',
+    source_ref_id: `source-${input.id}`,
+    replyable: 0,
+    created_at: Date.now().toString(),
+    updated_at: Date.now().toString(),
+    resolved_at: null,
+    extra_json: input.extra ? JSON.stringify(input.extra) : null,
   });
 }
 
@@ -138,6 +172,28 @@ describe('agent inbox store', () => {
     expect(settings.desktopAssistant.allowMovement).toBe(false);
     expect(settings.desktopAssistant.alwaysOnTop).toBe(true);
     expect(getAssistantSettings().enabled).toBe(false);
+  });
+
+  it('allows workbench pending action items to enable auto handling', () => {
+    const settings = updateAssistantSettings({
+      triggerRules: {
+        'workbench.pending_action_item': {
+          enabled: true,
+          investigationEnabled: false,
+          autoEnabled: true,
+          selectedServices: [],
+          lookbackDays: 3,
+        },
+      },
+    });
+
+    expect(
+      settings.triggerRules['workbench.pending_action_item'].autoEnabled,
+    ).toBe(true);
+    expect(
+      settings.triggerRules['workbench.pending_action_item']
+        .investigationEnabled,
+    ).toBe(false);
   });
 
   it('merges assistant evolution settings without enabling automation by default', () => {
@@ -475,6 +531,75 @@ describe('agent inbox store', () => {
     expect(item?.extra.autoFlowStatus).toBe('investigated');
   });
 
+  it('auto-handles workbench pending action items through a workbench action agent', async () => {
+    const now = new Date(2026, 3, 28, 9, 0, 0);
+    const updatedAt = String(now.getTime());
+    const workflowId = 'auto-action-workflow';
+    const taskId = 'wb-auto-action-workflow';
+    const actionItemId = 'wb-action-auto-message';
+    createStoredWorkbenchTask({
+      id: taskId,
+      status: 'review',
+      taskState: 'running',
+      updatedAt,
+    });
+    createStoredWorkbenchActionItem({
+      id: actionItemId,
+      taskId,
+      workflowId,
+      stageKey: 'review',
+      title: '阅读执行通知',
+      body: '执行通知已送达，确认后可关闭待办。',
+    });
+    let capturedPrompt = '';
+    const purposes: string[] = [];
+    const runner = vi.fn(async ({ purpose, prompt }) => {
+      purposes.push(purpose);
+      capturedPrompt = prompt;
+      return {
+        ok: true,
+        text: JSON.stringify({
+          ok: true,
+          decision: 'resolve',
+          confidence: 'high',
+          reason: '该待办是 send_message 通知，标记已读即可关闭。',
+          payload: {},
+          evidence: [{ label: '待办类型', value: 'send_message' }],
+          unresolved_gaps: [],
+        }),
+      };
+    });
+    initAssistantAutoFlow({ agentRunner: runner });
+    updateAssistantSettings({
+      triggerRules: {
+        'workbench.pending_action_item': {
+          enabled: true,
+          investigationEnabled: false,
+          autoEnabled: true,
+          selectedServices: [],
+          lookbackDays: 3,
+        },
+      },
+    });
+
+    await runProactiveScan({ now });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(purposes).toEqual(['workbench_action']);
+    expect(capturedPrompt).toContain('必须主动获取相关信息');
+    expect(capturedPrompt).toContain(actionItemId);
+    expect(getWorkbenchActionItem(actionItemId)?.status).toBe('resolved');
+    const inbox = listAgentInboxItems({ status: 'all' }).find(
+      (entry) => entry.dedupe_key === `workbench:action-item:${actionItemId}`,
+    );
+    expect(inbox?.status).toBe('done');
+    expect(inbox?.extra.autoFlowStatus).toBe('handled');
+    expect(inbox?.extra.workbenchActionDecision).toMatchObject({
+      decision: 'resolve',
+    });
+  });
+
   it('stores a parseable investigation result even when the runner reports an error status', async () => {
     const runner = vi.fn(async () => ({
       ok: false,
@@ -569,9 +694,7 @@ describe('agent inbox store', () => {
               repair_plan: null,
               risk_level: 'unknown',
               required_user_action: '需要进一步日志',
-              evidence: [
-                { label: 'query_id', value: 'query-container-137' },
-              ],
+              evidence: [{ label: 'query_id', value: 'query-container-137' }],
             },
           ],
         }),
@@ -599,7 +722,9 @@ describe('agent inbox store', () => {
     expect(capturedPrompt).toContain('/workspace/project/logs/nanoclaw.log');
     expect(capturedPrompt).toContain('/workspace/group/logs');
     expect(capturedPrompt).toContain('logFile');
-    expect(capturedPrompt).toContain('/workspace/project/src/container-runner.ts');
+    expect(capturedPrompt).toContain(
+      '/workspace/project/src/container-runner.ts',
+    );
     expect(capturedPrompt).toContain(
       '/workspace/project/container/agent-runner/src/index.ts',
     );

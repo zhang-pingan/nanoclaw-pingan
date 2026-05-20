@@ -1583,6 +1583,7 @@ function assistantActionPurposeLabel(
   purpose: AssistantActionAgentInput['purpose'],
 ): string {
   if (purpose === 'coding_anomaly_scan') return 'Coding 异常扫描';
+  if (purpose === 'workbench_action') return '工作台待处理项处理';
   if (purpose === 'repair') return '修复';
   return '排查';
 }
@@ -1592,6 +1593,9 @@ function assistantActionStepName(
 ): string {
   if (purpose === 'coding_anomaly_scan') {
     return 'assistant_coding_anomaly_scan_request';
+  }
+  if (purpose === 'workbench_action') {
+    return 'assistant_workbench_action_request';
   }
   return purpose === 'repair'
     ? 'assistant_repair_request'
@@ -2751,6 +2755,15 @@ async function main(): Promise<void> {
         purpose,
         item,
       }),
+    workbenchActionRuntime: {
+      registeredGroups: () => registeredGroups,
+      sendCard: sendCardFn,
+      sendMessage: async (jid, text) => {
+        const ch = findChannel(channels, jid);
+        if (!ch) return;
+        await ch.sendMessage(jid, text);
+      },
+    },
   });
   configureEvolutionEngine({
     agentRunner: runEvolutionActionAgent,

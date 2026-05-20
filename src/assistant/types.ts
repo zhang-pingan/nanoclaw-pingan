@@ -38,6 +38,7 @@ export interface AssistantTriggerRuleCapability {
   sourceLabel: string;
   supportsInvestigation: boolean;
   supportsRepair: boolean;
+  supportsAutoAction?: boolean;
 }
 
 export interface AssistantOnlineLogServiceOption {
@@ -166,6 +167,7 @@ export const ASSISTANT_TRIGGER_RULE_CAPABILITIES: AssistantTriggerRuleCapability
       sourceLabel: '工作台',
       supportsInvestigation: false,
       supportsRepair: false,
+      supportsAutoAction: true,
     },
     {
       key: 'workbench.task_failed_or_cancelled',
