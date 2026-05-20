@@ -5,6 +5,7 @@ import path from 'path';
 import {
   DATA_DIR,
   MAX_CONCURRENT_CONTAINERS,
+  ONE_SHOT_AGENT_MAX_QUEUE_LENGTH,
   ONE_SHOT_AGENT_SLOT_TIMEOUT_MS,
 } from './config.js';
 import { AgentStatusInfo, StopAgentResult } from './types.js';
@@ -34,6 +35,7 @@ export interface OneShotAgentStatusInput {
   lastTime?: string;
   isTask?: boolean;
   traceKey?: string;
+  dedupeKey?: string;
 }
 
 export type OneShotAgentSlotEventName =
@@ -67,16 +69,19 @@ interface QueuedOneShot<T = any> {
   timeoutMs: number;
   timeoutHandle: ReturnType<typeof setTimeout>;
   closeRequested: boolean;
+  closeRequestedAt: number | null;
 }
 
 const MAX_RETRIES = 5;
 const BASE_RETRY_MS = 5000;
+const ONE_SHOT_IDLE_CLOSE_RETRY_MS = 250;
 
 interface GroupState {
   active: boolean;
   idleWaiting: boolean;
   isTaskContainer: boolean;
   isOneShot: boolean;
+  runningOneShotDedupeKey: string | null;
   runningTaskId: string | null;
   pendingMessages: boolean;
   pendingTasks: QueuedTask[];
@@ -119,6 +124,7 @@ export class GroupQueue {
         idleWaiting: false,
         isTaskContainer: false,
         isOneShot: false,
+        runningOneShotDedupeKey: null,
         runningTaskId: null,
         pendingMessages: false,
         pendingTasks: [],
@@ -364,6 +370,22 @@ export class GroupQueue {
   ): Promise<T> {
     const state = this.getGroup(groupJid);
     if (
+      status.dedupeKey &&
+      (state.runningOneShotDedupeKey === status.dedupeKey ||
+        state.pendingOneShots.some(
+          (item) => item.status.dedupeKey === status.dedupeKey,
+        ))
+    ) {
+      throw new Error(
+        `One-shot agent already queued for ${groupJid}: ${status.dedupeKey}`,
+      );
+    }
+    if (state.pendingOneShots.length >= ONE_SHOT_AGENT_MAX_QUEUE_LENGTH) {
+      throw new Error(
+        `One-shot agent queue is full for ${groupJid} (${state.pendingOneShots.length}/${ONE_SHOT_AGENT_MAX_QUEUE_LENGTH})`,
+      );
+    }
+    if (
       !state.active &&
       this.activeCount < MAX_CONCURRENT_CONTAINERS &&
       state.pendingTasks.length === 0 &&
@@ -389,6 +411,7 @@ export class GroupQueue {
           this.timeoutOneShot(groupJid, item.id);
         }, ONE_SHOT_AGENT_SLOT_TIMEOUT_MS),
         closeRequested: false,
+        closeRequestedAt: null,
       };
       state.pendingOneShots.push(item as QueuedOneShot);
       if (!state.active && !this.waitingGroups.includes(groupJid)) {
@@ -434,12 +457,11 @@ export class GroupQueue {
     item: QueuedOneShot,
   ): void {
     const state = this.getGroup(groupJid);
+    if (!state.pendingOneShots.includes(item)) return;
     if (!state.active || !state.idleWaiting || item.closeRequested) return;
 
-    item.closeRequested = true;
     this.emitOneShotSlotEvent(groupJid, item, 'agent_slot_idle_detected');
-    this.emitOneShotSlotEvent(groupJid, item, 'closing_idle_container');
-    this.closeStdin(groupJid, {
+    const closeWritten = this.closeStdin(groupJid, {
       reason: 'one_shot_waiting_for_idle_slot',
       details: {
         oneShotId: item.id,
@@ -447,6 +469,15 @@ export class GroupQueue {
         pendingOneShots: state.pendingOneShots.length,
       },
     });
+    if (!closeWritten) {
+      setTimeout(() => {
+        this.requestIdleCloseForOneShot(groupJid, item);
+      }, ONE_SHOT_IDLE_CLOSE_RETRY_MS);
+      return;
+    }
+    item.closeRequested = true;
+    item.closeRequestedAt = Date.now();
+    this.emitOneShotSlotEvent(groupJid, item, 'closing_idle_container');
   }
 
   private requestIdleCloseForPendingOneShot(groupJid: string): void {
@@ -500,6 +531,7 @@ export class GroupQueue {
     state.idleWaiting = false;
     state.isTaskContainer = status.isTask ?? false;
     state.isOneShot = true;
+    state.runningOneShotDedupeKey = status.dedupeKey ?? null;
     state.pendingMessages = false;
     state.groupFolder = status.groupFolder;
     state.groupName = status.groupName;
@@ -518,6 +550,7 @@ export class GroupQueue {
       state.idleWaiting = false;
       state.isTaskContainer = false;
       state.isOneShot = false;
+      state.runningOneShotDedupeKey = null;
       state.runningTaskId = null;
       state.process = null;
       state.containerName = null;
@@ -557,7 +590,8 @@ export class GroupQueue {
       state.active &&
       state.groupFolder &&
       !state.isTaskContainer &&
-      !state.isOneShot,
+      !state.isOneShot &&
+      !state.pendingOneShots.some((item) => item.closeRequested),
     );
   }
 
@@ -696,7 +730,8 @@ export class GroupQueue {
       !state.active ||
       !state.groupFolder ||
       state.isTaskContainer ||
-      state.isOneShot
+      state.isOneShot ||
+      state.pendingOneShots.some((item) => item.closeRequested)
     ) {
       logger.warn(
         {
@@ -705,6 +740,10 @@ export class GroupQueue {
           groupFolder: state.groupFolder,
           isTaskContainer: state.isTaskContainer,
           isOneShot: state.isOneShot,
+          pendingOneShots: state.pendingOneShots.length,
+          oneShotCloseRequested: state.pendingOneShots.some(
+            (item) => item.closeRequested,
+          ),
           queryId,
         },
         'IPC message not written because container cannot receive messages',
@@ -761,7 +800,7 @@ export class GroupQueue {
   /**
    * Signal the active container to wind down by writing a close sentinel.
    */
-  closeStdin(groupJid: string, context: CloseStdinContext = {}): void {
+  closeStdin(groupJid: string, context: CloseStdinContext = {}): boolean {
     const state = this.getGroup(groupJid);
     if (!state.active || !state.groupFolder) {
       logger.info(
@@ -778,7 +817,7 @@ export class GroupQueue {
         },
         'Skipping container close sentinel because no active group folder exists',
       );
-      return;
+      return false;
     }
 
     const inputDir = path.join(DATA_DIR, 'ipc', state.groupFolder, 'input');
@@ -803,6 +842,7 @@ export class GroupQueue {
         },
         'Container close sentinel written',
       );
+      return true;
     } catch (err) {
       logger.warn(
         {
@@ -814,6 +854,7 @@ export class GroupQueue {
         },
         'Failed to write container close sentinel',
       );
+      return false;
     }
   }
 
@@ -827,6 +868,7 @@ export class GroupQueue {
     state.idleWaiting = false;
     state.isTaskContainer = false;
     state.isOneShot = false;
+    state.runningOneShotDedupeKey = null;
     state.pendingMessages = false;
     state.startedAt = Date.now();
     this.activeCount++;
@@ -860,6 +902,7 @@ export class GroupQueue {
     } finally {
       state.active = false;
       state.isOneShot = false;
+      state.runningOneShotDedupeKey = null;
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
@@ -883,6 +926,7 @@ export class GroupQueue {
     state.idleWaiting = false;
     state.isTaskContainer = true;
     state.isOneShot = false;
+    state.runningOneShotDedupeKey = null;
     state.runningTaskId = task.id;
     state.startedAt = Date.now();
     this.activeCount++;
@@ -907,6 +951,7 @@ export class GroupQueue {
       state.active = false;
       state.isTaskContainer = false;
       state.isOneShot = false;
+      state.runningOneShotDedupeKey = null;
       state.runningTaskId = null;
       state.process = null;
       state.containerName = null;

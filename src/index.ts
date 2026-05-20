@@ -172,6 +172,7 @@ interface OneShotTraceContext {
   stepId: string;
   runId?: string;
   traceKey?: string;
+  dedupeKey?: string;
 }
 
 type AgentExecutionContext = {
@@ -1519,6 +1520,7 @@ async function runAgent(
   executionContext?: AgentExecutionContext,
   requireResult?: boolean,
   isolatedSession?: boolean,
+  isOneShot?: boolean,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = isolatedSession ? undefined : sessions[group.folder];
@@ -1635,6 +1637,7 @@ async function runAgent(
         queryId: resolvedInitialQueryId,
         requireResult,
         isolatedSession,
+        isOneShot,
         groupFolder: group.folder,
         chatJid,
         isMain,
@@ -1709,6 +1712,7 @@ interface OneShotAgentInput {
     lastContent?: string;
     lastTime?: string;
     isTask?: boolean;
+    dedupeKey?: string;
   };
   selectedModel?: string;
   runId?: string;
@@ -1830,6 +1834,7 @@ async function runOneShotAgent(
         lastTime: input.status.lastTime || Date.now().toString(),
         isTask: input.status.isTask ?? false,
         traceKey: input.initialQueryId,
+        dedupeKey: input.status.dedupeKey,
       },
       () =>
         runAgent(
@@ -1892,6 +1897,7 @@ async function runOneShotAgent(
           undefined,
           input.requireResult,
           input.isolatedSession,
+          true,
         ),
     );
   } catch (err) {
@@ -2168,6 +2174,7 @@ async function runAssistantActionAgent(
         lastContent: input.item.body || input.item.title,
         lastTime: Date.now().toString(),
         isTask: true,
+        dedupeKey: `assistant-action:${input.purpose}:${input.item.id}`,
       },
       onOutput: handleTraceOutput,
     });
@@ -2271,6 +2278,7 @@ const runEvolutionActionAgent: EvolutionAgentRunner = async (input) => {
         lastContent: input.item.status,
         lastTime: Date.now().toString(),
         isTask: true,
+        dedupeKey: `assistant-evolution:${input.phase}:${input.item.id}`,
       },
     });
   } finally {

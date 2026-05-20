@@ -125,6 +125,15 @@ function emitOutputMarker(
   proc.stdout.push(`${OUTPUT_START_MARKER}\n${json}\n${OUTPUT_END_MARKER}\n`);
 }
 
+async function readStdinJson(proc: ReturnType<typeof createFakeProcess>) {
+  const chunks: Buffer[] = [];
+  proc.stdin.on('data', (chunk) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+  });
+  await vi.advanceTimersByTimeAsync(10);
+  return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+}
+
 describe('container-runner timeout behavior', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -362,5 +371,26 @@ describe('container-runner timeout behavior', () => {
     expect(args).toContain(
       '/tmp/nanoclaw-test-container-node-modules:/workspace/project/node_modules',
     );
+  });
+
+  it('passes one-shot mode to the container input', async () => {
+    const resultPromise = runContainerAgent(
+      testGroup,
+      { ...testInput, isOneShot: true },
+      () => {},
+    );
+
+    await expect(readStdinJson(fakeProc)).resolves.toMatchObject({
+      isOneShot: true,
+    });
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'ok',
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
   });
 });

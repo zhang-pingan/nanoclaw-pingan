@@ -13,6 +13,8 @@ const envConfig = readEnvFile([
   'SSH_KEY_PATH',
   'WORKBENCH_BROADCAST_TARGETS',
   'ASSISTANT_INBOX_BROADCAST_TARGETS',
+  'ONE_SHOT_AGENT_SLOT_TIMEOUT_MS',
+  'ONE_SHOT_AGENT_MAX_QUEUE_LENGTH',
 ]);
 
 export const ASSISTANT_NAME =
@@ -91,8 +93,21 @@ export const MAX_CONCURRENT_CONTAINERS = Math.max(
 );
 export const ONE_SHOT_AGENT_SLOT_TIMEOUT_MS = Math.max(
   1,
-  parseInt(process.env.ONE_SHOT_AGENT_SLOT_TIMEOUT_MS || '120000', 10) ||
-    120000,
+  parseInt(
+    process.env.ONE_SHOT_AGENT_SLOT_TIMEOUT_MS ||
+      envConfig.ONE_SHOT_AGENT_SLOT_TIMEOUT_MS ||
+      '120000',
+    10,
+  ) || 120000,
+);
+export const ONE_SHOT_AGENT_MAX_QUEUE_LENGTH = Math.max(
+  1,
+  parseInt(
+    process.env.ONE_SHOT_AGENT_MAX_QUEUE_LENGTH ||
+      envConfig.ONE_SHOT_AGENT_MAX_QUEUE_LENGTH ||
+      '10',
+    10,
+  ) || 10,
 );
 
 function escapeRegex(str: string): string {

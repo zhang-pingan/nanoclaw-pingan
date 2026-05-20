@@ -40,6 +40,7 @@ interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  isOneShot?: boolean;
   assistantName?: string;
   executionContext?: {
     workflowId?: string;
@@ -1353,6 +1354,10 @@ async function runQuery(
       return;
     }
     if (stream.ended) return;
+    if (containerInput.isOneShot) {
+      setTimeout(pollIpcDuringQuery, IPC_POLL_MS);
+      return;
+    }
     const messages = drainIpcInput();
     for (const message of messages) {
       writeEvent(
@@ -1478,7 +1483,7 @@ async function main(): Promise<void> {
   if (containerInput.isScheduledTask) {
     prompt = `[SCHEDULED TASK — this is an automated trigger, not a user message]\nExecute the task below and reply with the result. Be concise and direct.\nRules:\n- Stay focused on the task only. Do NOT do anything unrelated.\n- Do NOT modify, delete, or create scheduled tasks.\n- Do NOT read or modify project source code.\n- Do NOT call send_message. Your output will be sent to the user automatically. Calling send_message causes duplicate messages.\n- If the task is a simple reminder/notification, just output the message text directly without using any tools.\n- If the task requires fetching information (e.g. weather, data lookup), use tools as needed, then output the result.\n\nTask: ${prompt}`;
   }
-  const pending = drainIpcInput();
+  const pending = containerInput.isOneShot ? [] : drainIpcInput();
   if (pending.length > 0) {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
     const pendingPrompt = pending.map((m) => m.text).join('\n');
@@ -1659,6 +1664,10 @@ async function main(): Promise<void> {
         runId: containerInput.runId,
         queryId: queryResult.queryId,
       });
+      if (containerInput.isOneShot) {
+        log('One-shot query completed, exiting without waiting for IPC input');
+        break;
+      }
 
       log('Query ended, waiting for next IPC message...');
 

@@ -22,6 +22,7 @@ const {
 vi.mock('./config.js', () => ({
   DATA_DIR: '/tmp/nanoclaw-test-data',
   MAX_CONCURRENT_CONTAINERS: 2,
+  ONE_SHOT_AGENT_MAX_QUEUE_LENGTH: 2,
   ONE_SHOT_AGENT_SLOT_TIMEOUT_MS: 1000,
 }));
 
@@ -911,6 +912,193 @@ describe('GroupQueue', () => {
     resolveProcess!();
     await vi.advanceTimersByTimeAsync(10);
     await expect(oneShotPromise).resolves.toBe('ok');
+  });
+
+  it('does not pipe user messages after one-shot requested idle close', async () => {
+    let resolveProcess: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'assistant:main',
+      {} as any,
+      'container-1',
+      'assistant_main',
+    );
+    queue.notifyIdle('assistant:main');
+
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      async () => 'ok',
+    );
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(queue.canPipeMessage('assistant:main')).toBe(false);
+    expect(
+      queue.sendMessage(
+        'assistant:main',
+        'follow up',
+        'claude-4-6-sonnet-latest',
+        'query-1',
+      ),
+    ).toBe(false);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(oneShotPromise).resolves.toBe('ok');
+  });
+
+  it('retries one-shot idle close after a failed close sentinel write', async () => {
+    const fs = await import('fs');
+    let resolveProcess: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'assistant:main',
+      {} as any,
+      'container-1',
+      'assistant_main',
+    );
+    queue.notifyIdle('assistant:main');
+
+    const writeFileSync = vi.mocked(fs.default.writeFileSync);
+    writeFileSync.mockClear();
+    writeFileSync.mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+
+    const oneShotPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+      },
+      async () => 'ok',
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    expect(queue.canPipeMessage('assistant:main')).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(queue.canPipeMessage('assistant:main')).toBe(false);
+    expect(
+      writeFileSync.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
+      ),
+    ).toHaveLength(2);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(oneShotPromise).resolves.toBe('ok');
+  });
+
+  it('rejects duplicate queued one-shot by dedupe key', async () => {
+    let resolveProcess: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+
+    const firstPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查',
+        dedupeKey: 'inbox:item-1:investigate',
+      },
+      async () => 'ok',
+    );
+    await expect(
+      queue.runOneShot(
+        'assistant:main',
+        {
+          groupFolder: 'assistant_main',
+          groupName: '桌面个人助手',
+          promptSummary: '排查',
+          dedupeKey: 'inbox:item-1:investigate',
+        },
+        async () => 'duplicate',
+      ),
+    ).rejects.toThrow('One-shot agent already queued');
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(firstPromise).resolves.toBe('ok');
+  });
+
+  it('rejects one-shot when the per-group one-shot queue is full', async () => {
+    let resolveProcess: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('assistant:main');
+    await vi.advanceTimersByTimeAsync(10);
+
+    const firstPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查 1',
+        dedupeKey: 'one-shot-1',
+      },
+      async () => 'one',
+    );
+    const secondPromise = queue.runOneShot(
+      'assistant:main',
+      {
+        groupFolder: 'assistant_main',
+        groupName: '桌面个人助手',
+        promptSummary: '排查 2',
+        dedupeKey: 'one-shot-2',
+      },
+      async () => 'two',
+    );
+    await expect(
+      queue.runOneShot(
+        'assistant:main',
+        {
+          groupFolder: 'assistant_main',
+          groupName: '桌面个人助手',
+          promptSummary: '排查 3',
+          dedupeKey: 'one-shot-3',
+        },
+        async () => 'three',
+      ),
+    ).rejects.toThrow('One-shot agent queue is full');
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(firstPromise).resolves.toBe('one');
+    await expect(secondPromise).resolves.toBe('two');
   });
 
   it('rejects timed-out queued one-shot and does not run it later', async () => {

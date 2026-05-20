@@ -58,6 +58,7 @@ export interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  isOneShot?: boolean;
   assistantName?: string;
   executionContext?: {
     workflowId?: string;
