@@ -16155,3 +16155,1231 @@ body::after {
     transform: scaleX(0.2) rotate(-12deg);
   }
 }
+
+/* === Refined minimal shell: primary, secondary and tertiary areas only === */
+#main-screen {
+  --minimal-bg: #f6f6f7;
+  --minimal-surface: #ffffff;
+  --minimal-nav: #f0f1f3;
+  --minimal-nav-strong: #e7e9ec;
+  --minimal-line: #dfe2e7;
+  --minimal-line-strong: #cfd4dc;
+  --minimal-text: #202327;
+  --minimal-text-soft: #575f6a;
+  --minimal-text-muted: #8a929d;
+  --minimal-accent: #2d6cdf;
+  --minimal-accent-soft: #e8f0ff;
+  --minimal-danger: #dc2626;
+  --minimal-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.05);
+  background: var(--minimal-bg);
+}
+
+body::before,
+body::after,
+#chat-area::before,
+#messages::before,
+#chat-animated-bg,
+.tertiary-empty-scene,
+.doraemon-tertiary-empty::before,
+.doraemon-tertiary-empty::after,
+.assistant-hero::after,
+#knowledge-management-screen .workflow-definition-hero.knowledge-hero::after {
+  display: none !important;
+  content: none !important;
+}
+
+#primary-sidebar {
+  width: 176px;
+  min-width: 176px;
+  background: var(--minimal-nav);
+  border: 0;
+  border-right: 1px solid var(--minimal-line);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.primary-sidebar-header {
+  height: 52px;
+  justify-content: flex-start;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--minimal-line);
+  background: transparent;
+}
+
+.doraemon-mini {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(32, 35, 39, 0.08);
+  box-shadow: none;
+  animation: none;
+}
+
+.primary-nav {
+  padding: 10px 8px;
+  gap: 2px;
+}
+
+.primary-nav-item {
+  min-height: 36px;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--minimal-text-soft);
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.primary-nav-item:hover {
+  color: var(--minimal-text);
+  background: rgba(255, 255, 255, 0.62);
+  transform: none;
+}
+
+.primary-nav-item.active {
+  color: var(--minimal-text);
+  background: var(--minimal-nav-strong);
+  border-color: rgba(32, 35, 39, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.38);
+}
+
+.primary-nav-dot {
+  width: 6px;
+  height: 6px;
+  opacity: 0.72;
+  background: currentColor;
+}
+
+.primary-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.primary-sidebar-tools {
+  padding: 8px;
+  border-top: 1px solid var(--minimal-line);
+  background: transparent;
+}
+
+.primary-sidebar-tools .section-header {
+  min-height: 34px;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--minimal-text-soft);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.primary-sidebar-tools .section-header:hover {
+  color: var(--minimal-text);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.primary-sidebar-tools .sidebar-footer {
+  padding: 10px 8px 0;
+}
+
+.primary-sidebar-tools .conn-status {
+  font-size: 11px;
+  color: var(--minimal-text-muted);
+}
+
+#workspace.active,
+#workbench-screen.active,
+#today-plan-screen.active,
+#assistant-screen.active,
+#memory-management-screen.active,
+#knowledge-management-screen.active,
+#workflow-definitions-screen.active,
+#cards-management-screen.active,
+#configuration-screen.active,
+#trace-monitor-screen.active {
+  background: var(--minimal-bg);
+}
+
+#workbench-screen,
+#today-plan-screen,
+#assistant-screen,
+#memory-management-screen,
+#knowledge-management-screen,
+#workflow-definitions-screen,
+#cards-management-screen,
+#configuration-screen,
+#trace-monitor-screen {
+  background: var(--minimal-bg);
+}
+
+#sidebar,
+#workbench-screen .workbench-sidebar,
+#memory-management-screen .memory-sidebar,
+#knowledge-management-screen .knowledge-sidebar,
+#workflow-definitions-screen .workflow-definitions-sidebar,
+#cards-management-screen .workflow-definitions-sidebar,
+#configuration-screen .configuration-sidebar,
+#trace-monitor-screen .trace-monitor-sidebar {
+  width: 282px;
+  min-width: 282px;
+  background: var(--minimal-nav);
+  border: 0;
+  border-right: 1px solid var(--minimal-line);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#sidebar.collapsed,
+#workbench-screen .workbench-sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+  min-width: var(--sidebar-collapsed-width);
+}
+
+#sidebar .sidebar-header,
+#workbench-screen .workbench-section-header,
+#memory-management-screen .memory-section-header,
+#knowledge-management-screen .workflow-definitions-sidebar-header,
+#workflow-definitions-screen .workflow-definitions-sidebar-header,
+#cards-management-screen .workflow-definitions-sidebar-header,
+#configuration-screen .workflow-definitions-sidebar-header,
+#trace-monitor-screen .trace-monitor-sidebar-header {
+  min-height: 82px;
+  padding: 17px 18px 13px;
+  border-bottom: 1px solid var(--minimal-line);
+  background: transparent;
+  row-gap: 7px;
+}
+
+#sidebar .sidebar-header h2,
+#workbench-screen .workbench-section-header h2,
+#memory-management-screen .memory-section-header h2,
+#knowledge-management-screen .workflow-definitions-sidebar-header h2,
+#workflow-definitions-screen .workflow-definitions-sidebar-header h2,
+#cards-management-screen .workflow-definitions-sidebar-header h2,
+#configuration-screen .workflow-definitions-sidebar-header h2,
+#trace-monitor-screen .trace-monitor-sidebar-header h2 {
+  font-size: 17px;
+  line-height: 1.22;
+  font-weight: 720;
+  color: var(--minimal-text);
+  letter-spacing: 0;
+}
+
+.sidebar-kicker,
+.workbench-kicker,
+.workflow-definitions-kicker,
+.memory-kicker,
+.trace-monitor-kicker,
+.configuration-kicker,
+.cards-management-kicker {
+  margin-bottom: 5px;
+  color: var(--minimal-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+#sidebar .sidebar-header-actions .icon-btn,
+#workbench-screen .workbench-section-actions .icon-btn,
+#memory-management-screen .memory-toolbar-icon-actions .icon-btn,
+#knowledge-management-screen .workflow-definitions-sidebar-actions .icon-btn,
+#workflow-definitions-screen .workflow-definitions-sidebar-actions .icon-btn,
+#cards-management-screen .workflow-definitions-sidebar-actions .icon-btn,
+#configuration-screen .workflow-definitions-sidebar-actions .icon-btn,
+#trace-monitor-screen .trace-monitor-sidebar-actions .icon-btn,
+.secondary-nav-collapse-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--minimal-text-muted);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+#sidebar .sidebar-header-actions .icon-btn:hover,
+#workbench-screen .workbench-section-actions .icon-btn:hover,
+#memory-management-screen .memory-toolbar-icon-actions .icon-btn:hover,
+#knowledge-management-screen .workflow-definitions-sidebar-actions .icon-btn:hover,
+#workflow-definitions-screen .workflow-definitions-sidebar-actions .icon-btn:hover,
+#cards-management-screen .workflow-definitions-sidebar-actions .icon-btn:hover,
+#configuration-screen .workflow-definitions-sidebar-actions .icon-btn:hover,
+#trace-monitor-screen .trace-monitor-sidebar-actions .icon-btn:hover,
+.secondary-nav-collapse-btn:hover {
+  color: var(--minimal-text);
+  border-color: var(--minimal-line);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+  transform: none;
+}
+
+#sidebar .sidebar-section,
+#workbench-screen .workbench-task-list,
+#memory-management-screen .memory-groups-list,
+#knowledge-management-screen .knowledge-sidebar-section,
+#workflow-definitions-screen .workflow-definition-list,
+#cards-management-screen .workflow-definition-list,
+#configuration-screen .configuration-secondary-nav,
+#trace-monitor-screen .trace-monitor-list {
+  padding: 10px 8px;
+}
+
+#sidebar .list,
+#memory-management-screen .list.memory-groups-list {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+#sidebar .list-item,
+#memory-management-screen .memory-groups-list .list-item,
+#workflow-definitions-screen .workflow-definition-list-item,
+#cards-management-screen .workflow-definition-list-item,
+#configuration-screen .workflow-definition-list-item,
+#knowledge-management-screen .knowledge-list-item,
+#trace-monitor-screen .trace-monitor-list-item,
+#configuration-screen .configuration-nav-item {
+  width: 100%;
+  min-height: 38px;
+  margin: 0 0 4px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--minimal-text-soft);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+#sidebar .list-item:hover,
+#memory-management-screen .memory-groups-list .list-item:hover,
+#workflow-definitions-screen .workflow-definition-list-item:hover,
+#cards-management-screen .workflow-definition-list-item:hover,
+#configuration-screen .workflow-definition-list-item:hover,
+#knowledge-management-screen .knowledge-list-item:hover,
+#trace-monitor-screen .trace-monitor-list-item:hover,
+#configuration-screen .configuration-nav-item:hover {
+  color: var(--minimal-text);
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: none;
+  transform: none;
+}
+
+#sidebar .list-item.active,
+#memory-management-screen .memory-groups-list .list-item.active,
+#workflow-definitions-screen .workflow-definition-list-item.active,
+#cards-management-screen .workflow-definition-list-item.active,
+#configuration-screen .workflow-definition-list-item.active,
+#knowledge-management-screen .knowledge-list-item.active,
+#trace-monitor-screen .trace-monitor-list-item.active,
+#configuration-screen .configuration-nav-item.active {
+  color: var(--minimal-text);
+  border-color: rgba(32, 35, 39, 0.04);
+  background: var(--minimal-nav-strong);
+  box-shadow: inset 3px 0 0 var(--minimal-accent);
+  transform: none;
+}
+
+#sidebar .list-item .item-icon,
+#memory-management-screen .memory-groups-list .list-item .item-icon,
+#configuration-screen .configuration-nav-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--minimal-line);
+  background: var(--minimal-surface);
+  color: var(--minimal-text-soft);
+  box-shadow: none;
+}
+
+#sidebar .list-item.secondary-group .item-icon.item-initial,
+#memory-management-screen .memory-groups-list .list-item.secondary-group .item-icon.item-initial {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+#sidebar .list-item.active .item-icon,
+#memory-management-screen .memory-groups-list .list-item.active .item-icon,
+#configuration-screen .configuration-nav-item.active .configuration-nav-icon {
+  border-color: #c8d7f6;
+  background: var(--minimal-accent-soft);
+  color: var(--minimal-accent);
+  box-shadow: none;
+}
+
+#sidebar .list-item .item-icon.item-initial::before,
+#memory-management-screen .memory-groups-list .list-item .item-icon.item-initial::before {
+  display: none;
+}
+
+#sidebar .list-item .item-name,
+#memory-management-screen .memory-groups-list .list-item .item-name,
+.workflow-definition-list-title,
+.knowledge-list-item-title,
+.trace-monitor-list-title,
+.configuration-nav-item strong {
+  color: var(--minimal-text);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+#sidebar .list-item.active .item-name,
+#memory-management-screen .memory-groups-list .list-item.active .item-name,
+#workflow-definitions-screen .workflow-definition-list-item.active .workflow-definition-list-title,
+#cards-management-screen .workflow-definition-list-item.active .workflow-definition-list-title,
+#configuration-screen .workflow-definition-list-item.active .workflow-definition-list-title,
+#knowledge-management-screen .knowledge-list-item.active .knowledge-list-item-title,
+#trace-monitor-screen .trace-monitor-list-item.active .trace-monitor-list-title {
+  color: var(--minimal-text);
+}
+
+.workflow-definition-list-desc,
+.knowledge-list-item-meta,
+.trace-monitor-list-summary,
+.configuration-nav-item small {
+  color: var(--minimal-text-muted);
+  letter-spacing: 0;
+}
+
+#workbench-screen .workbench-task-item {
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+#workbench-screen .workbench-task-card-glow {
+  display: none;
+}
+
+#workbench-screen .workbench-task-item:hover {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: none;
+  transform: none;
+}
+
+#workbench-screen .workbench-task-item.active {
+  border-color: rgba(32, 35, 39, 0.04);
+  background: var(--minimal-nav-strong);
+  box-shadow: inset 3px 0 0 var(--minimal-accent);
+  transform: none;
+}
+
+#workbench-screen .workbench-task-title,
+#workbench-screen .workbench-task-item.active .workbench-task-title {
+  color: var(--minimal-text);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+#workbench-screen .workbench-task-type-chip,
+.workbench-badge,
+.workflow-definition-pill,
+.trace-monitor-status,
+.trace-monitor-pill {
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: var(--minimal-text-soft);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#workbench-screen .workbench-task-stage-strip {
+  border-radius: 8px;
+  border-color: var(--minimal-line);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+#workbench-screen .workbench-main,
+#memory-management-screen .memory-main,
+#knowledge-management-screen .knowledge-main,
+#workflow-definitions-screen .workflow-definitions-main,
+#cards-management-screen .workflow-definitions-main,
+#configuration-screen .configuration-main,
+#trace-monitor-screen .trace-monitor-main,
+#assistant-screen .assistant-workstation,
+#today-plan-screen .today-plan-shell {
+  background: var(--minimal-bg);
+  box-shadow: none;
+}
+
+#workbench-screen .workbench-main,
+#workflow-definitions-screen .workflow-definitions-main,
+#cards-management-screen .workflow-definitions-main,
+#configuration-screen .configuration-main,
+#trace-monitor-screen .trace-monitor-main,
+#assistant-screen .assistant-workstation {
+  padding: 22px 24px 26px;
+}
+
+#memory-management-screen .memory-main-body {
+  padding: 22px 24px 26px;
+}
+
+#workbench-screen .workbench-main::before {
+  display: none;
+}
+
+#chat-area {
+  background: var(--minimal-bg);
+}
+
+#chat-header {
+  height: 52px;
+  min-height: 52px;
+  padding: 0 22px;
+  border: 0;
+  border-bottom: 1px solid var(--minimal-line);
+  background: rgba(246, 246, 247, 0.94);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#chat-header::after {
+  display: none;
+}
+
+#chat-group-name {
+  color: var(--minimal-text);
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+#chat-group-folder {
+  color: var(--minimal-text-muted);
+  letter-spacing: 0;
+}
+
+#messages {
+  gap: 8px;
+  padding: 22px clamp(24px, 4vw, 56px);
+  background: var(--minimal-bg);
+}
+
+#messages-empty {
+  color: var(--minimal-text-muted);
+}
+
+#messages-empty-mascot {
+  width: 74px;
+  border: 1px solid var(--minimal-line);
+  box-shadow: none;
+  filter: none;
+  animation: none;
+}
+
+.message {
+  max-width: min(760px, 74%);
+}
+
+.message .msg-avatar {
+  width: 30px;
+  height: 30px;
+  border-color: var(--minimal-line);
+  box-shadow: none;
+}
+
+.message .msg-sender {
+  color: var(--minimal-text-soft);
+  font-weight: 650;
+}
+
+.message.assistant .msg-body {
+  border: 1px solid var(--minimal-line);
+  border-radius: 12px;
+  background: var(--minimal-surface);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.message.user .msg-body {
+  border-radius: 12px;
+  background: #202327;
+  box-shadow: none;
+}
+
+.message.user .msg-body::before {
+  display: none;
+}
+
+#input-area {
+  padding: 12px 22px 16px;
+  border: 0;
+  border-top: 1px solid var(--minimal-line);
+  background: rgba(246, 246, 247, 0.96);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#input-area::before {
+  display: none;
+}
+
+#input-wrap {
+  border: 1px solid var(--minimal-line-strong);
+  border-radius: 14px;
+  background: var(--minimal-surface);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#input-wrap::before {
+  display: none;
+}
+
+#input-wrap:focus-within {
+  border-color: #a9bce8;
+  background: var(--minimal-surface);
+  box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+}
+
+#message-input {
+  padding: 12px 16px;
+  padding-right: 92px;
+  color: var(--minimal-text);
+  letter-spacing: 0;
+}
+
+#message-input::placeholder {
+  color: var(--minimal-text-muted);
+}
+
+.send-btn {
+  background: #202327;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.send-btn:hover {
+  background: #111418;
+  box-shadow: none;
+}
+
+#input-actions .icon-btn {
+  color: var(--minimal-text-muted);
+}
+
+#input-actions .icon-btn:hover {
+  color: var(--minimal-text);
+  background: #eef1f5;
+  transform: none;
+}
+
+#workbench-screen .workbench-task-header,
+#workbench-screen .workbench-panel,
+#memory-management-screen .memory-toolbar,
+#memory-management-screen .memory-item,
+#knowledge-management-screen .workflow-definition-hero.knowledge-hero,
+#knowledge-management-screen .workflow-definition-panel.knowledge-panel,
+#workflow-definitions-screen .workflow-definition-hero,
+#workflow-definitions-screen .workflow-definition-panel,
+#cards-management-screen .workflow-definition-hero,
+#cards-management-screen .workflow-definition-panel,
+#configuration-screen .configuration-service-hero,
+#configuration-screen .configuration-panel,
+#trace-monitor-screen .trace-monitor-detail-header,
+#trace-monitor-screen .trace-monitor-panel,
+#assistant-screen .assistant-hero,
+#assistant-screen .assistant-panel,
+#today-plan-screen .today-plan-hero,
+#today-plan-screen .today-plan-board,
+#today-plan-screen .today-plan-empty-card,
+#today-plan-screen .today-plan-delivery-card {
+  border: 1px solid var(--minimal-line);
+  border-radius: 12px;
+  background: var(--minimal-surface);
+  box-shadow: var(--minimal-shadow);
+}
+
+#workbench-screen .workbench-task-header::before,
+#workbench-screen .workbench-panel::before {
+  display: none;
+}
+
+#workbench-screen .workbench-task-header,
+#workflow-definitions-screen .workflow-definition-hero,
+#cards-management-screen .workflow-definition-hero,
+#configuration-screen .configuration-service-hero,
+#assistant-screen .assistant-hero,
+#today-plan-screen .today-plan-hero,
+#trace-monitor-screen .trace-monitor-detail-header {
+  padding: 20px;
+}
+
+#workbench-screen .workbench-panel,
+#workflow-definitions-screen .workflow-definition-panel,
+#cards-management-screen .workflow-definition-panel,
+#configuration-screen .configuration-panel,
+#trace-monitor-screen .trace-monitor-panel,
+#assistant-screen .assistant-panel {
+  overflow: hidden;
+}
+
+.workbench-task-header h2,
+.workflow-definition-hero h2,
+.configuration-service-hero h2,
+.assistant-hero h2,
+.today-plan-hero h2,
+.trace-monitor-detail-heading h2,
+.knowledge-detail-header h2 {
+  color: var(--minimal-text);
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.workbench-panel-title,
+.workflow-definition-panel-title,
+.assistant-section-title,
+.today-plan-section-title,
+.trace-monitor-panel-title,
+.knowledge-panel-head strong {
+  color: var(--minimal-text);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+#workflow-definitions-screen .workflow-definition-panel > .workflow-definition-panel-head,
+#cards-management-screen .workflow-definition-panel > .workflow-definition-panel-head,
+#configuration-screen .configuration-panel > .workflow-definition-panel-head,
+#knowledge-management-screen .workflow-definition-panel > .knowledge-panel-head,
+#assistant-screen .assistant-panel-head {
+  border-bottom: 1px solid var(--minimal-line);
+  background: #fbfbfc;
+}
+
+#workbench-screen .workbench-detail-empty,
+#workflow-definitions-screen .workflow-definition-empty,
+#cards-management-screen .workflow-definition-empty,
+#configuration-screen .configuration-empty,
+#knowledge-management-screen .workflow-definition-empty,
+#trace-monitor-screen .trace-monitor-detail-empty,
+#memory-management-screen .memory-empty {
+  border: 1px dashed var(--minimal-line-strong);
+  border-radius: 12px;
+  background: var(--minimal-surface);
+  box-shadow: none;
+  color: var(--minimal-text-muted);
+}
+
+.doraemon-tertiary-empty img,
+.doraemon-tertiary-empty .tertiary-empty-avatar {
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--minimal-line);
+  box-shadow: none;
+  filter: none;
+}
+
+#memory-management-screen .memory-search-input,
+#memory-management-screen .memory-status-filter,
+#knowledge-management-screen .memory-search-input,
+#knowledge-management-screen .knowledge-filter-select,
+#workflow-definitions-screen .workflow-definitions-main input,
+#workflow-definitions-screen .workflow-definitions-main select,
+#workflow-definitions-screen .workflow-definitions-main textarea,
+#cards-management-screen .cards-management-main input,
+#cards-management-screen .cards-management-main select,
+#cards-management-screen .cards-management-main textarea,
+#configuration-screen .configuration-main input,
+#configuration-screen .configuration-main select,
+#configuration-screen .configuration-main textarea {
+  border-color: var(--minimal-line);
+  border-radius: 8px;
+  background: var(--minimal-surface);
+  box-shadow: none;
+}
+
+#memory-management-screen .memory-search-input:focus,
+#memory-management-screen .memory-status-filter:focus,
+#knowledge-management-screen .memory-search-input:focus,
+#knowledge-management-screen .knowledge-filter-select:focus,
+#workflow-definitions-screen .workflow-definitions-main input:focus,
+#workflow-definitions-screen .workflow-definitions-main select:focus,
+#workflow-definitions-screen .workflow-definitions-main textarea:focus,
+#cards-management-screen .cards-management-main input:focus,
+#cards-management-screen .cards-management-main select:focus,
+#cards-management-screen .cards-management-main textarea:focus,
+#configuration-screen .configuration-main input:focus,
+#configuration-screen .configuration-main select:focus,
+#configuration-screen .configuration-main textarea:focus {
+  border-color: #a9bce8;
+  box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+  outline: none;
+}
+
+@media (max-width: 1180px) {
+  #primary-sidebar {
+    width: 150px;
+    min-width: 150px;
+  }
+
+  #sidebar,
+  #workbench-screen .workbench-sidebar,
+  #memory-management-screen .memory-sidebar,
+  #knowledge-management-screen .knowledge-sidebar,
+  #workflow-definitions-screen .workflow-definitions-sidebar,
+  #cards-management-screen .workflow-definitions-sidebar,
+  #configuration-screen .configuration-sidebar,
+  #trace-monitor-screen .trace-monitor-sidebar {
+    width: 250px;
+    min-width: 250px;
+  }
+}
+
+/* === Refined minimal modals and overlays === */
+:root {
+  --minimal-bg: #f6f6f7;
+  --minimal-surface: #ffffff;
+  --minimal-nav: #f0f1f3;
+  --minimal-nav-strong: #e7e9ec;
+  --minimal-line: #dfe2e7;
+  --minimal-line-strong: #cfd4dc;
+  --minimal-text: #202327;
+  --minimal-text-soft: #575f6a;
+  --minimal-text-muted: #8a929d;
+  --minimal-accent: #2d6cdf;
+  --minimal-accent-soft: #e8f0ff;
+  --minimal-danger: #dc2626;
+  --minimal-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 20px 60px rgba(16, 24, 40, 0.18);
+}
+
+.app-prompt-overlay,
+.quick-chat-overlay,
+.workflow-wizard-overlay,
+.workflow-definition-diff-modal,
+.today-plan-switcher-modal,
+.today-plan-association-overlay,
+.today-plan-commit-modal,
+.lightbox-overlay {
+  background: rgba(32, 35, 39, 0.28);
+  backdrop-filter: blur(14px) saturate(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05);
+}
+
+.today-plan-switcher-mask,
+.today-plan-association-mask,
+.today-plan-commit-mask,
+.memory-modal-mask,
+#memory-management-screen .memory-modal-mask,
+.today-plan-chat-picker {
+  background: rgba(32, 35, 39, 0.28);
+  backdrop-filter: blur(14px) saturate(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05);
+}
+
+.app-prompt-dialog,
+.quick-chat-panel,
+.workflow-wizard-modal,
+.workflow-definition-diff-modal-card,
+.today-plan-switcher-window,
+.today-plan-association-dialog,
+.today-plan-commit-window,
+.today-plan-chat-picker-window,
+#memory-management-screen .memory-editor,
+#memory-management-screen .memory-doctor-panel,
+#memory-management-screen .memory-metrics-modal {
+  border: 1px solid var(--minimal-line);
+  border-radius: 14px;
+  background: var(--minimal-surface);
+  box-shadow: var(--minimal-shadow);
+}
+
+.workflow-wizard-modal {
+  width: min(1040px, 96vw);
+}
+
+.workflow-definition-create-preview-modal {
+  width: min(900px, 94vw);
+}
+
+.manual-requirement-dialog,
+.today-plan-mail-preview-dialog,
+.today-plan-mail-compose-dialog {
+  width: min(680px, calc(100vw - 40px));
+}
+
+.quick-chat-panel,
+body.quick-chat-window .quick-chat-panel {
+  border-radius: 14px;
+  background: var(--minimal-surface);
+  box-shadow: var(--minimal-shadow);
+}
+
+.workflow-wizard-header,
+.workflow-wizard-footer,
+.today-plan-switcher-header,
+.today-plan-association-header,
+.today-plan-commit-header,
+.today-plan-chat-picker-header,
+.today-plan-chat-picker-toolbar,
+#memory-management-screen .memory-editor-header,
+#memory-management-screen .memory-doctor-header,
+#memory-management-screen .memory-metrics-header {
+  border-color: var(--minimal-line);
+  background: #fbfbfc;
+}
+
+.workflow-wizard-header,
+.today-plan-switcher-header,
+.today-plan-association-header,
+.today-plan-commit-header,
+.today-plan-chat-picker-header,
+#memory-management-screen .memory-editor-header,
+#memory-management-screen .memory-doctor-header,
+#memory-management-screen .memory-metrics-header {
+  padding: 18px 20px;
+}
+
+.workflow-wizard-footer,
+#memory-management-screen .memory-editor-actions {
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--minimal-line);
+  background: #fbfbfc;
+}
+
+.app-prompt-dialog {
+  padding: 18px;
+}
+
+.app-prompt-title,
+.workflow-wizard-title,
+.quick-chat-title-wrap h2,
+.today-plan-switcher-header h3,
+.today-plan-association-header h3,
+.today-plan-commit-header h3,
+#memory-management-screen .memory-doctor-header strong,
+#memory-management-screen .memory-metrics-header strong,
+#memory-management-screen #memory-editor-title {
+  color: var(--minimal-text);
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.app-prompt-title {
+  font-size: 16px;
+}
+
+.workflow-wizard-title {
+  font-size: 22px;
+}
+
+.quick-chat-title-wrap h2,
+body.quick-chat-window .quick-chat-title-wrap h2 {
+  font-size: 22px;
+}
+
+.app-prompt-message,
+.workflow-wizard-header-desc,
+.quick-chat-target,
+.today-plan-subtitle,
+.workflow-wizard-field-help,
+.workflow-wizard-hint,
+.today-plan-switcher-title,
+.today-plan-option-desc,
+.today-plan-mail-preview-value,
+#memory-management-screen .memory-editor-header-copy small,
+#memory-management-screen .memory-doctor-header .muted,
+#memory-management-screen .memory-metrics-header .muted {
+  color: var(--minimal-text-soft);
+  letter-spacing: 0;
+}
+
+.workflow-wizard-kicker,
+.quick-chat-kicker,
+#memory-management-screen .memory-editor-kicker,
+.workflow-wizard-confirm-kicker,
+.workflow-wizard-step span,
+.workflow-wizard-label,
+.workflow-wizard-flow-group-label,
+.today-plan-kicker,
+.today-plan-mail-compose-label {
+  color: var(--minimal-text-muted);
+  letter-spacing: 0.08em;
+}
+
+.workflow-wizard-kicker,
+.quick-chat-kicker,
+#memory-management-screen .memory-editor-kicker {
+  border: 1px solid var(--minimal-line);
+  border-radius: 999px;
+  background: var(--minimal-nav);
+}
+
+.workflow-wizard-steps {
+  padding: 12px 20px 0;
+  background: var(--minimal-surface);
+}
+
+.workflow-wizard-step,
+.workflow-wizard-section,
+.workflow-wizard-flow-summary,
+.workflow-wizard-confirm-card,
+.workflow-wizard-summary-card,
+.workflow-wizard-validation-card,
+.workflow-wizard-selection-item,
+.workflow-wizard-file-card,
+.workflow-wizard-file-empty,
+.manual-requirement-file-zone,
+.manual-requirement-file-empty,
+.today-plan-switcher-item,
+.today-plan-association-column,
+.today-plan-option-card,
+.today-plan-chat-picker-message,
+.today-plan-service-branch-panel,
+.today-plan-service-branch-row,
+.today-plan-mail-preview-item,
+#memory-management-screen .memory-doctor-section,
+#memory-management-screen .memory-doctor-item,
+#memory-management-screen .memory-doctor-log,
+#memory-management-screen .memory-metrics-total,
+#memory-management-screen .memory-metrics-item {
+  border: 1px solid var(--minimal-line);
+  border-radius: 10px;
+  background: var(--minimal-surface);
+  box-shadow: none;
+}
+
+.workflow-wizard-step.is-active,
+.workflow-wizard-option.selected,
+.workflow-wizard-option-segmented.selected,
+.today-plan-switcher-item.active,
+.today-plan-chat-group-btn.active,
+.today-plan-chat-picker-message.selected,
+.today-plan-service-option-card.active {
+  border-color: #c8d7f6;
+  background: var(--minimal-accent-soft);
+  box-shadow: inset 3px 0 0 var(--minimal-accent);
+  transform: none;
+}
+
+.workflow-wizard-section-hero,
+.workflow-wizard-section-hero::after,
+.workflow-wizard-option-segmented::after,
+.workflow-wizard-action-btn::before,
+.workflow-wizard-action-btn::after,
+.workflow-wizard-submit-btn:not(:disabled) {
+  animation: none;
+}
+
+.workflow-wizard-section-hero::after,
+.workflow-wizard-option-segmented::after,
+.workflow-wizard-action-btn::before,
+.workflow-wizard-action-btn::after {
+  display: none;
+}
+
+.workflow-wizard-body {
+  padding: 18px 20px 10px;
+  gap: 14px;
+}
+
+.workflow-wizard-section {
+  padding: 16px;
+  animation: none;
+}
+
+.workflow-wizard-footer-actions {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workflow-wizard-option,
+.workflow-wizard-option-segmented,
+.today-plan-switcher-item,
+.today-plan-chat-picker-message,
+.today-plan-chat-group-btn {
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.workflow-wizard-option:hover,
+.workflow-wizard-option-segmented:hover,
+.today-plan-switcher-item:hover,
+.today-plan-chat-picker-message:hover,
+.today-plan-chat-group-btn:hover,
+.workflow-wizard-secondary-btn:hover:not(:disabled),
+.workflow-wizard-close:hover:not(:disabled),
+#memory-management-screen .memory-dialog-close-btn:hover,
+#memory-management-screen .memory-editor-actions .btn-ghost:hover {
+  transform: none;
+  border-color: var(--minimal-line-strong);
+  background: #f8f9fb;
+  color: var(--minimal-text);
+  box-shadow: none;
+}
+
+.app-prompt-input,
+.today-plan-mail-compose-input,
+.today-plan-mail-compose-textarea,
+.quick-chat-input,
+.workflow-wizard-input,
+.workflow-wizard-select,
+#memory-management-screen .memory-field select,
+#memory-management-screen .memory-field textarea {
+  border: 1px solid var(--minimal-line);
+  border-radius: 10px;
+  background: var(--minimal-surface);
+  color: var(--minimal-text);
+  box-shadow: none;
+}
+
+.app-prompt-input:focus,
+.today-plan-mail-compose-input:focus,
+.today-plan-mail-compose-textarea:focus,
+.quick-chat-input:focus,
+.workflow-wizard-input:focus,
+.workflow-wizard-select:focus,
+#memory-management-screen .memory-field select:focus,
+#memory-management-screen .memory-field textarea:focus {
+  border-color: #a9bce8;
+  box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+  outline: none;
+  transform: none;
+}
+
+.app-prompt-actions .btn-primary,
+.app-prompt-actions .btn-ghost,
+.quick-chat-actions .btn-primary,
+.quick-chat-actions .btn-ghost,
+.workflow-wizard-submit-btn,
+.workflow-wizard-secondary-btn,
+.workflow-wizard-close,
+.workflow-wizard-upload-icon-btn,
+.workflow-wizard-requirement-create-btn,
+.workflow-wizard-file-remove-btn,
+.today-plan-mail-dialog-primary-btn,
+.today-plan-mail-dialog-secondary-btn,
+#memory-management-screen .memory-editor-actions .btn-primary,
+#memory-management-screen .memory-editor-actions .btn-ghost,
+#memory-management-screen .memory-dialog-close-btn {
+  min-height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--minimal-line);
+  background: var(--minimal-surface);
+  color: var(--minimal-text);
+  box-shadow: none;
+  font-weight: 680;
+}
+
+.app-prompt-actions .btn-primary,
+.quick-chat-actions .btn-primary,
+.workflow-wizard-submit-btn,
+.today-plan-mail-dialog-primary-btn,
+#memory-management-screen .memory-editor-actions .btn-primary {
+  border-color: #202327;
+  background: #202327;
+  color: #ffffff;
+}
+
+.app-prompt-actions .btn-primary:hover,
+.quick-chat-actions .btn-primary:hover,
+.workflow-wizard-submit-btn:hover:not(:disabled),
+.today-plan-mail-dialog-primary-btn:hover,
+#memory-management-screen .memory-editor-actions .btn-primary:hover {
+  border-color: #111418;
+  background: #111418;
+  box-shadow: none;
+  transform: none;
+}
+
+.workflow-wizard-file-remove-btn,
+.manual-requirement-file-card .workflow-wizard-file-remove-btn {
+  color: var(--minimal-danger);
+}
+
+.workflow-wizard-file-remove-btn:hover {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fef2f2;
+  color: var(--minimal-danger);
+}
+
+.today-plan-mail-dialog-status,
+.workflow-wizard-validation-card[data-state="warning"],
+.workflow-wizard-confirm-card[data-state="warning"] {
+  border-color: #f5d39a;
+  background: #fff8ed;
+}
+
+.today-plan-mail-dialog-status.is-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.workflow-wizard-validation-card[data-state="success"],
+.workflow-wizard-confirm-card[data-state="success"] {
+  border-color: #b7e4c7;
+  background: #f0fdf4;
+}
+
+.workflow-definition-diff-modal-card .workflow-definition-panel-head {
+  margin: -18px -18px 0;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--minimal-line);
+  background: #fbfbfc;
+}
+
+.workflow-definition-diff-modal-card .workflow-definition-diff,
+.today-plan-commit-diff,
+.today-plan-mail-preview-body {
+  border: 1px solid var(--minimal-line);
+  border-radius: 10px;
+  background: #f8f9fb;
+  color: var(--minimal-text);
+  box-shadow: none;
+}
+
+.lightbox-overlay img {
+  border-radius: 10px;
+  box-shadow: var(--minimal-shadow);
+}
+
+@media (max-width: 760px) {
+  .app-prompt-overlay,
+  .workflow-wizard-overlay,
+  .quick-chat-overlay {
+    padding: 14px;
+  }
+
+  .workflow-wizard-header,
+  .workflow-wizard-body,
+  .workflow-wizard-footer,
+  .today-plan-switcher-header,
+  .today-plan-association-header,
+  .today-plan-commit-header {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
