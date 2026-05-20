@@ -1678,6 +1678,10 @@ function sendCardAction(value, cardId, formValue) {
 }
 
 function getMessageAvatarHtml(isUser) {
+  const isMainAssistant = !isUser && isCurrentGroupMain();
+  if (!isUser && !isMainAssistant) {
+    return `<div class="msg-avatar msg-avatar-agent-minimal" aria-hidden="true"><span>AI</span></div>`;
+  }
   const avatarSrc = isUser ? "/assets/avatar-user.png" : ASSISTANT_AVATAR;
   const avatarAlt = isUser ? "User" : "Assistant";
   return `<div class="msg-avatar"><img src="${avatarSrc}" alt="${avatarAlt}" /></div>`;
@@ -2195,6 +2199,8 @@ function renderGroups() {
   for (const group of groups) {
     const el = document.createElement("div");
     el.className = `list-item${group.jid === currentGroupJid ? " active" : ""}`;
+    el.classList.toggle("main-group", group.isMain === true);
+    el.classList.toggle("secondary-group", group.isMain !== true);
 
     const unread = unreadCounts[group.jid] || 0;
     const iconHtml = renderGroupListIcon(group);
@@ -2238,6 +2244,8 @@ function renderMemoryGroups() {
   for (const group of groups) {
     const el = document.createElement("div");
     el.className = `list-item${group.jid === activeMemoryGroupJid ? " active" : ""}`;
+    el.classList.toggle("main-group", group.isMain === true);
+    el.classList.toggle("secondary-group", group.isMain !== true);
     const iconHtml = renderGroupListIcon(group);
     el.innerHTML = `
       ${iconHtml}
@@ -18586,9 +18594,7 @@ function initChatBgParticleNudge() {
   const bgEl = document.getElementById("chat-animated-bg");
   if (!chatAreaEl || !bgEl) return;
 
-  const targets = Array.from(
-    bgEl.querySelectorAll(".bg-particle, .bg-star, .bg-copter, .bg-bell")
-  );
+  const targets = Array.from(bgEl.querySelectorAll(".bg-particle, .bg-star"));
   if (targets.length === 0) return;
 
   function applyNudge(clientX, clientY) {
