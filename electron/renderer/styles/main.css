@@ -10263,7 +10263,7 @@ body.quick-chat-window .quick-chat-input {
 #memory-management-screen .memory-toolbar {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(148px, 170px) minmax(0, auto) 42px;
+  grid-template-columns: minmax(260px, 1fr) minmax(148px, 170px) auto;
   align-items: center;
   gap: 12px;
   padding: 14px;
@@ -10274,12 +10274,26 @@ body.quick-chat-window .quick-chat-input {
   backdrop-filter: none;
 }
 
-#memory-management-screen .memory-toolbar-actions {
+#memory-management-screen .memory-toolbar-icon-actions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+#memory-management-screen .memory-toolbar-icon-actions .icon-btn {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+}
+
+#memory-management-screen .memory-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
   flex-wrap: wrap;
+  grid-column: 1 / -1;
 }
 
 #memory-management-screen .memory-search-input,
@@ -10299,14 +10313,15 @@ body.quick-chat-window .quick-chat-input {
 
 #memory-management-screen .memory-toolbar-btn {
   min-width: 0;
-  min-height: 42px;
-  padding: 0 13px;
-  border-radius: 14px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   white-space: nowrap;
-  box-shadow: 0 10px 20px rgba(0, 132, 201, 0.1);
+  box-shadow: none;
 }
 
 #memory-management-screen .memory-btn-icon,
@@ -10774,28 +10789,18 @@ body.quick-chat-window .quick-chat-input {
   }
 
   #memory-management-screen .memory-toolbar {
-    grid-template-columns: minmax(0, 1fr) 42px;
+    grid-template-columns: minmax(0, 1fr) minmax(148px, 170px) auto;
   }
 
   #memory-management-screen .memory-toolbar-actions {
     display: grid;
-    grid-template-columns: repeat(4, minmax(108px, 1fr));
+    grid-template-columns: repeat(3, minmax(108px, max-content));
     justify-content: stretch;
     grid-column: 1 / -1;
     width: 100%;
   }
 
-  #memory-management-screen .memory-search-input {
-    grid-column: 1 / -1;
-  }
-
-  #memory-management-screen .memory-status-filter {
-    grid-column: 1;
-  }
-
-  #memory-management-screen #memory-refresh-btn {
-    grid-column: 2;
-    width: 42px;
+  #memory-management-screen .memory-toolbar-icon-actions {
     justify-self: end;
   }
 
@@ -10842,6 +10847,10 @@ body.quick-chat-window .quick-chat-input {
 
   #memory-management-screen .memory-toolbar-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #memory-management-screen .memory-toolbar-icon-actions {
+    grid-column: 3;
   }
 
   #memory-management-screen .memory-toolbar-btn,
