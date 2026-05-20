@@ -2433,15 +2433,8 @@ body.quick-chat-window .quick-chat-input {
   flex: 1;
   min-width: 0;
   display: none;
-  --today-plan-accent-rgb: 14, 165, 233;
-  --today-plan-accent: #0ea5e9;
-  --today-plan-soft-rgb: 125, 211, 252;
-  background:
-    radial-gradient(circle at top left, rgba(125, 211, 252, 0.18), transparent 26%),
-    radial-gradient(circle at 82% 4%, rgba(135, 195, 255, 0.16), transparent 18%),
-    linear-gradient(180deg, rgba(14, 165, 233, 0.06), rgba(14, 165, 233, 0.015) 26%, transparent 46%),
-    linear-gradient(135deg, rgba(240, 247, 255, 0.96), rgba(248, 252, 255, 0.9) 38%, rgba(255, 255, 255, 0.98) 100%),
-    var(--bg-primary);
+  --today-plan-accent: var(--minimal-text-soft, var(--text-secondary));
+  background: var(--minimal-bg, var(--bg-primary));
 }
 
 #today-plan-screen.active {
@@ -2470,13 +2463,10 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-board,
 .today-plan-delivery-card {
   position: relative;
-  border-radius: 28px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.86), transparent 34%),
-    linear-gradient(180deg, rgba(244, 251, 255, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.96);
-  box-shadow: 0 28px 54px rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  box-shadow: var(--minimal-shadow, 0 8px 24px rgba(15, 23, 42, 0.05));
 }
 
 .today-plan-hero-main {
@@ -2485,13 +2475,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-hero-main::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 80% 18%, rgba(var(--today-plan-soft-rgb), 0.2), transparent 18%),
-    radial-gradient(circle at 12% 12%, rgba(var(--today-plan-accent-rgb), 0.13), transparent 26%);
-  pointer-events: none;
+  content: none;
+  display: none;
 }
 
 .today-plan-hero-side {
@@ -2499,10 +2484,7 @@ body.quick-chat-window .quick-chat-input {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.84), transparent 34%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.96);
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-page-actions,
@@ -2532,7 +2514,7 @@ body.quick-chat-window .quick-chat-input {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(var(--today-plan-accent-rgb), 0.9);
+  color: var(--minimal-text-muted, var(--text-muted));
 }
 
 .today-plan-hero-title-row {
@@ -2547,7 +2529,7 @@ body.quick-chat-window .quick-chat-input {
   margin: 0;
   font-size: 36px;
   line-height: 1.05;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
   position: relative;
   z-index: 1;
 }
@@ -2558,8 +2540,9 @@ body.quick-chat-window .quick-chat-input {
   height: 34px;
   padding: 0 14px;
   border-radius: 999px;
-  background: rgba(var(--today-plan-accent-rgb), 0.12);
-  color: var(--today-plan-accent);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-nav, rgba(248, 250, 252, 0.95));
+  color: var(--minimal-text-soft, var(--text-secondary));
   font-size: 13px;
   font-weight: 700;
   position: relative;
@@ -2606,9 +2589,9 @@ body.quick-chat-window .quick-chat-input {
   padding: 0 12px;
   border-radius: 999px;
   font-size: 12px;
-  color: var(--text-secondary);
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
-  background: rgba(255, 255, 255, 0.86);
+  color: var(--minimal-text-soft, var(--text-secondary));
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-overview-summary {
@@ -2622,13 +2605,10 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-overview-card {
-  border-radius: 20px;
+  border-radius: 10px;
   padding: 16px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.82), transparent 34%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.96), rgba(255, 255, 255, 0.92)),
-    rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-overview-card span {
@@ -2701,14 +2681,11 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-empty-card {
   width: min(820px, 100%);
-  border-radius: 28px;
+  border-radius: 12px;
   padding: 28px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.84), transparent 36%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.94);
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  box-shadow: var(--minimal-shadow, 0 8px 24px rgba(15, 23, 42, 0.05));
 }
 
 .today-plan-empty-kicker {
@@ -2716,14 +2693,14 @@ body.quick-chat-window .quick-chat-input {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(var(--today-plan-accent-rgb), 0.92);
+  color: var(--minimal-text-muted, var(--text-muted));
   margin-bottom: 10px;
 }
 
 .today-plan-empty-card h3 {
   margin: 0 0 10px;
   font-size: 30px;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .today-plan-empty-card p {
@@ -2740,10 +2717,10 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-empty-step {
-  border-radius: 20px;
+  border-radius: 10px;
   padding: 16px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-empty-step strong {
@@ -2753,8 +2730,8 @@ body.quick-chat-window .quick-chat-input {
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  background: rgba(var(--today-plan-accent-rgb), 0.1);
-  color: var(--today-plan-accent);
+  background: var(--minimal-nav, rgba(248, 250, 252, 0.95));
+  color: var(--minimal-text-soft, var(--text-secondary));
   margin-bottom: 12px;
 }
 
@@ -2786,14 +2763,11 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-item-card,
 .today-plan-surface-panel {
   position: relative;
-  border-radius: 26px;
+  border-radius: 12px;
   padding: 22px 24px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.84), transparent 34%),
-    linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.94);
-  box-shadow: 0 24px 46px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  box-shadow: var(--minimal-shadow, 0 8px 24px rgba(15, 23, 42, 0.05));
 }
 
 .today-plan-item-header {
@@ -2813,8 +2787,8 @@ body.quick-chat-window .quick-chat-input {
   border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--today-plan-accent);
-  background: rgba(var(--today-plan-accent-rgb), 0.12);
+  color: var(--minimal-text-soft, var(--text-secondary));
+  background: var(--minimal-nav, rgba(248, 250, 252, 0.95));
 }
 
 .today-plan-item-header-main {
@@ -2845,9 +2819,9 @@ body.quick-chat-window .quick-chat-input {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-muted);
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
-  background: rgba(255, 255, 255, 0.88);
+  color: var(--minimal-text-muted, var(--text-muted));
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-input,
@@ -2855,9 +2829,9 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-select,
 .today-plan-association-search {
   width: 100%;
-  border-radius: 16px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.14);
-  background: rgba(255, 255, 255, 0.94);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   color: var(--text-primary);
   padding: 13px 15px;
   font: inherit;
@@ -2868,7 +2842,7 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-textarea,
 .today-plan-static-title,
 .today-plan-static-detail {
-  border-radius: 14px;
+  border-radius: 10px;
   padding: 11px 13px;
 }
 
@@ -2877,8 +2851,8 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-select:focus,
 .today-plan-association-search:focus {
   outline: none;
-  border-color: rgba(var(--today-plan-accent-rgb), 0.34);
-  box-shadow: 0 0 0 4px rgba(var(--today-plan-accent-rgb), 0.12);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  box-shadow: 0 0 0 3px rgba(32, 35, 39, 0.08);
 }
 
 .today-plan-input {
@@ -2896,9 +2870,9 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-static-title,
 .today-plan-static-detail {
   width: 100%;
-  border-radius: 16px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
-  background: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   color: var(--text-primary);
   padding: 13px 15px;
   line-height: 1.7;
@@ -2920,10 +2894,10 @@ body.quick-chat-window .quick-chat-input {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.14);
-  background: rgba(255, 255, 255, 0.92);
-  color: rgba(14, 165, 233, 0.78);
+  border-radius: 9px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text-muted, var(--text-muted));
 }
 
 .today-plan-board-icon-btn .icon,
@@ -2934,9 +2908,9 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-board-icon-btn:hover,
 .today-plan-item-icon-btn:hover {
-  background: rgba(240, 247, 255, 0.96);
-  border-color: rgba(var(--today-plan-accent-rgb), 0.24);
-  color: var(--today-plan-accent);
+  background: #f8f9fb;
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.26));
+  color: var(--minimal-text, var(--text-primary));
 }
 
 .today-plan-item-icon-btn.danger {
@@ -2971,13 +2945,10 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-summary-pill {
-  border-radius: 18px;
+  border-radius: 10px;
   padding: 14px 16px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.8), transparent 34%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.96), rgba(255, 255, 255, 0.92)),
-    rgba(246, 250, 255, 0.92);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-summary-pill strong {
@@ -2995,7 +2966,7 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-section {
   margin-top: 16px;
-  border-top: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
+  border-top: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
   padding-top: 16px;
 }
 
@@ -3024,10 +2995,10 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-empty-inline {
   padding: 16px 18px;
-  border-radius: 18px;
-  border: 1px dashed rgba(var(--today-plan-accent-rgb), 0.18);
+  border-radius: 10px;
+  border: 1px dashed var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-task-block,
@@ -3042,14 +3013,11 @@ body.quick-chat-window .quick-chat-input {
 .today-plan-chat-card,
 .today-plan-service-card,
 .today-plan-conversation-card {
-  border-radius: 20px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.8), transparent 34%),
-    linear-gradient(180deg, rgba(246, 250, 255, 0.96), rgba(255, 255, 255, 0.92)),
-    rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   padding: 16px 18px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: none;
 }
 
 .today-plan-task-head,
@@ -3085,8 +3053,8 @@ body.quick-chat-window .quick-chat-input {
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 12px;
-  color: var(--text-secondary);
-  background: rgba(var(--today-plan-accent-rgb), 0.08);
+  color: var(--minimal-text-soft, var(--text-secondary));
+  background: var(--minimal-nav, rgba(248, 250, 252, 0.95));
 }
 
 .today-plan-description,
@@ -3102,12 +3070,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-action-item {
-  border-radius: 18px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.12);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.8), transparent 34%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.94), rgba(255, 255, 255, 0.92)),
-    rgba(246, 250, 255, 0.92);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   padding: 14px 16px;
 }
 
@@ -3159,24 +3124,20 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-chat-message {
-  border-radius: 14px;
+  border-radius: 10px;
   padding: 12px 14px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-chat-message.from-me {
-  border-color: rgba(37, 99, 235, 0.14);
-  background:
-    linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.92)),
-    rgba(239, 246, 255, 0.92);
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: #fbfbfc;
 }
 
 .today-plan-chat-message.bot {
-  border-color: rgba(245, 158, 11, 0.16);
-  background:
-    linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 255, 255, 0.92)),
-    rgba(255, 251, 235, 0.92);
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: #fbfbfc;
 }
 
 .today-plan-chat-message-head {
@@ -3198,12 +3159,9 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-branch-card,
 .today-plan-commit-card {
-  border-radius: 18px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.8), transparent 34%),
-    linear-gradient(180deg, rgba(247, 250, 255, 0.96), rgba(255, 255, 255, 0.92)),
-    rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   padding: 14px 16px;
 }
 
@@ -3219,8 +3177,8 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-commit-card:hover {
   transform: translateY(-1px);
-  border-color: rgba(var(--today-plan-accent-rgb), 0.28);
-  box-shadow: 0 16px 28px rgba(var(--today-plan-accent-rgb), 0.1);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.07);
 }
 
 .today-plan-commit-subject {
@@ -3261,12 +3219,9 @@ body.quick-chat-window .quick-chat-input {
   width: min(1200px, calc(100vw - 48px));
   max-height: calc(100vh - 56px);
   margin: 28px auto;
-  border-radius: 28px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.14);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.84), transparent 32%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.96), rgba(255, 255, 255, 0.96)),
-    rgba(255, 255, 255, 0.96);
+  border-radius: 14px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   box-shadow: 0 34px 68px rgba(15, 23, 42, 0.22);
   display: flex;
   flex-direction: column;
@@ -3285,7 +3240,7 @@ body.quick-chat-window .quick-chat-input {
   gap: 16px;
   align-items: flex-start;
   padding: 22px 24px 18px;
-  border-bottom: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  border-bottom: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
 }
 
 .today-plan-switcher-list {
@@ -3303,25 +3258,23 @@ body.quick-chat-window .quick-chat-input {
   cursor: pointer;
   font: inherit;
   color: inherit;
-  border-radius: 20px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.8), transparent 34%),
-    linear-gradient(180deg, rgba(246, 250, 255, 0.97), rgba(255, 255, 255, 0.92)),
-    rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   padding: 16px 18px;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .today-plan-switcher-item:hover {
   transform: translateY(-1px);
-  border-color: rgba(var(--today-plan-accent-rgb), 0.24);
-  box-shadow: 0 18px 30px rgba(var(--today-plan-accent-rgb), 0.08);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.07);
 }
 
 .today-plan-switcher-item.active {
-  border-color: rgba(var(--today-plan-accent-rgb), 0.28);
-  box-shadow: 0 18px 30px rgba(var(--today-plan-accent-rgb), 0.1);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: var(--minimal-nav-strong, #e7e9ec);
+  box-shadow: inset 3px 0 0 var(--minimal-text-soft, #575f6a);
 }
 
 .today-plan-switcher-item-head {
@@ -3353,9 +3306,9 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-association-column {
   min-width: 0;
-  border-radius: 20px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background: rgba(255, 255, 255, 0.84);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -3377,11 +3330,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-option-card {
-  border-radius: 16px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.78), transparent 34%),
-    linear-gradient(180deg, rgba(246, 250, 255, 0.92), rgba(255, 255, 255, 0.88));
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   padding: 12px 14px;
 }
 
@@ -3392,8 +3343,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-service-option-card.active {
-  border-color: rgba(var(--today-plan-accent-rgb), 0.22);
-  box-shadow: 0 16px 30px rgba(var(--today-plan-accent-rgb), 0.08);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: var(--minimal-nav-strong, #e7e9ec);
+  box-shadow: inset 3px 0 0 var(--minimal-text-soft, #575f6a);
 }
 
 .today-plan-service-option-head {
@@ -3407,9 +3359,9 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-service-branch-panel {
   margin-left: 30px;
-  border-radius: 14px;
-  border: 1px dashed rgba(var(--today-plan-accent-rgb), 0.22);
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.7), rgba(255, 255, 255, 0.88));
+  border-radius: 10px;
+  border: 1px dashed var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  background: #fbfbfc;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -3435,9 +3387,9 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-service-branch-row {
   padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background: rgba(255, 255, 255, 0.82);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-chat-group-btn {
@@ -3455,17 +3407,14 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-chat-group-btn:hover {
   transform: translateY(-1px);
-  border-color: rgba(var(--today-plan-accent-rgb), 0.22);
-  box-shadow: 0 14px 28px rgba(var(--today-plan-accent-rgb), 0.08);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.07);
 }
 
 .today-plan-chat-group-btn.active {
-  border-color: rgba(var(--today-plan-accent-rgb), 0.3);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.82), transparent 34%),
-    linear-gradient(180deg, rgba(240, 247, 255, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(243, 249, 255, 0.94);
-  box-shadow: 0 18px 30px rgba(var(--today-plan-accent-rgb), 0.12);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: var(--minimal-nav-strong, #e7e9ec);
+  box-shadow: inset 3px 0 0 var(--minimal-text-soft, #575f6a);
 }
 
 .today-plan-chat-group-btn .today-plan-description {
@@ -3515,12 +3464,9 @@ body.quick-chat-window .quick-chat-input {
   width: min(760px, calc(100% - 24px));
   max-height: calc(100% - 12px);
   cursor: default;
-  border-radius: 24px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.16);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.84), transparent 32%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.98), rgba(255, 255, 255, 0.96)),
-    rgba(255, 255, 255, 0.96);
+  border-radius: 14px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   box-shadow: 0 28px 56px rgba(15, 23, 42, 0.2);
   display: flex;
   flex-direction: column;
@@ -3533,7 +3479,7 @@ body.quick-chat-window .quick-chat-input {
   gap: 16px;
   align-items: flex-start;
   padding: 18px 20px 14px;
-  border-bottom: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  border-bottom: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
 }
 
 .today-plan-chat-picker-toolbar {
@@ -3542,8 +3488,8 @@ body.quick-chat-window .quick-chat-input {
   gap: 12px;
   align-items: center;
   padding: 14px 20px;
-  border-bottom: 1px solid rgba(var(--today-plan-accent-rgb), 0.08);
-  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: #fbfbfc;
 }
 
 .today-plan-chat-picker-list {
@@ -3552,9 +3498,7 @@ body.quick-chat-window .quick-chat-input {
   gap: 10px;
   padding: 16px 20px 20px;
   overflow: auto;
-  background:
-    linear-gradient(180deg, rgba(244, 249, 255, 0.76), rgba(255, 255, 255, 0.84)),
-    rgba(255, 255, 255, 0.76);
+  background: var(--minimal-surface, #ffffff);
 }
 
 .today-plan-chat-picker-message {
@@ -3570,48 +3514,37 @@ body.quick-chat-window .quick-chat-input {
   gap: 12px;
   align-items: flex-start;
   padding: 12px 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
-  background: rgba(255, 255, 255, 0.94);
+  border-radius: 10px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
 .today-plan-chat-picker-message:hover {
   transform: translateY(-1px);
-  border-color: rgba(var(--today-plan-accent-rgb), 0.22);
-  box-shadow: 0 14px 28px rgba(var(--today-plan-accent-rgb), 0.08);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.07);
 }
 
 .today-plan-chat-picker-message.selected {
-  border-color: rgba(var(--today-plan-accent-rgb), 0.52);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.78), transparent 34%),
-    linear-gradient(180deg, rgba(232, 244, 255, 0.98), rgba(255, 255, 255, 0.95)),
-    rgba(224, 238, 255, 0.96);
-  box-shadow:
-    0 0 0 2px rgba(37, 99, 235, 0.26),
-    0 18px 32px rgba(37, 99, 235, 0.16);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: var(--minimal-nav-strong, #e7e9ec);
+  box-shadow: inset 3px 0 0 var(--minimal-text-soft, #575f6a);
 }
 
 .today-plan-chat-picker-message.from-me {
-  border-color: rgba(37, 99, 235, 0.14);
-  background:
-    linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(239, 246, 255, 0.92);
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: #fbfbfc;
 }
 
 .today-plan-chat-picker-message.bot {
-  border-color: rgba(245, 158, 11, 0.16);
-  background:
-    linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(255, 251, 235, 0.92);
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: #fbfbfc;
 }
 
 .today-plan-chat-picker-message.selected.from-me,
 .today-plan-chat-picker-message.selected.bot {
-  box-shadow:
-    0 0 0 2px rgba(37, 99, 235, 0.26),
-    0 18px 32px rgba(37, 99, 235, 0.16);
+  box-shadow: inset 3px 0 0 var(--minimal-text-soft, #575f6a);
 }
 
 .today-plan-chat-picker-check {
@@ -3622,8 +3555,8 @@ body.quick-chat-window .quick-chat-input {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(var(--today-plan-accent-rgb), 0.2);
-  background: rgba(var(--today-plan-accent-rgb), 0.08);
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-nav, rgba(248, 250, 252, 0.95));
   color: transparent;
   font-size: 12px;
   font-weight: 700;
@@ -3632,9 +3565,9 @@ body.quick-chat-window .quick-chat-input {
 
 .today-plan-chat-picker-message.selected .today-plan-chat-picker-check {
   border-color: transparent;
-  background: var(--today-plan-accent);
+  background: var(--minimal-text, #202327);
   color: #ffffff;
-  box-shadow: 0 8px 18px rgba(var(--today-plan-accent-rgb), 0.24);
+  box-shadow: none;
 }
 
 .today-plan-chat-picker-message.selected .today-plan-chat-picker-meta {
@@ -3674,7 +3607,7 @@ body.quick-chat-window .quick-chat-input {
   justify-content: flex-end;
   gap: 10px;
   padding: 16px 24px 24px;
-  border-top: 1px solid rgba(var(--today-plan-accent-rgb), 0.1);
+  border-top: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
 }
 
 .today-plan-commit-window {
@@ -6475,65 +6408,65 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-view {
-  border-color: rgba(8, 145, 178, 0.18);
-  background: linear-gradient(180deg, rgba(236, 254, 255, 0.98), rgba(207, 250, 254, 0.92));
-  color: #0f766e;
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text, var(--text-primary));
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-view:hover {
-  border-color: rgba(14, 116, 144, 0.28);
-  background: linear-gradient(180deg, rgba(207, 250, 254, 0.98), rgba(165, 243, 252, 0.9));
-  box-shadow: 0 8px 18px rgba(6, 182, 212, 0.14);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  background: #f8f9fb;
+  box-shadow: none;
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-continue {
-  border-color: rgba(249, 115, 22, 0.18);
-  background: linear-gradient(180deg, rgba(255, 247, 237, 0.98), rgba(254, 215, 170, 0.92));
-  color: #c2410c;
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text, var(--text-primary));
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-continue:hover {
-  border-color: rgba(234, 88, 12, 0.28);
-  background: linear-gradient(180deg, rgba(254, 215, 170, 0.98), rgba(253, 186, 116, 0.9));
-  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.16);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  background: #f8f9fb;
+  box-shadow: none;
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-create,
 .today-plan-action-btn.btn-primary.today-plan-btn-add {
-  border-color: rgba(59, 130, 246, 0.18);
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(219, 234, 254, 0.94));
-  color: #1d4ed8;
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text, var(--text-primary));
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-create:hover,
 .today-plan-action-btn.btn-primary.today-plan-btn-add:hover {
-  border-color: rgba(37, 99, 235, 0.28);
-  background: linear-gradient(180deg, rgba(219, 234, 254, 0.98), rgba(191, 219, 254, 0.92));
-  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.14);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  background: #f8f9fb;
+  box-shadow: none;
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-send {
-  border-color: rgba(5, 150, 105, 0.18);
-  background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(209, 250, 229, 0.94));
-  color: #047857;
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text, var(--text-primary));
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-send:hover {
-  border-color: rgba(5, 150, 105, 0.28);
-  background: linear-gradient(180deg, rgba(209, 250, 229, 0.98), rgba(167, 243, 208, 0.92));
-  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.14);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  background: #f8f9fb;
+  box-shadow: none;
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-complete {
-  border-color: rgba(22, 163, 74, 0.18);
-  background: linear-gradient(180deg, rgba(240, 253, 244, 0.98), rgba(220, 252, 231, 0.94));
-  color: #15803d;
+  border-color: var(--minimal-line, rgba(148, 163, 184, 0.16));
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text, var(--text-primary));
 }
 
 .today-plan-action-btn.btn-primary.today-plan-btn-complete:hover {
-  border-color: rgba(21, 128, 61, 0.28);
-  background: linear-gradient(180deg, rgba(220, 252, 231, 0.98), rgba(187, 247, 208, 0.92));
-  box-shadow: 0 8px 18px rgba(34, 197, 94, 0.14);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  background: #f8f9fb;
+  box-shadow: none;
 }
 
 .workflow-definition-hero-actions .btn-ghost,
@@ -16167,8 +16100,8 @@ body::after {
   --minimal-text: #202327;
   --minimal-text-soft: #575f6a;
   --minimal-text-muted: #8a929d;
-  --minimal-accent: #2d6cdf;
-  --minimal-accent-soft: #e8f0ff;
+  --minimal-accent: #575f6a;
+  --minimal-accent-soft: #e7e9ec;
   --minimal-danger: #dc2626;
   --minimal-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.05);
   background: var(--minimal-bg);
@@ -16517,7 +16450,7 @@ body::after,
 #sidebar .list-item.active .item-icon,
 #memory-management-screen .memory-groups-list .list-item.active .item-icon,
 #configuration-screen .configuration-nav-item.active .configuration-nav-icon {
-  border-color: #c8d7f6;
+  border-color: var(--minimal-line-strong);
   background: var(--minimal-accent-soft);
   color: var(--minimal-accent);
   box-shadow: none;
@@ -16758,9 +16691,9 @@ body::after,
 }
 
 #input-wrap:focus-within {
-  border-color: #a9bce8;
+  border-color: var(--minimal-line-strong);
   background: var(--minimal-surface);
-  box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+  box-shadow: 0 0 0 3px rgba(32, 35, 39, 0.08);
 }
 
 #message-input {
@@ -16933,8 +16866,8 @@ body::after,
 #configuration-screen .configuration-main input:focus,
 #configuration-screen .configuration-main select:focus,
 #configuration-screen .configuration-main textarea:focus {
-  border-color: #a9bce8;
-  box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+  border-color: var(--minimal-line-strong);
+  box-shadow: 0 0 0 3px rgba(32, 35, 39, 0.08);
   outline: none;
 }
 
@@ -16968,8 +16901,8 @@ body::after,
   --minimal-text: #202327;
   --minimal-text-soft: #575f6a;
   --minimal-text-muted: #8a929d;
-  --minimal-accent: #2d6cdf;
-  --minimal-accent-soft: #e8f0ff;
+  --minimal-accent: #575f6a;
+  --minimal-accent-soft: #e7e9ec;
   --minimal-danger: #dc2626;
   --minimal-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 20px 60px rgba(16, 24, 40, 0.18);
 }
@@ -17177,7 +17110,7 @@ body.quick-chat-window .quick-chat-title-wrap h2 {
 .today-plan-chat-group-btn.active,
 .today-plan-chat-picker-message.selected,
 .today-plan-service-option-card.active {
-  border-color: #c8d7f6;
+  border-color: var(--minimal-line-strong);
   background: var(--minimal-accent-soft);
   box-shadow: inset 3px 0 0 var(--minimal-accent);
   transform: none;
@@ -17264,8 +17197,8 @@ body.quick-chat-window .quick-chat-title-wrap h2 {
 .workflow-wizard-select:focus,
 #memory-management-screen .memory-field select:focus,
 #memory-management-screen .memory-field textarea:focus {
-  border-color: #a9bce8;
-  box-shadow: 0 0 0 3px rgba(45, 108, 223, 0.12);
+  border-color: var(--minimal-line-strong);
+  box-shadow: 0 0 0 3px rgba(32, 35, 39, 0.08);
   outline: none;
   transform: none;
 }
