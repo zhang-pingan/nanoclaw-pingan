@@ -340,11 +340,12 @@ body.quick-chat-window #app {
 }
 
 .primary-sidebar-header {
-  flex: 0 0 88px;
+  flex: none;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   height: 88px;
+  min-height: 88px;
   padding-top: 10px;
   border-bottom: 1px solid var(--border);
 }

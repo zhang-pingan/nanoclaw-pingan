@@ -217,6 +217,7 @@ var sidebar = document.getElementById("sidebar");
 var sidebarCollapse = document.getElementById("sidebar-collapse");
 var primaryNav = document.getElementById("primary-nav");
 var primaryNavItems = Array.from(document.querySelectorAll(".primary-nav-item"));
+var primaryNavScrollTimer = null;
 var groupsList = document.getElementById("groups-list");
 var refreshGroupsBtn = document.getElementById("refresh-groups");
 var resetAllSessionsBtn = document.getElementById("reset-all-sessions");
@@ -22015,6 +22016,15 @@ warmWorkflowCreateOptions();
 
 // --- Event listeners ---
 if (primaryNav) {
+  primaryNav.addEventListener("scroll", () => {
+    primaryNav.classList.add("is-scrolling");
+    if (primaryNavScrollTimer) clearTimeout(primaryNavScrollTimer);
+    primaryNavScrollTimer = setTimeout(() => {
+      primaryNav.classList.remove("is-scrolling");
+      primaryNavScrollTimer = null;
+    }, 700);
+  });
+
   if (todayPlanVisible) {
     primaryNavItems.forEach((item) => {
       item.classList.toggle("active", false);
