@@ -2047,6 +2047,37 @@ body.quick-chat-window #app {
   box-shadow: 0 0 0 3px rgba(32, 35, 39, 0.08);
 }
 
+.workbench-comment-composer .btn-primary {
+  align-self: flex-end;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  border-radius: 9px;
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text, var(--text-primary));
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.workbench-comment-composer .btn-primary:hover {
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.28));
+  background: #f8f9fb;
+  color: var(--minimal-text, var(--text-primary));
+  box-shadow: none;
+  transform: none;
+}
+
+.workbench-comment-composer .btn-primary:active {
+  transform: translateY(1px);
+}
+
+.workbench-comment-composer .btn-primary:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .workbench-retry-composer {
   margin-top: 14px;
   display: flex;
