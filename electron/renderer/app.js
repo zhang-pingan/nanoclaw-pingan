@@ -2160,13 +2160,15 @@ function openSchedulersPanel() {
   if (knowledgeJobsPanel) {
     knowledgeJobsPanel.classList.remove("open");
   }
-  agentStatusPanel.classList.remove("open");
-  if (agentStatusInterval) {
-    clearInterval(agentStatusInterval);
-    agentStatusInterval = null;
-  }
+  closeAgentStatusPanel();
   schedulersPanel.classList.add("open");
+  schedulersPanel.setAttribute("aria-hidden", "false");
   loadSchedulers();
+}
+
+function closeSchedulersPanel() {
+  schedulersPanel.classList.remove("open");
+  schedulersPanel.setAttribute("aria-hidden", "true");
 }
 
 function openAgentStatusPanel() {
@@ -2174,21 +2176,27 @@ function openAgentStatusPanel() {
   if (knowledgeJobsPanel) {
     knowledgeJobsPanel.classList.remove("open");
   }
-  schedulersPanel.classList.remove("open");
+  closeSchedulersPanel();
   agentStatusPanel.classList.add("open");
+  agentStatusPanel.setAttribute("aria-hidden", "false");
   loadAgentStatus();
   if (agentStatusInterval) clearInterval(agentStatusInterval);
   agentStatusInterval = setInterval(updateAgentDurations, 1000);
 }
 
-function openKnowledgeJobsPanel() {
-  closeKnowledgeImportMenu();
-  schedulersPanel.classList.remove("open");
+function closeAgentStatusPanel() {
   agentStatusPanel.classList.remove("open");
+  agentStatusPanel.setAttribute("aria-hidden", "true");
   if (agentStatusInterval) {
     clearInterval(agentStatusInterval);
     agentStatusInterval = null;
   }
+}
+
+function openKnowledgeJobsPanel() {
+  closeKnowledgeImportMenu();
+  closeSchedulersPanel();
+  closeAgentStatusPanel();
   if (knowledgeJobsPanel) {
     knowledgeJobsPanel.classList.add("open");
   }
@@ -22721,14 +22729,14 @@ if (resetAllSessionsBtn) {
 }
 openSchedulersBtn.addEventListener("click", () => {
   if (schedulersPanel.classList.contains("open")) {
-    schedulersPanel.classList.remove("open");
+    closeSchedulersPanel();
     return;
   }
   openSchedulersPanel();
 });
 deleteAllSchedulersBtn.addEventListener("click", deleteAllSchedulers);
 closeSchedulersBtn.addEventListener("click", () => {
-  schedulersPanel.classList.remove("open");
+  closeSchedulersPanel();
 });
 if (openKnowledgeJobsBtn) {
   openKnowledgeJobsBtn.addEventListener("click", () => {
@@ -22751,21 +22759,13 @@ if (closeKnowledgeJobsBtn) {
 }
 openAgentStatusBtn.addEventListener("click", () => {
   if (agentStatusPanel.classList.contains("open")) {
-    agentStatusPanel.classList.remove("open");
-    if (agentStatusInterval) {
-      clearInterval(agentStatusInterval);
-      agentStatusInterval = null;
-    }
+    closeAgentStatusPanel();
     return;
   }
   openAgentStatusPanel();
 });
 closeAgentStatusBtn.addEventListener("click", () => {
-  agentStatusPanel.classList.remove("open");
-  if (agentStatusInterval) {
-    clearInterval(agentStatusInterval);
-    agentStatusInterval = null;
-  }
+  closeAgentStatusPanel();
 });
 sendBtn.addEventListener("click", () => {
   sendMessage(messageInput.value);
@@ -23098,6 +23098,16 @@ document.addEventListener("keydown", (e) => {
     closeTodayPlanCommitDialog();
     return;
   }
+  if (e.key === "Escape" && schedulersPanel.classList.contains("open")) {
+    e.preventDefault();
+    closeSchedulersPanel();
+    return;
+  }
+  if (e.key === "Escape" && agentStatusPanel.classList.contains("open")) {
+    e.preventDefault();
+    closeAgentStatusPanel();
+    return;
+  }
   if (e.key === "Escape" && mentionPickerVisible) {
     hideMentionPicker();
     return;
@@ -23109,7 +23119,7 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "1") {
     e.preventDefault();
     if (schedulersPanel.classList.contains("open")) {
-      schedulersPanel.classList.remove("open");
+      closeSchedulersPanel();
     } else {
       openSchedulersPanel();
     }
@@ -23119,11 +23129,7 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "2") {
     e.preventDefault();
     if (agentStatusPanel.classList.contains("open")) {
-      agentStatusPanel.classList.remove("open");
-      if (agentStatusInterval) {
-        clearInterval(agentStatusInterval);
-        agentStatusInterval = null;
-      }
+      closeAgentStatusPanel();
     } else {
       openAgentStatusPanel();
     }

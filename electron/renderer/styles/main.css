@@ -16955,11 +16955,315 @@ body.quick-chat-window .quick-chat-title-wrap h2 {
   box-shadow: var(--minimal-shadow);
 }
 
+#schedulers-panel,
+#agent-status-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100%;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--minimal-line);
+  background: var(--minimal-surface);
+  box-shadow: -16px 0 40px rgba(16, 24, 40, 0.12);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: panelSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#schedulers-panel.open,
+#agent-status-panel.open {
+  display: flex;
+}
+
+.utility-panel-window {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--minimal-surface);
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-status-panel-window {
+  width: 100%;
+}
+
+.schedulers-header,
+.agent-status-header {
+  flex-shrink: 0;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--minimal-line);
+  background: #fbfbfc;
+  color: var(--minimal-text);
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.schedulers-header button,
+.agent-status-header button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--minimal-line);
+  border-radius: 9px;
+  background: var(--minimal-surface);
+  color: var(--minimal-text-soft);
+  box-shadow: none;
+}
+
+.schedulers-header button:hover:not(:disabled),
+.agent-status-header button:hover:not(:disabled) {
+  border-color: var(--minimal-line-strong);
+  background: #f8f9fb;
+  color: var(--minimal-text);
+  transform: none;
+  box-shadow: none;
+}
+
+.schedulers-header button.danger,
+#delete-all-schedulers {
+  color: var(--minimal-danger);
+}
+
+.schedulers-header button.danger:hover:not(:disabled),
+#delete-all-schedulers:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fef2f2;
+  color: var(--minimal-danger);
+}
+
+#schedulers-list,
+#agent-status-list {
+  min-height: 180px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--minimal-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--minimal-line-strong) transparent;
+}
+
+#schedulers-list::-webkit-scrollbar,
+#agent-status-list::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  opacity: 1;
+}
+
+#schedulers-list::-webkit-scrollbar-thumb,
+#agent-status-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--minimal-line-strong);
+}
+
+.scheduler-group-header {
+  padding: 12px 8px 6px;
+  color: var(--minimal-text-muted);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scheduler-item,
+.agent-status-item {
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid var(--minimal-line);
+  border-radius: 10px;
+  background: var(--minimal-surface);
+  box-shadow: none;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.scheduler-item:last-child,
+.agent-status-item:last-child {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--minimal-line);
+}
+
+.scheduler-item:hover,
+.agent-status-item:hover {
+  border-color: var(--minimal-line-strong);
+  background: #f8f9fb;
+  box-shadow: none;
+}
+
+.scheduler-prompt,
+.agent-status-name {
+  color: var(--minimal-text);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.45;
+}
+
+.scheduler-meta,
+.agent-status-meta,
+.agent-status-time {
+  color: var(--minimal-text-muted);
+  font-size: 11px;
+}
+
+.scheduler-meta {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scheduler-status,
+.agent-status-type,
+.agent-status-workflow-count {
+  border: 1px solid var(--minimal-line);
+  border-radius: 999px;
+  background: var(--minimal-nav);
+  color: var(--minimal-text-soft);
+  padding: 2px 8px;
+  font-family: var(--font-sans);
+  font-weight: 680;
+}
+
+.scheduler-status.active,
+.agent-status-duration {
+  color: var(--minimal-text);
+}
+
+.scheduler-status.paused,
+.agent-status-pending,
+.agent-status-task-id {
+  color: var(--minimal-text-muted);
+}
+
+.scheduler-delete-btn {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--minimal-text-muted);
+}
+
+.scheduler-delete-btn:hover {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: #fef2f2;
+  color: var(--minimal-danger);
+  transform: none !important;
+}
+
+.schedulers-empty,
+.agent-status-empty {
+  margin: 12px;
+  padding: 34px 20px;
+  border: 1px solid var(--minimal-line);
+  border-radius: 10px;
+  background: #f8f9fb;
+  color: var(--minimal-text-muted);
+}
+
+.agent-status-item.is-stopping {
+  opacity: 1;
+  border-left: 1px solid var(--minimal-line-strong);
+  padding-left: 14px;
+  background: #f8f9fb;
+}
+
+.agent-status-item.is-stopping:hover {
+  background: #f8f9fb;
+}
+
+.agent-status-name {
+  margin-bottom: 2px;
+}
+
+.agent-status-dot.active {
+  background: #16a34a;
+  box-shadow: none;
+}
+
+.agent-status-dot.idle {
+  background: #d97706;
+  box-shadow: none;
+}
+
+.agent-status-sender {
+  color: var(--minimal-text);
+}
+
+.agent-status-content,
+.agent-status-prompt {
+  color: var(--minimal-text-soft);
+}
+
+#agent-status-panel .agent-trace-current,
+#agent-status-panel .agent-trace-diff,
+#agent-status-panel .agent-trace-preview,
+#agent-status-panel .agent-trace-preview-wrap .agent-trace-preview-header {
+  border-color: var(--minimal-line);
+  background: #f8f9fb;
+  color: var(--minimal-text-soft);
+  box-shadow: none;
+}
+
+#agent-status-panel .agent-trace-event-highlight {
+  border-color: var(--minimal-line);
+  background: #f8f9fb;
+  box-shadow: none;
+}
+
+#agent-status-panel .agent-trace-kind,
+#agent-status-panel .agent-trace-step,
+#agent-status-panel .agent-trace-disclosure summary {
+  color: var(--minimal-text-soft);
+}
+
+#agent-status-panel .agent-trace-file {
+  background: var(--minimal-nav);
+  color: var(--minimal-text-soft);
+}
+
+.agent-status-actions {
+  margin-top: 2px;
+}
+
+#agent-status-panel .agent-stop-btn,
+#agent-status-panel .panel-action-btn.stop {
+  min-height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--minimal-line);
+  background: var(--minimal-surface);
+  color: var(--minimal-text);
+  box-shadow: none;
+  font-weight: 680;
+}
+
+#agent-status-panel .agent-stop-btn:hover:not(:disabled),
+#agent-status-panel .panel-action-btn.stop:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fef2f2;
+  color: var(--minimal-danger);
+  transform: none;
+  box-shadow: none;
+}
+
 @media (max-width: 760px) {
   .app-prompt-overlay,
   .workflow-wizard-overlay,
-  .quick-chat-overlay {
-    padding: 14px;
+  .quick-chat-overlay,
+  #schedulers-panel,
+  #agent-status-panel {
+    width: min(380px, 100vw);
+    padding: 0;
   }
 
   .workflow-wizard-header,
@@ -16970,5 +17274,22 @@ body.quick-chat-window .quick-chat-title-wrap h2 {
   .today-plan-commit-header {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .utility-panel-window,
+  .agent-status-panel-window {
+    width: 100%;
+    max-height: none;
+  }
+
+  .schedulers-header,
+  .agent-status-header {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  #schedulers-list,
+  #agent-status-list {
+    padding: 10px;
   }
 }
