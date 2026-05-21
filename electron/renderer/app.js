@@ -15602,12 +15602,10 @@ async function openWorkbenchCreateTaskModal() {
     <div class="workflow-wizard-modal workbench-create-modal">
       <div class="workflow-wizard-header workbench-create-header">
         <div class="workflow-wizard-header-copy">
-          <div class="workflow-wizard-kicker">Workbench</div>
           <div class="workflow-wizard-title-row">
             <div class="workflow-wizard-title">新建工作台任务</div>
-            <span class="workflow-wizard-header-badge">更精致的任务发起面板</span>
           </div>
-          <div class="workflow-wizard-header-desc">按流程、入口点与服务维度快速组织任务，右侧会实时显示当前配置摘要与校验状态。</div>
+          <div class="workflow-wizard-header-desc">选择流程、入口点和服务后补充必要信息，右侧实时展示当前配置和校验状态。</div>
         </div>
         <button type="button" class="workflow-wizard-action-btn workflow-wizard-close" id="workbench-create-close" title="关闭" aria-label="关闭">
           <span class="workflow-wizard-btn-icon" aria-hidden="true">
@@ -15615,45 +15613,8 @@ async function openWorkbenchCreateTaskModal() {
           </span>
         </button>
       </div>
-      <div class="workflow-wizard-steps" aria-hidden="true">
-        <div class="workflow-wizard-step is-active">
-          <span>01</span>
-          <strong>选择流程</strong>
-        </div>
-        <div class="workflow-wizard-step">
-          <span>02</span>
-          <strong>补充信息</strong>
-        </div>
-        <div class="workflow-wizard-step">
-          <span>03</span>
-          <strong>确认创建</strong>
-        </div>
-      </div>
       <div class="workflow-wizard-body workflow-wizard-body-split">
         <div class="workflow-wizard-main">
-          <div class="workflow-wizard-section workflow-wizard-section-hero">
-            <div class="workflow-wizard-hero-grid">
-              <div>
-                <div class="workflow-wizard-label">任务创建方式</div>
-                <div class="workflow-wizard-hero-title">从工作台直接发起标准流程</div>
-                <div class="workflow-wizard-hero-copy">适合需求规划、开发、测试等多阶段协作。切换流程后，表单会自动切换对应字段与规则。</div>
-              </div>
-              <div class="workflow-wizard-metrics">
-                <div class="workflow-wizard-metric">
-                  <span>可用流程</span>
-                  <strong>${workflowTypes.length}</strong>
-                </div>
-                <div class="workflow-wizard-metric">
-                  <span>服务数量</span>
-                  <strong>${services.length}</strong>
-                </div>
-                <div class="workflow-wizard-metric">
-                  <span>主群</span>
-                  <strong>${escapeHtml(mainGroup.name || mainGroup.jid || '默认')}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
           <div class="workflow-wizard-section">
             <div class="workflow-wizard-label">1. 任务名称</div>
             <div class="workflow-wizard-subsection">
@@ -15694,7 +15655,7 @@ async function openWorkbenchCreateTaskModal() {
       </div>
       <div class="workflow-wizard-footer workbench-create-footer">
         <div class="workflow-wizard-footer-meta">
-          <div class="workflow-wizard-footer-label">Ready to launch</div>
+          <div class="workflow-wizard-footer-label">创建状态</div>
           <div id="wb-footer-status" class="workflow-wizard-footer-status">请先完成基础配置</div>
         </div>
         <div class="workflow-wizard-footer-actions">
