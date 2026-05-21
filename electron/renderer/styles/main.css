@@ -17844,15 +17844,18 @@ textarea.workflow-wizard-input {
   min-width: 136px;
 }
 
-#wb-service-options.workflow-wizard-options,
-#wb-entry-options.workflow-wizard-options {
+#wb-type-select-wrap.workflow-wizard-segmented-wrap,
+#wb-entry-options.workflow-wizard-options,
+#wb-service-options.workflow-wizard-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, 190px);
+  justify-content: start;
   gap: 10px;
 }
 
-#wb-service-options .workflow-wizard-option,
-#wb-entry-options .workflow-wizard-option {
+#wb-type-select-wrap .workflow-wizard-option,
+#wb-entry-options .workflow-wizard-option,
+#wb-service-options .workflow-wizard-option {
   width: 100%;
   min-height: 54px;
   padding: 12px 14px;
@@ -17969,8 +17972,9 @@ textarea.workflow-wizard-input {
     padding: 14px;
   }
 
-  #wb-service-options.workflow-wizard-options,
-  #wb-entry-options.workflow-wizard-options {
+  #wb-type-select-wrap.workflow-wizard-segmented-wrap,
+  #wb-entry-options.workflow-wizard-options,
+  #wb-service-options.workflow-wizard-options {
     grid-template-columns: 1fr;
   }
 
