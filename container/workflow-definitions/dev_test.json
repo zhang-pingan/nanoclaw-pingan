@@ -564,7 +564,7 @@
               "delegate": {
                 "role": "test",
                 "skill": "test-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试用例文档：\n{{test_case_files}}\n说明：如提供测试用例文档，测试文档中的用例必须使用该文档内的用例；可基于需求、方案和实现额外补充必要用例。\naccess_token: {{access_token}}",
                 "handoff": {
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
@@ -590,7 +590,7 @@
               "delegate": {
                 "role": "test",
                 "skill": "test-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试用例文档：\n{{test_case_files}}\n说明：如提供测试用例文档，测试文档中的用例必须使用该文档内的用例；可基于需求、方案和实现额外补充必要用例。",
                 "handoff": {
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
@@ -655,7 +655,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "dev-bugfix",
-                "task_template": "流程类型：{{workflow_type}}\n请修复以下测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
+                "task_template": "流程类型：{{workflow_type}}\n请修复以下测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试用例文档：\n{{test_case_files}}\n说明：如提供测试用例文档，测试文档中的用例必须使用该文档内的用例；可基于需求、方案和实现额外补充必要用例。\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
                 "handoff": {
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "dev_test.dev.v1",
@@ -803,6 +803,12 @@
                 "plan"
               ]
             }
+          },
+          {
+            "key": "test_case_files",
+            "label": "测试用例文档",
+            "type": "file_uploads",
+            "helper_text": "可选。上传后会随流程保存到需求交付目录，测试阶段必须使用其中用例，可由测试 Agent 补充。"
           },
           {
             "key": "requirement_preset",
@@ -1390,7 +1396,7 @@
               "delegate": {
                 "role": "test",
                 "skill": "test-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\naccess_token: {{access_token}}",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试用例文档：\n{{test_case_files}}\n说明：如提供测试用例文档，测试文档中的用例必须使用该文档内的用例；可基于需求、方案和实现额外补充必要用例。\naccess_token: {{access_token}}",
                 "handoff": {
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
@@ -1416,7 +1422,7 @@
               "delegate": {
                 "role": "test",
                 "skill": "test-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试用例文档：\n{{test_case_files}}\n说明：如提供测试用例文档，测试文档中的用例必须使用该文档内的用例；可基于需求、方案和实现额外补充必要用例。",
                 "handoff": {
                   "input_schema": "workflow.test.input.v1",
                   "output_schema": "dev_test.testing.v1",
@@ -1481,7 +1487,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "dev-bugfix",
-                "task_template": "流程类型：{{workflow_type}}\n请修复以下测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
+                "task_template": "流程类型：{{workflow_type}}\n请修复以下测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试用例文档：\n{{test_case_files}}\n说明：如提供测试用例文档，测试文档中的用例必须使用该文档内的用例；可基于需求、方案和实现额外补充必要用例。\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
                 "handoff": {
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "dev_test.dev.v1",
@@ -1623,6 +1629,12 @@
                 "plan"
               ]
             }
+          },
+          {
+            "key": "test_case_files",
+            "label": "测试用例文档",
+            "type": "file_uploads",
+            "helper_text": "可选。上传后会随流程保存到需求交付目录，测试阶段必须使用其中用例，可由测试 Agent 补充。"
           },
           {
             "key": "requirement_preset",

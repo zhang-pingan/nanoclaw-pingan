@@ -22,8 +22,9 @@ import {
   setRegisteredGroup,
   storeChatMetadata,
   updateDelegation,
+  updateWorkflow,
 } from './db.js';
-import { PROJECT_ROOT } from './config.js';
+import { PROJECT_ROOT, WEB_UPLOADS_DIR } from './config.js';
 import type { RegisteredGroup } from './types.js';
 import {
   createNewWorkflow,
@@ -195,6 +196,10 @@ beforeEach(() => {
   stopWorkflowRuntimeForTest();
   _initTestDatabase();
   fs.rmSync(path.join(PROJECT_ROOT, 'projects', TEST_SERVICE), {
+    recursive: true,
+    force: true,
+  });
+  fs.rmSync(WEB_UPLOADS_DIR, {
     recursive: true,
     force: true,
   });
@@ -1136,6 +1141,136 @@ describe('workflow metadata and branch flow', () => {
       '原始需求描述：为用户昵称功能输出完整技术方案。',
     );
     expect(latest?.task).toContain('- /tmp/plan-input.md');
+  });
+
+  it('materializes uploaded test case files next to plan.md before testing', () => {
+    fs.mkdirSync(WEB_UPLOADS_DIR, { recursive: true });
+    const uploadedCaseFile = path.join(WEB_UPLOADS_DIR, 'nickname-cases.md');
+    fs.writeFileSync(uploadedCaseFile, '# 测试用例\n\n- TC-001 昵称长度限制\n');
+    writeDoc(
+      '2026-04-08_feature',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 支持昵称规则改造\n\n## 验收标准\n- 支持测试用例文档传递\n\n## 风险\n- 需要保留用户提供的用例口径\n`,
+    );
+    createWorkflow({
+      id: 'wf-plan-test-cases',
+      name: 'Plan with test cases',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        main_branch: '',
+        work_branch: '',
+        deliverable: '',
+        staging_base_branch: '',
+        staging_work_branch: '',
+        access_token: '',
+        requirement_description: '为昵称功能输出方案。',
+        requirement_files: [],
+        test_case_files: [uploadedCaseFile],
+      },
+      status: 'plan',
+      current_delegation_id: 'del-plan-test-cases',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-plan-test-cases',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'plan@g.us',
+      target_folder: 'web_plan',
+      task: 'plan task',
+      status: 'completed',
+      result: buildStructuredResult({
+        deliverable: '2026-04-08_feature',
+        main_branch: 'main',
+        work_branch: 'feature/test_20260408',
+        summary: '方案已完成',
+      }),
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-plan-test-cases',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+
+    onDelegationComplete('del-plan-test-cases');
+
+    const materializedAgentPath = `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/test-cases.md`;
+    const materializedHostPath = path.join(
+      ITERATION_DIR,
+      '2026-04-08_feature',
+      'test-cases.md',
+    );
+    expect(fs.readFileSync(materializedHostPath, 'utf-8')).toContain('TC-001');
+    const workflow = getWorkflow('wf-plan-test-cases');
+    expect(workflow?.context.test_case_files).toEqual([materializedAgentPath]);
+
+    const planExamDelegation = getDelegationsByWorkflow(
+      'wf-plan-test-cases',
+    ).find((item) => item.id !== 'del-plan-test-cases');
+    expect(planExamDelegation?.task).not.toContain('nickname-cases.md');
+
+    updateWorkflow('wf-plan-test-cases', {
+      status: 'testing_confirm',
+      current_delegation_id: '',
+    });
+    const testingConfirmWorkflow = getWorkflow('wf-plan-test-cases');
+    expect(testingConfirmWorkflow).toBeDefined();
+    testingConfirmWorkflow &&
+      initWorkflow({
+        registeredGroups: () => getAllRegisteredGroups(),
+        enqueueMessageCheck: () => {},
+      });
+    resumePendingInterruptForTest('wf-plan-test-cases', 'testing_confirm');
+
+    const testingDelegationId =
+      getWorkflow('wf-plan-test-cases')!.current_delegation_id;
+    const testingDelegation = getDelegationsByWorkflow(
+      'wf-plan-test-cases',
+    ).find((item) => item.id === testingDelegationId);
+    expect(testingDelegation?.task).toContain('测试用例文档：');
+    expect(testingDelegation?.task).toContain(`- ${materializedAgentPath}`);
+    expect(testingDelegation?.task).toContain('测试文档中的用例必须使用');
+  });
+
+  it('materializes uploaded test case files for existing dev entry requirements', () => {
+    fs.mkdirSync(WEB_UPLOADS_DIR, { recursive: true });
+    const uploadedCaseFile = path.join(
+      WEB_UPLOADS_DIR,
+      'existing-dev-cases.md',
+    );
+    fs.writeFileSync(uploadedCaseFile, '# 测试用例\n\n- TC-010 既有需求用例\n');
+    writeDoc(
+      '2026-04-08_feature',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\ndoc_type: plan\n---\n\n# Plan\n`,
+    );
+
+    const result = createNewWorkflow({
+      title: 'Existing dev entry with cases',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'dev',
+      workflowType: 'dev_test',
+      deliverable: '2026-04-08_feature',
+      testCaseFiles: [uploadedCaseFile],
+    });
+
+    expect(result.error).toBeUndefined();
+    const materializedAgentPath = `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/test-cases.md`;
+    const materializedHostPath = path.join(
+      ITERATION_DIR,
+      '2026-04-08_feature',
+      'test-cases.md',
+    );
+    expect(fs.readFileSync(materializedHostPath, 'utf-8')).toContain('TC-010');
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.context.test_case_files).toEqual([materializedAgentPath]);
   });
 
   it('keeps the current stage when evaluation evidence is missing', () => {

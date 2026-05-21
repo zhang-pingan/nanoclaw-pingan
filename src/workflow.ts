@@ -16,7 +16,7 @@ import YAML from 'yaml';
 
 import { buildInteractiveCard } from './card-builder.js';
 import { buildCardActionPayload } from './card-action-payload.js';
-import { PROJECT_ROOT } from './config.js';
+import { PROJECT_ROOT, WEB_UPLOADS_DIR } from './config.js';
 import {
   closePendingWorkflowInterrupts,
   createDelegation,
@@ -155,6 +155,7 @@ interface ParsedDelegationPayload {
   }>;
 }
 
+const TEST_CASE_FILE_BASENAME = 'test-cases';
 const WORKFLOW_CONTEXT_STAGE_RESULTS_KEY = 'stage_results';
 const WORKFLOW_CONTEXT_LATEST_DELEGATION_RESULT_KEY =
   'latest_delegation_result';
@@ -1415,6 +1416,146 @@ function readDeliverableDir(
   return metadata;
 }
 
+function isPathInsideDir(baseDir: string, targetPath: string): boolean {
+  const relative = path.relative(
+    path.resolve(baseDir),
+    path.resolve(targetPath),
+  );
+  return !!relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function mapProjectHostPathToAgentPath(filePath: string): string {
+  const relative = path.relative(
+    path.join(PROJECT_ROOT, 'projects'),
+    path.resolve(filePath),
+  );
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return filePath;
+  }
+  return `/workspace/projects/${relative.split(path.sep).join('/')}`;
+}
+
+function sanitizeProjectMarkdownFilename(
+  filePath: string,
+  index: number,
+): string {
+  const ext = path.extname(filePath).toLowerCase() || '.md';
+  const safeExt = /^\.[a-z0-9]{1,12}$/.test(ext) ? ext : '.md';
+  return `${TEST_CASE_FILE_BASENAME}${index === 0 ? '' : `-${index + 1}`}${safeExt}`;
+}
+
+function uniquePathInDir(dir: string, filename: string): string {
+  const parsed = path.parse(filename);
+  let candidate = path.join(dir, filename);
+  let index = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(dir, `${parsed.name}-${index}${parsed.ext}`);
+    index += 1;
+  }
+  return candidate;
+}
+
+function normalizeTestCaseFilePaths(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .filter(
+          (item): item is string =>
+            typeof item === 'string' && item.trim().length > 0,
+        )
+        .map((item) => item.trim())
+    : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter((item) => item.trim().length > 0)));
+}
+
+function listDeliverableTestCaseFiles(
+  service: string,
+  deliverable: string,
+): string[] {
+  const deliverableDir = path.join(
+    PROJECT_ROOT,
+    'projects',
+    service,
+    'iteration',
+    deliverable,
+  );
+  if (!fs.existsSync(deliverableDir)) return [];
+  return fs
+    .readdirSync(deliverableDir)
+    .filter(
+      (fileName) =>
+        fileName === `${TEST_CASE_FILE_BASENAME}.md` ||
+        /^test-cases-\d+\.md$/i.test(fileName),
+    )
+    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    .map((fileName) =>
+      mapProjectHostPathToAgentPath(path.join(deliverableDir, fileName)),
+    );
+}
+
+function materializeTestCaseFilesForDeliverable(
+  workflow: Workflow,
+  context: WorkflowContext,
+): WorkflowContext {
+  const deliverable =
+    typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
+      ? String(context[WORKFLOW_CONTEXT_KEYS.deliverable]).trim()
+      : getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable);
+  if (!deliverable) return {};
+
+  const originalFiles = normalizeTestCaseFilePaths(
+    context[WORKFLOW_CONTEXT_KEYS.testCaseFiles] ??
+      workflow.context[WORKFLOW_CONTEXT_KEYS.testCaseFiles],
+  );
+  const currentFiles = uniqueStrings([
+    ...originalFiles,
+    ...listDeliverableTestCaseFiles(workflow.service, deliverable),
+  ]);
+  if (currentFiles.length === 0) return {};
+
+  const deliverableDir = path.join(
+    PROJECT_ROOT,
+    'projects',
+    workflow.service,
+    'iteration',
+    deliverable,
+  );
+  if (!fs.existsSync(deliverableDir)) return {};
+
+  const materializedFiles = uniqueStrings(
+    currentFiles.map((filePath, index) => {
+      if (filePath.startsWith('/workspace/projects/')) return filePath;
+
+      const resolvedPath = path.resolve(filePath);
+      if (isPathInsideDir(deliverableDir, resolvedPath)) {
+        return mapProjectHostPathToAgentPath(resolvedPath);
+      }
+
+      if (!isPathInsideDir(WEB_UPLOADS_DIR, resolvedPath)) return filePath;
+      if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+        return filePath;
+      }
+
+      const destination = uniquePathInDir(
+        deliverableDir,
+        sanitizeProjectMarkdownFilename(resolvedPath, index),
+      );
+      fs.copyFileSync(resolvedPath, destination);
+      return mapProjectHostPathToAgentPath(destination);
+    }),
+  );
+
+  const changed =
+    materializedFiles.length !== originalFiles.length ||
+    materializedFiles.some((item, index) => item !== originalFiles[index]);
+
+  return changed
+    ? { [WORKFLOW_CONTEXT_KEYS.testCaseFiles]: materializedFiles }
+    : {};
+}
+
 function buildDocPath(
   workflow: Pick<Workflow, 'service' | 'context'>,
   fileName: string,
@@ -1590,6 +1731,17 @@ function buildTemplateVars(
       workflow.context[WORKFLOW_CONTEXT_KEYS.requirementFiles],
     )
       ? (workflow.context[WORKFLOW_CONTEXT_KEYS.requirementFiles] as unknown[])
+          .filter(
+            (item): item is string =>
+              typeof item === 'string' && item.trim().length > 0,
+          )
+          .map((item) => `- ${item}`)
+          .join('\n') || '无'
+      : '无',
+    test_case_files: Array.isArray(
+      workflow.context[WORKFLOW_CONTEXT_KEYS.testCaseFiles],
+    )
+      ? (workflow.context[WORKFLOW_CONTEXT_KEYS.testCaseFiles] as unknown[])
           .filter(
             (item): item is string =>
               typeof item === 'string' && item.trim().length > 0,
@@ -3740,6 +3892,7 @@ export interface CreateWorkflowOpts {
   accessToken?: string;
   requirementDescription?: string;
   requirementFiles?: string[];
+  testCaseFiles?: string[];
   requirementPreset?: string;
 }
 
@@ -3816,8 +3969,36 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]:
         opts.stagingWorkBranch || deliverable.staging_work_branch,
       [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
+      [WORKFLOW_CONTEXT_KEYS.testCaseFiles]: Array.isArray(opts.testCaseFiles)
+        ? opts.testCaseFiles.filter(
+            (item) => typeof item === 'string' && item.trim().length > 0,
+          )
+        : normalizeTestCaseFilePaths(
+            opts.context?.[WORKFLOW_CONTEXT_KEYS.testCaseFiles],
+          ),
       [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
     });
+    Object.assign(
+      workflowContext,
+      materializeTestCaseFilesForDeliverable(
+        {
+          id: workflowId,
+          name: opts.title,
+          service: opts.service,
+          start_from: opts.startFrom,
+          context: workflowContext,
+          status: entryPoint.state,
+          current_delegation_id: '',
+          round: 0,
+          source_jid: opts.sourceJid,
+          paused_from: null,
+          workflow_type: workflowType,
+          created_at: now,
+          updated_at: now,
+        },
+        workflowContext,
+      ),
+    );
 
     dbCreateWorkflow({
       id: workflowId,
@@ -3991,8 +4172,36 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           (item) => typeof item === 'string' && item.trim().length > 0,
         )
       : [],
+    [WORKFLOW_CONTEXT_KEYS.testCaseFiles]: Array.isArray(opts.testCaseFiles)
+      ? opts.testCaseFiles.filter(
+          (item) => typeof item === 'string' && item.trim().length > 0,
+        )
+      : normalizeTestCaseFilePaths(
+          opts.context?.[WORKFLOW_CONTEXT_KEYS.testCaseFiles],
+        ),
     [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
   });
+  Object.assign(
+    workflowContext,
+    materializeTestCaseFilesForDeliverable(
+      {
+        id: workflowId,
+        name: opts.title,
+        service: opts.service,
+        start_from: opts.startFrom,
+        context: workflowContext,
+        status: entryPoint.state,
+        current_delegation_id: '',
+        round: 0,
+        source_jid: opts.sourceJid,
+        paused_from: null,
+        workflow_type: workflowType,
+        created_at: now,
+        updated_at: now,
+      },
+      workflowContext,
+    ),
+  );
 
   dbCreateWorkflow({
     id: workflowId,
@@ -4507,6 +4716,10 @@ export function onDelegationComplete(delegationId: string): void {
   if (payload.access_token) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.accessToken] = payload.access_token;
   }
+  Object.assign(
+    contextUpdates,
+    materializeTestCaseFilesForDeliverable(workflow, contextUpdates),
+  );
   if (Object.keys(contextUpdates).length > 0) {
     workflowUpdates.context = contextUpdates;
   }

@@ -15955,6 +15955,12 @@ async function openWorkbenchCreateTaskModal() {
             visible_when: { entry_points: ["plan"] },
           },
           {
+            key: "test_case_files",
+            label: "测试用例文档",
+            type: "file_uploads",
+            helper_text: "可选。上传后会随流程保存到需求交付目录，测试阶段必须使用其中用例，可由测试 Agent 补充。",
+          },
+          {
             key: "requirement_preset",
             label: "关联需求",
             type: "requirement_select",

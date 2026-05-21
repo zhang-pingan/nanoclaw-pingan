@@ -29,6 +29,7 @@ description: Use only in the dev_test workflow. Test implemented features in fir
    - 变更文件列表
    - 接口和数据库变更
    - 文档中的测试要点
+   - 如任务中提供了“测试用例文档”路径，必须先阅读并使用这些文档中的用例；路径通常为 `/workspace/projects/{服务名}/iteration/{文件夹名}/test-cases.md`
    - 如任务中提供了 `access_token`，提取该值，并在后续接口测试中统一拼装为 `Authorization: Bearer {access_token}` 请求头
    - 优先采用任务消息中明确给出的 `主分支`、`工作分支`；若文档中的分支信息与消息不一致，以消息为准，并在测试报告中说明
 2. 确认测试文档路径，优先使用任务中明确给出的 `测试文档：xxx`；若未给出，则默认使用 `/workspace/projects/{服务名}/iteration/{文件夹名}/test.md`
@@ -40,9 +41,11 @@ description: Use only in the dev_test workflow. Test implemented features in fir
 
 ### 2. 测试用例生成
 
-1. 根据文档和代码生成测试用例，并写入 `test.md`
-2. 若 `test.md` 已存在但内容不完整，可在原文件内补全，不要创建多个测试文档
-3. 测试用例格式如下，每条用例前必须有 `[ ]`
+1. 如果任务中提供了测试用例文档路径，必须读取 `/workspace/projects/{服务名}/iteration/{文件夹名}/test-cases.md` 或任务列出的其他路径；`test.md` 中的测试用例必须使用该文档内的全部用例，保留原用例意图、关键步骤和预期结果；不得无故删减、替换或重写成另一套口径
+2. 可根据需求、方案、开发文档和代码额外补充必要的边界、异常、兼容性或回归用例，并在 `test.md` 中与原有用例一起编号
+3. 如果未提供测试用例文档，根据文档和代码生成测试用例，并写入 `test.md`
+4. 若 `test.md` 已存在但内容不完整，可在原文件内补全，不要创建多个测试文档
+5. 测试用例格式如下，每条用例前必须有 `[ ]`
 
 ```text
 *测试用例*
@@ -75,7 +78,7 @@ description: Use only in the dev_test workflow. Test implemented features in fir
   ...
 ```
 
-4. 测试用例生成并写入 `test.md` 后，使用 `mcp__nanoclaw__ask_user_question` 向用户确认是否按当前用例开始执行；若用户需要补充说明，可改用 `request_human_input`
+6. 测试用例生成并写入 `test.md` 后，使用 `mcp__nanoclaw__ask_user_question` 向用户确认是否按当前用例开始执行；若用户需要补充说明，可改用 `request_human_input`
 
 ### 3. 测试执行
 

@@ -11,6 +11,7 @@ export const WORKFLOW_CONTEXT_KEYS = {
   accessToken: 'access_token',
   requirementDescription: 'requirement_description',
   requirementFiles: 'requirement_files',
+  testCaseFiles: 'test_case_files',
   requirementPreset: 'requirement_preset',
 } as const;
 
@@ -23,7 +24,9 @@ export function cloneWorkflowContext(
   return { ...context };
 }
 
-export function parseWorkflowContext(raw: string | null | undefined): WorkflowContext {
+export function parseWorkflowContext(
+  raw: string | null | undefined,
+): WorkflowContext {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);

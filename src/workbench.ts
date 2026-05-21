@@ -958,6 +958,16 @@ export function createWorkbenchTask(input: {
           typeof item === 'string' && item.trim().length > 0,
       )
     : [];
+  const testCaseFiles = Array.isArray(
+    input.context?.[WORKFLOW_CONTEXT_KEYS.testCaseFiles],
+  )
+    ? (
+        input.context?.[WORKFLOW_CONTEXT_KEYS.testCaseFiles] as unknown[]
+      ).filter(
+        (item): item is string =>
+          typeof item === 'string' && item.trim().length > 0,
+      )
+    : [];
 
   const result = createNewWorkflow({
     title: input.title,
@@ -1000,6 +1010,7 @@ export function createWorkbenchTask(input: {
           ] as string)
         : undefined,
     requirementFiles,
+    testCaseFiles,
     requirementPreset:
       typeof input.context?.[WORKFLOW_CONTEXT_KEYS.requirementPreset] ===
       'string'
@@ -1007,7 +1018,10 @@ export function createWorkbenchTask(input: {
         : undefined,
   });
 
-  if (result.error || requirementFiles.length === 0) {
+  if (
+    result.error ||
+    (requirementFiles.length === 0 && testCaseFiles.length === 0)
+  ) {
     return result;
   }
 
@@ -1027,6 +1041,31 @@ export function createWorkbenchTask(input: {
       path: filePath,
       url: null,
       note: 'Plan 入口上传的需求附件',
+      created_at: new Date().toISOString(),
+    });
+  }
+  const workflow = getWorkflow(result.workflowId);
+  const resolvedTestCaseFiles = workflow
+    ? Array.isArray(workflow.context[WORKFLOW_CONTEXT_KEYS.testCaseFiles])
+      ? (workflow.context[WORKFLOW_CONTEXT_KEYS.testCaseFiles] as unknown[])
+          .filter(
+            (item): item is string =>
+              typeof item === 'string' && item.trim().length > 0,
+          )
+          .map((item) => item.trim())
+      : testCaseFiles
+    : testCaseFiles;
+  for (const filePath of resolvedTestCaseFiles) {
+    const id = `wb-asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    createWorkbenchContextAsset({
+      id,
+      task_id: taskRecord.id,
+      workflow_id: result.workflowId,
+      asset_type: 'test_case_file',
+      title: path.basename(filePath),
+      path: filePath,
+      url: null,
+      note: '测试用例文档',
       created_at: new Date().toISOString(),
     });
   }
