@@ -16148,6 +16148,13 @@ body::after,
   color: var(--minimal-text-muted);
 }
 
+.messages-empty-sub {
+  color: var(--minimal-text-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+  opacity: 1;
+}
+
 #messages-empty-mascot {
   width: 74px;
   border: 1px solid var(--minimal-line);

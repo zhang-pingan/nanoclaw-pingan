@@ -1088,8 +1088,8 @@
         <p class="eyebrow">Personal Agent Operating System</p>
         <h1>MixClaw：面向工程交付的个人 Agent 工作系统</h1>
         <p class="lead">
-          MixClaw 把 Agent 从“会话工具”提升为“工程运行时”：多端入口负责触达，
-          宿主机负责可信编排，容器负责隔离执行，Workflow 负责交付闭环。
+          最终目标是将用户的工作流都收敛进工作台，通过安全可控的人机交互，让
+          Agent 助力用户完成所有的工作。
         </p>
         <div class="chips" aria-label="核心模块">
           <span class="chip">Web 工作台</span>
@@ -1135,9 +1135,9 @@
               <small>隔离执行面</small>
             </div>
             <div class="layer-grid">
-              <div class="unit">Claude Agent SDK</div>
-              <div class="unit">Tool Use / MCP / Skill</div>
-              <div class="unit">Bash / Browser / Files</div>
+              <div class="unit">Agent Loop Kernel</div>
+              <div class="unit">Tool Use: tool / MCP / Skill</div>
+              <div class="unit">Agent Teams</div>
               <div class="unit">Typed Handoff / Artifact</div>
             </div>
           </div>
@@ -1221,7 +1221,7 @@
               </p>
             </article>
             <article class="card">
-              <span class="tag coral">移动端 / 企微</span>
+              <span class="tag coral">移动端</span>
               <h3>轻量入口与私人客服</h3>
               <p>
                 飞书用于移动端查询、审批和提醒；企微用于一对一收集上下文和处理员工请求。
@@ -1239,8 +1239,7 @@
               <span class="tag green">容器 Agent</span>
               <h3>隔离执行面</h3>
               <p>
-                运行 Claude Agent
-                SDK、工具调用、浏览器、文件和命令执行，并把结果回传宿主机。
+                运行 Agent Loop:工具调用、浏览器、文件和命令执行，并把结果回传宿主机。
               </p>
             </article>
             <article class="card">
@@ -1270,42 +1269,40 @@
             <section class="architecture-band architecture-band--loop">
               <div class="band-head">
                 <div>
-                  <span class="band-kicker">A</span>
                   <div class="band-title">Agent Loop</div>
                   <div class="band-subtitle">
                     LLM 做决策，工具做动作，ReAct 串联观察反馈，Agent Teams
                     承担角色协作。
                   </div>
                 </div>
-                <div class="band-divider"><span>执行内核</span></div>
+                <div class="band-divider"><span>agent内核</span></div>
               </div>
 
               <div class="band-grid">
                 <article class="band-card">
                   <strong>LLM</strong>
                   <p>
-                    Claude Agent SDK 的 query()
+                    Agent Loop Kernel 的 query()
                     驱动推理和输出，是每轮循环的核心决策点。
                   </p>
                 </article>
                 <article class="band-card">
                   <strong>Tool Use</strong>
                   <p>
-                    Bash、MCP、浏览器、文件操作和 Skill 把模型推理接到真实动作。
+                    Bash、浏览器、文件操作、MCP 和 Skill 把模型推理接到真实动作。
                   </p>
                 </article>
                 <article class="band-card">
                   <strong>ReAct</strong>
                   <p>
                     Agent
-                    在“思考-行动-观察-再行动”的闭环里推进任务，而不是一次性给结论。
+                    在“思考-行动-观察-再行动”的闭环里推进直到完成任务。
                   </p>
                 </article>
                 <article class="band-card">
                   <strong>Agent Teams</strong>
                   <p>
-                    subagents 和角色分工把 planner、dev、reviewer、ops、test
-                    组织成协作队列。
+                    内核的Agent Teams 由agent 根据任务复杂度自主创建执行。
                   </p>
                 </article>
               </div>
@@ -1314,33 +1311,35 @@
             <section class="architecture-band architecture-band--runtime">
               <div class="band-head">
                 <div>
-                  <span class="band-kicker">B</span>
                   <div class="band-title">Agent Runtime Infrastructure</div>
                   <div class="band-subtitle">
-                    Workflow、容器 harness、checkpoint、interrupt、outbox
-                    组成可恢复运行时。
+                    Workflow、Harness Engine、Trace、Safety
+                    组成安全可控的运行时环境。
                   </div>
                 </div>
-                <div class="band-divider"><span>执行平台</span></div>
+                <div class="band-divider"><span>agent运行时环境</span></div>
               </div>
 
               <div class="band-grid">
                 <article class="band-card">
                   <strong>Workflow</strong>
-                  <p>状态机驱动节点迁移，把复杂工程任务拆成可恢复的阶段。</p>
-                </article>
-                <article class="band-card">
-                  <strong>Checkpoint</strong>
-                  <p>
-                    保存状态、上下文、当前委派和 pending
-                    interrupt，支持重启后继续推进。
+                  <p>状态机驱动节点迁移，checkpoint 负责恢复链路状态，interupt统一审批，
+                    handoff 校验agent输入/输出，steps 动态嵌入节点，把复杂工程任务转化
+                    为安全可控的自动化链路。
                   </p>
                 </article>
                 <article class="band-card">
-                  <strong>Harness</strong>
+                  <strong>Harness Engine</strong>
                   <p>
-                    容器 runner、SDK、hooks 和 marker
-                    输出解析构成工程执行器外壳。
+                    通过标准化输入/输出、标准化执行环境、约束的tool use、artifact-contracts、
+                    stage-evaluation、failure-taxonomy、Trace 等构建agent 标准运行时环境，
+                    把 Agent 变成可运行、可观测、可评估的执行单元。
+                  </p>
+                </article>
+                <article class="band-card">
+                  <strong>Trace</strong>
+                  <p>
+                    通过全链路追踪提升可观测性并为Replay model提供基础。
                   </p>
                 </article>
                 <article class="band-card">
@@ -1355,24 +1354,6 @@
           </div>
 
           <div style="height: 18px"></div>
-
-          <div class="split">
-            <div class="diagram">
-              <h3>主动工作流链路</h3>
-              <div style="height: 14px"></div>
-              <pre class="code-block">
-用户在 Web 工作台新建任务
-  -> 宿主机创建 workflow / workbench_task
-  -> Workflow Engine 按状态机推进
-  -> delegation 节点创建委派并注入角色群组
-  -> GroupQueue 启动或复用容器 Agent
-  -> Agent 使用 Tool / MCP / Skill 完成交付
-  -> 宿主机解析结果、写 Trace、产物和评估
-  -> interrupt 节点等待用户审批或补充输入
-  -> resume 后继续状态迁移，直到 terminal</pre
-              >
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1413,11 +1394,14 @@
             <div class="runtime-row">
               <div class="runtime-label">Harness Engine</div>
               <div class="runtime-items">
-                <span>Container Runner</span>
-                <span>Claude SDK query()</span>
-                <span>Tool hooks / MCP</span>
-                <span>结构化输出协议</span>
-                <span>Trace / failure taxonomy</span>
+                <span>标准化输入/输出</span>
+                <span>标准化执行环境</span>
+                <span>Tool Use 约束</span>
+                <span>Artifact Contracts</span>
+                <span>Stage Evaluation</span>
+                <span>Failure Taxonomy</span>
+                <span>Trace</span>
+                <span>Replay Model</span>
               </div>
             </div>
             <div class="runtime-row">
@@ -1449,9 +1433,7 @@
               <span class="tag coral">为什么不直接用 LangGraph</span>
               <h3>Claude 已承担内层 Agent Loop</h3>
               <p>
-                当前系统已有状态机、checkpoint、interrupt、outbox
-                和工作台同步机制；内层 Agent Loop 又由 Claude Agent SDK/Claude
-                Code 执行。直接引入 LangGraph
+                当前系统已有状态机、checkpoint等langGraph核心机制；内层 Agent Loop 又由 claude 执行。直接引入 LangGraph
                 会带来额外适配成本，而收益不如保持现有 TypeScript runtime 统一。
               </p>
             </article>
@@ -1643,7 +1625,7 @@
         <div class="section-inner">
           <div class="section-head section-head-single">
             <div>
-              <h2>交付闭环</h2>
+              <h2>Harness Engine</h2>
               <p>
                 MixClaw 把 Agent
                 输出从“自然语言回答”升级为“有契约、有证据、有评估、
@@ -1862,7 +1844,7 @@
                 <tr>
                   <td><code>container/agent-runner/src/index.ts</code></td>
                   <td>
-                    容器内 Claude Agent SDK 调用、消息流、hooks、事件输出。
+                    容器内 Agent Loop Kernel 调用、消息流、hooks、事件输出。
                   </td>
                 </tr>
                 <tr>
