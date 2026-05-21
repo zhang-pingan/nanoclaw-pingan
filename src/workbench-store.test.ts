@@ -739,7 +739,7 @@ describe('workbench approval transition sync', () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: 'access_token',
-          type: 'text',
+          type: 'token',
           required: true,
           min_length: 8,
         }),
@@ -749,6 +749,77 @@ describe('workbench approval transition sync', () => {
           required: true,
           min: 1,
           max: 3,
+        }),
+      ]),
+    );
+  });
+
+  it('renders checkbox and multi-select fields from resume payload schema', () => {
+    const item: WorkbenchActionItem = {
+      id: 'wb-action-schema-fields',
+      item_type: 'human_input',
+      source_type: 'workflow_interrupt',
+      title: '字段渲染',
+      body: '请填写字段',
+      status: 'pending',
+      stage_key: 'custom_interrupt',
+      source_ref_id: 'wi-schema-fields',
+      replyable: false,
+      extra: {
+        workflowId: 'wf-schema-fields',
+        allowedActions: ['submit'],
+        payloadSchema: {
+          type: 'object',
+          required: ['accepted', 'modes'],
+          properties: {
+            accepted: { type: 'boolean', description: '接受条款' },
+            modes: {
+              type: 'array',
+              minItems: 1,
+              items: { type: 'string', enum: ['fast', 'safe'] },
+            },
+          },
+        },
+      },
+    };
+    const task: WorkbenchTaskItem = {
+      id: 'wb-wf-schema-fields',
+      title: '字段渲染',
+      service: 'order-service',
+      start_from: 'custom_interrupt',
+      workflow_type: 'dev_test',
+      workflow_status: 'custom_interrupt',
+      workflow_status_label: 'custom_interrupt',
+      task_state: 'running',
+      workflow_stage: 'custom_interrupt',
+      workflow_stage_label: 'custom_interrupt',
+      round: 0,
+      source_jid: 'main@g.us',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+      pending_approval: true,
+      pending_action_count: 1,
+      active_delegation_id: '',
+      context: {},
+    };
+
+    const card = buildHumanInputCard(item, task);
+
+    expect(card.form?.inputs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'accepted',
+          type: 'checkbox',
+          required: true,
+        }),
+        expect.objectContaining({
+          name: 'modes',
+          type: 'multi_select',
+          required: true,
+          options: [
+            { value: 'fast', label: 'fast' },
+            { value: 'safe', label: 'safe' },
+          ],
         }),
       ]),
     );
@@ -1075,8 +1146,10 @@ describe('workbench approval transition sync', () => {
     );
     expect(interrupt).toBeDefined();
     expect(text).toContain(
-      `/resume ${interrupt!.id} submit key=value; key2=value2`,
+      `/resume ${interrupt!.id} submit 字段名=字段值; 字段名2=字段值2`,
     );
+    expect(text).toContain('字段说明:');
+    expect(text).toContain('- access_token: token，最短 1');
     expect(text).toContain(`/resume ${interrupt!.id} skip`);
   });
 

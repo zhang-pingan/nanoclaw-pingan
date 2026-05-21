@@ -363,13 +363,10 @@ function currentAskQuestion(item: WorkbenchActionItem): AskQuestionItem | null {
 
 function askFieldInputType(field: AskQuestionField): CardInput['type'] {
   if (field.enum && field.enum.length > 0) return 'enum';
-  if (
-    field.type === 'number' ||
-    field.type === 'integer' ||
-    field.type === 'boolean'
-  ) {
+  if (field.type === 'number' || field.type === 'integer') {
     return field.type;
   }
+  if (field.type === 'boolean') return 'checkbox';
   return 'text';
 }
 

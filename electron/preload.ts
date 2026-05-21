@@ -1,4 +1,4 @@
-import { contextBridge, BrowserWindow, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
 // Expose a safe API to the renderer process for the NanoClaw web channel.
 
@@ -39,14 +39,6 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
     };
     ipcRenderer.on('toggle-today-plan', listener);
     return () => ipcRenderer.removeListener('toggle-today-plan', listener);
-  },
-
-  onQuickChatOpenMainGroup: (handler: () => void) => {
-    const listener = () => {
-      handler();
-    };
-    ipcRenderer.on('quick-chat-open-main-group', listener);
-    return () => ipcRenderer.removeListener('quick-chat-open-main-group', listener);
   },
 
   onOpenWorkstationTarget: (handler: (payload: { url?: string }) => void) => {
@@ -95,17 +87,4 @@ contextBridge.exposeInMainWorld('nanoclawApp', {
   // Platform info
   platform: process.platform,
 
-  showMainWindow: () => {
-    ipcRenderer.send('show-main-window');
-  },
-
-  openMainGroupFromQuickChat: () => {
-    ipcRenderer.send('quick-chat-open-main-group');
-  },
-
-  // Quit the app (hide only, not "Quit All")
-  hideWindow: () => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (win) win.hide();
-  },
 });

@@ -3,14 +3,12 @@ var ws = null;
 var reconnectTimer = null;
 var currentGroupJid = "";
 var launchParams = new URLSearchParams(window.location.search);
-var isStandaloneQuickChat = launchParams.get("quick-chat") === "1";
 var initialAssistantTarget = launchParams.get("assistantTarget") || "";
 var initialWorkbenchTaskId = launchParams.get("taskId") || "";
 var browserNotificationPermissionRequested = false;
 var groups = [];
 var messages = [];
 var unreadCounts = {};
-var quickChatDraft = "";
 var replyToMsg = null;
 var hasMoreHistory = true;
 var loadingHistory = false;
@@ -308,12 +306,6 @@ var typingIndicator = document.getElementById("typing-indicator");
 var inputArea = document.getElementById("input-area");
 var messageInput = document.getElementById("message-input");
 var sendBtn = document.getElementById("send-btn");
-var quickChatOverlay = document.getElementById("quick-chat-overlay");
-var quickChatTarget = document.getElementById("quick-chat-target");
-var quickChatInput = document.getElementById("quick-chat-input");
-var quickChatSendBtn = document.getElementById("quick-chat-send");
-var quickChatOpenMainBtn = document.getElementById("quick-chat-open-main");
-var quickChatCloseBtn = document.getElementById("quick-chat-close");
 var attachBtn = document.getElementById("attach-btn");
 var fileInput = document.getElementById("file-input");
 var fileDropZone = document.getElementById("file-drop-zone");
@@ -1329,6 +1321,18 @@ function validateCardFormField(input, value) {
   const text = String(value || "").trim();
   const label = input.placeholder || input.name;
 
+  if (input.type === "multi_select") {
+    let selectedCount = 0;
+    try {
+      const parsed = JSON.parse(text || "[]");
+      selectedCount = Array.isArray(parsed) ? parsed.filter(Boolean).length : 0;
+    } catch {
+      selectedCount = text ? text.split(",").map((item) => item.trim()).filter(Boolean).length : 0;
+    }
+    if (input.required && selectedCount === 0) return `${label} 为必填项`;
+    return null;
+  }
+
   if (input.required && !text) return `${label} 为必填项`;
   if (!text) return null;
 
@@ -1516,27 +1520,31 @@ function renderInteractiveCard(card, callbacks = {}) {
     };
 
     for (const input of card.form.inputs) {
-      if (input.type === "enum" && Array.isArray(input.options) && input.options.length > 0) {
+      if ((input.type === "enum" || input.type === "multi_select") && Array.isArray(input.options) && input.options.length > 0) {
         const selectEl = document.createElement("select");
         selectEl.className = "card-input";
         selectEl.name = input.name;
+        if (input.type === "multi_select") {
+          selectEl.multiple = true;
+          selectEl.size = Math.min(Math.max(input.options.length, 3), 8);
+        }
         const emptyOpt = document.createElement("option");
         emptyOpt.value = "";
         emptyOpt.textContent = input.placeholder || "请选择";
-        selectEl.appendChild(emptyOpt);
+        if (input.type !== "multi_select") selectEl.appendChild(emptyOpt);
         for (const opt of input.options) {
           const optEl = document.createElement("option");
           optEl.value = opt.value;
           optEl.textContent = opt.label || opt.value;
           selectEl.appendChild(optEl);
         }
-        formInputs[input.name] = { el: selectEl, type: "enum", meta: input, container: selectEl };
+        formInputs[input.name] = { el: selectEl, type: input.type, meta: input, container: selectEl };
         formEl.appendChild(selectEl);
         if (input.error) addInputError(formInputs[input.name], input.error);
         continue;
       }
 
-      if (input.type === "boolean") {
+      if (input.type === "boolean" || input.type === "checkbox") {
         const wrap = document.createElement("label");
         wrap.className = "card-input";
         wrap.style.display = "flex";
@@ -1601,6 +1609,8 @@ function renderInteractiveCard(card, callbacks = {}) {
       for (const [name, item] of Object.entries(formInputs)) {
         if (item.type === "boolean") {
           formValue[name] = item.el.checked ? "true" : "false";
+        } else if (item.type === "multi_select") {
+          formValue[name] = JSON.stringify(Array.from(item.el.selectedOptions || []).map((option) => option.value).filter(Boolean));
         } else {
           formValue[name] = item.el.value;
         }
@@ -1608,6 +1618,8 @@ function renderInteractiveCard(card, callbacks = {}) {
       for (const [name, item] of Object.entries(formInputs)) {
         const val = item.type === "boolean"
           ? (item.el.checked ? "true" : "false")
+          : item.type === "multi_select"
+            ? JSON.stringify(Array.from(item.el.selectedOptions || []).map((option) => option.value).filter(Boolean))
           : item.type === "file"
             ? Array.from(item.el.files || []).map((file) => file.name).join(",")
             : item.el.value;
@@ -12904,63 +12916,6 @@ function getMainGroup() {
   return groups.find((group) => group.isMain) || null;
 }
 
-function syncQuickChatTarget() {
-  if (!quickChatTarget) return;
-  const mainGroup = getMainGroup();
-  if (!mainGroup) {
-    quickChatTarget.textContent = "未找到主群，请先完成主群初始化。";
-    return;
-  }
-  quickChatTarget.textContent = `发送到 ${mainGroup.name}${mainGroup.folder ? ` · @ ${mainGroup.folder}` : ""}`;
-}
-
-function isQuickChatOpen() {
-  return !!quickChatOverlay && !quickChatOverlay.classList.contains("hidden");
-}
-
-function openQuickChat(options = {}) {
-  if (!quickChatOverlay || !quickChatInput) return;
-  syncQuickChatTarget();
-  if (typeof options.prefill === "string") {
-    quickChatDraft = options.prefill;
-  }
-  quickChatInput.value = quickChatDraft;
-  quickChatOverlay.classList.remove("hidden");
-  quickChatOverlay.setAttribute("aria-hidden", "false");
-  document.body.classList.add("quick-chat-open");
-  requestAnimationFrame(() => {
-    quickChatInput.focus();
-    quickChatInput.setSelectionRange(quickChatInput.value.length, quickChatInput.value.length);
-  });
-}
-
-function closeQuickChat() {
-  if (!quickChatOverlay || !quickChatInput) return;
-  quickChatDraft = quickChatInput.value;
-  if (isStandaloneQuickChat) {
-    window.nanoclawApp?.hideWindow?.();
-    return;
-  }
-  quickChatOverlay.classList.add("hidden");
-  quickChatOverlay.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("quick-chat-open");
-}
-
-function toggleQuickChat() {
-  if (isQuickChatOpen()) {
-    closeQuickChat();
-    return;
-  }
-  openQuickChat();
-}
-
-function initStandaloneQuickChatMode() {
-  if (!isStandaloneQuickChat) return;
-  document.body.classList.add("quick-chat-window", "quick-chat-open");
-  if (mainScreen) mainScreen.classList.add("hidden");
-  openQuickChat();
-}
-
 async function loadGroups() {
   try {
     const res = await apiFetch("/api/groups");
@@ -12968,7 +12923,6 @@ async function loadGroups() {
     const data = await res.json();
     groups = data.groups;
     renderGroups();
-    syncQuickChatTarget();
     if (!groups.some((g) => g.jid === activeMemoryGroupJid)) {
       activeMemoryGroupJid = getDefaultMemoryGroupJid();
     }
@@ -15372,6 +15326,37 @@ async function triggerWorkbenchAction(taskId, action, subtaskId = "") {
   }
 }
 
+function parseWorkbenchPayloadText(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  const payload = {};
+  trimmed.split(/[;\n]/).map((part) => part.trim()).filter(Boolean).forEach((part) => {
+    const eq = part.indexOf("=");
+    if (eq <= 0) return;
+    const key = part.slice(0, eq).trim();
+    const value = part.slice(eq + 1).trim();
+    if (!key) return;
+    if (/^(true|false)$/i.test(value)) {
+      payload[key] = /^true$/i.test(value);
+    } else if (/^[-+]?\d+$/.test(value) && Number.isSafeInteger(Number(value))) {
+      payload[key] = Number.parseInt(value, 10);
+    } else if (/^[-+]?(?:\d+\.\d+|\d+\.\d*|\.\d+)$/.test(value) && Number.isFinite(Number(value))) {
+      payload[key] = Number(value);
+    } else {
+      payload[key] = value;
+    }
+  });
+  return Object.keys(payload).length > 0 ? payload : undefined;
+}
+
 async function triggerWorkbenchActionItem(taskId, actionItemId, action, prefillText) {
   let replyText = "";
   let payload = undefined;
@@ -15393,12 +15378,17 @@ async function triggerWorkbenchActionItem(taskId, actionItemId, action, prefillT
     if (!revisionText.trim()) return;
     payload = { revision_text: revisionText };
   } else if (action === "submit") {
-    const accessToken = await openTextPrompt("请输入 access_token", "", {
-      title: "填写 access_token",
-      placeholder: "请输入测试 token",
+    const payloadText = await openTextPrompt("请输入表单 payload", "", {
+      title: "提交表单",
+      placeholder: "JSON 或 key=value; key2=value2",
+      multiline: true,
     }) || "";
-    if (!accessToken.trim()) return;
-    payload = { access_token: accessToken };
+    if (!payloadText.trim()) return;
+    payload = parseWorkbenchPayloadText(payloadText);
+    if (!payload) {
+      showToast("payload 格式无效，请输入 JSON 或 key=value", 2200);
+      return;
+    }
   }
   try {
     const res = await apiFetch("/api/workbench/action-item", {
@@ -17091,7 +17081,6 @@ function handleWsMessage(msg) {
     case "groups":
       groups = msg.groups || [];
       renderGroups();
-      syncQuickChatTarget();
       if (activePrimaryNavKey === "trace-monitor") {
         renderTraceMonitorList();
         if (currentTraceRunRecord) {
@@ -17365,33 +17354,21 @@ function appendOptimisticMessage(chatJid, content, replyToId = null) {
 
 async function sendMessageToChat(chatJid, content, options = {}) {
   const trimmed = content.trim();
-  const usesComposerPendingFiles = !Array.isArray(options.pendingFiles);
-  const usesComposerPendingReferences = !Array.isArray(options.pendingFileReferences);
-  const stagedFiles = usesComposerPendingFiles ? pendingFiles : options.pendingFiles;
-  const stagedReferences = usesComposerPendingReferences
-    ? pendingFileReferences
-    : options.pendingFileReferences;
-  const safeStagedFiles = Array.isArray(stagedFiles) ? stagedFiles : [];
-  const safeStagedReferences = Array.isArray(stagedReferences) ? stagedReferences : [];
-  if (!trimmed && safeStagedFiles.length === 0 && safeStagedReferences.length === 0) return false;
+  if (!trimmed && pendingFiles.length === 0 && pendingFileReferences.length === 0) return false;
   if (!chatJid) return false;
 
   // Upload pending files first and prepend their container paths
-  let filePrefix = buildPendingFileReferencesPrefix(safeStagedReferences);
-  if (safeStagedFiles.length > 0) {
+  let filePrefix = buildPendingFileReferencesPrefix();
+  if (pendingFiles.length > 0) {
     try {
-      filePrefix += usesComposerPendingFiles
-        ? await uploadPendingFiles()
-        : buildUploadedFilesPrefix(await uploadFilesForJid(safeStagedFiles, chatJid));
+      filePrefix += await uploadPendingFiles();
     } catch (err) {
       showError(`附件上传失败: ${err}`);
       return false;
     }
   }
-  if (usesComposerPendingReferences) {
-    pendingFileReferences = [];
-    renderPendingFiles();
-  }
+  pendingFileReferences = [];
+  renderPendingFiles();
 
   const fullContent = filePrefix + trimmed;
   const payload = {
@@ -17421,26 +17398,6 @@ async function sendMessage(content) {
   clearReplyTo();
   hideCommandPalette();
   hideMentionPicker(false);
-}
-
-async function sendQuickChatMessage() {
-  if (!quickChatInput) return;
-  const mainGroup = getMainGroup();
-  if (!mainGroup) {
-    showToast("未找到主群，无法发送", 2200);
-    return;
-  }
-  const sent = await sendMessageToChat(mainGroup.jid, quickChatInput.value, {
-    optimistic: mainGroup.jid === currentGroupJid,
-    pendingFiles: [],
-    pendingFileReferences: [],
-    replyToId: null,
-  });
-  if (!sent) return;
-  quickChatInput.value = "";
-  quickChatDraft = "";
-  showToast(`已发送到主群 ${mainGroup.name}`, 1800);
-  closeQuickChat();
 }
 
 // --- Reply handling ---
@@ -18143,21 +18100,6 @@ function selectMention(name) {
   autoResizeInput();
 }
 
-function insertTextIntoComposer(text) {
-  const ta = messageInput;
-  const pos = typeof ta.selectionStart === "number" ? ta.selectionStart : ta.value.length;
-  const before = ta.value.substring(0, pos);
-  const after = ta.value.substring(pos);
-  let insertion = text;
-  if (before && !before.endsWith("\n")) insertion = `\n${insertion}`;
-  if (after && !after.startsWith("\n")) insertion = `${insertion}\n`;
-  ta.value = before + insertion + after;
-  const cursor = before.length + insertion.length;
-  ta.selectionStart = ta.selectionEnd = cursor;
-  ta.focus();
-  autoResizeInput();
-}
-
 function referenceFileInComposer(containerPath) {
   stageFileReference(containerPath);
   showToast("已引用文件");
@@ -18262,10 +18204,8 @@ function getFileReferenceName(containerPath) {
   return normalized.split("/").filter(Boolean).pop() || normalized || "未命名文件";
 }
 
-function buildPendingFileReferencesPrefix(references = pendingFileReferences) {
-  const paths = Array.isArray(references)
-    ? references.map((item) => String(item || "").trim()).filter(Boolean)
-    : [];
+function buildPendingFileReferencesPrefix() {
+  const paths = pendingFileReferences.map((item) => String(item || "").trim()).filter(Boolean);
   if (paths.length === 0) return "";
   return (
     "【引用文件】\n" +
@@ -18292,12 +18232,6 @@ function renderPendingFiles() {
   }
   pendingFilesContent.innerHTML = `${SVG.paperclip} ${parts.join(" · ")}`;
   pendingFilesEl.classList.add("visible");
-}
-
-// Remove a staged file by index
-function removePendingFile(index) {
-  pendingFiles.splice(index, 1);
-  renderPendingFiles();
 }
 
 // Upload all pending files and return the prefix string to prepend to the message
@@ -21910,7 +21844,6 @@ bindNotificationClickHandler();
 bindNotificationPermissionPrimer();
 bindCardsRowEvents();
 bindCardsDragEvents();
-initStandaloneQuickChatMode();
 window.addEventListener("focus", clearCurrentGroupUnreadIfForeground);
 document.addEventListener("visibilitychange", clearCurrentGroupUnreadIfForeground);
 connectWS();
@@ -21946,16 +21879,6 @@ if (window.nanoclawApp && typeof window.nanoclawApp.onCyclePrimaryNav === "funct
 if (window.nanoclawApp && typeof window.nanoclawApp.onToggleTodayPlan === "function") {
   window.nanoclawApp.onToggleTodayPlan(() => {
     toggleTodayPlanScreen();
-  });
-}
-if (window.nanoclawApp && typeof window.nanoclawApp.onQuickChatOpenMainGroup === "function") {
-  window.nanoclawApp.onQuickChatOpenMainGroup(async () => {
-    const mainGroup = getMainGroup();
-    if (!mainGroup) return;
-    if (activePrimaryNavKey !== "agent-groups") {
-      setPrimaryNav("agent-groups");
-    }
-    await selectGroup(mainGroup.jid);
   });
 }
 if (window.nanoclawApp && typeof window.nanoclawApp.onOpenWorkstationTarget === "function") {
@@ -22656,54 +22579,6 @@ closeAgentStatusBtn.addEventListener("click", () => {
 sendBtn.addEventListener("click", () => {
   sendMessage(messageInput.value);
 });
-if (quickChatCloseBtn) {
-  quickChatCloseBtn.addEventListener("click", () => {
-    closeQuickChat();
-  });
-}
-if (quickChatSendBtn) {
-  quickChatSendBtn.addEventListener("click", () => {
-    sendQuickChatMessage();
-  });
-}
-if (quickChatOpenMainBtn) {
-  quickChatOpenMainBtn.addEventListener("click", async () => {
-    const mainGroup = getMainGroup();
-    if (!mainGroup) {
-      showToast("未找到主群", 2200);
-      return;
-    }
-    if (isStandaloneQuickChat) {
-      window.nanoclawApp?.openMainGroupFromQuickChat?.();
-      return;
-    }
-    closeQuickChat();
-    await selectGroup(mainGroup.jid);
-  });
-}
-if (quickChatOverlay) {
-  quickChatOverlay.addEventListener("mousedown", (e) => {
-    if (e.target === quickChatOverlay) {
-      closeQuickChat();
-    }
-  });
-}
-if (quickChatInput) {
-  quickChatInput.addEventListener("input", () => {
-    quickChatDraft = quickChatInput.value;
-  });
-  quickChatInput.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeQuickChat();
-      return;
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendQuickChatMessage();
-    }
-  });
-}
 messageInput.addEventListener("keydown", (e) => {
   // Command palette navigation
   if (commandPalette.classList.contains("visible")) {
@@ -22963,11 +22838,6 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && String(e.key || "").toLowerCase() === "w") {
     e.preventDefault();
     toggleTodayPlanScreen();
-    return;
-  }
-  if (e.key === "Escape" && isQuickChatOpen()) {
-    e.preventDefault();
-    closeQuickChat();
     return;
   }
   if (e.key === "Escape" && todayPlanHistoryModal && !todayPlanHistoryModal.classList.contains("hidden")) {

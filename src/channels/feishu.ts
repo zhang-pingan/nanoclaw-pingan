@@ -276,8 +276,13 @@ class FeishuChannel implements Channel {
         }
         const label = input.placeholder || input.name;
         if (
-          (input.type === 'enum' || input.type === 'boolean') &&
-          (input.options?.length || input.type === 'boolean')
+          (input.type === 'enum' ||
+            input.type === 'multi_select' ||
+            input.type === 'boolean' ||
+            input.type === 'checkbox') &&
+          (input.options?.length ||
+            input.type === 'boolean' ||
+            input.type === 'checkbox')
         ) {
           const options =
             input.options && input.options.length > 0
@@ -287,7 +292,10 @@ class FeishuChannel implements Channel {
                   { value: 'false', label: '否' },
                 ];
           const selectElement: Record<string, unknown> = {
-            tag: 'select_static',
+            tag:
+              input.type === 'multi_select'
+                ? 'multi_select_static'
+                : 'select_static',
             name: input.name,
             label: { tag: 'plain_text', content: label },
             label_position: 'left',

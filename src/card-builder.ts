@@ -32,10 +32,14 @@ const DEFAULT_ACTIONS: Record<
 };
 
 function mergeSchemaInput(input: CardInput, schemaInput: CardInput): CardInput {
+  const schemaType =
+    schemaInput.type && schemaInput.type !== 'text'
+      ? schemaInput.type
+      : input.type || schemaInput.type;
   return {
     ...schemaInput,
     ...input,
-    type: input.type || schemaInput.type,
+    type: schemaType,
     placeholder: input.placeholder || schemaInput.placeholder,
     required: input.required ?? schemaInput.required,
     options: input.options || schemaInput.options,

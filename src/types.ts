@@ -845,7 +845,9 @@ export interface CardInput {
     | 'number'
     | 'integer'
     | 'boolean'
+    | 'checkbox'
     | 'enum'
+    | 'multi_select'
     | 'file'
     | 'token';
   options?: Array<{ value: string; label?: string }>;

@@ -54,10 +54,17 @@ function enumValues(schema: JsonObject): string[] {
     : [];
 }
 
+function arrayEnumValues(schema: JsonObject): string[] {
+  const items = asJsonObject(schema.items);
+  return items ? enumValues(items) : [];
+}
+
 function firstSchemaType(schema: JsonObject): string {
   if (typeof schema.type === 'string') return schema.type;
   if (Array.isArray(schema.type)) {
-    const value = schema.type.find((item) => typeof item === 'string');
+    const value =
+      schema.type.find((item) => typeof item === 'string' && item !== 'null') ||
+      schema.type.find((item) => typeof item === 'string');
     if (typeof value === 'string') return value;
   }
   return 'string';
@@ -69,6 +76,7 @@ export function schemaPropertyToInput(
   required: boolean,
 ): CardInput {
   const values = enumValues(schema);
+  const arrayValues = arrayEnumValues(schema);
   const type = firstSchemaType(schema);
   const format = typeof schema.format === 'string' ? schema.format : '';
   const inputType: CardInput['type'] =
@@ -79,14 +87,17 @@ export function schemaPropertyToInput(
         : type === 'integer'
           ? 'integer'
           : type === 'boolean'
-            ? 'boolean'
-            : type === 'array'
-              ? 'textarea'
-              : format === 'binary' || format === 'file'
-                ? 'file'
-                : format === 'password' || name.toLowerCase().includes('token')
-                  ? 'token'
-                  : 'text';
+            ? 'checkbox'
+            : type === 'array' && arrayValues.length > 0
+              ? 'multi_select'
+              : type === 'array'
+                ? 'textarea'
+                : format === 'binary' || format === 'file'
+                  ? 'file'
+                  : format === 'password' ||
+                      name.toLowerCase().includes('token')
+                    ? 'token'
+                    : 'text';
   return {
     name,
     type: inputType,
@@ -97,7 +108,10 @@ export function schemaPropertyToInput(
           ? schema.description
           : name,
     required,
-    options: values.map((value) => ({ value, label: value })),
+    options: (values.length > 0 ? values : arrayValues).map((value) => ({
+      value,
+      label: value,
+    })),
     min: typeof schema.minimum === 'number' ? schema.minimum : undefined,
     max: typeof schema.maximum === 'number' ? schema.maximum : undefined,
     min_length:
@@ -123,4 +137,69 @@ export function schemaInputs(schema: JsonObject | undefined): CardInput[] {
     .map(([name, raw]) =>
       schemaPropertyToInput(name, asJsonObject(raw) || {}, required.has(name)),
     );
+}
+
+function schemaTypeLabel(name: string, schema: JsonObject): string {
+  const values = enumValues(schema);
+  if (values.length > 0) return `枚举: ${values.join(', ')}`;
+  const type = firstSchemaType(schema);
+  const format = typeof schema.format === 'string' ? schema.format : '';
+  if (type === 'array') {
+    const itemSchema = asJsonObject(schema.items) || {};
+    const itemValues = enumValues(itemSchema);
+    return itemValues.length > 0
+      ? `多选: ${itemValues.join(', ')}`
+      : '数组，使用逗号分隔或 JSON 数组';
+  }
+  if (format === 'binary' || format === 'file') {
+    return '文件（文本命令不支持上传，请到 Web 工作台处理）';
+  }
+  if (format === 'password' || name.toLowerCase().includes('token')) {
+    return 'token';
+  }
+  if (format === 'date') return '日期 YYYY-MM-DD';
+  if (format === 'date-time') return '日期时间 ISO 或 YYYY-MM-DDTHH:mm';
+  if (type === 'integer') return '整数';
+  if (type === 'number') return '数字';
+  if (type === 'boolean') return '布尔 true/false';
+  return '文本';
+}
+
+function schemaConstraintLabels(schema: JsonObject): string[] {
+  const constraints: string[] = [];
+  if (typeof schema.minLength === 'number') {
+    constraints.push(`最短 ${schema.minLength}`);
+  }
+  if (typeof schema.maxLength === 'number') {
+    constraints.push(`最长 ${schema.maxLength}`);
+  }
+  if (typeof schema.minimum === 'number') {
+    constraints.push(`最小 ${schema.minimum}`);
+  }
+  if (typeof schema.maximum === 'number') {
+    constraints.push(`最大 ${schema.maximum}`);
+  }
+  if (typeof schema.minItems === 'number') {
+    constraints.push(`至少 ${schema.minItems} 项`);
+  }
+  if (typeof schema.maxItems === 'number') {
+    constraints.push(`最多 ${schema.maxItems} 项`);
+  }
+  return constraints;
+}
+
+export function schemaFieldHints(schema: JsonObject | undefined): string[] {
+  if (!schema || schema.type !== 'object') return [];
+  const properties = asJsonObject(schema.properties) || {};
+  const required = new Set(stringArray(schema.required));
+  return Object.entries(properties)
+    .filter(([name]) => !CARD_FORM_RESERVED_FIELD_NAMES.has(name))
+    .map(([name, raw]) => {
+      const propertySchema = asJsonObject(raw) || {};
+      const parts = [
+        schemaTypeLabel(name, propertySchema),
+        ...schemaConstraintLabels(propertySchema),
+      ];
+      return `- ${name}${required.has(name) ? '（必填）' : ''}: ${parts.join('，')}`;
+    });
 }

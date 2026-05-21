@@ -41,7 +41,9 @@ export interface CardFieldConfig {
     | 'number'
     | 'integer'
     | 'boolean'
+    | 'checkbox'
     | 'enum'
+    | 'multi_select'
     | 'file'
     | 'token';
   placeholder?: string;
@@ -149,11 +151,11 @@ export function validateCardConfig(
       }
       fieldNames.add(field.name);
       if (
-        field.type === 'enum' &&
+        (field.type === 'enum' || field.type === 'multi_select') &&
         (!field.options || field.options.length === 0)
       ) {
         errors.push(
-          `${cardKey}.form field "${field.name}" requires options for enum type`,
+          `${cardKey}.form field "${field.name}" requires options for ${field.type} type`,
         );
       }
     }

@@ -4132,7 +4132,7 @@ class WebChannel {
       value?: Record<string, string>;
       formValue?: Record<string, string>;
       form_value?: Record<string, string>;
-      payload?: Record<string, string>;
+      payload?: Record<string, unknown>;
       task_id?: string;
       action_item_id?: string;
       action?:
@@ -4162,6 +4162,23 @@ class WebChannel {
       return;
     }
 
+    const legacyValue = this.buildLegacyWorkbenchActionItemCardValue(data);
+    if (legacyValue) {
+      const result = await this.apiWorkbenchCardAction({
+        value: legacyValue,
+        payload: data.payload,
+        formValue: data.formValue || data.form_value,
+      });
+      if (result.error) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: result.error }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
     if (!data.task_id || !data.action_item_id || !data.action) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(
@@ -4171,129 +4188,107 @@ class WebChannel {
       );
       return;
     }
-
     const detail = getWorkbenchTaskDetail(data.task_id);
     const item = detail?.action_items?.find(
       (entry) => entry.id === data.action_item_id,
     );
-    if (!detail || !item) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Action item not found' }));
-      return;
-    }
+    res.writeHead(item ? 400 : 404, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        error: item
+          ? `Unsupported legacy action: ${data.action}`
+          : 'Action item not found',
+      }),
+    );
+  }
 
+  private buildLegacyWorkbenchActionItemCardValue(data: {
+    task_id?: string;
+    action_item_id?: string;
+    action?: string;
+    reply_text?: string;
+  }): Record<string, string> | null {
+    if (!data.task_id || !data.action_item_id || !data.action) return null;
+    const detail = getWorkbenchTaskDetail(data.task_id);
+    const item = detail?.action_items?.find(
+      (entry) => entry.id === data.action_item_id,
+    );
+    if (!detail || !item) return null;
+    const card = buildHumanInputCard(item, detail.task);
     if (data.action === 'reply') {
-      const replyText = data.reply_text?.trim();
-      if (!replyText) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'reply_text required' }));
-        return;
-      }
-      const groups = this.opts.registeredGroups();
-      const targetEntry = Object.entries(groups).find(
-        ([, group]) => group.folder === item.group_folder,
-      );
-      if (!targetEntry) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Target group not found' }));
-        return;
-      }
-      const [chatJid] = targetEntry;
-
-      if (
-        (item.source_type === 'ask_user_question' ||
-          item.source_type === 'request_human_input') &&
-        item.source_ref_id &&
-        item.group_folder
-      ) {
-        const groups = this.opts.registeredGroups();
-        const result = await handleAskQuestionResponse({
-          requestId: item.source_ref_id,
-          groupFolder: item.group_folder,
-          userId: 'web_user',
-          answer: replyText,
-          registeredGroups: groups,
-          sendMessage: async () => {},
-        });
-
-        if (!result.ok && !result.completed) {
-          await dispatchCurrentAskQuestion({
-            requestId: item.source_ref_id,
-            groupFolder: item.group_folder,
-            validationError: result.userMessage,
-            validationErrors: result.validationErrors,
-            registeredGroups: groups,
-            sendMessage: async () => {},
-          });
-        }
-
-        if (!result.ok) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: result.userMessage }));
-          return;
-        }
-      } else {
-        this.injectWorkbenchReply(chatJid, replyText);
-        this.opts.enqueueMessageCheck?.(chatJid);
-      }
-
-      if (item.source_type === 'send_message') {
-        runWorkbenchActionItemAction({
-          taskId: data.task_id,
-          actionItemId: data.action_item_id,
-          action: 'confirm',
-        });
-      }
-    } else {
-      if (
-        (data.action === 'confirm' ||
-          data.action === 'approve' ||
-          data.action === 'revise' ||
-          data.action === 'submit' ||
-          data.action === 'skip' ||
-          data.action === 'cancel') &&
-        item.source_ref_id &&
-        item.group_folder
-      ) {
-        const groups = this.opts.registeredGroups();
-        const targetEntry = Object.entries(groups).find(
-          ([, group]) => group.folder === item.group_folder,
-        );
-        if (targetEntry) {
-          const [chatJid] = targetEntry;
-          const signal =
-            data.action === 'confirm'
-              ? 'confirmed'
-              : data.action === 'skip'
-                ? 'skip'
-                : 'cancel';
-          this.injectWorkbenchReply(
-            chatJid,
-            `/answer ${item.source_ref_id} ${signal}`,
-          );
-          this.opts.enqueueMessageCheck?.(chatJid);
-        }
-      }
-      const result = runWorkbenchActionItemAction({
-        taskId: data.task_id,
-        actionItemId: data.action_item_id,
-        action: data.action,
-        payload: data.payload,
-      });
-      if (result.error) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: result.error }));
-        return;
-      }
+      const submitValue = card.form?.submitButton.value;
+      return {
+        ...(submitValue ||
+          card.buttons?.[0]?.value || {
+            action: 'workbench_action_item',
+          }),
+        task_id: data.task_id,
+        action_item_id: data.action_item_id,
+        ...(data.reply_text ? { answer: data.reply_text } : {}),
+      };
     }
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true }));
+    if (
+      data.action === 'skip' &&
+      (item.source_type === 'ask_user_question' ||
+        item.source_type === 'request_human_input')
+    ) {
+      const skipButton = card.buttons?.find(
+        (button) => button.value.action === 'ask_question_skip',
+      );
+      return skipButton
+        ? {
+            ...skipButton.value,
+            task_id: data.task_id,
+            action_item_id: data.action_item_id,
+          }
+        : null;
+    }
+    if (
+      data.action === 'confirm' ||
+      data.action === 'approve' ||
+      data.action === 'reject' ||
+      data.action === 'revise' ||
+      data.action === 'submit' ||
+      data.action === 'skip' ||
+      data.action === 'cancel'
+    ) {
+      const resumeAction = data.action === 'confirm' ? 'approve' : data.action;
+      const actionButton = [
+        ...(card.buttons || []),
+        ...(card.sections || []).flatMap((section) => section.buttons || []),
+        ...(card.form ? [card.form.submitButton] : []),
+      ].find((button) => {
+        if (button.value.resume_action === resumeAction) return true;
+        if (
+          button.value.workbench_action === data.action ||
+          button.value.workbench_action === resumeAction
+        ) {
+          return true;
+        }
+        return (
+          data.action === 'confirm' &&
+          button.value.workbench_action === 'resolve'
+        );
+      });
+      return {
+        ...(actionButton?.value || {
+          action:
+            item.source_type === 'workflow_interrupt'
+              ? 'workflow_interrupt_resume'
+              : 'workbench_action_item',
+          ...(item.source_ref_id ? { interrupt_id: item.source_ref_id } : {}),
+          resume_action: resumeAction,
+        }),
+        task_id: data.task_id,
+        action_item_id: data.action_item_id,
+      };
+    }
+    return null;
   }
 
   private async apiWorkbenchCardAction(input: {
     value: Record<string, string>;
-    payload?: Record<string, string>;
+    payload?: Record<string, unknown>;
     formValue?: Record<string, string>;
   }): Promise<{ error?: string }> {
     const legacyFormValue = input.formValue || {};

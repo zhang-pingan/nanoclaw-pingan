@@ -107,6 +107,15 @@ describe('FeishuChannel form cards', () => {
             options: [{ value: 'fast', label: '快速' }],
           },
           { name: 'enabled', type: 'boolean', placeholder: '启用' },
+          {
+            name: 'features',
+            type: 'multi_select',
+            placeholder: '特性',
+            options: [
+              { value: 'a', label: 'A' },
+              { value: 'b', label: 'B' },
+            ],
+          },
           { name: 'when', type: 'text', format: 'date', placeholder: '日期' },
           {
             name: 'secret',
@@ -148,6 +157,10 @@ describe('FeishuChannel form cards', () => {
             expect.objectContaining({ value: 'true' }),
             expect.objectContaining({ value: 'false' }),
           ]),
+        }),
+        expect.objectContaining({
+          tag: 'multi_select_static',
+          name: 'features',
         }),
         expect.objectContaining({
           tag: 'date_picker',

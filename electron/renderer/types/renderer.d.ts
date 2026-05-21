@@ -9,8 +9,6 @@ interface NanoClawAppAPI {
   onCyclePrimaryNav(handler: () => void): () => void;
   /** Listen to the app shortcut that toggles the Today Plan screen */
   onToggleTodayPlan(handler: () => void): () => void;
-  /** Listen for quick-chat actions that should switch the main window to the main group */
-  onQuickChatOpenMainGroup(handler: () => void): () => void;
   /** Listen for desktop assistant requests to open a workstation target */
   onOpenWorkstationTarget(handler: (payload: { url?: string }) => void): () => void;
   /** Open a URL in the system browser */
@@ -44,12 +42,6 @@ interface NanoClawAppAPI {
   }>;
   /** Current platform (darwin, win32, linux) */
   platform: string;
-  /** Bring the main application window to the foreground */
-  showMainWindow(): void;
-  /** Ask the main application window to jump to the main group */
-  openMainGroupFromQuickChat(): void;
-  /** Hide the window (quit Electron UI, keep NanoClaw running) */
-  hideWindow(): void;
 }
 
 declare global {

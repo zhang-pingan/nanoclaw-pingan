@@ -2,6 +2,11 @@ import type { CardButton, InteractiveCard } from './types.js';
 import { buildHumanInputCard } from './human-input-card.js';
 import { getWorkbenchTaskDetail } from './workbench.js';
 import { getWorkflowInterrupt } from './db.js';
+import {
+  asJsonObject,
+  schemaFieldHints,
+  type JsonObject,
+} from './schema-card.js';
 
 function headerColorForTaskState(
   taskState: 'running' | 'success' | 'failed' | 'cancelled',
@@ -109,6 +114,18 @@ function mapBroadcastButton(button: CardButton): CardButton {
   };
 }
 
+function parseJsonObject(
+  raw: string | null | undefined,
+): JsonObject | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return asJsonObject(parsed);
+  } catch {
+    return undefined;
+  }
+}
+
 function mapHumanInputCardForBroadcast(card: InteractiveCard): InteractiveCard {
   return {
     ...card,
@@ -163,6 +180,11 @@ export function buildWorkbenchBroadcastFallbackText(input: {
   } else if (item.source_type === 'workflow_interrupt' && item.source_ref_id) {
     const interrupt = getWorkflowInterrupt(item.source_ref_id);
     let allowedActions: string[] = [];
+    const payloadSchema =
+      parseJsonObject(interrupt?.resume_payload_schema_json) ||
+      (item.extra?.payloadSchema
+        ? asJsonObject(item.extra.payloadSchema)
+        : undefined);
     try {
       allowedActions = interrupt
         ? JSON.parse(interrupt.allowed_actions_json).filter(
@@ -185,10 +207,15 @@ export function buildWorkbenchBroadcastFallbackText(input: {
     lines.push(
       `可回复: /resume ${item.source_ref_id} ${primaryAction}${
         primaryAction === 'submit' || primaryAction === 'revise'
-          ? ' key=value; key2=value2'
+          ? ' 字段名=字段值; 字段名2=字段值2'
           : ''
       }`,
     );
+    const fieldHints = schemaFieldHints(payloadSchema);
+    if (fieldHints.length > 0) {
+      lines.push('字段说明:');
+      lines.push(...fieldHints);
+    }
     if (allowedActions.includes('skip')) {
       lines.push(`如需跳过，可回复: /resume ${item.source_ref_id} skip`);
     }

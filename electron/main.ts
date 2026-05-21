@@ -6,7 +6,6 @@ import {
   shell,
   ipcMain,
   Notification,
-  globalShortcut,
   screen,
   desktopCapturer,
   systemPreferences,
@@ -17,15 +16,12 @@ import { execFile } from 'child_process';
 import { readFile, unlink } from 'fs/promises';
 
 const mainDir = __dirname;
-const QUICK_CHAT_SHORTCUT = 'Command+`';
 const WORKSTATION_URL = 'http://localhost:3000/';
-const QUICK_CHAT_URL = `${WORKSTATION_URL}?quick-chat=1`;
 const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
 
 // Track whether we're doing a full quit (Quit All) vs just hiding
 let isQuitting = false;
 let mainWindow: BrowserWindow | null = null;
-let quickChatWindow: BrowserWindow | null = null;
 let pendingWorkstationOpenUrl: string | undefined;
 
 const isMac = process.platform === 'darwin';
@@ -456,116 +452,6 @@ function openWorkstationInClient(target?: string): void {
   sendWorkstationOpenTarget(url);
 }
 
-function bringWindowToFront(win: BrowserWindow | null): void {
-  if (!win) return;
-
-  if (isMac) {
-    app.focus({ steal: true });
-  }
-
-  if (win.isMinimized()) win.restore();
-  if (!win.isVisible()) win.show();
-  win.moveTop();
-  win.focus();
-}
-
-function placeWindowOnPrimaryDisplay(win: BrowserWindow): void {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { x, y, width, height } = primaryDisplay.workArea;
-  const bounds = win.getBounds();
-  const targetX = Math.round(x + (width - bounds.width) / 2);
-  const targetY = Math.round(y + Math.max((height - bounds.height) * 0.18, 28));
-  win.setPosition(targetX, targetY);
-}
-
-function createQuickChatWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 720,
-    height: 320,
-    minWidth: 640,
-    maxWidth: 840,
-    minHeight: 260,
-    maxHeight: 420,
-    show: false,
-    frame: false,
-    transparent: true,
-    hasShadow: true,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    movable: true,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    title: 'MixClaw Quick Chat',
-    backgroundColor: '#00000000',
-    vibrancy: isMac ? 'under-window' : undefined,
-    visualEffectState: isMac ? 'active' : undefined,
-    webPreferences: {
-      preload: path.join(mainDir, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  win.loadURL(QUICK_CHAT_URL);
-  win.setVisibleOnAllWorkspaces(true, {
-    visibleOnFullScreen: true,
-    // Prevent Electron from switching the app to UIElement mode, which
-    // makes the Dock icon disappear after the quick chat window is shown.
-    skipTransformProcessType: true,
-  });
-
-  win.on('blur', () => {
-    if (!isQuitting) {
-      win.hide();
-    }
-  });
-
-  win.on('close', (e) => {
-    if (!isQuitting) {
-      e.preventDefault();
-      win.hide();
-    }
-  });
-
-  win.on('closed', () => {
-    quickChatWindow = null;
-  });
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      shell.openExternal(url);
-    }
-    return { action: 'deny' };
-  });
-
-  return win;
-}
-
-function showQuickChatWindow(): void {
-  if (!quickChatWindow) {
-    quickChatWindow = createQuickChatWindow();
-  }
-  placeWindowOnPrimaryDisplay(quickChatWindow);
-  bringWindowToFront(quickChatWindow);
-}
-
-function hideQuickChatWindow(): void {
-  if (quickChatWindow && quickChatWindow.isVisible()) {
-    quickChatWindow.hide();
-  }
-}
-
-function toggleQuickChat(): void {
-  if (quickChatWindow?.isVisible()) {
-    hideQuickChatWindow();
-    return;
-  }
-  showQuickChatWindow();
-}
-
 function createWindow(initialUrl: string = WORKSTATION_URL): void {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -749,19 +635,6 @@ app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
   Menu.setApplicationMenu(buildAppMenu());
   createWindow(pendingWorkstationOpenUrl);
-  globalShortcut.register(QUICK_CHAT_SHORTCUT, () => {
-    toggleQuickChat();
-  });
-
-  ipcMain.on('show-main-window', () => {
-    bringMainWindowToFront();
-  });
-
-  ipcMain.on('quick-chat-open-main-group', () => {
-    bringMainWindowToFront();
-    mainWindow?.webContents.send('quick-chat-open-main-group');
-    hideQuickChatWindow();
-  });
 
   // Handle open-file IPC from renderer
   ipcMain.handle('open-file', async (_event, filePath: string) => {
@@ -845,10 +718,6 @@ app.whenReady().then(() => {
     });
     notification.show();
   });
-});
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
 });
 
 // Quit when all windows are closed (except on macOS)
