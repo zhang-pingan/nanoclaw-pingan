@@ -16374,7 +16374,7 @@ async function openWorkbenchCreateTaskModal() {
       entryOptionsEl,
       entryPoints.map((entry) => ({
         value: entry,
-        label: getSelectedWorkflowType().entry_points_detail?.[entry]?.requires_deliverable ? `${entry} (需要交付物)` : entry,
+        label: entry,
         description: getSelectedWorkflowType().entry_points_detail?.[entry]?.requires_deliverable ? "需要交付物" : "可直接发起",
       })),
       state.entryPoint,
@@ -16387,7 +16387,7 @@ async function openWorkbenchCreateTaskModal() {
 
     renderSingleOptions(
       serviceOptionsEl,
-      services.map((service) => ({ value: service, label: service, description: "目标服务" })),
+      services.map((service) => ({ value: service, label: service })),
       state.service,
       (value) => {
         state.service = value;
