@@ -4048,12 +4048,9 @@ function openKnowledgeTextImportDialog() {
       <div class="workflow-wizard-modal knowledge-text-import-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-text-import-title">
         <div class="workflow-wizard-header">
           <div class="workflow-wizard-header-copy">
-            <div class="workflow-wizard-kicker">Knowledge Base</div>
             <div class="workflow-wizard-title-row">
               <div id="knowledge-text-import-title" class="workflow-wizard-title">导入文本资料</div>
-              <span class="workflow-wizard-header-badge">单次填写标题与正文</span>
             </div>
-            <div class="workflow-wizard-header-desc">把资料标题和正文集中在一个弹窗里完成，提交后直接写入知识库资料快照。</div>
           </div>
           <button type="button" class="workflow-wizard-action-btn workflow-wizard-close" data-knowledge-text-import-close title="关闭" aria-label="关闭">
             <span class="workflow-wizard-btn-icon" aria-hidden="true">
