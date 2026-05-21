@@ -4063,8 +4063,6 @@ function openKnowledgeTextImportDialog() {
             <div class="workflow-wizard-section workflow-wizard-section-hero">
               <div class="workflow-wizard-hero-grid">
                 <div>
-                  <div class="workflow-wizard-label">导入方式</div>
-                  <div class="workflow-wizard-hero-title">粘贴文本生成资料快照</div>
                   <div class="workflow-wizard-hero-copy">文本会作为用户显式提供的资料进入知识库，后续可勾选资料生成草稿。</div>
                 </div>
                 <div class="workflow-wizard-metrics">
@@ -4087,8 +4085,7 @@ function openKnowledgeTextImportDialog() {
               <div class="workflow-wizard-label">1. 资料标题</div>
               <div class="workflow-wizard-subsection">
                 <label class="knowledge-text-import-field">
-                  <span>标题</span>
-                  <input id="knowledge-text-import-name" class="workflow-wizard-input" type="text" placeholder="例如：项目部署说明" />
+                  <input id="knowledge-text-import-name" class="workflow-wizard-input" type="text" placeholder="例如：项目部署说明" aria-label="资料标题" />
                 </label>
               </div>
               <div class="workflow-wizard-field-help">标题可留空；留空时会以“未命名资料”导入。</div>
@@ -4097,8 +4094,7 @@ function openKnowledgeTextImportDialog() {
               <div class="workflow-wizard-label">2. 资料正文</div>
               <div class="workflow-wizard-subsection">
                 <label class="knowledge-text-import-field">
-                  <span>正文</span>
-                  <textarea id="knowledge-text-import-content" class="workflow-wizard-input knowledge-text-import-textarea" rows="10" placeholder="粘贴要导入知识库的资料文本"></textarea>
+                  <textarea id="knowledge-text-import-content" class="workflow-wizard-input knowledge-text-import-textarea" rows="10" placeholder="粘贴要导入知识库的资料文本" aria-label="资料正文"></textarea>
                 </label>
               </div>
               <div class="workflow-wizard-field-help">正文不能为空。提交后会保留原始换行和格式文本。</div>
