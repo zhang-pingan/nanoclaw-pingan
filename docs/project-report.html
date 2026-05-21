@@ -1610,6 +1610,30 @@
 
           <div style="height: 22px"></div>
 
+
+          <div class="grid-2">
+            <article class="card">
+              <span class="tag teal">开发测试流程</span>
+              <h3><code>dev_test</code></h3>
+              <p>
+                从方案设计开始，经过方案审核、开发、开发复核、预发部署和测试验证。
+                角色包括 planner、plan_examiner、dev、dev_examiner、ops、test；
+                支持从方案、开发或测试前确认入口进入。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">Bug 修复测试流程</span>
+              <h3><code>fix_test</code></h3>
+              <p>
+                从 Bug 修复开始，进入预发部署和测试验证。测试失败时进入复修
+                Round， 再次部署和验证；部署失败、通过、取消等状态进入
+                terminal。
+              </p>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
           <div class="callout">
             <strong>Resume 的事务边界：</strong>
             <code>resumeWorkflowInterrupt()</code>
@@ -1668,26 +1692,6 @@
 
           <div style="height: 22px"></div>
 
-          <div class="grid-2">
-            <article class="card">
-              <span class="tag teal">开发测试流程</span>
-              <h3><code>dev_test</code></h3>
-              <p>
-                从方案设计开始，经过方案审核、开发、开发复核、预发部署和测试验证。
-                角色包括 planner、plan_examiner、dev、dev_examiner、ops、test；
-                支持从方案、开发或测试前确认入口进入。
-              </p>
-            </article>
-            <article class="card">
-              <span class="tag amber">Bug 修复测试流程</span>
-              <h3><code>fix_test</code></h3>
-              <p>
-                从 Bug 修复开始，进入预发部署和测试验证。测试失败时进入复修
-                Round， 再次部署和验证；部署失败、通过、取消等状态进入
-                terminal。
-              </p>
-            </article>
-          </div>
         </div>
       </section>
 
