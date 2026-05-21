@@ -17365,25 +17365,33 @@ function appendOptimisticMessage(chatJid, content, replyToId = null) {
 
 async function sendMessageToChat(chatJid, content, options = {}) {
   const trimmed = content.trim();
-  const stagedFiles = Array.isArray(options.pendingFiles) ? options.pendingFiles : pendingFiles;
-  const stagedReferences = Array.isArray(options.pendingFileReferences)
-    ? options.pendingFileReferences
-    : pendingFileReferences;
-  if (!trimmed && stagedFiles.length === 0 && stagedReferences.length === 0) return false;
+  const usesComposerPendingFiles = !Array.isArray(options.pendingFiles);
+  const usesComposerPendingReferences = !Array.isArray(options.pendingFileReferences);
+  const stagedFiles = usesComposerPendingFiles ? pendingFiles : options.pendingFiles;
+  const stagedReferences = usesComposerPendingReferences
+    ? pendingFileReferences
+    : options.pendingFileReferences;
+  const safeStagedFiles = Array.isArray(stagedFiles) ? stagedFiles : [];
+  const safeStagedReferences = Array.isArray(stagedReferences) ? stagedReferences : [];
+  if (!trimmed && safeStagedFiles.length === 0 && safeStagedReferences.length === 0) return false;
   if (!chatJid) return false;
 
   // Upload pending files first and prepend their container paths
-  let filePrefix = buildPendingFileReferencesPrefix(stagedReferences);
-  if (stagedFiles.length > 0) {
+  let filePrefix = buildPendingFileReferencesPrefix(safeStagedReferences);
+  if (safeStagedFiles.length > 0) {
     try {
-      filePrefix += await uploadPendingFiles();
+      filePrefix += usesComposerPendingFiles
+        ? await uploadPendingFiles()
+        : buildUploadedFilesPrefix(await uploadFilesForJid(safeStagedFiles, chatJid));
     } catch (err) {
       showError(`附件上传失败: ${err}`);
       return false;
     }
   }
-  pendingFileReferences = [];
-  renderPendingFiles();
+  if (usesComposerPendingReferences) {
+    pendingFileReferences = [];
+    renderPendingFiles();
+  }
 
   const fullContent = filePrefix + trimmed;
   const payload = {
@@ -18318,6 +18326,18 @@ async function uploadFilesForJid(files, jid) {
   return uploadedFiles.length > 0 ? uploadedFiles : agentPaths.map((agentPath) => ({ agentPath }));
 }
 
+function buildUploadedFilesPrefix(uploadedFiles) {
+  const agentPaths = Array.isArray(uploadedFiles)
+    ? uploadedFiles.map((file) => file.agentPath).filter(Boolean)
+    : [];
+  if (agentPaths.length === 0) return "";
+  return (
+    "【附件】\n" +
+    agentPaths.map((p) => `文件地址: ${p}`).join("\n") +
+    "\n"
+  );
+}
+
 // Upload all pending files and return the prefix string to prepend to the message
 async function uploadPendingFiles() {
   if (pendingFiles.length === 0) return "";
@@ -18326,13 +18346,7 @@ async function uploadPendingFiles() {
   pendingFiles = [];
   renderPendingFiles();
 
-  const agentPaths = uploadedFiles.map((file) => file.agentPath).filter(Boolean);
-  if (agentPaths.length === 0) return "";
-  return (
-    "【附件】\n" +
-    agentPaths.map((p) => `文件地址: ${p}`).join("\n") +
-    "\n"
-  );
+  return buildUploadedFilesPrefix(uploadedFiles);
 }
 function showError(msg) {
   const el = document.createElement("div");
