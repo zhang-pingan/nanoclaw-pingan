@@ -47,8 +47,15 @@ import {
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
-import { buildWorkbenchBroadcastCard } from './workbench-broadcast-render.js';
+import {
+  buildWorkbenchBroadcastCard,
+  buildWorkbenchBroadcastFallbackText,
+} from './workbench-broadcast-render.js';
 import { handleWorkbenchBroadcastCardAction } from './workbench-broadcast-actions.js';
+import {
+  handleWorkflowResumeCommand,
+  parseWorkflowResumeCommand,
+} from './workflow-interrupt-command.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 import { buildHumanInputCard } from './human-input-card.js';
 import type { WorkbenchActionItem, WorkbenchTaskItem } from './workbench.js';
@@ -1029,6 +1036,103 @@ describe('workbench approval transition sync', () => {
       request_id: 'ask-broadcast-ask-options',
       reply_text: '继续',
     });
+  });
+
+  it('includes resume text commands in workflow interrupt fallback text', () => {
+    dbCreateWorkflow({
+      id: 'wf-broadcast-text-resume',
+      name: '广播文本恢复',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/broadcast-text-resume',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_broadcast_text_resume',
+        staging_work_branch: 'staging-deploy/feature-broadcast-text-resume',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    recoverWorkflowRuntimeForTest();
+    syncWorkbenchOnWorkflowCreated('wf-broadcast-text-resume');
+
+    const text = buildWorkbenchBroadcastFallbackText({
+      taskId: 'wb-wf-broadcast-text-resume',
+      actionItemId: 'wb-action-wf-broadcast-text-resume-testing_confirm',
+    });
+
+    const interrupt = getPendingWorkflowInterruptForState(
+      'wf-broadcast-text-resume',
+      'testing_confirm',
+    );
+    expect(interrupt).toBeDefined();
+    expect(text).toContain(
+      `/resume ${interrupt!.id} submit key=value; key2=value2`,
+    );
+    expect(text).toContain(`/resume ${interrupt!.id} skip`);
+  });
+
+  it('handles workflow interrupt text resume commands', () => {
+    dbCreateWorkflow({
+      id: 'wf-text-resume-command',
+      name: '文本恢复命令',
+      service: 'order-service',
+      start_from: 'testing',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/text-resume-command',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_text_resume_command',
+        staging_work_branch: 'staging-deploy/feature-text-resume-command',
+        access_token: '',
+      },
+      status: 'testing_confirm',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    recoverWorkflowRuntimeForTest();
+    syncWorkbenchOnWorkflowCreated('wf-text-resume-command');
+    const interrupt = getPendingWorkflowInterruptForState(
+      'wf-text-resume-command',
+      'testing_confirm',
+    );
+    expect(interrupt).toBeDefined();
+
+    const command = parseWorkflowResumeCommand(
+      `/resume ${interrupt!.id} submit access_token=demo-token`,
+      /^\/nc\s*/,
+    );
+    expect(command).toEqual({
+      interruptId: interrupt!.id,
+      action: 'submit',
+      payload: { access_token: 'demo-token' },
+    });
+
+    const result = handleWorkflowResumeCommand({
+      command: command!,
+      currentChatJid: 'main@g.us',
+      currentGroupFolder: MAIN_GROUP.folder,
+      registeredGroups: getAllRegisteredGroups(),
+      userId: 'text-user',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      JSON.parse(getWorkflowInterrupt(interrupt!.id)!.resume_payload_json!),
+    ).toMatchObject({ access_token: 'demo-token' });
   });
 
   it('resolves ask-question broadcast replies by request_id when action_item_id is absent', async () => {

@@ -5,6 +5,8 @@ import type { ServerResponse } from 'http';
 import path from 'path';
 import {
   CardActionHandler,
+  CardButton,
+  CardInput,
   Channel,
   FeishuCard,
   InteractiveCard,
@@ -26,6 +28,7 @@ import { registerWebhookRoute } from './webhook-ingress.js';
 
 const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis';
 const FEISHU_API_BASE_V2 = 'https://open.feishu.cn/open-apis/v2';
+const FEISHU_UNSUPPORTED_FORM_INPUTS = new Set<CardInput['type']>(['file']);
 
 interface FeishuConfig {
   appId: string;
@@ -217,6 +220,8 @@ class FeishuChannel implements Channel {
   /** Convert a channel-agnostic InteractiveCard to Feishu's native card format. */
   private convertToFeishuCard(card: InteractiveCard): FeishuCard {
     const elements: unknown[] = [];
+    const channelNotice = this.getCardChannelNotice(card);
+    const disabledByChannel = Boolean(channelNotice);
 
     // Body text
     if (card.body) {
@@ -225,17 +230,22 @@ class FeishuChannel implements Channel {
         text: { tag: 'lark_md', content: card.body },
       });
     }
+    if (channelNotice) {
+      elements.push({
+        tag: 'note',
+        elements: [
+          {
+            tag: 'plain_text',
+            content: channelNotice,
+          },
+        ],
+      });
+    }
 
     // Top-level buttons
     if (card.buttons && card.buttons.length > 0) {
       const actions: unknown[] = card.buttons.map((btn) => {
-        const button: Record<string, unknown> = {
-          tag: 'button',
-          text: { tag: 'plain_text', content: btn.label },
-          value: btn.value,
-        };
-        if (btn.type && btn.type !== 'default') button.type = btn.type;
-        return button;
+        return this.buildFeishuButton(btn, disabledByChannel);
       });
       elements.push({ tag: 'action', actions });
     }
@@ -244,7 +254,26 @@ class FeishuChannel implements Channel {
     if (card.form) {
       elements.push({ tag: 'hr' });
       const formElements: unknown[] = [];
+      const unsupportedInputs = card.form.inputs.filter((input) =>
+        FEISHU_UNSUPPORTED_FORM_INPUTS.has(input.type),
+      );
+      if (unsupportedInputs.length > 0) {
+        formElements.push({
+          tag: 'note',
+          elements: [
+            {
+              tag: 'plain_text',
+              content: `以下字段不支持在飞书卡片内填写，请到 Web 工作台处理：${unsupportedInputs
+                .map((input) => input.placeholder || input.name)
+                .join(', ')}`,
+            },
+          ],
+        });
+      }
       for (const input of card.form.inputs) {
+        if (FEISHU_UNSUPPORTED_FORM_INPUTS.has(input.type)) {
+          continue;
+        }
         const label = input.placeholder || input.name;
         if (
           (input.type === 'enum' || input.type === 'boolean') &&
@@ -275,7 +304,27 @@ class FeishuChannel implements Channel {
             })),
           };
           if (input.required) selectElement.required = true;
+          if (disabledByChannel) selectElement.disabled = true;
           formElements.push(selectElement);
+          continue;
+        }
+
+        if (input.format === 'date' || input.format === 'date-time') {
+          const dateElement: Record<string, unknown> = {
+            tag: input.format === 'date' ? 'date_picker' : 'datetime_picker',
+            name: input.name,
+            label: { tag: 'plain_text', content: label },
+            label_position: 'left',
+            placeholder: {
+              tag: 'plain_text',
+              content:
+                input.placeholder ||
+                (input.format === 'date' ? '请选择日期' : '请选择时间'),
+            },
+          };
+          if (input.required) dateElement.required = true;
+          if (disabledByChannel) dateElement.disabled = true;
+          formElements.push(dateElement);
           continue;
         }
 
@@ -286,7 +335,13 @@ class FeishuChannel implements Channel {
           label_position: 'left',
           placeholder: { tag: 'plain_text', content: input.placeholder || '' },
         };
+        if (input.type === 'textarea') inputElement.input_type = 'multiline';
+        if (input.type === 'number' || input.type === 'integer') {
+          inputElement.input_type = 'text';
+        }
+        if (input.type === 'token') inputElement.input_type = 'password';
         if (input.required) inputElement.required = true;
+        if (disabledByChannel) inputElement.disabled = true;
         if (typeof input.max_length === 'number') {
           inputElement.max_length = input.max_length;
         }
@@ -304,6 +359,13 @@ class FeishuChannel implements Channel {
         card.form.submitButton.type !== 'default'
       ) {
         submitButton.type = card.form.submitButton.type;
+      }
+      if (
+        card.form.submitButton.disabled ||
+        disabledByChannel ||
+        unsupportedInputs.length > 0
+      ) {
+        submitButton.disabled = true;
       }
       formElements.push(submitButton);
       elements.push({
@@ -323,13 +385,7 @@ class FeishuChannel implements Channel {
         });
         if (section.buttons && section.buttons.length > 0) {
           const actions: unknown[] = section.buttons.map((btn) => {
-            const button: Record<string, unknown> = {
-              tag: 'button',
-              text: { tag: 'plain_text', content: btn.label },
-              value: btn.value,
-            };
-            if (btn.type && btn.type !== 'default') button.type = btn.type;
-            return button;
+            return this.buildFeishuButton(btn, disabledByChannel);
           });
           elements.push({ tag: 'action', actions });
         }
@@ -347,6 +403,37 @@ class FeishuChannel implements Channel {
       },
       elements,
     };
+  }
+
+  private isCardAllowedOnFeishu(card: InteractiveCard): boolean {
+    const channels = Array.isArray(card.allowed_channels)
+      ? card.allowed_channels
+      : [];
+    return channels.length === 0 || channels.includes('feishu');
+  }
+
+  private getCardChannelNotice(card: InteractiveCard): string {
+    if (this.isCardAllowedOnFeishu(card)) return '';
+    const channels = Array.isArray(card.allowed_channels)
+      ? card.allowed_channels.join(', ')
+      : '';
+    return channels
+      ? `该操作不支持飞书渠道，可用渠道：${channels}`
+      : '该操作不支持飞书渠道';
+  }
+
+  private buildFeishuButton(
+    btn: CardButton,
+    disabledByChannel: boolean,
+  ): Record<string, unknown> {
+    const button: Record<string, unknown> = {
+      tag: 'button',
+      text: { tag: 'plain_text', content: btn.label },
+      value: btn.value,
+    };
+    if (btn.type && btn.type !== 'default') button.type = btn.type;
+    if (btn.disabled || disabledByChannel) button.disabled = true;
+    return button;
   }
 
   private buildFeishuCardContent(

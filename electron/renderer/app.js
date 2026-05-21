@@ -18,6 +18,7 @@ var cmdPaletteIndex = -1;
 var multiSelectMode = false;
 var selectedMsgIds = new Set();
 var pendingFiles = []; // files staged for upload on next send
+var pendingFileReferences = []; // agent-visible file paths staged on next send
 var pendingCardActions = new Map();
 var cardActionSeq = 0;
 var modelSyncTimer = null;
@@ -15000,195 +15001,17 @@ function getWorkbenchSubtaskStatusIcon(status) {
   }
 }
 
-function getWorkbenchApprovalLabels(task, approval) {
-  const approvalType = approval.approval_type || task.workflow_status;
-  switch (approvalType) {
-    case "plan_examine_confirm":
-      return { approve: "进入开发", revise: "返回方案修改", skip: "跳过此节点" };
-    case "dev_examine_confirm":
-      return { approve: "继续后续流程", revise: "返回开发修正", skip: "跳过此节点" };
-    case "awaiting_confirm":
-      return { approve: "开始预发部署", revise: "", skip: "跳过此节点" };
-    case "testing_confirm":
-      return { approve: "", revise: "填写 access_token 并开始测试", skip: "跳过鉴权直接测试" };
-    default:
-      return {
-        approve: "通过",
-        revise: approval.action_mode === "approve_or_revise" ? "驳回并修改" : "",
-        skip: "跳过此节点",
-      };
-  }
-}
-
-function getWorkbenchItemAllowedActions(item) {
-  return Array.isArray(item.extra?.allowedActions)
-    ? item.extra.allowedActions.map((entry) => String(entry))
-    : [];
-}
-
-function getWorkbenchItemPayloadSchema(item) {
-  return item.extra?.payloadSchema && typeof item.extra.payloadSchema === "object"
-    ? item.extra.payloadSchema
-    : {};
-}
-
-function buildWorkbenchSchemaInputs(schema) {
-  if (!schema || schema.type !== "object" || !schema.properties || typeof schema.properties !== "object") return [];
-  const required = new Set(Array.isArray(schema.required) ? schema.required.map((entry) => String(entry)) : []);
-  return Object.entries(schema.properties)
-    .filter(([name]) => name !== "skipped")
-    .map(([name, raw]) => {
-      const field = raw && typeof raw === "object" ? raw : {};
-      const enumValues = Array.isArray(field.enum) ? field.enum.map((entry) => String(entry)) : [];
-      const type = enumValues.length > 0
-        ? "enum"
-        : field.type === "number"
-          ? "number"
-          : field.type === "integer"
-            ? "integer"
-            : field.type === "boolean"
-              ? "boolean"
-              : "text";
-      return {
-        name,
-        type,
-        placeholder: field.title || field.description || name,
-        required: required.has(name),
-        options: enumValues.map((value) => ({ value, label: value })),
-        min: typeof field.minimum === "number" ? field.minimum : undefined,
-        max: typeof field.maximum === "number" ? field.maximum : undefined,
-        min_length: typeof field.minLength === "number" ? field.minLength : undefined,
-        max_length: typeof field.maxLength === "number" ? field.maxLength : undefined,
-        format: ["email", "uri", "date", "date-time"].includes(field.format) ? field.format : undefined,
-      };
-    });
-}
-
-function getWorkbenchActionLabel(action, item, task) {
-  const labels = getWorkbenchApprovalLabels(task, {
-    approval_type: item.stage_key || task.workflow_status,
-    action_mode: item.action_mode || "approve_only",
-  });
-  if (action === "approve") return labels.approve || "确认";
-  if (action === "revise") return labels.revise || "提交修改";
-  if (action === "skip") return labels.skip || "跳过";
-  if (action === "submit") return "提交";
-  if (action === "cancel") return "取消";
-  if (action === "reject") return "拒绝";
-  return action;
-}
-
 function buildWorkbenchActionItemCardFallback(item, task) {
-  if (item.source_type === "workflow_interrupt") {
-    const allowedActions = getWorkbenchItemAllowedActions(item);
-    const payloadSchema = getWorkbenchItemPayloadSchema(item);
-    const buttons = [];
-    const buttonActions = allowedActions.length > 0
-      ? allowedActions.filter((action) => action !== "revise" && action !== "submit")
-      : item.action_mode === "input_required"
-        ? ["skip"]
-        : ["approve", "skip"];
-    for (const action of buttonActions) {
-      buttons.push({
-        id: `${item.id}-${action}`,
-        label: getWorkbenchActionLabel(action, item, task),
-        type: ["approve", "submit", "resume"].includes(action) ? "primary" : action === "cancel" || action === "reject" ? "danger" : undefined,
-        value: {
-          action: "workflow_interrupt_resume",
-          task_id: task.id,
-          action_item_id: item.id,
-          interrupt_id: item.source_ref_id || item.extra?.interruptId || "",
-          resume_action: action,
-        },
-      });
-    }
-    const card = {
-      header: { title: item.title || "待处理项", color: item.item_type === "credential" ? "orange" : "blue" },
-      body: item.body || "",
-      buttons,
-    };
-    const schemaInputs = buildWorkbenchSchemaInputs(payloadSchema);
-    const formAction = allowedActions.find((action) => action === "submit" || action === "revise") ||
-      (schemaInputs.length > 0
-        ? allowedActions.find((action) => !["skip", "cancel", "reject"].includes(action))
-        : item.action_mode === "input_required" ? "submit" : item.action_mode === "approve_or_revise" ? "revise" : "");
-    if (formAction) {
-      card.form = {
-        name: `workbench-${item.id}`,
-        inputs: schemaInputs.length > 0
-          ? schemaInputs
-          : [{
-              name: formAction === "revise" ? "revision_text" : "reply_text",
-              type: "textarea",
-              placeholder: formAction === "revise" ? "输入修改意见" : "输入内容",
-              required: true,
-            }],
-        submitButton: {
-          id: `${item.id}-${formAction}`,
-          label: getWorkbenchActionLabel(formAction, item, task),
-          type: formAction === "submit" ? "primary" : undefined,
-          value: {
-            action: "workflow_interrupt_resume",
-            task_id: task.id,
-            action_item_id: item.id,
-            interrupt_id: item.source_ref_id || item.extra?.interruptId || "",
-            resume_action: formAction,
-          },
-        },
-      };
-    }
-    return card;
-  }
-
-  const question = item.extra?.current_question || item.extra?.questions?.[0];
-  const answerValue = {
-    action: "ask_question_answer",
-    task_id: task.id,
-    action_item_id: item.id,
-    request_id: item.source_ref_id || item.extra?.request_id || "",
-    group_folder: item.group_folder || "",
-    ...(question?.id ? { question_id: question.id } : {}),
-  };
-  const buttons = Array.isArray(question?.options)
-    ? question.options.map((opt, index) => ({
-        id: `${item.id}-answer-${index}`,
-        label: opt.label,
-        value: { ...answerValue, answer: opt.label },
-      }))
-    : [];
-  buttons.push({
-    id: `${item.id}-skip`,
-    label: "跳过",
-    value: {
-      action: "ask_question_skip",
-      task_id: task.id,
-      action_item_id: item.id,
-      request_id: item.source_ref_id || item.extra?.request_id || "",
-      group_folder: item.group_folder || "",
-    },
-  });
-  if (item.source_type === "send_message") {
-    return {
-      header: { title: item.title || "待处理项", color: "grey" },
-      body: item.body || "",
-      buttons: [{
-        id: `${item.id}-resolve`,
-        label: "标记已读",
-        value: { action: "workbench_action_item", workbench_action: "resolve", task_id: task.id, action_item_id: item.id },
-      }],
-    };
-  }
   return {
-    header: { title: item.title || "待处理项", color: item.source_type === "request_human_input" ? "purple" : "blue" },
-    body: question?.question || item.body || "",
-    buttons,
-    form: item.replyable
-      ? {
-          name: `workbench-${item.id}`,
-          inputs: [{ name: "answer", type: "textarea", placeholder: "输入答复内容", required: true }],
-          submitButton: { id: `${item.id}-reply`, label: "提交答复", type: "primary", value: answerValue },
-        }
-      : undefined,
+    header: { title: item.title || "待处理项", color: "grey" },
+    body: item.body || "待办卡片缺少服务端渲染结果，请刷新工作台后重试。",
+    buttons: [{
+      id: `${item.id || "unknown"}-resolve`,
+      label: "刷新后处理",
+      disabled: true,
+      disabledReason: "该待办缺少服务端卡片模型，刷新任务详情后再处理。",
+      value: { action: "workbench_action_item", workbench_action: "resolve", task_id: task.id || "", action_item_id: item.id || "" },
+    }],
   };
 }
 
@@ -17500,6 +17323,7 @@ async function selectGroup(jid) {
   if (multiSelectMode) exitMultiSelect();
   // Clear staged files when switching groups
   pendingFiles = [];
+  pendingFileReferences = [];
   renderPendingFiles();
   currentGroupJid = jid;
   messages = [];
@@ -17541,20 +17365,25 @@ function appendOptimisticMessage(chatJid, content, replyToId = null) {
 
 async function sendMessageToChat(chatJid, content, options = {}) {
   const trimmed = content.trim();
-  if (!trimmed && (!options.pendingFiles || options.pendingFiles.length === 0)) return false;
+  const stagedFiles = Array.isArray(options.pendingFiles) ? options.pendingFiles : pendingFiles;
+  const stagedReferences = Array.isArray(options.pendingFileReferences)
+    ? options.pendingFileReferences
+    : pendingFileReferences;
+  if (!trimmed && stagedFiles.length === 0 && stagedReferences.length === 0) return false;
   if (!chatJid) return false;
 
   // Upload pending files first and prepend their container paths
-  let filePrefix = "";
-  const stagedFiles = Array.isArray(options.pendingFiles) ? options.pendingFiles : pendingFiles;
+  let filePrefix = buildPendingFileReferencesPrefix(stagedReferences);
   if (stagedFiles.length > 0) {
     try {
-      filePrefix = await uploadPendingFiles();
+      filePrefix += await uploadPendingFiles();
     } catch (err) {
       showError(`附件上传失败: ${err}`);
       return false;
     }
   }
+  pendingFileReferences = [];
+  renderPendingFiles();
 
   const fullContent = filePrefix + trimmed;
   const payload = {
@@ -17595,6 +17424,8 @@ async function sendQuickChatMessage() {
   }
   const sent = await sendMessageToChat(mainGroup.jid, quickChatInput.value, {
     optimistic: mainGroup.jid === currentGroupJid,
+    pendingFiles: [],
+    pendingFileReferences: [],
     replyToId: null,
   });
   if (!sent) return;
@@ -18320,7 +18151,7 @@ function insertTextIntoComposer(text) {
 }
 
 function referenceFileInComposer(containerPath) {
-  insertTextIntoComposer(`文件地址: ${containerPath}`);
+  stageFileReference(containerPath);
   showToast("已引用文件");
 }
 
@@ -18408,15 +18239,50 @@ function stageFile(file) {
   renderPendingFiles();
 }
 
+function stageFileReference(containerPath) {
+  const normalized = String(containerPath || "").trim();
+  if (!normalized || !currentGroupJid) return;
+  if (!pendingFileReferences.includes(normalized)) {
+    pendingFileReferences.push(normalized);
+  }
+  renderPendingFiles();
+  messageInput.focus();
+}
+
+function getFileReferenceName(containerPath) {
+  const normalized = String(containerPath || "").replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() || normalized || "未命名文件";
+}
+
+function buildPendingFileReferencesPrefix(references = pendingFileReferences) {
+  const paths = Array.isArray(references)
+    ? references.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (paths.length === 0) return "";
+  return (
+    "【引用文件】\n" +
+    paths.map((p) => `文件地址: ${p}`).join("\n") +
+    "\n"
+  );
+}
+
 // Render the pending files preview bar
 function renderPendingFiles() {
-  if (pendingFiles.length === 0) {
+  if (pendingFiles.length === 0 && pendingFileReferences.length === 0) {
     pendingFilesEl.classList.remove("visible");
     pendingFilesContent.textContent = "";
     return;
   }
-  const names = pendingFiles.map((f) => escapeHtml(f.name || "未命名附件")).join(", ");
-  pendingFilesContent.innerHTML = `${SVG.paperclip} ${pendingFiles.length} 个附件: ${names}`;
+  const parts = [];
+  if (pendingFiles.length > 0) {
+    const names = pendingFiles.map((f) => escapeHtml(f.name || "未命名附件")).join(", ");
+    parts.push(`${pendingFiles.length} 个附件: ${names}`);
+  }
+  if (pendingFileReferences.length > 0) {
+    const names = pendingFileReferences.map((filePath) => escapeHtml(getFileReferenceName(filePath))).join(", ");
+    parts.push(`${pendingFileReferences.length} 个引用: ${names}`);
+  }
+  pendingFilesContent.innerHTML = `${SVG.paperclip} ${parts.join(" · ")}`;
   pendingFilesEl.classList.add("visible");
 }
 
@@ -22926,6 +22792,7 @@ messageInput.addEventListener("paste", handleComposerPaste);
 replyPreviewClose.addEventListener("click", clearReplyTo);
 pendingFilesClose.addEventListener("click", () => {
   pendingFiles = [];
+  pendingFileReferences = [];
   renderPendingFiles();
 });
 

@@ -7,6 +7,10 @@ import {
   handleAskQuestionResponse,
   parseAskAnswerCommand,
 } from './ask-user-question.js';
+import {
+  handleWorkflowResumeCommand,
+  parseWorkflowResumeCommand,
+} from './workflow-interrupt-command.js';
 import { createCardActionHandler } from './card-action-router.js';
 import {
   ASSISTANT_NAME,
@@ -488,9 +492,8 @@ function isSendMessageToolResult(output: ContainerOutput): boolean {
   const toolName = output.event?.payload?.toolName;
   return Boolean(
     output.status === 'success' &&
-      output.event?.name === 'tool_result' &&
-      (toolName === 'mcp__nanoclaw__send_message' ||
-        toolName === 'send_message'),
+    output.event?.name === 'tool_result' &&
+    (toolName === 'mcp__nanoclaw__send_message' || toolName === 'send_message'),
   );
 }
 
@@ -787,6 +790,35 @@ async function handleAskAnswerCommand(opts: {
   return true;
 }
 
+async function handleWorkflowResumeTextCommand(opts: {
+  chatJid: string;
+  group: RegisteredGroup;
+  channel: Channel;
+  messages: NewMessage[];
+}): Promise<boolean> {
+  const { chatJid, group, channel, messages } = opts;
+  const cmdMsg = messages.find(
+    (m) => parseWorkflowResumeCommand(m.content, TRIGGER_PATTERN) !== null,
+  );
+  if (!cmdMsg) return false;
+
+  const parsed = parseWorkflowResumeCommand(cmdMsg.content, TRIGGER_PATTERN);
+  if (!parsed) return false;
+
+  lastAgentTimestamp[chatJid] = messages[messages.length - 1].timestamp;
+  saveState();
+
+  const result = handleWorkflowResumeCommand({
+    command: parsed,
+    currentChatJid: chatJid,
+    currentGroupFolder: group.folder,
+    registeredGroups,
+    userId: cmdMsg.sender || 'unknown',
+  });
+  await channel.sendMessage(chatJid, result.message);
+  return true;
+}
+
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
   const agentTs = getRouterState('last_agent_timestamp');
@@ -923,6 +955,17 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   if (
     await handleAskAnswerCommand({
+      chatJid,
+      group,
+      channel,
+      messages: missedMessages,
+    })
+  ) {
+    return true;
+  }
+
+  if (
+    await handleWorkflowResumeTextCommand({
       chatJid,
       group,
       channel,
@@ -2354,6 +2397,17 @@ async function startMessageLoop(): Promise<void> {
 
           if (
             await handleAskAnswerCommand({
+              chatJid,
+              group,
+              channel,
+              messages: groupMessages,
+            })
+          ) {
+            continue;
+          }
+
+          if (
+            await handleWorkflowResumeTextCommand({
               chatJid,
               group,
               channel,

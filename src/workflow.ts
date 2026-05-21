@@ -179,14 +179,20 @@ interface ResumeActor {
 }
 
 type JsonSchema = {
-  type?: string;
+  type?: string | string[];
   required?: string[];
   properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
   minLength?: number;
   maxLength?: number;
+  minItems?: number;
+  maxItems?: number;
   minimum?: number;
   maximum?: number;
+  pattern?: string;
+  format?: string;
   enum?: unknown[];
+  additionalProperties?: boolean | JsonSchema;
 };
 
 type WorkflowOutboxEffectType =
@@ -1956,7 +1962,9 @@ function validateJsonSchemaSubset(
 ): string[] {
   if (!schema || Object.keys(schema).length === 0) return [];
   const errors: string[] = [];
-  const expectedType = schema.type;
+  const expectedType = Array.isArray(schema.type)
+    ? schema.type.find((item) => item !== 'null') || schema.type[0]
+    : schema.type;
 
   if (expectedType === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -1964,7 +1972,11 @@ function validateJsonSchemaSubset(
     }
     const objectValue = value as Record<string, unknown>;
     for (const requiredKey of schema.required || []) {
-      if (objectValue[requiredKey] === undefined) {
+      if (
+        objectValue[requiredKey] === undefined ||
+        objectValue[requiredKey] === null ||
+        objectValue[requiredKey] === ''
+      ) {
         errors.push(`${pathName}.${requiredKey} is required`);
       }
     }
@@ -1978,6 +1990,27 @@ function validateJsonSchemaSubset(
         ),
       );
     }
+    if (schema.additionalProperties === false) {
+      const allowed = new Set(Object.keys(schema.properties || {}));
+      for (const key of Object.keys(objectValue)) {
+        if (!allowed.has(key)) errors.push(`${pathName}.${key} is not allowed`);
+      }
+    } else if (
+      schema.additionalProperties &&
+      typeof schema.additionalProperties === 'object'
+    ) {
+      const allowed = new Set(Object.keys(schema.properties || {}));
+      for (const [key, childValue] of Object.entries(objectValue)) {
+        if (allowed.has(key)) continue;
+        errors.push(
+          ...validateJsonSchemaSubset(
+            schema.additionalProperties,
+            childValue,
+            `${pathName}.${key}`,
+          ),
+        );
+      }
+    }
     return errors;
   }
 
@@ -1990,6 +2023,45 @@ function validateJsonSchemaSubset(
     }
     if (schema.maxLength !== undefined && value.length > schema.maxLength) {
       errors.push(`${pathName} must be at most ${schema.maxLength} characters`);
+    }
+    if (schema.pattern) {
+      try {
+        if (!new RegExp(schema.pattern).test(value)) {
+          errors.push(`${pathName} must match pattern ${schema.pattern}`);
+        }
+      } catch {
+        errors.push(`${pathName} has invalid schema pattern`);
+      }
+    }
+    if (schema.format === 'email') {
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(value)) errors.push(`${pathName} must be an email`);
+    }
+    if (schema.format === 'uri') {
+      try {
+        new URL(value);
+      } catch {
+        errors.push(`${pathName} must be a URI`);
+      }
+    }
+    if (schema.format === 'date') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        errors.push(`${pathName} must be a date in YYYY-MM-DD format`);
+      } else {
+        const date = new Date(`${value}T00:00:00Z`);
+        if (
+          Number.isNaN(date.getTime()) ||
+          !date.toISOString().startsWith(value)
+        ) {
+          errors.push(`${pathName} must be a valid date`);
+        }
+      }
+    }
+    if (
+      schema.format === 'date-time' &&
+      Number.isNaN(new Date(value).getTime())
+    ) {
+      errors.push(`${pathName} must be a valid date-time`);
     }
   } else if (expectedType === 'number') {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -2017,10 +2089,39 @@ function validateJsonSchemaSubset(
     if (typeof value !== 'boolean') {
       errors.push(`${pathName} must be a boolean`);
     }
+  } else if (expectedType === 'array') {
+    if (!Array.isArray(value)) {
+      errors.push(`${pathName} must be an array`);
+    } else {
+      if (schema.minItems !== undefined && value.length < schema.minItems) {
+        errors.push(
+          `${pathName} must contain at least ${schema.minItems} items`,
+        );
+      }
+      if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+        errors.push(
+          `${pathName} must contain at most ${schema.maxItems} items`,
+        );
+      }
+      if (schema.items) {
+        value.forEach((item, index) => {
+          errors.push(
+            ...validateJsonSchemaSubset(
+              schema.items,
+              item,
+              `${pathName}[${index}]`,
+            ),
+          );
+        });
+      }
+    }
   }
 
   if (schema.enum && !schema.enum.includes(value)) {
-    errors.push(`${pathName} must be one of ${schema.enum.join(', ')}`);
+    const allowed = schema.enum.map((item) => String(item));
+    if (!allowed.includes(String(value))) {
+      errors.push(`${pathName} must be one of ${allowed.join(', ')}`);
+    }
   }
   return errors;
 }
@@ -2030,8 +2131,11 @@ function normalizeJsonSchemaPayload(
   value: unknown,
 ): unknown {
   if (!schema || value === undefined || value === null) return value;
+  const expectedType = Array.isArray(schema.type)
+    ? schema.type.find((item) => item !== 'null') || schema.type[0]
+    : schema.type;
 
-  if (schema.type === 'object') {
+  if (expectedType === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value))
       return value;
     const input = value as Record<string, unknown>;
@@ -2044,22 +2148,59 @@ function normalizeJsonSchemaPayload(
     return output;
   }
 
+  if (expectedType === 'array') {
+    if (Array.isArray(value)) {
+      return schema.items
+        ? value.map((item) => normalizeJsonSchemaPayload(schema.items, item))
+        : value;
+    }
+    if (typeof value === 'string') {
+      const text = value.trim();
+      if (!text) return value;
+      if (text.startsWith('[') && text.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            return schema.items
+              ? parsed.map((item) =>
+                  normalizeJsonSchemaPayload(schema.items, item),
+                )
+              : parsed;
+          }
+        } catch {
+          return value;
+        }
+      }
+      return text
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) =>
+          schema.items ? normalizeJsonSchemaPayload(schema.items, item) : item,
+        );
+    }
+  }
+
   if (typeof value !== 'string') return value;
   const text = value.trim();
   if (!text) return value;
 
-  if (schema.type === 'number') {
+  if (expectedType === 'number') {
     const parsed = Number(text);
     return Number.isFinite(parsed) ? parsed : value;
   }
-  if (schema.type === 'integer') {
+  if (expectedType === 'integer') {
     if (!/^[-+]?\d+$/.test(text)) return value;
     const parsed = Number.parseInt(text, 10);
     return Number.isSafeInteger(parsed) ? parsed : value;
   }
-  if (schema.type === 'boolean') {
+  if (expectedType === 'boolean') {
     if (/^(true|1|yes|on)$/i.test(text)) return true;
     if (/^(false|0|no|off)$/i.test(text)) return false;
+  }
+  if (schema.enum) {
+    const match = schema.enum.find((item) => String(item) === text);
+    if (typeof match === 'number' || typeof match === 'boolean') return match;
   }
   return value;
 }

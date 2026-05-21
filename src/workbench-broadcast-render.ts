@@ -1,6 +1,7 @@
 import type { CardButton, InteractiveCard } from './types.js';
 import { buildHumanInputCard } from './human-input-card.js';
 import { getWorkbenchTaskDetail } from './workbench.js';
+import { getWorkflowInterrupt } from './db.js';
 
 function headerColorForTaskState(
   taskState: 'running' | 'success' | 'failed' | 'cancelled',
@@ -159,8 +160,41 @@ export function buildWorkbenchBroadcastFallbackText(input: {
   ) {
     lines.push(`可在广播群回复: /answer ${item.source_ref_id} <你的答复>`);
     lines.push(`如需跳过，可回复: /answer ${item.source_ref_id} --skip`);
-  } else if (item.source_type === 'workflow_interrupt') {
-    lines.push('请到工作台或支持卡片操作的群里处理该待办。');
+  } else if (item.source_type === 'workflow_interrupt' && item.source_ref_id) {
+    const interrupt = getWorkflowInterrupt(item.source_ref_id);
+    let allowedActions: string[] = [];
+    try {
+      allowedActions = interrupt
+        ? JSON.parse(interrupt.allowed_actions_json).filter(
+            (entry: unknown): entry is string => typeof entry === 'string',
+          )
+        : Array.isArray(item.extra?.allowedActions)
+          ? item.extra.allowedActions.filter(
+              (entry: unknown): entry is string => typeof entry === 'string',
+            )
+          : [];
+    } catch {
+      allowedActions = [];
+    }
+    const primaryAction =
+      allowedActions.find(
+        (action) => action !== 'skip' && action !== 'cancel',
+      ) ||
+      allowedActions[0] ||
+      'approve';
+    lines.push(
+      `可回复: /resume ${item.source_ref_id} ${primaryAction}${
+        primaryAction === 'submit' || primaryAction === 'revise'
+          ? ' key=value; key2=value2'
+          : ''
+      }`,
+    );
+    if (allowedActions.includes('skip')) {
+      lines.push(`如需跳过，可回复: /resume ${item.source_ref_id} skip`);
+    }
+    if (allowedActions.includes('cancel')) {
+      lines.push(`如需取消，可回复: /resume ${item.source_ref_id} cancel`);
+    }
   } else if (item.source_type === 'send_message') {
     lines.push('该待办需要人工确认后在工作台中处理。');
   }

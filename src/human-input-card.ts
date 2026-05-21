@@ -19,11 +19,15 @@ import {
 } from './workflow-config.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 import { getDeliverableFileNameForRole } from './workflow-artifacts.js';
+import {
+  asJsonObject,
+  schemaInputs,
+  stringArray,
+  type JsonObject,
+} from './schema-card.js';
 
 const ASK_ACTION_ANSWER = 'ask_question_answer';
 const ASK_ACTION_SKIP = 'ask_question_skip';
-
-type JsonObject = Record<string, unknown>;
 
 function parseJsonObject(
   raw: string | null | undefined,
@@ -37,20 +41,6 @@ function parseJsonObject(
   } catch {
     return undefined;
   }
-}
-
-function stringArray(value: unknown): string[] {
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return stringArray(parsed);
-    } catch {
-      return [];
-    }
-  }
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : [];
 }
 
 function channelArray(value: unknown): WorkflowInterruptActorChannel[] {
@@ -268,7 +258,7 @@ function buildWorkflowCardFromDsl(
     (item.extra?.payloadSchema &&
     typeof item.extra.payloadSchema === 'object' &&
     !Array.isArray(item.extra.payloadSchema)
-      ? (item.extra.payloadSchema as JsonObject)
+      ? asJsonObject(item.extra.payloadSchema)
       : undefined);
   try {
     const card = buildInteractiveCard(cardConfig, {
@@ -301,71 +291,6 @@ function buildWorkflowCardFromDsl(
   }
 }
 
-function schemaPropertyToInput(
-  name: string,
-  schema: JsonObject,
-  required: boolean,
-): CardInput {
-  const enumValues = Array.isArray(schema.enum)
-    ? schema.enum.filter((item): item is string => typeof item === 'string')
-    : [];
-  const type = String(schema.type || 'string');
-  const inputType: CardInput['type'] =
-    enumValues.length > 0
-      ? 'enum'
-      : type === 'number'
-        ? 'number'
-        : type === 'integer'
-          ? 'integer'
-          : type === 'boolean'
-            ? 'boolean'
-            : schema.format === 'binary' || schema.format === 'file'
-              ? 'file'
-              : schema.format === 'password' ||
-                  name.toLowerCase().includes('token')
-                ? 'token'
-                : 'text';
-  return {
-    name,
-    type: inputType,
-    placeholder:
-      typeof schema.title === 'string'
-        ? schema.title
-        : typeof schema.description === 'string'
-          ? schema.description
-          : name,
-    required,
-    options: enumValues.map((value) => ({ value, label: value })),
-    min: typeof schema.minimum === 'number' ? schema.minimum : undefined,
-    max: typeof schema.maximum === 'number' ? schema.maximum : undefined,
-    min_length:
-      typeof schema.minLength === 'number' ? schema.minLength : undefined,
-    max_length:
-      typeof schema.maxLength === 'number' ? schema.maxLength : undefined,
-    format:
-      schema.format === 'email' ||
-      schema.format === 'uri' ||
-      schema.format === 'date' ||
-      schema.format === 'date-time'
-        ? schema.format
-        : undefined,
-  };
-}
-
-function schemaInputs(schema: JsonObject | undefined): CardInput[] {
-  if (!schema || schema.type !== 'object') return [];
-  const properties =
-    schema.properties && typeof schema.properties === 'object'
-      ? (schema.properties as Record<string, JsonObject>)
-      : {};
-  const required = new Set(stringArray(schema.required));
-  return Object.entries(properties)
-    .filter(([name]) => name !== 'skipped')
-    .map(([name, propertySchema]) =>
-      schemaPropertyToInput(name, propertySchema, required.has(name)),
-    );
-}
-
 function buildDefaultWorkflowCard(
   item: WorkbenchActionItem,
   task: WorkbenchTaskItem,
@@ -375,7 +300,7 @@ function buildDefaultWorkflowCard(
     item.extra?.payloadSchema &&
     typeof item.extra.payloadSchema === 'object' &&
     !Array.isArray(item.extra.payloadSchema)
-      ? (item.extra.payloadSchema as JsonObject)
+      ? asJsonObject(item.extra.payloadSchema)
       : undefined;
   const base = baseWorkflowValue(item, task);
   const buttons: CardButton[] = actions

@@ -92,6 +92,129 @@ describe('FeishuChannel form cards', () => {
       },
     ]);
   });
+
+  it('maps common human input fields and disables unsupported file forms', () => {
+    const channel = createChannel();
+    const card: InteractiveCard = {
+      header: { title: '多字段表单', color: 'blue' },
+      form: {
+        name: 'multi-form',
+        inputs: [
+          {
+            name: 'mode',
+            type: 'enum',
+            placeholder: '模式',
+            options: [{ value: 'fast', label: '快速' }],
+          },
+          { name: 'enabled', type: 'boolean', placeholder: '启用' },
+          { name: 'when', type: 'text', format: 'date', placeholder: '日期' },
+          {
+            name: 'secret',
+            type: 'token',
+            placeholder: 'Token',
+            max_length: 32,
+          },
+          { name: 'attachment', type: 'file', placeholder: '附件' },
+        ],
+        submitButton: {
+          id: 'submit',
+          label: '提交',
+          value: { action: 'wb_broadcast_resume' },
+        },
+      },
+    };
+
+    const feishuCard = (channel as any).convertToFeishuCard(card) as {
+      elements: Array<Record<string, any>>;
+    };
+    const form = feishuCard.elements.find((element) => element.tag === 'form');
+
+    expect(form?.elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tag: 'select_static',
+          name: 'mode',
+          options: [
+            {
+              text: { tag: 'plain_text', content: '快速' },
+              value: 'fast',
+            },
+          ],
+        }),
+        expect.objectContaining({
+          tag: 'select_static',
+          name: 'enabled',
+          options: expect.arrayContaining([
+            expect.objectContaining({ value: 'true' }),
+            expect.objectContaining({ value: 'false' }),
+          ]),
+        }),
+        expect.objectContaining({
+          tag: 'date_picker',
+          name: 'when',
+        }),
+        expect.objectContaining({
+          tag: 'input',
+          name: 'secret',
+          input_type: 'password',
+          max_length: 32,
+        }),
+        expect.objectContaining({
+          tag: 'note',
+        }),
+        expect.objectContaining({
+          tag: 'button',
+          name: 'submit',
+          disabled: true,
+        }),
+      ]),
+    );
+    expect(
+      (form?.elements || []).some(
+        (element: Record<string, unknown>) => element.name === 'attachment',
+      ),
+    ).toBe(false);
+  });
+
+  it('disables actions when the card does not allow Feishu channel', () => {
+    const channel = createChannel();
+    const card: InteractiveCard = {
+      header: { title: '仅 Web', color: 'blue' },
+      body: '只能在 Web 处理',
+      allowed_channels: ['web'],
+      buttons: [
+        {
+          id: 'approve',
+          label: '确认',
+          value: { action: 'wb_broadcast_confirm' },
+        },
+      ],
+    };
+
+    const feishuCard = (channel as any).convertToFeishuCard(card) as {
+      elements: Array<Record<string, any>>;
+    };
+    const action = feishuCard.elements.find(
+      (element) => element.tag === 'action',
+    );
+
+    expect(feishuCard.elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tag: 'note',
+          elements: [
+            expect.objectContaining({
+              content: '该操作不支持飞书渠道，可用渠道：web',
+            }),
+          ],
+        }),
+      ]),
+    );
+    expect(action?.actions?.[0]).toMatchObject({
+      tag: 'button',
+      disabled: true,
+    });
+  });
 });
 
 describe('FeishuChannel card action callbacks', () => {

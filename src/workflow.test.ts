@@ -476,6 +476,116 @@ describe('durable interrupt runtime', () => {
     }
   });
 
+  it('validates richer resume payload schema constraints', () => {
+    createWorkflowAtInterrupt({
+      id: 'wf-rich-schema',
+      state: 'awaiting_confirm',
+    });
+    createWorkflowInterrupt({
+      id: 'wi-rich-schema',
+      workflow_id: 'wf-rich-schema',
+      state_key: 'awaiting_confirm',
+      kind: 'approval',
+      status: 'pending',
+      title: 'rich schema',
+      body: null,
+      resume_payload_schema_json: JSON.stringify({
+        type: 'object',
+        required: ['email', 'tags'],
+        additionalProperties: false,
+        properties: {
+          email: { type: 'string', format: 'email' },
+          code: { type: 'string', pattern: '^OK-\\d+$' },
+          tags: {
+            type: 'array',
+            minItems: 2,
+            items: { type: 'integer' },
+          },
+        },
+      }),
+      allowed_actions_json: JSON.stringify(['approve']),
+      allowed_channels_json: JSON.stringify(['web']),
+      assigned_role: null,
+      action_payload_json: null,
+      created_by: 'test',
+      resumed_by: null,
+      resume_action: null,
+      resume_payload_json: null,
+      resume_error: null,
+      idempotency_key:
+        'workflow_interrupt:wf-rich-schema:awaiting_confirm:0:rich',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+      expires_at: null,
+      resumed_at: null,
+      cancelled_at: null,
+      expired_at: null,
+    });
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalSchema = config.states.awaiting_confirm.resume_payload_schema;
+    config.states.awaiting_confirm.resume_payload_schema = {
+      schema: {
+        type: 'object',
+        required: ['email', 'tags'],
+        additionalProperties: false,
+        properties: {
+          email: { type: 'string', format: 'email' },
+          code: { type: 'string', pattern: '^OK-\\d+$' },
+          tags: {
+            type: 'array',
+            minItems: 2,
+            items: { type: 'integer' },
+          },
+        },
+      },
+    } as any;
+
+    try {
+      const invalid = resumeWorkflowInterrupt({
+        interruptId: 'wi-rich-schema',
+        action: 'approve',
+        payload: {
+          email: 'bad-email',
+          code: 'NO',
+          tags: '1',
+          extra: 'not allowed',
+        },
+        actor: { channel: 'web', userId: 'tester' },
+      });
+      expect(invalid.ok).toBe(false);
+      if (!invalid.ok) {
+        expect(invalid.error).toContain('payload.email must be an email');
+        expect(invalid.error).toContain(
+          'payload.tags must contain at least 2 items',
+        );
+        expect(invalid.error).toContain('payload.extra is not allowed');
+      }
+
+      const valid = resumeWorkflowInterrupt({
+        interruptId: 'wi-rich-schema',
+        action: 'approve',
+        payload: {
+          email: 'dev@example.com',
+          code: 'OK-42',
+          tags: '1,2',
+        },
+        actor: { channel: 'web', userId: 'tester' },
+      });
+      expect(valid.ok).toBe(true);
+      expect(
+        JSON.parse(
+          getWorkflowInterrupt('wi-rich-schema')!.resume_payload_json!,
+        ),
+      ).toEqual({
+        email: 'dev@example.com',
+        code: 'OK-42',
+        tags: [1, 2],
+      });
+    } finally {
+      config.states.awaiting_confirm.resume_payload_schema = originalSchema;
+    }
+  });
+
   it('isolates nested card payload and preserves the submitting channel', () => {
     createWorkflowAtInterrupt({
       id: 'wf-card-payload-isolated',
