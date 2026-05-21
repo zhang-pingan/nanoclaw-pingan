@@ -808,6 +808,93 @@
         border-bottom: 1px solid var(--line);
       }
 
+      .assistant-flow {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+        align-items: stretch;
+      }
+
+      .assistant-flow-step {
+        position: relative;
+        min-height: 132px;
+        padding: 15px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        transition:
+          transform 0.24s ease,
+          box-shadow 0.24s ease,
+          border-color 0.24s ease;
+      }
+
+      .assistant-flow-step::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: -10px;
+        width: 10px;
+        height: 2px;
+        background: var(--line);
+      }
+
+      .assistant-flow-step:last-child::after {
+        display: none;
+      }
+
+      .assistant-flow-step:hover {
+        transform: translateY(-3px);
+        border-color: rgba(25, 122, 115, 0.22);
+        box-shadow: 0 16px 32px rgba(29, 39, 51, 0.09);
+      }
+
+      .assistant-flow-step b {
+        display: block;
+        margin-bottom: 7px;
+        color: var(--ink);
+      }
+
+      .assistant-flow-step span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .assistant-capability-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .assistant-capability-card {
+        min-width: 0;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        transition:
+          transform 0.24s ease,
+          box-shadow 0.24s ease,
+          border-color 0.24s ease;
+      }
+
+      .assistant-capability-card:hover {
+        transform: translateY(-3px);
+        border-color: rgba(52, 92, 140, 0.22);
+        box-shadow: 0 16px 32px rgba(29, 39, 51, 0.09);
+      }
+
+      .assistant-capability-card b {
+        display: block;
+        margin: 10px 0 7px;
+        font-size: 17px;
+      }
+
+      .assistant-capability-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
       @keyframes drift {
         0%,
         100% {
@@ -980,11 +1067,20 @@
 
         .grid-3,
         .grid-4,
+        .assistant-capability-grid,
         .flow {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .flow-step::after {
+          display: none;
+        }
+
+        .assistant-flow {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .assistant-flow-step::after {
           display: none;
         }
 
@@ -1031,6 +1127,8 @@
         .grid-2,
         .grid-3,
         .grid-4,
+        .assistant-capability-grid,
+        .assistant-flow,
         .flow,
         .layer-grid,
         .runtime-items {
@@ -1076,6 +1174,7 @@
         <a href="#architecture">系统架构</a>
         <a href="#runtime">Runtime</a>
         <a href="#workflow">Workflow</a>
+        <a href="#assistant-proactive">主动助手</a>
         <a href="#delivery">交付闭环</a>
         <a href="#advantages">核心优势</a>
         <a href="#extension">扩展</a>
@@ -1662,26 +1761,26 @@
             <div class="flow-step">
               <b>Typed Handoff</b>
               <span
-                >每次委派附带输入/输出 schema、成功标准和 artifact
+              >每次委派附带输入/输出 schema、成功标准和 artifact
                 contract。</span
               >
             </div>
             <div class="flow-step">
               <b>Artifact Contract</b>
               <span
-                >约束交付字段、文件路径、front matter、大小和允许目录。</span
+              >约束交付字段、文件路径、front matter、大小和允许目录。</span
               >
             </div>
             <div class="flow-step">
               <b>Stage Evaluation</b>
               <span
-                >阶段评估输出 passed、needs_revision、failed 或 pending。</span
+              >阶段评估输出 passed、needs_revision、failed 或 pending。</span
               >
             </div>
             <div class="flow-step">
               <b>Failure Taxonomy</b>
               <span
-                >区分模型、工具、沙箱、配置、权限、超时、测试或部署失败。</span
+              >区分模型、工具、沙箱、配置、权限、超时、测试或部署失败。</span
               >
             </div>
             <div class="flow-step">
@@ -1692,6 +1791,157 @@
 
           <div style="height: 22px"></div>
 
+        </div>
+      </section>
+
+      <section class="section" id="assistant-proactive">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>个人助手详解</h2>
+              <p>
+                个人助手是 MixClaw 的 Agent 主动层。它会根据配置的关注点主动的扫描今日计划、工作台、定时任务、Agent Runs 和线上日志等信息，
+                把需要关注的事汇总到 Agent Inbox，并在策略允许时自动排查、
+                自动处理低风险待办、准备修复或进入受控自我进化。
+              </p>
+            </div>
+          </div>
+
+          <div class="assistant-flow" aria-label="个人助手主动化链路">
+            <div class="assistant-flow-step">
+              <b>扫描触发源</b>
+              <span>
+                Proactive Engine 按配置扫描今日计划、未完成计划、工作台任务、
+                定时任务失败、Agent 执行异常和线上 error 日志。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>生成 Inbox</b>
+              <span>
+                发现的问题通过 dedupe key 汇总成 Agent Inbox，带上来源、
+                优先级、动作入口和上下文，避免重复提醒。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>提醒与触达</b>
+              <span>
+                桌面助理、Web 工作台和飞书卡片共享同一待办状态，支持查看、
+                稍后、忽略、完成、排查和修复。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>自动排查</b>
+              <span>
+                对失败、卡住、日志异常等事项启动容器 Agent 主动取证，
+                输出根因、影响面、证据和可修复分组。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>受控执行</b>
+              <span>
+                对可自动处理的工作台待办可生成表单、审批建议或执行动作；
+                对可修复分组可发起修复，但保留策略和审计边界。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>同步闭环</b>
+              <span>
+                每个动作写入 action log、Trace、Inbox extra 和工作台状态，
+                结果可追踪、可回看、可继续处理。
+              </span>
+            </div>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="assistant-capability-grid">
+            <article class="assistant-capability-card">
+              <span class="tag teal">计划自动化</span>
+              <b>发现当天计划缺失和往日未完成</b>
+              <p>
+                助手会把“今天还没有计划”“历史计划还有未完成项”转成待办，
+                提醒用户继续计划或补充安排；针对服务 coding 异常，还可以结合代码、
+                工作台任务和执行记录生成异常候选。
+              </p>
+            </article>
+            <article class="assistant-capability-card">
+              <span class="tag blue">工作台自动化</span>
+              <b>处理待审批、待补充和卡住任务</b>
+              <p>
+                对 pending action item，助手可主动读取任务上下文、产物和卡片
+                schema，生成可提交的表单内容或审批决策；对失败、取消、长时间无进展的任务，
+                可发起原因分析并提出下一步。
+              </p>
+            </article>
+            <article class="assistant-capability-card">
+              <span class="tag coral">执行异常自动化</span>
+              <b>排查 Agent Runs 和定时任务失败</b>
+              <p>
+                当容器退出、超时、模型输出异常、定时任务失败或 trace 中断时，
+                助手能启动调查 Agent 读取运行记录、源码和最近变更，判断是环境、
+                代码、提示词、权限还是数据问题。
+              </p>
+            </article>
+            <article class="assistant-capability-card">
+              <span class="tag amber">线上日志自动化</span>
+              <b>扫描服务 error 日志并归因</b>
+              <p>
+                助手按服务配置读取线上 error 日志，使用日志分组规则聚合错误，
+                将异常映射到服务、主机、日志路径和时间窗口，再生成可调查或可修复的 Inbox。
+              </p>
+            </article>
+            <article class="assistant-capability-card">
+              <span class="tag green">修复自动化</span>
+              <b>从调查结论推进到受控修复</b>
+              <p>
+                调查结果标记 repairable 后，助手可按分组运行修复 Agent，
+                让 Agent 基于证据修改代码、执行检查并输出修复结果；失败时保留 next action，
+                成功时把待办推进到完成状态。
+              </p>
+            </article>
+            <article class="assistant-capability-card">
+              <span class="tag blue">自我进化自动化</span>
+              <b>持续发现自身优化方向</b>
+              <p>
+                Evolution Engine 可定时选择优化方向、生成方案、评估风险、
+                创建工作分支、实现、检查、复核并等待采纳。默认不自动实现、不自动合并主分支，
+                适合把助手自身能力小步提升。
+              </p>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="grid-2">
+            <article class="card">
+              <span class="tag teal">策略控制</span>
+              <h3>主动性可以逐项打开</h3>
+              <p>
+                <code>AssistantSettings</code> 控制 enabled、quiet / balanced /
+                active 主动等级、扫描间隔、静默时段、触发规则、服务范围、
+                investigationEnabled 和 autoEnabled。默认值保持保守：
+                自我进化关闭，自动实现和自动采纳关闭，触发规则的自动处理也默认关闭。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">安全边界</span>
+              <h3>主动不是越权执行</h3>
+              <p>
+                助手的主动动作仍通过宿主机状态、容器隔离、工作台动作路由、
+                action log、Trace 和 Inbox 状态管理；高风险操作回到用户审批，
+                低风险自动化也必须留下来源、输入、输出和结果记录。
+              </p>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="callout">
+            <strong>个人助手的产品价值：</strong>
+            它把“用户想起来才处理”变成“系统发现后主动推到用户面前”，再把
+            “提醒用户”升级为“在可控范围内先取证、先准备、先处理”。因此它既是提醒中心，
+            也是工作台自动化入口、故障排查入口和自我改进入口。
+          </div>
         </div>
       </section>
 
@@ -2065,7 +2315,7 @@
           );
           document
             .querySelectorAll(
-              '.card, .diagram, .architecture-band, .workflow-builder',
+              '.card, .diagram, .architecture-band, .workflow-builder, .assistant-flow-step, .assistant-capability-card',
             )
             .forEach((node) => observer.observe(node));
         }
