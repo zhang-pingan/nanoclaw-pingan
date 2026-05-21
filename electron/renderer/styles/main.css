@@ -6990,12 +6990,12 @@ body.quick-chat-window .quick-chat-input {
   height: 30px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid rgba(249, 115, 22, 0.18);
-  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 255, 255, 0.92));
-  color: #c2410c;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.22));
+  background: var(--minimal-surface, #ffffff);
+  color: var(--minimal-text, var(--text-primary));
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.08);
+  box-shadow: none;
 }
 
 .workflow-definition-state-list-head .btn-ghost:hover,
@@ -7003,11 +7003,11 @@ body.quick-chat-window .quick-chat-input {
 .workflow-definition-inline-actions .btn-ghost:hover,
 .workflow-definition-system-step-summary .btn-ghost:hover,
 .workflow-definition-role-channel-row .btn-ghost:hover {
-  border-color: rgba(249, 115, 22, 0.28);
-  background: linear-gradient(180deg, rgba(255, 237, 213, 0.98), rgba(255, 247, 237, 0.94));
-  color: #9a3412;
-  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.12);
-  transform: translateY(-1px);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: #f8f9fb;
+  color: var(--minimal-text, var(--text-primary));
+  box-shadow: none;
+  transform: none;
 }
 
 .workflow-definition-state-list-head .btn-ghost:active,
@@ -7049,14 +7049,14 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-state-list-item:hover {
-  border-color: rgba(249, 115, 22, 0.22);
-  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.08);
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  box-shadow: none;
 }
 
 .workflow-definition-state-list-item.active {
-  border-color: rgba(249, 115, 22, 0.28);
-  background: rgba(255, 247, 237, 0.92);
-  box-shadow: inset 3px 0 0 #f97316;
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: var(--minimal-accent-soft, rgba(231, 233, 236, 0.92));
+  box-shadow: inset 3px 0 0 var(--minimal-accent, #575f6a);
 }
 
 .workflow-definition-state-list-item strong {
@@ -7437,13 +7437,13 @@ body.quick-chat-window .quick-chat-input {
 
 .workflow-definition-select-option:hover,
 .workflow-definition-select-option.selected {
-  background: rgba(255, 247, 237, 0.96);
-  color: #9a3412;
+  background: var(--minimal-accent-soft, rgba(231, 233, 236, 0.92));
+  color: var(--minimal-text, var(--text-primary));
 }
 
 .workflow-definition-select-option:hover .workflow-definition-select-option-desc,
 .workflow-definition-select-option.selected .workflow-definition-select-option-desc {
-  color: #9a3412;
+  color: var(--minimal-text-soft, var(--text-secondary));
 }
 
 .workflow-definition-field input:not([type="checkbox"]):focus,
@@ -7798,7 +7798,7 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-graph-edge.exception {
-  stroke: rgba(245, 158, 11, 0.58);
+  stroke: rgba(100, 116, 139, 0.52);
 }
 
 .workflow-definition-graph-edge.backward {
@@ -7862,9 +7862,9 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-graph-edge-label.exception {
-  border-color: rgba(245, 158, 11, 0.26);
-  background: rgba(255, 251, 235, 0.96);
-  color: #b45309;
+  border-color: rgba(100, 116, 139, 0.26);
+  background: rgba(248, 250, 252, 0.96);
+  color: #475569;
 }
 
 .workflow-definition-graph-edge-label.missing-target {
@@ -7945,7 +7945,7 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-definition-graph-node.interrupt {
-  border-color: rgba(245, 158, 11, 0.28);
+  border-color: rgba(100, 116, 139, 0.28);
 }
 
 .workflow-definition-graph-node.delegation {
@@ -10943,7 +10943,8 @@ body.quick-chat-window .quick-chat-input {
   --initial-icon-ink: #475569;
 }
 
-#sidebar .list-item .item-icon.item-avatar {
+#sidebar .list-item .item-icon.item-avatar,
+#memory-management-screen .memory-groups-list .list-item .item-icon.item-avatar {
   border-radius: 50%;
   padding: 0;
   overflow: hidden;
@@ -10952,7 +10953,8 @@ body.quick-chat-window .quick-chat-input {
   box-shadow: 0 6px 14px rgba(var(--secondary-nav-accent-rgb), 0.08);
 }
 
-#sidebar .list-item .item-icon.item-avatar img {
+#sidebar .list-item .item-icon.item-avatar img,
+#memory-management-screen .memory-groups-list .list-item .item-icon.item-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -10978,7 +10980,8 @@ body.quick-chat-window .quick-chat-input {
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-#sidebar .list-item.active .item-icon.item-avatar {
+#sidebar .list-item.active .item-icon.item-avatar,
+#memory-management-screen .memory-groups-list .list-item.active .item-icon.item-avatar {
   background: #ffffff;
 }
 
@@ -12612,10 +12615,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-wizard-confirm-card[data-state="warning"] {
-  border-color: rgba(255, 159, 28, 0.22);
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.82), transparent 38%),
-    linear-gradient(160deg, rgba(255, 179, 71, 0.12), rgba(255, 255, 255, 0.98) 58%, rgba(255, 232, 204, 0.12));
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .workflow-wizard-confirm-card[data-state="success"] {
@@ -12964,8 +12965,8 @@ body.quick-chat-window .quick-chat-input {
 }
 
 .workflow-wizard-validation-card[data-state="warning"] {
-  border-color: rgba(255, 159, 28, 0.28);
-  background: linear-gradient(180deg, rgba(255, 245, 229, 0.96), rgba(255, 250, 241, 0.92));
+  border-color: var(--minimal-line-strong, rgba(148, 163, 184, 0.32));
+  background: var(--minimal-surface, #ffffff);
 }
 
 .workflow-wizard-validation-card[data-state="success"] {
@@ -16305,6 +16306,10 @@ body::after,
 #workbench-screen .workbench-detail-empty,
 #workflow-definitions-screen .workflow-definition-empty,
 #cards-management-screen .workflow-definition-empty,
+#cards-management-screen .cards-management-empty,
+#cards-management-screen .workflow-definition-list-empty,
+#cards-management-screen .cards-management-row-empty,
+#cards-management-screen .cards-management-reference-empty,
 #configuration-screen .configuration-empty,
 #knowledge-management-screen .workflow-definition-empty,
 #trace-monitor-screen .trace-monitor-detail-empty,
@@ -16314,6 +16319,13 @@ body::after,
   background: var(--minimal-surface);
   box-shadow: none;
   color: var(--minimal-text-muted);
+}
+
+#cards-management-screen .cards-management-empty.doraemon-tertiary-empty,
+#cards-management-screen .cards-management-row-empty,
+#cards-management-screen .cards-management-reference-empty {
+  background: var(--minimal-surface);
+  box-shadow: none;
 }
 
 .doraemon-tertiary-empty img,
@@ -16743,6 +16755,17 @@ body.quick-chat-window .quick-chat-title-wrap h2 {
 .app-prompt-actions .btn-ghost,
 .quick-chat-actions .btn-primary,
 .quick-chat-actions .btn-ghost,
+#workflow-definitions-screen .btn-primary,
+#workflow-definitions-screen .btn-ghost,
+#workflow-definitions-screen .workflow-definition-graph-toolbar .btn-ghost,
+#cards-management-screen .btn-primary,
+#cards-management-screen .btn-ghost,
+#cards-management-screen .cards-management-icon-btn,
+#cards-management-screen .cards-management-toggle-btn,
+#workflow-definition-diff-modal .btn-primary,
+#workflow-definition-diff-modal .btn-ghost,
+#workflow-definition-create-form-preview-overlay .btn-primary,
+#workflow-definition-create-form-preview-overlay .btn-ghost,
 .workflow-wizard-submit-btn,
 .workflow-wizard-secondary-btn,
 .workflow-wizard-close,
@@ -16784,6 +16807,52 @@ body.quick-chat-window .quick-chat-title-wrap h2 {
   transform: none;
 }
 
+#workflow-definitions-screen .btn-primary:hover:not(:disabled),
+#workflow-definitions-screen .btn-ghost:hover:not(:disabled),
+#workflow-definitions-screen .workflow-definition-graph-toolbar .btn-ghost:hover:not(:disabled),
+#cards-management-screen .btn-primary:hover:not(:disabled),
+#cards-management-screen .btn-ghost:hover:not(:disabled),
+#cards-management-screen .cards-management-icon-btn:hover:not(:disabled),
+#cards-management-screen .cards-management-toggle-btn:hover:not(:disabled),
+#workflow-definition-diff-modal .btn-primary:hover:not(:disabled),
+#workflow-definition-diff-modal .btn-ghost:hover:not(:disabled),
+#workflow-definition-create-form-preview-overlay .btn-primary:hover:not(:disabled),
+#workflow-definition-create-form-preview-overlay .btn-ghost:hover:not(:disabled) {
+  border-color: var(--minimal-line-strong);
+  background: #f8f9fb;
+  color: var(--minimal-text);
+  box-shadow: none;
+  transform: none;
+}
+
+#cards-management-screen .cards-management-toolbar,
+#cards-management-screen .cards-management-row,
+#cards-management-screen .cards-management-reference-item,
+#cards-management-screen .cards-management-preview,
+#cards-management-screen .cards-management-draggable.drag-over {
+  border-color: var(--minimal-line);
+  background: var(--minimal-surface);
+  box-shadow: none;
+}
+
+#cards-management-screen .cards-management-drag-handle,
+#cards-management-screen .cards-management-draggable.drag-over::after,
+#cards-management-screen .cards-management-pill {
+  background: var(--minimal-accent-soft);
+  color: var(--minimal-text-soft);
+}
+
+#cards-management-screen .cards-management-toggle-btn.active,
+#cards-management-screen .cards-management-toggle-btn.active .cards-management-toggle-track {
+  border-color: var(--minimal-line-strong);
+  background: var(--minimal-accent-soft);
+}
+
+#cards-management-screen .cards-management-toggle-btn.active .cards-management-toggle-thumb {
+  background: var(--minimal-accent);
+  box-shadow: none;
+}
+
 .workflow-wizard-file-remove-btn,
 .manual-requirement-file-card .workflow-wizard-file-remove-btn {
   color: var(--minimal-danger);
@@ -16798,8 +16867,8 @@ body.quick-chat-window .quick-chat-title-wrap h2 {
 .today-plan-mail-dialog-status,
 .workflow-wizard-validation-card[data-state="warning"],
 .workflow-wizard-confirm-card[data-state="warning"] {
-  border-color: #f5d39a;
-  background: #fff8ed;
+  border-color: var(--minimal-line-strong);
+  background: var(--minimal-surface);
 }
 
 .today-plan-mail-dialog-status.is-error {
