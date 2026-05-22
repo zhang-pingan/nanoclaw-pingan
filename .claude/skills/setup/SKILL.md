@@ -1,9 +1,9 @@
 ---
 name: setup
-description: Run initial NanoClaw setup. Use when user wants to install dependencies, configure NanoClaw, or start the background services. Triggers on "setup", "install", "configure nanoclaw", or first-time setup requests.
+description: Run initial Icarus setup. Use when user wants to install dependencies, configure Icarus, or start the background services. Triggers on "setup", "install", "configure icarus", or first-time setup requests.
 ---
 
-# NanoClaw Setup
+# Icarus Setup
 
 Run setup steps automatically. Only pause when user action is required for configuration choices. Setup uses `bash setup.sh` for bootstrap, then `npx tsx setup/index.ts --step <name>` for all other steps. Steps emit structured status blocks to stdout. Verbose logs go to `logs/setup.log`.
 
@@ -77,7 +77,7 @@ Only require these when the related feature is enabled or already configured:
 
 - `CREDENTIAL_PROXY_OPENAI_COMPAT=true` → require `CREDENTIAL_PROXY_OPENAI_API_KEY`
 - AI image tool enabled/expected → require `AI_IMAGE_BASE_URL`, `AI_IMAGE_API_KEY`, `AI_IMAGE_MODEL`, `AI_IMAGE_SIZE`, `AI_IMAGE_QUALITY`, `AI_IMAGE_TIMEOUT_MS`
-- Host-side Agent API usage → require `NANOCLAW_AGENT_API_API_KEY`; if `NANOCLAW_AGENT_API_USE_OPENAI_COMPAT=true`, also check `NANOCLAW_AGENT_API_OPENAI_KEY`, `NANOCLAW_AGENT_API_OPENAI_BASE_URL`, `NANOCLAW_AGENT_API_OPENAI_MODEL`
+- Host-side Agent API usage → require `ICARUS_AGENT_API_API_KEY`; if `ICARUS_AGENT_API_USE_OPENAI_COMPAT=true`, also check `ICARUS_AGENT_API_OPENAI_KEY`, `ICARUS_AGENT_API_OPENAI_BASE_URL`, `ICARUS_AGENT_API_OPENAI_MODEL`
 - Feishu main group registration expected → require `FEISHU_APP_ID` and `FEISHU_APP_SECRET`
 - MySQL service proxy usage → for each MySQL service in `groups/global/services.json`, require `MYSQL_PASSWORD_<service>`
 - Jenkins/deploy operations → if `JENKINS_URL` is set, require `JENKINS_USER` and `JENKINS_PASSWORD`
@@ -89,10 +89,10 @@ These can be omitted unless the user wants to override defaults:
 - Assistant and web: `ASSISTANT_NAME`, `ASSISTANT_HAS_OWN_NUMBER`, `WEB_PORT`, `WEB_TOKEN`
 - Runtime tuning: `CONTAINER_IMAGE`, `CONTAINER_TIMEOUT`, `CONTAINER_MAX_OUTPUT_SIZE`, `CREDENTIAL_PROXY_PORT`, `CREDENTIAL_PROXY_HOST`, `MYSQL_PROXY_PORT`, `IDLE_TIMEOUT`, `MAX_CONCURRENT_CONTAINERS`, `TZ`, `LOG_LEVEL`
 - DevOps paths: `REPOS_DIR`, `SSH_KEY_PATH`
-- Model selection: `ANTHROPIC_BASE_URL`, `ANTHROPIC_CLAUDE_MODEL`, `NANOCLAW_MODEL_LIGHT`, `NANOCLAW_MODEL_DEFAULT`, `NANOCLAW_MODEL_HEAVY`, `NANOCLAW_MODEL_FORCE`, `NANOCLAW_MODEL_SELECTOR_URL`, `NANOCLAW_MODEL_SELECTOR_MODEL`, `NANOCLAW_MODEL_SELECTOR_TIMEOUT_MS`
+- Model selection: `ANTHROPIC_BASE_URL`, `ANTHROPIC_CLAUDE_MODEL`, `ICARUS_MODEL_LIGHT`, `ICARUS_MODEL_DEFAULT`, `ICARUS_MODEL_HEAVY`, `ICARUS_MODEL_FORCE`, `ICARUS_MODEL_SELECTOR_URL`, `ICARUS_MODEL_SELECTOR_MODEL`, `ICARUS_MODEL_SELECTOR_TIMEOUT_MS`
 - OpenAI-compatible credential proxy options when compat is disabled: `CREDENTIAL_PROXY_OPENAI_BASE_URL`, `CREDENTIAL_PROXY_OPENAI_MODEL`, `CREDENTIAL_PROXY_OPENAI_TIMEOUT_MS`, `CREDENTIAL_PROXY_OPENAI_PROTOCOL`
 - Feishu optional fields: `FEISHU_VERIFICATION_TOKEN`, `FEISHU_ENCRYPT_KEY`, `FEISHU_ADMIN_USER_ID`, `FEISHU_WEBHOOK_PORT`
-- Integrations and advanced features: `WORKBENCH_BROADCAST_TARGETS`, `NANOCLAW_MAIL_CONFIG_PATH`, `NANOCLAW_WIKI_DRAFT_TIMEOUT_MS`, `NANOCLAW_WIKI_DRAFT_MAX_TOKENS`, `NANOCLAW_WIKI_MAX_MATERIAL_CHARS`, `NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS`, `NANOCLAW_WORKFLOW_LLM_JUDGE_RUN`, `NANOCLAW_WORKFLOW_LLM_JUDGE_TIMEOUT_MS`
+- Integrations and advanced features: `WORKBENCH_BROADCAST_TARGETS`, `ICARUS_MAIL_CONFIG_PATH`, `ICARUS_WIKI_DRAFT_TIMEOUT_MS`, `ICARUS_WIKI_DRAFT_MAX_TOKENS`, `ICARUS_WIKI_MAX_MATERIAL_CHARS`, `ICARUS_WIKI_MAX_TOTAL_MATERIAL_CHARS`, `ICARUS_WORKFLOW_LLM_JUDGE_RUN`, `ICARUS_WORKFLOW_LLM_JUDGE_TIMEOUT_MS`
 
 If required or conditionally required values are missing, stop and tell the user exactly which keys need values. Continue only after the user confirms they have updated `.env`, then re-check `.env`.
 
@@ -287,12 +287,12 @@ AskUserQuestion: Agent access to external directories?
 
 If service already running: unload first.
 
-- macOS: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist`
-- Linux: `systemctl --user stop nanoclaw` (or `systemctl stop nanoclaw` if root)
+- macOS: `launchctl unload ~/Library/LaunchAgents/com.icarus.plist`
+- Linux: `systemctl --user stop icarus.service` (or `systemctl stop icarus.service` if root)
 
 Run `npx tsx setup/index.ts --step service` and parse the status block.
 
-**If FALLBACK=wsl_no_systemd:** WSL without systemd detected. Tell user they can either enable systemd in WSL (`echo -e "[boot]\nsystemd=true" | sudo tee /etc/wsl.conf` then restart WSL) or use the generated `start-nanoclaw.sh` wrapper.
+**If FALLBACK=wsl_no_systemd:** WSL without systemd detected. Tell user they can either enable systemd in WSL (`echo -e "[boot]\nsystemd=true" | sudo tee /etc/wsl.conf` then restart WSL) or use the generated `start-icarus.sh` wrapper.
 
 **If DOCKER_GROUP_STALE=true:** The user was added to the docker group after their session started — the systemd service can't reach the Docker socket. Ask user to run these two commands:
 
@@ -313,8 +313,8 @@ Replace `USERNAME` with the actual username (from `whoami`). Run the two `sudo` 
 **If SERVICE_LOADED=false:**
 
 - Read `logs/setup.log` for the error.
-- macOS: check `launchctl list | grep nanoclaw`. If PID=`-` and status non-zero, read `logs/nanoclaw.error.log`.
-- Linux: check `systemctl --user status nanoclaw`.
+- macOS: check `launchctl list | grep icarus`. If PID=`-` and status non-zero, read `logs/icarus.error.log`.
+- Linux: check `systemctl --user status icarus.service`.
 - Re-run the service step after fixing.
 
 ## 10. Verify
@@ -346,7 +346,7 @@ EOF
 
 **If setup/verify or explicit checks fail, fix each:**
 
-- SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` (macOS) or `systemctl --user restart nanoclaw` (Linux) or `bash start-nanoclaw.sh` (WSL nohup)
+- SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.icarus` (macOS) or `systemctl --user restart icarus.service` (Linux) or `bash start-icarus.sh` (WSL nohup)
 - SERVICE=not_found → re-run step 9
 - Required `.env` values missing → re-run step 3
 - Missing required main group → re-run step 4
@@ -363,11 +363,11 @@ Expected non-main role folders from current workflow definitions:
 
 If any are missing, report them as warnings only. Tell the user they can register them later with `npx tsx setup/index.ts --step workflow-groups` (web groups) or the same command with `--include-feishu --feishu-map ...` for Feishu groups.
 
-Show logs with: `tail -f logs/nanoclaw.log`
+Show logs with: `tail -f logs/icarus.log`
 
 ## Troubleshooting
 
-**Service not starting:** Check `logs/nanoclaw.error.log`. Common: wrong Node path (re-run step 9), missing `.env`, invalid Feishu credentials, or port conflicts on `WEB_PORT`, `CREDENTIAL_PROXY_PORT`, `MYSQL_PROXY_PORT`, or `FEISHU_WEBHOOK_PORT`.
+**Service not starting:** Check `logs/icarus.error.log`. Common: wrong Node path (re-run step 9), missing `.env`, invalid Feishu credentials, or port conflicts on `WEB_PORT`, `CREDENTIAL_PROXY_PORT`, `MYSQL_PROXY_PORT`, or `FEISHU_WEBHOOK_PORT`.
 
 **Container agent fails ("Claude Code process exited with code 1"):** Ensure the container runtime is running — `open -a Docker` (macOS Docker), `container system start` (Apple Container), or `sudo systemctl start docker` (Linux). Check container logs under the relevant group folder, such as `groups/assistant_main/logs/`, `groups/web_main/logs/`, or `groups/feishu_main/logs/`.
 
@@ -375,4 +375,4 @@ Show logs with: `tail -f logs/nanoclaw.log`
 
 **Clean clone missing local files:** Recreate `.env` from `.env.example`, run `bash setup.sh`, register required main groups, run container setup, configure mounts, then start service. Do not copy ignored runtime state from another machine unless the user explicitly wants to migrate data.
 
-**Unload service:** macOS: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist` | Linux: `systemctl --user stop nanoclaw`
+**Unload service:** macOS: `launchctl unload ~/Library/LaunchAgents/com.icarus.plist` | Linux: `systemctl --user stop icarus.service`

@@ -1,11 +1,11 @@
 ---
 name: self-evolution
-description: Use only for NanoClaw assistant self-evolution tasks. Propose, implement, fix, and review small controlled improvements under program-managed state and branch boundaries.
+description: Use only for Icarus assistant self-evolution tasks. Propose, implement, fix, and review small controlled improvements under program-managed state and branch boundaries.
 ---
 
 # Self Evolution Skill
 
-This skill is for controlled NanoClaw self-improvement only.
+This skill is for controlled Icarus self-improvement only.
 
 ## Core Rules
 

@@ -93,10 +93,10 @@ Always tell the user:
 # Rebuild and restart
 npm run build
 # macOS:
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl unload ~/Library/LaunchAgents/com.icarus.plist
+launchctl load ~/Library/LaunchAgents/com.icarus.plist
 # Linux:
-# systemctl --user restart nanoclaw
+# systemctl --user restart icarus.service
 ```
 
 ## Example Interaction

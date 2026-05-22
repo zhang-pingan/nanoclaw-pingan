@@ -19,10 +19,10 @@ launchctl list | grep icarus
 # Expected: PID  0  com.icarus (PID = running, "-" = not running, non-zero exit = crashed)
 
 # 2. Any running containers?
-container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
+container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep icarus
 
 # 3. Any stopped/orphaned containers?
-container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
+container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep icarus
 
 # 4. Recent errors in service log?
 grep -E 'ERROR|WARN' logs/icarus.log | tail -20

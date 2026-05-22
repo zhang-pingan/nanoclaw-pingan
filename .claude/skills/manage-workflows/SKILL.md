@@ -34,9 +34,9 @@ After writing, run `npm run build` to verify compilation (the engine validates c
 Remind the user to restart the service for changes to take effect:
 ```bash
 # macOS
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.icarus
 # Linux
-systemctl --user restart nanoclaw
+systemctl --user restart icarus.service
 ```
 
 ## Config Schema
