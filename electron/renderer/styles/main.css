@@ -16205,6 +16205,11 @@ body::after,
 
 #workbench-screen .workbench-detail-empty,
 #workflow-definitions-screen .workflow-definition-empty,
+#workflow-definitions-screen .workflow-definition-list-empty,
+#workflow-definitions-screen .workflow-definition-state-list-empty,
+#workflow-definitions-screen .workflow-definition-state-inspector-empty,
+#workflow-definitions-screen .workflow-definition-graph-empty,
+#workflow-definitions-screen .workflow-definition-diff-empty,
 #cards-management-screen .workflow-definition-empty,
 #cards-management-screen .cards-management-empty,
 #cards-management-screen .workflow-definition-list-empty,
@@ -17686,8 +17691,8 @@ textarea.workflow-wizard-input {
 }
 
 .workbench-create-header .workflow-wizard-title {
-  font-size: 28px;
-  line-height: 1.18;
+  font-size: 24px;
+  line-height: 1.22;
   font-weight: 760;
 }
 
@@ -17703,6 +17708,7 @@ textarea.workflow-wizard-input {
   width: 44px;
   min-width: 44px;
   height: 44px;
+  margin-top: -6px;
   border-radius: 10px;
 }
 
@@ -17857,8 +17863,9 @@ textarea.workflow-wizard-input {
 #wb-entry-options .workflow-wizard-option,
 #wb-service-options .workflow-wizard-option {
   width: 100%;
-  min-height: 54px;
-  padding: 12px 14px;
+  height: 64px;
+  min-height: 64px;
+  padding: 10px 14px;
   border-radius: 10px;
   align-items: flex-start;
   flex-direction: column;
@@ -17963,7 +17970,7 @@ textarea.workflow-wizard-input {
   }
 
   .workbench-create-header .workflow-wizard-title {
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .workbench-create-header .workflow-wizard-header-desc {
