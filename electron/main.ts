@@ -598,18 +598,6 @@ function buildAppMenu(): Menu {
       ],
     },
 
-    // Help menu
-    {
-      label: 'Help',
-      submenu: [
-        {
-          label: 'Support Group Docs',
-          click: () => {
-            shell.openExternal('https://github.com/qwibitai/nanoclaw');
-          },
-        },
-      ],
-    },
   ];
 
   return Menu.buildFromTemplate(template);
