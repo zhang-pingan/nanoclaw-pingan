@@ -298,8 +298,6 @@ WEB_TOKEN=...
 
 如使用 Feishu、WeCom、线上日志、图片生成、模型选择器、MySQL 代理等能力，再按 `.env.example` 补充对应变量。
 
-从旧 NanoClaw 本地配置升级到 Icarus 时，先把 `~/.config/nanoclaw/mount-allowlist.json` 和 `~/.config/nanoclaw/mail.json` 复制到 `~/.config/icarus/`，确认内容无误后再启动新版本；`.env` 只使用 `ICARUS_*` 变量，旧 `NANOCLAW_*` 变量不会被读取。
-
 ### 构建容器
 
 Docker：

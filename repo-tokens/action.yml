@@ -114,9 +114,10 @@ runs:
         with open(readme_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        repo_tokens_url = "https://github.com/qwibitai/nanoclaw/tree/main/repo-tokens"
-        linked_badge = f'<a href="{repo_tokens_url}">{badge}</a>'
-        new_content = marker_re.sub(rf"\1{linked_badge}\2", content)
+        new_content = marker_re.sub(
+            lambda match: f"{match.group(1)}{badge}{match.group(2)}",
+            content,
+        )
 
         if new_content != content:
             with open(readme_path, "w", encoding="utf-8") as f:
@@ -148,9 +149,7 @@ runs:
             lx = label_w // 2
             vx = label_w + value_w // 2
 
-            repo_tokens_url = "https://github.com/qwibitai/nanoclaw/tree/main/repo-tokens"
-
-            svg = f'''<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{total_w}" height="20" role="img" aria-label="{full_desc}">
+            svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="20" role="img" aria-label="{full_desc}">
           <title>{full_desc}</title>
           <linearGradient id="s" x2="0" y2="100%">
             <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
@@ -159,19 +158,17 @@ runs:
           <clipPath id="r">
             <rect width="{total_w}" height="20" rx="3" fill="#fff"/>
           </clipPath>
-          <a xlink:href="{repo_tokens_url}">
-            <g clip-path="url(#r)">
-              <rect width="{label_w}" height="20" fill="#555"/>
-              <rect x="{label_w}" width="{value_w}" height="20" fill="{color}"/>
-              <rect width="{total_w}" height="20" fill="url(#s)"/>
-              <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
-                <text aria-hidden="true" x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label_text}</text>
-                <text x="{lx}" y="14">{label_text}</text>
-                <text aria-hidden="true" x="{vx}" y="15" fill="#010101" fill-opacity=".3">{value_text}</text>
-                <text x="{vx}" y="14">{value_text}</text>
-              </g>
+          <g clip-path="url(#r)">
+            <rect width="{label_w}" height="20" fill="#555"/>
+            <rect x="{label_w}" width="{value_w}" height="20" fill="{color}"/>
+            <rect width="{total_w}" height="20" fill="url(#s)"/>
+            <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+              <text aria-hidden="true" x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label_text}</text>
+              <text x="{lx}" y="14">{label_text}</text>
+              <text aria-hidden="true" x="{vx}" y="15" fill="#010101" fill-opacity=".3">{value_text}</text>
+              <text x="{vx}" y="14">{value_text}</text>
             </g>
-          </a>
+          </g>
         </svg>'''
 
             os.makedirs(os.path.dirname(badge_path) or ".", exist_ok=True)

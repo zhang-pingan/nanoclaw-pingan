@@ -1,6 +1,6 @@
 # Repo Tokens
 
-A GitHub Action that calculates the size of your codebase in terms of tokens and updates a badge in your README.
+A local GitHub Action that calculates the size of this codebase in terms of tokens and updates a badge in the README.
 
 <p>
   <img src="examples/green.svg" alt="tokens 12.4k">&nbsp;
@@ -12,7 +12,7 @@ A GitHub Action that calculates the size of your codebase in terms of tokens and
 ## Usage
 
 ```yaml
-- uses: qwibitai/nanoclaw/repo-tokens@v1
+- uses: ./repo-tokens
   with:
     include: 'src/**/*.ts'
     exclude: 'src/**/*.test.ts'
@@ -28,15 +28,7 @@ Small codebases were always a good thing. With coding agents, there's now a huge
 
 This badge gives some indication of how easy it will be to work with an agent on the codebase, and will hopefully be a visual reminder to avoid bloat.
 
-## Examples
-
-Repos using repo-tokens:
-
-| Repo | Badge |
-|------|-------|
-| [NanoClaw](https://github.com/qwibitai/NanoClaw) | ![tokens](https://raw.githubusercontent.com/qwibitai/NanoClaw/main/repo-tokens/badge.svg) |
-
-### Full workflow example
+## Workflow Example
 
 ```yaml
 name: Update token count
@@ -59,7 +51,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - uses: qwibitai/nanoclaw/repo-tokens@v1
+      - uses: ./repo-tokens
         id: tokens
         with:
           include: 'src/**/*.ts'
