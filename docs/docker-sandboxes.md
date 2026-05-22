@@ -77,7 +77,7 @@ Icarus must live inside the workspace directory — Docker-in-Docker can only bi
 ```bash
 # Clone to home first (virtiofs can corrupt git pack files during clone)
 cd ~
-git clone https://github.com/qwibitai/nanoclaw.git icarus
+git clone  icarus
 
 # Replace with YOUR workspace path (the host path you passed to `docker sandbox create`)
 WORKSPACE=/Users/you/icarus-workspace
@@ -347,7 +347,7 @@ docker sandbox network proxy <sandbox-name> \
 ### Git clone fails with "inflate: data stream error"
 Clone to a non-workspace path first, then move:
 ```bash
-cd ~ && git clone https://github.com/qwibitai/nanoclaw.git icarus && mv icarus /path/to/workspace/icarus
+cd ~ && git clone  icarus && mv icarus /path/to/workspace/icarus
 ```
 
 ### WhatsApp QR code doesn't display
