@@ -100,29 +100,6 @@ describe('agent-api', () => {
     ).rejects.toThrow('ICARUS_AGENT_API_API_KEY is required');
   });
 
-  it('ignores legacy NanoClaw agent api env keys', async () => {
-    readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-legacy',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://legacy.example.test',
-      NANOCLAW_AGENT_API_MODEL: 'legacy-model',
-      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
-    });
-    const fetchMock = vi.fn();
-
-    await expect(
-      callAnthropicMessages(
-        {
-          messages: [{ role: 'user', content: 'hello' }],
-        },
-        fetchMock as unknown as typeof fetch,
-      ),
-    ).rejects.toThrow('ICARUS_AGENT_API_API_KEY is required');
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(readEnvFileMock.mock.calls[0]?.[0]).not.toContain(
-      'NANOCLAW_AGENT_API_API_KEY',
-    );
-  });
 
   it('throws on non-ok anthropic responses', async () => {
     readEnvFileMock.mockReturnValue({

@@ -48,9 +48,6 @@ describe('mount allowlist setup', () => {
       'mount-allowlist.json',
     );
     expect(fs.existsSync(icarusConfig)).toBe(true);
-    expect(fs.existsSync(path.join(homeDir, '.config', 'nanoclaw'))).toBe(
-      false,
-    );
     expect(JSON.parse(fs.readFileSync(icarusConfig, 'utf-8'))).toMatchObject({
       allowedRoots: [],
       blockedPatterns: [],

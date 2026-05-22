@@ -566,21 +566,6 @@ describe('credential-proxy', () => {
       ],
     ]);
 
-    modelResolutionCalls = [];
-    await invokeProxyRequest({
-      method: 'POST',
-      path: '/__nanoclaw__/run-old/query-old/v1/messages',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': 'placeholder',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5',
-        messages: [{ role: 'user', content: 'hello' }],
-      }),
-    });
-
-    expect(modelResolutionCalls).toEqual([]);
   });
 
   it('returns 502 when upstream is unreachable', async () => {

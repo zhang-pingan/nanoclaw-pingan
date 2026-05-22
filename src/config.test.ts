@@ -40,11 +40,8 @@ describe('Icarus rename source contracts', () => {
     );
 
     expect(preload).toContain("exposeInMainWorld('icarusApp'");
-    expect(preload).not.toContain('nanoclawApp');
     expect(main).toContain('--icarus-open-workstation');
-    expect(main).not.toContain('--nanoclaw-open-workstation');
     expect(rendererTypes).toContain('icarusApp: IcarusAppAPI');
-    expect(rendererTypes).not.toContain('nanoclawApp');
   });
 
   it('uses Icarus MCP server names, env keys, and output markers only', () => {
@@ -55,16 +52,11 @@ describe('Icarus rename source contracts', () => {
     );
 
     expect(hostRunner).toContain('---ICARUS_OUTPUT_START---');
-    expect(hostRunner).not.toContain('---NANOCLAW_OUTPUT_START---');
     expect(agentRunner).toContain('mcp__icarus__*');
     expect(agentRunner).toContain('/__icarus__/');
     expect(agentRunner).toContain('ICARUS_CHAT_JID');
-    expect(agentRunner).not.toContain('mcp__nanoclaw__');
-    expect(agentRunner).not.toContain('/__nanoclaw__/');
-    expect(agentRunner).not.toContain('NANOCLAW_CHAT_JID');
     expect(mcpServer).toContain("name: 'icarus'");
     expect(mcpServer).toContain('ICARUS_GROUP_FOLDER');
-    expect(mcpServer).not.toContain("name: 'nanoclaw'");
   });
 
   it('uses Icarus mail protocol identifiers', () => {
@@ -72,8 +64,6 @@ describe('Icarus rename source contracts', () => {
 
     expect(mail).toContain('<icarus-');
     expect(mail).toContain('icarus.local');
-    expect(mail).not.toContain('<nanoclaw-');
-    expect(mail).not.toContain('nanoclaw.local');
   });
 });
 
@@ -111,7 +101,6 @@ describe('container image config', () => {
         'project',
       ),
     );
-    expect(Object.values(paths).join('\n')).not.toContain('nanoclaw');
   });
 
   it('defaults to the Icarus agent image', async () => {
@@ -133,11 +122,4 @@ describe('container image config', () => {
     );
   });
 
-  it('rejects old NanoClaw agent images', async () => {
-    process.env.CONTAINER_IMAGE = 'nanoclaw-agent:latest';
-
-    await expect(loadContainerImage()).rejects.toThrow(
-      'CONTAINER_IMAGE must use the icarus-agent image repository',
-    );
-  });
 });

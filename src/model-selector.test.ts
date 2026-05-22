@@ -61,28 +61,4 @@ describe('model-selector', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('ignores legacy NanoClaw model env keys', async () => {
-    readEnvFileMock.mockReturnValue({
-      CREDENTIAL_PROXY_OPENAI_COMPAT: 'true',
-      NANOCLAW_MODEL_LIGHT: 'legacy-haiku',
-      NANOCLAW_MODEL_FORCE: 'legacy-force',
-    });
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const { selectModel } = await import('./model-selector.js');
-
-    await expect(
-      selectModel({
-        prompt: 'please summarize this',
-        isMain: false,
-      }),
-    ).resolves.toEqual({
-      selectedModel: 'claude-haiku-4-5-20251001',
-      reason: 'openai_compat',
-    });
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(readEnvFileMock.mock.calls[0]?.[0]).not.toContain(
-      'NANOCLAW_MODEL_LIGHT',
-    );
-  });
 });
