@@ -78,13 +78,13 @@ describe('assistant channel', () => {
     expect(channel.sendFile).toBeTruthy();
     await channel.sendFile?.(
       ASSISTANT_MAIN_JID,
-      '/tmp/nanoclaw-test-image.png',
+      '/tmp/icarus-test-image.png',
       '生成图片',
     );
     const messagesWithFile = listAssistantChatMessages(10);
     const fileMessage = messagesWithFile[messagesWithFile.length - 1];
     expect(fileMessage.content).toBe('生成图片');
-    expect(fileMessage.filePath).toBe('/tmp/nanoclaw-test-image.png');
+    expect(fileMessage.filePath).toBe('/tmp/icarus-test-image.png');
     expect(fileMessage.fileUrl).toBe(
       `/api/message-files/${encodeURIComponent(
         ASSISTANT_MAIN_JID,
@@ -172,9 +172,9 @@ describe('assistant channel', () => {
       is_bot_message: false,
     });
 
-    expect(listAssistantChatMessageRecords(ASSISTANT_MAIN_JID, 10)).toHaveLength(
-      1,
-    );
+    expect(
+      listAssistantChatMessageRecords(ASSISTANT_MAIN_JID, 10),
+    ).toHaveLength(1);
     expect(
       listAssistantChatMessageRecords('assistant:other', 10).map(
         (message) => message.content,

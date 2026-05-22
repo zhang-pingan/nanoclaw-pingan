@@ -2322,7 +2322,7 @@ describe('request_delegation target parsing', () => {
 describe('run_local_host_script authorization', () => {
   it('main group can run a script under local/shell', async () => {
     const requestId = rid('hostscript');
-    const filename = `__nanoclaw-test-${Date.now()}.sh`;
+    const filename = `__icarus-test-${Date.now()}.sh`;
     const hostPath = path.join(process.cwd(), 'local', 'shell', filename);
 
     fs.writeFileSync(
@@ -2432,7 +2432,7 @@ describe('query_recent_today_plan_details authorization', () => {
       associations_json: JSON.stringify({
         workbench_task_ids: [],
         chat_selections: [],
-        services: [{ service: 'nanoclaw', branches: [] }],
+        services: [{ service: 'icarus', branches: [] }],
       }),
     });
 
@@ -2454,7 +2454,7 @@ describe('query_recent_today_plan_details authorization', () => {
     expect(result.query.date).toBe('2026-05-12');
     expect(result.plans).toHaveLength(1);
     expect(result.plans[0].items[0].title).toBe('整理上下文');
-    expect(result.services[0].service).toBe('nanoclaw');
+    expect(result.services[0].service).toBe('icarus');
   });
 
   it('non-main group can query recent today plan details', async () => {

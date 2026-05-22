@@ -11,7 +11,7 @@ const {
   testDataDir,
   testKnowledgeWikiDir,
 } = vi.hoisted(() => {
-  const root = `/tmp/nanoclaw-wiki-test-${process.pid}-${Date.now()}`;
+  const root = `/tmp/icarus-wiki-test-${process.pid}-${Date.now()}`;
   return {
     callAnthropicMessagesMock: vi.fn(),
     execFileSyncMock: vi.fn(),
@@ -199,13 +199,13 @@ describe('wiki', () => {
               page_kind: 'project',
               summary: '验证全局 wiki 的主链路',
               content_markdown:
-                '# Vitest Wiki Page\n\nNanoClaw wiki 采用全局知识模型。',
+                '# Vitest Wiki Page\n\nIcarus wiki 采用全局知识模型。',
             },
             claims: [
               {
                 claim_type: 'decision',
-                statement: 'NanoClaw wiki 采用全局知识模型。',
-                canonical_form: 'nanoclaw wiki 采用全局知识模型',
+                statement: 'Icarus wiki 采用全局知识模型。',
+                canonical_form: 'icarus wiki 采用全局知识模型',
                 confidence: 0.92,
                 evidence: [
                   {
@@ -282,7 +282,7 @@ describe('wiki', () => {
       material.id,
     );
     expect(publishResult.claims[0]?.canonical_form).toBe(
-      'nanoclaw wiki 采用全局知识模型',
+      'icarus wiki 采用全局知识模型',
     );
 
     const pageDetail = getWikiPageDetail(testSlug);
@@ -290,7 +290,7 @@ describe('wiki', () => {
     expect(pageDetail?.claims[0]?.evidence).toHaveLength(1);
     expect(pageDetail?.claims[0]?.evidence[0]?.material_id).toBe(material.id);
 
-    const searchResults = searchWikiPages('NanoClaw', 5);
+    const searchResults = searchWikiPages('Icarus', 5);
     expect(searchResults.some((item) => item.slug === testSlug)).toBe(true);
   });
 

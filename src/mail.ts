@@ -167,7 +167,7 @@ function wrapBase64(value: string): string {
 }
 
 function buildMessageId(domain: string): string {
-  return `<nanoclaw-${Date.now()}-${Math.random().toString(36).slice(2, 10)}@${domain}>`;
+  return `<icarus-${Date.now()}-${Math.random().toString(36).slice(2, 10)}@${domain}>`;
 }
 
 function buildPlainTextMessage(input: {
@@ -342,7 +342,7 @@ export async function sendMail(
     response = await sendCommand({
       socket,
       nextLine: initialReader.nextLine,
-      command: `EHLO ${os.hostname() || 'nanoclaw.local'}`,
+      command: `EHLO ${os.hostname() || 'icarus.local'}`,
       expectedCodes: [250],
     });
 
@@ -361,7 +361,7 @@ export async function sendMail(
       await sendCommand({
         socket: activeSocket,
         nextLine,
-        command: `EHLO ${os.hostname() || 'nanoclaw.local'}`,
+        command: `EHLO ${os.hostname() || 'icarus.local'}`,
         expectedCodes: [250],
       });
     }

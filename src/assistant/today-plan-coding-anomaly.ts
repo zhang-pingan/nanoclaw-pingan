@@ -176,7 +176,7 @@ function containerRepoPathForService(
   service: string,
   registry: Record<string, JsonRecord>,
 ): string {
-  if (service === 'nanoclaw' || path.basename(PROJECT_ROOT) === service) {
+  if (service === 'icarus' || path.basename(PROJECT_ROOT) === service) {
     return '/workspace/project';
   }
   const repoPath = stringOrNull(registry[service]?.repo_path) || service;
@@ -187,7 +187,7 @@ function hostRepoPathForService(
   service: string,
   registry: Record<string, JsonRecord>,
 ): string | null {
-  if (service === 'nanoclaw' || path.basename(PROJECT_ROOT) === service) {
+  if (service === 'icarus' || path.basename(PROJECT_ROOT) === service) {
     return PROJECT_ROOT;
   }
   const repoPath = stringOrNull(registry[service]?.repo_path);
@@ -483,7 +483,7 @@ function buildPrompt(items: TodayPlanCodingScanItem[]): string {
 
 约束：
 - 输入只包含 service、repo_path 和 revisions。不要要求额外需求文本。
-- service 对应仓库目录以 repo_path 为准；nanoclaw 的 repo_path 是 /workspace/project，其他服务通常是 /workspace/repos/{repo_path}。
+- service 对应仓库目录以 repo_path 为准；icarus 的 repo_path 是 /workspace/project，其他服务通常是 /workspace/repos/{repo_path}。
 - 必须进入对应仓库，自行读取 revisions 的 commit、diff、相关源码和必要测试。
 - 先根据 revisions 对应代码修改自行归纳需求；一个服务的多个修订可以拆成多个需求。
 - 只返回存在实现 bug 或风险点的需求；没有异常时 anomalies 必须是空数组。

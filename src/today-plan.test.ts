@@ -79,7 +79,7 @@ describe('today-plan', () => {
     _initTestDatabase();
     _initTestWebDb();
     if (tempDir) rmSync(tempDir, { recursive: true, force: true });
-    tempDir = mkdtempSync(path.join(tmpdir(), 'nanoclaw-today-plan-'));
+    tempDir = mkdtempSync(path.join(tmpdir(), 'icarus-today-plan-'));
   });
 
   afterEach(() => {
@@ -168,14 +168,14 @@ describe('today-plan', () => {
 
   it('adds the current project as an implicit today plan service', () => {
     const currentProject = buildTodayPlanCurrentProjectService({
-      projectRoot: '/Users/chelaile/IdeaProjects/nanoclaw',
+      projectRoot: '/Users/chelaile/IdeaProjects/icarus',
       reposDir: '/Users/chelaile/IdeaProjects',
     });
 
     expect(currentProject).toEqual({
-      service: 'nanoclaw',
+      service: 'icarus',
       config: {
-        repo_path: 'nanoclaw',
+        repo_path: 'icarus',
         default_branch: '',
       },
     });
@@ -184,18 +184,18 @@ describe('today-plan', () => {
   it('does not override explicit service config when merging today plan services', () => {
     const registry = mergeTodayPlanServiceRegistry({
       registry: {
-        nanoclaw: {
-          repo_path: 'custom/nanoclaw',
+        icarus: {
+          repo_path: 'custom/icarus',
           default_branch: 'release',
         },
       },
-      projectRoot: '/Users/chelaile/IdeaProjects/nanoclaw',
+      projectRoot: '/Users/chelaile/IdeaProjects/icarus',
       reposDir: '/Users/chelaile/IdeaProjects',
     });
 
     expect(registry).toEqual({
-      nanoclaw: {
-        repo_path: 'custom/nanoclaw',
+      icarus: {
+        repo_path: 'custom/icarus',
         default_branch: 'release',
       },
     });

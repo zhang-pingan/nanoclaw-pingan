@@ -91,7 +91,7 @@ function createPlanWithService(input: {
 
 beforeEach(() => {
   _initTestDatabase();
-  tempDir = mkdtempSync(path.join(tmpdir(), 'nanoclaw-coding-scan-'));
+  tempDir = mkdtempSync(path.join(tmpdir(), 'icarus-coding-scan-'));
 });
 
 afterEach(() => {
@@ -100,7 +100,7 @@ afterEach(() => {
 });
 
 describe('today plan coding anomaly scan', () => {
-  it('collects revisions and maps nanoclaw to the main project mount', () => {
+  it('collects revisions and maps icarus to the main project mount', () => {
     const catstory = createRepoWithDatedCommit({
       service: 'catstory',
       branch: 'feature/cat',
@@ -129,7 +129,7 @@ describe('today plan coding anomaly scan', () => {
     ]);
   });
 
-  it('tells the agent that nanoclaw is mounted at the main project path', async () => {
+  it('tells the agent that icarus is mounted at the main project path', async () => {
     const settings = {
       ...DEFAULT_ASSISTANT_SETTINGS,
       triggerRules: {
@@ -171,14 +171,14 @@ describe('today plan coding anomaly scan', () => {
       associations: {
         workbench_task_ids: [],
         chat_selections: [],
-        services: [{ service: 'nanoclaw', branches: ['HEAD'] }],
+        services: [{ service: 'icarus', branches: ['HEAD'] }],
       },
     });
 
     await scanTodayPlanCodingAnomalyRule({
       settings,
       now: new Date(),
-      registry: { nanoclaw: { repo_path: 'ignored-for-special-case' } },
+      registry: { icarus: { repo_path: 'ignored-for-special-case' } },
       agentRunner: runner,
     });
 
@@ -352,7 +352,11 @@ describe('today plan coding anomaly scan', () => {
       },
     });
     const investigation = candidates[0].extra?.investigation as {
-      groups?: Array<{ service?: string; requirement?: string; revisions?: string[] }>;
+      groups?: Array<{
+        service?: string;
+        requirement?: string;
+        revisions?: string[];
+      }>;
     };
     expect(investigation.groups?.[0]).toMatchObject({
       service: 'catstory',

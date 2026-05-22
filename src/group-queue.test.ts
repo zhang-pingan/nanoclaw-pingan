@@ -20,7 +20,7 @@ const {
 
 // Mock config to control concurrency limit
 vi.mock('./config.js', () => ({
-  DATA_DIR: '/tmp/nanoclaw-test-data',
+  DATA_DIR: '/tmp/icarus-test-data',
   MAX_CONCURRENT_CONTAINERS: 2,
   ONE_SHOT_AGENT_MAX_QUEUE_LENGTH: 2,
   ONE_SHOT_AGENT_SLOT_TIMEOUT_MS: 1000,

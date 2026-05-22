@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { aiImagesDir, axiosGetMock, axiosPostMock, readEnvFileMock } =
   vi.hoisted(() => ({
-    aiImagesDir: '/tmp/nanoclaw-ai-image-test',
+    aiImagesDir: '/tmp/icarus-ai-image-test',
     axiosGetMock: vi.fn(),
     axiosPostMock: vi.fn(),
     readEnvFileMock: vi.fn(),
@@ -19,10 +19,10 @@ vi.mock('axios', () => ({
 
 vi.mock('./config.js', () => ({
   AI_IMAGES_DIR: aiImagesDir,
-  ATTACHMENTS_DIR: '/tmp/nanoclaw-ai-image-attachments',
-  DESKTOP_CAPTURES_DIR: '/tmp/nanoclaw-ai-image-desktop-captures',
-  GROUPS_DIR: '/tmp/nanoclaw-ai-image-groups',
-  WEB_UPLOADS_DIR: '/tmp/nanoclaw-ai-image-uploads',
+  ATTACHMENTS_DIR: '/tmp/icarus-ai-image-attachments',
+  DESKTOP_CAPTURES_DIR: '/tmp/icarus-ai-image-desktop-captures',
+  GROUPS_DIR: '/tmp/icarus-ai-image-groups',
+  WEB_UPLOADS_DIR: '/tmp/icarus-ai-image-uploads',
 }));
 
 vi.mock('./env.js', () => ({

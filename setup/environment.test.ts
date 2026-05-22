@@ -1,7 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 import Database from 'better-sqlite3';
+
+const tempDirs: string[] = [];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  while (tempDirs.length > 0) {
+    const dir = tempDirs.pop();
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 /**
  * Tests for the environment check step.
@@ -14,6 +26,36 @@ describe('environment detection', () => {
     const { getPlatform } = await import('./platform.js');
     const platform = getPlatform();
     expect(['macos', 'linux', 'unknown']).toContain(platform);
+  });
+});
+
+describe('mount allowlist setup', () => {
+  it('writes only the Icarus mount allowlist path', async () => {
+    const homeDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-mounts-home-'),
+    );
+    tempDirs.push(homeDir);
+    vi.spyOn(os, 'homedir').mockReturnValue(homeDir);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { run } = await import('./mounts.js');
+    await run(['--empty']);
+
+    const icarusConfig = path.join(
+      homeDir,
+      '.config',
+      'icarus',
+      'mount-allowlist.json',
+    );
+    expect(fs.existsSync(icarusConfig)).toBe(true);
+    expect(fs.existsSync(path.join(homeDir, '.config', 'nanoclaw'))).toBe(
+      false,
+    );
+    expect(JSON.parse(fs.readFileSync(icarusConfig, 'utf-8'))).toMatchObject({
+      allowedRoots: [],
+      blockedPatterns: [],
+      nonMainReadOnly: true,
+    });
   });
 });
 
@@ -118,4 +160,3 @@ describe('channel auth detection', () => {
     expect(hasAuth('/tmp/nonexistent_auth_dir_xyz')).toBe(false);
   });
 });
-

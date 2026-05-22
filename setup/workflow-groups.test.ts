@@ -13,7 +13,7 @@ async function runWorkflowGroupsInTemp(
   opts: { reuseCwd?: boolean } = {},
 ): Promise<string> {
   if (!opts.reuseCwd) {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-wfgroups-'));
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-wfgroups-'));
     tempDirs.push(tmp);
     process.chdir(tmp);
   }

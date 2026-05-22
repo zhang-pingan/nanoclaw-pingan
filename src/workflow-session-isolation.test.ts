@@ -20,7 +20,7 @@ vi.mock('./config.js', async () => {
     await vi.importActual<typeof import('./config.js')>('./config.js');
   return {
     ...actual,
-    DATA_DIR: '/tmp/nanoclaw-workflow-session-isolation',
+    DATA_DIR: '/tmp/icarus-workflow-session-isolation',
   };
 });
 

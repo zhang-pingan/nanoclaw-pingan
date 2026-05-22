@@ -16,7 +16,7 @@ describe('web upload helpers', () => {
   });
 
   it('parses multipart file parts without corrupting utf-8 filenames or binary payloads', () => {
-    const boundary = '----WebKitFormBoundarynanoclaw';
+    const boundary = '----WebKitFormBoundaryicarus';
     const header = Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="测试资料.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
       'utf-8',

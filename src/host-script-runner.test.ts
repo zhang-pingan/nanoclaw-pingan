@@ -13,7 +13,7 @@ import {
 const tempDirs: string[] = [];
 
 function makeTempShellRoot(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-host-script-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-host-script-'));
   tempDirs.push(dir);
   fs.mkdirSync(path.join(dir, 'shell'), { recursive: true });
   return path.join(dir, 'shell');
@@ -50,7 +50,7 @@ describe('resolveLocalHostScript', () => {
   it('rejects symlinks that escape the configured host root', () => {
     const hostRoot = makeTempShellRoot();
     const outsideDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'nanoclaw-host-script-outside-'),
+      path.join(os.tmpdir(), 'icarus-host-script-outside-'),
     );
     tempDirs.push(outsideDir);
     const outsideScript = path.join(outsideDir, 'outside.sh');

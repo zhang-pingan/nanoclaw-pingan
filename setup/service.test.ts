@@ -92,7 +92,7 @@ describe('plist generation', () => {
   it('contains the correct label', () => {
     const plist = generatePlist(
       '/usr/local/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
     );
     expect(plist).toContain('<string>com.icarus</string>');
@@ -101,7 +101,7 @@ describe('plist generation', () => {
   it('uses the correct node path', () => {
     const plist = generatePlist(
       '/opt/node/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
     );
     expect(plist).toContain('<string>/opt/node/bin/node</string>');
@@ -110,16 +110,16 @@ describe('plist generation', () => {
   it('points to dist/index.js', () => {
     const plist = generatePlist(
       '/usr/local/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
     );
-    expect(plist).toContain('/home/user/nanoclaw/dist/index.js');
+    expect(plist).toContain('/home/user/icarus/dist/index.js');
   });
 
   it('sets log paths', () => {
     const plist = generatePlist(
       '/usr/local/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
     );
     expect(plist).toContain('icarus.log');
@@ -129,7 +129,7 @@ describe('plist generation', () => {
   it('includes node and Homebrew binary paths', () => {
     const plist = generatePlist(
       '/opt/homebrew/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
     );
     expect(plist).toContain(
@@ -142,7 +142,7 @@ describe('systemd unit generation', () => {
   it('user unit uses default.target', () => {
     const unit = generateSystemdUnit(
       '/usr/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
       false,
     );
@@ -152,7 +152,7 @@ describe('systemd unit generation', () => {
   it('system unit uses multi-user.target', () => {
     const unit = generateSystemdUnit(
       '/usr/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
       true,
     );
@@ -162,7 +162,7 @@ describe('systemd unit generation', () => {
   it('contains restart policy', () => {
     const unit = generateSystemdUnit(
       '/usr/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
       false,
     );
@@ -173,19 +173,17 @@ describe('systemd unit generation', () => {
   it('sets correct ExecStart', () => {
     const unit = generateSystemdUnit(
       '/usr/bin/node',
-      '/srv/nanoclaw',
+      '/srv/icarus',
       '/home/user',
       false,
     );
-    expect(unit).toContain(
-      'ExecStart=/usr/bin/node /srv/nanoclaw/dist/index.js',
-    );
+    expect(unit).toContain('ExecStart=/usr/bin/node /srv/icarus/dist/index.js');
   });
 
   it('includes node and package-manager binary paths', () => {
     const unit = generateSystemdUnit(
       '/home/linuxbrew/.linuxbrew/bin/node',
-      '/home/user/nanoclaw',
+      '/home/user/icarus',
       '/home/user',
       false,
     );
@@ -198,7 +196,7 @@ describe('systemd unit generation', () => {
 
 describe('WSL nohup fallback', () => {
   it('generates a valid wrapper script', () => {
-    const projectRoot = '/home/user/nanoclaw';
+    const projectRoot = '/home/user/icarus';
     const nodePath = '/usr/bin/node';
     const pidFile = path.join(projectRoot, 'icarus.pid');
 

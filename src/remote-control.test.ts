@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock config before importing the module under test
 vi.mock('./config.js', () => ({
-  DATA_DIR: '/tmp/nanoclaw-rc-test',
+  DATA_DIR: '/tmp/icarus-rc-test',
 }));
 
 // Mock child_process

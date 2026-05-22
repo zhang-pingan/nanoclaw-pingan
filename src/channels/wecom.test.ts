@@ -9,7 +9,7 @@ const { axiosGetMock, axiosPostMock, attachmentsDir } = vi.hoisted(() => {
   return {
     axiosGetMock: vi.fn(),
     axiosPostMock: vi.fn(),
-    attachmentsDir: `${tmpBase.replace(/\/$/, '')}/nanoclaw-wecom-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    attachmentsDir: `${tmpBase.replace(/\/$/, '')}/icarus-wecom-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   };
 });
 
@@ -176,9 +176,7 @@ describe('WeComChannel', () => {
   });
 
   it('uploads temporary media and sends a self-built app file message', async () => {
-    const tmpDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'nanoclaw-wecom-send-'),
-    );
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-wecom-send-'));
     const filePath = path.join(tmpDir, 'report.txt');
     fs.writeFileSync(filePath, 'hello file', 'utf-8');
     const channel = createChannel();

@@ -1,5 +1,5 @@
 /**
- * Cross-platform detection utilities for NanoClaw setup.
+ * Cross-platform detection utilities for Icarus setup.
  */
 import { execSync } from 'child_process';
 import fs from 'fs';
