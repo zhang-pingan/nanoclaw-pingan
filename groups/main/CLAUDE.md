@@ -262,7 +262,7 @@ After registering a group, explain the sender allowlist feature to the user:
 >
 > For closed groups with trusted members, I recommend setting up an allow-only list so only specific people can trigger me. Want me to configure that?
 
-If the user wants to set up an allowlist, edit `~/.config/nanoclaw/sender-allowlist.json` on the host:
+If the user wants to set up an allowlist, edit `~/.config/icarus/sender-allowlist.json` on the host:
 
 ```json
 {
@@ -280,7 +280,7 @@ If the user wants to set up an allowlist, edit `~/.config/nanoclaw/sender-allowl
 Notes:
 - Your own messages (`is_from_me`) explicitly bypass the allowlist in trigger checks. Bot messages are filtered out by the database query before trigger evaluation, so they never reach the allowlist.
 - If the config file doesn't exist or is invalid, all senders are allowed (fail-open)
-- The config file is on the host at `~/.config/nanoclaw/sender-allowlist.json`, not inside the container
+- The config file is on the host at `~/.config/icarus/sender-allowlist.json`, not inside the container
 
 ### Removing a Group
 

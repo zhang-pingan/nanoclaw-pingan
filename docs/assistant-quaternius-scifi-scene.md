@@ -16,9 +16,7 @@
 - 仓库只提交运行所需的精选模型和贴图，不提交完整 ZIP 或临时解压目录。
 
 ## 资源方案
-https://quaternius.com/packs/scifiessentialskit.html 
-本地完整资源包:/tmp/nanoclaw-quaternius
-
+https://quaternius.com/packs/scifiessentialskit.html
 本地资源位于：
 
 ```text
