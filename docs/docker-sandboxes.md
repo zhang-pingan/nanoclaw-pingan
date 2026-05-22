@@ -11,7 +11,7 @@ Host (macOS / Windows WSL)
     │   ├── Channel adapters (WhatsApp, Telegram, etc.)
     │   └── Container spawner → nested Docker daemon
     └── Docker-in-Docker
-        └── nanoclaw-agent containers
+        └── icarus-agent containers
             └── Claude Agent SDK
 ```
 
@@ -160,7 +160,7 @@ if (caCertSrc) {
 
 ### 4d. Container runtime — prevent self-termination
 
-In `src/container-runtime.ts`, the `cleanupOrphans()` function matches containers by the `nanoclaw-` prefix. Inside a sandbox, the sandbox container itself may match (e.g., `nanoclaw-docker-sandbox`). Filter out the current hostname:
+In `src/container-runtime.ts`, the `cleanupOrphans()` function matches containers by the `icarus-` prefix. Inside a sandbox, the sandbox container itself may match (e.g., `icarus-docker-sandbox`). Filter out the current hostname:
 
 ```typescript
 // In cleanupOrphans(), filter out os.hostname() from the list of containers to stop
@@ -316,7 +316,7 @@ npm config set strict-ssl false
 docker build \
   --build-arg http_proxy=$http_proxy \
   --build-arg https_proxy=$https_proxy \
-  -t nanoclaw-agent:latest container/
+  -t icarus-agent:latest container/
 ```
 
 ### Agent containers fail with "path not shared"

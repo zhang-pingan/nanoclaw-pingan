@@ -7,8 +7,8 @@ source "$SCRIPT_DIR/common.sh"
 
 cd "$ROOT_DIR"
 
-# Stop all nanoclaw containers
-containers=$(docker ps -q --filter name=nanoclaw-)
+# Stop all Icarus containers
+containers=$(docker ps -q --filter name=icarus-)
 if [ -n "$containers" ]; then
   docker stop $containers
   echo "containers stopped"
@@ -24,7 +24,7 @@ echo "builder cache pruned"
 
 # Rebuild container image without cache
 SCRIPT_DIR="$(pwd)/container"
-docker build --no-cache -t nanoclaw-agent:latest "$SCRIPT_DIR"
+docker build --no-cache -t icarus-agent:latest "$SCRIPT_DIR"
 echo "container image rebuilt (no cache)"
 
 # Restart service

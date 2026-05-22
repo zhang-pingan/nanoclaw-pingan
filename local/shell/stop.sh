@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-# Stop all nanoclaw containers
-containers=$(docker ps -q --filter name=nanoclaw-)
+# Stop all Icarus containers
+containers=$(docker ps -q --filter name=icarus-)
 if [ -n "$containers" ]; then
   docker stop $containers
   echo "containers stopped"

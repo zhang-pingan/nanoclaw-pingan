@@ -224,7 +224,7 @@ Build the container with updated agent runner:
 
 Verify the build:
 ```bash
-echo '{}' | docker run -i --entrypoint /bin/echo nanoclaw-agent:latest "Container OK"
+echo '{}' | docker run -i --entrypoint /bin/echo icarus-agent:latest "Container OK"
 ```
 
 ### 7. Restart Service

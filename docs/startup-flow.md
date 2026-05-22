@@ -47,7 +47,7 @@ Channel webhook handler → 存入 SQLite messages 表
   ↓
 ┌─ 容器已活跃？ → 通过 IPC 管道消息（复用容器）
 └─ 否 → 启动新容器
-         docker run nanoclaw-agent:latest
+         docker run icarus-agent:latest
          挂载: 项目(ro), 群组目录(rw), .claude(rw), IPC(rw)
          环境: ANTHROPIC_BASE_URL=http://host.docker.internal:3001
   ↓

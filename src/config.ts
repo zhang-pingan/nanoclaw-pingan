@@ -56,7 +56,7 @@ export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 export const CONTAINER_NODE_MODULES_DIR = path.join(
   HOME_DIR,
   '.cache',
-  'nanoclaw',
+  'icarus',
   'container-node-modules',
   'project',
 );
@@ -67,8 +67,28 @@ export const WEB_UPLOADS_DIR = path.resolve(DATA_DIR, 'web-uploads');
 export const KNOWLEDGE_DIR = path.resolve(PROJECT_ROOT, 'knowledge');
 export const KNOWLEDGE_WIKI_DIR = path.join(KNOWLEDGE_DIR, 'wiki');
 
-export const CONTAINER_IMAGE =
-  process.env.CONTAINER_IMAGE || 'nanoclaw-agent:latest';
+const DEFAULT_CONTAINER_IMAGE = 'icarus-agent:latest';
+
+function containerImageRepositoryName(image: string): string {
+  const withoutDigest = image.split('@')[0] || image;
+  const lastPathSegment = withoutDigest.slice(
+    withoutDigest.lastIndexOf('/') + 1,
+  );
+  return lastPathSegment.split(':')[0] || lastPathSegment;
+}
+
+function resolveContainerImage(): string {
+  const image = process.env.CONTAINER_IMAGE || DEFAULT_CONTAINER_IMAGE;
+  if (containerImageRepositoryName(image) !== 'icarus-agent') {
+    throw new Error(
+      'CONTAINER_IMAGE must use the icarus-agent image repository after the Icarus container rename: ' +
+        image,
+    );
+  }
+  return image;
+}
+
+export const CONTAINER_IMAGE = resolveContainerImage();
 export const CONTAINER_TIMEOUT = parseInt(
   process.env.CONTAINER_TIMEOUT || '1800000',
   10,

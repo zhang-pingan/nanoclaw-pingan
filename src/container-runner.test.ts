@@ -8,18 +8,18 @@ const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
 // Mock config
 vi.mock('./config.js', () => ({
-  CONTAINER_IMAGE: 'nanoclaw-agent:latest',
+  CONTAINER_IMAGE: 'icarus-agent:latest',
   CONTAINER_MAX_OUTPUT_SIZE: 10485760,
-  CONTAINER_NODE_MODULES_DIR: '/tmp/nanoclaw-test-container-node-modules',
+  CONTAINER_NODE_MODULES_DIR: '/tmp/icarus-test-container-node-modules',
   CONTAINER_TIMEOUT: 1800000, // 30min
   CREDENTIAL_PROXY_PORT: 3001,
   MYSQL_PROXY_PORT: 3307,
   SSH_KEY_PATH: null,
-  AI_IMAGES_DIR: '/tmp/nanoclaw-test-ai-images',
-  ATTACHMENTS_DIR: '/tmp/nanoclaw-test-attachments',
-  DATA_DIR: '/tmp/nanoclaw-test-data',
-  DESKTOP_CAPTURES_DIR: '/tmp/nanoclaw-test-desktop-captures',
-  GROUPS_DIR: '/tmp/nanoclaw-test-groups',
+  AI_IMAGES_DIR: '/tmp/icarus-test-ai-images',
+  ATTACHMENTS_DIR: '/tmp/icarus-test-attachments',
+  DATA_DIR: '/tmp/icarus-test-data',
+  DESKTOP_CAPTURES_DIR: '/tmp/icarus-test-desktop-captures',
+  GROUPS_DIR: '/tmp/icarus-test-groups',
   IDLE_TIMEOUT: 1800000, // 30min
   TIMEZONE: 'America/Los_Angeles',
 }));
@@ -369,7 +369,7 @@ describe('container-runner timeout behavior', () => {
     const args = calls[calls.length - 1][1] as string[];
     expect(args).toContain('-v');
     expect(args).toContain(
-      '/tmp/nanoclaw-test-container-node-modules:/workspace/project/node_modules',
+      '/tmp/icarus-test-container-node-modules:/workspace/project/node_modules',
     );
   });
 
