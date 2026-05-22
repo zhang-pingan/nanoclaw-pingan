@@ -1,4 +1,4 @@
-# NanoClaw Specification
+# Icarus Specification
 
 A personal Claude assistant with multi-channel support, persistent memory per conversation, scheduled tasks, and container-isolated agent execution.
 
@@ -438,7 +438,7 @@ Files with `{{PLACEHOLDER}}` values need to be configured:
 
 ## Memory System
 
-NanoClaw uses a structured memory system backed by SQLite, plus transcript archiving.
+Icarus uses a structured memory system backed by SQLite, plus transcript archiving.
 
 ### Memory Layers
 
@@ -464,7 +464,7 @@ Each memory row has `status`: `active` / `conflicted` / `deprecated`.
    - Session IDs are persisted in SQLite (`sessions` table)
    - Claude Agent SDK resumes with `resume`
 2. Startup memory pack:
-   - Before each new run, NanoClaw builds a budgeted memory pack from structured memory
+   - Before each new run, Icarus builds a budgeted memory pack from structured memory
    - Layer quotas: canonical > episodic > working
 3. Global prompt context:
    - Non-main groups read `groups/global/CLAUDE.md` as additional system prompt
@@ -580,7 +580,7 @@ This allows the agent to understand the conversation context even if it wasn't m
 
 ## Scheduled Tasks
 
-NanoClaw has a built-in scheduler that runs tasks as full agents in their group's context.
+Icarus has a built-in scheduler that runs tasks as full agents in their group's context.
 
 ### How Scheduling Works
 
@@ -643,7 +643,7 @@ From main channel:
 
 ## MCP Servers
 
-### NanoClaw MCP (built-in)
+### Built-in MCP Server
 
 The `nanoclaw` MCP server is created dynamically per agent call with the current group's context.
 
@@ -663,13 +663,13 @@ The `nanoclaw` MCP server is created dynamically per agent call with the current
 
 ## Deployment
 
-NanoClaw runs as a single macOS launchd service.
+Icarus runs as a single macOS launchd service.
 
 ### Startup Sequence
 
-When NanoClaw starts, it:
+When Icarus starts, it:
 
-1. **Ensures container runtime is running** - Automatically starts it if needed; kills orphaned NanoClaw containers from previous runs
+1. **Ensures container runtime is running** - Automatically starts it if needed; kills orphaned project containers from previous runs
 2. Initializes the SQLite database (migrates from JSON files if they exist)
 3. Loads state from SQLite (registered groups, sessions, router state)
 4. **Connects channels** — loops through registered channels, instantiates those with credentials, calls `connect()` on each
@@ -796,7 +796,7 @@ chmod 700 groups/
 | Issue                                    | Cause                             | Solution                                                                                 |
 | ---------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- | -------------- |
 | No response to messages                  | Service not running               | Check `launchctl list                                                                    | grep nanoclaw` |
-| "Claude Code process exited with code 1" | Container runtime failed to start | Check logs; NanoClaw auto-starts container runtime but may fail                          |
+| "Claude Code process exited with code 1" | Container runtime failed to start | Check logs; Icarus auto-starts container runtime but may fail                          |
 | "Claude Code process exited with code 1" | Session mount path wrong          | Ensure mount is to `/home/node/.claude/` not `/root/.claude/`                            |
 | Session not continuing                   | Session ID not saved              | Check SQLite: `sqlite3 store/messages.db "SELECT * FROM sessions"`                       |
 | Session not continuing                   | Mount path mismatch               | Container user is `node` with HOME=/home/node; sessions must be at `/home/node/.claude/` |

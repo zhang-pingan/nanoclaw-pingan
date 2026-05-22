@@ -1,4 +1,4 @@
-# NanoClaw Requirements
+# Icarus Requirements
 
 Original requirements and design decisions from the project creator.
 
@@ -8,7 +8,7 @@ Original requirements and design decisions from the project creator.
 
 This is a lightweight, secure alternative to OpenClaw (formerly ClawBot). That project became a monstrosity - 4-5 different processes running different gateways, endless configuration files, endless integrations. It's a security nightmare where agents don't run in isolated processes; there's all kinds of leaky workarounds trying to prevent them from accessing parts of the system they shouldn't. It's impossible for anyone to realistically understand the whole codebase. When you run it you're kind of just yoloing it.
 
-NanoClaw gives you the core functionality without that mess.
+Icarus gives you the core functionality without that mess.
 
 ---
 
@@ -193,4 +193,4 @@ These are the creator's settings, stored here for reference:
 
 ## Project Name
 
-**NanoClaw** - A reference to Clawdbot (now OpenClaw).
+**Icarus** - A reference to Clawdbot (now OpenClaw).

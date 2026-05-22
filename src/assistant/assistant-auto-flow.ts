@@ -800,7 +800,7 @@ function buildInvestigationPrompt(
   item: AgentInboxItemView,
   context: Record<string, unknown>,
 ): string {
-  return `你是 NanoClaw 主群个人助手的异常排查 Agent。请基于上下文判断触发项原因，以及是否可以自动修复。
+  return `你是 Icarus 主群个人助手的异常排查 Agent。请基于上下文判断触发项原因，以及是否可以自动修复。
 
 只返回 JSON，不要返回 Markdown 或额外解释。JSON 格式必须是：
 {
@@ -855,7 +855,7 @@ function buildRepairPrompt(
   investigation: InvestigationResult,
   group?: InvestigationGroup | null,
 ): string {
-  return `你是 NanoClaw 主群个人助手的异常修复 Agent。请按排查结论尝试修复；如果无法安全修复，说明原因。
+  return `你是 Icarus 主群个人助手的异常修复 Agent。请按排查结论尝试修复；如果无法安全修复，说明原因。
 
 只返回 JSON，不要返回 Markdown 或额外解释。JSON 格式必须是：
 {
@@ -883,7 +883,7 @@ function buildWorkbenchActionPrompt(
   item: AgentInboxItemView,
   context: Record<string, unknown>,
 ): string {
-  return `你是 NanoClaw 主群个人助手的工作台待处理项处理 Agent。目标：主动取证并尽可能推进待办。
+  return `你是 Icarus 主群个人助手的工作台待处理项处理 Agent。目标：主动取证并尽可能推进待办。
 
 只返回 JSON：
 {

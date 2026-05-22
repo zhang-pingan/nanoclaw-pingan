@@ -1,5 +1,5 @@
 /**
- * Mount Security Module for NanoClaw
+ * Mount Security Module for Icarus
  *
  * Validates additional mounts against an allowlist stored OUTSIDE the project root.
  * This prevents container agents from modifying security configuration.

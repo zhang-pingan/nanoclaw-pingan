@@ -1,13 +1,13 @@
-# NanoClaw Project Context
+# Icarus Project Context
 
-NanoClaw is a personal Agent work system. It combines a user-driven Web workbench, a proactive desktop personal assistant, a mobile channel currently implemented through Feishu, a WeCom employee private channel, a trusted host service, and isolated container agents.
+Icarus is a personal Agent work system. It combines a user-driven Web workbench, a proactive desktop personal assistant, a mobile channel currently implemented through Feishu, a WeCom employee private channel, a trusted host service, and isolated container agents.
 
 The most important product boundary:
 
 - **Web workbench client**: user-initiated. The user opens the workbench, creates tasks, reviews progress, adds context, approves actions, and inspects traces. Agent is a passive tool in this surface.
 - **Personal assistant client**: agent-initiated. The assistant proactively notices missing plans, stuck tasks, failed agent runs, scheduler failures, and online errors. It reminds the user and may investigate or prepare fixes under policy.
 - **Mobile channel**: currently Feishu. This is a lightweight fallback for when the user is away from the computer: task lookup, approval handling, reminder delivery, simple task creation, and short follow-up instructions. It is not a full mobile workbench.
-- **WeCom employee private channel**: one-to-one private customer-service surface between NanoClaw and WeCom employees. It gathers information from employees through private chat when NanoClaw needs details to resolve runtime problems, and it can also act as NanoClaw's private support agent to answer or handle employee requests and issues.
+- **WeCom employee private channel**: one-to-one private customer-service surface between Icarus and WeCom employees. It gathers information from employees through private chat when Icarus needs details to resolve runtime problems, and it can also act as Icarus's private support agent to answer or handle employee requests and issues.
 - **Host service**: trusted orchestration layer. It owns routing, workflow state, SQLite, scheduling, IPC authorization, credential proxying, workbench APIs, proactive scans, and container lifecycle.
 - **Container agent**: isolated high-capability executor. It performs real agent work inside Docker or Apple Container, with explicit mounts and no real API secrets.
 
@@ -77,7 +77,7 @@ Web Workbench / Electron     Personal Assistant / tray     Mobile / Feishu     W
 - When changing frontend behavior, account for both browser workbench and Electron wrapper behavior.
 - When changing assistant behavior, keep the active/passive boundary clear: workbench is the control surface; assistant is the proactive layer.
 - When changing mobile-channel behavior, keep Feishu lightweight: task lookup, approval handling, reminder delivery, simple task creation, and short follow-up instructions. Complex configuration, heavy artifact review, knowledge-base editing, and risky operations should return the user to the Web workbench.
-- When changing WeCom employee private-channel behavior, preserve the one-to-one customer-service boundary: use private chat to collect employee-provided context needed to resolve NanoClaw runtime issues, or to answer and handle employee requests on NanoClaw's behalf. Do not treat WeCom employee DMs as a full workbench, public group channel, or unrestricted privileged control surface.
+- When changing WeCom employee private-channel behavior, preserve the one-to-one customer-service boundary: use private chat to collect employee-provided context needed to resolve Icarus runtime issues, or to answer and handle employee requests on Icarus's behalf. Do not treat WeCom employee DMs as a full workbench, public group channel, or unrestricted privileged control surface.
 - When changing container execution, check host-side `src/container-runner.ts` and container-side `container/agent-runner/src/index.ts` together.
 - When changing workflow behavior, check the workflow definition/card config and the workbench synchronization path.
 

@@ -1,13 +1,13 @@
-# Running NanoClaw in Docker Sandboxes (Manual Setup)
+# Running Icarus in Docker Sandboxes (Manual Setup)
 
-This guide walks through setting up NanoClaw inside a [Docker Sandbox](https://docs.docker.com/ai/sandboxes/) from scratch — no install script, no pre-built fork. You'll clone the upstream repo, apply the necessary patches, and have agents running in full hypervisor-level isolation.
+This guide walks through setting up Icarus inside a [Docker Sandbox](https://docs.docker.com/ai/sandboxes/) from scratch — no install script, no pre-built fork. You'll clone the upstream repo, apply the necessary patches, and have agents running in full hypervisor-level isolation.
 
 ## Architecture
 
 ```
 Host (macOS / Windows WSL)
 └── Docker Sandbox (micro VM with isolated kernel)
-    ├── NanoClaw process (Node.js)
+    ├── Icarus process (Node.js)
     │   ├── Channel adapters (WhatsApp, Telegram, etc.)
     │   └── Container spawner → nested Docker daemon
     └── Docker-in-Docker
@@ -70,9 +70,9 @@ sudo apt-get update && sudo apt-get install -y build-essential python3
 npm config set strict-ssl false
 ```
 
-## Step 3: Clone and Install NanoClaw
+## Step 3: Clone and Install Icarus
 
-NanoClaw must live inside the workspace directory — Docker-in-Docker can only bind-mount from the shared workspace path.
+Icarus must live inside the workspace directory — Docker-in-Docker can only bind-mount from the shared workspace path.
 
 ```bash
 # Clone to home first (virtiofs can corrupt git pack files during clone)
@@ -93,7 +93,7 @@ npm install https-proxy-agent
 
 ## Step 4: Apply Proxy and Sandbox Patches
 
-NanoClaw needs several patches to work inside a Docker Sandbox. These handle proxy routing, CA certificates, and Docker-in-Docker mount restrictions.
+Icarus needs several patches to work inside a Docker Sandbox. These handle proxy routing, CA certificates, and Docker-in-Docker mount restrictions.
 
 ### 4a. Dockerfile — proxy args for container image build
 
@@ -321,7 +321,7 @@ docker build \
 
 ### Agent containers fail with "path not shared"
 All bind-mounted paths must be under the workspace directory. Check:
-- Is NanoClaw cloned into the workspace? (not `/home/agent/`)
+- Is Icarus cloned into the workspace? (not `/home/agent/`)
 - Is the CA cert copied to the project root?
 - Has the empty `.env` shadow file been created?
 

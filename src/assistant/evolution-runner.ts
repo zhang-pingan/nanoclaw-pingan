@@ -258,7 +258,7 @@ export function buildEvolutionRunnerPrompt(input: {
 }): string {
   const item = input.item;
   return [
-    '你正在执行 NanoClaw 个人助手 self-evolution 内部任务。',
+    '你正在执行 Icarus 个人助手 self-evolution 内部任务。',
     '必须使用 self-evolution skill；如果 skill 不可用，按下面边界执行。',
     '',
     '硬性边界：',

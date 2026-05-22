@@ -1,4 +1,4 @@
-# NanoClaw Security Model
+# Icarus Security Model
 
 ## Trust Model
 

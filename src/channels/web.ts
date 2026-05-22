@@ -770,7 +770,7 @@ class WebChannel {
         status: 'error',
         requestId,
         error:
-          'No connected Electron web client with desktop capture support. Open the NanoClaw desktop app and keep it connected.',
+          'No connected Electron web client with desktop capture support. Open the Icarus desktop app and keep it connected.',
       };
     }
 
@@ -5288,7 +5288,7 @@ class WebChannel {
       }
     };
 
-    send({ type: 'connected', message: 'Connected to NanoClaw' });
+    send({ type: 'connected', message: 'Connected to Icarus' });
     send({
       type: 'agent_status',
       agents: this.opts.getAgentStatus?.() ?? [],

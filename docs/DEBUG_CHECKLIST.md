@@ -1,4 +1,4 @@
-# NanoClaw Debug Checklist
+# Icarus Debug Checklist
 
 ## Known Issues (2026-02-08)
 

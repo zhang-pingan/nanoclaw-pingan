@@ -1,12 +1,12 @@
-# NanoClaw 核心技术介绍
+# Icarus 核心技术介绍
 
-NanoClaw 是一套面向个人和小团队工程场景的 Agent 工作系统。它不是把大模型简单接入聊天窗口，而是把 Agent 执行、安全隔离、工作流编排、长期记忆、知识库、产物评估和多端交互组合成一套可落地的工程运行时。
+Icarus 是一套面向个人和小团队工程场景的 Agent 工作系统。它不是把大模型简单接入聊天窗口，而是把 Agent 执行、安全隔离、工作流编排、长期记忆、知识库、产物评估和多端交互组合成一套可落地的工程运行时。
 
 项目的核心价值可以概括为：让 Agent 有足够强的执行能力，同时把执行边界、权限边界、会话边界和交付边界做清楚。Agent 可以读代码、写文档、跑命令、调用工具、推进流程；但密钥、宿主机权限、跨会话上下文和高风险操作都由宿主机可信控制面统一约束。
 
 ## 1. 安全性：容器化沙箱和宿主机代理
 
-NanoClaw 的首要设计原则是“高权限能力必须运行在隔离环境内”。Agent 不直接在宿主机进程里执行命令，而是由宿主机服务按需启动容器 Agent，容器只看到明确挂载的目录、工具和 IPC 命名空间。
+Icarus 的首要设计原则是“高权限能力必须运行在隔离环境内”。Agent 不直接在宿主机进程里执行命令，而是由宿主机服务按需启动容器 Agent，容器只看到明确挂载的目录、工具和 IPC 命名空间。
 
 核心安全设计包括：
 
@@ -22,7 +22,7 @@ NanoClaw 的首要设计原则是“高权限能力必须运行在隔离环境�
 
 ## 2. Agent 蜂窝架构：主调度与子 Agent 能力边界
 
-NanoClaw 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的单体 Agent。宿主机服务和主调度 Agent 负责统一编排，多个角色子 Agent 分别承担方案、开发、复核、部署、测试、知识库、自我进化等职责。
+Icarus 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的单体 Agent。宿主机服务和主调度 Agent 负责统一编排，多个角色子 Agent 分别承担方案、开发、复核、部署、测试、知识库、自我进化等职责。
 
 蜂窝架构的关键点是：
 
@@ -38,7 +38,7 @@ NanoClaw 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的�
 
 ## 3. Harness 工程应用：把 Agent 变成可运行、可观测、可评估的执行单元
 
-NanoClaw 的 harness 不是单独的目录，而是一组工程化封装：容器 runner、Agent SDK 调用、MCP 工具面、Trace、产物契约、工作流评估和失败分类共同构成 Agent Harness。
+Icarus 的 harness 不是单独的目录，而是一组工程化封装：容器 runner、Agent SDK 调用、MCP 工具面、Trace、产物契约、工作流评估和失败分类共同构成 Agent Harness。
 
 它解决的是工程落地中最关键的问题：同一个 Agent 任务不能只是“聊完了”，而要能被启动、监控、回放、评价、失败归因和继续推进。
 
@@ -57,7 +57,7 @@ NanoClaw 的 harness 不是单独的目录，而是一组工程化封装：容�
 
 ## 4. 记忆机制和 LLM Wiki
 
-NanoClaw 同时维护两类长期上下文：面向行为偏好的结构化记忆，以及面向项目知识的 LLM Wiki。两者互补，避免把所有历史都塞进对话上下文。
+Icarus 同时维护两类长期上下文：面向行为偏好的结构化记忆，以及面向项目知识的 LLM Wiki。两者互补，避免把所有历史都塞进对话上下文。
 
 ### 结构化记忆
 
@@ -86,7 +86,7 @@ LLM Wiki 的价值不只是“能搜索文档”，而是把非结构化材料�
 
 ## 5. 工作流机制：配置驱动的 Agent 协作状态机
 
-NanoClaw 的工作流引擎把复杂研发活动建模为配置驱动的状态机。工作流定义位于 `container/workflow-definitions/`，卡片、产物契约、评估器和角色映射独立配置。
+Icarus 的工作流引擎把复杂研发活动建模为配置驱动的状态机。工作流定义位于 `container/workflow-definitions/`，卡片、产物契约、评估器和角色映射独立配置。
 
 一个工作流通常包含：
 
@@ -143,48 +143,48 @@ Web 工作台是用户主动控制台，负责创建任务、查看阶段进度�
 
 OpenClaw 的公开定位是 local-first 个人 AI 助手：一个长期运行的 Gateway 管理多渠道、客户端、节点、会话和工具；多 Agent 通过 `agentId` 路由到独立 workspace、agentDir 和 session store；沙箱是可配置能力，工具可在 Docker/SSH/OpenShell 等后端中执行，未启用时工具运行在宿主机。它的优势在于多渠道覆盖、个人助理体验、快速接入和丰富技能生态。
 
-NanoClaw 的核心优势不是“更多渠道”，而是更强的工程控制面：
+Icarus 的核心优势不是“更多渠道”，而是更强的工程控制面：
 
-- **沙箱默认进入执行主路径**：NanoClaw 把容器 Agent 作为执行面基础设施，而不是只把 sandbox 当成某类工具后端。Agent 的 Bash、文件读写、浏览器和 MCP 调用都在容器边界内完成，宿主机只暴露受控 IPC、凭证代理和明确挂载目录。
-- **凭证和执行彻底分离**：OpenClaw 文档强调 Gateway、工具策略、DM pairing、sandbox 等边界；NanoClaw 进一步把模型 API Key 和 OAuth Token 留在宿主机 `credential-proxy`，容器只拿占位凭证，避免“Agent 读到真实密钥后再约束它不要外泄”的脆弱模式。
-- **面向交付的工作流状态机**：OpenClaw 的多 Agent 路由更像“多个隔离人格/账号/渠道”的路由系统；NanoClaw 的多 Agent 是 planner、dev、reviewer、ops、test 等工程角色围绕 workflow state、artifact contract、stage evaluation、failure taxonomy 和 interrupt/resume 协作。
-- **交付边界更可审计**：NanoClaw 要求阶段产物、handoff envelope、评估结果、Query Trace、失败分类进入统一数据库和工作台视图，目标是让 Agent 任务可以被暂停、复核、退回、重跑和复盘，而不仅是完成一次会话回复。
+- **沙箱默认进入执行主路径**：Icarus 把容器 Agent 作为执行面基础设施，而不是只把 sandbox 当成某类工具后端。Agent 的 Bash、文件读写、浏览器和 MCP 调用都在容器边界内完成，宿主机只暴露受控 IPC、凭证代理和明确挂载目录。
+- **凭证和执行彻底分离**：OpenClaw 文档强调 Gateway、工具策略、DM pairing、sandbox 等边界；Icarus 进一步把模型 API Key 和 OAuth Token 留在宿主机 `credential-proxy`，容器只拿占位凭证，避免“Agent 读到真实密钥后再约束它不要外泄”的脆弱模式。
+- **面向交付的工作流状态机**：OpenClaw 的多 Agent 路由更像“多个隔离人格/账号/渠道”的路由系统；Icarus 的多 Agent 是 planner、dev、reviewer、ops、test 等工程角色围绕 workflow state、artifact contract、stage evaluation、failure taxonomy 和 interrupt/resume 协作。
+- **交付边界更可审计**：Icarus 要求阶段产物、handoff envelope、评估结果、Query Trace、失败分类进入统一数据库和工作台视图，目标是让 Agent 任务可以被暂停、复核、退回、重跑和复盘，而不仅是完成一次会话回复。
 
 ### 相比 Claude Code、Codex 这类编程 Agent
 
 Claude Code 和 Codex 的公开文档都已经支持 subagent、工具权限、上下文隔离、approval/sandbox、并行工作等能力。Claude Code subagent 强调独立上下文窗口、专门系统提示、独立权限和前台/后台执行；Codex CLI 是本地终端编程 Agent，可以读写代码、运行命令，并可显式 spawn subagents；OpenAI Agents SDK 也有 sandbox、handoff、guardrail 和 eval 文档。
 
-NanoClaw 的优势在于它不是“一个更会写代码的 CLI”，而是把编程 Agent 放进完整研发运行时：
+Icarus 的优势在于它不是“一个更会写代码的 CLI”，而是把编程 Agent 放进完整研发运行时：
 
-- **从代码会话升级为工程流程**：Claude Code/Codex 的强项是 repo 内探索、编辑、测试和 review；NanoClaw 把这些能力作为工作流中的一个阶段，前后还有需求澄清、计划、评审、部署、测试验证、线上日志调查、人类审批和产物归档。
-- **跨端入口和统一状态**：编程 CLI 通常围绕终端、IDE 或云任务运行；NanoClaw 把 Web 工作台、桌面 Assistant、飞书移动端、定时任务和 Agent Trace 收敛到同一个宿主机状态机，用户可以在不同入口继续处理同一任务。
-- **角色隔离不只靠提示词**：Claude Code/Codex 的 subagent 主要隔离上下文、提示和工具权限；NanoClaw 还隔离容器、`.claude` 会话目录、IPC 来源、挂载目录、Skill 包、workflow metadata 和 group queue 资源配额。
-- **评估和失败归因是内建闭环**：OpenAI Agents 文档提供 traces、graders、guardrails 等通用能力；NanoClaw 在项目层把 artifact contract、stage evaluator、failure taxonomy 和 workbench timeline 固化为研发交付协议，减少“Agent 说完成了，但无法判断是否可交付”的问题。
+- **从代码会话升级为工程流程**：Claude Code/Codex 的强项是 repo 内探索、编辑、测试和 review；Icarus 把这些能力作为工作流中的一个阶段，前后还有需求澄清、计划、评审、部署、测试验证、线上日志调查、人类审批和产物归档。
+- **跨端入口和统一状态**：编程 CLI 通常围绕终端、IDE 或云任务运行；Icarus 把 Web 工作台、桌面 Assistant、飞书移动端、定时任务和 Agent Trace 收敛到同一个宿主机状态机，用户可以在不同入口继续处理同一任务。
+- **角色隔离不只靠提示词**：Claude Code/Codex 的 subagent 主要隔离上下文、提示和工具权限；Icarus 还隔离容器、`.claude` 会话目录、IPC 来源、挂载目录、Skill 包、workflow metadata 和 group queue 资源配额。
+- **评估和失败归因是内建闭环**：OpenAI Agents 文档提供 traces、graders、guardrails 等通用能力；Icarus 在项目层把 artifact contract、stage evaluator、failure taxonomy 和 workbench timeline 固化为研发交付协议，减少“Agent 说完成了，但无法判断是否可交付”的问题。
 
 ### 相比 Hermes Agent
 
 Hermes Agent 的公开定位是自改进、常驻、跨平台个人 Agent：它强调 persistent memory、session search、自动技能创建、技能自我改进、gateway、多 terminal backends、subagents、cron、trajectory/RL 数据生成等能力。它的优势是长期陪伴、自学习和个人自动化生态。
 
-NanoClaw 与 Hermes 的取舍不同：NanoClaw 不把“越用越会自己长技能”放在唯一中心，而是把“工程任务可控交付”放在中心。
+Icarus 与 Hermes 的取舍不同：Icarus 不把“越用越会自己长技能”放在唯一中心，而是把“工程任务可控交付”放在中心。
 
-- **知识沉淀更偏证据化**：Hermes 的 built-in memory 是 bounded、agent-curated 的 `MEMORY.md`/`USER.md` 加 session search，也支持外部 memory provider；NanoClaw 同时维护结构化 memory 和 LLM Wiki，把 materials、claims、evidence、relations、pages 分开，让项目知识可以被检索、引用和追溯证据。
-- **自我进化受状态机约束**：Hermes 强调 agent 从经验中自动创建和改进技能；NanoClaw 的自我进化更保守，问题发现、方案、分支实现、检查、复核和采纳都走 workflow、Trace 和人工确认，适合对稳定性要求更高的工程系统。
-- **执行权限更集中在可信宿主机控制面**：Hermes 支持多种运行后端和安全机制；NanoClaw 的设计重点是“控制面不进容器，执行面不越过控制面”，容器通过 IPC 向宿主机申请受控能力，宿主机按 group/main、workflow、stage 和 allowlist 判定。
-- **研发协作对象更明确**：Hermes 是一个泛化常驻个人 Agent；NanoClaw 把 planner/dev/reviewer/ops/test/wiki/assistant 等角色、产物契约和工作台操作面组合成研发团队语义，更适合需求开发、Bug 修复、预发部署、测试验证和线上故障处理这类多人/多阶段工程任务。
+- **知识沉淀更偏证据化**：Hermes 的 built-in memory 是 bounded、agent-curated 的 `MEMORY.md`/`USER.md` 加 session search，也支持外部 memory provider；Icarus 同时维护结构化 memory 和 LLM Wiki，把 materials、claims、evidence、relations、pages 分开，让项目知识可以被检索、引用和追溯证据。
+- **自我进化受状态机约束**：Hermes 强调 agent 从经验中自动创建和改进技能；Icarus 的自我进化更保守，问题发现、方案、分支实现、检查、复核和采纳都走 workflow、Trace 和人工确认，适合对稳定性要求更高的工程系统。
+- **执行权限更集中在可信宿主机控制面**：Hermes 支持多种运行后端和安全机制；Icarus 的设计重点是“控制面不进容器，执行面不越过控制面”，容器通过 IPC 向宿主机申请受控能力，宿主机按 group/main、workflow、stage 和 allowlist 判定。
+- **研发协作对象更明确**：Hermes 是一个泛化常驻个人 Agent；Icarus 把 planner/dev/reviewer/ops/test/wiki/assistant 等角色、产物契约和工作台操作面组合成研发团队语义，更适合需求开发、Bug 修复、预发部署、测试验证和线上故障处理这类多人/多阶段工程任务。
 
-总结来说，OpenClaw 更像多渠道 local-first 个人助手平台，Claude Code/Codex 更像强大的编程 Agent 工作台，Hermes 更像会长期学习的个人自动化 Agent；NanoClaw 的核心差异是把这些能力收束成“可信宿主机控制面 + 容器化执行面 + 状态机工作流 + 可审计交付契约”的工程运行时。
+总结来说，OpenClaw 更像多渠道 local-first 个人助手平台，Claude Code/Codex 更像强大的编程 Agent 工作台，Hermes 更像会长期学习的个人自动化 Agent；Icarus 的核心差异是把这些能力收束成“可信宿主机控制面 + 容器化执行面 + 状态机工作流 + 可审计交付契约”的工程运行时。
 
 ## 9. 前沿 Agent 技术在本项目中的体现
 
-NanoClaw 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工程化落地：
+Icarus 并不是逐字复刻某篇论文，而是把多个前沿 Agent 思路工程化落地：
 
-- **Anthropic Multi-Agent Research / Orchestrator-Workers**：Anthropic 没有以 arXiv 论文形式发布这套架构，但在官方 Engineering 文章 `How we built our multi-agent research system` 中系统介绍过 multi-agent research system：由 lead agent 分析任务、制定策略，并创建 specialized subagents 并行探索不同方向；在 `Building effective agents` 中也把 orchestrator-workers 总结为中心 LLM 动态拆解任务、委派 worker LLM、再综合结果的模式。NanoClaw 的“蜂窝架构”与这个方向高度一致，但更偏工程交付：主调度在宿主机工作流中完成，子 Agent 以角色、Skill、容器、IPC、会话和工具边界隔离，最终通过 handoff envelope、产物契约和阶段评估回收结果。
-- **Claude Code Subagents / Agent Teams**：Anthropic 的 Claude Code 文档强调 subagent 拥有独立上下文窗口、可配置工具权限和专门系统提示，并适合隔离高输出操作、并行研究和链式协作。NanoClaw 把这一思想进一步运行时化：每个角色 Agent 不只是提示隔离，还拥有独立容器、独立 `.claude` 会话、独立 IPC 命名空间和按角色分配的 Skill。
-- **ReAct**：ReAct 强调推理与行动交替进行。NanoClaw 中 Agent 通过工具调用、MCP、Bash、Web、浏览器和结构化 handoff 在“思考-行动-观察-再行动”的循环里推进任务，同时 Trace 记录过程，提升可解释性。
-- **Reflexion**：Reflexion 的核心是利用语言反馈和 episodic memory 改善后续决策。NanoClaw 的阶段评估、失败分类、记忆提取、memory pack 和自我进化日志提供了类似的反馈沉淀机制。
-- **Voyager**：Voyager 强调自动课程、Skill Library 和可组合技能。NanoClaw 通过工作流入口、角色 Skill、项目知识库和自我进化，把技能沉淀为可复用的执行方法论。
-- **SWE-agent / ACI**：SWE-agent 证明 Agent-Computer Interface 会显著影响软件工程 Agent 表现。NanoClaw 的 harness、工作区挂载、工具白名单、产物契约、测试/部署工具、Trace 和工作台视图，本质上是在为工程 Agent 构建专用 ACI。
-- **多 Agent 协作框架**：AutoGen、MetaGPT 等工作强调角色化协作和对话式编排。NanoClaw 采用更工程化的方式：角色 Agent 不靠自由聊天协作，而是通过状态机、handoff envelope、产物契约和评估器协作。
+- **Anthropic Multi-Agent Research / Orchestrator-Workers**：Anthropic 没有以 arXiv 论文形式发布这套架构，但在官方 Engineering 文章 `How we built our multi-agent research system` 中系统介绍过 multi-agent research system：由 lead agent 分析任务、制定策略，并创建 specialized subagents 并行探索不同方向；在 `Building effective agents` 中也把 orchestrator-workers 总结为中心 LLM 动态拆解任务、委派 worker LLM、再综合结果的模式。Icarus 的“蜂窝架构”与这个方向高度一致，但更偏工程交付：主调度在宿主机工作流中完成，子 Agent 以角色、Skill、容器、IPC、会话和工具边界隔离，最终通过 handoff envelope、产物契约和阶段评估回收结果。
+- **Claude Code Subagents / Agent Teams**：Anthropic 的 Claude Code 文档强调 subagent 拥有独立上下文窗口、可配置工具权限和专门系统提示，并适合隔离高输出操作、并行研究和链式协作。Icarus 把这一思想进一步运行时化：每个角色 Agent 不只是提示隔离，还拥有独立容器、独立 `.claude` 会话、独立 IPC 命名空间和按角色分配的 Skill。
+- **ReAct**：ReAct 强调推理与行动交替进行。Icarus 中 Agent 通过工具调用、MCP、Bash、Web、浏览器和结构化 handoff 在“思考-行动-观察-再行动”的循环里推进任务，同时 Trace 记录过程，提升可解释性。
+- **Reflexion**：Reflexion 的核心是利用语言反馈和 episodic memory 改善后续决策。Icarus 的阶段评估、失败分类、记忆提取、memory pack 和自我进化日志提供了类似的反馈沉淀机制。
+- **Voyager**：Voyager 强调自动课程、Skill Library 和可组合技能。Icarus 通过工作流入口、角色 Skill、项目知识库和自我进化，把技能沉淀为可复用的执行方法论。
+- **SWE-agent / ACI**：SWE-agent 证明 Agent-Computer Interface 会显著影响软件工程 Agent 表现。Icarus 的 harness、工作区挂载、工具白名单、产物契约、测试/部署工具、Trace 和工作台视图，本质上是在为工程 Agent 构建专用 ACI。
+- **多 Agent 协作框架**：AutoGen、MetaGPT 等工作强调角色化协作和对话式编排。Icarus 采用更工程化的方式：角色 Agent 不靠自由聊天协作，而是通过状态机、handoff envelope、产物契约和评估器协作。
 
 ## 参考资料
 

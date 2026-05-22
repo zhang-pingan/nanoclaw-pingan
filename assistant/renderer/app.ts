@@ -809,7 +809,7 @@ async function loadState(): Promise<void> {
     shell.classList.remove('bubble-hidden');
     bubble.setAttribute('aria-hidden', 'false');
     bubbleKicker.textContent = 'Connection';
-    bubbleTitle.textContent = '无法连接 NanoClaw';
+    bubbleTitle.textContent = '无法连接 Icarus';
     bubbleBody.textContent = '请确认主服务和 Web 工作站正在运行。';
     bubbleActions.innerHTML = '';
     bubbleActions.append(button('重试', 'primary', () => void loadState()));

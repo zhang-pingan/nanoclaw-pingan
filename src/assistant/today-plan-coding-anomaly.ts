@@ -459,7 +459,7 @@ function toInvestigation(result: CodingAnomalyScanResult): JsonRecord {
 }
 
 function buildPrompt(items: TodayPlanCodingScanItem[]): string {
-  return `你是 NanoClaw 主群个人助手的服务 coding 异常排查 Agent。请根据输入的服务和修订号集合，判断这些修订引入的实现 bug 或风险点。
+  return `你是 Icarus 主群个人助手的服务 coding 异常排查 Agent。请根据输入的服务和修订号集合，判断这些修订引入的实现 bug 或风险点。
 
 只返回 JSON，不要返回 Markdown 或额外解释。JSON 格式必须是：
 {

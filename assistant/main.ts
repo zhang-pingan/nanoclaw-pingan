@@ -224,7 +224,7 @@ function createTray(): void {
     .createFromPath(assetPath('claw-icon.png'))
     .resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
   tray = new Tray(image);
-  tray.setToolTip('NanoClaw Personal Assistant');
+  tray.setToolTip('Icarus Personal Assistant');
   tray.on('click', toggleAssistantWindow);
   tray.setContextMenu(
     Menu.buildFromTemplate([

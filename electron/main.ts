@@ -458,7 +458,7 @@ function createWindow(initialUrl: string = WORKSTATION_URL): void {
     height: 800,
     minWidth: 600,
     minHeight: 400,
-    title: 'MixClaw',
+    title: 'Icarus',
     backgroundColor: '#f0f2f5',
     webPreferences: {
       preload: path.join(mainDir, 'preload.cjs'),
@@ -468,7 +468,7 @@ function createWindow(initialUrl: string = WORKSTATION_URL): void {
     },
   });
 
-  // Load the NanoClaw web channel UI
+  // Load the Icarus web channel UI
   mainWindow.loadURL(normalizeWorkstationUrl(initialUrl));
 
   // Show window when ready to prevent white flash
@@ -476,7 +476,7 @@ function createWindow(initialUrl: string = WORKSTATION_URL): void {
     mainWindow?.show();
   });
 
-  // Intercept close — hide instead of quitting (NanoClaw daemon continues running)
+  // Intercept close — hide instead of quitting (Icarus daemon continues running)
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
@@ -526,7 +526,7 @@ function buildAppMenu(): Menu {
               {
                 label: 'Quit App Only',
                 click: () => {
-                  // Only quit the Electron UI — NanoClaw daemon keeps running
+                  // Only quit the Electron UI — Icarus daemon keeps running
                   isQuitting = false;
                   mainWindow?.hide();
                 },
@@ -534,14 +534,14 @@ function buildAppMenu(): Menu {
               {
                 label: 'Quit All (Support Group + App)',
                 click: () => {
-                  // Full quit: stop NanoClaw then quit Electron
+                  // Full quit: stop Icarus then quit Electron
                   isQuitting = true;
                   fetch('http://localhost:3000/api/shutdown', {
                     method: 'POST',
                   }).catch(() => {
-                    // NanoClaw might not have the shutdown endpoint; just quit anyway
+                    // Icarus might not have the shutdown endpoint; just quit anyway
                   });
-                  // Give NanoClaw a moment to shut down gracefully
+                  // Give Icarus a moment to shut down gracefully
                   setTimeout(() => {
                     app.quit();
                   }, 1500);
@@ -699,7 +699,7 @@ app.whenReady().then(() => {
     // Avoid duplicate disturbance when app window is already foregrounded.
     if (mainWindow && mainWindow.isVisible() && mainWindow.isFocused()) return;
 
-    const title = typeof payload?.title === 'string' ? payload.title : 'NanoClaw';
+    const title = typeof payload?.title === 'string' ? payload.title : 'Icarus';
     const body = typeof payload?.body === 'string' ? payload.body : '';
     const notification = new Notification({ title, body });
     notification.on('click', () => {

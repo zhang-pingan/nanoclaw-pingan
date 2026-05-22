@@ -1,5 +1,5 @@
 /**
- * Workflow Engine for NanoClaw — Configuration-Driven
+ * Workflow Engine for Icarus — Configuration-Driven
  *
  * State machine definitions live in container/workflow-definitions/*.json.
  * Card templates live in container/cards/*.json.

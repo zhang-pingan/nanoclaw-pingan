@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-// Expose a safe API to the renderer process for the NanoClaw web channel.
+// Expose a safe API to the renderer process for the Icarus web channel.
 
 // The renderer connects via standard WebSocket/HTTP to localhost:3000
-// where the NanoClaw web channel runs. The preload only bridges
+// where the Icarus web channel runs. The preload only bridges
 // Electron-specific capabilities (notifications, tray, etc.).
 
 contextBridge.exposeInMainWorld('nanoclawApp', {

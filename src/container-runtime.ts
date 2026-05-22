@@ -1,5 +1,5 @@
 /**
- * Container runtime abstraction for NanoClaw.
+ * Container runtime abstraction for Icarus.
  * All runtime-specific logic lives here so swapping runtimes means changing one file.
  */
 import { execSync } from 'child_process';
@@ -91,7 +91,7 @@ export function ensureContainerRuntimeRunning(): void {
       '║  2. Run: docker info                                           ║',
     );
     console.error(
-      '║  3. Restart NanoClaw                                           ║',
+      '║  3. Restart Icarus                                             ║',
     );
     console.error(
       '╚════════════════════════════════════════════════════════════════╝\n',
@@ -100,7 +100,7 @@ export function ensureContainerRuntimeRunning(): void {
   }
 }
 
-/** Kill orphaned NanoClaw containers from previous runs. */
+/** Kill orphaned project containers from previous runs. */
 export function cleanupOrphans(): void {
   try {
     const output = execSync(
