@@ -6,10 +6,12 @@ This document tracks a development-stage breaking rename from `nanoclaw` /
 This is not a gradual compatibility migration. The project is currently used
 only by the developer, so the preferred strategy is:
 
-1. Do a one-time cleanup and migration of local external state before changing
-   runtime code.
-2. Rename the codebase directly to the new Icarus names.
-3. Do not keep old-name fallback, aliases, or cleanup branches in production
+1. Inventory old local state up front, then clean or migrate each item in the
+   phase that owns it.
+2. Immediately before a phase changes runtime code, handle the old external
+   state that would conflict with that code.
+3. Rename the codebase directly to the new Icarus names.
+4. Do not keep old-name fallback, aliases, or cleanup branches in production
    runtime code.
 
 Do not use a blind global replacement. Some occurrences are historical data,
@@ -37,13 +39,16 @@ handled intentionally.
   historical workflow is identified before implementation.
 - Do not add runtime code that detects or cleans old local state.
 
-Old local state must be handled once before the code change lands.
+Old local state should be handled outside runtime code, in the phase that owns
+that state, immediately before the related code change is made.
 
-## Phase 0: One-Time Local Environment Cleanup
+## Phase 0: Rename Ground Rules and Local State Inventory
 
-Risk: High, but limited to the developer machine.
+Risk: Medium.
 
-Timing: Complete this phase before runtime code is renamed.
+Timing: Complete this phase before implementation starts. Do not use this phase
+as a bucket for all cleanup; use it to decide and record what each later phase
+must clean before its code changes.
 
 Scope:
 
@@ -59,34 +64,27 @@ Scope:
   - `.env`
   - `logs/nanoclaw*.log`
   - `nanoclaw.pid`
+- Local shortcuts, scheduled tasks, skills, and prompts that call old CLI or MCP
+  names
+- Historical sessions and generated artifacts that mention NanoClaw names
 
 Actions:
 
-- Stop and unload the old macOS service if present:
-  - `com.nanoclaw`
-- Stop and disable the old Linux service if present:
-  - `nanoclaw.service`
-- Delete old service unit or plist files that can auto-start NanoClaw again.
-- Stop old direct processes and remove stale pid files.
-- Stop and remove old `nanoclaw-*` containers.
-- Remove the old `nanoclaw-agent:latest` image after confirming it is no longer
-  needed.
-- Copy external config from `~/.config/nanoclaw` to `~/.config/icarus`.
-- Verify copied config files, especially:
-  - `mount-allowlist.json`
-  - `mail.json`
-- Delete `~/.config/nanoclaw` only after the copied files are verified.
-- Update local `.env` manually so it contains only `ICARUS_*` variables.
-- Rename or delete old local log and pid files if they are not needed for
-  debugging.
-- Confirm there are no remaining old processes, old services, old containers,
-  or old config paths before changing runtime code.
+- Confirm the project is still developer-only and can accept a breaking rename.
+- Confirm whether historical NanoClaw sessions must replay after the rename.
+- Confirm whether the GitHub repository will be renamed now or later.
+- Decide whether Electron `appId` should change or remain stable.
+- Decide whether old logs should be archived, renamed manually, or deleted.
+- Inventory old local services, processes, containers, images, env files,
+  config directories, shortcuts, skills, and scheduled tasks.
+- Assign each cleanup item to the phase that owns the related code path.
+- Do not clean everything in Phase 0 unless an item blocks the next phase.
 
 Required result:
 
-- The local machine has no active `nanoclaw` service, process, container, or
-  config source.
-- The runtime code does not need to know how to clean or migrate old names.
+- The breaking-rename policy is explicit.
+- Old local state is known and assigned to the relevant phase.
+- Runtime code still does not need to know how to clean or migrate old names.
 
 ## Phase 1: Display Text, Docs, and Visible Names
 
@@ -102,17 +100,23 @@ Scope:
 - Electron menu labels, window titles, notification titles
 - Web and assistant visible strings
 
+Pre-code cleanup:
+
+- None, unless a document is generated from local runtime state that still uses
+  old names.
+
 Actions:
 
 - Replace natural-language product references from `NanoClaw` to `Icarus`.
-- Update command examples to the new service names, env vars, image names, MCP
-  tools, and filesystem paths.
 - Update screenshots or generated docs only after the UI is rebuilt.
+- Update executable command examples in the same phase as the runtime behavior
+  they depend on, or after all runtime rename phases are complete.
 
 Required result:
 
 - User-visible product language consistently says `Icarus`.
-- Docs no longer describe old NanoClaw runtime names as supported commands.
+- Docs do not get ahead of runtime commands unless the whole rename lands as one
+  coordinated change.
 
 ## Phase 2: Environment Variables and Config Paths
 
@@ -131,6 +135,17 @@ Scope:
 - Any references to `~/.config/nanoclaw`
 - Any references to `NANOCLAW_*`
 
+Pre-code cleanup:
+
+- Copy external config from `~/.config/nanoclaw` to `~/.config/icarus`.
+- Verify copied config files, especially:
+  - `mount-allowlist.json`
+  - `mail.json`
+- Delete `~/.config/nanoclaw` only after the copied files are verified.
+- Update local `.env` manually so it contains only `ICARUS_*` variables.
+- Confirm no shell profile, service unit, launchd plist, or local script still
+  exports `NANOCLAW_*` for the current run path.
+
 Actions:
 
 - Rename env variables from `NANOCLAW_*` to `ICARUS_*`.
@@ -139,13 +154,12 @@ Actions:
 - Use `~/.config/icarus` as the only config directory.
 - Remove code and tests that expect `~/.config/nanoclaw` fallback behavior.
 - Update local setup documentation to say external config must be copied before
-  the breaking rename is applied.
+  this breaking phase is applied.
 
 Required result:
 
-- Old `.env` files using `NANOCLAW_*` fail clearly or are already updated before
-  launch.
 - Runtime code only reads Icarus env variables and Icarus config paths.
+- Old `.env` files using `NANOCLAW_*` are no longer accepted.
 
 ## Phase 3: Service, Process, PID, and Logs
 
@@ -168,6 +182,20 @@ Scope:
   - `logs/nanoclaw.log`
   - `logs/nanoclaw.error.log`
 
+Pre-code cleanup:
+
+- Stop and unload the old macOS service if present:
+  - `com.nanoclaw`
+- Stop and disable the old Linux service if present:
+  - `nanoclaw.service`
+- Delete old service unit or plist files that can auto-start NanoClaw again.
+- Stop old direct NanoClaw processes.
+- Remove stale `nanoclaw.pid` files.
+- Archive, rename manually, or delete old `logs/nanoclaw*.log` files according
+  to the Phase 0 decision.
+- Confirm no old NanoClaw process or service can restart while this phase is
+  being changed.
+
 Actions:
 
 - Rename macOS service identity to `com.icarus`.
@@ -182,8 +210,8 @@ Actions:
 Required result:
 
 - Setup, status, restart, and verify flows only know about Icarus services.
-- Old service cleanup remains a Phase 0 manual or one-time-script task, not a
-  runtime behavior.
+- Old service cleanup was done outside runtime code immediately before this
+  phase's service rename.
 
 ## Phase 4: Container Image and Container Names
 
@@ -204,6 +232,16 @@ Old names:
 - Image: `nanoclaw-agent:latest`
 - Container prefix: `nanoclaw-*`
 
+Pre-code cleanup:
+
+- Stop old `nanoclaw-*` containers.
+- Remove old `nanoclaw-*` containers after confirming no active run depends on
+  them.
+- Remove the old `nanoclaw-agent:latest` image after confirming it is no longer
+  needed.
+- Confirm no local script still passes `nanoclaw-agent:latest` as the container
+  image.
+
 Actions:
 
 - Rename image to `icarus-agent:latest`.
@@ -216,7 +254,8 @@ Actions:
 Required result:
 
 - The container stack only builds, starts, and cleans Icarus containers.
-- Old NanoClaw containers are removed before this phase through Phase 0 cleanup.
+- Old NanoClaw containers were removed outside runtime code immediately before
+  this phase's container rename.
 
 ## Phase 5: Electron and Web Runtime APIs
 
@@ -237,6 +276,14 @@ Old runtime API examples:
 - `--nanoclaw-open-workstation`
 - User-facing connection text such as `Connected to NanoClaw`
 
+Pre-code cleanup:
+
+- Close old Electron app instances.
+- Update or remove local shortcuts, shell aliases, and scripts that pass old
+  `--nanoclaw-*` CLI arguments.
+- If changing Electron app identity, copy or discard old Electron user data as
+  decided in Phase 0 before launching the renamed app.
+
 Actions:
 
 - Rename preload API to `window.icarusApp`.
@@ -249,7 +296,8 @@ Actions:
 Required result:
 
 - Electron and web runtime APIs no longer expose old NanoClaw names.
-- Local shortcuts or scripts must be updated before launch.
+- Local shortcuts or scripts have already been updated before launching the new
+  app.
 
 ## Phase 6: MCP and Agent Protocol Names
 
@@ -273,6 +321,16 @@ Old protocol names:
   - `---NANOCLAW_OUTPUT_START---`
   - `---NANOCLAW_OUTPUT_END---`
 - Internal URL segment: `__nanoclaw__`
+
+Pre-code cleanup:
+
+- Confirm again that historical NanoClaw sessions do not need to replay after
+  the rename.
+- Archive old scheduled tasks or prompts that call `mcp__nanoclaw__*`.
+- Update local skills and prompt snippets that must keep working after the
+  rename so they reference Icarus tool names.
+- Stop active agent sessions that may still emit or parse old NanoClaw protocol
+  markers.
 
 Actions:
 
@@ -304,6 +362,13 @@ Scope:
 - `.github/workflows/*.yml`
 - `repo-tokens/*`
 
+Pre-code cleanup:
+
+- If package names affect local global installs or linked packages, unlink or
+  remove old NanoClaw package links before testing the renamed package.
+- If app identity changes, handle old app data according to the Phase 0 decision
+  before first launch of the renamed app.
+
 Actions:
 
 - Rename npm package names if package publishing is not currently constrained.
@@ -330,13 +395,18 @@ Scope:
 - `container/skills/*/SKILL.md`
 - Setup and local operation docs
 
+Pre-code cleanup:
+
+- Remove or archive local skill copies that still need NanoClaw commands but are
+  not being updated in this phase.
+
 Actions:
 
 - Replace natural-language product references with `Icarus`.
 - Update executable commands to use Icarus service, env, config, container, and
   MCP names.
-- Remove NanoClaw command examples unless they are clearly labeled as pre-change
-  cleanup commands in Phase 0.
+- Remove NanoClaw command examples unless they are clearly labeled as cleanup
+  commands for an earlier phase.
 - Do not rename external skill repository names until those repositories exist.
 
 Required result:
@@ -353,6 +423,11 @@ Scope:
 - `src/**/*.test.ts`
 - `setup/**/*.test.ts`
 - `container/agent-runner` tests, if added
+
+Pre-code cleanup:
+
+- None for external state. Remove stale local test temp directories only if they
+  interfere with the test run.
 
 Actions:
 
@@ -383,6 +458,11 @@ Scope:
 - `.env`
 - `.idea/`
 
+Pre-code cleanup:
+
+- None by default. Historical artifacts should be archived, manually migrated,
+  or left alone according to the phase that owns them.
+
 Actions:
 
 - Rebuild generated `dist*` output after source changes.
@@ -396,21 +476,26 @@ Actions:
 Required result:
 
 - Generated output comes from source rebuilds.
-- Historical artifacts are either left alone or manually migrated before code
-  changes; runtime code does not support both eras.
+- Historical artifacts are either left alone or manually migrated before the
+  phase that needs them; runtime code does not support both eras.
 
 ## Suggested Order
 
-1. Complete Phase 0 local cleanup and external config migration.
-2. Update local `.env` to `ICARUS_*` only.
-3. Rename docs, visible UI text, and setup instructions.
-4. Rename env variables and config paths in runtime code.
-5. Rename service, pid, script, and log identities.
-6. Rename container image and container prefixes.
-7. Rename Electron and web runtime APIs.
-8. Rename MCP and agent protocol names.
-9. Rename package metadata and app identity where appropriate.
-10. Update tests and fixtures.
+1. Complete Phase 0 inventory and decisions.
+2. For each later phase, run that phase's pre-code cleanup first.
+3. Rename docs and visible UI text.
+4. Migrate external config and `.env`, then rename env variables and config
+   paths in runtime code.
+5. Stop/remove old services and pids, then rename service, pid, script, and log
+   identities.
+6. Stop/remove old containers and images, then rename container image and
+   container prefixes.
+7. Update local shortcuts, then rename Electron and web runtime APIs.
+8. Archive or update old MCP prompts and skills, then rename MCP and agent
+   protocol names.
+9. Handle package/app identity state, then rename package metadata and app
+   identity where appropriate.
+10. Update tests and fixtures alongside the code they cover.
 11. Rebuild generated output.
 12. Run full verification.
 
@@ -421,12 +506,9 @@ Required result:
 - Confirm whether the GitHub repository will be renamed now or later.
 - Decide whether Electron `appId` should change or remain stable.
 - Decide whether old logs should be archived or deleted.
-- Stop and remove old NanoClaw services, processes, containers, and pid files.
-- Copy `~/.config/nanoclaw` to `~/.config/icarus`.
-- Verify migrated config files, then delete `~/.config/nanoclaw`.
-- Update local `.env` so it contains only `ICARUS_*`.
-- Confirm no old `nanoclaw` process, service, container, env source, or config
-  path remains active.
+- Inventory old NanoClaw services, processes, containers, images, pid files,
+  config directories, env sources, shortcuts, skills, and scheduled tasks.
+- Assign each cleanup item to the phase that owns the related runtime behavior.
 
 ## Verification Checklist
 
