@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MixClaw 项目汇报</title>
+    <title>Irarus 项目汇报</title>
     <style>
       :root {
         --bg: #f5f7fa;
@@ -1164,9 +1164,9 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="#top" aria-label="MixClaw 项目汇报">
+      <a class="brand" href="#top" aria-label="Irarus 项目汇报">
         <img src="../assets/claw-icon.png" alt="" />
-        <span>MixClaw 项目汇报</span>
+        <span>Irarus 项目汇报</span>
       </a>
       <nav class="nav" aria-label="页面导航">
         <a href="#summary">概括</a>
@@ -1185,7 +1185,7 @@
     <section class="hero" id="top">
       <div class="hero-copy">
         <p class="eyebrow">Personal Agent Operating System</p>
-        <h1>MixClaw：面向工程交付的个人 Agent 工作系统</h1>
+        <h1>Irarus：面向工程交付的个人 Agent 工作系统</h1>
         <p class="lead">
           最终目标是将用户的工作流都收敛进工作台，通过安全可控的人机交互，让
           Agent 助力用户完成所有的工作。
@@ -1200,7 +1200,7 @@
         </div>
       </div>
 
-      <div class="hero-visual" aria-label="MixClaw 总体架构图">
+      <div class="hero-visual" aria-label="Irarus 总体架构图">
         <div class="architecture-stack">
           <div class="layer">
             <div class="layer-title">
@@ -1251,7 +1251,7 @@
             <div>
               <h2>概括</h2>
               <p>
-                MixClaw 的核心结论是：Agent
+                Irarus 的核心结论是：Agent
                 能力必须被工程化。它不是单个聊天窗口，
                 而是一套具备状态、权限、隔离、恢复、评估和审计能力的个人 Agent
                 操作系统。
@@ -1297,7 +1297,7 @@
             <div>
               <h2>核心模块介绍</h2>
               <p>
-                MixClaw
+                Irarus
                 的模块边界很明确：入口层负责交互，宿主机负责控制，容器负责执行，
                 Workflow 负责把执行结果推进成可审计的工程交付。
               </p>
@@ -1521,7 +1521,7 @@
               <span class="tag blue">类 LangGraph 架构</span>
               <h3>状态机 + checkpoint + interrupt</h3>
               <p>
-                MixClaw 已在宿主机实现 workflow state、durable
+                Irarus 已在宿主机实现 workflow state、durable
                 checkpoint、pending interrupt、resume attempt、workflow
                 event、outbox 和 watchdog。它类似 LangGraph
                 的地方在于：状态可持久化，
@@ -1578,7 +1578,7 @@
             <div>
               <h2>Workflow 详解</h2>
               <p>
-                Workflow 的重点不在具体配置字段，而在抽象层。MixClaw
+                Workflow 的重点不在具体配置字段，而在抽象层。Irarus
                 通过节点、待处理输入、卡片和 steps
                 四类抽象，让新工作流可以快速拼装， 而不是重写 runtime。
               </p>
@@ -1616,7 +1616,7 @@
               </div>
               <p class="workflow-builder-text">
                 新流程的差异主要体现在角色、卡片、契约和评估策略，节点引擎保持稳定。
-                这是 MixClaw 能快速扩展新流程类型的基础。
+                这是 Irarus 能快速扩展新流程类型的基础。
               </p>
               <div class="workflow-builder-rail">
                 <span>低成本复用</span>
@@ -1750,7 +1750,7 @@
             <div>
               <h2>Harness Engine</h2>
               <p>
-                MixClaw 把 Agent
+                Irarus 把 Agent
                 输出从“自然语言回答”升级为“有契约、有证据、有评估、
                 有追踪的工程交付”。
               </p>
@@ -1800,7 +1800,7 @@
             <div>
               <h2>个人助手详解</h2>
               <p>
-                个人助手是 MixClaw 的 Agent 主动层。它会根据配置的关注点主动的扫描今日计划、工作台、定时任务、Agent Runs 和线上日志等信息，
+                个人助手是 Irarus 的 Agent 主动层。它会根据配置的关注点主动的扫描今日计划、工作台、定时任务、Agent Runs 和线上日志等信息，
                 把需要关注的事汇总到 Agent Inbox，并在策略允许时自动排查、
                 自动处理低风险待办、准备修复或进入受控自我进化。
               </p>
@@ -1986,7 +1986,7 @@
               <span class="tag green">记忆与 Wiki</span>
               <h3>结构化记忆 + 可引用知识</h3>
               <p>
-                MixClaw
+                Irarus
                 不只存对话历史，还把长期偏好、项目知识、证据链和关系图分开建模，减少上下文漂移。
               </p>
             </article>
@@ -2120,7 +2120,7 @@
             <div>
               <h2>概念校准</h2>
               <p>
-                文中涉及的外部概念先用官方文档和论文校准定义，再映射到 MixClaw
+                文中涉及的外部概念先用官方文档和论文校准定义，再映射到 Irarus
                 的实现和设计选择。
               </p>
             </div>
@@ -2132,7 +2132,7 @@
                 <tr>
                   <th>概念</th>
                   <th>校准来源</th>
-                  <th>MixClaw 中的落地</th>
+                  <th>Irarus 中的落地</th>
                 </tr>
               </thead>
               <tbody>
@@ -2240,7 +2240,7 @@
               <h3>先校准定义，再说明落地</h3>
               <p>
                 文中关于 subagents、MCP、LangGraph、ReAct、SWE-agent、Reflexion
-                和 Voyager 的表述，先按官方文档或论文校正，再映射到 MixClaw
+                和 Voyager 的表述，先按官方文档或论文校正，再映射到 Irarus
                 的实现和设计选择。
               </p>
             </article>
@@ -2248,7 +2248,7 @@
               <span class="tag teal">内部文档</span>
               <h3>README 与 TECHNOLOGY 作为主线</h3>
               <p>
-                项目内文档负责定义 MixClaw
+                项目内文档负责定义 Irarus
                 的产品边界、架构边界、工作流边界和安全边界，
                 外部来源负责校准概念定义。
               </p>
