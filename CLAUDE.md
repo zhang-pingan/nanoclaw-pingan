@@ -218,17 +218,17 @@ When modifying container execution:
 macOS launchd:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.icarus.plist
+launchctl bootout gui/$(id -u)/com.icarus
+launchctl kickstart -k gui/$(id -u)/com.icarus
 ```
 
 Linux systemd, if installed:
 
 ```bash
-systemctl --user start nanoclaw
-systemctl --user stop nanoclaw
-systemctl --user restart nanoclaw
+systemctl --user start icarus
+systemctl --user stop icarus
+systemctl --user restart icarus
 ```
 
 ## Container Build Cache

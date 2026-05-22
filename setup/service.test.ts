@@ -36,7 +36,7 @@ function generatePlist(
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.nanoclaw</string>
+    <string>com.icarus</string>
     <key>ProgramArguments</key>
     <array>
         <string>${nodePath}</string>
@@ -56,9 +56,9 @@ function generatePlist(
         <string>${homeDir}</string>
     </dict>
     <key>StandardOutPath</key>
-    <string>${projectRoot}/logs/nanoclaw.log</string>
+    <string>${projectRoot}/logs/icarus.log</string>
     <key>StandardErrorPath</key>
-    <string>${projectRoot}/logs/nanoclaw.error.log</string>
+    <string>${projectRoot}/logs/icarus.error.log</string>
 </dict>
 </plist>`;
 }
@@ -70,7 +70,7 @@ function generateSystemdUnit(
   isSystem: boolean,
 ): string {
   return `[Unit]
-Description=NanoClaw Personal Assistant
+Description=Icarus Personal Assistant
 After=network.target
 
 [Service]
@@ -81,8 +81,8 @@ Restart=always
 RestartSec=5
 Environment=HOME=${homeDir}
 Environment=PATH=${servicePath(nodePath, homeDir)}
-StandardOutput=append:${projectRoot}/logs/nanoclaw.log
-StandardError=append:${projectRoot}/logs/nanoclaw.error.log
+StandardOutput=append:${projectRoot}/logs/icarus.log
+StandardError=append:${projectRoot}/logs/icarus.error.log
 
 [Install]
 WantedBy=${isSystem ? 'multi-user.target' : 'default.target'}`;
@@ -95,7 +95,7 @@ describe('plist generation', () => {
       '/home/user/nanoclaw',
       '/home/user',
     );
-    expect(plist).toContain('<string>com.nanoclaw</string>');
+    expect(plist).toContain('<string>com.icarus</string>');
   });
 
   it('uses the correct node path', () => {
@@ -122,8 +122,8 @@ describe('plist generation', () => {
       '/home/user/nanoclaw',
       '/home/user',
     );
-    expect(plist).toContain('nanoclaw.log');
-    expect(plist).toContain('nanoclaw.error.log');
+    expect(plist).toContain('icarus.log');
+    expect(plist).toContain('icarus.error.log');
   });
 
   it('includes node and Homebrew binary paths', () => {
@@ -200,18 +200,18 @@ describe('WSL nohup fallback', () => {
   it('generates a valid wrapper script', () => {
     const projectRoot = '/home/user/nanoclaw';
     const nodePath = '/usr/bin/node';
-    const pidFile = path.join(projectRoot, 'nanoclaw.pid');
+    const pidFile = path.join(projectRoot, 'icarus.pid');
 
     // Simulate what service.ts generates
     const wrapper = `#!/bin/bash
 set -euo pipefail
 cd ${JSON.stringify(projectRoot)}
-nohup ${JSON.stringify(nodePath)} ${JSON.stringify(projectRoot)}/dist/index.js >> ${JSON.stringify(projectRoot)}/logs/nanoclaw.log 2>> ${JSON.stringify(projectRoot)}/logs/nanoclaw.error.log &
+nohup ${JSON.stringify(nodePath)} ${JSON.stringify(projectRoot)}/dist/index.js >> ${JSON.stringify(projectRoot)}/logs/icarus.log 2>> ${JSON.stringify(projectRoot)}/logs/icarus.error.log &
 echo $! > ${JSON.stringify(pidFile)}`;
 
     expect(wrapper).toContain('#!/bin/bash');
     expect(wrapper).toContain('nohup');
     expect(wrapper).toContain(nodePath);
-    expect(wrapper).toContain('nanoclaw.pid');
+    expect(wrapper).toContain('icarus.pid');
   });
 });

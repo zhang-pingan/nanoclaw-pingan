@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const LAUNCHD_TEMPLATE = path.join('launchd', 'com.nanoclaw.plist');
+const LAUNCHD_TEMPLATE = path.join('launchd', 'com.icarus.plist');
 
 export function renderLaunchdPlist(
   projectRoot: string,

@@ -323,7 +323,7 @@ nanoclaw/
 │   # Note: Per-container logs are in groups/{folder}/logs/container-*.log
 │
 └── launchd/
-    └── com.nanoclaw.plist         # macOS service configuration
+    └── com.icarus.plist         # macOS service configuration
 ```
 
 ---
@@ -680,9 +680,9 @@ When Icarus starts, it:
    - Recovers any unprocessed messages from before shutdown
    - Starts the message polling loop
 
-### Service: com.nanoclaw
+### Service: com.icarus
 
-**launchd/com.nanoclaw.plist:**
+**launchd/com.icarus.plist:**
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -690,7 +690,7 @@ When Icarus starts, it:
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.nanoclaw</string>
+    <string>com.icarus</string>
     <key>ProgramArguments</key>
     <array>
         <string>{{NODE_PATH}}</string>
@@ -712,9 +712,9 @@ When Icarus starts, it:
         <string>Andy</string>
     </dict>
     <key>StandardOutPath</key>
-    <string>{{PROJECT_ROOT}}/logs/nanoclaw.log</string>
+    <string>{{PROJECT_ROOT}}/logs/icarus.log</string>
     <key>StandardErrorPath</key>
-    <string>{{PROJECT_ROOT}}/logs/nanoclaw.error.log</string>
+    <string>{{PROJECT_ROOT}}/logs/icarus.error.log</string>
 </dict>
 </plist>
 ```
@@ -723,19 +723,19 @@ When Icarus starts, it:
 
 ```bash
 # Install service
-cp launchd/com.nanoclaw.plist ~/Library/LaunchAgents/
+cp launchd/com.icarus.plist ~/Library/LaunchAgents/
 
 # Start service
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.icarus.plist
 
 # Stop service
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl bootout gui/$(id -u)/com.icarus
 
 # Check status
-launchctl list | grep nanoclaw
+launchctl list | grep icarus
 
 # View logs
-tail -f logs/nanoclaw.log
+tail -f logs/icarus.log
 ```
 
 ---
@@ -795,7 +795,7 @@ chmod 700 groups/
 
 | Issue                                    | Cause                             | Solution                                                                                 |
 | ---------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- | -------------- |
-| No response to messages                  | Service not running               | Check `launchctl list                                                                    | grep nanoclaw` |
+| No response to messages                  | Service not running               | Check `launchctl list                                                                    | grep icarus` |
 | "Claude Code process exited with code 1" | Container runtime failed to start | Check logs; Icarus auto-starts container runtime but may fail                          |
 | "Claude Code process exited with code 1" | Session mount path wrong          | Ensure mount is to `/home/node/.claude/` not `/root/.claude/`                            |
 | Session not continuing                   | Session ID not saved              | Check SQLite: `sqlite3 store/messages.db "SELECT * FROM sessions"`                       |
@@ -805,8 +805,8 @@ chmod 700 groups/
 
 ### Log Location
 
-- `logs/nanoclaw.log` - stdout
-- `logs/nanoclaw.error.log` - stderr
+- `logs/icarus.log` - stdout
+- `logs/icarus.error.log` - stderr
 
 ### Debug Mode
 

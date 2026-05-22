@@ -719,7 +719,7 @@ describe('agent inbox store', () => {
     await runAgentInboxAction({ itemId: item.id, action: 'investigate' });
 
     expect(capturedPrompt).toContain('必须先用工具主动取证');
-    expect(capturedPrompt).toContain('/workspace/project/logs/nanoclaw.log');
+    expect(capturedPrompt).toContain('/workspace/project/logs/icarus.log');
     expect(capturedPrompt).toContain('/workspace/group/logs');
     expect(capturedPrompt).toContain('logFile');
     expect(capturedPrompt).toContain(

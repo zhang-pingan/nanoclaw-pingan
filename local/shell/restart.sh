@@ -23,5 +23,5 @@ echo "typescript compiled"
 echo "container image rebuilt"
 
 # Restart service
-restart_nanoclaw_service
-echo "nanoclaw restarted"
+restart_icarus_service
+echo "icarus restarted"

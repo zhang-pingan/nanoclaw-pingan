@@ -3,7 +3,7 @@
 ## 1. 启动顺序
 
 ```
-launchd 启动 dist/index.js  (plist: ~/Library/LaunchAgents/com.nanoclaw.plist)
+launchd 启动 dist/index.js  (plist: ~/Library/LaunchAgents/com.icarus.plist)
   │
   ├─ 1. 容器系统检查
   │     ensureContainerSystemRunning()  → 检查 Docker 是否运行
@@ -156,7 +156,7 @@ data/sessions/{folder}/agent-runner-src/    /app/src                 rw
 | `data/sessions/{group}/.claude/settings.json` | 容器内模型、SDK 环境变量       | 下次容器启动生效 |
 | `groups/{group}/CLAUDE.md`                    | 群组记忆（容器内可读写）       | 下次容器启动生效 |
 | `store/messages.db`                           | 消息历史、已注册群组、定时任务 | 实时生效         |
-| `~/Library/LaunchAgents/com.nanoclaw.plist`   | launchd 服务配置               | unload + load    |
+| `~/Library/LaunchAgents/com.icarus.plist`   | launchd 服务配置               | unload + load    |
 
 ## 10. 关键超时和常量
 
@@ -189,14 +189,14 @@ sessions           -- Claude 会话 ID 持久化
 
 ```bash
 # 重启
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.icarus
 
 # 停止
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl bootout gui/$(id -u)/com.icarus
 
 # 启动
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.icarus.plist
 
 # 查看日志
-tail -f logs/nanoclaw.log
+tail -f logs/icarus.log
 ```

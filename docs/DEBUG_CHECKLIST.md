@@ -15,8 +15,8 @@ Both timers fire at the same time, so containers always exit via hard SIGKILL (c
 
 ```bash
 # 1. Is the service running?
-launchctl list | grep nanoclaw
-# Expected: PID  0  com.nanoclaw (PID = running, "-" = not running, non-zero exit = crashed)
+launchctl list | grep icarus
+# Expected: PID  0  com.icarus (PID = running, "-" = not running, non-zero exit = crashed)
 
 # 2. Any running containers?
 container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
@@ -25,13 +25,13 @@ container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
 container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
 
 # 4. Recent errors in service log?
-grep -E 'ERROR|WARN' logs/nanoclaw.log | tail -20
+grep -E 'ERROR|WARN' logs/icarus.log | tail -20
 
 # 5. Is WhatsApp connected? (look for last connection event)
-grep -E 'Connected to WhatsApp|Connection closed|connection.*close' logs/nanoclaw.log | tail -5
+grep -E 'Connected to WhatsApp|Connection closed|connection.*close' logs/icarus.log | tail -5
 
 # 6. Are groups loaded?
-grep 'groupCount' logs/nanoclaw.log | tail -3
+grep 'groupCount' logs/icarus.log | tail -3
 ```
 
 ## Session Transcript Branching
@@ -62,7 +62,7 @@ for i, line in enumerate(lines):
 
 ```bash
 # Check for recent timeouts
-grep -E 'Container timeout|timed out' logs/nanoclaw.log | tail -10
+grep -E 'Container timeout|timed out' logs/icarus.log | tail -10
 
 # Check container log files for the timed-out container
 ls -lt groups/*/logs/container-*.log | head -10
@@ -71,23 +71,23 @@ ls -lt groups/*/logs/container-*.log | head -10
 cat groups/<group>/logs/container-<timestamp>.log
 
 # Check if retries were scheduled and what happened
-grep -E 'Scheduling retry|retry|Max retries' logs/nanoclaw.log | tail -10
+grep -E 'Scheduling retry|retry|Max retries' logs/icarus.log | tail -10
 ```
 
 ## Agent Not Responding
 
 ```bash
 # Check if messages are being received from WhatsApp
-grep 'New messages' logs/nanoclaw.log | tail -10
+grep 'New messages' logs/icarus.log | tail -10
 
 # Check if messages are being processed (container spawned)
-grep -E 'Processing messages|Spawning container' logs/nanoclaw.log | tail -10
+grep -E 'Processing messages|Spawning container' logs/icarus.log | tail -10
 
 # Check if messages are being piped to active container
-grep -E 'Piped messages|sendMessage' logs/nanoclaw.log | tail -10
+grep -E 'Piped messages|sendMessage' logs/icarus.log | tail -10
 
 # Check the queue state — any active containers?
-grep -E 'Starting container|Container active|concurrency limit' logs/nanoclaw.log | tail -10
+grep -E 'Starting container|Container active|concurrency limit' logs/icarus.log | tail -10
 
 # Check lastAgentTimestamp vs latest message timestamp
 sqlite3 store/messages.db "SELECT chat_jid, MAX(timestamp) as latest FROM messages GROUP BY chat_jid ORDER BY latest DESC LIMIT 5;"
@@ -97,7 +97,7 @@ sqlite3 store/messages.db "SELECT chat_jid, MAX(timestamp) as latest FROM messag
 
 ```bash
 # Check mount validation logs (shows on container spawn)
-grep -E 'Mount validated|Mount.*REJECTED|mount' logs/nanoclaw.log | tail -10
+grep -E 'Mount validated|Mount.*REJECTED|mount' logs/icarus.log | tail -10
 
 # Verify the mount allowlist is readable
 cat ~/.config/icarus/mount-allowlist.json
@@ -114,7 +114,7 @@ container run -i --rm --entrypoint ls nanoclaw-agent:latest /workspace/extra/
 
 ```bash
 # Check if QR code was requested (means auth expired)
-grep 'QR\|authentication required\|qr' logs/nanoclaw.log | tail -5
+grep 'QR\|authentication required\|qr' logs/icarus.log | tail -5
 
 # Check auth files exist
 ls -la store/auth/
@@ -127,17 +127,17 @@ npm run auth
 
 ```bash
 # Restart the service
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+launchctl kickstart -k gui/$(id -u)/com.icarus
 
 # View live logs
-tail -f logs/nanoclaw.log
+tail -f logs/icarus.log
 
 # Stop the service (careful — running containers are detached, not killed)
-launchctl bootout gui/$(id -u)/com.nanoclaw
+launchctl bootout gui/$(id -u)/com.icarus
 
 # Start the service
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.nanoclaw.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.icarus.plist
 
 # Rebuild after code changes
-npm run build && launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+npm run build && launchctl kickstart -k gui/$(id -u)/com.icarus
 ```

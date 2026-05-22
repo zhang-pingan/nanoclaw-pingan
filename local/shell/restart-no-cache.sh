@@ -28,5 +28,5 @@ docker build --no-cache -t nanoclaw-agent:latest "$SCRIPT_DIR"
 echo "container image rebuilt (no cache)"
 
 # Restart service
-restart_nanoclaw_service
-echo "nanoclaw restarted"
+restart_icarus_service
+echo "icarus restarted"

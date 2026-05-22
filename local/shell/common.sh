@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LAUNCHD_LABEL="com.nanoclaw"
+LAUNCHD_LABEL="com.icarus"
 LAUNCHD_DOMAIN="gui/$(id -u)"
 LAUNCHD_TARGET="$LAUNCHD_DOMAIN/$LAUNCHD_LABEL"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
@@ -96,9 +96,9 @@ bootout_launch_agent() {
   launchctl bootout "$LAUNCHD_TARGET"
 }
 
-print_nanoclaw_logs_tail() {
-  local stdout_log="$ROOT_DIR/logs/nanoclaw.log"
-  local stderr_log="$ROOT_DIR/logs/nanoclaw.error.log"
+print_icarus_logs_tail() {
+  local stdout_log="$ROOT_DIR/logs/icarus.log"
+  local stderr_log="$ROOT_DIR/logs/icarus.error.log"
 
   if [ -f "$stdout_log" ]; then
     echo "--- tail $stdout_log ---"
@@ -110,7 +110,7 @@ print_nanoclaw_logs_tail() {
   fi
 }
 
-wait_for_nanoclaw_service() {
+wait_for_icarus_service() {
   local port
   port="$(get_web_port)"
   local url="http://127.0.0.1:${port}/"
@@ -118,19 +118,19 @@ wait_for_nanoclaw_service() {
 
   for attempt in $(seq 1 20); do
     if curl -fsS --max-time 2 "$url" >/dev/null 2>&1; then
-      echo "nanoclaw is healthy at $url"
+      echo "icarus is healthy at $url"
       return 0
     fi
     sleep 1
   done
 
-  echo "nanoclaw failed health check at $url"
+  echo "icarus failed health check at $url"
   launchctl print "$LAUNCHD_TARGET" || true
-  print_nanoclaw_logs_tail
+  print_icarus_logs_tail
   return 1
 }
 
-start_nanoclaw_service() {
+start_icarus_service() {
   install_launch_agent_plist
 
   if is_launch_agent_loaded; then
@@ -138,24 +138,24 @@ start_nanoclaw_service() {
       bootout_launch_agent
       bootstrap_launch_agent
       echo "launch agent reloaded"
-      wait_for_nanoclaw_service
+      wait_for_icarus_service
     else
       echo "launch agent already loaded"
-      wait_for_nanoclaw_service
+      wait_for_icarus_service
     fi
     return 0
   fi
 
   bootstrap_launch_agent
   echo "launch agent loaded"
-  wait_for_nanoclaw_service
+  wait_for_icarus_service
 }
 
-restart_nanoclaw_service() {
+restart_icarus_service() {
   install_launch_agent_plist
 
-  if stop_running_direct_nanoclaw; then
-    echo "direct nanoclaw process stopped"
+  if stop_running_direct_icarus; then
+    echo "direct icarus process stopped"
   fi
 
   if is_launch_agent_loaded; then
@@ -167,16 +167,16 @@ restart_nanoclaw_service() {
       launchctl kickstart -k "$LAUNCHD_TARGET"
       echo "launch agent restarted"
     fi
-    wait_for_nanoclaw_service
+    wait_for_icarus_service
     return 0
   fi
 
   bootstrap_launch_agent
   echo "launch agent loaded"
-  wait_for_nanoclaw_service
+  wait_for_icarus_service
 }
 
-stop_nanoclaw_service() {
+stop_icarus_service() {
   if ! is_launch_agent_loaded; then
     echo "launch agent not loaded"
     return 1
@@ -186,7 +186,7 @@ stop_nanoclaw_service() {
   echo "launch agent stopped"
 }
 
-is_direct_nanoclaw_pid() {
+is_direct_icarus_pid() {
   local pid="$1"
   local command
 
@@ -198,12 +198,12 @@ is_direct_nanoclaw_pid() {
   [ -n "$command" ] && [[ "$command" == *"$BACKEND_ENTRY"* ]]
 }
 
-find_running_direct_nanoclaw_pid() {
+find_running_direct_icarus_pid() {
   local pid
 
   while IFS= read -r pid; do
     [ -z "$pid" ] && continue
-    if is_direct_nanoclaw_pid "$pid"; then
+    if is_direct_icarus_pid "$pid"; then
       echo "$pid"
       return 0
     fi
@@ -212,7 +212,7 @@ find_running_direct_nanoclaw_pid() {
   return 1
 }
 
-wait_for_nanoclaw_process_exit() {
+wait_for_icarus_process_exit() {
   local pid="$1"
   local retries=10
 
@@ -226,13 +226,13 @@ wait_for_nanoclaw_process_exit() {
   done
 }
 
-stop_running_direct_nanoclaw() {
+stop_running_direct_icarus() {
   local stopped=1
   local pid
 
-  while pid="$(find_running_direct_nanoclaw_pid)"; do
+  while pid="$(find_running_direct_icarus_pid)"; do
     kill "$pid" 2>/dev/null || true
-    wait_for_nanoclaw_process_exit "$pid"
+    wait_for_icarus_process_exit "$pid"
     stopped=0
   done
 
