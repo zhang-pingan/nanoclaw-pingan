@@ -396,7 +396,7 @@ var cardsPreviewPresets = {
   default: {
     id: "WF-2026-001",
     name: "示例需求：Cards 管理页",
-    service: "nanoclaw-web",
+    service: "icarus-web",
     context: {
       deliverable: "workflow/cards-preview.md",
       work_branch: "feature/cards-web-management",
@@ -681,7 +681,7 @@ function containerFilePath(filePath) {
 }
 
 function shouldUseCustomAppDialogs() {
-  return typeof window !== "undefined" && Boolean(window.nanoclawApp);
+  return typeof window !== "undefined" && Boolean(window.icarusApp);
 }
 
 async function openTextPrompt(message, defaultValue = "", options = {}) {
@@ -1234,8 +1234,8 @@ function renderFilePreview(filename, ext, filePath, fileUrl = null) {
       btn.className = "file-open-btn";
       btn.innerHTML = `${SVG.paperclip} ${escapeHtml(filename)}`;
       btn.addEventListener("click", () => {
-        if (window.nanoclawApp?.openFile) {
-          window.nanoclawApp.openFile(filePath);
+        if (window.icarusApp?.openFile) {
+          window.icarusApp.openFile(filePath);
         } else {
           window.open(`file://${filePath}`);
         }
@@ -1776,8 +1776,8 @@ function createMessageEl(msg) {
 
       const card = wrapper.querySelector(".file-card");
       card.addEventListener("click", () => {
-        if (window.nanoclawApp?.openFile) {
-          window.nanoclawApp.openFile(msg._filePath);
+        if (window.icarusApp?.openFile) {
+          window.icarusApp.openFile(msg._filePath);
         } else {
           window.open(fileUrl ? apiUrl(fileUrl) : `file://${msg._filePath}`);
         }
@@ -1909,9 +1909,9 @@ function showFileContextMenu(e, filePath) {
   const referencePath = containerFilePath(filePath);
 
   const items = [
-    { label: "打开", icon: "📂", action: () => window.nanoclawApp?.openFile?.(filePath) },
-    { label: "打开方式…", icon: "🔀", action: () => window.nanoclawApp?.openFileWith?.(filePath) },
-    { label: "在文件夹中显示", icon: "📁", action: () => window.nanoclawApp?.showInFolder?.(filePath) },
+    { label: "打开", icon: "📂", action: () => window.icarusApp?.openFile?.(filePath) },
+    { label: "打开方式…", icon: "🔀", action: () => window.icarusApp?.openFileWith?.(filePath) },
+    { label: "在文件夹中显示", icon: "📁", action: () => window.icarusApp?.showInFolder?.(filePath) },
     ...(referencePath ? [{ label: "引用", icon: "↩", action: () => referenceFileInComposer(referencePath) }] : []),
     { label: "复制路径", icon: "📋", action: () => navigator.clipboard?.writeText(filePath) },
   ];
@@ -9510,7 +9510,7 @@ function buildWorkflowDefinitionGraphNodeHtml(stateKey, state, layout, entryStat
 
 function getWorkflowDefinitionGraphTransitionDragPayload(event) {
   if (workflowDefinitionGraphTransitionDrag) return workflowDefinitionGraphTransitionDrag;
-  const raw = event?.dataTransfer?.getData("application/x-nanoclaw-workflow-transition") ||
+  const raw = event?.dataTransfer?.getData("application/x-icarus-workflow-transition") ||
     event?.dataTransfer?.getData("text/plain") ||
     "";
   if (!raw) return null;
@@ -9626,7 +9626,7 @@ function bindWorkflowDefinitionGraphEvents(canEdit) {
       }
       workflowDefinitionGraphTransitionDrag = payload;
       event.dataTransfer.effectAllowed = "link";
-      event.dataTransfer.setData("application/x-nanoclaw-workflow-transition", JSON.stringify(payload));
+      event.dataTransfer.setData("application/x-icarus-workflow-transition", JSON.stringify(payload));
       event.dataTransfer.setData("text/plain", JSON.stringify(payload));
       workflowDefinitionGraph.classList.add("is-linking");
     });
@@ -14266,8 +14266,8 @@ function showWorkbenchPendingSystemNotification(task, pendingItems) {
   const itemCountLabel = pendingItems.length > 1 ? `等 ${pendingItems.length} 项待处理` : "有新的待处理项";
   const body = `${firstItem.title || getWorkbenchWorkflowStageLabel(task) || "当前任务"}，${itemCountLabel}`;
 
-  if (typeof window !== "undefined" && window.nanoclawApp?.notify) {
-    window.nanoclawApp.notify(`工作台：${task.title || "任务"}`, body, { taskId: task.id });
+  if (typeof window !== "undefined" && window.icarusApp?.notify) {
+    window.icarusApp.notify(`工作台：${task.title || "任务"}`, body, { taskId: task.id });
     return;
   }
 
@@ -14279,7 +14279,7 @@ function showWorkbenchPendingSystemNotification(task, pendingItems) {
 
   const notification = new Notification(`工作台：${task.title || "任务"}`, {
     body,
-    tag: `nanoclaw-workbench-${task.id}`,
+    tag: `icarus-workbench-${task.id}`,
   });
   notification.onclick = () => {
     window.focus();
@@ -15158,8 +15158,8 @@ function renderWorkbenchArtifacts(artifacts) {
     if (canOpen) {
       el.title = "点击打开产出物";
       el.addEventListener("click", () => {
-        if (window.nanoclawApp?.openFile) {
-          window.nanoclawApp.openFile(item.absolute_path);
+        if (window.icarusApp?.openFile) {
+          window.icarusApp.openFile(item.absolute_path);
         } else {
           window.open(`file://${item.absolute_path}`);
         }
@@ -16780,7 +16780,7 @@ function sendWs(payload) {
 }
 
 function sendDesktopCaptureCapabilities() {
-  const appApi = typeof window !== "undefined" ? window.nanoclawApp : null;
+  const appApi = typeof window !== "undefined" ? window.icarusApp : null;
   sendWs({
     type: "desktop_capture_capabilities",
     supported: Boolean(appApi?.captureDesktop),
@@ -16792,7 +16792,7 @@ async function handleDesktopCaptureRequest(msg) {
   const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
   if (!requestId) return;
 
-  const appApi = typeof window !== "undefined" ? window.nanoclawApp : null;
+  const appApi = typeof window !== "undefined" ? window.icarusApp : null;
   if (!appApi?.captureDesktop) {
     sendWs({
       type: "desktop_capture_result",
@@ -17197,8 +17197,8 @@ function notifyAgent(msg) {
   const group = groups.find((g) => g.jid === msg.chat_jid);
   const title = `${group?.name || "Support Group Agent"}`;
   const body = `${msg.sender_name}: ${msg.content.slice(0, 100)}`;
-  if (typeof window !== "undefined" && window.nanoclawApp) {
-    window.nanoclawApp.notify(title, body, { chatJid: msg.chat_jid });
+  if (typeof window !== "undefined" && window.icarusApp) {
+    window.icarusApp.notify(title, body, { chatJid: msg.chat_jid });
     return;
   }
 
@@ -17210,7 +17210,7 @@ function notifyAgent(msg) {
 
   const notification = new Notification(title, {
     body,
-    tag: `nanoclaw-${msg.chat_jid}`,
+    tag: `icarus-${msg.chat_jid}`,
   });
   notification.onclick = () => {
     window.focus();
@@ -17231,7 +17231,7 @@ function openAgentGroupFromNotification(chatJid, source) {
 }
 
 function ensureBrowserNotificationPermission() {
-  if (typeof window === "undefined" || window.nanoclawApp) return;
+  if (typeof window === "undefined" || window.icarusApp) return;
   if (typeof Notification === "undefined") return;
   if (Notification.permission !== "default") return;
   if (browserNotificationPermissionRequested) return;
@@ -17243,15 +17243,15 @@ function ensureBrowserNotificationPermission() {
 }
 
 function bindNotificationPermissionPrimer() {
-  if (typeof window === "undefined" || window.nanoclawApp) return;
+  if (typeof window === "undefined" || window.icarusApp) return;
   const requestOnce = () => ensureBrowserNotificationPermission();
   window.addEventListener("pointerdown", requestOnce, { once: true, capture: true });
   window.addEventListener("keydown", requestOnce, { once: true, capture: true });
 }
 
 function bindNotificationClickHandler() {
-  if (typeof window === "undefined" || !window.nanoclawApp?.onNotificationClick) return;
-  window.nanoclawApp.onNotificationClick(({ chatJid, taskId }) => {
+  if (typeof window === "undefined" || !window.icarusApp?.onNotificationClick) return;
+  window.icarusApp.onNotificationClick(({ chatJid, taskId }) => {
     if (typeof taskId === "string" && taskId) {
       setPrimaryNav("workbench");
       loadWorkbenchTaskDetail(taskId).catch((err) => {
@@ -21825,18 +21825,18 @@ if (primaryNav) {
     setPrimaryNav(activePrimaryNavKey);
   }
 }
-if (window.nanoclawApp && typeof window.nanoclawApp.onCyclePrimaryNav === "function") {
-  window.nanoclawApp.onCyclePrimaryNav(() => {
+if (window.icarusApp && typeof window.icarusApp.onCyclePrimaryNav === "function") {
+  window.icarusApp.onCyclePrimaryNav(() => {
     cyclePrimaryNav(1);
   });
 }
-if (window.nanoclawApp && typeof window.nanoclawApp.onToggleTodayPlan === "function") {
-  window.nanoclawApp.onToggleTodayPlan(() => {
+if (window.icarusApp && typeof window.icarusApp.onToggleTodayPlan === "function") {
+  window.icarusApp.onToggleTodayPlan(() => {
     toggleTodayPlanScreen();
   });
 }
-if (window.nanoclawApp && typeof window.nanoclawApp.onOpenWorkstationTarget === "function") {
-  window.nanoclawApp.onOpenWorkstationTarget(({ url }) => {
+if (window.icarusApp && typeof window.icarusApp.onOpenWorkstationTarget === "function") {
+  window.icarusApp.onOpenWorkstationTarget(({ url }) => {
     if (typeof url !== "string" || !url) return;
     if (!openWorkstationTargetUrl(url)) {
       window.open(url, "_blank");
@@ -22848,4 +22848,3 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-//# sourceMappingURL=app.js.map

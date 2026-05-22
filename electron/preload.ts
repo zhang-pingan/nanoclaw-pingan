@@ -6,7 +6,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 // where the Icarus web channel runs. The preload only bridges
 // Electron-specific capabilities (notifications, tray, etc.).
 
-contextBridge.exposeInMainWorld('nanoclawApp', {
+contextBridge.exposeInMainWorld('icarusApp', {
   // Show a native macOS notification
   notify: (title: string, body: string, meta?: { chatJid?: string; taskId?: string }) => {
     ipcRenderer.send('show-notification', { title, body, meta });

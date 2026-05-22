@@ -8,7 +8,7 @@ LOG_FILE="${RUNTIME_DIR}/cloudflared.log"
 MODE="${1:-named}"
 ORIGIN_URL="${2:-http://localhost:3002}"
 CONFIG_FILE="${CLOUDFLARED_CONFIG:-${HOME}/.cloudflared/config.yml}"
-TUNNEL_NAME="${CLOUDFLARED_TUNNEL:-nanoclaw}"
+TUNNEL_NAME="${CLOUDFLARED_TUNNEL:-icarus}"
 PUBLIC_HOSTNAME="${CLOUDFLARED_HOSTNAME:-webhook.zwqbb.com}"
 
 mkdir -p "${RUNTIME_DIR}"
@@ -36,7 +36,7 @@ if [ -f "${PID_FILE}" ]; then
 fi
 
 if [ "${MODE}" = "temp" ]; then
-  nohup cloudflared tunnel --url "${ORIGIN_URL}" >"${LOG_FILE}" 2>&1 &
+  nohup cloudflared tunnel --pidfile "${PID_FILE}" --url "${ORIGIN_URL}" >"${LOG_FILE}" 2>&1 &
   url_pattern='https://[a-z0-9-]+\.trycloudflare\.com'
   echo "origin: ${ORIGIN_URL}"
 else
@@ -44,19 +44,25 @@ else
     echo "cloudflared config not found: ${CONFIG_FILE}"
     exit 1
   fi
-  nohup cloudflared tunnel --config "${CONFIG_FILE}" run "${TUNNEL_NAME}" >"${LOG_FILE}" 2>&1 &
+  nohup cloudflared tunnel --pidfile "${PID_FILE}" --config "${CONFIG_FILE}" run "${TUNNEL_NAME}" >"${LOG_FILE}" 2>&1 &
   url_pattern=''
   echo "config: ${CONFIG_FILE}"
   echo "tunnel: ${TUNNEL_NAME}"
 fi
 
-pid="$!"
-echo "${pid}" >"${PID_FILE}"
+launcher_pid="$!"
 
-echo "starting cloudflared (pid=${pid}) ..."
+echo "starting cloudflared (launcher pid=${launcher_pid}) ..."
 
+pid="${launcher_pid}"
 url=""
 for _ in $(seq 1 30); do
+  if [ -f "${PID_FILE}" ]; then
+    managed_pid="$(cat "${PID_FILE}")"
+    if [ -n "${managed_pid}" ]; then
+      pid="${managed_pid}"
+    fi
+  fi
   if ! kill -0 "${pid}" >/dev/null 2>&1; then
     echo "cloudflared exited unexpectedly"
     tail -n 40 "${LOG_FILE}" || true

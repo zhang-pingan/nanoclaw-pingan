@@ -1,6 +1,6 @@
-// Type declarations for the NanoClaw Electron renderer
+// Type declarations for the Icarus Electron renderer
 
-interface NanoClawAppAPI {
+interface IcarusAppAPI {
   /** Show a native system notification */
   notify(title: string, body: string, meta?: { chatJid?: string; taskId?: string }): void;
   /** Listen to notification click events emitted by the main process */
@@ -46,7 +46,7 @@ interface NanoClawAppAPI {
 
 declare global {
   interface Window {
-    nanoclawApp: NanoClawAppAPI;
+    icarusApp: IcarusAppAPI;
   }
 }
 

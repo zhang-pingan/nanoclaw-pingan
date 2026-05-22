@@ -18,7 +18,7 @@ const ASSISTANT_EXPANDED_WINDOW_WIDTH = 1010;
 const ASSISTANT_EXPANDED_WINDOW_HEIGHT = 520;
 const WORKSTATION_URL = 'http://localhost:3000/';
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
-const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
+const OPEN_WORKSTATION_ARG = '--icarus-open-workstation';
 
 let assistantWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;

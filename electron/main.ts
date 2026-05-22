@@ -17,7 +17,7 @@ import { readFile, unlink } from 'fs/promises';
 
 const mainDir = __dirname;
 const WORKSTATION_URL = 'http://localhost:3000/';
-const OPEN_WORKSTATION_ARG = '--nanoclaw-open-workstation';
+const OPEN_WORKSTATION_ARG = '--icarus-open-workstation';
 
 // Track whether we're doing a full quit (Quit All) vs just hiding
 let isQuitting = false;
@@ -152,7 +152,7 @@ async function captureDesktopWithMacScreencapture(args: {
   desktopCapturerError: string;
   windowSourceError?: string;
 }) {
-  const filename = `nanoclaw-desktop-${Date.now()}-${Math.random()
+  const filename = `icarus-desktop-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}.png`;
   const outputPath = path.join(app.getPath('temp'), filename);
