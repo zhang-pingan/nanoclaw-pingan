@@ -64,11 +64,11 @@ function normalizeAddressList(value: unknown): string[] {
 }
 
 function getMailConfigPath(): string {
-  const env = readEnvFile(['NANOCLAW_MAIL_CONFIG_PATH']);
+  const env = readEnvFile(['ICARUS_MAIL_CONFIG_PATH']);
   const raw =
-    process.env.NANOCLAW_MAIL_CONFIG_PATH ||
-    env.NANOCLAW_MAIL_CONFIG_PATH ||
-    path.join(process.env.HOME || os.homedir(), '.config', 'nanoclaw', 'mail.json');
+    process.env.ICARUS_MAIL_CONFIG_PATH ||
+    env.ICARUS_MAIL_CONFIG_PATH ||
+    path.join(process.env.HOME || os.homedir(), '.config', 'icarus', 'mail.json');
   const home = process.env.HOME || os.homedir();
   return path.resolve(raw.replace(/^~/, home));
 }

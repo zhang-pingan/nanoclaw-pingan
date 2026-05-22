@@ -161,9 +161,9 @@ beforeEach(() => {
   execFileSyncMock.mockReset();
   readEnvFileMock.mockReset();
   readEnvFileMock.mockReturnValue({});
-  delete process.env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS;
-  delete process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS;
-  delete process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS;
+  delete process.env.ICARUS_WIKI_DRAFT_MAX_TOKENS;
+  delete process.env.ICARUS_WIKI_MAX_MATERIAL_CHARS;
+  delete process.env.ICARUS_WIKI_MAX_TOTAL_MATERIAL_CHARS;
 });
 
 afterEach(() => {
@@ -172,9 +172,9 @@ afterEach(() => {
   callAnthropicMessagesMock.mockReset();
   execFileSyncMock.mockReset();
   readEnvFileMock.mockReset();
-  delete process.env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS;
-  delete process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS;
-  delete process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS;
+  delete process.env.ICARUS_WIKI_DRAFT_MAX_TOKENS;
+  delete process.env.ICARUS_WIKI_MAX_MATERIAL_CHARS;
+  delete process.env.ICARUS_WIKI_MAX_TOTAL_MATERIAL_CHARS;
 });
 
 describe('wiki', () => {
@@ -331,8 +331,8 @@ describe('wiki', () => {
 
   it('uses configured wiki material character limits when compiling a draft', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_WIKI_MAX_MATERIAL_CHARS: '8',
-      NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS: '12',
+      ICARUS_WIKI_MAX_MATERIAL_CHARS: '8',
+      ICARUS_WIKI_MAX_TOTAL_MATERIAL_CHARS: '12',
     });
     const testSlug = `wiki-material-limit-${Date.now()}`;
     const compilePrompts: Array<{
@@ -409,7 +409,7 @@ describe('wiki', () => {
 
   it('uses configured wiki draft max tokens when compiling a draft', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_WIKI_DRAFT_MAX_TOKENS: '24000',
+      ICARUS_WIKI_DRAFT_MAX_TOKENS: '24000',
     });
     const material = importWikiMaterialFromText({
       title: '输出上限资料',
@@ -494,8 +494,7 @@ describe('wiki', () => {
               evidence: [
                 {
                   material_id: material.id,
-                  excerpt_text:
-                    '模型请求超时时，wiki 草稿生成应自动重试一次。',
+                  excerpt_text: '模型请求超时时，wiki 草稿生成应自动重试一次。',
                 },
               ],
             },

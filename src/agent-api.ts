@@ -215,41 +215,41 @@ function parseTimeoutMs(value: string | undefined): number {
 
 function getAgentApiConfig(): AgentApiConfig {
   const env = readEnvFile([
-    'NANOCLAW_AGENT_API_API_KEY',
-    'NANOCLAW_AGENT_API_BASE_URL',
-    'NANOCLAW_AGENT_API_MODEL',
-    'NANOCLAW_AGENT_API_TIMEOUT_MS',
-    'NANOCLAW_AGENT_API_USE_OPENAI_COMPAT',
-    'NANOCLAW_AGENT_API_OPENAI_KEY',
-    'NANOCLAW_AGENT_API_OPENAI_BASE_URL',
-    'NANOCLAW_AGENT_API_OPENAI_MODEL',
-    'NANOCLAW_AGENT_API_OPENAI_PROTOCOL',
+    'ICARUS_AGENT_API_API_KEY',
+    'ICARUS_AGENT_API_BASE_URL',
+    'ICARUS_AGENT_API_MODEL',
+    'ICARUS_AGENT_API_TIMEOUT_MS',
+    'ICARUS_AGENT_API_USE_OPENAI_COMPAT',
+    'ICARUS_AGENT_API_OPENAI_KEY',
+    'ICARUS_AGENT_API_OPENAI_BASE_URL',
+    'ICARUS_AGENT_API_OPENAI_MODEL',
+    'ICARUS_AGENT_API_OPENAI_PROTOCOL',
   ]);
 
-  const apiKey = getEnvValue('NANOCLAW_AGENT_API_API_KEY', env) || '';
-  if (!apiKey) throw new Error('NANOCLAW_AGENT_API_API_KEY is required');
+  const apiKey = getEnvValue('ICARUS_AGENT_API_API_KEY', env) || '';
+  if (!apiKey) throw new Error('ICARUS_AGENT_API_API_KEY is required');
 
   const rawBaseUrl =
-    getEnvValue('NANOCLAW_AGENT_API_BASE_URL', env) ||
+    getEnvValue('ICARUS_AGENT_API_BASE_URL', env) ||
     'https://api.anthropic.com';
   const baseUrl = rawBaseUrl.replace(/\/+$/, '');
-  const model = getEnvValue('NANOCLAW_AGENT_API_MODEL', env) || DEFAULT_MODEL;
+  const model = getEnvValue('ICARUS_AGENT_API_MODEL', env) || DEFAULT_MODEL;
   const timeoutMs = parseTimeoutMs(
-    getEnvValue('NANOCLAW_AGENT_API_TIMEOUT_MS', env),
+    getEnvValue('ICARUS_AGENT_API_TIMEOUT_MS', env),
   );
   const useOpenAiCompat =
-    (getEnvValue('NANOCLAW_AGENT_API_USE_OPENAI_COMPAT', env) || '')
+    (getEnvValue('ICARUS_AGENT_API_USE_OPENAI_COMPAT', env) || '')
       .trim()
       .toLowerCase() === 'true';
   const openAiApiKey =
-    getEnvValue('NANOCLAW_AGENT_API_OPENAI_KEY', env) || apiKey;
+    getEnvValue('ICARUS_AGENT_API_OPENAI_KEY', env) || apiKey;
   const openAiBaseUrl = (
-    getEnvValue('NANOCLAW_AGENT_API_OPENAI_BASE_URL', env) || rawBaseUrl
+    getEnvValue('ICARUS_AGENT_API_OPENAI_BASE_URL', env) || rawBaseUrl
   ).replace(/\/+$/, '');
   const openAiModel =
-    getEnvValue('NANOCLAW_AGENT_API_OPENAI_MODEL', env) || model;
+    getEnvValue('ICARUS_AGENT_API_OPENAI_MODEL', env) || model;
   const openAiProtocol = parseOpenAiProtocol(
-    getEnvValue('NANOCLAW_AGENT_API_OPENAI_PROTOCOL', env),
+    getEnvValue('ICARUS_AGENT_API_OPENAI_PROTOCOL', env),
   );
 
   return {

@@ -153,7 +153,7 @@ The primary security boundary is container isolation.
 
 - Agents do not run directly on the host.
 - Real API keys stay in the host process and credential proxy.
-- Mount permissions live outside the repo at `~/.config/nanoclaw/mount-allowlist.json`.
+- Mount permissions live outside the repo at `~/.config/icarus/mount-allowlist.json`.
 - Sensitive paths such as `.ssh`, `.aws`, `.kube`, `.env`, private keys, and credential files must not be mounted.
 - Main group is trusted admin context.
 - Non-main groups are treated as untrusted input and must only operate within their own scope unless host-side authorization allows more.

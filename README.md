@@ -298,6 +298,8 @@ WEB_TOKEN=...
 
 如使用 Feishu、WeCom、线上日志、图片生成、模型选择器、MySQL 代理等能力，再按 `.env.example` 补充对应变量。
 
+从旧 NanoClaw 本地配置升级到 Icarus 时，先把 `~/.config/nanoclaw/mount-allowlist.json` 和 `~/.config/nanoclaw/mail.json` 复制到 `~/.config/icarus/`，确认内容无误后再启动新版本；`.env` 只使用 `ICARUS_*` 变量，旧 `NANOCLAW_*` 变量不会被读取。
+
 ### 构建容器
 
 Docker：
@@ -374,7 +376,7 @@ Icarus 的核心安全边界是容器隔离，而不是让 Agent 在宿主机上
 - 模型 API 通过宿主机凭证代理转发。
 - 每个群组有独立 `.claude` 会话目录，避免上下文串扰。
 - IPC 操作按主群和非主群区分权限。
-- 额外挂载由 `~/.config/nanoclaw/mount-allowlist.json` 控制，该文件位于项目外，容器不可修改。
+- 额外挂载由 `~/.config/icarus/mount-allowlist.json` 控制，该文件位于项目外，容器不可修改。
 - 默认阻止 `.ssh`、`.aws`、`.kube`、`.env`、私钥、credential 等敏感路径挂载。
 
 主群通常代表用户本人，拥有管理权限；非主群被视为不可信输入，只能操作自己的上下文和有限资源。

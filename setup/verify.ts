@@ -167,7 +167,7 @@ export async function run(_args: string[]): Promise<void> {
   let mountAllowlist = 'missing';
   if (
     fs.existsSync(
-      path.join(homeDir, '.config', 'nanoclaw', 'mount-allowlist.json'),
+      path.join(homeDir, '.config', 'icarus', 'mount-allowlist.json'),
     )
   ) {
     mountAllowlist = 'configured';

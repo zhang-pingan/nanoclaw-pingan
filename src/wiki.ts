@@ -162,20 +162,20 @@ function parseOptionalPositiveInteger(
 }
 
 function getWikiDraftTimeoutMs(): number {
-  const env = readEnvFile(['NANOCLAW_WIKI_DRAFT_TIMEOUT_MS']);
+  const env = readEnvFile(['ICARUS_WIKI_DRAFT_TIMEOUT_MS']);
   return parsePositiveInteger(
-    env.NANOCLAW_WIKI_DRAFT_TIMEOUT_MS ||
-      process.env.NANOCLAW_WIKI_DRAFT_TIMEOUT_MS,
+    env.ICARUS_WIKI_DRAFT_TIMEOUT_MS ||
+      process.env.ICARUS_WIKI_DRAFT_TIMEOUT_MS,
     DEFAULT_WIKI_DRAFT_TIMEOUT_MS,
     1000,
   );
 }
 
 function getWikiDraftMaxTokens(): number | undefined {
-  const env = readEnvFile(['NANOCLAW_WIKI_DRAFT_MAX_TOKENS']);
+  const env = readEnvFile(['ICARUS_WIKI_DRAFT_MAX_TOKENS']);
   return parseOptionalPositiveInteger(
-    env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS ||
-      process.env.NANOCLAW_WIKI_DRAFT_MAX_TOKENS,
+    env.ICARUS_WIKI_DRAFT_MAX_TOKENS ||
+      process.env.ICARUS_WIKI_DRAFT_MAX_TOKENS,
     1,
   );
 }
@@ -223,19 +223,19 @@ function getWikiMaterialCharLimits(): {
   maxTotalMaterialChars: number;
 } {
   const env = readEnvFile([
-    'NANOCLAW_WIKI_MAX_MATERIAL_CHARS',
-    'NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS',
+    'ICARUS_WIKI_MAX_MATERIAL_CHARS',
+    'ICARUS_WIKI_MAX_TOTAL_MATERIAL_CHARS',
   ]);
   return {
     maxMaterialChars: parsePositiveInteger(
-      env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS ||
-        process.env.NANOCLAW_WIKI_MAX_MATERIAL_CHARS,
+      env.ICARUS_WIKI_MAX_MATERIAL_CHARS ||
+        process.env.ICARUS_WIKI_MAX_MATERIAL_CHARS,
       DEFAULT_MAX_MATERIAL_CHARS,
       1,
     ),
     maxTotalMaterialChars: parsePositiveInteger(
-      env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS ||
-        process.env.NANOCLAW_WIKI_MAX_TOTAL_MATERIAL_CHARS,
+      env.ICARUS_WIKI_MAX_TOTAL_MATERIAL_CHARS ||
+        process.env.ICARUS_WIKI_MAX_TOTAL_MATERIAL_CHARS,
       DEFAULT_MAX_TOTAL_MATERIAL_CHARS,
       1,
     ),

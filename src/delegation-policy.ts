@@ -1,7 +1,7 @@
 import { readEnvFile } from './env.js';
 
 const CROSS_CHANNEL_TARGET_ENV_KEYS = [
-  'NANOCLAW_CROSS_CHANNEL_DELEGATION_TARGET_CHANNELS',
+  'ICARUS_CROSS_CHANNEL_DELEGATION_TARGET_CHANNELS',
   'DELEGATION_CROSS_CHANNEL_TARGETS',
 ];
 
@@ -25,9 +25,9 @@ export function getFolderChannel(folder: string): string {
 
 export function getCrossChannelDelegationTargetChannels(): Set<string> {
   const configured =
-    process.env.NANOCLAW_CROSS_CHANNEL_DELEGATION_TARGET_CHANNELS ||
+    process.env.ICARUS_CROSS_CHANNEL_DELEGATION_TARGET_CHANNELS ||
     process.env.DELEGATION_CROSS_CHANNEL_TARGETS ||
-    envConfig.NANOCLAW_CROSS_CHANNEL_DELEGATION_TARGET_CHANNELS ||
+    envConfig.ICARUS_CROSS_CHANNEL_DELEGATION_TARGET_CHANNELS ||
     envConfig.DELEGATION_CROSS_CHANNEL_TARGETS;
   return parseDelegationTargetChannels(configured);
 }

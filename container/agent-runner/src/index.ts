@@ -97,7 +97,7 @@ const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_TASKS_DIR = '/workspace/ipc/tasks';
 const IPC_POLL_MS = 500;
-const MODEL_DEFAULT = process.env.NANOCLAW_MODEL_DEFAULT || 'claude-4-6-sonnet-latest';
+const MODEL_DEFAULT = process.env.ICARUS_MODEL_DEFAULT || 'claude-4-6-sonnet-latest';
 
 
 /**
@@ -1185,12 +1185,12 @@ function buildQueryOptions(
         command: 'node',
         args: [mcpServerPath],
         env: {
-          NANOCLAW_CHAT_JID: containerInput.chatJid,
-          NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-          NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-          NANOCLAW_WORKFLOW_ID: containerInput.executionContext?.workflowId || '',
-          NANOCLAW_STAGE_KEY: containerInput.executionContext?.stageKey || '',
-          NANOCLAW_DELEGATION_ID: containerInput.executionContext?.delegationId || '',
+          ICARUS_CHAT_JID: containerInput.chatJid,
+          ICARUS_GROUP_FOLDER: containerInput.groupFolder,
+          ICARUS_IS_MAIN: containerInput.isMain ? '1' : '0',
+          ICARUS_WORKFLOW_ID: containerInput.executionContext?.workflowId || '',
+          ICARUS_STAGE_KEY: containerInput.executionContext?.stageKey || '',
+          ICARUS_DELEGATION_ID: containerInput.executionContext?.delegationId || '',
         },
       },
     },

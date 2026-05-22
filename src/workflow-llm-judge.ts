@@ -217,11 +217,11 @@ export function buildQueuedWorkflowLlmJudgeRecord(input: {
 }
 
 export function shouldRunWorkflowLlmJudgeNow(): boolean {
-  const env = readEnvFile(['NANOCLAW_WORKFLOW_LLM_JUDGE_RUN']);
+  const env = readEnvFile(['ICARUS_WORKFLOW_LLM_JUDGE_RUN']);
   return (
     (
-      process.env.NANOCLAW_WORKFLOW_LLM_JUDGE_RUN ||
-      env.NANOCLAW_WORKFLOW_LLM_JUDGE_RUN ||
+      process.env.ICARUS_WORKFLOW_LLM_JUDGE_RUN ||
+      env.ICARUS_WORKFLOW_LLM_JUDGE_RUN ||
       ''
     )
       .trim()
@@ -230,12 +230,12 @@ export function shouldRunWorkflowLlmJudgeNow(): boolean {
 }
 
 function getLlmJudgeTimeoutMs(): number {
-  const env = readEnvFile(['NANOCLAW_WORKFLOW_LLM_JUDGE_TIMEOUT_MS']);
+  const env = readEnvFile(['ICARUS_WORKFLOW_LLM_JUDGE_TIMEOUT_MS']);
   return Math.max(
     1000,
     Number.parseInt(
-      process.env.NANOCLAW_WORKFLOW_LLM_JUDGE_TIMEOUT_MS ||
-        env.NANOCLAW_WORKFLOW_LLM_JUDGE_TIMEOUT_MS ||
+      process.env.ICARUS_WORKFLOW_LLM_JUDGE_TIMEOUT_MS ||
+        env.ICARUS_WORKFLOW_LLM_JUDGE_TIMEOUT_MS ||
         String(DEFAULT_TIMEOUT_MS),
       10,
     ) || DEFAULT_TIMEOUT_MS,
@@ -421,7 +421,7 @@ export async function runWorkflowLlmJudgeSidecar(input: {
             message,
             stageKey: input.stageKey,
             suggestion:
-              'Set NANOCLAW_WORKFLOW_LLM_JUDGE_RUN=true and configure the agent API credentials to execute the sidecar judge.',
+              'Set ICARUS_WORKFLOW_LLM_JUDGE_RUN=true and configure the agent API credentials to execute the sidecar judge.',
           },
         ],
         evidence: [

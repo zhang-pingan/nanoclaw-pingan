@@ -16,12 +16,12 @@ const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
 
 // Context from environment variables (set by the agent runner)
-const chatJid = process.env.NANOCLAW_CHAT_JID!;
-const groupFolder = process.env.NANOCLAW_GROUP_FOLDER!;
-const isMain = process.env.NANOCLAW_IS_MAIN === '1';
-const workflowId = process.env.NANOCLAW_WORKFLOW_ID || '';
-const stageKey = process.env.NANOCLAW_STAGE_KEY || '';
-const delegationId = process.env.NANOCLAW_DELEGATION_ID || '';
+const chatJid = process.env.ICARUS_CHAT_JID!;
+const groupFolder = process.env.ICARUS_GROUP_FOLDER!;
+const isMain = process.env.ICARUS_IS_MAIN === '1';
+const workflowId = process.env.ICARUS_WORKFLOW_ID || '';
+const stageKey = process.env.ICARUS_STAGE_KEY || '';
+const delegationId = process.env.ICARUS_DELEGATION_ID || '';
 
 function writeIpcFile(dir: string, data: object): string {
   fs.mkdirSync(dir, { recursive: true });

@@ -26,10 +26,10 @@ describe('agent-api', () => {
 
   it('calls anthropic messages endpoint using env config', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-test',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test/api/',
-      NANOCLAW_AGENT_API_MODEL: 'claude-test',
-      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
+      ICARUS_AGENT_API_API_KEY: 'sk-test',
+      ICARUS_AGENT_API_BASE_URL: 'https://example.test/api/',
+      ICARUS_AGENT_API_MODEL: 'claude-test',
+      ICARUS_AGENT_API_USE_OPENAI_COMPAT: 'false',
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -87,7 +87,7 @@ describe('agent-api', () => {
 
   it('throws when api key is missing', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test',
+      ICARUS_AGENT_API_BASE_URL: 'https://example.test',
     });
 
     await expect(
@@ -97,14 +97,38 @@ describe('agent-api', () => {
         },
         vi.fn() as unknown as typeof fetch,
       ),
-    ).rejects.toThrow('NANOCLAW_AGENT_API_API_KEY is required');
+    ).rejects.toThrow('ICARUS_AGENT_API_API_KEY is required');
+  });
+
+  it('ignores legacy NanoClaw agent api env keys', async () => {
+    readEnvFileMock.mockReturnValue({
+      NANOCLAW_AGENT_API_API_KEY: 'sk-legacy',
+      NANOCLAW_AGENT_API_BASE_URL: 'https://legacy.example.test',
+      NANOCLAW_AGENT_API_MODEL: 'legacy-model',
+      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
+    });
+    const fetchMock = vi.fn();
+
+    await expect(
+      callAnthropicMessages(
+        {
+          messages: [{ role: 'user', content: 'hello' }],
+        },
+        fetchMock as unknown as typeof fetch,
+      ),
+    ).rejects.toThrow('ICARUS_AGENT_API_API_KEY is required');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(readEnvFileMock.mock.calls[0]?.[0]).not.toContain(
+      'NANOCLAW_AGENT_API_API_KEY',
+    );
   });
 
   it('throws on non-ok anthropic responses', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-test',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test',
-      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
+      ICARUS_AGENT_API_API_KEY: 'sk-test',
+      ICARUS_AGENT_API_BASE_URL: 'https://example.test',
+      ICARUS_AGENT_API_USE_OPENAI_COMPAT: 'false',
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -133,10 +157,10 @@ describe('agent-api', () => {
 
   it('aggregates anthropic sse responses for non-stream callers', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-test',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test/api/',
-      NANOCLAW_AGENT_API_MODEL: 'claude-test',
-      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
+      ICARUS_AGENT_API_API_KEY: 'sk-test',
+      ICARUS_AGENT_API_BASE_URL: 'https://example.test/api/',
+      ICARUS_AGENT_API_MODEL: 'claude-test',
+      ICARUS_AGENT_API_USE_OPENAI_COMPAT: 'false',
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -203,14 +227,14 @@ describe('agent-api', () => {
 
   it('routes callAnthropicMessages through the compat helper when enabled', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-anthropic',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
-      NANOCLAW_AGENT_API_MODEL: 'claude-test',
-      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'true',
-      NANOCLAW_AGENT_API_OPENAI_KEY: 'sk-openai',
-      NANOCLAW_AGENT_API_OPENAI_BASE_URL: 'https://example.test/api/',
-      NANOCLAW_AGENT_API_OPENAI_MODEL: 'gpt-4.1',
-      NANOCLAW_AGENT_API_OPENAI_PROTOCOL: 'chat_completions',
+      ICARUS_AGENT_API_API_KEY: 'sk-anthropic',
+      ICARUS_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
+      ICARUS_AGENT_API_MODEL: 'claude-test',
+      ICARUS_AGENT_API_USE_OPENAI_COMPAT: 'true',
+      ICARUS_AGENT_API_OPENAI_KEY: 'sk-openai',
+      ICARUS_AGENT_API_OPENAI_BASE_URL: 'https://example.test/api/',
+      ICARUS_AGENT_API_OPENAI_MODEL: 'gpt-4.1',
+      ICARUS_AGENT_API_OPENAI_PROTOCOL: 'chat_completions',
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -338,14 +362,14 @@ describe('agent-api', () => {
 
   it('ignores input.model and uses env-backed models for both non-compat and compat calls', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-anthropic',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
-      NANOCLAW_AGENT_API_MODEL: 'claude-env',
-      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'true',
-      NANOCLAW_AGENT_API_OPENAI_KEY: 'sk-openai',
-      NANOCLAW_AGENT_API_OPENAI_BASE_URL: 'https://openai.example.test/api/',
-      NANOCLAW_AGENT_API_OPENAI_MODEL: 'gpt-env',
-      NANOCLAW_AGENT_API_OPENAI_PROTOCOL: 'responses',
+      ICARUS_AGENT_API_API_KEY: 'sk-anthropic',
+      ICARUS_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
+      ICARUS_AGENT_API_MODEL: 'claude-env',
+      ICARUS_AGENT_API_USE_OPENAI_COMPAT: 'true',
+      ICARUS_AGENT_API_OPENAI_KEY: 'sk-openai',
+      ICARUS_AGENT_API_OPENAI_BASE_URL: 'https://openai.example.test/api/',
+      ICARUS_AGENT_API_OPENAI_MODEL: 'gpt-env',
+      ICARUS_AGENT_API_OPENAI_PROTOCOL: 'responses',
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -385,14 +409,14 @@ describe('agent-api', () => {
     vi.useFakeTimers();
     try {
       readEnvFileMock.mockReturnValue({
-        NANOCLAW_AGENT_API_API_KEY: 'sk-anthropic',
-        NANOCLAW_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
-        NANOCLAW_AGENT_API_MODEL: 'claude-test',
-        NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'true',
-        NANOCLAW_AGENT_API_OPENAI_KEY: 'sk-openai',
-        NANOCLAW_AGENT_API_OPENAI_BASE_URL: 'https://example.test/api/',
-        NANOCLAW_AGENT_API_OPENAI_MODEL: 'gpt-4.1',
-        NANOCLAW_AGENT_API_OPENAI_PROTOCOL: 'chat_completions',
+        ICARUS_AGENT_API_API_KEY: 'sk-anthropic',
+        ICARUS_AGENT_API_BASE_URL: 'https://anthropic.example.test/api/',
+        ICARUS_AGENT_API_MODEL: 'claude-test',
+        ICARUS_AGENT_API_USE_OPENAI_COMPAT: 'true',
+        ICARUS_AGENT_API_OPENAI_KEY: 'sk-openai',
+        ICARUS_AGENT_API_OPENAI_BASE_URL: 'https://example.test/api/',
+        ICARUS_AGENT_API_OPENAI_MODEL: 'gpt-4.1',
+        ICARUS_AGENT_API_OPENAI_PROTOCOL: 'chat_completions',
       });
       let capturedSignal: AbortSignal | undefined;
       let outcome: unknown = 'pending';
@@ -442,9 +466,9 @@ describe('agent-api', () => {
 
   it('throws structured response errors for invalid or empty model output', async () => {
     readEnvFileMock.mockReturnValue({
-      NANOCLAW_AGENT_API_API_KEY: 'sk-test',
-      NANOCLAW_AGENT_API_BASE_URL: 'https://example.test',
-      NANOCLAW_AGENT_API_USE_OPENAI_COMPAT: 'false',
+      ICARUS_AGENT_API_API_KEY: 'sk-test',
+      ICARUS_AGENT_API_BASE_URL: 'https://example.test',
+      ICARUS_AGENT_API_USE_OPENAI_COMPAT: 'false',
     });
 
     await expect(

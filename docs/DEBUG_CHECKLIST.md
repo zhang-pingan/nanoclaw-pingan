@@ -100,7 +100,7 @@ sqlite3 store/messages.db "SELECT chat_jid, MAX(timestamp) as latest FROM messag
 grep -E 'Mount validated|Mount.*REJECTED|mount' logs/nanoclaw.log | tail -10
 
 # Verify the mount allowlist is readable
-cat ~/.config/nanoclaw/mount-allowlist.json
+cat ~/.config/icarus/mount-allowlist.json
 
 # Check group's container_config in DB
 sqlite3 store/messages.db "SELECT name, container_config FROM registered_groups;"

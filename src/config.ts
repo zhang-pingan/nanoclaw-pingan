@@ -33,13 +33,13 @@ const HOME_DIR = process.env.HOME || os.homedir();
 export const MOUNT_ALLOWLIST_PATH = path.join(
   HOME_DIR,
   '.config',
-  'nanoclaw',
+  'icarus',
   'mount-allowlist.json',
 );
 export const SENDER_ALLOWLIST_PATH = path.join(
   HOME_DIR,
   '.config',
-  'nanoclaw',
+  'icarus',
   'sender-allowlist.json',
 );
 const reposDir = process.env.REPOS_DIR || envConfig.REPOS_DIR;
