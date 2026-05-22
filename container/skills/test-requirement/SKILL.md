@@ -35,9 +35,9 @@ description: Use only in the dev_test workflow. Test implemented features in fir
 2. 确认测试文档路径，优先使用任务中明确给出的 `测试文档：xxx`；若未给出，则默认使用 `/workspace/projects/{服务名}/iteration/{文件夹名}/test.md`
 3. 阅读项目代码中对应的变更文件，理解实际实现
 4. 如有不清楚或者缺失测试信息(比如接口需要登录鉴权，则需要提供 `access_token`，需要具体的业务id等)的地方，优先使用提问工具向用户确认：
-   - 有明确选项的决策题（如是否继续测试、是否接受已知问题、是否覆盖某类回归范围）使用 `mcp__nanoclaw__ask_user_question`
+   - 有明确选项的决策题（如是否继续测试、是否接受已知问题、是否覆盖某类回归范围）使用 `mcp__icarus__ask_user_question`
    - 需要用户补充测试信息、验收口径等自由文本时，使用 `request_human_input`
-   - 不要仅用 `mcp__nanoclaw__send_message` 做阻塞型确认
+   - 不要仅用 `mcp__icarus__send_message` 做阻塞型确认
 
 ### 2. 测试用例生成
 
@@ -78,7 +78,7 @@ description: Use only in the dev_test workflow. Test implemented features in fir
   ...
 ```
 
-6. 测试用例生成并写入 `test.md` 后，使用 `mcp__nanoclaw__ask_user_question` 向用户确认是否按当前用例开始执行；若用户需要补充说明，可改用 `request_human_input`
+6. 测试用例生成并写入 `test.md` 后，使用 `mcp__icarus__ask_user_question` 向用户确认是否按当前用例开始执行；若用户需要补充说明，可改用 `request_human_input`
 
 ### 3. 测试执行
 

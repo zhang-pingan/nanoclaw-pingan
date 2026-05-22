@@ -66,7 +66,7 @@ A personal Claude assistant with multi-channel support, persistent memory per co
 │  │    • Read, Write, Edit, Glob, Grep (file operations)           │    │
 │  │    • WebSearch, WebFetch (internet access)                     │    │
 │  │    • agent-browser (browser automation)                        │    │
-│  │    • mcp__nanoclaw__* (scheduler tools via IPC)                │    │
+│  │    • mcp__icarus__* (scheduler tools via IPC)                │    │
 │  │                                                                │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 │                                                                       │
@@ -522,7 +522,7 @@ Sessions enable conversation continuity - Claude remembers what you talked about
    ├── cwd: groups/{group-name}/
    ├── prompt: conversation history + current message
    ├── resume: session_id (for continuity)
-   └── mcpServers: nanoclaw (scheduler)
+   └── mcpServers: icarus (scheduler)
    │
    ▼
 8. Claude processes message:
@@ -602,7 +602,7 @@ Icarus has a built-in scheduler that runs tasks as full agents in their group's 
 ```
 User: @Andy remind me every Monday at 9am to review the weekly metrics
 
-Claude: [calls mcp__nanoclaw__schedule_task]
+Claude: [calls mcp__icarus__schedule_task]
         {
           "prompt": "Send a reminder to review weekly metrics. Be encouraging!",
           "schedule_type": "cron",
@@ -617,7 +617,7 @@ Claude: Done! I'll remind you every Monday at 9am.
 ```
 User: @Andy at 5pm today, send me a summary of today's emails
 
-Claude: [calls mcp__nanoclaw__schedule_task]
+Claude: [calls mcp__icarus__schedule_task]
         {
           "prompt": "Search for today's emails, summarize the important ones, and send the summary to the group.",
           "schedule_type": "once",
@@ -645,7 +645,7 @@ From main channel:
 
 ### Built-in MCP Server
 
-The `nanoclaw` MCP server is created dynamically per agent call with the current group's context.
+The `icarus` MCP server is created dynamically per agent call with the current group's context.
 
 **Available Tools:**
 | Tool | Purpose |

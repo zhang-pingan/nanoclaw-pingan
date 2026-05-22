@@ -15,7 +15,7 @@ description: Maintain project knowledge base — analyze code repositories, gene
 
 检查 `/workspace/projects/{服务名}/docs/overview.md` 是否存在。如果不存在：
 
-通过 `mcp__nanoclaw__send_message` 提示用户：
+通过 `mcp__icarus__send_message` 提示用户：
 
 ```
 服务 {服务名} 尚未建立项目知识库，建议先进行初始化分析。初始化将分析代码仓库并生成项目架构文档，帮助后续需求分析更准确。
@@ -120,7 +120,7 @@ description: Maintain project knowledge base — analyze code repositories, gene
 - 通过域名、服务名、仓库名等信息匹配
 - 记录每个下游依赖是否能对应到 services.json 中的某个服务
 
-如果发现可能的映射关系，优先通过 `mcp__nanoclaw__ask_user_question` 向用户确认；若只是需要用户补充一段说明，可使用 `request_human_input`：
+如果发现可能的映射关系，优先通过 `mcp__icarus__ask_user_question` 向用户确认；若只是需要用户补充一段说明，可使用 `request_human_input`：
 
 ```
 🔍 下游服务依赖分析
@@ -169,7 +169,7 @@ description: Maintain project knowledge base — analyze code repositories, gene
 
 ### 步骤 9：发送结果摘要
 
-通过 `mcp__nanoclaw__send_message` 发送：
+通过 `mcp__icarus__send_message` 发送：
 
 ```
 项目知识库已生成完毕

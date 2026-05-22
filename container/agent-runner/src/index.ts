@@ -148,8 +148,8 @@ async function readStdin(): Promise<string> {
   });
 }
 
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = '---ICARUS_OUTPUT_START---';
+const OUTPUT_END_MARKER = '---ICARUS_OUTPUT_END---';
 
 function writeOutput(output: ContainerOutput): void {
   console.log(OUTPUT_START_MARKER);
@@ -1110,7 +1110,7 @@ function withQueryScopedEnv(
   const baseUrl = env.ANTHROPIC_BASE_URL.replace(/\/+$/, '');
   return {
     ...env,
-    ANTHROPIC_BASE_URL: `${baseUrl}/__nanoclaw__/${encodeURIComponent(runId)}/${encodeURIComponent(queryId)}`,
+    ANTHROPIC_BASE_URL: `${baseUrl}/__icarus__/${encodeURIComponent(runId)}/${encodeURIComponent(queryId)}`,
   };
 }
 
@@ -1170,7 +1170,7 @@ function buildQueryOptions(
       'TeamCreate', 'TeamDelete', 'SendMessage',
       'TodoWrite', 'ToolSearch', 'Skill',
       'NotebookEdit',
-      'mcp__nanoclaw__*'
+      'mcp__icarus__*'
     ],
     env: withQueryScopedEnv(sdkEnv, containerInput.runId, queryId),
     stderr: (data: string) => {
@@ -1181,7 +1181,7 @@ function buildQueryOptions(
     allowDangerouslySkipPermissions: true,
     settingSources: ['project', 'user'] as Array<'project' | 'user'>,
     mcpServers: {
-      nanoclaw: {
+      icarus: {
         command: 'node',
         args: [mcpServerPath],
         env: {

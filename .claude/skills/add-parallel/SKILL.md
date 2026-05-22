@@ -83,14 +83,14 @@ Update `container/agent-runner/src/index.ts`:
 Find the section where `mcpServers` is configured (around line 237-252):
 ```typescript
 const mcpServers: Record<string, any> = {
-  nanoclaw: ipcMcp
+  icarus: ipcMcp
 };
 ```
 
-Add Parallel AI MCP servers after the nanoclaw server:
+Add Parallel AI MCP servers after the icarus server:
 ```typescript
 const mcpServers: Record<string, any> = {
-  nanoclaw: ipcMcp
+  icarus: ipcMcp
 };
 
 // Add Parallel AI MCP servers if API key is available
@@ -122,7 +122,7 @@ allowedTools: [
   'Bash',
   'Read', 'Write', 'Edit', 'Glob', 'Grep',
   'WebSearch', 'WebFetch',
-  'mcp__nanoclaw__*',
+  'mcp__icarus__*',
   'mcp__parallel-search__*',
   'mcp__parallel-task__*'
 ],
@@ -178,14 +178,14 @@ AskUserQuestion: I can do deep research on [topic] using Parallel's Task API. Th
 
 1. Create the task using `mcp__parallel-task__create_task_run`
 2. Get the `run_id` from the response
-3. Create a polling scheduled task using `mcp__nanoclaw__schedule_task`:
+3. Create a polling scheduled task using `mcp__icarus__schedule_task`:
    ```
    Prompt: "Check Parallel AI task run [run_id] and send results when ready.
 
    1. Use the Parallel Task MCP to check the task status
    2. If status is 'completed', extract the results
-   3. Send results to user with mcp__nanoclaw__send_message
-   4. Use mcp__nanoclaw__complete_scheduled_task to mark this task as done
+   3. Send results to user with mcp__icarus__send_message
+   4. Use mcp__icarus__complete_scheduled_task to mark this task as done
 
    If status is still 'running' or 'pending', do nothing (task will run again in 30s).
    If status is 'failed', send error message and complete the task."

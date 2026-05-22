@@ -28,9 +28,9 @@ description: Use only in the fix_test workflow. Verify a fix_test bug fix on sta
 4. 在预发环境执行验证：
    - 接口、页面、日志、数据库等方式按服务实际情况选择。
    - 登录态、需要业务 ID 或其他测试数据时，优先使用提问工具向用户补充。**登录态 优先从服务器日志中获取最新的一条token。获取不到时或获取后调用还有鉴权问题才询问用户**
-     - 有明确选项的决策题（如是否继续测试、是否接受已知问题、是否覆盖某类回归范围）使用 `mcp__nanoclaw__ask_user_question`
+     - 有明确选项的决策题（如是否继续测试、是否接受已知问题、是否覆盖某类回归范围）使用 `mcp__icarus__ask_user_question`
      - 需要用户补充测试信息、验收口径等自由文本时，使用 `request_human_input`
-     - 不要仅用 `mcp__nanoclaw__send_message` 做阻塞型确认
+     - 不要仅用 `mcp__icarus__send_message` 做阻塞型确认
 5. 将验证结果写入 `/workspace/projects/{服务名}/iteration/{deliverable}/fix-test.md`。
 6. 调用 `complete_delegation` 返回结构化结果。
 

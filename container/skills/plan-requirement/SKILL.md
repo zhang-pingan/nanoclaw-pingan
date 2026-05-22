@@ -47,7 +47,7 @@ description: Use only in the dev_test workflow. Design implementation plans for 
    - 是否有遗漏的边界情况或约束条件
    - 对现有功能的兼容性要求
    - 是否需要下游服务配合改动（如果步骤 5 发现了关联）等
-7. 使用 `mcp__nanoclaw__ask_user_question` 向用户发起确认，优先遵循以下规则：
+7. 使用 `mcp__icarus__ask_user_question` 向用户发起确认，优先遵循以下规则：
    - 若问题属于“有明确选项的决策题”（如方案 A/B、是否兼容旧逻辑、是否需要下游联动），使用 `options`
    - 若问题需要用户自由补充信息（如补充验收口径、边界条件、特殊约束），使用 `fields`
    - 若只是需要用户回复一段自由文本，可直接使用 `request_human_input`
@@ -153,7 +153,7 @@ doc_type: plan
 🌲 主分支：{主分支}
 ```
 
-使用 `mcp__nanoclaw__send_message` 将方案发送给用户。
+使用 `mcp__icarus__send_message` 将方案发送给用户。
 
 ### 步骤 4：保存方案文档
 
@@ -218,6 +218,6 @@ doc_type: plan
 - **只读代码，不写代码**：你只分析和设计，不实现
 - **先读代码再说话**：对任何需求，先浏览相关代码，理解现有架构再给建议
 - **先读附件再补问**：如果委派里带了附件文件地址，先阅读可读附件，再决定要问什么，不要忽略附件信息
-- **澄清优先用提问工具**：凡是“需要用户明确选择/确认后才能继续”的问题，优先使用 `mcp__nanoclaw__ask_user_question` 或 `request_human_input`，不要仅用 `send_message` 做自然语言追问
+- **澄清优先用提问工具**：凡是“需要用户明确选择/确认后才能继续”的问题，优先使用 `mcp__icarus__ask_user_question` 或 `request_human_input`，不要仅用 `send_message` 做自然语言追问
 - **最小改动原则**：优先在现有架构上扩展，避免大范围重构
 - **可测试性**：方案中的测试要点要具体可执行

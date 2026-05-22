@@ -57,7 +57,7 @@ export function resolveCredentialProxyExecutionModel(
 function extractProxyRequestContext(rawUrl: string | undefined): ProxyRequestContext {
   const url = rawUrl || '/';
   const match = url.match(
-    /^\/__nanoclaw__\/([^/]+)\/([^/]+)(\/.*)?$/,
+    /^\/__icarus__\/([^/]+)\/([^/]+)(\/.*)?$/,
   );
   if (!match) {
     return { path: url };

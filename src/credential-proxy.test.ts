@@ -537,6 +537,52 @@ describe('credential-proxy', () => {
     expect(JSON.parse(lastUpstreamBody).model).toBe('claude-opus-4-6');
   });
 
+  it('records model resolution only for Icarus-scoped proxy paths', async () => {
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/__icarus__/run-1/query-1/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(lastUpstreamBody).toContain('claude-sonnet-4-6');
+    expect(modelResolutionCalls).toEqual([
+      [
+        expect.objectContaining({
+          runId: 'run-1',
+          queryId: 'query-1',
+          requestedModel: 'claude-sonnet-4-6',
+          actualModel: 'claude-sonnet-4-6',
+          source: 'proxy_forward',
+        }),
+      ],
+    ]);
+
+    modelResolutionCalls = [];
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/__nanoclaw__/run-old/query-old/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(modelResolutionCalls).toEqual([]);
+  });
+
   it('returns 502 when upstream is unreachable', async () => {
     upstreamResponder = vi.fn(async () => ({
       error: new Error('connect ECONNREFUSED'),

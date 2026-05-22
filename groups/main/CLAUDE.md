@@ -40,17 +40,17 @@ Compatibility note:
 
 Your output is sent to the user or group.
 
-You also have `mcp__nanoclaw__send_message` which sends a message immediately while you're still working. This is useful when you want to acknowledge a request before starting longer work.
+You also have `mcp__icarus__send_message` which sends a message immediately while you're still working. This is useful when you want to acknowledge a request before starting longer work.
 
 ### Requirement Clarification
 
-When requirements are ambiguous or multiple implementation paths are possible, you MUST use `mcp__nanoclaw__ask_user_question` to collect explicit user choices.
+When requirements are ambiguous or multiple implementation paths are possible, you MUST use `mcp__icarus__ask_user_question` to collect explicit user choices.
 
 Rules:
 - Ask by tool first, not by free-text follow-up.
 - Batch related clarifications into one tool call when possible (1-4 questions).
 - Use concise, mutually exclusive options.
-- If plan approval or go/no-go is needed, also use `mcp__nanoclaw__ask_user_question` rather than plain text.
+- If plan approval or go/no-go is needed, also use `mcp__icarus__ask_user_question` rather than plain text.
 - Do not proceed with irreversible or high-cost actions until clarification is answered.
 
 ### Internal thoughts

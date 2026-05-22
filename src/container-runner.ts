@@ -43,8 +43,8 @@ import { RegisteredGroup } from './types.js';
 const HOME_DIR = process.env.HOME || os.homedir();
 
 // Sentinel markers for robust output parsing (must match agent-runner)
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = '---ICARUS_OUTPUT_START---';
+const OUTPUT_END_MARKER = '---ICARUS_OUTPUT_END---';
 
 export interface ContainerInput {
   prompt: string;

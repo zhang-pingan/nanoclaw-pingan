@@ -19,9 +19,9 @@ description: Use only in the dev_test workflow. Implement features based on appr
    - 开发、提交、push、代码搜索、测试执行都必须在 `/workspace/repos/{repo_path}` 下进行
    - 若 `/workspace/repos/{repo_path}` 不存在，才视为“代码仓库未挂载/不可用”的真实阻塞；此时不要臆断为 `projects` 目录缺代码，而应通过 `complete_delegation` 返回失败，明确说明缺失的仓库路径、当前已确认的服务名与 `repo_path`
 4. 如有疑问，优先使用提问工具向用户确认：
-   - 有明确选项的决策题（如是否兼容旧逻辑、是否允许改接口、是否需要同步调整下游）使用 `mcp__nanoclaw__ask_user_question`
+   - 有明确选项的决策题（如是否兼容旧逻辑、是否允许改接口、是否需要同步调整下游）使用 `mcp__icarus__ask_user_question`
    - 需要用户补充一段自由描述时，使用 `request_human_input`
-   - `mcp__nanoclaw__send_message` 只用于进度同步或发送结果摘要，不用于阻塞型确认
+   - `mcp__icarus__send_message` 只用于进度同步或发送结果摘要，不用于阻塞型确认
 
 ### 步骤 2：创建工作分支
 
@@ -95,7 +95,7 @@ doc_type: dev
 
 ### 步骤 5：回复委派消息
 
-1. 将交付文档关键内容通过 `mcp__nanoclaw__send_message` 发送给用户
+1. 将交付文档关键内容通过 `mcp__icarus__send_message` 发送给用户
 2. 无论任务成功还是失败，都必须调用 `complete_delegation` 回复委派结果
 3. `complete_delegation` 返回结果要求：
    - `outcome=success` 只表示开发任务执行完成并产出了合法的结构化结果；不要再用 `outcome` 表示“代码审核通过 / 不通过”这类业务 verdict
@@ -130,6 +130,6 @@ doc_type: dev
 ## 工作原则
 
 - *先读代码再说话*：对任何需求，先浏览相关代码，理解现有架构再给建议
-- *澄清优先用提问工具*：凡是“需要用户明确选择/确认后才能继续”的问题，优先使用 `mcp__nanoclaw__ask_user_question` 或 `request_human_input`
+- *澄清优先用提问工具*：凡是“需要用户明确选择/确认后才能继续”的问题，优先使用 `mcp__icarus__ask_user_question` 或 `request_human_input`
 - *最小改动原则*：优先在现有架构上扩展，避免大范围重构
 - *可测试性*：实现时考虑如何验证，交付文档中的测试要点要具体可执行

@@ -3,8 +3,8 @@ import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
 // Sentinel markers must match container-runner.ts
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = '---ICARUS_OUTPUT_START---';
+const OUTPUT_END_MARKER = '---ICARUS_OUTPUT_END---';
 
 // Mock config
 vi.mock('./config.js', () => ({
@@ -235,6 +235,37 @@ describe('container-runner timeout behavior', () => {
     const result = await resultPromise;
     expect(result.status).toBe('success');
     expect(result.newSessionId).toBe('session-456');
+  });
+
+  it('does not parse legacy NanoClaw output markers', async () => {
+    const onOutput = vi.fn(async () => {});
+    const resultPromise = runContainerAgent(
+      testGroup,
+      { ...testInput, requireResult: true },
+      () => {},
+      onOutput,
+    );
+
+    const json = JSON.stringify({
+      status: 'success',
+      result: 'legacy output',
+      newSessionId: 'legacy-session',
+    });
+    fakeProc.stdout.push(
+      `---NANOCLAW_OUTPUT_START---\n${json}\n---NANOCLAW_OUTPUT_END---\n`,
+    );
+
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(result.status).toBe('error');
+    expect(result.failure).toMatchObject({
+      failureType: 'model_output_invalid',
+      failureSubtype: 'agent_result_missing',
+    });
+    expect(onOutput).not.toHaveBeenCalled();
   });
 
   it('returns structured failure when a required text result is missing', async () => {

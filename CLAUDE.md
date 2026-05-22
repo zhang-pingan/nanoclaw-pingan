@@ -200,9 +200,9 @@ The container runner receives JSON input on stdin and follow-up messages via `/w
 Output is wrapped with:
 
 ```text
----NANOCLAW_OUTPUT_START---
+---ICARUS_OUTPUT_START---
 {...json...}
----NANOCLAW_OUTPUT_END---
+---ICARUS_OUTPUT_END---
 ```
 
 When modifying container execution:

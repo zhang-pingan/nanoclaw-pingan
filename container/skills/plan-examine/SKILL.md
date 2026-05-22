@@ -33,7 +33,7 @@ description: Use only in the dev_test workflow. Review requirement implementatio
    - 有条件通过：需先完成少量修订
    - 不通过：存在关键缺陷，必须重做或大改
 5. 对“需修改/缺失”项输出可执行修改建议，要求具体到内容与位置
-6. 使用 `mcp__nanoclaw__send_message` 发送审核结果
+6. 使用 `mcp__icarus__send_message` 发送审核结果
 7. 无论审核结论是“通过 / 有条件通过 / 不通过”，都必须调用 `complete_delegation` 回复委派结果，不允许只发普通消息后结束
 
 ## 回复委派要求

@@ -56,7 +56,7 @@ Channel webhook handler → 存入 SQLite messages 表
   模型由 data/sessions/{group}/.claude/settings.json 决定
   API 请求经凭证代理转发到实际 API 端点
   ↓
-流式输出 (---NANOCLAW_OUTPUT_START/END---)
+流式输出 (---ICARUS_OUTPUT_START/END---)
   ↓
 宿主机实时解析 → channel.sendMessage() → 飞书 API → 用户收到回复
 ```

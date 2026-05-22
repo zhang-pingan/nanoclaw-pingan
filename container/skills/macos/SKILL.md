@@ -15,10 +15,10 @@ SSH is configured to connect to `chelaile@172.16.11.100`. The SSH key is automat
 
 ### Capture Desktop Screenshot / Info
 
-Use the NanoClaw MCP desktop capture tool when you need to inspect the live Mac desktop. This goes through the connected Electron/Web client and requires macOS Screen Recording permission for the desktop app.
+Use the Icarus MCP desktop capture tool when you need to inspect the live Mac desktop. This goes through the connected Electron/Web client and requires macOS Screen Recording permission for the desktop app.
 
 ```text
-mcp__nanoclaw__desktop_capture
+mcp__icarus__desktop_capture
 ```
 
 Useful arguments:
@@ -28,7 +28,7 @@ Useful arguments:
 - `max_width`: screenshot max width, default 1920.
 
 Successful screenshot results include `image.containerPath` under `/workspace/desktop-captures/`.
-- To send the screenshot to the user, call `mcp__nanoclaw__send_file` with `file_path` set to `image.containerPath`.
+- To send the screenshot to the user, call `mcp__icarus__send_file` with `file_path` set to `image.containerPath`.
 - To inspect the screenshot yourself, read `image.containerPath` with the image/file read tool.
 
 ### Sleep Mac

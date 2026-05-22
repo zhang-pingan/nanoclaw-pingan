@@ -31,7 +31,7 @@ Icarus 的 Agent 架构更接近蜂窝系统，而不是一个无限权限的单
 - **Agent 独立容器化**：每个群组或角色执行单元拥有自己的容器实例、会话目录、IPC 目录和工作目录。执行时启动，不需要时销毁。
 - **会话隔离**：`data/sessions/{group}/.claude` 将不同角色、群组和渠道的 Claude 会话分开保存。工作流需要共享的信息通过结构化 handoff、产物和数据库传递，而不是依赖隐式聊天历史。
 - **Skill 隔离**：`container/skills/skills.json` 按角色文件夹分配 Skill。Agent 只加载当前角色需要的方法论包，减少提示污染，也让角色职责更稳定。
-- **MCP 和工具隔离**：容器内统一挂载 `nanoclaw` MCP 服务，但每次执行都会带上 `ICARUS_GROUP_FOLDER`、`ICARUS_IS_MAIN`、`ICARUS_WORKFLOW_ID`、`ICARUS_STAGE_KEY` 等上下文，宿主机按来源做授权。
+- **MCP 和工具隔离**：容器内统一挂载 `icarus` MCP 服务，但每次执行都会带上 `ICARUS_GROUP_FOLDER`、`ICARUS_IS_MAIN`、`ICARUS_WORKFLOW_ID`、`ICARUS_STAGE_KEY` 等上下文，宿主机按来源做授权。
 - **并发队列控制**：`GroupQueue` 管理活跃容器数量、等待队列、空闲状态、后续消息注入和停止请求，避免 Agent swarm 把本机资源耗尽。
 
 这个设计的巧妙之处在于：系统保留了多 Agent 协作的弹性，但没有让所有 Agent 共享一个混乱的上下文池。每个蜂窝单元都可以强执行、可追踪、可销毁，跨单元协作通过结构化协议完成。

@@ -493,7 +493,7 @@ function isSendMessageToolResult(output: ContainerOutput): boolean {
   return Boolean(
     output.status === 'success' &&
     output.event?.name === 'tool_result' &&
-    (toolName === 'mcp__nanoclaw__send_message' || toolName === 'send_message'),
+    (toolName === 'mcp__icarus__send_message' || toolName === 'send_message'),
   );
 }
 
