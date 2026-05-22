@@ -1,17 +1,17 @@
-# NanoClaw to MixClaw Rename Change List
+# NanoClaw to Icarus Rename Change List
 
 This document tracks a gradual rename from `nanoclaw` / `NanoClaw` /
-`NANOCLAW` to `mixclaw` / `MixClaw` / `MIXCLAW`.
+`NANOCLAW` to `icarus` / `Icarus` / `ICARUS`.
 
 Do not use a blind global replacement. Some occurrences are stable runtime
 contracts and must keep backward compatibility during the transition.
 
 ## Rename Rules
 
-- Product display name: `NanoClaw` -> `MixClaw`
-- Lowercase project name: `nanoclaw` -> `mixclaw`
-- Uppercase env prefix: `NANOCLAW_` -> `MIXCLAW_`
-- Reverse-DNS identifiers: `com.nanoclaw...` -> `com.mixclaw...`
+- Product display name: `NanoClaw` -> `Icarus`
+- Lowercase project name: `nanoclaw` -> `icarus`
+- Uppercase env prefix: `NANOCLAW_` -> `ICARUS_`
+- Reverse-DNS identifiers: `com.nanoclaw...` -> `com.icarus...`
 - Internal protocol names should be migrated last and only with aliases.
 
 ## Phase 1: Low-Risk Display Text
@@ -30,7 +30,7 @@ Scope:
 
 Actions:
 
-- Replace natural-language product references from `NanoClaw` to `MixClaw`.
+- Replace natural-language product references from `NanoClaw` to `Icarus`.
 - Keep command examples unchanged if they refer to current service names,
   env vars, image names, MCP tools, or filesystem paths.
 - Update screenshots or generated docs only after the UI is rebuilt.
@@ -59,11 +59,11 @@ Scope:
 
 Actions:
 
-- Add `MIXCLAW_*` env variables.
+- Add `ICARUS_*` env variables.
 - Keep reading `NANOCLAW_*` as fallback.
-- Prefer `MIXCLAW_*` when both old and new variables are set.
+- Prefer `ICARUS_*` when both old and new variables are set.
 - Add a clear deprecation warning when old-only variables are used.
-- Support `~/.config/mixclaw` first and `~/.config/nanoclaw` as fallback.
+- Support `~/.config/icarus` first and `~/.config/nanoclaw` as fallback.
 - Add migration notes for:
   - `~/.config/nanoclaw/mount-allowlist.json`
   - `~/.config/nanoclaw/mail.json`
@@ -98,18 +98,18 @@ Scope:
 Actions:
 
 - Introduce new service names:
-  - macOS: `com.mixclaw`
-  - Linux: `mixclaw.service`
+  - macOS: `com.icarus`
+  - Linux: `icarus.service`
 - Add setup migration logic that detects and stops old services.
 - Unload or disable old service units before starting the new one.
-- Decide whether logs should be renamed to `logs/mixclaw.log` or kept as
+- Decide whether logs should be renamed to `logs/icarus.log` or kept as
   stable legacy paths.
 - If logs are renamed, keep old log lookup fallback in debug and setup tools.
 - Update shell helpers to stop both old and new direct processes.
 
 Compatibility requirements:
 
-- Running old `com.nanoclaw` and new `com.mixclaw` at the same time must be
+- Running old `com.nanoclaw` and new `com.icarus` at the same time must be
   prevented.
 - Restart and stop scripts must clean up old services and direct processes.
 - Debug commands should work during the mixed-name period.
@@ -135,9 +135,9 @@ Current names:
 
 Actions:
 
-- Introduce image name `mixclaw-agent:latest`.
+- Introduce image name `icarus-agent:latest`.
 - Continue accepting `nanoclaw-agent:latest` through `CONTAINER_IMAGE`.
-- Make orphan cleanup recognize both `nanoclaw-*` and `mixclaw-*`.
+- Make orphan cleanup recognize both `nanoclaw-*` and `icarus-*`.
 - Update build scripts to produce the new image.
 - Consider tagging both image names during the transition.
 
@@ -197,9 +197,9 @@ Current runtime API examples:
 
 Actions:
 
-- Change visible UI strings to `MixClaw`.
-- Add `window.mixclawApp` while keeping `window.nanoclawApp` as an alias.
-- Add `--mixclaw-open-workstation` while keeping the old CLI argument.
+- Change visible UI strings to `Icarus`.
+- Add `window.icarusApp` while keeping `window.nanoclawApp` as an alias.
+- Add `--icarus-open-workstation` while keeping the old CLI argument.
 - Update TypeScript declarations for both preload APIs.
 
 Compatibility requirements:
@@ -233,7 +233,7 @@ Current protocol names:
 Actions:
 
 - Do not rename these in early phases.
-- Add `mixclaw` protocol aliases only after display, config, service, and
+- Add `icarus` protocol aliases only after display, config, service, and
   container names are stable.
 - Keep old `mcp__nanoclaw__*` tools available for historical prompts,
   scheduled tasks, skills, and saved sessions.
@@ -259,7 +259,7 @@ Scope:
 Actions:
 
 - Split changes into two groups:
-  - Natural-language product references: can become `MixClaw`.
+  - Natural-language product references: can become `Icarus`.
   - Executable commands and protocol names: only update after the owning
     runtime migration is complete.
 - Keep old commands documented during the compatibility period.
@@ -290,7 +290,7 @@ Actions:
 Compatibility requirements:
 
 - Tests should prove both new-name behavior and old-name fallback behavior.
-- Test temp paths may move from `/tmp/nanoclaw-*` to `/tmp/mixclaw-*` after
+- Test temp paths may move from `/tmp/nanoclaw-*` to `/tmp/icarus-*` after
   the implementation supports it.
 
 ## Phase 10: Ignored Runtime Artifacts
@@ -326,7 +326,7 @@ Compatibility requirements:
 ## Suggested Order
 
 1. Display-only docs and UI copy.
-2. Add `MIXCLAW_*` and `~/.config/mixclaw` compatibility layer.
+2. Add `ICARUS_*` and `~/.config/icarus` compatibility layer.
 3. Add service migration support while still cleaning up old `nanoclaw`
    services and processes.
 4. Add container image and prefix compatibility.
@@ -352,12 +352,12 @@ Compatibility requirements:
 - `npm test`
 - `npm run build`
 - Setup flow starts from old `.env` using only `NANOCLAW_*`.
-- Setup flow starts from new `.env` using only `MIXCLAW_*`.
+- Setup flow starts from new `.env` using only `ICARUS_*`.
 - macOS service migration stops old `com.nanoclaw` before starting
-  `com.mixclaw`.
+  `com.icarus`.
 - Linux service migration stops old `nanoclaw.service` before starting
-  `mixclaw.service`.
-- Container cleanup handles both `nanoclaw-*` and `mixclaw-*`.
-- Electron renderer works through both `nanoclawApp` and `mixclawApp`.
+  `icarus.service`.
+- Container cleanup handles both `nanoclaw-*` and `icarus-*`.
+- Electron renderer works through both `nanoclawApp` and `icarusApp`.
 - Existing MCP tools under `mcp__nanoclaw__*` still work.
 - New docs do not advertise commands that are not yet implemented.
