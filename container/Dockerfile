@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
+    openjdk-17-jdk \
+    maven \
     python3 \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
