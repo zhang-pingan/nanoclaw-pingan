@@ -70,9 +70,6 @@ describe('web trace detail helpers', () => {
       status: 'success',
       payload: { path: 'src/billing.ts' },
     });
-    agentQueryTraceManager.updateQuery('web-trace-filter-dev', {
-      changed_file_count: 1,
-    });
     agentQueryTraceManager.finishQuery('web-trace-filter-dev', 'success');
 
     agentQueryTraceManager.startQuery({

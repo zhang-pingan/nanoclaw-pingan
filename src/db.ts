@@ -5871,7 +5871,19 @@ export function listAgentQueries(
     values.push(options.role);
   }
   if (options.hasFileChanges) {
-    conditions.push('COALESCE(changed_file_count, 0) > 0');
+    conditions.push(
+      `(COALESCE(changed_file_count, 0) > 0 OR EXISTS (
+        SELECT 1 FROM agent_query_events e
+        WHERE e.query_id = agent_queries.query_id
+          AND e.event_type = 'file'
+          AND (
+            e.event_name LIKE '%write%'
+            OR e.event_name LIKE '%edit%'
+            OR e.event_name LIKE '%delete%'
+            OR e.event_name LIKE '%diff%'
+          )
+      ))`,
+    );
   }
   if (options.hasErrors) {
     conditions.push(

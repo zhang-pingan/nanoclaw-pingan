@@ -493,19 +493,22 @@ function createPreToolHook(meta: {
       runId: meta.runId,
       queryId: meta.queryId,
     };
+    const toolType = toolTypeForName(hook.tool_name);
+    const isIpcTool = toolType === 'ipc';
     emitToolLifecycleEvent(
       {
-        type: 'tool',
-        name: 'tool_started',
+        type: isIpcTool ? 'ipc' : 'tool',
+        name: isIpcTool ? 'ipc_request_created' : 'tool_started',
         status: 'running',
         summary: `Calling ${hook.tool_name}`,
         payload: {
-          category: 'tool',
+          category: isIpcTool ? 'ipc' : 'tool',
           severity: 'info',
           visibility: 'summary',
           toolName: hook.tool_name,
-          toolType: toolTypeForName(hook.tool_name),
+          toolType,
           toolUseId: hook.tool_use_id,
+          operation: isIpcTool ? hook.tool_name : undefined,
           input: hook.tool_input as Record<string, unknown>,
         },
       },
@@ -526,6 +529,7 @@ function createPreToolHook(meta: {
             visibility: 'summary',
             toolName: hook.tool_name,
             toolType: 'command',
+            toolUseId: hook.tool_use_id,
             commandPreview: summarizeCommand(toolInput.command),
             description: toolInput.description,
             timeout: toolInput.timeout,
@@ -549,6 +553,7 @@ function createPreToolHook(meta: {
             resourceType: 'file',
             resourceRef: normalizeDisplayPath(toolInput.file_path),
             path: normalizeDisplayPath(toolInput.file_path),
+            toolUseId: hook.tool_use_id,
             operation: 'read',
             offset: toolInput.offset,
             limit: toolInput.limit,
@@ -571,6 +576,7 @@ function createPreToolHook(meta: {
             resourceType: 'file',
             resourceRef: normalizeDisplayPath(toolInput.file_path),
             path: normalizeDisplayPath(toolInput.file_path),
+            toolUseId: hook.tool_use_id,
             operation: 'write',
             contentLength:
               typeof toolInput.content === 'string' ? toolInput.content.length : undefined,
@@ -593,6 +599,7 @@ function createPreToolHook(meta: {
             resourceType: 'file',
             resourceRef: normalizeDisplayPath(toolInput.file_path),
             path: normalizeDisplayPath(toolInput.file_path),
+            toolUseId: hook.tool_use_id,
             operation: 'edit',
             replaceAll: toolInput.replace_all,
           },
@@ -615,6 +622,7 @@ function createPreToolHook(meta: {
             visibility: 'summary',
             toolName: hook.tool_name,
             toolType: 'file_search',
+            toolUseId: hook.tool_use_id,
             pattern: toolInput.pattern,
             path: normalizeDisplayPath(toolInput.path),
             query: toolInput.query,
@@ -645,19 +653,22 @@ function createPostToolHook(meta: {
     };
     const toolInput = (hook.tool_input || {}) as Record<string, unknown>;
     const response = (hook.tool_response || {}) as Record<string, unknown>;
+    const toolType = toolTypeForName(hook.tool_name);
+    const isIpcTool = toolType === 'ipc';
     emitToolLifecycleEvent(
       {
-        type: 'tool',
-        name: 'tool_completed',
+        type: isIpcTool ? 'ipc' : 'tool',
+        name: isIpcTool ? 'ipc_request_completed' : 'tool_completed',
         status: 'success',
         summary: `${hook.tool_name} completed`,
         payload: {
-          category: 'tool',
+          category: isIpcTool ? 'ipc' : 'tool',
           severity: 'info',
           visibility: 'summary',
           toolName: hook.tool_name,
-          toolType: toolTypeForName(hook.tool_name),
+          toolType,
           toolUseId: hook.tool_use_id,
+          operation: isIpcTool ? hook.tool_name : undefined,
         },
       },
       commonMeta,
@@ -676,6 +687,7 @@ function createPostToolHook(meta: {
             visibility: 'summary',
             toolName: hook.tool_name,
             toolType: 'command',
+            toolUseId: hook.tool_use_id,
             commandPreview: summarizeCommand(toolInput.command),
             interrupted: response.interrupted,
             backgroundTaskId: response.backgroundTaskId,
@@ -706,6 +718,7 @@ function createPostToolHook(meta: {
             resourceType: 'file',
             resourceRef: normalizeDisplayPath(toolInput.file_path),
             path: normalizeDisplayPath(toolInput.file_path),
+            toolUseId: hook.tool_use_id,
             operation: 'read',
             numLines:
               typeof response?.file === 'object' &&
@@ -734,6 +747,7 @@ function createPostToolHook(meta: {
             resourceType: 'file',
             resourceRef: normalizeDisplayPath(toolInput.file_path || response.filePath),
             path: normalizeDisplayPath(toolInput.file_path || response.filePath),
+            toolUseId: hook.tool_use_id,
             operation: hook.tool_name === 'Write' ? 'write' : 'edit',
             editKind: hook.tool_name === 'Write' ? response.type : 'edit',
             patchPreview,
@@ -764,6 +778,7 @@ function createPostToolHook(meta: {
             visibility: 'summary',
             toolName: hook.tool_name,
             toolType: 'file_search',
+            toolUseId: hook.tool_use_id,
             numFiles: response.numFiles,
             numMatches: response.numMatches,
             truncated: response.truncated,
@@ -789,19 +804,38 @@ function createPostToolFailureHook(meta: {
 }): HookCallback {
   return async (input): Promise<SyncHookJSONOutput> => {
     const hook = input as PostToolUseFailureHookInput;
+    const toolType = toolTypeForName(hook.tool_name);
+    const isIpcTool = toolType === 'ipc';
     emitToolLifecycleEvent(
       {
-        type: hook.tool_name === 'Bash' ? 'command' : hook.tool_name === 'Read' || hook.tool_name === 'Write' || hook.tool_name === 'Edit' ? 'file' : 'tool',
-        name: hook.tool_name === 'Bash' ? 'command_failed' : 'tool_failed',
+        type: isIpcTool
+          ? 'ipc'
+          : hook.tool_name === 'Bash'
+            ? 'command'
+            : hook.tool_name === 'Read' || hook.tool_name === 'Write' || hook.tool_name === 'Edit'
+              ? 'file'
+              : 'tool',
+        name: isIpcTool
+          ? 'ipc_request_failed'
+          : hook.tool_name === 'Bash'
+            ? 'command_failed'
+            : 'tool_failed',
         status: 'error',
         summary: `${hook.tool_name} failed: ${hook.error}`,
         payload: {
-          category: hook.tool_name === 'Bash' ? 'tool' : toolTypeForName(hook.tool_name) === 'file' ? 'file' : 'tool',
+          category: isIpcTool
+            ? 'ipc'
+            : hook.tool_name === 'Bash'
+              ? 'tool'
+              : toolType === 'file'
+                ? 'file'
+                : 'tool',
           severity: 'error',
           visibility: 'summary',
           toolName: hook.tool_name,
-          toolType: toolTypeForName(hook.tool_name),
+          toolType,
           toolUseId: hook.tool_use_id,
+          operation: isIpcTool ? hook.tool_name : undefined,
           input: hook.tool_input as Record<string, unknown>,
           error: hook.error,
           isInterrupt: hook.is_interrupt,

@@ -72,6 +72,18 @@ function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function eventIdentity(
+  event: AgentQueryEventRecord,
+  payload: JsonObject,
+): string {
+  return (
+    stringValue(payload.toolUseId) ||
+    stringValue(payload.path) ||
+    stringValue(payload.resourceRef) ||
+    `${event.event_name}:${event.event_index}`
+  );
+}
+
 function timestamp(value: string | null | undefined): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -118,6 +130,43 @@ function categoryForEvent(
 function addUniquePath(paths: Set<string>, payload: JsonObject): void {
   const path = stringValue(payload.path) || stringValue(payload.resourceRef);
   if (path) paths.add(path);
+}
+
+function isToolStartEvent(name: string): boolean {
+  return name === 'tool_started' || name === 'tool_call';
+}
+
+function isToolFailureEvent(name: string, status: string): boolean {
+  return (
+    status === 'error' ||
+    status === 'failed' ||
+    name.endsWith('_failed') ||
+    name.includes('tool_failed') ||
+    name.includes('command_failed')
+  );
+}
+
+function isFileWriteEvent(name: string, payload: JsonObject): boolean {
+  const operation = stringValue(payload.operation).toLowerCase();
+  return (
+    name.includes('write') ||
+    name.includes('edit') ||
+    name.includes('delete') ||
+    name.includes('diff') ||
+    operation === 'write' ||
+    operation === 'edit' ||
+    operation === 'delete' ||
+    operation === 'diff'
+  );
+}
+
+function isFileReadEvent(name: string, payload: JsonObject): boolean {
+  const operation = stringValue(payload.operation).toLowerCase();
+  return name.includes('read') || operation === 'read';
+}
+
+function eventHasToolIdentity(payload: JsonObject): boolean {
+  return Boolean(stringValue(payload.toolUseId) || stringValue(payload.toolName));
 }
 
 function backfillQuerySummary(
@@ -184,6 +233,9 @@ export function buildAgentQueryTraceDetail(
   let containerStart: number | null = null;
   let containerEnd: number | null = null;
   let queueLatencyMs = query.queue_latency_ms;
+  const toolCallIds = new Set<string>();
+  const failedToolIds = new Set<string>();
+  const fileReadPaths = new Set<string>();
 
   for (const event of events) {
     const payload = parsePayload(event.payload_json);
@@ -213,29 +265,45 @@ export function buildAgentQueryTraceDetail(
 
     if (category === 'tool') {
       highlights.tools.push(event);
-      if (name === 'tool_started' || name === 'tool_call') toolCallCount += 1;
-      if (status === 'error' || status === 'failed' || name.includes('failed')) {
-        failedToolCallCount += 1;
+      const id = eventIdentity(event, payload);
+      if (isToolStartEvent(name)) {
+        toolCallIds.add(id);
+      }
+      if (isToolFailureEvent(name, status)) {
+        failedToolIds.add(id);
+        toolCallIds.add(id);
       }
     }
 
     if (category === 'file') {
       highlights.files.push(event);
-      if (name.includes('read')) fileReadCount += 1;
-      if (
-        name.includes('write') ||
-        name.includes('edit') ||
-        name.includes('delete') ||
-        name.includes('diff')
-      ) {
-        fileWriteCount += 1;
+      if (isFileReadEvent(name, payload)) {
+        const path = stringValue(payload.path) || stringValue(payload.resourceRef);
+        if (path) fileReadPaths.add(path);
+      }
+      if (isFileWriteEvent(name, payload)) {
         addUniquePath(changedPaths, payload);
       }
     }
 
     if (event.event_type === 'command' || name.startsWith('command_')) {
-      commandCount += name.endsWith('started') ? 1 : 0;
+      const id = eventIdentity(event, payload);
+      if (name.endsWith('started')) {
+        commandCount += 1;
+        toolCallIds.add(id);
+      }
+      if (isToolFailureEvent(name, status)) {
+        failedToolIds.add(id);
+      }
       if (!highlights.tools.includes(event)) highlights.tools.push(event);
+    }
+    if (
+      category !== 'tool' &&
+      event.event_type !== 'command' &&
+      eventHasToolIdentity(payload) &&
+      isToolFailureEvent(name, status)
+    ) {
+      failedToolIds.add(eventIdentity(event, payload));
     }
 
     if (category === 'model') {
@@ -269,6 +337,10 @@ export function buildAgentQueryTraceDetail(
   const start = timestamp(query.started_at);
   const firstOutput = timestamp(query.first_output_at);
   const firstTool = timestamp(query.first_tool_at);
+  toolCallCount = toolCallIds.size;
+  failedToolCallCount = failedToolIds.size;
+  fileReadCount = fileReadPaths.size;
+  fileWriteCount = changedPaths.size;
   const containerDurationMs =
     containerStart != null && containerEnd != null
       ? Math.max(0, containerEnd - containerStart)
@@ -281,8 +353,7 @@ export function buildAgentQueryTraceDetail(
       start != null && firstOutput != null ? Math.max(0, firstOutput - start) : null,
     firstToolDelayMs:
       start != null && firstTool != null ? Math.max(0, firstTool - start) : null,
-    toolCallCount:
-      query.tool_call_count ?? Math.max(toolCallCount, highlights.tools.length),
+    toolCallCount: query.tool_call_count ?? toolCallCount,
     failedToolCallCount: query.failed_tool_call_count ?? failedToolCallCount,
     fileReadCount,
     fileWriteCount,

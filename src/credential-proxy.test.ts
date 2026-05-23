@@ -16,6 +16,13 @@ type UpstreamResult =
       statusCode: number;
       headers?: IncomingHttpHeaders;
       body?: string;
+      chunks?: string[];
+      stream?: (
+        res: PassThrough & {
+          statusCode: number;
+          headers: IncomingHttpHeaders;
+        },
+      ) => void;
     }
   | {
       error: Error;
@@ -307,7 +314,16 @@ function setupModuleMocks(): void {
               upstreamResponse.statusCode = result.statusCode;
               upstreamResponse.headers = result.headers || {};
               callback?.(upstreamResponse);
-              upstreamResponse.end(result.body || '');
+              if (result.stream) {
+                result.stream(upstreamResponse);
+              } else if (result.chunks) {
+                for (const chunk of result.chunks) {
+                  upstreamResponse.write(chunk);
+                }
+                upstreamResponse.end();
+              } else {
+                upstreamResponse.end(result.body || '');
+              }
             })
             .catch((error) => {
               req.emit(
@@ -607,6 +623,51 @@ describe('credential-proxy', () => {
         }),
       ],
     ]);
+  });
+
+  it('pipes upstream event streams without waiting for the stream to end', async () => {
+    let upstreamResponse:
+      | (PassThrough & {
+          statusCode: number;
+          headers: IncomingHttpHeaders;
+        })
+      | null = null;
+    upstreamResponder = vi.fn(async () => {
+      return {
+        statusCode: 200,
+        headers: { 'content-type': 'text/event-stream' },
+        stream: (
+          res: PassThrough & {
+            statusCode: number;
+            headers: IncomingHttpHeaders;
+          },
+        ) => {
+          upstreamResponse = res;
+        },
+      };
+    });
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+
+    if (!lastServer) throw new Error('Credential proxy server was not created');
+    const req = new PassThrough() as PassThrough & {
+      method: string;
+      url: string;
+      headers: IncomingHttpHeaders;
+    };
+    req.method = 'POST';
+    req.url = '/__icarus__/run-1/query-stream/v1/messages';
+    req.headers = { 'content-type': 'application/json' };
+    const res = new LocalServerResponse();
+    lastServer.handler(req, res as never);
+    req.end(JSON.stringify({ model: 'claude-stream', stream: true }));
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(upstreamResponse).not.toBeNull();
+    upstreamResponse!.write('event: message_start\n\n');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(res.body).toContain('event: message_start');
+    upstreamResponse!.end();
   });
 
   it('returns 502 when upstream is unreachable', async () => {

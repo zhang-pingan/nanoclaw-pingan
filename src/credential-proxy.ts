@@ -88,6 +88,31 @@ function estimateAnthropicCost(_model: string | undefined): number | undefined {
   return undefined;
 }
 
+function headerValue(
+  headers: Record<string, string | string[] | number | undefined>,
+  name: string,
+): string {
+  const value = headers[name] ?? headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value.join(', ');
+  return value === undefined ? '' : String(value);
+}
+
+function isEventStreamResponse(
+  headers: Record<string, string | string[] | number | undefined>,
+): boolean {
+  return headerValue(headers, 'content-type')
+    .toLowerCase()
+    .includes('text/event-stream');
+}
+
+function requestModelFromBody(
+  parsedJsonBody: Record<string, unknown> | null,
+): string | undefined {
+  return parsedJsonBody && typeof parsedJsonBody.model === 'string'
+    ? parsedJsonBody.model
+    : undefined;
+}
+
 async function getTraceManager(): Promise<{
   appendStructuredEvent: (input: {
     queryId: string;
@@ -497,6 +522,57 @@ export function startCredentialProxy(
             headers,
           } as RequestOptions,
           (upRes) => {
+            const statusCode = upRes.statusCode || 502;
+            const requestedModel = requestModelFromBody(parsedJsonBody);
+            if (
+              targetPath === '/v1/messages' &&
+              isEventStreamResponse(upRes.headers)
+            ) {
+              res.writeHead(statusCode, upRes.headers);
+              upRes.on('end', () => {
+                const latencyMs = Date.now() - requestStartedAt;
+                if (statusCode >= 400) {
+                  appendModelTraceEvent(requestContext, {
+                    name: 'model_request_failed',
+                    status: 'error',
+                    summary: `Model stream failed: HTTP ${statusCode}`,
+                    payload: {
+                      provider: 'anthropic',
+                      traceSource: 'credential_proxy',
+                      requestedModel,
+                      actualModel: requestedModel,
+                      upstreamStatus: statusCode,
+                      latencyMs,
+                    },
+                    latencyMs,
+                  });
+                  return;
+                }
+                recordModelTraceResolution(
+                  requestContext,
+                  requestedModel,
+                  requestedModel,
+                  'proxy_forward',
+                  latencyMs,
+                );
+                appendModelTraceEvent(requestContext, {
+                  name: 'model_response_completed',
+                  status: 'success',
+                  summary: `Model stream completed: ${requestedModel || 'unknown'}`,
+                  payload: {
+                    provider: 'anthropic',
+                    traceSource: 'credential_proxy',
+                    requestedModel,
+                    actualModel: requestedModel,
+                    latencyMs,
+                  },
+                  latencyMs,
+                });
+              });
+              upRes.pipe(res);
+              return;
+            }
+
             const chunks: Buffer[] = [];
             upRes.on('data', (chunk) => {
               chunks.push(Buffer.from(chunk));
@@ -513,10 +589,6 @@ export function startCredentialProxy(
               const usage =
                 responseJson?.usage && typeof responseJson.usage === 'object'
                   ? (responseJson.usage as Record<string, unknown>)
-                  : undefined;
-              const requestedModel =
-                parsedJsonBody && typeof parsedJsonBody.model === 'string'
-                  ? parsedJsonBody.model
                   : undefined;
               const actualModel =
                 responseJson && typeof responseJson.model === 'string'

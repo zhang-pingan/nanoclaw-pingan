@@ -144,6 +144,97 @@ describe('agent query trace manager', () => {
     expect(detail?.highlights.files).toHaveLength(1);
   });
 
+  it('deduplicates tool/file lifecycle events and backfills query counters on append', () => {
+    agentQueryTraceManager.startQuery({
+      queryId: 'trace-dedup-counts',
+      sourceType: 'message',
+      sourceRefId: 'msg-dedup',
+    });
+
+    for (const eventName of ['tool_started', 'tool_completed']) {
+      agentQueryTraceManager.appendStructuredEvent({
+        queryId: 'trace-dedup-counts',
+        category: 'tool',
+        eventName,
+        status: eventName === 'tool_started' ? 'running' : 'success',
+        payload: {
+          toolName: 'Bash',
+          toolType: 'command',
+          toolUseId: 'tool-1',
+        },
+      });
+    }
+    for (const eventName of ['command_started', 'command_finished']) {
+      agentQueryTraceManager.appendEvent({
+        queryId: 'trace-dedup-counts',
+        eventType: 'command',
+        eventName,
+        status: eventName === 'command_started' ? 'running' : 'success',
+        payload: {
+          category: 'tool',
+          toolName: 'Bash',
+          toolType: 'command',
+          toolUseId: 'tool-1',
+        },
+      });
+    }
+    for (const eventName of ['file_edit', 'file_edit_complete']) {
+      agentQueryTraceManager.appendStructuredEvent({
+        queryId: 'trace-dedup-counts',
+        category: 'file',
+        eventName,
+        status: eventName === 'file_edit' ? 'running' : 'success',
+        payload: {
+          toolUseId: 'tool-2',
+          path: 'src/example.ts',
+          operation: 'edit',
+        },
+      });
+    }
+
+    const query = getAgentQuery('trace-dedup-counts');
+    expect(query?.tool_call_count).toBe(1);
+    expect(query?.changed_file_count).toBe(1);
+
+    const detail = buildAgentQueryTraceDetail('trace-dedup-counts');
+    expect(detail?.summary.toolCallCount).toBe(1);
+    expect(detail?.summary.fileWriteCount).toBe(1);
+    expect(detail?.summary.changedFileCount).toBe(1);
+  });
+
+  it('derives queue latency and highlights IPC events', () => {
+    agentQueryTraceManager.startQuery({
+      queryId: 'trace-queue-ipc',
+      sourceType: 'message',
+      sourceRefId: 'msg-queue',
+    });
+
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'trace-queue-ipc',
+      category: 'queue',
+      eventName: 'queue_dequeued',
+      status: 'success',
+      payload: { queueName: 'one-shot-agent-slot', queueLatencyMs: 42 },
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'trace-queue-ipc',
+      category: 'ipc',
+      eventName: 'ipc_request_completed',
+      status: 'success',
+      payload: {
+        operation: 'mcp__icarus__send_message',
+        toolName: 'mcp__icarus__send_message',
+        toolUseId: 'ipc-1',
+      },
+    });
+
+    expect(getAgentQuery('trace-queue-ipc')?.queue_latency_ms).toBe(42);
+    const detail = buildAgentQueryTraceDetail('trace-queue-ipc');
+    expect(detail?.summary.queueLatencyMs).toBe(42);
+    expect(detail?.summary.ipcCallCount).toBe(1);
+    expect(detail?.highlights.ipc).toHaveLength(1);
+  });
+
   it('keeps selected model separate from proxy-confirmed actual model', () => {
     agentQueryTraceManager.startQuery({
       queryId: 'trace-actual-model',

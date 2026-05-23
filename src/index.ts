@@ -317,28 +317,35 @@ function handleOneShotSlotTraceEvent(event: OneShotAgentSlotEvent): void {
       continue;
     }
     try {
-      agentQueryTraceManager.appendEvent({
+      const isTimeout = event.eventName === 'agent_slot_timeout';
+      const isAcquired = event.eventName === 'agent_slot_acquired';
+      agentQueryTraceManager.appendStructuredEvent({
         queryId: context.queryId,
         stepId: context.stepId,
-        eventType:
-          event.eventName === 'agent_slot_timeout' ? 'error' : 'lifecycle',
-        eventName: event.eventName,
-        status:
-          event.eventName === 'agent_slot_timeout'
-            ? 'error'
-            : event.eventName === 'agent_slot_acquired'
+        category: 'queue',
+        eventName: isTimeout
+          ? 'queue_wait_timeout'
+          : isAcquired
+            ? 'queue_dequeued'
+            : 'queue_entered',
+        status: isTimeout
+          ? 'error'
+          : isAcquired
               ? 'success'
               : 'running',
-        summary:
-          event.eventName === 'agent_slot_timeout'
-            ? `Agent busy timeout for ${event.groupJid}`
-            : event.eventName === 'agent_slot_acquired'
-              ? 'One-shot agent slot acquired'
-              : 'Waiting for one-shot agent slot',
+        severity: isTimeout ? 'error' : 'info',
+        summary: isTimeout
+          ? `Agent busy timeout for ${event.groupJid}`
+          : isAcquired
+            ? 'One-shot agent slot acquired'
+            : 'Waiting for one-shot agent slot',
         payload: {
+          originalEventName: event.eventName,
           groupJid: event.groupJid,
           runId: context.runId ?? null,
           oneShotId: event.oneShotId,
+          queueName: 'one-shot-agent-slot',
+          queueLatencyMs: isAcquired || isTimeout ? event.waitMs : undefined,
           waitMs: event.waitMs,
           idleWaiting: event.idleWaiting,
           pendingQueueLength: event.pendingQueueLength,
@@ -346,6 +353,11 @@ function handleOneShotSlotTraceEvent(event: OneShotAgentSlotEvent): void {
           timeoutMs: event.timeoutMs,
         },
       });
+      if (isAcquired || isTimeout) {
+        agentQueryTraceManager.updateQuery(context.queryId, {
+          queue_latency_ms: event.waitMs,
+        });
+      }
     } catch (err) {
       logger.warn(
         {
@@ -493,10 +505,13 @@ function isWorkflowDelegationExecutionContext(
 }
 
 function isCompleteDelegationToolResult(output: ContainerOutput): boolean {
+  const toolName = output.event?.payload?.toolName;
   return Boolean(
     output.status === 'success' &&
-    output.event?.name === 'tool_result' &&
-    output.event.payload?.toolName === 'complete_delegation',
+    (output.event?.name === 'tool_result' ||
+      output.event?.name === 'tool_completed' ||
+      output.event?.name === 'ipc_request_completed') &&
+    toolName === 'complete_delegation',
   );
 }
 
@@ -504,7 +519,9 @@ function isSendMessageToolResult(output: ContainerOutput): boolean {
   const toolName = output.event?.payload?.toolName;
   return Boolean(
     output.status === 'success' &&
-    output.event?.name === 'tool_result' &&
+    (output.event?.name === 'tool_result' ||
+      output.event?.name === 'tool_completed' ||
+      output.event?.name === 'ipc_request_completed') &&
     (toolName === 'mcp__icarus__send_message' || toolName === 'send_message'),
   );
 }
@@ -679,6 +696,26 @@ function createMessageQueryTrace(params: {
     status: 'running',
     summary: 'Waiting for agent output',
   });
+  if (params.delegationId || params.workflowId) {
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: params.queryId,
+      stepId: executionStepId,
+      category: 'workflow',
+      eventName: 'workflow_delegation_created',
+      status: 'running',
+      summary: params.stageKey
+        ? `Workflow delegation started: ${params.stageKey}`
+        : 'Workflow delegation started',
+      payload: {
+        workflowId: params.workflowId ?? null,
+        workflowType: params.workflowType ?? null,
+        stageKey: params.stageKey ?? null,
+        delegationId: params.delegationId ?? null,
+        role: params.role ?? null,
+        service: params.service ?? null,
+      },
+    });
+  }
   activeMessageQueryTraces.set(params.queryId, {
     runId: params.runId,
     chatJid: params.chatJid,
@@ -741,6 +778,29 @@ function finishMessageQueryTrace(
     summary: status === 'error' ? 'Query failed' : 'Query completed',
   });
   agentQueryTraceManager.completeStep(queryId, finishStepId, status);
+  const record = agentQueryTraceManager.getQuery(queryId);
+  if (record?.delegation_id || record?.workflow_id) {
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId,
+      stepId: activeStepId,
+      category: 'workflow',
+      eventName: 'workflow_delegation_completed',
+      status,
+      severity: status === 'error' ? 'error' : 'info',
+      summary:
+        status === 'error'
+          ? 'Workflow delegation failed'
+          : 'Workflow delegation completed',
+      payload: {
+        workflowId: record.workflow_id,
+        workflowType: record.workflow_type,
+        stageKey: record.stage_key,
+        delegationId: record.delegation_id,
+        role: record.role,
+        service: record.service,
+      },
+    });
+  }
   agentQueryTraceManager.finishQuery(queryId, status, {
     ...(patch || {}),
     ...failurePatch,
