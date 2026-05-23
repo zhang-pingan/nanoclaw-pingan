@@ -6,6 +6,127 @@ import {
   parseMultipartParts,
   sanitizeUploadFilename,
 } from './web.js';
+import { buildAgentQueryTraceDetail } from '../agent-query-trace-detail.js';
+import { agentQueryTraceManager } from '../agent-query-trace.js';
+import {
+  _initTestDatabase,
+  getAgentQueriesOverview,
+  listAgentQueries,
+} from '../db.js';
+
+describe('web trace detail helpers', () => {
+  it('builds detail response compatible with the trace detail API shape', () => {
+    _initTestDatabase();
+    agentQueryTraceManager.startQuery({
+      queryId: 'web-trace-detail',
+      sourceType: 'message',
+      sourceRefId: 'msg-web',
+      service: 'billing',
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'web-trace-detail',
+      category: 'tool',
+      eventName: 'tool_started',
+      status: 'running',
+      payload: { toolName: 'Bash' },
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'web-trace-detail',
+      category: 'error',
+      eventName: 'query_failed',
+      status: 'error',
+      summary: 'failed',
+    });
+
+    const detail = buildAgentQueryTraceDetail('web-trace-detail');
+    expect(detail).toMatchObject({
+      query: { query_id: 'web-trace-detail', service: 'billing' },
+      summary: { toolCallCount: 1, errorCount: 1 },
+    });
+    expect(detail?.events).toHaveLength(3);
+    expect(detail?.highlights.tools).toHaveLength(1);
+    expect(detail?.highlights.errors).toHaveLength(1);
+
+    expect(listAgentQueries(10, 0, { service: 'billing' })).toHaveLength(1);
+  });
+
+  it('filters trace history by workflow metadata and derived error/file flags', () => {
+    _initTestDatabase();
+    agentQueryTraceManager.startQuery({
+      queryId: 'web-trace-filter-dev',
+      sourceType: 'workflow_delegation',
+      sourceRefId: 'del-filter-dev',
+      workflowType: 'dev_test',
+      service: 'billing',
+      role: 'dev',
+      workflowId: 'wf-filter',
+      stageKey: 'dev',
+      delegationId: 'del-filter-dev',
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'web-trace-filter-dev',
+      category: 'file',
+      eventName: 'file_edit',
+      status: 'success',
+      payload: { path: 'src/billing.ts' },
+    });
+    agentQueryTraceManager.updateQuery('web-trace-filter-dev', {
+      changed_file_count: 1,
+    });
+    agentQueryTraceManager.finishQuery('web-trace-filter-dev', 'success');
+
+    agentQueryTraceManager.startQuery({
+      queryId: 'web-trace-filter-test',
+      sourceType: 'workflow_delegation',
+      sourceRefId: 'del-filter-test',
+      workflowType: 'dev_test',
+      service: 'billing',
+      role: 'test',
+      workflowId: 'wf-filter',
+      stageKey: 'testing',
+      delegationId: 'del-filter-test',
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'web-trace-filter-test',
+      category: 'error',
+      eventName: 'query_failed',
+      status: 'error',
+      summary: 'failed',
+    });
+    agentQueryTraceManager.finishQuery('web-trace-filter-test', 'error');
+
+    expect(
+      listAgentQueries(10, 0, {
+        workflowType: 'dev_test',
+        stageKey: 'dev',
+        role: 'dev',
+        hasFileChanges: true,
+      }).map((item) => item.query_id),
+    ).toEqual(['web-trace-filter-dev']);
+    expect(
+      listAgentQueries(10, 0, {
+        workflowId: 'wf-filter',
+        hasErrors: true,
+      }).map((item) => item.query_id),
+    ).toEqual(['web-trace-filter-test']);
+    expect(
+      listAgentQueries(10, 0, {
+        delegationId: 'del-filter-dev',
+      }).map((item) => item.query_id),
+    ).toEqual(['web-trace-filter-dev']);
+
+    const overview = getAgentQueriesOverview(
+      new Date('2026-05-23T12:00:00.000Z'),
+    );
+    expect(overview.last24h).toMatchObject({
+      success: 1,
+      failure: 1,
+      total: 2,
+    });
+    expect(overview.topFailureTypes[0]?.failureType).toBe('error');
+    expect(overview.slowStages.map((item) => item.stageKey)).toContain('dev');
+  });
+});
 
 describe('web upload helpers', () => {
   it('preserves non-ascii filenames while sanitizing only unsafe path characters', () => {

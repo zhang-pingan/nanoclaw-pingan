@@ -24,6 +24,7 @@ import {
 } from '../assistant/assistant-api.js';
 import { resolveTodayPlanInboxItemsForDate } from '../assistant/today-plan-inbox.js';
 import type { AssistantRealtimeEvent } from '../assistant/assistant-events.js';
+import { buildAgentQueryTraceDetail } from '../agent-query-trace-detail.js';
 import {
   AgentStatusInfo,
   DesktopCaptureOptions,
@@ -79,6 +80,7 @@ import {
 import {
   deleteWorkbenchTaskData,
   deleteHistoricalAgentQueries,
+  getAgentQueriesOverview,
   getAssistantChatMessageById,
   getAgentQuery,
   getWikiJob,
@@ -1146,6 +1148,9 @@ class WebChannel {
       }
       if (pathname === '/api/agent-queries/active') {
         return this.apiGetActiveAgentQueries(res);
+      }
+      if (pathname === '/api/agent-queries/overview') {
+        return this.apiGetAgentQueriesOverview(res);
       }
       if (pathname === '/api/agent-queries') {
         if (req.method === 'DELETE') {
@@ -2527,6 +2532,11 @@ class WebChannel {
     res.end(JSON.stringify({ queries }));
   }
 
+  private apiGetAgentQueriesOverview(res: http.ServerResponse): void {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getAgentQueriesOverview()));
+  }
+
   private apiListAgentQueries(reqUrl: URL, res: http.ServerResponse): void {
     const limitRaw = parseInt(reqUrl.searchParams.get('limit') || '50', 10);
     const offsetRaw = parseInt(reqUrl.searchParams.get('offset') || '0', 10);
@@ -2534,6 +2544,16 @@ class WebChannel {
     const sourceRefIdParam = reqUrl.searchParams.get('sourceRefId');
     const sourceRefId =
       sourceRefIdParam === null ? undefined : sourceRefIdParam;
+    const status = reqUrl.searchParams.get('status') || undefined;
+    const failureType = reqUrl.searchParams.get('failureType') || undefined;
+    const service = reqUrl.searchParams.get('service') || undefined;
+    const workflowType = reqUrl.searchParams.get('workflowType') || undefined;
+    const stageKey = reqUrl.searchParams.get('stageKey') || undefined;
+    const role = reqUrl.searchParams.get('role') || undefined;
+    const hasFileChanges =
+      reqUrl.searchParams.get('hasFileChanges') === 'true' || undefined;
+    const hasErrors =
+      reqUrl.searchParams.get('hasErrors') === 'true' || undefined;
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(limitRaw, 1), 200)
       : 50;
@@ -2548,6 +2568,14 @@ class WebChannel {
         | 'assistant_action'
         | undefined,
       sourceRefId,
+      status,
+      failureType,
+      service,
+      workflowType,
+      stageKey,
+      role,
+      hasFileChanges,
+      hasErrors,
     });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
@@ -2557,6 +2585,14 @@ class WebChannel {
         offset,
         sourceType: sourceType ?? null,
         sourceRefId: sourceRefId ?? null,
+        status: status ?? null,
+        failureType: failureType ?? null,
+        service: service ?? null,
+        workflowType: workflowType ?? null,
+        stageKey: stageKey ?? null,
+        role: role ?? null,
+        hasFileChanges: hasFileChanges ? true : null,
+        hasErrors: hasErrors ? true : null,
         hasMore: queries.length === limit,
       }),
     );
@@ -2564,7 +2600,7 @@ class WebChannel {
 
   private apiGetAgentQuery(pathname: string, res: http.ServerResponse): void {
     const match = pathname.match(
-      /^\/api\/agent-queries\/([^/]+)(?:\/(steps|events))?$/,
+      /^\/api\/agent-queries\/([^/]+)(?:\/(steps|events|detail))?$/,
     );
     if (!match) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -2573,20 +2609,32 @@ class WebChannel {
     }
 
     const [, queryId, suffix] = match;
+    const decodedQueryId = decodeURIComponent(queryId);
     if (suffix === 'steps') {
-      const steps = listAgentQuerySteps(queryId);
+      const steps = listAgentQuerySteps(decodedQueryId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ steps }));
       return;
     }
     if (suffix === 'events') {
-      const events = listAgentQueryEvents(queryId);
+      const events = listAgentQueryEvents(decodedQueryId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ events }));
       return;
     }
+    if (suffix === 'detail') {
+      const detail = buildAgentQueryTraceDetail(decodedQueryId);
+      if (!detail) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Query not found' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(detail));
+      return;
+    }
 
-    const query = getAgentQuery(queryId);
+    const query = getAgentQuery(decodedQueryId);
     if (!query) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Query not found' }));

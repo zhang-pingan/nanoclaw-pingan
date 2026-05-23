@@ -41,6 +41,10 @@ import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
 const HOME_DIR = process.env.HOME || os.homedir();
+const TRACE_PREVIEW_MAX_CHARS = Number.parseInt(
+  process.env.TRACE_PREVIEW_MAX_CHARS || '2000',
+  10,
+);
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---ICARUS_OUTPUT_START---';
@@ -93,6 +97,8 @@ interface VolumeMount {
   readonly: boolean;
 }
 
+type TraceEventWriter = (event: NonNullable<ContainerOutput['event']>) => void;
+
 function classifyContainerFailure(
   err: unknown,
   defaultSubtype: string,
@@ -132,6 +138,38 @@ function makeMissingRequiredResultOutput(): ContainerOutput {
       retryable: true,
     }),
   );
+}
+
+function sanitizeTracePreview(value: string, maxChars = TRACE_PREVIEW_MAX_CHARS): string {
+  const limit = Number.isFinite(maxChars) && maxChars > 0 ? maxChars : 2000;
+  return value
+    .slice(0, limit)
+    .replace(/(authorization\s*:\s*)[^\s]+/gi, '$1[redacted]')
+    .replace(/(x-api-key\s*:\s*)[^\s]+/gi, '$1[redacted]')
+    .replace(/(password\s*=\s*)[^\s]+/gi, '$1[redacted]')
+    .replace(/(token\s*=\s*)[^\s]+/gi, '$1[redacted]')
+    .replace(/CLAUDE_CODE_OAUTH_TOKEN=[^\s]+/g, 'CLAUDE_CODE_OAUTH_TOKEN=[redacted]')
+    .replace(/ANTHROPIC_API_KEY=[^\s]+/g, 'ANTHROPIC_API_KEY=[redacted]')
+    .replace(/JENKINS_PASSWORD=[^\s]+/g, 'JENKINS_PASSWORD=[redacted]')
+    .replace(/-----BEGIN PRIVATE KEY-----[\s\S]*?-----END PRIVATE KEY-----/g, '[redacted private key]');
+}
+
+function summarizeMounts(mounts: VolumeMount[]): string[] {
+  return mounts.map(
+    (mount) => `${mount.containerPath}${mount.readonly ? ' (ro)' : ''}`,
+  );
+}
+
+function emitTraceEvent(
+  emit: TraceEventWriter | undefined,
+  event: NonNullable<ContainerOutput['event']>,
+): void {
+  if (!emit) return;
+  try {
+    emit(event);
+  } catch (err) {
+    logger.warn({ err, eventName: event.name }, 'Container trace event skipped');
+  }
 }
 
 function buildVolumeMounts(
@@ -540,6 +578,21 @@ export async function runContainerAgent(
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `icarus-${safeName}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);
+  const emitContainerTraceEvent: TraceEventWriter | undefined = onOutput
+    && input.queryId
+    ? (event) =>
+        onOutput({
+          status: 'success',
+          result: null,
+          newSessionId: undefined,
+          selectedModel: input.selectedModel,
+          runId: input.runId,
+          queryId: input.queryId,
+          event,
+        }).catch((err) => {
+          logger.warn({ err, eventName: event.name }, 'Container trace event failed');
+        })
+    : undefined;
 
   logger.debug(
     {
@@ -567,12 +620,51 @@ export async function runContainerAgent(
   const logsDir = path.join(groupDir, 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
 
+  emitTraceEvent(emitContainerTraceEvent, {
+    type: 'container',
+    name: 'container_args_built',
+    status: 'success',
+    summary: `Container args built for ${containerName}`,
+    payload: {
+      category: 'container',
+      severity: 'info',
+      visibility: 'detail',
+      containerName,
+      runtime: CONTAINER_RUNTIME_BIN,
+      image: CONTAINER_IMAGE,
+      mountCount: mounts.length,
+      mountSummary: summarizeMounts(mounts),
+      envKeys: containerArgs
+        .flatMap((arg, index) =>
+          arg === '-e' && containerArgs[index + 1]
+            ? [String(containerArgs[index + 1]).split('=')[0]]
+            : [],
+        )
+        .filter(Boolean),
+    },
+  });
+
   return new Promise((resolve) => {
     const container = spawn(CONTAINER_RUNTIME_BIN, containerArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     onProcess(container, containerName);
+    emitTraceEvent(emitContainerTraceEvent, {
+      type: 'container',
+      name: 'container_spawned',
+      status: 'running',
+      summary: `Container spawned: ${containerName}`,
+      payload: {
+        category: 'container',
+        severity: 'info',
+        visibility: 'summary',
+        containerName,
+        runtime: CONTAINER_RUNTIME_BIN,
+        image: CONTAINER_IMAGE,
+        timeoutMs: group.containerConfig?.timeout || CONTAINER_TIMEOUT,
+      },
+    });
 
     let stdout = '';
     let stderr = '';
@@ -626,6 +718,27 @@ export async function runContainerAgent(
 
           try {
             const parsed: ContainerOutput = JSON.parse(jsonStr);
+            emitTraceEvent(emitContainerTraceEvent, {
+              type: 'container',
+              name: 'container_stdout_marker_seen',
+              status: parsed.status === 'error' ? 'error' : 'success',
+              summary: parsed.event
+                ? `Output marker event: ${parsed.event.name}`
+                : parsed.result
+                  ? 'Output marker contained agent result'
+                  : 'Output marker parsed',
+              payload: {
+                category: 'container',
+                severity: parsed.status === 'error' ? 'error' : 'debug',
+                visibility: 'debug',
+                containerName,
+                markerStatus: parsed.status,
+                hasResult: typeof parsed.result === 'string' && parsed.result.length > 0,
+                eventName: parsed.event?.name,
+                resultLength:
+                  typeof parsed.result === 'string' ? parsed.result.length : 0,
+              },
+            });
             if (parsed.newSessionId) {
               newSessionId = parsed.newSessionId;
             }
@@ -715,6 +828,37 @@ export async function runContainerAgent(
         { group: group.name, containerName },
         'Container timeout, stopping gracefully',
       );
+      emitTraceEvent(emitContainerTraceEvent, {
+        type: 'container',
+        name: 'container_timeout',
+        status: 'error',
+        summary: `Container timed out after ${timeoutMs}ms`,
+        payload: {
+          category: 'container',
+          severity: 'error',
+          visibility: 'summary',
+          containerName,
+          runtime: CONTAINER_RUNTIME_BIN,
+          image: CONTAINER_IMAGE,
+          timeoutMs,
+          configuredTimeoutMs: configTimeout,
+          terminatedReason: 'timeout',
+          hadStreamingOutput,
+        },
+      });
+      emitTraceEvent(emitContainerTraceEvent, {
+        type: 'container',
+        name: 'container_stop_requested',
+        status: 'running',
+        summary: `Stopping timed out container ${containerName}`,
+        payload: {
+          category: 'container',
+          severity: 'warn',
+          visibility: 'summary',
+          containerName,
+          reason: 'timeout',
+        },
+      });
       exec(stopContainer(containerName), { timeout: 15000 }, (err) => {
         if (err) {
           logger.warn(
@@ -723,6 +867,22 @@ export async function runContainerAgent(
           );
           container.kill('SIGKILL');
         }
+        emitTraceEvent(emitContainerTraceEvent, {
+          type: 'container',
+          name: 'container_stop_completed',
+          status: err ? 'error' : 'success',
+          summary: err
+            ? `Graceful stop failed for ${containerName}`
+            : `Stop completed for ${containerName}`,
+          payload: {
+            category: 'container',
+            severity: err ? 'error' : 'info',
+            visibility: 'summary',
+            containerName,
+            reason: 'timeout',
+            error: err ? sanitizeTracePreview(err.message) : undefined,
+          },
+        });
       });
     };
 
@@ -737,6 +897,35 @@ export async function runContainerAgent(
     container.on('close', (code) => {
       clearTimeout(timeout);
       const duration = Date.now() - startTime;
+      emitTraceEvent(emitContainerTraceEvent, {
+        type: 'container',
+        name: timedOut ? 'container_timeout' : 'container_exited',
+        status: timedOut || code !== 0 ? 'error' : 'success',
+        summary: timedOut
+          ? `Container timed out: ${containerName}`
+          : `Container exited with code ${code ?? 'unknown'}`,
+        payload: {
+          category: 'container',
+          severity: timedOut || code !== 0 ? 'error' : 'info',
+          visibility: 'summary',
+          containerName,
+          runtime: CONTAINER_RUNTIME_BIN,
+          image: CONTAINER_IMAGE,
+          exitCode: code,
+          durationMs: duration,
+          timeoutMs,
+          terminatedReason: timedOut
+            ? 'timeout'
+            : code === 0
+              ? 'completed'
+              : 'nonzero_exit',
+          stdoutPreview: sanitizeTracePreview(stdout.slice(-TRACE_PREVIEW_MAX_CHARS)),
+          stderrPreview: sanitizeTracePreview(stderr.slice(-TRACE_PREVIEW_MAX_CHARS)),
+          stdoutTruncated,
+          stderrTruncated,
+          hadStreamingOutput,
+        },
+      });
 
       if (timedOut) {
         const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -981,6 +1170,23 @@ export async function runContainerAgent(
         }
 
         const output: ContainerOutput = JSON.parse(jsonLine);
+        emitTraceEvent(emitContainerTraceEvent, {
+          type: 'container',
+          name: 'container_output_parsed',
+          status: output.status === 'error' ? 'error' : 'success',
+          summary: `Container output parsed: ${output.status}`,
+          payload: {
+            category: 'container',
+            severity: output.status === 'error' ? 'error' : 'info',
+            visibility: 'summary',
+            containerName,
+            status: output.status,
+            hasResult: Boolean(output.result),
+            resultLength:
+              typeof output.result === 'string' ? output.result.length : 0,
+            error: output.error ? sanitizeTracePreview(output.error) : undefined,
+          },
+        });
 
         logger.info(
           {
@@ -994,6 +1200,21 @@ export async function runContainerAgent(
 
         resolve(output);
       } catch (err) {
+        emitTraceEvent(emitContainerTraceEvent, {
+          type: 'container',
+          name: 'container_output_parsed',
+          status: 'error',
+          summary: 'Failed to parse container output',
+          payload: {
+            category: 'container',
+            severity: 'error',
+            visibility: 'summary',
+            containerName,
+            error: err instanceof Error ? err.message : String(err),
+            stdoutPreview: sanitizeTracePreview(stdout.slice(-TRACE_PREVIEW_MAX_CHARS)),
+            stderrPreview: sanitizeTracePreview(stderr.slice(-TRACE_PREVIEW_MAX_CHARS)),
+          },
+        });
         logger.error(
           {
             group: group.name,
@@ -1025,6 +1246,22 @@ export async function runContainerAgent(
 
     container.on('error', (err) => {
       clearTimeout(timeout);
+      emitTraceEvent(emitContainerTraceEvent, {
+        type: 'container',
+        name: 'container_exited',
+        status: 'error',
+        summary: `Container spawn error: ${err.message}`,
+        payload: {
+          category: 'container',
+          severity: 'error',
+          visibility: 'summary',
+          containerName,
+          runtime: CONTAINER_RUNTIME_BIN,
+          image: CONTAINER_IMAGE,
+          terminatedReason: 'spawn_error',
+          error: sanitizeTracePreview(err.message),
+        },
+      });
       logger.error(
         { group: group.name, containerName, error: err },
         'Container spawn error',

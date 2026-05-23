@@ -352,6 +352,11 @@ export interface AgentQueryRecord {
   source_ref_id: string | null;
   chat_jid: string | null;
   group_folder: string | null;
+  workflow_type: string | null;
+  service: string | null;
+  role: string | null;
+  task_id: string | null;
+  task_title: string | null;
   workflow_id: string | null;
   stage_key: string | null;
   delegation_id: string | null;
@@ -377,6 +382,24 @@ export interface AgentQueryRecord {
   first_output_at: string | null;
   first_tool_at: string | null;
   last_event_at: string | null;
+  queue_latency_ms: number | null;
+  container_name: string | null;
+  container_runtime: string | null;
+  container_exit_code: number | null;
+  container_timeout_ms: number | null;
+  container_terminated_reason: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  estimated_cost: number | null;
+  tool_call_count: number | null;
+  failed_tool_call_count: number | null;
+  changed_file_count: number | null;
+  artifact_count: number | null;
+  artifact_contract_status: string | null;
+  retry_attempt: number | null;
+  retry_of_query_id: string | null;
   started_at: string;
   ended_at: string | null;
   latency_ms: number | null;
@@ -421,6 +444,9 @@ export interface ActiveAgentQueryTrace {
   runId: string | null;
   groupJid: string | null;
   groupFolder: string | null;
+  workflowType?: string | null;
+  service?: string | null;
+  role?: string | null;
   workflowId: string | null;
   stageKey: string | null;
   sessionId: string | null;
@@ -436,6 +462,16 @@ export interface ActiveAgentQueryTrace {
   startedAt: string;
   firstOutputAt: string | null;
   lastEventAt: string;
+  queueLatencyMs?: number | null;
+  containerName?: string | null;
+  containerRuntime?: string | null;
+  containerExitCode?: number | null;
+  containerTerminatedReason?: string | null;
+  toolCallCount?: number | null;
+  failedToolCallCount?: number | null;
+  changedFileCount?: number | null;
+  artifactCount?: number | null;
+  artifactContractStatus?: string | null;
   recentEvents: AgentQueryEventRecord[];
 }
 

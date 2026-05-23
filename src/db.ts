@@ -204,6 +204,11 @@ function createSchema(database: Database.Database): void {
       source_ref_id TEXT,
       chat_jid TEXT,
       group_folder TEXT,
+      workflow_type TEXT,
+      service TEXT,
+      role TEXT,
+      task_id TEXT,
+      task_title TEXT,
       workflow_id TEXT,
       stage_key TEXT,
       delegation_id TEXT,
@@ -229,6 +234,24 @@ function createSchema(database: Database.Database): void {
       first_output_at TEXT,
       first_tool_at TEXT,
       last_event_at TEXT,
+      queue_latency_ms INTEGER,
+      container_name TEXT,
+      container_runtime TEXT,
+      container_exit_code INTEGER,
+      container_timeout_ms INTEGER,
+      container_terminated_reason TEXT,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      cache_read_tokens INTEGER,
+      cache_write_tokens INTEGER,
+      estimated_cost REAL,
+      tool_call_count INTEGER,
+      failed_tool_call_count INTEGER,
+      changed_file_count INTEGER,
+      artifact_count INTEGER,
+      artifact_contract_status TEXT,
+      retry_attempt INTEGER,
+      retry_of_query_id TEXT,
       started_at TEXT NOT NULL,
       ended_at TEXT,
       latency_ms INTEGER,
@@ -289,6 +312,45 @@ function createSchema(database: Database.Database): void {
       ON agent_query_events(step_id, event_index);
     CREATE INDEX IF NOT EXISTS idx_agent_query_events_type
       ON agent_query_events(event_type, created_at DESC);
+  `);
+
+  for (const statement of [
+    `ALTER TABLE agent_queries ADD COLUMN workflow_type TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN service TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN role TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN task_id TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN task_title TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN queue_latency_ms INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN container_name TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN container_runtime TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN container_exit_code INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN container_timeout_ms INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN container_terminated_reason TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN input_tokens INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN output_tokens INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN cache_read_tokens INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN cache_write_tokens INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN estimated_cost REAL`,
+    `ALTER TABLE agent_queries ADD COLUMN tool_call_count INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN failed_tool_call_count INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN changed_file_count INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN artifact_count INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN artifact_contract_status TEXT`,
+    `ALTER TABLE agent_queries ADD COLUMN retry_attempt INTEGER`,
+    `ALTER TABLE agent_queries ADD COLUMN retry_of_query_id TEXT`,
+  ]) {
+    try {
+      database.exec(statement);
+    } catch {
+      /* column already exists */
+    }
+  }
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_service
+      ON agent_queries(service, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_queries_workflow_type
+      ON agent_queries(workflow_type, stage_key, started_at DESC);
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -5531,6 +5593,11 @@ export function createAgentQuery(record: AgentQueryRecord): void {
       source_ref_id,
       chat_jid,
       group_folder,
+      workflow_type,
+      service,
+      role,
+      task_id,
+      task_title,
       workflow_id,
       stage_key,
       delegation_id,
@@ -5556,12 +5623,30 @@ export function createAgentQuery(record: AgentQueryRecord): void {
       first_output_at,
       first_tool_at,
       last_event_at,
+      queue_latency_ms,
+      container_name,
+      container_runtime,
+      container_exit_code,
+      container_timeout_ms,
+      container_terminated_reason,
+      input_tokens,
+      output_tokens,
+      cache_read_tokens,
+      cache_write_tokens,
+      estimated_cost,
+      tool_call_count,
+      failed_tool_call_count,
+      changed_file_count,
+      artifact_count,
+      artifact_contract_status,
+      retry_attempt,
+      retry_of_query_id,
       started_at,
       ended_at,
       latency_ms,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
     record.query_id,
@@ -5570,6 +5655,11 @@ export function createAgentQuery(record: AgentQueryRecord): void {
     record.source_ref_id,
     record.chat_jid,
     record.group_folder,
+    record.workflow_type,
+    record.service,
+    record.role,
+    record.task_id,
+    record.task_title,
     record.workflow_id,
     record.stage_key,
     record.delegation_id,
@@ -5595,6 +5685,24 @@ export function createAgentQuery(record: AgentQueryRecord): void {
     record.first_output_at,
     record.first_tool_at,
     record.last_event_at,
+    record.queue_latency_ms,
+    record.container_name,
+    record.container_runtime,
+    record.container_exit_code,
+    record.container_timeout_ms,
+    record.container_terminated_reason,
+    record.input_tokens,
+    record.output_tokens,
+    record.cache_read_tokens,
+    record.cache_write_tokens,
+    record.estimated_cost,
+    record.tool_call_count,
+    record.failed_tool_call_count,
+    record.changed_file_count,
+    record.artifact_count,
+    record.artifact_contract_status,
+    record.retry_attempt,
+    record.retry_of_query_id,
     record.started_at,
     record.ended_at,
     record.latency_ms,
@@ -5621,6 +5729,11 @@ export function updateAgentQuery(
   assign('source_ref_id');
   assign('chat_jid');
   assign('group_folder');
+  assign('workflow_type');
+  assign('service');
+  assign('role');
+  assign('task_id');
+  assign('task_title');
   assign('workflow_id');
   assign('stage_key');
   assign('delegation_id');
@@ -5646,6 +5759,24 @@ export function updateAgentQuery(
   assign('first_output_at');
   assign('first_tool_at');
   assign('last_event_at');
+  assign('queue_latency_ms');
+  assign('container_name');
+  assign('container_runtime');
+  assign('container_exit_code');
+  assign('container_timeout_ms');
+  assign('container_terminated_reason');
+  assign('input_tokens');
+  assign('output_tokens');
+  assign('cache_read_tokens');
+  assign('cache_write_tokens');
+  assign('estimated_cost');
+  assign('tool_call_count');
+  assign('failed_tool_call_count');
+  assign('changed_file_count');
+  assign('artifact_count');
+  assign('artifact_contract_status');
+  assign('retry_attempt');
+  assign('retry_of_query_id');
   assign('started_at');
   assign('ended_at');
   assign('latency_ms');
@@ -5666,6 +5797,37 @@ export function getAgentQuery(queryId: string): AgentQueryRecord | undefined {
 export interface ListAgentQueriesOptions {
   sourceType?: AgentQuerySourceType;
   sourceRefId?: string;
+  status?: string;
+  failureType?: string;
+  service?: string;
+  workflowType?: string;
+  stageKey?: string;
+  role?: string;
+  hasFileChanges?: boolean;
+  hasErrors?: boolean;
+  workflowId?: string;
+  delegationId?: string;
+}
+
+export interface AgentQueriesOverview {
+  activeQueryCount: number;
+  last24h: {
+    success: number;
+    failure: number;
+    total: number;
+  };
+  topFailureTypes: Array<{
+    failureType: string;
+    count: number;
+  }>;
+  slowStages: Array<{
+    workflowType: string | null;
+    stageKey: string | null;
+    count: number;
+    avgLatencyMs: number;
+    maxLatencyMs: number;
+  }>;
+  pendingHumanReviews: number;
 }
 
 export function listAgentQueries(
@@ -5684,6 +5846,56 @@ export function listAgentQueries(
     conditions.push('source_ref_id = ?');
     values.push(options.sourceRefId);
   }
+  if (options.status) {
+    conditions.push('status = ?');
+    values.push(options.status);
+  }
+  if (options.failureType) {
+    conditions.push('failure_type = ?');
+    values.push(options.failureType);
+  }
+  if (options.service) {
+    conditions.push('service = ?');
+    values.push(options.service);
+  }
+  if (options.workflowType) {
+    conditions.push('workflow_type = ?');
+    values.push(options.workflowType);
+  }
+  if (options.stageKey) {
+    conditions.push('stage_key = ?');
+    values.push(options.stageKey);
+  }
+  if (options.role) {
+    conditions.push('role = ?');
+    values.push(options.role);
+  }
+  if (options.hasFileChanges) {
+    conditions.push('COALESCE(changed_file_count, 0) > 0');
+  }
+  if (options.hasErrors) {
+    conditions.push(
+      `(status IN ('error', 'timeout') OR failure_type IS NOT NULL OR EXISTS (
+        SELECT 1 FROM agent_query_events e
+        WHERE e.query_id = agent_queries.query_id
+          AND (
+            e.status = 'error'
+            OR e.event_type = 'error'
+            OR e.event_name LIKE '%failed%'
+            OR e.event_name LIKE '%error%'
+            OR e.event_name LIKE '%timeout%'
+          )
+      ))`,
+    );
+  }
+  if (options.workflowId) {
+    conditions.push('workflow_id = ?');
+    values.push(options.workflowId);
+  }
+  if (options.delegationId) {
+    conditions.push('delegation_id = ?');
+    values.push(options.delegationId);
+  }
 
   const whereClause = conditions.length
     ? `WHERE ${conditions.join(' AND ')}`
@@ -5693,6 +5905,83 @@ export function listAgentQueries(
       `SELECT * FROM agent_queries ${whereClause} ORDER BY started_at DESC LIMIT ? OFFSET ?`,
     )
     .all(...values, limit, Math.max(offset, 0)) as AgentQueryRecord[];
+}
+
+function countQuery(sql: string, ...values: unknown[]): number {
+  const row = db.prepare(sql).get(...values) as { count?: number } | undefined;
+  return Number(row?.count || 0);
+}
+
+export function getAgentQueriesOverview(now: Date = new Date()): AgentQueriesOverview {
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const activeQueryCount = countQuery(
+    `SELECT COUNT(*) AS count FROM agent_queries WHERE status = 'running'`,
+  );
+  const success = countQuery(
+    `SELECT COUNT(*) AS count
+       FROM agent_queries
+      WHERE started_at >= ? AND status = 'success'`,
+    since,
+  );
+  const failure = countQuery(
+    `SELECT COUNT(*) AS count
+       FROM agent_queries
+      WHERE started_at >= ?
+        AND (status IN ('error', 'timeout', 'cancelled') OR failure_type IS NOT NULL)`,
+    since,
+  );
+  const total = countQuery(
+    `SELECT COUNT(*) AS count FROM agent_queries WHERE started_at >= ?`,
+    since,
+  );
+  const topFailureTypes = db
+    .prepare(
+      `SELECT COALESCE(failure_type, status) AS failureType, COUNT(*) AS count
+         FROM agent_queries
+        WHERE started_at >= ?
+          AND (failure_type IS NOT NULL OR status IN ('error', 'timeout', 'cancelled'))
+        GROUP BY COALESCE(failure_type, status)
+        ORDER BY count DESC, failureType ASC
+        LIMIT 5`,
+    )
+    .all(since) as Array<{ failureType: string; count: number }>;
+  const slowStages = db
+    .prepare(
+      `SELECT
+          workflow_type AS workflowType,
+          stage_key AS stageKey,
+          COUNT(*) AS count,
+          ROUND(AVG(latency_ms)) AS avgLatencyMs,
+          MAX(latency_ms) AS maxLatencyMs
+         FROM agent_queries
+        WHERE started_at >= ?
+          AND latency_ms IS NOT NULL
+          AND (workflow_type IS NOT NULL OR stage_key IS NOT NULL)
+        GROUP BY workflow_type, stage_key
+        ORDER BY avgLatencyMs DESC
+        LIMIT 5`,
+    )
+    .all(since) as Array<{
+    workflowType: string | null;
+    stageKey: string | null;
+    count: number;
+    avgLatencyMs: number;
+    maxLatencyMs: number;
+  }>;
+  const pendingHumanReviews = countQuery(
+    `SELECT COUNT(*) AS count
+       FROM workbench_action_items
+      WHERE status = 'pending'
+        AND item_type IN ('approval', 'revision_request', 'credential', 'human_input', 'interactive')`,
+  );
+
+  return {
+    activeQueryCount,
+    last24h: { success, failure, total },
+    topFailureTypes,
+    slowStages,
+    pendingHumanReviews,
+  };
 }
 
 export function createAgentQueryStep(record: AgentQueryStepRecord): void {

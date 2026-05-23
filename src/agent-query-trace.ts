@@ -36,6 +36,11 @@ interface StartQueryInput {
   sourceRefId?: string | null;
   chatJid?: string | null;
   groupFolder?: string | null;
+  workflowType?: string | null;
+  service?: string | null;
+  role?: string | null;
+  taskId?: string | null;
+  taskTitle?: string | null;
   workflowId?: string | null;
   stageKey?: string | null;
   delegationId?: string | null;
@@ -62,6 +67,27 @@ interface AppendEventInput {
   status?: string | null;
   summary?: string | null;
   payload?: unknown;
+  startedAt?: string;
+  endedAt?: string | null;
+  latencyMs?: number | null;
+}
+
+type TraceEventSeverity = 'debug' | 'info' | 'warn' | 'error';
+type TraceEventVisibility = 'summary' | 'detail' | 'debug';
+
+interface AppendStructuredEventInput {
+  queryId: string;
+  stepId?: string | null;
+  category: string;
+  eventName: string;
+  status?: string | null;
+  severity?: TraceEventSeverity;
+  summary?: string | null;
+  resourceType?: string | null;
+  resourceRef?: string | null;
+  visibility?: TraceEventVisibility;
+  redacted?: boolean;
+  payload?: Record<string, unknown>;
   startedAt?: string;
   endedAt?: string | null;
   latencyMs?: number | null;
@@ -121,6 +147,11 @@ export class AgentQueryTraceManager {
       source_ref_id: input.sourceRefId ?? null,
       chat_jid: input.chatJid ?? null,
       group_folder: input.groupFolder ?? null,
+      workflow_type: input.workflowType ?? null,
+      service: input.service ?? null,
+      role: input.role ?? null,
+      task_id: input.taskId ?? null,
+      task_title: input.taskTitle ?? null,
       workflow_id: input.workflowId ?? null,
       stage_key: input.stageKey ?? null,
       delegation_id: input.delegationId ?? null,
@@ -146,6 +177,24 @@ export class AgentQueryTraceManager {
       first_output_at: null,
       first_tool_at: null,
       last_event_at: startedAt,
+      queue_latency_ms: null,
+      container_name: null,
+      container_runtime: null,
+      container_exit_code: null,
+      container_timeout_ms: null,
+      container_terminated_reason: null,
+      input_tokens: null,
+      output_tokens: null,
+      cache_read_tokens: null,
+      cache_write_tokens: null,
+      estimated_cost: null,
+      tool_call_count: null,
+      failed_tool_call_count: null,
+      changed_file_count: null,
+      artifact_count: null,
+      artifact_contract_status: null,
+      retry_attempt: null,
+      retry_of_query_id: null,
       started_at: startedAt,
       ended_at: null,
       latency_ms: null,
@@ -158,6 +207,9 @@ export class AgentQueryTraceManager {
       runId: input.runId ?? null,
       groupJid: input.chatJid ?? null,
       groupFolder: input.groupFolder ?? null,
+      workflowType: input.workflowType ?? null,
+      service: input.service ?? null,
+      role: input.role ?? null,
       workflowId: input.workflowId ?? null,
       stageKey: input.stageKey ?? null,
       sessionId: input.sessionId ?? null,
@@ -173,6 +225,16 @@ export class AgentQueryTraceManager {
       startedAt,
       firstOutputAt: null,
       lastEventAt: startedAt,
+      queueLatencyMs: null,
+      containerName: null,
+      containerRuntime: null,
+      containerExitCode: null,
+      containerTerminatedReason: null,
+      toolCallCount: null,
+      failedToolCallCount: null,
+      changedFileCount: null,
+      artifactCount: null,
+      artifactContractStatus: null,
       recentEvents: [],
       sourceType: input.sourceType,
       sourceRefId: input.sourceRefId ?? null,
@@ -187,6 +249,9 @@ export class AgentQueryTraceManager {
       status: 'success',
       summary: 'Query started',
       payload: {
+        category: 'lifecycle',
+        severity: 'info',
+        visibility: 'summary',
         sourceType: input.sourceType,
         sourceRefId: input.sourceRefId ?? null,
       },
@@ -266,6 +331,32 @@ export class AgentQueryTraceManager {
     }
   }
 
+  appendStructuredEvent(input: AppendStructuredEventInput): AgentQueryEventRecord {
+    const payload = {
+      ...(input.payload ?? {}),
+      category: input.category,
+      severity:
+        input.severity ?? (input.status === 'error' ? 'error' : 'info'),
+      resourceType: input.resourceType ?? undefined,
+      resourceRef: input.resourceRef ?? undefined,
+      visibility: input.visibility ?? 'summary',
+      redacted: input.redacted,
+    };
+
+    return this.appendEvent({
+      queryId: input.queryId,
+      stepId: input.stepId,
+      eventType: input.category,
+      eventName: input.eventName,
+      status: input.status,
+      summary: input.summary,
+      payload,
+      startedAt: input.startedAt,
+      endedAt: input.endedAt,
+      latencyMs: input.latencyMs,
+    });
+  }
+
   appendEvent(input: AppendEventInput): AgentQueryEventRecord {
     const query = this.activeQueries.get(input.queryId);
     if (!query) throw new Error(`Query ${input.queryId} is not active`);
@@ -317,6 +408,9 @@ export class AgentQueryTraceManager {
     const query = this.activeQueries.get(queryId);
     if (query) {
       if (patch.run_id !== undefined) query.runId = patch.run_id;
+      if (patch.workflow_type !== undefined) query.workflowType = patch.workflow_type;
+      if (patch.service !== undefined) query.service = patch.service;
+      if (patch.role !== undefined) query.role = patch.role;
       if (patch.session_id !== undefined) query.sessionId = patch.session_id;
       if (patch.selected_model !== undefined) query.selectedModel = patch.selected_model;
       if (patch.actual_model !== undefined) query.actualModel = patch.actual_model;
@@ -325,6 +419,20 @@ export class AgentQueryTraceManager {
       if (patch.status !== undefined) query.status = patch.status;
       if (patch.first_output_at !== undefined) query.firstOutputAt = patch.first_output_at;
       if (patch.last_event_at !== undefined && patch.last_event_at) query.lastEventAt = patch.last_event_at;
+      if (patch.queue_latency_ms !== undefined) query.queueLatencyMs = patch.queue_latency_ms;
+      if (patch.container_name !== undefined) query.containerName = patch.container_name;
+      if (patch.container_runtime !== undefined) query.containerRuntime = patch.container_runtime;
+      if (patch.container_exit_code !== undefined) query.containerExitCode = patch.container_exit_code;
+      if (patch.container_terminated_reason !== undefined) {
+        query.containerTerminatedReason = patch.container_terminated_reason;
+      }
+      if (patch.tool_call_count !== undefined) query.toolCallCount = patch.tool_call_count;
+      if (patch.failed_tool_call_count !== undefined) query.failedToolCallCount = patch.failed_tool_call_count;
+      if (patch.changed_file_count !== undefined) query.changedFileCount = patch.changed_file_count;
+      if (patch.artifact_count !== undefined) query.artifactCount = patch.artifact_count;
+      if (patch.artifact_contract_status !== undefined) {
+        query.artifactContractStatus = patch.artifact_contract_status;
+      }
     }
     updateAgentQuery(queryId, patch);
     this.emitChange();
@@ -401,6 +509,9 @@ export class AgentQueryTraceManager {
       status: 'error',
       summary: errorMessage,
       payload_json: toJson({
+        category: 'error',
+        severity: 'error',
+        visibility: 'summary',
         error: errorMessage,
         terminalStatus: status,
         failureType: patch?.failure_type ?? record?.failure_type ?? null,

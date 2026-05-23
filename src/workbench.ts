@@ -13,6 +13,7 @@ import {
   getPendingWorkflowInterruptForState,
   getWorkbenchTaskById,
   getWorkbenchTaskByWorkflowId,
+  listAgentQueries,
   listWorkbenchActionItemsByTask,
   listWorkbenchArtifactsByTask,
   listWorkbenchCommentsByTask,
@@ -119,6 +120,19 @@ export interface WorkbenchSubtask {
   result?: string;
   created_at?: string;
   updated_at?: string;
+  trace?: WorkbenchTraceSummary;
+}
+
+export interface WorkbenchTraceSummary {
+  query_id: string;
+  status: string;
+  duration_ms?: number;
+  current_step?: string;
+  failure_type?: string;
+  artifact_contract_status?: string;
+  model?: string;
+  started_at?: string;
+  updated_at?: string;
 }
 
 export interface WorkbenchArtifact {
@@ -129,6 +143,7 @@ export interface WorkbenchArtifact {
   absolute_path: string;
   exists: boolean;
   created_at?: string;
+  generated_by_query?: WorkbenchTraceSummary;
 }
 
 export interface WorkbenchActionItem {
@@ -291,6 +306,11 @@ function mapPersistedSubtask(
 ): WorkbenchSubtask {
   const stageType =
     getWorkflowTypeConfig(workflowType)?.states[item.stage_key]?.type;
+  const trace = getLatestTraceForSubtask({
+    workflowId: item.workflow_id,
+    stageKey: item.stage_key,
+    delegationId: item.delegation_id || undefined,
+  });
   return {
     id: item.id,
     title: item.title,
@@ -314,6 +334,7 @@ function mapPersistedSubtask(
     result: item.output_summary || undefined,
     created_at: item.started_at || undefined,
     updated_at: item.updated_at,
+    trace,
   };
 }
 
@@ -342,6 +363,7 @@ function mapPersistedArtifact(
   item: WorkbenchArtifactRecord,
 ): WorkbenchArtifact {
   const fullPath = path.join(PROJECT_ROOT, item.path);
+  const trace = getLatestTraceForArtifact(item);
   return {
     id: item.id,
     title: item.title,
@@ -350,6 +372,7 @@ function mapPersistedArtifact(
     absolute_path: fullPath,
     exists: fs.existsSync(fullPath),
     created_at: item.created_at,
+    generated_by_query: trace,
   };
 }
 
@@ -580,6 +603,11 @@ function buildSubtasks(
       result: summarizeResult(linkedDelegation?.result || null),
       created_at: linkedDelegation?.created_at,
       updated_at: linkedDelegation?.updated_at,
+      trace: getLatestTraceForSubtask({
+        workflowId: workflow.id,
+        stageKey: stage.stage_key,
+        delegationId: linkedDelegation?.id,
+      }),
     };
   });
 }
@@ -612,6 +640,14 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
       absolute_path: fullPath,
       exists: fs.existsSync(fullPath),
       created_at: workflow.updated_at,
+      generated_by_query: toTraceSummary(
+        candidate.source_role
+          ? firstAgentQuery({
+              workflowId: workflow.id,
+              role: candidate.source_role,
+            })
+          : firstAgentQuery({ workflowId: workflow.id }),
+      ),
     };
   });
 }
@@ -789,6 +825,68 @@ function parseTimestamp(value: string | undefined | null): number {
   if (Number.isFinite(numeric)) return numeric;
   const parsed = new Date(value).getTime();
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toTraceSummary(
+  query: ReturnType<typeof listAgentQueries>[number] | undefined,
+): WorkbenchTraceSummary | undefined {
+  if (!query) return undefined;
+  const currentStep = [query.current_phase, query.current_action]
+    .filter(Boolean)
+    .join(' · ');
+  const model = query.actual_model || query.selected_model || undefined;
+  return {
+    query_id: query.query_id,
+    status: query.status,
+    duration_ms: query.latency_ms ?? undefined,
+    current_step: currentStep || query.current_action || undefined,
+    failure_type: query.failure_type || undefined,
+    artifact_contract_status: query.artifact_contract_status || undefined,
+    model,
+    started_at: query.started_at,
+    updated_at: query.last_event_at || query.updated_at,
+  };
+}
+
+function firstAgentQuery(
+  options: Parameters<typeof listAgentQueries>[2],
+): ReturnType<typeof listAgentQueries>[number] | undefined {
+  return listAgentQueries(1, 0, options)[0];
+}
+
+function getLatestTraceForSubtask(input: {
+  workflowId: string;
+  stageKey: string;
+  delegationId?: string | null;
+}): WorkbenchTraceSummary | undefined {
+  if (input.delegationId) {
+    const byDelegation = firstAgentQuery({
+      delegationId: input.delegationId,
+    });
+    if (byDelegation) return toTraceSummary(byDelegation);
+  }
+  const byWorkflowStage = firstAgentQuery({
+    workflowId: input.workflowId,
+    stageKey: input.stageKey,
+  });
+  return toTraceSummary(byWorkflowStage);
+}
+
+function getLatestTraceForArtifact(
+  artifact: WorkbenchArtifactRecord,
+): WorkbenchTraceSummary | undefined {
+  const byRole = artifact.source_role
+    ? firstAgentQuery({
+        workflowId: artifact.workflow_id,
+        role: artifact.source_role,
+      })
+    : undefined;
+  if (byRole) return toTraceSummary(byRole);
+
+  const byWorkflow = firstAgentQuery({
+    workflowId: artifact.workflow_id,
+  });
+  return toTraceSummary(byWorkflow);
 }
 
 export function listWorkbenchTasks(): WorkbenchTaskItem[] {

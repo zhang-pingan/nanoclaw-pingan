@@ -135,6 +135,7 @@ import {
   consumeModelResolution,
 } from './model-resolution.js';
 import { selectModel } from './model-selector.js';
+import { getWorkflowTypeConfig } from './workflow-config.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -183,6 +184,9 @@ type AgentExecutionContext = {
   workflowId?: string;
   stageKey?: string;
   delegationId?: string;
+  workflowType?: string;
+  service?: string;
+  role?: string;
 };
 
 const channels: Channel[] = [];
@@ -433,6 +437,7 @@ function finalizePendingQueryBatch(result: ContainerOutput): {
   applied: boolean;
   batch?: PendingQueryBatch;
   actualModel?: string;
+  confirmedActualModel?: string;
   updatedRows?: number;
   updatedWebRows?: number;
 } {
@@ -469,7 +474,14 @@ function finalizePendingQueryBatch(result: ContainerOutput): {
       : 0;
 
   pendingQueryBatches.delete(result.queryId);
-  return { applied: true, batch, actualModel, updatedRows, updatedWebRows };
+  return {
+    applied: true,
+    batch,
+    actualModel,
+    confirmedActualModel: resolution?.actualModel,
+    updatedRows,
+    updatedWebRows,
+  };
 }
 
 function isWorkflowDelegationExecutionContext(
@@ -506,11 +518,76 @@ function isNaturalConfirmationText(text: string): boolean {
   );
 }
 
+function numberFromPayload(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function queryPatchFromTraceEvent(
+  event: NonNullable<ContainerOutput['event']>,
+): Partial<AgentQueryRecord> {
+  const payload = event.payload || {};
+  const category =
+    typeof payload.category === 'string' ? payload.category : event.type;
+  const traceSource =
+    typeof payload.traceSource === 'string' ? payload.traceSource : undefined;
+  const patch: Partial<AgentQueryRecord> = {};
+
+  if (category === 'container') {
+    if (typeof payload.containerName === 'string') {
+      patch.container_name = payload.containerName;
+    }
+    if (typeof payload.runtime === 'string') {
+      patch.container_runtime = payload.runtime;
+    }
+    const exitCode = numberFromPayload(payload.exitCode);
+    if (exitCode !== undefined) patch.container_exit_code = exitCode;
+    const timeoutMs = numberFromPayload(payload.timeoutMs);
+    if (timeoutMs !== undefined) patch.container_timeout_ms = timeoutMs;
+    if (typeof payload.terminatedReason === 'string') {
+      patch.container_terminated_reason = payload.terminatedReason;
+    }
+  }
+
+  if (category === 'model') {
+    const isProxyConfirmedModel =
+      traceSource === 'credential_proxy' &&
+      (event.name === 'model_resolution' ||
+        event.name === 'model_response_completed');
+    if (
+      typeof payload.actualModel === 'string' &&
+      isProxyConfirmedModel
+    ) {
+      patch.actual_model = payload.actualModel;
+    }
+    const inputTokens = numberFromPayload(payload.inputTokens);
+    if (inputTokens !== undefined) patch.input_tokens = inputTokens;
+    const outputTokens = numberFromPayload(payload.outputTokens);
+    if (outputTokens !== undefined) patch.output_tokens = outputTokens;
+    const cacheReadTokens = numberFromPayload(payload.cacheReadTokens);
+    if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
+    const cacheWriteTokens = numberFromPayload(payload.cacheWriteTokens);
+    if (cacheWriteTokens !== undefined) {
+      patch.cache_write_tokens = cacheWriteTokens;
+    }
+    const estimatedCost = numberFromPayload(payload.estimatedCost);
+    if (estimatedCost !== undefined) patch.estimated_cost = estimatedCost;
+  }
+
+  if (category === 'evaluation' && typeof payload.status === 'string') {
+    patch.artifact_contract_status = payload.status;
+  }
+
+  return patch;
+}
+
 function createMessageQueryTrace(params: {
   queryId: string;
   runId: string;
   chatJid: string;
   groupFolder: string;
+  workflowType?: string;
+  service?: string;
+  role?: string;
   workflowId?: string;
   stageKey?: string;
   delegationId?: string;
@@ -526,13 +603,20 @@ function createMessageQueryTrace(params: {
   cursorBefore?: string | null;
   messageCursor?: string | null;
 }): void {
+  const sourceType = params.delegationId ? 'workflow_delegation' : 'message';
   agentQueryTraceManager.startQuery({
     queryId: params.queryId,
     runId: params.runId,
-    sourceType: 'message',
-    sourceRefId: params.sourceRefId ?? null,
+    sourceType,
+    sourceRefId:
+      sourceType === 'workflow_delegation'
+        ? params.delegationId ?? null
+        : params.sourceRefId ?? null,
     chatJid: params.chatJid,
     groupFolder: params.groupFolder,
+    workflowType: params.workflowType,
+    service: params.service,
+    role: params.role,
     workflowId: params.workflowId,
     stageKey: params.stageKey,
     delegationId: params.delegationId,
@@ -1105,6 +1189,9 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     chatJid,
     groupFolder: group.folder,
     workflowId: executionContext?.workflowId,
+    workflowType: executionContext?.workflowType,
+    service: executionContext?.service,
+    role: executionContext?.role,
     stageKey: executionContext?.stageKey,
     delegationId: executionContext?.delegationId,
     sourceRefId: lastMsg.id,
@@ -1178,11 +1265,6 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           session_id: result.newSessionId,
         });
       }
-      if (result.selectedModel) {
-        agentQueryTraceManager.updateQuery(queryId, {
-          actual_model: result.selectedModel,
-        });
-      }
       if (result.newSessionId) {
         // keep query traces in sync with the latest resumed session id
       }
@@ -1208,6 +1290,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
             'Skipping event for inactive query trace',
           );
           return;
+        }
+        const eventQueryPatch = queryPatchFromTraceEvent(result.event);
+        if (Object.keys(eventQueryPatch).length > 0) {
+          agentQueryTraceManager.updateQuery(queryId, eventQueryPatch);
         }
         traceState.agentActivitySeen = true;
         const payload = result.event.payload || {};
@@ -1348,9 +1434,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           },
           'Backfilled actual model after query completion',
         );
-        agentQueryTraceManager.updateQuery(finalized.batch!.queryId, {
-          actual_model: finalized.actualModel,
-        });
+        if (finalized.confirmedActualModel) {
+          agentQueryTraceManager.updateQuery(finalized.batch!.queryId, {
+            actual_model: finalized.confirmedActualModel,
+          });
+        }
       }
 
       if (result.status === 'success' && !result.event && !result.result) {
@@ -2136,12 +2224,11 @@ async function runAssistantActionAgent(
         session_id: output.newSessionId,
       });
     }
-    if (output.selectedModel) {
-      agentQueryTraceManager.updateQuery(queryId, {
-        actual_model: output.selectedModel,
-      });
-    }
     if (output.event) {
+      const eventQueryPatch = queryPatchFromTraceEvent(output.event);
+      if (Object.keys(eventQueryPatch).length > 0) {
+        agentQueryTraceManager.updateQuery(queryId, eventQueryPatch);
+      }
       agentQueryTraceManager.appendEvent({
         queryId,
         stepId: resultDeliveryStepId || executionStepId,
@@ -2694,6 +2781,11 @@ function resolveExecutionContext(
     workflowId: workflow.id,
     stageKey: workflow.status,
     delegationId: workflow.current_delegation_id || undefined,
+    workflowType: workflow.workflow_type,
+    service: workflow.service,
+    role:
+      getWorkflowTypeConfig(workflow.workflow_type)?.states[workflow.status]
+        ?.role || undefined,
   };
 }
 

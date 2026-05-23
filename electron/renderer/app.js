@@ -241,6 +241,15 @@ var traceMonitorTitle = document.getElementById("trace-monitor-title");
 var traceMonitorMeta = document.getElementById("trace-monitor-meta");
 var traceMonitorSummary = document.getElementById("trace-monitor-summary");
 var traceMonitorTimeline = document.getElementById("trace-monitor-timeline");
+var traceMonitorStatusFilter = document.getElementById("trace-monitor-status-filter");
+var traceMonitorSourceFilter = document.getElementById("trace-monitor-source-filter");
+var traceMonitorServiceFilter = document.getElementById("trace-monitor-service-filter");
+var traceMonitorFailureFilter = document.getElementById("trace-monitor-failure-filter");
+var traceMonitorWorkflowFilter = document.getElementById("trace-monitor-workflow-filter");
+var traceMonitorStageFilter = document.getElementById("trace-monitor-stage-filter");
+var traceMonitorRoleFilter = document.getElementById("trace-monitor-role-filter");
+var traceMonitorFilesFilter = document.getElementById("trace-monitor-files-filter");
+var traceMonitorErrorsFilter = document.getElementById("trace-monitor-errors-filter");
 var knowledgeImportMenu = null;
 var knowledgeImportMenuCloseHandler = null;
 var workbenchSidebar = document.getElementById("workbench-sidebar");
@@ -550,8 +559,26 @@ var currentTraceRunId = "";
 var currentTraceRunRecord = null;
 var currentTraceRunSteps = [];
 var currentTraceRunEvents = [];
+var currentTraceRunSummary = null;
+var currentTraceRunHighlights = null;
 var currentTraceRunScope = "active";
 var traceMonitorDetailReloadTimer = null;
+var traceMonitorFilterDebounceTimer = null;
+function getDefaultTraceMonitorFilters() {
+  return {
+    status: "",
+    sourceType: "",
+    sourceRefId: "",
+    service: "",
+    failureType: "",
+    workflowType: "",
+    stageKey: "",
+    role: "",
+    hasFileChanges: false,
+    hasErrors: false,
+  };
+}
+var traceMonitorFilters = getDefaultTraceMonitorFilters();
 
 var TRACE_HISTORY_PAGE_SIZE = 10;
 
@@ -13338,8 +13365,13 @@ function normalizeTraceRun(run, scope) {
     return {
       id: run.queryId,
       scope,
+      sourceType: run.sourceType || null,
+      sourceRefId: run.sourceRefId || null,
       groupJid: run.groupJid || null,
       groupFolder: run.groupFolder || null,
+      workflowType: run.workflowType || null,
+      service: run.service || null,
+      role: run.role || null,
       workflowId: run.workflowId || null,
       stageKey: run.stageKey || null,
       selectedModel: run.selectedModel || null,
@@ -13353,13 +13385,28 @@ function normalizeTraceRun(run, scope) {
       lastEventAt: run.lastEventAt || null,
       endedAt: null,
       latencyMs: null,
+      queueLatencyMs: run.queueLatencyMs ?? null,
+      containerName: run.containerName || null,
+      containerRuntime: run.containerRuntime || null,
+      containerExitCode: run.containerExitCode ?? null,
+      containerTerminatedReason: run.containerTerminatedReason || null,
+      toolCallCount: run.toolCallCount ?? null,
+      failedToolCallCount: run.failedToolCallCount ?? null,
+      changedFileCount: run.changedFileCount ?? null,
+      artifactCount: run.artifactCount ?? null,
+      artifactContractStatus: run.artifactContractStatus || null,
     };
   }
   return {
     id: run.query_id || run.id,
     scope,
+    sourceType: run.source_type || run.sourceType || null,
+    sourceRefId: run.source_ref_id || run.sourceRefId || null,
     groupJid: run.chat_jid || null,
     groupFolder: run.group_folder || null,
+    workflowType: run.workflow_type || null,
+    service: run.service || null,
+    role: run.role || null,
     workflowId: run.workflow_id || null,
     stageKey: run.stage_key || null,
     selectedModel: run.selected_model || null,
@@ -13373,6 +13420,17 @@ function normalizeTraceRun(run, scope) {
     lastEventAt: run.last_event_at || null,
     endedAt: run.ended_at || null,
     latencyMs: run.latency_ms || null,
+    queueLatencyMs: run.queue_latency_ms ?? null,
+    containerName: run.container_name || null,
+    containerRuntime: run.container_runtime || null,
+    containerExitCode: run.container_exit_code ?? null,
+    containerTerminatedReason: run.container_terminated_reason || null,
+    toolCallCount: run.tool_call_count ?? null,
+    failedToolCallCount: run.failed_tool_call_count ?? null,
+    changedFileCount: run.changed_file_count ?? null,
+    artifactCount: run.artifact_count ?? null,
+    artifactContractStatus: run.artifact_contract_status || null,
+    failureType: run.failure_type || null,
   };
 }
 
@@ -13388,6 +13446,67 @@ function sortTraceRunsByLatest(runs) {
   });
 }
 
+function getTraceMonitorFilterEntries() {
+  const filters = traceMonitorFilters || {};
+  return [
+    ["status", filters.status],
+    ["sourceType", filters.sourceType],
+    ["sourceRefId", filters.sourceRefId],
+    ["service", filters.service],
+    ["failureType", filters.failureType],
+    ["workflowType", filters.workflowType],
+    ["stageKey", filters.stageKey],
+    ["role", filters.role],
+    ["hasFileChanges", filters.hasFileChanges ? "true" : ""],
+    ["hasErrors", filters.hasErrors ? "true" : ""],
+  ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "");
+}
+
+function hasTraceMonitorFilters() {
+  return getTraceMonitorFilterEntries().length > 0;
+}
+
+function buildTraceHistoryUrl(offset) {
+  const params = new URLSearchParams({
+    limit: String(TRACE_HISTORY_PAGE_SIZE),
+    offset: String(offset),
+  });
+  getTraceMonitorFilterEntries().forEach(([key, value]) => {
+    params.set(key, String(value));
+  });
+  return `/api/agent-queries?${params.toString()}`;
+}
+
+function traceRunMatchesFilters(run) {
+  const filters = traceMonitorFilters || {};
+  const includesValue = (actual, expected) => {
+    if (!expected) return true;
+    return String(actual || "").toLowerCase().includes(String(expected).toLowerCase());
+  };
+  if (filters.status && run.status !== filters.status) return false;
+  if (filters.sourceType && run.sourceType !== filters.sourceType) return false;
+  if (filters.sourceRefId && run.sourceRefId !== filters.sourceRefId) return false;
+  if (!includesValue(run.service, filters.service)) return false;
+  if (!includesValue(run.failureType, filters.failureType)) return false;
+  if (!includesValue(run.workflowType, filters.workflowType)) return false;
+  if (!includesValue(run.stageKey, filters.stageKey)) return false;
+  if (!includesValue(run.role, filters.role)) return false;
+  if (filters.hasFileChanges && !(Number(run.changedFileCount || 0) > 0)) return false;
+  if (filters.hasErrors && !(
+    run.status === "error" ||
+    run.status === "timeout" ||
+    Boolean(run.failureType) ||
+    Number(run.failedToolCallCount || 0) > 0
+  )) return false;
+  return true;
+}
+
+function getFilteredTraceRunCollection(scope) {
+  const runs = getTraceRunCollection(scope);
+  if (!hasTraceMonitorFilters()) return runs;
+  return runs.filter(traceRunMatchesFilters);
+}
+
 async function loadTraceHistoryPage(options) {
   const reset = Boolean(options && options.reset);
   if (traceMonitorHistoryLoading) return;
@@ -13397,7 +13516,7 @@ async function loadTraceHistoryPage(options) {
   }
   try {
     const offset = reset ? 0 : traceMonitorHistoryOffset;
-    const res = await apiFetch(`/api/agent-queries?limit=${TRACE_HISTORY_PAGE_SIZE}&offset=${offset}`);
+    const res = await apiFetch(buildTraceHistoryUrl(offset));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const activeRunIds = new Set(traceMonitorActiveRuns.map((run) => run.id));
@@ -13444,11 +13563,137 @@ function getTraceRunListEmptyText(scope) {
   if (scope === "history" && traceMonitorHistoryJustCleared) {
     return "活动历史已清空";
   }
+  if (hasTraceMonitorFilters()) {
+    return scope === "history" ? "当前筛选下暂无历史 Agent Trace" : "当前筛选下暂无活跃 Agent Trace";
+  }
   return scope === "history" ? "暂无历史 Agent Trace" : "暂无活跃 Agent Trace";
 }
 
 function buildTraceRunSummary(run) {
   return run.currentAction || run.currentStepName || run.currentStepType || run.promptSummary || "等待更多执行数据...";
+}
+
+function buildTraceRunSubtitle(run) {
+  const parts = [run.workflowType, run.stageKey, run.role].filter(Boolean);
+  if (run.service) parts.push(run.service);
+  return parts.join(" / ");
+}
+
+function buildTraceRunStats(run) {
+  const stats = [];
+  if (run.latencyMs || run.latencyMs === 0) stats.push(formatDuration(run.latencyMs));
+  if (run.toolCallCount || run.toolCallCount === 0) stats.push(`tools ${run.toolCallCount}`);
+  if (run.changedFileCount || run.changedFileCount === 0) stats.push(`files ${run.changedFileCount}`);
+  if (run.failedToolCallCount) stats.push(`failed tools ${run.failedToolCallCount}`);
+  if (run.actualModel || run.selectedModel) stats.push(run.actualModel || run.selectedModel);
+  if (run.containerTerminatedReason && run.containerTerminatedReason !== "completed") {
+    stats.push(run.containerTerminatedReason);
+  }
+  return stats;
+}
+
+function setTraceMonitorFilterValue(key, value) {
+  if (!traceMonitorFilters || !Object.prototype.hasOwnProperty.call(traceMonitorFilters, key)) return;
+  traceMonitorFilters[key] = String(value || "").trim();
+}
+
+function syncTraceMonitorFilterControls() {
+  if (traceMonitorStatusFilter) traceMonitorStatusFilter.value = traceMonitorFilters.status || "";
+  if (traceMonitorSourceFilter) traceMonitorSourceFilter.value = traceMonitorFilters.sourceType || "";
+  if (traceMonitorServiceFilter) traceMonitorServiceFilter.value = traceMonitorFilters.service || "";
+  if (traceMonitorFailureFilter) traceMonitorFailureFilter.value = traceMonitorFilters.failureType || "";
+  if (traceMonitorWorkflowFilter) traceMonitorWorkflowFilter.value = traceMonitorFilters.workflowType || "";
+  if (traceMonitorStageFilter) traceMonitorStageFilter.value = traceMonitorFilters.stageKey || "";
+  if (traceMonitorRoleFilter) traceMonitorRoleFilter.value = traceMonitorFilters.role || "";
+  if (traceMonitorFilesFilter) traceMonitorFilesFilter.checked = Boolean(traceMonitorFilters.hasFileChanges);
+  if (traceMonitorErrorsFilter) traceMonitorErrorsFilter.checked = Boolean(traceMonitorFilters.hasErrors);
+}
+
+function readTraceMonitorFilterControls() {
+  traceMonitorFilters = {
+    ...traceMonitorFilters,
+    status: String(traceMonitorStatusFilter?.value || "").trim(),
+    sourceType: String(traceMonitorSourceFilter?.value || "").trim(),
+    service: String(traceMonitorServiceFilter?.value || "").trim(),
+    failureType: String(traceMonitorFailureFilter?.value || "").trim(),
+    workflowType: String(traceMonitorWorkflowFilter?.value || "").trim(),
+    stageKey: String(traceMonitorStageFilter?.value || "").trim(),
+    role: String(traceMonitorRoleFilter?.value || "").trim(),
+    hasFileChanges: Boolean(traceMonitorFilesFilter?.checked),
+    hasErrors: Boolean(traceMonitorErrorsFilter?.checked),
+  };
+}
+
+function applyTraceMonitorFilters() {
+  readTraceMonitorFilterControls();
+  traceMonitorHistoryOffset = 0;
+  traceMonitorHistoryHasMore = false;
+  traceMonitorHistoryRuns = [];
+  currentTraceRunId = "";
+  currentTraceRunRecord = null;
+  currentTraceRunSteps = [];
+  currentTraceRunEvents = [];
+  currentTraceRunSummary = null;
+  currentTraceRunHighlights = null;
+  renderTraceMonitorList();
+  renderTraceMonitorDetailEmpty();
+  if (activeTraceMonitorScope === "history") {
+    loadTraceHistoryPage({ reset: true })
+      .then(() => {
+        renderTraceMonitorList();
+        ensureTraceSelectionVisible("history");
+      })
+      .catch((err) => {
+        console.error("Failed to apply trace filters:", err);
+        traceMonitorList.innerHTML = `<div class="trace-monitor-list-empty">Trace 筛选加载失败</div>`;
+      });
+    return;
+  }
+  ensureTraceSelectionVisible("active");
+}
+
+function scheduleTraceMonitorFilterApply() {
+  if (traceMonitorFilterDebounceTimer) {
+    clearTimeout(traceMonitorFilterDebounceTimer);
+  }
+  traceMonitorFilterDebounceTimer = setTimeout(() => {
+    traceMonitorFilterDebounceTimer = null;
+    applyTraceMonitorFilters();
+  }, 250);
+}
+
+async function openTraceMonitorRun(queryId, options = {}) {
+  if (!queryId) return;
+  const scope = options.scope === "active" ? "active" : "history";
+  if (options.preserveFilters === true) {
+    if (options.sourceType) setTraceMonitorFilterValue("sourceType", options.sourceType);
+    if (options.sourceRefId) setTraceMonitorFilterValue("sourceRefId", options.sourceRefId);
+    if (options.workflowType) setTraceMonitorFilterValue("workflowType", options.workflowType);
+    if (options.stageKey) setTraceMonitorFilterValue("stageKey", options.stageKey);
+    if (options.role) setTraceMonitorFilterValue("role", options.role);
+  } else {
+    traceMonitorFilters = getDefaultTraceMonitorFilters();
+  }
+  syncTraceMonitorFilterControls();
+  const normalized = normalizeTraceRun({
+    query_id: queryId,
+    source_type: options.sourceType || null,
+    source_ref_id: options.sourceRefId || null,
+    workflow_type: options.workflowType || null,
+    stage_key: options.stageKey || null,
+    role: options.role || null,
+  }, "history");
+  if (scope === "history" && normalized && !traceMonitorHistoryRuns.some((run) => run.id === queryId)) {
+    traceMonitorHistoryRuns = sortTraceRunsByLatest([normalized, ...traceMonitorHistoryRuns]);
+  }
+  currentTraceRunId = queryId;
+  setPrimaryNav("trace-monitor");
+  setTraceMonitorScope(scope);
+  renderTraceMonitorList();
+  await loadTraceRunDetail(queryId, scope);
+  loadTraceMonitorData({ force: true }).catch((err) => {
+    console.error("Failed to refresh trace monitor after workbench jump:", err);
+  });
 }
 
 function renderTraceHistoryLoadingSkeleton() {
@@ -13476,7 +13721,7 @@ function syncTraceMonitorHeaderActions() {
 function renderTraceMonitorList() {
   if (!traceMonitorList) return;
   syncTraceMonitorHeaderActions();
-  const runs = getTraceRunCollection(activeTraceMonitorScope);
+  const runs = getFilteredTraceRunCollection(activeTraceMonitorScope);
   if (!runs.length) {
     traceMonitorList.innerHTML = `<div class="trace-monitor-list-empty">${getTraceRunListEmptyText(activeTraceMonitorScope)}</div>`;
     return;
@@ -13490,12 +13735,17 @@ function renderTraceMonitorList() {
     const statusClass = getTraceStatusClass(run.status);
     const primaryTime = run.startedAt ? formatDateTime(run.startedAt) : "--";
     const secondaryTime = run.lastEventAt ? formatRelativeTime(run.lastEventAt) : "--";
+    const subtitle = buildTraceRunSubtitle(run);
+    const stats = buildTraceRunStats(run);
     item.innerHTML = `
       <div class="trace-monitor-list-head">
         <div class="trace-monitor-list-title">${escapeHtml(getGroupDisplayNameByJid(run.groupJid))}</div>
         <span class="trace-monitor-status ${escapeHtml(statusClass)}">${escapeHtml(run.status || "unknown")}</span>
       </div>
+      ${subtitle ? `<div class="trace-monitor-list-subtitle">${escapeHtml(subtitle)}</div>` : ""}
       <div class="trace-monitor-list-summary">${escapeHtml(buildTraceRunSummary(run))}</div>
+      ${stats.length ? `<div class="trace-monitor-list-stats">${stats.map((stat) => `<span>${escapeHtml(String(stat))}</span>`).join("")}</div>` : ""}
+      ${run.failureType ? `<div class="trace-monitor-list-failure">failure: ${escapeHtml(run.failureType)}</div>` : ""}
       <div class="trace-monitor-list-meta">
         <span>${escapeHtml(runId.slice(0, 8))}...</span>
         <span>${escapeHtml(primaryTime)}</span>
@@ -13535,58 +13785,116 @@ function getTraceCategoryBadgeClass(className) {
   return className === "error" ? "trace-monitor-category-badge-error" : className;
 }
 
+function renderTracePill(label, value) {
+  if (value === undefined || value === null || value === "") return "";
+  return `<span class="trace-monitor-pill"><strong>${escapeHtml(label)}</strong>${escapeHtml(String(value))}</span>`;
+}
+
 function renderTraceMonitorDetailEmpty() {
   currentTraceRunRecord = null;
   currentTraceRunSteps = [];
   currentTraceRunEvents = [];
+  currentTraceRunSummary = null;
+  currentTraceRunHighlights = null;
   if (traceMonitorDetail) traceMonitorDetail.classList.add("hidden");
   if (traceMonitorDetailEmpty) traceMonitorDetailEmpty.classList.remove("hidden");
 }
 
 function renderTraceSummaryPills(run) {
   const pills = [];
-  pills.push(`<span class="trace-monitor-pill"><strong>Status</strong>${escapeHtml(run.status || "--")}</span>`);
+  const summary = currentTraceRunSummary || {};
+  pills.push(renderTracePill("Status", run.status || "--"));
   if (run.started_at) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Started</strong>${escapeHtml(formatDateTime(run.started_at))}</span>`);
+    pills.push(renderTracePill("Started", formatDateTime(run.started_at)));
   }
   if (run.ended_at) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Ended</strong>${escapeHtml(formatDateTime(run.ended_at))}</span>`);
+    pills.push(renderTracePill("Ended", formatDateTime(run.ended_at)));
   }
-  if (run.latency_ms || run.latency_ms === 0) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Duration</strong>${escapeHtml(formatDuration(run.latency_ms))}</span>`);
+  const durationMs = summary.durationMs ?? run.latency_ms;
+  if (durationMs || durationMs === 0) {
+    pills.push(renderTracePill("Duration", formatDuration(durationMs)));
   }
   if (run.selected_model) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Selected</strong>${escapeHtml(run.selected_model)}</span>`);
+    pills.push(renderTracePill("Selected", run.selected_model));
   }
   if (run.actual_model) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Actual</strong>${escapeHtml(run.actual_model)}</span>`);
+    pills.push(renderTracePill("Actual", run.actual_model));
   }
   if (run.workflow_id) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Workflow</strong>${escapeHtml(run.workflow_id)}</span>`);
+    pills.push(renderTracePill("Workflow", run.workflow_id));
+  }
+  if (run.workflow_type) {
+    pills.push(renderTracePill("Type", run.workflow_type));
   }
   if (run.stage_key) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Stage</strong>${escapeHtml(run.stage_key)}</span>`);
+    pills.push(renderTracePill("Stage", run.stage_key));
+  }
+  if (run.role) {
+    pills.push(renderTracePill("Role", run.role));
+  }
+  if (run.service) {
+    pills.push(renderTracePill("Service", run.service));
   }
   if (run.group_folder) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Folder</strong>${escapeHtml(run.group_folder)}</span>`);
+    pills.push(renderTracePill("Folder", run.group_folder));
   }
-  return pills.join("");
+  const queueMs = summary.queueLatencyMs ?? run.queue_latency_ms;
+  if (queueMs || queueMs === 0) {
+    pills.push(renderTracePill("Queue", formatDuration(queueMs)));
+  }
+  const containerMs = summary.containerDurationMs;
+  if (containerMs || containerMs === 0) {
+    pills.push(renderTracePill("Container", formatDuration(containerMs)));
+  } else if (run.container_terminated_reason) {
+    pills.push(renderTracePill("Container", run.container_terminated_reason));
+  }
+  if (run.input_tokens || run.output_tokens) {
+    pills.push(renderTracePill("Tokens", `${run.input_tokens || 0} / ${run.output_tokens || 0}`));
+  }
+  if (run.estimated_cost || run.estimated_cost === 0) {
+    pills.push(renderTracePill("Cost", `$${Number(run.estimated_cost).toFixed(4)}`));
+  }
+  if (summary.toolCallCount || summary.toolCallCount === 0) {
+    pills.push(renderTracePill("Tools", `${summary.toolCallCount}${summary.failedToolCallCount ? ` / ${summary.failedToolCallCount} failed` : ""}`));
+  }
+  if (summary.changedFileCount || summary.changedFileCount === 0) {
+    pills.push(renderTracePill("Files", summary.changedFileCount));
+  }
+  if (summary.artifactCount) {
+    pills.push(renderTracePill("Artifacts", summary.artifactCount));
+  }
+  if (run.artifact_contract_status) {
+    pills.push(renderTracePill("Contract", run.artifact_contract_status));
+  }
+  if (run.failure_type) {
+    pills.push(renderTracePill("Failure", run.failure_subtype ? `${run.failure_type}.${run.failure_subtype}` : run.failure_type));
+  }
+  return pills.filter(Boolean).join("");
 }
 
 function renderTraceMetaPills(run) {
   const pills = [];
-  pills.push(`<span class="trace-monitor-pill"><strong>Run</strong>${escapeHtml(run.query_id || run.id)}</span>`);
-  pills.push(`<span class="trace-monitor-pill"><strong>Source</strong>${escapeHtml(run.source_type || "--")}</span>`);
+  pills.push(renderTracePill("Run", run.query_id || run.id));
+  pills.push(renderTracePill("Source", run.source_type || "--"));
   if (run.chat_jid) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Group</strong>${escapeHtml(getGroupDisplayNameByJid(run.chat_jid))}</span>`);
+    pills.push(renderTracePill("Group", getGroupDisplayNameByJid(run.chat_jid)));
+  }
+  if (run.container_name) {
+    pills.push(renderTracePill("Container", run.container_name));
+  }
+  if (run.container_runtime) {
+    pills.push(renderTracePill("Runtime", run.container_runtime));
+  }
+  if (run.container_exit_code || run.container_exit_code === 0) {
+    pills.push(renderTracePill("Exit", run.container_exit_code));
   }
   if (run.current_action) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Action</strong>${escapeHtml(run.current_action)}</span>`);
+    pills.push(renderTracePill("Action", run.current_action));
   }
   if (run.error_message) {
-    pills.push(`<span class="trace-monitor-pill"><strong>Error</strong>${escapeHtml(run.error_message)}</span>`);
+    pills.push(renderTracePill("Error", run.error_message));
   }
-  return pills.join("");
+  return pills.filter(Boolean).join("");
 }
 
 function stringifyTracePayload(payload) {
@@ -13598,6 +13906,41 @@ function stringifyTracePayload(payload) {
   }
 }
 
+var TRACE_CATEGORY_META = {
+  lifecycle: { key: "lifecycle", label: "生命周期", className: "lifecycle", order: 10 },
+  queue: { key: "queue", label: "排队", className: "queue", order: 20 },
+  container: { key: "container", label: "容器", className: "container", order: 30 },
+  model: { key: "model", label: "模型", className: "model", order: 40 },
+  tool: { key: "tool", label: "工具调用", className: "tool", order: 50 },
+  file: { key: "file", label: "文件改动", className: "file", order: 60 },
+  ipc: { key: "ipc", label: "IPC", className: "ipc", order: 70 },
+  workflow: { key: "workflow", label: "Workflow", className: "workflow", order: 80 },
+  evaluation: { key: "evaluation", label: "评估", className: "evaluation", order: 90 },
+  human: { key: "human", label: "人类确认", className: "human", order: 100 },
+  artifact: { key: "artifact", label: "产物", className: "artifact", order: 110 },
+  output: { key: "output", label: "输出", className: "output", order: 120 },
+  error: { key: "error", label: "错误事件", className: "error", order: 130 },
+  general: { key: "general", label: "", className: "general", order: 900 },
+};
+
+function traceCategoryMeta(key, payload) {
+  const normalized = String(key || "").toLowerCase();
+  if (normalized === "command") return TRACE_CATEGORY_META.tool;
+  if (TRACE_CATEGORY_META[normalized]) return TRACE_CATEGORY_META[normalized];
+  const payloadCategory = payload && typeof payload.category === "string" ? payload.category.toLowerCase() : "";
+  return TRACE_CATEGORY_META[payloadCategory] || TRACE_CATEGORY_META.general;
+}
+
+function tracePayloadPath(payload) {
+  return payload?.path || payload?.resourceRef || payload?.resource_ref || "";
+}
+
+function formatTraceNumber(value) {
+  if (!(value || value === 0)) return "";
+  if (Math.abs(Number(value)) >= 1000) return Intl.NumberFormat("en", { notation: "compact" }).format(Number(value));
+  return String(value);
+}
+
 function classifyTraceTimelineItem(item) {
   const status = String(item?.status || "").toLowerCase();
   const stepType = String(item?.step_type || "").toLowerCase();
@@ -13605,6 +13948,19 @@ function classifyTraceTimelineItem(item) {
   const eventName = String(item?.event_name || "").toLowerCase();
   const payload = "event_type" in item ? parseAgentEventPayload(item) || {} : parseAgentEventPayload({ payload_json: item.payload_json }) || {};
   const summaryText = String(item?.summary || "").toLowerCase();
+  const explicitCategory = typeof payload.category === "string" ? payload.category.toLowerCase() : "";
+  const baseCategory =
+    explicitCategory ||
+    (eventName.startsWith("container_") ? "container" : "") ||
+    (eventName.startsWith("model_") ? "model" : "") ||
+    (eventName.startsWith("ipc_") ? "ipc" : "") ||
+    (eventName.startsWith("workflow_") ? "workflow" : "") ||
+    (eventName.includes("evaluation") || eventName.includes("judge") ? "evaluation" : "") ||
+    (eventName.startsWith("human_") ? "human" : "") ||
+    (eventName.startsWith("artifact_") ? "artifact" : "") ||
+    (eventType === "command" ? "tool" : "") ||
+    eventType ||
+    stepType;
 
   const isError =
     status === "error" ||
@@ -13613,6 +13969,8 @@ function classifyTraceTimelineItem(item) {
     eventType === "error" ||
     eventName.includes("error") ||
     eventName.includes("failed") ||
+    eventName.includes("timeout") ||
+    String(payload.severity || "").toLowerCase() === "error" ||
     summaryText.includes("error") ||
     summaryText.includes("failed");
   if (isError) {
@@ -13620,6 +13978,13 @@ function classifyTraceTimelineItem(item) {
       key: "error",
       label: "错误事件",
       className: "error",
+      payload,
+    };
+  }
+
+  if (baseCategory && TRACE_CATEGORY_META[baseCategory]) {
+    return {
+      ...TRACE_CATEGORY_META[baseCategory],
       payload,
     };
   }
@@ -13636,6 +14001,7 @@ function classifyTraceTimelineItem(item) {
       key: "file",
       label: "文件改动",
       className: "file",
+      order: TRACE_CATEGORY_META.file.order,
       payload,
     };
   }
@@ -13656,20 +14022,31 @@ function classifyTraceTimelineItem(item) {
       key: "tool",
       label: "工具调用",
       className: "tool",
+      order: TRACE_CATEGORY_META.tool.order,
       payload,
     };
   }
 
   return {
+    ...TRACE_CATEGORY_META.general,
     key: "general",
-    label: "",
-    className: "general",
     payload,
   };
 }
 
 function renderTraceHighlightSummary(items) {
-  const counts = { file: 0, tool: 0, error: 0 };
+  const highlightDefs = [
+    ["file", "文件改动"],
+    ["tool", "工具调用"],
+    ["error", "错误事件"],
+    ["model", "模型调用"],
+    ["ipc", "IPC 调用"],
+    ["container", "容器事件"],
+    ["workflow", "Workflow"],
+    ["evaluation", "评估"],
+    ["human", "人类确认"],
+  ];
+  const counts = Object.fromEntries(highlightDefs.map(([key]) => [key, 0]));
   for (const item of items) {
     if (item.category && counts[item.category.key] !== undefined) {
       counts[item.category.key] += 1;
@@ -13677,18 +14054,12 @@ function renderTraceHighlightSummary(items) {
   }
   return `
     <div class="trace-monitor-highlight-strip">
-      <button type="button" class="trace-monitor-highlight-card file" data-trace-jump="file">
-        <span class="trace-monitor-highlight-label">文件改动</span>
-        <strong>${escapeHtml(String(counts.file))}</strong>
-      </button>
-      <button type="button" class="trace-monitor-highlight-card tool" data-trace-jump="tool">
-        <span class="trace-monitor-highlight-label">工具调用</span>
-        <strong>${escapeHtml(String(counts.tool))}</strong>
-      </button>
-      <button type="button" class="trace-monitor-highlight-card trace-monitor-highlight-card-error" data-trace-jump="error">
-        <span class="trace-monitor-highlight-label">错误事件</span>
-        <strong>${escapeHtml(String(counts.error))}</strong>
-      </button>
+      ${highlightDefs.map(([key, label]) => `
+        <button type="button" class="trace-monitor-highlight-card ${escapeHtml(key === "error" ? "trace-monitor-highlight-card-error" : key)}" data-trace-jump="${escapeHtml(key)}"${counts[key] ? "" : " disabled"}>
+          <span class="trace-monitor-highlight-label">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(String(counts[key] || 0))}</strong>
+        </button>
+      `).join("")}
     </div>
   `;
 }
@@ -13716,6 +14087,7 @@ function renderTraceTimeline() {
       kind: "step",
       sortAt: parseTimestamp(step.started_at) || 0,
       category,
+      order: category.order || TRACE_CATEGORY_META.general.order,
       html: renderTraceStepTimelineItem(step, category),
     });
   }
@@ -13725,10 +14097,11 @@ function renderTraceTimeline() {
       kind: "event",
       sortAt: parseTimestamp(event.created_at || event.started_at) || 0,
       category,
+      order: category.order || TRACE_CATEGORY_META.general.order,
       html: renderTraceEventTimelineItem(event, category),
     });
   }
-  timelineItems.sort((a, b) => a.sortAt - b.sortAt);
+  timelineItems.sort((a, b) => (a.order - b.order) || (a.sortAt - b.sortAt));
   if (!timelineItems.length) {
       traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">当前 Trace 暂无可展示的时间线数据</div>`;
     return;
@@ -13739,7 +14112,7 @@ function renderTraceTimeline() {
 
 function renderTraceStepTimelineItem(step, category) {
   const payload = category?.payload || parseAgentEventPayload({ payload_json: step.payload_json }) || null;
-  const payloadBlock = payload ? `<pre class="trace-monitor-json">${escapeHtml(stringifyTracePayload(payload))}</pre>` : "";
+  const payloadBlock = payload ? `<details class="trace-monitor-json-disclosure"><summary>Payload</summary><pre class="trace-monitor-json">${escapeHtml(stringifyTracePayload(payload))}</pre></details>` : "";
   return `
     <div class="trace-monitor-timeline-item step trace-monitor-timeline-item-${escapeHtml(category.className)}">
       <span class="trace-monitor-timeline-dot"></span>
@@ -13763,9 +14136,141 @@ function renderTraceStepTimelineItem(step, category) {
   `;
 }
 
+function renderTraceKv(items) {
+  const visible = items.filter((item) => item && item.value !== undefined && item.value !== null && item.value !== "");
+  if (!visible.length) return "";
+  return `<div class="trace-monitor-structured-kv">${visible.map((item) => `<span><strong>${escapeHtml(item.label)}</strong>${escapeHtml(String(item.value))}</span>`).join("")}</div>`;
+}
+
+function renderTracePreview(label, value) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const text = value.length > 800 ? `${value.slice(0, 800)}...` : value;
+  return `
+    <div class="trace-monitor-preview-block">
+      <div class="trace-monitor-preview-label">${escapeHtml(label)}</div>
+      <pre>${escapeHtml(text)}</pre>
+    </div>
+  `;
+}
+
+function renderTracePatchPreview(payload) {
+  if (!Array.isArray(payload.patchPreview) || payload.patchPreview.length === 0) return "";
+  return `
+    <div class="trace-monitor-diff-block">
+      ${payload.patchPreview.slice(0, 12).map((line) => `<div class="agent-trace-diff-line ${String(line).startsWith("+") ? "add" : String(line).startsWith("-") ? "del" : ""}">${escapeHtml(String(line))}</div>`).join("")}
+    </div>
+  `;
+}
+
+function renderTraceStructuredEventSummary(event, category, payload) {
+  const key = category?.key || "general";
+  if (key === "tool") {
+    return `
+      <div class="trace-monitor-structured-summary">
+        ${renderTraceKv([
+          { label: "Tool", value: payload.toolName || event.event_name },
+          { label: "Type", value: payload.toolType },
+          { label: "Duration", value: event.latency_ms || event.latency_ms === 0 ? formatDuration(event.latency_ms) : "" },
+          { label: "Exit", value: payload.exitCode },
+        ])}
+        ${payload.commandPreview ? `<div class="trace-monitor-command-line">${escapeHtml(payload.commandPreview)}</div>` : ""}
+        ${renderTracePreview("stdout", payload.stdoutPreview)}
+        ${renderTracePreview("stderr", payload.stderrPreview)}
+      </div>
+    `;
+  }
+  if (key === "file") {
+    const path = tracePayloadPath(payload);
+    return `
+      <div class="trace-monitor-structured-summary">
+        ${renderTraceKv([
+          { label: "Operation", value: payload.operation || event.event_name.replace(/^file_/, "") },
+          { label: "Path", value: path },
+          { label: "+", value: payload.additions },
+          { label: "-", value: payload.deletions },
+        ])}
+        ${renderTracePatchPreview(payload)}
+        ${renderTracePreview("preview", payload.contentPreview)}
+      </div>
+    `;
+  }
+  if (key === "model") {
+    const modelLatency = payload.latencyMs ?? event.latency_ms;
+    return `
+      <div class="trace-monitor-structured-summary">
+        ${renderTraceKv([
+          { label: "Model", value: payload.actualModel || payload.requestedModel },
+          { label: "Input", value: formatTraceNumber(payload.inputTokens) },
+          { label: "Output", value: formatTraceNumber(payload.outputTokens) },
+          { label: "Cache read", value: formatTraceNumber(payload.cacheReadTokens) },
+          { label: "Latency", value: modelLatency || modelLatency === 0 ? formatDuration(modelLatency) : "" },
+        ])}
+      </div>
+    `;
+  }
+  if (key === "container") {
+    const containerDuration = payload.durationMs ?? event.latency_ms;
+    return `
+      <div class="trace-monitor-structured-summary">
+        ${renderTraceKv([
+          { label: "Runtime", value: payload.runtime },
+          { label: "Name", value: payload.containerName },
+          { label: "Image", value: payload.image },
+          { label: "Exit", value: payload.exitCode },
+          { label: "Reason", value: payload.terminatedReason },
+          { label: "Duration", value: containerDuration || containerDuration === 0 ? formatDuration(containerDuration) : "" },
+        ])}
+        ${renderTracePreview("stderr", payload.stderrPreview)}
+      </div>
+    `;
+  }
+  if (key === "workflow") {
+    return `
+      <div class="trace-monitor-structured-summary">
+        ${renderTraceKv([
+          { label: "Workflow", value: payload.workflowId },
+          { label: "Type", value: payload.workflowType },
+          { label: "Stage", value: payload.stageKey },
+          { label: "Transition", value: payload.fromState || payload.toState ? `${payload.fromState || "?"} -> ${payload.toState || "?"}` : "" },
+          { label: "Action", value: payload.action },
+          { label: "Round", value: payload.round },
+        ])}
+      </div>
+    `;
+  }
+  if (key === "evaluation") {
+    return `
+      <div class="trace-monitor-structured-summary">
+        ${renderTraceKv([
+          { label: "Status", value: payload.status },
+          { label: "Score", value: payload.score },
+          { label: "Contract", value: payload.contract },
+          { label: "Findings", value: payload.findingCount },
+          { label: "Evidence", value: payload.evidenceCount },
+        ])}
+      </div>
+    `;
+  }
+  if (key === "ipc" || key === "human" || key === "artifact") {
+    const genericLatency = payload.latencyMs ?? event.latency_ms;
+    return `
+      <div class="trace-monitor-structured-summary">
+        ${renderTraceKv([
+          { label: "Operation", value: payload.operation || payload.action || event.event_name },
+          { label: "Resource", value: payload.resourceRef || payload.requestId || payload.path },
+          { label: "Status", value: payload.status || event.status },
+          { label: "Latency", value: genericLatency || genericLatency === 0 ? formatDuration(genericLatency) : "" },
+        ])}
+      </div>
+    `;
+  }
+  return "";
+}
+
 function renderTraceEventTimelineItem(event, category) {
   const payload = category?.payload || parseAgentEventPayload(event) || null;
-  const payloadBlock = payload ? `<pre class="trace-monitor-json">${escapeHtml(stringifyTracePayload(payload))}</pre>` : "";
+  const payloadBlock = payload ? `<details class="trace-monitor-json-disclosure"><summary>Payload</summary><pre class="trace-monitor-json">${escapeHtml(stringifyTracePayload(payload))}</pre></details>` : "";
+  const structuredSummary = renderTraceStructuredEventSummary(event, category, payload || {});
   return `
     <div class="trace-monitor-timeline-item event trace-monitor-timeline-item-${escapeHtml(category.className)}">
       <span class="trace-monitor-timeline-dot"></span>
@@ -13782,7 +14287,7 @@ function renderTraceEventTimelineItem(event, category) {
             <div>${escapeHtml(event.latency_ms || event.latency_ms === 0 ? formatDuration(event.latency_ms) : "--")}</div>
           </div>
         </div>
-        ${renderAgentTraceEvent(event)}
+        ${structuredSummary || renderAgentTraceEvent(event)}
         ${payloadBlock}
       </div>
     </div>
@@ -13818,31 +14323,45 @@ async function loadTraceRunDetail(runId, scope) {
   if (traceMonitorDetail) traceMonitorDetail.classList.remove("hidden");
   if (traceMonitorDetailEmpty) traceMonitorDetailEmpty.classList.add("hidden");
   try {
-    const [runRes, stepsRes, eventsRes] = await Promise.all([
-      apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}`),
-      apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}/steps`),
-      apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}/events`),
-    ]);
-    if (!runRes.ok) throw new Error(`HTTP ${runRes.status}`);
-    if (!stepsRes.ok) throw new Error(`HTTP ${stepsRes.status}`);
-    if (!eventsRes.ok) throw new Error(`HTTP ${eventsRes.status}`);
-    const runData = await runRes.json();
-    const stepsData = await stepsRes.json();
-    const eventsData = await eventsRes.json();
-    currentTraceRunRecord = runData.query || null;
-    currentTraceRunSteps = Array.isArray(stepsData.steps) ? stepsData.steps : [];
-    currentTraceRunEvents = Array.isArray(eventsData.events) ? eventsData.events : [];
+    const detailRes = await apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}/detail`);
+    if (detailRes.ok) {
+      const detailData = await detailRes.json();
+      currentTraceRunRecord = detailData.query || null;
+      currentTraceRunSteps = Array.isArray(detailData.steps) ? detailData.steps : [];
+      currentTraceRunEvents = Array.isArray(detailData.events) ? detailData.events : [];
+      currentTraceRunSummary = detailData.summary || null;
+      currentTraceRunHighlights = detailData.highlights || null;
+    } else {
+      const [runRes, stepsRes, eventsRes] = await Promise.all([
+        apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}`),
+        apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}/steps`),
+        apiFetch(`/api/agent-queries/${encodeURIComponent(runId)}/events`),
+      ]);
+      if (!runRes.ok) throw new Error(`HTTP ${runRes.status}`);
+      if (!stepsRes.ok) throw new Error(`HTTP ${stepsRes.status}`);
+      if (!eventsRes.ok) throw new Error(`HTTP ${eventsRes.status}`);
+      const runData = await runRes.json();
+      const stepsData = await stepsRes.json();
+      const eventsData = await eventsRes.json();
+      currentTraceRunRecord = runData.query || null;
+      currentTraceRunSteps = Array.isArray(stepsData.steps) ? stepsData.steps : [];
+      currentTraceRunEvents = Array.isArray(eventsData.events) ? eventsData.events : [];
+      currentTraceRunSummary = null;
+      currentTraceRunHighlights = null;
+    }
     renderTraceRunDetail();
   } catch (err) {
     console.error("Failed to load trace detail:", err);
     if (traceMonitorTimeline) {
       traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">Trace 详情加载失败</div>`;
     }
+    currentTraceRunSummary = null;
+    currentTraceRunHighlights = null;
   }
 }
 
 function ensureTraceSelectionVisible(scope) {
-  const runs = getTraceRunCollection(scope);
+  const runs = getFilteredTraceRunCollection(scope);
   if (!runs.length) {
     currentTraceRunId = "";
     renderTraceMonitorDetailEmpty();
@@ -13861,7 +14380,7 @@ function setTraceMonitorScope(scope) {
   traceMonitorScopeBtns.forEach((btn) => {
     btn.classList.toggle("active", btn.getAttribute("data-trace-scope") === activeTraceMonitorScope);
   });
-  const runs = getTraceRunCollection(activeTraceMonitorScope);
+  const runs = getFilteredTraceRunCollection(activeTraceMonitorScope);
   const hasSelected = runs.some((run) => run.id === currentTraceRunId);
   if (!hasSelected) {
     currentTraceRunId = "";
@@ -13889,7 +14408,7 @@ function scheduleTraceDetailReload() {
   if (activePrimaryNavKey !== "trace-monitor") return;
   if (activeTraceMonitorScope !== "active") return;
   if (!currentTraceRunId) return;
-  const isActiveSelected = traceMonitorActiveRuns.some((run) => run.id === currentTraceRunId);
+  const isActiveSelected = getFilteredTraceRunCollection("active").some((run) => run.id === currentTraceRunId);
   if (!isActiveSelected) return;
   if (traceMonitorDetailReloadTimer) {
     clearTimeout(traceMonitorDetailReloadTimer);
@@ -13922,7 +14441,7 @@ async function loadTraceMonitorData(options) {
       ensureTraceSelectionVisible(activeTraceMonitorScope);
       return;
     }
-    const runs = getTraceRunCollection(activeTraceMonitorScope);
+    const runs = getFilteredTraceRunCollection(activeTraceMonitorScope);
     if (runs.some((run) => run.id === currentTraceRunId)) {
       loadTraceRunDetail(currentTraceRunId, activeTraceMonitorScope);
     } else {
@@ -14784,6 +15303,17 @@ function renderWorkbenchSubtasks(subtasks) {
       `
       : "";
   const selectedMeta = getSubtaskMetaList(selected);
+  const traceSummary = selected.trace || null;
+  const tracePills = traceSummary
+    ? [
+        traceSummary.status ? `状态 · ${traceSummary.status}` : "",
+        traceSummary.duration_ms || traceSummary.duration_ms === 0 ? `耗时 · ${formatDuration(traceSummary.duration_ms)}` : "",
+        traceSummary.current_step ? `当前 · ${traceSummary.current_step}` : "",
+        traceSummary.failure_type ? `失败 · ${traceSummary.failure_type}` : "",
+        traceSummary.artifact_contract_status ? `契约 · ${traceSummary.artifact_contract_status}` : "",
+        traceSummary.model ? `模型 · ${traceSummary.model}` : "",
+      ].filter(Boolean)
+    : [];
   const detailEl = document.createElement("div");
   detailEl.className = `workbench-subtask-detail-card ${selected.status}${shouldAnimateSelection ? " animate-in" : ""}`;
   detailEl.innerHTML = `
@@ -14810,8 +15340,37 @@ function renderWorkbenchSubtasks(subtasks) {
       ? `<div class="workbench-subtask-detail-meta-grid">${selectedMeta.map((entry) => `<div class="workbench-subtask-detail-meta-item">${escapeHtml(entry)}</div>`).join("")}</div>`
       : ""}
     <div class="workbench-item-body workbench-subtask-detail-body">${selectedBody}</div>
+    ${traceSummary
+      ? `
+        <div class="workbench-subtask-trace-summary">
+          <div class="workbench-subtask-trace-main">
+            <span class="workbench-subtask-trace-kicker">Trace</span>
+            <div class="workbench-subtask-trace-pills">
+              ${tracePills.map((entry) => `<span>${escapeHtml(entry)}</span>`).join("")}
+            </div>
+          </div>
+          <button type="button" class="btn-ghost workbench-open-trace-btn" data-query-id="${escapeAttribute(traceSummary.query_id)}">
+            打开 Trace
+          </button>
+        </div>
+      `
+      : ""}
     ${detailHint}
   `;
+  const openTraceBtn = detailEl.querySelector(".workbench-open-trace-btn");
+  if (openTraceBtn && traceSummary) {
+    openTraceBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openTraceMonitorRun(traceSummary.query_id, {
+        scope: "history",
+        sourceType: selected.delegation_id ? "workflow_delegation" : "",
+        sourceRefId: selected.delegation_id || "",
+        workflowType: currentWorkbenchDetail?.task?.workflow_type || "",
+        stageKey: selected.stage_key || "",
+        role: selected.role || "",
+      });
+    });
+  }
 
   const activeTask = currentWorkbenchDetail && currentWorkbenchDetail.task
     ? currentWorkbenchDetail.task
@@ -15147,6 +15706,15 @@ function renderWorkbenchArtifacts(artifacts) {
   sortedArtifacts.forEach((item) => {
     const el = document.createElement("div");
     const canOpen = Boolean(item.exists && item.absolute_path);
+    const generatedBy = item.generated_by_query || null;
+    const generatedMeta = generatedBy
+      ? [
+          generatedBy.query_id ? `query ${String(generatedBy.query_id).slice(0, 8)}` : "",
+          generatedBy.status ? `状态 · ${generatedBy.status}` : "",
+          generatedBy.model ? `模型 · ${generatedBy.model}` : "",
+          generatedBy.artifact_contract_status ? `契约 · ${generatedBy.artifact_contract_status}` : "",
+        ].filter(Boolean)
+      : [];
     el.className = `workbench-artifact-item${canOpen ? " is-clickable" : ""}`;
     el.innerHTML = `
       <div class="workbench-item-row">
@@ -15154,7 +15722,22 @@ function renderWorkbenchArtifacts(artifacts) {
         ${renderWorkbenchBadge(item.exists ? "ready" : "missing", item.exists ? "ready" : "missing")}
       </div>
       <div class="workbench-item-body">${escapeHtml(item.path)}</div>
+      ${generatedBy
+        ? `
+          <div class="workbench-artifact-trace">
+            <div class="workbench-artifact-trace-meta">${generatedMeta.map((entry) => `<span>${escapeHtml(entry)}</span>`).join("")}</div>
+            <button type="button" class="btn-ghost workbench-open-trace-btn" data-query-id="${escapeAttribute(generatedBy.query_id)}">打开 Trace</button>
+          </div>
+        `
+        : ""}
     `;
+    const openTraceBtn = el.querySelector(".workbench-open-trace-btn");
+    if (openTraceBtn && generatedBy) {
+      openTraceBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openTraceMonitorRun(generatedBy.query_id, { scope: "history" });
+      });
+    }
     if (canOpen) {
       el.title = "点击打开产出物";
       el.addEventListener("click", () => {
@@ -22405,6 +22988,35 @@ if (traceMonitorClearHistoryBtn) {
     clearAllTraceHistory();
   });
 }
+[
+  traceMonitorStatusFilter,
+  traceMonitorSourceFilter,
+  traceMonitorFilesFilter,
+  traceMonitorErrorsFilter,
+].forEach((control) => {
+  if (!control) return;
+  control.addEventListener("change", () => {
+    applyTraceMonitorFilters();
+  });
+});
+[
+  traceMonitorServiceFilter,
+  traceMonitorFailureFilter,
+  traceMonitorWorkflowFilter,
+  traceMonitorStageFilter,
+  traceMonitorRoleFilter,
+].forEach((control) => {
+  if (!control) return;
+  control.addEventListener("input", () => {
+    scheduleTraceMonitorFilterApply();
+  });
+  control.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyTraceMonitorFilters();
+    }
+  });
+});
 if (traceMonitorList) {
   traceMonitorList.addEventListener("scroll", () => {
     if (activePrimaryNavKey !== "trace-monitor" || activeTraceMonitorScope !== "history") return;
@@ -22847,4 +23459,3 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 });
-

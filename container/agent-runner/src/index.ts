@@ -469,6 +469,16 @@ function emitToolLifecycleEvent(
   });
 }
 
+function toolTypeForName(toolName: string): string {
+  if (toolName === 'Bash') return 'command';
+  if (['Read', 'Write', 'Edit', 'Glob', 'Grep', 'NotebookEdit'].includes(toolName)) {
+    return 'file';
+  }
+  if (toolName.startsWith('mcp__')) return 'ipc';
+  if (toolName === 'WebSearch' || toolName === 'WebFetch') return 'web';
+  return 'tool';
+}
+
 function createPreToolHook(meta: {
   getSessionId: () => string | undefined;
   getSelectedModel: () => string | undefined;
@@ -486,11 +496,15 @@ function createPreToolHook(meta: {
     emitToolLifecycleEvent(
       {
         type: 'tool',
-        name: 'tool_call',
+        name: 'tool_started',
         status: 'running',
         summary: `Calling ${hook.tool_name}`,
         payload: {
+          category: 'tool',
+          severity: 'info',
+          visibility: 'summary',
           toolName: hook.tool_name,
+          toolType: toolTypeForName(hook.tool_name),
           toolUseId: hook.tool_use_id,
           input: hook.tool_input as Record<string, unknown>,
         },
@@ -507,10 +521,16 @@ function createPreToolHook(meta: {
           status: 'running',
           summary: `Running ${summarizeCommand(toolInput.command)}`,
           payload: {
-            command: toolInput.command,
+            category: 'tool',
+            severity: 'info',
+            visibility: 'summary',
+            toolName: hook.tool_name,
+            toolType: 'command',
+            commandPreview: summarizeCommand(toolInput.command),
             description: toolInput.description,
             timeout: toolInput.timeout,
             background: toolInput.run_in_background,
+            redacted: true,
           },
         },
         commonMeta,
@@ -523,7 +543,13 @@ function createPreToolHook(meta: {
           status: 'running',
           summary: `Reading ${normalizeDisplayPath(toolInput.file_path)}`,
           payload: {
-            path: toolInput.file_path,
+            category: 'file',
+            severity: 'info',
+            visibility: 'summary',
+            resourceType: 'file',
+            resourceRef: normalizeDisplayPath(toolInput.file_path),
+            path: normalizeDisplayPath(toolInput.file_path),
+            operation: 'read',
             offset: toolInput.offset,
             limit: toolInput.limit,
             pages: toolInput.pages,
@@ -539,9 +565,16 @@ function createPreToolHook(meta: {
           status: 'running',
           summary: `Writing ${normalizeDisplayPath(toolInput.file_path)}`,
           payload: {
-            path: toolInput.file_path,
+            category: 'file',
+            severity: 'info',
+            visibility: 'summary',
+            resourceType: 'file',
+            resourceRef: normalizeDisplayPath(toolInput.file_path),
+            path: normalizeDisplayPath(toolInput.file_path),
+            operation: 'write',
             contentLength:
               typeof toolInput.content === 'string' ? toolInput.content.length : undefined,
+            redacted: true,
           },
         },
         commonMeta,
@@ -554,7 +587,13 @@ function createPreToolHook(meta: {
           status: 'running',
           summary: `Editing ${normalizeDisplayPath(toolInput.file_path)}`,
           payload: {
-            path: toolInput.file_path,
+            category: 'file',
+            severity: 'info',
+            visibility: 'summary',
+            resourceType: 'file',
+            resourceRef: normalizeDisplayPath(toolInput.file_path),
+            path: normalizeDisplayPath(toolInput.file_path),
+            operation: 'edit',
             replaceAll: toolInput.replace_all,
           },
         },
@@ -571,10 +610,15 @@ function createPreToolHook(meta: {
           status: 'running',
           summary: `${hook.tool_name === 'Glob' ? 'Globbing' : 'Searching'} ${String(target || '')}`.trim(),
           payload: {
+            category: 'file',
+            severity: 'info',
+            visibility: 'summary',
             toolName: hook.tool_name,
+            toolType: 'file_search',
             pattern: toolInput.pattern,
-            path: toolInput.path,
+            path: normalizeDisplayPath(toolInput.path),
             query: toolInput.query,
+            operation: 'search',
           },
         },
         commonMeta,
@@ -604,11 +648,15 @@ function createPostToolHook(meta: {
     emitToolLifecycleEvent(
       {
         type: 'tool',
-        name: 'tool_result',
+        name: 'tool_completed',
         status: 'success',
         summary: `${hook.tool_name} completed`,
         payload: {
+          category: 'tool',
+          severity: 'info',
+          visibility: 'summary',
           toolName: hook.tool_name,
+          toolType: toolTypeForName(hook.tool_name),
           toolUseId: hook.tool_use_id,
         },
       },
@@ -623,7 +671,12 @@ function createPostToolHook(meta: {
           status: 'success',
           summary: `Finished ${summarizeCommand(toolInput.command)}`,
           payload: {
-            command: toolInput.command,
+            category: 'tool',
+            severity: 'info',
+            visibility: 'summary',
+            toolName: hook.tool_name,
+            toolType: 'command',
+            commandPreview: summarizeCommand(toolInput.command),
             interrupted: response.interrupted,
             backgroundTaskId: response.backgroundTaskId,
             stdoutPreview:
@@ -634,6 +687,7 @@ function createPostToolHook(meta: {
               typeof response.stderr === 'string'
                 ? response.stderr.slice(0, 240)
                 : undefined,
+            redacted: true,
           },
         },
         commonMeta,
@@ -646,7 +700,13 @@ function createPostToolHook(meta: {
           status: 'success',
           summary: `Read ${normalizeDisplayPath(toolInput.file_path)}`,
           payload: {
-            path: toolInput.file_path,
+            category: 'file',
+            severity: 'info',
+            visibility: 'summary',
+            resourceType: 'file',
+            resourceRef: normalizeDisplayPath(toolInput.file_path),
+            path: normalizeDisplayPath(toolInput.file_path),
+            operation: 'read',
             numLines:
               typeof response?.file === 'object' &&
               response.file &&
@@ -668,7 +728,13 @@ function createPostToolHook(meta: {
           status: 'success',
           summary: `${hook.tool_name === 'Write' ? 'Wrote' : 'Edited'} ${normalizeDisplayPath(toolInput.file_path || response.filePath)}`,
           payload: {
-            path: toolInput.file_path || response.filePath,
+            category: 'file',
+            severity: 'info',
+            visibility: 'summary',
+            resourceType: 'file',
+            resourceRef: normalizeDisplayPath(toolInput.file_path || response.filePath),
+            path: normalizeDisplayPath(toolInput.file_path || response.filePath),
+            operation: hook.tool_name === 'Write' ? 'write' : 'edit',
             editKind: hook.tool_name === 'Write' ? response.type : 'edit',
             patchPreview,
             additions:
@@ -679,6 +745,7 @@ function createPostToolHook(meta: {
               typeof response.gitDiff === 'object' && response.gitDiff
                 ? (response.gitDiff as Record<string, unknown>).deletions
                 : undefined,
+            redacted: true,
           },
         },
         commonMeta,
@@ -692,12 +759,18 @@ function createPostToolHook(meta: {
           status: 'success',
           summary: `${hook.tool_name} found ${String(response.numFiles ?? response.numMatches ?? 0)} result(s)`,
           payload: {
+            category: 'file',
+            severity: 'info',
+            visibility: 'summary',
             toolName: hook.tool_name,
+            toolType: 'file_search',
             numFiles: response.numFiles,
             numMatches: response.numMatches,
             truncated: response.truncated,
             filenames,
             contentPreview,
+            operation: 'search',
+            redacted: true,
           },
         },
         commonMeta,
@@ -723,11 +796,16 @@ function createPostToolFailureHook(meta: {
         status: 'error',
         summary: `${hook.tool_name} failed: ${hook.error}`,
         payload: {
+          category: hook.tool_name === 'Bash' ? 'tool' : toolTypeForName(hook.tool_name) === 'file' ? 'file' : 'tool',
+          severity: 'error',
+          visibility: 'summary',
           toolName: hook.tool_name,
+          toolType: toolTypeForName(hook.tool_name),
           toolUseId: hook.tool_use_id,
           input: hook.tool_input as Record<string, unknown>,
           error: hook.error,
           isInterrupt: hook.is_interrupt,
+          redacted: true,
         },
       },
       {
@@ -1150,6 +1228,29 @@ function buildQueryOptions(
 
   const resolvedModel = selectedModel || MODEL_DEFAULT;
   log(`Model from host: model=${resolvedModel}`);
+  writeEvent(
+    {
+      type: 'model',
+      name: 'model_resolution',
+      status: 'success',
+      summary: `Using model ${resolvedModel}`,
+      payload: {
+        category: 'model',
+        severity: 'info',
+        visibility: 'summary',
+        provider: 'anthropic',
+        requestedModel: selectedModel,
+        actualModel: resolvedModel,
+        promptChars: containerInput.prompt.length,
+      },
+    },
+    {
+      newSessionId: overrides.sessionId,
+      selectedModel: resolvedModel,
+      runId: containerInput.runId,
+      queryId,
+    },
+  );
 
   const useIsolatedSession = containerInput.isolatedSession === true;
 
@@ -1277,6 +1378,28 @@ async function iterateQuery(
       const textResult = 'result' in message ? (message as { result?: string }).result : null;
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
       if (message.subtype?.startsWith('error')) {
+        writeEvent(
+          {
+            type: 'model',
+            name: 'model_request_failed',
+            status: 'error',
+            summary: textResult || 'Agent query failed.',
+            payload: {
+              category: 'model',
+              severity: 'error',
+              visibility: 'summary',
+              actualModel: options.model,
+              resultSubtype: message.subtype,
+              outputChars: typeof textResult === 'string' ? textResult.length : 0,
+            },
+          },
+          {
+            newSessionId,
+            selectedModel: options.model,
+            runId: identifiers.runId,
+            queryId: identifiers.queryId,
+          },
+        );
         writeOutput({
           status: 'error',
           result: null,
@@ -1288,6 +1411,28 @@ async function iterateQuery(
         });
       } else {
         planResult = textResult || undefined;
+        writeEvent(
+          {
+            type: 'model',
+            name: 'model_response_completed',
+            status: 'success',
+            summary: `Model response completed${textResult ? ` (${textResult.length} chars)` : ''}`,
+            payload: {
+              category: 'model',
+              severity: 'info',
+              visibility: 'summary',
+              actualModel: options.model,
+              resultSubtype: message.subtype,
+              outputChars: typeof textResult === 'string' ? textResult.length : 0,
+            },
+          },
+          {
+            newSessionId,
+            selectedModel: options.model,
+            runId: identifiers.runId,
+            queryId: identifiers.queryId,
+          },
+        );
         writeOutput({
           status: 'success',
           result: textResult || null,
@@ -1422,6 +1567,27 @@ async function runQuery(
       resumeAt: resumeAt ?? null,
     };
     log(`ERROR: ${error}. details=${JSON.stringify(details)}`);
+    writeEvent(
+      {
+        type: 'model',
+        name: 'model_request_failed',
+        status: 'error',
+        summary: error,
+        payload: {
+          category: 'model',
+          severity: 'error',
+          visibility: 'summary',
+          actualModel: options.model,
+          ...details,
+        },
+      },
+      {
+        newSessionId,
+        selectedModel: options.model,
+        runId: containerInput.runId,
+        queryId,
+      },
+    );
     writeOutput({
       status: 'error',
       result: null,

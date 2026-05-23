@@ -23,6 +23,7 @@ import {
   updateDelegation,
   updateWorkflow,
 } from './db.js';
+import { agentQueryTraceManager } from './agent-query-trace.js';
 import { PROJECT_ROOT } from './config.js';
 import { RegisteredGroup } from './types.js';
 import {
@@ -387,6 +388,110 @@ describe('workbench approval transition sync', () => {
     expect(
       detail?.subtasks.find((item) => item.stage_key === 'dev')?.status,
     ).toBe('current');
+  });
+
+  it('attaches latest query trace summaries to workbench stages and artifacts', () => {
+    dbCreateWorkflow({
+      id: 'wf-trace-summary',
+      name: 'Trace 摘要联动',
+      service: WORKBENCH_TEST_SERVICE,
+      start_from: 'dev',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/trace-summary',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_trace_summary',
+        staging_work_branch: '',
+        access_token: '',
+      },
+      status: 'dev',
+      current_delegation_id: 'wf-del-trace-summary',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-trace-summary');
+    createDelegation({
+      id: 'wf-del-trace-summary',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'dev@g.us',
+      target_folder: 'web_dev',
+      task: '开发 Trace 摘要',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      requester_jid: null,
+      workflow_id: 'wf-trace-summary',
+      created_at: '2026-04-07T00:01:00.000Z',
+      updated_at: '2026-04-07T00:01:00.000Z',
+    });
+    syncWorkbenchOnDelegationCreated(
+      'wf-trace-summary',
+      'wf-del-trace-summary',
+    );
+
+    agentQueryTraceManager.startQuery({
+      queryId: 'query-trace-summary',
+      sourceType: 'workflow_delegation',
+      sourceRefId: 'wf-del-trace-summary',
+      workflowType: 'dev_test',
+      service: WORKBENCH_TEST_SERVICE,
+      role: 'dev',
+      workflowId: 'wf-trace-summary',
+      stageKey: 'dev',
+      delegationId: 'wf-del-trace-summary',
+      selectedModel: 'claude-sonnet',
+    });
+    agentQueryTraceManager.updateQuery('query-trace-summary', {
+      current_action: 'Running tests',
+      artifact_contract_status: 'passed',
+      changed_file_count: 1,
+    });
+    agentQueryTraceManager.finishQuery('query-trace-summary', 'success', {
+      output_preview: 'done',
+    });
+
+    fs.mkdirSync(
+      path.join(
+        PROJECT_ROOT,
+        'projects',
+        WORKBENCH_TEST_SERVICE,
+        'iteration',
+        '2026-04-07_trace_summary',
+      ),
+      { recursive: true },
+    );
+    fs.writeFileSync(
+      path.join(
+        PROJECT_ROOT,
+        'projects',
+        WORKBENCH_TEST_SERVICE,
+        'iteration',
+        '2026-04-07_trace_summary',
+        'dev.md',
+      ),
+      '# dev',
+    );
+
+    const detail = getWorkbenchTaskDetail('wb-wf-trace-summary');
+    const devStage = detail?.subtasks.find((item) => item.stage_key === 'dev');
+    expect(devStage?.trace).toMatchObject({
+      query_id: 'query-trace-summary',
+      status: 'success',
+      current_step: 'Running tests',
+      artifact_contract_status: 'passed',
+      model: 'claude-sonnet',
+    });
+    const devArtifact = detail?.artifacts.find(
+      (item) => item.artifact_type === 'dev_doc',
+    );
+    expect(devArtifact?.generated_by_query?.query_id).toBe(
+      'query-trace-summary',
+    );
   });
 
   it('does not emit nested action item updates while rendering broadcast cards', () => {

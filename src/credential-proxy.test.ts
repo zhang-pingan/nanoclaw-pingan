@@ -565,7 +565,48 @@ describe('credential-proxy', () => {
         }),
       ],
     ]);
+  });
 
+  it('records upstream response model as the actual proxy model', async () => {
+    upstreamResponder = vi.fn(async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'msg-final-model',
+        type: 'message',
+        model: 'claude-proxy-final',
+        usage: {
+          input_tokens: 12,
+          output_tokens: 5,
+        },
+      }),
+    }));
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/__icarus__/run-1/query-1/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
+      },
+      body: JSON.stringify({
+        model: 'claude-select-output',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(modelResolutionCalls).toEqual([
+      [
+        expect.objectContaining({
+          runId: 'run-1',
+          queryId: 'query-1',
+          requestedModel: 'claude-select-output',
+          actualModel: 'claude-proxy-final',
+          source: 'proxy_forward',
+        }),
+      ],
+    ]);
   });
 
   it('returns 502 when upstream is unreachable', async () => {

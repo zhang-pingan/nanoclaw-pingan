@@ -1731,6 +1731,38 @@
             <button type="button" class="trace-monitor-scope-btn active" data-trace-scope="active">活跃 Agent</button>
             <button type="button" class="trace-monitor-scope-btn" data-trace-scope="history">历史 Agent</button>
           </div>
+          <div class="trace-monitor-filters">
+            <select id="trace-monitor-status-filter" aria-label="Trace 状态筛选">
+              <option value="">全部状态</option>
+              <option value="running">running</option>
+              <option value="success">success</option>
+              <option value="error">error</option>
+              <option value="timeout">timeout</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+            <select id="trace-monitor-source-filter" aria-label="Trace 来源筛选">
+              <option value="">全部来源</option>
+              <option value="message">message</option>
+              <option value="workflow_delegation">workflow</option>
+              <option value="scheduled_task">scheduled</option>
+              <option value="web_action">web action</option>
+              <option value="assistant_evolution">evolution</option>
+              <option value="assistant_action">assistant</option>
+            </select>
+            <input id="trace-monitor-service-filter" type="search" placeholder="service" autocomplete="off" />
+            <input id="trace-monitor-failure-filter" type="search" placeholder="failure" autocomplete="off" />
+            <input id="trace-monitor-workflow-filter" type="search" placeholder="workflow" autocomplete="off" />
+            <input id="trace-monitor-stage-filter" type="search" placeholder="stage" autocomplete="off" />
+            <input id="trace-monitor-role-filter" type="search" placeholder="role" autocomplete="off" />
+            <label class="trace-monitor-filter-check">
+              <input id="trace-monitor-files-filter" type="checkbox" />
+              <span>文件变更</span>
+            </label>
+            <label class="trace-monitor-filter-check">
+              <input id="trace-monitor-errors-filter" type="checkbox" />
+              <span>仅错误</span>
+            </label>
+          </div>
           <div id="trace-monitor-list" class="trace-monitor-list"></div>
         </aside>
 

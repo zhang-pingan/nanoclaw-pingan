@@ -23,6 +23,7 @@ import {
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 import { recordModelResolution } from './model-resolution.js';
+import type { AgentQueryRecord } from './types.js';
 
 export type AuthMode = 'api-key' | 'oauth';
 
@@ -79,6 +80,145 @@ function parseProxyErrorBody(body: string): unknown {
   }
 }
 
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function estimateAnthropicCost(_model: string | undefined): number | undefined {
+  return undefined;
+}
+
+async function getTraceManager(): Promise<{
+  appendStructuredEvent: (input: {
+    queryId: string;
+    category: string;
+    eventName: string;
+    status?: string | null;
+    severity?: 'debug' | 'info' | 'warn' | 'error';
+    summary?: string | null;
+    payload?: Record<string, unknown>;
+    latencyMs?: number | null;
+  }) => unknown;
+  updateQuery: (queryId: string, patch: Partial<AgentQueryRecord>) => void;
+} | null> {
+  try {
+    const module = await import('./agent-query-trace.js');
+    return module.agentQueryTraceManager;
+  } catch {
+    return null;
+  }
+}
+
+function appendModelTraceEvent(
+  context: ProxyRequestContext,
+  event: {
+    name: string;
+    status: 'running' | 'success' | 'error';
+    summary: string;
+    payload: Record<string, unknown>;
+    latencyMs?: number;
+  },
+): void {
+  if (!context.queryId) return;
+  void getTraceManager().then((manager) => {
+    if (!manager || !context.queryId) return;
+    try {
+      manager.appendStructuredEvent({
+        queryId: context.queryId,
+        category: 'model',
+        eventName: event.name,
+        status: event.status,
+        severity: event.status === 'error' ? 'error' : 'info',
+        summary: event.summary,
+        payload: event.payload,
+        latencyMs: event.latencyMs,
+      });
+    } catch {
+      // The proxy can serve model calls before/without an active trace.
+    }
+  }).catch(() => {});
+}
+
+function updateQueryFromModelUsage(
+  context: ProxyRequestContext,
+  payload: Record<string, unknown>,
+): void {
+  if (!context.queryId) return;
+  const patch: Partial<AgentQueryRecord> = {};
+  if (typeof payload.actualModel === 'string') patch.actual_model = payload.actualModel;
+  const inputTokens = numberValue(payload.inputTokens);
+  if (inputTokens !== undefined) patch.input_tokens = inputTokens;
+  const outputTokens = numberValue(payload.outputTokens);
+  if (outputTokens !== undefined) patch.output_tokens = outputTokens;
+  const cacheReadTokens = numberValue(payload.cacheReadTokens);
+  if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
+  const cacheWriteTokens = numberValue(payload.cacheWriteTokens);
+  if (cacheWriteTokens !== undefined) patch.cache_write_tokens = cacheWriteTokens;
+  const estimatedCost = numberValue(payload.estimatedCost);
+  if (estimatedCost !== undefined) patch.estimated_cost = estimatedCost;
+  if (Object.keys(patch).length === 0) return;
+  void getTraceManager().then((manager) => {
+    if (!manager || !context.queryId) return;
+    try {
+      manager.updateQuery(context.queryId, patch);
+    } catch {
+      // ignore inactive or uninitialized trace storage
+    }
+  }).catch(() => {});
+}
+
+function normalizeUsagePayload(
+  requestedModel: string | undefined,
+  actualModel: string | undefined,
+  usage: Record<string, unknown> | undefined,
+  latencyMs: number,
+): Record<string, unknown> {
+  const inputTokens = numberValue(usage?.input_tokens);
+  const outputTokens = numberValue(usage?.output_tokens);
+  const cacheReadTokens = numberValue(usage?.cache_read_input_tokens);
+  const cacheWriteTokens = numberValue(usage?.cache_creation_input_tokens);
+  return {
+    provider: 'anthropic',
+    traceSource: 'credential_proxy',
+    requestedModel,
+    actualModel,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    estimatedCost: estimateAnthropicCost(actualModel),
+    latencyMs,
+  };
+}
+
+function recordModelTraceResolution(
+  context: ProxyRequestContext,
+  requestedModel: string | undefined,
+  actualModel: string | undefined,
+  source: 'proxy_forward' | 'compat_response',
+  latencyMs: number,
+  usage?: Record<string, unknown>,
+): void {
+  if (!context.runId || !context.queryId || !actualModel) return;
+  recordModelResolution({
+    runId: context.runId,
+    queryId: context.queryId,
+    requestedModel,
+    actualModel,
+    source,
+    updatedAt: Date.now(),
+  });
+  const payload = normalizeUsagePayload(requestedModel, actualModel, usage, latencyMs);
+  appendModelTraceEvent(context, {
+    name: 'model_resolution',
+    status: 'success',
+    summary: `Model resolved: ${actualModel}`,
+    payload,
+    latencyMs,
+  });
+  updateQueryFromModelUsage(context, payload);
+}
+
 export function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
@@ -113,6 +253,7 @@ export function startCredentialProxy(
         const body = Buffer.concat(chunks);
         const requestContext = extractProxyRequestContext(req.url);
         const targetPath = requestContext.path.split('?')[0] || '/';
+        const requestStartedAt = Date.now();
         const headers: Record<string, string | number | string[] | undefined> =
           {
             ...(req.headers as Record<string, string>),
@@ -149,6 +290,20 @@ export function startCredentialProxy(
         }
 
         if (openAiCompat.enabled && targetPath === '/v1/messages' && parsedJsonBody) {
+          appendModelTraceEvent(requestContext, {
+            name: 'model_request_started',
+            status: 'running',
+            summary: `Model request started: ${String(parsedJsonBody.model || openAiCompat.model)}`,
+            payload: {
+              provider: 'openai-compatible',
+              traceSource: 'credential_proxy',
+              requestedModel:
+                typeof parsedJsonBody.model === 'string'
+                  ? parsedJsonBody.model
+                  : undefined,
+              requestPath: targetPath,
+            },
+          });
           try {
             if (!openAiCompat.apiKey) {
               throw new Error('CREDENTIAL_PROXY_OPENAI_API_KEY is required');
@@ -169,23 +324,33 @@ export function startCredentialProxy(
             );
 
             if (compatResult.stream) {
-              if (
-                requestContext.runId &&
-                requestContext.queryId &&
-                compatResult.model
-              ) {
-                recordModelResolution({
-                  runId: requestContext.runId,
-                  queryId: requestContext.queryId,
+              const latencyMs = Date.now() - requestStartedAt;
+              const actualModel = compatResult.model || openAiCompat.model;
+              recordModelTraceResolution(
+                requestContext,
+                typeof parsedJsonBody.model === 'string'
+                  ? parsedJsonBody.model
+                  : undefined,
+                actualModel,
+                'compat_response',
+                latencyMs,
+              );
+              appendModelTraceEvent(requestContext, {
+                name: 'model_response_completed',
+                status: 'success',
+                summary: `Model stream completed: ${compatResult.model || openAiCompat.model}`,
+                payload: {
+                  provider: 'openai-compatible',
+                  traceSource: 'credential_proxy',
                   requestedModel:
                     typeof parsedJsonBody.model === 'string'
                       ? parsedJsonBody.model
                       : undefined,
-                  actualModel: compatResult.model,
-                  source: 'compat_response',
-                  updatedAt: Date.now(),
-                });
-              }
+                  actualModel,
+                  latencyMs,
+                },
+                latencyMs,
+              });
               res.writeHead(200, {
                 'content-type': compatResult.contentType,
                 'cache-control': 'no-cache',
@@ -196,26 +361,59 @@ export function startCredentialProxy(
             }
 
             res.writeHead(200, { 'content-type': 'application/json' });
-            if (
-              requestContext.runId &&
-              requestContext.queryId &&
-              compatResult.model
-            ) {
-              recordModelResolution({
-                runId: requestContext.runId,
-                queryId: requestContext.queryId,
+            const latencyMs = Date.now() - requestStartedAt;
+            const usage =
+              compatResult.anthropicResponse &&
+              typeof compatResult.anthropicResponse === 'object' &&
+              'usage' in compatResult.anthropicResponse &&
+              typeof compatResult.anthropicResponse.usage === 'object'
+                ? (compatResult.anthropicResponse.usage as Record<string, unknown>)
+                : undefined;
+            const actualModel = compatResult.model || openAiCompat.model;
+            recordModelTraceResolution(
+              requestContext,
+              typeof parsedJsonBody.model === 'string'
+                ? parsedJsonBody.model
+                : undefined,
+              actualModel,
+              'compat_response',
+              latencyMs,
+              usage,
+            );
+            appendModelTraceEvent(requestContext, {
+              name: 'model_response_completed',
+              status: 'success',
+              summary: `Model response completed: ${compatResult.model || openAiCompat.model}`,
+              payload: normalizeUsagePayload(
+                typeof parsedJsonBody.model === 'string'
+                  ? parsedJsonBody.model
+                  : undefined,
+                actualModel,
+                usage,
+                latencyMs,
+              ),
+              latencyMs,
+            });
+            res.end(JSON.stringify(compatResult.anthropicResponse));
+            return;
+          } catch (err) {
+            appendModelTraceEvent(requestContext, {
+              name: 'model_request_failed',
+              status: 'error',
+              summary:
+                err instanceof Error ? err.message : 'Model request failed',
+              payload: {
+                provider: 'openai-compatible',
+                traceSource: 'credential_proxy',
                 requestedModel:
                   typeof parsedJsonBody.model === 'string'
                     ? parsedJsonBody.model
                     : undefined,
-                actualModel: compatResult.model,
-                source: 'compat_response',
-                updatedAt: Date.now(),
-              });
-            }
-            res.end(JSON.stringify(compatResult.anthropicResponse));
-            return;
-          } catch (err) {
+                latencyMs: Date.now() - requestStartedAt,
+                error: err instanceof Error ? err.message : String(err),
+              },
+              latencyMs: Date.now() - requestStartedAt,
+            });
             const compatError =
               err instanceof OpenAiCompatRequestError
                 ? {
@@ -271,18 +469,21 @@ export function startCredentialProxy(
           parsedJsonBody &&
           targetPath === '/v1/messages'
         ) {
-          const actualModel =
+          const requestedModel =
             typeof parsedJsonBody.model === 'string' && parsedJsonBody.model.trim()
               ? parsedJsonBody.model
               : undefined;
-          if (actualModel) {
-            recordModelResolution({
-              runId: requestContext.runId,
-              queryId: requestContext.queryId,
-              requestedModel: actualModel,
-              actualModel,
-              source: 'proxy_forward',
-              updatedAt: Date.now(),
+          if (requestedModel) {
+            appendModelTraceEvent(requestContext, {
+              name: 'model_request_started',
+              status: 'running',
+              summary: `Model request started: ${requestedModel}`,
+              payload: {
+                provider: 'anthropic',
+                traceSource: 'credential_proxy',
+                requestedModel,
+                requestPath: targetPath,
+              },
             });
           }
         }
@@ -296,12 +497,94 @@ export function startCredentialProxy(
             headers,
           } as RequestOptions,
           (upRes) => {
-            res.writeHead(upRes.statusCode!, upRes.headers);
-            upRes.pipe(res);
+            const chunks: Buffer[] = [];
+            upRes.on('data', (chunk) => {
+              chunks.push(Buffer.from(chunk));
+            });
+            upRes.on('end', () => {
+              const responseBody = Buffer.concat(chunks);
+              const latencyMs = Date.now() - requestStartedAt;
+              let responseJson: Record<string, unknown> | null = null;
+              try {
+                responseJson = JSON.parse(responseBody.toString('utf-8')) as Record<string, unknown>;
+              } catch {
+                responseJson = null;
+              }
+              const usage =
+                responseJson?.usage && typeof responseJson.usage === 'object'
+                  ? (responseJson.usage as Record<string, unknown>)
+                  : undefined;
+              const requestedModel =
+                parsedJsonBody && typeof parsedJsonBody.model === 'string'
+                  ? parsedJsonBody.model
+                  : undefined;
+              const actualModel =
+                responseJson && typeof responseJson.model === 'string'
+                  ? responseJson.model
+                  : requestedModel;
+
+              if (targetPath === '/v1/messages') {
+                if (upRes.statusCode && upRes.statusCode >= 400) {
+                  appendModelTraceEvent(requestContext, {
+                    name: 'model_request_failed',
+                    status: 'error',
+                    summary: `Model request failed: HTTP ${upRes.statusCode}`,
+                    payload: {
+                      provider: 'anthropic',
+                      traceSource: 'credential_proxy',
+                      requestedModel,
+                      actualModel,
+                      upstreamStatus: upRes.statusCode,
+                      latencyMs,
+                    },
+                    latencyMs,
+                  });
+                } else {
+                  const usagePayload = normalizeUsagePayload(
+                    requestedModel,
+                    actualModel,
+                    usage,
+                    latencyMs,
+                  );
+                  recordModelTraceResolution(
+                    requestContext,
+                    requestedModel,
+                    actualModel,
+                    'proxy_forward',
+                    latencyMs,
+                    usage,
+                  );
+                  appendModelTraceEvent(requestContext, {
+                    name: 'model_response_completed',
+                    status: 'success',
+                    summary: `Model response completed: ${actualModel || requestedModel || 'unknown'}`,
+                    payload: usagePayload,
+                    latencyMs,
+                  });
+                  updateQueryFromModelUsage(requestContext, usagePayload);
+                }
+              }
+
+              res.writeHead(upRes.statusCode!, upRes.headers);
+              res.end(responseBody);
+            });
           },
         );
 
         upstream.on('error', (err) => {
+          appendModelTraceEvent(requestContext, {
+            name: 'model_request_failed',
+            status: 'error',
+            summary: err.message,
+            payload: {
+              provider: 'anthropic',
+              traceSource: 'credential_proxy',
+              requestPath: targetPath,
+              latencyMs: Date.now() - requestStartedAt,
+              error: err.message,
+            },
+            latencyMs: Date.now() - requestStartedAt,
+          });
           logger.error(
             { err, url: req.url },
             'Credential proxy upstream error',
