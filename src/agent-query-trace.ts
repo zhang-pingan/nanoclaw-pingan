@@ -13,6 +13,13 @@ import {
   updateAgentQueryStep,
 } from './db.js';
 import {
+  AgentQueryTraceSummaryAccumulator,
+  applyEventToTraceSummary,
+  createTraceSummaryAccumulator,
+  finalizeTraceSummary,
+  summarizeAgentQueryEvents,
+} from './agent-query-trace-summary.js';
+import {
   ActiveAgentQueryTrace,
   AgentQueryEventRecord,
   AgentQueryRecord,
@@ -110,150 +117,6 @@ function isErrorTerminalStatus(status: AgentQueryStatus): boolean {
   return status === 'error' || status === 'timeout';
 }
 
-function parsePayloadObject(value: string | null): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function payloadString(
-  payload: Record<string, unknown>,
-  key: string,
-): string | null {
-  const value = payload[key];
-  return typeof value === 'string' && value.trim() ? value : null;
-}
-
-function eventCategory(
-  eventType: string,
-  eventName: string,
-  payload: Record<string, unknown>,
-): string {
-  const explicit = payloadString(payload, 'category');
-  if (explicit) return explicit.toLowerCase();
-  const type = eventType.toLowerCase();
-  const name = eventName.toLowerCase();
-  if (type === 'command' || name.startsWith('command_')) return 'tool';
-  if (type) return type;
-  if (name.startsWith('file_')) return 'file';
-  if (name.startsWith('tool_')) return 'tool';
-  if (name.startsWith('model_')) return 'model';
-  if (name.startsWith('container_')) return 'container';
-  if (name.startsWith('queue_')) return 'queue';
-  if (name.startsWith('ipc_')) return 'ipc';
-  if (name.startsWith('artifact_')) return 'artifact';
-  return 'lifecycle';
-}
-
-function eventIdentity(
-  eventName: string,
-  payload: Record<string, unknown>,
-  fallback: string,
-): string {
-  return (
-    payloadString(payload, 'toolUseId') ||
-    payloadString(payload, 'path') ||
-    payloadString(payload, 'resourceRef') ||
-    `${eventName}:${fallback}`
-  );
-}
-
-function isToolStartEvent(eventName: string): boolean {
-  return eventName === 'tool_started' || eventName === 'tool_call';
-}
-
-function isToolFailureEvent(eventName: string, status: string | null): boolean {
-  const normalizedStatus = (status || '').toLowerCase();
-  const name = eventName.toLowerCase();
-  return (
-    normalizedStatus === 'error' ||
-    normalizedStatus === 'failed' ||
-    name.endsWith('_failed') ||
-    name.includes('tool_failed') ||
-    name.includes('command_failed')
-  );
-}
-
-function isFileChangeEvent(eventName: string, payload: Record<string, unknown>): boolean {
-  const name = eventName.toLowerCase();
-  const operation = payloadString(payload, 'operation')?.toLowerCase() || '';
-  return (
-    name.includes('write') ||
-    name.includes('edit') ||
-    name.includes('delete') ||
-    name.includes('diff') ||
-    operation === 'write' ||
-    operation === 'edit' ||
-    operation === 'delete' ||
-    operation === 'diff'
-  );
-}
-
-function eventHasToolIdentity(payload: Record<string, unknown>): boolean {
-  return Boolean(payloadString(payload, 'toolUseId') || payloadString(payload, 'toolName'));
-}
-
-function summarizeEventsForQuery(
-  events: AgentQueryEventRecord[],
-): Pick<
-  AgentQueryRecord,
-  | 'queue_latency_ms'
-  | 'tool_call_count'
-  | 'failed_tool_call_count'
-  | 'changed_file_count'
-  | 'artifact_count'
-> {
-  const toolIds = new Set<string>();
-  const failedToolIds = new Set<string>();
-  const changedPaths = new Set<string>();
-  const artifactIds = new Set<string>();
-  let queueLatencyMs: number | null = null;
-
-  for (const event of events) {
-    const payload = parsePayloadObject(event.payload_json);
-    const category = eventCategory(event.event_type, event.event_name, payload);
-    const eventName = event.event_name.toLowerCase();
-    if (category === 'queue' && typeof payload.queueLatencyMs === 'number') {
-      queueLatencyMs = payload.queueLatencyMs;
-    }
-    if (category === 'tool' || event.event_type === 'command') {
-      const id = eventIdentity(eventName, payload, String(event.event_index));
-      if (isToolStartEvent(eventName) || event.event_type === 'command') {
-        toolIds.add(id);
-      }
-      if (isToolFailureEvent(eventName, event.status)) {
-        failedToolIds.add(id);
-        toolIds.add(id);
-      }
-    } else if (eventHasToolIdentity(payload) && isToolFailureEvent(eventName, event.status)) {
-      const id = eventIdentity(eventName, payload, String(event.event_index));
-      failedToolIds.add(id);
-      toolIds.add(id);
-    }
-    if (category === 'file' && isFileChangeEvent(eventName, payload)) {
-      const path = payloadString(payload, 'path') || payloadString(payload, 'resourceRef');
-      if (path) changedPaths.add(path);
-    }
-    if (category === 'artifact') {
-      artifactIds.add(eventIdentity(eventName, payload, String(event.event_index)));
-    }
-  }
-
-  return {
-    queue_latency_ms: queueLatencyMs,
-    tool_call_count: toolIds.size,
-    failed_tool_call_count: failedToolIds.size,
-    changed_file_count: changedPaths.size,
-    artifact_count: artifactIds.size,
-  };
-}
-
 function hasErrorEvent(events: AgentQueryEventRecord[]): boolean {
   return events.some(
     (event) =>
@@ -265,6 +128,10 @@ function hasErrorEvent(events: AgentQueryEventRecord[]): boolean {
 
 export class AgentQueryTraceManager {
   private activeQueries = new Map<string, LiveQueryState>();
+  private summaryAccumulators = new Map<
+    string,
+    AgentQueryTraceSummaryAccumulator
+  >();
   private listeners: Array<() => void> = [];
 
   onChange(callback: () => void): void {
@@ -346,6 +213,10 @@ export class AgentQueryTraceManager {
       updated_at: startedAt,
     };
     createAgentQuery(record);
+    this.summaryAccumulators.set(
+      input.queryId,
+      createTraceSummaryAccumulator(),
+    );
     this.activeQueries.set(input.queryId, {
       queryId: input.queryId,
       runId: input.runId ?? null,
@@ -404,6 +275,7 @@ export class AgentQueryTraceManager {
 
   deleteQuery(queryId: string): void {
     this.activeQueries.delete(queryId);
+    this.summaryAccumulators.delete(queryId);
     deleteAgentQuery(queryId);
     this.emitChange();
   }
@@ -534,13 +406,16 @@ export class AgentQueryTraceManager {
     if (input.eventType === 'output' && !query.firstOutputAt) {
       query.firstOutputAt = startedAt;
     }
-    if (input.eventType === 'tool' && !getAgentQuery(input.queryId)?.first_tool_at) {
-      updateAgentQuery(input.queryId, { first_tool_at: startedAt });
+    const accumulator = this.summaryAccumulators.get(input.queryId);
+    let derivedSummary;
+    if (accumulator) {
+      applyEventToTraceSummary(accumulator, record);
+      derivedSummary = finalizeTraceSummary(accumulator);
+    } else {
+      derivedSummary = summarizeAgentQueryEvents(
+        listAgentQueryEvents(input.queryId),
+      );
     }
-
-    const derivedSummary = summarizeEventsForQuery(
-      listAgentQueryEvents(input.queryId),
-    );
     updateAgentQuery(input.queryId, {
       current_phase: query.currentPhase,
       current_action: query.currentAction,
@@ -626,6 +501,7 @@ export class AgentQueryTraceManager {
       ...(patch || {}),
     });
     this.activeQueries.delete(queryId);
+    this.summaryAccumulators.delete(queryId);
     this.emitChange();
   }
 

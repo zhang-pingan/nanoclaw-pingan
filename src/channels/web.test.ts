@@ -66,7 +66,7 @@ describe('web trace detail helpers', () => {
     agentQueryTraceManager.appendStructuredEvent({
       queryId: 'web-trace-filter-dev',
       category: 'file',
-      eventName: 'file_edit',
+      eventName: 'file_edit_complete',
       status: 'success',
       payload: { path: 'src/billing.ts' },
     });
@@ -92,6 +92,29 @@ describe('web trace detail helpers', () => {
     });
     agentQueryTraceManager.finishQuery('web-trace-filter-test', 'error');
 
+    agentQueryTraceManager.startQuery({
+      queryId: 'web-trace-filter-attempt-only',
+      sourceType: 'workflow_delegation',
+      sourceRefId: 'del-filter-attempt',
+      workflowType: 'dev_test',
+      service: 'billing',
+      role: 'dev',
+      workflowId: 'wf-filter',
+      stageKey: 'dev',
+      delegationId: 'del-filter-attempt',
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'web-trace-filter-attempt-only',
+      category: 'file',
+      eventName: 'file_edit',
+      status: 'running',
+      payload: { path: 'src/attempt-only.ts' },
+    });
+    agentQueryTraceManager.finishQuery(
+      'web-trace-filter-attempt-only',
+      'success',
+    );
+
     expect(
       listAgentQueries(10, 0, {
         workflowType: 'dev_test',
@@ -116,9 +139,9 @@ describe('web trace detail helpers', () => {
       new Date('2026-05-23T12:00:00.000Z'),
     );
     expect(overview.last24h).toMatchObject({
-      success: 1,
+      success: 2,
       failure: 1,
-      total: 2,
+      total: 3,
     });
     expect(overview.topFailureTypes[0]?.failureType).toBe('error');
     expect(overview.slowStages.map((item) => item.stageKey)).toContain('dev');

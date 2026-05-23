@@ -9,6 +9,20 @@ import {
   AgentQueryRecord,
   AgentQueryStepRecord,
 } from './types.js';
+import {
+  isAppliedTraceFileChangeEvent,
+  isTraceFileReadEvent,
+  isTraceToolFailureEvent,
+  isTraceToolStartEvent,
+  parseTracePayloadObject,
+  summarizeAgentQueryEvents,
+  traceEventCategory,
+  traceEventHasToolIdentity,
+  traceEventIdentity,
+  traceNumberValue,
+  tracePayloadString,
+  traceStringValue,
+} from './agent-query-trace-summary.js';
 
 export interface AgentQueryTraceSummary {
   durationMs: number | null;
@@ -53,35 +67,22 @@ export interface AgentQueryTraceDetail {
 type JsonObject = Record<string, unknown>;
 
 function parsePayload(value: string | null): JsonObject {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as JsonObject)
-      : {};
-  } catch {
-    return {};
-  }
+  return parseTracePayloadObject(value);
 }
 
 function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+  return traceStringValue(value);
 }
 
 function numberValue(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return traceNumberValue(value);
 }
 
 function eventIdentity(
   event: AgentQueryEventRecord,
   payload: JsonObject,
 ): string {
-  return (
-    stringValue(payload.toolUseId) ||
-    stringValue(payload.path) ||
-    stringValue(payload.resourceRef) ||
-    `${event.event_name}:${event.event_index}`
-  );
+  return traceEventIdentity(event.event_name, payload, String(event.event_index));
 }
 
 function timestamp(value: string | null | undefined): number | null {
@@ -110,81 +111,56 @@ function categoryForEvent(
   event: AgentQueryEventRecord,
   payload: JsonObject,
 ): string {
-  const explicit = stringValue(payload.category).toLowerCase();
-  if (explicit) return explicit;
-
-  const type = event.event_type.toLowerCase();
-  const name = event.event_name.toLowerCase();
-  if (type === 'command' || name.startsWith('command_')) return 'tool';
-  if (type) return type;
-  if (name.startsWith('file_')) return 'file';
-  if (name.startsWith('tool_')) return 'tool';
-  if (name.startsWith('model_')) return 'model';
-  if (name.startsWith('container_')) return 'container';
-  if (name.startsWith('workflow_')) return 'workflow';
-  if (name.includes('evaluation') || name.includes('judge')) return 'evaluation';
-  if (name.startsWith('ipc_')) return 'ipc';
-  return 'lifecycle';
+  return traceEventCategory(event.event_type, event.event_name, payload);
 }
 
 function addUniquePath(paths: Set<string>, payload: JsonObject): void {
-  const path = stringValue(payload.path) || stringValue(payload.resourceRef);
+  const path =
+    tracePayloadString(payload, 'path') ||
+    tracePayloadString(payload, 'resourceRef');
   if (path) paths.add(path);
 }
 
 function isToolStartEvent(name: string): boolean {
-  return name === 'tool_started' || name === 'tool_call';
+  return isTraceToolStartEvent(name);
 }
 
 function isToolFailureEvent(name: string, status: string): boolean {
-  return (
-    status === 'error' ||
-    status === 'failed' ||
-    name.endsWith('_failed') ||
-    name.includes('tool_failed') ||
-    name.includes('command_failed')
-  );
-}
-
-function isFileWriteEvent(name: string, payload: JsonObject): boolean {
-  const operation = stringValue(payload.operation).toLowerCase();
-  return (
-    name.includes('write') ||
-    name.includes('edit') ||
-    name.includes('delete') ||
-    name.includes('diff') ||
-    operation === 'write' ||
-    operation === 'edit' ||
-    operation === 'delete' ||
-    operation === 'diff'
-  );
+  return isTraceToolFailureEvent(name, status);
 }
 
 function isFileReadEvent(name: string, payload: JsonObject): boolean {
-  const operation = stringValue(payload.operation).toLowerCase();
-  return name.includes('read') || operation === 'read';
+  return isTraceFileReadEvent(name, payload);
 }
 
 function eventHasToolIdentity(payload: JsonObject): boolean {
-  return Boolean(stringValue(payload.toolUseId) || stringValue(payload.toolName));
+  return traceEventHasToolIdentity(payload);
 }
 
 function backfillQuerySummary(
   query: AgentQueryRecord,
   summary: AgentQueryTraceSummary,
+  firstToolAt: string | null,
 ): void {
   const patch: Partial<AgentQueryRecord> = {};
-  if (query.queue_latency_ms == null && summary.queueLatencyMs != null) {
+  if (query.first_tool_at !== firstToolAt) {
+    patch.first_tool_at = firstToolAt;
+  }
+  if (query.queue_latency_ms !== summary.queueLatencyMs) {
     patch.queue_latency_ms = summary.queueLatencyMs;
   }
-  if (query.tool_call_count == null) patch.tool_call_count = summary.toolCallCount;
-  if (query.failed_tool_call_count == null) {
+  if (query.tool_call_count !== summary.toolCallCount) {
+    patch.tool_call_count = summary.toolCallCount;
+  }
+  if (query.failed_tool_call_count !== summary.failedToolCallCount) {
     patch.failed_tool_call_count = summary.failedToolCallCount;
   }
-  if (query.changed_file_count == null) {
+  if (query.changed_file_count !== summary.changedFileCount) {
     patch.changed_file_count = summary.changedFileCount;
   }
-  if (query.artifact_count == null) patch.artifact_count = summary.artifactCount;
+  if (query.artifact_count !== summary.artifactCount) {
+    patch.artifact_count = summary.artifactCount;
+  }
 
   if (Object.keys(patch).length > 0) {
     updateAgentQuery(query.query_id, patch);
@@ -236,6 +212,7 @@ export function buildAgentQueryTraceDetail(
   const toolCallIds = new Set<string>();
   const failedToolIds = new Set<string>();
   const fileReadPaths = new Set<string>();
+  const derivedSummary = summarizeAgentQueryEvents(events);
 
   for (const event of events) {
     const payload = parsePayload(event.payload_json);
@@ -281,7 +258,7 @@ export function buildAgentQueryTraceDetail(
         const path = stringValue(payload.path) || stringValue(payload.resourceRef);
         if (path) fileReadPaths.add(path);
       }
-      if (isFileWriteEvent(name, payload)) {
+      if (isAppliedTraceFileChangeEvent(name, status, payload)) {
         addUniquePath(changedPaths, payload);
       }
     }
@@ -336,7 +313,7 @@ export function buildAgentQueryTraceDetail(
 
   const start = timestamp(query.started_at);
   const firstOutput = timestamp(query.first_output_at);
-  const firstTool = timestamp(query.first_tool_at);
+  const firstTool = timestamp(derivedSummary.first_tool_at);
   toolCallCount = toolCallIds.size;
   failedToolCallCount = failedToolIds.size;
   fileReadCount = fileReadPaths.size;
@@ -347,26 +324,26 @@ export function buildAgentQueryTraceDetail(
       : null;
   const summary: AgentQueryTraceSummary = {
     durationMs: query.latency_ms,
-    queueLatencyMs,
+    queueLatencyMs: derivedSummary.queue_latency_ms ?? queueLatencyMs,
     containerDurationMs,
     firstOutputDelayMs:
       start != null && firstOutput != null ? Math.max(0, firstOutput - start) : null,
     firstToolDelayMs:
       start != null && firstTool != null ? Math.max(0, firstTool - start) : null,
-    toolCallCount: query.tool_call_count ?? toolCallCount,
-    failedToolCallCount: query.failed_tool_call_count ?? failedToolCallCount,
+    toolCallCount: derivedSummary.tool_call_count,
+    failedToolCallCount: derivedSummary.failed_tool_call_count,
     fileReadCount,
     fileWriteCount,
-    changedFileCount: query.changed_file_count ?? changedPaths.size,
+    changedFileCount: derivedSummary.changed_file_count,
     commandCount,
     ipcCallCount,
     modelCallCount:
       modelStartedCount || modelCompletedCount || modelResolutionCount,
-    artifactCount: query.artifact_count ?? artifactCount,
+    artifactCount: derivedSummary.artifact_count,
     errorCount,
     warningCount,
   };
 
-  backfillQuerySummary(query, summary);
+  backfillQuerySummary(query, summary, derivedSummary.first_tool_at);
   return { query: newestQuery(queryId, query), steps, events, summary, highlights };
 }

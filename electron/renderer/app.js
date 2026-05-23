@@ -13483,6 +13483,22 @@ function traceRunMatchesFilters(run) {
     if (!expected) return true;
     return String(actual || "").toLowerCase().includes(String(expected).toLowerCase());
   };
+  const hasRecentErrorEvent = Array.isArray(run.recentEvents) && run.recentEvents.some((event) => {
+    const payload = parseAgentEventPayload(event) || {};
+    const status = String(event?.status || "").toLowerCase();
+    const eventType = String(event?.event_type || "").toLowerCase();
+    const eventName = String(event?.event_name || "").toLowerCase();
+    const severity = String(payload.severity || "").toLowerCase();
+    return (
+      status === "error" ||
+      status === "failed" ||
+      eventType === "error" ||
+      severity === "error" ||
+      eventName.includes("failed") ||
+      eventName.includes("error") ||
+      eventName.includes("timeout")
+    );
+  });
   if (filters.status && run.status !== filters.status) return false;
   if (filters.sourceType && run.sourceType !== filters.sourceType) return false;
   if (filters.sourceRefId && run.sourceRefId !== filters.sourceRefId) return false;
@@ -13496,7 +13512,8 @@ function traceRunMatchesFilters(run) {
     run.status === "error" ||
     run.status === "timeout" ||
     Boolean(run.failureType) ||
-    Number(run.failedToolCallCount || 0) > 0
+    Number(run.failedToolCallCount || 0) > 0 ||
+    hasRecentErrorEvent
   )) return false;
   return true;
 }

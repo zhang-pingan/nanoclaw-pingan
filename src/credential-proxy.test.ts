@@ -668,6 +668,74 @@ describe('credential-proxy', () => {
 
     expect(res.body).toContain('event: message_start');
     upstreamResponse!.end();
+    await new Promise<void>((resolve) => res.on('finish', resolve));
+  });
+
+  it('collects usage from upstream event streams without delaying chunks', async () => {
+    let upstreamResponse:
+      | (PassThrough & {
+          statusCode: number;
+          headers: IncomingHttpHeaders;
+        })
+      | null = null;
+    upstreamResponder = vi.fn(async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'text/event-stream' },
+      stream: (
+        res: PassThrough & {
+          statusCode: number;
+          headers: IncomingHttpHeaders;
+        },
+      ) => {
+        upstreamResponse = res;
+      },
+    }));
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+
+    if (!lastServer) throw new Error('Credential proxy server was not created');
+    const req = new PassThrough() as PassThrough & {
+      method: string;
+      url: string;
+      headers: IncomingHttpHeaders;
+    };
+    req.method = 'POST';
+    req.url = '/__icarus__/run-usage/query-usage/v1/messages';
+    req.headers = { 'content-type': 'application/json' };
+    const res = new LocalServerResponse();
+    lastServer.handler(req, res as never);
+    req.end(
+      JSON.stringify({ model: 'claude-stream-usage', stream: true }),
+    );
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    upstreamResponse!.write(
+      [
+        'event: message_start',
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":11,"cache_read_input_tokens":3}}}',
+        '',
+      ].join('\n'),
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(res.body).toContain('message_start');
+
+    upstreamResponse!.end(
+      [
+        'event: message_delta',
+        'data: {"type":"message_delta","usage":{"output_tokens":7}}',
+        '',
+      ].join('\n'),
+    );
+    await new Promise<void>((resolve) => res.on('finish', resolve));
+
+    expect(modelResolutionCalls).toContainEqual([
+      expect.objectContaining({
+        runId: 'run-usage',
+        queryId: 'query-usage',
+        requestedModel: 'claude-stream-usage',
+        actualModel: 'claude-stream-usage',
+        source: 'proxy_forward',
+      }),
+    ]);
   });
 
   it('returns 502 when upstream is unreachable', async () => {

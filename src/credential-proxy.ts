@@ -216,6 +216,57 @@ function normalizeUsagePayload(
   };
 }
 
+interface StreamingUsageCollector {
+  push(chunk: Buffer | string): void;
+  usage(): Record<string, unknown> | undefined;
+}
+
+function createAnthropicStreamingUsageCollector(): StreamingUsageCollector {
+  let buffer = '';
+  let latestUsage: Record<string, unknown> | undefined;
+
+  const consumeLine = (line: string) => {
+    if (!line.startsWith('data:')) return;
+    const data = line.slice('data:'.length).trim();
+    if (!data || data === '[DONE]') return;
+    try {
+      const event = JSON.parse(data) as Record<string, unknown>;
+      const usage =
+        event.usage && typeof event.usage === 'object'
+          ? (event.usage as Record<string, unknown>)
+          : undefined;
+      if (usage) latestUsage = { ...(latestUsage || {}), ...usage };
+      const message =
+        event.message && typeof event.message === 'object'
+          ? (event.message as Record<string, unknown>)
+          : undefined;
+      const messageUsage =
+        message?.usage && typeof message.usage === 'object'
+          ? (message.usage as Record<string, unknown>)
+          : undefined;
+      if (messageUsage) latestUsage = { ...(latestUsage || {}), ...messageUsage };
+    } catch {
+      // Ignore partial or non-JSON SSE data lines; streaming must continue.
+    }
+  };
+
+  return {
+    push(chunk: Buffer | string): void {
+      buffer += chunk.toString();
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) consumeLine(line);
+    },
+    usage(): Record<string, unknown> | undefined {
+      if (buffer) {
+        consumeLine(buffer);
+        buffer = '';
+      }
+      return latestUsage;
+    },
+  };
+}
+
 function recordModelTraceResolution(
   context: ProxyRequestContext,
   requestedModel: string | undefined,
@@ -351,6 +402,17 @@ export function startCredentialProxy(
             if (compatResult.stream) {
               const latencyMs = Date.now() - requestStartedAt;
               const actualModel = compatResult.model || openAiCompat.model;
+              const usageCollector = createAnthropicStreamingUsageCollector();
+              usageCollector.push(compatResult.body || '');
+              const usage = usageCollector.usage();
+              const usagePayload = normalizeUsagePayload(
+                typeof parsedJsonBody.model === 'string'
+                  ? parsedJsonBody.model
+                  : undefined,
+                actualModel,
+                usage,
+                latencyMs,
+              );
               recordModelTraceResolution(
                 requestContext,
                 typeof parsedJsonBody.model === 'string'
@@ -359,23 +421,16 @@ export function startCredentialProxy(
                 actualModel,
                 'compat_response',
                 latencyMs,
+                usage,
               );
               appendModelTraceEvent(requestContext, {
                 name: 'model_response_completed',
                 status: 'success',
                 summary: `Model stream completed: ${compatResult.model || openAiCompat.model}`,
-                payload: {
-                  provider: 'openai-compatible',
-                  traceSource: 'credential_proxy',
-                  requestedModel:
-                    typeof parsedJsonBody.model === 'string'
-                      ? parsedJsonBody.model
-                      : undefined,
-                  actualModel,
-                  latencyMs,
-                },
+                payload: usagePayload,
                 latencyMs,
               });
+              updateQueryFromModelUsage(requestContext, usagePayload);
               res.writeHead(200, {
                 'content-type': compatResult.contentType,
                 'cache-control': 'no-cache',
@@ -528,7 +583,11 @@ export function startCredentialProxy(
               targetPath === '/v1/messages' &&
               isEventStreamResponse(upRes.headers)
             ) {
+              const usageCollector = createAnthropicStreamingUsageCollector();
               res.writeHead(statusCode, upRes.headers);
+              upRes.on('data', (chunk) => {
+                usageCollector.push(chunk);
+              });
               upRes.on('end', () => {
                 const latencyMs = Date.now() - requestStartedAt;
                 if (statusCode >= 400) {
@@ -548,26 +607,29 @@ export function startCredentialProxy(
                   });
                   return;
                 }
+                const usage = usageCollector.usage();
+                const usagePayload = normalizeUsagePayload(
+                  requestedModel,
+                  requestedModel,
+                  usage,
+                  latencyMs,
+                );
                 recordModelTraceResolution(
                   requestContext,
                   requestedModel,
                   requestedModel,
                   'proxy_forward',
                   latencyMs,
+                  usage,
                 );
                 appendModelTraceEvent(requestContext, {
                   name: 'model_response_completed',
                   status: 'success',
                   summary: `Model stream completed: ${requestedModel || 'unknown'}`,
-                  payload: {
-                    provider: 'anthropic',
-                    traceSource: 'credential_proxy',
-                    requestedModel,
-                    actualModel: requestedModel,
-                    latencyMs,
-                  },
+                  payload: usagePayload,
                   latencyMs,
                 });
+                updateQueryFromModelUsage(requestContext, usagePayload);
               });
               upRes.pipe(res);
               return;

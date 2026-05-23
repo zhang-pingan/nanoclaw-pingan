@@ -202,6 +202,97 @@ describe('agent query trace manager', () => {
     expect(detail?.summary.changedFileCount).toBe(1);
   });
 
+  it('counts only applied file changes and records first tool activity across categories', () => {
+    agentQueryTraceManager.startQuery({
+      queryId: 'trace-applied-file-change',
+      sourceType: 'message',
+      sourceRefId: 'msg-file-change',
+    });
+
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'trace-applied-file-change',
+      category: 'file',
+      eventName: 'file_edit',
+      status: 'running',
+      payload: {
+        toolUseId: 'edit-1',
+        path: 'src/risky.ts',
+        operation: 'edit',
+      },
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'trace-applied-file-change',
+      category: 'file',
+      eventName: 'tool_failed',
+      status: 'error',
+      payload: {
+        toolUseId: 'edit-1',
+        path: 'src/risky.ts',
+        operation: 'edit',
+        error: 'Permission denied',
+      },
+    });
+
+    let query = getAgentQuery('trace-applied-file-change');
+    expect(query?.changed_file_count).toBe(0);
+    expect(query?.failed_tool_call_count).toBe(1);
+    expect(query?.first_tool_at).toBeTruthy();
+
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'trace-applied-file-change',
+      category: 'file',
+      eventName: 'file_edit_complete',
+      status: 'success',
+      payload: {
+        toolUseId: 'edit-2',
+        path: 'src/applied.ts',
+        operation: 'edit',
+      },
+    });
+
+    query = getAgentQuery('trace-applied-file-change');
+    expect(query?.changed_file_count).toBe(1);
+    const detail = buildAgentQueryTraceDetail('trace-applied-file-change');
+    expect(detail?.summary.changedFileCount).toBe(1);
+    expect(detail?.summary.failedToolCallCount).toBe(1);
+    expect(detail?.summary.firstToolDelayMs).not.toBeNull();
+  });
+
+  it('overwrites stale query counters when detail is built', () => {
+    agentQueryTraceManager.startQuery({
+      queryId: 'trace-stale-counters',
+      sourceType: 'message',
+      sourceRefId: 'msg-stale',
+    });
+    agentQueryTraceManager.appendStructuredEvent({
+      queryId: 'trace-stale-counters',
+      category: 'file',
+      eventName: 'file_write_complete',
+      status: 'success',
+      payload: {
+        toolUseId: 'write-1',
+        path: 'src/generated.ts',
+        operation: 'write',
+      },
+    });
+    agentQueryTraceManager.updateQuery('trace-stale-counters', {
+      tool_call_count: 0,
+      changed_file_count: 0,
+      artifact_count: 99,
+      first_tool_at: null,
+    });
+
+    const detail = buildAgentQueryTraceDetail('trace-stale-counters');
+    expect(detail?.summary.toolCallCount).toBe(0);
+    expect(detail?.summary.changedFileCount).toBe(1);
+
+    const query = getAgentQuery('trace-stale-counters');
+    expect(query?.tool_call_count).toBe(0);
+    expect(query?.changed_file_count).toBe(1);
+    expect(query?.artifact_count).toBe(0);
+    expect(query?.first_tool_at).toBeTruthy();
+  });
+
   it('derives queue latency and highlights IPC events', () => {
     agentQueryTraceManager.startQuery({
       queryId: 'trace-queue-ipc',

@@ -5877,6 +5877,10 @@ export function listAgentQueries(
         WHERE e.query_id = agent_queries.query_id
           AND e.event_type = 'file'
           AND (
+            e.status IN ('success', 'succeeded', 'completed', 'ok')
+            OR e.event_name LIKE '%complete%'
+          )
+          AND (
             e.event_name LIKE '%write%'
             OR e.event_name LIKE '%edit%'
             OR e.event_name LIKE '%delete%'
