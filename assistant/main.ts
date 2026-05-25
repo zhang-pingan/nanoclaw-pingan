@@ -103,6 +103,27 @@ function setAssistantWindowChatControlsEnabled(enabled: boolean): void {
   assistantWindow.setFullScreenable(enabled);
 }
 
+function isAssistantWindowFullScreen(): boolean {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return false;
+  if (process.platform === 'darwin') return assistantWindow.isSimpleFullScreen();
+  return assistantWindow.isFullScreen();
+}
+
+function setAssistantWindowFullScreen(enabled: boolean): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+
+  if (process.platform === 'darwin') {
+    if (assistantWindow.isSimpleFullScreen() !== enabled) {
+      assistantWindow.setSimpleFullScreen(enabled);
+    }
+    return;
+  }
+
+  if (assistantWindow.isFullScreen() !== enabled) {
+    assistantWindow.setFullScreen(enabled);
+  }
+}
+
 function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
 
@@ -111,7 +132,7 @@ function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
   lastContextMenuPopupAt = now;
 
   const chatMode = options.chatMode ?? assistantChatMode;
-  const isFullScreen = assistantWindow.isFullScreen();
+  const isFullScreen = isAssistantWindowFullScreen();
   const template: MenuItemConstructorOptions[] = [
     {
       label: chatMode ? '退出聊天模式' : '进入聊天模式',
@@ -127,7 +148,7 @@ function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
       enabled: chatMode,
       click: () => {
         if (!assistantWindow || assistantWindow.isDestroyed()) return;
-        assistantWindow.setFullScreen(!assistantWindow.isFullScreen());
+        setAssistantWindowFullScreen(!isAssistantWindowFullScreen());
       },
     },
     {
@@ -201,6 +222,41 @@ function clampWindowToWorkArea(
   };
 }
 
+function runAfterLeavingFullScreen(resize: () => void): boolean {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return false;
+  if (process.platform === 'darwin') {
+    if (!assistantWindow.isSimpleFullScreen()) return false;
+    assistantWindow.setSimpleFullScreen(false);
+    resize();
+    return true;
+  }
+
+  if (!assistantWindow.isFullScreen()) return false;
+  assistantWindow.once('leave-full-screen', resize);
+  assistantWindow.setFullScreen(false);
+  return true;
+}
+
+function applyAssistantWindowSize(expanded: boolean): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+
+  const bounds = assistantWindow.getBounds();
+  const size = assistantWindowSize(expanded);
+  if (bounds.width === size.width && bounds.height === size.height) return;
+
+  const next = clampWindowToWorkArea(
+    bounds.x + bounds.width - size.width,
+    bounds.y + bounds.height - size.height,
+    size.width,
+    size.height,
+  );
+  assistantWindow.setBounds({
+    ...next,
+    width: size.width,
+    height: size.height,
+  });
+}
+
 function createAssistantWindow(): void {
   if (assistantWindow && !assistantWindow.isDestroyed()) {
     assistantWindow.show();
@@ -252,44 +308,30 @@ function setAssistantWindowExpanded(expanded: boolean): void {
   assistantChatOpen = expanded;
   if (!expanded) {
     assistantChatMode = false;
-    setAssistantWindowChatControlsEnabled(false);
-  }
-  if (!expanded && assistantWindow.isFullScreen()) {
-    assistantWindow.setFullScreen(false);
   }
 
-  const bounds = assistantWindow.getBounds();
-  const size = assistantWindowSize(expanded);
-  if (
-    assistantWindow.isFullScreen() ||
-    (bounds.width === size.width && bounds.height === size.height)
-  ) {
+  const resize = () => {
+    applyAssistantWindowSize(expanded);
+    if (!expanded) setAssistantWindowChatControlsEnabled(false);
+  };
+  if (runAfterLeavingFullScreen(resize)) {
     return;
   }
 
-  const next = clampWindowToWorkArea(
-    bounds.x + bounds.width - size.width,
-    bounds.y + bounds.height - size.height,
-    size.width,
-    size.height,
-  );
-  assistantWindow.setBounds({
-    ...next,
-    width: size.width,
-    height: size.height,
-  });
+  resize();
 }
 
 function setAssistantWindowChatMode(enabled: boolean): void {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
   assistantChatMode = enabled;
   assistantChatOpen = true;
-  setAssistantWindowChatControlsEnabled(enabled);
+  if (enabled) setAssistantWindowChatControlsEnabled(true);
 
-  const resizeToExpanded = () => setAssistantWindowExpanded(true);
-  if (!enabled && assistantWindow.isFullScreen()) {
-    assistantWindow.once('leave-full-screen', resizeToExpanded);
-    assistantWindow.setFullScreen(false);
+  const resizeToExpanded = () => {
+    applyAssistantWindowSize(true);
+    if (!enabled) setAssistantWindowChatControlsEnabled(false);
+  };
+  if (runAfterLeavingFullScreen(resizeToExpanded)) {
     return;
   }
 
