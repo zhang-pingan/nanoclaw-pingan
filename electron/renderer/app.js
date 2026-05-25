@@ -235,6 +235,8 @@ var traceMonitorList = document.getElementById("trace-monitor-list");
 var traceMonitorRefreshBtn = document.getElementById("trace-monitor-refresh-btn");
 var traceMonitorClearHistoryBtn = document.getElementById("trace-monitor-clear-history-btn");
 var traceMonitorScopeBtns = Array.from(document.querySelectorAll(".trace-monitor-scope-btn"));
+var traceMonitorFilterToggle = document.getElementById("trace-monitor-filter-toggle");
+var traceMonitorFilterPanel = document.getElementById("trace-monitor-filter-panel");
 var traceMonitorDetailEmpty = document.getElementById("trace-monitor-detail-empty");
 var traceMonitorDetail = document.getElementById("trace-monitor-detail");
 var traceMonitorTitle = document.getElementById("trace-monitor-title");
@@ -13679,6 +13681,13 @@ function scheduleTraceMonitorFilterApply() {
   }, 250);
 }
 
+function setTraceMonitorFiltersCollapsed(collapsed) {
+  if (!traceMonitorFilterPanel || !traceMonitorFilterToggle) return;
+  traceMonitorFilterPanel.classList.toggle("collapsed", Boolean(collapsed));
+  traceMonitorFilterToggle.classList.toggle("collapsed", Boolean(collapsed));
+  traceMonitorFilterToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
 async function openTraceMonitorRun(queryId, options = {}) {
   if (!queryId) return;
   const scope = options.scope === "active" ? "active" : "history";
@@ -13867,9 +13876,6 @@ function renderTraceSummaryPills(run) {
   }
   if (run.input_tokens || run.output_tokens) {
     pills.push(renderTracePill("Tokens", `${run.input_tokens || 0} / ${run.output_tokens || 0}`));
-  }
-  if (run.estimated_cost || run.estimated_cost === 0) {
-    pills.push(renderTracePill("Cost", `$${Number(run.estimated_cost).toFixed(4)}`));
   }
   if (summary.toolCallCount || summary.toolCallCount === 0) {
     pills.push(renderTracePill("Tools", `${summary.toolCallCount}${summary.failedToolCallCount ? ` / ${summary.failedToolCallCount} failed` : ""}`));
@@ -14118,7 +14124,7 @@ function renderTraceTimeline() {
       html: renderTraceEventTimelineItem(event, category),
     });
   }
-  timelineItems.sort((a, b) => (a.order - b.order) || (a.sortAt - b.sortAt));
+  timelineItems.sort((a, b) => (a.sortAt - b.sortAt) || (a.order - b.order));
   if (!timelineItems.length) {
       traceMonitorTimeline.innerHTML = `<div class="trace-monitor-list-empty">当前 Trace 暂无可展示的时间线数据</div>`;
     return;
@@ -23003,6 +23009,12 @@ if (traceMonitorRefreshBtn) {
 if (traceMonitorClearHistoryBtn) {
   traceMonitorClearHistoryBtn.addEventListener("click", () => {
     clearAllTraceHistory();
+  });
+}
+if (traceMonitorFilterToggle) {
+  traceMonitorFilterToggle.addEventListener("click", () => {
+    const expanded = traceMonitorFilterToggle.getAttribute("aria-expanded") === "true";
+    setTraceMonitorFiltersCollapsed(expanded);
   });
 }
 [

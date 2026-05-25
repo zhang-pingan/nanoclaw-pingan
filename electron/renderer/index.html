@@ -1731,7 +1731,13 @@
             <button type="button" class="trace-monitor-scope-btn active" data-trace-scope="active">活跃 Agent</button>
             <button type="button" class="trace-monitor-scope-btn" data-trace-scope="history">历史 Agent</button>
           </div>
-          <div class="trace-monitor-filters">
+          <button id="trace-monitor-filter-toggle" type="button" class="trace-monitor-filter-toggle" aria-expanded="false" aria-controls="trace-monitor-filter-panel">
+            <span>筛选</span>
+            <svg class="trace-monitor-filter-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div id="trace-monitor-filter-panel" class="trace-monitor-filters collapsed">
             <select id="trace-monitor-status-filter" aria-label="Trace 状态筛选">
               <option value="">全部状态</option>
               <option value="running">running</option>

@@ -8761,6 +8761,37 @@ html, body {
   box-shadow: none;
 }
 
+.trace-monitor-filter-toggle {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-bottom: 1px solid var(--minimal-line, var(--stroke-soft));
+  background: var(--minimal-nav, transparent);
+  color: var(--minimal-text-soft, var(--text-secondary));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font: 700 12px/1 var(--font-sans);
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.trace-monitor-filter-toggle:hover {
+  color: var(--minimal-text, var(--text-primary));
+  background: var(--minimal-nav-strong, #e7e9ec);
+}
+
+.trace-monitor-filter-toggle-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform var(--transition);
+}
+
+.trace-monitor-filter-toggle:not(.collapsed) .trace-monitor-filter-toggle-icon {
+  transform: rotate(180deg);
+}
+
 .trace-monitor-filters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8768,6 +8799,19 @@ html, body {
   padding: 12px 14px;
   border-bottom: 1px solid var(--minimal-line, var(--stroke-soft));
   background: var(--minimal-nav, transparent);
+  max-height: 260px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 180ms ease, opacity 180ms ease, padding-top 180ms ease, padding-bottom 180ms ease, border-color 180ms ease;
+}
+
+.trace-monitor-filters.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+  pointer-events: none;
 }
 
 .trace-monitor-filters select,

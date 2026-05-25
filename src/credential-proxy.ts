@@ -84,10 +84,6 @@ function numberValue(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function estimateAnthropicCost(_model: string | undefined): number | undefined {
-  return undefined;
-}
-
 function headerValue(
   headers: Record<string, string | string[] | number | undefined>,
   name: string,
@@ -179,8 +175,6 @@ function updateQueryFromModelUsage(
   if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
   const cacheWriteTokens = numberValue(payload.cacheWriteTokens);
   if (cacheWriteTokens !== undefined) patch.cache_write_tokens = cacheWriteTokens;
-  const estimatedCost = numberValue(payload.estimatedCost);
-  if (estimatedCost !== undefined) patch.estimated_cost = estimatedCost;
   if (Object.keys(patch).length === 0) return;
   void getTraceManager().then((manager) => {
     if (!manager || !context.queryId) return;
@@ -211,7 +205,6 @@ function normalizeUsagePayload(
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
-    estimatedCost: estimateAnthropicCost(actualModel),
     latencyMs,
   };
 }

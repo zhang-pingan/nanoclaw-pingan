@@ -78,8 +78,6 @@ function queryPatchFromTraceEvent(
     if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
     const cacheWriteTokens = numberFromPayload(payload.cacheWriteTokens);
     if (cacheWriteTokens !== undefined) patch.cache_write_tokens = cacheWriteTokens;
-    const estimatedCost = numberFromPayload(payload.estimatedCost);
-    if (estimatedCost !== undefined) patch.estimated_cost = estimatedCost;
   }
 
   return patch;

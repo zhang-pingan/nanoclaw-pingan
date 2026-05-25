@@ -108,6 +108,8 @@ let upstreamResponder: (
 let compatCalls: unknown[][];
 let compatConfigCalls: number;
 let modelResolutionCalls: unknown[][];
+let appendedTraceEvents: unknown[];
+let updatedTraceQueries: unknown[][];
 let OpenAiCompatRequestErrorCtor:
   | (new (status: number, endpoint: string, responseBody: string) => Error)
   | undefined;
@@ -130,6 +132,17 @@ function setupModuleMocks(): void {
   vi.doMock('./model-resolution.js', () => ({
     recordModelResolution: (...args: unknown[]) => {
       modelResolutionCalls.push(args);
+    },
+  }));
+
+  vi.doMock('./agent-query-trace.js', () => ({
+    agentQueryTraceManager: {
+      appendStructuredEvent: (input: unknown) => {
+        appendedTraceEvents.push(input);
+      },
+      updateQuery: (...args: unknown[]) => {
+        updatedTraceQueries.push(args);
+      },
     },
   }));
 
@@ -396,6 +409,25 @@ async function invokeProxyRequest(input: {
   return completed;
 }
 
+async function waitForAssertion(
+  assertion: () => void,
+  timeoutMs = 250,
+): Promise<void> {
+  const started = Date.now();
+  let lastError: unknown;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      assertion();
+      return;
+    } catch (err) {
+      lastError = err;
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    }
+  }
+  if (lastError) throw lastError;
+  assertion();
+}
+
 describe('credential-proxy', () => {
   beforeEach(async () => {
     mockEnv = {};
@@ -412,6 +444,8 @@ describe('credential-proxy', () => {
     compatCalls = [];
     compatConfigCalls = 0;
     modelResolutionCalls = [];
+    appendedTraceEvents = [];
+    updatedTraceQueries = [];
     OpenAiCompatRequestErrorCtor = undefined;
     await reloadCredentialProxyModule();
   });
@@ -623,6 +657,59 @@ describe('credential-proxy', () => {
         }),
       ],
     ]);
+  });
+
+  it('updates trace events with token usage without estimating price', async () => {
+    upstreamResponder = vi.fn(async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'msg-priced',
+        type: 'message',
+        model: 'claude-sonnet-4-6',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 100_000,
+          cache_read_input_tokens: 10_000,
+          cache_creation_input_tokens: 20_000,
+        },
+      }),
+    }));
+    await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+
+    await invokeProxyRequest({
+      method: 'POST',
+      path: '/__icarus__/run-priced/query-priced/v1/messages',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'placeholder',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await waitForAssertion(() => {
+      expect(appendedTraceEvents).toContainEqual(
+        expect.objectContaining({
+          eventName: 'model_resolution',
+          payload: expect.objectContaining({
+            inputTokens: 1_000_000,
+            outputTokens: 100_000,
+            cacheReadTokens: 10_000,
+            cacheWriteTokens: 20_000,
+          }),
+        }),
+      );
+      const modelResolution = appendedTraceEvents.find(
+        (event) =>
+          event &&
+          typeof event === 'object' &&
+          (event as { eventName?: unknown }).eventName === 'model_resolution',
+      ) as { payload?: Record<string, unknown> } | undefined;
+      expect(modelResolution?.payload?.estimatedCost).toBeUndefined();
+    });
   });
 
   it('pipes upstream event streams without waiting for the stream to end', async () => {
