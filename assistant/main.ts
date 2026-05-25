@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  globalShortcut,
   Menu,
   Tray,
   ipcMain,
@@ -20,6 +21,13 @@ const ASSISTANT_EXPANDED_WINDOW_HEIGHT = 520;
 const WORKSTATION_URL = 'http://localhost:3000/';
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
 const OPEN_WORKSTATION_ARG = '--icarus-open-workstation';
+const ASSISTANT_CHAT_MENU_ACCELERATORS = ['Command+`', 'Command+~'];
+const ASSISTANT_CHAT_GLOBAL_ACCELERATORS = [
+  ...ASSISTANT_CHAT_MENU_ACCELERATORS,
+  'Command+·',
+  'Command+§',
+  'Command+±',
+];
 
 let assistantWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -121,6 +129,7 @@ function handleAssistantEscapeKey(): boolean {
 }
 
 function handleAssistantCommandBacktickKey(): boolean {
+  bringAssistantWindowToFront();
   if (!assistantWindow || assistantWindow.isDestroyed()) return false;
 
   if (!assistantChatMode) {
@@ -134,6 +143,77 @@ function handleAssistantCommandBacktickKey(): boolean {
   }
 
   return true;
+}
+
+function registerAssistantShortcuts(): void {
+  for (const accelerator of ASSISTANT_CHAT_GLOBAL_ACCELERATORS) {
+    try {
+      const registered = globalShortcut.register(accelerator, () => {
+        handleAssistantCommandBacktickKey();
+      });
+      if (!registered) {
+        console.warn(`assistant shortcut not registered: ${accelerator}`);
+      }
+    } catch (err) {
+      console.warn(`assistant shortcut registration failed: ${accelerator}`, err);
+    }
+  }
+}
+
+function unregisterAssistantShortcuts(): void {
+  for (const accelerator of ASSISTANT_CHAT_GLOBAL_ACCELERATORS) {
+    globalShortcut.unregister(accelerator);
+  }
+}
+
+function assistantShortcutMenuItems(): MenuItemConstructorOptions[] {
+  return ASSISTANT_CHAT_MENU_ACCELERATORS.map((accelerator, index) => ({
+    label: index === 0 ? '个人助手聊天模式' : '个人助手聊天模式备用快捷键',
+    accelerator,
+    visible: false,
+    click: () => {
+      handleAssistantCommandBacktickKey();
+    },
+  }));
+}
+
+function installAssistantApplicationMenu(): void {
+  try {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        ...(process.platform === 'darwin'
+          ? [
+              {
+                label: app.name,
+                submenu: [
+                  ...assistantShortcutMenuItems(),
+                  { type: 'separator' as const },
+                  { role: 'hide' as const },
+                  { role: 'hideOthers' as const },
+                  { role: 'unhide' as const },
+                  { type: 'separator' as const },
+                  { role: 'quit' as const },
+                ],
+              },
+            ]
+          : []),
+        {
+          label: 'Edit',
+          submenu: [
+            { role: 'undo' as const },
+            { role: 'redo' as const },
+            { type: 'separator' as const },
+            { role: 'cut' as const },
+            { role: 'copy' as const },
+            { role: 'paste' as const },
+            { role: 'selectAll' as const },
+          ],
+        },
+      ]),
+    );
+  } catch (err) {
+    console.warn('assistant application menu installation failed', err);
+  }
 }
 
 function isCommandBackquoteInput(input: Electron.Input): boolean {
@@ -202,6 +282,7 @@ function bringAssistantWindowToFront(): void {
   assistantWindow.show();
   assistantWindow.moveTop();
   assistantWindow.focus();
+  assistantWindow.webContents.focus();
 }
 
 function toggleAssistantWindow(): void {
@@ -256,6 +337,7 @@ function createAssistantWindow(): void {
   if (assistantWindow && !assistantWindow.isDestroyed()) {
     assistantWindow.show();
     assistantWindow.focus();
+    assistantWindow.webContents.focus();
     return;
   }
 
@@ -316,6 +398,11 @@ function setAssistantWindowExpanded(expanded: boolean): void {
   }
 
   assistantChatOpen = expanded;
+  if (expanded) {
+    assistantWindow.show();
+    assistantWindow.focus();
+    assistantWindow.webContents.focus();
+  }
   if (!expanded) {
     assistantChatMode = false;
     setAssistantWindowChatControlsEnabled(false);
@@ -355,6 +442,9 @@ function setAssistantWindowChatMode(enabled: boolean): void {
 
   assistantChatMode = enabled;
   assistantChatOpen = true;
+  assistantWindow.show();
+  assistantWindow.focus();
+  assistantWindow.webContents.focus();
   setAssistantWindowChatControlsEnabled(enabled);
 
   const resizeToExpanded = () => setAssistantWindowExpanded(true);
@@ -447,8 +537,10 @@ ipcMain.handle('assistant:hide', () => {
 });
 
 app.whenReady().then(() => {
+  installAssistantApplicationMenu();
   createTray();
   createAssistantWindow();
+  registerAssistantShortcuts();
 });
 
 app.on('activate', () => {
@@ -457,4 +549,8 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+});
+
+app.on('will-quit', () => {
+  unregisterAssistantShortcuts();
 });
