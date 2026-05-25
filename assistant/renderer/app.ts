@@ -54,6 +54,16 @@ type AssistantChatMessage = {
   fileUrl?: string | null;
 };
 
+type ChatContentSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'code'; text: string; language: string };
+
+type ChatFileInfo = {
+  fileName: string;
+  extension: string;
+  url: string;
+};
+
 declare global {
   interface Window {
     assistantHost?: {
@@ -502,13 +512,54 @@ function truncatePreviewText(text: string, maxLength: number): string {
     .trimEnd()}...`;
 }
 
+function parseMessageTimestamp(timestamp: string): number {
+  const value = String(timestamp || '').trim();
+  if (!value) return NaN;
+  if (/^\d+$/.test(value)) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric < 1_000_000_000_000
+      ? numeric * 1000
+      : numeric;
+  }
+  return Date.parse(value);
+}
+
+function formatChatMessageTime(timestamp: string): string {
+  const parsedMs = parseMessageTimestamp(timestamp);
+  if (!Number.isFinite(parsedMs)) return '';
+
+  const date = new Date(parsedMs);
+  const now = new Date();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatChatMessageDatetime(timestamp: string): string {
+  const parsedMs = parseMessageTimestamp(timestamp);
+  if (!Number.isFinite(parsedMs)) return '';
+  return new Date(parsedMs).toISOString();
+}
+
 function chatMessagePreviewBody(message: AssistantChatMessage): string {
-  const content = normalizePreviewText(message.content);
+  const content = normalizePreviewText(
+    parseChatAttachmentReferences(message.content).content,
+  );
   if (content) {
     return truncatePreviewText(content, BUBBLE_BODY_TEXT_LIMIT);
   }
 
-  const fileInfo = chatFileInfo(message);
+  const fileInfo = chatFileInfos(message)[0] || null;
   const fileName = truncatePreviewText(fileInfo?.fileName || '未命名附件', 54);
   if (fileInfo && IMAGE_EXTENSIONS.has(fileInfo.extension)) {
     return `收到图片：${fileName}`;
@@ -691,24 +742,162 @@ function detectFilePathFromContent(content: string): string | null {
   return value;
 }
 
-function chatFileInfo(message: AssistantChatMessage): {
-  fileName: string;
-  extension: string;
-  url: string;
-} | null {
-  const filePath =
-    message.filePath || detectFilePathFromContent(message.content);
-  if (!filePath && !message.fileUrl) return null;
+function parseChatAttachmentReferences(content: string): {
+  content: string;
+  paths: string[];
+} {
+  const lines = String(content || '').split(/\r?\n/);
+  const visibleLines: string[] = [];
+  const paths: string[] = [];
 
-  const fileName = basename(filePath || message.fileUrl || 'file');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === '【附件】') continue;
+
+    const pathMatch = line.match(
+      /^\s*(?:文件地址|文件路径|file path|path)[:：]\s*(.+?)\s*$/i,
+    );
+    if (pathMatch?.[1]) {
+      const value = pathMatch[1].trim().replace(/[。.,，\s]+$/, '');
+      if (value) paths.push(value);
+      continue;
+    }
+
+    const fileMatch = line.match(/^\s*文件[:：]\s*(.+?)\s*$/i);
+    if (fileMatch?.[1]) {
+      const value = fileMatch[1].trim().replace(/[。.,，\s]+$/, '');
+      if (/[\\/]/.test(value)) {
+        paths.push(value);
+        continue;
+      }
+    }
+
+    visibleLines.push(line);
+  }
+
+  while (visibleLines.length > 0 && !visibleLines[0].trim()) {
+    visibleLines.shift();
+  }
+  while (
+    visibleLines.length > 0 &&
+    !visibleLines[visibleLines.length - 1].trim()
+  ) {
+    visibleLines.pop();
+  }
+
+  return { content: visibleLines.join('\n'), paths };
+}
+
+function chatFileInfoFromPath(
+  filePath: string,
+  explicitUrl?: string | null,
+): ChatFileInfo {
+  const fileName = basename(filePath || explicitUrl || 'file');
   const extension = fileExtension(fileName);
-  const url = filePath
-    ? fileUrlForPath(filePath)
-    : /^https?:\/\//i.test(message.fileUrl || '')
-      ? message.fileUrl || ''
-      : apiUrl(message.fileUrl || '');
+  const url = explicitUrl ? apiUrl(explicitUrl) : fileUrlForPath(filePath);
 
   return { fileName, extension, url };
+}
+
+function chatFileInfoFromUrl(fileUrl: string): ChatFileInfo {
+  const fileName = basename(fileUrl || 'file');
+  const extension = fileExtension(fileName);
+  const url = /^https?:\/\//i.test(fileUrl) ? fileUrl : apiUrl(fileUrl);
+
+  return { fileName, extension, url };
+}
+
+function chatFileInfos(message: AssistantChatMessage): ChatFileInfo[] {
+  const parsed = parseChatAttachmentReferences(message.content);
+  const infos: ChatFileInfo[] = [];
+  const seen = new Set<string>();
+
+  const addInfo = (info: ChatFileInfo): void => {
+    const key = info.url || info.fileName;
+    if (seen.has(key)) return;
+    seen.add(key);
+    infos.push(info);
+  };
+
+  if (message.filePath) {
+    addInfo(chatFileInfoFromPath(message.filePath, message.fileUrl));
+  } else if (message.fileUrl) {
+    addInfo(chatFileInfoFromUrl(message.fileUrl));
+  }
+
+  parsed.paths.forEach((pathValue) => addInfo(chatFileInfoFromPath(pathValue)));
+
+  const fallbackPath = detectFilePathFromContent(parsed.content);
+  if (fallbackPath) addInfo(chatFileInfoFromPath(fallbackPath));
+
+  return infos;
+}
+
+function parseChatContentSegments(content: string): ChatContentSegment[] {
+  const lines = String(content || '').replace(/\r\n/g, '\n').split('\n');
+  const segments: ChatContentSegment[] = [];
+  let textLines: string[] = [];
+  let codeLines: string[] = [];
+  let inCode = false;
+  let codeLanguage = '';
+
+  const flushText = (): void => {
+    const text = textLines.join('\n').trim();
+    if (text) segments.push({ kind: 'text', text });
+    textLines = [];
+  };
+
+  const flushCode = (): void => {
+    const text = codeLines.join('\n').replace(/\n$/, '');
+    segments.push({ kind: 'code', text, language: codeLanguage });
+    codeLines = [];
+    codeLanguage = '';
+  };
+
+  for (const line of lines) {
+    const fenceMatch = line.match(/^\s*```(.*)$/);
+    if (fenceMatch) {
+      if (inCode) {
+        flushCode();
+        inCode = false;
+      } else {
+        flushText();
+        inCode = true;
+        codeLanguage = fenceMatch[1].trim();
+      }
+      continue;
+    }
+
+    if (inCode) codeLines.push(line);
+    else textLines.push(line);
+  }
+
+  if (inCode) flushCode();
+  flushText();
+
+  return segments;
+}
+
+function appendChatMessageContent(container: HTMLElement, content: string): void {
+  const segments = parseChatContentSegments(content);
+  for (const segment of segments) {
+    if (segment.kind === 'code') {
+      const pre = document.createElement('pre');
+      pre.className = 'chat-code-block';
+      const code = document.createElement('code');
+      code.className = 'chat-code-content';
+      if (segment.language) code.dataset.language = segment.language;
+      code.textContent = segment.text;
+      pre.append(code);
+      container.append(pre);
+      continue;
+    }
+
+    const text = document.createElement('div');
+    text.className = 'chat-message-text';
+    text.textContent = segment.text;
+    container.append(text);
+  }
 }
 
 function openImagePreview(src: string, alt: string): void {
@@ -735,37 +924,61 @@ function renderChat(): void {
     const klass = message.isFromMe ? 'user' : 'bot';
     const el = document.createElement('div');
     el.className = `chat-message ${klass}`;
+    const parsedContent = parseChatAttachmentReferences(message.content);
+    const main = document.createElement('div');
+    main.className = 'chat-message-main';
+    const header = document.createElement('div');
+    header.className = 'chat-message-header';
+    const role = document.createElement('span');
+    role.className = `chat-message-role ${
+      message.isFromMe ? 'chat-message-role-user' : 'chat-message-role-agent'
+    }`;
+    role.textContent = message.isFromMe ? '用户' : 'Agent';
+    header.append(role);
 
-    if (message.content.trim()) {
-      const text = document.createElement('div');
-      text.className = 'chat-message-text';
-      text.textContent = message.content;
-      el.append(text);
+    const timeText = formatChatMessageTime(message.timestamp);
+    if (timeText) {
+      const time = document.createElement('time');
+      time.className = 'chat-message-time';
+      time.textContent = timeText;
+      time.dateTime = formatChatMessageDatetime(message.timestamp);
+      time.title = new Date(parseMessageTimestamp(message.timestamp)).toLocaleString();
+      header.append(time);
     }
 
-    const fileInfo = chatFileInfo(message);
-    if (fileInfo && IMAGE_EXTENSIONS.has(fileInfo.extension)) {
-      const image = document.createElement('img');
-      image.className = 'chat-image-preview';
-      image.loading = 'lazy';
-      image.decoding = 'async';
-      image.src = fileInfo.url;
-      image.alt = fileInfo.fileName;
-      image.addEventListener('click', () => {
-        openImagePreview(image.src, fileInfo.fileName);
-      });
-      el.append(image);
-    } else if (fileInfo) {
+    const body = document.createElement('div');
+    body.className = 'chat-message-body';
+
+    appendChatMessageContent(body, parsedContent.content);
+
+    const fileInfos = chatFileInfos(message);
+    for (const fileInfo of fileInfos) {
+      if (IMAGE_EXTENSIONS.has(fileInfo.extension)) {
+        const image = document.createElement('img');
+        image.className = 'chat-image-preview';
+        image.loading = 'lazy';
+        image.decoding = 'async';
+        image.src = fileInfo.url;
+        image.alt = fileInfo.fileName;
+        image.addEventListener('click', () => {
+          openImagePreview(image.src, fileInfo.fileName);
+        });
+        body.append(image);
+        continue;
+      }
+
       const file = document.createElement('div');
       file.className = 'chat-file-chip';
       file.textContent = fileInfo.fileName;
-      el.append(file);
+      body.append(file);
     }
 
-    if (!el.childElementCount) {
-      el.textContent = '无内容';
+    if (!body.childElementCount) {
+      body.textContent = '无内容';
     }
 
+    main.append(header, body);
+    el.append(main);
     chatLog.append(el);
   }
   chatStatus.textContent = chatTyping ? 'Agent 正在回复...' : '';
