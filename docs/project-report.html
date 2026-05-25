@@ -1174,8 +1174,9 @@
         <a href="#architecture">系统架构</a>
         <a href="#runtime">Runtime</a>
         <a href="#workflow">Workflow</a>
-        <a href="#assistant-proactive">主动助手</a>
         <a href="#delivery">交付闭环</a>
+        <a href="#memory-wiki">记忆与 Wiki</a>
+        <a href="#assistant-proactive">主动助手</a>
         <a href="#advantages">核心优势</a>
         <a href="#extension">扩展</a>
         <a href="#references">概念校准</a>
@@ -1794,6 +1795,303 @@
         </div>
       </section>
 
+      <section class="section" id="memory-wiki">
+        <div class="section-inner">
+          <div class="section-head section-head-single">
+            <div>
+              <h2>记忆与 Wiki 模块</h2>
+              <p>
+                记忆与 Wiki 是 Irarus 的长期上下文层。结构化记忆负责把当前群组、
+                当前用户和近期任务的偏好、规则、事实注入 Agent 上下文；Wiki
+                负责把项目资料、流程说明、决策和证据链沉淀成可检索、可引用、
+                可复核的长期知识。
+              </p>
+            </div>
+          </div>
+
+          <div class="assistant-flow" aria-label="记忆与 Wiki 的上下文链路">
+            <div class="assistant-flow-step">
+              <b>上下文来源</b>
+              <span>
+                消息归档、人工新增记忆、Agent 写入、上传资料和文本导入共同成为长期上下文入口。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>结构化入库</b>
+              <span>
+                记忆写入 <code>memories</code>，Wiki 写入
+                <code>wiki_materials</code>、<code>wiki_drafts</code> 等表。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>检索与筛选</b>
+              <span>
+                记忆按 group 检索并组装 Memory Pack；Wiki 按页面、标题、摘要和正文做全文检索。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>编纂与治理</b>
+              <span>
+                记忆做冲突、重复和过期治理；Wiki 通过后台任务生成草稿、校验证据并预览发布差异。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>Agent 消费</b>
+              <span>
+                普通会话自动注入记忆；容器 Agent 可通过
+                <code>memory_search</code>、<code>wiki_search</code> 继续查证。
+              </span>
+            </div>
+            <div class="assistant-flow-step">
+              <b>工作台管理</b>
+              <span>
+                Web/Electron 提供记忆管理、Doctor、指标统计、知识库资料、草稿、页面和后台任务管理。
+              </span>
+            </div>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag teal">Working</span>
+              <h3>短期工作记忆</h3>
+              <p>
+                存当前任务、近期目标和立即有用的上下文，例如“本轮要修复哪个服务”
+                或“用户刚指定的输出格式”。检索排序会给 1 天内 working
+                记忆最高时效加成，超过配置窗口后可由 GC 识别为过期短记忆。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag blue">Episodic</span>
+              <h3>事件与结果记忆</h3>
+              <p>
+                存已经明确完成的事件摘要和结果，例如某次修复的原因、分支、产物、
+                blocker 或交付结论。它比 working 更稳定，但仍偏近期，适合让 Agent
+                理解“刚发生过什么”。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag green">Canonical</span>
+              <h3>长期规范记忆</h3>
+              <p>
+                存长期偏好、稳定规则和事实，例如用户沟通偏好、团队约束、
+                环境规则或项目长期事实。即使当前查询没有命中，系统也会把
+                canonical 中的 rule/preference 作为兜底候选纳入上下文。
+              </p>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="grid-2">
+            <article class="diagram">
+              <span class="tag amber">记忆机制</span>
+              <h3>从会话到 Memory Pack</h3>
+              <div class="timeline" style="margin-top: 14px">
+                <div class="timeline-item">
+                  <div class="dot">1</div>
+                  <div class="timeline-body">
+                    <b>写入结构化记忆</b>
+                    <span>
+                      <code>createMemory()</code> 写入 group 作用域、layer、
+                      memory_type、status、source 和 metadata。来源可以是 Web
+                      手工维护、容器内 <code>memory_write</code>，也可以是会话归档抽取。
+                    </span>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="dot">2</div>
+                  <div class="timeline-body">
+                    <b>归档抽取与过滤</b>
+                    <span>
+                      <code>memory_extract_from_archive</code> 读取群组
+                      conversations 归档，先过滤系统提示、工具指令、Memory Pack
+                      和低价值交接话术，再按置信度和每层最大数量写入候选。
+                    </span>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="dot">3</div>
+                  <div class="timeline-body">
+                    <b>相关性检索</b>
+                    <span>
+                      <code>retrieveStructuredMemories()</code> 使用 SQLite FTS5、
+                      同义词扩展和中文 n-gram 兜底检索 active 记忆，并记录匹配词、
+                      直接命中数和来源分数。
+                    </span>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="dot">4</div>
+                  <div class="timeline-body">
+                    <b>上下文打包</b>
+                    <span>
+                      <code>buildMemoryPackForGroup()</code> 拉取最多 24 条相关记忆，
+                      追加 canonical 兜底候选，再按层级、类型、相关性、直接命中和新鲜度排序。
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="diagram">
+              <span class="tag green">Wiki 机制</span>
+              <h3>从资料到可引用知识</h3>
+              <div class="timeline" style="margin-top: 14px">
+                <div class="timeline-item">
+                  <div class="dot">1</div>
+                  <div class="timeline-body">
+                    <b>导入资料</b>
+                    <span>
+                      <code>importWikiMaterialFromUpload()</code> 和
+                      <code>importWikiMaterialFromText()</code> 保存原始资料、抽取文本、
+                      计算 sha256，并形成 <code>wiki_materials</code> 记录。
+                    </span>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="dot">2</div>
+                  <div class="timeline-body">
+                    <b>后台编纂草稿</b>
+                    <span>
+                      <code>queueWikiDraftGenerationJob()</code> 创建
+                      <code>draft_generate</code> 任务。模型只允许使用所选资料和既有页面上下文，
+                      输出 page、claims 和 relations 的 JSON。
+                    </span>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="dot">3</div>
+                  <div class="timeline-body">
+                    <b>证据校验</b>
+                    <span>
+                      每条重要事实都要落成原子 Claim，并至少绑定一条
+                      <code>wiki_claim_evidence</code>。证据的 material_id 必须来自所选资料，
+                      excerpt 要能回到原文。
+                    </span>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="dot">4</div>
+                  <div class="timeline-body">
+                    <b>发布与检索</b>
+                    <span>
+                      发布时 upsert 页面、替换资料引用和关系，旧 Claim 未再出现则标记
+                      deprecated；页面写成 Markdown，并通过 <code>wiki_pages_fts</code>
+                      支持搜索。
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>维度</th>
+                  <th>结构化记忆</th>
+                  <th>Wiki 知识库</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>作用范围</td>
+                  <td>
+                    以 <code>group_folder</code> 隔离，每个群组、角色或服务有自己的短期和长期行为上下文。
+                  </td>
+                  <td>
+                    宿主机管理的全局 LLM Wiki，面向跨任务复用的项目、流程、概念、决策和资料知识。
+                  </td>
+                </tr>
+                <tr>
+                  <td>数据形态</td>
+                  <td>
+                    单条短文本，带 layer、memory_type、status、source、metadata。
+                    类型包括 preference、rule、fact、summary。
+                  </td>
+                  <td>
+                    资料、草稿、页面、Claim、证据、页面关系和后台任务共同组成知识图谱与证据层。
+                  </td>
+                </tr>
+                <tr>
+                  <td>进入上下文方式</td>
+                  <td>
+                    普通消息进入 Agent 前自动拼接 <code>[MEMORY PACK]</code>，并明确提示新用户指令优先于旧记忆。
+                  </td>
+                  <td>
+                    不默认塞入全部上下文，Agent 通过 <code>wiki_search</code> 和
+                    <code>wiki_get_page</code> 按需读取，避免长文档污染 prompt。
+                  </td>
+                </tr>
+                <tr>
+                  <td>可信度控制</td>
+                  <td>
+                    通过 active/conflicted/deprecated 管理状态；Doctor 发现重复、极性冲突和过期 working 记忆。
+                  </td>
+                  <td>
+                    通过 Claim 和 Evidence 建证据链；编纂提示明确禁止凭通识补全，发布前校验资料来源。
+                  </td>
+                </tr>
+                <tr>
+                  <td>本项目中的价值</td>
+                  <td>
+                    让工程 Agent 记住用户偏好、当前服务、近期异常、团队规则和沟通约束，
+                    减少每次重新解释背景。
+                  </td>
+                  <td>
+                    把需求文档、项目架构、流程说明、决策记录和运维资料沉淀成可搜索页面，
+                    让后续 Workflow 和 Agent 可以先查证再执行。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="grid-3">
+            <article class="card">
+              <span class="tag blue">检索排序</span>
+              <h3>相关性和稳定性一起算</h3>
+              <p>
+                记忆打包不是简单取最新。排序同时考虑 FTS 分数、直接命中数量、层级权重、
+                类型权重和时间加成；canonical/rule 权重最高，working 更依赖近期性。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag coral">容量控制</span>
+              <h3>每层有独立预算</h3>
+              <p>
+                Memory Pack 对 canonical、episodic、working 分别设置字符预算和条数上限，
+                避免短期噪声挤掉长期规则，也避免长期规则占满当前任务上下文。
+              </p>
+            </article>
+            <article class="card">
+              <span class="tag amber">后台任务</span>
+              <h3>Wiki 编纂可停止可恢复</h3>
+              <p>
+                Wiki 草稿生成进入 <code>wiki_jobs</code> 队列，支持 running、completed、
+                failed 状态、手动停止、进程重启后的 pending 恢复和失败原始响应留存。
+              </p>
+            </article>
+          </div>
+
+          <div style="height: 22px"></div>
+
+          <div class="callout">
+            <strong>设计取舍：</strong>
+            记忆是“轻量、分组、自动注入”的行为上下文，Wiki 是“证据化、全局、
+            按需检索”的知识上下文。前者让 Agent 更懂当前用户和当前工作，后者让
+            Agent 在面对稳定事实和项目资料时先查证、再行动。
+          </div>
+        </div>
+      </section>
+
       <section class="section" id="assistant-proactive">
         <div class="section-inner">
           <div class="section-head section-head-single">
@@ -1986,8 +2284,8 @@
               <span class="tag green">记忆与 Wiki</span>
               <h3>结构化记忆 + 可引用知识</h3>
               <p>
-                Irarus
-                不只存对话历史，还把长期偏好、项目知识、证据链和关系图分开建模，减少上下文漂移。
+                记忆按 working、episodic、canonical 分层进入上下文；Wiki
+                以资料、页面、Claim、证据和关系图沉淀长期知识，减少上下文漂移。
               </p>
             </article>
             <article class="card">
@@ -2106,6 +2404,19 @@
                   <td>
                     workflow/delegation/interrupt/evaluation
                     到工作台任务、子任务、待办和时间线的同步。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>src/memory-pack.ts</code> / <code>src/memory-retrieval.ts</code></td>
+                  <td>
+                    结构化记忆检索、同义词扩展、中文兜底、排序和 Memory Pack
+                    注入逻辑。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>src/wiki.ts</code></td>
+                  <td>
+                    LLM Wiki 的资料导入、草稿生成、证据校验、发布、页面详情和后台任务队列。
                   </td>
                 </tr>
               </tbody>
