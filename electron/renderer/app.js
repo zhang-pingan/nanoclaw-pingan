@@ -1142,6 +1142,128 @@ function formatTime(ts) {
   const pad = (value) => String(value).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+function formatMessageTimeTitle(ts) {
+  const parsedMs = parseTimestamp(ts);
+  if (!Number.isFinite(parsedMs) || parsedMs <= 0) return "";
+  return new Date(parsedMs).toLocaleString();
+}
+
+function formatMessageDatetime(ts) {
+  const parsedMs = parseTimestamp(ts);
+  if (!Number.isFinite(parsedMs) || parsedMs <= 0) return "";
+  return new Date(parsedMs).toISOString();
+}
+
+function getMessageSenderDisplayName(msg, fallback) {
+  const raw = String(msg?.sender_name || msg?.sender || fallback || "").trim();
+  if (msg?.is_from_me && /^(you|me|web user|desktop user|web_user)$/i.test(raw)) return "你";
+  if (!raw) return msg?.is_from_me ? "你" : "Assistant";
+  if (/^assistant$/i.test(raw)) return "Assistant";
+  return raw;
+}
+
+function getMessageKindInfo(msg, kindOverride) {
+  if (kindOverride === "card") return { label: "卡片", className: "msg-role-card" };
+  if (kindOverride === "file" || msg?._filePath) return { label: "附件", className: "msg-role-file" };
+  if (msg?.is_from_me) return { label: "用户", className: "msg-role-user" };
+  if (msg?.is_bot_message || /assistant|agent|bot/i.test(String(msg?.sender || msg?.sender_name || ""))) {
+    return { label: "Agent", className: "msg-role-agent" };
+  }
+  return { label: "成员", className: "msg-role-member" };
+}
+
+function renderMessageHeaderHtml(msg, options = {}) {
+  const senderName = getMessageSenderDisplayName(msg, options.fallbackSenderName);
+  const kindInfo = getMessageKindInfo(msg, options.kind);
+  const showSender = kindInfo.label !== "用户" && kindInfo.label !== "Agent";
+  const timeText = formatTime(msg?.timestamp);
+  const timeTitle = formatMessageTimeTitle(msg?.timestamp);
+  const datetime = formatMessageDatetime(msg?.timestamp);
+  return `
+    <div class="msg-header">
+      <span class="msg-role ${escapeAttribute(kindInfo.className)}">${escapeHtml(kindInfo.label)}</span>
+      ${showSender ? `<span class="msg-sender">${escapeHtml(senderName)}</span>` : ""}
+      <time class="msg-time" datetime="${escapeAttribute(datetime)}" title="${escapeAttribute(timeTitle)}">${escapeHtml(timeText)}</time>
+    </div>
+  `;
+}
+
+function parseMessageAttachmentReferences(content) {
+  const lines = String(content || "").split(/\r?\n/);
+  const paths = [];
+  const visibleLines = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === "【附件】") continue;
+    const pathMatch = line.match(/^\s*文件地址:\s*(.+?)\s*$/);
+    if (pathMatch) {
+      paths.push(pathMatch[1]);
+      continue;
+    }
+    visibleLines.push(line);
+  }
+
+  while (visibleLines.length > 0 && visibleLines[0].trim() === "") visibleLines.shift();
+  while (visibleLines.length > 0 && visibleLines[visibleLines.length - 1].trim() === "") visibleLines.pop();
+
+  return { content: visibleLines.join("\n"), paths };
+}
+
+function createFileInfoFromPath(filePath) {
+  const filename = String(filePath || "").split("/").pop() || String(filePath || "附件");
+  const ext = filename.includes(".") ? filename.split(".").pop().toLowerCase() : "";
+  return { filename, ext, filePath };
+}
+
+function getMessagePreviewText(msg) {
+  const parsed = parseMessageAttachmentReferences(msg?.content || "");
+  const text = parsed.content.replace(/\s+/g, " ").trim();
+  if (text) return text.slice(0, 80);
+  if (msg?._filePath) return msg._filePath.split("/").pop() || "附件";
+  if (parsed.paths.length > 0) {
+    return parsed.paths.map((path) => path.split("/").pop() || path).join(", ").slice(0, 80);
+  }
+  return String(msg?.content || "").replace(/\s+/g, " ").trim().slice(0, 80) || "消息";
+}
+
+function renderPlainMessageContent(text) {
+  return escapeHtml(text).replace(/\n/g, "<br>");
+}
+
+function renderMessageActionsHtml(options = {}) {
+  const copyEnabled = options.copy !== false;
+  return `
+    <div class="msg-actions">
+      ${copyEnabled ? '<button class="msg-copy-btn" title="\\u590D\\u5236"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>' : ""}
+      <button class="msg-reply-btn" title="Reply"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg></button>
+    </div>
+  `;
+}
+
+function attachMessageInteractions(el, msg, options = {}) {
+  const replyBtn = el.querySelector(".msg-reply-btn");
+  if (replyBtn) {
+    replyBtn.addEventListener("click", () => setReplyTo(msg));
+  }
+
+  const copyBtn = el.querySelector(".msg-copy-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => copyMessageContent(msg));
+  }
+
+  if (options.addCopyButtons !== false) {
+    addCopyButtons(el);
+  }
+
+  el.addEventListener("click", (e) => {
+    if (!multiSelectMode) return;
+    if (e.target.closest(".msg-actions")) return;
+    e.preventDefault();
+    toggleMessageSelection(msg.id, el);
+  });
+}
 // --- SVG Icon helpers ---
 const SVG = {
   trash: '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>',
@@ -1214,21 +1336,9 @@ function addCopyButtons(container) {
   });
 }
 
-// --- File preview detection ---
+// --- File preview rendering ---
 var IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "svg", "webp"];
 var PDF_EXTS = ["pdf"];
-
-function detectFileUpload(content) {
-  // Detect agent-visible workspace file references.
-  const pathMatch = content.match(/文件地址:\s*(.+)/);
-  if (pathMatch) {
-    const filePath = pathMatch[1].trim();
-    const filename = filePath.split("/").pop() || filePath;
-    const ext = filename.split(".").pop().toLowerCase();
-    return { filename, ext, filePath };
-  }
-  return null;
-}
 
 function renderFilePreview(filename, ext, filePath, fileUrl = null) {
   const div = document.createElement("div");
@@ -1720,53 +1830,46 @@ function sendCardAction(value, cardId, formValue) {
   });
 }
 
-function getMessageAvatarHtml(isUser) {
-  const isMainAssistant = !isUser && isCurrentGroupMain();
-  if (!isUser && !isMainAssistant) {
-    return `<div class="msg-avatar msg-avatar-agent-minimal" aria-hidden="true"><span>AI</span></div>`;
-  }
-  const avatarSrc = isUser ? "/assets/avatar-user.png" : ASSISTANT_AVATAR;
-  const avatarAlt = isUser ? "User" : "Assistant";
-  return `<div class="msg-avatar"><img src="${avatarSrc}" alt="${avatarAlt}" /></div>`;
-}
-
 // --- Create single message element (factory) ---
 function createMessageEl(msg) {
+  const isUser = msg.is_from_me;
+  const isSystem = msg.sender === "system";
+
+  if (isSystem) {
+    const systemEl = document.createElement("div");
+    systemEl.className = "message system";
+    systemEl.setAttribute("data-msg-id", msg.id);
+    systemEl.setAttribute("data-timestamp", msg.timestamp);
+    systemEl.textContent = msg.content;
+    return systemEl;
+  }
+
   // Card messages get special rendering
   if (isCardMessage(msg)) {
     const card = parseCardContent(msg);
     if (card) {
-      const senderName = msg.sender_name || msg.sender || "Assistant";
       const wrapper = document.createElement("div");
       wrapper.className = "message assistant card-message";
       wrapper.setAttribute("data-msg-id", msg.id);
       wrapper.setAttribute("data-timestamp", msg.timestamp);
       wrapper.innerHTML = `
         <div class="msg-select-check">\u2713</div>
-        ${getMessageAvatarHtml(false)}
         <div class="msg-main">
-          <div class="msg-header">
-            <span class="msg-sender">${escapeHtml(senderName)}</span>
-            <span class="msg-time">${formatTime(msg.timestamp)}</span>
+          ${renderMessageHeaderHtml(msg, { kind: "card", fallbackSenderName: "Assistant" })}
+          <div class="msg-body">
+            ${renderMessageActionsHtml({ copy: false })}
           </div>
-          <div class="msg-body"></div>
         </div>
       `;
       const body = wrapper.querySelector(".msg-body");
       if (body) body.appendChild(renderCardElement(card, msg.id));
-      wrapper.addEventListener("click", (e) => {
-        if (!multiSelectMode) return;
-        if (e.target.closest(".msg-actions")) return;
-        e.preventDefault();
-        toggleMessageSelection(msg.id, wrapper);
-      });
+      attachMessageInteractions(wrapper, msg, { addCopyButtons: false });
       return wrapper;
     }
   }
 
   // File messages: render as file card with icon and filename
   if (msg._filePath) {
-    const senderName = msg.sender_name || msg.sender || "Assistant";
     const fileName = msg._filePath.split("/").pop() || msg.content;
     const ext = fileName.split(".").pop().toLowerCase();
     const fileUrl = msg._fileUrl || null;
@@ -1777,13 +1880,11 @@ function createMessageEl(msg) {
     wrapper.setAttribute("data-timestamp", msg.timestamp);
     wrapper.innerHTML = `
       <div class="msg-select-check">\u2713</div>
-      ${getMessageAvatarHtml(false)}
       <div class="msg-main">
-        <div class="msg-header">
-          <span class="msg-sender">${escapeHtml(senderName)}</span>
-          <span class="msg-time">${formatTime(msg.timestamp)}</span>
+        ${renderMessageHeaderHtml(msg, { kind: "file", fallbackSenderName: "Assistant" })}
+        <div class="msg-body">
+          ${renderMessageActionsHtml()}
         </div>
-        <div class="msg-body"></div>
       </div>
     `;
 
@@ -1796,12 +1897,12 @@ function createMessageEl(msg) {
         showFileContextMenu(e, msg._filePath);
       });
     } else {
-      body.innerHTML = `
+      body.insertAdjacentHTML("beforeend", `
         <div class="file-card" data-ext="${escapeHtml(ext)}">
           <div class="file-card-icon">${getFileIcon(ext)}</div>
           <div class="file-card-name">${escapeHtml(fileName)}</div>
         </div>
-      `;
+      `);
 
       const card = wrapper.querySelector(".file-card");
       card.addEventListener("click", () => {
@@ -1816,26 +1917,13 @@ function createMessageEl(msg) {
         showFileContextMenu(e, msg._filePath);
       });
     }
-    wrapper.addEventListener("click", (e) => {
-      if (!multiSelectMode) return;
-      if (e.target.closest(".msg-actions")) return;
-      e.preventDefault();
-      toggleMessageSelection(msg.id, wrapper);
-    });
+    attachMessageInteractions(wrapper, msg, { addCopyButtons: false });
     return wrapper;
   }
 
   const div = document.createElement("div");
-  const isUser = msg.is_from_me;
-  const isSystem = msg.sender === "system";
   div.setAttribute("data-msg-id", msg.id);
   div.setAttribute("data-timestamp", msg.timestamp);
-
-  if (isSystem) {
-    div.className = "message system";
-    div.textContent = msg.content;
-    return div;
-  }
 
   div.className = `message ${isUser ? "user" : "assistant"}`;
 
@@ -1843,68 +1931,46 @@ function createMessageEl(msg) {
   let replyHtml = "";
   if (msg.reply_to_id) {
     const quoted = messages.find((m) => m.id === msg.reply_to_id);
-    const quotedText = quoted ? quoted.content.slice(0, 80) : "...";
-    replyHtml = `<div class="msg-reply-quote" data-reply-id="${escapeHtml(msg.reply_to_id)}">${escapeHtml(quotedText)}</div>`;
+    const quotedText = quoted ? getMessagePreviewText(quoted) : "...";
+    replyHtml = `<div class="msg-reply-quote" data-reply-id="${escapeAttribute(msg.reply_to_id)}">${escapeHtml(quotedText)}</div>`;
   }
 
-  const renderedContent = isUser ? escapeHtml(msg.content) : renderMarkdown(msg.content);
+  const parsedContent = parseMessageAttachmentReferences(msg.content);
+  const cleanContent = parsedContent.content;
+  const attachmentInfos = parsedContent.paths.map(createFileInfoFromPath);
+  const renderedContent = cleanContent
+    ? (isUser ? renderPlainMessageContent(cleanContent) : renderMarkdown(cleanContent))
+    : "";
+  const attachmentsHtml = attachmentInfos.length > 0
+    ? '<div class="msg-attachments"></div>'
+    : "";
   const modelTail = isUser && msg.model
     ? `<div class="msg-model-tail">模型：${escapeHtml(msg.model)}</div>`
     : "";
 
-  // Check for file upload
-  const fileInfo = detectFileUpload(msg.content);
-  const groupFolder = currentGroupJid.replace("web:", "");
-
   div.innerHTML = `
     <div class="msg-select-check">\u2713</div>
-    ${getMessageAvatarHtml(isUser)}
     <div class="msg-main">
-      <div class="msg-header">
-        ${msg.sender_name ? `<span class="msg-sender">${escapeHtml(msg.sender_name)}</span>` : ""}
-        <span class="msg-time">${formatTime(msg.timestamp)}</span>
-      </div>
+      ${renderMessageHeaderHtml(msg)}
       <div class="msg-body">
-        <div class="msg-actions">
-          <button class="msg-copy-btn" title="\u590D\u5236"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-          <button class="msg-reply-btn" title="Reply"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg></button>
-        </div>
+        ${renderMessageActionsHtml()}
         ${replyHtml}
-        <div class="msg-content">${renderedContent}</div>
+        ${renderedContent ? `<div class="msg-content">${renderedContent}</div>` : ""}
+        ${attachmentsHtml}
       </div>
       ${modelTail}
     </div>
   `;
 
-  // Add file preview if detected
-  if (fileInfo) {
-    const preview = renderFilePreview(fileInfo.filename, fileInfo.ext, fileInfo.filePath);
-    const contentEl = div.querySelector(".msg-content");
-    contentEl.appendChild(preview);
+  if (attachmentInfos.length > 0) {
+    const attachmentsEl = div.querySelector(".msg-attachments");
+    attachmentInfos.forEach((fileInfo) => {
+      const preview = renderFilePreview(fileInfo.filename, fileInfo.ext, fileInfo.filePath);
+      attachmentsEl.appendChild(preview);
+    });
   }
 
-  // Add copy buttons to code blocks
-  addCopyButtons(div);
-
-  // Reply button handler
-  const replyBtn = div.querySelector(".msg-reply-btn");
-  if (replyBtn) {
-    replyBtn.addEventListener("click", () => setReplyTo(msg));
-  }
-
-  // Copy button handler
-  const copyBtn = div.querySelector(".msg-copy-btn");
-  if (copyBtn) {
-    copyBtn.addEventListener("click", () => copyMessageContent(msg));
-  }
-
-  // Multi-select click handler
-  div.addEventListener("click", (e) => {
-    if (!multiSelectMode) return;
-    if (e.target.closest(".msg-actions")) return;
-    e.preventDefault();
-    toggleMessageSelection(msg.id, div);
-  });
+  attachMessageInteractions(div, msg);
 
   return div;
 }
@@ -17963,7 +18029,8 @@ async function sendMessage(content) {
 // --- Reply handling ---
 function setReplyTo(msg) {
   replyToMsg = msg;
-  replyPreviewContent.textContent = `${msg.sender_name || msg.sender}: ${msg.content.slice(0, 80)}`;
+  const senderName = getMessageSenderDisplayName(msg, msg.sender_name || msg.sender);
+  replyPreviewContent.textContent = `${senderName}: ${getMessagePreviewText(msg)}`;
   replyPreview.classList.add("visible");
   messageInput.focus();
 }

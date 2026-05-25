@@ -46,7 +46,6 @@ type SceneObjects = {
   screenGlow: THREE.PointLight;
   statusLight: THREE.PointLight;
   statusRing: THREE.Mesh;
-  starField: THREE.Points;
   dataTicks: THREE.Mesh[];
 };
 
@@ -289,29 +288,6 @@ export class AssistantScene {
     viewportGroup.position.set(0, 0.98, -1.82);
     root.add(viewportGroup);
 
-    const starGeometry = new THREE.BufferGeometry();
-    const starPositions = new Float32Array(360 * 3);
-    for (let i = 0; i < starPositions.length; i += 3) {
-      starPositions[i] = (Math.random() - 0.5) * 4.8;
-      starPositions[i + 1] = Math.random() * 2.2 - 0.62;
-      starPositions[i + 2] = Math.random() * 0.8 - 0.42;
-    }
-    starGeometry.setAttribute(
-      'position',
-      new THREE.BufferAttribute(starPositions, 3),
-    );
-    const starField = new THREE.Points(
-      starGeometry,
-      new THREE.PointsMaterial({
-        color: '#E0F2FE',
-        size: 0.018,
-        transparent: true,
-        opacity: 0.82,
-        depthWrite: false,
-      }),
-    );
-    viewportGroup.add(starField);
-
     const wallGroup = new THREE.Group();
     wallGroup.position.set(0, 0, -1.26);
     root.add(wallGroup);
@@ -451,7 +427,6 @@ export class AssistantScene {
       screenGlow,
       statusLight,
       statusRing,
-      starField,
       dataTicks,
     };
   }
@@ -767,7 +742,6 @@ export class AssistantScene {
     this.objects.statusRing.rotation.z += delta * 0.42;
     this.objects.platform.visible = !expanded;
     this.objects.statusRing.visible = !expanded;
-    this.objects.starField.rotation.z += delta * 0.012;
     this.objects.hologramGroup.position.y =
       0.7 + Math.sin(elapsed * 2.7) * 0.022;
     this.objects.hologramScan.position.x = -0.68 + ((elapsed * 0.58) % 1.36);
