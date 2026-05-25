@@ -392,10 +392,25 @@ button {
   will-change: opacity, transform;
   contain: layout paint;
   backface-visibility: hidden;
+  -webkit-app-region: drag;
   transition:
     opacity 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
     transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1),
     visibility 0s linear 110ms;
+}
+
+.assistant-chat .chat-log,
+.assistant-chat .pending-files-preview,
+.assistant-chat .file-drop-zone,
+.assistant-chat .chat-form,
+.assistant-chat .chat-status,
+.assistant-chat button,
+.assistant-chat textarea,
+.assistant-chat a,
+.assistant-chat img,
+.assistant-chat pre,
+.assistant-chat code {
+  -webkit-app-region: no-drag;
 }
 
 .assistant-chat::before,

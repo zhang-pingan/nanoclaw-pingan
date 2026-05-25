@@ -136,6 +136,18 @@ function handleAssistantCommandBacktickKey(): boolean {
   return true;
 }
 
+function isCommandBackquoteInput(input: Electron.Input): boolean {
+  if (!input.meta || input.shift || input.control || input.alt) return false;
+  return (
+    input.code === 'Backquote' ||
+    input.key === '`' ||
+    input.key === '~' ||
+    input.key === '·' ||
+    input.key === '§' ||
+    input.key === '±'
+  );
+}
+
 function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
 
@@ -284,13 +296,7 @@ function createAssistantWindow(): void {
       if (handleAssistantEscapeKey()) event.preventDefault();
       return;
     }
-    if (
-      input.meta &&
-      !input.shift &&
-      !input.control &&
-      !input.alt &&
-      (input.key === '`' || input.code === 'Backquote')
-    ) {
+    if (isCommandBackquoteInput(input)) {
       if (handleAssistantCommandBacktickKey()) event.preventDefault();
     }
   });
