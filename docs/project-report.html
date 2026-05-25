@@ -1971,8 +1971,8 @@
               <span class="tag blue">Agent 蜂窝架构</span>
               <h3>主调度与角色 Agent 分离</h3>
               <p>
-                宿主机统一调度 planner、dev、reviewer、ops、test
-                等角色，避免多个 Agent 共用一个混乱上下文池。
+                主控agent负责调度所有角色agent，并且所有agent 有单独的工作区、
+                记忆、 上下文、工具、skill，避免了互相影响和最专注的工作环境上下文
               </p>
             </article>
             <article class="card">
