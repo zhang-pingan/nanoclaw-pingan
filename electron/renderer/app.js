@@ -18595,7 +18595,7 @@ function fuzzyMatch(text, query) {
 }
 
 function getMentionTargets() {
-  const targets = [{ name: "Andy", kind: "assistant" }];
+  const targets = [{ name: "Andy", kind: "助手" }];
   const seen = new Set(["andy"]);
   const folders = groups
     .filter((g) => g && typeof g.jid === "string" && g.jid.startsWith("web:") && typeof g.folder === "string" && g.folder.trim())
@@ -18606,7 +18606,7 @@ function getMentionTargets() {
     const key = folder.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    targets.push({ name: folder, kind: "groupfolder" });
+    targets.push({ name: folder, kind: "群组" });
   }
   return targets;
 }
@@ -18619,7 +18619,7 @@ function ensureMentionPickerElements() {
   mentionSearchInput = document.createElement("input");
   mentionSearchInput.id = "mention-search-input";
   mentionSearchInput.type = "text";
-  mentionSearchInput.placeholder = "搜索 Andy 或 group folder";
+  mentionSearchInput.placeholder = "搜索助手或群组";
   searchWrap.appendChild(mentionSearchInput);
   mentionPicker.appendChild(searchWrap);
 

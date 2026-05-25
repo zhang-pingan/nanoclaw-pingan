@@ -16420,6 +16420,107 @@ body::after,
   color: var(--minimal-text-muted);
 }
 
+#mention-picker {
+  left: 22px;
+  right: 22px;
+  margin-bottom: 8px;
+  border: 1px solid var(--minimal-line);
+  border-radius: 12px;
+  background: var(--minimal-surface);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 12px 28px rgba(16, 24, 40, 0.08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#mention-picker.visible {
+  display: block;
+}
+
+.mention-search-wrap {
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--minimal-line);
+  background: #fbfbfc;
+}
+
+#mention-search-input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--minimal-line);
+  border-radius: 8px;
+  background: var(--minimal-surface);
+  color: var(--minimal-text);
+  font-size: 13px;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+#mention-search-input::placeholder {
+  color: var(--minimal-text-muted);
+}
+
+#mention-search-input:focus {
+  border-color: var(--minimal-line-strong);
+  box-shadow: 0 0 0 3px rgba(32, 35, 39, 0.08);
+}
+
+#mention-options {
+  max-height: 216px;
+  padding: 6px;
+}
+
+.mention-item {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px;
+  color: var(--minimal-text-soft);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.mention-item:hover,
+.mention-item.active {
+  border-color: rgba(32, 35, 39, 0.04);
+  background: var(--minimal-nav-strong);
+  color: var(--minimal-text);
+}
+
+.mention-name {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-kind {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border: 1px solid var(--minimal-line);
+  border-radius: 999px;
+  background: var(--minimal-nav);
+  color: var(--minimal-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.mention-empty {
+  padding: 16px 10px;
+  color: var(--minimal-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 .send-btn {
   background: #202327;
   color: #ffffff;
