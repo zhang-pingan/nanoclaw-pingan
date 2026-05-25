@@ -11,6 +11,7 @@ import {
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';
+import type { MenuItemConstructorOptions } from 'electron';
 
 const ASSISTANT_COMPACT_WINDOW_WIDTH = 540;
 const ASSISTANT_COMPACT_WINDOW_HEIGHT = 430;
@@ -23,6 +24,9 @@ const OPEN_WORKSTATION_ARG = '--icarus-open-workstation';
 let assistantWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+let assistantChatOpen = false;
+let assistantChatMode = false;
+let lastContextMenuPopupAt = 0;
 
 function rendererPath(filename: string): string {
   return path.join(process.cwd(), 'assistant', 'renderer', filename);
@@ -86,6 +90,53 @@ function openWorkstationClient(target?: string): void {
     void shell.openExternal(url);
   });
   child.unref();
+}
+
+function sendAssistantChatModeRequest(enabled: boolean): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  assistantWindow.webContents.send('assistant:chat-mode-request', enabled);
+}
+
+function setAssistantWindowChatControlsEnabled(enabled: boolean): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  assistantWindow.setResizable(enabled);
+  assistantWindow.setFullScreenable(enabled);
+}
+
+function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+
+  const now = Date.now();
+  if (now - lastContextMenuPopupAt < 180) return;
+  lastContextMenuPopupAt = now;
+
+  const chatMode = options.chatMode ?? assistantChatMode;
+  const isFullScreen = assistantWindow.isFullScreen();
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: chatMode ? '退出聊天模式' : '进入聊天模式',
+      click: () => sendAssistantChatModeRequest(!chatMode),
+    },
+    {
+      label: '打开工作站',
+      click: () => openWorkstationClient(),
+    },
+    { type: 'separator' },
+    {
+      label: isFullScreen ? '退出全屏' : '全屏',
+      enabled: chatMode,
+      click: () => {
+        if (!assistantWindow || assistantWindow.isDestroyed()) return;
+        assistantWindow.setFullScreen(!assistantWindow.isFullScreen());
+      },
+    },
+    {
+      label: '隐藏个人助手',
+      click: () => assistantWindow?.hide(),
+    },
+  ];
+
+  Menu.buildFromTemplate(template).popup({ window: assistantWindow });
 }
 
 function bringAssistantWindowToFront(): void {
@@ -169,7 +220,7 @@ function createAssistantWindow(): void {
     frame: false,
     resizable: false,
     movable: true,
-    fullscreenable: false,
+    fullscreenable: true,
     hasShadow: false,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -183,14 +234,10 @@ function createAssistantWindow(): void {
   assistantWindow.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true,
   });
+  setAssistantWindowChatControlsEnabled(false);
   assistantWindow.loadFile(rendererPath('index.html'));
   assistantWindow.webContents.on('context-menu', () => {
-    Menu.buildFromTemplate([
-      {
-        label: '打开工作站',
-        click: () => openWorkstationClient(),
-      },
-    ]).popup({ window: assistantWindow || undefined });
+    showAssistantContextMenu();
   });
 
   assistantWindow.on('close', (event) => {
@@ -202,9 +249,23 @@ function createAssistantWindow(): void {
 
 function setAssistantWindowExpanded(expanded: boolean): void {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  assistantChatOpen = expanded;
+  if (!expanded) {
+    assistantChatMode = false;
+    setAssistantWindowChatControlsEnabled(false);
+  }
+  if (!expanded && assistantWindow.isFullScreen()) {
+    assistantWindow.setFullScreen(false);
+  }
+
   const bounds = assistantWindow.getBounds();
   const size = assistantWindowSize(expanded);
-  if (bounds.width === size.width && bounds.height === size.height) return;
+  if (
+    assistantWindow.isFullScreen() ||
+    (bounds.width === size.width && bounds.height === size.height)
+  ) {
+    return;
+  }
 
   const next = clampWindowToWorkArea(
     bounds.x + bounds.width - size.width,
@@ -217,6 +278,22 @@ function setAssistantWindowExpanded(expanded: boolean): void {
     width: size.width,
     height: size.height,
   });
+}
+
+function setAssistantWindowChatMode(enabled: boolean): void {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  assistantChatMode = enabled;
+  assistantChatOpen = true;
+  setAssistantWindowChatControlsEnabled(enabled);
+
+  const resizeToExpanded = () => setAssistantWindowExpanded(true);
+  if (!enabled && assistantWindow.isFullScreen()) {
+    assistantWindow.once('leave-full-screen', resizeToExpanded);
+    assistantWindow.setFullScreen(false);
+    return;
+  }
+
+  resizeToExpanded();
 }
 
 function createTray(): void {
@@ -254,12 +331,26 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle(
+  'assistant:show-context-menu',
+  async (_event, options?: { chatMode?: boolean }) => {
+    showAssistantContextMenu({
+      chatMode:
+        typeof options?.chatMode === 'boolean' ? options.chatMode : undefined,
+    });
+  },
+);
+
 ipcMain.handle('assistant:set-always-on-top', (_event, enabled: boolean) => {
   assistantWindow?.setAlwaysOnTop(Boolean(enabled), 'floating');
 });
 
 ipcMain.handle('assistant:set-chat-open', (_event, open: boolean) => {
   setAssistantWindowExpanded(Boolean(open));
+});
+
+ipcMain.handle('assistant:set-chat-mode', (_event, enabled: boolean) => {
+  setAssistantWindowChatMode(Boolean(enabled));
 });
 
 ipcMain.handle(

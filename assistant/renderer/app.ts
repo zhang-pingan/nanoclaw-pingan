@@ -69,8 +69,11 @@ declare global {
     assistantHost?: {
       getWebToken: () => Promise<string>;
       openWorkstation: (target?: string) => Promise<void>;
+      showContextMenu: (options?: { chatMode?: boolean }) => Promise<void>;
+      onChatModeRequest: (handler: (enabled: boolean) => void) => () => void;
       setAlwaysOnTop: (enabled: boolean) => Promise<void>;
       setChatOpen: (open: boolean) => Promise<void>;
+      setChatMode: (enabled: boolean) => Promise<void>;
       setMousePassthrough: (enabled: boolean) => Promise<void>;
       moveBy: (dx: number, dy: number) => Promise<void>;
       hide: () => Promise<void>;
@@ -128,6 +131,7 @@ let movingTimer: number | null = null;
 let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
 let chatOpen = false;
+let chatMode = false;
 let sceneChatOpen = false;
 let collapsedChatMessage: AssistantChatMessage | null = null;
 let collapsedChatMessageTimer: number | null = null;
@@ -290,9 +294,12 @@ function setChatOpen(open: boolean): void {
     })();
   } else {
     clearChatAutoHideTimer();
+    chatMode = false;
     shell.classList.remove('chat-open');
+    shell.classList.remove('chat-mode');
     updateAlertLayout();
     assistantChat.setAttribute('aria-hidden', 'true');
+    void window.assistantHost?.setChatMode(false);
     void (async () => {
       await delay(CHAT_PANEL_TRANSITION_MS);
       if (transitionToken !== chatTransitionToken || chatOpen) return;
@@ -305,12 +312,40 @@ function setChatOpen(open: boolean): void {
   }
 }
 
+function setChatMode(enabled: boolean): void {
+  if (enabled) {
+    if (!chatOpen) setChatOpen(true);
+    chatMode = true;
+    shell.classList.add('chat-mode');
+    clearChatAutoHideTimer();
+    updateAlertLayout();
+    setMousePassthrough(false);
+    void window.assistantHost?.setChatMode(true);
+    chatInput.focus();
+    return;
+  }
+
+  chatMode = false;
+  shell.classList.remove('chat-mode');
+  updateAlertLayout();
+  void window.assistantHost?.setChatMode(false);
+}
+
 function scheduleChatAutoHide(): void {
-  if (!chatOpen) return;
+  if (!chatOpen || chatMode) return;
   clearChatAutoHideTimer();
   chatAutoHideTimer = window.setTimeout(() => {
+    if (chatMode) return;
     setChatOpen(false);
   }, CHAT_AUTO_HIDE_DELAY_MS);
+}
+
+function showAssistantContextMenu(event: MouseEvent): void {
+  event.preventDefault();
+  event.stopPropagation();
+  clearChatAutoHideTimer();
+  setMousePassthrough(false);
+  void window.assistantHost?.showContextMenu?.({ chatMode });
 }
 
 function beginMascotWindowDrag(): void {
@@ -363,8 +398,7 @@ function triggerRuleCapability(
   const ruleKey = inboxItemRuleKey(item);
   if (!ruleKey) return null;
   return (
-    state?.triggerRuleCapabilities?.find((rule) => rule.key === ruleKey) ||
-    null
+    state?.triggerRuleCapabilities?.find((rule) => rule.key === ruleKey) || null
   );
 }
 
@@ -389,10 +423,10 @@ function canRepair(item: AgentInboxItem): boolean {
   const investigation = item.extra?.investigation;
   return Boolean(
     capability?.supportsRepair &&
-      investigation &&
-      typeof investigation === 'object' &&
-      !Array.isArray(investigation) &&
-      (investigation as Record<string, unknown>).repairable === true,
+    investigation &&
+    typeof investigation === 'object' &&
+    !Array.isArray(investigation) &&
+    (investigation as Record<string, unknown>).repairable === true,
   );
 }
 
@@ -631,28 +665,48 @@ function renderItem(item: AgentInboxItem): void {
 
   if (item.action_url) {
     bubbleActions.append(
-      button('查看', 'primary', () => {
-        window.assistantHost?.openWorkstation(item.action_url || undefined);
-        void runInboxAction(item.id, 'mark_read');
-      }, { disabled: Boolean(pendingAction) }),
+      button(
+        '查看',
+        'primary',
+        () => {
+          window.assistantHost?.openWorkstation(item.action_url || undefined);
+          void runInboxAction(item.id, 'mark_read');
+        },
+        { disabled: Boolean(pendingAction) },
+      ),
     );
   }
 
   if (item.action_kind === 'continue_today_plan') {
     bubbleActions.append(
-      button(item.action_label || '执行', '', () => {
-        void runInboxAction(item.id, 'execute');
-      }, { disabled: Boolean(pendingAction) }),
+      button(
+        item.action_label || '执行',
+        '',
+        () => {
+          void runInboxAction(item.id, 'execute');
+        },
+        { disabled: Boolean(pendingAction) },
+      ),
     );
   }
 
   bubbleActions.append(
-    button('稍后', '', () => {
-      void runInboxAction(item.id, 'snooze', { minutes: 60 });
-    }, { disabled: Boolean(pendingAction) }),
-    button('忽略', '', () => {
-      void runInboxAction(item.id, 'dismiss');
-    }, { disabled: Boolean(pendingAction) }),
+    button(
+      '稍后',
+      '',
+      () => {
+        void runInboxAction(item.id, 'snooze', { minutes: 60 });
+      },
+      { disabled: Boolean(pendingAction) },
+    ),
+    button(
+      '忽略',
+      '',
+      () => {
+        void runInboxAction(item.id, 'dismiss');
+      },
+      { disabled: Boolean(pendingAction) },
+    ),
   );
   updateAlertLayout();
 }
@@ -834,7 +888,9 @@ function chatFileInfos(message: AssistantChatMessage): ChatFileInfo[] {
 }
 
 function parseChatContentSegments(content: string): ChatContentSegment[] {
-  const lines = String(content || '').replace(/\r\n/g, '\n').split('\n');
+  const lines = String(content || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n');
   const segments: ChatContentSegment[] = [];
   let textLines: string[] = [];
   let codeLines: string[] = [];
@@ -878,7 +934,10 @@ function parseChatContentSegments(content: string): ChatContentSegment[] {
   return segments;
 }
 
-function appendChatMessageContent(container: HTMLElement, content: string): void {
+function appendChatMessageContent(
+  container: HTMLElement,
+  content: string,
+): void {
   const segments = parseChatContentSegments(content);
   for (const segment of segments) {
     if (segment.kind === 'code') {
@@ -942,7 +1001,9 @@ function renderChat(): void {
       time.className = 'chat-message-time';
       time.textContent = timeText;
       time.dateTime = formatChatMessageDatetime(message.timestamp);
-      time.title = new Date(parseMessageTimestamp(message.timestamp)).toLocaleString();
+      time.title = new Date(
+        parseMessageTimestamp(message.timestamp),
+      ).toLocaleString();
       header.append(time);
     }
 
@@ -1426,9 +1487,14 @@ mascotTrigger.addEventListener('keydown', (event) => {
   setChatOpen(!chatOpen);
 });
 
+window.assistantHost?.onChatModeRequest?.((enabled) => {
+  setChatMode(enabled);
+});
+
 window.addEventListener('blur', scheduleChatAutoHide);
 window.addEventListener('focus', clearChatAutoHideTimer);
 window.addEventListener('mousemove', syncMousePassthrough);
+document.addEventListener('contextmenu', showAssistantContextMenu);
 window.addEventListener('mouseleave', () => {
   if (chatOpen || primaryItem()) return;
   setMousePassthrough(true);
