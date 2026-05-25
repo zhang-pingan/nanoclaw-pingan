@@ -94,6 +94,7 @@ function openWorkstationClient(target?: string): void {
 
 function sendAssistantChatModeRequest(enabled: boolean): void {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
+  if (!enabled && assistantWindow.isFullScreen()) return;
   assistantWindow.webContents.send('assistant:chat-mode-request', enabled);
 }
 
@@ -103,25 +104,36 @@ function setAssistantWindowChatControlsEnabled(enabled: boolean): void {
   assistantWindow.setFullScreenable(enabled);
 }
 
-function isAssistantWindowFullScreen(): boolean {
+function handleAssistantEscapeKey(): boolean {
   if (!assistantWindow || assistantWindow.isDestroyed()) return false;
-  if (process.platform === 'darwin') return assistantWindow.isSimpleFullScreen();
-  return assistantWindow.isFullScreen();
+
+  if (assistantWindow.isFullScreen()) {
+    assistantWindow.setFullScreen(false);
+    return true;
+  }
+
+  if (assistantChatMode) {
+    sendAssistantChatModeRequest(false);
+    return true;
+  }
+
+  return false;
 }
 
-function setAssistantWindowFullScreen(enabled: boolean): void {
-  if (!assistantWindow || assistantWindow.isDestroyed()) return;
+function handleAssistantCommandBacktickKey(): boolean {
+  if (!assistantWindow || assistantWindow.isDestroyed()) return false;
 
-  if (process.platform === 'darwin') {
-    if (assistantWindow.isSimpleFullScreen() !== enabled) {
-      assistantWindow.setSimpleFullScreen(enabled);
-    }
-    return;
+  if (!assistantChatMode) {
+    sendAssistantChatModeRequest(true);
+    return true;
   }
 
-  if (assistantWindow.isFullScreen() !== enabled) {
-    assistantWindow.setFullScreen(enabled);
+  if (!assistantWindow.isFullScreen()) {
+    assistantWindow.setFullScreen(true);
+    return true;
   }
+
+  return true;
 }
 
 function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
@@ -132,10 +144,16 @@ function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
   lastContextMenuPopupAt = now;
 
   const chatMode = options.chatMode ?? assistantChatMode;
-  const isFullScreen = isAssistantWindowFullScreen();
+  const isFullScreen = assistantWindow.isFullScreen();
+  const exitChatModeDisabled = chatMode && isFullScreen;
   const template: MenuItemConstructorOptions[] = [
     {
-      label: chatMode ? '退出聊天模式' : '进入聊天模式',
+      label: exitChatModeDisabled
+        ? '请先退出全屏'
+        : chatMode
+          ? '退出聊天模式'
+          : '进入聊天模式',
+      enabled: !exitChatModeDisabled,
       click: () => sendAssistantChatModeRequest(!chatMode),
     },
     {
@@ -148,7 +166,7 @@ function showAssistantContextMenu(options: { chatMode?: boolean } = {}): void {
       enabled: chatMode,
       click: () => {
         if (!assistantWindow || assistantWindow.isDestroyed()) return;
-        setAssistantWindowFullScreen(!isAssistantWindowFullScreen());
+        assistantWindow.setFullScreen(!assistantWindow.isFullScreen());
       },
     },
     {
@@ -222,41 +240,6 @@ function clampWindowToWorkArea(
   };
 }
 
-function runAfterLeavingFullScreen(resize: () => void): boolean {
-  if (!assistantWindow || assistantWindow.isDestroyed()) return false;
-  if (process.platform === 'darwin') {
-    if (!assistantWindow.isSimpleFullScreen()) return false;
-    assistantWindow.setSimpleFullScreen(false);
-    resize();
-    return true;
-  }
-
-  if (!assistantWindow.isFullScreen()) return false;
-  assistantWindow.once('leave-full-screen', resize);
-  assistantWindow.setFullScreen(false);
-  return true;
-}
-
-function applyAssistantWindowSize(expanded: boolean): void {
-  if (!assistantWindow || assistantWindow.isDestroyed()) return;
-
-  const bounds = assistantWindow.getBounds();
-  const size = assistantWindowSize(expanded);
-  if (bounds.width === size.width && bounds.height === size.height) return;
-
-  const next = clampWindowToWorkArea(
-    bounds.x + bounds.width - size.width,
-    bounds.y + bounds.height - size.height,
-    size.width,
-    size.height,
-  );
-  assistantWindow.setBounds({
-    ...next,
-    width: size.width,
-    height: size.height,
-  });
-}
-
 function createAssistantWindow(): void {
   if (assistantWindow && !assistantWindow.isDestroyed()) {
     assistantWindow.show();
@@ -295,6 +278,22 @@ function createAssistantWindow(): void {
   assistantWindow.webContents.on('context-menu', () => {
     showAssistantContextMenu();
   });
+  assistantWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'Escape' || input.code === 'Escape') {
+      if (handleAssistantEscapeKey()) event.preventDefault();
+      return;
+    }
+    if (
+      input.meta &&
+      !input.shift &&
+      !input.control &&
+      !input.alt &&
+      (input.key === '`' || input.code === 'Backquote')
+    ) {
+      if (handleAssistantCommandBacktickKey()) event.preventDefault();
+    }
+  });
 
   assistantWindow.on('close', (event) => {
     if (isQuitting) return;
@@ -305,36 +304,54 @@ function createAssistantWindow(): void {
 
 function setAssistantWindowExpanded(expanded: boolean): void {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
-  assistantChatOpen = expanded;
-  if (!expanded) {
-    assistantChatMode = false;
-  }
-
-  const resize = () => {
-    applyAssistantWindowSize(expanded);
-    if (!expanded) setAssistantWindowChatControlsEnabled(false);
-  };
-  if (runAfterLeavingFullScreen(resize)) {
+  if (!expanded && assistantChatMode && assistantWindow.isFullScreen()) {
+    sendAssistantChatModeRequest(true);
     return;
   }
 
-  resize();
+  assistantChatOpen = expanded;
+  if (!expanded) {
+    assistantChatMode = false;
+    setAssistantWindowChatControlsEnabled(false);
+  }
+  if (!expanded && assistantWindow.isFullScreen()) {
+    assistantWindow.setFullScreen(false);
+  }
+
+  const bounds = assistantWindow.getBounds();
+  const size = assistantWindowSize(expanded);
+  if (
+    assistantWindow.isFullScreen() ||
+    (bounds.width === size.width && bounds.height === size.height)
+  ) {
+    return;
+  }
+
+  const next = clampWindowToWorkArea(
+    bounds.x + bounds.width - size.width,
+    bounds.y + bounds.height - size.height,
+    size.width,
+    size.height,
+  );
+  assistantWindow.setBounds({
+    ...next,
+    width: size.width,
+    height: size.height,
+  });
 }
 
 function setAssistantWindowChatMode(enabled: boolean): void {
   if (!assistantWindow || assistantWindow.isDestroyed()) return;
-  assistantChatMode = enabled;
-  assistantChatOpen = true;
-  if (enabled) setAssistantWindowChatControlsEnabled(true);
-
-  const resizeToExpanded = () => {
-    applyAssistantWindowSize(true);
-    if (!enabled) setAssistantWindowChatControlsEnabled(false);
-  };
-  if (runAfterLeavingFullScreen(resizeToExpanded)) {
+  if (!enabled && assistantWindow.isFullScreen()) {
+    sendAssistantChatModeRequest(true);
     return;
   }
 
+  assistantChatMode = enabled;
+  assistantChatOpen = true;
+  setAssistantWindowChatControlsEnabled(enabled);
+
+  const resizeToExpanded = () => setAssistantWindowExpanded(true);
   resizeToExpanded();
 }
 
