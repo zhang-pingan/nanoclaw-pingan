@@ -17209,7 +17209,8 @@ body::after,
 }
 
 #schedulers-panel,
-#agent-status-panel {
+#agent-status-panel,
+#knowledge-jobs-panel {
   position: absolute;
   top: 0;
   right: 0;
@@ -17229,7 +17230,8 @@ body::after,
 }
 
 #schedulers-panel.open,
-#agent-status-panel.open {
+#agent-status-panel.open,
+#knowledge-jobs-panel.open {
   display: flex;
 }
 
@@ -17296,7 +17298,8 @@ body::after,
 }
 
 #schedulers-list,
-#agent-status-list {
+#agent-status-list,
+#knowledge-job-list {
   min-height: 180px;
   flex: 1;
   overflow-y: auto;
@@ -17307,14 +17310,16 @@ body::after,
 }
 
 #schedulers-list::-webkit-scrollbar,
-#agent-status-list::-webkit-scrollbar {
+#agent-status-list::-webkit-scrollbar,
+#knowledge-job-list::-webkit-scrollbar {
   width: 8px;
   height: 8px;
   opacity: 1;
 }
 
 #schedulers-list::-webkit-scrollbar-thumb,
-#agent-status-list::-webkit-scrollbar-thumb {
+#agent-status-list::-webkit-scrollbar-thumb,
+#knowledge-job-list::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: var(--minimal-line-strong);
 }
@@ -17329,7 +17334,8 @@ body::after,
 }
 
 .scheduler-item,
-.agent-status-item {
+.agent-status-item,
+.knowledge-job-panel-item {
   margin-bottom: 10px;
   padding: 14px;
   border: 1px solid var(--minimal-line);
@@ -17340,20 +17346,23 @@ body::after,
 }
 
 .scheduler-item:last-child,
-.agent-status-item:last-child {
+.agent-status-item:last-child,
+.knowledge-job-panel-item:last-child {
   margin-bottom: 0;
   border-bottom: 1px solid var(--minimal-line);
 }
 
 .scheduler-item:hover,
-.agent-status-item:hover {
+.agent-status-item:hover,
+.knowledge-job-panel-item:hover {
   border-color: var(--minimal-line-strong);
   background: #f8f9fb;
   box-shadow: none;
 }
 
 .scheduler-prompt,
-.agent-status-name {
+.agent-status-name,
+.knowledge-job-panel-title {
   color: var(--minimal-text);
   font-size: 13px;
   font-weight: 680;
@@ -17362,7 +17371,8 @@ body::after,
 
 .scheduler-meta,
 .agent-status-meta,
-.agent-status-time {
+.agent-status-time,
+.knowledge-job-panel-meta {
   color: var(--minimal-text-muted);
   font-size: 11px;
 }
@@ -17376,7 +17386,8 @@ body::after,
 
 .scheduler-status,
 .agent-status-type,
-.agent-status-workflow-count {
+.agent-status-workflow-count,
+#knowledge-jobs-panel .knowledge-status-pill {
   border: 1px solid var(--minimal-line);
   border-radius: 999px;
   background: var(--minimal-nav);
@@ -17424,14 +17435,16 @@ body::after,
   color: var(--minimal-text-muted);
 }
 
-.agent-status-item.is-stopping {
+.agent-status-item.is-stopping,
+.knowledge-job-panel-item.is-stopping {
   opacity: 1;
   border-left: 1px solid var(--minimal-line-strong);
   padding-left: 14px;
   background: #f8f9fb;
 }
 
-.agent-status-item.is-stopping:hover {
+.agent-status-item.is-stopping:hover,
+.knowledge-job-panel-item.is-stopping:hover {
   background: #f8f9fb;
 }
 
@@ -17509,11 +17522,102 @@ body::after,
   box-shadow: none;
 }
 
+#knowledge-jobs-panel {
+  width: 400px;
+  color: var(--minimal-text);
+}
+
+#knowledge-jobs-panel .agent-status-header {
+  min-height: 73px;
+}
+
+#knowledge-jobs-panel .knowledge-jobs-header-actions {
+  gap: 8px;
+}
+
+#knowledge-jobs-panel .agent-status-header button.danger,
+#knowledge-jobs-delete-finished-btn {
+  color: var(--minimal-danger);
+}
+
+#knowledge-jobs-panel .agent-status-header button.danger:hover:not(:disabled),
+#knowledge-jobs-delete-finished-btn:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fef2f2;
+  color: var(--minimal-danger);
+}
+
+#knowledge-job-list {
+  padding-right: 12px;
+}
+
+#knowledge-job-list .agent-status-empty {
+  margin: 0;
+}
+
+#knowledge-jobs-panel .knowledge-job-panel-head {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+#knowledge-jobs-panel .knowledge-job-panel-title {
+  min-width: 0;
+  word-break: break-word;
+}
+
+#knowledge-jobs-panel .knowledge-job-panel-content {
+  color: var(--minimal-text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+#knowledge-jobs-panel .knowledge-job-panel-meta {
+  gap: 8px;
+  line-height: 1.5;
+}
+
+#knowledge-jobs-panel .knowledge-job-panel-actions {
+  margin-top: 2px;
+}
+
+#knowledge-jobs-panel .knowledge-job-stop-btn,
+#knowledge-jobs-panel .panel-action-btn.stop {
+  min-height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--minimal-line);
+  background: var(--minimal-surface);
+  color: var(--minimal-text);
+  box-shadow: none;
+  font-weight: 680;
+}
+
+#knowledge-jobs-panel .knowledge-job-stop-btn:hover:not(:disabled),
+#knowledge-jobs-panel .panel-action-btn.stop:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fef2f2;
+  color: var(--minimal-danger);
+  transform: none;
+  box-shadow: none;
+}
+
+#knowledge-jobs-panel .knowledge-status-pill.running,
+#knowledge-jobs-panel .knowledge-status-pill.pending,
+#knowledge-jobs-panel .knowledge-status-pill.completed {
+  color: var(--minimal-text-soft);
+}
+
+#knowledge-jobs-panel .knowledge-status-pill.failed {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: var(--minimal-danger);
+}
+
 @media (max-width: 760px) {
   .app-prompt-overlay,
   .workflow-wizard-overlay,
   #schedulers-panel,
-  #agent-status-panel {
+  #agent-status-panel,
+  #knowledge-jobs-panel {
     width: min(380px, 100vw);
     padding: 0;
   }
