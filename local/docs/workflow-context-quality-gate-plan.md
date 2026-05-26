@@ -128,6 +128,24 @@ workflow stage 对上下文的声明。它描述“本阶段需要哪些来源�
 }
 ```
 
+### Evidence Ref 来源
+
+证据编号不应只来自 Context Pack。Context Pack 中的 `INPUT-*`、`ART-*`、`EVID-*` 表示委派前系统已知、已过滤、已编号的证据；agent 在执行阶段通过阅读代码、检索 wiki、运行命令、查看日志或调用专项工具获得的新事实，也必须写入阶段产物的 `evidence`，生成新的 evidence ref 后再被 decision、action、test result 引用。
+
+建议区分两类证据：
+
+- 预置证据：来自 Context Pack，例如 `INPUT-001`、`ART-001`、`EVID-001`。
+- 运行时新增证据：来自 agent 执行过程，例如 `EVID-CODE-001`、`EVID-WIKI-001`、`EVID-CMD-001`、`EVID-EXEC-001`。
+
+运行时新增 evidence 必须包含可校验来源：
+
+- 代码证据：代码库 ref、分支或 commit、文件路径、函数/符号、行号范围、摘要。
+- wiki 或外部文档证据：URL、标题、retrieved_at、所属 scope、摘要。
+- 命令或测试证据：命令、工作目录、退出码、关键输出摘要、日志或报告路径。
+- 日志或观测证据：来源系统、时间范围、查询条件、关键片段或报告路径。
+
+`CODEBASE-*` 只表示代码库位置或路径存在性，不能直接支撑业务或实现结论。agent 基于代码得出的结论，必须新增 `EVID-CODE-*` 等证据并接受 Evidence Evaluator 校验。无法提供证据的内容只能进入 `assumptions` 或 `risks`，不能作为 blocking decision 的依据。
+
 ## 系统如何知道收集什么
 
 系统不应自行猜测要收集什么。Context Pack builder 只读取 workflow definition 中当前 stage 的 `context_requirements`。
@@ -185,8 +203,10 @@ Query Plan 必须写入 trace，便于审计“为什么收集这些材料”。
 
 - workflow input 的字段路径或附件路径。
 - artifact 的文件路径和片段。
-- codebase 的容器路径和路径存在性校验记录。
-- command 的执行记录。
+- codebase 的容器路径和路径存在性校验记录；它只能证明代码库位置，不能直接证明业务或实现结论。
+- agent 阅读代码后在阶段产物中新增的代码 evidence，例如文件、符号、行号范围和摘要。
+- agent 执行 command、测试、脚本或 API 调用后新增的执行 evidence。
+- agent 检索 wiki、日志或其他授权 provider 后新增的外部 evidence。
 - iOS provider 产出的 screenshot、UI tree、network、crash、case/assert 记录。
 
 ### 3. Freshness Gate
@@ -238,7 +258,8 @@ workflow state prepared
 
 agent 指令中要明确：
 
-- 关键结论必须引用 Context Pack 中的 `INPUT-*`、`ART-*`、`EVID-*`。
+- 关键结论必须引用 Context Pack 中已有的 `INPUT-*`、`ART-*`、`EVID-*`，或引用阶段产物中新增且可校验的 evidence ref。
+- agent 自行阅读代码、检索 wiki、查看日志、运行命令或调用工具得到的事实，必须先写入产物 `evidence`，再被 decision、action、test result 引用。
 - `CODEBASE-*` 只表示代码库位置，不能作为业务或实现结论依据。
 - 不允许把 excluded candidates 当事实。
 
@@ -302,6 +323,8 @@ agent 指令中要明确：
 
 - 关键 decision、action、test result 是否有 evidence。
 - evidence ref 是否存在于 Context Pack 或产物中。
+- 产物新增 evidence 是否包含来源、路径/URL/命令记录、时间或版本信息、摘要。
+- 新增 evidence 是否满足当前服务 scope；跨服务、外部文档或 provider 证据必须来自配置允许的来源或上游产物中的依赖事实。
 
 ### Consistency Evaluator
 
