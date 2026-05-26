@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
+import fs from 'fs';
+import path from 'path';
 
 // Sentinel markers must match container-runner.ts
 const OUTPUT_START_MARKER = '---ICARUS_OUTPUT_START---';
@@ -32,6 +34,11 @@ vi.mock('./logger.js', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+// Mock env reader
+vi.mock('./env.js', () => ({
+  readEnvFile: vi.fn(() => ({})),
 }));
 
 // Mock fs
@@ -93,6 +100,7 @@ vi.mock('child_process', async () => {
 });
 
 import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import { readEnvFile } from './env.js';
 import type { RegisteredGroup } from './types.js';
 
 const testGroup: RegisteredGroup = {
@@ -135,12 +143,45 @@ async function readStdinJson(proc: ReturnType<typeof createFakeProcess>) {
 }
 
 describe('container-runner timeout behavior', () => {
+  const originalMavenEnv = {
+    MAVEN_OPTS: process.env.MAVEN_OPTS,
+    MAVEN_SETTINGS_PATH: process.env.MAVEN_SETTINGS_PATH,
+    MAVEN_SETTINGS_XML: process.env.MAVEN_SETTINGS_XML,
+    MVN_SETTINGS_XML: process.env.MVN_SETTINGS_XML,
+  };
+
   beforeEach(() => {
     vi.useFakeTimers();
     fakeProc = createFakeProcess();
+    vi.mocked(readEnvFile).mockReset();
+    vi.mocked(readEnvFile).mockReturnValue({});
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(fs.mkdirSync).mockReset();
+    vi.mocked(fs.writeFileSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReturnValue('');
+    vi.mocked(fs.readdirSync).mockReset();
+    vi.mocked(fs.readdirSync).mockReturnValue([]);
+    vi.mocked(fs.statSync).mockReset();
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => false,
+      isFile: () => false,
+    } as any);
+    delete process.env.MAVEN_OPTS;
+    delete process.env.MAVEN_SETTINGS_PATH;
+    delete process.env.MAVEN_SETTINGS_XML;
+    delete process.env.MVN_SETTINGS_XML;
   });
 
   afterEach(() => {
+    for (const [key, value] of Object.entries(originalMavenEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
     vi.useRealTimers();
   });
 
@@ -236,7 +277,6 @@ describe('container-runner timeout behavior', () => {
     expect(result.status).toBe('success');
     expect(result.newSessionId).toBe('session-456');
   });
-
 
   it('returns structured failure when a required text result is missing', async () => {
     const onOutput = vi.fn(async () => {});
@@ -372,6 +412,103 @@ describe('container-runner timeout behavior', () => {
     expect(args).toContain(
       '/tmp/icarus-test-container-node-modules:/workspace/project/node_modules',
     );
+  });
+
+  it('mounts configured Maven settings and repository into the container defaults', async () => {
+    const { spawn } = await import('child_process');
+    const fs = await import('fs');
+    const { readEnvFile } = await import('./env.js');
+    vi.mocked(readEnvFile).mockImplementation((keys: string[]) => {
+      const env: Record<string, string> = {};
+      if (keys.includes('MAVEN_SETTINGS_XML')) {
+        env.MAVEN_SETTINGS_XML = '/host/maven/settings.xml';
+      }
+      return env;
+    });
+    vi.mocked(fs.default.existsSync).mockImplementation(
+      (filePath) =>
+        filePath === '/host/maven/settings.xml' ||
+        filePath === '/host/maven/repository',
+    );
+    vi.mocked(fs.default.statSync).mockImplementation(
+      (filePath) =>
+        ({
+          isDirectory: () => filePath === '/host/maven/repository',
+          isFile: () => filePath === '/host/maven/settings.xml',
+        }) as any,
+    );
+    vi.mocked(fs.default.readFileSync).mockImplementation((filePath) => {
+      if (filePath === '/host/maven/settings.xml') {
+        return [
+          '<settings>',
+          '  <localRepository>/host/maven/repository</localRepository>',
+          '</settings>',
+        ].join('\n');
+      }
+      return '';
+    });
+
+    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'ok',
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const calls = vi.mocked(spawn).mock.calls;
+    const args = calls[calls.length - 1][1] as string[];
+    expect(args).toContain(
+      '/host/maven/settings.xml:/home/node/.m2/settings.xml:ro',
+    );
+    expect(args).toContain('/host/maven/repository:/home/node/.m2/repository');
+    expect(args).toContain('-e');
+    expect(args).toContain(
+      'MAVEN_OPTS=-Dmaven.repo.local=/home/node/.m2/repository',
+    );
+  });
+
+  it('uses default Maven settings and repository paths when not configured', async () => {
+    const { spawn } = await import('child_process');
+    const homeDir = process.env.HOME || '';
+    const settingsPath = path.join(homeDir, '.m2', 'settings.xml');
+    const repositoryPath = path.join(homeDir, '.m2', 'repository');
+
+    vi.mocked(fs.existsSync).mockImplementation(
+      (filePath) => filePath === settingsPath || filePath === repositoryPath,
+    );
+    vi.mocked(fs.statSync).mockImplementation(
+      (filePath) =>
+        ({
+          isDirectory: () => filePath === repositoryPath,
+          isFile: () => filePath === settingsPath,
+        }) as any,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath === settingsPath) {
+        return '<settings></settings>';
+      }
+      return '';
+    });
+
+    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'ok',
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const calls = vi.mocked(spawn).mock.calls;
+    const args = calls[calls.length - 1][1] as string[];
+    expect(args).toContain(`${settingsPath}:/home/node/.m2/settings.xml:ro`);
+    expect(args).toContain(`${repositoryPath}:/home/node/.m2/repository`);
   });
 
   it('passes one-shot mode to the container input', async () => {

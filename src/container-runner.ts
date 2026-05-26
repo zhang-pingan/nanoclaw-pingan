@@ -41,6 +41,23 @@ import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
 const HOME_DIR = process.env.HOME || os.homedir();
+const DEFAULT_HOST_MAVEN_SETTINGS_PATH = path.join(
+  HOME_DIR,
+  '.m2',
+  'settings.xml',
+);
+const DEFAULT_HOST_MAVEN_REPOSITORY_PATH = path.join(
+  HOME_DIR,
+  '.m2',
+  'repository',
+);
+const CONTAINER_MAVEN_SETTINGS_PATH = '/home/node/.m2/settings.xml';
+const CONTAINER_MAVEN_REPOSITORY_PATH = '/home/node/.m2/repository';
+const MAVEN_SETTINGS_ENV_KEYS = [
+  'MAVEN_SETTINGS_XML',
+  'MAVEN_SETTINGS_PATH',
+  'MVN_SETTINGS_XML',
+];
 const TRACE_PREVIEW_MAX_CHARS = Number.parseInt(
   process.env.TRACE_PREVIEW_MAX_CHARS || '2000',
   10,
@@ -158,6 +175,169 @@ function summarizeMounts(mounts: VolumeMount[]): string[] {
   return mounts.map(
     (mount) => `${mount.containerPath}${mount.readonly ? ' (ro)' : ''}`,
   );
+}
+
+function expandHomePath(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '~') return HOME_DIR;
+  if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+    return path.join(HOME_DIR, trimmed.slice(2));
+  }
+  return trimmed;
+}
+
+function resolveHostPath(value: string, baseDir = process.cwd()): string {
+  const expanded = expandHomePath(value);
+  return path.isAbsolute(expanded) ? expanded : path.resolve(baseDir, expanded);
+}
+
+function expandMavenPathExpressions(value: string): string {
+  return value
+    .replace(/\$\{user\.home\}/g, HOME_DIR)
+    .replace(/\$\{env\.HOME\}/g, HOME_DIR)
+    .replace(/\$\{env\.([^}]+)\}/g, (match, name: string) => {
+      return process.env[name] || match;
+    });
+}
+
+function statIsFile(filePath: string): boolean {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const stat = fs.statSync(filePath);
+    return typeof stat.isFile === 'function'
+      ? stat.isFile()
+      : !stat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function decodeXmlText(value: string): string {
+  return value.replace(
+    /&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi,
+    (entity, body: string) => {
+      const lower = body.toLowerCase();
+      if (lower === 'amp') return '&';
+      if (lower === 'lt') return '<';
+      if (lower === 'gt') return '>';
+      if (lower === 'quot') return '"';
+      if (lower === 'apos') return "'";
+      if (lower.startsWith('#x')) {
+        const codePoint = Number.parseInt(lower.slice(2), 16);
+        return Number.isFinite(codePoint)
+          ? String.fromCodePoint(codePoint)
+          : entity;
+      }
+      if (lower.startsWith('#')) {
+        const codePoint = Number.parseInt(lower.slice(1), 10);
+        return Number.isFinite(codePoint)
+          ? String.fromCodePoint(codePoint)
+          : entity;
+      }
+      return entity;
+    },
+  );
+}
+
+function resolveMavenSettingsPath(): {
+  path: string;
+  source: 'configured' | 'default';
+} {
+  const env = readEnvFile(MAVEN_SETTINGS_ENV_KEYS);
+  const configured =
+    process.env.MAVEN_SETTINGS_XML ||
+    process.env.MAVEN_SETTINGS_PATH ||
+    process.env.MVN_SETTINGS_XML ||
+    env.MAVEN_SETTINGS_XML ||
+    env.MAVEN_SETTINGS_PATH ||
+    env.MVN_SETTINGS_XML;
+
+  if (configured) {
+    return {
+      path: resolveHostPath(configured),
+      source: 'configured',
+    };
+  }
+
+  return {
+    path: DEFAULT_HOST_MAVEN_SETTINGS_PATH,
+    source: 'default',
+  };
+}
+
+function readMavenLocalRepository(settingsPath: string): string | null {
+  if (!statIsFile(settingsPath)) return null;
+
+  let content: string;
+  try {
+    content = fs.readFileSync(settingsPath, 'utf-8');
+  } catch (err) {
+    logger.warn(
+      { err, settingsPath },
+      'Failed to read Maven settings.xml for localRepository',
+    );
+    return null;
+  }
+
+  const withoutComments = content.replace(/<!--[\s\S]*?-->/g, '');
+  const match = withoutComments.match(
+    /<(?:[A-Za-z_][\w.-]*:)?localRepository\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?localRepository>/i,
+  );
+  const localRepository = decodeXmlText(match?.[1]?.trim() || '');
+  if (!localRepository) return null;
+
+  return resolveHostPath(
+    expandMavenPathExpressions(localRepository),
+    path.dirname(settingsPath),
+  );
+}
+
+function addMavenMounts(mounts: VolumeMount[]): void {
+  const settings = resolveMavenSettingsPath();
+  const settingsExists = statIsFile(settings.path);
+
+  if (settingsExists) {
+    mounts.push({
+      hostPath: settings.path,
+      containerPath: CONTAINER_MAVEN_SETTINGS_PATH,
+      readonly: true,
+    });
+  } else if (settings.source === 'configured') {
+    logger.warn(
+      { settingsPath: settings.path },
+      'Configured Maven settings.xml does not exist; skipping settings mount',
+    );
+  } else {
+    logger.debug(
+      { settingsPath: settings.path },
+      'Default Maven settings.xml not found; skipping settings mount',
+    );
+  }
+
+  const localRepository = settingsExists
+    ? readMavenLocalRepository(settings.path)
+    : null;
+  const repositoryPath = localRepository || DEFAULT_HOST_MAVEN_REPOSITORY_PATH;
+
+  try {
+    fs.mkdirSync(repositoryPath, { recursive: true });
+    mounts.push({
+      hostPath: repositoryPath,
+      containerPath: CONTAINER_MAVEN_REPOSITORY_PATH,
+      readonly: false,
+    });
+  } catch (err) {
+    logger.warn(
+      { err, repositoryPath },
+      'Failed to prepare Maven repository mount',
+    );
+  }
+}
+
+function buildMavenOpts(): string {
+  const env = readEnvFile(['MAVEN_OPTS']);
+  const configured = process.env.MAVEN_OPTS || env.MAVEN_OPTS || '';
+  return `${configured} -Dmaven.repo.local=${CONTAINER_MAVEN_REPOSITORY_PATH}`.trim();
 }
 
 function emitTraceEvent(
@@ -490,6 +670,8 @@ function buildVolumeMounts(
     mounts.push(...validatedMounts);
   }
 
+  addMavenMounts(mounts);
+
   return mounts;
 }
 
@@ -536,6 +718,10 @@ function buildContainerArgs(
     '-e',
     `MYSQL_PROXY_URL=http://${CONTAINER_HOST_GATEWAY}:${MYSQL_PROXY_PORT}`,
   );
+
+  // Keep Maven cache stable at the container default path even when the
+  // mounted settings.xml contains a host-specific <localRepository>.
+  args.push('-e', `MAVEN_OPTS=${buildMavenOpts()}`);
 
   // Runtime-specific args for host gateway resolution
   args.push(...hostGatewayArgs());
