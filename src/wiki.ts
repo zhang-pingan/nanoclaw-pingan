@@ -38,6 +38,7 @@ import {
   replaceWikiClaimEvidence,
   replaceWikiPageMaterials,
   replaceWikiRelationsForPage,
+  rebuildWikiPageFtsIndex,
   updateWikiClaim,
   updateWikiDraft,
   updateWikiJob,
@@ -451,6 +452,17 @@ function removePathIfExists(targetPath: string | null | undefined): void {
   if (!targetPath) return;
   if (!fs.existsSync(targetPath)) return;
   fs.rmSync(targetPath, { recursive: true, force: true });
+}
+
+function isWikiPageFtsCorruption(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code =
+    'code' in err && typeof err.code === 'string' ? err.code : undefined;
+  return (
+    code === 'SQLITE_CORRUPT_VTAB' ||
+    /database disk image is malformed/i.test(err.message) ||
+    /\bwiki_pages_fts\b/i.test(err.message)
+  );
 }
 
 function sanitizeFileToken(value: string): string {
@@ -1771,7 +1783,17 @@ export function deleteWikiPage(pageSlug: string): {
   const removedOutgoingRelationCount =
     listWikiRelationsForPage(pageSlug).length;
   const removedIncomingRelationCount = listWikiRelationsToPage(pageSlug).length;
-  deleteWikiPageGraph(pageSlug);
+  try {
+    deleteWikiPageGraph(pageSlug);
+  } catch (err) {
+    if (!isWikiPageFtsCorruption(err)) throw err;
+    logger.warn(
+      { err, pageSlug },
+      'Wiki page FTS index corrupt during delete; rebuilding and retrying',
+    );
+    rebuildWikiPageFtsIndex();
+    deleteWikiPageGraph(pageSlug);
+  }
   removePathIfExists(page.file_path);
   return {
     page_slug: pageSlug,

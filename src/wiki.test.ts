@@ -52,6 +52,7 @@ vi.mock('child_process', async () => {
 import {
   _initTestDatabase,
   createWikiJob,
+  getDatabase,
   getWikiDraft,
   getWikiJob,
   getWikiMaterial,
@@ -1149,6 +1150,38 @@ describe('wiki', () => {
       ),
     ).toBe(false);
     expect(getWikiPage(dependentSlug)?.slug).toBe(dependentSlug);
+  });
+
+  it('rebuilds corrupt wiki page FTS index and retries page delete', () => {
+    const pageSlug = `wiki-delete-corrupt-fts-${Date.now()}`;
+    const pagePath = path.join(KNOWLEDGE_WIKI_DIR, 'pages', `${pageSlug}.md`);
+    fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+    fs.writeFileSync(pagePath, '# Corrupt FTS Delete\n');
+    rememberPath(pagePath);
+
+    upsertWikiPage({
+      slug: pageSlug,
+      title: 'Corrupt FTS Delete',
+      page_kind: 'project',
+      status: 'published',
+      summary: '删除时会先遇到损坏的 FTS 表。',
+      content_markdown: '# Corrupt FTS Delete\n',
+      file_path: pagePath,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    const database = getDatabase();
+    database.exec(`
+      DROP TABLE wiki_pages_fts;
+    `);
+
+    const deleteResult = deleteWikiPage(pageSlug);
+
+    expect(deleteResult.page_slug).toBe(pageSlug);
+    expect(getWikiPage(pageSlug)).toBeUndefined();
+    expect(fs.existsSync(pagePath)).toBe(false);
+    expect(searchWikiPages('Corrupt FTS Delete', 10)).toEqual([]);
   });
 
   it('bulk deletes only unpublished drafts', async () => {

@@ -91,6 +91,86 @@ function registerWikiSearchAliasFunction(database: Database.Database): void {
   );
 }
 
+function createWikiPageFtsSchema(database: Database.Database): void {
+  database.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(
+      slug,
+      title,
+      summary,
+      content_markdown,
+      search_aliases,
+      content='wiki_pages',
+      content_rowid='rowid',
+      tokenize='unicode61'
+    );
+
+    DROP TRIGGER IF EXISTS wiki_pages_ai;
+    DROP TRIGGER IF EXISTS wiki_pages_ad;
+    DROP TRIGGER IF EXISTS wiki_pages_au;
+
+    CREATE TRIGGER wiki_pages_ai AFTER INSERT ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES (
+        new.rowid,
+        new.slug,
+        new.title,
+        COALESCE(new.summary, ''),
+        new.content_markdown,
+        wiki_search_aliases(new.slug, new.title)
+      );
+    END;
+
+    CREATE TRIGGER wiki_pages_ad AFTER DELETE ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES(
+        'delete',
+        old.rowid,
+        old.slug,
+        old.title,
+        COALESCE(old.summary, ''),
+        old.content_markdown,
+        wiki_search_aliases(old.slug, old.title)
+      );
+    END;
+
+    CREATE TRIGGER wiki_pages_au AFTER UPDATE ON wiki_pages BEGIN
+      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES(
+        'delete',
+        old.rowid,
+        old.slug,
+        old.title,
+        COALESCE(old.summary, ''),
+        old.content_markdown,
+        wiki_search_aliases(old.slug, old.title)
+      );
+      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
+      VALUES (
+        new.rowid,
+        new.slug,
+        new.title,
+        COALESCE(new.summary, ''),
+        new.content_markdown,
+        wiki_search_aliases(new.slug, new.title)
+      );
+    END;
+  `);
+}
+
+function backfillWikiPageFts(database: Database.Database): void {
+  database.exec(`
+    INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
+    SELECT
+      rowid,
+      slug,
+      title,
+      COALESCE(summary, ''),
+      content_markdown,
+      wiki_search_aliases(slug, title)
+    FROM wiki_pages;
+  `);
+}
+
 function ensureWikiPageSearchAliases(database: Database.Database): void {
   const columns = database.pragma('table_info(wiki_pages)') as Array<{
     name: string;
@@ -1345,69 +1425,7 @@ function createSchema(database: Database.Database): void {
   ensureWikiPageSearchAliases(database);
   recreateWikiFtsIfNeeded(database);
 
-  database.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(
-      slug,
-      title,
-      summary,
-      content_markdown,
-      search_aliases,
-      content='wiki_pages',
-      content_rowid='rowid',
-      tokenize='unicode61'
-    );
-
-    DROP TRIGGER IF EXISTS wiki_pages_ai;
-    DROP TRIGGER IF EXISTS wiki_pages_ad;
-    DROP TRIGGER IF EXISTS wiki_pages_au;
-
-    CREATE TRIGGER wiki_pages_ai AFTER INSERT ON wiki_pages BEGIN
-      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
-      VALUES (
-        new.rowid,
-        new.slug,
-        new.title,
-        COALESCE(new.summary, ''),
-        new.content_markdown,
-        wiki_search_aliases(new.slug, new.title)
-      );
-    END;
-
-    CREATE TRIGGER wiki_pages_ad AFTER DELETE ON wiki_pages BEGIN
-      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown, search_aliases)
-      VALUES(
-        'delete',
-        old.rowid,
-        old.slug,
-        old.title,
-        COALESCE(old.summary, ''),
-        old.content_markdown,
-        wiki_search_aliases(old.slug, old.title)
-      );
-    END;
-
-    CREATE TRIGGER wiki_pages_au AFTER UPDATE ON wiki_pages BEGIN
-      INSERT INTO wiki_pages_fts(wiki_pages_fts, rowid, slug, title, summary, content_markdown, search_aliases)
-      VALUES(
-        'delete',
-        old.rowid,
-        old.slug,
-        old.title,
-        COALESCE(old.summary, ''),
-        old.content_markdown,
-        wiki_search_aliases(old.slug, old.title)
-      );
-      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
-      VALUES (
-        new.rowid,
-        new.slug,
-        new.title,
-        COALESCE(new.summary, ''),
-        new.content_markdown,
-        wiki_search_aliases(new.slug, new.title)
-      );
-    END;
-  `);
+  createWikiPageFtsSchema(database);
 
   const wikiFtsCount = database
     .prepare(`SELECT COUNT(*) as cnt FROM wiki_pages_fts`)
@@ -1416,17 +1434,7 @@ function createSchema(database: Database.Database): void {
     .prepare(`SELECT COUNT(*) as cnt FROM wiki_pages`)
     .get() as { cnt: number };
   if (wikiFtsCount.cnt === 0 && wikiPageCount.cnt > 0) {
-    database.exec(`
-      INSERT INTO wiki_pages_fts(rowid, slug, title, summary, content_markdown, search_aliases)
-      SELECT
-        rowid,
-        slug,
-        title,
-        COALESCE(summary, ''),
-        content_markdown,
-        wiki_search_aliases(slug, title)
-      FROM wiki_pages;
-    `);
+    backfillWikiPageFts(database);
     logger.info({ wikiPageCount }, 'Wiki page FTS backfill complete');
   }
 }
@@ -1589,6 +1597,19 @@ export function getDatabase(): Database.Database {
     throw new Error('Database has not been initialized');
   }
   return db;
+}
+
+export function rebuildWikiPageFtsIndex(): void {
+  const database = getDatabase();
+  database.exec(`
+    DROP TRIGGER IF EXISTS wiki_pages_ai;
+    DROP TRIGGER IF EXISTS wiki_pages_ad;
+    DROP TRIGGER IF EXISTS wiki_pages_au;
+    DROP TABLE IF EXISTS wiki_pages_fts;
+  `);
+  createWikiPageFtsSchema(database);
+  backfillWikiPageFts(database);
+  logger.info('Wiki page FTS index rebuilt');
 }
 
 /**

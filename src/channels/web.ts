@@ -4948,17 +4948,22 @@ class WebChannel {
   }
 
   private apiDeleteWikiPage(reqUrl: URL, res: http.ServerResponse): void {
-    const slug = (reqUrl.searchParams.get('slug') || '').trim();
+    const rawSlug = reqUrl.searchParams.get('slug') || '';
+    const slug = rawSlug.trim();
+    logger.info({ rawSlug, slug }, 'Wiki page delete requested');
     if (!slug) {
+      logger.warn({ rawSlug }, 'Wiki page delete missing slug');
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'slug required' }));
       return;
     }
     try {
       const result = deleteWikiPage(slug);
+      logger.info({ slug, result }, 'Wiki page delete completed');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, ...result }));
     } catch (err) {
+      logger.error({ err, slug }, 'Wiki page delete failed');
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
