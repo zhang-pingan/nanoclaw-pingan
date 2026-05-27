@@ -1,0 +1,122 @@
+{
+  "profiles": {
+    "base": [
+      "send_message",
+      "send_file",
+      "ask_user_question",
+      "request_human_input",
+      "reload_tools"
+    ],
+    "knowledge": [
+      "memory_search",
+      "memory_write",
+      "memory_delete",
+      "memory_resolve_conflict",
+      "wiki_search",
+      "wiki_get_page",
+      "query_recent_today_plan_details"
+    ],
+    "tasking": [
+      "schedule_task",
+      "list_tasks",
+      "pause_task",
+      "resume_task",
+      "cancel_task",
+      "update_task"
+    ],
+    "workbench-main": [
+      "query_workbench_tasks"
+    ],
+    "group-admin-main": [
+      "register_group"
+    ],
+    "delegation-main": [
+      "delegate_task",
+      "list_delegations"
+    ],
+    "delegation-worker": [
+      "request_delegation",
+      "complete_delegation",
+      "list_delegations"
+    ],
+    "desktop-main": [
+      "desktop_capture",
+      "run_local_host_script"
+    ],
+    "image-main": [
+      "ai_image_generate_image"
+    ]
+  },
+  "groups": {
+    "global": [
+      "base",
+      "knowledge",
+      "tasking",
+
+    ],
+    "main": [
+      "workbench-main",
+      "group-admin-main",
+      "delegation-main",
+      "desktop-main",
+      "image-main"
+    ],
+    "feishu_main": [
+      "workbench-main",
+      "group-admin-main",
+      "delegation-main",
+      "desktop-main",
+      "image-main"
+    ],
+    "web_main": [
+      "workbench-main",
+      "group-admin-main",
+      "delegation-main",
+      "desktop-main",
+      "image-main"
+    ],
+    "assistant_main": [
+      "workbench-main",
+      "group-admin-main",
+      "delegation-main",
+      "desktop-main",
+      "image-main"
+    ],
+    "feishu_dev": [
+      "delegation-worker"
+    ],
+    "feishu_dev_examine": [
+      "delegation-worker"
+    ],
+    "feishu_plan": [
+      "delegation-worker"
+    ],
+    "feishu_plan_examine": [
+      "delegation-worker"
+    ],
+    "feishu_ops": [
+      "delegation-worker"
+    ],
+    "feishu_test": [
+      "delegation-worker"
+    ],
+    "web_dev": [
+      "delegation-worker"
+    ],
+    "web_dev_examine": [
+      "delegation-worker"
+    ],
+    "web_plan": [
+      "delegation-worker"
+    ],
+    "web_plan_examine": [
+      "delegation-worker"
+    ],
+    "web_ops": [
+      "delegation-worker"
+    ],
+    "web_test": [
+      "delegation-worker"
+    ]
+  }
+}

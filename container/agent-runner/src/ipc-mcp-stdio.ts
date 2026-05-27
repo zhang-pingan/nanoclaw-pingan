@@ -14,6 +14,7 @@ import { CronExpressionParser } from 'cron-parser';
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
+const MCP_CONFIG_PATH = '/workspace/mcp/mcp.json';
 
 // Context from environment variables (set by the agent runner)
 const chatJid = process.env.ICARUS_CHAT_JID!;
@@ -22,6 +23,117 @@ const isMain = process.env.ICARUS_IS_MAIN === '1';
 const workflowId = process.env.ICARUS_WORKFLOW_ID || '';
 const stageKey = process.env.ICARUS_STAGE_KEY || '';
 const delegationId = process.env.ICARUS_DELEGATION_ID || '';
+
+type ToolVisibility = 'all' | 'main' | 'non_main';
+
+type McpAccessConfig = {
+  profiles?: Record<string, string[]>;
+  groups?: Record<string, string[]>;
+};
+
+const BUILTIN_TOOL_VISIBILITY: Record<string, ToolVisibility> = {
+  send_message: 'all',
+  send_file: 'all',
+  ai_image_generate_image: 'main',
+  schedule_task: 'all',
+  list_tasks: 'all',
+  query_workbench_tasks: 'main',
+  query_recent_today_plan_details: 'all',
+  pause_task: 'all',
+  resume_task: 'all',
+  cancel_task: 'all',
+  update_task: 'all',
+  register_group: 'main',
+  ask_user_question: 'all',
+  request_human_input: 'all',
+  memory_search: 'all',
+  wiki_search: 'all',
+  wiki_get_page: 'all',
+  memory_write: 'all',
+  memory_delete: 'all',
+  memory_resolve_conflict: 'all',
+  delegate_task: 'main',
+  request_delegation: 'non_main',
+  complete_delegation: 'non_main',
+  list_delegations: 'all',
+  desktop_capture: 'main',
+  run_local_host_script: 'main',
+  reload_tools: 'all',
+};
+
+function parseStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function normalizeMcpAccessConfig(value: unknown): McpAccessConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const raw = value as Record<string, unknown>;
+  const profiles: Record<string, string[]> = {};
+  const groups: Record<string, string[]> = {};
+
+  if (raw.profiles && typeof raw.profiles === 'object' && !Array.isArray(raw.profiles)) {
+    for (const [profile, tools] of Object.entries(raw.profiles)) {
+      profiles[profile] = parseStringArray(tools);
+    }
+  }
+
+  if (raw.groups && typeof raw.groups === 'object' && !Array.isArray(raw.groups)) {
+    for (const [group, profileNames] of Object.entries(raw.groups)) {
+      groups[group] = parseStringArray(profileNames);
+    }
+  }
+
+  return { profiles, groups };
+}
+
+function loadMcpAccessConfig(): McpAccessConfig | null {
+  if (!fs.existsSync(MCP_CONFIG_PATH)) return null;
+  try {
+    return normalizeMcpAccessConfig(
+      JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, 'utf-8')),
+    );
+  } catch (err) {
+    process.stderr.write(`[mcp-config] Failed to parse ${MCP_CONFIG_PATH}: ${err}\n`);
+    return null;
+  }
+}
+
+function resolveConfiguredTools(config: McpAccessConfig | null): Set<string> | null {
+  if (!config) return null;
+
+  const profiles = config.profiles || {};
+  const profileNames = [
+    ...parseStringArray(config.groups?.global),
+    ...parseStringArray(config.groups?.[groupFolder]),
+  ];
+
+  const tools = new Set<string>();
+  for (const profileName of profileNames) {
+    const profileTools = profiles[profileName];
+    if (!profileTools) {
+      process.stderr.write(
+        `[mcp-config] Group ${groupFolder} references unknown profile "${profileName}".\n`,
+      );
+      continue;
+    }
+    for (const toolName of profileTools) {
+      tools.add(toolName);
+    }
+  }
+
+  return tools;
+}
+
+function toolVisibilityAllows(visibility: ToolVisibility): boolean {
+  if (visibility === 'main') return isMain;
+  if (visibility === 'non_main') return !isMain;
+  return true;
+}
 
 function writeIpcFile(dir: string, data: object): string {
   fs.mkdirSync(dir, { recursive: true });
@@ -266,6 +378,34 @@ const server = new McpServer({
   name: 'icarus',
   version: '1.0.0',
 });
+
+const configuredTools = resolveConfiguredTools(loadMcpAccessConfig());
+const originalServerTool = server.tool.bind(server) as unknown as (
+  name: string,
+  ...args: unknown[]
+) => unknown;
+(server as unknown as { tool: (name: string, ...args: unknown[]) => unknown }).tool = (
+  name: string,
+  ...args: unknown[]
+) => {
+  const visibility = BUILTIN_TOOL_VISIBILITY[name];
+  if (visibility) {
+    if (!toolVisibilityAllows(visibility)) {
+      process.stderr.write(
+        `[mcp-config] Skipping ${name}: visibility=${visibility}, isMain=${isMain}.\n`,
+      );
+      return undefined;
+    }
+    if (configuredTools && !configuredTools.has(name)) {
+      process.stderr.write(
+        `[mcp-config] Skipping ${name}: not enabled for group ${groupFolder}.\n`,
+      );
+      return undefined;
+    }
+  }
+
+  return originalServerTool(name, ...args);
+};
 
 server.tool(
   'send_message',

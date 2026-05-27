@@ -506,6 +506,15 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  const mcpConfigDir = path.join(projectRoot, 'container', 'mcp');
+  if (fs.existsSync(mcpConfigDir)) {
+    mounts.push({
+      hostPath: mcpConfigDir,
+      containerPath: '/workspace/mcp',
+      readonly: true,
+    });
+  }
+
   // Shared attachments directory: inbound channel files are stored here.
   // Mounted for all groups so agents can reference files with stable paths.
   fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
