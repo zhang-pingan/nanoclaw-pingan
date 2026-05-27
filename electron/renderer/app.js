@@ -5228,7 +5228,7 @@ function applyWorkflowDefinitionEditorControlState(isReadonly) {
 
 function buildWorkflowDefinitionJsonDocument(version) {
   if (!version) return {};
-  return {
+  const document = {
     key: version.key,
     name: version.name || "",
     description: version.description || "",
@@ -5241,6 +5241,12 @@ function buildWorkflowDefinitionJsonDocument(version) {
     create_form: cloneJson(version.create_form || {}),
     metadata: cloneJson(version.metadata || {}),
   };
+  Object.keys(version || {}).forEach((key) => {
+    if (document[key] === undefined) {
+      document[key] = cloneJson(version[key]);
+    }
+  });
+  return document;
 }
 
 function parseWorkflowDefinitionJsonDocument() {
@@ -5297,6 +5303,11 @@ function syncWorkflowDefinitionFormFromJson() {
     create_form: parsed.create_form && typeof parsed.create_form === "object" ? parsed.create_form : {},
     metadata: parsed.metadata && typeof parsed.metadata === "object" ? parsed.metadata : {},
   };
+  Object.keys(parsed).forEach((key) => {
+    if (!["key", "name", "description", "version", "status"].includes(key)) {
+      nextDefinition[key] = cloneJson(parsed[key]);
+    }
+  });
   Object.assign(selectedVersion, nextDefinition);
   renderWorkflowDefinitionEditor(nextDefinition, bundle);
 }
@@ -5850,6 +5861,80 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
       pushItem("artifact_contract", `${path} 引用了不存在的 artifact contract: ${value}`);
     }
   };
+  const implementedBlockingQualityGateEvaluators = new Set(["schema", "artifact", "stage_rules", "llm_judge"]);
+  const supportedQualityGateEvaluators = new Set([
+    "schema",
+    "artifact",
+    "stage_rules",
+    "context_coverage",
+    "evidence",
+    "consistency",
+    "execution",
+    "llm_judge",
+  ]);
+  const validateContextRequirements = (stateKey, contextRequirements) => {
+    if (!contextRequirements) return;
+    if (!contextRequirements || typeof contextRequirements !== "object" || Array.isArray(contextRequirements)) {
+      pushItem("context_requirements", `states.${stateKey}.context_requirements 必须是 object`);
+      return;
+    }
+    const sources = Array.isArray(contextRequirements.sources) ? contextRequirements.sources : [];
+    const seenSourceIds = new Set();
+    sources.forEach((source, index) => {
+      const sourcePath = `states.${stateKey}.context_requirements.sources[${index}]`;
+      if (!source?.id) pushItem("context_requirements", `${sourcePath}.id 不能为空`);
+      if (source?.id && seenSourceIds.has(source.id)) pushItem("context_requirements", `${sourcePath}.id 重复：${source.id}`);
+      if (source?.id) seenSourceIds.add(source.id);
+      if (!["workflow_input", "artifact", "codebase_location"].includes(source?.type)) {
+        pushItem("context_requirements", `${sourcePath}.type 不支持：${source?.type || "--"}`);
+      }
+    });
+    if (contextRequirements.readiness_policy === "block_if_required_missing") {
+      const onBlock = contextRequirements.on_block || {};
+      if (!onBlock.target || !onBlock.retry_action) {
+        pushItem("context_requirements", `states.${stateKey}.context_requirements.on_block.target/retry_action 不能为空`);
+        return;
+      }
+      const targetState = states[onBlock.target];
+      if (!targetState) {
+        pushItem("context_requirements", `states.${stateKey}.context_requirements.on_block.target 引用了不存在的 state: ${onBlock.target}`);
+      } else if (targetState.type === "interrupt") {
+        if (targetState.kind !== "human_input") {
+          pushItem("context_requirements", `states.${stateKey}.context_requirements.on_block.target 必须是 human_input interrupt`);
+        }
+        if (!Array.isArray(targetState.allowed_actions) || !targetState.allowed_actions.includes(onBlock.retry_action)) {
+          pushItem("context_requirements", `states.${stateKey}.context_requirements.on_block.retry_action 不在 ${onBlock.target}.allowed_actions 中`);
+        }
+        if (!targetState.on_resume?.[onBlock.retry_action]) {
+          pushItem("context_requirements", `states.${stateKey}.context_requirements.on_block.retry_action 缺少 on_resume`);
+        }
+      } else if (!(targetState.type === "system" && targetState.on_complete?.success?.target === stateKey)) {
+        pushItem("context_requirements", `states.${stateKey}.context_requirements.on_block.target 必须能回到当前 stage`);
+      }
+    }
+  };
+  const validateQualityGate = (stateKey, qualityGate) => {
+    if (!qualityGate) return;
+    if (!qualityGate || typeof qualityGate !== "object" || Array.isArray(qualityGate)) {
+      pushItem("quality_gate", `states.${stateKey}.quality_gate 必须是 object`);
+      return;
+    }
+    const evaluators = Array.isArray(qualityGate.evaluators) ? qualityGate.evaluators : [];
+    const seenEvaluatorTypes = new Set();
+    evaluators.forEach((evaluator, index) => {
+      const path = `states.${stateKey}.quality_gate.evaluators[${index}]`;
+      if (!supportedQualityGateEvaluators.has(evaluator?.type)) {
+        pushItem("quality_gate", `${path}.type 不支持：${evaluator?.type || "--"}`);
+      }
+      if (evaluator?.type && seenEvaluatorTypes.has(evaluator.type)) {
+        pushItem("quality_gate", `${path}.type 重复：${evaluator.type}`);
+      }
+      if (evaluator?.type) seenEvaluatorTypes.add(evaluator.type);
+      if (evaluator?.blocking === true && !implementedBlockingQualityGateEvaluators.has(evaluator.type)) {
+        pushItem("quality_gate", `${path}.type 尚未实现 blocking evaluator：${evaluator.type}`);
+      }
+    });
+  };
 
   Object.entries(entryPoints).forEach(([entryKey, entry]) => {
     if (entry?.state && !stateOptions.includes(entry.state)) {
@@ -5867,6 +5952,8 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
   });
 
   Object.entries(states).forEach(([stateKey, state]) => {
+    validateContextRequirements(stateKey, state?.context_requirements);
+    validateQualityGate(stateKey, state?.quality_gate);
     pushArtifactContractRefItem(`states.${stateKey}.artifact_contract.ref`, state?.artifact_contract?.ref);
     if (state?.type === "confirmation") {
       pushItem("states", `states.${stateKey}.type confirmation 已废弃，请改用 interrupt`);
@@ -7033,6 +7120,51 @@ function getWorkflowDefinitionSavePayload(forcedMode) {
     if (!name) {
       throw new Error("Name 不能为空");
     }
+    const knownDefinitionKeys = new Set([
+      "key",
+      "name",
+      "description",
+      "version",
+      "status",
+      "roles",
+      "entry_points",
+      "states",
+      "status_labels",
+      "create_form",
+      "metadata",
+    ]);
+    const definition = {};
+    Object.keys(parsed).forEach((parsedKey) => {
+      if (!knownDefinitionKeys.has(parsedKey)) {
+        definition[parsedKey] = cloneJson(parsed[parsedKey]);
+      }
+    });
+    Object.assign(definition, {
+      name,
+      description: String(parsed.description || "").trim(),
+      roles: parseWorkflowDefinitionJsonField("Roles", JSON.stringify(parsed.roles || {}), {}),
+      entry_points: parseWorkflowDefinitionJsonField(
+        "Entry Points",
+        JSON.stringify(parsed.entry_points || {}),
+        {},
+      ),
+      states: parseWorkflowDefinitionJsonField("States", JSON.stringify(parsed.states || {}), {}),
+      status_labels: parseWorkflowDefinitionJsonField(
+        "Status Labels",
+        JSON.stringify(parsed.status_labels || {}),
+        {},
+      ),
+      create_form: parseWorkflowDefinitionJsonField(
+        "Create Form",
+        JSON.stringify(parsed.create_form || {}),
+        {},
+      ),
+      metadata: parseWorkflowDefinitionJsonField(
+        "Metadata",
+        JSON.stringify(parsed.metadata || {}),
+        {},
+      ),
+    });
     return {
       key,
       label:
@@ -7043,32 +7175,7 @@ function getWorkflowDefinitionSavePayload(forcedMode) {
         (workflowDefinitionBundleDescriptionInput?.value || "").trim() ||
         currentWorkflowDefinitionDetail?.bundle?.description ||
         "",
-      definition: {
-        name,
-        description: String(parsed.description || "").trim(),
-        roles: parseWorkflowDefinitionJsonField("Roles", JSON.stringify(parsed.roles || {}), {}),
-        entry_points: parseWorkflowDefinitionJsonField(
-          "Entry Points",
-          JSON.stringify(parsed.entry_points || {}),
-          {},
-        ),
-        states: parseWorkflowDefinitionJsonField("States", JSON.stringify(parsed.states || {}), {}),
-        status_labels: parseWorkflowDefinitionJsonField(
-          "Status Labels",
-          JSON.stringify(parsed.status_labels || {}),
-          {},
-        ),
-        create_form: parseWorkflowDefinitionJsonField(
-          "Create Form",
-          JSON.stringify(parsed.create_form || {}),
-          {},
-        ),
-        metadata: parseWorkflowDefinitionJsonField(
-          "Metadata",
-          JSON.stringify(parsed.metadata || {}),
-          {},
-        ),
-      },
+      definition,
     };
   }
   const name = (workflowDefinitionNameInput?.value || "").trim();

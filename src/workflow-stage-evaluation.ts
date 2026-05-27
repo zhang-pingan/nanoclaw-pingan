@@ -519,7 +519,14 @@ function collectPayloadEvidence(
           entry.type === 'message' ||
           entry.type === 'workflow_state' ||
           entry.type === 'test_result' ||
-          entry.type === 'user_feedback'
+          entry.type === 'user_feedback' ||
+          entry.type === 'input' ||
+          entry.type === 'codebase_location' ||
+          entry.type === 'code' ||
+          entry.type === 'command' ||
+          entry.type === 'wiki' ||
+          entry.type === 'log' ||
+          entry.type === 'provider'
             ? entry.type
             : 'message',
         refId:

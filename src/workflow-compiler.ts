@@ -11,9 +11,39 @@ import {
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionTimeoutPolicy,
   WorkflowDefinitionSystemRun,
+  WorkflowContextRequirements,
+  WorkflowContextSourceType,
+  WorkflowQualityGate,
+  WorkflowQualityGateEvaluatorType,
 } from './workflow-definition.js';
 import { getWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { isValidDeliverableFileName } from './workflow-artifacts.js';
+
+const SUPPORTED_CONTEXT_SOURCE_TYPES = new Set<WorkflowContextSourceType>([
+  'workflow_input',
+  'artifact',
+  'codebase_location',
+]);
+
+const IMPLEMENTED_QUALITY_GATE_EVALUATORS =
+  new Set<WorkflowQualityGateEvaluatorType>([
+    'schema',
+    'artifact',
+    'stage_rules',
+    'llm_judge',
+  ]);
+
+const SUPPORTED_QUALITY_GATE_EVALUATORS =
+  new Set<WorkflowQualityGateEvaluatorType>([
+    'schema',
+    'artifact',
+    'stage_rules',
+    'context_coverage',
+    'evidence',
+    'consistency',
+    'execution',
+    'llm_judge',
+  ]);
 
 export interface CompiledWorkflowTransition {
   target: string;
@@ -39,6 +69,8 @@ export interface CompiledWorkflowState {
   description?: string;
   retry_policy?: WorkflowDefinitionRetryPolicy;
   timeout_policy?: WorkflowDefinitionTimeoutPolicy;
+  context_requirements?: WorkflowContextRequirements;
+  quality_gate?: WorkflowQualityGate;
   artifact_contract?: { ref: string };
   evaluator?: WorkflowDefinitionEvaluatorRef;
   rollback_hint?: { ref: string };
@@ -97,6 +129,8 @@ function compileState(state: WorkflowDefinitionState): CompiledWorkflowState {
   const base = {
     label: state.label,
     description: state.description,
+    context_requirements: state.context_requirements,
+    quality_gate: state.quality_gate,
     retry_policy: state.retry_policy,
     timeout_policy: state.timeout_policy,
     artifact_contract: state.artifact_contract,
@@ -239,6 +273,237 @@ export function validateWorkflowDefinition(
           Array.isArray(step.with))
       ) {
         errors.push(`${stepPath}.with must be an object`);
+      }
+    }
+  };
+  const validateContextRequirements = (
+    stateKey: string,
+    contextRequirements: WorkflowContextRequirements | undefined,
+  ): void => {
+    if (contextRequirements === undefined) return;
+    const basePath = `${definition.key}.states.${stateKey}.context_requirements`;
+    if (
+      !contextRequirements ||
+      typeof contextRequirements !== 'object' ||
+      Array.isArray(contextRequirements)
+    ) {
+      errors.push(`${basePath} must be an object`);
+      return;
+    }
+    const policy = contextRequirements.readiness_policy;
+    if (
+      policy !== undefined &&
+      policy !== 'record_only' &&
+      policy !== 'block_if_required_missing'
+    ) {
+      errors.push(`${basePath}.readiness_policy "${policy}" is invalid`);
+    }
+    if (
+      contextRequirements.allow_open_questions !== undefined &&
+      typeof contextRequirements.allow_open_questions !== 'boolean'
+    ) {
+      errors.push(`${basePath}.allow_open_questions must be a boolean`);
+    }
+    if (
+      contextRequirements.sources !== undefined &&
+      !Array.isArray(contextRequirements.sources)
+    ) {
+      errors.push(`${basePath}.sources must be an array`);
+    }
+    const seenSourceIds = new Set<string>();
+    for (const [index, source] of (
+      Array.isArray(contextRequirements.sources)
+        ? contextRequirements.sources
+        : []
+    ).entries()) {
+      const sourcePath = `${basePath}.sources[${index}]`;
+      if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        errors.push(`${sourcePath} must be an object`);
+        continue;
+      }
+      if (!source.id?.trim()) {
+        errors.push(`${sourcePath}.id is required`);
+      } else if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(source.id)) {
+        errors.push(
+          `${sourcePath}.id must start with a letter or underscore and contain only letters, numbers, "_" or "-"`,
+        );
+      } else if (seenSourceIds.has(source.id)) {
+        errors.push(`${sourcePath}.id "${source.id}" is duplicated`);
+      } else {
+        seenSourceIds.add(source.id);
+      }
+      if (
+        !source.type ||
+        !SUPPORTED_CONTEXT_SOURCE_TYPES.has(
+          source.type as WorkflowContextSourceType,
+        )
+      ) {
+        errors.push(`${sourcePath}.type "${source.type}" is invalid`);
+      }
+      if (source.required !== undefined && typeof source.required !== 'boolean') {
+        errors.push(`${sourcePath}.required must be a boolean`);
+      }
+      if (
+        source.refs !== undefined &&
+        (!Array.isArray(source.refs) ||
+          !source.refs.every(
+            (item) => typeof item === 'string' && item.trim().length > 0,
+          ))
+      ) {
+        errors.push(`${sourcePath}.refs must be an array of non-empty strings`);
+      }
+      if (
+        source.fields !== undefined &&
+        (!Array.isArray(source.fields) ||
+          !source.fields.every(
+            (item) => typeof item === 'string' && item.trim().length > 0,
+          ))
+      ) {
+        errors.push(
+          `${sourcePath}.fields must be an array of non-empty strings`,
+        );
+      }
+      if (
+        source.on_missing !== undefined &&
+        source.on_missing !== 'warn' &&
+        source.on_missing !== 'block' &&
+        source.on_missing !== 'needs_input'
+      ) {
+        errors.push(`${sourcePath}.on_missing "${source.on_missing}" is invalid`);
+      }
+      if (
+        source.max_age_days !== undefined &&
+        (typeof source.max_age_days !== 'number' ||
+          !Number.isFinite(source.max_age_days) ||
+          source.max_age_days < 0)
+      ) {
+        errors.push(`${sourcePath}.max_age_days must be a non-negative number`);
+      }
+      if (
+        source.verify_exists !== undefined &&
+        typeof source.verify_exists !== 'boolean'
+      ) {
+        errors.push(`${sourcePath}.verify_exists must be a boolean`);
+      }
+      if (
+        source.verify_mounted_for_role !== undefined &&
+        typeof source.verify_mounted_for_role !== 'boolean'
+      ) {
+        errors.push(`${sourcePath}.verify_mounted_for_role must be a boolean`);
+      }
+      if (source.type === 'workflow_input' && source.refs !== undefined) {
+        errors.push(`${sourcePath}.refs is not supported for workflow_input`);
+      }
+      if (source.type === 'artifact' && source.fields !== undefined) {
+        errors.push(`${sourcePath}.fields is not supported for artifact`);
+      }
+      if (source.type === 'codebase_location' && source.refs !== undefined) {
+        errors.push(`${sourcePath}.refs is not supported for codebase_location`);
+      }
+    }
+
+    const isBlockingPolicy = policy === 'block_if_required_missing';
+    if (!isBlockingPolicy) return;
+    const onBlock = contextRequirements.on_block;
+    if (!onBlock?.target?.trim() || !onBlock.retry_action?.trim()) {
+      errors.push(
+        `${basePath}.on_block.target and .retry_action are required for blocking readiness_policy`,
+      );
+      return;
+    }
+    const targetState = definition.states[onBlock.target];
+    if (!targetState) {
+      errors.push(`${basePath}.on_block.target "${onBlock.target}" does not exist`);
+      return;
+    }
+    if (targetState.type === 'interrupt') {
+      if (targetState.kind !== 'human_input') {
+        errors.push(
+          `${basePath}.on_block.target "${onBlock.target}" must be interrupt.kind=human_input or a context_blocked state`,
+        );
+      }
+      if (!targetState.allowed_actions?.includes(onBlock.retry_action)) {
+        errors.push(
+          `${basePath}.on_block.retry_action "${onBlock.retry_action}" is not in ${onBlock.target}.allowed_actions`,
+        );
+      }
+      if (!targetState.on_resume?.[onBlock.retry_action]) {
+        errors.push(
+          `${basePath}.on_block.retry_action "${onBlock.retry_action}" is not configured in ${onBlock.target}.on_resume`,
+        );
+      }
+      return;
+    }
+    if (
+      targetState.type !== 'system' ||
+      !targetState.on_complete?.success ||
+      targetState.on_complete.success.target !== stateKey
+    ) {
+      errors.push(
+        `${basePath}.on_block.target "${onBlock.target}" must be a human_input interrupt or a context_blocked system state that resumes current stage`,
+      );
+    }
+  };
+  const validateQualityGate = (
+    stateKey: string,
+    qualityGate: WorkflowQualityGate | undefined,
+  ): void => {
+    if (qualityGate === undefined) return;
+    const basePath = `${definition.key}.states.${stateKey}.quality_gate`;
+    if (!qualityGate || typeof qualityGate !== 'object' || Array.isArray(qualityGate)) {
+      errors.push(`${basePath} must be an object`);
+      return;
+    }
+    if (
+      qualityGate.pass_policy !== undefined &&
+      qualityGate.pass_policy !== 'all_blocking_pass'
+    ) {
+      errors.push(`${basePath}.pass_policy "${qualityGate.pass_policy}" is invalid`);
+    }
+    if (
+      qualityGate.evaluators !== undefined &&
+      !Array.isArray(qualityGate.evaluators)
+    ) {
+      errors.push(`${basePath}.evaluators must be an array`);
+      return;
+    }
+    const seenEvaluatorTypes = new Set<string>();
+    for (const [index, evaluator] of (
+      Array.isArray(qualityGate.evaluators) ? qualityGate.evaluators : []
+    ).entries()) {
+      const evaluatorPath = `${basePath}.evaluators[${index}]`;
+      if (!evaluator || typeof evaluator !== 'object' || Array.isArray(evaluator)) {
+        errors.push(`${evaluatorPath} must be an object`);
+        continue;
+      }
+      if (
+        !evaluator.type ||
+        !SUPPORTED_QUALITY_GATE_EVALUATORS.has(
+          evaluator.type as WorkflowQualityGateEvaluatorType,
+        )
+      ) {
+        errors.push(`${evaluatorPath}.type "${evaluator.type}" is invalid`);
+      } else if (seenEvaluatorTypes.has(evaluator.type)) {
+        errors.push(`${evaluatorPath}.type "${evaluator.type}" is duplicated`);
+      } else {
+        seenEvaluatorTypes.add(evaluator.type);
+      }
+      if (
+        evaluator.blocking !== undefined &&
+        typeof evaluator.blocking !== 'boolean'
+      ) {
+        errors.push(`${evaluatorPath}.blocking must be a boolean`);
+      }
+      if (
+        evaluator.blocking === true &&
+        evaluator.type &&
+        !IMPLEMENTED_QUALITY_GATE_EVALUATORS.has(
+          evaluator.type as WorkflowQualityGateEvaluatorType,
+        )
+      ) {
+        errors.push(
+          `${evaluatorPath}.type "${evaluator.type}" is not implemented as a blocking evaluator`,
+        );
       }
     }
   };
@@ -393,6 +658,8 @@ export function validateWorkflowDefinition(
       `${definition.key}.states.${stateKey}.artifact_contract.ref`,
       state.artifact_contract?.ref,
     );
+    validateContextRequirements(stateKey, state.context_requirements);
+    validateQualityGate(stateKey, state.quality_gate);
 
     if (state.type === 'delegation') {
       validateHandoffArtifactContractRef(

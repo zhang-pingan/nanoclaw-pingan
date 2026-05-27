@@ -117,7 +117,14 @@ function parseEvidence(value: unknown): WorkflowEvalEvidence[] {
         type === 'message' ||
         type === 'workflow_state' ||
         type === 'test_result' ||
-        type === 'user_feedback'
+        type === 'user_feedback' ||
+        type === 'input' ||
+        type === 'codebase_location' ||
+        type === 'code' ||
+        type === 'command' ||
+        type === 'wiki' ||
+        type === 'log' ||
+        type === 'provider'
           ? type
           : 'message',
       refId: trimText(entry.refId) || undefined,

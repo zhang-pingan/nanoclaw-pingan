@@ -26,6 +26,8 @@ import {
   WorkflowDefinitionRollbackHintRef,
   WorkflowDefinitionSystemRun,
   WorkflowDefinitionTimeoutPolicy,
+  WorkflowContextRequirements,
+  WorkflowQualityGate,
 } from './workflow-definition.js';
 import {
   getWorkflowDefinitionsDir,
@@ -65,6 +67,8 @@ export interface StateConfig {
   description?: string;
   retry_policy?: WorkflowDefinitionRetryPolicy;
   timeout_policy?: WorkflowDefinitionTimeoutPolicy;
+  context_requirements?: WorkflowContextRequirements;
+  quality_gate?: WorkflowQualityGate;
   artifact_contract?: WorkflowDefinitionArtifactContractRef;
   evaluator?: WorkflowDefinitionEvaluatorRef;
   rollback_hint?: WorkflowDefinitionRollbackHintRef;

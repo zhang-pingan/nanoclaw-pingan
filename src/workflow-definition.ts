@@ -63,6 +63,57 @@ export interface WorkflowDefinitionSystemRun {
   steps?: WorkflowDefinitionSystemRunStep[];
 }
 
+export type WorkflowContextSourceType =
+  | 'workflow_input'
+  | 'artifact'
+  | 'codebase_location';
+
+export interface WorkflowContextRequirementSource {
+  id: string;
+  type: WorkflowContextSourceType;
+  required?: boolean;
+  refs?: string[];
+  fields?: string[];
+  required_when?: Record<string, unknown>;
+  on_missing?: 'warn' | 'block' | 'needs_input';
+  service?: string;
+  verify_exists?: boolean;
+  verify_mounted_for_role?: boolean;
+  max_age_days?: number;
+}
+
+export interface WorkflowContextRequirementOnBlock {
+  target: string;
+  retry_action: string;
+}
+
+export interface WorkflowContextRequirements {
+  readiness_policy?: 'record_only' | 'block_if_required_missing';
+  allow_open_questions?: boolean;
+  on_block?: WorkflowContextRequirementOnBlock;
+  sources?: WorkflowContextRequirementSource[];
+}
+
+export type WorkflowQualityGateEvaluatorType =
+  | 'schema'
+  | 'artifact'
+  | 'stage_rules'
+  | 'context_coverage'
+  | 'evidence'
+  | 'consistency'
+  | 'execution'
+  | 'llm_judge';
+
+export interface WorkflowQualityGateEvaluator {
+  type: WorkflowQualityGateEvaluatorType;
+  blocking?: boolean;
+}
+
+export interface WorkflowQualityGate {
+  pass_policy?: 'all_blocking_pass';
+  evaluators?: WorkflowQualityGateEvaluator[];
+}
+
 export interface WorkflowDefinitionEffects {
   increment_round?: boolean;
 }
@@ -120,6 +171,8 @@ export interface WorkflowDefinitionStateBase {
   type: 'delegation' | 'interrupt' | 'terminal' | 'system';
   label?: string;
   description?: string;
+  context_requirements?: WorkflowContextRequirements;
+  quality_gate?: WorkflowQualityGate;
   retry_policy?: WorkflowDefinitionRetryPolicy;
   timeout_policy?: WorkflowDefinitionTimeoutPolicy;
   artifact_contract?: WorkflowDefinitionArtifactContractRef;

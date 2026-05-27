@@ -105,7 +105,15 @@ export type WorkflowStageEvaluationStatus =
 
 export type WorkflowStageEvaluatorType =
   | 'rules'
+  | 'schema'
+  | 'artifact'
+  | 'stage_rules'
+  | 'context_coverage'
+  | 'evidence'
+  | 'consistency'
+  | 'execution'
   | 'llm_judge'
+  | 'quality_gate'
   | 'hybrid'
   | 'manual';
 
@@ -124,9 +132,27 @@ export interface WorkflowEvalEvidence {
     | 'message'
     | 'workflow_state'
     | 'test_result'
-    | 'user_feedback';
+    | 'user_feedback'
+    | 'input'
+    | 'codebase_location'
+    | 'code'
+    | 'command'
+    | 'wiki'
+    | 'log'
+    | 'provider';
   refId?: string;
   path?: string;
+  source?: string;
+  url?: string;
+  command?: string;
+  cwd?: string;
+  exitCode?: number;
+  hash?: string;
+  retrievedAt?: string;
+  scope?: string;
+  lineStart?: number;
+  lineEnd?: number;
+  metadata?: Record<string, unknown>;
   summary: string;
 }
 

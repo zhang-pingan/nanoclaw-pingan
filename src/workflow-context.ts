@@ -13,6 +13,13 @@ export const WORKFLOW_CONTEXT_KEYS = {
   requirementFiles: 'requirement_files',
   testCaseFiles: 'test_case_files',
   requirementPreset: 'requirement_preset',
+  contextPackPath: 'context_pack_path',
+  contextPackImmutablePath: 'context_pack_immutable_path',
+  contextPackHash: 'context_pack_hash',
+  contextPackSummary: 'context_pack_summary',
+  contextPackOpenQuestions: 'context_pack_open_questions',
+  contextReadinessStatus: 'context_readiness_status',
+  contextPackGeneratedAt: 'context_pack_generated_at',
 } as const;
 
 export function cloneWorkflowContext(

@@ -661,6 +661,7 @@ describe('durable interrupt runtime', () => {
     const workflowId = 'wf-evaluator-retry';
     const retryConfig = getWorkflowTypeConfig('dev_test')?.states.plan;
     expect(retryConfig?.type).toBe('delegation');
+    const originalRetryPolicy = retryConfig!.retry_policy;
     retryConfig!.retry_policy = {
       max_attempts: 2,
       retry_on: ['evaluator_pending'],
@@ -730,15 +731,21 @@ describe('durable interrupt runtime', () => {
       created_at: '2026-04-08T00:00:00.000Z',
     });
 
-    runWorkflowWatchdogOnce('2026-04-08T00:00:02.000Z');
+    try {
+      runWorkflowWatchdogOnce('2026-04-08T00:00:02.000Z');
 
-    const delegations = getDelegationsByWorkflow(workflowId);
-    expect(delegations).toHaveLength(1);
-    expect(delegations[0]?.target_folder).toBe('web_plan');
-    expect(delegations[0]?.task).toContain('Evaluator pending retry attempt 2');
-    expect(getWorkflow(workflowId)?.current_delegation_id).toBe(
-      delegations[0]?.id,
-    );
+      const delegations = getDelegationsByWorkflow(workflowId);
+      expect(delegations).toHaveLength(1);
+      expect(delegations[0]?.target_folder).toBe('web_plan');
+      expect(delegations[0]?.task).toContain(
+        'Evaluator pending retry attempt 2',
+      );
+      expect(getWorkflow(workflowId)?.current_delegation_id).toBe(
+        delegations[0]?.id,
+      );
+    } finally {
+      retryConfig!.retry_policy = originalRetryPolicy;
+    }
   });
 });
 
@@ -826,6 +833,22 @@ describe('workflow metadata and branch flow', () => {
           WORKFLOW_CONTEXT_KEYS.requirementDescription,
         ),
     ).toContain('昵称最长 20 个可见字符');
+    expect(
+      workflow &&
+        getWorkflowContextValue(
+          workflow,
+          WORKFLOW_CONTEXT_KEYS.contextPackPath,
+        ),
+    ).toContain(
+      `/workspace/projects/${TEST_SERVICE}/workflow-context/${workflow?.id}/plan/latest.json`,
+    );
+    expect(
+      workflow &&
+        getWorkflowContextValue(
+          workflow,
+          WORKFLOW_CONTEXT_KEYS.contextReadinessStatus,
+        ),
+    ).toBe('warning');
 
     const delegations = getDelegationsByWorkflow(result.workflowId);
     expect(delegations).toHaveLength(1);
@@ -833,6 +856,8 @@ describe('workflow metadata and branch flow', () => {
     expect(delegations[0]?.task).toContain(
       '需求描述：需要支持用户昵称输入表情',
     );
+    expect(delegations[0]?.task).toContain('[Context Pack]');
+    expect(delegations[0]?.task).toContain('CODEBASE-* 只表示代码库位置');
     expect(delegations[0]?.task).toContain('- /tmp/nickname-prd.md');
     expect(delegations[0]?.task).toContain('- /tmp/nickname-ui.png');
     expect(delegations[0]?.handoff_role).toBe('planner');
@@ -844,6 +869,27 @@ describe('workflow metadata and branch flow', () => {
     const input = JSON.parse(delegations[0]?.handoff_input_json || '{}');
     expect(input.stage_key).toBe('plan');
     expect(input.rendered_task).toContain('需求描述：需要支持用户昵称输入表情');
+    expect(input.context.context_pack_path).toContain('/workflow-context/');
+    const contextPackPath = path.join(
+      PROJECT_ROOT,
+      'projects',
+      TEST_SERVICE,
+      'workflow-context',
+      result.workflowId,
+      'plan',
+      'latest.json',
+    );
+    expect(fs.existsSync(contextPackPath)).toBe(true);
+    const contextPack = JSON.parse(fs.readFileSync(contextPackPath, 'utf-8'));
+    expect(contextPack.workflow_id).toBe(result.workflowId);
+    expect(contextPack.stage_key).toBe('plan');
+    expect(
+      contextPack.query_plan.sources.map((item: { type: string }) => item.type),
+    ).toContain('workflow_input');
+    expect(
+      contextPack.query_plan.sources.map((item: { type: string }) => item.type),
+    ).toContain('codebase_location');
+    expect(contextPack.hash).toMatch(/^sha256:/);
   });
 
   it('starts fix_test from the single fix entry with bug context', () => {
@@ -1982,6 +2028,40 @@ describe('workflow metadata and branch flow', () => {
     );
     expect(getWorkflowArtifactContract('fix_test.bug_test.v1')).toBeDefined();
   });
+
+  it('preserves context requirements and quality gate config through runtime config', () => {
+    const devTest = getWorkflowTypeConfig('dev_test');
+    expect(devTest?.states.plan.context_requirements?.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'user_input',
+          type: 'workflow_input',
+          required: true,
+        }),
+        expect.objectContaining({
+          id: 'service_codebase_location',
+          type: 'codebase_location',
+          verify_exists: true,
+          verify_mounted_for_role: true,
+        }),
+      ]),
+    );
+    expect(devTest?.states.dev.context_requirements?.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'plan_artifact',
+          type: 'artifact',
+          refs: ['plan_doc'],
+        }),
+      ]),
+    );
+    expect(devTest?.states.plan.quality_gate?.evaluators).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'schema', blocking: true }),
+        expect.objectContaining({ type: 'llm_judge', blocking: false }),
+      ]),
+    );
+  });
 });
 
 describe('system workflow action nodes', () => {
@@ -2072,6 +2152,108 @@ describe('system workflow action nodes', () => {
     };
 
     expect(validateWorkflowDefinition(definition)).toEqual([]);
+  });
+
+  it('validates context requirements and quality gate evaluator support', () => {
+    const definition: WorkflowDefinition = {
+      key: 'context_quality_test',
+      name: 'Context quality test',
+      version: 1,
+      status: 'draft',
+      roles: {
+        planner: {
+          channels: {
+            web: 'web_plan',
+          },
+        },
+      },
+      entry_points: {
+        start: {
+          state: 'plan',
+        },
+      },
+      states: {
+        plan: {
+          type: 'delegation',
+          label: 'Plan',
+          context_requirements: {
+            readiness_policy: 'record_only',
+            sources: [
+              {
+                id: 'user_input',
+                type: 'workflow_input',
+                required: true,
+                fields: ['requirement_description'],
+              },
+              {
+                id: 'service_codebase_location',
+                type: 'codebase_location',
+                verify_exists: true,
+                verify_mounted_for_role: true,
+              },
+            ],
+          },
+          quality_gate: {
+            pass_policy: 'all_blocking_pass',
+            evaluators: [
+              { type: 'schema', blocking: true },
+              { type: 'llm_judge', blocking: false },
+              { type: 'evidence', blocking: false },
+            ],
+          },
+          delegate: {
+            role: 'planner',
+            skill: 'plan-requirement',
+          },
+          on_complete: {
+            success: { target: 'done' },
+            failure: { target: 'done' },
+          },
+        },
+        done: {
+          type: 'terminal',
+          label: 'Done',
+        },
+      },
+      status_labels: {},
+    };
+
+    expect(validateWorkflowDefinition(definition)).toEqual([]);
+
+    const invalid: WorkflowDefinition = {
+      ...definition,
+      states: {
+        ...definition.states,
+        plan: {
+          ...(definition.states.plan as Extract<
+            WorkflowDefinition['states'][string],
+            { type: 'delegation' }
+          >),
+          context_requirements: {
+            readiness_policy: 'block_if_required_missing',
+            sources: [
+              { id: 'user_input', type: 'workflow_input', required: true },
+              { id: 'user_input', type: 'artifact', refs: ['plan_doc'] },
+              {
+                id: 'unsupported',
+                type: 'memory' as unknown as 'workflow_input',
+              },
+            ],
+          },
+          quality_gate: {
+            evaluators: [{ type: 'evidence', blocking: true }],
+          },
+        },
+      },
+    };
+
+    const errors = validateWorkflowDefinition(invalid);
+    expect(errors.join('\n')).toContain('id "user_input" is duplicated');
+    expect(errors.join('\n')).toContain('type "memory" is invalid');
+    expect(errors.join('\n')).toContain('on_block.target and .retry_action');
+    expect(errors.join('\n')).toContain(
+      'not implemented as a blocking evaluator',
+    );
   });
 
   it('treats system states without steps as successful no-ops', () => {

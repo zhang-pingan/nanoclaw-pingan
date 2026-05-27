@@ -109,6 +109,54 @@
           "evaluator": {
             "ref": "dev_test.plan.v1"
           },
+          "context_requirements": {
+            "readiness_policy": "record_only",
+            "sources": [
+              {
+                "id": "user_input",
+                "type": "workflow_input",
+                "required": true,
+                "fields": [
+                  "requirement_description",
+                  "requirement_files",
+                  "main_branch",
+                  "work_branch"
+                ]
+              },
+              {
+                "id": "service_codebase_location",
+                "type": "codebase_location",
+                "required": false,
+                "fields": [
+                  "repo_path",
+                  "container_path"
+                ],
+                "verify_exists": true,
+                "verify_mounted_for_role": true
+              }
+            ]
+          },
+          "quality_gate": {
+            "pass_policy": "all_blocking_pass",
+            "evaluators": [
+              {
+                "type": "schema",
+                "blocking": true
+              },
+              {
+                "type": "artifact",
+                "blocking": true
+              },
+              {
+                "type": "stage_rules",
+                "blocking": true
+              },
+              {
+                "type": "llm_judge",
+                "blocking": false
+              }
+            ]
+          },
           "delegate": {
             "role": "planner",
             "skill": "plan-requirement",
@@ -280,6 +328,62 @@
           },
           "evaluator": {
             "ref": "dev_test.dev.v1"
+          },
+          "context_requirements": {
+            "readiness_policy": "record_only",
+            "sources": [
+              {
+                "id": "user_input",
+                "type": "workflow_input",
+                "required": true,
+                "fields": [
+                  "requirement_description",
+                  "requirement_files",
+                  "main_branch",
+                  "work_branch"
+                ]
+              },
+              {
+                "id": "plan_artifact",
+                "type": "artifact",
+                "required": false,
+                "refs": [
+                  "plan_doc"
+                ]
+              },
+              {
+                "id": "service_codebase_location",
+                "type": "codebase_location",
+                "required": false,
+                "fields": [
+                  "repo_path",
+                  "container_path"
+                ],
+                "verify_exists": true,
+                "verify_mounted_for_role": true
+              }
+            ]
+          },
+          "quality_gate": {
+            "pass_policy": "all_blocking_pass",
+            "evaluators": [
+              {
+                "type": "schema",
+                "blocking": true
+              },
+              {
+                "type": "artifact",
+                "blocking": true
+              },
+              {
+                "type": "stage_rules",
+                "blocking": true
+              },
+              {
+                "type": "llm_judge",
+                "blocking": false
+              }
+            ]
           },
           "delegate": {
             "role": "dev",
