@@ -93,6 +93,15 @@ doc_type: dev
 - {兼容性注意事项}
 ```
 
+同时保存 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/traceability.json`。
+
+- `traceability.json` 必须是 JSON object，至少包含 `statements`、`decisions`、`actions`、`acceptance_criteria`、`evidence`、`coverage`、`open_questions`
+- `coverage` 必须覆盖 Context Pack 里的 required `INPUT-*`，并继承或引用方案阶段的重要 `ART-*` / evidence
+- `decisions/actions/acceptance_criteria` 必须引用 `evidence` 中存在的证据 ref，或 Context Pack 中已有的 `INPUT-*` / `ART-*` / `EVID-*`
+- `CODEBASE-*` 只能证明仓库位置，不能作为实现结论、测试结论或业务决策证据；基于代码得出的结论必须新增 `EVID-CODE-*`
+- 代码证据使用 `type=code`，包含 `refId`、`path`、`branch` 或 `commit`、`summary`，尽量包含 `symbol` 或行号
+- 命令/测试证据使用 `type=command` 或 `type=test_result`，包含 `refId`、`command`、`cwd`、`exitCode`、`summary`，测试报告可加 `reportPath`
+
 ### 步骤 5：回复委派消息
 
 1. 将交付文档关键内容通过 `mcp__icarus__send_message` 发送给用户
@@ -100,7 +109,7 @@ doc_type: dev
 3. `complete_delegation` 返回结果要求：
    - `outcome=success` 只表示开发任务执行完成并产出了合法的结构化结果；不要再用 `outcome` 表示“代码审核通过 / 不通过”这类业务 verdict
    - `outcome=failure` 只用于执行层失败或阻塞，例如：仓库不可访问、分支不可确认、关键测试/构建无法执行且无法继续、文档无法落盘
-   - 若成功，`result` 必须是 JSON，至少包含：`service`、`main_branch`、`work_branch`、`deliverable`、`verdict`、`summary`、`findings`、`evidence`
+   - 若成功，`result` 必须是 JSON，至少包含：`service`、`main_branch`、`work_branch`、`deliverable`、`verdict`、`summary`、`findings`、`evidence`、`traceability_path`
    - 本阶段通常返回 `verdict=passed`
    - 成功返回示例：
 
@@ -112,10 +121,12 @@ doc_type: dev
   "deliverable": "2026-03-20_用户昵称功能",
   "verdict": "passed",
   "summary": "需求开发完成，可以进入开发复核。",
+  "traceability_path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/traceability.json",
   "findings": [],
   "evidence": [
     {
       "type": "artifact",
+      "refId": "EVID-DEV-001",
       "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/dev.md",
       "summary": "已写入 dev.md 并同步交付说明"
     }

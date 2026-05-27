@@ -180,7 +180,6 @@ Each role's `skill_to_role_key` must match a skill assigned to a group folder in
 {
   "feishu_dev": ["dev-requirement", "dev-bugfix"],
   "feishu_ops": ["ops-staging-deploy"],
-  "feishu_test": ["test-requirement"]
 }
 ```
 

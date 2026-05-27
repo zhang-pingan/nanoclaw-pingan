@@ -98,7 +98,6 @@ import {
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
 import {
-  buildWorkflowStageEvaluationRecord,
   evaluateWorkflowStage,
 } from './workflow-stage-evaluation.js';
 import {
@@ -129,6 +128,10 @@ import {
   buildWorkflowContextPack,
   WorkflowContextPack,
 } from './workflow-context-pack.js';
+import {
+  buildWorkflowQualityGateEvaluation,
+  buildWorkflowQualityGateRecords,
+} from './workflow-quality-gate.js';
 
 interface DeliverableMetadata {
   fileName: string;
@@ -152,6 +155,8 @@ interface ParsedDelegationPayload {
   passed?: number;
   failed?: number;
   blocked?: number;
+  traceability_path?: string;
+  traceabilityPath?: string;
   bugs?: Array<{
     id: string;
     title?: string;
@@ -3489,51 +3494,6 @@ function exhaustedRetryTransition(
     : undefined;
 }
 
-function mergeEvaluationResults(input: {
-  stageEvaluation: WorkflowStageEvalResult;
-  contractEvaluation: WorkflowStageEvalResult | null;
-  evaluatorRef?: string;
-}): WorkflowStageEvalResult {
-  if (!input.contractEvaluation) return input.stageEvaluation;
-  const evaluatorConfig = getWorkflowEvaluatorConfig(input.evaluatorRef);
-  const missingStatus =
-    evaluatorConfig?.status_mapping?.artifact_missing || 'pending';
-  const contractStatus =
-    input.contractEvaluation.status === 'pending'
-      ? missingStatus
-      : input.contractEvaluation.status;
-  const severityRank: Record<WorkflowStageEvalResult['status'], number> = {
-    passed: 0,
-    needs_revision: 1,
-    pending: 2,
-    failed: 3,
-  };
-  const status =
-    severityRank[contractStatus] > severityRank[input.stageEvaluation.status]
-      ? contractStatus
-      : input.stageEvaluation.status;
-  return {
-    status,
-    score: Math.min(
-      input.stageEvaluation.score,
-      input.contractEvaluation.score,
-    ),
-    summary:
-      status === input.stageEvaluation.status
-        ? input.stageEvaluation.summary
-        : input.contractEvaluation.summary,
-    findings: [
-      ...input.contractEvaluation.findings,
-      ...input.stageEvaluation.findings,
-    ],
-    evidence: [
-      ...input.contractEvaluation.evidence,
-      ...input.stageEvaluation.evidence,
-    ],
-    evaluatorType: 'hybrid',
-  };
-}
-
 function recordLlmJudgeSidecar(input: {
   workflow: Workflow;
   stageKey: string;
@@ -5226,23 +5186,37 @@ export function onDelegationComplete(delegationId: string): void {
   const evaluatorConfig = getWorkflowEvaluatorConfig(
     stateConfig.evaluator?.ref,
   );
-  const artifactContractRef = getDelegationArtifactContractRef(delegation);
+  const artifactContractRef =
+    getDelegationArtifactContractRef(delegation) ||
+    stateConfig.artifact_contract?.ref;
   const contractEvaluation = evaluateWorkflowArtifactContract({
     workflow: evaluationWorkflow,
     contractRef: artifactContractRef,
     payload: payload as unknown as Record<string, unknown>,
   });
-  const evaluation = mergeEvaluationResults({
-    stageEvaluation,
-    contractEvaluation,
-    evaluatorRef: stateConfig.evaluator?.ref,
-  });
-  const evaluationRecord = buildWorkflowStageEvaluationRecord({
+  const qualityGateEvaluation = buildWorkflowQualityGateEvaluation({
     workflow: evaluationWorkflow,
     stageKey: workflow.status,
     delegation,
-    result: evaluation,
+    qualityGate: stateConfig.quality_gate,
+    stageEvaluation,
+    contractEvaluation,
+    missingArtifactStatus:
+      evaluatorConfig?.status_mapping?.artifact_missing || 'pending',
+    allowOpenQuestions:
+      stateConfig.context_requirements?.allow_open_questions === true,
   });
+  const { finalRecord: evaluationRecord, componentRecords } =
+    buildWorkflowQualityGateRecords({
+      workflow: evaluationWorkflow,
+      stageKey: workflow.status,
+      delegation,
+      evaluation: qualityGateEvaluation,
+    });
+  for (const componentRecord of componentRecords) {
+    createWorkflowStageEvaluation(componentRecord);
+  }
+  const evaluation = qualityGateEvaluation.finalResult;
   createWorkflowStageEvaluation(evaluationRecord);
   const llmJudgeSidecarRecord = recordLlmJudgeSidecar({
     workflow: evaluationWorkflow,
@@ -5258,6 +5232,7 @@ export function onDelegationComplete(delegationId: string): void {
       latest_evaluator_result: {
         state_key: workflow.status,
         evaluation_id: evaluationRecord.id,
+        source_evaluation_ids: componentRecords.map((record) => record.id),
         evaluator_ref:
           stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
         artifact_contract_ref: artifactContractRef || null,
@@ -5303,6 +5278,12 @@ export function onDelegationComplete(delegationId: string): void {
       artifact_contract_ref: artifactContractRef || null,
       evaluator_ref:
         stateConfig.evaluator?.ref || evaluationRecord.evaluator_type,
+      quality_gate:
+        stateConfig.quality_gate?.evaluators?.map((item) => ({
+          type: item.type,
+          blocking: item.blocking === true,
+        })) || null,
+      source_evaluation_ids: componentRecords.map((record) => record.id),
       result: evaluation.status,
       findings: evaluation.findings,
       evidence: evaluation.evidence,

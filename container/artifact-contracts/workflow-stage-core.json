@@ -9,7 +9,8 @@
       "properties": {
         "deliverable": { "type": "string", "minLength": 1 },
         "main_branch": { "type": "string", "minLength": 1 },
-        "work_branch": { "type": "string", "minLength": 1 }
+        "work_branch": { "type": "string", "minLength": 1 },
+        "traceability_path": { "type": "string", "minLength": 1 }
       }
     },
     "files": [
@@ -17,6 +18,11 @@
         "path": "projects/{{service}}/iteration/{{deliverable}}/plan.md",
         "required": true,
         "frontmatter_required": ["service", "deliverable", "doc_type"],
+        "max_bytes": 200000
+      },
+      {
+        "path": "projects/{{service}}/iteration/{{deliverable}}/traceability.json",
+        "required": true,
         "max_bytes": 200000
       }
     ]
@@ -31,7 +37,8 @@
       "properties": {
         "deliverable": { "type": "string", "minLength": 1 },
         "main_branch": { "type": "string", "minLength": 1 },
-        "work_branch": { "type": "string", "minLength": 1 }
+        "work_branch": { "type": "string", "minLength": 1 },
+        "traceability_path": { "type": "string", "minLength": 1 }
       }
     },
     "files": [
@@ -40,6 +47,11 @@
         "required": true,
         "frontmatter_required": ["service", "deliverable", "doc_type"],
         "max_bytes": 250000
+      },
+      {
+        "path": "projects/{{service}}/iteration/{{deliverable}}/traceability.json",
+        "required": true,
+        "max_bytes": 200000
       }
     ]
   },

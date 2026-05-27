@@ -537,6 +537,115 @@ function collectPayloadEvidence(
           typeof entry.path === 'string' && entry.path.trim()
             ? entry.path.trim()
             : undefined,
+        source:
+          typeof entry.source === 'string' && entry.source.trim()
+            ? entry.source.trim()
+            : undefined,
+        service:
+          typeof entry.service === 'string' && entry.service.trim()
+            ? entry.service.trim()
+            : undefined,
+        repo:
+          typeof entry.repo === 'string' && entry.repo.trim()
+            ? entry.repo.trim()
+            : undefined,
+        repoPath:
+          typeof entry.repoPath === 'string' && entry.repoPath.trim()
+            ? entry.repoPath.trim()
+            : typeof entry.repo_path === 'string' && entry.repo_path.trim()
+              ? entry.repo_path.trim()
+              : undefined,
+        branch:
+          typeof entry.branch === 'string' && entry.branch.trim()
+            ? entry.branch.trim()
+            : undefined,
+        commit:
+          typeof entry.commit === 'string' && entry.commit.trim()
+            ? entry.commit.trim()
+            : undefined,
+        symbol:
+          typeof entry.symbol === 'string' && entry.symbol.trim()
+            ? entry.symbol.trim()
+            : undefined,
+        url:
+          typeof entry.url === 'string' && entry.url.trim()
+            ? entry.url.trim()
+            : undefined,
+        title:
+          typeof entry.title === 'string' && entry.title.trim()
+            ? entry.title.trim()
+            : undefined,
+        command:
+          typeof entry.command === 'string' && entry.command.trim()
+            ? entry.command.trim()
+            : undefined,
+        cwd:
+          typeof entry.cwd === 'string' && entry.cwd.trim()
+            ? entry.cwd.trim()
+            : undefined,
+        exitCode:
+          typeof entry.exitCode === 'number' && Number.isFinite(entry.exitCode)
+            ? entry.exitCode
+            : typeof entry.exit_code === 'number' &&
+                Number.isFinite(entry.exit_code)
+              ? entry.exit_code
+              : undefined,
+        hash:
+          typeof entry.hash === 'string' && entry.hash.trim()
+            ? entry.hash.trim()
+            : undefined,
+        retrievedAt:
+          typeof entry.retrievedAt === 'string' && entry.retrievedAt.trim()
+            ? entry.retrievedAt.trim()
+            : typeof entry.retrieved_at === 'string' &&
+                entry.retrieved_at.trim()
+              ? entry.retrieved_at.trim()
+              : undefined,
+        scope:
+          typeof entry.scope === 'string' && entry.scope.trim()
+            ? entry.scope.trim()
+            : undefined,
+        locator:
+          typeof entry.locator === 'string' && entry.locator.trim()
+            ? entry.locator.trim()
+            : undefined,
+        timeRange:
+          typeof entry.timeRange === 'string' && entry.timeRange.trim()
+            ? entry.timeRange.trim()
+            : typeof entry.time_range === 'string' && entry.time_range.trim()
+              ? entry.time_range.trim()
+              : undefined,
+        query:
+          typeof entry.query === 'string' && entry.query.trim()
+            ? entry.query.trim()
+            : undefined,
+        reportPath:
+          typeof entry.reportPath === 'string' && entry.reportPath.trim()
+            ? entry.reportPath.trim()
+            : typeof entry.report_path === 'string' &&
+                entry.report_path.trim()
+              ? entry.report_path.trim()
+              : undefined,
+        lineStart:
+          typeof entry.lineStart === 'number' && Number.isFinite(entry.lineStart)
+            ? entry.lineStart
+            : typeof entry.line_start === 'number' &&
+                Number.isFinite(entry.line_start)
+              ? entry.line_start
+              : undefined,
+        lineEnd:
+          typeof entry.lineEnd === 'number' && Number.isFinite(entry.lineEnd)
+            ? entry.lineEnd
+            : typeof entry.line_end === 'number' &&
+                Number.isFinite(entry.line_end)
+              ? entry.line_end
+              : undefined,
+        metadata:
+          entry.metadata &&
+          typeof entry.metadata === 'object' &&
+          !Array.isArray(entry.metadata)
+            ? (entry.metadata as Record<string, unknown>)
+            : undefined,
         summary,
       });
     }

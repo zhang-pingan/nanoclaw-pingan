@@ -51,8 +51,7 @@
     "global": [
       "base",
       "knowledge",
-      "tasking",
-
+      "tasking"
     ],
     "main": [
       "workbench-main",
@@ -81,24 +80,6 @@
       "delegation-main",
       "desktop-main",
       "image-main"
-    ],
-    "feishu_dev": [
-      "delegation-worker"
-    ],
-    "feishu_dev_examine": [
-      "delegation-worker"
-    ],
-    "feishu_plan": [
-      "delegation-worker"
-    ],
-    "feishu_plan_examine": [
-      "delegation-worker"
-    ],
-    "feishu_ops": [
-      "delegation-worker"
-    ],
-    "feishu_test": [
-      "delegation-worker"
     ],
     "web_dev": [
       "delegation-worker"

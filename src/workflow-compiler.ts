@@ -30,6 +30,10 @@ const IMPLEMENTED_QUALITY_GATE_EVALUATORS =
     'schema',
     'artifact',
     'stage_rules',
+    'context_coverage',
+    'evidence',
+    'consistency',
+    'execution',
     'llm_judge',
   ]);
 

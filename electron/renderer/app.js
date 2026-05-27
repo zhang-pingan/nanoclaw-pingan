@@ -5861,7 +5861,16 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
       pushItem("artifact_contract", `${path} 引用了不存在的 artifact contract: ${value}`);
     }
   };
-  const implementedBlockingQualityGateEvaluators = new Set(["schema", "artifact", "stage_rules", "llm_judge"]);
+  const implementedBlockingQualityGateEvaluators = new Set([
+    "schema",
+    "artifact",
+    "stage_rules",
+    "context_coverage",
+    "evidence",
+    "consistency",
+    "execution",
+    "llm_judge",
+  ]);
   const supportedQualityGateEvaluators = new Set([
     "schema",
     "artifact",

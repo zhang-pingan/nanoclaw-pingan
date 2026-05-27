@@ -358,8 +358,8 @@ Do not fail setup when non-main groups are missing. Warn the user that the `dev_
 
 Expected non-main role folders from current workflow definitions:
 
-- `dev_test`: `feishu_plan`, `feishu_plan_examine`, `feishu_dev`, `feishu_dev_examine`, `feishu_ops`, `feishu_test`, or the web equivalents `web_plan`, `web_plan_examine`, `web_dev`, `web_dev_examine`, `web_ops`, `web_test`
-- `fix_test`: `feishu_dev`, `feishu_ops`, `feishu_test`, or the web equivalents `web_dev`, `web_ops`, `web_test`
+- `dev_test`: the web equivalents `web_plan`, `web_plan_examine`, `web_dev`, `web_dev_examine`, `web_ops`, `web_test`
+- `fix_test`: the web equivalents `web_dev`, `web_ops`, `web_test`
 
 If any are missing, report them as warnings only. Tell the user they can register them later with `npx tsx setup/index.ts --step workflow-groups` (web groups) or the same command with `--include-feishu --feishu-map ...` for Feishu groups.
 

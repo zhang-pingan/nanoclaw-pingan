@@ -153,12 +153,128 @@ function buildStructuredResult(
     findings: [],
     evidence: [
       {
+        refId: 'EVID-MSG-001',
         type: 'message',
         summary: '已产出结构化评测结果',
       },
     ],
     ...overrides,
   });
+}
+
+function writeTraceability(
+  dirName: string,
+  content: Record<string, unknown>,
+): void {
+  const dir = path.join(ITERATION_DIR, dirName);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'traceability.json'),
+    `${JSON.stringify(content, null, 2)}\n`,
+  );
+}
+
+function buildTraceability(overrides: Record<string, unknown> = {}): Record<
+  string,
+  unknown
+> {
+  return {
+    version: 1,
+    statements: [
+      {
+        id: 'STMT-001',
+        text: '需求输入已纳入阶段处理',
+        source_refs: ['INPUT-001'],
+        evidence: ['INPUT-001'],
+      },
+    ],
+    decisions: [
+      {
+        id: 'DEC-001',
+        summary: '采用当前阶段方案继续流程',
+        evidence: ['EVID-ART-001'],
+      },
+    ],
+    assumptions: [],
+    risks: [],
+    actions: [
+      {
+        id: 'ACT-001',
+        summary: '产出阶段文档',
+        evidence: ['EVID-ART-001'],
+      },
+    ],
+    acceptance_criteria: [
+      {
+        id: 'CHECK-001',
+        summary: '阶段产物满足工作流合同',
+        evidence: ['EVID-ART-001'],
+      },
+    ],
+    evidence: [
+      {
+        refId: 'EVID-ART-001',
+        type: 'artifact',
+        path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+        summary: '阶段文档已写入交付目录',
+      },
+    ],
+    coverage: [
+      {
+        source_id: 'INPUT-001',
+        covered_by: ['DEC-001', 'ACT-001', 'CHECK-001'],
+        evidence: ['EVID-ART-001'],
+      },
+    ],
+    open_questions: [],
+    ...overrides,
+  };
+}
+
+function readContextPackInputRefs(workflowId: string, stageKey: string): string[] {
+  const contextPackPath = path.join(
+    PROJECT_ROOT,
+    'projects',
+    TEST_SERVICE,
+    'workflow-context',
+    workflowId,
+    stageKey,
+    'latest.json',
+  );
+  if (!fs.existsSync(contextPackPath)) return [];
+  const parsed = JSON.parse(fs.readFileSync(contextPackPath, 'utf-8')) as {
+    input_refs?: Array<{ ref_id?: string }>;
+  };
+  return (parsed.input_refs || [])
+    .map((item) => item.ref_id || '')
+    .filter(Boolean);
+}
+
+function rewriteTraceabilityForContextPack(input: {
+  workflowId: string;
+  stageKey: string;
+  deliverable: string;
+  documentPath: string;
+}): void {
+  const inputRefs = readContextPackInputRefs(input.workflowId, input.stageKey);
+  writeTraceability(
+    input.deliverable,
+    buildTraceability({
+      evidence: [
+        {
+          refId: 'EVID-ART-001',
+          type: 'artifact',
+          path: input.documentPath,
+          summary: '阶段文档已写入交付目录',
+        },
+      ],
+      coverage: inputRefs.map((ref) => ({
+        source_id: ref,
+        covered_by: ['DEC-001', 'ACT-001', 'CHECK-001'],
+        evidence: ['EVID-ART-001'],
+      })),
+    }),
+  );
 }
 
 function createWorkflowAtInterrupt(input: {
@@ -1202,6 +1318,80 @@ describe('workflow metadata and branch flow', () => {
     );
   });
 
+  it('blocks dev_test plan when traceability artifact is missing', () => {
+    writeDoc(
+      '2026-04-08_missing_trace',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_missing_trace\nmain_branch: main\nwork_branch: feature/missing-trace\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 覆盖需求\n\n## 验收标准\n- 满足质量门\n\n## 风险\n- 需要补证据\n`,
+    );
+    createWorkflow({
+      id: 'wf-plan-missing-trace',
+      name: 'Plan missing traceability',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        main_branch: '',
+        work_branch: '',
+        deliverable: '',
+        staging_base_branch: '',
+        staging_work_branch: '',
+        access_token: '',
+        requirement_description: '需要完整 traceability。',
+        requirement_files: [],
+      },
+      status: 'plan',
+      current_delegation_id: 'del-plan-missing-trace',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-plan-missing-trace',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'plan@g.us',
+      target_folder: 'web_plan',
+      task: 'plan task',
+      status: 'completed',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        deliverable: '2026-04-08_missing_trace',
+        main_branch: 'main',
+        work_branch: 'feature/missing-trace',
+        summary: '方案已完成但缺少 traceability。',
+      }),
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-plan-missing-trace',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+
+    onDelegationComplete('del-plan-missing-trace');
+
+    const workflow = getWorkflow('wf-plan-missing-trace');
+    expect(workflow?.status).toBe('plan');
+    const latest = getLatestWorkflowStageEvaluation(
+      'wf-plan-missing-trace',
+      'plan',
+    );
+    expect(latest?.evaluator_type).toBe('quality_gate');
+    expect(latest?.status).toBe('pending');
+    const evaluations = listWorkflowStageEvaluationsByWorkflow(
+      'wf-plan-missing-trace',
+    );
+    expect(
+      evaluations.some(
+        (item) =>
+          item.stage_key === 'plan:artifact' && item.status === 'pending',
+      ),
+    ).toBe(true);
+    expect(latest?.summary).toContain('artifact=pending');
+  });
+
   it('propagates plan result fields into next delegation', () => {
     writeDoc(
       '2026-04-08_feature',
@@ -1232,6 +1422,12 @@ describe('workflow metadata and branch flow', () => {
       created_at: '2026-04-08T00:00:00.000Z',
       updated_at: '2026-04-08T00:00:00.000Z',
     });
+    rewriteTraceabilityForContextPack({
+      workflowId: 'wf-plan',
+      stageKey: 'plan',
+      deliverable: '2026-04-08_feature',
+      documentPath: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+    });
     createDelegation({
       id: 'del-plan',
       source_jid: 'main@g.us',
@@ -1245,6 +1441,7 @@ describe('workflow metadata and branch flow', () => {
         deliverable: '2026-04-08_feature',
         main_branch: 'main',
         work_branch: 'feature/test_20260408',
+        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/traceability.json`,
         summary: '方案已完成，可以进入审核',
       }),
       outcome: 'success',
@@ -1265,6 +1462,22 @@ describe('workflow metadata and branch flow', () => {
       'passed',
     );
     const evaluations = listWorkflowStageEvaluationsByWorkflow('wf-plan');
+    expect(
+      evaluations.some(
+        (item) =>
+          item.stage_key === 'plan:evidence' &&
+          item.evaluator_type === 'evidence' &&
+          item.status === 'passed',
+      ),
+    ).toBe(true);
+    expect(
+      evaluations.some(
+        (item) =>
+          item.stage_key === 'plan:context_coverage' &&
+          item.evaluator_type === 'context_coverage' &&
+          item.status === 'passed',
+      ),
+    ).toBe(true);
     expect(
       evaluations.some(
         (item) =>
@@ -1333,6 +1546,12 @@ describe('workflow metadata and branch flow', () => {
       created_at: '2026-04-08T00:00:00.000Z',
       updated_at: '2026-04-08T00:00:00.000Z',
     });
+    rewriteTraceabilityForContextPack({
+      workflowId: 'wf-plan-test-cases',
+      stageKey: 'plan',
+      deliverable: '2026-04-08_feature',
+      documentPath: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+    });
     createDelegation({
       id: 'del-plan-test-cases',
       source_jid: 'main@g.us',
@@ -1345,6 +1564,7 @@ describe('workflow metadata and branch flow', () => {
         deliverable: '2026-04-08_feature',
         main_branch: 'main',
         work_branch: 'feature/test_20260408',
+        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/traceability.json`,
         summary: '方案已完成',
       }),
       outcome: 'success',
@@ -1484,7 +1704,7 @@ describe('workflow metadata and branch flow', () => {
       'plan',
     );
     expect(evaluation?.status).toBe('pending');
-    expect(evaluation?.summary).toContain('待补充证据');
+    expect(evaluation?.summary).toContain('Quality gate pending');
   });
 
   it('routes plan review revision verdict while keeping outcome success', () => {
@@ -2058,6 +2278,11 @@ describe('workflow metadata and branch flow', () => {
     expect(devTest?.states.plan.quality_gate?.evaluators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'schema', blocking: true }),
+        expect.objectContaining({
+          type: 'context_coverage',
+          blocking: true,
+        }),
+        expect.objectContaining({ type: 'evidence', blocking: true }),
         expect.objectContaining({ type: 'llm_judge', blocking: false }),
       ]),
     );
@@ -2241,7 +2466,7 @@ describe('system workflow action nodes', () => {
             ],
           },
           quality_gate: {
-            evaluators: [{ type: 'evidence', blocking: true }],
+            evaluators: [{ type: 'memory' as 'evidence', blocking: true }],
           },
         },
       },
@@ -2251,9 +2476,7 @@ describe('system workflow action nodes', () => {
     expect(errors.join('\n')).toContain('id "user_input" is duplicated');
     expect(errors.join('\n')).toContain('type "memory" is invalid');
     expect(errors.join('\n')).toContain('on_block.target and .retry_action');
-    expect(errors.join('\n')).toContain(
-      'not implemented as a blocking evaluator',
-    );
+    expect(errors.join('\n')).toContain('type "memory" is invalid');
   });
 
   it('treats system states without steps as successful no-ops', () => {
@@ -2453,6 +2676,7 @@ describe('system workflow action nodes', () => {
     config.states.capture_after_hook = {
       type: 'delegation',
       label: '采集并后处理',
+      quality_gate: undefined,
       role: 'planner',
       skill: 'plan-requirement',
       task_template: '返回结构化阶段结果',
@@ -2480,6 +2704,7 @@ describe('system workflow action nodes', () => {
     config.states.next_after_hook = {
       type: 'delegation',
       label: '读取后处理结果',
+      quality_gate: undefined,
       role: 'planner',
       skill: 'plan-requirement',
       task_template:
@@ -2554,6 +2779,7 @@ describe('system workflow action nodes', () => {
     config.states.capture_after_hook_retry = {
       type: 'delegation',
       label: '采集并后处理重试',
+      quality_gate: undefined,
       role: 'planner',
       skill: 'plan-requirement',
       task_template: '返回结构化阶段结果',
@@ -2654,6 +2880,7 @@ describe('system workflow action nodes', () => {
     config.states.capture_before_block = {
       type: 'delegation',
       label: '采集后转入失败 hook',
+      quality_gate: undefined,
       role: 'planner',
       skill: 'plan-requirement',
       task_template: '返回结构化阶段结果',
@@ -2813,6 +3040,7 @@ describe('system workflow action nodes', () => {
     config.states.capture_result = {
       type: 'delegation',
       label: '采集阶段结果',
+      quality_gate: undefined,
       role: 'planner',
       skill: 'plan-requirement',
       task_template: '返回结构化阶段结果',
@@ -2852,6 +3080,7 @@ describe('system workflow action nodes', () => {
     config.states.next_stage_from_result = {
       type: 'delegation',
       label: '读取阶段结果',
+      quality_gate: undefined,
       role: 'planner',
       skill: 'plan-requirement',
       task_template:

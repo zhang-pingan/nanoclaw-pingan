@@ -105,7 +105,7 @@ export interface StateConfig {
 }
 
 export interface RoleConfig {
-  /** Channel → group folder mapping, e.g. { feishu: "feishu_plan", web: "web_plan" } */
+  /** Channel → group folder mapping, e.g. { web: "web_plan" } */
   channels: Record<string, string>;
   /** Optional deliverable filename produced by this role, e.g. plan.md. */
   deliverable_file?: string;

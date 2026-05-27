@@ -195,8 +195,30 @@ export function validateWorkflowHandoffResult(
   }
 
   const errors: string[] = [];
+  const contract = parseWorkflowHandoffContract(delegation);
   for (const key of ['verdict', 'summary', 'findings', 'evidence']) {
     if (payload[key] === undefined) errors.push(`${key} is required`);
+  }
+  if (
+    (contract?.artifact_contract_ref === 'dev_test.plan.v1' &&
+      (!delegation?.handoff_skill ||
+        delegation.handoff_skill === 'plan-requirement')) ||
+    (contract?.artifact_contract_ref === 'dev_test.dev.v1' &&
+      (!delegation?.handoff_skill ||
+        delegation.handoff_skill === 'dev-requirement'))
+  ) {
+    const hasTraceabilityPath =
+      typeof payload.traceability_path === 'string' &&
+      payload.traceability_path.trim().length > 0;
+    const hasTraceabilityObject =
+      payload.traceability &&
+      typeof payload.traceability === 'object' &&
+      !Array.isArray(payload.traceability);
+    if (!hasTraceabilityPath && !hasTraceabilityObject) {
+      errors.push(
+        'traceability_path or traceability object is required for dev_test plan/dev results',
+      );
+    }
   }
   if (
     payload.verdict !== undefined &&
@@ -218,7 +240,6 @@ export function validateWorkflowHandoffResult(
     errors.push('evidence must be an array');
   }
 
-  const contract = parseWorkflowHandoffContract(delegation);
   const schemaRef = contract?.artifact_contract_ref || contract?.output_schema;
   const payloadContractIssues = validateWorkflowArtifactContractPayload({
     contractRef: contract?.artifact_contract_ref,

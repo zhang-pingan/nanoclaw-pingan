@@ -162,6 +162,16 @@ doc_type: plan
 例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md`
 
 - 文档内容即步骤 3 中的完整方案
+- 同时保存 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/traceability.json`
+- `traceability.json` 必须是 JSON object，至少包含：
+  - `statements`、`decisions`、`actions`、`acceptance_criteria`、`evidence`、`coverage`、`open_questions`
+  - `coverage` 必须覆盖 Context Pack 里的 required `INPUT-*`
+  - `decisions/actions/acceptance_criteria` 必须引用 `evidence` 中存在的证据 ref，或 Context Pack 中已有的 `INPUT-*` / `ART-*` / `EVID-*`
+  - `CODEBASE-*` 只能证明仓库位置，不能作为业务或实现决策证据；基于代码得出的结论必须新增 `EVID-CODE-*`
+- 运行时新增 evidence 必须可校验：
+  - 代码证据：`type=code`，包含 `refId`、`path`、`branch` 或 `commit`、`summary`，尽量包含 `symbol` 或行号
+  - 命令证据：`type=command`，包含 `refId`、`command`、`cwd`、`exitCode`、`summary`
+  - 文档证据：`type=wiki/provider/log` 时包含 URL、来源、检索时间、查询条件或报告路径等可追溯字段
 
 ### 步骤 5：回复委派消息
 
@@ -178,6 +188,7 @@ doc_type: plan
      - `summary`
      - `findings`：数组，可为空
      - `evidence`：数组，至少包含方案文档或关键信息来源
+     - `traceability_path`：`/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/traceability.json`
    - 成功返回示例：
 
 ```json
@@ -188,10 +199,12 @@ doc_type: plan
   "work_branch": "feature/user-nickname_20260320",
   "verdict": "passed",
   "summary": "方案文档已产出，可以进入方案审核。",
+  "traceability_path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/traceability.json",
   "findings": [],
   "evidence": [
     {
       "type": "artifact",
+      "refId": "EVID-PLAN-001",
       "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
       "summary": "已写入 plan.md"
     }
