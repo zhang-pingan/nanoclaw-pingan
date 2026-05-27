@@ -62,7 +62,9 @@
 ```text
 workflow delegation
   -> container agent
-    -> MCP ios_app_* tool
+    -> named MCP ios_app_* tool
+      -> IPC ios_app_request
+      -> host ios_app_request dispatcher
       -> host IosAppReconService
         -> xcrun simctl
         -> Appium / XCUITest
@@ -72,11 +74,61 @@ workflow delegation
         -> product-recon.json / acceptance-report.json
 ```
 
+### MCP 与宿主机承载层边界
+
+第一版采用“外部具名、内部统一路由”的设计：
+
+```text
+Agent 可见层：一批具名 MCP
+  ios_app_prepare
+  ios_app_snapshot
+  ios_app_tap
+  ios_app_type
+  ios_app_run_flow
+  ios_app_run_test_case
+  ...
+
+宿主机承载层：一个 ios_app_request dispatcher
+  { type: "ios_app_request", action: "prepare", payload: {...} }
+  { type: "ios_app_request", action: "snapshot", payload: {...} }
+  { type: "ios_app_request", action: "tap", payload: {...} }
+```
+
+原因：
+
+- 对 agent 暴露具名 MCP，能保留清晰工具语义、独立参数 schema、可读 Trace 和按工具授权能力。
+- 对宿主机只暴露统一 `ios_app_request` IPC 类型，能集中处理权限校验、session、Simulator/Appium 资源锁、超时、日志脱敏、evidence 存储和错误格式。
+- 不建议把通用 `ios_app_request` 直接暴露给 agent 作为正式工具；它可以作为内部承载协议或调试入口。
+
+调用链：
+
+```text
+ios_app_prepare MCP
+  -> write IPC ios_app_request(action=prepare)
+  -> host dispatcher 校验 workflow/stage/service 权限
+  -> IosAppReconService.prepare()
+  -> write IPC result
+  -> MCP 返回结构化 JSON
+```
+
+所有 `ios_app_*` MCP 的返回都应复用统一结果 envelope：
+
+```json
+{
+  "status": "success",
+  "session_id": "IOS-SESSION-001",
+  "action_id": "ACT-001",
+  "evidence": ["PREP-001"],
+  "data": {}
+}
+```
+
 建议新增代码模块：
 
 ```text
 src/app-recon/
   types.ts
+  ios-app-request-dispatcher.ts
   ios-simulator.ts
   ios-appium.ts
   ios-source-index.ts
@@ -88,36 +140,46 @@ src/app-recon/
 
 ## 服务配置
 
-在服务配置中增加 iOS client 信息。示例：
+在现有 `groups/global/services.json` 服务配置中增加 iOS client 信息。当前项目的服务配置是“顶层 service name 为 key”的结构，不再额外包一层 `services`。
+
+示例：
 
 ```json
 {
-  "services": {
-    "catstory": {
-      "repo_path": "catstory-backend",
-      "default_branch": "main",
-      "clients": {
-        "ios": {
-          "repo_path": "catstory-ios",
-          "workspace": "Catstory.xcworkspace",
-          "scheme": "CatstoryDebug",
-          "bundle_id": "com.example.catstory",
-          "simulator": "iPhone 16",
-          "configuration": "Debug",
-          "automation": {
-            "driver": "appium",
-            "launch_args": ["-UITestMode", "1", "-Environment", "staging"],
-            "deep_links": {
-              "profile_edit": "catstory://profile/edit"
-            },
-            "network_log_path": "Library/Caches/IcarusNetworkLog/network.jsonl"
-          }
+  "catstory": {
+    "repo_path": "catstory",
+    "git_url": "git@tx.git.chelaile.net.cn:dev/catstory.git",
+    "default_branch": "master",
+    "clients": {
+      "ios": {
+        "repo_path": "catstory-ios",
+        "git_url": "git@tx.git.chelaile.net.cn:client/catstory-ios.git",
+        "workspace": "Catstory.xcworkspace",
+        "scheme": "CatstoryDebug",
+        "bundle_id": "com.example.catstory",
+        "simulator": "iPhone 16",
+        "configuration": "Debug",
+        "automation": {
+          "driver": "appium",
+          "launch_args": ["-UITestMode", "1", "-Environment", "staging"],
+          "deep_links": {
+            "profile_edit": "catstory://profile/edit"
+          },
+          "network_log_path": "Library/Caches/IcarusNetworkLog/network.jsonl"
         }
       }
     }
   }
 }
 ```
+
+配置规则：
+
+- `repo_path` 必须是相对路径，不能为空，不能包含绝对路径、`.`、`..` 或空 path segment，解析后必须位于 `REPOS_DIR` 下。
+- 后端服务仓库继续使用服务自身的 `repo_path`，iOS client 仓库使用 `clients.ios.repo_path`。
+- iOS client repo 第一版由宿主机 `IosAppReconService` 读取和搜索，不默认挂载给容器；容器只通过 `ios_app_search_client_code` 获取受控源码片段。
+- 如果后续需要容器直接读取 iOS repo，应复用现有 service mount 安全规则，并显式声明 `clients.ios.mount_to_container: true`，默认仍为 false。
+- `git_url` 可选；若本地 `REPOS_DIR/{clients.ios.repo_path}` 不存在，第一版直接返回配置错误，不自动 clone。
 
 ## iOS 工程配合要求
 
@@ -134,6 +196,8 @@ src/app-recon/
 没有这些能力时仍可通过 UI tree 和截图探索，但可复现性和测试稳定性会下降。
 
 ## MCP 工具定义
+
+以下 `ios_app_*` 均为 agent 可见的具名 MCP。容器侧 MCP 只负责参数校验、写入统一 `ios_app_request` IPC、等待宿主机结果并返回结构化 JSON；真正的 Simulator、Appium、源码搜索、网络日志和 evidence 写入都在宿主机 `ios_app_request dispatcher` 与 `IosAppReconService` 内完成。
 
 ### ios_app_prepare
 
@@ -562,6 +626,13 @@ prepare
 
 ## Workflow 接入
 
+当前项目的 `deliverable_file` 校验只允许 `.md` 文件。为了让 `product-recon.json` 和 `acceptance-report.json` 成为正式 workflow artifact，接入前需要先扩展 artifact 系统支持 JSON deliverable：
+
+- `WorkflowArtifactDefinition.file` 和角色 `deliverable_file` 允许 `.json`。
+- artifact contract 支持 JSON 文件 schema 校验，而不要求 frontmatter。
+- 工作台 artifact 列表能展示和下载 JSON 产物。
+- handoff / evaluator 能把 JSON artifact path 纳入校验和 Trace。
+
 建议新增两个角色：
 
 ```json
@@ -576,6 +647,11 @@ prepare
   }
 }
 ```
+
+对应 artifact contract：
+
+- `ios.product_recon.v1`：要求 `projects/{{service}}/iteration/{{deliverable}}/product-recon.json` 存在，并校验 `version/platform/app/flows/evidence/open_questions` 等关键字段。
+- `ios.acceptance_report.v1`：要求 `projects/{{service}}/iteration/{{deliverable}}/acceptance-report.json` 存在，并校验 `version/platform/summary/cases/evidence` 等关键字段。
 
 推荐状态：
 
@@ -678,6 +754,9 @@ Quality Gate 示例：
 
 ### Phase 1：Product Recon 最小闭环
 
+- 实现内部 `ios_app_request` IPC 协议和宿主机 dispatcher。
+- 容器侧暴露具名 MCP，并统一转发到 `ios_app_request`。
+- dispatcher 统一处理 workflow/stage/service 权限、session、资源锁、超时、脱敏和 evidence envelope。
 - 实现 `ios_app_prepare`。
 - 实现 `ios_app_snapshot`。
 - 实现 `ios_app_tap/type/run_flow`。
@@ -692,6 +771,7 @@ Quality Gate 示例：
 
 ### Phase 3：工作流接入
 
+- 扩展 workflow artifact 系统支持 JSON deliverable 和 JSON artifact contract。
 - 新增 `product_recon` 角色和 skill。
 - plan prompt 注入 `product-recon.json`。
 - Context Pack 纳入 `ios_product_recon` source。

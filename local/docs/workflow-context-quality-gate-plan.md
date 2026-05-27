@@ -48,6 +48,10 @@ workflow stage 对上下文的声明。它描述“本阶段需要哪些来源�
 {
   "context_requirements": {
     "readiness_policy": "block_if_required_missing",
+    "on_block": {
+      "target": "context_input",
+      "retry_action": "submit"
+    },
     "sources": [
       {
         "id": "user_input",
@@ -61,20 +65,20 @@ workflow stage 对上下文的声明。它描述“本阶段需要哪些来源�
         "refs": ["plan_doc", "dev_doc"]
       },
       {
-        "id": "service_codebase",
-        "type": "codebase",
+        "id": "service_codebase_location",
+        "type": "codebase_location",
         "required": true,
         "service": "{{service}}",
         "fields": ["repo_path", "container_path"],
         "verify_exists": true,
-        "verify_mounted_for_role": true,
-        "include_content": false,
-        "search": false
+        "verify_mounted_for_role": true
       }
     ]
   }
 }
 ```
+
+第一版只允许三类 source：`workflow_input`、`artifact`、`codebase_location`。`codebase_location` 只表示代码库位置、宿主机路径存在性和目标 role 容器挂载可达性，不能携带代码摘要、搜索结果、调用链、影响文件或业务结论。
 
 ### Context Pack
 
@@ -104,7 +108,7 @@ workflow stage 对上下文的声明。它描述“本阶段需要哪些来源�
   "query_plan": [],
   "input_refs": [],
   "prior_artifacts": [],
-  "codebase_refs": [],
+  "codebase_location_refs": [],
   "excluded_candidates": [],
   "evidence_index": []
 }
@@ -163,11 +167,11 @@ workflow stage 对上下文的声明。它描述“本阶段需要哪些来源�
 第一版只支持显式 source，因此不需要搜索词预填充。`query_plan` 只记录本阶段按配置解析出的 source 计划：
 
 - workflow 元数据：`workflow_type`、`stage_key`、`role`、`skill`、`service`。
-- 配置声明的 source：`workflow_input`、`artifact`、`codebase`，以及专项 provider 如 `ios_app_recon`。
+- 配置声明的 source 第一版仅允许：`workflow_input`、`artifact`、`codebase_location`。
 - 每个 source 的 `required`、`refs`、`fields`、`required_when`、`on_missing`。
-- 服务配置中用于解析 `codebase.repo_path` 和 `codebase.container_path` 的字段。
+- 服务配置中用于解析 `codebase_location.repo_path` 和 `codebase_location.container_path` 的字段。
 
-代码类上下文只用于定位代码库，不用于替代 coding agent 阅读代码。当前项目服务仓库来自 `groups/global/services.json` 的 `repo_path`，容器路径为 `/workspace/repos/{repo_path}`；`icarus` 等特殊服务如已有明确约定，可由 provider 解析为 `/workspace/project`。Context Pack 只提供 `repo_path`、`host_path`、`container_path`、路径存在性和目标 role 所在 group 是否具备该服务挂载能力；不应预先做代码搜索、代码摘要、调用链推断、受影响文件判断或分支状态判断。分支字段继续通过 workflow context 和 `context.require` 校验。
+代码类上下文第一版统一命名为 `codebase_location`，只用于定位代码库，不用于替代 coding agent 阅读代码。当前项目服务仓库来自 `groups/global/services.json` 的 `repo_path`，容器路径为 `/workspace/repos/{repo_path}`；`icarus` 等特殊服务如已有明确约定，可由 provider 解析为 `/workspace/project`。Context Pack 只提供 `repo_path`、`host_path`、`container_path`、路径存在性和目标 role 所在 group 是否具备该服务挂载能力；不应预先做代码搜索、代码摘要、调用链推断、受影响文件判断或分支状态判断。分支字段继续通过 workflow context 和 `context.require` 校验。
 
 示例 Query Plan：
 
@@ -185,8 +189,8 @@ workflow stage 对上下文的声明。它描述“本阶段需要哪些来源�
       "refs": ["plan_doc", "plan_coverage"]
     },
     {
-      "id": "service_codebase",
-      "type": "codebase",
+      "id": "service_codebase_location",
+      "type": "codebase_location",
       "fields": ["repo_path", "container_path"]
     }
   ]
@@ -213,7 +217,7 @@ Query Plan 必须写入 trace，便于审计“为什么收集这些材料”。
 
 - workflow input 的字段路径或附件路径。
 - artifact 的文件路径和片段。
-- codebase 的容器路径和路径存在性校验记录；它只能证明代码库位置，不能直接证明业务或实现结论。
+- codebase_location 的容器路径和路径存在性校验记录；它只能证明代码库位置，不能直接证明业务或实现结论。
 - agent 阅读代码后在阶段产物中新增的代码 evidence，例如文件、符号、行号范围和摘要。
 - agent 执行 command、测试、脚本或 API 调用后新增的执行 evidence。
 - agent 检索 wiki、日志或其他授权 provider 后新增的外部 evidence。
@@ -291,7 +295,28 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 - 转入 workflow definition 中配置的 `human_input` interrupt。
 - 转入专门的 `context_blocked` 状态，并提供补充上下文后重试当前 stage 的 resume action。
 
-若 workflow 未配置阻断目标，Phase 2 的编译校验应禁止该 stage 将 readiness policy 配为 blocking。
+Blocking readiness 必须在 `context_requirements.on_block` 中显式声明恢复路径：
+
+```json
+{
+  "context_requirements": {
+    "readiness_policy": "block_if_required_missing",
+    "on_block": {
+      "target": "context_input",
+      "retry_action": "submit"
+    }
+  }
+}
+```
+
+编译期校验规则：
+
+- 只要 `readiness_policy` 是 blocking，就必须配置 `on_block.target` 和 `on_block.retry_action`。
+- `on_block.target` 必须指向 `interrupt.kind=human_input`，或指向专门的 `context_blocked` 状态。
+- 若目标是 `human_input` interrupt，则 `retry_action` 必须存在于该 interrupt 的 `allowed_actions` 和 `on_resume` 中。
+- 若目标是 `context_blocked` 状态，则该状态必须提供“补充上下文后重试当前 stage”的 resume action，且不能落回普通 hook failure。
+
+若 workflow 未配置合法阻断目标，Phase 2 的编译校验应禁止该 stage 将 readiness policy 配为 blocking。
 
 ## Delegation Prompt 注入
 
@@ -413,6 +438,13 @@ LLM judge 只做语义补充：
 
 新增 `context_coverage`、`evidence`、`consistency`、`execution` evaluator 在 Phase 3/4 接入。接入前，`quality_gate` 配置可以声明这些 evaluator，但编译校验必须阻止将未实现 evaluator 配为 blocking。
 
+Pipeline 必须保留 evaluator 分项结果，不能只写一个最终 `hybrid` verdict。当前 `workflow_stage_evaluations.evaluator_type` 是文本列，可直接存新 evaluator type；TypeScript 的 `WorkflowStageEvaluatorType` union 需要同步扩展为 `schema`、`artifact`、`stage_rules`、`context_coverage`、`evidence`、`consistency`、`execution`、`llm_judge`、`quality_gate` 等类型。Phase 4 的推荐记录方式：
+
+- 每个 evaluator 产出独立 result，包含 `status`、`score`、`summary`、`findings`、`evidence`、`blocking`、`source_evaluation_ids`。
+- blocking evaluator 失败时，最终 `quality_gate` result 负责聚合并驱动 transition，但原始分项 result 必须可审计。
+- 第一版包装现有链路时，`artifact`、`stage_rules`、`llm_judge` 应保留独立 evaluation record；如暂不拆 record，也必须在 `quality_gate` result 的 findings/evidence 中保留 evaluator type 和原始 evaluation id。
+- UI/trace 展示应能定位“哪个 evaluator 阻断”，而不是只展示 `hybrid` 或 `pending`。
+
 ## 数据存储
 
 第一版使用 JSON 文件作为权威存储，不建表，不依赖 deliverable，不做路径 fallback。Context Pack 是 workflow 运行态材料，统一写到 service 级目录：
@@ -463,6 +495,7 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 - `src/workflow-compiler.ts`
   - `CompiledWorkflowState` 必须保留 `context_requirements`、`quality_gate`。
   - `validateWorkflowDefinition()` 必须校验 source type、evaluator type、blocking evaluator 是否已实现、重复 source id、非法字段组合。
+  - `validateWorkflowDefinition()` 必须校验 blocking readiness 的 `on_block.target` 和 `retry_action` 指向合法 resume 路径。
 - `src/workflow-config.ts`
   - `StateConfig` 必须暴露 `context_requirements`、`quality_gate`，否则运行时无法读取。
 - `src/workflow.ts`
@@ -474,13 +507,16 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
   - 增加 `context_pack_path`、`context_pack_immutable_path`、`context_pack_hash`、`context_pack_summary`、`context_pack_open_questions`、`context_readiness_status`、`context_pack_generated_at` 等 key。
 - 新增 `src/workflow-context-pack.ts`
   - 负责 signal extraction、query plan、retrieval、gating、路径安全校验、原子写入、hash 计算、pack summary 生成。
-  - codebase provider 从 `groups/global/services.json` 解析 `repo_path`，再得到 `/workspace/repos/{repo_path}`；同时检查目标 role 对应 group 是否挂载该 service。
+  - 第一版 source provider 仅支持 `workflow_input`、`artifact`、`codebase_location`。
+  - codebase_location provider 从 `groups/global/services.json` 解析 `repo_path`，再得到 `/workspace/repos/{repo_path}`；同时检查目标 role 对应 group 是否挂载该 service。
+  - codebase_location provider 禁止做代码搜索、摘要、调用链分析、影响文件推断或分支判断。
 - 新增 `src/workflow-quality-gate.ts`
   - 第一版先包装现有 stage rules、artifact contract 和 llm judge sidecar，不产生第二套冲突结论。
+  - 每个 evaluator 分项结果必须保留；最终 gate 只做聚合和 transition 判定。
 - `src/workflow-stage-evaluation.ts`
   - 后续拆分现有 stage evaluator，接入通用 evaluator result merge。
 - `src/types.ts`
-  - 扩展 `WorkflowEvalEvidence` 和 `WorkflowStageEvaluatorType`，为 `context_coverage`、`evidence`、`consistency`、`execution` 预留类型。
+  - 扩展 `WorkflowEvalEvidence` 和 `WorkflowStageEvaluatorType`，为 `schema`、`artifact`、`stage_rules`、`context_coverage`、`evidence`、`consistency`、`execution`、`quality_gate` 预留类型。
 - `src/db.ts`
   - `workflow_stage_evaluations.evaluator_type` 当前是文本列，可直接存新 evaluator type；TypeScript union 需要同步扩展。
 - `electron/renderer/app.js`
@@ -493,13 +529,20 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 - 在 `WorkflowDefinitionStateBase`、`CompiledWorkflowState`、`StateConfig` 同步增加 `context_requirements`、`quality_gate`。
 - compiler 校验新增字段，并确保 editor 保存不会丢字段。
 - 扩展 workflow context key 常量。
+- 增加端到端配置保真测试：
+  - workflow JSON 中写入 `context_requirements`、`quality_gate` 后，`validateWorkflowDefinition()` 不应误删或忽略合法字段。
+  - `compileWorkflowDefinitions()` 输出的 `CompiledWorkflowState` 必须保留这两个字段。
+  - `getWorkflowTypeConfig()` 返回的 `StateConfig` 必须能读取这两个字段。
+  - `createDelegationForState()` 所接收的 `stateConfig` 必须包含这两个字段，保证后续运行时可接入 Context Pack builder。
+  - renderer workflow definition 保存草稿时不得丢失这两个字段；若表单 UI 暂不支持编辑，也必须在本地校验和 JSON 模式保存中保留。
 - 不改变运行时行为。
 
 ### Phase 1：只做可审计 Context Pack
 
 - 增加少量 `context_requirements` 配置，从 `dev_test.plan`、`dev_test.dev` 开始试点。
 - 构建 Query Plan。
-- 从 workflow input、artifact 收集候选，并从 service config 解析 codebase 元信息。
+- 第一版只实现 `workflow_input`、`artifact`、`codebase_location` 三类 source；配置出现其他 source type 时编译校验报错。
+- 从 workflow input、artifact 收集候选，并从 service config 解析 codebase_location 元信息。
 - 输出 service 级 context pack 文件：
   - `projects/{service}/workflow-context/{workflow_id}/{stage_key}/context-pack.r{round}.a{attempt}.json`
   - `projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json`
@@ -510,6 +553,7 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 ### Phase 2：启用 Readiness Gate
 
 - required source 缺失时阻断，但必须进入明确的 `human_input` interrupt 或 `context_blocked` 状态，不能只表现为普通 hook failure。
+- blocking readiness 必须配置 `context_requirements.on_block.target` 和 `retry_action`；编译期校验目标状态和 resume action 合法。
 - required source 冲突时阻断，并把 conflicts 写入 context pack 和 interrupt body。
 - open questions 非空时按配置转 human input；允许 workflow 配置 `allow_open_questions: true` 的非阻断阶段。
 - 增加“补充上下文后重试当前 stage”的 resume 路径。
@@ -527,6 +571,7 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 
 - `workflow-quality-gate.ts` 包装现有 `evaluateWorkflowStage()`、artifact contract、LLM judge sidecar。
 - schema、artifact、stage_rules、llm_judge 先接入。
+- 保留 evaluator 分项结果；最终 `quality_gate` 只聚合 blocking/non-blocking 结果并驱动 transition。
 - context_coverage、evidence、consistency、execution evaluator 逐步接入。
 - 支持 workflow 配置 blocking/non-blocking。
 - LLM judge 继续默认 sidecar；只有确定性 evaluator 覆盖足够后，才允许特定流程配置为 blocking。
@@ -541,15 +586,15 @@ projects/{service}/workflow-context/{workflow_id}/{stage_key}/latest.json
 | 过度阻断 | 第一版只记录不阻断，成熟后逐步打开 blocking |
 | 配置复杂 | 提供默认 preset：`service_task`、`document_review`、`ops_action`、`incident_response` |
 | LLM 误判 | LLM judge 不作为唯一质量门，确定性 evaluator 优先 |
-| 配置写入但运行时不生效 | definition、compiled config、runtime config、editor 四处同步新增字段并加编译校验 |
+| 配置写入但运行时不生效 | definition、compiled config、runtime config、editor 四处同步新增字段，并增加端到端配置保真测试 |
 | plan 阶段没有 deliverable 导致 pack 无处落盘 | 不依赖 deliverable，固定写入 `projects/{service}/workflow-context/{workflow_id}/{stage_key}` |
 | 单文件覆盖导致不可审计 | 写入版本化 `context-pack.r{round}.a{attempt}.json`，同时维护 `latest.json` |
 | agent 读到半截 JSON | 临时文件写入后原子 rename |
 | workflow context 泄露凭据 | Context Pack source 过滤敏感 key，只记录 redacted 字段路径 |
 | readiness 阻断后流程卡死 | 阻断必须转 `human_input` interrupt 或明确 `context_blocked` 状态，并提供 resume retry |
-| codebase path 与容器挂载不一致 | codebase provider 从 `services.json.repo_path` 和目标 role group mount 配置共同验证 |
+| codebase path 与容器挂载不一致 | codebase_location provider 从 `services.json.repo_path` 和目标 role group mount 配置共同验证 |
 | Evidence Evaluator 超出现有证据模型 | Phase 3 先扩展 `WorkflowEvalEvidence` 和 traceability artifact，再启用 blocking evidence |
-| Quality Gate 与现有 evaluator 双重结论冲突 | Phase 4 先包装现有链路，不新增并行最终 verdict |
+| Quality Gate 与现有 evaluator 双重结论冲突 | Phase 4 先包装现有链路；保留 evaluator 分项结果，由最终 quality_gate result 统一聚合 |
 
 ## 成功标准
 
