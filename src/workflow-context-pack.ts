@@ -114,10 +114,30 @@ function assertSafePathSegment(label: string, value: string): void {
   }
 }
 
-function workspaceProjectPath(hostPath: string): string {
-  const relative = path.relative(PROJECT_ROOT, hostPath);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) return hostPath;
-  return `/workspace/project/${relative.split(path.sep).join('/')}`;
+function isSafeWorkspacePathSegment(value: string): boolean {
+  const segment = value.trim();
+  return (
+    !!segment &&
+    !segment.includes('\0') &&
+    segment !== '.' &&
+    segment !== '..' &&
+    !segment.includes('/') &&
+    !segment.includes('\\') &&
+    !path.isAbsolute(segment)
+  );
+}
+
+function isSafeRelativeRepoPath(repoPath: string): boolean {
+  const normalized = repoPath.trim();
+  return (
+    !!normalized &&
+    !normalized.includes('\0') &&
+    !normalized.includes('\\') &&
+    !path.isAbsolute(normalized) &&
+    normalized.split('/').every((segment) => {
+      return !!segment && segment !== '.' && segment !== '..';
+    })
+  );
 }
 
 function workspaceContextPath(
@@ -258,6 +278,16 @@ function groupCanMountService(
   return services.includes('*') || services.includes(service);
 }
 
+function nextRefId(
+  prefix: string,
+  existing: Array<Record<string, unknown>>,
+): string {
+  const count = existing.filter((item) =>
+    String(item.ref_id || '').startsWith(`${prefix}-`),
+  ).length;
+  return `${prefix}-${String(count + 1).padStart(3, '0')}`;
+}
+
 function artifactPathFromRef(workflow: Workflow, ref: string): string {
   if (ref.endsWith('_doc')) {
     const fileName =
@@ -280,17 +310,67 @@ function artifactPathFromRef(workflow: Workflow, ref: string): string {
   return typeof contextValue === 'string' ? contextValue.trim() : '';
 }
 
-function hostPathFromWorkspacePath(workspacePath: string): string {
-  if (workspacePath.startsWith('/workspace/projects/')) {
-    return path.join(PROJECT_ROOT, workspacePath.replace(/^\/workspace\//, ''));
+function scopedHostPathFromWorkspacePath(input: {
+  workflow: Workflow;
+  workspacePath: string;
+  allowedKinds: Array<'deliverable' | 'context_pack'>;
+}): { hostPath: string; error?: string } {
+  const workspacePath = input.workspacePath.trim();
+  if (!workspacePath) return { hostPath: '', error: 'path_missing' };
+  if (
+    workspacePath.includes('\0') ||
+    workspacePath.split('/').some((segment) => segment === '..')
+  ) {
+    return { hostPath: '', error: 'path_invalid' };
   }
-  if (workspacePath.startsWith('/workspace/project/')) {
-    return path.join(
-      PROJECT_ROOT,
-      workspacePath.replace(/^\/workspace\/project\//, ''),
+
+  const allowedPrefixes: string[] = [];
+  if (input.allowedKinds.includes('deliverable')) {
+    const deliverable = getWorkflowContextValue(
+      input.workflow,
+      WORKFLOW_CONTEXT_KEYS.deliverable,
+    );
+    if (deliverable && isSafeWorkspacePathSegment(deliverable)) {
+      allowedPrefixes.push(
+        `/workspace/projects/${input.workflow.service}/iteration/${deliverable}/`,
+      );
+    }
+  }
+  if (input.allowedKinds.includes('context_pack')) {
+    allowedPrefixes.push(
+      `/workspace/projects/${input.workflow.service}/workflow-context/${input.workflow.id}/`,
     );
   }
-  return workspacePath;
+
+  if (
+    allowedPrefixes.length === 0 ||
+    !allowedPrefixes.some((prefix) => workspacePath.startsWith(prefix))
+  ) {
+    return { hostPath: '', error: 'scope_mismatch' };
+  }
+
+  if (workspacePath.startsWith('/workspace/projects/')) {
+    return {
+      hostPath: path.join(
+        PROJECT_ROOT,
+        workspacePath.replace(/^\/workspace\//, ''),
+      ),
+    };
+  }
+  return { hostPath: '', error: 'unsupported_path' };
+}
+
+function artifactStalenessReason(input: {
+  modifiedAt: Date;
+  maxAgeDays?: number;
+  now?: Date;
+}): string {
+  if (input.maxAgeDays === undefined) return '';
+  const now = input.now || new Date();
+  const maxAgeMs = input.maxAgeDays * 24 * 60 * 60 * 1000;
+  return now.getTime() - input.modifiedAt.getTime() > maxAgeMs
+    ? 'stale'
+    : '';
 }
 
 function collectWorkflowInputSource(input: {
@@ -324,7 +404,7 @@ function collectWorkflowInputSource(input: {
       return;
     }
     presentCount += 1;
-    const refId = `INPUT-${String(index + 1).padStart(3, '0')}`;
+    const refId = nextRefId('INPUT', input.evidence);
     refs.push({
       ref_id: refId,
       source_id: input.source.id,
@@ -340,7 +420,7 @@ function collectWorkflowInputSource(input: {
       summary,
     });
   });
-  if (isSourceRequired(input.source) && presentCount === 0) {
+  if (isSourceRequired(input.source) && presentCount < fields.length) {
     input.missing.push(input.source.id);
   }
   return refs;
@@ -366,18 +446,25 @@ function collectArtifactSource(input: {
   }
 
   let foundCount = 0;
-  sourceRefs.forEach((ref, index) => {
+  sourceRefs.forEach((ref) => {
     const workspacePath = artifactPathFromRef(input.workflow, ref);
-    const hostPath = workspacePath ? hostPathFromWorkspacePath(workspacePath) : '';
+    const resolved = workspacePath
+      ? scopedHostPathFromWorkspacePath({
+          workflow: input.workflow,
+          workspacePath,
+          allowedKinds: ['deliverable'],
+        })
+      : { hostPath: '', error: 'unresolved_ref' };
+    const hostPath = resolved.hostPath;
     const exists = !!hostPath && fs.existsSync(hostPath);
-    const refId = `ART-${String(index + 1).padStart(3, '0')}`;
-    if (!workspacePath || !exists) {
+    const refId = nextRefId('ART', input.evidence);
+    if (!workspacePath || resolved.error || !exists) {
       input.excluded.push({
         source_id: input.source.id,
         type: input.source.type,
         ref,
         path: workspacePath || '',
-        reason: workspacePath ? 'path_missing' : 'unresolved_ref',
+        reason: resolved.error || 'path_missing',
       });
       return;
     }
@@ -389,6 +476,22 @@ function collectArtifactSource(input: {
         ref,
         path: workspacePath,
         reason: 'not_file',
+      });
+      return;
+    }
+    const staleReason = artifactStalenessReason({
+      modifiedAt: stat.mtime,
+      maxAgeDays: input.source.max_age_days,
+    });
+    if (staleReason) {
+      input.excluded.push({
+        source_id: input.source.id,
+        type: input.source.type,
+        ref,
+        path: workspacePath,
+        modified_at: stat.mtime.toISOString(),
+        max_age_days: input.source.max_age_days,
+        reason: staleReason,
       });
       return;
     }
@@ -432,30 +535,39 @@ function collectCodebaseLocationSource(input: {
   const service = input.source.service?.trim() || input.workflow.service;
   const allServices = readServicesConfig();
   const serviceConfig = allServices[service];
-  const currentRepo = path.relative(REPOS_DIR, PROJECT_ROOT).split(path.sep).join('/');
+  const currentRepoRelative = path
+    .relative(REPOS_DIR, PROJECT_ROOT)
+    .split(path.sep)
+    .join('/');
+  const currentRepo = isSafeRelativeRepoPath(currentRepoRelative)
+    ? currentRepoRelative
+    : path.basename(PROJECT_ROOT);
   const repoPath =
     typeof serviceConfig?.repo_path === 'string'
       ? serviceConfig.repo_path.trim()
-      : service === 'icarus' || service === input.workflow.service
+      : service === 'icarus'
         ? currentRepo || path.basename(PROJECT_ROOT)
         : '';
-  const existsInConfig =
-    !!serviceConfig || service === 'icarus' || service === input.workflow.service;
+  const repoPathIsSafe = !repoPath || isSafeRelativeRepoPath(repoPath);
+  const existsInConfig = !!serviceConfig || service === 'icarus';
   const hostPath =
+    repoPath &&
+    repoPathIsSafe &&
     getContainerPathForRepo(service, repoPath) === '/workspace/project'
       ? PROJECT_ROOT
-      : repoPath
+      : repoPath && repoPathIsSafe
         ? path.join(REPOS_DIR, repoPath)
         : '';
   const hostPathExists = !!hostPath && fs.existsSync(hostPath);
-  const containerPath = repoPath ? getContainerPathForRepo(service, repoPath) : '';
+  const containerPath =
+    repoPath && repoPathIsSafe ? getContainerPathForRepo(service, repoPath) : '';
   const targetGroup = Object.values(input.registeredGroups).find(
     (group) => group.folder === input.targetFolder,
   );
   const mountedForRole =
     containerPath === '/workspace/project' ||
     groupCanMountService(targetGroup, service);
-  const refId = 'CODEBASE-001';
+  const refId = nextRefId('CODEBASE', input.evidence);
   const item = {
     ref_id: refId,
     source_id: input.source.id,
@@ -473,7 +585,9 @@ function collectCodebaseLocationSource(input: {
   };
 
   const failedChecks: string[] = [];
+  if (!existsInConfig) failedChecks.push('service_config_missing');
   if (!repoPath) failedChecks.push('repo_path_missing');
+  if (repoPath && !repoPathIsSafe) failedChecks.push('repo_path_invalid');
   if (input.source.verify_exists && !hostPathExists) {
     failedChecks.push('host_path_missing');
   }
@@ -555,18 +669,26 @@ function buildPromptSummary(pack: Pick<
   return parts.join('; ');
 }
 
-function atomicWriteJson(filePath: string, value: unknown): string {
-  const content = `${JSON.stringify(value, null, 2)}\n`;
+function sha256(content: string): string {
+  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
+}
+
+function packWithCanonicalHash(pack: WorkflowContextPack): {
+  pack: WorkflowContextPack;
+  content: string;
+} {
+  const canonicalContent = `${JSON.stringify({ ...pack, hash: '' }, null, 2)}\n`;
+  const finalized = { ...pack, hash: sha256(canonicalContent) };
+  const content = `${JSON.stringify(finalized, null, 2)}\n`;
+  return { pack: finalized, content };
+}
+
+function atomicWriteContent(filePath: string, content: string): void {
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
   fs.writeFileSync(tempPath, content, 'utf-8');
   fs.renameSync(tempPath, filePath);
-  return content;
-}
-
-function sha256(content: string): string {
-  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
 }
 
 export function buildWorkflowContextPack(
@@ -691,14 +813,10 @@ export function buildWorkflowContextPack(
   packWithoutHash.prompt_summary = buildPromptSummary(packWithoutHash);
 
   const hostImmutablePackPath = path.join(hostDir, immutableFileName);
-  const immutableContent = atomicWriteJson(hostImmutablePackPath, packWithoutHash);
-  const hash = sha256(immutableContent);
-  const pack: WorkflowContextPack = {
-    ...packWithoutHash,
-    hash,
-  };
+  const { pack, content } = packWithCanonicalHash(packWithoutHash);
+  atomicWriteContent(hostImmutablePackPath, content);
   const hostPackPath = path.join(hostDir, latestFileName);
-  atomicWriteJson(hostPackPath, pack);
+  atomicWriteContent(hostPackPath, content);
 
   const openQuestionsText = readiness.open_questions.length
     ? readiness.open_questions.join('\n')

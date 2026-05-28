@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { PROJECT_ROOT } from './config.js';
+import { GROUPS_DIR, PROJECT_ROOT, REPOS_DIR } from './config.js';
 import type {
   Delegation,
   Workflow,
@@ -74,6 +74,11 @@ interface LoadedContextPack {
   error?: string;
 }
 
+interface ServiceConfig {
+  repo_path?: string;
+  [key: string]: unknown;
+}
+
 export interface WorkflowQualityGateComponentRecordInput {
   evaluatorType: WorkflowStageEvaluatorType;
   result: WorkflowStageEvalResult;
@@ -116,6 +121,68 @@ function parseJsonObject(raw: string): Record<string, unknown> | null {
   }
 }
 
+function readServicesConfig(): Record<string, ServiceConfig> {
+  const servicesPath = path.join(GROUPS_DIR, 'global', 'services.json');
+  if (!fs.existsSync(servicesPath)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(servicesPath, 'utf-8'));
+    return isPlainObject(parsed)
+      ? (parsed as Record<string, ServiceConfig>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function isSafeWorkspacePathSegment(value: string): boolean {
+  const segment = value.trim();
+  return (
+    !!segment &&
+    !segment.includes('\0') &&
+    segment !== '.' &&
+    segment !== '..' &&
+    !segment.includes('/') &&
+    !segment.includes('\\') &&
+    !path.isAbsolute(segment)
+  );
+}
+
+function isSafeRelativeRepoPath(repoPath: string): boolean {
+  const normalized = repoPath.trim();
+  return (
+    !!normalized &&
+    !normalized.includes('\0') &&
+    !normalized.includes('\\') &&
+    !path.isAbsolute(normalized) &&
+    normalized.split('/').every((segment) => {
+      return !!segment && segment !== '.' && segment !== '..';
+    })
+  );
+}
+
+function currentRepoPath(): string {
+  const relative = path.relative(REPOS_DIR, PROJECT_ROOT).split(path.sep).join('/');
+  return isSafeRelativeRepoPath(relative) ? relative : path.basename(PROJECT_ROOT);
+}
+
+function serviceRepoPath(workflow: Workflow): string {
+  const configured = readServicesConfig()[workflow.service]?.repo_path;
+  const repoPath =
+    typeof configured === 'string'
+      ? configured.trim()
+      : workflow.service === 'icarus'
+        ? currentRepoPath()
+        : '';
+  return repoPath && isSafeRelativeRepoPath(repoPath) ? repoPath : '';
+}
+
+function workspacePathMatchesPrefix(
+  workspacePath: string,
+  prefix: string,
+): boolean {
+  return workspacePath === prefix || workspacePath.startsWith(`${prefix}/`);
+}
+
 function getDelegationPayload(
   delegation: Delegation | null | undefined,
 ): Record<string, unknown> {
@@ -125,17 +192,100 @@ function getDelegationPayload(
   return parseJsonObject(delegation.result) || {};
 }
 
-function workspaceToHostPath(workspacePath: string): string {
-  if (workspacePath.startsWith('/workspace/projects/')) {
-    return path.join(PROJECT_ROOT, workspacePath.replace(/^\/workspace\//, ''));
+type ScopedWorkspacePathKind = 'deliverable' | 'context_pack';
+
+function scopedWorkspacePrefixes(
+  workflow: Workflow,
+  kinds: ScopedWorkspacePathKind[],
+): string[] {
+  const prefixes: string[] = [];
+  if (kinds.includes('deliverable')) {
+    const deliverable = getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.deliverable,
+    );
+    if (deliverable && isSafeWorkspacePathSegment(deliverable)) {
+      prefixes.push(
+        `/workspace/projects/${workflow.service}/iteration/${deliverable}/`,
+      );
+    }
   }
-  if (workspacePath.startsWith('/workspace/project/')) {
-    return path.join(
-      PROJECT_ROOT,
-      workspacePath.replace(/^\/workspace\/project\//, ''),
+  if (kinds.includes('context_pack')) {
+    prefixes.push(
+      `/workspace/projects/${workflow.service}/workflow-context/${workflow.id}/`,
     );
   }
-  return workspacePath;
+  return prefixes;
+}
+
+function scopedWorkspaceToHostPath(input: {
+  workflow: Workflow;
+  workspacePath: string;
+  allowedKinds: ScopedWorkspacePathKind[];
+}): { hostPath: string; error?: string } {
+  const workspacePath = input.workspacePath.trim();
+  if (!workspacePath) return { hostPath: '', error: 'path_missing' };
+  if (
+    workspacePath.includes('\0') ||
+    workspacePath.split('/').some((segment) => segment === '..')
+  ) {
+    return { hostPath: '', error: 'path_invalid' };
+  }
+  if (!workspacePath.startsWith('/workspace/projects/')) {
+    return { hostPath: '', error: 'unsupported_path' };
+  }
+  const prefixes = scopedWorkspacePrefixes(input.workflow, input.allowedKinds);
+  if (
+    prefixes.length === 0 ||
+    !prefixes.some((prefix) => workspacePath.startsWith(prefix))
+  ) {
+    return { hostPath: '', error: 'scope_mismatch' };
+  }
+  return {
+    hostPath: path.join(
+      PROJECT_ROOT,
+      workspacePath.replace(/^\/workspace\//, ''),
+    ),
+  };
+}
+
+function workspaceEvidenceScopeError(input: {
+  workflow: Workflow;
+  workspacePath: string;
+  evidenceType: WorkflowEvalEvidence['type'];
+}): string {
+  const workspacePath = input.workspacePath.trim();
+  if (!workspacePath) return '';
+  if (!workspacePath.startsWith('/workspace/')) return '';
+  if (
+    workspacePath.includes('\0') ||
+    workspacePath.split('/').some((segment) => segment === '..')
+  ) {
+    return 'path_invalid';
+  }
+  if (input.evidenceType === 'code') {
+    const repoPath = serviceRepoPath(input.workflow);
+    if (
+      repoPath &&
+      workspacePathMatchesPrefix(workspacePath, `/workspace/repos/${repoPath}`)
+    ) {
+      return '';
+    }
+    if (
+      repoPath &&
+      (repoPath === 'icarus' || repoPath === currentRepoPath()) &&
+      workspacePathMatchesPrefix(workspacePath, '/workspace/project')
+    ) {
+      return '';
+    }
+    return 'scope_mismatch';
+  }
+  const resolved = scopedWorkspaceToHostPath({
+    workflow: input.workflow,
+    workspacePath,
+    allowedKinds: ['deliverable'],
+  });
+  return resolved.error || '';
 }
 
 function defaultTraceabilityWorkspacePath(workflow: Workflow): string {
@@ -143,11 +293,16 @@ function defaultTraceabilityWorkspacePath(workflow: Workflow): string {
     workflow,
     WORKFLOW_CONTEXT_KEYS.deliverable,
   );
-  if (!deliverable) return '';
+  if (!deliverable || !isSafeWorkspacePathSegment(deliverable)) return '';
   return `/workspace/projects/${workflow.service}/iteration/${deliverable}/traceability.json`;
 }
 
-function loadJsonFile(workspacePath: string): LoadedContextPack {
+function loadJsonFile(input: {
+  workflow: Workflow;
+  workspacePath: string;
+  allowedKinds: ScopedWorkspacePathKind[];
+}): LoadedContextPack {
+  const workspacePath = input.workspacePath;
   if (!workspacePath) {
     return {
       pack: null,
@@ -157,7 +312,17 @@ function loadJsonFile(workspacePath: string): LoadedContextPack {
       error: 'path_missing',
     };
   }
-  const hostPath = workspaceToHostPath(workspacePath);
+  const resolved = scopedWorkspaceToHostPath(input);
+  if (resolved.error) {
+    return {
+      pack: null,
+      hostPath: '',
+      workspacePath,
+      source: 'invalid',
+      error: resolved.error,
+    };
+  }
+  const hostPath = resolved.hostPath;
   if (!hostPath || !fs.existsSync(hostPath)) {
     return {
       pack: null,
@@ -193,7 +358,11 @@ function loadContextPack(workflow: Workflow): LoadedContextPack {
   const workspacePath = trimText(
     workflow.context[WORKFLOW_CONTEXT_KEYS.contextPackPath],
   );
-  return loadJsonFile(workspacePath);
+  return loadJsonFile({
+    workflow,
+    workspacePath,
+    allowedKinds: ['context_pack'],
+  });
 }
 
 function loadTraceability(input: {
@@ -224,7 +393,11 @@ function loadTraceability(input: {
     };
   }
 
-  const loaded = loadJsonFile(workspacePath);
+  const loaded = loadJsonFile({
+    workflow: input.workflow,
+    workspacePath,
+    allowedKinds: ['deliverable'],
+  });
   if (!loaded.pack) {
     return {
       traceability: null,
@@ -800,6 +973,28 @@ function hasAnyField(item: Record<string, unknown>, fields: string[]): boolean {
   return fields.some((field) => trimText(item[field]));
 }
 
+function validateEvidenceWorkspacePaths(input: {
+  workflow: Workflow;
+  item: Record<string, unknown>;
+  evidenceType: WorkflowEvalEvidence['type'];
+  missing: (message: string, severity?: Severity) => void;
+}): void {
+  for (const field of ['path', 'reportPath', 'report_path']) {
+    const value = trimText(input.item[field]);
+    if (!value) continue;
+    const scopeError = workspaceEvidenceScopeError({
+      workflow: input.workflow,
+      workspacePath: value,
+      evidenceType: input.evidenceType,
+    });
+    if (scopeError) {
+      input.missing(
+        `${field} is outside current service/deliverable (${scopeError}): ${value}`,
+      );
+    }
+  }
+}
+
 function validateEvidenceItem(input: {
   workflow: Workflow;
   stageKey: string;
@@ -881,6 +1076,12 @@ function validateEvidenceItem(input: {
       `evidence service "${service}" is outside current workflow service "${input.workflow.service}"`,
     );
   }
+  validateEvidenceWorkspacePaths({
+    workflow: input.workflow,
+    item: input.item,
+    evidenceType: type,
+    missing,
+  });
 }
 
 function evaluateEvidence(input: {
@@ -1015,6 +1216,16 @@ function evaluateConsistency(input: {
 }): WorkflowStageEvalResult {
   const findings: WorkflowEvalFinding[] = [];
   const evidence: WorkflowEvalEvidence[] = [];
+  const payloadDeliverable = trimText(input.payload.deliverable);
+  if (payloadDeliverable && !isSafeWorkspacePathSegment(payloadDeliverable)) {
+    pushFinding(findings, {
+      code: 'consistency.deliverable_invalid',
+      severity: 'high',
+      message: `Payload deliverable is not a safe path segment: ${payloadDeliverable}`,
+      stageKey: input.stageKey,
+      path: 'deliverable',
+    });
+  }
   const checks: Array<[string, string]> = [
     ['service', input.workflow.service],
     [

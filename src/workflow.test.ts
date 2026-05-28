@@ -277,6 +277,15 @@ function rewriteTraceabilityForContextPack(input: {
   );
 }
 
+function parseEvaluationFindings(
+  record: { findings_json: string | null } | undefined,
+): Array<{ code?: string; message?: string }> {
+  return JSON.parse(record?.findings_json || '[]') as Array<{
+    code?: string;
+    message?: string;
+  }>;
+}
+
 function createWorkflowAtInterrupt(input: {
   id: string;
   state: string;
@@ -1006,6 +1015,39 @@ describe('workflow metadata and branch flow', () => {
       contextPack.query_plan.sources.map((item: { type: string }) => item.type),
     ).toContain('codebase_location');
     expect(contextPack.hash).toMatch(/^sha256:/);
+    expect(contextPack.readiness.missing_required_sources).toContain(
+      'user_input',
+    );
+    expect(contextPack.excluded_candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source_id: 'user_input',
+          field: 'main_branch',
+          reason: 'empty',
+        }),
+        expect.objectContaining({
+          source_id: 'user_input',
+          field: 'work_branch',
+          reason: 'empty',
+        }),
+        expect.objectContaining({
+          source_id: 'service_codebase_location',
+          reason: expect.stringContaining('service_config_missing'),
+        }),
+      ]),
+    );
+    expect(contextPack.codebase_location_refs[0].repo_path).toBe('');
+    const immutablePackPath = path.join(
+      PROJECT_ROOT,
+      contextPack.immutable_pack_path.replace(/^\/workspace\//, ''),
+    );
+    expect(fs.existsSync(immutablePackPath)).toBe(true);
+    const immutablePackContent = fs.readFileSync(immutablePackPath, 'utf-8');
+    expect(immutablePackContent).toBe(
+      fs.readFileSync(contextPackPath, 'utf-8'),
+    );
+    const immutablePack = JSON.parse(immutablePackContent);
+    expect(immutablePack.hash).toBe(contextPack.hash);
   });
 
   it('starts fix_test from the single fix entry with bug context', () => {
@@ -1390,6 +1432,176 @@ describe('workflow metadata and branch flow', () => {
       ),
     ).toBe(true);
     expect(latest?.summary).toContain('artifact=pending');
+  });
+
+  it('rejects traceability loaded from another deliverable', () => {
+    const result = createNewWorkflow({
+      title: 'Cross deliverable traceability',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'dev_test',
+      requirementDescription: '方案必须只引用当前交付目录的 traceability。',
+    });
+    expect(result.error).toBeUndefined();
+    const [delegation] = getDelegationsByWorkflow(result.workflowId);
+    expect(delegation).toBeDefined();
+    writeDoc(
+      '2026-04-08_feature',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/cross-trace\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 只允许当前交付目录证据\n\n## 验收标准\n- scope gate 生效\n\n## 风险\n- 防止串用其他交付物\n`,
+    );
+    writeTraceability('2026-04-08_other', buildTraceability());
+
+    updateDelegation(delegation!.id, {
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        deliverable: '2026-04-08_feature',
+        main_branch: 'main',
+        work_branch: 'feature/cross-trace',
+        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_other/traceability.json`,
+        summary: '方案产物错误引用了其他交付目录的 traceability。',
+      }),
+    });
+    onDelegationComplete(delegation!.id);
+
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('plan');
+    const latest = getLatestWorkflowStageEvaluation(result.workflowId, 'plan');
+    expect(latest?.status).not.toBe('passed');
+    const evaluations = listWorkflowStageEvaluationsByWorkflow(
+      result.workflowId,
+    );
+    const coverage = evaluations.find(
+      (item) => item.stage_key === 'plan:context_coverage',
+    );
+    expect(coverage?.status).toBe('needs_revision');
+    expect(
+      parseEvaluationFindings(coverage)
+        .map((finding) => `${finding.code || ''} ${finding.message || ''}`)
+        .join('\n'),
+    ).toContain('traceability.artifact_missing');
+    const consistency = evaluations.find(
+      (item) => item.stage_key === 'plan:consistency',
+    );
+    expect(
+      parseEvaluationFindings(consistency)
+        .map((finding) => finding.message || '')
+        .join('\n'),
+    ).toContain('outside current service/deliverable');
+  });
+
+  it('rejects traceability evidence paths outside the current deliverable', () => {
+    const result = createNewWorkflow({
+      title: 'Cross deliverable evidence',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'dev_test',
+      requirementDescription: 'traceability evidence 必须留在当前交付目录。',
+    });
+    expect(result.error).toBeUndefined();
+    const [delegation] = getDelegationsByWorkflow(result.workflowId);
+    expect(delegation).toBeDefined();
+    writeDoc(
+      '2026-04-08_feature',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/evidence-scope\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 只允许当前交付目录 evidence\n\n## 验收标准\n- evidence scope gate 生效\n\n## 风险\n- 防止串用其他交付物\n`,
+    );
+    writeDoc(
+      '2026-04-08_other',
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_other\ndoc_type: plan\n---\n\n# Other Plan\n`,
+    );
+    const inputRefs = readContextPackInputRefs(result.workflowId, 'plan');
+    writeTraceability(
+      '2026-04-08_feature',
+      buildTraceability({
+        evidence: [
+          {
+            refId: 'EVID-ART-001',
+            type: 'artifact',
+            path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_other/plan.md`,
+            summary: '错误引用了其他交付目录的方案文档',
+          },
+        ],
+        coverage: inputRefs.map((ref) => ({
+          source_id: ref,
+          covered_by: ['DEC-001', 'ACT-001', 'CHECK-001'],
+          evidence: ['EVID-ART-001'],
+        })),
+      }),
+    );
+
+    updateDelegation(delegation!.id, {
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        deliverable: '2026-04-08_feature',
+        main_branch: 'main',
+        work_branch: 'feature/evidence-scope',
+        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/traceability.json`,
+        summary: '方案产物的 evidence 错误引用了其他交付目录。',
+      }),
+    });
+    onDelegationComplete(delegation!.id);
+
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('plan');
+    const evidence = listWorkflowStageEvaluationsByWorkflow(
+      result.workflowId,
+    ).find((item) => item.stage_key === 'plan:evidence');
+    expect(evidence?.status).toBe('needs_revision');
+    expect(
+      parseEvaluationFindings(evidence)
+        .map((finding) => finding.message || '')
+        .join('\n'),
+    ).toContain('outside current service/deliverable');
+  });
+
+  it('does not persist unsafe deliverable values from delegation results', () => {
+    const result = createNewWorkflow({
+      title: 'Unsafe deliverable',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'dev_test',
+      requirementDescription: 'delegation 返回的 deliverable 不能作为路径逃逸。',
+    });
+    expect(result.error).toBeUndefined();
+    const [delegation] = getDelegationsByWorkflow(result.workflowId);
+    expect(delegation).toBeDefined();
+
+    updateDelegation(delegation!.id, {
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        deliverable: '../2026-04-08_feature',
+        main_branch: 'main',
+        work_branch: 'feature/unsafe-deliverable',
+        summary: '错误返回了不安全的 deliverable。',
+      }),
+    });
+    onDelegationComplete(delegation!.id);
+
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('plan');
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable),
+    ).toBe('');
+    const consistency = listWorkflowStageEvaluationsByWorkflow(
+      result.workflowId,
+    ).find((item) => item.stage_key === 'plan:consistency');
+    expect(
+      parseEvaluationFindings(consistency)
+        .map((finding) => `${finding.code || ''} ${finding.message || ''}`)
+        .join('\n'),
+    ).toContain('consistency.deliverable_invalid');
   });
 
   it('propagates plan result fields into next delegation', () => {

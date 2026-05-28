@@ -170,6 +170,19 @@ const WORKFLOW_CONTEXT_STAGE_RESULTS_KEY = 'stage_results';
 const WORKFLOW_CONTEXT_LATEST_DELEGATION_RESULT_KEY =
   'latest_delegation_result';
 
+function isSafeWorkflowPathSegment(value: string): boolean {
+  const segment = value.trim();
+  return (
+    !!segment &&
+    !segment.includes('\0') &&
+    segment !== '.' &&
+    segment !== '..' &&
+    !segment.includes('/') &&
+    !segment.includes('\\') &&
+    !path.isAbsolute(segment)
+  );
+}
+
 interface WorkflowCheckpointPayload {
   workflowId: string;
   workflowType: string;
@@ -1400,6 +1413,7 @@ function readDeliverableDir(
   service: string,
   dirName: string,
 ): DeliverableMetadata | null {
+  if (!isSafeWorkflowPathSegment(dirName)) return null;
   const delivDir = path.join(
     PROJECT_ROOT,
     'projects',
@@ -1490,6 +1504,7 @@ function listDeliverableTestCaseFiles(
   service: string,
   deliverable: string,
 ): string[] {
+  if (!isSafeWorkflowPathSegment(deliverable)) return [];
   const deliverableDir = path.join(
     PROJECT_ROOT,
     'projects',
@@ -1519,7 +1534,7 @@ function materializeTestCaseFilesForDeliverable(
     typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
       ? String(context[WORKFLOW_CONTEXT_KEYS.deliverable]).trim()
       : getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable);
-  if (!deliverable) return {};
+  if (!deliverable || !isSafeWorkflowPathSegment(deliverable)) return {};
 
   const originalFiles = normalizeTestCaseFilePaths(
     context[WORKFLOW_CONTEXT_KEYS.testCaseFiles] ??
@@ -1580,6 +1595,9 @@ function buildDocPath(
     workflow,
     WORKFLOW_CONTEXT_KEYS.deliverable,
   );
+  if (!deliverable || !isSafeWorkflowPathSegment(deliverable)) {
+    return '';
+  }
   return `/workspace/projects/${workflow.service}/iteration/${deliverable}/${fileName}`;
 }
 
@@ -5108,8 +5126,10 @@ export function onDelegationComplete(delegationId: string): void {
         '\n' + payload.bugs.map((b) => `- ${b.id}: ${b.title}`).join('\n');
     }
   }
-  if (payload.deliverable) {
-    contextUpdates[WORKFLOW_CONTEXT_KEYS.deliverable] = payload.deliverable;
+  const payloadDeliverable =
+    typeof payload.deliverable === 'string' ? payload.deliverable.trim() : '';
+  if (payloadDeliverable && isSafeWorkflowPathSegment(payloadDeliverable)) {
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.deliverable] = payloadDeliverable;
   }
   if (payload.main_branch) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.mainBranch] = payload.main_branch;
