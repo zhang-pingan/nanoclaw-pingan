@@ -48,3 +48,7 @@ local/shell/electron/.runtime
 local/shell/assistant/.runtime
 knowledge
 assistant/renderer/assets/scifi
+.codex/*
+!.codex/skills/
+!.codex/skills/devops/
+!.codex/skills/devops/**
