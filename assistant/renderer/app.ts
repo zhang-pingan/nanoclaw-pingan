@@ -137,6 +137,7 @@ let collapsedChatMessage: AssistantChatMessage | null = null;
 let collapsedChatMessageTimer: number | null = null;
 let chatTransitionToken = 0;
 let chatAutoHideTimer: number | null = null;
+let chatScrollToken = 0;
 let mousePassthrough = false;
 let lastMouseClientX = -1;
 let lastMouseClientY = -1;
@@ -264,6 +265,22 @@ function afterNextPaint(): Promise<void> {
   });
 }
 
+function scheduleChatScrollToBottom(): void {
+  const token = ++chatScrollToken;
+  const scrollToBottom = () => {
+    if (token !== chatScrollToken) return;
+    chatLog.scrollTop = chatLog.scrollHeight;
+  };
+
+  scrollToBottom();
+  window.requestAnimationFrame(() => {
+    scrollToBottom();
+    window.requestAnimationFrame(scrollToBottom);
+  });
+  window.setTimeout(scrollToBottom, CHAT_PANEL_TRANSITION_MS + 40);
+  window.setTimeout(scrollToBottom, 350);
+}
+
 function setChatOpen(open: boolean): void {
   if (chatOpen === open) {
     if (open) clearChatAutoHideTimer();
@@ -289,6 +306,7 @@ function setChatOpen(open: boolean): void {
       setSceneChatOpen(true);
       shell.classList.add('chat-open');
       updateAlertLayout();
+      scheduleChatScrollToBottom();
       setMousePassthrough(false);
       chatInput.focus();
     })();
@@ -319,6 +337,7 @@ function setChatMode(enabled: boolean): void {
     shell.classList.add('chat-mode');
     clearChatAutoHideTimer();
     updateAlertLayout();
+    scheduleChatScrollToBottom();
     setMousePassthrough(false);
     void window.assistantHost?.setChatMode(true);
     chatInput.focus();
@@ -1021,6 +1040,12 @@ function renderChat(): void {
         image.decoding = 'async';
         image.src = fileInfo.url;
         image.alt = fileInfo.fileName;
+        image.addEventListener('load', scheduleChatScrollToBottom, {
+          once: true,
+        });
+        image.addEventListener('error', scheduleChatScrollToBottom, {
+          once: true,
+        });
         image.addEventListener('click', () => {
           openImagePreview(image.src, fileInfo.fileName);
         });
@@ -1044,7 +1069,7 @@ function renderChat(): void {
   }
   chatStatus.textContent = chatTyping ? 'Agent 正在回复...' : '';
   syncScene();
-  chatLog.scrollTop = chatLog.scrollHeight;
+  scheduleChatScrollToBottom();
 }
 
 function upsertChatMessage(message: AssistantChatMessage): void {
