@@ -133,6 +133,8 @@ async function getPool(service: string): Promise<Pool> {
     waitForConnections: true,
     connectionLimit: 5,
     queueLimit: 0,
+    supportBigNumbers: true,
+    bigNumberStrings: true,
   });
 
   pools.set(service, pool);
