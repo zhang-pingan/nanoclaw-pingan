@@ -22,12 +22,10 @@ const WORKSTATION_URL = 'http://localhost:3000/';
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
 const OPEN_WORKSTATION_ARG = '--icarus-open-workstation';
 const ASSISTANT_CHAT_MENU_ACCELERATORS = ['Command+`', 'Command+~'];
-const ASSISTANT_CHAT_GLOBAL_ACCELERATORS = [
-  ...ASSISTANT_CHAT_MENU_ACCELERATORS,
-  'Command+·',
-  'Command+§',
-  'Command+±',
-];
+// "Command + 数字1左边那个键" 的合法写法就是 Command+`(含 Shift 变体 Command+~)。
+// 之前额外注册的 Command+·/§/± 不是合法的 Electron 加速键,
+// register 时被静默忽略,unregister 时还会抛 "conversion failure" 导致退出崩溃。
+const ASSISTANT_CHAT_GLOBAL_ACCELERATORS = [...ASSISTANT_CHAT_MENU_ACCELERATORS];
 
 let assistantWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -162,7 +160,14 @@ function registerAssistantShortcuts(): void {
 
 function unregisterAssistantShortcuts(): void {
   for (const accelerator of ASSISTANT_CHAT_GLOBAL_ACCELERATORS) {
-    globalShortcut.unregister(accelerator);
+    try {
+      globalShortcut.unregister(accelerator);
+    } catch (err) {
+      console.warn(
+        `assistant shortcut unregistration failed: ${accelerator}`,
+        err,
+      );
+    }
   }
 }
 
