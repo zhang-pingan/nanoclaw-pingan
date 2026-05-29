@@ -15,6 +15,10 @@ export type FailureType =
   | 'invalid_config'
   | 'permission_error'
   | 'db_error'
+  // A query ended leaving an SDK session leaf unclosed: a task was started
+  // (e.g. a Skill load) but abandoned without a closing answer. Not a crash —
+  // surfaced as a distinct, filterable failure so dropped replies are visible.
+  | 'unclosed_leaf'
   | 'unknown_error';
 
 export type FailureOrigin =

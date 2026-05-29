@@ -103,7 +103,7 @@ describe('workflow artifact contract declarative rules', () => {
       },
     });
 
-    expect(result?.status).not.toBe('passed');
+    expect(result?.status).toBe('needs_revision');
     const codes = result?.findings.map((f) => f.code) || [];
     expect(codes).toContain('missing_acceptance_criteria');
     expect(codes).toContain('missing_scope_definition');

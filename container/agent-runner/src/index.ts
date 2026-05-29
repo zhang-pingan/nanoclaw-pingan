@@ -187,6 +187,21 @@ function makeMissingResultFailure(
   };
 }
 
+/**
+ * The Agent SDK injects a synthetic `Continue from where you left off.` user
+ * message when resuming a session whose last transcript leaf never closed with
+ * a real assistant turn. The runtime object carries `isSynthetic: true` even
+ * though our narrow local SDKUserMessage interface doesn't declare it.
+ */
+function isSyntheticUserMessage(message: unknown): boolean {
+  return (
+    !!message &&
+    typeof message === 'object' &&
+    (message as { type?: string }).type === 'user' &&
+    (message as { isSynthetic?: boolean }).isSynthetic === true
+  );
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
@@ -1046,6 +1061,53 @@ function parseTranscript(content: string): ParsedMessage[] {
   return messages;
 }
 
+interface TranscriptLeaf {
+  closed: boolean;
+  lastRole: string | null;
+  lastStopReason: string | null;
+}
+
+// stop_reason values that represent a turn the model finished on its own.
+const TERMINAL_STOP_REASONS = new Set(['end_turn', 'stop_sequence', 'max_tokens']);
+
+/**
+ * Read the tail of a session transcript to decide whether its last leaf is
+ * "closed" (the conversation reached a stable resting state) or "unclosed"
+ * (a turn was started/loaded but never finished with a terminal assistant
+ * turn — e.g. a dangling user/tool_result node or an assistant that stopped on
+ * `tool_use` with no follow-up). Only `type` user/assistant rows count as
+ * meaningful nodes; transcript bookkeeping rows (last-prompt, queue-operation,
+ * attachment, …) are ignored.
+ */
+function readTranscriptTail(sessionId: string | undefined): TranscriptLeaf | null {
+  if (!sessionId) return null;
+  const transcriptPath = findTranscriptPath(sessionId);
+  if (!transcriptPath) return null;
+  let content: string;
+  try {
+    content = fs.readFileSync(transcriptPath, 'utf-8');
+  } catch {
+    return null;
+  }
+  const lines = content.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let entry: { type?: string; message?: { role?: string; stop_reason?: string | null; content?: unknown } };
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry.type !== 'user' && entry.type !== 'assistant') continue;
+    const role = entry.message?.role ?? entry.type;
+    const stopReason = entry.message?.stop_reason ?? null;
+    const closed = entry.type === 'assistant' && !!stopReason && TERMINAL_STOP_REASONS.has(stopReason);
+    return { closed, lastRole: role ?? null, lastStopReason: stopReason };
+  }
+  return null;
+}
+
 interface ArchiveMetadata {
   session: string;
   round: number;
@@ -1372,6 +1434,7 @@ async function iterateQuery(
   messageCount: number;
   resultCount: number;
   lastMessageType?: string;
+  deliveredGenuineAnswer: boolean;
 }> {
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
@@ -1379,6 +1442,15 @@ async function iterateQuery(
   let messageCount = 0;
   let resultCount = 0;
   let lastMessageType: string | undefined;
+  // Leaf-close cascade guard: the SDK emits a synthetic "Continue from where you
+  // left off." user turn (then a no-op success result) to close an unclosed
+  // leaf on resume. That result is NOT the answer to the real pushed message,
+  // so we must not end the stream on it — otherwise the real message becomes
+  // the next unclosed leaf and replies are silently dropped.
+  let syntheticCloseSeen = false;
+  let syntheticSkips = 0;
+  const MAX_SYNTHETIC_SKIPS = 1;
+  let deliveredGenuineAnswer = false;
 
   for await (const message of query({ prompt: stream, options })) {
     messageCount++;
@@ -1388,6 +1460,14 @@ async function iterateQuery(
 
     if (message.type === 'assistant' && 'uuid' in message) {
       lastAssistantUuid = (message as { uuid: string }).uuid;
+    }
+
+    if (message.type === 'user') {
+      if (isSyntheticUserMessage(message)) {
+        syntheticCloseSeen = true;
+        log('Synthetic "Continue from where you left off" user message observed (unclosed leaf on resume)');
+      }
+      continue;
     }
 
     if (message.type === 'system') {
@@ -1410,7 +1490,58 @@ async function iterateQuery(
     if (message.type === 'result') {
       resultCount++;
       const textResult = 'result' in message ? (message as { result?: string }).result : null;
-      log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
+      const stopReason = (message as { stop_reason?: string | null }).stop_reason ?? null;
+      const numTurns = (message as { num_turns?: number }).num_turns;
+      log(
+        `Result #${resultCount}: subtype=${message.subtype} stop_reason=${stopReason ?? 'null'} num_turns=${numTurns ?? 'n/a'} synthSeen=${syntheticCloseSeen}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`,
+      );
+
+      // Detect a synthetic leaf-close result: the SDK closed an unclosed leaf
+      // on resume rather than answering the real pushed message.
+      //  - PRIMARY: we observed the synthetic "Continue…" user turn this query.
+      //  - FALLBACK (in case synthetic user turns aren't surfaced to this loop
+      //    in push mode): a single-turn success that stopped on a stop sequence
+      //    with the canonical "No response requested." text.
+      const looksSynthetic =
+        message.subtype === 'success' &&
+        (numTurns === undefined || numTurns <= 1) &&
+        stopReason === 'stop_sequence' &&
+        /^\s*no response requested\.?\s*$/i.test(textResult || '');
+      const isSyntheticClose =
+        message.subtype === 'success' && (syntheticCloseSeen || looksSynthetic);
+
+      if (isSyntheticClose && syntheticSkips < MAX_SYNTHETIC_SKIPS) {
+        const detectedBy = syntheticCloseSeen ? 'synthetic_user' : 'result_shape';
+        syntheticSkips++;
+        syntheticCloseSeen = false;
+        log(
+          `Skipping synthetic leaf-close result (skips=${syntheticSkips}/${MAX_SYNTHETIC_SKIPS}, detectedBy=${detectedBy}); continuing so the real message gets answered`,
+        );
+        writeEvent(
+          {
+            type: 'lifecycle',
+            name: 'unclosed_leaf_resumed',
+            status: 'success',
+            summary: 'Recovered from a synthetic-closed unclosed leaf on resume',
+            payload: {
+              category: 'lifecycle',
+              severity: 'info',
+              visibility: 'summary',
+              stopReason,
+              detectedBy,
+            },
+          },
+          {
+            newSessionId,
+            selectedModel: options.model,
+            runId: identifiers.runId,
+            queryId: identifiers.queryId,
+          },
+        );
+        // Do NOT deliver and do NOT end the stream.
+        continue;
+      }
+
       if (message.subtype?.startsWith('error')) {
         writeEvent(
           {
@@ -1445,6 +1576,7 @@ async function iterateQuery(
         });
       } else {
         planResult = textResult || undefined;
+        if (textResult && textResult.trim()) deliveredGenuineAnswer = true;
         writeEvent(
           {
             type: 'model',
@@ -1476,13 +1608,15 @@ async function iterateQuery(
           queryId: identifiers.queryId,
         });
       }
-      // Result received — end the stream so the query exits naturally
-      // and the null completion marker can be emitted by the main loop.
+      // A genuine result (real answer or any error) — end the stream so the
+      // query exits naturally and the null completion marker can be emitted by
+      // the main loop. Synthetic leaf-close results are skipped above and never
+      // reach here (subject to MAX_SYNTHETIC_SKIPS as a hang-safety bound).
       stream.end();
     }
   }
 
-  log(`Query phase done. Messages: ${messageCount}, results: ${resultCount}`);
+  log(`Query phase done. Messages: ${messageCount}, results: ${resultCount}, syntheticSkips: ${syntheticSkips}`);
   return {
     newSessionId,
     lastAssistantUuid,
@@ -1490,6 +1624,7 @@ async function iterateQuery(
     messageCount,
     resultCount,
     lastMessageType,
+    deliveredGenuineAnswer,
   };
 }
 
@@ -1634,7 +1769,46 @@ async function runQuery(
     });
   }
 
-  log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}, missingSdkResult: ${missingSdkResult}`);
+  // Detect a query that ended leaving an unclosed leaf (a task started but
+  // abandoned without a closing answer — e.g. a Skill-load turn). Excludes
+  // benign cases: interrupted/_close (closedDuringQuery), no-result-at-all
+  // (already reported as missingSdkResult), and queries that delivered a real
+  // answer. A legitimately "nothing to say" turn closes with end_turn and is
+  // therefore reported closed by readTranscriptTail, so it is not flagged.
+  let leftUnclosedLeaf = false;
+  if (!closedDuringQuery && !missingSdkResult && !result.deliveredGenuineAnswer) {
+    const tail = readTranscriptTail(newSessionId || sessionId);
+    if (tail && !tail.closed) {
+      leftUnclosedLeaf = true;
+      const leafDetails = {
+        module: 'agent-runner',
+        action: 'unclosed_leaf_left',
+        lastRole: tail.lastRole,
+        lastStopReason: tail.lastStopReason,
+        queryId: queryId ?? null,
+      };
+      const leafError = 'Query ended leaving an unclosed leaf (abandoned incomplete task)';
+      log(`Unclosed leaf left after query: ${JSON.stringify(leafDetails)}`);
+      writeOutput({
+        status: 'error',
+        result: null,
+        error: leafError,
+        failure: {
+          failureType: 'unclosed_leaf',
+          failureSubtype: 'abandoned_incomplete_task',
+          failureOrigin: 'model',
+          retryable: true,
+          details: leafDetails,
+        },
+        newSessionId,
+        selectedModel: options.model,
+        runId: containerInput.runId,
+        queryId,
+      });
+    }
+  }
+
+  log(`Query done. newSessionId: ${newSessionId || 'none'}, lastAssistantUuid: ${lastAssistantUuid || 'none'}, closedDuringQuery: ${closedDuringQuery}, missingSdkResult: ${missingSdkResult}, leftUnclosedLeaf: ${leftUnclosedLeaf}`);
   return {
     newSessionId,
     lastAssistantUuid,

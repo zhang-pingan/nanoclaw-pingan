@@ -511,6 +511,7 @@ export function evaluateWorkflowArtifactContract(input: {
 
   const findings: WorkflowEvalFinding[] = [];
   const evidence: WorkflowEvalEvidence[] = [];
+  const forcedStatuses: WorkflowStageEvaluationStatus[] = [];
 
   for (const issue of validateWorkflowArtifactContractPayload({
     contractRef: input.contractRef,
@@ -604,14 +605,22 @@ export function evaluateWorkflowArtifactContract(input: {
       }
       for (const check of file.content_checks || []) {
         if (!contentMatchesAnyOf(content, check.any_of || [])) {
+          const severity = check.severity || 'medium';
           findings.push({
             code: check.code,
-            severity: check.severity || 'medium',
+            severity,
             message: check.message,
             stageKey: input.workflow.status,
             path: fullPath,
             suggestion: check.suggestion,
           });
+          // A failed content check means the document exists but is
+          // incomplete — a revision issue, not "missing evidence". Force
+          // needs_revision (or failed for critical) so the routing matches
+          // the legacy stage-rules behavior instead of mapping high → pending.
+          forcedStatuses.push(
+            severity === 'critical' ? 'failed' : 'needs_revision',
+          );
         }
       }
       if (file.body_required_fields && file.body_required_fields.length > 0) {
@@ -652,7 +661,6 @@ export function evaluateWorkflowArtifactContract(input: {
     }
   }
 
-  const forcedStatuses: WorkflowStageEvaluationStatus[] = [];
   for (const rule of contract.payload_rules || []) {
     if (!evaluatePayloadRule(rule, input.payload)) continue;
     findings.push({
@@ -665,13 +673,28 @@ export function evaluateWorkflowArtifactContract(input: {
     if (rule.then_status) forcedStatuses.push(rule.then_status);
   }
 
-  const hasCritical = findings.some((item) => item.severity === 'critical');
-  const hasHigh = findings.some((item) => item.severity === 'high');
+  // Content checks and payload rules carry their own status (forcedStatuses):
+  // a failed content check is a revision issue, not "missing evidence". Only
+  // structural findings (missing file/frontmatter/schema/size/body) drive the
+  // severity-based status, where high means "cannot evaluate yet" → pending.
+  const ruleCodes = new Set<string>();
+  for (const file of contract.files || []) {
+    for (const check of file.content_checks || []) ruleCodes.add(check.code);
+  }
+  for (const rule of contract.payload_rules || []) ruleCodes.add(rule.code);
+  const structuralFindings = findings.filter(
+    (item) => !ruleCodes.has(item.code),
+  );
+
+  const hasCritical = structuralFindings.some(
+    (item) => item.severity === 'critical',
+  );
+  const hasHigh = structuralFindings.some((item) => item.severity === 'high');
   const severityStatus: WorkflowStageEvaluationStatus = hasCritical
     ? 'failed'
     : hasHigh
       ? 'pending'
-      : findings.length > 0
+      : structuralFindings.length > 0
         ? 'needs_revision'
         : 'passed';
   const status = worstArtifactStatus([severityStatus, ...forcedStatuses]);
