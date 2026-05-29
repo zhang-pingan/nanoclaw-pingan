@@ -955,10 +955,17 @@ Quality Gate 可检查：
 
 ## 分阶段实施
 
+实施顺序原则：
+
+- **能力层先于 workflow 接入。** Phase 1–2 的 prepare/observe/act/trace/search 先作为**独立的主群工具**验证，完全不绑定任何 workflow 阶段。`ios-recon`/`ios-acceptance` profile 先只授予主群，agent 在主群里就能跑通启动、观察、操作、网络关联的完整闭环。
+- **先消未知数，再付改造成本。** UI 自动化稳定性、iOS 工程配合（accessibilityIdentifier / launch args / deeplink / JSONL 日志 / seed data）是两个最大的外部不确定项；要在能力层独立验证里先压掉，再进入 workflow/quality-gate 接入。
+- **workflow 接入压到最后。** JSON deliverable、Context Pack、Quality Gate 阻断是 churn 和风险集中区，排在 Phase 6；其中 JSON deliverable 是横切前置改造，范围另行讨论后再排期。
+- 每个 Phase 都自带可独立验证的成功标准，未达标不进入下一阶段。
+
 ### Phase 1：可操作模拟器最小闭环
 
 - 实现 host `ios_app_request` dispatcher。
-- 实现 session 管理、权限校验、资源锁、超时和统一错误格式。
+- 实现 session 管理、资源锁、超时和统一错误格式（授权沿用工具可见性，dispatcher 不做二次校验）。
 - 实现 `ios_app_prepare_session`。
 - 实现 `ios_app_observe`。
 - 实现 `ios_app_act` 的 tap/type/scroll/back/deeplink/wait。
