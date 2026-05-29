@@ -50,6 +50,36 @@
           }
         }
       },
+      "artifacts": [
+        {
+          "artifact_type": "plan_doc",
+          "title": "方案文档",
+          "path": "plan.md",
+          "source_role": "planner"
+        },
+        {
+          "artifact_type": "dev_doc",
+          "title": "开发文档",
+          "path": "dev.md",
+          "source_role": "dev"
+        },
+        {
+          "artifact_type": "test_doc",
+          "title": "测试文档",
+          "path": "test.md",
+          "source_role": "test"
+        },
+        {
+          "artifact_type": "traceability",
+          "title": "追踪矩阵",
+          "path": "traceability.json"
+        },
+        {
+          "artifact_type": "readme",
+          "title": "说明文档",
+          "path": "README.md"
+        }
+      ],
       "entry_points": {
         "plan": {
           "label": "从方案开始",

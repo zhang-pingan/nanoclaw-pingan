@@ -416,9 +416,8 @@ function ensureArtifacts(workflow: Workflow): void {
   );
   const workflowConfig = getWorkflowTypeConfig(workflow.workflow_type);
   const artifactDefinitions = resolveWorkflowArtifactDefinitions(
-    workflowConfig?.roles,
+    workflowConfig?.artifacts,
     workflow,
-    workflowConfig?.states,
   );
   for (const def of artifactDefinitions) {
     const relativePath =

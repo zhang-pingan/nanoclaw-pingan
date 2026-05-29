@@ -33,6 +33,25 @@
           }
         }
       },
+      "artifacts": [
+        {
+          "artifact_type": "dev_doc",
+          "title": "修复文档",
+          "path": "dev.md",
+          "source_role": "dev"
+        },
+        {
+          "artifact_type": "test_doc",
+          "title": "测试文档",
+          "path": "test.md",
+          "source_role": "test"
+        },
+        {
+          "artifact_type": "readme",
+          "title": "说明文档",
+          "path": "README.md"
+        }
+      ],
       "entry_points": {
         "fix": {
           "label": "从 Bug 修复开始",

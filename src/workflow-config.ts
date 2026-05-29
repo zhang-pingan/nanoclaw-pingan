@@ -17,6 +17,7 @@ import {
 import { logger } from './logger.js';
 import {
   WorkflowCreateForm,
+  WorkflowDefinitionArtifactDisplay,
   WorkflowDefinitionArtifactContractRef,
   WorkflowDefinitionEvaluatorRef,
   WorkflowDefinitionHandoff,
@@ -125,6 +126,7 @@ export interface EntryPointConfig {
 export interface WorkflowTypeConfig {
   name: string;
   roles: Record<string, RoleConfig>;
+  artifacts?: WorkflowDefinitionArtifactDisplay[];
   entry_points: Record<string, EntryPointConfig>;
   states: Record<string, StateConfig>;
   status_labels: Record<string, string>;
@@ -383,6 +385,58 @@ export function validateConfig(
 ): string[] {
   const errors: string[] = [];
   const stateNames = new Set(Object.keys(config.states));
+
+  if (config.artifacts !== undefined && !Array.isArray(config.artifacts)) {
+    errors.push(`${typeName}.artifacts must be an array`);
+  }
+  const seenArtifactPaths = new Set<string>();
+  for (const [index, artifact] of (Array.isArray(config.artifacts)
+    ? config.artifacts
+    : []
+  ).entries()) {
+    const artifactPath = `${typeName}.artifacts[${index}]`;
+    if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact)) {
+      errors.push(`${artifactPath} must be an object`);
+      continue;
+    }
+    if (!artifact.artifact_type?.trim()) {
+      errors.push(`${artifactPath}.artifact_type is required`);
+    }
+    if (!artifact.title?.trim()) {
+      errors.push(`${artifactPath}.title is required`);
+    }
+    if (!artifact.path?.trim()) {
+      errors.push(`${artifactPath}.path is required`);
+    } else {
+      const normalizedPath = artifact.path.trim();
+      const scopedPath = normalizedPath.startsWith('/workspace/')
+        ? normalizedPath.replace(/^\/workspace\//, '')
+        : normalizedPath.replace(/^\/+/, '');
+      if (
+        normalizedPath.includes('\0') ||
+        normalizedPath.includes('\\') ||
+        scopedPath.split('/').some((segment) => segment === '..') ||
+        (normalizedPath.startsWith('/') &&
+          !normalizedPath.startsWith('/workspace/'))
+      ) {
+        errors.push(
+          `${artifactPath}.path must be a safe relative artifact path`,
+        );
+      }
+      if (seenArtifactPaths.has(normalizedPath)) {
+        errors.push(`${artifactPath}.path "${normalizedPath}" is duplicated`);
+      }
+      seenArtifactPaths.add(normalizedPath);
+    }
+    if (
+      artifact.source_role !== undefined &&
+      !config.roles[artifact.source_role]
+    ) {
+      errors.push(
+        `${artifactPath}.source_role "${artifact.source_role}" not defined in roles`,
+      );
+    }
+  }
 
   // Check role configs have valid channels
   for (const [roleName, roleConfig] of Object.entries(config.roles)) {

@@ -629,9 +629,8 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
 
   const workflowConfig = getWorkflowTypeConfig(workflow.workflow_type);
   const artifactDefinitions = resolveWorkflowArtifactDefinitions(
-    workflowConfig?.roles,
+    workflowConfig?.artifacts,
     workflow,
-    workflowConfig?.states,
   );
   return artifactDefinitions.map((candidate) => {
     const relativePath =

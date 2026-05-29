@@ -1,7 +1,10 @@
+import path from 'path';
+
 import {
   WorkflowDefinition,
   WorkflowCreateForm,
   WORKFLOW_CREATE_FIELD_TYPES,
+  WorkflowDefinitionArtifactDisplay,
   WorkflowDefinitionState,
   WorkflowDefinitionTransition,
   WorkflowDefinitionEvaluatorRef,
@@ -100,6 +103,7 @@ export interface CompiledWorkflowConfig {
     string,
     { channels: Record<string, string>; deliverable_file?: string }
   >;
+  artifacts?: WorkflowDefinitionArtifactDisplay[];
   entry_points: Record<
     string,
     {
@@ -112,6 +116,20 @@ export interface CompiledWorkflowConfig {
   states: Record<string, CompiledWorkflowState>;
   status_labels: Record<string, string>;
   create_form?: WorkflowCreateForm;
+}
+
+function isSafeArtifactDisplayPath(value: string): boolean {
+  const trimmed = value.trim();
+  const normalized = trimmed.startsWith('/workspace/')
+    ? trimmed.replace(/^\/workspace\//, '')
+    : trimmed.replace(/^\/+/, '');
+  return (
+    !!trimmed &&
+    !trimmed.includes('\0') &&
+    !trimmed.includes('\\') &&
+    !normalized.split('/').some((segment) => segment === '..') &&
+    (!path.isAbsolute(trimmed) || trimmed.startsWith('/workspace/'))
+  );
 }
 
 function compileTransition(
@@ -280,6 +298,60 @@ export function validateWorkflowDefinition(
       }
     }
   };
+
+  if (
+    definition.artifacts !== undefined &&
+    !Array.isArray(definition.artifacts)
+  ) {
+    errors.push(`${definition.key}.artifacts must be an array`);
+  }
+  const seenArtifactPaths = new Set<string>();
+  for (const [index, artifact] of (Array.isArray(definition.artifacts)
+    ? definition.artifacts
+    : []
+  ).entries()) {
+    const artifactPath = `${definition.key}.artifacts[${index}]`;
+    if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact)) {
+      errors.push(`${artifactPath} must be an object`);
+      continue;
+    }
+    if (!artifact.artifact_type?.trim()) {
+      errors.push(`${artifactPath}.artifact_type is required`);
+    }
+    if (!artifact.title?.trim()) {
+      errors.push(`${artifactPath}.title is required`);
+    }
+    if (!artifact.path?.trim()) {
+      errors.push(`${artifactPath}.path is required`);
+    } else {
+      const normalizedPath = artifact.path.trim();
+      if (!isSafeArtifactDisplayPath(normalizedPath)) {
+        errors.push(
+          `${artifactPath}.path must be a safe relative artifact path`,
+        );
+      }
+      if (seenArtifactPaths.has(normalizedPath)) {
+        errors.push(`${artifactPath}.path "${normalizedPath}" is duplicated`);
+      }
+      seenArtifactPaths.add(normalizedPath);
+    }
+    if (artifact.source_role !== undefined) {
+      if (!artifact.source_role.trim()) {
+        errors.push(`${artifactPath}.source_role must be a non-empty string`);
+      } else if (!roleNames.has(artifact.source_role)) {
+        errors.push(
+          `${artifactPath}.source_role "${artifact.source_role}" not defined in roles`,
+        );
+      }
+    }
+    if (
+      artifact.required !== undefined &&
+      typeof artifact.required !== 'boolean'
+    ) {
+      errors.push(`${artifactPath}.required must be a boolean`);
+    }
+  }
+
   const validateContextRequirements = (
     stateKey: string,
     contextRequirements: WorkflowContextRequirements | undefined,
@@ -873,6 +945,7 @@ export function compileWorkflowDefinition(
         },
       ]),
     ),
+    artifacts: definition.artifacts,
     entry_points: Object.fromEntries(
       Object.entries(definition.entry_points).map(([entryKey, entry]) => [
         entryKey,

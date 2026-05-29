@@ -494,7 +494,7 @@ describe('workbench approval transition sync', () => {
     );
   });
 
-  it('persists JSON artifacts declared by artifact contracts', () => {
+  it('persists JSON artifacts declared by workflow definitions', () => {
     dbCreateWorkflow({
       id: 'wf-contract-json-artifact',
       name: '契约 JSON 产物',
@@ -534,8 +534,8 @@ describe('workbench approval transition sync', () => {
       item.path.endsWith('/traceability.json'),
     );
     expect(traceabilityArtifact).toMatchObject({
-      title: 'traceability.json',
-      artifact_type: 'json_artifact',
+      title: '追踪矩阵',
+      artifact_type: 'traceability',
       path: `projects/${WORKBENCH_TEST_SERVICE}/iteration/2026-04-07_contract_json/traceability.json`,
       exists: true,
     });

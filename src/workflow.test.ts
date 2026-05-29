@@ -2439,6 +2439,21 @@ describe('workflow metadata and branch flow', () => {
 
   it('declares artifact contracts and sidecar evaluator refs for critical stages', () => {
     const devTest = getWorkflowTypeConfig('dev_test');
+    expect(devTest?.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          artifact_type: 'plan_doc',
+          title: '方案文档',
+          path: 'plan.md',
+          source_role: 'planner',
+        }),
+        expect.objectContaining({
+          artifact_type: 'traceability',
+          title: '追踪矩阵',
+          path: 'traceability.json',
+        }),
+      ]),
+    );
     expect(devTest?.states.plan.artifact_contract?.ref).toBe(
       'dev_test.plan.v1',
     );
@@ -2589,6 +2604,60 @@ describe('system workflow action nodes', () => {
     };
 
     expect(validateWorkflowDefinition(definition)).toEqual([]);
+  });
+
+  it('validates workflow artifact display definitions', () => {
+    const definition: WorkflowDefinition = {
+      key: 'artifact_display_test',
+      name: 'Artifact display test',
+      version: 1,
+      status: 'draft',
+      roles: {
+        planner: {
+          channels: {
+            web: 'web_plan',
+          },
+        },
+      },
+      artifacts: [
+        {
+          artifact_type: 'json_report',
+          title: 'JSON Report',
+          path: 'report.json',
+          source_role: 'planner',
+        },
+      ],
+      entry_points: {
+        start: {
+          state: 'done',
+        },
+      },
+      states: {
+        done: {
+          type: 'terminal',
+          label: 'Done',
+        },
+      },
+      status_labels: {},
+    };
+
+    expect(validateWorkflowDefinition(definition)).toEqual([]);
+
+    const invalid: WorkflowDefinition = {
+      ...definition,
+      artifacts: [
+        {
+          artifact_type: 'bad_report',
+          title: 'Bad Report',
+          path: '../report.json',
+          source_role: 'missing_role',
+        },
+      ],
+    };
+
+    const errors = validateWorkflowDefinition(invalid).join('\n');
+    expect(errors).toContain('path must be a safe relative artifact path');
+    expect(errors).toContain('source_role "missing_role" not defined in roles');
   });
 
   it('validates context requirements and quality gate evaluator support', () => {

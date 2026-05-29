@@ -27,6 +27,14 @@ export interface WorkflowDefinitionEntryPoint {
   manual_requirement_create?: WorkflowManualRequirementCreateConfig;
 }
 
+export interface WorkflowDefinitionArtifactDisplay {
+  artifact_type: string;
+  title: string;
+  path: string;
+  source_role?: string;
+  required?: boolean;
+}
+
 export interface WorkflowManualRequirementCreateFile {
   filename: string;
   label?: string;
@@ -287,6 +295,7 @@ export interface WorkflowDefinition {
   status: 'draft' | 'published' | 'archived';
   roles: Record<string, WorkflowDefinitionRole>;
   entry_points: Record<string, WorkflowDefinitionEntryPoint>;
+  artifacts?: WorkflowDefinitionArtifactDisplay[];
   states: Record<string, WorkflowDefinitionState>;
   status_labels: Record<string, string>;
   create_form?: WorkflowCreateForm;
