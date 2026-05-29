@@ -627,16 +627,22 @@ function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
     deliverable,
   );
 
+  const workflowConfig = getWorkflowTypeConfig(workflow.workflow_type);
   const artifactDefinitions = resolveWorkflowArtifactDefinitions(
-    getWorkflowTypeConfig(workflow.workflow_type)?.roles,
+    workflowConfig?.roles,
+    workflow,
+    workflowConfig?.states,
   );
   return artifactDefinitions.map((candidate) => {
-    const fullPath = path.join(baseDir, candidate.file);
+    const relativePath =
+      candidate.project_path ||
+      path.relative(PROJECT_ROOT, path.join(baseDir, candidate.file));
+    const fullPath = path.join(PROJECT_ROOT, relativePath);
     return {
       id: `${workflow.id}-${candidate.file}`,
       title: candidate.title,
       artifact_type: candidate.artifact_type,
-      path: path.relative(PROJECT_ROOT, fullPath),
+      path: relativePath,
       absolute_path: fullPath,
       exists: fs.existsSync(fullPath),
       created_at: workflow.updated_at,

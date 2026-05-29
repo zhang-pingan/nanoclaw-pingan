@@ -494,6 +494,53 @@ describe('workbench approval transition sync', () => {
     );
   });
 
+  it('persists JSON artifacts declared by artifact contracts', () => {
+    dbCreateWorkflow({
+      id: 'wf-contract-json-artifact',
+      name: '契约 JSON 产物',
+      service: WORKBENCH_TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/contract-json-artifact',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_contract_json',
+        staging_work_branch: '',
+        access_token: '',
+      },
+      status: 'plan',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-contract-json-artifact');
+
+    const iterationDir = path.join(
+      PROJECT_ROOT,
+      'projects',
+      WORKBENCH_TEST_SERVICE,
+      'iteration',
+      '2026-04-07_contract_json',
+    );
+    fs.mkdirSync(iterationDir, { recursive: true });
+    fs.writeFileSync(path.join(iterationDir, 'traceability.json'), '{}');
+
+    const detail = getWorkbenchTaskDetail('wb-wf-contract-json-artifact');
+    const traceabilityArtifact = detail?.artifacts.find((item) =>
+      item.path.endsWith('/traceability.json'),
+    );
+    expect(traceabilityArtifact).toMatchObject({
+      title: 'traceability.json',
+      artifact_type: 'json_artifact',
+      path: `projects/${WORKBENCH_TEST_SERVICE}/iteration/2026-04-07_contract_json/traceability.json`,
+      exists: true,
+    });
+  });
+
   it('does not emit nested action item updates while rendering broadcast cards', () => {
     dbCreateWorkflow({
       id: 'wf-broadcast-readonly-detail',

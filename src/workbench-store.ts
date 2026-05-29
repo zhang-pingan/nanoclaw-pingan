@@ -36,10 +36,7 @@ import type {
   WorkflowEvalEvidence,
   WorkflowEvalFinding,
 } from './types.js';
-import type {
-  WorkbenchActionItem,
-  WorkbenchTaskItem,
-} from './workbench.js';
+import type { WorkbenchActionItem, WorkbenchTaskItem } from './workbench.js';
 import { resolveWorkflowArtifactDefinitions } from './workflow-artifacts.js';
 import { buildHumanInputCard } from './human-input-card.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
@@ -417,11 +414,17 @@ function ensureArtifacts(workflow: Workflow): void {
     'iteration',
     deliverable,
   );
+  const workflowConfig = getWorkflowTypeConfig(workflow.workflow_type);
   const artifactDefinitions = resolveWorkflowArtifactDefinitions(
-    getWorkflowTypeConfig(workflow.workflow_type)?.roles,
+    workflowConfig?.roles,
+    workflow,
+    workflowConfig?.states,
   );
   for (const def of artifactDefinitions) {
-    const fullPath = path.join(baseDir, def.file);
+    const relativePath =
+      def.project_path ||
+      path.relative(PROJECT_ROOT, path.join(baseDir, def.file));
+    const fullPath = path.join(PROJECT_ROOT, relativePath);
     if (!fs.existsSync(fullPath)) continue;
     createWorkbenchArtifact({
       id: `${task.id}-${def.file}`,
@@ -429,7 +432,7 @@ function ensureArtifacts(workflow: Workflow): void {
       workflow_id: workflow.id,
       artifact_type: def.artifact_type,
       title: def.title,
-      path: path.relative(PROJECT_ROOT, fullPath),
+      path: relativePath,
       source_role: def.source_role,
       created_at: workflow.updated_at,
     });
@@ -440,7 +443,7 @@ function ensureArtifacts(workflow: Workflow): void {
       payload: {
         id: `${task.id}-${def.file}`,
         title: def.title,
-        path: path.relative(PROJECT_ROOT, fullPath),
+        path: relativePath,
         absolutePath: fullPath,
         createdAt: workflow.updated_at,
       },
