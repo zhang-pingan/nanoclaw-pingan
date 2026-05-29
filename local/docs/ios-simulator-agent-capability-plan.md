@@ -934,7 +934,7 @@ product-recon.json + impact-analysis.json + requirement
 
 iOS Simulator Capability 是 evidence provider，不直接替代 agent 设计方案。
 
-> 接入方式：`WorkflowContextSourceType` 是封闭联合，仅 `workflow_input | artifact | codebase_location` 三种（见 `src/workflow-definition.ts`，并在 `src/workflow-compiler.ts` 有白名单二次约束）。本方案**不新增 source type**；四类 JSON 产物在 workflow artifact 系统支持 JSON deliverable 后，统一作为 `artifact` source 纳入 Context Pack（JSON deliverable 改造范围另行讨论）。
+> 接入方式：`WorkflowContextSourceType` 是封闭联合，仅 `workflow_input | artifact | codebase_location` 三种（见 `src/workflow-definition.ts`，并在 `src/workflow-compiler.ts` 有白名单二次约束）。本方案**不新增 source type**；workflow artifact 系统已支持 JSON deliverable（见 `stage-evaluation-config-driven-plan.md` 的 ①②③），四类 JSON 产物直接作为 `artifact` source 纳入 Context Pack。
 
 Context Pack 可纳入（均为 `artifact` 类型）：
 
@@ -1026,8 +1026,10 @@ Quality Gate 可检查：
 
 ### Phase 6：Workflow 与 Quality Gate 接入
 
-- JSON artifact contract 支持四类产物。
-- Context Pack 纳入 iOS evidence provider。
+> 前置已就绪：JSON deliverable 支持（目录扫描去 `.md` 化、`body_required_fields` 文件体校验、handoff/Trace 纳入 JSON artifact）已由 `stage-evaluation-config-driven-plan.md` 实现。本阶段是**消费既有能力**，不再建设 JSON 支持本身。
+
+- 为四类产物声明 artifact contract，并配置 `body_required_fields`（如 `version`/`platform`/`flows`/`evidence`）。
+- Context Pack 纳入 iOS evidence provider（四类产物作为 `artifact` source）。
 - Quality Gate 从 non-blocking 逐步切换到 blocking。
 
 成功标准：
