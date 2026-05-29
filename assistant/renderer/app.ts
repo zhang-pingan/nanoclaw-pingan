@@ -64,6 +64,20 @@ type ChatFileInfo = {
   url: string;
 };
 
+type AgentStatusMessage = {
+  type?: string;
+  agents?: Array<{ groupJid?: string | null }>;
+};
+
+type AgentQueryTraceMessage = {
+  type?: string;
+  queries?: Array<{
+    groupJid?: string | null;
+    groupFolder?: string | null;
+    status?: string | null;
+  }>;
+};
+
 declare global {
   interface Window {
     assistantHost?: {
@@ -130,6 +144,7 @@ let state: AssistantState | null = null;
 let movingTimer: number | null = null;
 let chatMessages: AssistantChatMessage[] = [];
 let chatTyping = false;
+let assistantQueryActive = false;
 let chatOpen = false;
 let chatMode = false;
 let sceneChatOpen = false;
@@ -1072,6 +1087,36 @@ function renderChat(): void {
   scheduleChatScrollToBottom();
 }
 
+function clearChatTypingIfIdle(isAssistantActive: boolean): void {
+  if (isAssistantActive || !chatTyping) return;
+  chatTyping = false;
+  renderChat();
+}
+
+function syncChatTypingFromAgentStatus(message: AgentStatusMessage): void {
+  const isAssistantActive = Array.isArray(message.agents)
+    ? message.agents.some((agent) => agent.groupJid === ASSISTANT_CHAT_JID)
+    : false;
+  clearChatTypingIfIdle(isAssistantActive);
+}
+
+function syncChatTypingFromAgentQueryTrace(
+  message: AgentQueryTraceMessage,
+): void {
+  const isAssistantActive = Array.isArray(message.queries)
+    ? message.queries.some(
+        (query) =>
+          query.status === 'running' &&
+          (query.groupJid === ASSISTANT_CHAT_JID ||
+            query.groupFolder === 'assistant_main'),
+      )
+    : false;
+  const wasAssistantActive = assistantQueryActive;
+  assistantQueryActive = isAssistantActive;
+  if (!wasAssistantActive) return;
+  clearChatTypingIfIdle(isAssistantActive);
+}
+
 function upsertChatMessage(message: AssistantChatMessage): void {
   const index = chatMessages.findIndex((item) => item.id === message.id);
   if (index >= 0) chatMessages[index] = message;
@@ -1387,12 +1432,26 @@ async function connectWs(): Promise<void> {
       const message = JSON.parse(String(event.data)) as {
         type?: string;
         state?: AssistantState;
+        agents?: Array<{ groupJid?: string | null }>;
+        queries?: Array<{
+          groupJid?: string | null;
+          groupFolder?: string | null;
+          status?: string | null;
+        }>;
         event?: {
           type?: string;
           message?: AssistantChatMessage;
           typing?: boolean;
         };
       };
+      if (message.type === 'agent_status') {
+        syncChatTypingFromAgentStatus(message);
+        return;
+      }
+      if (message.type === 'agent_query_trace') {
+        syncChatTypingFromAgentQueryTrace(message);
+        return;
+      }
       if (message.type === 'assistant_state' && message.state) {
         state = message.state;
         render();
