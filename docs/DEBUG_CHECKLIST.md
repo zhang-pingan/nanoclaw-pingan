@@ -11,6 +11,9 @@ Both timers fire at the same time, so containers always exit via hard SIGKILL (c
 ### 3. Cursor advanced before agent succeeds
 `processGroupMessages` advances `lastAgentTimestamp` before the agent runs. If the container times out, retries find no messages (cursor already past them). Messages are permanently lost on timeout.
 
+### 4. [FIXED] 未闭合叶子 / 合成 close 级联导致空回复（trace 仍记 success）
+group 调用多次、回复全空、但 Trace 全记 `success`、无 error。根因：未闭合叶子 resume 时 SDK 发合成 `No response requested.` 的 success result，`iterateQuery` 在第一个 result 就 `stream.end()`，把真消息甩成下一个未闭合叶子，自我级联。**完整排查与修复方案、含 Skill-load 残留的条件化改法见 [unclosed-leaf-cascade.md](./unclosed-leaf-cascade.md)。**
+
 ## Quick Status Check
 
 ```bash

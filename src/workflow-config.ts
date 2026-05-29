@@ -400,7 +400,7 @@ export function validateConfig(
       !isValidDeliverableFileName(roleConfig.deliverable_file)
     ) {
       errors.push(
-        `${typeName}.roles.${roleName}.deliverable_file must be a base .md filename`,
+        `${typeName}.roles.${roleName}.deliverable_file must be a base filename with an extension`,
       );
     }
   }
