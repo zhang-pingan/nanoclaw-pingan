@@ -934,7 +934,7 @@ product-recon.json + impact-analysis.json + requirement
 
 iOS Simulator Capability 是 evidence provider，不直接替代 agent 设计方案。
 
-> 接入方式：`WorkflowContextSourceType` 是封闭联合，仅 `workflow_input | artifact | codebase_location` 三种（见 `src/workflow-definition.ts`，并在 `src/workflow-compiler.ts` 有白名单二次约束）。本方案**不新增 source type**；四类 JSON 产物在“横切前置改造：JSON Deliverable 支持”落地后，统一作为 `artifact` source 纳入 Context Pack。
+> 接入方式：`WorkflowContextSourceType` 是封闭联合，仅 `workflow_input | artifact | codebase_location` 三种（见 `src/workflow-definition.ts`，并在 `src/workflow-compiler.ts` 有白名单二次约束）。本方案**不新增 source type**；四类 JSON 产物在 workflow artifact 系统支持 JSON deliverable 后，统一作为 `artifact` source 纳入 Context Pack（JSON deliverable 改造范围另行讨论）。
 
 Context Pack 可纳入（均为 `artifact` 类型）：
 
