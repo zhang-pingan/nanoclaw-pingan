@@ -33,6 +33,20 @@ agent
 
 后续 workflow 可以在 plan 前、开发前、测试前或质量门阶段调用这套能力，但第一版重点不是决定接入哪个环节，而是确保能力本身可靠。
 
+## 两层划分：底座能力 vs 编排能力
+
+本方案显式分两层，**本次只实现「底座能力」**：
+
+- **底座能力（本次实现）**：一组无状态、可独立调用的 MCP 工具 + 宿主机执行 + evidence/claim 存储 + 脱敏与引用完整性护栏。它不规定"按什么顺序调、提炼什么结论、判断改哪端"，只保证每个工具可操作、每条产物可追溯、敏感信息已脱敏。
+  - 范围：能力分层（Prepare/Observe/Act/Trace/Assert）、MCP 工具草案、Evidence 与 Claim 模型、安全与权限、`clients.ios` 服务配置、技术选型、`src/app-recon/` 模块清单。
+- **编排能力（暂不实现，留作设计参考）**：把底座工具按业务意图串成 agent 行为，并嵌入工作流。`Product Recon → Claim → Impact Analysis → Test Plan → Acceptance` 这条链属于此层——它是某个委派节点 + skill prompt 的职责，不是底座。
+  - 范围：Product Recon / Impact Analysis / Test Plan 产物、Agent 使用流程、与 Context Pack / Quality Gate 关系、Phase 6 工作流接入。
+  - **本次不实现，具体如何嵌入工作流待定。** 文档保留这部分是为了让底座的工具设计不偏离最终用途，不代表本次交付。
+
+底座与编排的护栏边界（贯穿全文）：**凡是"防止 agent 幻觉破坏可追溯性、或泄漏敏感信息"的机械护栏，放底座；凡是需要语义判断的（结论对不对、改哪端、用例怎么设计），归编排。**
+
+下文章节标题会标注 `[底座]` 或 `[编排·暂不实现]`，以示范围。
+
 ## 目标
 
 - 让 agent 能稳定启动、观察、操作和恢复 iOS Simulator 中的 App。
@@ -60,7 +74,7 @@ agent
 - **端/服影响显式建模**：不让 plan agent 从散乱观察中自行猜测是否需要改客户端或服务端。
 - **宿主机执行，容器调用**：Xcode、Simulator、Appium/XCUITest、iOS 源码读取和 evidence 存储均在宿主机侧执行。
 
-## 能力分层
+## 能力分层 [底座]
 
 ### 1. Prepare / Session
 
@@ -238,25 +252,27 @@ agent
 - 崩溃断言：用例执行期间无 crash。
 - 报告生成：product recon、impact analysis、test plan、acceptance report。
 
-## MCP 工具草案
+## MCP 工具草案 [底座]
 
 第一版继续采用“agent 可见具名 MCP，宿主机内部统一 dispatcher”的设计。
 
 > 承载层设计取舍（有意偏离现有模式）：现有宿主机工具是“一工具一 IPC type”，每个工具在 `src/ipc.ts` 有独立 case 和独立结果目录（如 `desktop_capture`、`run_local_host_script`、`ai_image_generate_image`）。本方案有意收敛为单一 `ios_app_request` 承载协议，用 `action` 区分动作。原因是这一组工具共享 session、Simulator 资源锁、evidence store 和脱敏逻辑；若拆成十余个独立 IPC type，这些公共状态会被复制十余份。容器侧仍按具名工具暴露（保留清晰语义、独立 schema、可读 Trace 和按工具授权），只有宿主机承载层统一。这是相对 CLAUDE.md “优先现有模式”的刻意例外。
 
 ```text
-Agent 可见工具
+Agent 可见工具（底座，本次实现）
   ios_app_prepare_session
   ios_app_observe
   ios_app_act
   ios_app_run_flow
   ios_app_read_trace
   ios_app_search_code
-  ios_app_write_claims
-  ios_app_generate_test_plan
-  ios_app_run_test_case
-  ios_app_write_report
+  ios_app_write_claims        # 存 claim + 校验 evidence 引用（内容由编排决定）
+  ios_app_run_test_case       # 执行给定用例 + 断言（用例内容由编排提供）
+  ios_app_write_report        # 通用结构化写盘 + 脱敏 + 字段/引用校验
   ios_host_debug_shell
+
+编排层工具（暂不实现）
+  ios_app_generate_test_plan  # 生成 ios-test-plan.json 的"内容"，属语义判断
 
 宿主机内部
   ios_app_request dispatcher
@@ -503,7 +519,11 @@ Agent 可见工具
 
 ### ios_app_write_claims
 
-把原始观察转换成可被后续 agent 引用的结论。
+把 agent 提炼的结论落盘为可追溯的 `CLAIM-*`。
+
+> 底座/编排边界：**claim 的内容（statement 写什么、confidence 给多高、该不该提炼）由 agent 决定，属编排。** 底座只做两件机械事：
+> - 分配 `CLAIM-*` id 并落盘；
+> - **校验 `supported_by` 引用的 evidence id 真实存在于本 session 的 evidence store**，否则报错。这是"结论可证明"的护栏——防止 agent 幻觉出引用了不存在证据的 claim。
 
 输入：
 
@@ -535,7 +555,45 @@ Agent 可见工具
 }
 ```
 
-## Evidence 与 Claim 模型
+### ios_app_write_report
+
+通用的结构化产物写盘工具，是**所有 JSON 产物（product-recon / impact-analysis / ios-test-plan / acceptance-report）落盘的唯一底座出口**。
+
+> 底座/编排边界：**产物里写什么内容、是哪种产物、字段如何定义，由调用方（编排）决定。** 底座只提供通用机制：
+> - 把 `body` 写到 deliverable 目录；
+> - **脱敏出口**：写盘前统一脱敏（token/cookie/手机号/身份证/定位等），不允许 agent 用通用文件工具绕过；
+> - **字段存在性校验**：按调用方传入的 `required_fields` 校验（与 `stage-evaluation-config-driven-plan.md` 的 `body_required_fields` 同源，等于"生产端先验、质量门再验"）；
+> - **evidence 引用完整性校验**：body 中引用的 `FLOW-*`/`NET-*`/`CLAIM-*` 等 id 必须真实存在。
+>
+> 底座**不内置**各产物的字段定义——`required_fields` 由调用方传入，产物形态随编排演进，底座不绑定。
+
+输入：
+
+```json
+{
+  "session_id": "SESSION-001",
+  "kind": "product_recon",
+  "path": "projects/{{service}}/iteration/{{deliverable}}/product-recon.json",
+  "required_fields": ["version", "platform", "flows", "evidence"],
+  "body": {}
+}
+```
+
+输出：
+
+```json
+{
+  "status": "success",
+  "path": "projects/catstory/iteration/2026-05-29_nickname/product-recon.json",
+  "redacted_fields": ["app_log.0.token"],
+  "missing_fields": [],
+  "unresolved_evidence_refs": []
+}
+```
+
+`generate_test_plan` 等"生成具体产物内容"的工具属编排层，本次不实现；底座只提供 `write_report` 这个通用写盘出口。
+
+## Evidence 与 Claim 模型 [底座]
 
 ### Evidence
 
@@ -606,7 +664,9 @@ Claim 类型：
 - `CLAIM-*` 再追溯到 `FLOW-*`、`ACT-*`、`NET-*`、`CLIENT_CODE-*` 等原始 evidence。
 - 没有 evidence 的内容只能进入 assumption 或 open question。
 
-## Product Recon 产物
+## Product Recon 产物 [编排·暂不实现]
+
+> 本节及之后的 Impact Analysis、Test Plan、Agent 使用流程、Context Pack/Quality Gate 接入，均属**编排层**：它们描述 agent 如何用底座工具产出业务结论与如何嵌入工作流。**本次不实现**，保留作为底座工具设计的目标参照。产物的字段定义即底座 `ios_app_write_report` 的 `required_fields` 来源。
 
 Product Recon 用来理解当前业务行为。
 
@@ -651,7 +711,7 @@ Product Recon 用来理解当前业务行为。
 }
 ```
 
-## Impact Analysis 产物
+## Impact Analysis 产物 [编排·暂不实现]
 
 Impact Analysis 用来回答“这次需求是否涉及客户端或服务端改动”。
 
@@ -701,7 +761,7 @@ Impact Analysis 用来回答“这次需求是否涉及客户端或服务端改�
 - `required=false` 表示已有证据能支撑该端不需要修改。
 - `required=unknown` 表示需求或证据不足，必须进入 open question 或 human review。
 
-## Test Plan 生成
+## Test Plan 生成 [编排·暂不实现]
 
 测试计划生成位于 Product Recon 之后、Acceptance Harness 之前。
 
@@ -770,7 +830,7 @@ Impact Analysis 用来回答“这次需求是否涉及客户端或服务端改�
 - 涉及状态刷新时必须生成刷新、返回、重启或重新进入页面的状态断言。
 - 无法自动化的 case 必须标记 `automatable=false` 并说明原因。
 
-## Acceptance Harness 产物
+## Acceptance Harness 产物 [编排·暂不实现]
 
 Acceptance Harness 执行 `ios-test-plan.json` 中可自动化的 case。
 
@@ -830,7 +890,7 @@ Acceptance Harness 执行 `ios-test-plan.json` 中可自动化的 case。
 - 用例执行期间出现 crash 时，该 case 不能 passed。
 - 自由探索结果只能作为补充 evidence，不能直接让 case passed。
 
-## Agent 使用流程
+## Agent 使用流程 [编排·暂不实现]
 
 ### 面对需求时理解业务全貌
 
@@ -888,7 +948,61 @@ product-recon.json + impact-analysis.json + requirement
 - 自动化执行报告。
 - case/assert/evidence/claim 追溯链。
 
-## iOS 工程配合要求
+## 技术选型 [底座]
+
+第一版：
+
+- iOS 运行环境：Xcode + iOS Simulator。
+- 模拟器管理：`xcrun simctl`。
+- App 构建安装：`xcodebuild` + `simctl install/launch`。
+- UI 自动化：Appium + XCUITest driver。
+- 网络采集：优先 iOS Debug/Staging build 内置网络 JSONL 日志（路径见 `clients.ios.automation.network_log_path`）。
+- iOS / 服务端源码索引：第一版用 `rg` 搜 screen/API/model/deeplink；后续可接 SwiftSyntax。
+
+不建议第一版用 mitmproxy 做 HTTPS 抓包：iOS 证书信任、证书 pinning 和环境差异会明显增加维护成本。
+
+## 服务配置：clients.ios [底座]
+
+在现有 `groups/global/services.json` 中为服务增加 iOS client 信息。该配置是"顶层 service name 为 key"的结构，不额外包一层 `services`。
+
+```json
+{
+  "catstory": {
+    "repo_path": "catstory",
+    "git_url": "git@tx.git.chelaile.net.cn:dev/catstory.git",
+    "default_branch": "master",
+    "clients": {
+      "ios": {
+        "repo_path": "catstory-ios",
+        "git_url": "git@tx.git.chelaile.net.cn:client/catstory-ios.git",
+        "workspace": "Catstory.xcworkspace",
+        "scheme": "CatstoryDebug",
+        "bundle_id": "com.example.catstory",
+        "simulator": "iPhone 16",
+        "configuration": "Debug",
+        "automation": {
+          "driver": "appium",
+          "launch_args": ["-UITestMode", "1", "-Environment", "staging"],
+          "deep_links": {
+            "profile_edit": "catstory://profile/edit"
+          },
+          "network_log_path": "Library/Caches/IcarusNetworkLog/network.jsonl"
+        }
+      }
+    }
+  }
+}
+```
+
+配置规则：
+
+- `clients.ios.repo_path` 必须是相对路径，不能为空，不能含绝对路径、`.`、`..` 或空 path segment，解析后必须位于 `REPOS_DIR` 下（与现有 service `repo_path` 同规则）。
+- iOS client repo 第一版由宿主机读取和搜索（`ios_app_search_code`），**不默认挂载给容器**；容器只通过工具获取受控源码片段。
+- 若后续需容器直接读取 iOS repo，复用现有 service mount 安全规则，并显式声明 `clients.ios.mount_to_container: true`，默认 `false`。
+- `git_url` 可选；若本地 `REPOS_DIR/{clients.ios.repo_path}` 不存在，**第一版直接返回配置错误，不自动 clone**。
+- `network_log_path` 是相对 Simulator app container 的路径，由 `ios_app_read_trace` 通过 `simctl get_app_container` 解析后读取。
+
+## iOS 工程配合要求 [底座依赖]
 
 为了让能力稳定，Debug/Staging App 应配合：
 
@@ -905,7 +1019,7 @@ product-recon.json + impact-analysis.json + requirement
 
 没有这些配合时仍可探索，但工具返回中必须降低 confidence，并在报告中标记自动化稳定性风险。
 
-## 安全与权限
+## 安全与权限 [底座]
 
 ### 工具可见性即授权
 
@@ -930,7 +1044,31 @@ product-recon.json + impact-analysis.json + requirement
 - `ios_host_debug_shell` 是具名调试工具，但不属于正式 evidence provider；它的输出只能形成 `DEBUG-*` 记录。
 - `DEBUG-*` 可以被人工排障引用，但不能直接支撑 plan decision、impact decision 或 acceptance passed。
 
-## 与 Context Pack / Quality Gate 的关系
+## 代码模块清单 [底座]
+
+宿主机侧建议新增的模块。**本次只实现底座文件**；编排文件列出仅作占位，待编排层落地时再加。
+
+```text
+src/app-recon/
+  types.ts                       # [底座] Session/Evidence/Claim/Action 等类型
+  ios-app-request-dispatcher.ts  # [底座] 统一 ios_app_request 入口与分发
+  ios-simulator.ts               # [底座] xcrun simctl / xcodebuild：启动/安装/launch/锁
+  ios-appium.ts                  # [底座] Appium/XCUITest：observe/act/run_flow
+  ios-source-index.ts            # [底座] iOS + 服务端源码搜索（rg）
+  ios-network-log.ts             # [底座] 读 Simulator 网络 JSONL、脱敏、关联 action
+  ios-evidence-store.ts          # [底座] evidence/claim 落盘、id 分配、脱敏出口、引用校验
+  ios-report-writer.ts           # [底座] ios_app_write_report：通用写盘+脱敏+字段/引用校验
+
+  # 以下为编排层，本次不实现，待定如何嵌入工作流：
+  ios-product-recon.ts           # [编排] 生成 product-recon.json 的内容
+  ios-impact-analysis.ts         # [编排] 生成 impact-analysis.json 的内容
+  ios-test-plan.ts               # [编排] 生成 ios-test-plan.json 的内容
+  ios-acceptance-harness.ts      # [编排] 串联 run_test_case/assert 产出 acceptance-report.json
+```
+
+注：脱敏与 evidence/claim 引用完整性校验集中在 `ios-evidence-store.ts` 与 `ios-report-writer.ts` 两处统一出口，编排层不得绕过。
+
+## 与 Context Pack / Quality Gate 的关系 [编排·暂不实现]
 
 iOS Simulator Capability 是 evidence provider，不直接替代 agent 设计方案。
 
@@ -955,14 +1093,16 @@ Quality Gate 可检查：
 
 ## 分阶段实施
 
+> 范围对照：**本次交付 = 底座（Phase 1–3）。** Phase 4 起属编排层，本次不实现，列出仅供规划。底座工具产出的 JSON 产物落盘走 `ios_app_write_report`，但"产物内容怎么生成、按什么链路编排、如何嵌入工作流"待定。
+
 实施顺序原则：
 
-- **能力层先于 workflow 接入。** Phase 1–2 的 prepare/observe/act/trace/search 先作为**独立的主群工具**验证，完全不绑定任何 workflow 阶段。`ios-recon`/`ios-acceptance` profile 先只授予主群，agent 在主群里就能跑通启动、观察、操作、网络关联的完整闭环。
-- **先消未知数，再付改造成本。** UI 自动化稳定性、iOS 工程配合（accessibilityIdentifier / launch args / deeplink / JSONL 日志 / seed data）是两个最大的外部不确定项；要在能力层独立验证里先压掉，再进入 workflow/quality-gate 接入。
-- **workflow 接入压到最后。** JSON deliverable、Context Pack、Quality Gate 阻断是 churn 和风险集中区，排在 Phase 6；其中 JSON deliverable 是横切前置改造，范围另行讨论后再排期。
+- **底座先于编排与 workflow 接入。** Phase 1–3 的 prepare/observe/act/trace/search + write_claims/write_report 先作为**独立的主群工具**验证，完全不绑定任何 workflow 阶段。`ios-recon`/`ios-acceptance` profile 先只授予主群，agent 在主群里就能跑通启动、观察、操作、网络关联、产物写盘的完整闭环。
+- **先消未知数，再付编排成本。** UI 自动化稳定性、iOS 工程配合（accessibilityIdentifier / launch args / deeplink / JSONL 日志 / seed data）是两个最大的外部不确定项；要在底座独立验证里先压掉。
+- **编排与 workflow 接入待定。** Product Recon/Impact/Test Plan 的编排链路、Context Pack、Quality Gate 阻断如何嵌入工作流，本次不决定。其依赖的 JSON deliverable 能力由 `stage-evaluation-config-driven-plan.md` 提供。
 - 每个 Phase 都自带可独立验证的成功标准，未达标不进入下一阶段。
 
-### Phase 1：可操作模拟器最小闭环
+### Phase 1：可操作模拟器最小闭环 [底座]
 
 - 实现 host `ios_app_request` dispatcher。
 - 实现 session 管理、资源锁、超时和统一错误格式（授权沿用工具可见性，dispatcher 不做二次校验）。
@@ -977,7 +1117,7 @@ Quality Gate 可检查：
 - 每个动作都有前后 observe 和 action evidence。
 - 失败时能返回结构化失败原因。
 
-### Phase 2：Trace 与代码关联
+### Phase 2：Trace 与代码关联 [底座]
 
 - iOS Debug build 输出网络 JSONL。
 - 实现 `ios_app_read_trace`。
@@ -989,53 +1129,30 @@ Quality Gate 可检查：
 - agent 能证明某个 UI 动作触发了哪个 API。
 - agent 能找到相关 iOS ViewModel/API client 和服务端 route。
 
-### Phase 3：Claim 与 Product Recon
+### Phase 3：Claim 与产物写盘工具 [底座]
 
-- 实现 `ios_app_write_claims`。
-- 生成 `product-recon.json`。
-- 对低置信度观察输出 limitations 和 open questions。
+> 这里只实现**工具**（存 claim、写盘、校验、断言执行），不实现"按业务链路生成产物内容"——那是编排层。
 
-成功标准：
-
-- plan agent 不再直接引用散乱截图和日志，而是引用 claim。
-- 每个 claim 可追溯到原始 evidence。
-
-### Phase 4：Impact Analysis
-
-- 生成 `impact-analysis.json`。
-- 显式输出 client/server impact。
-- `unknown` 项进入 open question 或 human review。
+- 实现 `ios_app_write_claims`（分配 id、落盘、校验 evidence 引用存在）。
+- 实现 `ios_app_write_report`（通用写盘 + 脱敏出口 + `required_fields` 字段校验 + evidence 引用校验）。
+- 实现 `ios_app_run_test_case`（执行调用方给定的用例 + UI/network/state/crash 断言）。
 
 成功标准：
 
-- 需求是否涉及客户端或服务端改动有结构化判断和证据。
-- 无法判断时不会被 agent 猜成确定结论。
+- agent 可生成至少一个 `CLAIM-*`，引用不存在 evidence 时被拒。
+- 通过 `write_report` 写出一个带 `required_fields` 的 JSON 产物，缺字段/坏引用能被报告。
+- 给定一个用例可执行并返回结构化断言结果。
 
-### Phase 5：Test Plan 与 Acceptance Harness
+### Phase 4 起：编排与工作流接入 [暂不实现]
 
-- 生成 `ios-test-plan.json`。
-- 实现 `ios_app_run_test_case`。
-- 实现 UI/network/state/crash assertions。
-- 生成 `acceptance-report.json`。
+以下属编排层，本次不实现，待"如何嵌入工作流"想清楚后再排期：
 
-成功标准：
+- Product Recon / Impact Analysis / Test Plan 的**内容生成链路**（agent 如何串底座工具产出四类 JSON）。
+- 工作流角色/状态接入、plan prompt 注入。
+- Context Pack 纳入 iOS 产物（作为 `artifact` source）。
+- Quality Gate 从 non-blocking 切到 blocking。
 
-- 测试计划覆盖需求验收标准。
-- 自动化用例可重复执行。
-- passed 结论都能追溯到 case、assertion 和 evidence。
-
-### Phase 6：Workflow 与 Quality Gate 接入
-
-> 前置已就绪：JSON deliverable 支持（目录扫描去 `.md` 化、`body_required_fields` 文件体校验、handoff/Trace 纳入 JSON artifact）已由 `stage-evaluation-config-driven-plan.md` 实现。本阶段是**消费既有能力**，不再建设 JSON 支持本身。
-
-- 为四类产物声明 artifact contract，并配置 `body_required_fields`（如 `version`/`platform`/`flows`/`evidence`）。
-- Context Pack 纳入 iOS evidence provider（四类产物作为 `artifact` source）。
-- Quality Gate 从 non-blocking 逐步切换到 blocking。
-
-成功标准：
-
-- plan、dev、testing agent 都能引用 iOS evidence。
-- 质量门能阻断缺少关键证据的方案或测试结论。
+> 依赖说明：上述 JSON 产物作为正式 artifact 所需的 JSON deliverable 能力（目录扫描去 `.md` 化、`body_required_fields` 校验、handoff/Trace 纳入 JSON artifact），由 `stage-evaluation-config-driven-plan.md` 提供，届时为"消费既有能力"。
 
 ## 风险与处理
 
@@ -1051,14 +1168,17 @@ Quality Gate 可检查：
 | iOS 工程配合不足 | 降低 confidence，报告 limitations，不把低置信度观察作为 blocking claim |
 | 过早接入 workflow 导致复杂度失控 | 先做能力闭环，再接 Product Recon、Impact Analysis、Acceptance Harness |
 
-## 第一版验收标准
+## 第一版验收标准（底座）
+
+本次验收只覆盖底座能力；产物的"内容生成链路"和工作流接入属编排层，不在本次验收范围。
 
 - agent 可以通过 MCP 启动指定 iOS App 到 staging/debug 环境。
 - agent 可以获取包含 screenshot、UI tree、可交互元素和 network cursor 的 observe。
 - agent 可以执行 tap/type/scroll/back/deeplink/wait，并自动记录 action 前后 observe。
 - agent 可以读取 action 触发的网络事件，并输出脱敏 `NET-*` evidence。
 - agent 可以搜索 iOS 客户端和服务端代码，并输出 `CLIENT_CODE-*`、`SERVER_CODE-*` evidence。
-- agent 可以生成至少一个 `CLAIM-*`，且 claim 能追溯到原始 evidence。
-- agent 可以生成 `product-recon.json` 和 `impact-analysis.json`。
-- agent 可以从需求和 recon 生成 `ios-test-plan.json`。
-- agent 可以执行至少一个自动化 test case，并输出 `acceptance-report.json`。
+- agent 可以生成至少一个 `CLAIM-*`，引用不存在的 evidence 时被底座拒绝。
+- agent 可以通过 `ios_app_write_report` 写出一个 JSON 产物：缺 `required_fields` 字段、引用不存在 evidence、含敏感字段时，分别被校验报告 / 脱敏。
+- agent 可以执行至少一个给定的 test case，并返回结构化断言结果与证据。
+
+> 注：能否产出语义完整的 `product-recon.json` / `impact-analysis.json` / `ios-test-plan.json` / `acceptance-report.json`，取决于编排层（暂不实现）；底座只保证"写盘工具可用、校验/脱敏护栏生效"。
