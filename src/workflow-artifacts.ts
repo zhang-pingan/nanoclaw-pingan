@@ -41,10 +41,14 @@ export function getDefaultDeliverableFileNameForRole(role?: string): string {
 }
 
 export function isValidDeliverableFileName(fileName: string): boolean {
+  // A deliverable file name must be a single path segment (no traversal) with
+  // a reasonable extension. The extension is no longer restricted to `.md`, so
+  // workflows can declare non-Markdown deliverables (JSON/YAML/CSV/SVG…).
+  const trimmed = fileName.trim();
   return (
-    fileName.trim().length > 0 &&
-    fileName === fileName.split(/[\\/]/).pop() &&
-    fileName.toLowerCase().endsWith('.md')
+    trimmed.length > 0 &&
+    trimmed === trimmed.split(/[\\/]/).pop() &&
+    /\.[a-z0-9]{1,12}$/i.test(trimmed)
   );
 }
 

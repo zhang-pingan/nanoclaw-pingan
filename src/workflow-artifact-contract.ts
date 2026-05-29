@@ -24,6 +24,35 @@ type JsonSchema = {
   enum?: unknown[];
 };
 
+export type WorkflowArtifactFindingSeverity =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical';
+
+export interface WorkflowArtifactContentCheck {
+  code: string;
+  severity?: WorkflowArtifactFindingSeverity;
+  any_of: string[];
+  message: string;
+  suggestion?: string;
+}
+
+export interface WorkflowArtifactPayloadRule {
+  code: string;
+  severity?: WorkflowArtifactFindingSeverity;
+  field: string;
+  gt?: number;
+  gte?: number;
+  lt?: number;
+  lte?: number;
+  eq?: unknown;
+  exists?: boolean;
+  then_status?: WorkflowStageEvaluationStatus;
+  message: string;
+  suggestion?: string;
+}
+
 export interface WorkflowArtifactContract {
   id: string;
   version: number;
@@ -35,12 +64,15 @@ export interface WorkflowArtifactContract {
     must_exist?: boolean;
     frontmatter_required?: string[];
     frontmatter_schema?: Record<string, unknown>;
+    content_checks?: WorkflowArtifactContentCheck[];
+    body_required_fields?: string[];
     max_bytes?: number;
   }>;
   payload?: {
     required?: string[];
     properties?: Record<string, unknown>;
   };
+  payload_rules?: WorkflowArtifactPayloadRule[];
   allowed_artifact_roots?: string[];
 }
 
@@ -165,7 +197,11 @@ function normalizeWorkflowArtifactContract(
 export function saveWorkflowArtifactContract(input: {
   ref: string;
   contract: unknown;
-}): { contract?: WorkflowArtifactContract; source_file?: string; error?: string } {
+}): {
+  contract?: WorkflowArtifactContract;
+  source_file?: string;
+  error?: string;
+} {
   const ref = input.ref.trim();
   if (!ref) return { error: 'contract id required' };
 
@@ -268,6 +304,100 @@ function readFrontMatter(content: string): Record<string, unknown> | null {
     result[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
   }
   return result;
+}
+
+function interpolateMessage(
+  message: string,
+  values: Record<string, unknown>,
+): string {
+  return message.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
+    const value = getValueByPath(values, key);
+    return value === undefined || value === null ? '' : String(value);
+  });
+}
+
+function getValueByPath(source: unknown, dottedPath: string): unknown {
+  if (!source || typeof source !== 'object') return undefined;
+  let current: unknown = source;
+  for (const segment of dottedPath.split('.')) {
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      Array.isArray(current)
+    ) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function hasValueAtPath(source: unknown, dottedPath: string): boolean {
+  if (!source || typeof source !== 'object') return false;
+  let current: unknown = source;
+  for (const segment of dottedPath.split('.')) {
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !Object.prototype.hasOwnProperty.call(
+        current as Record<string, unknown>,
+        segment,
+      )
+    ) {
+      return false;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current !== undefined;
+}
+
+function contentMatchesAnyOf(content: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    try {
+      return new RegExp(pattern, 'i').test(content);
+    } catch {
+      return content.toLowerCase().includes(pattern.toLowerCase());
+    }
+  });
+}
+
+function evaluatePayloadRule(
+  rule: WorkflowArtifactPayloadRule,
+  payload: Record<string, unknown>,
+): boolean {
+  const value = getValueByPath(payload, rule.field);
+  if (rule.exists !== undefined) {
+    return rule.exists ? value !== undefined : value === undefined;
+  }
+  if (rule.eq !== undefined) {
+    return value === rule.eq;
+  }
+  const numeric = typeof value === 'number' && Number.isFinite(value);
+  if (rule.gt !== undefined) return numeric && (value as number) > rule.gt;
+  if (rule.gte !== undefined) return numeric && (value as number) >= rule.gte;
+  if (rule.lt !== undefined) return numeric && (value as number) < rule.lt;
+  if (rule.lte !== undefined) return numeric && (value as number) <= rule.lte;
+  return false;
+}
+
+const ARTIFACT_STATUS_RANK: Record<WorkflowStageEvaluationStatus, number> = {
+  passed: 0,
+  needs_revision: 1,
+  pending: 2,
+  failed: 3,
+};
+
+function worstArtifactStatus(
+  statuses: WorkflowStageEvaluationStatus[],
+): WorkflowStageEvaluationStatus {
+  return statuses.reduce<WorkflowStageEvaluationStatus>(
+    (worst, candidate) =>
+      ARTIFACT_STATUS_RANK[candidate] > ARTIFACT_STATUS_RANK[worst]
+        ? candidate
+        : worst,
+    'passed',
+  );
 }
 
 function validateJsonSchemaSubset(
@@ -472,6 +602,48 @@ export function evaluateWorkflowArtifactContract(input: {
           path: fullPath,
         });
       }
+      for (const check of file.content_checks || []) {
+        if (!contentMatchesAnyOf(content, check.any_of || [])) {
+          findings.push({
+            code: check.code,
+            severity: check.severity || 'medium',
+            message: check.message,
+            stageKey: input.workflow.status,
+            path: fullPath,
+            suggestion: check.suggestion,
+          });
+        }
+      }
+      if (file.body_required_fields && file.body_required_fields.length > 0) {
+        let body: unknown;
+        let parseFailed = false;
+        try {
+          body = JSON.parse(content);
+        } catch {
+          parseFailed = true;
+        }
+        if (parseFailed) {
+          findings.push({
+            code: 'artifact_contract.body_not_json',
+            severity: 'high',
+            message: `Artifact body is not valid JSON: ${file.path}`,
+            stageKey: input.workflow.status,
+            path: fullPath,
+          });
+        } else {
+          for (const field of file.body_required_fields) {
+            if (!hasValueAtPath(body, field)) {
+              findings.push({
+                code: 'artifact_contract.body_field_missing',
+                severity: 'high',
+                message: `Artifact body missing required field "${field}": ${file.path}`,
+                stageKey: input.workflow.status,
+                path: fullPath,
+              });
+            }
+          }
+        }
+      }
       evidence.push({
         type: 'artifact',
         path: fullPath,
@@ -480,15 +652,29 @@ export function evaluateWorkflowArtifactContract(input: {
     }
   }
 
+  const forcedStatuses: WorkflowStageEvaluationStatus[] = [];
+  for (const rule of contract.payload_rules || []) {
+    if (!evaluatePayloadRule(rule, input.payload)) continue;
+    findings.push({
+      code: rule.code,
+      severity: rule.severity || 'high',
+      message: interpolateMessage(rule.message, input.payload),
+      stageKey: input.workflow.status,
+      suggestion: rule.suggestion,
+    });
+    if (rule.then_status) forcedStatuses.push(rule.then_status);
+  }
+
   const hasCritical = findings.some((item) => item.severity === 'critical');
   const hasHigh = findings.some((item) => item.severity === 'high');
-  const status: WorkflowStageEvaluationStatus = hasCritical
+  const severityStatus: WorkflowStageEvaluationStatus = hasCritical
     ? 'failed'
     : hasHigh
       ? 'pending'
       : findings.length > 0
         ? 'needs_revision'
         : 'passed';
+  const status = worstArtifactStatus([severityStatus, ...forcedStatuses]);
 
   return {
     status,

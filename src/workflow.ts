@@ -1384,7 +1384,15 @@ function readFrontMatter(content: string): Record<string, unknown> | null {
 }
 
 function readMetadataFromFile(filePath: string): Partial<DeliverableMetadata> {
-  const content = fs.readFileSync(filePath, 'utf-8');
+  // Branch metadata lives in YAML front matter. Non-front-matter deliverables
+  // (e.g. JSON/CSV/SVG) or unreadable files degrade to empty metadata rather
+  // than throwing, so the workflow can still declare them as deliverables.
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return {};
+  }
   const metadata = readFrontMatter(content);
   if (!metadata) return {};
 
@@ -1423,7 +1431,14 @@ function readDeliverableDir(
   );
   if (!fs.existsSync(delivDir)) return null;
 
-  const files = fs.readdirSync(delivDir).filter((f) => f.endsWith('.md'));
+  // Accept any regular deliverable file, not just `.md`. The workflow's
+  // artifact contract (`path`) and entry-point `required_deliverable_file`
+  // decide which file is mandatory; the scan no longer pre-filters by
+  // extension, so non-Markdown deliverables (JSON/YAML/CSV/SVG…) survive here.
+  const files = fs
+    .readdirSync(delivDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+    .map((entry) => entry.name);
   if (files.length === 0) return null;
 
   const metadata: DeliverableMetadata = {

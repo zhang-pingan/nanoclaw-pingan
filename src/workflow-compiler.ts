@@ -315,10 +315,9 @@ export function validateWorkflowDefinition(
       errors.push(`${basePath}.sources must be an array`);
     }
     const seenSourceIds = new Set<string>();
-    for (const [index, source] of (
-      Array.isArray(contextRequirements.sources)
-        ? contextRequirements.sources
-        : []
+    for (const [index, source] of (Array.isArray(contextRequirements.sources)
+      ? contextRequirements.sources
+      : []
     ).entries()) {
       const sourcePath = `${basePath}.sources[${index}]`;
       if (!source || typeof source !== 'object' || Array.isArray(source)) {
@@ -344,7 +343,10 @@ export function validateWorkflowDefinition(
       ) {
         errors.push(`${sourcePath}.type "${source.type}" is invalid`);
       }
-      if (source.required !== undefined && typeof source.required !== 'boolean') {
+      if (
+        source.required !== undefined &&
+        typeof source.required !== 'boolean'
+      ) {
         errors.push(`${sourcePath}.required must be a boolean`);
       }
       if (
@@ -373,7 +375,9 @@ export function validateWorkflowDefinition(
         source.on_missing !== 'block' &&
         source.on_missing !== 'needs_input'
       ) {
-        errors.push(`${sourcePath}.on_missing "${source.on_missing}" is invalid`);
+        errors.push(
+          `${sourcePath}.on_missing "${source.on_missing}" is invalid`,
+        );
       }
       if (
         source.max_age_days !== undefined &&
@@ -402,7 +406,9 @@ export function validateWorkflowDefinition(
         errors.push(`${sourcePath}.fields is not supported for artifact`);
       }
       if (source.type === 'codebase_location' && source.refs !== undefined) {
-        errors.push(`${sourcePath}.refs is not supported for codebase_location`);
+        errors.push(
+          `${sourcePath}.refs is not supported for codebase_location`,
+        );
       }
     }
 
@@ -417,7 +423,9 @@ export function validateWorkflowDefinition(
     }
     const targetState = definition.states[onBlock.target];
     if (!targetState) {
-      errors.push(`${basePath}.on_block.target "${onBlock.target}" does not exist`);
+      errors.push(
+        `${basePath}.on_block.target "${onBlock.target}" does not exist`,
+      );
       return;
     }
     if (targetState.type === 'interrupt') {
@@ -454,7 +462,11 @@ export function validateWorkflowDefinition(
   ): void => {
     if (qualityGate === undefined) return;
     const basePath = `${definition.key}.states.${stateKey}.quality_gate`;
-    if (!qualityGate || typeof qualityGate !== 'object' || Array.isArray(qualityGate)) {
+    if (
+      !qualityGate ||
+      typeof qualityGate !== 'object' ||
+      Array.isArray(qualityGate)
+    ) {
       errors.push(`${basePath} must be an object`);
       return;
     }
@@ -462,7 +474,9 @@ export function validateWorkflowDefinition(
       qualityGate.pass_policy !== undefined &&
       qualityGate.pass_policy !== 'all_blocking_pass'
     ) {
-      errors.push(`${basePath}.pass_policy "${qualityGate.pass_policy}" is invalid`);
+      errors.push(
+        `${basePath}.pass_policy "${qualityGate.pass_policy}" is invalid`,
+      );
     }
     if (
       qualityGate.evaluators !== undefined &&
@@ -472,11 +486,16 @@ export function validateWorkflowDefinition(
       return;
     }
     const seenEvaluatorTypes = new Set<string>();
-    for (const [index, evaluator] of (
-      Array.isArray(qualityGate.evaluators) ? qualityGate.evaluators : []
+    for (const [index, evaluator] of (Array.isArray(qualityGate.evaluators)
+      ? qualityGate.evaluators
+      : []
     ).entries()) {
       const evaluatorPath = `${basePath}.evaluators[${index}]`;
-      if (!evaluator || typeof evaluator !== 'object' || Array.isArray(evaluator)) {
+      if (
+        !evaluator ||
+        typeof evaluator !== 'object' ||
+        Array.isArray(evaluator)
+      ) {
         errors.push(`${evaluatorPath} must be an object`);
         continue;
       }
@@ -565,8 +584,10 @@ export function validateWorkflowDefinition(
             if (filename !== filename.split(/[\\/]/).pop()) {
               errors.push(`${filePath}.filename must be a base filename`);
             }
-            if (!filename.toLowerCase().endsWith('.md')) {
-              errors.push(`${filePath}.filename must end with .md`);
+            if (!/\.[a-z0-9]{1,12}$/i.test(filename)) {
+              errors.push(
+                `${filePath}.filename must be a base filename with an extension`,
+              );
             }
             if (seenFiles.has(filename)) {
               errors.push(`${filePath}.filename "${filename}" is duplicated`);
@@ -590,7 +611,9 @@ export function validateWorkflowDefinition(
       role.deliverable_file !== undefined &&
       !isValidDeliverableFileName(role.deliverable_file)
     ) {
-      errors.push(`${basePath}.deliverable_file must be a base .md filename`);
+      errors.push(
+        `${basePath}.deliverable_file must be a base filename with an extension`,
+      );
     }
   }
 

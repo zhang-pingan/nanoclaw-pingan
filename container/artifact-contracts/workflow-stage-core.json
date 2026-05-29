@@ -18,6 +18,26 @@
         "path": "projects/{{service}}/iteration/{{deliverable}}/plan.md",
         "required": true,
         "frontmatter_required": ["service", "deliverable", "doc_type"],
+        "content_checks": [
+          {
+            "code": "missing_acceptance_criteria",
+            "severity": "high",
+            "any_of": ["验收标准", "acceptance criteria"],
+            "message": "plan.md 缺少验收标准说明。"
+          },
+          {
+            "code": "missing_scope_definition",
+            "severity": "medium",
+            "any_of": ["范围", "scope", "边界"],
+            "message": "plan.md 缺少范围或边界定义。"
+          },
+          {
+            "code": "missing_risk_assessment",
+            "severity": "medium",
+            "any_of": ["风险", "约束", "限制"],
+            "message": "plan.md 缺少风险或约束说明。"
+          }
+        ],
         "max_bytes": 200000
       },
       {
@@ -46,6 +66,26 @@
         "path": "projects/{{service}}/iteration/{{deliverable}}/dev.md",
         "required": true,
         "frontmatter_required": ["service", "deliverable", "doc_type"],
+        "content_checks": [
+          {
+            "code": "missing_plan_reference",
+            "severity": "medium",
+            "any_of": ["plan\\.md", "方案"],
+            "message": "dev.md 未明确引用方案产物或方案约束。"
+          },
+          {
+            "code": "missing_impact_scope",
+            "severity": "medium",
+            "any_of": ["影响范围", "影响面", "变更范围", "scope"],
+            "message": "dev.md 缺少影响范围说明。"
+          },
+          {
+            "code": "missing_validation_notes",
+            "severity": "high",
+            "any_of": ["验证", "自测", "测试"],
+            "message": "dev.md 缺少验证或自测说明。"
+          }
+        ],
         "max_bytes": 250000
       },
       {
@@ -88,7 +128,17 @@
         "failed": { "type": "number" },
         "blocked": { "type": "number" }
       }
-    }
+    },
+    "payload_rules": [
+      {
+        "code": "test_cases_failed",
+        "severity": "high",
+        "field": "failed",
+        "gt": 0,
+        "then_status": "failed",
+        "message": "测试未通过，失败用例数 {{failed}}。"
+      }
+    ]
   },
   {
     "id": "fix_test.bug_fix.v1",
@@ -136,6 +186,16 @@
         "failed": { "type": "number" },
         "blocked": { "type": "number" }
       }
-    }
+    },
+    "payload_rules": [
+      {
+        "code": "test_cases_failed",
+        "severity": "high",
+        "field": "failed",
+        "gt": 0,
+        "then_status": "failed",
+        "message": "测试未通过，失败用例数 {{failed}}。"
+      }
+    ]
   }
 ]
