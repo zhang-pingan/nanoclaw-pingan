@@ -109,14 +109,18 @@ function readActionWindow(
   if (!actionId) return null;
   const evidence = store.getEvidence(sessionId, actionId);
   if (!evidence || evidence.type !== 'ACT' || !isRecord(evidence.payload)) {
-    throw new Error(`after_action must reference an ACT evidence in this session: ${actionId}`);
+    throw new Error(
+      `after_action must reference an ACT evidence in this session: ${actionId}`,
+    );
   }
   const timeWindow = evidence.payload.time_window;
   if (!isRecord(timeWindow)) {
     throw new Error(`ACT evidence has no time_window: ${actionId}`);
   }
-  const startedAt = typeof timeWindow.started_at === 'string' ? timeWindow.started_at : '';
-  const endedAt = typeof timeWindow.ended_at === 'string' ? timeWindow.ended_at : '';
+  const startedAt =
+    typeof timeWindow.started_at === 'string' ? timeWindow.started_at : '';
+  const endedAt =
+    typeof timeWindow.ended_at === 'string' ? timeWindow.ended_at : '';
   if (!startedAt || !endedAt) {
     throw new Error(`ACT evidence has incomplete time_window: ${actionId}`);
   }
@@ -134,6 +138,10 @@ function eventWithinActionWindow(
   const endedAt = Date.parse(window.ended_at);
   if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return false;
   return timestamp >= startedAt - 250 && timestamp <= endedAt + 1000;
+}
+
+function wantsTraceType(input: ReadTraceInput, type: string): boolean {
+  return input.types?.includes(type) === true;
 }
 
 export async function readIosTrace(input: {
@@ -182,7 +190,12 @@ export async function readIosTrace(input: {
     }
     return path.resolve(appContainer);
   };
-  if (input.request.types?.includes('network') !== false && networkLogPath) {
+  if (input.request.types?.includes('network') !== false) {
+    if (!networkLogPath) {
+      throw new Error(
+        'clients.ios.automation.network_log_path is required for network trace',
+      );
+    }
     const actionWindow = readActionWindow(
       input.store,
       input.session.session_id,
@@ -192,6 +205,9 @@ export async function readIosTrace(input: {
     const logPath = path.resolve(path.join(root, networkLogPath));
     if (logPath === root || !logPath.startsWith(root + path.sep)) {
       throw new Error('network_log_path escapes Simulator app container');
+    }
+    if (!fs.existsSync(logPath)) {
+      throw new Error(`network log file does not exist: ${networkLogPath}`);
     }
 
     const events = parseJsonl(logPath).filter(
@@ -222,23 +238,21 @@ export async function readIosTrace(input: {
         status: Number(event.status || event.status_code || 0) || null,
         latency_ms: Number(event.latency_ms || event.duration_ms || 0) || null,
         triggered_by: input.request.after_action || null,
-        request_summary:
-          isRecord(redactedValue.request_summary)
-            ? (redactedValue.request_summary as JsonObject)
-            : isRecord(redactedValue.request)
-              ? (redactedValue.request as JsonObject)
-              : {},
-        response_summary:
-          isRecord(redactedValue.response_summary)
-            ? (redactedValue.response_summary as JsonObject)
-            : isRecord(redactedValue.response)
-              ? (redactedValue.response as JsonObject)
-              : {},
+        request_summary: isRecord(redactedValue.request_summary)
+          ? (redactedValue.request_summary as JsonObject)
+          : isRecord(redactedValue.request)
+            ? (redactedValue.request as JsonObject)
+            : {},
+        response_summary: isRecord(redactedValue.response_summary)
+          ? (redactedValue.response_summary as JsonObject)
+          : isRecord(redactedValue.response)
+            ? (redactedValue.response as JsonObject)
+            : {},
       });
     }
   }
 
-  if (input.request.types?.includes('app_log') && appLogPath) {
+  if (wantsTraceType(input.request, 'app_log') && appLogPath) {
     const root = await getContainer();
     const redacted = redactJson({
       lines: tailLines(readRelativeTextFile(root, appLogPath)),
@@ -260,7 +274,12 @@ export async function readIosTrace(input: {
     });
   }
 
-  if (input.request.types?.includes('crash') && crashLogPath) {
+  if (wantsTraceType(input.request, 'crash')) {
+    if (!crashLogPath) {
+      throw new Error(
+        'clients.ios.automation.crash_log_path is required for crash trace',
+      );
+    }
     const root = await getContainer();
     const lines = tailLines(readRelativeTextFile(root, crashLogPath));
     if (lines.length > 0) {

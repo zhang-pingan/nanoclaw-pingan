@@ -14,9 +14,11 @@ vi.mock('./ios-simulator.js', () => ({
   buildIosApp: vi.fn(),
   findSimulatorDevice: vi.fn(),
   getAppContainerPath: vi.fn(),
+  getInstalledAppPath: vi.fn(),
   installIosApp: vi.fn(),
   launchIosApp: vi.fn(),
   openDeepLink: vi.fn(),
+  runHostCommand: vi.fn(),
   runDebugShellCommand: vi.fn(),
   terminateIosApp: vi.fn(),
   uninstallIosApp: vi.fn(),
@@ -28,6 +30,7 @@ import { IosAppRequestDispatcher } from './ios-app-request-dispatcher.js';
 import { IosEvidenceStore } from './ios-evidence-store.js';
 import { readIosTrace } from './ios-network-log.js';
 import { getAppContainerPath } from './ios-simulator.js';
+import { searchIosCode } from './ios-source-index.js';
 import type { IosSessionRecord } from './types.js';
 
 const tempDirs: string[] = [];
@@ -194,14 +197,199 @@ describe('IosAppRequestDispatcher run_test_case', () => {
       flow_status: 'blocked',
     });
   });
+
+  it('fails network_absent when network trace is not configured', async () => {
+    const store = makeStore();
+    createSession(store);
+    vi.mocked(actWithAppium).mockResolvedValue({
+      id: 'ACT-001',
+      type: 'tap',
+      target: {
+        strategy: 'accessibility_id',
+        value: 'profile.save.button',
+        matched_count: 1,
+      },
+      time_window: {
+        started_at: '2026-06-01T00:00:01.000Z',
+        ended_at: '2026-06-01T00:00:02.000Z',
+      },
+      status: 'success',
+      wait: { type: 'none' },
+    });
+
+    const result = await new IosAppRequestDispatcher(store).dispatch(
+      {
+        action: 'run_test_case',
+        args: {
+          session_id: 'SESSION-001',
+          case_id: 'TC-network-absent',
+          steps: [{ action: 'tap', target: 'profile.save.button' }],
+          assertions: [{ type: 'network_absent', path: '/api/user/profile' }],
+        },
+      },
+      { sourceGroup: 'test', isMain: true },
+    );
+
+    expect(result).toMatchObject({
+      case_id: 'TC-network-absent',
+      result: 'failed',
+    });
+    expect(
+      (result as { assertions?: Array<{ error?: string }> }).assertions?.[0]
+        ?.error,
+    ).toBe('network trace is not configured for this session');
+  });
+
+  it('fails crash_absent when crash trace is not configured', async () => {
+    const store = makeStore();
+    createSession(store);
+
+    const result = await new IosAppRequestDispatcher(store).dispatch(
+      {
+        action: 'run_test_case',
+        args: {
+          session_id: 'SESSION-001',
+          case_id: 'TC-crash-absent',
+          steps: [],
+          assertions: [{ type: 'crash_absent' }],
+        },
+      },
+      { sourceGroup: 'test', isMain: true },
+    );
+
+    expect(result).toMatchObject({
+      case_id: 'TC-crash-absent',
+      result: 'failed',
+    });
+    expect(
+      (result as { assertions?: Array<{ error?: string }> }).assertions?.[0]
+        ?.error,
+    ).toBe('crash trace is not configured for this session');
+  });
+
+  it('requires a passed UI or state assertion for a passed case', async () => {
+    const store = makeStore();
+    createSession(store, {
+      config: {
+        service: 'catstory',
+        automation: {
+          network_log_path: 'Library/Caches/IcarusNetworkLog/network.jsonl',
+        },
+      },
+    });
+    vi.mocked(actWithAppium).mockResolvedValue({
+      id: 'ACT-001',
+      type: 'tap',
+      target: {
+        strategy: 'accessibility_id',
+        value: 'profile.save.button',
+        matched_count: 1,
+      },
+      time_window: {
+        started_at: '2026-06-01T00:00:01.000Z',
+        ended_at: '2026-06-01T00:00:02.000Z',
+      },
+      status: 'success',
+      wait: { type: 'none' },
+    });
+    const appContainer = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-ios-app-'),
+    );
+    tempDirs.push(appContainer);
+    const logDir = path.join(
+      appContainer,
+      'Library',
+      'Caches',
+      'IcarusNetworkLog',
+    );
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(logDir, 'network.jsonl'),
+      `${JSON.stringify({
+        timestamp: '2026-06-01T00:00:01.500Z',
+        method: 'PATCH',
+        path: '/api/user/profile',
+        status: 200,
+      })}\n`,
+    );
+    vi.mocked(getAppContainerPath).mockResolvedValue(appContainer);
+
+    const result = await new IosAppRequestDispatcher(store).dispatch(
+      {
+        action: 'run_test_case',
+        args: {
+          session_id: 'SESSION-001',
+          case_id: 'TC-network-only',
+          steps: [{ action: 'tap', target: 'profile.save.button' }],
+          assertions: [
+            {
+              type: 'network',
+              path: '/api/user/profile',
+              method: 'PATCH',
+              status: 200,
+            },
+          ],
+        },
+      },
+      { sourceGroup: 'test', isMain: true },
+    );
+
+    expect(result).toMatchObject({
+      case_id: 'TC-network-only',
+      result: 'failed',
+    });
+    expect((result as { errors?: string[] }).errors).toContain(
+      'test case must contain at least one passed UI or state assertion',
+    );
+  });
+
+  it('passes a case with a matching app_state assertion', async () => {
+    const store = makeStore();
+    createSession(store);
+
+    const result = await new IosAppRequestDispatcher(store).dispatch(
+      {
+        action: 'run_test_case',
+        args: {
+          session_id: 'SESSION-001',
+          case_id: 'TC-app-state',
+          steps: [],
+          assertions: [
+            {
+              type: 'app_state',
+              expected: {
+                keyboard_visible: false,
+                system_alert_visible: false,
+                loading: false,
+              },
+            },
+          ],
+        },
+      },
+      { sourceGroup: 'test', isMain: true },
+    );
+
+    expect(result).toMatchObject({
+      case_id: 'TC-app-state',
+      result: 'passed',
+      flow_status: 'success',
+    });
+  });
 });
 
 describe('readIosTrace', () => {
   it('filters network events to the referenced action time window', async () => {
     const store = makeStore();
-    const appContainer = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-ios-app-'));
+    const appContainer = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-ios-app-'),
+    );
     tempDirs.push(appContainer);
-    const logDir = path.join(appContainer, 'Library', 'Caches', 'IcarusNetworkLog');
+    const logDir = path.join(
+      appContainer,
+      'Library',
+      'Caches',
+      'IcarusNetworkLog',
+    );
     fs.mkdirSync(logDir, { recursive: true });
     fs.writeFileSync(
       path.join(logDir, 'network.jsonl'),
@@ -266,5 +454,37 @@ describe('readIosTrace', () => {
       path: '/api/user/profile',
       triggered_by: 'ACT-001',
     });
+  });
+});
+
+describe('searchIosCode', () => {
+  it('rejects searches when request service does not match the session service', async () => {
+    const store = makeStore();
+    createSession(store, { service: 'catstory' });
+
+    await expect(
+      searchIosCode({
+        store,
+        request: {
+          service: 'other',
+          session_id: 'SESSION-001',
+          scope: ['ios_client'],
+          queries: [{ type: 'screen_title', value: 'Profile' }],
+          registry: {
+            other: {
+              clients: {
+                ios: {
+                  repo_path: path.basename(process.cwd()),
+                  scheme: 'OtherDebug',
+                  bundle_id: 'com.example.other',
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).rejects.toThrow(
+      'ios_app_search_code service "other" does not match session service "catstory"',
+    );
   });
 });

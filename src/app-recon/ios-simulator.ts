@@ -72,7 +72,8 @@ export async function runHostCommand(
       timeout: options.timeoutMs || DEFAULT_TIMEOUT_MS,
       maxBuffer: (options.maxOutputBytes || DEBUG_MAX_OUTPUT_BYTES) * 2,
       env: {
-        PATH: process.env.PATH || '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin',
+        PATH:
+          process.env.PATH || '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin',
         HOME: process.env.HOME,
         LANG: process.env.LANG || 'en_US.UTF-8',
       },
@@ -114,7 +115,10 @@ export async function runHostCommand(
 function parseSimctlDevices(stdout: string): SimulatorDevice[] {
   const devices: SimulatorDevice[] = [];
   const parsed = JSON.parse(stdout) as {
-    devices?: Record<string, Array<{ name?: string; udid?: string; state?: string }>>;
+    devices?: Record<
+      string,
+      Array<{ name?: string; udid?: string; state?: string }>
+    >;
   };
   for (const runtimeDevices of Object.values(parsed.devices || {})) {
     for (const device of runtimeDevices) {
@@ -141,24 +145,44 @@ export async function findSimulatorDevice(
     '--json',
   ]);
   if (result.exit_code !== 0) {
-    throw new Error(`xcrun simctl list failed: ${result.stderr || result.stdout}`);
+    throw new Error(
+      `xcrun simctl list failed: ${result.stderr || result.stdout}`,
+    );
   }
   const devices = parseSimctlDevices(result.stdout);
   const booted = devices.find(
     (device) => device.name === simulatorName && device.state === 'Booted',
   );
   const named = devices.find((device) => device.name === simulatorName);
-  const selected = booted || named || devices.find((device) => device.state === 'Booted');
+  const selected = booted || named;
   if (!selected) {
-    throw new Error(`No available iOS simulator found for "${simulatorName}"`);
+    const availableNames = Array.from(
+      new Set(devices.map((device) => device.name)),
+    )
+      .sort()
+      .slice(0, 20);
+    throw new Error(
+      [
+        `No available iOS simulator found for "${simulatorName}"`,
+        availableNames.length > 0
+          ? `Available simulators: ${availableNames.join(', ')}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('. '),
+    );
   }
   return selected;
 }
 
 export async function bootSimulator(udid: string): Promise<void> {
-  const result = await runHostCommand('xcrun', ['simctl', 'bootstatus', udid, '-b'], {
-    timeoutMs: 180_000,
-  });
+  const result = await runHostCommand(
+    'xcrun',
+    ['simctl', 'bootstatus', udid, '-b'],
+    {
+      timeoutMs: 180_000,
+    },
+  );
   if (result.exit_code === 0) return;
 
   const boot = await runHostCommand('xcrun', ['simctl', 'boot', udid], {
@@ -170,18 +194,26 @@ export async function bootSimulator(udid: string): Promise<void> {
   ) {
     throw new Error(`xcrun simctl boot failed: ${boot.stderr || boot.stdout}`);
   }
-  const status = await runHostCommand('xcrun', ['simctl', 'bootstatus', udid, '-b'], {
-    timeoutMs: 180_000,
-  });
+  const status = await runHostCommand(
+    'xcrun',
+    ['simctl', 'bootstatus', udid, '-b'],
+    {
+      timeoutMs: 180_000,
+    },
+  );
   if (status.exit_code !== 0) {
-    throw new Error(`xcrun simctl bootstatus failed: ${status.stderr || status.stdout}`);
+    throw new Error(
+      `xcrun simctl bootstatus failed: ${status.stderr || status.stdout}`,
+    );
   }
 }
 
 function buildOutputPath(repoPath: string, config: IosClientConfig): string {
   const derivedData = path.join(repoPath, 'DerivedData', 'Icarus');
   const configuration = config.configuration || 'Debug';
-  const appName = config.scheme.endsWith('.app') ? config.scheme : `${config.scheme}.app`;
+  const appName = config.scheme.endsWith('.app')
+    ? config.scheme
+    : `${config.scheme}.app`;
   return path.join(
     derivedData,
     'Build',
@@ -229,11 +261,17 @@ export async function installIosApp(
   udid: string,
   appPath: string,
 ): Promise<void> {
-  const result = await runHostCommand('xcrun', ['simctl', 'install', udid, appPath], {
-    timeoutMs: 180_000,
-  });
+  const result = await runHostCommand(
+    'xcrun',
+    ['simctl', 'install', udid, appPath],
+    {
+      timeoutMs: 180_000,
+    },
+  );
   if (result.exit_code !== 0) {
-    throw new Error(`xcrun simctl install failed: ${result.stderr || result.stdout}`);
+    throw new Error(
+      `xcrun simctl install failed: ${result.stderr || result.stdout}`,
+    );
   }
 }
 
@@ -241,16 +279,22 @@ export async function uninstallIosApp(
   udid: string,
   bundleId: string,
 ): Promise<void> {
-  const result = await runHostCommand('xcrun', ['simctl', 'uninstall', udid, bundleId], {
-    timeoutMs: 60_000,
-  });
+  const result = await runHostCommand(
+    'xcrun',
+    ['simctl', 'uninstall', udid, bundleId],
+    {
+      timeoutMs: 60_000,
+    },
+  );
   if (
     result.exit_code !== 0 &&
     !/No such application|not installed|Invalid bundle identifier/i.test(
       `${result.stdout}\n${result.stderr}`,
     )
   ) {
-    throw new Error(`xcrun simctl uninstall failed: ${result.stderr || result.stdout}`);
+    throw new Error(
+      `xcrun simctl uninstall failed: ${result.stderr || result.stdout}`,
+    );
   }
 }
 
@@ -267,7 +311,9 @@ export async function launchIosApp(input: {
   args.push(input.udid, input.bundleId, ...(input.launchArgs || []));
   const result = await runHostCommand('xcrun', args, { timeoutMs: 60_000 });
   if (result.exit_code !== 0) {
-    throw new Error(`xcrun simctl launch failed: ${result.stderr || result.stdout}`);
+    throw new Error(
+      `xcrun simctl launch failed: ${result.stderr || result.stdout}`,
+    );
   }
 }
 
@@ -308,6 +354,25 @@ export async function getAppContainerPath(
   return result.stdout.trim();
 }
 
+export async function getInstalledAppPath(
+  udid: string,
+  bundleId: string,
+): Promise<string> {
+  const result = await runHostCommand('xcrun', [
+    'simctl',
+    'get_app_container',
+    udid,
+    bundleId,
+    'app',
+  ]);
+  if (result.exit_code !== 0) {
+    throw new Error(
+      `xcrun simctl get_app_container app failed: ${result.stderr || result.stdout}`,
+    );
+  }
+  return result.stdout.trim();
+}
+
 export async function runDebugShellCommand(input: {
   command: string;
   timeoutMs?: number;
@@ -322,7 +387,8 @@ export async function runDebugShellCommand(input: {
     const child = spawn('/bin/zsh', ['-lc', trimmed], {
       cwd: process.cwd(),
       env: {
-        PATH: process.env.PATH || '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin',
+        PATH:
+          process.env.PATH || '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin',
         HOME: process.env.HOME,
         LANG: process.env.LANG || 'en_US.UTF-8',
       },

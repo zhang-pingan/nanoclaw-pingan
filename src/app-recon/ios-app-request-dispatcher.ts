@@ -5,10 +5,7 @@ import {
   createIosEvidenceStore,
   IosEvidenceStore,
 } from './ios-evidence-store.js';
-import {
-  actWithAppium,
-  observeWithAppium,
-} from './ios-appium.js';
+import { actWithAppium, observeWithAppium } from './ios-appium.js';
 import { readIosTrace } from './ios-network-log.js';
 import { writeIosReport } from './ios-report-writer.js';
 import { resolveIosServiceConfig } from './ios-service-config.js';
@@ -16,9 +13,11 @@ import {
   bootSimulator,
   buildIosApp,
   findSimulatorDevice,
+  getInstalledAppPath,
   installIosApp,
   launchIosApp,
   openDeepLink,
+  runHostCommand,
   runDebugShellCommand,
   terminateIosApp,
   uninstallIosApp,
@@ -81,13 +80,17 @@ function toErrorResult(
   };
 }
 
-function sessionConfigPayload(config: ReturnType<typeof resolveIosServiceConfig>): JsonObject {
+function sessionConfigPayload(
+  config: ReturnType<typeof resolveIosServiceConfig>,
+): JsonObject {
   return {
     service: config.service,
     bundle_id: config.ios.bundle_id,
     scheme: config.ios.scheme,
     simulator: config.ios.simulator || '',
     configuration: config.ios.configuration || '',
+    backend_env: envFromServiceConfig(config),
+    base_url: baseUrlFromServiceConfig(config),
     ios_repo_path: config.ios.repo_path,
     backend_repo_path: config.service_config.repo_path || '',
     automation: {
@@ -98,8 +101,7 @@ function sessionConfigPayload(config: ReturnType<typeof resolveIosServiceConfig>
       app_log_path: config.ios.automation?.app_log_path || '',
       crash_log_path: config.ios.automation?.crash_log_path || '',
       appium_server_url:
-        config.ios.automation?.appium_server_url ||
-        'http://127.0.0.1:4723',
+        config.ios.automation?.appium_server_url || 'http://127.0.0.1:4723',
     },
   };
 }
@@ -110,10 +112,29 @@ function safeArtifactName(name: string): string {
 
 function appiumServerUrl(session: IosSessionRecord): string {
   const automation = session.config.automation;
-  if (isRecord(automation) && typeof automation.appium_server_url === 'string') {
+  if (
+    isRecord(automation) &&
+    typeof automation.appium_server_url === 'string'
+  ) {
     return automation.appium_server_url;
   }
   return 'http://127.0.0.1:4723';
+}
+
+function automationConfig(session: IosSessionRecord): Record<string, unknown> {
+  const automation = session.config.automation;
+  return isRecord(automation) ? automation : {};
+}
+
+function tracePathConfigured(
+  session: IosSessionRecord,
+  type: 'network' | 'crash',
+): boolean {
+  const automation = automationConfig(session);
+  const key = type === 'network' ? 'network_log_path' : 'crash_log_path';
+  return (
+    typeof automation[key] === 'string' && automation[key].trim().length > 0
+  );
 }
 
 function okObservation(result: unknown): boolean {
@@ -126,7 +147,9 @@ function okObservation(result: unknown): boolean {
 }
 
 function observationId(result: unknown): string | undefined {
-  return okObservation(result) && isRecord(result) && typeof result.id === 'string'
+  return okObservation(result) &&
+    isRecord(result) &&
+    typeof result.id === 'string'
     ? result.id
     : undefined;
 }
@@ -137,6 +160,102 @@ function resultErrorMessage(result: IosAppRequestResult): string {
   }
   if (isRecord(result) && typeof result.error === 'string') return result.error;
   return JSON.stringify(result);
+}
+
+function okTrace(result: unknown): result is {
+  network_events?: JsonObject[];
+  app_logs?: JsonObject[];
+  crashes?: JsonObject[];
+  evidence?: string[];
+} {
+  return (
+    isRecord(result) &&
+    result.status !== 'error' &&
+    result.status !== 'blocked' &&
+    !isRecord(result.error)
+  );
+}
+
+function traceFailureMessage(result: unknown): string {
+  if (isRecord(result) && isRecord(result.error)) {
+    return [asString(result.error.code), asString(result.error.message)]
+      .filter(Boolean)
+      .join(': ');
+  }
+  return result instanceof Error ? result.message : JSON.stringify(result);
+}
+
+function envFromServiceConfig(
+  config: ReturnType<typeof resolveIosServiceConfig>,
+): string {
+  const staging = isRecord(config.service_config.staging)
+    ? config.service_config.staging
+    : {};
+  const automation = config.ios.automation || {};
+  const launchArgs = automation.launch_args || [];
+  const envArgIndex = launchArgs.findIndex((item) => item === '-Environment');
+  if (envArgIndex >= 0 && typeof launchArgs[envArgIndex + 1] === 'string') {
+    return launchArgs[envArgIndex + 1];
+  }
+  if (typeof staging.env === 'string') return staging.env;
+  if (typeof staging.branch === 'string') return staging.branch;
+  return '';
+}
+
+function baseUrlFromServiceConfig(
+  config: ReturnType<typeof resolveIosServiceConfig>,
+): string {
+  const staging = isRecord(config.service_config.staging)
+    ? config.service_config.staging
+    : {};
+  return typeof staging.domain === 'string' ? staging.domain : '';
+}
+
+async function readGitRevision(repoPath: string | null): Promise<string> {
+  if (!repoPath) return '';
+  const result = await runHostCommand('git', ['rev-parse', 'HEAD'], {
+    cwd: repoPath,
+    timeoutMs: 10_000,
+    maxOutputBytes: 4_000,
+  });
+  return result.exit_code === 0 ? result.stdout.trim() : '';
+}
+
+async function readPlistKey(plistPath: string, key: string): Promise<string> {
+  const result = await runHostCommand(
+    '/usr/libexec/PlistBuddy',
+    ['-c', `Print :${key}`, plistPath],
+    {
+      timeoutMs: 10_000,
+      maxOutputBytes: 4_000,
+    },
+  );
+  return result.exit_code === 0 ? result.stdout.trim() : '';
+}
+
+async function readInstalledAppMetadata(input: {
+  udid: string;
+  bundleId: string;
+}): Promise<JsonObject> {
+  try {
+    const appPath = await getInstalledAppPath(input.udid, input.bundleId);
+    const plistPath = path.join(appPath, 'Info.plist');
+    const [bundleIdentifier, appVersion, buildNumber] = await Promise.all([
+      readPlistKey(plistPath, 'CFBundleIdentifier'),
+      readPlistKey(plistPath, 'CFBundleShortVersionString'),
+      readPlistKey(plistPath, 'CFBundleVersion'),
+    ]);
+    return {
+      app_path: appPath,
+      bundle_identifier: bundleIdentifier,
+      app_version: appVersion,
+      build_number: buildNumber,
+    };
+  } catch (err) {
+    return {
+      metadata_error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 function createBlockedAction(input: {
@@ -206,39 +325,41 @@ export class IosAppRequestDispatcher {
     request: IosAppRequest,
     context: IosAppRequestContext,
   ): Promise<IosAppRequestResult> {
-      switch (request.action) {
-        case 'prepare_session':
-          return await this.prepareSession(request.args);
-        case 'observe':
-          return await this.observe(request.args);
-        case 'act':
-          return await this.act(request.args);
-        case 'run_flow':
-          return await this.runFlow(request.args);
-        case 'read_trace':
-          return await this.readTrace(request.args);
-        case 'search_code':
-          return await this.searchCode(request.args);
-        case 'write_claims':
-          return this.writeClaims(request.args);
-        case 'write_report':
-          return this.writeReport(request.args);
-        case 'run_test_case':
-          return await this.runTestCase(request.args);
-        case 'debug_shell':
-          return await this.debugShell(request.args, context);
-        default:
-          return toErrorResult(
-            new Error(`Unsupported ios_app_request action: ${request.action}`),
-            'unsupported_action',
-          );
-      }
+    switch (request.action) {
+      case 'prepare_session':
+        return await this.prepareSession(request.args);
+      case 'observe':
+        return await this.observe(request.args);
+      case 'act':
+        return await this.act(request.args);
+      case 'run_flow':
+        return await this.runFlow(request.args);
+      case 'read_trace':
+        return await this.readTrace(request.args);
+      case 'search_code':
+        return await this.searchCode(request.args);
+      case 'write_claims':
+        return this.writeClaims(request.args);
+      case 'write_report':
+        return this.writeReport(request.args);
+      case 'run_test_case':
+        return await this.runTestCase(request.args);
+      case 'debug_shell':
+        return await this.debugShell(request.args, context);
+      default:
+        return toErrorResult(
+          new Error(`Unsupported ios_app_request action: ${request.action}`),
+          'unsupported_action',
+        );
+    }
   }
 
   private async prepareSession(args: unknown): Promise<IosAppRequestResult> {
-    if (!isRecord(args)) throw new Error('prepare_session args must be an object');
+    if (!isRecord(args))
+      throw new Error('prepare_session args must be an object');
     const service = asString(args.service).trim();
-    const purpose = asString(args.purpose, 'product_recon').trim() || 'product_recon';
+    const purpose =
+      asString(args.purpose, 'product_recon').trim() || 'product_recon';
     const resolved = resolveIosServiceConfig(service, {
       requireIosRepoExists: true,
       requireBackendRepoExists: false,
@@ -252,9 +373,29 @@ export class IosAppRequestDispatcher {
     return (async () => {
       const device = await findSimulatorDevice(simulatorName);
       await bootSimulator(device.udid);
+      const [iosGitRevision, backendGitRevision] = await Promise.all([
+        readGitRevision(resolved.ios_repo_host_path),
+        readGitRevision(resolved.backend_repo_host_path),
+      ]);
+      const backendEnv = envFromServiceConfig(resolved);
+      const baseUrl = baseUrlFromServiceConfig(resolved);
       let buildEvidencePayload: JsonObject = {
         requested_build: asBoolean(args.build, false),
         built: false,
+        bundle_id: resolved.ios.bundle_id,
+        scheme: resolved.ios.scheme,
+        configuration: resolved.ios.configuration || 'Debug',
+        simulator: {
+          requested_name: simulatorName,
+          selected_name: device.name,
+          udid: device.udid,
+        },
+        git_revision: {
+          ios_client: iosGitRevision,
+          backend: backendGitRevision,
+        },
+        backend_env: backendEnv,
+        base_url: baseUrl,
       };
       if (asBoolean(args.clean_install, false)) {
         await terminateIosApp(device.udid, resolved.ios.bundle_id);
@@ -270,6 +411,20 @@ export class IosAppRequestDispatcher {
         buildEvidencePayload = {
           requested_build: true,
           built: true,
+          bundle_id: resolved.ios.bundle_id,
+          scheme: resolved.ios.scheme,
+          configuration: resolved.ios.configuration || 'Debug',
+          simulator: {
+            requested_name: simulatorName,
+            selected_name: device.name,
+            udid: device.udid,
+          },
+          git_revision: {
+            ios_client: iosGitRevision,
+            backend: backendGitRevision,
+          },
+          backend_env: backendEnv,
+          base_url: baseUrl,
           app_path: build.appPath,
           command: {
             command: build.command.command,
@@ -296,7 +451,8 @@ export class IosAppRequestDispatcher {
         if (accountRef) launchEnv.ICARUS_TEST_ACCOUNT_REF = accountRef;
       }
       if (asBoolean(args.clean_install, false)) {
-        launchEnv.ICARUS_RESET_KEYCHAIN = launchEnv.ICARUS_RESET_KEYCHAIN || '1';
+        launchEnv.ICARUS_RESET_KEYCHAIN =
+          launchEnv.ICARUS_RESET_KEYCHAIN || '1';
         launchEnv.ICARUS_RESET_USER_DEFAULTS =
           launchEnv.ICARUS_RESET_USER_DEFAULTS || '1';
         launchEnv.ICARUS_RESET_CACHES = launchEnv.ICARUS_RESET_CACHES || '1';
@@ -309,6 +465,14 @@ export class IosAppRequestDispatcher {
         launchArgs,
         launchEnv,
       });
+      const appMetadata = await readInstalledAppMetadata({
+        udid: device.udid,
+        bundleId: resolved.ios.bundle_id,
+      });
+      buildEvidencePayload = {
+        ...buildEvidencePayload,
+        app: appMetadata,
+      };
 
       const now = new Date().toISOString();
       const session = this.store.createSessionRecord({
@@ -320,6 +484,10 @@ export class IosAppRequestDispatcher {
         simulator_name: device.name,
         simulator_udid: device.udid,
         bundle_id: resolved.ios.bundle_id,
+        app_version:
+          typeof appMetadata.app_version === 'string'
+            ? appMetadata.app_version
+            : '',
         build_id: buildId,
         state_id: stateId,
         ios_repo_host_path: resolved.ios_repo_host_path,
@@ -352,7 +520,9 @@ export class IosAppRequestDispatcher {
         payload: {
           clean_install: asBoolean(args.clean_install, false),
           reset: {
-            app_container: asBoolean(args.clean_install, false) ? 'uninstalled' : 'preserved',
+            app_container: asBoolean(args.clean_install, false)
+              ? 'uninstalled'
+              : 'preserved',
             keychain: asBoolean(args.clean_install, false)
               ? 'requested_via_launch_environment'
               : 'preserved',
@@ -362,7 +532,9 @@ export class IosAppRequestDispatcher {
             permissions: asBoolean(args.clean_install, false)
               ? 'requested_via_launch_environment'
               : 'preserved',
-            caches: asBoolean(args.clean_install, false) ? 'removed_with_app_container' : 'preserved',
+            caches: asBoolean(args.clean_install, false)
+              ? 'removed_with_app_container'
+              : 'preserved',
           },
           launch_args: launchArgs,
           launch_env_keys: Object.keys(launchEnv).sort(),
@@ -383,12 +555,14 @@ export class IosAppRequestDispatcher {
         session_id: session.session_id,
         simulator_udid: device.udid,
         bundle_id: resolved.ios.bundle_id,
-        app_version: '',
+        app_version: session.app_version || '',
         build: buildEvidence.id,
         state: stateEvidence.id,
         evidence: [sessionEvidence.id, buildEvidence.id, stateEvidence.id],
       };
-    })().catch((err) => toErrorResult(err, 'ios_environment_unavailable', 'blocked'));
+    })().catch((err) =>
+      toErrorResult(err, 'ios_environment_unavailable', 'blocked'),
+    );
   }
 
   private async observe(args: unknown): Promise<IosAppRequestResult> {
@@ -406,20 +580,22 @@ export class IosAppRequestDispatcher {
         observeId,
         options: { serverUrl: appiumServerUrl(session) },
       });
-      const screenshotArtifact = record.includes('screenshot') && observation.raw_screenshot_base64
-        ? this.store.writeArtifact(
-            sessionId,
-            `screenshots/${observeId}.png.base64`,
-            observation.raw_screenshot_base64,
-          )
-        : undefined;
-      const uiTreeArtifact = record.includes('ui_tree') && observation.raw_ui_tree
-        ? this.store.writeArtifact(
-            sessionId,
-            `ui/${observeId}.xml`,
-            observation.raw_ui_tree,
-          )
-        : undefined;
+      const screenshotArtifact =
+        record.includes('screenshot') && observation.raw_screenshot_base64
+          ? this.store.writeArtifact(
+              sessionId,
+              `screenshots/${observeId}.png.base64`,
+              observation.raw_screenshot_base64,
+            )
+          : undefined;
+      const uiTreeArtifact =
+        record.includes('ui_tree') && observation.raw_ui_tree
+          ? this.store.writeArtifact(
+              sessionId,
+              `ui/${observeId}.xml`,
+              observation.raw_ui_tree,
+            )
+          : undefined;
       const screenshotEvidence = screenshotArtifact
         ? this.store.createEvidence({
             type: 'SCREENSHOT',
@@ -443,8 +619,12 @@ export class IosAppRequestDispatcher {
         session_id: sessionId,
         screen: observation.screen,
         artifacts: {
-          ...(record.includes('screenshot') ? { screenshot: screenshotEvidence?.id || '' } : {}),
-          ...(record.includes('ui_tree') ? { ui_tree: uiTreeEvidence?.id || '' } : {}),
+          ...(record.includes('screenshot')
+            ? { screenshot: screenshotEvidence?.id || '' }
+            : {}),
+          ...(record.includes('ui_tree')
+            ? { ui_tree: uiTreeEvidence?.id || '' }
+            : {}),
         },
         elements: observation.elements,
         ...(record.includes('network_cursor')
@@ -505,9 +685,14 @@ export class IosAppRequestDispatcher {
 
     let actionResult: Omit<IosActionResult, 'before' | 'after' | 'evidence'>;
     if (action === 'deeplink') {
-      const url = asString(args.url || (isRecord(args.target) ? args.target.url : ''));
+      const url = asString(
+        args.url || (isRecord(args.target) ? args.target.url : ''),
+      );
       if (!url) throw new Error('deeplink url is required');
-      const result = await openDeepLink(session.simulator_udid || 'booted', url);
+      const result = await openDeepLink(
+        session.simulator_udid || 'booted',
+        url,
+      );
       actionResult = {
         id: actionId,
         type: action,
@@ -517,21 +702,30 @@ export class IosAppRequestDispatcher {
           ended_at: new Date().toISOString(),
         },
         status: result.exit_code === 0 ? 'success' : 'blocked',
-        error: result.exit_code === 0 ? undefined : result.stderr || result.stdout,
+        error:
+          result.exit_code === 0 ? undefined : result.stderr || result.stdout,
       };
     } else if (action === 'terminate') {
-      await terminateIosApp(session.simulator_udid || 'booted', session.bundle_id);
+      await terminateIosApp(
+        session.simulator_udid || 'booted',
+        session.bundle_id,
+      );
       actionResult = {
         id: actionId,
         type: action,
-        time_window: { started_at: startedAt, ended_at: new Date().toISOString() },
+        time_window: {
+          started_at: startedAt,
+          ended_at: new Date().toISOString(),
+        },
         status: 'success',
       };
     } else if (action === 'relaunch') {
       const automation = session.config.automation;
       const configuredLaunchArgs =
         isRecord(automation) && Array.isArray(automation.launch_args)
-          ? automation.launch_args.filter((item): item is string => typeof item === 'string')
+          ? automation.launch_args.filter(
+              (item): item is string => typeof item === 'string',
+            )
           : [];
       const configuredLaunchEnv =
         isRecord(automation) && isRecord(automation.launch_env)
@@ -540,7 +734,10 @@ export class IosAppRequestDispatcher {
       await launchIosApp({
         udid: session.simulator_udid || 'booted',
         bundleId: session.bundle_id,
-        launchArgs: [...configuredLaunchArgs, ...asStringArray(args.launch_args)],
+        launchArgs: [
+          ...configuredLaunchArgs,
+          ...asStringArray(args.launch_args),
+        ],
         launchEnv: {
           ...configuredLaunchEnv,
           ...asStringRecord(args.launch_env),
@@ -549,7 +746,10 @@ export class IosAppRequestDispatcher {
       actionResult = {
         id: actionId,
         type: action,
-        time_window: { started_at: startedAt, ended_at: new Date().toISOString() },
+        time_window: {
+          started_at: startedAt,
+          ended_at: new Date().toISOString(),
+        },
         status: 'success',
       };
     } else {
@@ -582,11 +782,13 @@ export class IosAppRequestDispatcher {
     const fullAction: IosActionResult = {
       ...actionResult,
       status:
-        isRecord(actionResult.wait) && actionResult.wait.result === 'not_implemented'
+        isRecord(actionResult.wait) &&
+        actionResult.wait.result === 'not_implemented'
           ? 'blocked'
           : actionResult.status,
       error:
-        isRecord(actionResult.wait) && actionResult.wait.result === 'not_implemented'
+        isRecord(actionResult.wait) &&
+        actionResult.wait.result === 'not_implemented'
           ? [
               actionResult.error,
               `wait condition not implemented: ${asString(actionResult.wait.type, 'unknown')}`,
@@ -596,7 +798,10 @@ export class IosAppRequestDispatcher {
           : actionResult.error,
       before: beforeId,
       after: afterId,
-      evidence: [actionId, ...[beforeId, afterId].filter((id): id is string => !!id)],
+      evidence: [
+        actionId,
+        ...[beforeId, afterId].filter((id): id is string => !!id),
+      ],
     };
     this.store.createEvidence({
       id: actionId,
@@ -710,12 +915,10 @@ export class IosAppRequestDispatcher {
               )
             : undefined,
           queries: Array.isArray(args.queries)
-            ? args.queries
-                .filter(isRecord)
-                .map((query) => ({
-                  type: asString(query.type),
-                  value: asString(query.value),
-                }))
+            ? args.queries.filter(isRecord).map((query) => ({
+                type: asString(query.type),
+                value: asString(query.value),
+              }))
             : [],
           max_results:
             typeof args.max_results === 'number' ? args.max_results : undefined,
@@ -760,8 +963,10 @@ export class IosAppRequestDispatcher {
   }
 
   private async runTestCase(args: unknown): Promise<IosAppRequestResult> {
-    if (!isRecord(args)) throw new Error('run_test_case args must be an object');
+    if (!isRecord(args))
+      throw new Error('run_test_case args must be an object');
     const sessionId = asString(args.session_id);
+    const session = this.store.getSession(sessionId);
     const caseId = asString(args.case_id, 'TC-001');
     const steps = Array.isArray(args.steps) ? args.steps : [];
     const assertions = Array.isArray(args.assertions) ? args.assertions : [];
@@ -781,11 +986,15 @@ export class IosAppRequestDispatcher {
         : [];
     const errors: string[] =
       isRecord(stepResult) && Array.isArray(stepResult.errors)
-        ? stepResult.errors.filter((item): item is string => typeof item === 'string')
+        ? stepResult.errors.filter(
+            (item): item is string => typeof item === 'string',
+          )
         : [];
     const actionEvidence =
       isRecord(stepResult) && Array.isArray(stepResult.steps)
-        ? stepResult.steps.filter((item): item is string => typeof item === 'string')
+        ? stepResult.steps.filter(
+            (item): item is string => typeof item === 'string',
+          )
         : [];
     const assertionResults: JsonObject[] = [];
     const validAssertions = assertions.filter(isRecord);
@@ -799,62 +1008,130 @@ export class IosAppRequestDispatcher {
       let evidence: string[] = [];
       let assertionError = '';
       if (type === 'network') {
-        const trace = await this.readTrace({
-          session_id: sessionId,
-          after_action: actionEvidence[actionEvidence.length - 1],
-          types: ['network'],
-          filters: {
-            path_contains: asString(assertion.path),
-            method: asString(assertion.method),
-            status:
-              typeof assertion.status === 'number' ? assertion.status : undefined,
-          },
-        });
-        evidence =
-          isRecord(trace) && Array.isArray(trace.evidence)
-            ? trace.evidence.filter((item): item is string => typeof item === 'string')
-            : [];
-        passed = evidence.length > 0;
-        if (!passed) assertionError = 'expected network event was not observed';
+        if (!tracePathConfigured(session, 'network')) {
+          assertionError = 'network trace is not configured for this session';
+        } else {
+          const trace = await this.readTrace({
+            session_id: sessionId,
+            after_action: actionEvidence[actionEvidence.length - 1],
+            types: ['network'],
+            filters: {
+              path_contains: asString(assertion.path),
+              method: asString(assertion.method),
+              status:
+                typeof assertion.status === 'number'
+                  ? assertion.status
+                  : undefined,
+            },
+          });
+          if (!okTrace(trace)) {
+            assertionError = `network trace unavailable: ${traceFailureMessage(trace)}`;
+          } else {
+            evidence =
+              isRecord(trace) && Array.isArray(trace.evidence)
+                ? trace.evidence.filter(
+                    (item): item is string => typeof item === 'string',
+                  )
+                : [];
+            passed = evidence.length > 0;
+            if (!passed)
+              assertionError = 'expected network event was not observed';
+          }
+        }
       } else if (type === 'network_absent') {
-        const trace = await this.readTrace({
-          session_id: sessionId,
-          after_action: actionEvidence[actionEvidence.length - 1],
-          types: ['network'],
-          filters: { path_contains: asString(assertion.path) },
-        });
-        const traceEvidence =
-          isRecord(trace) && Array.isArray(trace.evidence) ? trace.evidence : [];
-        passed = traceEvidence.length === 0;
-        evidence = traceEvidence.filter((item): item is string => typeof item === 'string');
-        if (!passed) assertionError = 'unexpected network event was observed';
+        if (!tracePathConfigured(session, 'network')) {
+          assertionError = 'network trace is not configured for this session';
+        } else {
+          const trace = await this.readTrace({
+            session_id: sessionId,
+            after_action: actionEvidence[actionEvidence.length - 1],
+            types: ['network'],
+            filters: { path_contains: asString(assertion.path) },
+          });
+          if (!okTrace(trace)) {
+            assertionError = `network trace unavailable: ${traceFailureMessage(trace)}`;
+          } else {
+            const traceEvidence =
+              isRecord(trace) && Array.isArray(trace.evidence)
+                ? trace.evidence
+                : [];
+            passed = traceEvidence.length === 0;
+            evidence = traceEvidence.filter(
+              (item): item is string => typeof item === 'string',
+            );
+            if (!passed)
+              assertionError = 'unexpected network event was observed';
+          }
+        }
       } else if (type === 'ui_text' || type === 'element_exists') {
         const obs = await this.observe({ session_id: sessionId });
         const obsId = observationId(obs);
         if (obsId) {
           evidence = [obsId];
-          const needle = asString(assertion.contains || assertion.text || assertion.value);
+          const needle = asString(
+            assertion.contains || assertion.text || assertion.value,
+          );
           const haystack = JSON.stringify(obs);
           passed = needle ? haystack.includes(needle) : evidence.length > 0;
           if (!passed) assertionError = 'expected UI state was not observed';
         } else {
           assertionError = `observe failed: ${resultErrorMessage(obs)}`;
         }
+      } else if (type === 'app_state') {
+        const obs = await this.observe({ session_id: sessionId });
+        const obsId = observationId(obs);
+        if (obsId && isRecord(obs) && isRecord(obs.app_state)) {
+          evidence = [obsId];
+          const appState = obs.app_state as Record<string, unknown>;
+          const expected = isRecord(assertion.expected)
+            ? assertion.expected
+            : Object.fromEntries(
+                Object.entries(assertion).filter(
+                  ([key]) => !['type', 'expected'].includes(key),
+                ),
+              );
+          const mismatches = Object.entries(expected).filter(
+            ([key, value]) => appState[key] !== value,
+          );
+          passed = mismatches.length === 0 && Object.keys(expected).length > 0;
+          if (!passed) {
+            assertionError =
+              Object.keys(expected).length === 0
+                ? 'app_state assertion must specify expected fields'
+                : `app_state mismatch: ${mismatches
+                    .map(([key]) => key)
+                    .join(', ')}`;
+          }
+        } else {
+          assertionError = `observe failed: ${resultErrorMessage(obs)}`;
+        }
       } else if (type === 'crash_absent') {
-        const trace = await this.readTrace({
-          session_id: sessionId,
-          after_action: actionEvidence[actionEvidence.length - 1],
-          types: ['crash'],
-        });
-        const crashEvidence =
-          isRecord(trace) && Array.isArray(trace.evidence)
-            ? trace.evidence.filter((item): item is string => typeof item === 'string')
-            : [];
-        const crashes =
-          isRecord(trace) && Array.isArray(trace.crashes) ? trace.crashes : [];
-        evidence = crashEvidence;
-        passed = crashes.length === 0;
-        if (!passed) assertionError = 'crash trace was observed';
+        if (!tracePathConfigured(session, 'crash')) {
+          assertionError = 'crash trace is not configured for this session';
+        } else {
+          const trace = await this.readTrace({
+            session_id: sessionId,
+            after_action: actionEvidence[actionEvidence.length - 1],
+            types: ['crash'],
+          });
+          if (!okTrace(trace)) {
+            assertionError = `crash trace unavailable: ${traceFailureMessage(trace)}`;
+          } else {
+            const crashEvidence =
+              isRecord(trace) && Array.isArray(trace.evidence)
+                ? trace.evidence.filter(
+                    (item): item is string => typeof item === 'string',
+                  )
+                : [];
+            const crashes =
+              isRecord(trace) && Array.isArray(trace.crashes)
+                ? trace.crashes
+                : [];
+            evidence = crashEvidence;
+            passed = crashes.length === 0;
+            if (!passed) assertionError = 'crash trace was observed';
+          }
+        }
       } else {
         assertionError = `unsupported assertion type: ${type || '(missing)'}`;
       }
@@ -877,9 +1154,22 @@ export class IosAppRequestDispatcher {
       assertionResults.push(assertionPayload);
     }
 
+    const hasUiOrStateAssertion = assertionResults.some(
+      (item) =>
+        item.status === 'passed' &&
+        (item.type === 'ui_text' ||
+          item.type === 'element_exists' ||
+          item.type === 'app_state'),
+    );
+    if (validAssertions.length > 0 && !hasUiOrStateAssertion) {
+      errors.push(
+        'test case must contain at least one passed UI or state assertion',
+      );
+    }
     const failed =
       flowStatus !== 'success' ||
       validAssertions.length === 0 ||
+      !hasUiOrStateAssertion ||
       assertionResults.some((item) => item.status !== 'passed');
     const result = {
       case_id: caseId,
@@ -924,7 +1214,8 @@ export class IosAppRequestDispatcher {
           ? Math.min(args.timeout_ms, 10 * 60 * 1000)
           : 30_000,
       maxBytes:
-        typeof capture.max_bytes === 'number' && Number.isFinite(capture.max_bytes)
+        typeof capture.max_bytes === 'number' &&
+        Number.isFinite(capture.max_bytes)
           ? Math.min(capture.max_bytes, 100_000)
           : 20_000,
     });

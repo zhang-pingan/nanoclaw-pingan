@@ -6,7 +6,7 @@ import { promisify } from 'util';
 import { IosEvidenceStore } from './ios-evidence-store.js';
 import { resolveIosServiceConfig } from './ios-service-config.js';
 import { redactText } from './ios-redaction.js';
-import type { JsonObject } from './types.js';
+import type { JsonObject, ServiceConfig } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -21,6 +21,7 @@ export interface SearchCodeInput {
   scope?: Array<'ios_client' | 'backend'>;
   queries: SearchCodeQuery[];
   max_results?: number;
+  registry?: Record<string, ServiceConfig>;
 }
 
 function rgPattern(query: SearchCodeQuery): string {
@@ -57,7 +58,9 @@ async function runRg(root: string, pattern: string, maxResults: number) {
         timeout: 20_000,
         maxBuffer: 1024 * 1024,
         env: {
-          PATH: process.env.PATH || '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin',
+          PATH:
+            process.env.PATH ||
+            '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin',
           HOME: process.env.HOME,
         },
       },
@@ -66,8 +69,9 @@ async function runRg(root: string, pattern: string, maxResults: number) {
       .split(/\r?\n/)
       .filter(Boolean)
       .map(parseRgLine)
-      .filter((item): item is NonNullable<ReturnType<typeof parseRgLine>> =>
-        item !== null,
+      .filter(
+        (item): item is NonNullable<ReturnType<typeof parseRgLine>> =>
+          item !== null,
       )
       .slice(0, maxResults);
   } catch (err) {
@@ -78,8 +82,9 @@ async function runRg(root: string, pattern: string, maxResults: number) {
         .split(/\r?\n/)
         .filter(Boolean)
         .map(parseRgLine)
-        .filter((item): item is NonNullable<ReturnType<typeof parseRgLine>> =>
-          item !== null,
+        .filter(
+          (item): item is NonNullable<ReturnType<typeof parseRgLine>> =>
+            item !== null,
         )
         .slice(0, maxResults);
     }
@@ -92,11 +97,15 @@ export async function searchIosCode(input: {
   request: SearchCodeInput;
 }): Promise<{ matches: JsonObject[]; evidence: string[] }> {
   const resolved = resolveIosServiceConfig(input.request.service, {
+    registry: input.request.registry,
     requireIosRepoExists: true,
     requireBackendRepoExists: false,
   });
   const scope = input.request.scope || ['ios_client', 'backend'];
-  const maxResults = Math.min(Math.max(input.request.max_results || 20, 1), 100);
+  const maxResults = Math.min(
+    Math.max(input.request.max_results || 20, 1),
+    100,
+  );
   const roots: Array<{
     scope: 'ios_client' | 'backend';
     root: string;
@@ -121,8 +130,14 @@ export async function searchIosCode(input: {
   }
 
   const sessionId = input.request.session_id || '';
-  if (!sessionId) throw new Error('session_id is required for ios_app_search_code');
-  input.store.getSession(sessionId);
+  if (!sessionId)
+    throw new Error('session_id is required for ios_app_search_code');
+  const session = input.store.getSession(sessionId);
+  if (session.service !== resolved.service) {
+    throw new Error(
+      `ios_app_search_code service "${resolved.service}" does not match session service "${session.service}"`,
+    );
+  }
   const evidence: string[] = [];
   const matches: JsonObject[] = [];
   for (const query of input.request.queries || []) {
@@ -143,16 +158,16 @@ export async function searchIosCode(input: {
           session_id: sessionId,
           source: 'ios_app_search_code',
           summary: `${root.scope} match for ${query.type}: ${query.value}`,
-        payload: {
-          repo: root.repo,
-          path: relativePath,
-          line: match.line,
-          query: {
-            type: query.type,
-            value: query.value,
-          },
-          snippet: redacted.value.trim().slice(0, 500),
-        } as JsonObject,
+          payload: {
+            repo: root.repo,
+            path: relativePath,
+            line: match.line,
+            query: {
+              type: query.type,
+              value: query.value,
+            },
+            snippet: redacted.value.trim().slice(0, 500),
+          } as JsonObject,
           redact: false,
         });
         evidence.push(record.id);

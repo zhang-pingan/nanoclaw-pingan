@@ -86,13 +86,21 @@ function normalizeMcpAccessConfig(value: unknown): McpAccessConfig {
   const profiles: Record<string, string[]> = {};
   const groups: Record<string, string[]> = {};
 
-  if (raw.profiles && typeof raw.profiles === 'object' && !Array.isArray(raw.profiles)) {
+  if (
+    raw.profiles &&
+    typeof raw.profiles === 'object' &&
+    !Array.isArray(raw.profiles)
+  ) {
     for (const [profile, tools] of Object.entries(raw.profiles)) {
       profiles[profile] = parseStringArray(tools);
     }
   }
 
-  if (raw.groups && typeof raw.groups === 'object' && !Array.isArray(raw.groups)) {
+  if (
+    raw.groups &&
+    typeof raw.groups === 'object' &&
+    !Array.isArray(raw.groups)
+  ) {
     for (const [group, profileNames] of Object.entries(raw.groups)) {
       groups[group] = parseStringArray(profileNames);
     }
@@ -108,12 +116,16 @@ function loadMcpAccessConfig(): McpAccessConfig | null {
       JSON.parse(fs.readFileSync(MCP_CONFIG_PATH, 'utf-8')),
     );
   } catch (err) {
-    process.stderr.write(`[mcp-config] Failed to parse ${MCP_CONFIG_PATH}: ${err}\n`);
+    process.stderr.write(
+      `[mcp-config] Failed to parse ${MCP_CONFIG_PATH}: ${err}\n`,
+    );
     return null;
   }
 }
 
-function resolveConfiguredTools(config: McpAccessConfig | null): Set<string> | null {
+function resolveConfiguredTools(
+  config: McpAccessConfig | null,
+): Set<string> | null {
   if (!config) return null;
 
   const profiles = config.profiles || {};
@@ -405,11 +417,7 @@ async function callIosAppRequestTool(
     timestamp: new Date().toISOString(),
   });
 
-  const resultPath = path.join(
-    IPC_DIR,
-    'ios-app-results',
-    `${requestId}.json`,
-  );
+  const resultPath = path.join(IPC_DIR, 'ios-app-results', `${requestId}.json`);
   const result = await waitForIpcResult<IosAppMcpResult>(
     resultPath,
     waitMs,
@@ -459,10 +467,9 @@ const originalServerTool = server.tool.bind(server) as unknown as (
   name: string,
   ...args: unknown[]
 ) => unknown;
-(server as unknown as { tool: (name: string, ...args: unknown[]) => unknown }).tool = (
-  name: string,
-  ...args: unknown[]
-) => {
+(
+  server as unknown as { tool: (name: string, ...args: unknown[]) => unknown }
+).tool = (name: string, ...args: unknown[]) => {
   const visibility = BUILTIN_TOOL_VISIBILITY[name];
   if (visibility) {
     if (!toolVisibilityAllows(visibility)) {
@@ -709,10 +716,15 @@ server.tool(
     build: z.boolean().optional().default(false),
     simulator: z.string().optional().describe('模拟器名称，例如 iPhone 16'),
     launch_args: z.array(z.string()).optional(),
+    launch_env: z.record(z.string(), z.string()).optional(),
     auth: z.record(z.string(), z.unknown()).optional(),
   },
   async (args) =>
-    callIosAppRequestTool('prepare_session', args as Record<string, unknown>, 25 * 60 * 1000),
+    callIosAppRequestTool(
+      'prepare_session',
+      args as Record<string, unknown>,
+      25 * 60 * 1000,
+    ),
 );
 
 server.tool(
@@ -724,7 +736,8 @@ server.tool(
       .array(z.enum(['screenshot', 'ui_tree', 'network_cursor', 'app_state']))
       .optional(),
   },
-  async (args) => callIosAppRequestTool('observe', args as Record<string, unknown>),
+  async (args) =>
+    callIosAppRequestTool('observe', args as Record<string, unknown>),
 );
 
 server.tool(
@@ -732,20 +745,19 @@ server.tool(
   '执行 iOS App 动作并自动关联动作前后 observe。支持 tap/type/scroll/back/home/deeplink/wait/terminate/relaunch。',
   {
     session_id: z.string().min(1),
-    action: z
-      .enum([
-        'tap',
-        'type',
-        'scroll',
-        'back',
-        'home',
-        'terminate',
-        'relaunch',
-        'deeplink',
-        'wait',
-        'dismiss_keyboard',
-        'handle_system_alert',
-      ]),
+    action: z.enum([
+      'tap',
+      'type',
+      'scroll',
+      'back',
+      'home',
+      'terminate',
+      'relaunch',
+      'deeplink',
+      'wait',
+      'dismiss_keyboard',
+      'handle_system_alert',
+    ]),
     target: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
     url: z.string().optional(),
     text: z.string().optional(),
@@ -765,7 +777,8 @@ server.tool(
     flow_id: z.string().optional(),
     steps: z.array(iosActionStepSchema).min(1),
   },
-  async (args) => callIosAppRequestTool('run_flow', args as Record<string, unknown>, 600000),
+  async (args) =>
+    callIosAppRequestTool('run_flow', args as Record<string, unknown>, 600000),
 );
 
 server.tool(
@@ -783,7 +796,8 @@ server.tool(
       })
       .optional(),
   },
-  async (args) => callIosAppRequestTool('read_trace', args as Record<string, unknown>),
+  async (args) =>
+    callIosAppRequestTool('read_trace', args as Record<string, unknown>),
 );
 
 server.tool(
@@ -803,7 +817,8 @@ server.tool(
       .min(1),
     max_results: z.number().int().min(1).max(100).optional(),
   },
-  async (args) => callIosAppRequestTool('search_code', args as Record<string, unknown>),
+  async (args) =>
+    callIosAppRequestTool('search_code', args as Record<string, unknown>),
 );
 
 server.tool(
@@ -835,7 +850,8 @@ server.tool(
       )
       .min(1),
   },
-  async (args) => callIosAppRequestTool('write_claims', args as Record<string, unknown>),
+  async (args) =>
+    callIosAppRequestTool('write_claims', args as Record<string, unknown>),
 );
 
 server.tool(
@@ -847,7 +863,12 @@ server.tool(
     steps: z.array(iosActionStepSchema).default([]),
     assertions: z.array(iosAssertionSchema).default([]),
   },
-  async (args) => callIosAppRequestTool('run_test_case', args as Record<string, unknown>, 600000),
+  async (args) =>
+    callIosAppRequestTool(
+      'run_test_case',
+      args as Record<string, unknown>,
+      600000,
+    ),
 );
 
 server.tool(
@@ -860,7 +881,8 @@ server.tool(
     required_fields: z.array(z.string().min(1)).optional(),
     body: z.record(z.string(), z.unknown()),
   },
-  async (args) => callIosAppRequestTool('write_report', args as Record<string, unknown>),
+  async (args) =>
+    callIosAppRequestTool('write_report', args as Record<string, unknown>),
 );
 
 server.tool(
@@ -879,7 +901,12 @@ server.tool(
       })
       .optional(),
   },
-  async (args) => callIosAppRequestTool('debug_shell', args as Record<string, unknown>, 605000),
+  async (args) =>
+    callIosAppRequestTool(
+      'debug_shell',
+      args as Record<string, unknown>,
+      605000,
+    ),
 );
 
 server.tool(
