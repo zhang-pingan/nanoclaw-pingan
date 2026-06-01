@@ -307,6 +307,11 @@ export interface TemplateVars {
   plan_doc?: string;
   dev_doc?: string;
   test_doc?: string;
+  product_recon_path?: string;
+  impact_analysis_path?: string;
+  prototype_analysis_path?: string;
+  ios_test_plan_path?: string;
+  acceptance_report_path?: string;
   delegation_result?: string;
   result_summary?: string;
   revision_text?: string;

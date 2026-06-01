@@ -27,7 +27,11 @@
     "id": "dev_test.plan_review.v1",
     "type": "hybrid",
     "deterministic": {
-      "required_checks": ["review_verdict", "findings", "evidence"]
+      "required_checks": [
+        "review_verdict",
+        "findings",
+        "evidence"
+      ]
     },
     "ai": {
       "enabled": true,
@@ -68,7 +72,11 @@
     "id": "dev_test.dev_review.v1",
     "type": "hybrid",
     "deterministic": {
-      "required_checks": ["review_verdict", "findings", "evidence"]
+      "required_checks": [
+        "review_verdict",
+        "findings",
+        "evidence"
+      ]
     },
     "ai": {
       "enabled": true,
@@ -132,7 +140,11 @@
     "id": "fix_test.bug_fix.v1",
     "type": "hybrid",
     "deterministic": {
-      "required_checks": ["fix_summary", "work_branch", "validation_notes"]
+      "required_checks": [
+        "fix_summary",
+        "work_branch",
+        "validation_notes"
+      ]
     },
     "ai": {
       "enabled": true,
@@ -150,7 +162,10 @@
     "id": "fix_test.ops_deploy.v1",
     "type": "hybrid",
     "deterministic": {
-      "required_checks": ["work_branch", "deploy_result"]
+      "required_checks": [
+        "work_branch",
+        "deploy_result"
+      ]
     },
     "ai": {
       "enabled": true,
@@ -168,7 +183,11 @@
     "id": "fix_test.bug_test.v1",
     "type": "hybrid",
     "deterministic": {
-      "required_checks": ["test_counts", "bug_verification", "evidence"]
+      "required_checks": [
+        "test_counts",
+        "bug_verification",
+        "evidence"
+      ]
     },
     "ai": {
       "enabled": true,
@@ -181,6 +200,193 @@
       "schema_invalid": "failed",
       "tests_failed": "failed",
       "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "ios_dev_test.ios_recon.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "product_recon",
+        "impact_analysis",
+        "ios_evidence"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether iOS recon artifacts describe real app behavior, relevant flows, network/client/server evidence, limitations, and a clear client/server impact analysis. Treat unsupported impact claims as needs_revision.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "ios_dev_test.plan.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "plan_doc",
+        "frontmatter",
+        "acceptance_criteria",
+        "scope",
+        "risk",
+        "ios_impact_handling"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether plan.md consumes product-recon.json and impact-analysis.json, separates backend changes from iOS coordination, preserves unknowns as open questions, and gives testable acceptance criteria.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "ios_dev_test.plan_review.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "review_verdict",
+        "findings",
+        "evidence"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether the iOS-aware plan review is backed by concrete findings and checks backend scope, iOS coordination, unknowns, and testability.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "ios_dev_test.dev.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "dev_doc",
+        "plan_reference",
+        "impact_scope",
+        "validation_notes",
+        "ios_dependency_notes"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether dev.md explains backend implementation, references the plan, identifies impact scope, records iOS coordination dependencies, and gives credible validation notes.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "ios_dev_test.dev_review.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "review_verdict",
+        "findings",
+        "evidence"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether development review evaluates plan alignment, backend implementation quality, regression risk, validation evidence, and iOS coordination notes.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "ios_dev_test.ops_deploy.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "work_branch",
+        "deploy_result",
+        "verification_evidence"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether deployment evidence identifies target environment, deployed work branch, deployment result, verification evidence, and risks for iOS acceptance.",
+      "max_context_bytes": 12000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "ios_dev_test.ios_acceptance.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "ios_test_plan",
+        "acceptance_report",
+        "test_counts",
+        "case_evidence",
+        "assertions"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether iOS acceptance report is based on executable simulator test cases, includes CASE/ASSERT/OBS/NET/CRASH evidence where relevant, distinguishes failed and blocked cases, and never marks unverified assertions as passed.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending",
+      "tests_failed": "failed"
+    }
+  },
+  {
+    "id": "ios_dev_test.testing.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": [
+        "test_summary",
+        "failure_breakdown",
+        "coverage",
+        "evidence",
+        "ios_acceptance_consumed"
+      ]
+    },
+    "ai": {
+      "enabled": true,
+      "model": "default",
+      "rubric": "Judge whether centralized testing covers backend APIs, DB, logs, exception boundaries, and consumes iOS acceptance results without duplicating pure UI steps. Preserve failed verdicts when bugs or failed cases are present.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending",
+      "tests_failed": "failed"
     }
   }
 ]

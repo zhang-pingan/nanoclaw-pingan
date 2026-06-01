@@ -38,6 +38,23 @@ export function getDeliverableFileNameForRole(
     : '';
 }
 
+const WORKFLOW_ARTIFACT_REF_FILES: Record<string, string> = {
+  plan_doc: 'plan.md',
+  dev_doc: 'dev.md',
+  test_doc: 'test.md',
+  product_recon: 'product-recon.json',
+  impact_analysis: 'impact-analysis.json',
+  prototype_analysis: 'prototype-analysis.json',
+  ios_test_plan: 'ios-test-plan.json',
+  acceptance_report: 'acceptance-report.json',
+  traceability: 'traceability.json',
+  readme: 'README.md',
+};
+
+export function getWorkflowArtifactFileNameForRef(ref: string): string {
+  return WORKFLOW_ARTIFACT_REF_FILES[ref] || '';
+}
+
 function deliverableProjectPathPrefix(workflow: Workflow): string {
   const deliverable = getWorkflowContextValue(
     workflow,

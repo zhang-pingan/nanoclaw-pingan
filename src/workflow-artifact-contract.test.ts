@@ -152,6 +152,107 @@ describe('workflow artifact contract declarative rules', () => {
     );
   });
 
+  it('requires iOS recon artifacts and JSON fields', () => {
+    writeDeliverable(
+      'product-recon.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-001',
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'impact-analysis.json',
+      JSON.stringify({
+        version: 1,
+        service: TEST_SERVICE,
+        platform: 'ios',
+        client_impact: { required: 'unknown' },
+        server_impact: { required: true },
+        evidence: [],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: { ...makeWorkflow(), workflow_type: 'ios_dev_test' },
+      contractRef: 'ios_dev_test.ios_recon.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        product_recon: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/product-recon.json`,
+        impact_analysis: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/impact-analysis.json`,
+      },
+    });
+
+    expect(result?.status).toBe('pending');
+    expect(result?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'artifact_contract.body_field_missing',
+          message: expect.stringContaining('flows'),
+        }),
+      ]),
+    );
+  });
+
+  it('forces failed status when iOS acceptance has failed or blocked cases', () => {
+    writeDeliverable(
+      'ios-test-plan.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_purpose: 'acceptance',
+        cases: [],
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'acceptance-report.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-002',
+        summary: {
+          total: 2,
+          passed: 0,
+          failed: 1,
+          blocked: 1,
+        },
+        cases: [],
+        verdict: 'failed',
+        evidence: [],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: {
+        ...makeWorkflow(),
+        workflow_type: 'ios_dev_test',
+        status: 'ios_acceptance',
+      },
+      contractRef: 'ios_dev_test.ios_acceptance.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        ios_test_plan: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/ios-test-plan.json`,
+        acceptance_report: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/acceptance-report.json`,
+        total: 2,
+        passed: 0,
+        failed: 1,
+        blocked: 1,
+      },
+    });
+
+    expect(result?.status).toBe('failed');
+    const codes = result?.findings.map((f) => f.code) || [];
+    expect(codes).toContain('ios_acceptance_cases_failed');
+    expect(codes).toContain('ios_acceptance_cases_blocked');
+  });
+
   it('validates JSON deliverable body_required_fields', () => {
     fs.writeFileSync(
       TEMP_CONTRACT_FILE,

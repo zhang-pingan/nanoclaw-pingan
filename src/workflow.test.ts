@@ -112,6 +112,24 @@ const GROUPS: Array<[string, RegisteredGroup]> = [
       added_at: '2026-04-08T00:00:00.000Z',
     },
   ],
+  [
+    'ios-recon@g.us',
+    {
+      name: 'iOS Recon',
+      folder: 'web_ios_recon',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
+  [
+    'ios-acceptance@g.us',
+    {
+      name: 'iOS Acceptance',
+      folder: 'web_ios_acceptance',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
 ];
 
 function resumePendingInterruptForTest(
@@ -131,6 +149,7 @@ function resumePendingInterruptForTest(
 }
 
 const TEST_SERVICE = 'workflow-test-service';
+const DELIVERABLE = '2026-04-08_ios_feature';
 const ITERATION_DIR = path.join(
   PROJECT_ROOT,
   'projects',
@@ -174,10 +193,9 @@ function writeTraceability(
   );
 }
 
-function buildTraceability(overrides: Record<string, unknown> = {}): Record<
-  string,
-  unknown
-> {
+function buildTraceability(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     version: 1,
     statements: [
@@ -231,7 +249,10 @@ function buildTraceability(overrides: Record<string, unknown> = {}): Record<
   };
 }
 
-function readContextPackInputRefs(workflowId: string, stageKey: string): string[] {
+function readContextPackInputRefs(
+  workflowId: string,
+  stageKey: string,
+): string[] {
   const contextPackPath = path.join(
     PROJECT_ROOT,
     'projects',
@@ -937,6 +958,28 @@ describe('workflow metadata and branch flow', () => {
     expect(getWorkflow(result.workflowId)).toBeUndefined();
   });
 
+  it('rejects ios_dev_test dev entry when required recon artifacts are missing', () => {
+    writeDoc(
+      DELIVERABLE,
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: ${DELIVERABLE}\n---\n\n# Plan\n`,
+    );
+
+    const result = createNewWorkflow({
+      title: 'iOS recon artifacts missing',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'dev',
+      workflowType: 'ios_dev_test',
+      deliverable: DELIVERABLE,
+    });
+
+    expect(result.error).toContain(
+      '需要交付物 product-recon.json, impact-analysis.json',
+    );
+    expect(getWorkflow(result.workflowId)).toBeUndefined();
+  });
+
   it('injects requirement description and attachment paths into the plan delegation task', () => {
     const result = createNewWorkflow({
       title: '用户昵称支持表情并限制长度',
@@ -1576,7 +1619,8 @@ describe('workflow metadata and branch flow', () => {
       sourceJid: 'main@g.us',
       startFrom: 'plan',
       workflowType: 'dev_test',
-      requirementDescription: 'delegation 返回的 deliverable 不能作为路径逃逸。',
+      requirementDescription:
+        'delegation 返回的 deliverable 不能作为路径逃逸。',
     });
     expect(result.error).toBeUndefined();
     const [delegation] = getDelegationsByWorkflow(result.workflowId);
@@ -2481,6 +2525,191 @@ describe('workflow metadata and branch flow', () => {
       'fix_test.bug_test.v1',
     );
     expect(getWorkflowArtifactContract('fix_test.bug_test.v1')).toBeDefined();
+  });
+
+  it('loads ios_dev_test with isolated iOS roles and artifact contracts', () => {
+    const iosDevTest = getWorkflowTypeConfig('ios_dev_test');
+    expect(iosDevTest?.roles.ios_recon.channels.web).toBe('web_ios_recon');
+    expect(iosDevTest?.roles.planner.channels.web).toBe('web_plan');
+    expect(iosDevTest?.roles.plan_examiner.channels.web).toBe(
+      'web_plan_examine',
+    );
+    expect(iosDevTest?.roles.dev.channels.web).toBe('web_dev');
+    expect(iosDevTest?.roles.dev_examiner.channels.web).toBe('web_dev_examine');
+    expect(iosDevTest?.roles.ops.channels.web).toBe('web_ops');
+    expect(iosDevTest?.roles.ios_acceptance.channels.web).toBe(
+      'web_ios_acceptance',
+    );
+    expect(iosDevTest?.roles.test.channels.web).toBe('web_test');
+    expect(iosDevTest?.entry_points.plan.state).toBe('ios_recon');
+    expect(iosDevTest?.entry_points.dev).toMatchObject({
+      requires_deliverable: true,
+      deliverable_role: 'planner',
+    });
+    expect(iosDevTest?.states.ios_recon.artifact_contract?.ref).toBe(
+      'ios_dev_test.ios_recon.v1',
+    );
+    expect(iosDevTest?.states.plan.artifact_contract?.ref).toBe(
+      'ios_dev_test.plan.v1',
+    );
+    expect(iosDevTest?.states.backend_dev.artifact_contract?.ref).toBe(
+      'ios_dev_test.dev.v1',
+    );
+    expect(iosDevTest?.states.ios_acceptance.artifact_contract?.ref).toBe(
+      'ios_dev_test.ios_acceptance.v1',
+    );
+    expect(iosDevTest?.states.centralized_test.artifact_contract?.ref).toBe(
+      'ios_dev_test.testing.v1',
+    );
+    expect(
+      getWorkflowArtifactContract('ios_dev_test.ios_recon.v1'),
+    ).toBeDefined();
+    expect(
+      getWorkflowEvaluatorConfig('ios_dev_test.ios_acceptance.v1')?.ai?.enabled,
+    ).toBe(true);
+  });
+
+  it('keeps iOS MCP profiles isolated from existing dev_test workers', () => {
+    const mcpConfig = JSON.parse(
+      fs.readFileSync(
+        path.join(PROJECT_ROOT, 'container', 'mcp', 'mcp.json'),
+        'utf-8',
+      ),
+    ) as { groups: Record<string, string[]> };
+    const skillsConfig = JSON.parse(
+      fs.readFileSync(
+        path.join(PROJECT_ROOT, 'container', 'skills', 'skills.json'),
+        'utf-8',
+      ),
+    ) as Record<string, string[]>;
+
+    expect(mcpConfig.groups.web_plan).toEqual(['delegation-worker']);
+    expect(mcpConfig.groups.web_test).toEqual(['delegation-worker']);
+    expect(mcpConfig.groups.web_ios_recon).toEqual([
+      'delegation-worker',
+      'ios-recon',
+    ]);
+    expect(mcpConfig.groups.web_ios_acceptance).toEqual([
+      'delegation-worker',
+      'ios-acceptance',
+    ]);
+    expect(mcpConfig.groups.web_ios_plan).toBeUndefined();
+    expect(skillsConfig.web_plan).toEqual(
+      expect.arrayContaining(['plan-requirement', 'ios-plan-requirement']),
+    );
+    expect(skillsConfig.web_dev).toEqual(
+      expect.arrayContaining([
+        'dev-requirement',
+        'dev-bugfix',
+        'ios-backend-dev-requirement',
+        'ios-backend-bugfix',
+      ]),
+    );
+    expect(skillsConfig.web_ios_plan).toBeUndefined();
+    expect(skillsConfig.web_ios_acceptance).toEqual(['ios-acceptance-test']);
+  });
+
+  it('starts ios_dev_test from iOS recon and builds context pack', () => {
+    const result = createNewWorkflow({
+      title: '资料页新增徽章展示',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'ios_dev_test',
+      requirementDescription:
+        '需要在 iOS 资料页展示用户徽章，并由服务端返回徽章信息。',
+      requirementFiles: [
+        '/tmp/profile-badge-prd.md',
+        '/tmp/profile-badge-ui.png',
+      ],
+    });
+
+    expect(result.error).toBeUndefined();
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('ios_recon');
+    expect(
+      workflow &&
+        getWorkflowContextValue(
+          workflow,
+          WORKFLOW_CONTEXT_KEYS.contextPackPath,
+        ),
+    ).toContain(
+      `/workspace/projects/${TEST_SERVICE}/workflow-context/${workflow?.id}/ios_recon/latest.json`,
+    );
+
+    const delegations = getDelegationsByWorkflow(result.workflowId);
+    expect(delegations).toHaveLength(1);
+    expect(delegations[0]?.target_folder).toBe('web_ios_recon');
+    expect(delegations[0]?.handoff_skill).toBe('ios-recon-requirement');
+    expect(delegations[0]?.task).toContain('iOS Product Recon');
+    expect(delegations[0]?.task).toContain('- /tmp/profile-badge-ui.png');
+    const contract = JSON.parse(delegations[0]?.handoff_contract_json || '{}');
+    expect(contract.artifact_contract_ref).toBe('ios_dev_test.ios_recon.v1');
+  });
+
+  it('collects iOS JSON artifacts into later stage context packs', () => {
+    writeDoc(
+      DELIVERABLE,
+      'product-recon.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-001',
+        flows: [],
+        evidence: [],
+      }),
+    );
+    writeDoc(
+      DELIVERABLE,
+      'impact-analysis.json',
+      JSON.stringify({
+        version: 1,
+        service: TEST_SERVICE,
+        platform: 'ios',
+        client_impact: { required: 'unknown' },
+        server_impact: { required: true },
+        evidence: [],
+      }),
+    );
+    writeDoc(
+      DELIVERABLE,
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: ${DELIVERABLE}\nmain_branch: main\nwork_branch: feature/ios\nstaging_base_branch: staging\nstaging_work_branch: staging/ios\ndoc_type: plan\n---\n\n# Plan\n\n## 范围\nx\n\n## 验收标准\ny\n\n## 风险\nz\n\n## iOS 配合\n待联调\n`,
+    );
+
+    const result = createNewWorkflow({
+      title: 'Existing iOS recon deliverable',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'dev',
+      workflowType: 'ios_dev_test',
+      deliverable: DELIVERABLE,
+    });
+
+    expect(result.error).toBeUndefined();
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('backend_dev');
+    const delegations = getDelegationsByWorkflow(result.workflowId);
+    expect(delegations[0]?.target_folder).toBe('web_dev');
+    expect(delegations[0]?.task).toContain('product-recon.json');
+    const contextPackPath = path.join(
+      PROJECT_ROOT,
+      'projects',
+      TEST_SERVICE,
+      'workflow-context',
+      result.workflowId,
+      'backend_dev',
+      'latest.json',
+    );
+    const contextPack = JSON.parse(fs.readFileSync(contextPackPath, 'utf-8'));
+    expect(contextPack.prior_artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ artifact_ref: 'product_recon' }),
+        expect.objectContaining({ artifact_ref: 'impact_analysis' }),
+        expect.objectContaining({ artifact_ref: 'plan_doc' }),
+      ]),
+    );
   });
 
   it('preserves context requirements and quality gate config through runtime config', () => {

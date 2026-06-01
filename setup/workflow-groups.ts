@@ -189,6 +189,48 @@ Read \`/workspace/global/services.json\` (or \`/workspace/project/groups/global/
   },
 ];
 
+const IOS_ROLE_TEMPLATES: WorkflowGroupTemplate[] = [
+  {
+    roleKey: 'ios_recon',
+    name: 'iOS 行为分析师',
+    folderSuffix: 'ios_recon',
+    description:
+      'iOS 行为分析：使用模拟器、App 自动化、网络 trace 和源码搜索产出产品行为与端服影响分析',
+    claudeMd: `# Group Instructions
+
+## 性格设定
+- 观察细致，结论必须有可追踪证据支撑
+- 沟通直接，明确区分已观察事实、推断、限制与阻塞
+- 风险敏感，不把不稳定自动化结果伪装为通过
+
+## 角色设定
+- 你是 iOS 行为分析师，负责在方案设计前探索真实 App 行为
+- 你只做分析和证据产物，不写正式业务代码
+- 所有业务结论必须通过 formal claim 和 JSON artifact 留痕
+`,
+  },
+  {
+    roleKey: 'ios_acceptance',
+    name: 'iOS 联调验收',
+    folderSuffix: 'ios_acceptance',
+    description:
+      'iOS 联调验收：执行真实 App flow、UI 状态、网络 trace 和 crash 检查并生成验收报告',
+    claudeMd: `# Group Instructions
+
+## 性格设定
+- 测试细致，不伪造通过，不忽略阻塞
+- 证据优先，每个通过结论必须能追溯到 CASE/ASSERT/OBS/NET 等 evidence
+- 反馈直接，清楚区分业务失败、环境阻塞和自动化限制
+
+## 角色设定
+- 你是 iOS 联调验收工程师，负责真实 App 验收
+- 你必须基于可执行 test case 输出 ios-test-plan.json 和 acceptance-report.json
+`,
+  },
+];
+
+const ALL_ROLE_TEMPLATES = [...ROLE_TEMPLATES, ...IOS_ROLE_TEMPLATES];
+
 function parseArgs(args: string[]): ParsedArgs {
   const channels = new Set<ChannelName>(['web']);
   const feishuMap: Record<string, string> = {};
@@ -358,7 +400,7 @@ export async function run(args: string[]): Promise<void> {
   initDatabase();
 
   for (const channel of parsed.channels) {
-    for (const template of ROLE_TEMPLATES) {
+    for (const template of ALL_ROLE_TEMPLATES) {
       const folder = folderFor(channel, template);
       if (channel === 'feishu') {
         const jid = resolveFeishuJid(template, parsed.feishuMap);

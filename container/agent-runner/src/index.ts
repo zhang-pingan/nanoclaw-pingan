@@ -1502,13 +1502,22 @@ async function iterateQuery(
       //  - FALLBACK (in case synthetic user turns aren't surfaced to this loop
       //    in push mode): a single-turn success that stopped on a stop sequence
       //    with the canonical "No response requested." text.
+      const noResponseRequested =
+        /^\s*no response requested\.?\s*$/i.test(textResult || '');
+      const hasGenuineTextResult =
+        Boolean(textResult && textResult.trim()) && !noResponseRequested;
       const looksSynthetic =
         message.subtype === 'success' &&
         (numTurns === undefined || numTurns <= 1) &&
         stopReason === 'stop_sequence' &&
-        /^\s*no response requested\.?\s*$/i.test(textResult || '');
+        noResponseRequested;
       const isSyntheticClose =
-        message.subtype === 'success' && (syntheticCloseSeen || looksSynthetic);
+        message.subtype === 'success' &&
+        !hasGenuineTextResult &&
+        (looksSynthetic ||
+          (syntheticCloseSeen &&
+            (numTurns === undefined || numTurns <= 1) &&
+            stopReason !== 'end_turn'));
 
       if (isSyntheticClose && syntheticSkips < MAX_SYNTHETIC_SKIPS) {
         const detectedBy = syntheticCloseSeen ? 'synthetic_user' : 'result_shape';

@@ -5476,13 +5476,15 @@ function getWorkflowDefinitionGroupChannel(group) {
 
 function getDefaultWorkflowDefinitionDeliverableFile(roleKey = "") {
   if (roleKey === "planner") return "plan.md";
+  if (roleKey === "ios_recon") return "product-recon.json";
+  if (roleKey === "ios_acceptance") return "acceptance-report.json";
   if (roleKey === "test") return "test.md";
   return "dev.md";
 }
 
 function isWorkflowDefinitionDeliverableFileName(value) {
   const fileName = String(value || "").trim();
-  return !!fileName && fileName === fileName.split(/[\\/]/).pop() && fileName.toLowerCase().endsWith(".md");
+  return !!fileName && fileName === fileName.split(/[\\/]/).pop() && /\.[a-z0-9]{1,12}$/i.test(fileName);
 }
 
 function resolveWorkflowDefinitionDeliverableFileForRole(roles, roleKey) {
@@ -5956,7 +5958,7 @@ function collectWorkflowDefinitionValidationItems(definition, bundleKey) {
 
   Object.entries(roles).forEach(([roleKey, role]) => {
     if (role?.deliverable_file && !isWorkflowDefinitionDeliverableFileName(role.deliverable_file)) {
-      pushItem("roles", `roles.${roleKey}.deliverable_file 必须是不含路径的 .md 文件名`);
+      pushItem("roles", `roles.${roleKey}.deliverable_file 必须是不含路径且带扩展名的文件名`);
     }
   });
 
@@ -16716,12 +16718,18 @@ async function openWorkbenchCreateTaskModal() {
         label: typeof file?.label === "string" ? file.label.trim() : "",
         required: file?.required !== false,
       }))
-      .filter((file) => file.filename && file.filename.toLowerCase().endsWith(".md"));
+      .filter((file) => file.filename && /\.[a-z0-9]{1,12}$/i.test(file.filename));
     return files.length > 0 ? { ...config, files } : null;
   }
 
-  function isMarkdownFile(file) {
-    return !!file && typeof file.name === "string" && file.name.toLowerCase().endsWith(".md");
+  function getFileExtension(fileName) {
+    const match = String(fileName || "").toLowerCase().match(/(\.[a-z0-9]{1,12})$/);
+    return match ? match[1] : "";
+  }
+
+  function fileMatchesExpectedExtension(file, expectedFilename) {
+    if (!file || typeof file.name !== "string") return false;
+    return getFileExtension(file.name) === getFileExtension(expectedFilename);
   }
 
   function upsertRequirementOption(requirement) {
@@ -16899,12 +16907,13 @@ async function openWorkbenchCreateTaskModal() {
           if (Number.isNaN(index)) return;
           const picker = document.createElement("input");
           picker.type = "file";
-          picker.accept = ".md,text/markdown,text/plain";
+          const expectedExt = getFileExtension(config.files[index]?.filename);
+          picker.accept = expectedExt || "";
           picker.onchange = () => {
             const file = picker.files && picker.files[0];
             if (!file) return;
-            if (!isMarkdownFile(file)) {
-              alert("只能上传 .md 文件");
+            if (!fileMatchesExpectedExtension(file, config.files[index]?.filename)) {
+              alert(`只能上传 ${expectedExt || "匹配扩展名的"} 文件`);
               return;
             }
             dialogState.files[index] = file;
@@ -16972,15 +16981,23 @@ async function openWorkbenchCreateTaskModal() {
     return resolveRequiredDeliverableFile(detail);
   }
 
+  function getRequiredDeliverableFiles() {
+    const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
+    return resolveRequiredDeliverableFiles(detail);
+  }
+
   function updateValidation() {
     const taskTitle = getTaskTitle();
     const requirementDescription = getRequirementDescription();
     const selectedRequirement = getSelectedRequirementName();
     const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
     const deliverableRequired = !!detail?.requires_deliverable;
-    const requiredFile = getRequiredDeliverableFile();
+    const requiredFiles = getRequiredDeliverableFiles();
+    const requiredFile = requiredFiles[0] || getRequiredDeliverableFile();
+    const requiredFilesLabel = requiredFiles.join("、") || requiredFile;
     const deliverableFiles = getRequirementDeliverables(selectedRequirement);
-    const deliverableOk = !deliverableRequired || deliverableFiles.includes(requiredFile);
+    const missingDeliverableFiles = requiredFiles.filter((fileName) => !deliverableFiles.includes(fileName));
+    const deliverableOk = !deliverableRequired || missingDeliverableFiles.length === 0;
     const missingRequiredFields = getMissingRequiredCreateFields();
     const missingRequiredField = missingRequiredFields[0];
     let validationTone = "info";
@@ -16999,8 +17016,8 @@ async function openWorkbenchCreateTaskModal() {
       validationTone = "warning";
     } else if (deliverableRequired) {
       reqHintEl.textContent = deliverableOk
-        ? `已校验交付物文件：${requiredFile}`
-        : `当前入口点要求存在 ${requiredFile}，所选需求暂不满足`;
+        ? `已校验交付物文件：${requiredFilesLabel}`
+        : `当前入口点要求存在 ${missingDeliverableFiles.join("、") || requiredFilesLabel}，所选需求暂不满足`;
       validationTone = deliverableOk ? "success" : "warning";
     } else {
       reqHintEl.textContent = "将使用当前名称创建新的工作流任务";
@@ -17018,7 +17035,7 @@ async function openWorkbenchCreateTaskModal() {
     } else if (deliverableRequired && !selectedRequirement) {
       summaryText = "请先选择关联需求";
     } else if (deliverableRequired && !deliverableOk) {
-      summaryText = `缺少必需交付物 ${requiredFile}`;
+      summaryText = `缺少必需交付物 ${missingDeliverableFiles.join("、") || requiredFilesLabel}`;
     }
     footerStatusEl.textContent = summaryText;
     if (submitBtnLabelEl) {
@@ -17056,7 +17073,7 @@ async function openWorkbenchCreateTaskModal() {
             ? (fileUploadSummary.length > 0 ? fileUploadSummary.join("、") : "无")
             : "--"
         },
-        { label: "交付物", value: deliverableRequired ? (deliverableOk ? `已满足 ${requiredFile}` : `缺少 ${requiredFile}`) : "当前入口无需交付物" }
+        { label: "交付物", value: deliverableRequired ? (deliverableOk ? `已满足 ${requiredFilesLabel}` : `缺少 ${missingDeliverableFiles.join("、") || requiredFilesLabel}`) : "当前入口无需交付物" }
       ];
       selectionSummaryEl.innerHTML = `
         <div class="workflow-wizard-confirm-card" data-state="${escapeAttribute(validationTone)}">
@@ -17426,14 +17443,16 @@ async function openWorkbenchCreateTaskModal() {
     const selectedRequirement = getSelectedRequirementName();
     const detail = getSelectedWorkflowType().entry_points_detail?.[state.entryPoint];
     const deliverableRequired = !!detail?.requires_deliverable;
-    const requiredFile = getRequiredDeliverableFile();
+    const requiredFiles = getRequiredDeliverableFiles();
+    const requiredFile = requiredFiles[0] || getRequiredDeliverableFile();
     const deliverableFiles = getRequirementDeliverables(selectedRequirement);
+    const missingDeliverableFiles = requiredFiles.filter((fileName) => !deliverableFiles.includes(fileName));
     const missingRequiredFields = getMissingRequiredCreateFields();
     if (!title) return;
     if (missingRequiredFields.length > 0) return;
     if (deliverableRequired && !selectedRequirement) return;
-    if (deliverableRequired && !deliverableFiles.includes(requiredFile)) {
-      alert(`当前入口点要求交付物文件 ${requiredFile}，所选需求不满足。`);
+    if (deliverableRequired && missingDeliverableFiles.length > 0) {
+      alert(`当前入口点要求交付物文件 ${missingDeliverableFiles.join("、") || requiredFile}，所选需求不满足。`);
       return;
     }
     const createFormContext = buildCreateFormContext();
@@ -18293,11 +18312,24 @@ function loadWorkflowCreateOptions(forceReload = false) {
 }
 
 function resolveRequiredDeliverableFile(detail) {
+  const files = Array.isArray(detail?.required_deliverable_files)
+    ? detail.required_deliverable_files.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim())
+    : [];
+  if (files.length > 0) return files[0];
   if (!detail?.requires_deliverable) return "";
   if (typeof detail.required_deliverable_file === "string" && detail.required_deliverable_file.trim()) {
     return detail.required_deliverable_file.trim();
   }
   return getDefaultWorkflowDefinitionDeliverableFile(detail.deliverable_role || "dev");
+}
+
+function resolveRequiredDeliverableFiles(detail) {
+  const files = Array.isArray(detail?.required_deliverable_files)
+    ? detail.required_deliverable_files.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim())
+    : [];
+  if (files.length > 0) return files;
+  const single = resolveRequiredDeliverableFile(detail);
+  return single ? [single] : [];
 }
 
 function invalidateWorkflowCreateOptionsCache() {
@@ -18378,8 +18410,31 @@ async function openWorkflowDefinitionCreateFormPreview() {
           requires_deliverable: !!ep?.requires_deliverable,
           deliverable_role: ep?.deliverable_role,
           required_deliverable_file: ep?.requires_deliverable
-            ? resolveWorkflowDefinitionDeliverableFileForRole(selectedRoles, ep?.deliverable_role || "dev")
+            ? resolveRequiredDeliverableFiles({
+                requires_deliverable: true,
+                required_deliverable_files: Array.isArray(ep?.manual_requirement_create?.files)
+                  ? ep.manual_requirement_create.files
+                      .filter((file) => file?.required !== false)
+                      .map((file) => String(file?.filename || "").trim())
+                      .filter(Boolean)
+                  : [],
+                required_deliverable_file: resolveWorkflowDefinitionDeliverableFileForRole(selectedRoles, ep?.deliverable_role || "dev"),
+                deliverable_role: ep?.deliverable_role,
+              })[0]
             : "",
+          required_deliverable_files: ep?.requires_deliverable
+            ? resolveRequiredDeliverableFiles({
+                requires_deliverable: true,
+                required_deliverable_files: Array.isArray(ep?.manual_requirement_create?.files)
+                  ? ep.manual_requirement_create.files
+                      .filter((file) => file?.required !== false)
+                      .map((file) => String(file?.filename || "").trim())
+                      .filter(Boolean)
+                  : [],
+                required_deliverable_file: resolveWorkflowDefinitionDeliverableFileForRole(selectedRoles, ep?.deliverable_role || "dev"),
+                deliverable_role: ep?.deliverable_role,
+              })
+            : [],
         },
       ]),
     ),
@@ -18541,6 +18596,11 @@ async function openWorkflowDefinitionCreateFormPreview() {
     return resolveRequiredDeliverableFile(detail);
   }
 
+  function getRequiredDeliverableFiles() {
+    const detail = workflowType.entry_points_detail?.[state.entryPoint];
+    return resolveRequiredDeliverableFiles(detail);
+  }
+
   function getRequirementDeliverables(reqName) {
     const req = getRequirements().find((item) => item.requirement_name === reqName);
     return Array.isArray(req?.deliverables) ? req.deliverables : [];
@@ -18551,9 +18611,12 @@ async function openWorkflowDefinitionCreateFormPreview() {
     const selectedRequirement = getSelectedRequirementName();
     const detail = workflowType.entry_points_detail?.[state.entryPoint];
     const deliverableRequired = !!detail?.requires_deliverable;
-    const requiredFile = getRequiredDeliverableFile();
-    const deliverableOk =
-      !deliverableRequired || getRequirementDeliverables(selectedRequirement).includes(requiredFile);
+    const requiredFiles = getRequiredDeliverableFiles();
+    const requiredFile = requiredFiles[0] || getRequiredDeliverableFile();
+    const requiredFilesLabel = requiredFiles.join("、") || requiredFile;
+    const deliverables = getRequirementDeliverables(selectedRequirement);
+    const missingDeliverableFiles = requiredFiles.filter((fileName) => !deliverables.includes(fileName));
+    const deliverableOk = !deliverableRequired || missingDeliverableFiles.length === 0;
     const missingRequiredField = getMissingRequiredFields()[0];
     if (!taskTitle) {
       hintEl.textContent = "请输入任务名称";
@@ -18563,8 +18626,8 @@ async function openWorkflowDefinitionCreateFormPreview() {
       hintEl.textContent = "请选择关联需求";
     } else if (deliverableRequired) {
       hintEl.textContent = deliverableOk
-        ? `已命中交付物校验：${requiredFile}`
-        : `当前入口点要求存在 ${requiredFile}，示例服务下的需求暂不满足`;
+        ? `已命中交付物校验：${requiredFilesLabel}`
+        : `当前入口点要求存在 ${missingDeliverableFiles.join("、") || requiredFilesLabel}，示例服务下的需求暂不满足`;
     } else {
       hintEl.textContent = "当前配置下可以创建任务；这里只做 UI 预览。";
     }

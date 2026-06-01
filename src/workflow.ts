@@ -78,6 +78,7 @@ import {
   StateConfig,
   StateTransition,
   TemplateVars,
+  EntryPointConfig,
   WorkflowTypeConfig,
 } from './workflow-config.js';
 import {
@@ -86,7 +87,11 @@ import {
   WorkflowDefinitionTransition,
   WorkflowManualRequirementCreateConfig,
 } from './workflow-definition.js';
-import { getDeliverableFileNameForRole } from './workflow-artifacts.js';
+import {
+  getDeliverableFileNameForRole,
+  getWorkflowArtifactFileNameForRef,
+  isValidDeliverableFileName,
+} from './workflow-artifacts.js';
 import {
   createWorkbenchManualSkipEvent,
   syncWorkbenchOnDelegationCompleted,
@@ -97,9 +102,7 @@ import {
   syncWorkbenchOnWorkflowCreated,
   syncWorkbenchOnWorkflowUpdated,
 } from './workbench-store.js';
-import {
-  evaluateWorkflowStage,
-} from './workflow-stage-evaluation.js';
+import { evaluateWorkflowStage } from './workflow-stage-evaluation.js';
 import {
   evaluateWorkflowArtifactContract,
   getWorkflowArtifactContract,
@@ -1616,6 +1619,14 @@ function buildDocPath(
   return `/workspace/projects/${workflow.service}/iteration/${deliverable}/${fileName}`;
 }
 
+function buildArtifactRefPath(
+  workflow: Pick<Workflow, 'service' | 'context'>,
+  ref: string,
+): string {
+  const fileName = getWorkflowArtifactFileNameForRef(ref);
+  return fileName ? buildDocPath(workflow, fileName) : '';
+}
+
 function getWorkflowDeliverableFileName(
   workflowType: string,
   role?: string,
@@ -1629,6 +1640,25 @@ function getWorkflowEntryPointDeliverableFileName(
   role?: string,
 ): string {
   return getDeliverableFileNameForRole(role, config.roles);
+}
+
+function getWorkflowEntryPointRequiredDeliverableFiles(
+  config: WorkflowTypeConfig,
+  entryPoint: EntryPointConfig,
+): string[] {
+  const configuredFiles = (entryPoint.manual_requirement_create?.files || [])
+    .filter((file) => file.required !== false)
+    .map((file) => file.filename.trim())
+    .filter((file) => isValidDeliverableFileName(file));
+  if (configuredFiles.length > 0) {
+    return Array.from(new Set(configuredFiles));
+  }
+
+  const roleFile = getWorkflowEntryPointDeliverableFileName(
+    config,
+    entryPoint.deliverable_role,
+  );
+  return roleFile ? [roleFile] : [];
 }
 
 function parseDelegationPayload(
@@ -1812,6 +1842,14 @@ function buildTemplateVars(
         workflow,
         getWorkflowDeliverableFileName(workflow.workflow_type, 'test'),
       ),
+    product_recon_path: buildArtifactRefPath(workflow, 'product_recon'),
+    impact_analysis_path: buildArtifactRefPath(workflow, 'impact_analysis'),
+    prototype_analysis_path: buildArtifactRefPath(
+      workflow,
+      'prototype_analysis',
+    ),
+    ios_test_plan_path: buildArtifactRefPath(workflow, 'ios_test_plan'),
+    acceptance_report_path: buildArtifactRefPath(workflow, 'acceptance_report'),
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
     revision_text: extra?.revisionText || '',
@@ -3475,11 +3513,15 @@ function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
       attempt,
       delegation_id: delegationId,
       context_pack_path:
-        getWorkflowContextValue(updated, WORKFLOW_CONTEXT_KEYS.contextPackPath) ||
-        null,
+        getWorkflowContextValue(
+          updated,
+          WORKFLOW_CONTEXT_KEYS.contextPackPath,
+        ) || null,
       context_pack_hash:
-        getWorkflowContextValue(updated, WORKFLOW_CONTEXT_KEYS.contextPackHash) ||
-        null,
+        getWorkflowContextValue(
+          updated,
+          WORKFLOW_CONTEXT_KEYS.contextPackHash,
+        ) || null,
     },
     idempotencyKey: `workflow_retry_executed:${workflow.id}:${workflow.status}:${workflow.round}:${attempt}`,
     createdAt: nowIso,
@@ -3496,11 +3538,15 @@ function processDueEvaluatorRetry(workflow: Workflow, nowIso: string): void {
       attempt,
       target_folder: prepared.intent.targetFolder,
       context_pack_path:
-        getWorkflowContextValue(updated, WORKFLOW_CONTEXT_KEYS.contextPackPath) ||
-        null,
+        getWorkflowContextValue(
+          updated,
+          WORKFLOW_CONTEXT_KEYS.contextPackPath,
+        ) || null,
       context_pack_hash:
-        getWorkflowContextValue(updated, WORKFLOW_CONTEXT_KEYS.contextPackHash) ||
-        null,
+        getWorkflowContextValue(
+          updated,
+          WORKFLOW_CONTEXT_KEYS.contextPackHash,
+        ) || null,
     },
     createdAt: nowIso,
   });
@@ -4315,14 +4361,15 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         error: `交付文档目录 "${opts.deliverable}" 不存在 (projects/${opts.service}/iteration/${opts.deliverable}/)`,
       };
     }
-    const requiredDeliverableFile = getWorkflowEntryPointDeliverableFileName(
-      config,
-      entryPoint.deliverable_role,
+    const requiredDeliverableFiles =
+      getWorkflowEntryPointRequiredDeliverableFiles(config, entryPoint);
+    const missingDeliverableFiles = requiredDeliverableFiles.filter(
+      (fileName) => !deliverable.files.includes(fileName),
     );
-    if (!deliverable.files.includes(requiredDeliverableFile)) {
+    if (missingDeliverableFiles.length > 0) {
       return {
         workflowId,
-        error: `入口 "${opts.startFrom}" 需要交付物 ${requiredDeliverableFile}，但目录 projects/${opts.service}/iteration/${opts.deliverable}/ 中未找到。`,
+        error: `入口 "${opts.startFrom}" 需要交付物 ${missingDeliverableFiles.join(', ')}，但目录 projects/${opts.service}/iteration/${opts.deliverable}/ 中未找到。`,
       };
     }
 
@@ -6147,6 +6194,7 @@ export function getAvailableWorkflowTypes(): Array<{
       requires_deliverable: boolean;
       deliverable_role?: string;
       required_deliverable_file?: string;
+      required_deliverable_files?: string[];
       manual_requirement_create?: WorkflowManualRequirementCreateConfig;
     }
   >;
@@ -6163,17 +6211,18 @@ export function getAvailableWorkflowTypes(): Array<{
     entry_points_detail: Object.fromEntries(
       Object.entries(config.entry_points).map(([name, ep]) => [
         name,
-        {
-          requires_deliverable: ep.requires_deliverable || false,
-          deliverable_role: ep.deliverable_role,
-          required_deliverable_file: ep.requires_deliverable
-            ? getWorkflowEntryPointDeliverableFileName(
-                config,
-                ep.deliverable_role,
-              )
-            : undefined,
-          manual_requirement_create: ep.manual_requirement_create,
-        },
+        (() => {
+          const requiredFiles = ep.requires_deliverable
+            ? getWorkflowEntryPointRequiredDeliverableFiles(config, ep)
+            : [];
+          return {
+            requires_deliverable: ep.requires_deliverable || false,
+            deliverable_role: ep.deliverable_role,
+            required_deliverable_file: requiredFiles[0],
+            required_deliverable_files: requiredFiles,
+            manual_requirement_create: ep.manual_requirement_create,
+          };
+        })(),
       ]),
     ),
     role_channels: Object.fromEntries(

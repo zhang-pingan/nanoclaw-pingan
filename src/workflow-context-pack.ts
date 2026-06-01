@@ -8,6 +8,7 @@ import type {
   WorkflowContextRequirementSource,
   WorkflowContextRequirements,
 } from './workflow-definition.js';
+import { getWorkflowArtifactFileNameForRef } from './workflow-artifacts.js';
 import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
@@ -168,7 +169,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function cloneJsonObject(value: Record<string, unknown>): Record<string, unknown> {
+function cloneJsonObject(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
 }
 
@@ -229,7 +232,9 @@ function buildQueryPlanSource(
     required: isSourceRequired(source),
     ...(source.refs?.length ? { refs: [...source.refs] } : {}),
     ...(source.fields?.length ? { fields: [...source.fields] } : {}),
-    ...(source.required_when ? { required_when: cloneJsonObject(source.required_when) } : {}),
+    ...(source.required_when
+      ? { required_when: cloneJsonObject(source.required_when) }
+      : {}),
     ...(source.on_missing ? { on_missing: source.on_missing } : {}),
     ...(source.service ? { service: source.service } : {}),
     ...(source.verify_exists !== undefined
@@ -258,7 +263,10 @@ function readServicesConfig(): Record<string, ServiceConfig> {
 }
 
 function getContainerPathForRepo(service: string, repoPath: string): string {
-  const currentRepo = path.relative(REPOS_DIR, PROJECT_ROOT).split(path.sep).join('/');
+  const currentRepo = path
+    .relative(REPOS_DIR, PROJECT_ROOT)
+    .split(path.sep)
+    .join('/');
   if (
     service === 'icarus' ||
     repoPath === 'icarus' ||
@@ -289,20 +297,13 @@ function nextRefId(
 }
 
 function artifactPathFromRef(workflow: Workflow, ref: string): string {
-  if (ref.endsWith('_doc')) {
-    const fileName =
-      ref === 'plan_doc'
-        ? 'plan.md'
-        : ref === 'dev_doc'
-          ? 'dev.md'
-          : ref === 'test_doc'
-            ? 'test.md'
-            : '';
+  const fileName = getWorkflowArtifactFileNameForRef(ref);
+  if (fileName) {
     const deliverable = getWorkflowContextValue(
       workflow,
       WORKFLOW_CONTEXT_KEYS.deliverable,
     );
-    if (fileName && deliverable) {
+    if (deliverable) {
       return `/workspace/projects/${workflow.service}/iteration/${deliverable}/${fileName}`;
     }
   }
@@ -368,9 +369,7 @@ function artifactStalenessReason(input: {
   if (input.maxAgeDays === undefined) return '';
   const now = input.now || new Date();
   const maxAgeMs = input.maxAgeDays * 24 * 60 * 60 * 1000;
-  return now.getTime() - input.modifiedAt.getTime() > maxAgeMs
-    ? 'stale'
-    : '';
+  return now.getTime() - input.modifiedAt.getTime() > maxAgeMs ? 'stale' : '';
 }
 
 function collectWorkflowInputSource(input: {
@@ -560,7 +559,9 @@ function collectCodebaseLocationSource(input: {
         : '';
   const hostPathExists = !!hostPath && fs.existsSync(hostPath);
   const containerPath =
-    repoPath && repoPathIsSafe ? getContainerPathForRepo(service, repoPath) : '';
+    repoPath && repoPathIsSafe
+      ? getContainerPathForRepo(service, repoPath)
+      : '';
   const targetGroup = Object.values(input.registeredGroups).find(
     (group) => group.folder === input.targetFolder,
   );
@@ -644,14 +645,16 @@ function readinessStatus(input: {
   return 'ready';
 }
 
-function buildPromptSummary(pack: Pick<
-  WorkflowContextPack,
-  | 'readiness'
-  | 'input_refs'
-  | 'prior_artifacts'
-  | 'codebase_location_refs'
-  | 'excluded_candidates'
->): string {
+function buildPromptSummary(
+  pack: Pick<
+    WorkflowContextPack,
+    | 'readiness'
+    | 'input_refs'
+    | 'prior_artifacts'
+    | 'codebase_location_refs'
+    | 'excluded_candidates'
+  >,
+): string {
   const parts = [
     `readiness=${pack.readiness.status}`,
     `inputs=${pack.input_refs.length}`,
@@ -659,9 +662,7 @@ function buildPromptSummary(pack: Pick<
     `codebase_locations=${pack.codebase_location_refs.length}`,
   ];
   if (pack.readiness.missing_required_sources.length > 0) {
-    parts.push(
-      `missing=${pack.readiness.missing_required_sources.join(', ')}`,
-    );
+    parts.push(`missing=${pack.readiness.missing_required_sources.join(', ')}`);
   }
   if (pack.excluded_candidates.length > 0) {
     parts.push(`excluded=${pack.excluded_candidates.length}`);
@@ -881,7 +882,9 @@ export function buildWorkflowContextPack(
 export function buildContextPackPromptInstructions(
   context: WorkflowContext,
 ): string {
-  const latestPath = String(context[WORKFLOW_CONTEXT_KEYS.contextPackPath] || '');
+  const latestPath = String(
+    context[WORKFLOW_CONTEXT_KEYS.contextPackPath] || '',
+  );
   if (!latestPath) return '';
   return [
     '[Context Pack]',

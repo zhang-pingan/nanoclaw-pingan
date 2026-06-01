@@ -121,6 +121,14 @@
     ],
     "web_test": [
       "delegation-worker"
+    ],
+    "web_ios_recon": [
+      "delegation-worker",
+      "ios-recon"
+    ],
+    "web_ios_acceptance": [
+      "delegation-worker",
+      "ios-acceptance"
     ]
   }
 }

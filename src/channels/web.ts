@@ -430,8 +430,8 @@ function normalizeManualRequirementFilename(rawFilename: string): string {
   if (!filename || filename !== path.basename(filename)) {
     throw new Error('交付物文件名必须是不含路径的文件名');
   }
-  if (path.extname(filename).toLowerCase() !== '.md') {
-    throw new Error('交付物文件名必须是 .md 文件');
+  if (!/\.[a-z0-9]{1,12}$/i.test(filename)) {
+    throw new Error('交付物文件名必须带有有效扩展名');
   }
   return filename;
 }
@@ -2894,11 +2894,13 @@ class WebChannel {
           }
           continue;
         }
-        if (path.extname(part.filename || '').toLowerCase() !== '.md') {
+        const uploadedExt = path.extname(part.filename || '').toLowerCase();
+        const expectedExt = path.extname(fileConfig.filename).toLowerCase();
+        if (uploadedExt !== expectedExt) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
-              error: `仅支持上传 .md 文件: ${part.filename || fileConfig.filename}`,
+              error: `上传文件扩展名需为 ${expectedExt}: ${part.filename || fileConfig.filename}`,
             }),
           );
           return;
