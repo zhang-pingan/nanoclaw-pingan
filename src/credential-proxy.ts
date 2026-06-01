@@ -37,6 +37,8 @@ interface ProxyRequestContext {
   path: string;
 }
 
+let proxyModelRequestSeq = 0;
+
 export function resolveCredentialProxyExecutionModel(
   requestedModel: string,
 ): string {
@@ -120,6 +122,18 @@ async function getTraceManager(): Promise<{
     payload?: Record<string, unknown>;
     latencyMs?: number | null;
   }) => unknown;
+  accumulateModelUsage?: (input: {
+    queryId: string;
+    requestId?: string | null;
+    requestedModel?: string | null;
+    actualModel?: string | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cacheReadTokens?: number | null;
+    cacheWriteTokens?: number | null;
+    latencyMs?: number | null;
+    traceSource?: string | null;
+  }) => unknown;
   updateQuery: (queryId: string, patch: Partial<AgentQueryRecord>) => void;
 } | null> {
   try {
@@ -160,26 +174,61 @@ function appendModelTraceEvent(
   }).catch(() => {});
 }
 
-function updateQueryFromModelUsage(
+function makeModelRequestId(context: ProxyRequestContext): string {
+  proxyModelRequestSeq += 1;
+  const queryId = context.queryId || 'unscoped';
+  return `${queryId}-${Date.now()}-${proxyModelRequestSeq}`;
+}
+
+function recordQueryModelUsage(
   context: ProxyRequestContext,
   payload: Record<string, unknown>,
+  requestId: string,
 ): void {
   if (!context.queryId) return;
-  const patch: Partial<AgentQueryRecord> = {};
-  if (typeof payload.actualModel === 'string') patch.actual_model = payload.actualModel;
-  const inputTokens = numberValue(payload.inputTokens);
-  if (inputTokens !== undefined) patch.input_tokens = inputTokens;
-  const outputTokens = numberValue(payload.outputTokens);
-  if (outputTokens !== undefined) patch.output_tokens = outputTokens;
-  const cacheReadTokens = numberValue(payload.cacheReadTokens);
-  if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
-  const cacheWriteTokens = numberValue(payload.cacheWriteTokens);
-  if (cacheWriteTokens !== undefined) patch.cache_write_tokens = cacheWriteTokens;
-  if (Object.keys(patch).length === 0) return;
   void getTraceManager().then((manager) => {
     if (!manager || !context.queryId) return;
     try {
-      manager.updateQuery(context.queryId, patch);
+      if (typeof manager.accumulateModelUsage === 'function') {
+        manager.accumulateModelUsage({
+          queryId: context.queryId,
+          requestId,
+          requestedModel:
+            typeof payload.requestedModel === 'string'
+              ? payload.requestedModel
+              : null,
+          actualModel:
+            typeof payload.actualModel === 'string' ? payload.actualModel : null,
+          inputTokens: numberValue(payload.inputTokens) ?? null,
+          outputTokens: numberValue(payload.outputTokens) ?? null,
+          cacheReadTokens: numberValue(payload.cacheReadTokens) ?? null,
+          cacheWriteTokens: numberValue(payload.cacheWriteTokens) ?? null,
+          latencyMs: numberValue(payload.latencyMs) ?? null,
+          traceSource:
+            typeof payload.traceSource === 'string'
+              ? payload.traceSource
+              : 'credential_proxy',
+        });
+        return;
+      }
+
+      const patch: Partial<AgentQueryRecord> = {};
+      if (typeof payload.actualModel === 'string') {
+        patch.actual_model = payload.actualModel;
+      }
+      const inputTokens = numberValue(payload.inputTokens);
+      if (inputTokens !== undefined) patch.input_tokens = inputTokens;
+      const outputTokens = numberValue(payload.outputTokens);
+      if (outputTokens !== undefined) patch.output_tokens = outputTokens;
+      const cacheReadTokens = numberValue(payload.cacheReadTokens);
+      if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
+      const cacheWriteTokens = numberValue(payload.cacheWriteTokens);
+      if (cacheWriteTokens !== undefined) {
+        patch.cache_write_tokens = cacheWriteTokens;
+      }
+      if (Object.keys(patch).length > 0) {
+        manager.updateQuery(context.queryId, patch);
+      }
     } catch {
       // ignore inactive or uninitialized trace storage
     }
@@ -285,7 +334,6 @@ function recordModelTraceResolution(
     payload,
     latencyMs,
   });
-  updateQueryFromModelUsage(context, payload);
 }
 
 export function startCredentialProxy(
@@ -321,6 +369,7 @@ export function startCredentialProxy(
       req.on('end', async () => {
         const body = Buffer.concat(chunks);
         const requestContext = extractProxyRequestContext(req.url);
+        const modelRequestId = makeModelRequestId(requestContext);
         const targetPath = requestContext.path.split('?')[0] || '/';
         const requestStartedAt = Date.now();
         const headers: Record<string, string | number | string[] | undefined> =
@@ -366,6 +415,7 @@ export function startCredentialProxy(
             payload: {
               provider: 'openai-compatible',
               traceSource: 'credential_proxy',
+              requestId: modelRequestId,
               requestedModel:
                 typeof parsedJsonBody.model === 'string'
                   ? parsedJsonBody.model
@@ -406,6 +456,7 @@ export function startCredentialProxy(
                 usage,
                 latencyMs,
               );
+              usagePayload.requestId = modelRequestId;
               recordModelTraceResolution(
                 requestContext,
                 typeof parsedJsonBody.model === 'string'
@@ -423,7 +474,7 @@ export function startCredentialProxy(
                 payload: usagePayload,
                 latencyMs,
               });
-              updateQueryFromModelUsage(requestContext, usagePayload);
+              recordQueryModelUsage(requestContext, usagePayload, modelRequestId);
               res.writeHead(200, {
                 'content-type': compatResult.contentType,
                 'cache-control': 'no-cache',
@@ -443,6 +494,15 @@ export function startCredentialProxy(
                 ? (compatResult.anthropicResponse.usage as Record<string, unknown>)
                 : undefined;
             const actualModel = compatResult.model || openAiCompat.model;
+            const usagePayload = normalizeUsagePayload(
+              typeof parsedJsonBody.model === 'string'
+                ? parsedJsonBody.model
+                : undefined,
+              actualModel,
+              usage,
+              latencyMs,
+            );
+            usagePayload.requestId = modelRequestId;
             recordModelTraceResolution(
               requestContext,
               typeof parsedJsonBody.model === 'string'
@@ -457,16 +517,10 @@ export function startCredentialProxy(
               name: 'model_response_completed',
               status: 'success',
               summary: `Model response completed: ${compatResult.model || openAiCompat.model}`,
-              payload: normalizeUsagePayload(
-                typeof parsedJsonBody.model === 'string'
-                  ? parsedJsonBody.model
-                  : undefined,
-                actualModel,
-                usage,
-                latencyMs,
-              ),
+              payload: usagePayload,
               latencyMs,
             });
+            recordQueryModelUsage(requestContext, usagePayload, modelRequestId);
             res.end(JSON.stringify(compatResult.anthropicResponse));
             return;
           } catch (err) {
@@ -591,6 +645,7 @@ export function startCredentialProxy(
                     payload: {
                       provider: 'anthropic',
                       traceSource: 'credential_proxy',
+                      requestId: modelRequestId,
                       requestedModel,
                       actualModel: requestedModel,
                       upstreamStatus: statusCode,
@@ -607,6 +662,7 @@ export function startCredentialProxy(
                   usage,
                   latencyMs,
                 );
+                usagePayload.requestId = modelRequestId;
                 recordModelTraceResolution(
                   requestContext,
                   requestedModel,
@@ -622,7 +678,7 @@ export function startCredentialProxy(
                   payload: usagePayload,
                   latencyMs,
                 });
-                updateQueryFromModelUsage(requestContext, usagePayload);
+                recordQueryModelUsage(requestContext, usagePayload, modelRequestId);
               });
               upRes.pipe(res);
               return;
@@ -659,6 +715,7 @@ export function startCredentialProxy(
                     payload: {
                       provider: 'anthropic',
                       traceSource: 'credential_proxy',
+                      requestId: modelRequestId,
                       requestedModel,
                       actualModel,
                       upstreamStatus: upRes.statusCode,
@@ -673,6 +730,7 @@ export function startCredentialProxy(
                     usage,
                     latencyMs,
                   );
+                  usagePayload.requestId = modelRequestId;
                   recordModelTraceResolution(
                     requestContext,
                     requestedModel,
@@ -688,7 +746,7 @@ export function startCredentialProxy(
                     payload: usagePayload,
                     latencyMs,
                   });
-                  updateQueryFromModelUsage(requestContext, usagePayload);
+                  recordQueryModelUsage(requestContext, usagePayload, modelRequestId);
                 }
               }
 

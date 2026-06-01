@@ -368,4 +368,70 @@ describe('agent query trace manager', () => {
     expect(query?.selected_model).toBe('claude-select-output');
     expect(query?.actual_model).toBe('claude-proxy-final');
   });
+
+  it('accumulates model usage across requests and deduplicates request ids', () => {
+    agentQueryTraceManager.startQuery({
+      queryId: 'trace-model-usage-aggregate',
+      sourceType: 'message',
+      sourceRefId: 'msg-usage',
+      selectedModel: 'claude-sonnet-4-6',
+    });
+
+    expect(
+      agentQueryTraceManager.accumulateModelUsage({
+        queryId: 'trace-model-usage-aggregate',
+        requestId: 'model-req-1',
+        requestedModel: 'claude-sonnet-4-6',
+        actualModel: 'claude-sonnet-4-6',
+        inputTokens: 100,
+        outputTokens: 20,
+        cacheReadTokens: 30,
+        cacheWriteTokens: 40,
+        latencyMs: 50,
+      }),
+    ).toBe(true);
+    expect(
+      agentQueryTraceManager.accumulateModelUsage({
+        queryId: 'trace-model-usage-aggregate',
+        requestId: 'model-req-2',
+        requestedModel: 'claude-sonnet-4-6',
+        actualModel: 'claude-sonnet-4-6',
+        inputTokens: 7,
+        outputTokens: 3,
+        cacheReadTokens: 11,
+        cacheWriteTokens: 13,
+        latencyMs: 25,
+      }),
+    ).toBe(true);
+    expect(
+      agentQueryTraceManager.accumulateModelUsage({
+        queryId: 'trace-model-usage-aggregate',
+        requestId: 'model-req-2',
+        requestedModel: 'claude-sonnet-4-6',
+        actualModel: 'claude-sonnet-4-6',
+        inputTokens: 7,
+        outputTokens: 3,
+        cacheReadTokens: 11,
+        cacheWriteTokens: 13,
+        latencyMs: 25,
+      }),
+    ).toBe(false);
+
+    const query = getAgentQuery('trace-model-usage-aggregate');
+    expect(query?.input_tokens).toBe(107);
+    expect(query?.output_tokens).toBe(23);
+    expect(query?.cache_read_tokens).toBe(41);
+    expect(query?.cache_write_tokens).toBe(53);
+    expect(query?.actual_model).toBe('claude-sonnet-4-6');
+
+    const usageEvents = agentQueryTraceManager
+      .getQueryEvents('trace-model-usage-aggregate')
+      .filter((event) => event.event_name === 'model_usage_recorded');
+    expect(usageEvents).toHaveLength(2);
+    expect(JSON.parse(usageEvents[0].payload_json || '{}')).toMatchObject({
+      requestId: 'model-req-1',
+      inputTokens: 100,
+      cacheWriteTokens: 40,
+    });
+  });
 });

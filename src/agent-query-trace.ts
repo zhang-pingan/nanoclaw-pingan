@@ -100,6 +100,19 @@ interface AppendStructuredEventInput {
   latencyMs?: number | null;
 }
 
+interface AccumulateModelUsageInput {
+  queryId: string;
+  requestId?: string | null;
+  requestedModel?: string | null;
+  actualModel?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheReadTokens?: number | null;
+  cacheWriteTokens?: number | null;
+  latencyMs?: number | null;
+  traceSource?: string | null;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -132,6 +145,7 @@ export class AgentQueryTraceManager {
     string,
     AgentQueryTraceSummaryAccumulator
   >();
+  private seenModelUsageRequestIds = new Set<string>();
   private listeners: Array<() => void> = [];
 
   onChange(callback: () => void): void {
@@ -371,6 +385,80 @@ export class AgentQueryTraceManager {
       endedAt: input.endedAt,
       latencyMs: input.latencyMs,
     });
+  }
+
+  accumulateModelUsage(input: AccumulateModelUsageInput): boolean {
+    const requestId = input.requestId?.trim();
+    const dedupeKey = requestId ? `${input.queryId}:${requestId}` : '';
+    if (dedupeKey && this.seenModelUsageRequestIds.has(dedupeKey)) {
+      return false;
+    }
+
+    const record = getAgentQuery(input.queryId);
+    if (!record) return false;
+
+    const add = (
+      current: number | null,
+      value: number | null | undefined,
+    ): number | null => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return current;
+      }
+      return (current ?? 0) + value;
+    };
+
+    const patch: Partial<AgentQueryRecord> = {};
+    if (typeof input.actualModel === 'string' && input.actualModel) {
+      patch.actual_model = input.actualModel;
+    }
+    patch.input_tokens = add(record.input_tokens, input.inputTokens);
+    patch.output_tokens = add(record.output_tokens, input.outputTokens);
+    patch.cache_read_tokens = add(record.cache_read_tokens, input.cacheReadTokens);
+    patch.cache_write_tokens = add(
+      record.cache_write_tokens,
+      input.cacheWriteTokens,
+    );
+
+    const usageChanged =
+      patch.input_tokens !== record.input_tokens ||
+      patch.output_tokens !== record.output_tokens ||
+      patch.cache_read_tokens !== record.cache_read_tokens ||
+      patch.cache_write_tokens !== record.cache_write_tokens ||
+      patch.actual_model !== undefined;
+
+    if (!usageChanged) return false;
+    if (dedupeKey) {
+      this.seenModelUsageRequestIds.add(dedupeKey);
+      if (this.seenModelUsageRequestIds.size > 10_000) {
+        const oldest = this.seenModelUsageRequestIds.values().next().value as
+          | string
+          | undefined;
+        if (oldest) this.seenModelUsageRequestIds.delete(oldest);
+      }
+    }
+
+    this.updateQuery(input.queryId, patch);
+    this.appendStructuredEvent({
+      queryId: input.queryId,
+      category: 'model',
+      eventName: 'model_usage_recorded',
+      status: 'success',
+      summary: `Model usage recorded${input.actualModel ? `: ${input.actualModel}` : ''}`,
+      payload: {
+        provider: 'anthropic',
+        traceSource: input.traceSource || 'credential_proxy',
+        requestId: requestId || undefined,
+        requestedModel: input.requestedModel || undefined,
+        actualModel: input.actualModel || undefined,
+        inputTokens: input.inputTokens ?? undefined,
+        outputTokens: input.outputTokens ?? undefined,
+        cacheReadTokens: input.cacheReadTokens ?? undefined,
+        cacheWriteTokens: input.cacheWriteTokens ?? undefined,
+        latencyMs: input.latencyMs ?? undefined,
+      },
+      latencyMs: input.latencyMs ?? null,
+    });
+    return true;
   }
 
   appendEvent(input: AppendEventInput): AgentQueryEventRecord {

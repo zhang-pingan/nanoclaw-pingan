@@ -983,6 +983,13 @@ describe('workflow metadata and branch flow', () => {
     );
     expect(delegations[0]?.task).toContain('[Context Pack]');
     expect(delegations[0]?.task).toContain('CODEBASE-* 只表示代码库位置');
+    expect(delegations[0]?.task).toContain(
+      `/workspace/projects/${TEST_SERVICE}/workflow-context/${workflow?.id}/plan/latest.json`,
+    );
+    expect(delegations[0]?.task).not.toContain('immutable:');
+    expect(delegations[0]?.task).not.toContain('hash: sha256:');
+    expect(delegations[0]?.task).not.toContain('summary: readiness=');
+    expect(delegations[0]?.task).not.toContain('open_questions:');
     expect(delegations[0]?.task).toContain('- /tmp/nickname-prd.md');
     expect(delegations[0]?.task).toContain('- /tmp/nickname-ui.png');
     expect(delegations[0]?.handoff_role).toBe('planner');

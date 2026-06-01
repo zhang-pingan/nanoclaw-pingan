@@ -673,14 +673,45 @@ function sha256(content: string): string {
   return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
 }
 
+function semanticPackForHash(pack: WorkflowContextPack): WorkflowContextPack {
+  return {
+    ...pack,
+    generated_at: '',
+    pack_path: '',
+    immutable_pack_path: '',
+    hash: '',
+  };
+}
+
 function packWithCanonicalHash(pack: WorkflowContextPack): {
   pack: WorkflowContextPack;
   content: string;
 } {
-  const canonicalContent = `${JSON.stringify({ ...pack, hash: '' }, null, 2)}\n`;
+  const canonicalContent = `${JSON.stringify(semanticPackForHash(pack), null, 2)}\n`;
   const finalized = { ...pack, hash: sha256(canonicalContent) };
   const content = `${JSON.stringify(finalized, null, 2)}\n`;
   return { pack: finalized, content };
+}
+
+function findReusableImmutablePack(
+  hostDir: string,
+  semanticHash: string,
+): { hostPath: string; pack: WorkflowContextPack; content: string } | null {
+  if (!fs.existsSync(hostDir)) return null;
+  for (const entry of fs.readdirSync(hostDir).sort()) {
+    if (!/^context-pack\.r\d+\.a\d+\.json$/.test(entry)) continue;
+    const hostPath = path.join(hostDir, entry);
+    try {
+      const content = fs.readFileSync(hostPath, 'utf-8');
+      const parsed = JSON.parse(content) as WorkflowContextPack;
+      if (parsed.hash === semanticHash) {
+        return { hostPath, pack: parsed, content };
+      }
+    } catch {
+      // Ignore corrupt or partially written historical packs.
+    }
+  }
+  return null;
 }
 
 function atomicWriteContent(filePath: string, content: string): void {
@@ -813,8 +844,16 @@ export function buildWorkflowContextPack(
   packWithoutHash.prompt_summary = buildPromptSummary(packWithoutHash);
 
   const hostImmutablePackPath = path.join(hostDir, immutableFileName);
-  const { pack, content } = packWithCanonicalHash(packWithoutHash);
-  atomicWriteContent(hostImmutablePackPath, content);
+  let { pack, content } = packWithCanonicalHash(packWithoutHash);
+  let resolvedHostImmutablePackPath = hostImmutablePackPath;
+  const reusablePack = findReusableImmutablePack(hostDir, pack.hash);
+  if (reusablePack) {
+    pack = reusablePack.pack;
+    content = reusablePack.content;
+    resolvedHostImmutablePackPath = reusablePack.hostPath;
+  } else {
+    atomicWriteContent(hostImmutablePackPath, content);
+  }
   const hostPackPath = path.join(hostDir, latestFileName);
   atomicWriteContent(hostPackPath, content);
 
@@ -825,7 +864,7 @@ export function buildWorkflowContextPack(
   return {
     pack,
     hostPackPath,
-    hostImmutablePackPath,
+    hostImmutablePackPath: resolvedHostImmutablePackPath,
     contextPatch: {
       [WORKFLOW_CONTEXT_KEYS.contextPackPath]: pack.pack_path,
       [WORKFLOW_CONTEXT_KEYS.contextPackImmutablePath]:
@@ -844,29 +883,12 @@ export function buildContextPackPromptInstructions(
 ): string {
   const latestPath = String(context[WORKFLOW_CONTEXT_KEYS.contextPackPath] || '');
   if (!latestPath) return '';
-  const immutablePath = String(
-    context[WORKFLOW_CONTEXT_KEYS.contextPackImmutablePath] || '',
-  );
-  const hash = String(context[WORKFLOW_CONTEXT_KEYS.contextPackHash] || '');
-  const summary = String(
-    context[WORKFLOW_CONTEXT_KEYS.contextPackSummary] || '',
-  );
-  const readiness = String(
-    context[WORKFLOW_CONTEXT_KEYS.contextReadinessStatus] || '',
-  );
-  const openQuestions = String(
-    context[WORKFLOW_CONTEXT_KEYS.contextPackOpenQuestions] || '',
-  );
   return [
     '[Context Pack]',
     `latest: ${latestPath}`,
-    immutablePath ? `immutable: ${immutablePath}` : '',
-    hash ? `hash: ${hash}` : '',
-    readiness ? `readiness: ${readiness}` : '',
-    summary ? `summary: ${summary}` : '',
-    openQuestions ? `open_questions: ${openQuestions}` : '',
     '',
     '执行前请读取 latest 指向的 Context Pack，并在产物中引用其中已有的 INPUT-*、ART-*、EVID-*，或引用你在执行阶段新增且可校验的 evidence ref。',
+    'readiness、summary、open_questions、hash 等上下文字段以 Context Pack 文件为准，不要依赖本提示词中的摘要。',
     '你阅读代码、检索 wiki、查看日志、运行命令或调用工具得到的新事实，必须先写入阶段产物 evidence，再被 decision、action、test result 引用。',
     'CODEBASE-* 只表示代码库位置，不能作为业务、实现或测试结论依据；不要把 excluded_candidates 当事实使用。',
   ]

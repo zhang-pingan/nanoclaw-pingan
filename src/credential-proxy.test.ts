@@ -140,6 +140,9 @@ function setupModuleMocks(): void {
       appendStructuredEvent: (input: unknown) => {
         appendedTraceEvents.push(input);
       },
+      accumulateModelUsage: (input: unknown) => {
+        updatedTraceQueries.push(['accumulateModelUsage', input]);
+      },
       updateQuery: (...args: unknown[]) => {
         updatedTraceQueries.push(args);
       },
@@ -709,6 +712,7 @@ describe('credential-proxy', () => {
           (event as { eventName?: unknown }).eventName === 'model_resolution',
       ) as { payload?: Record<string, unknown> } | undefined;
       expect(modelResolution?.payload?.estimatedCost).toBeUndefined();
+      expect(updatedTraceQueries).toHaveLength(0);
     });
   });
 
