@@ -66,8 +66,11 @@ export interface IosClaimRecord {
 export interface IosClientAutomationConfig {
   driver?: 'appium' | string;
   launch_args?: string[];
+  launch_env?: Record<string, string>;
   deep_links?: Record<string, string>;
   network_log_path?: string;
+  app_log_path?: string;
+  crash_log_path?: string;
   appium_server_url?: string;
 }
 

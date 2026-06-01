@@ -86,6 +86,27 @@ describe('IosEvidenceStore', () => {
     expect(claim.id).toBe('CLAIM-001');
     expect(store.evidenceExists('SESSION-001', 'CLAIM-001')).toBe(true);
   });
+
+  it('rejects DEBUG refs as formal claim evidence', () => {
+    const store = makeStore();
+    createSession(store);
+    store.createEvidence({
+      id: 'DEBUG-001',
+      type: 'DEBUG',
+      session_id: 'SESSION-001',
+      source: 'test',
+      summary: 'debug',
+    });
+
+    expect(() =>
+      store.createClaim({
+        session_id: 'SESSION-001',
+        statement: 'debug output showed a route',
+        supported_by: ['DEBUG-001'],
+        confidence: 'low',
+      }),
+    ).toThrow('not usable as formal evidence');
+  });
 });
 
 describe('writeIosReport', () => {
@@ -107,6 +128,32 @@ describe('writeIosReport', () => {
     expect(result.status).toBe('error');
     expect(result.missing_fields).toEqual(['platform']);
     expect(result.unresolved_evidence_refs).toEqual(['NET-404']);
+  });
+
+  it('rejects DEBUG refs in reports', () => {
+    const store = makeStore();
+    createSession(store);
+    store.createEvidence({
+      id: 'DEBUG-001',
+      type: 'DEBUG',
+      session_id: 'SESSION-001',
+      source: 'test',
+      summary: 'debug',
+    });
+
+    const result = writeIosReport(store, {
+      session_id: 'SESSION-001',
+      kind: 'product_recon',
+      path: 'projects/{{service}}/iteration/demo/product-recon.json',
+      required_fields: ['version', 'evidence'],
+      body: {
+        version: 1,
+        evidence: ['DEBUG-001'],
+      },
+    });
+
+    expect(result.status).toBe('error');
+    expect(result.unresolved_evidence_refs).toEqual(['DEBUG-001']);
   });
 
   it('redacts sensitive fields before writing report', () => {

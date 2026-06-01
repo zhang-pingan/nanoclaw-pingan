@@ -791,7 +791,7 @@ server.tool(
   '受控搜索 iOS 客户端和服务端源码。iOS repo 从 services.json clients.ios.repo_path 解析，第一版使用 rg 输出脱敏 CLIENT_CODE/SERVER_CODE evidence。',
   {
     service: z.string().min(1),
-    session_id: z.string().optional(),
+    session_id: z.string().min(1),
     scope: z.array(z.enum(['ios_client', 'backend'])).optional(),
     queries: z
       .array(

@@ -27,6 +27,8 @@ export interface WriteIosReportResult {
 
 const EVIDENCE_REF_PATTERN =
   /^(SESSION|BUILD|STATE|OBS|SCREEN|SCREENSHOT|UI|ACT|FLOW|NET|APPLOG|CRASH|CLIENT_CODE|SERVER_CODE|CASE|ASSERT|CLAIM|DEBUG)-\d+$/;
+const FORMAL_EVIDENCE_REF_PATTERN =
+  /^(SESSION|BUILD|STATE|OBS|SCREEN|SCREENSHOT|UI|ACT|FLOW|NET|APPLOG|CRASH|CLIENT_CODE|SERVER_CODE|CASE|ASSERT|CLAIM)-\d+$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -119,7 +121,11 @@ export function writeIosReport(
     const refs = new Set<string>();
     collectEvidenceRefs(redacted.value, refs);
     const unresolved = Array.from(refs)
-      .filter((ref) => !store.evidenceExists(input.session_id, ref))
+      .filter(
+        (ref) =>
+          !FORMAL_EVIDENCE_REF_PATTERN.test(ref) ||
+          !store.evidenceExists(input.session_id, ref),
+      )
       .sort();
 
     if (missingFields.length > 0 || unresolved.length > 0) {

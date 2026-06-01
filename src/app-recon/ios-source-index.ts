@@ -120,7 +120,9 @@ export async function searchIosCode(input: {
     });
   }
 
-  const sessionId = input.request.session_id || 'SEARCH-CODE';
+  const sessionId = input.request.session_id || '';
+  if (!sessionId) throw new Error('session_id is required for ios_app_search_code');
+  input.store.getSession(sessionId);
   const evidence: string[] = [];
   const matches: JsonObject[] = [];
   for (const query of input.request.queries || []) {

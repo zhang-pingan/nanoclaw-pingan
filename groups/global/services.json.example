@@ -16,10 +16,15 @@
           "driver": "appium",
           "appium_server_url": "http://127.0.0.1:4723",
           "launch_args": ["-UITestMode", "1", "-Environment", "staging"],
+          "launch_env": {
+            "ICARUS_NETWORK_LOG_ENABLED": "1"
+          },
           "deep_links": {
             "profile_edit": "catstory://profile/edit"
           },
-          "network_log_path": "Library/Caches/IcarusNetworkLog/network.jsonl"
+          "network_log_path": "Library/Caches/IcarusNetworkLog/network.jsonl",
+          "app_log_path": "Library/Caches/IcarusAppLog/app.log",
+          "crash_log_path": "Library/Caches/IcarusCrashLog/crash.log"
         }
       }
     },

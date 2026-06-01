@@ -37,6 +37,9 @@ const EVIDENCE_PREFIX_BY_TYPE: Record<IosEvidenceType, string> = {
   DEBUG: 'DEBUG',
 };
 
+const FORMAL_EVIDENCE_REF_PATTERN =
+  /^(SESSION|BUILD|STATE|OBS|SCREEN|SCREENSHOT|UI|ACT|FLOW|NET|APPLOG|CRASH|CLIENT_CODE|SERVER_CODE|CASE|ASSERT|CLAIM)-\d+$/;
+
 export interface EvidenceStoreOptions {
   rootDir?: string;
 }
@@ -200,6 +203,10 @@ export class IosEvidenceStore {
     const missing = refs.filter((ref) => !existing.has(ref));
     if (missing.length > 0) {
       throw new Error(`Unresolved evidence refs: ${missing.join(', ')}`);
+    }
+    const nonFormal = refs.filter((ref) => !FORMAL_EVIDENCE_REF_PATTERN.test(ref));
+    if (nonFormal.length > 0) {
+      throw new Error(`Evidence refs are not usable as formal evidence: ${nonFormal.join(', ')}`);
     }
   }
 

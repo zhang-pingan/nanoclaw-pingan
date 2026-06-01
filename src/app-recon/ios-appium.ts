@@ -111,6 +111,54 @@ function parseXmlAttributes(xmlTag: string): Record<string, string> {
   return attrs;
 }
 
+function encodeRefValue(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64url');
+}
+
+function decodeRefValue(value: string): string {
+  return Buffer.from(value, 'base64url').toString('utf8');
+}
+
+function stableElementRef(input: {
+  identifier?: string;
+  label?: string;
+  type: string;
+  frame?: { x: number; y: number; width: number; height: number };
+}): string {
+  if (input.identifier) return `@ios-id-${encodeRefValue(input.identifier)}`;
+  if (input.label) return `@ios-label-${encodeRefValue(input.label)}`;
+  if (input.frame) {
+    const x = Math.round(input.frame.x + input.frame.width / 2);
+    const y = Math.round(input.frame.y + input.frame.height / 2);
+    return `@ios-coord-${x}-${y}`;
+  }
+  return `@ios-type-${encodeRefValue(input.type)}`;
+}
+
+function decodeElementRef(ref: string): Record<string, unknown> | null {
+  if (ref.startsWith('@ios-id-')) {
+    return {
+      strategy: 'accessibility_id',
+      value: decodeRefValue(ref.slice('@ios-id-'.length)),
+    };
+  }
+  if (ref.startsWith('@ios-label-')) {
+    return {
+      strategy: 'label',
+      value: decodeRefValue(ref.slice('@ios-label-'.length)),
+    };
+  }
+  const coordMatch = /^@ios-coord-(-?\d+)-(-?\d+)$/.exec(ref);
+  if (coordMatch) {
+    return {
+      strategy: 'coordinate',
+      x: Number(coordMatch[1]),
+      y: Number(coordMatch[2]),
+    };
+  }
+  return null;
+}
+
 function extractElementsFromSource(source: string): IosObserveElement[] {
   const elements: IosObserveElement[] = [];
   const tagRe = /<([A-Za-z0-9_.:-]+)\s+([^>]+)>/g;
@@ -127,8 +175,12 @@ function extractElementsFromSource(source: string): IosObserveElement[] {
     const width = Number(attrs.width);
     const height = Number(attrs.height);
     if (!label && !identifier && !visible) continue;
+    const frame =
+      [x, y, width, height].every((n) => Number.isFinite(n))
+        ? { x, y, width, height }
+        : undefined;
     elements.push({
-      ref: `@ios-${elements.length + 1}`,
+      ref: stableElementRef({ identifier, label, type, frame }),
       type,
       label,
       identifier,
@@ -138,10 +190,7 @@ function extractElementsFromSource(source: string): IosObserveElement[] {
         enabled &&
         visible &&
         /(Button|Cell|TextField|SecureTextField|Switch|Link)/i.test(type),
-      frame:
-        [x, y, width, height].every((n) => Number.isFinite(n))
-          ? { x, y, width, height }
-          : undefined,
+      frame,
     });
   }
   return elements;
@@ -176,6 +225,13 @@ export async function observeWithAppium(input: {
     ]);
     const source = sourceResponse.data.value || '';
     const elements = extractElementsFromSource(source);
+    const appState = {
+      keyboard_visible: elements.some((item) => /Keyboard/i.test(item.type)),
+      system_alert_visible: elements.some((item) => /Alert/i.test(item.type)),
+      loading: elements.some((item) =>
+        /(ActivityIndicator|ProgressIndicator)/i.test(item.type),
+      ),
+    };
     return {
       id: input.observeId,
       session_id: input.session.session_id,
@@ -187,15 +243,42 @@ export async function observeWithAppium(input: {
       },
       elements,
       network_cursor: new Date().toISOString(),
-      app_state: {
-        keyboard_visible: false,
-        system_alert_visible: false,
-        loading: false,
-      },
+      app_state: appState,
       raw_screenshot_base64: screenshotResponse.data.value || '',
       raw_ui_tree: source,
     };
   });
+}
+
+function normalizeTarget(target: unknown): Record<string, unknown> {
+  if (typeof target === 'string') {
+    return decodeElementRef(target) || { strategy: 'accessibility_id', value: target };
+  }
+  if (target && typeof target === 'object') {
+    const raw = target as Record<string, unknown>;
+    if (raw.strategy === 'element_ref' && typeof raw.value === 'string') {
+      return decodeElementRef(raw.value) || raw;
+    }
+    if (typeof raw.ref === 'string') {
+      return decodeElementRef(raw.ref) || raw;
+    }
+    return raw;
+  }
+  return {};
+}
+
+function coordinateTarget(target: unknown): { x: number; y: number } | null {
+  const normalized = normalizeTarget(target);
+  const x = Number(normalized.x);
+  const y = Number(normalized.y);
+  if (
+    (normalized.strategy === 'coordinate' || 'x' in normalized || 'y' in normalized) &&
+    Number.isFinite(x) &&
+    Number.isFinite(y)
+  ) {
+    return { x, y };
+  }
+  return null;
 }
 
 async function findElement(input: {
@@ -203,12 +286,7 @@ async function findElement(input: {
   target: unknown;
   options: AppiumClientOptions;
 }): Promise<{ elementId: string; matchedCount: number; strategy: string; value: string }> {
-  const target =
-    typeof input.target === 'string'
-      ? { strategy: 'accessibility_id', value: input.target }
-      : input.target && typeof input.target === 'object'
-        ? (input.target as Record<string, unknown>)
-        : {};
+  const target = normalizeTarget(input.target);
   const strategy =
     typeof target.strategy === 'string' ? target.strategy : 'accessibility_id';
   const value = typeof target.value === 'string' ? target.value : '';
@@ -281,35 +359,52 @@ export async function actWithAppium(input: {
         const base = `${appiumUrl(input.options || {})}/session/${appiumSessionId}`;
         let targetSummary: JsonValue | undefined;
         if (input.action === 'tap' || input.action === 'type') {
-          const element = await findElement({
-            appiumSessionId,
-            target: input.target,
-            options: input.options || {},
-          });
-          targetSummary = {
-            strategy: element.strategy,
-            value: element.value,
-            matched_count: element.matchedCount,
-          };
-          if (input.action === 'tap') {
+          const coordinate = input.action === 'tap' ? coordinateTarget(input.target) : null;
+          if (coordinate) {
             await axios.post(
-              `${base}/element/${element.elementId}/click`,
-              {},
+              `${base}/execute/sync`,
+              {
+                script: 'mobile: tap',
+                args: [coordinate],
+              },
               { timeout: 15_000 },
             );
+            targetSummary = {
+              strategy: 'coordinate',
+              x: coordinate.x,
+              y: coordinate.y,
+            };
           } else {
-            if (input.clear) {
+            const element = await findElement({
+              appiumSessionId,
+              target: input.target,
+              options: input.options || {},
+            });
+            targetSummary = {
+              strategy: element.strategy,
+              value: element.value,
+              matched_count: element.matchedCount,
+            };
+            if (input.action === 'tap') {
               await axios.post(
-                `${base}/element/${element.elementId}/clear`,
+                `${base}/element/${element.elementId}/click`,
                 {},
                 { timeout: 15_000 },
               );
+            } else {
+              if (input.clear) {
+                await axios.post(
+                  `${base}/element/${element.elementId}/clear`,
+                  {},
+                  { timeout: 15_000 },
+                );
+              }
+              await axios.post(
+                `${base}/element/${element.elementId}/value`,
+                { text: input.text || '', value: Array.from(input.text || '') },
+                { timeout: 15_000 },
+              );
             }
-            await axios.post(
-              `${base}/element/${element.elementId}/value`,
-              { text: input.text || '', value: Array.from(input.text || '') },
-              { timeout: 15_000 },
-            );
           }
         } else if (input.action === 'back') {
           await axios.post(`${base}/back`, {}, { timeout: 15_000 });
