@@ -967,26 +967,22 @@ describe('workflow metadata and branch flow', () => {
     expect(getWorkflow(result.workflowId)).toBeUndefined();
   });
 
-  it('rejects ios_dev_test dev entry when required recon artifacts are missing', () => {
-    writeDoc(
-      DELIVERABLE,
-      'plan.md',
-      `---\nservice: ${TEST_SERVICE}\ndeliverable: ${DELIVERABLE}\n---\n\n# Plan\n`,
-    );
+  it('rejects ios_dev_test shortcut entries that bypass iOS recon', () => {
+    for (const startFrom of ['dev', 'testing']) {
+      const result = createNewWorkflow({
+        title: `iOS shortcut entry ${startFrom}`,
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom,
+        workflowType: 'ios_dev_test',
+        deliverable: DELIVERABLE,
+      });
 
-    const result = createNewWorkflow({
-      title: 'iOS recon artifacts missing',
-      service: TEST_SERVICE,
-      sourceJid: 'main@g.us',
-      startFrom: 'dev',
-      workflowType: 'ios_dev_test',
-      deliverable: DELIVERABLE,
-    });
-
-    expect(result.error).toContain(
-      '需要交付物 product-recon.json, impact-analysis.json',
-    );
-    expect(getWorkflow(result.workflowId)).toBeUndefined();
+      expect(result.error).toContain(
+        `流程类型 "ios_dev_test" 不支持 start_from="${startFrom}"`,
+      );
+      expect(getWorkflow(result.workflowId)).toBeUndefined();
+    }
   });
 
   it('injects requirement description and attachment paths into the plan delegation task', () => {
@@ -2553,11 +2549,8 @@ describe('workflow metadata and branch flow', () => {
       'web_ios_preintegration',
     );
     expect(iosDevTest?.roles.test.channels.web).toBe('web_test');
+    expect(Object.keys(iosDevTest?.entry_points || {})).toEqual(['plan']);
     expect(iosDevTest?.entry_points.plan.state).toBe('ios_recon');
-    expect(iosDevTest?.entry_points.dev).toMatchObject({
-      requires_deliverable: true,
-      deliverable_role: 'planner',
-    });
     expect(iosDevTest?.states.ios_recon.artifact_contract?.ref).toBe(
       'ios_dev_test.ios_recon.v1',
     );
@@ -2688,6 +2681,9 @@ describe('workflow metadata and branch flow', () => {
   });
 
   it('collects iOS JSON artifacts into later stage context packs', () => {
+    const config = getWorkflowTypeConfig('ios_dev_test')!;
+    const originalEntry = config.entry_points.plan;
+
     writeDoc(
       DELIVERABLE,
       'product-recon.json',
@@ -2718,41 +2714,63 @@ describe('workflow metadata and branch flow', () => {
       `---\nservice: ${TEST_SERVICE}\ndeliverable: ${DELIVERABLE}\nmain_branch: main\nwork_branch: feature/ios\nstaging_base_branch: staging\nstaging_work_branch: staging/ios\ndoc_type: plan\n---\n\n# Plan\n\n## 范围\nx\n\n## 验收标准\ny\n\n## 风险\nz\n\n## iOS 配合\n待联调\n`,
     );
 
-    const result = createNewWorkflow({
-      title: 'Existing iOS recon deliverable',
-      service: TEST_SERVICE,
-      sourceJid: 'main@g.us',
-      startFrom: 'dev',
-      workflowType: 'ios_dev_test',
-      deliverable: DELIVERABLE,
-    });
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'ios_preintegration_router',
+      requires_deliverable: true,
+      deliverable_role: 'planner',
+      manual_requirement_create: {
+        enabled: true,
+        files: [
+          { filename: 'plan.md', required: true },
+          { filename: 'product-recon.json', required: true },
+          { filename: 'impact-analysis.json', required: true },
+        ],
+      },
+    };
 
-    expect(result.error).toBeUndefined();
-    const workflow = getWorkflow(result.workflowId);
-    expect(workflow?.status).toBe('backend_dev');
-    const delegations = getDelegationsByWorkflow(result.workflowId);
-    expect(delegations[0]?.target_folder).toBe('web_dev');
-    expect(delegations[0]?.task).toContain('product-recon.json');
-    const contextPackPath = path.join(
-      PROJECT_ROOT,
-      'projects',
-      TEST_SERVICE,
-      'workflow-context',
-      result.workflowId,
-      'backend_dev',
-      'latest.json',
-    );
-    const contextPack = JSON.parse(fs.readFileSync(contextPackPath, 'utf-8'));
-    expect(contextPack.prior_artifacts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ artifact_ref: 'product_recon' }),
-        expect.objectContaining({ artifact_ref: 'impact_analysis' }),
-        expect.objectContaining({ artifact_ref: 'plan_doc' }),
-      ]),
-    );
+    try {
+      const result = createNewWorkflow({
+        title: 'Existing iOS recon deliverable',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'ios_dev_test',
+        deliverable: DELIVERABLE,
+      });
+
+      expect(result.error).toBeUndefined();
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.status).toBe('backend_dev');
+      const delegations = getDelegationsByWorkflow(result.workflowId);
+      expect(delegations[0]?.target_folder).toBe('web_dev');
+      expect(delegations[0]?.task).toContain('product-recon.json');
+      const contextPackPath = path.join(
+        PROJECT_ROOT,
+        'projects',
+        TEST_SERVICE,
+        'workflow-context',
+        result.workflowId,
+        'backend_dev',
+        'latest.json',
+      );
+      const contextPack = JSON.parse(fs.readFileSync(contextPackPath, 'utf-8'));
+      expect(contextPack.prior_artifacts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ artifact_ref: 'product_recon' }),
+          expect.objectContaining({ artifact_ref: 'impact_analysis' }),
+          expect.objectContaining({ artifact_ref: 'plan_doc' }),
+        ]),
+      );
+    } finally {
+      config.entry_points.plan = originalEntry;
+    }
   });
 
   it('requires approval before iOS preintegration when client impact is required and no iOS branch exists', () => {
+    const config = getWorkflowTypeConfig('ios_dev_test')!;
+    const originalEntry = config.entry_points.plan;
+
     writeDoc(
       DELIVERABLE,
       'product-recon.json',
@@ -2796,44 +2814,63 @@ describe('workflow metadata and branch flow', () => {
       }),
     );
 
-    const result = createNewWorkflow({
-      title: 'Existing iOS recon deliverable requiring client',
-      service: TEST_SERVICE,
-      sourceJid: 'main@g.us',
-      startFrom: 'dev',
-      workflowType: 'ios_dev_test',
-      deliverable: DELIVERABLE,
-    });
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'ios_preintegration_router',
+      requires_deliverable: true,
+      deliverable_role: 'planner',
+      manual_requirement_create: {
+        enabled: true,
+        files: [
+          { filename: 'plan.md', required: true },
+          { filename: 'product-recon.json', required: true },
+          { filename: 'impact-analysis.json', required: true },
+        ],
+      },
+    };
 
-    expect(result.error).toBeUndefined();
-    const workflow = getWorkflow(result.workflowId);
-    expect(workflow?.status).toBe('ios_preintegration_confirm');
-    expect(workflow?.context.client_impact_required).toBe(true);
-    expect(
-      getPendingWorkflowInterruptForState(
+    try {
+      const result = createNewWorkflow({
+        title: 'Existing iOS recon deliverable requiring client',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'ios_dev_test',
+        deliverable: DELIVERABLE,
+      });
+
+      expect(result.error).toBeUndefined();
+      const workflow = getWorkflow(result.workflowId);
+      expect(workflow?.status).toBe('ios_preintegration_confirm');
+      expect(workflow?.context.client_impact_required).toBe(true);
+      expect(
+        getPendingWorkflowInterruptForState(
+          result.workflowId,
+          'ios_preintegration_confirm',
+        ),
+      ).toBeDefined();
+      expect(
+        getDelegationsByWorkflow(result.workflowId).some(
+          (item) => item.target_folder === 'web_ios_preintegration',
+        ),
+      ).toBe(false);
+
+      resumePendingInterruptForTest(
         result.workflowId,
         'ios_preintegration_confirm',
-      ),
-    ).toBeDefined();
-    expect(
-      getDelegationsByWorkflow(result.workflowId).some(
+        'approve',
+      );
+      const workflowAfterApproval = getWorkflow(result.workflowId);
+      expect(workflowAfterApproval?.status).toBe('ios_preintegration');
+      const delegations = getDelegationsByWorkflow(result.workflowId);
+      const preintegration = delegations.find(
         (item) => item.target_folder === 'web_ios_preintegration',
-      ),
-    ).toBe(false);
-
-    resumePendingInterruptForTest(
-      result.workflowId,
-      'ios_preintegration_confirm',
-      'approve',
-    );
-    const workflowAfterApproval = getWorkflow(result.workflowId);
-    expect(workflowAfterApproval?.status).toBe('ios_preintegration');
-    const delegations = getDelegationsByWorkflow(result.workflowId);
-    const preintegration = delegations.find(
-      (item) => item.target_folder === 'web_ios_preintegration',
-    );
-    expect(preintegration?.handoff_skill).toBe('ios-preintegration');
-    expect(preintegration?.task).toContain('clients.ios.default_branch');
+      );
+      expect(preintegration?.handoff_skill).toBe('ios-preintegration');
+      expect(preintegration?.task).toContain('clients.ios.default_branch');
+    } finally {
+      config.entry_points.plan = originalEntry;
+    }
   });
 
   it('returns blocked iOS preintegration to approval instead of self-looping', () => {

@@ -158,63 +158,6 @@
         "plan": {
           "label": "从 iOS Recon 开始",
           "state": "ios_recon"
-        },
-        "dev": {
-          "label": "从服务端开发开始",
-          "state": "ios_preintegration_router",
-          "requires_deliverable": true,
-          "deliverable_role": "planner",
-          "manual_requirement_create": {
-            "enabled": true,
-            "files": [
-              {
-                "filename": "plan.md",
-                "label": "方案文档",
-                "required": true
-              },
-              {
-                "filename": "product-recon.json",
-                "label": "iOS 产品行为分析",
-                "required": true
-              },
-              {
-                "filename": "impact-analysis.json",
-                "label": "端服影响分析",
-                "required": true
-              }
-            ]
-          }
-        },
-        "testing": {
-          "label": "从 iOS 联调验收开始",
-          "state": "testing_confirm",
-          "requires_deliverable": true,
-          "deliverable_role": "dev",
-          "manual_requirement_create": {
-            "enabled": true,
-            "files": [
-              {
-                "filename": "dev.md",
-                "label": "开发文档",
-                "required": true
-              },
-              {
-                "filename": "plan.md",
-                "label": "方案文档",
-                "required": false
-              },
-              {
-                "filename": "product-recon.json",
-                "label": "iOS 产品行为分析",
-                "required": false
-              },
-              {
-                "filename": "impact-analysis.json",
-                "label": "端服影响分析",
-                "required": false
-              }
-            ]
-          }
         }
       },
       "states": {
@@ -1540,16 +1483,6 @@
                 "label": "仅 iOS 验收"
               }
             ]
-          },
-          {
-            "key": "requirement_preset",
-            "label": "关联需求",
-            "type": "requirement_select",
-            "searchable": true,
-            "helper_text": "从 Dev 或 Testing 入口创建时，选择已有需求目录，用于定位交付物与历史文档。",
-            "visible_when": {
-              "entry_points": ["dev", "testing"]
-            }
           },
           {
             "key": "main_branch",
