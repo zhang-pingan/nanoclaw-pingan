@@ -174,7 +174,7 @@
       "title_template": "🔐 填写 iOS 联调测试信息",
       "color": "orange"
     },
-    "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**交付目录**：{{deliverable}}\n\n部署已完成。可填写 iOS 联调验收所需的 access_token；如本轮验收无需鉴权，也可直接跳过当前节点。",
+    "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**交付目录**：{{deliverable}}\n\n部署已完成，且当前服务未配置 testToken。可填写 iOS 联调验收所需的 access_token；如本轮验收无需鉴权，也可直接跳过当前节点。",
     "actions": [
       {
         "id": "skip",

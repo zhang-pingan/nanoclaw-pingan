@@ -3,6 +3,7 @@
     "repo_path": "catstory",
     "git_url": "git@tx.git.chelaile.net.cn:dev/catstory.git",
     "default_branch": "master",
+    "testToken": "",
     "clients": {
       "ios": {
         "repo_path": "catstory-ios",
@@ -66,6 +67,7 @@
     "repo_path": "push-service",
     "git_url": "git@tx.git.chelaile.net.cn:learn-share/push-service.git",
     "default_branch": "master",
+    "testToken": "",
     "jenkins_job": "上海-push-service",
     "staging": {
       "branch": "erp",
@@ -103,6 +105,7 @@
     "repo_path": "learning-platform",
     "git_url": "git@tx.git.chelaile.net.cn:dev/learning-platform.git",
     "default_branch": "master",
+    "testToken": "",
     "jenkins_job": "上海-learning-platform",
     "staging": {
       "branch": "erp",
@@ -140,6 +143,7 @@
     "repo_path": "content-platform",
     "git_url": "git@tx.git.chelaile.net.cn:dev/content-platform.git",
     "default_branch": "master",
+    "testToken": "",
     "jenkins_job": "上海-content-platform",
     "staging": {
       "branch": "erp",
@@ -177,6 +181,7 @@
     "repo_path": "user-platform",
     "git_url": "git@tx.git.chelaile.net.cn:dev/user-platform.git",
     "default_branch": "master",
+    "testToken": "",
     "jenkins_job": "上海-user-platform",
     "staging": {
       "branch": "erp",
@@ -214,6 +219,7 @@
     "repo_path": "assets",
     "git_url": "git@tx.git.chelaile.net.cn:learn-share/assets.git",
     "default_branch": "master",
+    "testToken": "",
     "jenkins_job": "上海-assets",
     "staging": {
       "branch": "erp",

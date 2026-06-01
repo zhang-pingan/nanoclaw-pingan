@@ -668,18 +668,81 @@
           },
           "on_complete": {
             "success": {
-              "target": "testing_confirm",
-              "card": {
-                "ref": "testing_confirm"
-              },
+              "target": "testing_token_router",
               "notify": {
-                "template": "[流程进展] 需求「{{name}}」({{id}}) 预发部署成功 ✅\n\n请先确认接口测试使用的 access_token，再进入测试阶段。"
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 预发部署成功 ✅\n\n正在检查服务配置中的 testToken。"
               }
             },
             "failure": {
               "target": "ops_failed",
               "notify": {
                 "template": "[流程终止] 需求「{{name}}」({{id}}) 预发部署失败 ❌\n\n{{result_summary}}"
+              }
+            }
+          }
+        },
+        "testing_token_router": {
+          "type": "system",
+          "label": "检查测试 Token 配置",
+          "run": {
+            "steps": [
+              {
+                "id": "load_test_token",
+                "uses": "service.test_token"
+              }
+            ]
+          },
+          "routes": [
+            {
+              "when": {
+                "test_token_configured": true
+              },
+              "target": "testing",
+              "delegate": {
+                "role": "test",
+                "skill": "test-requirement",
+                "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行测试：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n交付文档：{{dev_doc}}\n测试用例文档：\n{{test_case_files}}\n说明：如提供测试用例文档，测试文档中的用例必须使用该文档内的用例；可基于需求、方案和实现额外补充必要用例。\naccess_token: {{access_token}}",
+                "handoff": {
+                  "input_schema": "workflow.test.input.v1",
+                  "output_schema": "dev_test.testing.v1",
+                  "artifact_contract_ref": "dev_test.testing.v1",
+                  "success_criteria": [
+                    "测试完成或明确记录阻塞原因",
+                    "测试文档写入指定交付目录",
+                    "返回 total、passed、failed、blocked、bugs、verdict、summary、findings、evidence"
+                  ],
+                  "auto_retry": {
+                    "enabled": false,
+                    "max_attempts": 0,
+                    "retryable_failures": []
+                  }
+                }
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已使用服务配置 testToken，跳过 Token 确认，已委派 {{role_folder:test}} 开始测试。"
+              }
+            },
+            {
+              "target": "testing_confirm",
+              "card": {
+                "ref": "testing_confirm"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 未配置 testToken，请先确认接口测试使用的 access_token，再进入测试阶段。"
+              }
+            }
+          ],
+          "on_complete": {
+            "success": {
+              "target": "testing_confirm",
+              "card": {
+                "ref": "testing_confirm"
+              }
+            },
+            "failure": {
+              "target": "testing_confirm",
+              "card": {
+                "ref": "testing_confirm"
               }
             }
           }
@@ -916,6 +979,7 @@
         "dev_examine_confirm": "📋 确认回修或继续后续流程",
         "awaiting_confirm": "⏳ 确认预发部署",
         "ops_deploy": "🚀 部署中",
+        "testing_token_router": "🔎 检查测试 Token 配置",
         "testing_confirm": "🔐 确认测试 Token",
         "testing": "🧪 测试中",
         "fixing": "🔨 修复中",

@@ -1,6 +1,7 @@
 import { registerAssertWorkflowActions } from './assert.js';
 import { registerContextWorkflowActions } from './context.js';
 import { registerJsonWorkflowActions } from './json.js';
+import { registerServiceWorkflowActions } from './service.js';
 import { registerScriptWorkflowActions } from './script.js';
 
 export {
@@ -21,4 +22,5 @@ export type {
 registerContextWorkflowActions();
 registerAssertWorkflowActions();
 registerJsonWorkflowActions();
+registerServiceWorkflowActions();
 registerScriptWorkflowActions();

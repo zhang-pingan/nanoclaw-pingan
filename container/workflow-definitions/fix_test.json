@@ -153,9 +153,9 @@
           },
           "on_complete": {
             "success": {
-              "target": "bug_test",
+              "target": "testing_token_router",
               "notify": {
-                "template": "[流程进展] Bug「{{name}}」({{id}}) 预发部署成功，已委派 {{role_folder:test}} 进行测试验证。"
+                "template": "[流程进展] Bug「{{name}}」({{id}}) 预发部署成功，正在检查服务配置中的 testToken。"
               }
             },
             "failure": {
@@ -163,6 +163,43 @@
               "notify": {
                 "template": "[流程终止] Bug「{{name}}」({{id}}) 预发部署失败 ❌\n\n{{result_summary}}"
               }
+            }
+          }
+        },
+        "testing_token_router": {
+          "type": "system",
+          "label": "检查测试 Token 配置",
+          "run": {
+            "steps": [
+              {
+                "id": "load_test_token",
+                "uses": "service.test_token"
+              }
+            ]
+          },
+          "routes": [
+            {
+              "when": {
+                "test_token_configured": true
+              },
+              "target": "bug_test",
+              "notify": {
+                "template": "[流程进展] Bug「{{name}}」({{id}}) 已使用服务配置 testToken，已委派 {{role_folder:test}} 进行测试验证。"
+              }
+            },
+            {
+              "target": "bug_test",
+              "notify": {
+                "template": "[流程进展] Bug「{{name}}」({{id}}) 未配置 testToken，已委派 {{role_folder:test}} 进行测试验证。"
+              }
+            }
+          ],
+          "on_complete": {
+            "success": {
+              "target": "bug_test"
+            },
+            "failure": {
+              "target": "bug_test"
             }
           }
         },
@@ -178,7 +215,7 @@
           "delegate": {
             "role": "test",
             "skill": "fix-test-bug",
-            "task_template": "流程类型：{{workflow_type}}\n请验证以下 Bug 修复是否通过：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\n\n预发部署结果：\n{{delegation_result}}",
+            "task_template": "流程类型：{{workflow_type}}\n请验证以下 Bug 修复是否通过：\n\nBug 描述：{{bug_description}}\nBug 附件：\n{{bug_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n修复文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix.md\n测试文档：/workspace/projects/{{service}}/iteration/{{deliverable}}/fix-test.md\naccess_token: {{access_token}}\n\n预发部署结果：\n{{delegation_result}}",
             "handoff": {
               "input_schema": "workflow.test.input.v1",
               "output_schema": "fix_test.bug_test.v1",
@@ -316,6 +353,7 @@
       "status_labels": {
         "bug_fix": "🔨 修复 Bug",
         "ops_deploy": "🚀 预发部署",
+        "testing_token_router": "🔎 检查测试 Token 配置",
         "bug_test": "🧪 测试验证",
         "bug_refix": "🔧 复修 Bug",
         "passed": "✅ 已通过",

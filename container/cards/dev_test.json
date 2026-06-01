@@ -119,7 +119,7 @@
       "title_template": "🔐 填写 access_token 后开始测试",
       "color": "orange"
     },
-    "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**交付文档**：{{deliverable}}\n\n部署已完成。请先填写接口测试使用的 access_token，系统会在委派测试任务时自动附带该字段。\n\n如本轮测试无需鉴权，也可直接点击“跳过当前节点”。",
+    "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**交付文档**：{{deliverable}}\n\n部署已完成，且当前服务未配置 testToken。请填写接口测试使用的 access_token，系统会在委派测试任务时自动附带该字段。\n\n如本轮测试无需鉴权，也可直接点击“跳过当前节点”。",
     "actions": [
       {
         "id": "skip",

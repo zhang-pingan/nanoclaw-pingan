@@ -15,6 +15,7 @@ describe('workflow action registry', () => {
       'context.set_if_empty',
       'json.parse',
       'script.run_local',
+      'service.test_token',
     ]);
 
     expect(listWorkflowActionHandlerDetails()).toEqual([
@@ -126,6 +127,20 @@ describe('workflow action registry', () => {
             type: 'number',
             required: false,
             description: 'Optional maximum captured output size in bytes.',
+          },
+        ],
+      },
+      {
+        name: 'service.test_token',
+        description:
+          'Load service testToken from groups/global/services.json into workflow context.',
+        params: [
+          {
+            name: 'service',
+            type: 'string',
+            required: false,
+            description:
+              'Service name in groups/global/services.json. Defaults to workflow.service.',
           },
         ],
       },
