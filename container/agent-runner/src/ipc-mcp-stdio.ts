@@ -715,6 +715,12 @@ server.tool(
     clean_install: z.boolean().optional().default(false),
     build: z.boolean().optional().default(false),
     simulator: z.string().optional().describe('模拟器名称，例如 iPhone 16'),
+    ios_branch: z
+      .string()
+      .optional()
+      .describe(
+        'iOS 客户端仓库分支。优先使用任务消息中的 ios_work_branch；不传时宿主工具使用 clients.ios.default_branch。',
+      ),
     launch_args: z.array(z.string()).optional(),
     launch_env: z.record(z.string(), z.string()).optional(),
     auth: z.record(z.string(), z.unknown()).optional(),

@@ -7,6 +7,7 @@
       "ios": {
         "repo_path": "catstory-ios",
         "git_url": "git@tx.git.chelaile.net.cn:client/catstory-ios.git",
+        "default_branch": "master",
         "workspace": "Catstory.xcworkspace",
         "scheme": "CatstoryDebug",
         "bundle_id": "com.example.catstory",

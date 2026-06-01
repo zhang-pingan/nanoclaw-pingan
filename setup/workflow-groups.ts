@@ -227,6 +227,25 @@ const IOS_ROLE_TEMPLATES: WorkflowGroupTemplate[] = [
 - 你必须基于可执行 test case 输出 ios-test-plan.json 和 acceptance-report.json
 `,
   },
+  {
+    roleKey: 'ios_preintegration',
+    name: 'iOS 预联调',
+    folderSuffix: 'ios_preintegration',
+    description:
+      'iOS 预联调：在缺少现成 iOS 工作分支且确认需要客户端配合时，基于默认分支准备联调分支并处理必要客户端改动',
+    claudeMd: `# Group Instructions
+
+## 性格设定
+- 改动克制，先确认分支和影响面，再做最小必要代码处理
+- 证据优先，所有分支创建、代码修改和验证都要记录清楚
+- 边界清晰，不把临时联调改动伪装成完整正式 iOS 交付
+
+## 角色设定
+- 你是 iOS 预联调工程师，负责在服务端联调前准备必要 iOS 客户端工作分支
+- 如果任务已提供 iOS 工作分支，你复用该分支；如果未提供，你基于 services.json 的 clients.ios.default_branch 创建新分支
+- 你必须返回最终 ios_work_branch，供后续 iOS Acceptance 使用
+`,
+  },
 ];
 
 const ALL_ROLE_TEMPLATES = [...ROLE_TEMPLATES, ...IOS_ROLE_TEMPLATES];

@@ -7,6 +7,7 @@ import {
   WorkflowDefinitionArtifactDisplay,
   WorkflowDefinitionState,
   WorkflowDefinitionTransition,
+  WorkflowDefinitionConditionalTransition,
   WorkflowDefinitionEvaluatorRef,
   WorkflowDefinitionHandoff,
   WorkflowDefinitionJsonSchemaRef,
@@ -95,6 +96,7 @@ export interface CompiledWorkflowState {
   on_cancel?: CompiledWorkflowTransition;
   on_expire?: CompiledWorkflowTransition;
   run?: WorkflowDefinitionSystemRun;
+  routes?: WorkflowDefinitionConditionalTransition[];
 }
 
 export interface CompiledWorkflowConfig {
@@ -208,6 +210,7 @@ function compileState(state: WorkflowDefinitionState): CompiledWorkflowState {
       ...base,
       type: 'system',
       run: state.run,
+      routes: state.routes,
       on_complete: state.on_complete
         ? {
             success: compileTransition(state.on_complete.success),
@@ -296,6 +299,37 @@ export function validateWorkflowDefinition(
       ) {
         errors.push(`${stepPath}.with must be an object`);
       }
+    }
+  };
+  const validateConditionalTransition = (
+    basePath: string,
+    transition: WorkflowDefinitionConditionalTransition,
+  ): void => {
+    if (!transition || typeof transition !== 'object' || Array.isArray(transition)) {
+      errors.push(`${basePath} must be an object`);
+      return;
+    }
+    if (!transition.target?.trim()) {
+      errors.push(`${basePath}.target is required`);
+    } else if (!stateNames.has(transition.target)) {
+      errors.push(`${basePath}.target "${transition.target}" does not exist`);
+    }
+    if (
+      transition.when !== undefined &&
+      (!transition.when ||
+        typeof transition.when !== 'object' ||
+        Array.isArray(transition.when))
+    ) {
+      errors.push(`${basePath}.when must be an object when provided`);
+    }
+    validateHandoffArtifactContractRef(
+      `${basePath}.delegate.handoff`,
+      transition.delegate?.handoff,
+    );
+    if (transition.delegate && !roleNames.has(transition.delegate.role)) {
+      errors.push(
+        `${basePath}.delegate.role "${transition.delegate.role}" not defined in roles`,
+      );
     }
   };
 
@@ -818,6 +852,23 @@ export function validateWorkflowDefinition(
 
     if (state.type === 'system') {
       validateActionRun(`${definition.key}.states.${stateKey}.run`, state.run);
+      if (
+        state.routes !== undefined &&
+        (!Array.isArray(state.routes) || state.routes.length === 0)
+      ) {
+        errors.push(
+          `${definition.key}.states.${stateKey}.routes must be a non-empty array when provided`,
+        );
+      }
+      for (const [index, route] of (Array.isArray(state.routes)
+        ? state.routes
+        : []
+      ).entries()) {
+        validateConditionalTransition(
+          `${definition.key}.states.${stateKey}.routes[${index}]`,
+          route,
+        );
+      }
     }
 
     if (state.type === 'interrupt') {

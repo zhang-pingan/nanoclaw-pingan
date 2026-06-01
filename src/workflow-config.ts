@@ -26,6 +26,7 @@ import {
   WorkflowDefinitionRetryPolicy,
   WorkflowDefinitionRollbackHintRef,
   WorkflowDefinitionSystemRun,
+  WorkflowDefinitionConditionalTransition,
   WorkflowDefinitionTimeoutPolicy,
   WorkflowContextRequirements,
   WorkflowQualityGate,
@@ -86,6 +87,7 @@ export interface StateConfig {
     failure?: StateTransition;
   };
   run?: WorkflowDefinitionSystemRun;
+  routes?: WorkflowDefinitionConditionalTransition[];
 
   // --- interrupt fields ---
   card?: string;
@@ -262,6 +264,7 @@ export function getReachableWorkflowStages(
     const nextStates = [
       state.on_complete?.success?.target,
       state.on_complete?.failure?.target,
+      ...(state.routes ? state.routes.map((route) => route.target) : []),
       ...(state.on_resume
         ? Object.values(state.on_resume).map((transition) => transition.target)
         : []),
@@ -296,6 +299,7 @@ export interface TemplateVars {
   service?: string;
   main_branch?: string;
   work_branch?: string;
+  ios_work_branch?: string;
   id?: string;
   round?: number;
   deliverable?: string;

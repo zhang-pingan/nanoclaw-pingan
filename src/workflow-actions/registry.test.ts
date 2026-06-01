@@ -12,6 +12,7 @@ describe('workflow action registry', () => {
       'assert.equals',
       'context.require',
       'context.set',
+      'context.set_if_empty',
       'json.parse',
       'script.run_local',
     ]);
@@ -58,6 +59,20 @@ describe('workflow action registry', () => {
             type: 'object',
             required: true,
             description: 'Workflow context key-value pairs to set.',
+            defaultValue: {},
+          },
+        ],
+      },
+      {
+        name: 'context.set_if_empty',
+        description:
+          'Set workflow context keys only when the current value is empty.',
+        params: [
+          {
+            name: 'values',
+            type: 'object',
+            required: true,
+            description: 'Workflow context key-value pairs to set if empty.',
             defaultValue: {},
           },
         ],
@@ -140,5 +155,31 @@ describe('workflow action registry', () => {
     });
     expect(valid.status).toBe('success');
     expect(valid.contextPatch).toEqual({ work_branch: 'feature/test' });
+  });
+
+  it('sets context values only when current values are empty', () => {
+    const handler = getWorkflowActionHandler('context.set_if_empty');
+    expect(handler).toBeDefined();
+
+    const result = handler!.run({
+      workflow: {} as never,
+      stateKey: 'prepare',
+      params: {
+        values: {
+          ios_work_branch: 'feature/generated',
+          work_branch: 'feature/new-server',
+        },
+      },
+      context: {
+        ios_work_branch: '',
+        work_branch: 'feature/existing-server',
+      },
+      steps: {},
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.contextPatch).toEqual({
+      ios_work_branch: 'feature/generated',
+    });
   });
 });

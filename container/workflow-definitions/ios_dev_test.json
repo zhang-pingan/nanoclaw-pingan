@@ -56,6 +56,12 @@
             "web": "web_ios_acceptance"
           }
         },
+        "ios_preintegration": {
+          "label": "iOS 预联调",
+          "channels": {
+            "web": "web_ios_preintegration"
+          }
+        },
         "test": {
           "label": "集中测试",
           "deliverable_file": "test.md",
@@ -115,6 +121,13 @@
           "required": true
         },
         {
+          "artifact_type": "ios_preintegration_doc",
+          "title": "iOS 预联调记录",
+          "path": "ios-preintegration.md",
+          "source_role": "ios_preintegration",
+          "required": false
+        },
+        {
           "artifact_type": "test_doc",
           "title": "集中测试文档",
           "path": "test.md",
@@ -141,7 +154,7 @@
         },
         "dev": {
           "label": "从服务端开发开始",
-          "state": "backend_dev",
+          "state": "ios_preintegration_router",
           "requires_deliverable": true,
           "deliverable_role": "planner",
           "manual_requirement_create": {
@@ -219,17 +232,15 @@
                   "requirement_files",
                   "test_case_files",
                   "main_branch",
-                  "work_branch"
+                  "work_branch",
+                  "ios_work_branch"
                 ]
               },
               {
                 "id": "service_codebase_location",
                 "type": "codebase_location",
                 "required": false,
-                "fields": [
-                  "repo_path",
-                  "container_path"
-                ],
+                "fields": ["repo_path", "container_path"],
                 "verify_exists": true,
                 "verify_mounted_for_role": true
               }
@@ -271,7 +282,7 @@
           "delegate": {
             "role": "ios_recon",
             "skill": "ios-recon-requirement",
-            "task_template": "流程类型：{{workflow_type}}\n请执行 iOS Product Recon，为后续服务端方案设计提供真实 App 行为上下文：\n\n需求名称：{{name}}\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n测试用例文档：\n{{test_case_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n\n要求：读取 Context Pack；优先分析需求附件中的 UI 原型/截图/PDF；调用 iOS 底座工具完成 session、observe/action/flow、trace 和源码搜索；通过 ios_app_write_report 写出 product-recon.json、impact-analysis.json，必要时写出 prototype-analysis.json。",
+            "task_template": "流程类型：{{workflow_type}}\n请执行 iOS Product Recon，为后续服务端方案设计提供真实 App 行为上下文：\n\n需求名称：{{name}}\n需求描述：{{requirement_description}}\n附件文件：\n{{requirement_files}}\n测试用例文档：\n{{test_case_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n\n要求：读取 Context Pack；优先分析需求附件中的 UI 原型/截图/PDF；调用 iOS 底座工具完成 session、observe/action/flow、trace 和源码搜索；如 iOS 工作分支非空，调用 ios_app_prepare_session 时传 ios_branch=该分支；如为空，不要猜工作分支，由工具使用 clients.ios.default_branch；通过 ios_app_write_report 写出 product-recon.json、impact-analysis.json，必要时写出 prototype-analysis.json。",
             "handoff": {
               "input_schema": "workflow.ios_recon.input.v1",
               "output_schema": "ios_dev_test.ios_recon.v1",
@@ -323,27 +334,27 @@
                   "requirement_description",
                   "requirement_files",
                   "main_branch",
-                  "work_branch"
+                  "work_branch",
+                  "ios_work_branch"
                 ]
               },
               {
                 "id": "ios_recon_artifacts",
                 "type": "artifact",
                 "required": true,
-                "refs": [
-                  "product_recon",
-                  "impact_analysis",
-                  "prototype_analysis"
-                ]
+                "refs": ["product_recon", "impact_analysis"]
+              },
+              {
+                "id": "prototype_analysis_artifact",
+                "type": "artifact",
+                "required": false,
+                "refs": ["prototype_analysis"]
               },
               {
                 "id": "service_codebase_location",
                 "type": "codebase_location",
                 "required": false,
-                "fields": [
-                  "repo_path",
-                  "container_path"
-                ],
+                "fields": ["repo_path", "container_path"],
                 "verify_exists": true,
                 "verify_mounted_for_role": true
               }
@@ -446,9 +457,9 @@
           },
           "on_complete": {
             "success": {
-              "target": "backend_dev",
+              "target": "ios_preintegration_router",
               "notify": {
-                "template": "[流程进展] 需求「{{name}}」({{id}}) 方案审核通过，已自动进入服务端开发阶段，已委派 {{role_folder:dev}} 开始执行。"
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 方案审核通过，正在判断是否需要 iOS 预联调。"
               }
             },
             "failure": {
@@ -470,10 +481,7 @@
           },
           "kind": "approval",
           "title": "方案复核审批",
-          "allowed_actions": [
-            "approve",
-            "revise"
-          ],
+          "allowed_actions": ["approve", "revise"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -487,30 +495,9 @@
           },
           "on_resume": {
             "approve": {
-              "target": "backend_dev",
-              "delegate": {
-                "role": "dev",
-                "skill": "ios-backend-dev-requirement",
-                "task_template": "流程类型：{{workflow_type}}\n请按照方案执行服务端开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文件：{{plan_doc}}\niOS Recon 产物：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n\n边界：本阶段只实现服务端改动；如方案包含 iOS 配合事项，仅记录联调依赖，不直接修改 iOS 代码。",
-                "handoff": {
-                  "input_schema": "workflow.dev.input.v1",
-                  "output_schema": "ios_dev_test.dev.v1",
-                  "artifact_contract_ref": "ios_dev_test.dev.v1",
-                  "success_criteria": [
-                    "代码改动完成并位于指定工作分支",
-                    "相关验证或测试已执行并记录",
-                    "开发文档写入指定交付目录",
-                    "返回 deliverable、main_branch、work_branch、verdict、summary、findings、evidence"
-                  ],
-                  "auto_retry": {
-                    "enabled": false,
-                    "max_attempts": 0,
-                    "retryable_failures": []
-                  }
-                }
-              },
+              "target": "ios_preintegration_router",
               "notify": {
-                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续后续流程，已委派 {{role_folder:dev}} 开始开发。"
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认直接继续，正在判断是否需要 iOS 预联调。"
               }
             },
             "revise": {
@@ -540,11 +527,108 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
+        },
+        "ios_preintegration_router": {
+          "type": "system",
+          "label": "判断 iOS 预联调",
+          "routes": [
+            {
+              "when": {
+                "ios_work_branch": {
+                  "exists": true
+                }
+              },
+              "target": "backend_dev",
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已提供 iOS 工作分支 {{ios_work_branch}}，跳过 iOS 预联调，进入服务端开发。"
+              }
+            },
+            {
+              "when": {
+                "client_impact_required": true
+              },
+              "target": "ios_preintegration",
+              "delegate": {
+                "role": "ios_preintegration",
+                "skill": "ios-preintegration",
+                "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 预联调代码处理：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n服务端主分支：{{main_branch}}\n服务端工作分支：{{work_branch}}\niOS 工作分支（如已有）：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n\n要求：读取 services.json 的 clients.ios.default_branch；如 ios_work_branch 为空，从 clients.ios.default_branch 创建新的 iOS 工作分支，完成必要的联调代码处理，提交本地变更并返回最终 ios_work_branch。若无法判断或不需要 iOS 改动，明确返回 verdict=pending 或 passed 并说明原因。",
+                "handoff": {
+                  "input_schema": "workflow.ios_preintegration.input.v1",
+                  "output_schema": "ios_dev_test.ios_preintegration.v1",
+                  "artifact_contract_ref": "ios_dev_test.ios_preintegration.v1",
+                  "success_criteria": [
+                    "基于 clients.ios.default_branch 或既有 ios_work_branch 准备 iOS 工作分支",
+                    "完成必要 iOS 预联调代码处理或明确说明无需处理",
+                    "返回 deliverable、main_branch、work_branch、ios_work_branch、verdict、summary、findings、evidence"
+                  ],
+                  "auto_retry": {
+                    "enabled": false,
+                    "max_attempts": 0,
+                    "retryable_failures": []
+                  }
+                }
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 需要 iOS 端配合且未提供 iOS 工作分支，已委派 {{role_folder:ios_preintegration}} 进行 iOS 预联调。"
+              }
+            },
+            {
+              "target": "backend_dev",
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 无需自动 iOS 预联调，进入服务端开发。"
+              }
+            }
+          ],
+          "on_complete": {
+            "success": {
+              "target": "backend_dev"
+            },
+            "failure": {
+              "target": "backend_dev"
+            }
+          }
+        },
+        "ios_preintegration": {
+          "type": "delegation",
+          "label": "iOS 预联调",
+          "evaluator": {
+            "ref": "ios_dev_test.ios_preintegration.v1"
+          },
+          "delegate": {
+            "role": "ios_preintegration",
+            "skill": "ios-preintegration",
+            "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 预联调代码处理：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n服务端主分支：{{main_branch}}\n服务端工作分支：{{work_branch}}\niOS 工作分支（如已有）：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n\n要求：读取 services.json 的 clients.ios.default_branch；如 ios_work_branch 为空，从 clients.ios.default_branch 创建新的 iOS 工作分支，完成必要的联调代码处理，提交本地变更并返回最终 ios_work_branch。",
+            "handoff": {
+              "input_schema": "workflow.ios_preintegration.input.v1",
+              "output_schema": "ios_dev_test.ios_preintegration.v1",
+              "artifact_contract_ref": "ios_dev_test.ios_preintegration.v1",
+              "success_criteria": [
+                "基于 clients.ios.default_branch 或既有 ios_work_branch 准备 iOS 工作分支",
+                "完成必要 iOS 预联调代码处理或明确说明无需处理",
+                "返回 deliverable、main_branch、work_branch、ios_work_branch、verdict、summary、findings、evidence"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
+          },
+          "on_complete": {
+            "success": {
+              "target": "backend_dev",
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) iOS 预联调完成，iOS 工作分支：{{ios_work_branch}}，已进入服务端开发。"
+              }
+            },
+            "failure": {
+              "target": "ios_preintegration",
+              "notify": {
+                "template": "[流程异常] 需求「{{name}}」({{id}}) iOS 预联调失败或阻塞，请检查。"
+              }
+            }
+          }
         },
         "backend_dev": {
           "type": "delegation",
@@ -566,34 +650,27 @@
                   "requirement_description",
                   "requirement_files",
                   "main_branch",
-                  "work_branch"
+                  "work_branch",
+                  "ios_work_branch"
                 ]
               },
               {
                 "id": "plan_artifact",
                 "type": "artifact",
                 "required": true,
-                "refs": [
-                  "plan_doc"
-                ]
+                "refs": ["plan_doc"]
               },
               {
                 "id": "ios_recon_artifacts",
                 "type": "artifact",
                 "required": true,
-                "refs": [
-                  "product_recon",
-                  "impact_analysis"
-                ]
+                "refs": ["product_recon", "impact_analysis"]
               },
               {
                 "id": "service_codebase_location",
                 "type": "codebase_location",
                 "required": false,
-                "fields": [
-                  "repo_path",
-                  "container_path"
-                ],
+                "fields": ["repo_path", "container_path"],
                 "verify_exists": true,
                 "verify_mounted_for_role": true
               }
@@ -635,7 +712,7 @@
           "delegate": {
             "role": "dev",
             "skill": "ios-backend-dev-requirement",
-            "task_template": "流程类型：{{workflow_type}}\n请按照方案执行服务端开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文件：{{plan_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n\n边界：本阶段只实现服务端改动；如方案包含 iOS 配合事项，仅在 dev.md 中记录联调依赖，不直接修改 iOS 代码。",
+            "task_template": "流程类型：{{workflow_type}}\n请按照方案执行服务端开发：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文件：{{plan_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n\n边界：本阶段只实现服务端改动；如方案包含 iOS 配合事项，仅在 dev.md 中记录联调依赖，不直接修改 iOS 代码。",
             "handoff": {
               "input_schema": "workflow.dev.input.v1",
               "output_schema": "ios_dev_test.dev.v1",
@@ -677,7 +754,7 @@
           "delegate": {
             "role": "dev_examiner",
             "skill": "dev-examine",
-            "task_template": "流程类型：{{workflow_type}}\n请对以下服务端开发结果执行复核（重点：与方案一致性、实现质量、代码审查、iOS 联调依赖是否记录）：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS Recon 产物：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}",
+            "task_template": "流程类型：{{workflow_type}}\n请对以下服务端开发结果执行复核（重点：与方案一致性、实现质量、代码审查、iOS 联调依赖是否记录）：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS Recon 产物：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}",
             "handoff": {
               "input_schema": "workflow.review.input.v1",
               "output_schema": "ios_dev_test.dev_review.v1",
@@ -723,10 +800,7 @@
           },
           "kind": "approval",
           "title": "确认回修或继续后续流程",
-          "allowed_actions": [
-            "approve",
-            "revise"
-          ],
+          "allowed_actions": ["approve", "revise"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -775,11 +849,7 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
         },
         "awaiting_confirm": {
           "type": "interrupt",
@@ -789,9 +859,7 @@
           },
           "kind": "approval",
           "title": "确认预发部署",
-          "allowed_actions": [
-            "approve"
-          ],
+          "allowed_actions": ["approve"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -831,11 +899,7 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
         },
         "ops_deploy": {
           "type": "delegation",
@@ -891,10 +955,7 @@
           },
           "kind": "credential",
           "title": "确认 iOS 联调测试信息",
-          "allowed_actions": [
-            "submit",
-            "skip"
-          ],
+          "allowed_actions": ["submit", "skip"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -915,7 +976,7 @@
               "delegate": {
                 "role": "ios_acceptance",
                 "skill": "ios-acceptance-test",
-                "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 联调验收：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n测试用例文档：\n{{test_case_files}}\naccess_token: {{access_token}}",
+                "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 联调验收：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n测试用例文档：\n{{test_case_files}}\naccess_token: {{access_token}}",
                 "handoff": {
                   "input_schema": "workflow.ios_acceptance.input.v1",
                   "output_schema": "ios_dev_test.ios_acceptance.v1",
@@ -934,7 +995,7 @@
                 }
               },
               "notify": {
-                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认 access_token，已委派 {{role_folder:test}} 开始测试。"
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认 access_token，已委派 {{role_folder:ios_acceptance}} 开始 iOS 联调验收。"
               }
             },
             "skip": {
@@ -942,7 +1003,7 @@
               "delegate": {
                 "role": "ios_acceptance",
                 "skill": "ios-acceptance-test",
-                "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 联调验收：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n测试用例文档：\n{{test_case_files}}",
+                "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 联调验收：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n测试用例文档：\n{{test_case_files}}",
                 "handoff": {
                   "input_schema": "workflow.ios_acceptance.input.v1",
                   "output_schema": "ios_dev_test.ios_acceptance.v1",
@@ -962,11 +1023,7 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
         },
         "ios_acceptance": {
           "type": "delegation",
@@ -990,6 +1047,7 @@
                   "test_case_files",
                   "main_branch",
                   "work_branch",
+                  "ios_work_branch",
                   "access_token"
                 ]
               },
@@ -997,29 +1055,25 @@
                 "id": "plan_dev_artifacts",
                 "type": "artifact",
                 "required": true,
-                "refs": [
-                  "plan_doc",
-                  "dev_doc"
-                ]
+                "refs": ["plan_doc", "dev_doc"]
               },
               {
                 "id": "ios_recon_artifacts",
                 "type": "artifact",
                 "required": true,
-                "refs": [
-                  "product_recon",
-                  "impact_analysis",
-                  "prototype_analysis"
-                ]
+                "refs": ["product_recon", "impact_analysis"]
+              },
+              {
+                "id": "prototype_analysis_artifact",
+                "type": "artifact",
+                "required": false,
+                "refs": ["prototype_analysis"]
               },
               {
                 "id": "service_codebase_location",
                 "type": "codebase_location",
                 "required": false,
-                "fields": [
-                  "repo_path",
-                  "container_path"
-                ],
+                "fields": ["repo_path", "container_path"],
                 "verify_exists": true,
                 "verify_mounted_for_role": true
               }
@@ -1061,7 +1115,7 @@
           "delegate": {
             "role": "ios_acceptance",
             "skill": "ios-acceptance-test",
-            "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 联调验收：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n测试用例文档：\n{{test_case_files}}",
+            "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 联调验收：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n测试用例文档：\n{{test_case_files}}",
             "handoff": {
               "input_schema": "workflow.ios_acceptance.input.v1",
               "output_schema": "ios_dev_test.ios_acceptance.v1",
@@ -1091,7 +1145,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "ios-backend-bugfix",
-                "task_template": "流程类型：{{workflow_type}}\n请修复 iOS 联调验收发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS 测试计划：{{ios_test_plan_path}}\niOS 验收报告：{{acceptance_report_path}}\n\n验收结果：\n{{delegation_result}}",
+                "task_template": "流程类型：{{workflow_type}}\n请修复 iOS 联调验收发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS 测试计划：{{ios_test_plan_path}}\niOS 验收报告：{{acceptance_report_path}}\n\n验收结果：\n{{delegation_result}}",
                 "handoff": {
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "ios_dev_test.dev.v1",
@@ -1144,7 +1198,7 @@
                 "retryable_failures": []
               }
             },
-            "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行集中测试，覆盖接口、DB、日志、异常边界和回归场景；已由 iOS Acceptance 覆盖的纯 UI 步骤不要重复执行：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS 测试计划：{{ios_test_plan_path}}\niOS 验收报告：{{acceptance_report_path}}\n测试用例文档：\n{{test_case_files}}"
+            "task_template": "流程类型：{{workflow_type}}\n请对以下需求进行集中测试，覆盖接口、DB、日志、异常边界和回归场景；已由 iOS Acceptance 覆盖的纯 UI 步骤不要重复执行：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS 测试计划：{{ios_test_plan_path}}\niOS 验收报告：{{acceptance_report_path}}\n测试用例文档：\n{{test_case_files}}"
           },
           "on_complete": {
             "success": {
@@ -1158,7 +1212,7 @@
               "delegate": {
                 "role": "dev",
                 "skill": "ios-backend-bugfix",
-                "task_template": "流程类型：{{workflow_type}}\n请修复集中测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS 验收报告：{{acceptance_report_path}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
+                "task_template": "流程类型：{{workflow_type}}\n请修复集中测试发现的问题（Round {{round}}）：\n\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n主分支：{{main_branch}}\n工作分支：{{work_branch}}\niOS 工作分支：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n开发文档：{{dev_doc}}\niOS 验收报告：{{acceptance_report_path}}\n测试文档：{{test_doc}}\n\n测试报告：\n{{delegation_result}}",
                 "handoff": {
                   "input_schema": "workflow.fix.input.v1",
                   "output_schema": "ios_dev_test.dev.v1",
@@ -1195,35 +1249,27 @@
                   "requirement_files",
                   "test_case_files",
                   "main_branch",
-                  "work_branch"
+                  "work_branch",
+                  "ios_work_branch"
                 ]
               },
               {
                 "id": "plan_dev_artifacts",
                 "type": "artifact",
                 "required": true,
-                "refs": [
-                  "plan_doc",
-                  "dev_doc"
-                ]
+                "refs": ["plan_doc", "dev_doc"]
               },
               {
                 "id": "ios_acceptance_artifacts",
                 "type": "artifact",
                 "required": true,
-                "refs": [
-                  "ios_test_plan",
-                  "acceptance_report"
-                ]
+                "refs": ["ios_test_plan", "acceptance_report"]
               },
               {
                 "id": "service_codebase_location",
                 "type": "codebase_location",
                 "required": false,
-                "fields": [
-                  "repo_path",
-                  "container_path"
-                ],
+                "fields": ["repo_path", "container_path"],
                 "verify_exists": true,
                 "verify_mounted_for_role": true
               }
@@ -1342,6 +1388,8 @@
         "plan": "📝 方案设计中",
         "plan_examine": "🧭 方案审核中",
         "plan_examine_confirm": "📋 方案复核审批",
+        "ios_preintegration_router": "🧭 iOS 预联调判断中",
+        "ios_preintegration": "🛠 iOS 预联调中",
         "backend_dev": "🔧 服务端开发中",
         "dev_examine": "🧾 开发复核中",
         "dev_examine_confirm": "📋 确认回修或继续后续流程",
@@ -1357,10 +1405,7 @@
         "paused": "⏸ 已中断"
       },
       "metadata": {
-        "tags": [
-          "ios",
-          "delivery"
-        ]
+        "tags": ["ios", "delivery"]
       },
       "create_form": {
         "fields": [
@@ -1372,9 +1417,7 @@
             "required": true,
             "helper_text": "从 Plan 入口创建时，直接填写完整需求描述。",
             "visible_when": {
-              "entry_points": [
-                "plan"
-              ]
+              "entry_points": ["plan"]
             }
           },
           {
@@ -1383,9 +1426,7 @@
             "type": "file_uploads",
             "helper_text": "可选。支持上传 PRD、原型导出图、截图、PDF 或设计说明，用于 iOS 行为分析与方案设计。",
             "visible_when": {
-              "entry_points": [
-                "plan"
-              ]
+              "entry_points": ["plan"]
             }
           },
           {
@@ -1401,10 +1442,7 @@
             "searchable": true,
             "helper_text": "从 Dev 或 Testing 入口创建时，选择已有需求目录，用于定位交付物与历史文档。",
             "visible_when": {
-              "entry_points": [
-                "dev",
-                "testing"
-              ]
+              "entry_points": ["dev", "testing"]
             }
           },
           {
@@ -1418,6 +1456,13 @@
             "label": "work_branch（工作分支，可选）",
             "type": "text",
             "placeholder": "填写实际工作分支，如 feature/xxx"
+          },
+          {
+            "key": "ios_work_branch",
+            "label": "ios_work_branch（iOS 工作分支，可选）",
+            "type": "text",
+            "placeholder": "已有 iOS 联调分支，如 feature/ios-xxx",
+            "helper_text": "如果已存在 iOS 工作分支请填写；为空时将使用 clients.ios.default_branch，必要时由 iOS 预联调阶段创建新分支。"
           }
         ]
       }

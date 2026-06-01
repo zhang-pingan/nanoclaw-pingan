@@ -5,6 +5,7 @@ export type WorkflowContext = Record<string, unknown>;
 export const WORKFLOW_CONTEXT_KEYS = {
   mainBranch: 'main_branch',
   workBranch: 'work_branch',
+  iosWorkBranch: 'ios_work_branch',
   deliverable: 'deliverable',
   stagingBaseBranch: 'staging_base_branch',
   stagingWorkBranch: 'staging_work_branch',

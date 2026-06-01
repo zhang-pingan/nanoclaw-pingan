@@ -12,6 +12,7 @@ import { resolveIosServiceConfig } from './ios-service-config.js';
 import {
   bootSimulator,
   buildIosApp,
+  checkoutGitBranch,
   findSimulatorDevice,
   getInstalledAppPath,
   installIosApp,
@@ -37,6 +38,7 @@ import type {
   IosSessionRecord,
   JsonObject,
   JsonValue,
+  ServiceConfig,
 } from './types.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -82,6 +84,7 @@ function toErrorResult(
 
 function sessionConfigPayload(
   config: ReturnType<typeof resolveIosServiceConfig>,
+  iosBranch: string,
 ): JsonObject {
   return {
     service: config.service,
@@ -92,6 +95,8 @@ function sessionConfigPayload(
     backend_env: envFromServiceConfig(config),
     base_url: baseUrlFromServiceConfig(config),
     ios_repo_path: config.ios.repo_path,
+    ios_branch: iosBranch,
+    ios_default_branch: config.ios.default_branch || '',
     backend_repo_path: config.service_config.repo_path || '',
     automation: {
       driver: config.ios.automation?.driver || 'appium',
@@ -361,9 +366,15 @@ export class IosAppRequestDispatcher {
     const purpose =
       asString(args.purpose, 'product_recon').trim() || 'product_recon';
     const resolved = resolveIosServiceConfig(service, {
+      registry: isRecord(args.registry)
+        ? (args.registry as Record<string, ServiceConfig>)
+        : undefined,
       requireIosRepoExists: true,
       requireBackendRepoExists: false,
     });
+    const iosBranch =
+      asString(args.ios_branch).trim() ||
+      (resolved.ios.default_branch || '').trim();
     const simulatorName =
       asString(args.simulator) || resolved.ios.simulator || 'iPhone 16';
     const sessionId = this.store.nextGlobalId('SESSION');
@@ -371,6 +382,19 @@ export class IosAppRequestDispatcher {
     const stateId = this.store.nextId(sessionId, 'STATE');
 
     return (async () => {
+      let iosCheckoutCommand: JsonObject = {};
+      if (iosBranch) {
+        const checkout = await checkoutGitBranch(
+          resolved.ios_repo_host_path,
+          iosBranch,
+        );
+        iosCheckoutCommand = {
+          command: checkout.command,
+          args: checkout.args,
+          exit_code: checkout.exit_code,
+          duration_ms: checkout.duration_ms,
+        };
+      }
       const device = await findSimulatorDevice(simulatorName);
       await bootSimulator(device.udid);
       const [iosGitRevision, backendGitRevision] = await Promise.all([
@@ -394,6 +418,13 @@ export class IosAppRequestDispatcher {
           ios_client: iosGitRevision,
           backend: backendGitRevision,
         },
+        ios_branch: iosBranch,
+        ios_branch_source: asString(args.ios_branch).trim()
+          ? 'request'
+          : iosBranch
+            ? 'clients.ios.default_branch'
+            : 'current_checkout',
+        ios_checkout: iosCheckoutCommand,
         backend_env: backendEnv,
         base_url: baseUrl,
       };
@@ -423,6 +454,13 @@ export class IosAppRequestDispatcher {
             ios_client: iosGitRevision,
             backend: backendGitRevision,
           },
+          ios_branch: iosBranch,
+          ios_branch_source: asString(args.ios_branch).trim()
+            ? 'request'
+            : iosBranch
+              ? 'clients.ios.default_branch'
+              : 'current_checkout',
+          ios_checkout: iosCheckoutCommand,
           backend_env: backendEnv,
           base_url: baseUrl,
           app_path: build.appPath,
@@ -492,7 +530,7 @@ export class IosAppRequestDispatcher {
         state_id: stateId,
         ios_repo_host_path: resolved.ios_repo_host_path,
         backend_repo_host_path: resolved.backend_repo_host_path,
-        config: sessionConfigPayload(resolved),
+        config: sessionConfigPayload(resolved, iosBranch),
       });
 
       const sessionEvidence = this.store.createEvidence({

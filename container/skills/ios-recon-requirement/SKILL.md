@@ -15,10 +15,12 @@ description: Use only in the ios_dev_test workflow. Explore real iOS app behavio
 2. Context Pack `latest` 文件；后续结论优先引用其中的 `INPUT-*`、`ART-*`、`CODEBASE-*`。
 3. `/workspace/global/services.json` 中当前服务的 `clients.ios` 配置，确认 scheme、bundle_id、simulator、automation 配置。
 4. 需求附件中的 UI 原型图、设计稿、截图、PDF 或说明文档。无法解析的附件写入 `limitations` 或 `open_questions`，不要阻断整个阶段。
+5. 委派消息中的 `iOS 工作分支`：如果非空，调用 `ios_app_prepare_session` 时传 `ios_branch`；如果为空，不要猜测或复用服务端 `work_branch`，由工具使用 `clients.ios.default_branch`。
 
 ## 工具使用规则
 
 - 必须调用 `ios_app_prepare_session` 准备 session。
+- `ios_app_prepare_session` 的分支规则：`ios_branch` 只来自任务消息中的 iOS 工作分支；为空时不传，让底座使用 `clients.ios.default_branch` 并在 evidence 中记录。
 - 必须用 `ios_app_observe`、`ios_app_act` 或 `ios_app_run_flow` 探索需求相关路径；无法到达时记录 blocked/limitations。
 - 必须根据需求读取 `ios_app_read_trace`，并用 `ios_app_search_code` 搜索 iOS 客户端和服务端相关实现。
 - 所有业务结论必须先通过 `ios_app_write_claims` 写入 `CLAIM-*`，再由 JSON 产物引用。
@@ -50,6 +52,7 @@ description: Use only in the ios_dev_test workflow. Explore real iOS app behavio
   "deliverable": "2026-06-01_example",
   "main_branch": "main",
   "work_branch": "feature/example",
+  "client_impact_required": true,
   "product_recon": "/workspace/projects/catstory/iteration/2026-06-01_example/product-recon.json",
   "impact_analysis": "/workspace/projects/catstory/iteration/2026-06-01_example/impact-analysis.json",
   "verdict": "passed",
@@ -67,4 +70,3 @@ description: Use only in the ios_dev_test workflow. Explore real iOS app behavio
 ```
 
 `outcome=failure` 只用于执行层失败或阻塞，例如缺少 iOS service 配置、Simulator 不可用、App build 不可用、关键工具调用失败、产物无法安全落盘。执行阻塞时 result 仍尽量返回 `verdict=pending`、`summary`、`findings`、`evidence` 和已知分支/交付目录。
-

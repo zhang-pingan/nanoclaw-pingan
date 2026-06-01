@@ -68,6 +68,17 @@
       "ios_app_run_test_case",
       "ios_app_write_report",
       "ios_host_debug_shell"
+    ],
+    "ios-preintegration": [
+      "ios_app_prepare_session",
+      "ios_app_observe",
+      "ios_app_act",
+      "ios_app_run_flow",
+      "ios_app_read_trace",
+      "ios_app_search_code",
+      "ios_app_write_claims",
+      "ios_app_write_report",
+      "ios_host_debug_shell"
     ]
   },
   "groups": {
@@ -125,6 +136,10 @@
     "web_ios_recon": [
       "delegation-worker",
       "ios-recon"
+    ],
+    "web_ios_preintegration": [
+      "delegation-worker",
+      "ios-preintegration"
     ],
     "web_ios_acceptance": [
       "delegation-worker",

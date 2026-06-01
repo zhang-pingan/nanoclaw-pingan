@@ -47,6 +47,9 @@
   "web_ios_recon": [
     "ios-recon-requirement"
   ],
+  "web_ios_preintegration": [
+    "ios-preintegration"
+  ],
   "web_ios_acceptance": [
     "ios-acceptance-test"
   ]

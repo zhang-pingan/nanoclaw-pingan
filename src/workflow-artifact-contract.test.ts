@@ -253,6 +253,162 @@ describe('workflow artifact contract declarative rules', () => {
     expect(codes).toContain('ios_acceptance_cases_blocked');
   });
 
+  it('fails iOS acceptance when report summary differs from payload counts', () => {
+    writeDeliverable(
+      'ios-test-plan.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_purpose: 'acceptance',
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            title: '资料页徽章展示',
+            steps: [],
+            assertions: [],
+          },
+        ],
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'acceptance-report.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-002',
+        summary: {
+          total: 1,
+          passed: 0,
+          failed: 1,
+          blocked: 0,
+        },
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            result: 'failed',
+            case_evidence: ['CASE-001'],
+            assertions: ['ASSERT-001'],
+            bugs: [],
+          },
+        ],
+        bugs: [],
+        verdict: 'failed',
+        evidence: ['CASE-001', 'ASSERT-001'],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: {
+        ...makeWorkflow(),
+        workflow_type: 'ios_dev_test',
+        status: 'ios_acceptance',
+      },
+      contractRef: 'ios_dev_test.ios_acceptance.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        ios_test_plan: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/ios-test-plan.json`,
+        acceptance_report: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/acceptance-report.json`,
+        total: 1,
+        passed: 1,
+        failed: 0,
+        blocked: 0,
+      },
+    });
+
+    expect(result?.status).toBe('failed');
+    expect(result?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ios_acceptance_report_passed_mismatch',
+        }),
+        expect.objectContaining({
+          code: 'ios_acceptance_report_failed_mismatch',
+        }),
+      ]),
+    );
+  });
+
+  it('fails iOS acceptance when a passed case lacks CASE or ASSERT evidence', () => {
+    writeDeliverable(
+      'ios-test-plan.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_purpose: 'acceptance',
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            title: '资料页徽章展示',
+            steps: [],
+            assertions: [],
+          },
+        ],
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'acceptance-report.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-002',
+        summary: {
+          total: 1,
+          passed: 1,
+          failed: 0,
+          blocked: 0,
+        },
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            result: 'passed',
+            case_evidence: ['OBS-001'],
+            assertions: [],
+            bugs: [],
+          },
+        ],
+        bugs: [],
+        verdict: 'passed',
+        evidence: ['OBS-001'],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: {
+        ...makeWorkflow(),
+        workflow_type: 'ios_dev_test',
+        status: 'ios_acceptance',
+      },
+      contractRef: 'ios_dev_test.ios_acceptance.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        ios_test_plan: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/ios-test-plan.json`,
+        acceptance_report: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/acceptance-report.json`,
+        total: 1,
+        passed: 1,
+        failed: 0,
+        blocked: 0,
+      },
+    });
+
+    expect(result?.status).toBe('failed');
+    expect(result?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ios_acceptance_report.passed_case_missing_case_evidence',
+        }),
+        expect.objectContaining({
+          code: 'ios_acceptance_report.passed_case_missing_assertion',
+        }),
+      ]),
+    );
+  });
+
   it('validates JSON deliverable body_required_fields', () => {
     fs.writeFileSync(
       TEMP_CONTRACT_FILE,

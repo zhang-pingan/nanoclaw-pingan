@@ -24,6 +24,8 @@ interface ParsedDelegationPayload {
   deliverable?: string;
   main_branch?: string;
   work_branch?: string;
+  ios_work_branch?: string;
+  client_impact_required?: boolean | string;
   staging_base_branch?: string;
   staging_work_branch?: string;
   access_token?: string;
@@ -415,9 +417,14 @@ function addWorkflowContextEvidence(
     workflow,
     WORKFLOW_CONTEXT_KEYS.workBranch,
   );
+  const iosWorkBranch = getWorkflowContextValue(
+    workflow,
+    WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
+  );
   const parts = [
     deliverable ? `deliverable=${deliverable}` : '',
     workBranch ? `work_branch=${workBranch}` : '',
+    iosWorkBranch ? `ios_work_branch=${iosWorkBranch}` : '',
   ].filter(Boolean);
   if (parts.length > 0) {
     pushEvidence(evidence, {

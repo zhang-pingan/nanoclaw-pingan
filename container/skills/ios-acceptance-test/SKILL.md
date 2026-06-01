@@ -16,11 +16,13 @@ description: Use only in the ios_dev_test workflow. Build and execute iOS accept
 3. `product-recon.json`、`impact-analysis.json`，以及可选 `prototype-analysis.json`。
 4. 委派消息中的测试用例文档、access_token、主分支、工作分支。
 5. `/workspace/global/services.json` 中当前服务的 `clients.ios` 自动化配置。
+6. 委派消息中的 `iOS 工作分支`：如果非空，调用 `ios_app_prepare_session` 时传 `ios_branch`；如果为空，不要使用服务端 `work_branch` 代替，由工具使用 `clients.ios.default_branch`。
 
 ## 工具使用规则
 
 - 必须先生成或读取 `ios-test-plan.json`。
 - 必须调用 `ios_app_prepare_session` 准备 staging/debug App。
+- `ios_app_prepare_session` 的分支规则：`ios_branch` 只来自任务消息中的 iOS 工作分支；为空时不传，让底座使用 `clients.ios.default_branch`。
 - 每个 passed case 必须来自 `ios_app_run_test_case` 的执行结果；不能用自由探索结果直接标记 passed。
 - 可以用 `ios_app_observe`、`ios_app_act`、`ios_app_run_flow` 辅助定位和排障，但正式验收结果必须落到 test case。
 - 必须通过 `ios_app_write_report` 写出 `acceptance-report.json`。
@@ -99,4 +101,3 @@ description: Use only in the ios_dev_test workflow. Build and execute iOS accept
 ```
 
 当缺少 App 配置、Simulator 不可用、iOS build 不可用或测试账号不可用时，返回 `verdict=pending`，`blocked` 计数大于 0，并在 `findings` / `limitations` 中说明阻塞原因。
-

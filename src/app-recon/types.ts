@@ -77,6 +77,7 @@ export interface IosClientAutomationConfig {
 export interface IosClientConfig {
   repo_path: string;
   git_url?: string;
+  default_branch?: string;
   workspace?: string;
   project?: string;
   scheme: string;

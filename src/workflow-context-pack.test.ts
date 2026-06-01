@@ -51,6 +51,19 @@ function group(folder: string): RegisteredGroup {
   };
 }
 
+function writeDeliverable(fileName: string, content: string): void {
+  const deliverable = workflow().context.deliverable as string;
+  const dir = path.join(
+    PROJECT_ROOT,
+    'projects',
+    SERVICE,
+    'iteration',
+    deliverable,
+  );
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, fileName), content);
+}
+
 const REQUIREMENTS: WorkflowContextRequirements = {
   readiness_policy: 'record_only',
   sources: [
@@ -124,10 +137,8 @@ describe('workflow context pack', () => {
 
   it('keeps context pack prompt short and points to latest only', () => {
     const context = {
-      [WORKFLOW_CONTEXT_KEYS.contextPackPath]:
-        `/workspace/projects/${SERVICE}/workflow-context/${WORKFLOW_ID}/plan/latest.json`,
-      [WORKFLOW_CONTEXT_KEYS.contextPackImmutablePath]:
-        `/workspace/projects/${SERVICE}/workflow-context/${WORKFLOW_ID}/plan/context-pack.r1.a1.json`,
+      [WORKFLOW_CONTEXT_KEYS.contextPackPath]: `/workspace/projects/${SERVICE}/workflow-context/${WORKFLOW_ID}/plan/latest.json`,
+      [WORKFLOW_CONTEXT_KEYS.contextPackImmutablePath]: `/workspace/projects/${SERVICE}/workflow-context/${WORKFLOW_ID}/plan/context-pack.r1.a1.json`,
       [WORKFLOW_CONTEXT_KEYS.contextPackHash]: 'sha256:abc',
       [WORKFLOW_CONTEXT_KEYS.contextPackSummary]: 'readiness=warning; inputs=4',
       [WORKFLOW_CONTEXT_KEYS.contextPackOpenQuestions]: '缺少工作分支',
@@ -144,5 +155,58 @@ describe('workflow context pack', () => {
     expect(prompt).not.toContain('summary:');
     expect(prompt).not.toContain('open_questions:');
     expect(prompt).not.toContain('readiness: warning');
+  });
+
+  it('marks a required artifact source missing when any configured ref is absent', () => {
+    writeDeliverable(
+      'product-recon.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: SERVICE,
+        session_id: 'SESSION-001',
+        flows: [],
+        evidence: [],
+      }),
+    );
+
+    const result = buildWorkflowContextPack({
+      workflow: workflow({ workflow_type: 'ios_dev_test', status: 'plan' }),
+      stageKey: 'plan',
+      role: 'planner',
+      skill: 'ios-plan-requirement',
+      attempt: 1,
+      targetFolder: 'web_plan',
+      registeredGroups: { 'plan@g.us': group('web_plan') },
+      contextRequirements: {
+        readiness_policy: 'record_only',
+        sources: [
+          {
+            id: 'ios_recon_artifacts',
+            type: 'artifact',
+            required: true,
+            refs: ['product_recon', 'impact_analysis'],
+          },
+        ],
+      },
+    });
+
+    expect(result.pack.prior_artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ artifact_ref: 'product_recon' }),
+      ]),
+    );
+    expect(result.pack.readiness.missing_required_sources).toContain(
+      'ios_recon_artifacts',
+    );
+    expect(result.pack.excluded_candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source_id: 'ios_recon_artifacts',
+          ref: 'impact_analysis',
+          reason: 'path_missing',
+        }),
+      ]),
+    );
   });
 });

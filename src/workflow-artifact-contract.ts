@@ -53,6 +53,23 @@ export interface WorkflowArtifactPayloadRule {
   suggestion?: string;
 }
 
+export interface WorkflowArtifactBodyPayloadFieldMatch {
+  code: string;
+  severity?: WorkflowArtifactFindingSeverity;
+  body_field: string;
+  payload_field: string;
+  then_status?: WorkflowStageEvaluationStatus;
+  message: string;
+  suggestion?: string;
+}
+
+export interface WorkflowArtifactBodyCheck {
+  type: 'ios_acceptance_report';
+  code_prefix?: string;
+  severity?: WorkflowArtifactFindingSeverity;
+  then_status?: WorkflowStageEvaluationStatus;
+}
+
 export interface WorkflowArtifactContract {
   id: string;
   version: number;
@@ -66,6 +83,8 @@ export interface WorkflowArtifactContract {
     frontmatter_schema?: Record<string, unknown>;
     content_checks?: WorkflowArtifactContentCheck[];
     body_required_fields?: string[];
+    body_payload_field_matches?: WorkflowArtifactBodyPayloadFieldMatch[];
+    body_checks?: WorkflowArtifactBodyCheck[];
     max_bytes?: number;
   }>;
   payload?: {
@@ -352,6 +371,26 @@ function hasValueAtPath(source: unknown, dottedPath: string): boolean {
   return current !== undefined;
 }
 
+function evidenceRefFromValue(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const objectValue = value as Record<string, unknown>;
+  return (
+    (typeof objectValue.refId === 'string' ? objectValue.refId.trim() : '') ||
+    (typeof objectValue.ref_id === 'string' ? objectValue.ref_id.trim() : '') ||
+    (typeof objectValue.id === 'string' ? objectValue.id.trim() : '') ||
+    (typeof objectValue.ref === 'string' ? objectValue.ref.trim() : '')
+  );
+}
+
+function evidenceRefsFromValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(evidenceRefFromValue).filter(Boolean);
+  }
+  const ref = evidenceRefFromValue(value);
+  return ref ? [ref] : [];
+}
+
 function contentMatchesAnyOf(content: string, patterns: string[]): boolean {
   return patterns.some((pattern) => {
     try {
@@ -379,6 +418,116 @@ function evaluatePayloadRule(
   if (rule.lt !== undefined) return numeric && (value as number) < rule.lt;
   if (rule.lte !== undefined) return numeric && (value as number) <= rule.lte;
   return false;
+}
+
+function evaluateIosAcceptanceReportBody(input: {
+  body: unknown;
+  filePath: string;
+  stageKey: Workflow['status'];
+  codePrefix: string;
+  severity: WorkflowArtifactFindingSeverity;
+}): WorkflowEvalFinding[] {
+  const findings: WorkflowEvalFinding[] = [];
+  const pushBodyFinding = (code: string, message: string): void => {
+    findings.push({
+      code: `${input.codePrefix}.${code}`,
+      severity: input.severity,
+      message,
+      stageKey: input.stageKey,
+      path: input.filePath,
+    });
+  };
+
+  if (
+    !input.body ||
+    typeof input.body !== 'object' ||
+    Array.isArray(input.body)
+  ) {
+    pushBodyFinding(
+      'body_not_object',
+      'acceptance-report.json body must be an object',
+    );
+    return findings;
+  }
+
+  const body = input.body as Record<string, unknown>;
+  const summary = body.summary;
+  const summaryObject =
+    summary && typeof summary === 'object' && !Array.isArray(summary)
+      ? (summary as Record<string, unknown>)
+      : {};
+  const total = summaryObject.total;
+  const passed = summaryObject.passed;
+  const failed = summaryObject.failed;
+  const blocked = summaryObject.blocked;
+  if (
+    typeof total === 'number' &&
+    typeof passed === 'number' &&
+    typeof failed === 'number' &&
+    typeof blocked === 'number' &&
+    total !== passed + failed + blocked
+  ) {
+    pushBodyFinding(
+      'summary_count_mismatch',
+      `acceptance-report.json summary total (${total}) must equal passed + failed + blocked (${passed + failed + blocked})`,
+    );
+  }
+
+  const verdict = typeof body.verdict === 'string' ? body.verdict.trim() : '';
+  if (
+    verdict === 'passed' &&
+    ((typeof failed === 'number' && failed > 0) ||
+      (typeof blocked === 'number' && blocked > 0))
+  ) {
+    pushBodyFinding(
+      'passed_with_failed_or_blocked',
+      'acceptance-report.json verdict=passed requires summary.failed=0 and summary.blocked=0',
+    );
+  }
+
+  const cases = Array.isArray(body.cases) ? body.cases : [];
+  if (typeof total === 'number' && cases.length !== total) {
+    pushBodyFinding(
+      'case_count_mismatch',
+      `acceptance-report.json cases length (${cases.length}) must equal summary.total (${total})`,
+    );
+  }
+
+  for (const [index, rawCase] of cases.entries()) {
+    if (!rawCase || typeof rawCase !== 'object' || Array.isArray(rawCase)) {
+      pushBodyFinding(
+        'case_not_object',
+        `acceptance-report.json cases[${index}] must be an object`,
+      );
+      continue;
+    }
+    const caseItem = rawCase as Record<string, unknown>;
+    const result =
+      typeof caseItem.result === 'string' ? caseItem.result.trim() : '';
+    if (result !== 'passed') continue;
+
+    const caseId =
+      typeof caseItem.case_id === 'string' && caseItem.case_id.trim()
+        ? caseItem.case_id.trim()
+        : `cases[${index}]`;
+    const caseEvidenceRefs = evidenceRefsFromValue(caseItem.case_evidence);
+    if (!caseEvidenceRefs.some((ref) => /^CASE-/i.test(ref))) {
+      pushBodyFinding(
+        'passed_case_missing_case_evidence',
+        `${caseId} is passed but does not cite CASE-* evidence`,
+      );
+    }
+
+    const assertionRefs = evidenceRefsFromValue(caseItem.assertions);
+    if (!assertionRefs.some((ref) => /^ASSERT-/i.test(ref))) {
+      pushBodyFinding(
+        'passed_case_missing_assertion',
+        `${caseId} is passed but does not cite ASSERT-* evidence`,
+      );
+    }
+  }
+
+  return findings;
 }
 
 const ARTIFACT_STATUS_RANK: Record<WorkflowStageEvaluationStatus, number> = {
@@ -512,6 +661,7 @@ export function evaluateWorkflowArtifactContract(input: {
   const findings: WorkflowEvalFinding[] = [];
   const evidence: WorkflowEvalEvidence[] = [];
   const forcedStatuses: WorkflowStageEvaluationStatus[] = [];
+  const semanticFindingCodes = new Set<string>();
 
   for (const issue of validateWorkflowArtifactContractPayload({
     contractRef: input.contractRef,
@@ -623,7 +773,12 @@ export function evaluateWorkflowArtifactContract(input: {
           );
         }
       }
-      if (file.body_required_fields && file.body_required_fields.length > 0) {
+      const needsJsonBody =
+        (file.body_required_fields && file.body_required_fields.length > 0) ||
+        (file.body_payload_field_matches &&
+          file.body_payload_field_matches.length > 0) ||
+        (file.body_checks && file.body_checks.length > 0);
+      if (needsJsonBody) {
         let body: unknown;
         let parseFailed = false;
         try {
@@ -640,7 +795,7 @@ export function evaluateWorkflowArtifactContract(input: {
             path: fullPath,
           });
         } else {
-          for (const field of file.body_required_fields) {
+          for (const field of file.body_required_fields || []) {
             if (!hasValueAtPath(body, field)) {
               findings.push({
                 code: 'artifact_contract.body_field_missing',
@@ -649,6 +804,48 @@ export function evaluateWorkflowArtifactContract(input: {
                 stageKey: input.workflow.status,
                 path: fullPath,
               });
+            }
+          }
+          for (const match of file.body_payload_field_matches || []) {
+            const bodyValue = getValueByPath(body, match.body_field);
+            const payloadValue = getValueByPath(
+              input.payload,
+              match.payload_field,
+            );
+            if (bodyValue !== payloadValue) {
+              findings.push({
+                code: match.code,
+                severity: match.severity || 'high',
+                message: interpolateMessage(match.message, {
+                  body,
+                  payload: input.payload,
+                  body_value: bodyValue,
+                  payload_value: payloadValue,
+                }),
+                stageKey: input.workflow.status,
+                path: fullPath,
+                suggestion: match.suggestion,
+              });
+              semanticFindingCodes.add(match.code);
+              forcedStatuses.push(match.then_status || 'failed');
+            }
+          }
+          for (const check of file.body_checks || []) {
+            if (check.type !== 'ios_acceptance_report') continue;
+            const checkFindings = evaluateIosAcceptanceReportBody({
+              body,
+              filePath: fullPath,
+              stageKey: input.workflow.status,
+              codePrefix:
+                check.code_prefix || 'artifact_contract.ios_acceptance_report',
+              severity: check.severity || 'high',
+            });
+            findings.push(...checkFindings);
+            for (const finding of checkFindings) {
+              semanticFindingCodes.add(finding.code);
+            }
+            if (checkFindings.length > 0) {
+              forcedStatuses.push(check.then_status || 'failed');
             }
           }
         }
@@ -683,7 +880,7 @@ export function evaluateWorkflowArtifactContract(input: {
   }
   for (const rule of contract.payload_rules || []) ruleCodes.add(rule.code);
   const structuralFindings = findings.filter(
-    (item) => !ruleCodes.has(item.code),
+    (item) => !ruleCodes.has(item.code) && !semanticFindingCodes.has(item.code),
   );
 
   const hasCritical = structuralFindings.some(

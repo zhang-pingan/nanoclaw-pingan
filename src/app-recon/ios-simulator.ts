@@ -112,6 +112,27 @@ export async function runHostCommand(
   }
 }
 
+export async function checkoutGitBranch(
+  repoPath: string,
+  branch: string,
+): Promise<CommandResult> {
+  const target = branch.trim();
+  if (!target) {
+    throw new Error('iOS branch is empty');
+  }
+  const result = await runHostCommand('git', ['checkout', target], {
+    cwd: repoPath,
+    timeoutMs: 60_000,
+    maxOutputBytes: 20_000,
+  });
+  if (result.exit_code !== 0) {
+    throw new Error(
+      `git checkout ${target} failed: ${result.stderr || result.stdout}`,
+    );
+  }
+  return result;
+}
+
 function parseSimctlDevices(stdout: string): SimulatorDevice[] {
   const devices: SimulatorDevice[] = [];
   const parsed = JSON.parse(stdout) as {

@@ -83,6 +83,7 @@ import {
 } from './workflow-config.js';
 import {
   WorkflowCreateForm,
+  WorkflowDefinitionConditionalTransition,
   WorkflowDefinitionSystemRunStep,
   WorkflowDefinitionTransition,
   WorkflowManualRequirementCreateConfig,
@@ -150,6 +151,8 @@ interface ParsedDelegationPayload {
   deliverable?: string;
   main_branch?: string;
   work_branch?: string;
+  ios_work_branch?: string;
+  client_impact_required?: boolean | string;
   staging_base_branch?: string;
   staging_work_branch?: string;
   access_token?: string;
@@ -1699,8 +1702,30 @@ function buildDelegationResultContextPatch(
       >)
     : {};
   const payloadRecord = { ...payload };
+  const patch: WorkflowContext = {};
+  const payloadDeliverable =
+    typeof payloadRecord.deliverable === 'string'
+      ? payloadRecord.deliverable.trim()
+      : '';
+  const workflowForPayload =
+    payloadDeliverable && isSafeWorkflowPathSegment(payloadDeliverable)
+      ? {
+          ...workflow,
+          context: mergeWorkflowContext(workflow.context, {
+            [WORKFLOW_CONTEXT_KEYS.deliverable]: payloadDeliverable,
+          }),
+        }
+      : workflow;
+  const clientImpactRequired = extractClientImpactRequired(
+    payloadRecord,
+    workflowForPayload,
+  );
+  if (clientImpactRequired !== undefined) {
+    patch.client_impact_required = clientImpactRequired;
+  }
 
   return {
+    ...patch,
     [WORKFLOW_CONTEXT_STAGE_RESULTS_KEY]: {
       ...existingStageResults,
       [workflow.status]: payloadRecord,
@@ -1711,6 +1736,86 @@ function buildDelegationResultContextPatch(
       payload: payloadRecord,
     },
   };
+}
+
+function extractClientImpactRequired(
+  payload: Record<string, unknown>,
+  workflow?: Workflow,
+): boolean | string | undefined {
+  const direct = payload.client_impact_required;
+  if (
+    typeof direct === 'boolean' ||
+    (typeof direct === 'string' && direct.trim())
+  ) {
+    return typeof direct === 'string' ? direct.trim() : direct;
+  }
+  const impactAnalysis = getNestedValue(payload, ['impact_analysis']);
+  if (!impactAnalysis) return undefined;
+  if (typeof impactAnalysis === 'string') {
+    const artifact = workflow
+      ? readScopedWorkflowJsonArtifact(workflow, impactAnalysis)
+      : null;
+    if (artifact) return extractClientImpactRequired({ impact_analysis: artifact });
+    return undefined;
+  }
+  const required = getNestedValue(impactAnalysis, [
+    'client_impact',
+    'required',
+  ]);
+  if (
+    typeof required === 'boolean' ||
+    (typeof required === 'string' && required.trim())
+  ) {
+    return typeof required === 'string' ? required.trim() : required;
+  }
+  return undefined;
+}
+
+function readScopedWorkflowJsonArtifact(
+  workflow: Pick<Workflow, 'service' | 'context'>,
+  workspacePath: string,
+): Record<string, unknown> | null {
+  const deliverable = getWorkflowContextValue(
+    workflow,
+    WORKFLOW_CONTEXT_KEYS.deliverable,
+  );
+  if (!deliverable || !isSafeWorkflowPathSegment(deliverable)) return null;
+  const normalized = workspacePath.trim();
+  const allowedPrefix = `/workspace/projects/${workflow.service}/iteration/${deliverable}/`;
+  if (
+    !normalized.startsWith(allowedPrefix) ||
+    normalized.includes('\0') ||
+    normalized.split('/').some((segment) => segment === '..')
+  ) {
+    return null;
+  }
+  const hostPath = path.join(
+    PROJECT_ROOT,
+    normalized.replace(/^\/workspace\//, ''),
+  );
+  if (!fs.existsSync(hostPath) || !fs.statSync(hostPath).isFile()) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(hostPath, 'utf-8'));
+    return isPlainObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildIosImpactContextPatchFromArtifacts(
+  workflow: Pick<Workflow, 'service' | 'context'>,
+): WorkflowContext {
+  const impactAnalysisPath = buildArtifactRefPath(workflow, 'impact_analysis');
+  if (!impactAnalysisPath) return {};
+  const impactAnalysis = readScopedWorkflowJsonArtifact(
+    workflow,
+    impactAnalysisPath,
+  );
+  if (!impactAnalysis) return {};
+  const required = extractClientImpactRequired({
+    impact_analysis: impactAnalysis,
+  });
+  return required === undefined ? {} : { client_impact_required: required };
 }
 
 /** Get terminal state names from a workflow type config. */
@@ -1783,6 +1888,10 @@ function buildTemplateVars(
     work_branch: getWorkflowContextValue(
       workflow,
       WORKFLOW_CONTEXT_KEYS.workBranch,
+    ),
+    ios_work_branch: getWorkflowContextValue(
+      workflow,
+      WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
     ),
     id: workflow.id,
     round: workflow.round,
@@ -2562,8 +2671,14 @@ function runSystemState(
     return;
   }
 
+  const routeTransition = selectSystemRoute(
+    state.routes,
+    workflowForTransition,
+  );
   const transition =
-    systemResult.status === 'success'
+    systemResult.status === 'success' && routeTransition
+      ? routeTransition
+      : systemResult.status === 'success'
       ? state.on_complete?.success
       : state.on_complete?.failure;
   if (!transition) return;
@@ -2575,18 +2690,82 @@ function runSystemState(
       fallbackToTargetDelegate: true,
       workflowUpdates: {
         context: {
-          last_system_state: {
-            state_key: workflow.status,
-            executed_at: now,
-            attempt,
-            status: systemResult.status,
-            summary: systemResult.summary || '',
-            error: systemResult.error || '',
-          },
+      last_system_state: {
+        state_key: workflow.status,
+        executed_at: now,
+        attempt,
+        status: systemResult.status,
+        summary: systemResult.summary || '',
+        error: systemResult.error || '',
+        routed_to: routeTransition?.target || '',
+      },
         },
       },
     },
   );
+}
+
+function selectSystemRoute(
+  routes: WorkflowDefinitionConditionalTransition[] | undefined,
+  workflow: Workflow,
+): StateTransition | undefined {
+  if (!routes || routes.length === 0) return undefined;
+  for (const route of routes) {
+    if (!route.when || routeMatchesWorkflow(route.when, workflow)) {
+      return compileDefinitionTransitionToStateTransition(route);
+    }
+  }
+  return undefined;
+}
+
+function routeMatchesWorkflow(
+  condition: Record<string, unknown>,
+  workflow: Workflow,
+): boolean {
+  return Object.entries(condition).every(([pathName, expected]) => {
+    const actual = getWorkflowRouteValue(pathName, workflow);
+    return routeValueMatches(actual, expected);
+  });
+}
+
+function getWorkflowRouteValue(pathName: string, workflow: Workflow): unknown {
+  if (pathName === 'service') return workflow.service;
+  if (pathName === 'name') return workflow.name;
+  if (pathName.startsWith('context.')) {
+    return getNestedValue(
+      workflow.context,
+      pathName.slice('context.'.length).split('.'),
+    );
+  }
+  const contextValue = getNestedValue(workflow.context, pathName.split('.'));
+  return contextValue !== undefined
+    ? contextValue
+    : getNestedValue(
+        workflow as unknown as Record<string, unknown>,
+        pathName.split('.'),
+      );
+}
+
+function routeValueMatches(actual: unknown, expected: unknown): boolean {
+  if (isPlainObject(expected)) {
+    if ('exists' in expected) {
+      const exists = hasRouteValue(actual);
+      return Boolean(expected.exists) ? exists : !exists;
+    }
+    if ('equals' in expected) return actual === expected.equals;
+    if ('not_equals' in expected) return actual !== expected.not_equals;
+    if ('in' in expected) {
+      return Array.isArray(expected.in) && expected.in.includes(actual);
+    }
+  }
+  return actual === expected;
+}
+
+function hasRouteValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
 }
 
 function workflowActionStepEventType(
@@ -4301,6 +4480,7 @@ export interface CreateWorkflowOpts {
   deliverable?: string;
   mainBranch?: string;
   workBranch?: string;
+  iosWorkBranch?: string;
   stagingBaseBranch?: string;
   stagingWorkBranch?: string;
   accessToken?: string;
@@ -4378,6 +4558,12 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         opts.mainBranch || deliverable.main_branch,
       [WORKFLOW_CONTEXT_KEYS.workBranch]:
         opts.workBranch || deliverable.work_branch,
+      [WORKFLOW_CONTEXT_KEYS.iosWorkBranch]:
+        opts.iosWorkBranch ||
+        getWorkflowContextValue(
+          { context: opts.context || {} },
+          WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
+        ),
       [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable.fileName,
       [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]:
         opts.stagingBaseBranch || deliverable.staging_base_branch,
@@ -4393,6 +4579,13 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           ),
       [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
     });
+    Object.assign(
+      workflowContext,
+      buildIosImpactContextPatchFromArtifacts({
+        service: opts.service,
+        context: workflowContext,
+      }),
+    );
     Object.assign(
       workflowContext,
       materializeTestCaseFilesForDeliverable(
@@ -4598,6 +4791,12 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   const workflowContext = mergeWorkflowContext(opts.context || {}, {
     [WORKFLOW_CONTEXT_KEYS.mainBranch]: opts.mainBranch || '',
     [WORKFLOW_CONTEXT_KEYS.workBranch]: opts.workBranch || '',
+    [WORKFLOW_CONTEXT_KEYS.iosWorkBranch]:
+      opts.iosWorkBranch ||
+      getWorkflowContextValue(
+        { context: opts.context || {} },
+        WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
+      ),
     [WORKFLOW_CONTEXT_KEYS.deliverable]: '',
     [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]: opts.stagingBaseBranch || '',
     [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]: opts.stagingWorkBranch || '',
@@ -5198,6 +5397,13 @@ export function onDelegationComplete(delegationId: string): void {
   }
   if (payload.work_branch) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.workBranch] = payload.work_branch;
+  }
+  if (payload.ios_work_branch) {
+    contextUpdates[WORKFLOW_CONTEXT_KEYS.iosWorkBranch] =
+      payload.ios_work_branch;
+  }
+  if (payload.client_impact_required !== undefined) {
+    contextUpdates.client_impact_required = payload.client_impact_required;
   }
   if (payload.staging_base_branch) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] =

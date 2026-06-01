@@ -12,6 +12,7 @@ vi.mock('./ios-appium.js', () => ({
 vi.mock('./ios-simulator.js', () => ({
   bootSimulator: vi.fn(),
   buildIosApp: vi.fn(),
+  checkoutGitBranch: vi.fn(),
   findSimulatorDevice: vi.fn(),
   getAppContainerPath: vi.fn(),
   getInstalledAppPath: vi.fn(),
@@ -29,7 +30,13 @@ import { actWithAppium, observeWithAppium } from './ios-appium.js';
 import { IosAppRequestDispatcher } from './ios-app-request-dispatcher.js';
 import { IosEvidenceStore } from './ios-evidence-store.js';
 import { readIosTrace } from './ios-network-log.js';
-import { getAppContainerPath } from './ios-simulator.js';
+import {
+  checkoutGitBranch,
+  findSimulatorDevice,
+  getAppContainerPath,
+  launchIosApp,
+  runHostCommand,
+} from './ios-simulator.js';
 import { searchIosCode } from './ios-source-index.js';
 import type { IosSessionRecord } from './types.js';
 
@@ -114,6 +121,75 @@ afterEach(() => {
 
 beforeEach(() => {
   mockSuccessfulObservation();
+  vi.mocked(findSimulatorDevice).mockResolvedValue({
+    name: 'iPhone 16',
+    udid: 'SIM-001',
+    state: 'Booted',
+  });
+  vi.mocked(checkoutGitBranch).mockResolvedValue({
+    command: 'git',
+    args: ['checkout', 'feature/ios'],
+    exit_code: 0,
+    stdout: '',
+    stderr: '',
+    duration_ms: 10,
+  });
+  vi.mocked(runHostCommand).mockResolvedValue({
+    command: 'git',
+    args: ['rev-parse', 'HEAD'],
+    exit_code: 0,
+    stdout: 'abc123\n',
+    stderr: '',
+    duration_ms: 10,
+  });
+  vi.mocked(launchIosApp).mockResolvedValue(undefined);
+});
+
+describe('IosAppRequestDispatcher prepare_session', () => {
+  it('checks out explicit ios_branch before launching the app', async () => {
+    const store = makeStore();
+    const repoName = path.basename(process.cwd());
+    const repoDir = process.cwd();
+
+    const result = await new IosAppRequestDispatcher(store).dispatch(
+      {
+        action: 'prepare_session',
+        args: {
+          service: 'catstory',
+          ios_branch: 'feature/ios-ready',
+          registry: {
+            catstory: {
+              clients: {
+                ios: {
+                  repo_path: repoName,
+                  scheme: 'CatstoryDebug',
+                  bundle_id: 'com.example.catstory',
+                  simulator: 'iPhone 16',
+                },
+              },
+            },
+          },
+        },
+      },
+      { sourceGroup: 'test', isMain: true },
+    );
+
+    expect(result).toMatchObject({ status: 'ready' });
+    expect(checkoutGitBranch).toHaveBeenCalledWith(
+      repoDir,
+      'feature/ios-ready',
+    );
+    expect(launchIosApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        udid: 'SIM-001',
+        bundleId: 'com.example.catstory',
+      }),
+    );
+    const session = store.getSession(
+      (result as { session_id: string }).session_id,
+    );
+    expect(session?.config.ios_branch).toBe('feature/ios-ready');
+  });
 });
 
 describe('IosAppRequestDispatcher run_test_case', () => {

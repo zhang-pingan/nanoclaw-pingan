@@ -215,12 +215,17 @@ function defaultFieldsForWorkflowInput(): string[] {
     WORKFLOW_CONTEXT_KEYS.testCaseFiles,
     WORKFLOW_CONTEXT_KEYS.mainBranch,
     WORKFLOW_CONTEXT_KEYS.workBranch,
+    WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
     WORKFLOW_CONTEXT_KEYS.deliverable,
   ];
 }
 
 function isSourceRequired(source: WorkflowContextRequirementSource): boolean {
   return source.required === true;
+}
+
+function isOptionalWorkflowInputField(field: string): boolean {
+  return field === WORKFLOW_CONTEXT_KEYS.iosWorkBranch;
 }
 
 function buildQueryPlanSource(
@@ -384,6 +389,7 @@ function collectWorkflowInputSource(input: {
     ? input.source.fields
     : defaultFieldsForWorkflowInput();
   let presentCount = 0;
+  let requiredPresentCount = 0;
   fields.forEach((field, index) => {
     const rawValue =
       field === 'name'
@@ -403,6 +409,9 @@ function collectWorkflowInputSource(input: {
       return;
     }
     presentCount += 1;
+    if (!isOptionalWorkflowInputField(field)) {
+      requiredPresentCount += 1;
+    }
     const refId = nextRefId('INPUT', input.evidence);
     refs.push({
       ref_id: refId,
@@ -419,7 +428,13 @@ function collectWorkflowInputSource(input: {
       summary,
     });
   });
-  if (isSourceRequired(input.source) && presentCount < fields.length) {
+  const requiredFieldCount = fields.filter(
+    (field) => !isOptionalWorkflowInputField(field),
+  ).length;
+  if (
+    isSourceRequired(input.source) &&
+    requiredPresentCount < requiredFieldCount
+  ) {
     input.missing.push(input.source.id);
   }
   return refs;
@@ -516,7 +531,7 @@ function collectArtifactSource(input: {
     });
   });
 
-  if (isSourceRequired(input.source) && foundCount === 0) {
+  if (isSourceRequired(input.source) && foundCount < sourceRefs.length) {
     input.missing.push(input.source.id);
   }
   return refs;

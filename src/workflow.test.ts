@@ -130,6 +130,15 @@ const GROUPS: Array<[string, RegisteredGroup]> = [
       added_at: '2026-04-08T00:00:00.000Z',
     },
   ],
+  [
+    'ios-preintegration@g.us',
+    {
+      name: 'iOS Preintegration',
+      folder: 'web_ios_preintegration',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
 ];
 
 function resumePendingInterruptForTest(
@@ -2540,6 +2549,9 @@ describe('workflow metadata and branch flow', () => {
     expect(iosDevTest?.roles.ios_acceptance.channels.web).toBe(
       'web_ios_acceptance',
     );
+    expect(iosDevTest?.roles.ios_preintegration.channels.web).toBe(
+      'web_ios_preintegration',
+    );
     expect(iosDevTest?.roles.test.channels.web).toBe('web_test');
     expect(iosDevTest?.entry_points.plan.state).toBe('ios_recon');
     expect(iosDevTest?.entry_points.dev).toMatchObject({
@@ -2558,11 +2570,17 @@ describe('workflow metadata and branch flow', () => {
     expect(iosDevTest?.states.ios_acceptance.artifact_contract?.ref).toBe(
       'ios_dev_test.ios_acceptance.v1',
     );
+    expect(iosDevTest?.states.ios_preintegration.evaluator?.ref).toBe(
+      'ios_dev_test.ios_preintegration.v1',
+    );
     expect(iosDevTest?.states.centralized_test.artifact_contract?.ref).toBe(
       'ios_dev_test.testing.v1',
     );
     expect(
       getWorkflowArtifactContract('ios_dev_test.ios_recon.v1'),
+    ).toBeDefined();
+    expect(
+      getWorkflowArtifactContract('ios_dev_test.ios_preintegration.v1'),
     ).toBeDefined();
     expect(
       getWorkflowEvaluatorConfig('ios_dev_test.ios_acceptance.v1')?.ai?.enabled,
@@ -2593,6 +2611,10 @@ describe('workflow metadata and branch flow', () => {
       'delegation-worker',
       'ios-acceptance',
     ]);
+    expect(mcpConfig.groups.web_ios_preintegration).toEqual([
+      'delegation-worker',
+      'ios-preintegration',
+    ]);
     expect(mcpConfig.groups.web_ios_plan).toBeUndefined();
     expect(skillsConfig.web_plan).toEqual(
       expect.arrayContaining(['plan-requirement', 'ios-plan-requirement']),
@@ -2607,6 +2629,9 @@ describe('workflow metadata and branch flow', () => {
     );
     expect(skillsConfig.web_ios_plan).toBeUndefined();
     expect(skillsConfig.web_ios_acceptance).toEqual(['ios-acceptance-test']);
+    expect(skillsConfig.web_ios_preintegration).toEqual([
+      'ios-preintegration',
+    ]);
   });
 
   it('starts ios_dev_test from iOS recon and builds context pack', () => {
@@ -2622,6 +2647,9 @@ describe('workflow metadata and branch flow', () => {
         '/tmp/profile-badge-prd.md',
         '/tmp/profile-badge-ui.png',
       ],
+      context: {
+        ios_work_branch: 'feature/ios-profile-badge',
+      },
     });
 
     expect(result.error).toBeUndefined();
@@ -2642,6 +2670,9 @@ describe('workflow metadata and branch flow', () => {
     expect(delegations[0]?.target_folder).toBe('web_ios_recon');
     expect(delegations[0]?.handoff_skill).toBe('ios-recon-requirement');
     expect(delegations[0]?.task).toContain('iOS Product Recon');
+    expect(delegations[0]?.task).toContain(
+      'iOS 工作分支：feature/ios-profile-badge',
+    );
     expect(delegations[0]?.task).toContain('- /tmp/profile-badge-ui.png');
     const contract = JSON.parse(delegations[0]?.handoff_contract_json || '{}');
     expect(contract.artifact_contract_ref).toBe('ios_dev_test.ios_recon.v1');
@@ -2710,6 +2741,109 @@ describe('workflow metadata and branch flow', () => {
         expect.objectContaining({ artifact_ref: 'plan_doc' }),
       ]),
     );
+  });
+
+  it('routes to iOS preintegration when client impact is required and no iOS branch exists', () => {
+    writeDoc(
+      DELIVERABLE,
+      'product-recon.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-001',
+        flows: [],
+        evidence: [],
+      }),
+    );
+    writeDoc(
+      DELIVERABLE,
+      'impact-analysis.json',
+      JSON.stringify({
+        version: 1,
+        service: TEST_SERVICE,
+        platform: 'ios',
+        client_impact: { required: true },
+        server_impact: { required: true },
+        evidence: [],
+      }),
+    );
+    writeDoc(
+      DELIVERABLE,
+      'plan.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: ${DELIVERABLE}\nmain_branch: main\nwork_branch: feature/ios\nstaging_base_branch: staging\nstaging_work_branch: staging/ios\ndoc_type: plan\n---\n\n# Plan\n\n## 范围\nx\n\n## 验收标准\ny\n\n## 风险\nz\n`,
+    );
+    writeTraceability(
+      DELIVERABLE,
+      buildTraceability({
+        evidence: [
+          {
+            refId: 'EVID-ART-001',
+            type: 'artifact',
+            path: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/plan.md`,
+            summary: '阶段文档已写入交付目录',
+          },
+        ],
+      }),
+    );
+
+    const result = createNewWorkflow({
+      title: 'Existing iOS recon deliverable requiring client',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'dev',
+      workflowType: 'ios_dev_test',
+      deliverable: DELIVERABLE,
+    });
+
+    expect(result.error).toBeUndefined();
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('ios_preintegration');
+    expect(workflow?.context.client_impact_required).toBe(true);
+    const delegations = getDelegationsByWorkflow(result.workflowId);
+    const preintegration = delegations.find(
+      (item) => item.target_folder === 'web_ios_preintegration',
+    );
+    expect(preintegration?.handoff_skill).toBe('ios-preintegration');
+    expect(preintegration?.task).toContain('clients.ios.default_branch');
+  });
+
+  it('skips iOS preintegration when an iOS work branch is supplied', () => {
+    const config = getWorkflowTypeConfig('ios_dev_test')!;
+    const originalEntry = config.entry_points.plan;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'ios_preintegration_router',
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'Route with existing iOS branch',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'ios_dev_test',
+        requirementDescription: 'branch already exists',
+        context: {
+          ios_work_branch: 'feature/ios-existing',
+          client_impact_required: true,
+        },
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(getWorkflow(result.workflowId)?.status).toBe('backend_dev');
+      expect(
+        getDelegationsByWorkflow(result.workflowId).some(
+          (item) => item.target_folder === 'web_ios_preintegration',
+        ),
+      ).toBe(false);
+      expect(getDelegationsByWorkflow(result.workflowId)[0]?.task).toContain(
+        'iOS 工作分支：feature/ios-existing',
+      );
+    } finally {
+      config.entry_points.plan = originalEntry;
+    }
   });
 
   it('preserves context requirements and quality gate config through runtime config', () => {
@@ -3539,6 +3673,69 @@ describe('system workflow action nodes', () => {
         config.states.prepare_failure_check = originalPrepare;
       } else {
         delete config.states.prepare_failure_check;
+      }
+    }
+  });
+
+  it('routes system states by workflow context conditions', () => {
+    const config = getWorkflowTypeConfig('dev_test')!;
+    const originalEntry = config.entry_points.plan;
+    const originalRouter = config.states.branch_router;
+
+    config.entry_points.plan = {
+      ...originalEntry,
+      state: 'branch_router',
+    };
+    config.states.branch_router = {
+      type: 'system',
+      label: '分支路由',
+      routes: [
+        {
+          when: {
+            ios_work_branch: { exists: true },
+          },
+          target: 'plan',
+        },
+        {
+          target: 'cancelled',
+        },
+      ],
+      on_complete: {
+        success: { target: 'cancelled' },
+        failure: { target: 'cancelled' },
+      },
+    };
+
+    try {
+      const result = createNewWorkflow({
+        title: 'System route flow',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'plan',
+        workflowType: 'dev_test',
+        requirementDescription: 'route by ios branch',
+        context: {
+          ios_work_branch: 'feature/ios-ready',
+        },
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(getWorkflow(result.workflowId)?.status).toBe('plan');
+      expect(getDelegationsByWorkflow(result.workflowId)[0]?.task).toContain(
+        '需求描述：route by ios branch',
+      );
+      expect(getWorkflow(result.workflowId)?.context.last_system_state).toMatchObject(
+        {
+          state_key: 'branch_router',
+          routed_to: 'plan',
+        },
+      );
+    } finally {
+      config.entry_points.plan = originalEntry;
+      if (originalRouter) {
+        config.states.branch_router = originalRouter;
+      } else {
+        delete config.states.branch_router;
       }
     }
   });

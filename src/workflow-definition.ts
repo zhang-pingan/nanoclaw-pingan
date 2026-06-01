@@ -175,6 +175,15 @@ export interface WorkflowDefinitionTransition {
   effects?: WorkflowDefinitionEffects;
 }
 
+export interface WorkflowDefinitionConditionalTransition {
+  when?: Record<string, unknown>;
+  target: string;
+  delegate?: WorkflowDefinitionDelegate;
+  notify?: WorkflowDefinitionNotify;
+  card?: WorkflowDefinitionCardRef;
+  effects?: WorkflowDefinitionEffects;
+}
+
 export interface WorkflowDefinitionStateBase {
   type: 'delegation' | 'interrupt' | 'terminal' | 'system';
   label?: string;
@@ -229,6 +238,7 @@ export interface WorkflowDefinitionTerminalState extends WorkflowDefinitionState
 export interface WorkflowDefinitionSystemState extends WorkflowDefinitionStateBase {
   type: 'system';
   run?: WorkflowDefinitionSystemRun;
+  routes?: WorkflowDefinitionConditionalTransition[];
   on_complete?: {
     success: WorkflowDefinitionTransition;
     failure?: WorkflowDefinitionTransition;
