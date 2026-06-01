@@ -9,6 +9,7 @@ import {
 import {
   buildAssistantInboxBroadcastCard,
   buildAssistantInboxBroadcastFallbackText,
+  buildAssistantInboxBroadcastStatusCard,
   buildAssistantInboxBroadcastStatusText,
 } from './assistant-inbox-broadcast-render.js';
 
@@ -117,17 +118,36 @@ export class AssistantInboxBroadcastService {
       return;
     }
 
+    const card = buildAssistantInboxBroadcastStatusCard(item);
     const text = buildAssistantInboxBroadcastStatusText(item);
     const sentTargets = new Set<string>();
     for (const jid of targetJids) {
       try {
-        await this.deps.sendMessage(jid, text);
+        if (this.deps.sendCard) {
+          await this.deps.sendCard(jid, card);
+        } else {
+          await this.deps.sendMessage(jid, text);
+        }
         sentTargets.add(jid);
       } catch (err) {
         logger.warn(
           { err, itemId: item.id, jid, status: item.status },
           'Failed to broadcast assistant inbox status update',
         );
+        if (!this.deps.sendCard) continue;
+        try {
+          await this.deps.sendMessage(jid, text);
+          sentTargets.add(jid);
+          logger.info(
+            { itemId: item.id, jid, status: item.status },
+            'Assistant inbox status broadcast downgraded to text message',
+          );
+        } catch (fallbackErr) {
+          logger.warn(
+            { err: fallbackErr, itemId: item.id, jid, status: item.status },
+            'Failed to broadcast assistant inbox status fallback text',
+          );
+        }
       }
     }
 

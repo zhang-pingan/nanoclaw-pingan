@@ -262,6 +262,26 @@ export function buildAssistantInboxBroadcastStatusText(
   ].join('\n');
 }
 
+export function buildAssistantInboxBroadcastStatusCard(
+  item: AgentInboxItemView,
+): InteractiveCard {
+  return {
+    header: {
+      title: `个人助手事项已更新：${item.title || '未命名事项'}`,
+      color: headerColorForInboxItem(item),
+    },
+    body: [
+      `状态: ${statusLabel(item.status)}`,
+      sourceLabel(item) ? `来源: ${sourceLabel(item)}` : '',
+      item.body ? `说明: ${compactText(item.body)}` : '',
+      ...buildExtraLines(item),
+      `Inbox ID: ${item.id}`,
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  };
+}
+
 export function buildAssistantInboxBroadcastActionFeedbackCard(input: {
   item: AgentInboxItemView;
   statusText: string;
