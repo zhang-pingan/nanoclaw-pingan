@@ -128,6 +128,13 @@
           "required": false
         },
         {
+          "artifact_type": "ios_preintegration_report",
+          "title": "iOS 预联调报告",
+          "path": "ios-preintegration-report.json",
+          "source_role": "ios_preintegration",
+          "required": false
+        },
+        {
           "artifact_type": "test_doc",
           "title": "集中测试文档",
           "path": "test.md",
@@ -1186,9 +1193,9 @@
           },
           "on_complete": {
             "success": {
-              "target": "centralized_test",
+              "target": "test_strategy_router",
               "notify": {
-                "template": "[流程进展] 需求「{{name}}」({{id}}) iOS 联调验收通过，已委派 {{role_folder:test}} 进行集中测试。"
+                "template": "[流程进展] 需求「{{name}}」({{id}}) iOS 联调验收通过，正在按测试策略判断下一阶段。"
               }
             },
             "failure": {
@@ -1219,6 +1226,35 @@
               "effects": {
                 "increment_round": true
               }
+            }
+          }
+        },
+        "test_strategy_router": {
+          "type": "system",
+          "label": "判断测试策略",
+          "routes": [
+            {
+              "when": {
+                "test_strategy": "ios_only"
+              },
+              "target": "passed",
+              "notify": {
+                "template": "[流程完成] 需求「{{name}}」({{id}}) iOS 联调验收已通过，当前测试策略为 ios_only，流程完成。"
+              }
+            },
+            {
+              "target": "centralized_test",
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 当前测试策略为 {{test_strategy}}，已委派 {{role_folder:test}} 进行集中测试。"
+              }
+            }
+          ],
+          "on_complete": {
+            "success": {
+              "target": "centralized_test"
+            },
+            "failure": {
+              "target": "centralized_test"
             }
           }
         },
@@ -1449,6 +1485,7 @@
         "ops_deploy": "🚀 部署中",
         "testing_confirm": "🔐 确认 iOS 联调测试信息",
         "ios_acceptance": "📱 iOS 联调验收中",
+        "test_strategy_router": "🧭 测试策略判断中",
         "centralized_test": "🧪 集中测试中",
         "fixing": "🔨 修复中",
         "passed": "✅ 已通过",
@@ -1486,6 +1523,23 @@
             "label": "测试用例文档",
             "type": "file_uploads",
             "helper_text": "可选。上传后会随流程保存到需求交付目录，iOS Acceptance 和集中测试阶段可引用。"
+          },
+          {
+            "key": "test_strategy",
+            "label": "测试策略",
+            "type": "choice",
+            "default_value": "hybrid",
+            "helper_text": "默认 hybrid：先 iOS 联调验收，再集中测试；ios_only：iOS 验收通过后直接完成。",
+            "options": [
+              {
+                "value": "hybrid",
+                "label": "Hybrid 双轨"
+              },
+              {
+                "value": "ios_only",
+                "label": "仅 iOS 验收"
+              }
+            ]
           },
           {
             "key": "requirement_preset",

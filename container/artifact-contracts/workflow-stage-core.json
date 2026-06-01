@@ -336,6 +336,14 @@
           "server_impact",
           "evidence"
         ],
+        "body_checks": [
+          {
+            "type": "ios_impact_analysis",
+            "code_prefix": "ios_impact_analysis",
+            "severity": "high",
+            "then_status": "needs_revision"
+          }
+        ],
         "max_bytes": 200000
       },
       {
@@ -402,6 +410,14 @@
           "client_impact",
           "server_impact",
           "evidence"
+        ],
+        "body_checks": [
+          {
+            "type": "ios_impact_analysis",
+            "code_prefix": "ios_impact_analysis",
+            "severity": "high",
+            "then_status": "needs_revision"
+          }
         ],
         "max_bytes": 200000
       },
@@ -544,6 +560,21 @@
           "service",
           "deliverable",
           "doc_type"
+        ],
+        "max_bytes": 200000
+      },
+      {
+        "path": "projects/{{service}}/iteration/{{deliverable}}/ios-preintegration-report.json",
+        "required": false,
+        "body_required_fields": [
+          "version",
+          "platform",
+          "service",
+          "ios_work_branch",
+          "base_branch",
+          "changes",
+          "verdict",
+          "evidence"
         ],
         "max_bytes": 200000
       }

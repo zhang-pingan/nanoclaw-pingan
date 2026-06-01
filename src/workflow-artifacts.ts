@@ -47,6 +47,7 @@ const WORKFLOW_ARTIFACT_REF_FILES: Record<string, string> = {
   prototype_analysis: 'prototype-analysis.json',
   ios_test_plan: 'ios-test-plan.json',
   acceptance_report: 'acceptance-report.json',
+  ios_preintegration_report: 'ios-preintegration-report.json',
   traceability: 'traceability.json',
   readme: 'README.md',
 };

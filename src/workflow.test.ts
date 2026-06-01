@@ -2576,6 +2576,7 @@ describe('workflow metadata and branch flow', () => {
     expect(iosDevTest?.states.ios_preintegration_confirm.type).toBe(
       'interrupt',
     );
+    expect(iosDevTest?.states.test_strategy_router.type).toBe('system');
     expect(iosDevTest?.states.centralized_test.artifact_contract?.ref).toBe(
       'ios_dev_test.testing.v1',
     );
@@ -2585,6 +2586,11 @@ describe('workflow metadata and branch flow', () => {
     expect(
       getWorkflowArtifactContract('ios_dev_test.ios_preintegration.v1'),
     ).toBeDefined();
+    expect(
+      iosDevTest?.artifacts?.some(
+        (artifact) => artifact.artifact_type === 'ios_preintegration_report',
+      ),
+    ).toBe(true);
     expect(
       getWorkflowEvaluatorConfig('ios_dev_test.ios_acceptance.v1')?.ai?.enabled,
     ).toBe(true);
@@ -2926,6 +2932,133 @@ describe('workflow metadata and branch flow', () => {
     } finally {
       config.entry_points.plan = originalEntry;
     }
+  });
+
+  it('routes iOS-only test strategy directly to passed after acceptance', () => {
+    writeDoc(
+      DELIVERABLE,
+      'ios-test-plan.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_purpose: 'acceptance',
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            title: '资料页徽章展示',
+            steps: [],
+            assertions: [],
+          },
+        ],
+        evidence: ['CASE-001', 'ASSERT-001'],
+      }),
+    );
+    writeDoc(
+      DELIVERABLE,
+      'acceptance-report.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-002',
+        summary: {
+          total: 1,
+          passed: 1,
+          failed: 0,
+          blocked: 0,
+        },
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            result: 'passed',
+            case_evidence: ['CASE-001'],
+            assertions: ['ASSERT-001'],
+            bugs: [],
+          },
+        ],
+        verdict: 'passed',
+        evidence: [
+          'CASE-001',
+          {
+            id: 'ASSERT-001',
+            type: 'UI',
+            status: 'passed',
+            target: 'screen.profile.badge',
+          },
+        ],
+      }),
+    );
+    writeTraceability(
+      DELIVERABLE,
+      buildTraceability({
+        evidence: [
+          {
+            refId: 'EVID-ART-001',
+            type: 'artifact',
+            path: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/acceptance-report.json`,
+            summary: 'iOS 验收报告已写入交付目录',
+          },
+        ],
+      }),
+    );
+    const result = createNewWorkflow({
+      title: 'iOS only strategy',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'ios_dev_test',
+      requirementDescription: 'skip centralized test after iOS acceptance',
+      context: {
+        deliverable: DELIVERABLE,
+        test_strategy: 'ios_only',
+      },
+    });
+    expect(result.error).toBeUndefined();
+    updateWorkflow(result.workflowId, {
+      status: 'ios_acceptance',
+      context: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        test_strategy: 'ios_only',
+      },
+    });
+    createDelegation({
+      id: 'del-ios-acceptance-ios-only',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'ios-acceptance@g.us',
+      target_folder: 'web_ios_acceptance',
+      requester_jid: null,
+      workflow_id: result.workflowId,
+      task: 'acceptance passed',
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        deliverable: DELIVERABLE,
+        ios_test_plan: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/ios-test-plan.json`,
+        acceptance_report: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/acceptance-report.json`,
+        total: 1,
+        passed: 1,
+        failed: 0,
+        blocked: 0,
+      }),
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    updateWorkflow(result.workflowId, {
+      current_delegation_id: 'del-ios-acceptance-ios-only',
+    });
+
+    onDelegationComplete('del-ios-acceptance-ios-only');
+    expect(getWorkflow(result.workflowId)?.status).toBe('passed');
+    expect(
+      getDelegationsByWorkflow(result.workflowId).some(
+        (item) => item.target_folder === 'web_test',
+      ),
+    ).toBe(false);
   });
 
   it('preserves context requirements and quality gate config through runtime config', () => {

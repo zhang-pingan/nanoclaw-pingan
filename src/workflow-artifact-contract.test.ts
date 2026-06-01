@@ -258,6 +258,56 @@ describe('workflow artifact contract declarative rules', () => {
     );
   });
 
+  it('validates iOS impact required values and supporting evidence', () => {
+    writeDeliverable(
+      'product-recon.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-001',
+        flows: [],
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'impact-analysis.json',
+      JSON.stringify({
+        version: 1,
+        service: TEST_SERVICE,
+        platform: 'ios',
+        client_impact: { required: 'yes', supported_by: [] },
+        server_impact: { required: true, supported_by: ['OBS-001'] },
+        open_questions: [],
+        evidence: [],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: { ...makeWorkflow(), workflow_type: 'ios_dev_test' },
+      contractRef: 'ios_dev_test.ios_recon.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        product_recon: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/product-recon.json`,
+        impact_analysis: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/impact-analysis.json`,
+      },
+    });
+
+    expect(result?.status).toBe('needs_revision');
+    expect(result?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ios_impact_analysis.client_impact_required_invalid',
+        }),
+        expect.objectContaining({
+          code: 'ios_impact_analysis.server_impact_true_missing_evidence',
+        }),
+      ]),
+    );
+  });
+
   it('allows iOS preintegration pending without a final iOS branch', () => {
     const result = evaluateWorkflowArtifactContract({
       workflow: {
@@ -282,6 +332,50 @@ describe('workflow artifact contract declarative rules', () => {
           finding.message.includes('ios_work_branch'),
       ),
     ).toBe(false);
+  });
+
+  it('validates optional iOS preintegration report when present', () => {
+    writeDeliverable(
+      'ios-preintegration-report.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        ios_work_branch: 'preintegration/example',
+        verdict: 'passed',
+        evidence: [],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: {
+        ...makeWorkflow(),
+        workflow_type: 'ios_dev_test',
+        status: 'ios_preintegration',
+      },
+      contractRef: 'ios_dev_test.ios_preintegration.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        ios_work_branch: 'preintegration/example',
+        verdict: 'passed',
+      },
+    });
+
+    expect(result?.status).toBe('pending');
+    expect(result?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'artifact_contract.body_field_missing',
+          message: expect.stringContaining('base_branch'),
+        }),
+        expect.objectContaining({
+          code: 'artifact_contract.body_field_missing',
+          message: expect.stringContaining('changes'),
+        }),
+      ]),
+    );
   });
 
   it('forces failed status when iOS acceptance has failed or blocked cases', () => {

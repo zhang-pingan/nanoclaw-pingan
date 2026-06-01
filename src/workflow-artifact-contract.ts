@@ -64,7 +64,10 @@ export interface WorkflowArtifactBodyPayloadFieldMatch {
 }
 
 export interface WorkflowArtifactBodyCheck {
-  type: 'ios_acceptance_report' | 'ios_plan_traceability';
+  type:
+    | 'ios_acceptance_report'
+    | 'ios_impact_analysis'
+    | 'ios_plan_traceability';
   code_prefix?: string;
   severity?: WorkflowArtifactFindingSeverity;
   then_status?: WorkflowStageEvaluationStatus;
@@ -589,6 +592,98 @@ function evaluateIosAcceptanceReportBody(input: {
   return findings;
 }
 
+function evaluateIosImpactAnalysisBody(input: {
+  body: unknown;
+  filePath: string;
+  stageKey: Workflow['status'];
+  codePrefix: string;
+  severity: WorkflowArtifactFindingSeverity;
+}): WorkflowEvalFinding[] {
+  const findings: WorkflowEvalFinding[] = [];
+  const pushBodyFinding = (code: string, message: string): void => {
+    findings.push({
+      code: `${input.codePrefix}.${code}`,
+      severity: input.severity,
+      message,
+      stageKey: input.stageKey,
+      path: input.filePath,
+    });
+  };
+
+  if (
+    !input.body ||
+    typeof input.body !== 'object' ||
+    Array.isArray(input.body)
+  ) {
+    pushBodyFinding(
+      'body_not_object',
+      'impact-analysis.json body must be an object',
+    );
+    return findings;
+  }
+
+  const body = input.body as Record<string, unknown>;
+  const openQuestionsText = textRefsFromValue(body.open_questions)
+    .join('\n')
+    .toLowerCase();
+  const checks = [
+    {
+      prefix: 'client_impact',
+      field: getValueByPath(body, 'client_impact.required'),
+      evidence: evidenceRefsFromValue(getValueByPath(body, 'client_impact.supported_by')).concat(
+        evidenceRefsFromValue(body.evidence),
+      ),
+      allowedEvidence: /^(CLIENT_CODE|OBS|FLOW|CLAIM)-/i,
+    },
+    {
+      prefix: 'server_impact',
+      field: getValueByPath(body, 'server_impact.required'),
+      evidence: evidenceRefsFromValue(getValueByPath(body, 'server_impact.supported_by')).concat(
+        evidenceRefsFromValue(body.evidence),
+      ),
+      allowedEvidence: /^(SERVER_CODE|NET|CLAIM)-/i,
+    },
+  ];
+
+  for (const check of checks) {
+    if (
+      check.field !== true &&
+      check.field !== false &&
+      check.field !== 'unknown'
+    ) {
+      pushBodyFinding(
+        `${check.prefix}_required_invalid`,
+        `impact-analysis.json ${check.prefix}.required must be true, false, or "unknown"`,
+      );
+      continue;
+    }
+    if (check.field === 'unknown') {
+      const normalized = check.prefix.toLowerCase();
+      const compact = normalized.replace(/_/g, ' ');
+      if (
+        !openQuestionsText.includes(normalized) &&
+        !openQuestionsText.includes(compact)
+      ) {
+        pushBodyFinding(
+          `${check.prefix}_unknown_missing_open_question`,
+          `impact-analysis.json ${check.prefix}.required=unknown must be covered by open_questions`,
+        );
+      }
+    }
+    if (
+      check.field === true &&
+      !check.evidence.some((ref) => check.allowedEvidence.test(ref))
+    ) {
+      pushBodyFinding(
+        `${check.prefix}_true_missing_evidence`,
+        `impact-analysis.json ${check.prefix}.required=true must cite supporting evidence`,
+      );
+    }
+  }
+
+  return findings;
+}
+
 function evaluateIosPlanTraceabilityBody(input: {
   body: unknown;
   workflow: Workflow;
@@ -978,6 +1073,15 @@ export function evaluateWorkflowArtifactContract(input: {
                 stageKey: input.workflow.status,
                 codePrefix:
                   check.code_prefix || 'artifact_contract.ios_acceptance_report',
+                severity: check.severity || 'high',
+              });
+            } else if (check.type === 'ios_impact_analysis') {
+              checkFindings = evaluateIosImpactAnalysisBody({
+                body,
+                filePath: fullPath,
+                stageKey: input.workflow.status,
+                codePrefix:
+                  check.code_prefix || 'artifact_contract.ios_impact_analysis',
                 severity: check.severity || 'high',
               });
             } else if (check.type === 'ios_plan_traceability') {

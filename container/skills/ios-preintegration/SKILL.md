@@ -38,6 +38,7 @@ description: Use only in the ios_dev_test workflow. Prepare an iOS client work b
 可写出：
 
 - `/workspace/projects/{service}/iteration/{deliverable}/ios-preintegration.md`
+- `/workspace/projects/{service}/iteration/{deliverable}/ios-preintegration-report.json`
 
 文档应记录：
 
@@ -45,6 +46,17 @@ description: Use only in the ios_dev_test workflow. Prepare an iOS client work b
 - 基于哪个 `clients.ios.default_branch` 创建或复用
 - 修改文件和原因
 - 已执行验证或阻塞原因
+
+`ios-preintegration-report.json` 必填字段：
+
+- `version`
+- `platform`
+- `service`
+- `ios_work_branch`
+- `base_branch`
+- `changes`
+- `verdict`
+- `evidence`
 
 ## complete_delegation
 
@@ -57,6 +69,7 @@ description: Use only in the ios_dev_test workflow. Prepare an iOS client work b
   "main_branch": "main",
   "work_branch": "feature/example",
   "ios_work_branch": "preintegration/2026-06-01_example",
+  "ios_preintegration_report": "/workspace/projects/catstory/iteration/2026-06-01_example/ios-preintegration-report.json",
   "verdict": "passed",
   "summary": "已完成 iOS 预联调分支准备。",
   "findings": [],
