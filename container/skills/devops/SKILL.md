@@ -41,6 +41,7 @@ Service repos are mounted at `/workspace/repos/{repo_path}/`.
 11. Push: `git push origin HEAD`
 
 Rules:
+
 - NEVER push without explicit user confirmation
 - NEVER force push
 - Always create a new branch: `git checkout -b fix/description`
@@ -52,6 +53,7 @@ Use environment variables `$JENKINS_URL`, `$JENKINS_USER`, `$JENKINS_PASSWORD` w
 ### Get CSRF Crumb
 
 Before any POST request, fetch a crumb:
+
 ```bash
 CRUMB=$(curl -s "$JENKINS_URL/crumbIssuer/api/json" \
   --user "$JENKINS_USER:$JENKINS_PASSWORD" | jq -r '.crumbRequestField + ":" + .crumb')
@@ -67,6 +69,7 @@ curl -s -X POST \
 ```
 
 For parameterized builds:
+
 ```bash
 curl -s -X POST \
   "$JENKINS_URL/job/{jenkins_job}/buildWithParameters?BRANCH=main" \
@@ -75,6 +78,7 @@ curl -s -X POST \
 ```
 
 Note: For multi-level job paths like `deploy/service-a`, replace `/` with `/job/` in the URL:
+
 ```bash
 # deploy/service-a → /job/deploy/job/service-a
 curl -s -X POST \
@@ -107,6 +111,7 @@ curl -s "$JENKINS_URL/job/{jenkins_job}/lastBuild/consoleText" \
 ## 3. SSH Log Inspection
 
 Use `ssh` to inspect remote logs. Two SSH keys may be available:
+
 - `/home/node/.ssh/` — default SSH directory (contains git keys)
 - `/home/node/.ssh_devops_key` — dedicated server SSH key (if configured via `SSH_KEY_PATH`)
 
@@ -144,8 +149,10 @@ curl -s -X POST "$MYSQL_PROXY_URL/query" \
 ### Lookup Service Database Config
 
 1. Read services.json to find the `mysql` configuration for the service
-2. Get `host`, `port`, `user`, and `database` from the config
-3. Use the service name as the `service` field in the API request
+2. If the user asks about staging/pre/预发, use the service's `staging.mysql` configuration instead of production `mysql`
+3. Get `host`, `port`, `user`, and `database` from the config
+4. Use the service name as the `service` field in the API request
+5. For staging/pre requests, include `"environment": "staging"` in the proxy request and use `_gray`-suffixed table names in SQL
 
 ### Example Workflow
 
@@ -160,10 +167,32 @@ curl -s -X POST "$MYSQL_PROXY_URL/query" \
   -d '{"service": "catstory", "sql": "SELECT * FROM users LIMIT 10"}' | jq .
 ```
 
+For staging/pre SELECT queries, use `staging.mysql`, pass `environment`, and rewrite tables to `_gray`:
+
+```bash
+curl -s -X POST "$MYSQL_PROXY_URL/query" \
+  -H "Content-Type: application/json" \
+  -d '{"service": "catstory", "environment": "staging", "sql": "SELECT * FROM users_gray LIMIT 10"}' | jq .
+```
+
+For staging/pre DML or DDL, only operate on `_gray` tables:
+
+```bash
+curl -s -X POST "$MYSQL_PROXY_URL/query" \
+  -H "Content-Type: application/json" \
+  -d '{"service": "catstory", "environment": "staging", "sql": "UPDATE users_gray SET status = 1 WHERE id = 123"}' | jq .
+
+curl -s -X POST "$MYSQL_PROXY_URL/query" \
+  -H "Content-Type: application/json" \
+  -d '{"service": "catstory", "environment": "staging", "sql": "ALTER TABLE users_gray ADD COLUMN demo_flag TINYINT DEFAULT 0"}' | jq .
+```
+
 ### Rules
 
-- **READ-ONLY only** — only SELECT queries are allowed
-- Never execute INSERT, UPDATE, DELETE, DROP, or any write operations
-- If the user asks to modify data, explain what needs to be done and ask them to do it manually
+- Production/default MySQL is **READ-ONLY only** — only SELECT queries are allowed
+- Staging/pre DML is allowed only when all referenced tables end with `_gray`
+- Staging/pre table/index DDL is allowed only when all referenced tables end with `_gray`
+- Never run write operations unless the user clearly asks for staging/pre and the SQL targets `_gray` tables
+- Never run GRANT, REVOKE, CREATE USER, ALTER USER, DROP USER, stored procedures, or other account/privilege operations
 - Format results in a readable way for the user
 - Limit results with LIMIT clause when appropriate (e.g., LIMIT 100)

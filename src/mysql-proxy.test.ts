@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PassThrough, Writable } from 'stream';
-import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http';
+import type {
+  IncomingHttpHeaders,
+  IncomingMessage,
+  ServerResponse,
+} from 'http';
 
 const {
   createPoolMock,
@@ -119,9 +123,7 @@ class LocalServerResponse extends Writable {
 
     if (finalChunk !== undefined) {
       this.chunks.push(
-        typeof finalChunk === 'string'
-          ? Buffer.from(finalChunk)
-          : finalChunk,
+        typeof finalChunk === 'string' ? Buffer.from(finalChunk) : finalChunk,
       );
     }
 
@@ -148,6 +150,37 @@ async function postQuery(body: unknown): Promise<LocalServerResponse> {
   await handled;
 
   return res;
+}
+
+function mockMysqlPool(result: unknown = [[{ affectedRows: 1 }], []]): void {
+  createPoolMock.mockReturnValue({
+    end: endMock,
+    query: queryMock.mockResolvedValue(result),
+  });
+  readEnvFileMock.mockReturnValue({
+    MYSQL_PASSWORD_demo: 'secret',
+  });
+}
+
+function demoMysqlConfig(): Record<string, unknown> {
+  return {
+    demo: {
+      mysql: {
+        database: 'demo_db',
+        host: '127.0.0.1',
+        port: 3306,
+        user: 'demo_user',
+      },
+      staging: {
+        mysql: {
+          database: 'demo_gray_db',
+          host: '192.0.2.10',
+          port: 3307,
+          user: 'demo_gray_user',
+        },
+      },
+    },
+  };
 }
 
 describe('mysql-proxy', () => {
@@ -209,5 +242,147 @@ describe('mysql-proxy', () => {
         supportBigNumbers: true,
       }),
     );
+  });
+
+  it('uses staging MySQL config when staging environment is requested', async () => {
+    mockMysqlPool([[], []]);
+
+    const { loadMysqlConfigs, startMysqlProxy } = await loadProxy();
+    loadMysqlConfigs(demoMysqlConfig());
+
+    await startMysqlProxy(0);
+    const response = await postQuery({
+      environment: 'staging',
+      service: 'demo',
+      sql: 'SELECT id, name FROM users_gray LIMIT 1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(createPoolMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        database: 'demo_gray_db',
+        host: '192.0.2.10',
+        port: 3307,
+        user: 'demo_gray_user',
+      }),
+    );
+  });
+
+  it('rejects DML outside staging even when the table is _gray suffixed', async () => {
+    mockMysqlPool();
+
+    const { loadMysqlConfigs, startMysqlProxy } = await loadProxy();
+    loadMysqlConfigs(demoMysqlConfig());
+
+    await startMysqlProxy(0);
+    const response = await postQuery({
+      service: 'demo',
+      sql: 'UPDATE users_gray SET name = "demo" WHERE id = 1',
+    });
+    const parsed = JSON.parse(response.body) as { error: string };
+
+    expect(response.statusCode).toBe(400);
+    expect(parsed.error).toContain('staging/pre');
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects staging DML against non-_gray tables', async () => {
+    mockMysqlPool();
+
+    const { loadMysqlConfigs, startMysqlProxy } = await loadProxy();
+    loadMysqlConfigs(demoMysqlConfig());
+
+    await startMysqlProxy(0);
+    const response = await postQuery({
+      environment: 'pre',
+      service: 'demo',
+      sql: 'UPDATE users SET name = "demo" WHERE id = 1',
+    });
+    const parsed = JSON.parse(response.body) as { error: string };
+
+    expect(response.statusCode).toBe(400);
+    expect(parsed.error).toContain('_gray');
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it('allows staging DML against _gray tables', async () => {
+    mockMysqlPool();
+
+    const { loadMysqlConfigs, startMysqlProxy } = await loadProxy();
+    loadMysqlConfigs(demoMysqlConfig());
+
+    await startMysqlProxy(0);
+    const sql = 'UPDATE users_gray SET name = "demo" WHERE id = 1';
+    const response = await postQuery({
+      environment: 'staging',
+      service: 'demo',
+      sql,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(queryMock).toHaveBeenCalledWith(sql);
+  });
+
+  it.each([
+    'CREATE TABLE IF NOT EXISTS users_gray (id BIGINT)',
+    'CREATE INDEX idx_users_gray_created ON users_gray (created_at)',
+    'ALTER TABLE users_gray ADD COLUMN nickname VARCHAR(64)',
+    'ALTER TABLE users_gray RENAME TO users_archive_gray',
+    'RENAME TABLE users_gray TO users_archive_gray',
+    'DROP TABLE IF EXISTS users_gray',
+    'TRUNCATE TABLE users_gray',
+  ])('allows staging DDL against _gray tables: %s', async (sql) => {
+    mockMysqlPool();
+
+    const { loadMysqlConfigs, startMysqlProxy } = await loadProxy();
+    loadMysqlConfigs(demoMysqlConfig());
+
+    await startMysqlProxy(0);
+    const response = await postQuery({
+      environment: 'staging',
+      service: 'demo',
+      sql,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(queryMock).toHaveBeenCalledWith(sql);
+  });
+
+  it('rejects staging DDL against non-_gray tables', async () => {
+    mockMysqlPool();
+
+    const { loadMysqlConfigs, startMysqlProxy } = await loadProxy();
+    loadMysqlConfigs(demoMysqlConfig());
+
+    await startMysqlProxy(0);
+    const response = await postQuery({
+      environment: 'staging',
+      service: 'demo',
+      sql: 'ALTER TABLE users ADD COLUMN nickname VARCHAR(64)',
+    });
+    const parsed = JSON.parse(response.body) as { error: string };
+
+    expect(response.statusCode).toBe(400);
+    expect(parsed.error).toContain('users');
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects multiple SQL statements', async () => {
+    mockMysqlPool();
+
+    const { loadMysqlConfigs, startMysqlProxy } = await loadProxy();
+    loadMysqlConfigs(demoMysqlConfig());
+
+    await startMysqlProxy(0);
+    const response = await postQuery({
+      environment: 'staging',
+      service: 'demo',
+      sql: 'UPDATE users_gray SET name = "demo"; UPDATE users_gray SET name = "demo2"',
+    });
+    const parsed = JSON.parse(response.body) as { error: string };
+
+    expect(response.statusCode).toBe(400);
+    expect(parsed.error).toContain('Only one SQL statement');
+    expect(queryMock).not.toHaveBeenCalled();
   });
 });
