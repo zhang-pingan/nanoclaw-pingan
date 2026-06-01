@@ -81,6 +81,7 @@ import {
   generateAiImage,
   getAiImageWaitTimeoutMs,
 } from './ai-image.js';
+import { dispatchIosAppRequest } from './app-recon/ios-app-request-dispatcher.js';
 import { getRecentTodayPlanDetails } from './today-plan.js';
 
 export interface IpcDeps {
@@ -1008,6 +1009,9 @@ export async function processTaskIpc(
     includeImage?: boolean;
     includeWindows?: boolean;
     waitMs?: number;
+    // For ios_app_request
+    action?: string;
+    iosAppRequest?: unknown;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -1138,6 +1142,23 @@ export async function processTaskIpc(
       'ipc',
       groupFolder,
       'desktop-capture-results',
+    );
+    fs.mkdirSync(resultsDir, { recursive: true });
+    const responsePath = path.join(resultsDir, `${requestId}.json`);
+    const tempPath = `${responsePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2));
+    fs.renameSync(tempPath, responsePath);
+  };
+  const writeIosAppResult = (
+    groupFolder: string,
+    requestId: string,
+    payload: object,
+  ) => {
+    const resultsDir = path.join(
+      DATA_DIR,
+      'ipc',
+      groupFolder,
+      'ios-app-results',
     );
     fs.mkdirSync(resultsDir, { recursive: true });
     const responsePath = path.join(resultsDir, `${requestId}.json`);
@@ -2756,6 +2777,67 @@ export async function processTaskIpc(
         logger.error(
           { err, sourceGroup, requestId: data.requestId },
           'desktop_capture failed',
+        );
+      }
+      break;
+    }
+
+    case 'ios_app_request': {
+      if (!data.requestId || typeof data.requestId !== 'string') {
+        logger.warn({ sourceGroup }, 'ios_app_request missing requestId');
+        break;
+      }
+      if (!data.action || typeof data.action !== 'string') {
+        writeIosAppResult(sourceGroup, data.requestId, {
+          status: 'error',
+          error: {
+            code: 'missing_action',
+            message: 'ios_app_request action is required',
+          },
+        });
+        logger.warn(
+          { sourceGroup, requestId: data.requestId },
+          'ios_app_request missing action',
+        );
+        break;
+      }
+
+      try {
+        const result = await dispatchIosAppRequest(
+          {
+            action: data.action as never,
+            args: data.iosAppRequest,
+          },
+          { sourceGroup, isMain },
+        );
+        writeIosAppResult(sourceGroup, data.requestId, result);
+        logger.info(
+          {
+            sourceGroup,
+            requestId: data.requestId,
+            action: data.action,
+            status:
+              typeof result.status === 'string' ? result.status : 'success',
+          },
+          'ios_app_request completed',
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        writeIosAppResult(sourceGroup, data.requestId, {
+          status: 'error',
+          error: {
+            code: 'ios_app_request_failed',
+            message: errMsg,
+          },
+        });
+        logger.error(
+          {
+            err,
+            sourceGroup,
+            requestId: data.requestId,
+            action: data.action,
+          },
+          'ios_app_request failed',
         );
       }
       break;

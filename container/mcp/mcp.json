@@ -45,6 +45,29 @@
     ],
     "image-main": [
       "ai_image_generate_image"
+    ],
+    "ios-recon": [
+      "ios_app_prepare_session",
+      "ios_app_observe",
+      "ios_app_act",
+      "ios_app_run_flow",
+      "ios_app_read_trace",
+      "ios_app_search_code",
+      "ios_app_write_claims",
+      "ios_app_write_report",
+      "ios_host_debug_shell"
+    ],
+    "ios-acceptance": [
+      "ios_app_prepare_session",
+      "ios_app_observe",
+      "ios_app_act",
+      "ios_app_run_flow",
+      "ios_app_read_trace",
+      "ios_app_search_code",
+      "ios_app_write_claims",
+      "ios_app_run_test_case",
+      "ios_app_write_report",
+      "ios_host_debug_shell"
     ]
   },
   "groups": {
@@ -58,28 +81,36 @@
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main"
+      "image-main",
+      "ios-recon",
+      "ios-acceptance"
     ],
     "feishu_main": [
       "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main"
+      "image-main",
+      "ios-recon",
+      "ios-acceptance"
     ],
     "web_main": [
       "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main"
+      "image-main",
+      "ios-recon",
+      "ios-acceptance"
     ],
     "assistant_main": [
       "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main"
+      "image-main",
+      "ios-recon",
+      "ios-acceptance"
     ],
     "web_dev": [
       "delegation-worker"
@@ -88,7 +119,8 @@
       "delegation-worker"
     ],
     "web_plan": [
-      "delegation-worker"
+      "delegation-worker",
+      "ios-recon"
     ],
     "web_plan_examine": [
       "delegation-worker"
@@ -97,7 +129,8 @@
       "delegation-worker"
     ],
     "web_test": [
-      "delegation-worker"
+      "delegation-worker",
+      "ios-acceptance"
     ]
   }
 }

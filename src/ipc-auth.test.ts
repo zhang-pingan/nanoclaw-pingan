@@ -134,6 +134,20 @@ function readDesktopCaptureIpcResult(
   return data;
 }
 
+function readIosAppIpcResult(sourceGroup: string, requestId: string): any {
+  const p = path.join(
+    DATA_DIR,
+    'ipc',
+    sourceGroup,
+    'ios-app-results',
+    `${requestId}.json`,
+  );
+  expect(fs.existsSync(p)).toBe(true);
+  const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+  fs.unlinkSync(p);
+  return data;
+}
+
 function readTodayPlanIpcResult(sourceGroup: string, requestId: string): any {
   const p = path.join(
     DATA_DIR,
@@ -258,6 +272,29 @@ describe('schedule_task authorization', () => {
 
     const allTasks = getAllTasks();
     expect(allTasks.length).toBe(0);
+  });
+});
+
+describe('ios_app_request IPC', () => {
+  it('routes missing action to a structured ios app result', async () => {
+    const requestId = rid('iosapp');
+    await processTaskIpc(
+      {
+        type: 'ios_app_request',
+        requestId,
+      },
+      'whatsapp_main',
+      true,
+      deps,
+    );
+
+    const result = readIosAppIpcResult('whatsapp_main', requestId);
+    expect(result).toMatchObject({
+      status: 'error',
+      error: {
+        code: 'missing_action',
+      },
+    });
   });
 });
 

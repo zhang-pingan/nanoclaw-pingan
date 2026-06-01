@@ -3,6 +3,26 @@
     "repo_path": "catstory",
     "git_url": "git@tx.git.chelaile.net.cn:dev/catstory.git",
     "default_branch": "master",
+    "clients": {
+      "ios": {
+        "repo_path": "catstory-ios",
+        "git_url": "git@tx.git.chelaile.net.cn:client/catstory-ios.git",
+        "workspace": "Catstory.xcworkspace",
+        "scheme": "CatstoryDebug",
+        "bundle_id": "com.example.catstory",
+        "simulator": "iPhone 16",
+        "configuration": "Debug",
+        "automation": {
+          "driver": "appium",
+          "appium_server_url": "http://127.0.0.1:4723",
+          "launch_args": ["-UITestMode", "1", "-Environment", "staging"],
+          "deep_links": {
+            "profile_edit": "catstory://profile/edit"
+          },
+          "network_log_path": "Library/Caches/IcarusNetworkLog/network.jsonl"
+        }
+      }
+    },
     "jenkins_job": "上海-catstory",
     "staging": {
       "branch": "erp",
