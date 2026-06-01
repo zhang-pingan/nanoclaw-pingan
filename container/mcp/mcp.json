@@ -81,36 +81,28 @@
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main",
-      "ios-recon",
-      "ios-acceptance"
+      "image-main"
     ],
     "feishu_main": [
       "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main",
-      "ios-recon",
-      "ios-acceptance"
+      "image-main"
     ],
     "web_main": [
       "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main",
-      "ios-recon",
-      "ios-acceptance"
+      "image-main"
     ],
     "assistant_main": [
       "workbench-main",
       "group-admin-main",
       "delegation-main",
       "desktop-main",
-      "image-main",
-      "ios-recon",
-      "ios-acceptance"
+      "image-main"
     ],
     "web_dev": [
       "delegation-worker"
@@ -119,8 +111,7 @@
       "delegation-worker"
     ],
     "web_plan": [
-      "delegation-worker",
-      "ios-recon"
+      "delegation-worker"
     ],
     "web_plan_examine": [
       "delegation-worker"
@@ -129,8 +120,7 @@
       "delegation-worker"
     ],
     "web_test": [
-      "delegation-worker",
-      "ios-acceptance"
+      "delegation-worker"
     ]
   }
 }
