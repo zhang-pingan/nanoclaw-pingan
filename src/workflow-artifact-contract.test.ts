@@ -198,6 +198,92 @@ describe('workflow artifact contract declarative rules', () => {
     );
   });
 
+  it('requires unknown iOS impact to be covered by plan open questions', () => {
+    writeDeliverable(
+      'product-recon.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-001',
+        flows: [],
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'impact-analysis.json',
+      JSON.stringify({
+        version: 1,
+        service: TEST_SERVICE,
+        platform: 'ios',
+        client_impact: { required: 'unknown' },
+        server_impact: { required: true },
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'plan.md',
+      `${PLAN_FRONTMATTER}\n# 方案\n\n## 范围\nx\n\n## 验收标准\ny\n\n## 风险\nz\n\n## iOS 配合\nclient_impact 待确认\n`,
+    );
+    writeDeliverable(
+      'traceability.json',
+      JSON.stringify({
+        statements: [],
+        decisions: [],
+        actions: [],
+        acceptance_criteria: [],
+        evidence: [],
+        coverage: [],
+        open_questions: [],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: { ...makeWorkflow(), workflow_type: 'ios_dev_test' },
+      contractRef: 'ios_dev_test.plan.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+      },
+    });
+
+    expect(result?.status).toBe('needs_revision');
+    expect(result?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ios_plan_traceability.unknown_impact_missing_open_question',
+        }),
+      ]),
+    );
+  });
+
+  it('allows iOS preintegration pending without a final iOS branch', () => {
+    const result = evaluateWorkflowArtifactContract({
+      workflow: {
+        ...makeWorkflow(),
+        workflow_type: 'ios_dev_test',
+        status: 'ios_preintegration',
+      },
+      contractRef: 'ios_dev_test.ios_preintegration.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        verdict: 'pending',
+      },
+    });
+
+    expect(result?.status).toBe('passed');
+    expect(
+      result?.findings.some(
+        (finding) =>
+          finding.code === 'artifact_contract.payload_missing' &&
+          finding.message.includes('ios_work_branch'),
+      ),
+    ).toBe(false);
+  });
+
   it('forces failed status when iOS acceptance has failed or blocked cases', () => {
     writeDeliverable(
       'ios-test-plan.json',
@@ -404,6 +490,91 @@ describe('workflow artifact contract declarative rules', () => {
         }),
         expect.objectContaining({
           code: 'ios_acceptance_report.passed_case_missing_assertion',
+        }),
+      ]),
+    );
+  });
+
+  it('fails iOS acceptance when a passed case cites failed or non-UI assertions', () => {
+    writeDeliverable(
+      'ios-test-plan.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_purpose: 'acceptance',
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            title: '资料页徽章展示',
+            steps: [],
+            assertions: [],
+          },
+        ],
+        evidence: [],
+      }),
+    );
+    writeDeliverable(
+      'acceptance-report.json',
+      JSON.stringify({
+        version: 1,
+        platform: 'ios',
+        service: TEST_SERVICE,
+        session_id: 'SESSION-002',
+        summary: {
+          total: 1,
+          passed: 1,
+          failed: 0,
+          blocked: 0,
+        },
+        cases: [
+          {
+            case_id: 'IOS-TC-001',
+            result: 'passed',
+            case_evidence: ['CASE-001'],
+            assertions: ['ASSERT-001'],
+            bugs: [],
+          },
+        ],
+        bugs: [],
+        verdict: 'passed',
+        evidence: [
+          'CASE-001',
+          {
+            id: 'ASSERT-001',
+            type: 'network',
+            status: 'failed',
+          },
+        ],
+      }),
+    );
+
+    const result = evaluateWorkflowArtifactContract({
+      workflow: {
+        ...makeWorkflow(),
+        workflow_type: 'ios_dev_test',
+        status: 'ios_acceptance',
+      },
+      contractRef: 'ios_dev_test.ios_acceptance.v1',
+      payload: {
+        deliverable: DELIVERABLE,
+        ios_test_plan: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/ios-test-plan.json`,
+        acceptance_report: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/acceptance-report.json`,
+        total: 1,
+        passed: 1,
+        failed: 0,
+        blocked: 0,
+      },
+    });
+
+    expect(result?.status).toBe('failed');
+    expect(result?.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'ios_acceptance_report.passed_case_assertion_not_passed',
+        }),
+        expect.objectContaining({
+          code: 'ios_acceptance_report.passed_case_missing_ui_or_app_state_assertion',
         }),
       ]),
     );

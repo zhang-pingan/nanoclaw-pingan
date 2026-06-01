@@ -71,6 +71,61 @@
       }
     ]
   },
+  "ios_preintegration_confirm": {
+    "pattern": "confirm_revise",
+    "header": {
+      "title_template": "📋 确认 iOS 预联调",
+      "color": "orange"
+    },
+    "body_template": "**流程 ID**：{{id}}\n**需求**：{{name}}\n**服务**：{{service}}\n**服务端工作分支**：{{work_branch}}\n**iOS 工作分支**：{{ios_work_branch}}\n**交付目录**：{{deliverable}}\n\n端侧影响已判断为需要配合，且当前没有可直接使用的 iOS 工作分支。请选择是否允许自动创建/准备 iOS 预联调分支。",
+    "actions": [
+      {
+        "id": "approve",
+        "label": "✅ 允许预联调",
+        "type": "primary",
+        "action_kind": "interrupt_resume",
+        "resume_action": "approve"
+      },
+      {
+        "id": "skip",
+        "label": "⏭ 跳过预联调",
+        "action_kind": "interrupt_resume",
+        "resume_action": "skip"
+      },
+      {
+        "id": "pause_workflow",
+        "label": "⏸ 暂缓",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "pause_workflow"
+      },
+      {
+        "id": "cancel_workflow",
+        "label": "❌ 取消流程",
+        "type": "danger",
+        "action_kind": "workflow_control",
+        "workflow_control_action": "cancel_workflow"
+      }
+    ],
+    "form": {
+      "name": "preintegration_form",
+      "submit_action": {
+        "id": "approve_with_note",
+        "label": "✏️ 提交说明并允许预联调",
+        "type": "primary",
+        "action_kind": "interrupt_resume",
+        "resume_action": "approve"
+      },
+      "fields": [
+        {
+          "name": "revision_text",
+          "label": "预联调说明",
+          "type": "textarea",
+          "placeholder": "可填写分支命名、改动边界或联调注意事项",
+          "required": false
+        }
+      ]
+    }
+  },
   "dev_examine_confirm": {
     "pattern": "confirm_revise",
     "header": {

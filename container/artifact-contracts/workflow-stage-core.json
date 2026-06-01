@@ -457,6 +457,14 @@
           "coverage",
           "open_questions"
         ],
+        "body_checks": [
+          {
+            "type": "ios_plan_traceability",
+            "code_prefix": "ios_plan_traceability",
+            "severity": "high",
+            "then_status": "needs_revision"
+          }
+        ],
         "max_bytes": 200000
       }
     ]
@@ -503,7 +511,6 @@
         "deliverable",
         "main_branch",
         "work_branch",
-        "ios_work_branch",
         "verdict"
       ],
       "properties": {

@@ -64,7 +64,7 @@ export interface WorkflowArtifactBodyPayloadFieldMatch {
 }
 
 export interface WorkflowArtifactBodyCheck {
-  type: 'ios_acceptance_report';
+  type: 'ios_acceptance_report' | 'ios_plan_traceability';
   code_prefix?: string;
   severity?: WorkflowArtifactFindingSeverity;
   then_status?: WorkflowStageEvaluationStatus;
@@ -385,10 +385,28 @@ function evidenceRefFromValue(value: unknown): string {
 
 function evidenceRefsFromValue(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.map(evidenceRefFromValue).filter(Boolean);
+    return value
+      .flatMap((item) => [
+        evidenceRefFromValue(item),
+        ...evidenceRefsFromValue(
+          item && typeof item === 'object' && !Array.isArray(item)
+            ? (item as Record<string, unknown>).evidence
+            : undefined,
+        ),
+      ])
+      .filter(Boolean);
   }
   const ref = evidenceRefFromValue(value);
   return ref ? [ref] : [];
+}
+
+function textRefsFromValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(textRefsFromValue);
+  }
+  if (typeof value === 'string') return [value.trim()].filter(Boolean);
+  if (!value || typeof value !== 'object') return [];
+  return Object.values(value as Record<string, unknown>).flatMap(textRefsFromValue);
 }
 
 function contentMatchesAnyOf(content: string, patterns: string[]): boolean {
@@ -451,6 +469,15 @@ function evaluateIosAcceptanceReportBody(input: {
   }
 
   const body = input.body as Record<string, unknown>;
+  const evidenceRefs = evidenceRefsFromValue(body.evidence);
+  const evidenceEntries = Array.isArray(body.evidence) ? body.evidence : [];
+  const assertionEvidenceByRef = new Map<string, Record<string, unknown>>();
+  for (const entry of evidenceEntries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const entryRecord = entry as Record<string, unknown>;
+    const ref = evidenceRefFromValue(entryRecord);
+    if (/^ASSERT-/i.test(ref)) assertionEvidenceByRef.set(ref, entryRecord);
+  }
   const summary = body.summary;
   const summaryObject =
     summary && typeof summary === 'object' && !Array.isArray(summary)
@@ -525,8 +552,120 @@ function evaluateIosAcceptanceReportBody(input: {
         `${caseId} is passed but does not cite ASSERT-* evidence`,
       );
     }
+    const passedAssertionRefs = assertionRefs.filter((ref) => /^ASSERT-/i.test(ref));
+    for (const ref of passedAssertionRefs) {
+      const assertion = assertionEvidenceByRef.get(ref);
+      const status =
+        typeof assertion?.status === 'string'
+          ? assertion.status.trim().toLowerCase()
+          : typeof assertion?.result === 'string'
+            ? assertion.result.trim().toLowerCase()
+            : '';
+      if (assertion && status && status !== 'passed') {
+        pushBodyFinding(
+          'passed_case_assertion_not_passed',
+          `${caseId} is passed but cites ${ref} with status ${status}`,
+        );
+      }
+    }
+    const assertionTexts = textRefsFromValue(caseItem.assertions)
+      .concat(
+        passedAssertionRefs.flatMap((ref) =>
+          textRefsFromValue(assertionEvidenceByRef.get(ref)),
+        ),
+      )
+      .concat(evidenceRefs);
+    if (
+      passedAssertionRefs.length > 0 &&
+      !assertionTexts.some((text) => /(UI|app_state|element_|screen|OBS-)/i.test(text))
+    ) {
+      pushBodyFinding(
+        'passed_case_missing_ui_or_app_state_assertion',
+        `${caseId} is passed but does not cite a UI or app_state assertion`,
+      );
+    }
   }
 
+  return findings;
+}
+
+function evaluateIosPlanTraceabilityBody(input: {
+  body: unknown;
+  workflow: Workflow;
+  filePath: string;
+  stageKey: Workflow['status'];
+  codePrefix: string;
+  severity: WorkflowArtifactFindingSeverity;
+}): WorkflowEvalFinding[] {
+  const findings: WorkflowEvalFinding[] = [];
+  const pushBodyFinding = (code: string, message: string): void => {
+    findings.push({
+      code: `${input.codePrefix}.${code}`,
+      severity: input.severity,
+      message,
+      stageKey: input.stageKey,
+      path: input.filePath,
+    });
+  };
+  if (
+    !input.body ||
+    typeof input.body !== 'object' ||
+    Array.isArray(input.body)
+  ) {
+    pushBodyFinding('body_not_object', 'traceability.json body must be an object');
+    return findings;
+  }
+  const deliverable = getWorkflowContextValue(
+    input.workflow,
+    WORKFLOW_CONTEXT_KEYS.deliverable,
+  );
+  if (!deliverable) return findings;
+  const impactPath = path.join(
+    PROJECT_ROOT,
+    'projects',
+    input.workflow.service,
+    'iteration',
+    deliverable,
+    'impact-analysis.json',
+  );
+  if (!fs.existsSync(impactPath)) return findings;
+  let impact: unknown;
+  try {
+    impact = JSON.parse(fs.readFileSync(impactPath, 'utf-8'));
+  } catch {
+    return findings;
+  }
+  const unknownPaths = ['client_impact.required', 'server_impact.required'].filter(
+    (fieldPath) => getValueByPath(impact, fieldPath) === 'unknown',
+  );
+  if (unknownPaths.length === 0) return findings;
+  const body = input.body as Record<string, unknown>;
+  const openQuestions = Array.isArray(body.open_questions)
+    ? body.open_questions
+    : [];
+  const openQuestionText = openQuestions
+    .flatMap(textRefsFromValue)
+    .join('\n')
+    .toLowerCase();
+  for (const unknownPath of unknownPaths) {
+    const normalized = unknownPath.replace('.required', '').toLowerCase();
+    const compact = normalized.replace(/_/g, ' ');
+    if (
+      !openQuestionText.includes(normalized) &&
+      !openQuestionText.includes(compact)
+    ) {
+      pushBodyFinding(
+        'unknown_impact_missing_open_question',
+        `impact-analysis.json ${unknownPath}=unknown must be covered by traceability.json open_questions`,
+      );
+    }
+  }
+  if (openQuestions.length === 0) {
+    pushBodyFinding(
+      'unknown_impact_open_questions_empty',
+      'impact-analysis.json contains unknown impact but traceability.json open_questions is empty',
+    );
+  }
   return findings;
 }
 
@@ -831,22 +970,33 @@ export function evaluateWorkflowArtifactContract(input: {
             }
           }
           for (const check of file.body_checks || []) {
-            if (check.type !== 'ios_acceptance_report') continue;
-            const checkFindings = evaluateIosAcceptanceReportBody({
-              body,
-              filePath: fullPath,
-              stageKey: input.workflow.status,
-              codePrefix:
-                check.code_prefix || 'artifact_contract.ios_acceptance_report',
-              severity: check.severity || 'high',
-            });
+            let checkFindings: WorkflowEvalFinding[] = [];
+            if (check.type === 'ios_acceptance_report') {
+              checkFindings = evaluateIosAcceptanceReportBody({
+                body,
+                filePath: fullPath,
+                stageKey: input.workflow.status,
+                codePrefix:
+                  check.code_prefix || 'artifact_contract.ios_acceptance_report',
+                severity: check.severity || 'high',
+              });
+            } else if (check.type === 'ios_plan_traceability') {
+              checkFindings = evaluateIosPlanTraceabilityBody({
+                body,
+                workflow: input.workflow,
+                filePath: fullPath,
+                stageKey: input.workflow.status,
+                codePrefix:
+                  check.code_prefix || 'artifact_contract.ios_plan_traceability',
+                severity: check.severity || 'high',
+              });
+            }
+            if (checkFindings.length === 0) continue;
             findings.push(...checkFindings);
             for (const finding of checkFindings) {
               semanticFindingCodes.add(finding.code);
             }
-            if (checkFindings.length > 0) {
-              forcedStatuses.push(check.then_status || 'failed');
-            }
+            forcedStatuses.push(check.then_status || 'failed');
           }
         }
       }

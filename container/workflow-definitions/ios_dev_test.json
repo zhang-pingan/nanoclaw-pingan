@@ -548,29 +548,12 @@
               "when": {
                 "client_impact_required": true
               },
-              "target": "ios_preintegration",
-              "delegate": {
-                "role": "ios_preintegration",
-                "skill": "ios-preintegration",
-                "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 预联调代码处理：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n服务端主分支：{{main_branch}}\n服务端工作分支：{{work_branch}}\niOS 工作分支（如已有）：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n\n要求：读取 services.json 的 clients.ios.default_branch；如 ios_work_branch 为空，从 clients.ios.default_branch 创建新的 iOS 工作分支，完成必要的联调代码处理，提交本地变更并返回最终 ios_work_branch。若无法判断或不需要 iOS 改动，明确返回 verdict=pending 或 passed 并说明原因。",
-                "handoff": {
-                  "input_schema": "workflow.ios_preintegration.input.v1",
-                  "output_schema": "ios_dev_test.ios_preintegration.v1",
-                  "artifact_contract_ref": "ios_dev_test.ios_preintegration.v1",
-                  "success_criteria": [
-                    "基于 clients.ios.default_branch 或既有 ios_work_branch 准备 iOS 工作分支",
-                    "完成必要 iOS 预联调代码处理或明确说明无需处理",
-                    "返回 deliverable、main_branch、work_branch、ios_work_branch、verdict、summary、findings、evidence"
-                  ],
-                  "auto_retry": {
-                    "enabled": false,
-                    "max_attempts": 0,
-                    "retryable_failures": []
-                  }
-                }
+              "target": "ios_preintegration_confirm",
+              "card": {
+                "ref": "ios_preintegration_confirm"
               },
               "notify": {
-                "template": "[流程进展] 需求「{{name}}」({{id}}) 需要 iOS 端配合且未提供 iOS 工作分支，已委派 {{role_folder:ios_preintegration}} 进行 iOS 预联调。"
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 需要 iOS 端配合且未提供 iOS 工作分支，请确认是否允许 {{role_folder:ios_preintegration}} 进行 iOS 预联调。"
               }
             },
             {
@@ -589,11 +572,76 @@
             }
           }
         },
+        "ios_preintegration_confirm": {
+          "type": "interrupt",
+          "label": "确认 iOS 预联调",
+          "card": {
+            "ref": "ios_preintegration_confirm"
+          },
+          "kind": "approval",
+          "title": "确认 iOS 预联调",
+          "allowed_actions": ["approve", "skip"],
+          "resume_payload_schema": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "revision_text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "on_resume": {
+            "approve": {
+              "target": "ios_preintegration",
+              "delegate": {
+                "role": "ios_preintegration",
+                "skill": "ios-preintegration",
+                "task_template": "流程类型：{{workflow_type}}\n请执行 iOS 预联调代码处理：\n\n需求名称：{{name}}\n原始需求描述：{{requirement_description}}\n原始附件：\n{{requirement_files}}\n服务名称：{{service}}\n服务端主分支：{{main_branch}}\n服务端工作分支：{{work_branch}}\niOS 工作分支（如已有）：{{ios_work_branch}}\n方案文档：{{plan_doc}}\n产品行为分析：{{product_recon_path}}\n端/服影响分析：{{impact_analysis_path}}\n\n人工确认意见：{{revision_text}}\n\n要求：读取 services.json 的 clients.ios.default_branch；如 ios_work_branch 为空，从 clients.ios.default_branch 创建新的 iOS 工作分支，完成必要的联调代码处理，提交本地变更并返回最终 ios_work_branch。若无法创建或确认 iOS 分支，返回 verdict=pending 并说明阻塞原因，不要伪造 ios_work_branch。",
+                "handoff": {
+                  "input_schema": "workflow.ios_preintegration.input.v1",
+                  "output_schema": "ios_dev_test.ios_preintegration.v1",
+                  "artifact_contract_ref": "ios_dev_test.ios_preintegration.v1",
+                  "success_criteria": [
+                    "基于 clients.ios.default_branch 或既有 ios_work_branch 准备 iOS 工作分支",
+                    "完成必要 iOS 预联调代码处理或明确说明无需处理",
+                    "返回 deliverable、main_branch、work_branch、ios_work_branch、verdict、summary、findings、evidence"
+                  ],
+                  "auto_retry": {
+                    "enabled": false,
+                    "max_attempts": 0,
+                    "retryable_failures": []
+                  }
+                }
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认允许 iOS 预联调，已委派 {{role_folder:ios_preintegration}} 处理。"
+              }
+            },
+            "skip": {
+              "target": "backend_dev",
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) 已确认跳过自动 iOS 预联调，进入服务端开发；iOS 配合事项将作为联调依赖记录。"
+              }
+            }
+          },
+          "allowed_channels": ["web", "feishu", "assistant"]
+        },
         "ios_preintegration": {
           "type": "delegation",
           "label": "iOS 预联调",
           "evaluator": {
-            "ref": "ios_dev_test.ios_preintegration.v1"
+            "ref": "ios_dev_test.ios_preintegration.v1",
+            "on_pending": {
+              "target": "ios_preintegration_confirm",
+              "card": {
+                "ref": "ios_preintegration_confirm"
+              },
+              "notify": {
+                "template": "[流程进展] 需求「{{name}}」({{id}}) iOS 预联调阻塞，请确认重试预联调或跳过进入服务端开发。"
+              }
+            }
           },
           "delegate": {
             "role": "ios_preintegration",
@@ -623,9 +671,12 @@
               }
             },
             "failure": {
-              "target": "ios_preintegration",
+              "target": "ios_preintegration_confirm",
+              "card": {
+                "ref": "ios_preintegration_confirm"
+              },
               "notify": {
-                "template": "[流程异常] 需求「{{name}}」({{id}}) iOS 预联调失败或阻塞，请检查。"
+                "template": "[流程异常] 需求「{{name}}」({{id}}) iOS 预联调失败或阻塞，请确认重试预联调或跳过进入服务端开发。"
               }
             }
           }
@@ -1389,6 +1440,7 @@
         "plan_examine": "🧭 方案审核中",
         "plan_examine_confirm": "📋 方案复核审批",
         "ios_preintegration_router": "🧭 iOS 预联调判断中",
+        "ios_preintegration_confirm": "📋 确认 iOS 预联调",
         "ios_preintegration": "🛠 iOS 预联调中",
         "backend_dev": "🔧 服务端开发中",
         "dev_examine": "🧾 开发复核中",

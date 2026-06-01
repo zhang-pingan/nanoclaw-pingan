@@ -2573,6 +2573,9 @@ describe('workflow metadata and branch flow', () => {
     expect(iosDevTest?.states.ios_preintegration.evaluator?.ref).toBe(
       'ios_dev_test.ios_preintegration.v1',
     );
+    expect(iosDevTest?.states.ios_preintegration_confirm.type).toBe(
+      'interrupt',
+    );
     expect(iosDevTest?.states.centralized_test.artifact_contract?.ref).toBe(
       'ios_dev_test.testing.v1',
     );
@@ -2743,7 +2746,7 @@ describe('workflow metadata and branch flow', () => {
     );
   });
 
-  it('routes to iOS preintegration when client impact is required and no iOS branch exists', () => {
+  it('requires approval before iOS preintegration when client impact is required and no iOS branch exists', () => {
     writeDoc(
       DELIVERABLE,
       'product-recon.json',
@@ -2798,14 +2801,93 @@ describe('workflow metadata and branch flow', () => {
 
     expect(result.error).toBeUndefined();
     const workflow = getWorkflow(result.workflowId);
-    expect(workflow?.status).toBe('ios_preintegration');
+    expect(workflow?.status).toBe('ios_preintegration_confirm');
     expect(workflow?.context.client_impact_required).toBe(true);
+    expect(
+      getPendingWorkflowInterruptForState(
+        result.workflowId,
+        'ios_preintegration_confirm',
+      ),
+    ).toBeDefined();
+    expect(
+      getDelegationsByWorkflow(result.workflowId).some(
+        (item) => item.target_folder === 'web_ios_preintegration',
+      ),
+    ).toBe(false);
+
+    resumePendingInterruptForTest(
+      result.workflowId,
+      'ios_preintegration_confirm',
+      'approve',
+    );
+    const workflowAfterApproval = getWorkflow(result.workflowId);
+    expect(workflowAfterApproval?.status).toBe('ios_preintegration');
     const delegations = getDelegationsByWorkflow(result.workflowId);
     const preintegration = delegations.find(
       (item) => item.target_folder === 'web_ios_preintegration',
     );
     expect(preintegration?.handoff_skill).toBe('ios-preintegration');
     expect(preintegration?.task).toContain('clients.ios.default_branch');
+  });
+
+  it('returns blocked iOS preintegration to approval instead of self-looping', () => {
+    const result = createNewWorkflow({
+      title: 'Preintegration blocked',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'ios_dev_test',
+      requirementDescription: 'preintegration should return to approval',
+      context: {
+        deliverable: DELIVERABLE,
+      },
+    });
+    expect(result.error).toBeUndefined();
+    updateWorkflow(result.workflowId, {
+      status: 'ios_preintegration',
+      context: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        client_impact_required: true,
+      },
+    });
+    createDelegation({
+      id: 'del-ios-preintegration-blocked',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'ios-preintegration@g.us',
+      target_folder: 'web_ios_preintegration',
+      requester_jid: null,
+      workflow_id: result.workflowId,
+      task: 'preintegration blocked',
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        verdict: 'pending',
+        summary: 'iOS default branch missing.',
+      }),
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    updateWorkflow(result.workflowId, {
+      current_delegation_id: 'del-ios-preintegration-blocked',
+    });
+
+    onDelegationComplete('del-ios-preintegration-blocked');
+
+    const workflow = getWorkflow(result.workflowId);
+    expect(workflow?.status).toBe('ios_preintegration_confirm');
+    expect(
+      getPendingWorkflowInterruptForState(
+        result.workflowId,
+        'ios_preintegration_confirm',
+      ),
+    ).toBeDefined();
   });
 
   it('skips iOS preintegration when an iOS work branch is supplied', () => {
