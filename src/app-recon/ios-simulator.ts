@@ -1,6 +1,8 @@
 import { execFile, spawn } from 'child_process';
 import { AsyncLocalStorage } from 'async_hooks';
+import crypto from 'crypto';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
@@ -229,12 +231,39 @@ export async function bootSimulator(udid: string): Promise<void> {
   }
 }
 
+function resolveHomePath(value: string): string {
+  const home = process.env.HOME || os.homedir();
+  return path.resolve(value.replace(/^~(?=$|\/)/, home));
+}
+
+export function resolveIosDerivedDataPath(repoPath: string): string {
+  const configuredRoot = process.env.ICARUS_IOS_DERIVED_DATA_DIR?.trim();
+  const root = configuredRoot
+    ? resolveHomePath(configuredRoot)
+    : path.join(
+        process.env.HOME || os.homedir(),
+        '.cache',
+        'icarus',
+        'ios-derived-data',
+      );
+  const resolvedRepo = path.resolve(repoPath);
+  const repoName =
+    path.basename(resolvedRepo).replace(/[^A-Za-z0-9_.-]/g, '_') || 'ios-repo';
+  const repoHash = crypto
+    .createHash('sha256')
+    .update(resolvedRepo)
+    .digest('hex')
+    .slice(0, 12);
+  return path.join(root, `${repoName}-${repoHash}`);
+}
+
 function buildOutputPath(repoPath: string, config: IosClientConfig): string {
-  const derivedData = path.join(repoPath, 'DerivedData', 'Icarus');
+  const derivedData = resolveIosDerivedDataPath(repoPath);
   const configuration = config.configuration || 'Debug';
-  const appName = config.scheme.endsWith('.app')
-    ? config.scheme
-    : `${config.scheme}.app`;
+  const configuredAppName = config.app_name || config.scheme;
+  const appName = configuredAppName.endsWith('.app')
+    ? configuredAppName
+    : `${configuredAppName}.app`;
   return path.join(
     derivedData,
     'Build',
@@ -244,12 +273,29 @@ function buildOutputPath(repoPath: string, config: IosClientConfig): string {
   );
 }
 
+function findBuiltAppPath(repoPath: string, config: IosClientConfig): string {
+  const expected = buildOutputPath(repoPath, config);
+  if (fs.existsSync(expected)) return expected;
+
+  const productsDir = path.dirname(expected);
+  if (!fs.existsSync(productsDir)) return expected;
+
+  const appPaths = fs
+    .readdirSync(productsDir)
+    .filter((entry) => entry.endsWith('.app'))
+    .map((entry) => path.join(productsDir, entry))
+    .filter((entry) => fs.statSync(entry).isDirectory());
+
+  if (appPaths.length === 1) return appPaths[0];
+  return expected;
+}
+
 export async function buildIosApp(
   repoPath: string,
   config: IosClientConfig,
   simulatorName: string,
 ): Promise<{ appPath: string; command: CommandResult }> {
-  const derivedData = path.join(repoPath, 'DerivedData', 'Icarus');
+  const derivedData = resolveIosDerivedDataPath(repoPath);
   const args = [
     ...(config.workspace ? ['-workspace', config.workspace] : []),
     ...(config.project ? ['-project', config.project] : []),
@@ -271,7 +317,7 @@ export async function buildIosApp(
   if (result.exit_code !== 0) {
     throw new Error(`xcodebuild failed: ${result.stderr || result.stdout}`);
   }
-  const appPath = buildOutputPath(repoPath, config);
+  const appPath = findBuiltAppPath(repoPath, config);
   if (!fs.existsSync(appPath)) {
     throw new Error(`xcodebuild succeeded but app was not found at ${appPath}`);
   }

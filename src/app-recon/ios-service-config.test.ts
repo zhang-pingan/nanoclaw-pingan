@@ -72,4 +72,52 @@ describe('resolveIosServiceConfig', () => {
       }),
     ).toThrow('safe relative path');
   });
+
+  it('normalizes app_name when provided', async () => {
+    const reposDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-ios-repos-'));
+    tempDirs.push(reposDir);
+    fs.mkdirSync(path.join(reposDir, 'catstory-ios'), { recursive: true });
+    const { resolveIosServiceConfig } = await loadModuleWithReposDir(reposDir);
+
+    const resolved = resolveIosServiceConfig('catstory', {
+      registry: {
+        catstory: {
+          clients: {
+            ios: {
+              repo_path: 'catstory-ios',
+              scheme: 'cn',
+              bundle_id: 'net.maoli.history.cn',
+              app_name: ' Runner-CN.app ',
+            },
+          },
+        },
+      },
+    });
+
+    expect(resolved.ios.app_name).toBe('Runner-CN.app');
+  });
+
+  it('rejects unsafe app_name values', async () => {
+    const reposDir = fs.mkdtempSync(path.join(os.tmpdir(), 'icarus-ios-repos-'));
+    tempDirs.push(reposDir);
+    fs.mkdirSync(path.join(reposDir, 'catstory-ios'), { recursive: true });
+    const { resolveIosServiceConfig } = await loadModuleWithReposDir(reposDir);
+
+    expect(() =>
+      resolveIosServiceConfig('catstory', {
+        registry: {
+          catstory: {
+            clients: {
+              ios: {
+                repo_path: 'catstory-ios',
+                scheme: 'cn',
+                bundle_id: 'net.maoli.history.cn',
+                app_name: '../Runner-CN.app',
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow('app bundle name');
+  });
 });

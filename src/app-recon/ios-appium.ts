@@ -24,8 +24,32 @@ interface AppiumSessionResponse {
   sessionId?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function appiumUrl(options: AppiumClientOptions): string {
   return (options.serverUrl || DEFAULT_APPIUM_URL).replace(/\/+$/, '');
+}
+
+function sessionAutomation(session: IosSessionRecord): Record<string, unknown> {
+  const automation = session.config.automation;
+  return isRecord(automation) ? automation : {};
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (typeof child === 'string') out[key] = child;
+  }
+  return out;
 }
 
 function formatAppiumError(err: unknown): string {
@@ -47,6 +71,9 @@ export async function ensureAppiumSession(
   session: IosSessionRecord,
   options: AppiumClientOptions = {},
 ): Promise<string> {
+  const automation = sessionAutomation(session);
+  const launchArgs = stringArray(automation.launch_args);
+  const launchEnv = stringRecord(automation.launch_env);
   const payload = {
     capabilities: {
       alwaysMatch: {
@@ -56,6 +83,11 @@ export async function ensureAppiumSession(
         'appium:bundleId': session.bundle_id,
         'appium:noReset': true,
         'appium:newCommandTimeout': 300,
+        ...(launchArgs.length > 0
+          ? { 'appium:processArguments': { args: launchArgs, env: launchEnv } }
+          : Object.keys(launchEnv).length > 0
+            ? { 'appium:processArguments': { env: launchEnv } }
+            : {}),
       },
       firstMatch: [{}],
     },

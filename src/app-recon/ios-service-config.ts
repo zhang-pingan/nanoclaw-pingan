@@ -60,15 +60,25 @@ function normalizeIosClientConfig(value: unknown): IosClientConfig {
   const scheme = typeof value.scheme === 'string' ? value.scheme.trim() : '';
   const bundleId =
     typeof value.bundle_id === 'string' ? value.bundle_id.trim() : '';
+  const appName = typeof value.app_name === 'string' ? value.app_name.trim() : '';
   if (!repoPath) throw new Error('clients.ios.repo_path is required');
   if (!scheme) throw new Error('clients.ios.scheme is required');
   if (!bundleId) throw new Error('clients.ios.bundle_id is required');
+  if (appName && !/^[A-Za-z0-9_. -]+(?:\.app)?$/.test(appName)) {
+    throw new Error('clients.ios.app_name must be an app bundle name');
+  }
 
   if (value.automation !== undefined && !isRecord(value.automation)) {
     throw new Error('clients.ios.automation must be an object when provided');
   }
 
-  return value as unknown as IosClientConfig;
+  return {
+    ...value,
+    repo_path: repoPath,
+    scheme,
+    bundle_id: bundleId,
+    ...(appName ? { app_name: appName } : {}),
+  } as unknown as IosClientConfig;
 }
 
 export function resolveIosServiceConfig(

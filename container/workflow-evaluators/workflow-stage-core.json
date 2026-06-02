@@ -373,13 +373,13 @@
         "failure_breakdown",
         "coverage",
         "evidence",
-        "ios_acceptance_consumed"
+        "backend_integration_scope"
       ]
     },
     "ai": {
       "enabled": true,
       "model": "default",
-      "rubric": "Judge whether centralized testing covers backend APIs, DB, logs, exception boundaries, and consumes iOS acceptance results without duplicating pure UI steps. Preserve failed verdicts when bugs or failed cases are present.",
+      "rubric": "Judge whether backend integration testing verifies the staging service before iOS acceptance, including backend APIs, DB effects, logs, exception boundaries, auth/token behavior, compatibility, and core regression scope. Treat pure UI-only testing as insufficient. Preserve failed verdicts when bugs or failed cases are present.",
       "max_context_bytes": 18000
     },
     "status_mapping": {

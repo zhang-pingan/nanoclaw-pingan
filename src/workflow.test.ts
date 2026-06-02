@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   _initTestDatabase,
@@ -46,6 +46,24 @@ import type { WorkflowDefinition } from './workflow-definition.js';
 import { validateWorkflowDefinition } from './workflow-compiler.js';
 import { getWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
+
+vi.mock('./host-script-runner.js', async () => {
+  const actual =
+    await vi.importActual<typeof import('./host-script-runner.js')>(
+      './host-script-runner.js',
+    );
+  return {
+    ...actual,
+    runLocalHostScriptSync: vi.fn((scriptPath: string) => ({
+      status: 'success',
+      exitCode: 0,
+      stdout: `mocked workflow script: ${scriptPath}\n`,
+      stderr: '',
+      durationMs: 1,
+      scriptPath,
+    })),
+  };
+});
 
 const GROUPS: Array<[string, RegisteredGroup]> = [
   [
@@ -2554,6 +2572,26 @@ describe('workflow metadata and branch flow', () => {
     expect(iosDevTest?.states.ios_recon.artifact_contract?.ref).toBe(
       'ios_dev_test.ios_recon.v1',
     );
+    expect(iosDevTest?.states.ios_recon.before_delegate?.steps).toEqual([
+      expect.objectContaining({
+        id: 'ios_mcp_enter_catstory_cn',
+        uses: 'script.run_local',
+        with: expect.objectContaining({
+          script_path:
+            '/workspace/project/local/shell/ios-mcp/enter-catstory-cn.sh',
+        }),
+      }),
+    ]);
+    expect(iosDevTest?.states.ios_recon.after_complete?.steps).toEqual([
+      expect.objectContaining({
+        id: 'ios_mcp_exit_catstory_cn',
+        uses: 'script.run_local',
+        with: expect.objectContaining({
+          script_path:
+            '/workspace/project/local/shell/ios-mcp/exit-catstory-cn.sh',
+        }),
+      }),
+    ]);
     expect(iosDevTest?.states.plan.artifact_contract?.ref).toBe(
       'ios_dev_test.plan.v1',
     );
@@ -2563,6 +2601,26 @@ describe('workflow metadata and branch flow', () => {
     expect(iosDevTest?.states.ios_acceptance.artifact_contract?.ref).toBe(
       'ios_dev_test.ios_acceptance.v1',
     );
+    expect(iosDevTest?.states.ios_acceptance.before_delegate?.steps).toEqual([
+      expect.objectContaining({
+        id: 'ios_mcp_enter_catstory_cn',
+        uses: 'script.run_local',
+        with: expect.objectContaining({
+          script_path:
+            '/workspace/project/local/shell/ios-mcp/enter-catstory-cn.sh',
+        }),
+      }),
+    ]);
+    expect(iosDevTest?.states.ios_acceptance.after_complete?.steps).toEqual([
+      expect.objectContaining({
+        id: 'ios_mcp_exit_catstory_cn',
+        uses: 'script.run_local',
+        with: expect.objectContaining({
+          script_path:
+            '/workspace/project/local/shell/ios-mcp/exit-catstory-cn.sh',
+        }),
+      }),
+    ]);
     expect(iosDevTest?.states.ios_preintegration.evaluator?.ref).toBe(
       'ios_dev_test.ios_preintegration.v1',
     );
@@ -2570,7 +2628,24 @@ describe('workflow metadata and branch flow', () => {
       'interrupt',
     );
     expect(iosDevTest?.states.test_strategy_router.type).toBe('system');
-    expect(iosDevTest?.states.centralized_test.artifact_contract?.ref).toBe(
+    expect(
+      iosDevTest?.states.backend_integration_test.artifact_contract?.ref,
+    ).toBe('ios_dev_test.testing.v1');
+    expect(
+      iosDevTest?.states.backend_integration_test.on_complete?.success.target,
+    ).toBe('ios_acceptance');
+    expect(iosDevTest?.states.ios_acceptance.on_complete?.success.target).toBe(
+      'passed',
+    );
+    expect(
+      iosDevTest?.states.backend_integration_test.context_requirements?.sources,
+    ).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'ios_acceptance_artifacts' }),
+      ]),
+    );
+    expect(iosDevTest?.states.centralized_test).toBeUndefined();
+    expect(iosDevTest?.states.backend_integration_test.evaluator?.ref).toBe(
       'ios_dev_test.testing.v1',
     );
     expect(
@@ -2971,7 +3046,100 @@ describe('workflow metadata and branch flow', () => {
     }
   });
 
-  it('routes iOS-only test strategy directly to passed after acceptance', () => {
+  it('runs backend integration before iOS acceptance by default', () => {
+    writeDoc(
+      DELIVERABLE,
+      'test.md',
+      `---\nservice: ${TEST_SERVICE}\ndeliverable: ${DELIVERABLE}\ndoc_type: test\n---\n\n# Backend integration test\n`,
+    );
+    const result = createNewWorkflow({
+      title: 'Backend first strategy',
+      service: TEST_SERVICE,
+      sourceJid: 'main@g.us',
+      startFrom: 'plan',
+      workflowType: 'ios_dev_test',
+      requirementDescription: 'run backend integration before iOS acceptance',
+      context: {
+        deliverable: DELIVERABLE,
+        test_strategy: 'hybrid',
+      },
+    });
+    expect(result.error).toBeUndefined();
+    updateWorkflow(result.workflowId, {
+      status: 'backend_integration_test',
+      context: {
+        deliverable: DELIVERABLE,
+        main_branch: 'main',
+        work_branch: 'feature/ios',
+        test_strategy: 'hybrid',
+      },
+    });
+    writeTraceability(
+      DELIVERABLE,
+      buildTraceability({
+        evidence: [
+          {
+            refId: 'EVID-ART-001',
+            type: 'artifact',
+            path: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/test.md`,
+            summary: '服务端集成测试文档已写入交付目录',
+          },
+        ],
+        coverage: [
+          {
+            source_id: 'INPUT-001',
+            covered_by: ['DEC-001', 'ACT-001', 'CHECK-001'],
+            evidence: ['EVID-ART-001'],
+          },
+        ],
+      }),
+    );
+    createDelegation({
+      id: 'del-ios-backend-integration-pass',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'test@g.us',
+      target_folder: 'web_test',
+      requester_jid: null,
+      workflow_id: result.workflowId,
+      task: 'backend integration passed',
+      status: 'completed',
+      outcome: 'success',
+      result: buildStructuredResult({
+        service: TEST_SERVICE,
+        deliverable: DELIVERABLE,
+        test_doc: `/workspace/projects/${TEST_SERVICE}/iteration/${DELIVERABLE}/test.md`,
+        total: 1,
+        passed: 1,
+        failed: 0,
+        blocked: 0,
+      }),
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    updateWorkflow(result.workflowId, {
+      current_delegation_id: 'del-ios-backend-integration-pass',
+    });
+
+    onDelegationComplete('del-ios-backend-integration-pass');
+
+    expect(getWorkflow(result.workflowId)?.status).toBe('ios_acceptance');
+    const delegations = getDelegationsByWorkflow(result.workflowId);
+    const acceptance = delegations.find(
+      (item) => item.target_folder === 'web_ios_acceptance',
+    );
+    expect(acceptance?.handoff_skill).toBe('ios-acceptance-test');
+    expect(acceptance?.task).toContain('服务端集成测试文档');
+  });
+
+  it('routes iOS-only test strategy directly to iOS acceptance before passing', () => {
+    const config = getWorkflowTypeConfig('ios_dev_test')!;
+    const iosOnlyRoute = config.states.test_strategy_router.routes?.find(
+      (route) => route.when?.test_strategy === 'ios_only',
+    );
+    expect(iosOnlyRoute?.target).toBe('ios_acceptance');
+    expect(iosOnlyRoute?.delegate?.role).toBe('ios_acceptance');
+
     writeDoc(
       DELIVERABLE,
       'ios-test-plan.json',
@@ -3045,7 +3213,7 @@ describe('workflow metadata and branch flow', () => {
       sourceJid: 'main@g.us',
       startFrom: 'plan',
       workflowType: 'ios_dev_test',
-      requirementDescription: 'skip centralized test after iOS acceptance',
+      requirementDescription: 'skip backend integration before iOS acceptance',
       context: {
         deliverable: DELIVERABLE,
         test_strategy: 'ios_only',

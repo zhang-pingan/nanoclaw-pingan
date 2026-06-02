@@ -6,14 +6,15 @@
     "testToken": "",
     "clients": {
       "ios": {
-        "repo_path": "catstory-ios",
-        "git_url": "git@tx.git.chelaile.net.cn:client/catstory-ios.git",
+        "repo_path": "catapp",
+        "git_url": "git@git.chelaile.net.cn:3322/oversea/catstory.git",
         "default_branch": "master",
-        "workspace": "Catstory.xcworkspace",
-        "scheme": "CatstoryDebug",
-        "bundle_id": "com.example.catstory",
-        "simulator": "iPhone 16",
-        "configuration": "Debug",
+        "workspace": "ios/Runner.xcworkspace",
+        "scheme": "cn",
+        "bundle_id": "net.maoli.history.cn",
+        "app_name": "Runner-CN",
+        "simulator": "iPhone 17",
+        "configuration": "Debug-CN",
         "automation": {
           "driver": "appium",
           "appium_server_url": "http://127.0.0.1:4723",

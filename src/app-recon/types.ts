@@ -82,6 +82,7 @@ export interface IosClientConfig {
   project?: string;
   scheme: string;
   bundle_id: string;
+  app_name?: string;
   simulator?: string;
   configuration?: string;
   mount_to_container?: boolean;

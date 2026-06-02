@@ -833,7 +833,7 @@
   {
     "id": "ios_dev_test.testing.v1",
     "version": 1,
-    "description": "Centralized testing stage must return a structured test result and test document reference.",
+    "description": "Backend integration testing stage must return a structured test result and test document reference before iOS acceptance.",
     "payload": {
       "required": [
         "deliverable",
