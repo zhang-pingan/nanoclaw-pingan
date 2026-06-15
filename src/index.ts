@@ -17,6 +17,11 @@ import {
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   IDLE_TIMEOUT,
+  ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS,
+  ICARUS_INTERNAL_API_HOST,
+  ICARUS_INTERNAL_API_MAX_BODY_BYTES,
+  ICARUS_INTERNAL_API_PORT,
+  ICARUS_INTERNAL_API_TOKEN,
   MYSQL_PROXY_PORT,
   POLL_INTERVAL,
   TIMEZONE,
@@ -44,6 +49,7 @@ import {
   PROXY_BIND_HOST,
 } from './container-runtime.js';
 import { agentQueryTraceManager } from './agent-query-trace.js';
+import { queryPatchFromTraceEvent } from './agent-query-trace-utils.js';
 import { ASSISTANT_MAIN_JID } from './assistant/assistant-channel-bridge.js';
 import type { AssistantAgentPurpose } from './assistant/assistant-auto-flow.js';
 import type { AgentInboxItemView } from './assistant/types.js';
@@ -136,6 +142,8 @@ import {
 } from './model-resolution.js';
 import { selectModel } from './model-selector.js';
 import { getWorkflowTypeConfig } from './workflow-config.js';
+import { InternalAgentRunOnceService } from './internal-agent-run-once/service.js';
+import { startInternalAgentRunOnceServer } from './internal-agent-run-once/server.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -284,7 +292,7 @@ function oneShotAgentSlotTimeoutFailure(
   };
 }
 
-function addOneShotTraceContext(
+export function addOneShotTraceContext(
   chatJid: string,
   context: OneShotTraceContext,
 ): void {
@@ -293,7 +301,10 @@ function addOneShotTraceContext(
   oneShotTraceContexts.set(chatJid, contexts);
 }
 
-function removeOneShotTraceContext(chatJid: string, queryId: string): void {
+export function removeOneShotTraceContext(
+  chatJid: string,
+  queryId: string,
+): void {
   const contexts = oneShotTraceContexts.get(chatJid);
   if (!contexts) return;
   const remaining = contexts.filter((context) => context.queryId !== queryId);
@@ -328,11 +339,7 @@ function handleOneShotSlotTraceEvent(event: OneShotAgentSlotEvent): void {
           : isAcquired
             ? 'queue_dequeued'
             : 'queue_entered',
-        status: isTimeout
-          ? 'error'
-          : isAcquired
-              ? 'success'
-              : 'running',
+        status: isTimeout ? 'error' : isAcquired ? 'success' : 'running',
         severity: isTimeout ? 'error' : 'info',
         summary: isTimeout
           ? `Agent busy timeout for ${event.groupJid}`
@@ -535,66 +542,6 @@ function isNaturalConfirmationText(text: string): boolean {
   );
 }
 
-function numberFromPayload(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function queryPatchFromTraceEvent(
-  event: NonNullable<ContainerOutput['event']>,
-): Partial<AgentQueryRecord> {
-  const payload = event.payload || {};
-  const category =
-    typeof payload.category === 'string' ? payload.category : event.type;
-  const traceSource =
-    typeof payload.traceSource === 'string' ? payload.traceSource : undefined;
-  const patch: Partial<AgentQueryRecord> = {};
-
-  if (category === 'container') {
-    if (typeof payload.containerName === 'string') {
-      patch.container_name = payload.containerName;
-    }
-    if (typeof payload.runtime === 'string') {
-      patch.container_runtime = payload.runtime;
-    }
-    const exitCode = numberFromPayload(payload.exitCode);
-    if (exitCode !== undefined) patch.container_exit_code = exitCode;
-    const timeoutMs = numberFromPayload(payload.timeoutMs);
-    if (timeoutMs !== undefined) patch.container_timeout_ms = timeoutMs;
-    if (typeof payload.terminatedReason === 'string') {
-      patch.container_terminated_reason = payload.terminatedReason;
-    }
-  }
-
-  if (category === 'model') {
-    const isProxyConfirmedModel =
-      traceSource === 'credential_proxy' &&
-      (event.name === 'model_resolution' ||
-        event.name === 'model_response_completed');
-    if (
-      typeof payload.actualModel === 'string' &&
-      isProxyConfirmedModel
-    ) {
-      patch.actual_model = payload.actualModel;
-    }
-    const inputTokens = numberFromPayload(payload.inputTokens);
-    if (inputTokens !== undefined) patch.input_tokens = inputTokens;
-    const outputTokens = numberFromPayload(payload.outputTokens);
-    if (outputTokens !== undefined) patch.output_tokens = outputTokens;
-    const cacheReadTokens = numberFromPayload(payload.cacheReadTokens);
-    if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
-    const cacheWriteTokens = numberFromPayload(payload.cacheWriteTokens);
-    if (cacheWriteTokens !== undefined) {
-      patch.cache_write_tokens = cacheWriteTokens;
-    }
-  }
-
-  if (category === 'evaluation' && typeof payload.status === 'string') {
-    patch.artifact_contract_status = payload.status;
-  }
-
-  return patch;
-}
-
 function createMessageQueryTrace(params: {
   queryId: string;
   runId: string;
@@ -625,8 +572,8 @@ function createMessageQueryTrace(params: {
     sourceType,
     sourceRefId:
       sourceType === 'workflow_delegation'
-        ? params.delegationId ?? null
-        : params.sourceRefId ?? null,
+        ? (params.delegationId ?? null)
+        : (params.sourceRefId ?? null),
     chatJid: params.chatJid,
     groupFolder: params.groupFolder,
     workflowType: params.workflowType,
@@ -2883,12 +2830,29 @@ async function main(): Promise<void> {
     MYSQL_PROXY_PORT,
     PROXY_BIND_HOST,
   );
+  const internalRunOnceService = new InternalAgentRunOnceService({
+    registeredGroups: () => registeredGroups,
+    queue,
+    addOneShotTraceContext,
+    removeOneShotTraceContext,
+    onProcess: (groupJid, proc, containerName, groupFolder) =>
+      queue.registerProcess(groupJid, proc, containerName, groupFolder),
+    maxInputChars: ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS,
+  });
+  const internalRunOnceServer = startInternalAgentRunOnceServer({
+    host: ICARUS_INTERNAL_API_HOST,
+    port: ICARUS_INTERNAL_API_PORT,
+    token: ICARUS_INTERNAL_API_TOKEN,
+    maxBodyBytes: ICARUS_INTERNAL_API_MAX_BODY_BYTES,
+    service: internalRunOnceService,
+  });
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
     mysqlProxyServer.close();
+    internalRunOnceServer?.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);

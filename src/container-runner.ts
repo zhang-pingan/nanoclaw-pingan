@@ -69,12 +69,14 @@ const OUTPUT_END_MARKER = '---ICARUS_OUTPUT_END---';
 
 export interface ContainerInput {
   prompt: string;
+  system?: string;
   sessionId?: string;
   selectedModel?: string;
   runId?: string;
   queryId?: string;
   requireResult?: boolean;
   isolatedSession?: boolean;
+  executionMode?: 'external_system_once';
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -157,7 +159,10 @@ function makeMissingRequiredResultOutput(): ContainerOutput {
   );
 }
 
-function sanitizeTracePreview(value: string, maxChars = TRACE_PREVIEW_MAX_CHARS): string {
+function sanitizeTracePreview(
+  value: string,
+  maxChars = TRACE_PREVIEW_MAX_CHARS,
+): string {
   const limit = Number.isFinite(maxChars) && maxChars > 0 ? maxChars : 2000;
   return value
     .slice(0, limit)
@@ -165,10 +170,16 @@ function sanitizeTracePreview(value: string, maxChars = TRACE_PREVIEW_MAX_CHARS)
     .replace(/(x-api-key\s*:\s*)[^\s]+/gi, '$1[redacted]')
     .replace(/(password\s*=\s*)[^\s]+/gi, '$1[redacted]')
     .replace(/(token\s*=\s*)[^\s]+/gi, '$1[redacted]')
-    .replace(/CLAUDE_CODE_OAUTH_TOKEN=[^\s]+/g, 'CLAUDE_CODE_OAUTH_TOKEN=[redacted]')
+    .replace(
+      /CLAUDE_CODE_OAUTH_TOKEN=[^\s]+/g,
+      'CLAUDE_CODE_OAUTH_TOKEN=[redacted]',
+    )
     .replace(/ANTHROPIC_API_KEY=[^\s]+/g, 'ANTHROPIC_API_KEY=[redacted]')
     .replace(/JENKINS_PASSWORD=[^\s]+/g, 'JENKINS_PASSWORD=[redacted]')
-    .replace(/-----BEGIN PRIVATE KEY-----[\s\S]*?-----END PRIVATE KEY-----/g, '[redacted private key]');
+    .replace(
+      /-----BEGIN PRIVATE KEY-----[\s\S]*?-----END PRIVATE KEY-----/g,
+      '[redacted private key]',
+    );
 }
 
 function summarizeMounts(mounts: VolumeMount[]): string[] {
@@ -348,17 +359,22 @@ function emitTraceEvent(
   try {
     emit(event);
   } catch (err) {
-    logger.warn({ err, eventName: event.name }, 'Container trace event skipped');
+    logger.warn(
+      { err, eventName: event.name },
+      'Container trace event skipped',
+    );
   }
 }
 
 function buildVolumeMounts(
   group: RegisteredGroup,
   isMain: boolean,
+  opts: { externalSystemOnce?: boolean } = {},
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
   const groupDir = resolveGroupFolderPath(group.folder);
+  const isExternalSystemOnce = opts.externalSystemOnce === true;
 
   if (isMain) {
     // Main gets the project root read-only. Writable paths the agent needs
@@ -427,12 +443,9 @@ function buildVolumeMounts(
 
   // Per-group Claude sessions directory (isolated from other groups)
   // Each group gets their own .claude/ to prevent cross-group session access
-  const groupSessionsDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    '.claude',
-  );
+  const groupSessionsDir = isExternalSystemOnce
+    ? path.join(DATA_DIR, 'run-once-sessions', group.folder, '.claude')
+    : path.join(DATA_DIR, 'sessions', group.folder, '.claude');
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   if (!fs.existsSync(settingsFile)) {
@@ -446,10 +459,12 @@ function buildVolumeMounts(
             CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
             // Load CLAUDE.md from additional mounted directories
             // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: isExternalSystemOnce
+              ? '0'
+              : '1',
             // Enable Claude's memory feature (persists user preferences between sessions)
             // https://code.claude.com/docs/en/memory#manage-auto-memory
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
+            CLAUDE_CODE_DISABLE_AUTO_MEMORY: isExternalSystemOnce ? '1' : '0',
           },
         },
         null,
@@ -463,7 +478,7 @@ function buildVolumeMounts(
   //   "global" → all groups, "{folder}" → only that group
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
   const skillsDst = path.join(groupSessionsDir, 'skills');
-  if (fs.existsSync(skillsSrc)) {
+  if (!isExternalSystemOnce && fs.existsSync(skillsSrc)) {
     const skillsConfigPath = path.join(skillsSrc, 'skills.json');
     let allowedSkills: Set<string> | null = null; // null = copy all (fallback)
     if (fs.existsSync(skillsConfigPath)) {
@@ -769,25 +784,30 @@ export async function runContainerAgent(
   const groupDir = resolveGroupFolderPath(group.folder);
   fs.mkdirSync(groupDir, { recursive: true });
 
-  const mounts = buildVolumeMounts(group, input.isMain);
+  const mounts = buildVolumeMounts(group, input.isMain, {
+    externalSystemOnce: input.executionMode === 'external_system_once',
+  });
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `icarus-${safeName}-${Date.now()}`;
   const containerArgs = buildContainerArgs(mounts, containerName);
-  const emitContainerTraceEvent: TraceEventWriter | undefined = onOutput
-    && input.queryId
-    ? (event) =>
-        onOutput({
-          status: 'success',
-          result: null,
-          newSessionId: undefined,
-          selectedModel: input.selectedModel,
-          runId: input.runId,
-          queryId: input.queryId,
-          event,
-        }).catch((err) => {
-          logger.warn({ err, eventName: event.name }, 'Container trace event failed');
-        })
-    : undefined;
+  const emitContainerTraceEvent: TraceEventWriter | undefined =
+    onOutput && input.queryId
+      ? (event) =>
+          onOutput({
+            status: 'success',
+            result: null,
+            newSessionId: undefined,
+            selectedModel: input.selectedModel,
+            runId: input.runId,
+            queryId: input.queryId,
+            event,
+          }).catch((err) => {
+            logger.warn(
+              { err, eventName: event.name },
+              'Container trace event failed',
+            );
+          })
+      : undefined;
 
   logger.debug(
     {
@@ -928,7 +948,8 @@ export async function runContainerAgent(
                 visibility: 'debug',
                 containerName,
                 markerStatus: parsed.status,
-                hasResult: typeof parsed.result === 'string' && parsed.result.length > 0,
+                hasResult:
+                  typeof parsed.result === 'string' && parsed.result.length > 0,
                 eventName: parsed.event?.name,
                 resultLength:
                   typeof parsed.result === 'string' ? parsed.result.length : 0,
@@ -1114,8 +1135,12 @@ export async function runContainerAgent(
             : code === 0
               ? 'completed'
               : 'nonzero_exit',
-          stdoutPreview: sanitizeTracePreview(stdout.slice(-TRACE_PREVIEW_MAX_CHARS)),
-          stderrPreview: sanitizeTracePreview(stderr.slice(-TRACE_PREVIEW_MAX_CHARS)),
+          stdoutPreview: sanitizeTracePreview(
+            stdout.slice(-TRACE_PREVIEW_MAX_CHARS),
+          ),
+          stderrPreview: sanitizeTracePreview(
+            stderr.slice(-TRACE_PREVIEW_MAX_CHARS),
+          ),
           stdoutTruncated,
           stderrTruncated,
           hadStreamingOutput,
@@ -1379,7 +1404,9 @@ export async function runContainerAgent(
             hasResult: Boolean(output.result),
             resultLength:
               typeof output.result === 'string' ? output.result.length : 0,
-            error: output.error ? sanitizeTracePreview(output.error) : undefined,
+            error: output.error
+              ? sanitizeTracePreview(output.error)
+              : undefined,
           },
         });
 
@@ -1406,8 +1433,12 @@ export async function runContainerAgent(
             visibility: 'summary',
             containerName,
             error: err instanceof Error ? err.message : String(err),
-            stdoutPreview: sanitizeTracePreview(stdout.slice(-TRACE_PREVIEW_MAX_CHARS)),
-            stderrPreview: sanitizeTracePreview(stderr.slice(-TRACE_PREVIEW_MAX_CHARS)),
+            stdoutPreview: sanitizeTracePreview(
+              stdout.slice(-TRACE_PREVIEW_MAX_CHARS),
+            ),
+            stderrPreview: sanitizeTracePreview(
+              stderr.slice(-TRACE_PREVIEW_MAX_CHARS),
+            ),
           },
         });
         logger.error(

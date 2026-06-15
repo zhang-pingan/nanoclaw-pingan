@@ -5,6 +5,7 @@ import fs from 'fs';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { agentQueryTraceManager } from './agent-query-trace.js';
+import { queryPatchFromTraceEvent } from './agent-query-trace-utils.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -27,60 +28,10 @@ import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
 import { selectModel } from './model-selector.js';
-import { AgentQueryRecord, RegisteredGroup, ScheduledTask } from './types.js';
+import { RegisteredGroup, ScheduledTask } from './types.js';
 
 function createExecutionId(): string {
   return crypto.randomUUID();
-}
-
-function numberFromPayload(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function queryPatchFromTraceEvent(
-  event: NonNullable<ContainerOutput['event']>,
-): Partial<AgentQueryRecord> {
-  const payload = event.payload || {};
-  const category =
-    typeof payload.category === 'string' ? payload.category : event.type;
-  const patch: Partial<AgentQueryRecord> = {};
-
-  if (category === 'container') {
-    if (typeof payload.containerName === 'string') patch.container_name = payload.containerName;
-    if (typeof payload.runtime === 'string') patch.container_runtime = payload.runtime;
-    const exitCode = numberFromPayload(payload.exitCode);
-    if (exitCode !== undefined) patch.container_exit_code = exitCode;
-    const timeoutMs = numberFromPayload(payload.timeoutMs);
-    if (timeoutMs !== undefined) patch.container_timeout_ms = timeoutMs;
-    if (typeof payload.terminatedReason === 'string') {
-      patch.container_terminated_reason = payload.terminatedReason;
-    }
-  }
-
-  if (category === 'model') {
-    const traceSource =
-      typeof payload.traceSource === 'string' ? payload.traceSource : undefined;
-    const isProxyConfirmedModel =
-      traceSource === 'credential_proxy' &&
-      (event.name === 'model_resolution' ||
-        event.name === 'model_response_completed');
-    if (
-      typeof payload.actualModel === 'string' &&
-      isProxyConfirmedModel
-    ) {
-      patch.actual_model = payload.actualModel;
-    }
-    const inputTokens = numberFromPayload(payload.inputTokens);
-    if (inputTokens !== undefined) patch.input_tokens = inputTokens;
-    const outputTokens = numberFromPayload(payload.outputTokens);
-    if (outputTokens !== undefined) patch.output_tokens = outputTokens;
-    const cacheReadTokens = numberFromPayload(payload.cacheReadTokens);
-    if (cacheReadTokens !== undefined) patch.cache_read_tokens = cacheReadTokens;
-    const cacheWriteTokens = numberFromPayload(payload.cacheWriteTokens);
-    if (cacheWriteTokens !== undefined) patch.cache_write_tokens = cacheWriteTokens;
-  }
-
-  return patch;
 }
 
 function finishScheduledTaskErrorQuery(
@@ -393,7 +344,9 @@ async function runTask(
           });
         }
         if (streamedOutput.event) {
-          const eventQueryPatch = queryPatchFromTraceEvent(streamedOutput.event);
+          const eventQueryPatch = queryPatchFromTraceEvent(
+            streamedOutput.event,
+          );
           if (Object.keys(eventQueryPatch).length > 0) {
             agentQueryTraceManager.updateQuery(queryId, eventQueryPatch);
           }

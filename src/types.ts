@@ -379,7 +379,8 @@ export type AgentQuerySourceType =
   | 'workflow_delegation'
   | 'web_action'
   | 'assistant_evolution'
-  | 'assistant_action';
+  | 'assistant_action'
+  | 'internal_run_once';
 
 export interface AgentQueryRecord {
   id: string;

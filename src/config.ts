@@ -4,11 +4,17 @@ import path from 'path';
 import { readEnvFile } from './env.js';
 
 // Read config values from .env (falls back to process.env).
-// Secrets (API keys, tokens) are NOT read here — they are loaded only
-// by the credential proxy (credential-proxy.ts), never exposed to containers.
+// Model/provider secrets are loaded only by the credential proxy
+// (credential-proxy.ts). The internal API token below is host-only and is
+// never passed into containers.
 const envConfig = readEnvFile([
   'ASSISTANT_NAME',
   'ASSISTANT_HAS_OWN_NUMBER',
+  'ICARUS_INTERNAL_API_HOST',
+  'ICARUS_INTERNAL_API_PORT',
+  'ICARUS_INTERNAL_API_TOKEN',
+  'ICARUS_INTERNAL_API_MAX_BODY_BYTES',
+  'ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS',
   'REPOS_DIR',
   'SSH_KEY_PATH',
   'WORKBENCH_BROADCAST_TARGETS',
@@ -104,6 +110,41 @@ export const CREDENTIAL_PROXY_PORT = parseInt(
 export const MYSQL_PROXY_PORT = parseInt(
   process.env.MYSQL_PROXY_PORT || '3003',
   10,
+);
+export const ICARUS_INTERNAL_API_HOST =
+  process.env.ICARUS_INTERNAL_API_HOST ||
+  envConfig.ICARUS_INTERNAL_API_HOST ||
+  '127.0.0.1';
+export const ICARUS_INTERNAL_API_PORT = Math.max(
+  1,
+  parseInt(
+    process.env.ICARUS_INTERNAL_API_PORT ||
+      envConfig.ICARUS_INTERNAL_API_PORT ||
+      '3004',
+    10,
+  ) || 3004,
+);
+export const ICARUS_INTERNAL_API_TOKEN =
+  process.env.ICARUS_INTERNAL_API_TOKEN ||
+  envConfig.ICARUS_INTERNAL_API_TOKEN ||
+  '';
+export const ICARUS_INTERNAL_API_MAX_BODY_BYTES = Math.max(
+  1024,
+  parseInt(
+    process.env.ICARUS_INTERNAL_API_MAX_BODY_BYTES ||
+      envConfig.ICARUS_INTERNAL_API_MAX_BODY_BYTES ||
+      '1048576',
+    10,
+  ) || 1048576,
+);
+export const ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS = Math.max(
+  1000,
+  parseInt(
+    process.env.ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS ||
+      envConfig.ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS ||
+      '200000',
+    10,
+  ) || 200000,
 );
 export const IPC_POLL_INTERVAL = 1000;
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1200000', 10); // 20min default — how long to keep container alive after last result (must be < CONTAINER_TIMEOUT to allow graceful exit)

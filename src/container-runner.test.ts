@@ -531,4 +531,36 @@ describe('container-runner timeout behavior', () => {
     await vi.advanceTimersByTimeAsync(10);
     await resultPromise;
   });
+
+  it('passes external system once fields to the container input', async () => {
+    const resultPromise = runContainerAgent(
+      testGroup,
+      {
+        ...testInput,
+        system: 'external system prompt',
+        executionMode: 'external_system_once',
+        isolatedSession: true,
+        requireResult: true,
+        isOneShot: true,
+      },
+      () => {},
+    );
+
+    await expect(readStdinJson(fakeProc)).resolves.toMatchObject({
+      system: 'external system prompt',
+      executionMode: 'external_system_once',
+      isolatedSession: true,
+      requireResult: true,
+      isOneShot: true,
+    });
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'ok',
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+  });
 });

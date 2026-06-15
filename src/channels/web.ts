@@ -2566,6 +2566,7 @@ class WebChannel {
         | 'web_action'
         | 'assistant_evolution'
         | 'assistant_action'
+        | 'internal_run_once'
         | undefined,
       sourceRefId,
       status,
