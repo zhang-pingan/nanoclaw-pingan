@@ -509,6 +509,20 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  if (isExternalSystemOnce) {
+    const runOnceWorkspaceDir = path.join(
+      DATA_DIR,
+      'run-once-workspaces',
+      group.folder,
+    );
+    fs.mkdirSync(runOnceWorkspaceDir, { recursive: true });
+    mounts.push({
+      hostPath: runOnceWorkspaceDir,
+      containerPath: '/workspace/run-once',
+      readonly: false,
+    });
+  }
+
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);

@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 import crypto from 'crypto';
 
+import { buildAgentQueryTraceDetail } from '../agent-query-trace-detail.js';
 import { agentQueryTraceManager } from '../agent-query-trace.js';
 import { queryPatchFromTraceEvent } from '../agent-query-trace-utils.js';
 import { ContainerOutput, runContainerAgent } from '../container-runner.js';
@@ -20,6 +21,7 @@ import {
   RunOnceResponse,
   runOnceInputLength,
 } from './schemas.js';
+import { createRunOnceTraceWriter } from './trace-writer.js';
 
 export class RunOnceInputError extends Error {
   status = 400;
@@ -123,6 +125,15 @@ export class InternalAgentRunOnceService {
       prompt,
       isMain: group.isMain === true,
     });
+    const traceWriter = createRunOnceTraceWriter({
+      groupFolder: group.folder,
+      chatJid: request.chat_jid,
+      request,
+      runId,
+      queryId,
+      selectedModel: selectedModel.selectedModel,
+      selectedModelReason: selectedModel.reason,
+    });
 
     agentQueryTraceManager.startQuery({
       queryId,
@@ -188,6 +199,7 @@ export class InternalAgentRunOnceService {
     let closeRequested = false;
 
     const handleOutput = async (output: ContainerOutput): Promise<void> => {
+      traceWriter.recordOutput(output);
       if (output.selectedModel) selectedOrActualModel = output.selectedModel;
       if (output.event) {
         eventMarkerCount += 1;
@@ -209,6 +221,10 @@ export class InternalAgentRunOnceService {
       if (output.status === 'error') {
         executionError = output.error || executionError;
         executionFailure = output.failure || executionFailure;
+        traceWriter.recordError(
+          output.error || 'Internal run-once execution failed',
+          output.failure,
+        );
         agentQueryTraceManager.appendEvent({
           queryId,
           stepId: resultDeliveryStepId || executionStepId,
@@ -341,12 +357,22 @@ export class InternalAgentRunOnceService {
       agentQueryTraceManager.finishQuery(queryId, 'success', {
         output_preview: text.slice(0, 500),
       });
+      traceWriter.finalize({
+        status: 'success',
+        actualModel: selectedOrActualModel,
+        agentTrace: buildAgentQueryTraceDetail(queryId),
+        response: {
+          ok: true,
+          text,
+        },
+      });
       return {
         ok: true,
         text,
         run_id: runId,
         query_id: queryId,
         model: selectedOrActualModel,
+        trace_path: traceWriter.containerPath,
       };
     }
 
@@ -378,12 +404,23 @@ export class InternalAgentRunOnceService {
       ...toAgentQueryFailurePatch(failure, error),
       output_preview: text.slice(0, 500) || null,
     });
+    traceWriter.finalize({
+      status: 'error',
+      actualModel: selectedOrActualModel,
+      agentTrace: buildAgentQueryTraceDetail(queryId),
+      response: {
+        ok: false,
+        error,
+        failure,
+      },
+    });
     return {
       ok: false,
       error,
       failure,
       run_id: runId,
       query_id: queryId,
+      trace_path: traceWriter.containerPath,
     };
   }
 }

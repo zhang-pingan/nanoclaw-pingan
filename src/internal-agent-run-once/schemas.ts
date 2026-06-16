@@ -30,6 +30,7 @@ export interface RunOnceSuccessResponse {
   run_id: string;
   query_id: string;
   model: string;
+  trace_path?: string;
 }
 
 export interface RunOnceFailureResponse {
@@ -44,6 +45,7 @@ export interface RunOnceFailureResponse {
   };
   run_id: string;
   query_id: string;
+  trace_path?: string;
 }
 
 export type RunOnceResponse = RunOnceSuccessResponse | RunOnceFailureResponse;

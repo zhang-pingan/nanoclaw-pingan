@@ -563,4 +563,38 @@ describe('container-runner timeout behavior', () => {
     await vi.advanceTimersByTimeAsync(10);
     await resultPromise;
   });
+
+  it('mounts a writable run-once workspace for external system once', async () => {
+    const resultPromise = runContainerAgent(
+      testGroup,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        isolatedSession: true,
+      },
+      () => {},
+    );
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const { spawn } = await import('child_process');
+    const calls = vi.mocked(spawn).mock.calls;
+    const args = calls[calls.length - 1][1] as string[];
+    expect(args).toContain(
+      '/tmp/icarus-test-data/run-once-workspaces/test-group:/workspace/run-once',
+    );
+    expect(vi.mocked(fs.mkdirSync)).toHaveBeenCalledWith(
+      '/tmp/icarus-test-data/run-once-workspaces/test-group',
+      { recursive: true },
+    );
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'ok',
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+  });
 });
