@@ -97,11 +97,7 @@ export function retrieveStructuredMemories(
   const limit = Math.max(1, opts?.limit || 10);
   const expanded = expandMemoryQuery(prompt);
   const queryVariants = Array.from(
-    new Set(
-      [expanded.rawQuery, expanded.expandedMatchQuery].filter(
-        (query) => query.length > 0,
-      ),
-    ),
+    new Set([expanded.expandedMatchQuery].filter((query) => query.length > 0)),
   );
 
   const merged = new Map<string, MemorySearchResult>();
@@ -198,8 +194,6 @@ export function listCanonicalFallbackMemories(
 ): MemoryRecord[] {
   return listMemories(groupFolder, 200)
     .filter((m) => m.status === 'active' && m.layer === 'canonical')
-    .filter(
-      (m) => m.memory_type === 'rule' || m.memory_type === 'preference',
-    )
+    .filter((m) => m.memory_type === 'rule' || m.memory_type === 'preference')
     .slice(0, limit);
 }

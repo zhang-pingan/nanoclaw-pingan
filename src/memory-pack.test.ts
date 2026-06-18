@@ -1,6 +1,16 @@
-import { beforeEach, describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+
+vi.mock('./logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+  },
+}));
 
 import { _initTestDatabase, createMemory } from './db.js';
+import { logger } from './logger.js';
 import { buildMemoryPack, buildMemoryPackForGroup } from './memory-pack.js';
 import { MemoryRecord } from './types.js';
 
@@ -23,6 +33,7 @@ function mem(
 describe('buildMemoryPack', () => {
   beforeEach(() => {
     _initTestDatabase();
+    vi.mocked(logger.error).mockClear();
   });
 
   it('returns empty string when no usable memories', () => {
@@ -110,7 +121,9 @@ describe('buildMemoryPack', () => {
       'web_main',
       'Help me prepare the payment release',
     );
-    expect(pack).toContain('Service payment uses deploy checklist before rollout');
+    expect(pack).toContain(
+      'Service payment uses deploy checklist before rollout',
+    );
     expect(pack).not.toContain('Gardening notes for spring tomatoes');
   });
 
@@ -133,6 +146,23 @@ describe('buildMemoryPack', () => {
     );
     expect(pack).toContain('支付服务上线前先检查回滚预案');
     expect(pack).not.toContain('园艺手册记录了番茄浇水频率');
+  });
+
+  it('does not run raw XML prompt text as an FTS query', () => {
+    createMemory({
+      group_folder: 'web_main',
+      layer: 'canonical',
+      memory_type: 'fact',
+      content: 'catstory 支付订单排查需要检查用户、登录、订单和 webhook',
+    });
+
+    const pack = buildMemoryPackForGroup(
+      'web_main',
+      '<context timezone="Asia/Shanghai" />\n<messages>\n<message sender="Desktop User">继续查 catstory 支付订单</message>\n</messages>',
+    );
+
+    expect(pack).toContain('catstory 支付订单排查');
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('respects layer quotas and still keeps canonical entries', () => {

@@ -93,6 +93,7 @@ export interface ContainerInput {
 export interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
+  final?: boolean;
   newSessionId?: string;
   error?: string;
   failure?: ClassifiedFailure;
@@ -1379,6 +1380,7 @@ export async function runContainerAgent(
           resolve({
             status: 'success',
             result: null,
+            final: true,
             newSessionId,
             selectedModel,
           });

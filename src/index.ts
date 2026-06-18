@@ -1446,7 +1446,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         }
       }
 
-      if (result.status === 'success' && !result.event && !result.result) {
+      if (
+        result.status === 'success' &&
+        !result.event &&
+        !result.result &&
+        result.final !== false
+      ) {
         if (isWorkflowDelegationRun) {
           queue.closeStdin(chatJid, {
             reason: 'workflow_delegation_session_update',
@@ -1465,6 +1470,19 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
                 : 'Completed without channel output',
             },
           );
+        }
+      } else if (
+        result.status === 'success' &&
+        !result.event &&
+        !result.result
+      ) {
+        if (isWorkflowDelegationRun) {
+          queue.closeStdin(chatJid, {
+            reason: 'workflow_delegation_session_update',
+            details: { groupName: group.name, runId, queryId },
+          });
+        } else {
+          queue.notifyIdle(chatJid);
         }
       }
 
@@ -2012,6 +2030,7 @@ async function runOneShotAgent(
               output.status === 'success' &&
               !output.event &&
               !output.result &&
+              output.final !== false &&
               (!input.requireResult || resultMarkerCount > 0) &&
               input.closeOnFirstResult !== false &&
               !closeRequested

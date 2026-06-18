@@ -275,7 +275,39 @@ describe('container-runner timeout behavior', () => {
 
     const result = await resultPromise;
     expect(result.status).toBe('success');
+    expect(result.final).toBe(true);
     expect(result.newSessionId).toBe('session-456');
+  });
+
+  it('forwards non-final empty success marker but resolves with final completion marker', async () => {
+    const onOutput = vi.fn(async () => {});
+    const resultPromise = runContainerAgent(
+      testGroup,
+      testInput,
+      () => {},
+      onOutput,
+    );
+
+    const nonFinalMarker: ContainerOutput = {
+      status: 'success',
+      result: null,
+      final: false,
+      newSessionId: 'session-non-final',
+    };
+    emitOutputMarker(fakeProc, nonFinalMarker);
+
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(onOutput).toHaveBeenCalledWith(nonFinalMarker);
+    expect(result).toMatchObject({
+      status: 'success',
+      result: null,
+      final: true,
+      newSessionId: 'session-non-final',
+    });
   });
 
   it('returns structured failure when a required text result is missing', async () => {

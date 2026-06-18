@@ -54,6 +54,7 @@ interface ContainerInput {
 interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
+  final?: boolean;
   newSessionId?: string;
   error?: string;
   failure?: {
@@ -1628,6 +1629,7 @@ async function iterateQuery(
   resultCount: number;
   lastMessageType?: string;
   deliveredGenuineAnswer: boolean;
+  terminalErrorEmitted: boolean;
 }> {
   let newSessionId: string | undefined;
   let lastAssistantUuid: string | undefined;
@@ -1644,6 +1646,7 @@ async function iterateQuery(
   let syntheticSkips = 0;
   const MAX_SYNTHETIC_SKIPS = 1;
   let deliveredGenuineAnswer = false;
+  let terminalErrorEmitted = false;
 
   for await (const message of query({ prompt: stream, options })) {
     messageCount++;
@@ -1758,6 +1761,7 @@ async function iterateQuery(
       }
 
       if (message.subtype?.startsWith('error')) {
+        terminalErrorEmitted = true;
         writeEvent(
           {
             type: 'model',
@@ -1819,6 +1823,7 @@ async function iterateQuery(
         writeOutput({
           status: 'success',
           result: textResult || null,
+          final: Boolean(textResult && textResult.trim()),
           newSessionId,
           selectedModel: options.model,
           runId: identifiers.runId,
@@ -1844,6 +1849,7 @@ async function iterateQuery(
     resultCount,
     lastMessageType,
     deliveredGenuineAnswer,
+    terminalErrorEmitted,
   };
 }
 
@@ -1868,6 +1874,7 @@ async function runQuery(
   lastAssistantUuid?: string;
   closedDuringQuery: boolean;
   missingSdkResult: boolean;
+  terminalErrorEmitted: boolean;
   selectedModel: string;
   queryId?: string;
 }> {
@@ -1944,7 +1951,9 @@ async function runQuery(
 
   ipcPolling = false;
   const missingSdkResult = result.resultCount === 0 && !closedDuringQuery;
+  let terminalErrorEmitted = result.terminalErrorEmitted;
   if (missingSdkResult) {
+    terminalErrorEmitted = true;
     const error = 'SDK query ended without result message';
     const details = {
       module: 'agent-runner',
@@ -2005,6 +2014,7 @@ async function runQuery(
     const tail = readTranscriptTail(newSessionId || sessionId);
     if (tail && !tail.closed) {
       leftUnclosedLeaf = true;
+      terminalErrorEmitted = true;
       const leafDetails = {
         module: 'agent-runner',
         action: 'unclosed_leaf_left',
@@ -2042,6 +2052,7 @@ async function runQuery(
     lastAssistantUuid,
     closedDuringQuery,
     missingSdkResult,
+    terminalErrorEmitted,
     selectedModel: options.model,
     queryId,
   };
@@ -2287,11 +2298,16 @@ async function main(): Promise<void> {
         log('SDK query ended without result; error marker emitted, exiting');
         break;
       }
+      if (queryResult.terminalErrorEmitted) {
+        log('Terminal error emitted during query, exiting');
+        break;
+      }
 
       // Emit session update so host can track it
       writeOutput({
         status: 'success',
         result: null,
+        final: true,
         newSessionId: sessionId,
         selectedModel: queryResult.selectedModel,
         runId: containerInput.runId,
