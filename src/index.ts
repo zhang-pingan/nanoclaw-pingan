@@ -180,6 +180,12 @@ interface ActiveMessageQueryTraceState {
   messageCursor: string | null;
 }
 
+interface RetryLink {
+  queryId: string;
+  cursorBefore: string | null;
+  messageCursor: string | null;
+}
+
 interface OneShotTraceContext {
   queryId: string;
   stepId: string;
@@ -206,6 +212,7 @@ const activeMessageQueryTraces = new Map<
   string,
   ActiveMessageQueryTraceState
 >();
+const pendingRetryLinksByChat = new Map<string, RetryLink[]>();
 const oneShotTraceContexts = new Map<string, OneShotTraceContext[]>();
 
 function removeSessionDir(groupFolder: string): void {
@@ -564,6 +571,8 @@ function createMessageQueryTrace(params: {
   pipedIntoActiveSession?: boolean;
   cursorBefore?: string | null;
   messageCursor?: string | null;
+  retryOfQueryId?: string | null;
+  retryAttempt?: number | null;
 }): void {
   const sourceType = params.delegationId ? 'workflow_delegation' : 'message';
   agentQueryTraceManager.startQuery({
@@ -587,6 +596,12 @@ function createMessageQueryTrace(params: {
     promptSummary: params.promptSummary,
     promptHash: params.promptHash,
   });
+  if (params.retryOfQueryId || params.retryAttempt) {
+    agentQueryTraceManager.updateQuery(params.queryId, {
+      retry_of_query_id: params.retryOfQueryId ?? null,
+      retry_attempt: params.retryAttempt ?? null,
+    });
+  }
   const inputStepId = agentQueryTraceManager.startStep({
     queryId: params.queryId,
     stepType: 'input',
@@ -676,6 +691,31 @@ function createMessageQueryTrace(params: {
     cursorBefore: params.cursorBefore ?? null,
     messageCursor: params.messageCursor ?? null,
   });
+}
+
+function rememberRetryLink(chatJid: string, link: RetryLink): void {
+  const links = pendingRetryLinksByChat.get(chatJid) ?? [];
+  pendingRetryLinksByChat.set(chatJid, [...links, link].slice(-20));
+}
+
+function consumeRetryLink(
+  chatJid: string,
+  cursorBefore: string,
+  messageCursor: string,
+): RetryLink | null {
+  const links = pendingRetryLinksByChat.get(chatJid);
+  if (!links?.length) return null;
+  const index = links.findIndex(
+    (link) =>
+      link.cursorBefore === cursorBefore &&
+      link.messageCursor === messageCursor,
+  );
+  if (index === -1) return null;
+  const [link] = links.splice(index, 1);
+  if (links.length === 0) {
+    pendingRetryLinksByChat.delete(chatJid);
+  }
+  return link;
 }
 
 function finishMessageQueryTrace(
@@ -1188,6 +1228,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     prompt,
     isMain: isMainGroup,
   });
+  const retryLink = consumeRetryLink(chatJid, previousCursor, lastMsg.timestamp);
   createMessageQueryTrace({
     queryId: initialQueryId,
     runId,
@@ -1206,6 +1247,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     promptHash,
     cursorBefore: previousCursor,
     messageCursor: lastMsg.timestamp,
+    retryOfQueryId: retryLink?.queryId ?? null,
+    retryAttempt: retryLink ? 1 : null,
     inputSummary: `Received ${missedMessages.length} pending messages`,
     inputPayload: {
       messageIds: missedMessages.map((m) => m.id),
@@ -1563,6 +1606,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
         status: 'running',
         summary:
           'Piped message was not consumed before the active container exited',
+        payload: {
+          retryMode: 'chat_history',
+          cursorBefore: state.cursorBefore,
+          messageCursor: state.messageCursor,
+        },
       });
       const removedIpcMessages = removeQueuedIpcMessagesForQuery(
         group.folder,
@@ -1586,6 +1634,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       ) {
         retryCursor = state.cursorBefore;
       }
+      rememberRetryLink(chatJid, {
+        queryId,
+        cursorBefore: state.cursorBefore,
+        messageCursor: state.messageCursor,
+      });
       shouldRetryUnconsumedPipedMessages = true;
       finishMessageQueryTrace(queryId, 'error', {
         error_message: errorMessage,

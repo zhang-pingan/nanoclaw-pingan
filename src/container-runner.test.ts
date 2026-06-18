@@ -421,6 +421,31 @@ describe('container-runner timeout behavior', () => {
     });
   });
 
+  it('reports code 137 as a killed container instead of an API retry root cause', async () => {
+    const resultPromise = runContainerAgent(testGroup, testInput, () => {});
+
+    fakeProc.stderr.push(
+      [
+        '[agent-runner] [msg #5] type=system/api_retry',
+        '[agent-runner] SDK event: api_retry status=running summary=API retry 4/10 in 4519ms',
+      ].join('\n'),
+    );
+    fakeProc.emit('close', 137);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('Container exited with code 137');
+    expect(result.error).toContain('process was killed with SIGKILL');
+    expect(result.error).toContain('Last output:');
+    expect(result.failure).toMatchObject({
+      failureType: 'container_runtime_error',
+      failureSubtype: 'container_killed_137',
+      failureOrigin: 'container',
+      retryable: true,
+    });
+  });
+
   it('mounts isolated Linux node_modules over the main project node_modules', async () => {
     const { spawn } = await import('child_process');
     const resultPromise = runContainerAgent(

@@ -83,6 +83,7 @@ interface GroupState {
   isOneShot: boolean;
   runningOneShotDedupeKey: string | null;
   runningTaskId: string | null;
+  stdinClosing: boolean;
   pendingMessages: boolean;
   pendingTasks: QueuedTask[];
   pendingOneShots: QueuedOneShot[];
@@ -126,6 +127,7 @@ export class GroupQueue {
         isOneShot: false,
         runningOneShotDedupeKey: null,
         runningTaskId: null,
+        stdinClosing: false,
         pendingMessages: false,
         pendingTasks: [],
         pendingOneShots: [],
@@ -532,6 +534,7 @@ export class GroupQueue {
     state.isTaskContainer = status.isTask ?? false;
     state.isOneShot = true;
     state.runningOneShotDedupeKey = status.dedupeKey ?? null;
+    state.stdinClosing = false;
     state.pendingMessages = false;
     state.groupFolder = status.groupFolder;
     state.groupName = status.groupName;
@@ -552,6 +555,7 @@ export class GroupQueue {
       state.isOneShot = false;
       state.runningOneShotDedupeKey = null;
       state.runningTaskId = null;
+      state.stdinClosing = false;
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
@@ -589,6 +593,7 @@ export class GroupQueue {
     return Boolean(
       state.active &&
       state.groupFolder &&
+      !state.stdinClosing &&
       !state.isTaskContainer &&
       !state.isOneShot &&
       !state.pendingOneShots.some((item) => item.closeRequested),
@@ -731,6 +736,7 @@ export class GroupQueue {
       !state.groupFolder ||
       state.isTaskContainer ||
       state.isOneShot ||
+      state.stdinClosing ||
       state.pendingOneShots.some((item) => item.closeRequested)
     ) {
       logger.warn(
@@ -740,6 +746,7 @@ export class GroupQueue {
           groupFolder: state.groupFolder,
           isTaskContainer: state.isTaskContainer,
           isOneShot: state.isOneShot,
+          stdinClosing: state.stdinClosing,
           pendingOneShots: state.pendingOneShots.length,
           oneShotCloseRequested: state.pendingOneShots.some(
             (item) => item.closeRequested,
@@ -824,6 +831,8 @@ export class GroupQueue {
     try {
       fs.mkdirSync(inputDir, { recursive: true });
       fs.writeFileSync(path.join(inputDir, '_close'), '');
+      state.stdinClosing = true;
+      state.idleWaiting = false;
       logger.info(
         {
           groupJid,
@@ -837,6 +846,7 @@ export class GroupQueue {
           pendingOneShots: state.pendingOneShots.length,
           isTaskContainer: state.isTaskContainer,
           isOneShot: state.isOneShot,
+          stdinClosing: state.stdinClosing,
           runningTaskId: state.runningTaskId,
           stopRequested: state.stopRequested,
         },
@@ -869,6 +879,7 @@ export class GroupQueue {
     state.isTaskContainer = false;
     state.isOneShot = false;
     state.runningOneShotDedupeKey = null;
+    state.stdinClosing = false;
     state.pendingMessages = false;
     state.startedAt = Date.now();
     this.activeCount++;
@@ -903,6 +914,7 @@ export class GroupQueue {
       state.active = false;
       state.isOneShot = false;
       state.runningOneShotDedupeKey = null;
+      state.stdinClosing = false;
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
@@ -927,6 +939,7 @@ export class GroupQueue {
     state.isTaskContainer = true;
     state.isOneShot = false;
     state.runningOneShotDedupeKey = null;
+    state.stdinClosing = false;
     state.runningTaskId = task.id;
     state.startedAt = Date.now();
     this.activeCount++;
@@ -953,6 +966,7 @@ export class GroupQueue {
       state.isOneShot = false;
       state.runningOneShotDedupeKey = null;
       state.runningTaskId = null;
+      state.stdinClosing = false;
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;

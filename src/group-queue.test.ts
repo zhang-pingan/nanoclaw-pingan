@@ -497,6 +497,49 @@ describe('GroupQueue', () => {
     await vi.advanceTimersByTimeAsync(10);
   });
 
+  it('does not pipe messages into an idle container after close was requested', async () => {
+    const fs = await import('fs');
+    let resolveProcess: () => void;
+
+    queue.setProcessMessagesFn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveProcess = resolve;
+      });
+      return true;
+    });
+    queue.enqueueMessageCheck('group1@g.us');
+    await vi.advanceTimersByTimeAsync(10);
+    queue.registerProcess(
+      'group1@g.us',
+      {} as any,
+      'container-1',
+      'test-group',
+    );
+    queue.notifyIdle('group1@g.us');
+
+    const writeFileSync = vi.mocked(fs.default.writeFileSync);
+    writeFileSync.mockClear();
+
+    queue.enqueueMessageCheck('group1@g.us');
+
+    const closeWrites = writeFileSync.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].endsWith('_close'),
+    );
+    expect(closeWrites).toHaveLength(1);
+    expect(queue.canPipeMessage('group1@g.us')).toBe(false);
+    expect(
+      queue.sendMessage(
+        'group1@g.us',
+        'hello',
+        'claude-4-6-sonnet-latest',
+        'query-1',
+      ),
+    ).toBe(false);
+
+    resolveProcess!();
+    await vi.advanceTimersByTimeAsync(10);
+  });
+
   it('sendMessage resets idleWaiting so a subsequent task enqueue does not preempt', async () => {
     const fs = await import('fs');
     let resolveProcess: () => void;

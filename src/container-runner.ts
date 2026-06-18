@@ -183,6 +183,44 @@ function sanitizeTracePreview(
     );
 }
 
+function summarizeProcessOutputTail(value: string, maxLines = 4): string {
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith(OUTPUT_START_MARKER))
+    .filter((line) => !line.startsWith(OUTPUT_END_MARKER))
+    .filter((line) => !line.startsWith('{'));
+  return sanitizeTracePreview(lines.slice(-maxLines).join('\n'), 800);
+}
+
+function formatContainerExitError(params: {
+  code: number | null;
+  duration: number;
+  logFile?: string;
+  stderr: string;
+  stdout: string;
+  timedOut?: boolean;
+}): string {
+  const { code, duration, logFile, stderr, stdout, timedOut } = params;
+  const codeText = code ?? 'unknown';
+  const reason =
+    code === 137
+      ? 'process was killed with SIGKILL; possible causes include external stop, runtime cleanup, or host/container memory pressure'
+      : timedOut
+        ? 'container timed out'
+        : 'container exited non-zero';
+  const tail =
+    summarizeProcessOutputTail(stderr) || summarizeProcessOutputTail(stdout);
+  return [
+    `Container exited with code ${codeText} after ${duration}ms (${reason})`,
+    logFile ? `Log: ${logFile}` : '',
+    tail ? `Last output:\n${tail}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 function summarizeMounts(mounts: VolumeMount[]): string[] {
   return mounts.map(
     (mount) => `${mount.containerPath}${mount.readonly ? ' (ro)' : ''}`,
@@ -1279,7 +1317,7 @@ export async function runContainerAgent(
           JSON.stringify(input, null, 2),
           ``,
           `=== Container Args ===`,
-          containerArgs.join(' '),
+          sanitizeTracePreview(containerArgs.join(' '), Number.MAX_SAFE_INTEGER),
           ``,
           `=== Mounts ===`,
           mounts
@@ -1339,13 +1377,19 @@ export async function runContainerAgent(
         // race where wrappedOnOutput writes a stale session ID after
         // isSessionInvalid clears it.
         outputChain.then(() => {
-          const error = `Container exited with code ${code}: ${stderr.slice(-200)}`;
+          const error = formatContainerExitError({
+            code,
+            duration,
+            logFile,
+            stderr,
+            stdout,
+          });
           resolve(
             makeContainerErrorOutput(
               error,
               classifyContainerFailure(
                 new Error(error),
-                'container_exit_nonzero',
+                code === 137 ? 'container_killed_137' : 'container_exit_nonzero',
                 true,
               ),
             ),
