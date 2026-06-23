@@ -15,6 +15,7 @@ import { GroupQueue } from '../group-queue.js';
 import { logger } from '../logger.js';
 import { clearModelResolutionsForRun } from '../model-resolution.js';
 import { selectModel } from '../model-selector.js';
+import { stripInternalTags } from '../router.js';
 import type { RegisteredGroup } from '../types.js';
 import {
   parseRunOnceRequest,
@@ -309,7 +310,9 @@ export class InternalAgentRunOnceService {
       }
       if (output.result) {
         resultMarkerCount += 1;
-        outputs.push(output.result);
+        const raw = String(output.result);
+        const text = stripInternalTags(raw);
+        if (text) outputs.push(text);
         if (!resultDeliveryStepId) {
           agentQueryTraceManager.completeStep(
             queryId,
@@ -330,8 +333,8 @@ export class InternalAgentRunOnceService {
           eventType: 'output',
           eventName: 'assistant_output',
           status: 'success',
-          summary: `Output: ${output.result.slice(0, 120)}`,
-          payload: { text: output.result },
+          summary: text ? `Output: ${text.slice(0, 120)}` : 'Received output',
+          payload: { text, rawLength: raw.length },
         });
         if (!closeRequested) {
           closeRequested = true;

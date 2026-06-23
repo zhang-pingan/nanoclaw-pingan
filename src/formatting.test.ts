@@ -185,6 +185,16 @@ describe('stripInternalTags', () => {
   it('returns empty string when text is only internal tags', () => {
     expect(stripInternalTags('<internal>only this</internal>')).toBe('');
   });
+
+  it('strips think tags from model output', () => {
+    expect(stripInternalTags('<think>hidden reasoning</think>visible')).toBe(
+      'visible',
+    );
+  });
+
+  it('strips uppercase think tags', () => {
+    expect(stripInternalTags('a<THINK>hidden</THINK>b')).toBe('ab');
+  });
 });
 
 describe('formatOutbound', () => {
@@ -200,6 +210,12 @@ describe('formatOutbound', () => {
     expect(
       formatOutbound('<internal>thinking</internal>The answer is 42'),
     ).toBe('The answer is 42');
+  });
+
+  it('strips think tags from outbound text', () => {
+    expect(formatOutbound('<think>reasoning</think>The answer is 42')).toBe(
+      'The answer is 42',
+    );
   });
 });
 

@@ -157,6 +157,43 @@ describe('InternalAgentRunOnceService', () => {
     );
   });
 
+  it('strips think blocks from run-once text responses', async () => {
+    vi.mocked(runContainerAgent).mockImplementation(
+      async (_group, _input, _onProcess, onOutput) => {
+        await onOutput?.({
+          status: 'success',
+          result: '<think>private reasoning</think>visible answer',
+          selectedModel: 'test-model',
+        });
+        return {
+          status: 'success',
+          result: null,
+          selectedModel: 'test-model',
+        };
+      },
+    );
+
+    const service = new InternalAgentRunOnceService({
+      registeredGroups: () => ({ 'web:l3agent': group }),
+      queue: new GroupQueue(),
+      onProcess: vi.fn(),
+      maxInputChars: 10000,
+    });
+
+    const result = await service.runOnce({
+      system: 'portal system prompt',
+      messages: [{ role: 'user', content: 'question' }],
+      chat_jid: 'web:l3agent',
+      require_result: true,
+      metadata: {},
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      text: 'visible answer',
+    });
+  });
+
   it('returns files generated under the run-once output directory', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
       async (_group, input, _onProcess, onOutput) => {

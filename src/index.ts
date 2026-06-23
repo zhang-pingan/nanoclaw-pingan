@@ -89,7 +89,12 @@ import { initWorkflow } from './workflow.js';
 import { initWorkbenchEvents } from './workbench-events.js';
 import { WorkbenchBroadcastService } from './workbench-broadcast.js';
 import { resolveAskAnswerGroupFolder } from './workbench-broadcast-actions.js';
-import { findChannel, formatMessages, formatOutbound } from './router.js';
+import {
+  findChannel,
+  formatMessages,
+  formatOutbound,
+  stripInternalTags,
+} from './router.js';
 import { isAllowedCrossChannelDelegationTargetFolder } from './delegation-policy.js';
 import {
   restoreRemoteControl,
@@ -1228,7 +1233,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     prompt,
     isMain: isMainGroup,
   });
-  const retryLink = consumeRetryLink(chatJid, previousCursor, lastMsg.timestamp);
+  const retryLink = consumeRetryLink(
+    chatJid,
+    previousCursor,
+    lastMsg.timestamp,
+  );
   createMessageQueryTrace({
     queryId: initialQueryId,
     runId,
@@ -1399,8 +1408,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           typeof result.result === 'string'
             ? result.result
             : JSON.stringify(result.result);
-        // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        const text = stripInternalTags(raw);
         agentQueryTraceManager.appendEvent({
           queryId,
           stepId: traceState.resultDeliveryStepId,
@@ -1988,7 +1996,7 @@ function assistantActionStepName(
 }
 
 function stripInternalBlocks(value: string): string {
-  return value.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+  return stripInternalTags(value);
 }
 
 async function runOneShotAgent(
