@@ -100,6 +100,58 @@ describe('InternalAgentRunOnceService', () => {
     ).toBe(false);
   });
 
+  it('injects structured file metadata into the container prompt', async () => {
+    vi.mocked(runContainerAgent).mockImplementation(
+      async (_group, _input, _onProcess, onOutput) => {
+        await onOutput?.({
+          status: 'success',
+          result: 'file answer',
+          selectedModel: 'test-model',
+        });
+        return {
+          status: 'success',
+          result: null,
+          selectedModel: 'test-model',
+        };
+      },
+    );
+
+    const service = new InternalAgentRunOnceService({
+      registeredGroups: () => ({ 'web:l3agent': group }),
+      queue: new GroupQueue(),
+      onProcess: vi.fn(),
+      maxInputChars: 10000,
+    });
+
+    await service.runOnce({
+      system: 'portal system prompt',
+      messages: [{ role: 'user', content: 'summarize attachment' }],
+      chat_jid: 'web:l3agent',
+      require_result: true,
+      metadata: {},
+      files: [
+        {
+          name: 'report.md',
+          agent_path: '/workspace/run-once/inputs/upload-1/report.md',
+          relative_path: 'inputs/upload-1/report.md',
+          size: 12,
+          sha256: 'abc123',
+          content_type: 'text/markdown',
+        },
+      ],
+    });
+
+    expect(vi.mocked(runContainerAgent).mock.calls[0][1].prompt).toContain(
+      'Available files:',
+    );
+    expect(vi.mocked(runContainerAgent).mock.calls[0][1].prompt).toContain(
+      '/workspace/run-once/inputs/upload-1/report.md',
+    );
+    expect(vi.mocked(runContainerAgent).mock.calls[0][1].prompt).toContain(
+      'User request:\nsummarize attachment',
+    );
+  });
+
   it('writes full run-once trace into the run-once workspace', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
       async (_group, _input, _onProcess, onOutput) => {

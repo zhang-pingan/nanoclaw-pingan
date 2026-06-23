@@ -41,4 +41,20 @@ describe('internal run-once schemas', () => {
       }),
     ).toThrow();
   });
+
+  it('rejects host file paths in structured file inputs', () => {
+    expect(() =>
+      parseRunOnceRequest({
+        system: 'system prompt',
+        messages: [{ role: 'user', content: 'question' }],
+        chat_jid: 'web:l3agent',
+        files: [
+          {
+            name: 'secret.txt',
+            agent_path: '/Users/alice/Desktop/secret.txt',
+          },
+        ],
+      }),
+    ).toThrow();
+  });
 });

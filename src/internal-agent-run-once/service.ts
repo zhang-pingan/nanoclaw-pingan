@@ -17,7 +17,9 @@ import { clearModelResolutionsForRun } from '../model-resolution.js';
 import { selectModel } from '../model-selector.js';
 import type { RegisteredGroup } from '../types.js';
 import {
-  RunOnceRequest,
+  parseRunOnceRequest,
+  RunOnceFile,
+  RunOnceRequestInput,
   RunOnceResponse,
   runOnceInputLength,
 } from './schemas.js';
@@ -62,6 +64,31 @@ function sha256(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex');
 }
 
+function buildFilesPrompt(files: RunOnceFile[]): string {
+  if (files.length === 0) return '';
+  return [
+    'Available files:',
+    ...files.map((file, index) => {
+      const details = [
+        `path=${file.agent_path}`,
+        file.relative_path ? `relative=${file.relative_path}` : '',
+        file.size != null ? `size=${file.size}` : '',
+        file.content_type ? `type=${file.content_type}` : '',
+        file.sha256 ? `sha256=${file.sha256}` : '',
+      ].filter(Boolean);
+      return `${index + 1}. ${file.name} (${details.join(', ')})`;
+    }),
+    '',
+    'Use these files when they are relevant to the user request.',
+  ].join('\n');
+}
+
+function buildPromptWithFiles(prompt: string, files: RunOnceFile[]): string {
+  const filesPrompt = buildFilesPrompt(files);
+  if (!filesPrompt) return prompt;
+  return `${filesPrompt}\n\nUser request:\n${prompt}`;
+}
+
 function oneShotSlotTimeoutFailure(
   error: string,
   details: Record<string, unknown>,
@@ -97,7 +124,16 @@ function fallbackRunOnceFailure(error: string): ClassifiedFailure {
 export class InternalAgentRunOnceService {
   constructor(private readonly opts: InternalAgentRunOnceServiceOptions) {}
 
-  async runOnce(request: RunOnceRequest): Promise<RunOnceResponse> {
+  resolveGroupFolder(chatJid: string): string {
+    const group = this.opts.registeredGroups()[chatJid];
+    if (!group) {
+      throw new RunOnceInputError(`Registered group not found: ${chatJid}`);
+    }
+    return group.folder;
+  }
+
+  async runOnce(input: RunOnceRequestInput): Promise<RunOnceResponse> {
+    const request = parseRunOnceRequest(input);
     const group = this.opts.registeredGroups()[request.chat_jid];
     if (!group) {
       throw new RunOnceInputError(
@@ -119,7 +155,8 @@ export class InternalAgentRunOnceService {
 
     const runId = createExecutionId();
     const queryId = createExecutionId();
-    const prompt = message.content;
+    const userPrompt = message.content;
+    const prompt = buildPromptWithFiles(userPrompt, request.files);
     const promptHash = sha256(`${request.system}\n${prompt}`);
     const selectedModel = await selectModel({
       prompt,
@@ -147,7 +184,7 @@ export class InternalAgentRunOnceService {
       groupFolder: group.folder,
       selectedModel: selectedModel.selectedModel,
       selectedModelReason: selectedModel.reason,
-      promptSummary: prompt.slice(0, 140),
+      promptSummary: userPrompt.slice(0, 140),
       promptHash,
     });
 
@@ -159,7 +196,9 @@ export class InternalAgentRunOnceService {
       payload: {
         chatJid: request.chat_jid,
         systemChars: request.system.length,
-        messageChars: prompt.length,
+        messageChars: userPrompt.length,
+        injectedPromptChars: prompt.length,
+        files: request.files,
         metadata: request.metadata,
       },
     });
@@ -287,9 +326,9 @@ export class InternalAgentRunOnceService {
         {
           groupFolder: group.folder,
           groupName: group.name,
-          promptSummary: prompt.slice(0, 100),
+          promptSummary: userPrompt.slice(0, 100),
           lastSender: 'internal-agent-run-once',
-          lastContent: prompt.slice(0, 200),
+          lastContent: userPrompt.slice(0, 200),
           lastTime: Date.now().toString(),
           isTask: true,
           traceKey: queryId,

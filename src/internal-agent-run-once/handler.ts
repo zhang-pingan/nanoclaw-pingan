@@ -1,13 +1,27 @@
 import http from 'http';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { ZodError } from 'zod';
 
 import { logger } from '../logger.js';
 import {
+  ensureUniqueUploadPath,
+  getMultipartTextField,
+  parseMultipartBoundary,
+  parseMultipartFileParts,
+  parseMultipartParts,
+  sanitizeUploadFilename,
+} from '../multipart.js';
+import {
   parseRunOnceRequest,
+  RunOnceFile,
+  RunOnceRequest,
   RunOnceResponse,
   UnsupportedMessagesShapeError,
 } from './schemas.js';
 import { InternalAgentRunOnceService, RunOnceInputError } from './service.js';
+import { runOnceWorkspaceHostPath } from './trace-writer.js';
 
 export interface RunOnceHandlerOptions {
   service: InternalAgentRunOnceService;
@@ -30,10 +44,10 @@ function bearerToken(req: http.IncomingMessage): string {
   return match?.[1]?.trim() || '';
 }
 
-async function readJsonBody(
+async function readRequestBody(
   req: http.IncomingMessage,
   maxBodyBytes: number,
-): Promise<unknown> {
+): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let bytes = 0;
   for await (const chunk of req) {
@@ -44,13 +58,131 @@ async function readJsonBody(
     }
     chunks.push(buffer);
   }
-  const raw = Buffer.concat(chunks).toString('utf-8');
+  return Buffer.concat(chunks);
+}
+
+function parseJsonBuffer(body: Buffer): unknown {
+  const raw = body.toString('utf-8');
   if (!raw.trim()) throw new RunOnceInputError('Request body is required');
   try {
     return JSON.parse(raw);
   } catch {
     throw new RunOnceInputError('Invalid JSON body');
   }
+}
+
+function createUploadId(): string {
+  return crypto.randomUUID();
+}
+
+function sha256Buffer(input: Buffer): string {
+  return crypto.createHash('sha256').update(input).digest('hex');
+}
+
+function parseMultipartRequestBody(
+  body: Buffer,
+  contentType: string,
+): {
+  requestBody: unknown;
+  fileParts: ReturnType<typeof parseMultipartFileParts>;
+} {
+  const boundary = parseMultipartBoundary(contentType);
+  if (!boundary) {
+    throw new RunOnceInputError('Missing multipart boundary');
+  }
+
+  const parts = parseMultipartParts(body, boundary);
+  const requestText = getMultipartTextField(parts, 'request');
+  if (!requestText) {
+    throw new RunOnceInputError('Multipart field "request" is required');
+  }
+
+  let requestBody: unknown;
+  try {
+    requestBody = JSON.parse(requestText);
+  } catch {
+    throw new RunOnceInputError('Multipart field "request" must be JSON');
+  }
+
+  return {
+    requestBody,
+    fileParts: parseMultipartFileParts(body, boundary),
+  };
+}
+
+function saveMultipartFiles(input: {
+  groupFolder: string;
+  uploadId: string;
+  fileParts: ReturnType<typeof parseMultipartFileParts>;
+}): RunOnceFile[] {
+  if (input.fileParts.length === 0) return [];
+
+  const relativeDir = path.join('inputs', input.uploadId);
+  const uploadDir = path.join(
+    runOnceWorkspaceHostPath(input.groupFolder),
+    relativeDir,
+  );
+  fs.mkdirSync(uploadDir, { recursive: true });
+
+  return input.fileParts.map((part) => {
+    const filename = sanitizeUploadFilename(part.filename);
+    const hostPath = ensureUniqueUploadPath(uploadDir, filename);
+    fs.writeFileSync(hostPath, part.data);
+    const storedName = path.basename(hostPath);
+    const relativePath = path.posix.join('inputs', input.uploadId, storedName);
+    return {
+      name: storedName,
+      agent_path: `/workspace/run-once/${relativePath}`,
+      relative_path: relativePath,
+      size: part.data.length,
+      sha256: sha256Buffer(part.data),
+      content_type: part.contentType,
+    };
+  });
+}
+
+function withUploadedFiles(
+  request: RunOnceRequest,
+  uploadedFiles: RunOnceFile[],
+  uploadId: string,
+): RunOnceRequest {
+  if (uploadedFiles.length === 0) return request;
+  return {
+    ...request,
+    files: [...request.files, ...uploadedFiles],
+    metadata: {
+      ...request.metadata,
+      uploaded_file_count: uploadedFiles.length,
+      upload_id: uploadId,
+    },
+  };
+}
+
+async function readRunOnceRequest(
+  req: http.IncomingMessage,
+  opts: RunOnceHandlerOptions,
+): Promise<RunOnceRequest> {
+  const contentType = String(req.headers['content-type'] || '');
+  const body = await readRequestBody(req, opts.maxBodyBytes);
+
+  if (contentType.includes('multipart/form-data')) {
+    const uploadId = createUploadId();
+    const { requestBody, fileParts } = parseMultipartRequestBody(
+      body,
+      contentType,
+    );
+    const request = parseRunOnceRequest(requestBody);
+    const groupFolder = opts.service.resolveGroupFolder(request.chat_jid);
+    const uploadedFiles = saveMultipartFiles({
+      groupFolder,
+      uploadId,
+      fileParts,
+    });
+    return withUploadedFiles(request, uploadedFiles, uploadId);
+  }
+
+  const requestBody = parseJsonBuffer(body);
+  return parseRunOnceRequest(requestBody);
 }
 
 export async function handleInternalAgentRunOnce(
@@ -70,8 +202,7 @@ export async function handleInternalAgentRunOnce(
 
   let result: RunOnceResponse;
   try {
-    const body = await readJsonBody(req, opts.maxBodyBytes);
-    const request = parseRunOnceRequest(body);
+    const request = await readRunOnceRequest(req, opts);
     result = await opts.service.runOnce(request);
   } catch (err) {
     if (err instanceof ZodError) {
