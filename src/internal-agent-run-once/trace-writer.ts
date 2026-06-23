@@ -6,7 +6,7 @@ import { ClassifiedFailure } from '../failure-taxonomy.js';
 import { assertValidGroupFolder } from '../group-folder.js';
 import { logger } from '../logger.js';
 import type { ContainerOutput } from '../container-runner.js';
-import type { RunOnceRequest } from './schemas.js';
+import type { RunOnceOutputFile, RunOnceRequest } from './schemas.js';
 
 export interface RunOnceTraceEventRecord {
   index: number;
@@ -45,6 +45,7 @@ export interface RunOnceTraceDocument {
     text?: string;
     error?: string;
     failure?: ClassifiedFailure;
+    output_files?: RunOnceOutputFile[];
   };
   agent_trace?: unknown;
   events: RunOnceTraceEventRecord[];

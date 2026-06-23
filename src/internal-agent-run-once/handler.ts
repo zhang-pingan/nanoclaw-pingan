@@ -20,6 +20,7 @@ import {
   RunOnceResponse,
   UnsupportedMessagesShapeError,
 } from './schemas.js';
+import { contentTypeForFile, resolveRunOnceDownloadFile } from './files.js';
 import { InternalAgentRunOnceService, RunOnceInputError } from './service.js';
 import { runOnceWorkspaceHostPath } from './trace-writer.js';
 
@@ -36,6 +37,16 @@ function sendJson(
 ): void {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
+}
+
+function sendFile(res: http.ServerResponse, filePath: string): void {
+  const stat = fs.statSync(filePath);
+  res.writeHead(200, {
+    'Content-Type': contentTypeForFile(filePath) || 'application/octet-stream',
+    'Content-Length': stat.size,
+    'Content-Disposition': `attachment; filename="${path.basename(filePath).replace(/"/g, '_')}"`,
+  });
+  fs.createReadStream(filePath).pipe(res);
 }
 
 function bearerToken(req: http.IncomingMessage): string {
@@ -230,4 +241,44 @@ export async function handleInternalAgentRunOnce(
   }
 
   sendJson(res, result.ok ? 200 : 502, result);
+}
+
+export async function handleInternalAgentRunOnceFileDownload(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  reqUrl: URL,
+  opts: RunOnceHandlerOptions,
+): Promise<void> {
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    return;
+  }
+
+  if (!opts.token || bearerToken(req) !== opts.token) {
+    sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+    return;
+  }
+
+  const chatJid = reqUrl.searchParams.get('chat_jid') || '';
+  const relativePath = reqUrl.searchParams.get('path') || '';
+  if (!chatJid || !relativePath) {
+    sendJson(res, 400, {
+      ok: false,
+      error: 'chat_jid and path are required',
+    });
+    return;
+  }
+
+  try {
+    const groupFolder = opts.service.resolveGroupFolder(chatJid);
+    const filePath = resolveRunOnceDownloadFile({
+      groupFolder,
+      relativePath,
+    });
+    sendFile(res, filePath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'File download failed';
+    const statusCode = message.includes('not found') ? 404 : 400;
+    sendJson(res, statusCode, { ok: false, error: message });
+  }
 }

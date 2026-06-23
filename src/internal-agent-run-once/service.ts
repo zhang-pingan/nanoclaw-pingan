@@ -23,6 +23,11 @@ import {
   RunOnceResponse,
   runOnceInputLength,
 } from './schemas.js';
+import {
+  ensureRunOnceOutputDir,
+  runOnceOutputAgentPath,
+  scanRunOnceOutputFiles,
+} from './files.js';
 import { createRunOnceTraceWriter } from './trace-writer.js';
 
 export class RunOnceInputError extends Error {
@@ -83,10 +88,28 @@ function buildFilesPrompt(files: RunOnceFile[]): string {
   ].join('\n');
 }
 
-function buildPromptWithFiles(prompt: string, files: RunOnceFile[]): string {
+function buildOutputPrompt(outputAgentPath: string): string {
+  return [
+    'Output files:',
+    `- If the user asks you to generate files, write them under ${outputAgentPath}/.`,
+    '- Keep generated filenames descriptive and include an appropriate file extension.',
+    '- Mention generated files briefly in your final text; the API will return them separately as output_files.',
+  ].join('\n');
+}
+
+function buildPromptWithFiles(
+  prompt: string,
+  files: RunOnceFile[],
+  outputAgentPath: string,
+): string {
   const filesPrompt = buildFilesPrompt(files);
-  if (!filesPrompt) return prompt;
-  return `${filesPrompt}\n\nUser request:\n${prompt}`;
+  return [
+    filesPrompt,
+    buildOutputPrompt(outputAgentPath),
+    `User request:\n${prompt}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 function oneShotSlotTimeoutFailure(
@@ -155,8 +178,14 @@ export class InternalAgentRunOnceService {
 
     const runId = createExecutionId();
     const queryId = createExecutionId();
+    ensureRunOnceOutputDir(group.folder, runId);
+    const outputAgentPath = runOnceOutputAgentPath(runId);
     const userPrompt = message.content;
-    const prompt = buildPromptWithFiles(userPrompt, request.files);
+    const prompt = buildPromptWithFiles(
+      userPrompt,
+      request.files,
+      outputAgentPath,
+    );
     const promptHash = sha256(`${request.system}\n${prompt}`);
     const selectedModel = await selectModel({
       prompt,
@@ -199,6 +228,7 @@ export class InternalAgentRunOnceService {
         messageChars: userPrompt.length,
         injectedPromptChars: prompt.length,
         files: request.files,
+        outputDir: outputAgentPath,
         metadata: request.metadata,
       },
     });
@@ -385,6 +415,11 @@ export class InternalAgentRunOnceService {
     }
 
     const text = outputs.join('\n').trim();
+    const outputFiles = scanRunOnceOutputFiles({
+      groupFolder: group.folder,
+      chatJid: request.chat_jid,
+      runId,
+    });
     if (status === 'success' && text) {
       if (resultDeliveryStepId) {
         agentQueryTraceManager.completeStep(
@@ -403,6 +438,7 @@ export class InternalAgentRunOnceService {
         response: {
           ok: true,
           text,
+          output_files: outputFiles,
         },
       });
       return {
@@ -412,6 +448,7 @@ export class InternalAgentRunOnceService {
         query_id: queryId,
         model: selectedOrActualModel,
         trace_path: traceWriter.containerPath,
+        output_files: outputFiles,
       };
     }
 
@@ -451,6 +488,7 @@ export class InternalAgentRunOnceService {
         ok: false,
         error,
         failure,
+        output_files: outputFiles,
       },
     });
     return {
@@ -460,6 +498,7 @@ export class InternalAgentRunOnceService {
       run_id: runId,
       query_id: queryId,
       trace_path: traceWriter.containerPath,
+      output_files: outputFiles,
     };
   }
 }

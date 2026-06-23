@@ -2,6 +2,7 @@ import http from 'http';
 
 import { logger } from '../logger.js';
 import {
+  handleInternalAgentRunOnceFileDownload,
   handleInternalAgentRunOnce,
   RunOnceHandlerOptions,
 } from './handler.js';
@@ -21,17 +22,33 @@ export function startInternalAgentRunOnceServer(
 
   const server = http.createServer((req, res) => {
     const reqUrl = new URL(req.url || '/', `http://${opts.host}:${opts.port}`);
-    if (reqUrl.pathname !== '/internal/agent/run-once') {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+    if (reqUrl.pathname === '/internal/agent/run-once') {
+      handleInternalAgentRunOnce(req, res, opts).catch((err) => {
+        logger.error({ err }, 'Unhandled internal run-once request error');
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Internal server error' }));
+      });
       return;
     }
 
-    handleInternalAgentRunOnce(req, res, opts).catch((err) => {
-      logger.error({ err }, 'Unhandled internal run-once request error');
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: 'Internal server error' }));
-    });
+    if (reqUrl.pathname === '/internal/agent/run-once/files') {
+      handleInternalAgentRunOnceFileDownload(req, res, reqUrl, opts).catch(
+        (err) => {
+          logger.error(
+            { err },
+            'Unhandled internal run-once file download error',
+          );
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({ ok: false, error: 'Internal server error' }),
+          );
+        },
+      );
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Not found' }));
   });
 
   server.listen(opts.port, opts.host, () => {

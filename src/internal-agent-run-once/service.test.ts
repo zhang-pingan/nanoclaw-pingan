@@ -85,13 +85,18 @@ describe('InternalAgentRunOnceService', () => {
       model: 'test-model',
     });
     expect(vi.mocked(runContainerAgent).mock.calls[0][1]).toMatchObject({
-      prompt: 'question',
       system: 'portal system prompt',
       isolatedSession: true,
       requireResult: true,
       executionMode: 'external_system_once',
       isOneShot: true,
     });
+    expect(vi.mocked(runContainerAgent).mock.calls[0][1].prompt).toContain(
+      'Output files:',
+    );
+    expect(vi.mocked(runContainerAgent).mock.calls[0][1].prompt).toContain(
+      'User request:\nquestion',
+    );
     expect(
       Object.prototype.hasOwnProperty.call(
         vi.mocked(runContainerAgent).mock.calls[0][1],
@@ -149,6 +154,76 @@ describe('InternalAgentRunOnceService', () => {
     );
     expect(vi.mocked(runContainerAgent).mock.calls[0][1].prompt).toContain(
       'User request:\nsummarize attachment',
+    );
+  });
+
+  it('returns files generated under the run-once output directory', async () => {
+    vi.mocked(runContainerAgent).mockImplementation(
+      async (_group, input, _onProcess, onOutput) => {
+        const match = input.prompt.match(
+          /write them under (\/workspace\/run-once\/outputs\/[^/]+)\//,
+        );
+        if (!match?.[1]) throw new Error('output directory not injected');
+        const outputRelativeDir = match[1].replace(
+          /^\/workspace\/run-once\//,
+          '',
+        );
+        const outputHostDir = path.resolve(
+          'data/run-once-workspaces/l3agent',
+          outputRelativeDir,
+        );
+        fs.mkdirSync(outputHostDir, { recursive: true });
+        fs.writeFileSync(path.join(outputHostDir, 'report.md'), '# Report\n');
+
+        await onOutput?.({
+          status: 'success',
+          result: 'generated report',
+          selectedModel: 'test-model',
+        });
+        return {
+          status: 'success',
+          result: null,
+          selectedModel: 'test-model',
+        };
+      },
+    );
+
+    const service = new InternalAgentRunOnceService({
+      registeredGroups: () => ({ 'web:l3agent': group }),
+      queue: new GroupQueue(),
+      onProcess: vi.fn(),
+      maxInputChars: 10000,
+    });
+
+    const result = await service.runOnce({
+      system: 'portal system prompt',
+      messages: [{ role: 'user', content: 'generate a markdown report' }],
+      chat_jid: 'web:l3agent',
+      require_result: true,
+      metadata: {},
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output_files: [
+        {
+          name: 'report.md',
+          agent_path: expect.stringMatching(
+            /^\/workspace\/run-once\/outputs\/[^/]+\/report\.md$/,
+          ),
+          relative_path: expect.stringMatching(/^outputs\/[^/]+\/report\.md$/),
+          size: Buffer.byteLength('# Report\n'),
+          sha256: expect.any(String),
+          content_type: 'text/markdown',
+          download_url: expect.stringContaining(
+            '/internal/agent/run-once/files?',
+          ),
+        },
+      ],
+    });
+    if (!result.ok) throw new Error('expected success');
+    expect(result.output_files?.[0]?.download_url).toContain(
+      'chat_jid=web%3Al3agent',
     );
   });
 

@@ -39,6 +39,13 @@ export const runOnceFileSchema = z.object({
   content_type: z.string().min(1).optional(),
 });
 
+export const runOnceOutputFileSchema = runOnceFileSchema.extend({
+  relative_path: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  sha256: z.string().min(1),
+  download_url: z.string().min(1),
+});
+
 export const runOnceRequestSchema = z.object({
   system: z.string().min(1),
   messages: z.array(runOnceMessageSchema).min(1),
@@ -51,6 +58,7 @@ export const runOnceRequestSchema = z.object({
 export type RunOnceRequest = z.output<typeof runOnceRequestSchema>;
 export type RunOnceRequestInput = z.input<typeof runOnceRequestSchema>;
 export type RunOnceFile = z.infer<typeof runOnceFileSchema>;
+export type RunOnceOutputFile = z.infer<typeof runOnceOutputFileSchema>;
 
 export interface RunOnceSuccessResponse {
   ok: true;
@@ -59,6 +67,7 @@ export interface RunOnceSuccessResponse {
   query_id: string;
   model: string;
   trace_path?: string;
+  output_files?: RunOnceOutputFile[];
 }
 
 export interface RunOnceFailureResponse {
@@ -74,6 +83,7 @@ export interface RunOnceFailureResponse {
   run_id: string;
   query_id: string;
   trace_path?: string;
+  output_files?: RunOnceOutputFile[];
 }
 
 export type RunOnceResponse = RunOnceSuccessResponse | RunOnceFailureResponse;

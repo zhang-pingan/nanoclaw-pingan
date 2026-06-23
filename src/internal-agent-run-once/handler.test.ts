@@ -11,7 +11,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { _initTestDatabase } from '../db.js';
 import { GroupQueue } from '../group-queue.js';
 import type { RegisteredGroup } from '../types.js';
-import { handleInternalAgentRunOnce } from './handler.js';
+import {
+  handleInternalAgentRunOnce,
+  handleInternalAgentRunOnceFileDownload,
+} from './handler.js';
 import { InternalAgentRunOnceService } from './service.js';
 import type { RunOnceRequestInput, RunOnceResponse } from './schemas.js';
 
@@ -20,6 +23,10 @@ class LocalServerResponse extends Writable {
   headers: IncomingHttpHeaders = {};
   headersSent = false;
   private chunks: Buffer[] = [];
+  private finishResolver: (() => void) | null = null;
+  readonly finished = new Promise<void>((resolve) => {
+    this.finishResolver = resolve;
+  });
 
   writeHead(statusCode: number, headers: IncomingHttpHeaders = {}): this {
     this.statusCode = statusCode;
@@ -61,7 +68,10 @@ class LocalServerResponse extends Writable {
     }
 
     this.headersSent = true;
-    return super.end(finalCallback);
+    return super.end(() => {
+      finalCallback?.();
+      this.finishResolver?.();
+    });
   }
 
   get body(): string {
@@ -124,6 +134,34 @@ async function postToHandler(input: {
   );
   req.end(input.body);
   await handled;
+  return res;
+}
+
+async function downloadFromHandler(input: {
+  path: string;
+  token?: string;
+  service: InternalAgentRunOnceService;
+}): Promise<LocalServerResponse> {
+  const req = new PassThrough() as PassThrough & IncomingMessage;
+  req.method = 'GET';
+  req.url = input.path;
+  req.headers = {
+    authorization: `Bearer ${input.token || 'secret'}`,
+  };
+  const res = new LocalServerResponse();
+  const reqUrl = new URL(input.path, 'http://127.0.0.1:3004');
+
+  await handleInternalAgentRunOnceFileDownload(
+    req,
+    res as unknown as ServerResponse,
+    reqUrl,
+    {
+      service: input.service,
+      token: 'secret',
+      maxBodyBytes: 1024 * 1024,
+    },
+  );
+  await res.finished;
   return res;
 }
 
@@ -297,6 +335,61 @@ describe('internal run-once handler', () => {
     expect(res.json).toMatchObject({
       ok: false,
       error: 'Multipart field "request" is required',
+    });
+  });
+
+  it('downloads generated output files with the internal token', async () => {
+    const service = makeService(
+      makeRunOnceMock(async () => ({
+        ok: true as const,
+        text: 'unused',
+        run_id: 'run',
+        query_id: 'query',
+        model: 'test-model',
+      })),
+    );
+    const relativePath = 'outputs/run-download/report.md';
+    const hostPath = path.resolve(
+      'data/run-once-workspaces/handler_l3agent',
+      relativePath,
+    );
+    fs.mkdirSync(path.dirname(hostPath), { recursive: true });
+    fs.writeFileSync(hostPath, '# Download\n');
+
+    const res = await downloadFromHandler({
+      service,
+      path: `/internal/agent/run-once/files?chat_jid=${encodeURIComponent(
+        'web:l3agent',
+      )}&path=${encodeURIComponent(relativePath)}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['Content-Type']).toBe('text/markdown');
+    expect(res.body).toBe('# Download\n');
+  });
+
+  it('rejects output file download path traversal', async () => {
+    const service = makeService(
+      makeRunOnceMock(async () => ({
+        ok: true as const,
+        text: 'unused',
+        run_id: 'run',
+        query_id: 'query',
+        model: 'test-model',
+      })),
+    );
+
+    const res = await downloadFromHandler({
+      service,
+      path: `/internal/agent/run-once/files?chat_jid=${encodeURIComponent(
+        'web:l3agent',
+      )}&path=${encodeURIComponent('outputs/run/../secret.txt')}`,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json).toMatchObject({
+      ok: false,
+      error: 'Invalid output file path',
     });
   });
 });
