@@ -1,20 +1,22 @@
 ---
 name: deep-research-review
-description: Use only in the deep_research workflow review stage. Validate report claims, citations, source quality, and route revisions.
+description: Use only in the deep_research workflow review stage. Validate final report claims, citations, evidence support, and route revisions.
 ---
 
 # Deep Research Review Skill
 
 本技能仅用于 `deep_research` workflow 的 `review` 阶段。
 
-目标：校验 `report.json` 的主张、引用、来源质量、覆盖度和未解决缺口，输出可驱动 workflow 路由的 `review.json`。
+目标：校验最终 `report.json` 的主张、引用、证据支撑和未解决缺口，输出可驱动 workflow 路由的 `review.json`。来源充分性和证据抽取质量已由前置 review 阶段审核；本阶段重点判断 writer 是否基于已验证的 `findings/evidence` 正确写作。
 
 ## 必须读取
 
 - `research_plan.json`
 - `sources.json`
+- `source_review.json`
 - `evidence.json`
 - `findings.json`
+- `evidence_review.json`
 - `report.json`
 - `traceability.json`
 
@@ -59,17 +61,18 @@ description: Use only in the deep_research workflow review stage. Validate repor
 - `failed`
 - `review`
 
-当前第一阶段 evaluator 只粗略映射 `verdict`，`needs_revision` 会回到 `collect`；仍要在 `review.json.route` 写清理想回跳目标，便于后续增强。
+workflow 会执行 `review.json.route` 或 handoff result 里的 `route`。报告乱写、漏引、夸大、误读或乱用历史上下文时回 `write`；证据抽取/发现归纳有问题时回 `analyze`；底层来源不足时回 `collect`。
 
 ## 检查项
 
 1. 每个关键 claim 是否有 evidence/source 支撑。
 2. `report.json` 的 citations 是否都存在于 `sources.json`。
 3. `findings.json` 的 evidence/source 是否存在。
-4. 来源质量是否足以支撑结论。
-5. 是否存在冲突来源或未解决缺口。
-6. report 是否包含任意 HTML/CSS/JS。
-7. 时间敏感结论是否记录检索时间和时效限制。
+4. `report.json` 是否只基于 `findings.json` / `evidence.json` 中已有证据写作，而不是从 sources 临场扩展新 claim。
+5. 是否夸大、误读、遗漏限制，或把低置信度 finding 写成确定事实。
+6. 是否存在冲突来源或未解决缺口未在报告中说明。
+7. report 是否包含任意 HTML/CSS/JS。
+8. 时间敏感结论是否记录检索时间和时效限制。
 
 ## complete_delegation
 

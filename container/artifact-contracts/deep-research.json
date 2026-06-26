@@ -76,6 +76,79 @@
     ]
   },
   {
+    "id": "deep_research.collect_review.v1",
+    "version": 1,
+    "description": "Deep Research source review must validate source coverage and route collection revisions.",
+    "allowed_artifact_roots": ["/workspace/projects"],
+    "payload": {
+      "required": ["deliverable", "verdict", "route", "summary"],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "verdict": {
+          "type": "string",
+          "enum": ["passed", "failed", "needs_revision", "pending"]
+        },
+        "route": {
+          "type": "string",
+          "enum": ["analyze", "collect", "failed", "collect_review"]
+        },
+        "summary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "files": [
+      {
+        "path": "projects/{{service}}/iteration/{{deliverable}}/source_review.json",
+        "required": true,
+        "body_required_fields": ["verdict", "route", "summary", "checked_at"],
+        "body_payload_field_matches": [
+          {
+            "code": "deep_research.collect_review_verdict_mismatch",
+            "severity": "high",
+            "body_field": "verdict",
+            "payload_field": "verdict",
+            "then_status": "failed",
+            "message": "source_review.json verdict does not match handoff verdict."
+          },
+          {
+            "code": "deep_research.collect_review_route_mismatch",
+            "severity": "high",
+            "body_field": "route",
+            "payload_field": "route",
+            "then_status": "failed",
+            "message": "source_review.json route does not match handoff route."
+          }
+        ],
+        "max_bytes": 300000
+      }
+    ],
+    "payload_rules": [
+      {
+        "code": "deep_research.collect_review_needs_revision",
+        "severity": "medium",
+        "field": "verdict",
+        "eq": "needs_revision",
+        "then_status": "needs_revision",
+        "message": "Deep Research source reviewer requested collection revision."
+      },
+      {
+        "code": "deep_research.collect_review_failed",
+        "severity": "high",
+        "field": "verdict",
+        "eq": "failed",
+        "then_status": "failed",
+        "message": "Deep Research source reviewer failed the source set."
+      },
+      {
+        "code": "deep_research.collect_review_pending",
+        "severity": "medium",
+        "field": "verdict",
+        "eq": "pending",
+        "then_status": "pending",
+        "message": "Deep Research source reviewer marked review pending."
+      }
+    ]
+  },
+  {
     "id": "deep_research.analyze.v1",
     "version": 1,
     "description": "Deep Research analyze stage must write evidence and findings.",
@@ -106,6 +179,79 @@
         "path": "projects/{{service}}/iteration/{{deliverable}}/traceability.json",
         "required": true,
         "max_bytes": 250000
+      }
+    ]
+  },
+  {
+    "id": "deep_research.analyze_review.v1",
+    "version": 1,
+    "description": "Deep Research evidence review must validate source/evidence/finding mappings and route evidence revisions.",
+    "allowed_artifact_roots": ["/workspace/projects"],
+    "payload": {
+      "required": ["deliverable", "verdict", "route", "summary"],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "verdict": {
+          "type": "string",
+          "enum": ["passed", "failed", "needs_revision", "pending"]
+        },
+        "route": {
+          "type": "string",
+          "enum": ["write", "analyze", "collect", "failed", "analyze_review"]
+        },
+        "summary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "files": [
+      {
+        "path": "projects/{{service}}/iteration/{{deliverable}}/evidence_review.json",
+        "required": true,
+        "body_required_fields": ["verdict", "route", "summary", "checked_at"],
+        "body_payload_field_matches": [
+          {
+            "code": "deep_research.analyze_review_verdict_mismatch",
+            "severity": "high",
+            "body_field": "verdict",
+            "payload_field": "verdict",
+            "then_status": "failed",
+            "message": "evidence_review.json verdict does not match handoff verdict."
+          },
+          {
+            "code": "deep_research.analyze_review_route_mismatch",
+            "severity": "high",
+            "body_field": "route",
+            "payload_field": "route",
+            "then_status": "failed",
+            "message": "evidence_review.json route does not match handoff route."
+          }
+        ],
+        "max_bytes": 300000
+      }
+    ],
+    "payload_rules": [
+      {
+        "code": "deep_research.analyze_review_needs_revision",
+        "severity": "medium",
+        "field": "verdict",
+        "eq": "needs_revision",
+        "then_status": "needs_revision",
+        "message": "Deep Research evidence reviewer requested analysis revision."
+      },
+      {
+        "code": "deep_research.analyze_review_failed",
+        "severity": "high",
+        "field": "verdict",
+        "eq": "failed",
+        "then_status": "failed",
+        "message": "Deep Research evidence reviewer failed the evidence set."
+      },
+      {
+        "code": "deep_research.analyze_review_pending",
+        "severity": "medium",
+        "field": "verdict",
+        "eq": "pending",
+        "then_status": "pending",
+        "message": "Deep Research evidence reviewer marked review pending."
       }
     ]
   },
@@ -149,12 +295,16 @@
     "description": "Deep Research reviewer must write review.json and route verdict.",
     "allowed_artifact_roots": ["/workspace/projects"],
     "payload": {
-      "required": ["deliverable", "verdict", "summary"],
+      "required": ["deliverable", "verdict", "route", "summary"],
       "properties": {
         "deliverable": { "type": "string", "minLength": 1 },
         "verdict": {
           "type": "string",
           "enum": ["passed", "failed", "needs_revision", "pending"]
+        },
+        "route": {
+          "type": "string",
+          "enum": ["publish", "write", "analyze", "collect", "failed", "review"]
         },
         "summary": { "type": "string", "minLength": 1 }
       }
@@ -163,7 +313,25 @@
       {
         "path": "projects/{{service}}/iteration/{{deliverable}}/review.json",
         "required": true,
-        "body_required_fields": ["verdict", "summary", "checked_at"],
+        "body_required_fields": ["verdict", "route", "summary", "checked_at"],
+        "body_payload_field_matches": [
+          {
+            "code": "deep_research.review_verdict_mismatch",
+            "severity": "high",
+            "body_field": "verdict",
+            "payload_field": "verdict",
+            "then_status": "failed",
+            "message": "review.json verdict does not match handoff verdict."
+          },
+          {
+            "code": "deep_research.review_route_mismatch",
+            "severity": "high",
+            "body_field": "route",
+            "payload_field": "route",
+            "then_status": "failed",
+            "message": "review.json route does not match handoff route."
+          }
+        ],
         "max_bytes": 300000
       }
     ],

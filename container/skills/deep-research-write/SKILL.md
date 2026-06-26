@@ -7,14 +7,16 @@ description: Use only in the deep_research workflow write stage. Build structure
 
 本技能仅用于 `deep_research` workflow 的 `write` 阶段。
 
-目标：只基于结构化证据生成 `report.json`。`report.json` 是主产物，Markdown 只由系统导出生成。不要输出任意 HTML/CSS/JS。
+目标：只基于已审核的结构化证据生成 `report.json`。`report.json` 是主产物，Markdown 只由系统导出生成。不要输出任意 HTML/CSS/JS。
 
 ## 必须读取
 
 - `research_plan.json`
 - `sources.json`
+- `source_review.json`
 - `evidence.json`
 - `findings.json`
+- `evidence_review.json`
 - `traceability.json`
 
 ## 必须写出的文件
@@ -80,6 +82,8 @@ description: Use only in the deep_research workflow write stage. Build structure
 3. 不确定、冲突或低置信度结论必须在正文或 `limitations` 中说明。
 4. 不写 HTML、CSS、JS、script、iframe。
 5. 不把 Markdown 当主产物。
+6. 不直接从 `sources.json` 临场发明新的关键 claim；如果某个结论不在 `findings/evidence` 中，应写为限制或等待 analyze 回修。
+7. 历史研究上下文只能作为背景和对比线索，不得替代本次 `findings/evidence`。
 
 ## complete_delegation
 

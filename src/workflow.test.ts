@@ -156,6 +156,51 @@ const GROUPS: Array<[string, RegisteredGroup]> = [
       added_at: '2026-04-08T00:00:00.000Z',
     },
   ],
+  [
+    'research-planner@g.us',
+    {
+      name: 'Research Planner',
+      folder: 'web_research_planner',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
+  [
+    'research-collector@g.us',
+    {
+      name: 'Research Collector',
+      folder: 'web_research_collector',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
+  [
+    'research-analyst@g.us',
+    {
+      name: 'Research Analyst',
+      folder: 'web_research_analyst',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
+  [
+    'research-writer@g.us',
+    {
+      name: 'Research Writer',
+      folder: 'web_research_writer',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
+  [
+    'research-reviewer@g.us',
+    {
+      name: 'Research Reviewer',
+      folder: 'web_research_reviewer',
+      trigger: '/nc',
+      added_at: '2026-04-08T00:00:00.000Z',
+    },
+  ],
 ];
 
 function resumePendingInterruptForTest(
@@ -2182,6 +2227,162 @@ describe('workflow metadata and branch flow', () => {
     } finally {
       planReviewState!.evaluator = originalEvaluator;
     }
+  });
+
+  it('routes deep research report review revisions to the route target', () => {
+    writeDoc(
+      '2026-04-08_research',
+      'review.json',
+      JSON.stringify(
+        {
+          schema_version: 1,
+          verdict: 'needs_revision',
+          route: 'write',
+          summary: '报告 claim 超出 evidence 支撑范围。',
+          checked_at: '2026-04-08T00:00:01.000Z',
+        },
+        null,
+        2,
+      ),
+    );
+    createWorkflow({
+      id: 'wf-deep-research-review-route-write',
+      name: 'Deep research review route write',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        deliverable: '2026-04-08_research',
+        research_query: '测试研究问题',
+      },
+      status: 'review',
+      current_delegation_id: 'del-deep-research-review-route-write',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'deep_research',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-deep-research-review-route-write',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'research-reviewer@g.us',
+      target_folder: 'web_research_reviewer',
+      task: 'deep research report review task',
+      status: 'completed',
+      result: buildStructuredResult({
+        deliverable: '2026-04-08_research',
+        verdict: 'needs_revision',
+        route: 'write',
+        summary: '报告 claim 超出 evidence 支撑范围。',
+      }),
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-deep-research-review-route-write',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+
+    onDelegationComplete('del-deep-research-review-route-write');
+
+    const workflow = getWorkflow('wf-deep-research-review-route-write');
+    expect(workflow?.status).toBe('write');
+    expect(workflow?.current_delegation_id).toBeTruthy();
+    expect(workflow?.current_delegation_id).not.toBe(
+      'del-deep-research-review-route-write',
+    );
+    const delegations = getDelegationsByWorkflow(
+      'wf-deep-research-review-route-write',
+    );
+    const writerDelegation = delegations.find(
+      (item) => item.id === workflow?.current_delegation_id,
+    );
+    expect(writerDelegation?.target_folder).toBe('web_research_writer');
+    expect(
+      getLatestWorkflowStageEvaluation(
+        'wf-deep-research-review-route-write',
+        'review',
+      )?.status,
+    ).toBe('needs_revision');
+  });
+
+  it('routes deep research evidence review source gaps back to collect', () => {
+    writeDoc(
+      '2026-04-08_research',
+      'evidence_review.json',
+      JSON.stringify(
+        {
+          schema_version: 1,
+          verdict: 'needs_revision',
+          route: 'collect',
+          summary: '关键子问题缺少官方来源，无法完成证据抽取。',
+          checked_at: '2026-04-08T00:00:01.000Z',
+        },
+        null,
+        2,
+      ),
+    );
+    createWorkflow({
+      id: 'wf-deep-research-analyze-review-route-collect',
+      name: 'Deep research evidence review route collect',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        deliverable: '2026-04-08_research',
+        research_query: '测试研究问题',
+      },
+      status: 'analyze_review',
+      current_delegation_id: 'del-deep-research-analyze-review-route-collect',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'deep_research',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-deep-research-analyze-review-route-collect',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'research-reviewer@g.us',
+      target_folder: 'web_research_reviewer',
+      task: 'deep research evidence review task',
+      status: 'completed',
+      result: buildStructuredResult({
+        deliverable: '2026-04-08_research',
+        verdict: 'needs_revision',
+        route: 'collect',
+        summary: '关键子问题缺少官方来源，无法完成证据抽取。',
+      }),
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-deep-research-analyze-review-route-collect',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+
+    onDelegationComplete('del-deep-research-analyze-review-route-collect');
+
+    const workflow = getWorkflow('wf-deep-research-analyze-review-route-collect');
+    expect(workflow?.status).toBe('collect');
+    expect(workflow?.current_delegation_id).toBeTruthy();
+    expect(workflow?.current_delegation_id).not.toBe(
+      'del-deep-research-analyze-review-route-collect',
+    );
+    const delegations = getDelegationsByWorkflow(
+      'wf-deep-research-analyze-review-route-collect',
+    );
+    const collectorDelegation = delegations.find(
+      (item) => item.id === workflow?.current_delegation_id,
+    );
+    expect(collectorDelegation?.target_folder).toBe('web_research_collector');
+    expect(
+      getLatestWorkflowStageEvaluation(
+        'wf-deep-research-analyze-review-route-collect',
+        'analyze_review',
+      )?.status,
+    ).toBe('needs_revision');
   });
 
   it('evaluates typed handoff result before falling back to raw result text', () => {

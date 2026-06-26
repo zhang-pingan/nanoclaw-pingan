@@ -26,8 +26,10 @@ export const DEEP_RESEARCH_SERVICE = 'research';
 
 const REPORT_FILE = 'report.json';
 const SOURCES_FILE = 'sources.json';
+const SOURCE_REVIEW_FILE = 'source_review.json';
 const EVIDENCE_FILE = 'evidence.json';
 const FINDINGS_FILE = 'findings.json';
+const EVIDENCE_REVIEW_FILE = 'evidence_review.json';
 const REVIEW_FILE = 'review.json';
 const SEARCH_LOG_FILE = 'search_log.json';
 const RESEARCH_PLAN_FILE = 'research_plan.json';
@@ -40,8 +42,10 @@ const CONTINUATION_MAX_TASKS = 6;
 const DEEP_RESEARCH_FILE_NAMES = new Set([
   REPORT_FILE,
   SOURCES_FILE,
+  SOURCE_REVIEW_FILE,
   EVIDENCE_FILE,
   FINDINGS_FILE,
+  EVIDENCE_REVIEW_FILE,
   REVIEW_FILE,
   SEARCH_LOG_FILE,
   RESEARCH_PLAN_FILE,
@@ -646,8 +650,16 @@ function buildContinuationContextTask(
         CONTINUATION_BUNDLE_TEXT_LIMIT,
       ),
       sources: truncateContinuationArray(read(SOURCES_FILE), 30),
+      source_review: compactDeepResearchValue(
+        read(SOURCE_REVIEW_FILE),
+        CONTINUATION_BUNDLE_TEXT_LIMIT,
+      ),
       evidence: truncateContinuationArray(read(EVIDENCE_FILE), 30),
       findings: truncateContinuationArray(read(FINDINGS_FILE), 30),
+      evidence_review: compactDeepResearchValue(
+        read(EVIDENCE_REVIEW_FILE),
+        CONTINUATION_BUNDLE_TEXT_LIMIT,
+      ),
       report: compactDeepResearchValue(
         read(REPORT_FILE),
         CONTINUATION_BUNDLE_TEXT_LIMIT,
@@ -751,8 +763,10 @@ export function getDeepResearchBundleWithOptions(
         research_plan: read(RESEARCH_PLAN_FILE),
         search_log: read(SEARCH_LOG_FILE),
         sources,
+        source_review: read(SOURCE_REVIEW_FILE),
         evidence,
         findings,
+        evidence_review: read(EVIDENCE_REVIEW_FILE),
         report: read(REPORT_FILE),
         review: read(REVIEW_FILE),
       },
@@ -765,8 +779,10 @@ export function getDeepResearchBundleWithOptions(
       research_plan: null,
       search_log: null,
       sources: limitDeepResearchArray(sources, sourceLimit),
+      source_review: null,
       evidence: limitDeepResearchArray(evidence, evidenceLimit),
       findings: limitDeepResearchArray(findings, findingLimit),
+      evidence_review: null,
       report: read(REPORT_FILE),
       review: null,
     },

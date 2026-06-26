@@ -36,6 +36,24 @@
     }
   },
   {
+    "id": "deep_research.collect_review.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": ["source_review"]
+    },
+    "ai": {
+      "enabled": false,
+      "model": "default",
+      "rubric": "Judge whether source_review.json validates subquestion coverage, source quality, search log completeness, rejected candidate rationale, and route decision.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
     "id": "deep_research.analyze.v1",
     "type": "hybrid",
     "deterministic": {
@@ -45,6 +63,24 @@
       "enabled": false,
       "model": "default",
       "rubric": "Judge whether evidence maps to sources and findings map to evidence with conflicts and limitations preserved.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "deep_research.analyze_review.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": ["evidence_review"]
+    },
+    "ai": {
+      "enabled": false,
+      "model": "default",
+      "rubric": "Judge whether evidence_review.json validates evidence-to-source and finding-to-evidence mappings, preserves conflicts and limitations, and routes source insufficiency to collect or extraction issues to analyze.",
       "max_context_bytes": 16000
     },
     "status_mapping": {
@@ -80,7 +116,7 @@
     "ai": {
       "enabled": false,
       "model": "default",
-      "rubric": "Judge whether review.json validates citation coverage, source quality, unresolved gaps, and route decision.",
+      "rubric": "Judge whether review.json validates report claim coverage, citation correctness, source/evidence support, unresolved gaps, and route decision.",
       "max_context_bytes": 16000
     },
     "status_mapping": {
