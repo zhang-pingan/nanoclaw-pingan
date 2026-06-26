@@ -258,7 +258,7 @@
   {
     "id": "deep_research.write.v1",
     "version": 1,
-    "description": "Deep Research writer must publish structured report.json.",
+    "description": "Deep Research writer must publish a formal structured research report.json.",
     "allowed_artifact_roots": ["/workspace/projects"],
     "payload": {
       "required": ["deliverable", "verdict", "summary"],
@@ -281,6 +281,8 @@
           "status",
           "language",
           "generated_at",
+          "research_question",
+          "methodology",
           "summary",
           "sections",
           "source_ids"

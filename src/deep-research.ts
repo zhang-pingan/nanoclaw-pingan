@@ -353,44 +353,182 @@ export function readDeepResearchEvidence(taskId: string): unknown | null {
   return readDeepResearchArtifact(taskId, EVIDENCE_FILE);
 }
 
-function citationLabel(
-  sourceId: string,
-  sources: Map<string, Record<string, unknown>>,
-): string {
-  const source = sources.get(sourceId);
-  const title = safeText(source?.title) || sourceId;
-  const url = safeText(source?.url);
-  return url ? `[${sourceId}] ${title} - ${url}` : `[${sourceId}] ${title}`;
+interface CitationRenderContext {
+  sources: Map<string, Record<string, unknown>>;
+  sourceNumbers: Map<string, number>;
+  orderedSourceIds: string[];
 }
 
-function appendCitationRefs(
-  lines: string[],
-  citations: unknown,
+function createCitationRenderContext(
   sources: Map<string, Record<string, unknown>>,
-): void {
+): CitationRenderContext {
+  return {
+    sources,
+    sourceNumbers: new Map(),
+    orderedSourceIds: [],
+  };
+}
+
+function getCitationNumber(
+  sourceId: string,
+  context: CitationRenderContext,
+): number {
+  const existing = context.sourceNumbers.get(sourceId);
+  if (existing) return existing;
+  const next = context.orderedSourceIds.length + 1;
+  context.sourceNumbers.set(sourceId, next);
+  context.orderedSourceIds.push(sourceId);
+  return next;
+}
+
+function citationMarkers(
+  citations: unknown,
+  context: CitationRenderContext,
+): string {
   const ids = normalizeStringArray(citations);
-  if (ids.length === 0) return;
-  lines.push('');
-  lines.push(`引用：${ids.map((id) => citationLabel(id, sources)).join('; ')}`);
+  if (ids.length === 0) return '';
+  return ids.map((id) => `[${getCitationNumber(id, context)}]`).join('');
+}
+
+function textWithCitationMarkers(
+  text: string,
+  citations: unknown,
+  context: CitationRenderContext,
+): string {
+  const markers = citationMarkers(citations, context);
+  return markers ? `${text} ${markers}` : text;
+}
+
+function citationAppendixLabel(
+  sourceId: string,
+  source: Record<string, unknown> | undefined,
+): string {
+  const title = safeText(source?.title) || sourceId;
+  const publisher =
+    safeText(source?.publisher) || safeText(source?.source_type);
+  const publishedAt = safeText(source?.published_at);
+  const retrievedAt = safeText(source?.retrieved_at);
+  const url = safeText(source?.url);
+  const meta = [sourceId, publisher, publishedAt || retrievedAt]
+    .filter(Boolean)
+    .join(' · ');
+  return `${meta ? `${meta} · ` : ''}${title}${url ? `：${url}` : ''}`;
+}
+
+function reportValueText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(reportValueText).filter(Boolean).join('、');
+  }
+  if (isRecord(value)) {
+    return (
+      safeText(value.text) ||
+      safeText(value.title) ||
+      safeText(value.name) ||
+      safeText(value.label) ||
+      JSON.stringify(value)
+    );
+  }
+  return '';
+}
+
+function markdownTableCell(value: unknown): string {
+  return reportValueText(value)
+    .replace(/\r?\n/g, ' ')
+    .replace(/\|/g, '\\|')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function appendMarkdownTable(
+  lines: string[],
+  headers: string[],
+  rows: string[][],
+): void {
+  if (headers.length === 0 || rows.length === 0) return;
+  lines.push(`| ${headers.map(markdownTableCell).join(' | ')} |`);
+  lines.push(`| ${headers.map(() => '---').join(' | ')} |`);
+  for (const row of rows) {
+    const cells = headers.map((_, index) =>
+      markdownTableCell(row[index] || ''),
+    );
+    lines.push(`| ${cells.join(' | ')} |`);
+  }
+}
+
+function appendReportTableBlock(
+  lines: string[],
+  block: Record<string, unknown>,
+  context: CitationRenderContext,
+): void {
+  const rows = Array.isArray(block.rows)
+    ? block.rows.filter(isRecord)
+    : Array.isArray(block.items)
+      ? block.items.filter(isRecord)
+      : [];
+  if (rows.length === 0) return;
+
+  const columns = Array.isArray(block.columns)
+    ? block.columns
+        .map((column) => {
+          if (typeof column === 'string') {
+            return { key: column, label: column };
+          }
+          if (!isRecord(column)) return null;
+          const key = safeText(column.key) || safeText(column.id);
+          if (!key) return null;
+          return { key, label: safeText(column.label) || key };
+        })
+        .filter((column): column is { key: string; label: string } => !!column)
+    : Object.keys(rows[0])
+        .filter((key) => key !== 'citations' && key !== 'source_ids')
+        .slice(0, 6)
+        .map((key) => ({ key, label: key }));
+
+  if (columns.length === 0) return;
+
+  const tableRows = rows.map((row) => {
+    const cells = columns.map((column) => reportValueText(row[column.key]));
+    const markers = citationMarkers(row.citations || row.source_ids, context);
+    if (markers && cells.length > 0) {
+      cells[cells.length - 1] = `${cells[cells.length - 1]} ${markers}`.trim();
+    }
+    return cells;
+  });
+
+  appendMarkdownTable(
+    lines,
+    columns.map((column) => column.label),
+    tableRows,
+  );
 }
 
 function appendReportBlock(
   lines: string[],
   block: Record<string, unknown>,
-  sources: Map<string, Record<string, unknown>>,
+  context: CitationRenderContext,
 ): void {
   const type = safeText(block.type) || 'paragraph';
   if (type === 'paragraph') {
     const text = safeText(block.text);
-    if (text) lines.push(text);
-    appendCitationRefs(lines, block.citations, sources);
+    if (text)
+      lines.push(textWithCitationMarkers(text, block.citations, context));
     return;
   }
   if (type === 'insight_card') {
     const title = safeText(block.title) || '洞察';
     const body = safeText(block.body);
-    lines.push(`> ${title}${body ? `：${body}` : ''}`);
-    appendCitationRefs(lines, block.citations, sources);
+    lines.push(
+      textWithCitationMarkers(
+        `> ${title}${body ? `：${body}` : ''}`,
+        block.citations,
+        context,
+      ),
+    );
     return;
   }
   if (type === 'metric_grid' && Array.isArray(block.items)) {
@@ -398,17 +536,33 @@ function appendReportBlock(
     lines.push('| --- | --- | --- |');
     for (const item of block.items) {
       if (!isRecord(item)) continue;
+      const note = textWithCitationMarkers(
+        safeText(item.note),
+        item.citations,
+        context,
+      );
       lines.push(
-        `| ${safeText(item.label)} | ${safeText(item.value)} | ${safeText(item.note)} |`,
+        `| ${markdownTableCell(item.label)} | ${markdownTableCell(item.value)} | ${markdownTableCell(note)} |`,
       );
     }
+    return;
+  }
+  if (type === 'table') {
+    appendReportTableBlock(lines, block, context);
     return;
   }
   if (type === 'timeline' && Array.isArray(block.events)) {
     for (const event of block.events) {
       if (!isRecord(event)) continue;
+      const description = safeText(event.description)
+        ? `：${safeText(event.description)}`
+        : '';
       lines.push(
-        `- ${safeText(event.date)} ${safeText(event.title)}${safeText(event.description) ? `：${safeText(event.description)}` : ''}`,
+        textWithCitationMarkers(
+          `- ${safeText(event.date)} ${safeText(event.title)}${description}`,
+          event.citations,
+          context,
+        ),
       );
     }
     return;
@@ -416,13 +570,113 @@ function appendReportBlock(
   if (type === 'source_cluster') {
     const ids = normalizeStringArray(block.source_ids);
     if (ids.length > 0) {
-      lines.push(ids.map((id) => `- ${citationLabel(id, sources)}`).join('\n'));
+      lines.push(
+        ids
+          .map((id) => {
+            const source = context.sources.get(id);
+            const title = safeText(source?.title) || id;
+            return `- ${title} ${citationMarkers([id], context)}`;
+          })
+          .join('\n'),
+      );
     }
     return;
   }
   const text = safeText(block.text) || safeText(block.body);
-  if (text) lines.push(text);
-  appendCitationRefs(lines, block.citations, sources);
+  if (text) lines.push(textWithCitationMarkers(text, block.citations, context));
+}
+
+function appendMethodology(lines: string[], methodology: unknown): void {
+  if (!isRecord(methodology)) return;
+  const labels: Record<string, string> = {
+    scope: '研究范围',
+    ranking_basis: '排序口径',
+    important_caveat: '关键限制',
+    data_window: '数据窗口',
+    evidence_basis: '证据基础',
+    source_policy: '来源策略',
+  };
+  const entries = Object.entries(methodology).filter(
+    ([, value]) => reportValueText(value).length > 0,
+  );
+  if (entries.length === 0) return;
+  lines.push('', '## 方法与数据口径', '');
+  for (const [key, value] of entries) {
+    lines.push(`- ${labels[key] || key}：${reportValueText(value)}`);
+  }
+}
+
+function appendCandidateTop10(
+  lines: string[],
+  candidates: unknown,
+  context: CitationRenderContext,
+): void {
+  const rows = Array.isArray(candidates) ? candidates.filter(isRecord) : [];
+  if (rows.length === 0) return;
+  lines.push('', '## Top10/关键对象清单', '');
+  appendMarkdownTable(
+    lines,
+    ['排名', '对象', '赛道/类别', '公开指标', '置信度', '判断依据'],
+    rows.map((row, index) => {
+      const project = reportValueText(row.project || row.name || row.app);
+      const repo = reportValueText(row.repo);
+      const label = repo && repo !== project ? `${project} / ${repo}` : project;
+      const basis = reportValueText(
+        row.why_included || row.rationale || row.notes || row.description,
+      );
+      return [
+        reportValueText(row.rank) || String(index + 1),
+        label,
+        reportValueText(row.segment || row.category || row.classification),
+        reportValueText(
+          row.current_visible_stars ||
+            row.observed_value ||
+            row.metric ||
+            row.public_metric,
+        ),
+        reportValueText(row.ranking_confidence || row.confidence),
+        textWithCitationMarkers(
+          basis,
+          row.citations || row.source_ids,
+          context,
+        ),
+      ];
+    }),
+  );
+}
+
+function appendBoundaryCandidates(
+  lines: string[],
+  candidates: unknown,
+  context: CitationRenderContext,
+): void {
+  const rows = Array.isArray(candidates) ? candidates.filter(isRecord) : [];
+  if (rows.length === 0) return;
+  lines.push('', '## 边界样本与排除项', '');
+  for (const row of rows) {
+    const name = reportValueText(row.project || row.name || row.app);
+    const reason = reportValueText(row.reason || row.notes);
+    lines.push(
+      `- ${textWithCitationMarkers(`${name}${reason ? `：${reason}` : ''}`, row.citations || row.source_ids, context)}`,
+    );
+  }
+}
+
+function appendSourceAppendix(
+  lines: string[],
+  context: CitationRenderContext,
+): void {
+  if (context.sources.size === 0) return;
+  for (const id of context.sources.keys()) {
+    getCitationNumber(id, context);
+  }
+  lines.push('', '## 资料来源', '');
+  for (const id of context.orderedSourceIds) {
+    const number = getCitationNumber(id, context);
+    lines.push(
+      `- [${number}] ${citationAppendixLabel(id, context.sources.get(id))}`,
+    );
+  }
 }
 
 export function renderDeepResearchMarkdown(input: {
@@ -437,6 +691,7 @@ export function renderDeepResearchMarkdown(input: {
     const id = safeText(source.id);
     if (id) sources.set(id, source);
   }
+  const citations = createCitationRenderContext(sources);
 
   const lines: string[] = [];
   lines.push(`# ${safeText(report.title) || 'Deep Research Report'}`);
@@ -444,10 +699,12 @@ export function renderDeepResearchMarkdown(input: {
   if (subtitle) lines.push('', subtitle);
   const generatedAt = formatDateTime(report.generated_at);
   if (generatedAt) lines.push('', `生成时间：${generatedAt}`);
+  const researchQuestion = safeText(report.research_question);
+  if (researchQuestion) lines.push('', `研究问题：${researchQuestion}`);
 
   const summary = isRecord(report.summary) ? report.summary : null;
   if (summary) {
-    lines.push('', '## 摘要');
+    lines.push('', '## 执行摘要');
     const headline = safeText(summary.headline);
     if (headline) lines.push('', headline);
     if (Array.isArray(summary.bullets)) {
@@ -456,12 +713,15 @@ export function renderDeepResearchMarkdown(input: {
         if (!isRecord(bullet)) continue;
         const text = safeText(bullet.text);
         if (!text) continue;
-        const citations = normalizeStringArray(bullet.citations);
-        const suffix = citations.length > 0 ? ` (${citations.join(', ')})` : '';
-        lines.push(`- ${text}${suffix}`);
+        lines.push(
+          `- ${textWithCitationMarkers(text, bullet.citations, citations)}`,
+        );
       }
     }
   }
+
+  appendMethodology(lines, report.methodology);
+  appendCandidateTop10(lines, report.candidate_top10, citations);
 
   if (Array.isArray(report.sections)) {
     for (const section of report.sections) {
@@ -471,11 +731,17 @@ export function renderDeepResearchMarkdown(input: {
         for (const block of section.blocks) {
           if (!isRecord(block)) continue;
           lines.push('');
-          appendReportBlock(lines, block, sources);
+          appendReportBlock(lines, block, citations);
         }
       }
     }
   }
+
+  appendBoundaryCandidates(
+    lines,
+    report.excluded_or_boundary_candidates,
+    citations,
+  );
 
   if (Array.isArray(report.limitations) && report.limitations.length > 0) {
     lines.push('', '## 限制与未确认事项', '');
@@ -488,17 +754,7 @@ export function renderDeepResearchMarkdown(input: {
     }
   }
 
-  if (sources.size > 0) {
-    lines.push('', '## 来源', '');
-    for (const [id, source] of sources) {
-      const title = safeText(source.title) || id;
-      const url = safeText(source.url);
-      const publisher = safeText(source.publisher);
-      lines.push(
-        `- [${escapeMarkdown(id)}] ${title}${publisher ? `，${publisher}` : ''}${url ? `：${url}` : ''}`,
-      );
-    }
-  }
+  appendSourceAppendix(lines, citations);
 
   return `${lines
     .join('\n')
@@ -506,23 +762,149 @@ export function renderDeepResearchMarkdown(input: {
     .trim()}\n`;
 }
 
-function buildPrintHtml(input: { report: unknown; sources: unknown }): string {
-  const markdown = renderDeepResearchMarkdown(input)
+function escapeHtml(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderInlineMarkdownHtml(value: string): string {
+  return escapeHtml(value).replace(/\[(\d+)\]/g, '<sup>[$1]</sup>');
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.replace(/\\\|/g, '|').trim());
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
+}
+
+function renderMarkdownTableHtml(lines: string[]): string {
+  if (lines.length < 2) return '';
+  const headers = splitMarkdownTableRow(lines[0]);
+  const rows = lines.slice(2).map(splitMarkdownTableRow);
+  return `<table><thead><tr>${headers
+    .map((header) => `<th>${renderInlineMarkdownHtml(header)}</th>`)
+    .join('')}</tr></thead><tbody>${rows
+    .map(
+      (row) =>
+        `<tr>${headers
+          .map(
+            (_, index) =>
+              `<td>${renderInlineMarkdownHtml(row[index] || '')}</td>`,
+          )
+          .join('')}</tr>`,
+    )
+    .join('')}</tbody></table>`;
+}
+
+function markdownToPrintHtml(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const html: string[] = [];
+  let listOpen = false;
+
+  const closeList = (): void => {
+    if (!listOpen) return;
+    html.push('</ul>');
+    listOpen = false;
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (!trimmed) {
+      closeList();
+      continue;
+    }
+
+    if (
+      trimmed.startsWith('|') &&
+      lines[index + 1] &&
+      isMarkdownTableSeparator(lines[index + 1])
+    ) {
+      closeList();
+      const tableLines = [trimmed, lines[index + 1].trim()];
+      index += 2;
+      while (index < lines.length && lines[index].trim().startsWith('|')) {
+        tableLines.push(lines[index].trim());
+        index += 1;
+      }
+      index -= 1;
+      html.push(renderMarkdownTableHtml(tableLines));
+      continue;
+    }
+
+    if (trimmed.startsWith('# ')) {
+      closeList();
+      html.push(`<h1>${renderInlineMarkdownHtml(trimmed.slice(2))}</h1>`);
+      continue;
+    }
+    if (trimmed.startsWith('## ')) {
+      closeList();
+      html.push(`<h2>${renderInlineMarkdownHtml(trimmed.slice(3))}</h2>`);
+      continue;
+    }
+    if (trimmed.startsWith('### ')) {
+      closeList();
+      html.push(`<h3>${renderInlineMarkdownHtml(trimmed.slice(4))}</h3>`);
+      continue;
+    }
+    if (trimmed.startsWith('- ')) {
+      if (!listOpen) {
+        html.push('<ul>');
+        listOpen = true;
+      }
+      html.push(`<li>${renderInlineMarkdownHtml(trimmed.slice(2))}</li>`);
+      continue;
+    }
+    if (trimmed.startsWith('> ')) {
+      closeList();
+      html.push(
+        `<blockquote>${renderInlineMarkdownHtml(trimmed.slice(2))}</blockquote>`,
+      );
+      continue;
+    }
+
+    closeList();
+    html.push(`<p>${renderInlineMarkdownHtml(trimmed)}</p>`);
+  }
+
+  closeList();
+  return html.join('\n');
+}
+
+function buildPrintHtml(input: { report: unknown; sources: unknown }): string {
+  const body = markdownToPrintHtml(renderDeepResearchMarkdown(input));
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Deep Research Report</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172033; line-height: 1.55; margin: 40px; }
-    pre { white-space: pre-wrap; font: inherit; }
-    @media print { body { margin: 18mm; } }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172033; line-height: 1.62; margin: 42px auto; max-width: 980px; padding: 0 36px; }
+    h1 { font-size: 30px; line-height: 1.2; margin: 0 0 14px; }
+    h2 { font-size: 21px; line-height: 1.3; margin: 34px 0 12px; padding-top: 6px; border-top: 1px solid #e5e7eb; }
+    h3 { font-size: 16px; margin: 20px 0 8px; }
+    p { margin: 8px 0 12px; }
+    ul { margin: 8px 0 16px; padding-left: 22px; }
+    li { margin: 5px 0; }
+    blockquote { margin: 14px 0; padding: 10px 14px; border-left: 3px solid #94a3b8; background: #f8fafc; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-size: 12px; line-height: 1.45; }
+    th, td { border: 1px solid #d9dee7; padding: 7px 8px; vertical-align: top; text-align: left; }
+    th { background: #f3f6fa; font-weight: 700; }
+    sup { color: #2563eb; font-size: 10px; margin-left: 1px; }
+    @media print { body { margin: 18mm auto; max-width: none; padding: 0; } h2 { break-after: avoid; } table { break-inside: avoid; } }
   </style>
 </head>
-<body><pre>${markdown}</pre><script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));</script></body>
+<body>${body}<script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));</script></body>
 </html>`;
 }
 

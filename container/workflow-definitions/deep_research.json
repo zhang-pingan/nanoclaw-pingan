@@ -1,7 +1,7 @@
 {
   "key": "deep_research",
   "label": "Deep Research",
-  "description": "基于公开网页检索、证据抽取和引用校验生成交互式研究报告。",
+  "description": "基于公开网页检索、证据抽取和引用校验生成正式深度研究报告。",
   "versions": [
     {
       "key": "deep_research",
@@ -98,7 +98,7 @@
         },
         {
           "artifact_type": "research_report_bundle",
-          "title": "交互式报告数据",
+          "title": "正式研究报告数据",
           "path": "report.json",
           "source_role": "writer",
           "required": true
@@ -364,13 +364,15 @@
           "delegate": {
             "role": "writer",
             "skill": "deep-research-write",
-            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n历史研究上下文：{{previous_research_context}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只基于本次 research_plan.json、sources.json、evidence.json、findings.json 写结构化 report.json；历史研究上下文仅作为背景和对比线索，不得替代本次引用证据。不输出任意 HTML/CSS/JS，并调用 complete_delegation。",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n历史研究上下文：{{previous_research_context}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只基于本次 research_plan.json、sources.json、evidence.json、findings.json 写一份正式、可直接交付阅读的结构化 report.json。报告必须有执行摘要、方法与数据口径、关键表格或判断矩阵、主体产研/市场分析、风险限制和建议/后续补证；TopN/榜单/竞品类研究要优先输出 candidate_top10 或 table block。正文必须是分析报告写法，不要把证据清单、URL、来源标题、SRC/EVID 编号或“引用/证据/来源显示”堆进 text/body；引用只放在 citations/source_ids 字段中，系统导出时会统一生成脚注/附录。历史研究上下文仅作为背景和对比线索，不得替代本次引用证据。不输出任意 HTML/CSS/JS，并调用 complete_delegation。",
             "handoff": {
               "input_schema": "deep_research.write.input.v1",
               "output_schema": "deep_research.write.v1",
               "artifact_contract_ref": "deep_research.write.v1",
               "success_criteria": [
-                "report.json 符合结构化报告 schema",
+                "report.json 符合正式研究报告 schema",
+                "报告包含执行摘要、方法口径、关键表格/判断矩阵、主体分析、风险限制和建议/补证",
+                "正文不堆叠 URL、来源标题、SRC/EVID 编号或证据话术",
                 "关键 claim 使用 sources.json 中存在的 source id 引用",
                 "Markdown 不是主产物",
                 "返回 deliverable、verdict、summary、findings、evidence"
@@ -415,7 +417,7 @@
           "delegate": {
             "role": "reviewer",
             "skill": "deep-research-review",
-            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n历史研究上下文：{{previous_research_context}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请校验 report.json、sources.json、evidence.json、findings.json、source_review.json、evidence_review.json 和 traceability.json，输出 review.json。若报告使用了历史研究上下文中的结论，必须确认其被本次 sources/evidence 支撑或被标注为背景。review.json verdict 可为 passed、needs_revision、failed、pending，route 可为 collect、analyze、write、failed、publish、review；route 会被 workflow 执行：报告乱写回 write，证据抽取问题回 analyze，来源不足回 collect。然后调用 complete_delegation。",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n历史研究上下文：{{previous_research_context}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请校验 report.json、sources.json、evidence.json、findings.json、source_review.json、evidence_review.json 和 traceability.json，输出 review.json。除引用正确性外，还必须审核 report.json 是否是一份正式、可直接阅读的研究报告：是否有执行摘要、方法口径、关键表格/判断矩阵、主体产研/市场分析、风险限制和建议/补证；正文是否避免堆叠 URL、来源标题、SRC/EVID 编号和证据话术。若报告使用了历史研究上下文中的结论，必须确认其被本次 sources/evidence 支撑或被标注为背景。review.json verdict 可为 passed、needs_revision、failed、pending，route 可为 collect、analyze、write、failed、publish、review；route 会被 workflow 执行：报告证据正确但不像正式报告/干货不足/正文引用过载回 write，证据抽取问题回 analyze，来源不足回 collect。然后调用 complete_delegation。",
             "handoff": {
               "input_schema": "deep_research.review.input.v1",
               "output_schema": "deep_research.review.v1",
@@ -424,6 +426,7 @@
                 "review.json 写入交付目录",
                 "校验每个关键 claim 是否有来源支撑",
                 "校验引用是否只指向存在的 source/evidence",
+                "校验正式报告结构、干货密度和正文引用克制",
                 "返回 deliverable、verdict、route、summary、findings、evidence"
               ],
               "auto_retry": {

@@ -98,7 +98,7 @@
     "ai": {
       "enabled": false,
       "model": "default",
-      "rubric": "Judge whether report.json is a structured interactive report, cites known sources, and avoids arbitrary HTML/CSS/JS.",
+      "rubric": "Judge whether report.json is a formal research report with executive summary, methodology, structured tables or decision matrices, substantive product/market analysis, restrained citations through source ids, and no arbitrary HTML/CSS/JS.",
       "max_context_bytes": 18000
     },
     "status_mapping": {
@@ -116,7 +116,7 @@
     "ai": {
       "enabled": false,
       "model": "default",
-      "rubric": "Judge whether review.json validates report claim coverage, citation correctness, source/evidence support, unresolved gaps, and route decision.",
+      "rubric": "Judge whether review.json validates report claim coverage, citation correctness, source/evidence support, unresolved gaps, formal report structure, substantive analysis density, restrained body citations, and route decision.",
       "max_context_bytes": 16000
     },
     "status_mapping": {

@@ -7,7 +7,7 @@ description: Use only in the deep_research workflow review stage. Validate final
 
 本技能仅用于 `deep_research` workflow 的 `review` 阶段。
 
-目标：校验最终 `report.json` 的主张、引用、证据支撑和未解决缺口，输出可驱动 workflow 路由的 `review.json`。来源充分性和证据抽取质量已由前置 review 阶段审核；本阶段重点判断 writer 是否基于已验证的 `findings/evidence` 正确写作。
+目标：校验最终 `report.json` 的主张、引用、证据支撑、正式报告质量和未解决缺口，输出可驱动 workflow 路由的 `review.json`。来源充分性和证据抽取质量已由前置 review 阶段审核；本阶段重点判断 writer 是否基于已验证的 `findings/evidence` 正确写作，并且是否产出一份能直接阅读的正式研究报告，而不是证据清单。
 
 ## 必须读取
 
@@ -73,6 +73,17 @@ workflow 会执行 `review.json.route` 或 handoff result 里的 `route`。报�
 6. 是否存在冲突来源或未解决缺口未在报告中说明。
 7. report 是否包含任意 HTML/CSS/JS。
 8. 时间敏感结论是否记录检索时间和时效限制。
+9. 是否具备正式报告结构：执行摘要、方法/口径、关键表格或判断矩阵、主体分析、风险限制、建议或后续补证。
+10. 是否存在“证据化正文”：在 `text/body` 中堆叠 URL、来源标题、`SRC-xxx`、`EVID-xxx`、“引用：”“证据：”“来源显示”等话术。引用应只在 `citations/source_ids` 字段中。
+11. 干货密度是否足够：summary 是否给出综合判断，章节是否有产品/市场/竞争/风险/行动启示，而不是只改写 evidence 或搜索摘要。
+12. TopN/榜单/竞品/项目清单类研究是否有结构化表格、候选清单或明确排序口径；如果缺核心排序证据，是否降级为候选榜并清楚标注。
+
+## 报告质量路由
+
+- 报告证据正确但像证据清单、正文引用过载、没有正式报告结构、干货明显不足：`verdict=needs_revision`，`route=write`。
+- 报告为了显得完整而伪造排序、指标、市场规模或确定性：`verdict=needs_revision` 或 `failed`，按根因 route 到 `write` / `analyze` / `collect`。
+- 核心来源不足导致无法形成用户要求的报告：`verdict=needs_revision`，`route=collect`。
+- 证据足够但 writer 未组织成可交付报告：`verdict=needs_revision`，`route=write`。
 
 ## complete_delegation
 

@@ -21073,6 +21073,11 @@ textarea.workflow-wizard-input {
   color: #343941;
 }
 
+.deep-research-question {
+  color: #4b5563 !important;
+  font-size: 14px;
+}
+
 .deep-research-report-meta {
   display: flex;
   flex-wrap: wrap;
@@ -21093,23 +21098,84 @@ textarea.workflow-wizard-input {
   line-height: 1.25;
 }
 
-.deep-research-citations {
+.deep-research-citation-refs {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-left: 6px;
+  gap: 2px;
+  margin-left: 4px;
   vertical-align: middle;
 }
 
-.deep-research-citation {
-  border: 1px solid rgba(15, 23, 42, 0.16);
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #0f609b;
-  padding: 2px 6px;
+.deep-research-citation-ref {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  padding: 0 1px;
   font-size: 11px;
   font-weight: 700;
+  line-height: 1;
   cursor: pointer;
+}
+
+.deep-research-citation-ref:hover {
+  text-decoration: underline;
+}
+
+.deep-research-method-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.deep-research-method-list div {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) minmax(0, 1fr);
+  gap: 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 8px 0;
+}
+
+.deep-research-method-list dt {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.deep-research-method-list dd {
+  margin: 0;
+  color: #343941;
+}
+
+.deep-research-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 12px 0 18px;
+}
+
+.deep-research-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.deep-research-table th,
+.deep-research-table td {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  padding: 8px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.deep-research-table th {
+  background: #f3f4f6;
+  color: #1f2328;
+  font-weight: 800;
+}
+
+.deep-research-table small {
+  color: #6b7280;
 }
 
 .deep-research-metric-grid {

@@ -18104,21 +18104,168 @@ function getDeepResearchSourceMap(sources) {
   return map;
 }
 
-function renderDeepResearchCitationChips(citations, sourceMap) {
+function createDeepResearchCitationContext(sourceMap) {
+  return {
+    sourceMap,
+    sourceNumbers: new Map(),
+    orderedSourceIds: [],
+  };
+}
+
+function getDeepResearchCitationNumber(id, context) {
+  if (!id) return 0;
+  const existing = context.sourceNumbers.get(id);
+  if (existing) return existing;
+  const next = context.orderedSourceIds.length + 1;
+  context.sourceNumbers.set(id, next);
+  context.orderedSourceIds.push(id);
+  return next;
+}
+
+function renderDeepResearchCitationRefs(citations, context) {
   const ids = Array.isArray(citations)
     ? citations.filter(Boolean).map(String)
     : [];
   if (ids.length === 0) return '';
-  return `<span class="deep-research-citations">${ids
+  return `<span class="deep-research-citation-refs">${ids
     .map((id) => {
-      const source = sourceMap.get(id);
+      const source = context.sourceMap.get(id);
       const title = source?.title || id;
-      return `<button type="button" class="deep-research-citation" title="${escapeAttribute(title)}" data-deep-research-source-id="${escapeAttribute(id)}">${escapeHtml(id)}</button>`;
+      const number = getDeepResearchCitationNumber(id, context);
+      return `<button type="button" class="deep-research-citation-ref" title="${escapeAttribute(title)}" data-deep-research-source-id="${escapeAttribute(id)}">[${escapeHtml(String(number))}]</button>`;
     })
     .join('')}</span>`;
 }
 
-function renderDeepResearchBlock(block, sourceMap) {
+function renderDeepResearchTextWithCitations(text, citations, context) {
+  return `${escapeHtml(text || '')}${renderDeepResearchCitationRefs(citations, context)}`;
+}
+
+function getDeepResearchValueText(value) {
+  if (value === null || typeof value === 'undefined') return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  if (Array.isArray(value))
+    return value.map(getDeepResearchValueText).filter(Boolean).join('、');
+  if (value && typeof value === 'object') {
+    return (
+      value.text ||
+      value.title ||
+      value.name ||
+      value.label ||
+      JSON.stringify(value)
+    );
+  }
+  return '';
+}
+
+function renderDeepResearchTable(headers, rows) {
+  if (!headers.length || !rows.length) return '';
+  return `
+    <div class="deep-research-table-wrap">
+      <table class="deep-research-table">
+        <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows
+            .map(
+              (row) => `
+            <tr>${headers.map((_, index) => `<td>${row[index] || ''}</td>`).join('')}</tr>
+          `,
+            )
+            .join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDeepResearchCandidateTable(candidates, context) {
+  const rows = Array.isArray(candidates)
+    ? candidates.filter((item) => item && typeof item === 'object')
+    : [];
+  if (!rows.length) return '';
+  return `
+    <section class="deep-research-report-section">
+      <h2>Top10/关键对象清单</h2>
+      ${renderDeepResearchTable(
+        ['排名', '对象', '赛道/类别', '公开指标', '置信度', '判断依据'],
+        rows.map((row, index) => {
+          const project = getDeepResearchValueText(
+            row.project || row.name || row.app,
+          );
+          const repo = getDeepResearchValueText(row.repo);
+          const label =
+            repo && repo !== project
+              ? `${escapeHtml(project)}<br><small>${escapeHtml(repo)}</small>`
+              : escapeHtml(project);
+          return [
+            escapeHtml(getDeepResearchValueText(row.rank) || String(index + 1)),
+            label,
+            escapeHtml(
+              getDeepResearchValueText(
+                row.segment || row.category || row.classification,
+              ),
+            ),
+            escapeHtml(
+              getDeepResearchValueText(
+                row.current_visible_stars ||
+                  row.observed_value ||
+                  row.metric ||
+                  row.public_metric,
+              ),
+            ),
+            escapeHtml(
+              getDeepResearchValueText(row.ranking_confidence || row.confidence),
+            ),
+            renderDeepResearchTextWithCitations(
+              getDeepResearchValueText(
+                row.why_included || row.rationale || row.notes,
+              ),
+              row.citations || row.source_ids,
+              context,
+            ),
+          ];
+        }),
+      )}
+    </section>
+  `;
+}
+
+function renderDeepResearchMethodology(methodology) {
+  if (!methodology || typeof methodology !== 'object') return '';
+  const labels = {
+    scope: '研究范围',
+    data_window: '数据窗口',
+    ranking_basis: '排序口径',
+    important_caveat: '关键限制',
+    evidence_basis: '证据基础',
+    source_policy: '来源策略',
+  };
+  const rows = Object.entries(methodology)
+    .map(([key, value]) => [labels[key] || key, getDeepResearchValueText(value)])
+    .filter(([, value]) => value);
+  if (!rows.length) return '';
+  return `
+    <section class="deep-research-report-section">
+      <h2>方法与数据口径</h2>
+      <dl class="deep-research-method-list">
+        ${rows
+          .map(
+            ([label, value]) => `
+          <div>
+            <dt>${escapeHtml(label)}</dt>
+            <dd>${escapeHtml(value)}</dd>
+          </div>
+        `,
+          )
+          .join('')}
+      </dl>
+    </section>
+  `;
+}
+
+function renderDeepResearchBlock(block, context) {
   const type = block?.type || 'paragraph';
   if (type === 'metric_grid') {
     const items = Array.isArray(block.items) ? block.items : [];
@@ -18130,7 +18277,7 @@ function renderDeepResearchBlock(block, sourceMap) {
           <div class="deep-research-metric-card">
             <span>${escapeHtml(item?.label || '--')}</span>
             <strong>${escapeHtml(item?.value || '--')}</strong>
-            <small>${escapeHtml(item?.note || '')}</small>
+            <small>${renderDeepResearchTextWithCitations(item?.note || '', item?.citations, context)}</small>
           </div>
         `,
           )
@@ -18148,8 +18295,7 @@ function renderDeepResearchBlock(block, sourceMap) {
           <div class="deep-research-timeline-item">
             <time>${escapeHtml(event?.date || '--')}</time>
             <strong>${escapeHtml(event?.title || '--')}</strong>
-            <p>${escapeHtml(event?.description || '')}</p>
-            ${renderDeepResearchCitationChips(event?.citations, sourceMap)}
+            <p>${renderDeepResearchTextWithCitations(event?.description || '', event?.citations, context)}</p>
           </div>
         `,
           )
@@ -18157,12 +18303,48 @@ function renderDeepResearchBlock(block, sourceMap) {
       </div>
     `;
   }
+  if (type === 'table') {
+    const rawRows = Array.isArray(block.rows)
+      ? block.rows
+      : Array.isArray(block.items)
+        ? block.items
+        : [];
+    const rows = rawRows.filter((item) => item && typeof item === 'object');
+    if (!rows.length) return '';
+    const columns = Array.isArray(block.columns)
+      ? block.columns
+          .map((column) => {
+            if (typeof column === 'string')
+              return { key: column, label: column };
+            if (!column || typeof column !== 'object') return null;
+            const key = column.key || column.id;
+            return key ? { key: String(key), label: column.label || key } : null;
+          })
+          .filter(Boolean)
+      : Object.keys(rows[0])
+          .filter((key) => key !== 'citations' && key !== 'source_ids')
+          .slice(0, 6)
+          .map((key) => ({ key, label: key }));
+    return renderDeepResearchTable(
+      columns.map((column) => String(column.label)),
+      rows.map((row) => {
+        const cells = columns.map((column) =>
+          escapeHtml(getDeepResearchValueText(row[column.key])),
+        );
+        const refs = renderDeepResearchCitationRefs(
+          row.citations || row.source_ids,
+          context,
+        );
+        if (refs && cells.length) cells[cells.length - 1] += refs;
+        return cells;
+      }),
+    );
+  }
   if (type === 'insight_card') {
     return `
       <aside class="deep-research-insight ${escapeAttribute(block?.tone || 'neutral')}">
         <strong>${escapeHtml(block?.title || '洞察')}</strong>
-        <p>${escapeHtml(block?.body || '')}</p>
-        ${renderDeepResearchCitationChips(block?.citations, sourceMap)}
+        <p>${renderDeepResearchTextWithCitations(block?.body || '', block?.citations, context)}</p>
       </aside>
     `;
   }
@@ -18174,7 +18356,7 @@ function renderDeepResearchBlock(block, sourceMap) {
       <div class="deep-research-source-cluster">
         ${ids
           .map((id) => {
-            const source = sourceMap.get(id);
+            const source = context.sourceMap.get(id);
             return `<button type="button" data-deep-research-source-id="${escapeAttribute(id)}">${escapeHtml(source?.title || id)}</button>`;
           })
           .join('')}
@@ -18182,31 +18364,34 @@ function renderDeepResearchBlock(block, sourceMap) {
     `;
   }
   return `
-    <p>${escapeHtml(block?.text || block?.body || '')}</p>
-    ${renderDeepResearchCitationChips(block?.citations, sourceMap)}
+    <p>${renderDeepResearchTextWithCitations(block?.text || block?.body || '', block?.citations, context)}</p>
   `;
 }
 
-function buildDeepResearchSourceAppendix(sources) {
-  const items = Array.isArray(sources) ? sources : [];
+function buildDeepResearchSourceAppendix(context) {
+  context.sourceMap.forEach((_, id) => getDeepResearchCitationNumber(id, context));
+  const items = context.orderedSourceIds
+    .map((id) => context.sourceMap.get(id))
+    .filter(Boolean);
   if (items.length === 0) return '';
   return `
     <section class="deep-research-report-section" id="deep-research-overlay-sources">
-      <h2>来源</h2>
+      <h2>资料来源</h2>
       <div class="deep-research-source-appendix">
         ${items
-          .map(
-            (source) => `
+          .map((source) => {
+            const number = getDeepResearchCitationNumber(source?.id || '', context);
+            return `
           <div class="deep-research-source-row" data-deep-research-source-anchor="${escapeAttribute(source?.id || '')}">
             <div>
-              <strong>${escapeHtml(source?.id || '--')} · ${escapeHtml(source?.title || '--')}</strong>
+              <strong>[${escapeHtml(String(number))}] ${escapeHtml(source?.title || '--')}</strong>
               <span>${escapeHtml(source?.publisher || source?.source_type || '--')}</span>
             </div>
             <p>${escapeHtml(source?.summary || '')}</p>
             ${source?.url ? `<a href="${escapeAttribute(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.url)}</a>` : ''}
           </div>
-        `,
-          )
+        `;
+          })
           .join('')}
       </div>
     </section>
@@ -18248,6 +18433,7 @@ function buildDeepResearchFullReportHtml(bundle) {
   const report = bundle?.files?.report;
   const sources = bundle?.files?.sources;
   const sourceMap = getDeepResearchSourceMap(sources);
+  const citationContext = createDeepResearchCitationContext(sourceMap);
   if (!report || typeof report !== 'object') {
     return '';
   }
@@ -18262,6 +18448,7 @@ function buildDeepResearchFullReportHtml(bundle) {
       <div class="deep-research-kicker">Report Bundle</div>
       <h1>${escapeHtml(report.title || 'Deep Research Report')}</h1>
       ${report.subtitle ? `<p>${escapeHtml(report.subtitle)}</p>` : ''}
+      ${report.research_question ? `<p class="deep-research-question">${escapeHtml(report.research_question)}</p>` : ''}
       <div class="deep-research-report-meta">
         <span>${escapeHtml(report.language || '--')}</span>
         <span>${escapeHtml(formatDateTime(report.generated_at))}</span>
@@ -18274,18 +18461,20 @@ function buildDeepResearchFullReportHtml(bundle) {
         ${(Array.isArray(summary.bullets) ? summary.bullets : [])
           .map(
             (bullet) => `
-          <li>${escapeHtml(bullet?.text || '')}${renderDeepResearchCitationChips(bullet?.citations, sourceMap)}</li>
+          <li>${renderDeepResearchTextWithCitations(bullet?.text || '', bullet?.citations, citationContext)}</li>
         `,
           )
           .join('')}
       </ul>
     </section>
+    ${renderDeepResearchMethodology(report.methodology)}
+    ${renderDeepResearchCandidateTable(report.candidate_top10, citationContext)}
     ${sections
       .map(
         (section) => `
       <section class="deep-research-report-section">
         <h2>${escapeHtml(section?.title || 'Section')}</h2>
-        ${(Array.isArray(section?.blocks) ? section.blocks : []).map((block) => renderDeepResearchBlock(block, sourceMap)).join('')}
+        ${(Array.isArray(section?.blocks) ? section.blocks : []).map((block) => renderDeepResearchBlock(block, citationContext)).join('')}
       </section>
     `,
       )
@@ -18300,8 +18489,7 @@ function buildDeepResearchFullReportHtml(bundle) {
     `
         : ''
     }
-    ${buildDeepResearchSourceAppendix(sources)}
-    ${buildDeepResearchEvidenceAppendix(bundle?.files || {})}
+    ${buildDeepResearchSourceAppendix(citationContext)}
   `;
 }
 
@@ -18654,9 +18842,10 @@ function openDeepResearchFullReport(anchor) {
     return;
   deepResearchReportOverlayTitle.textContent =
     getDeepResearchReportTitle(currentDeepResearchBundle);
-  deepResearchReportOverlayContent.innerHTML = buildDeepResearchFullReportHtml(
-    currentDeepResearchBundle,
-  );
+  deepResearchReportOverlayContent.innerHTML =
+    anchor === 'evidence'
+      ? buildDeepResearchEvidenceAppendix(currentDeepResearchBundle?.files || {})
+      : buildDeepResearchFullReportHtml(currentDeepResearchBundle);
   bindDeepResearchFullReportInteractions(deepResearchReportOverlayContent);
   deepResearchReportOverlay.classList.remove('hidden');
   deepResearchReportOverlay.setAttribute('aria-hidden', 'false');
@@ -18664,9 +18853,7 @@ function openDeepResearchFullReport(anchor) {
     const targetId =
       anchor === 'sources'
         ? 'deep-research-overlay-sources'
-        : anchor === 'evidence'
-          ? 'deep-research-overlay-evidence'
-          : '';
+        : '';
     const target = targetId
       ? deepResearchReportOverlayContent.querySelector(`#${targetId}`)
       : null;
