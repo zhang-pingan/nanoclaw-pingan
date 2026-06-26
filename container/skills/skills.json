@@ -1,14 +1,7 @@
 {
-  "global": [
-    "agent-browser"
-  ],
-  "feishu_ops": [
-    "ops-staging-deploy",
-    "devops"
-  ],
-  "feishu_main": [
-    "macos"
-  ],
+  "global": ["agent-browser"],
+  "feishu_ops": ["ops-staging-deploy", "devops"],
+  "feishu_main": ["macos"],
   "web_dev": [
     "dev-requirement",
     "dev-bugfix",
@@ -17,40 +10,19 @@
     "ios-backend-dev-requirement",
     "ios-backend-bugfix"
   ],
-  "web_dev_examine": [
-    "dev-examine"
-  ],
-  "web_plan_examine": [
-    "plan-examine"
-  ],
-  "web_plan": [
-    "plan-requirement",
-    "ios-plan-requirement"
-  ],
-  "web_ops": [
-    "ops-staging-deploy",
-    "devops"
-  ],
-  "web_test": [
-    "test-requirement",
-    "fix-test-bug",
-    "devops"
-  ],
-  "web_main": [
-    "macos"
-  ],
-  "assistant_main": [
-    "macos",
-    "devops",
-    "self-evolution"
-  ],
-  "web_ios_recon": [
-    "ios-recon-requirement"
-  ],
-  "web_ios_preintegration": [
-    "ios-preintegration"
-  ],
-  "web_ios_acceptance": [
-    "ios-acceptance-test"
-  ]
+  "web_dev_examine": ["dev-examine"],
+  "web_plan_examine": ["plan-examine"],
+  "web_plan": ["plan-requirement", "ios-plan-requirement"],
+  "web_ops": ["ops-staging-deploy", "devops"],
+  "web_test": ["test-requirement", "fix-test-bug", "devops"],
+  "web_main": ["macos"],
+  "assistant_main": ["macos", "devops", "self-evolution"],
+  "web_ios_recon": ["ios-recon-requirement"],
+  "web_ios_preintegration": ["ios-preintegration"],
+  "web_ios_acceptance": ["ios-acceptance-test"],
+  "web_research_planner": ["deep-research-plan"],
+  "web_research_collector": ["deep-research-collect", "agent-browser"],
+  "web_research_analyst": ["deep-research-analyze"],
+  "web_research_writer": ["deep-research-write"],
+  "web_research_reviewer": ["deep-research-review"]
 }

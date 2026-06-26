@@ -24,28 +24,16 @@
       "cancel_task",
       "update_task"
     ],
-    "workbench-main": [
-      "query_workbench_tasks"
-    ],
-    "group-admin-main": [
-      "register_group"
-    ],
-    "delegation-main": [
-      "delegate_task",
-      "list_delegations"
-    ],
+    "workbench-main": ["query_workbench_tasks"],
+    "group-admin-main": ["register_group"],
+    "delegation-main": ["delegate_task", "list_delegations"],
     "delegation-worker": [
       "request_delegation",
       "complete_delegation",
       "list_delegations"
     ],
-    "desktop-main": [
-      "desktop_capture",
-      "run_local_host_script"
-    ],
-    "image-main": [
-      "ai_image_generate_image"
-    ],
+    "desktop-main": ["desktop_capture", "run_local_host_script"],
+    "image-main": ["ai_image_generate_image"],
     "ios-recon": [
       "ios_app_prepare_session",
       "ios_app_observe",
@@ -82,11 +70,7 @@
     ]
   },
   "groups": {
-    "global": [
-      "base",
-      "knowledge",
-      "tasking"
-    ],
+    "global": ["base", "knowledge", "tasking"],
     "main": [
       "workbench-main",
       "group-admin-main",
@@ -115,35 +99,19 @@
       "desktop-main",
       "image-main"
     ],
-    "web_dev": [
-      "delegation-worker"
-    ],
-    "web_dev_examine": [
-      "delegation-worker"
-    ],
-    "web_plan": [
-      "delegation-worker"
-    ],
-    "web_plan_examine": [
-      "delegation-worker"
-    ],
-    "web_ops": [
-      "delegation-worker"
-    ],
-    "web_test": [
-      "delegation-worker"
-    ],
-    "web_ios_recon": [
-      "delegation-worker",
-      "ios-recon"
-    ],
-    "web_ios_preintegration": [
-      "delegation-worker",
-      "ios-preintegration"
-    ],
-    "web_ios_acceptance": [
-      "delegation-worker",
-      "ios-acceptance"
-    ]
+    "web_dev": ["delegation-worker"],
+    "web_dev_examine": ["delegation-worker"],
+    "web_plan": ["delegation-worker"],
+    "web_plan_examine": ["delegation-worker"],
+    "web_ops": ["delegation-worker"],
+    "web_test": ["delegation-worker"],
+    "web_ios_recon": ["delegation-worker", "ios-recon"],
+    "web_ios_preintegration": ["delegation-worker", "ios-preintegration"],
+    "web_ios_acceptance": ["delegation-worker", "ios-acceptance"],
+    "web_research_planner": ["delegation-worker"],
+    "web_research_collector": ["delegation-worker"],
+    "web_research_analyst": ["delegation-worker"],
+    "web_research_writer": ["delegation-worker"],
+    "web_research_reviewer": ["delegation-worker"]
   }
 }

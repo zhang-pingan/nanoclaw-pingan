@@ -189,6 +189,23 @@ function isSafeWorkflowPathSegment(value: string): boolean {
   );
 }
 
+function workflowDeliverableDirExists(
+  workflow: Pick<Workflow, 'service'>,
+  deliverable: string,
+): boolean {
+  if (!workflow.service || !isSafeWorkflowPathSegment(deliverable)) {
+    return false;
+  }
+  const dir = path.join(
+    PROJECT_ROOT,
+    'projects',
+    workflow.service,
+    'iteration',
+    deliverable.trim(),
+  );
+  return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+}
+
 interface WorkflowCheckpointPayload {
   workflowId: string;
   workflowType: string;
@@ -1708,7 +1725,7 @@ function buildDelegationResultContextPatch(
       ? payloadRecord.deliverable.trim()
       : '';
   const workflowForPayload =
-    payloadDeliverable && isSafeWorkflowPathSegment(payloadDeliverable)
+    payloadDeliverable && workflowDeliverableDirExists(workflow, payloadDeliverable)
       ? {
           ...workflow,
           context: mergeWorkflowContext(workflow.context, {
@@ -1755,7 +1772,8 @@ function extractClientImpactRequired(
     const artifact = workflow
       ? readScopedWorkflowJsonArtifact(workflow, impactAnalysis)
       : null;
-    if (artifact) return extractClientImpactRequired({ impact_analysis: artifact });
+    if (artifact)
+      return extractClientImpactRequired({ impact_analysis: artifact });
     return undefined;
   }
   const required = getNestedValue(impactAnalysis, [
@@ -2679,8 +2697,8 @@ function runSystemState(
     systemResult.status === 'success' && routeTransition
       ? routeTransition
       : systemResult.status === 'success'
-      ? state.on_complete?.success
-      : state.on_complete?.failure;
+        ? state.on_complete?.success
+        : state.on_complete?.failure;
   if (!transition) return;
   applyTransition(
     workflowForTransition,
@@ -2690,15 +2708,15 @@ function runSystemState(
       fallbackToTargetDelegate: true,
       workflowUpdates: {
         context: {
-      last_system_state: {
-        state_key: workflow.status,
-        executed_at: now,
-        attempt,
-        status: systemResult.status,
-        summary: systemResult.summary || '',
-        error: systemResult.error || '',
-        routed_to: routeTransition?.target || '',
-      },
+          last_system_state: {
+            state_key: workflow.status,
+            executed_at: now,
+            attempt,
+            status: systemResult.status,
+            summary: systemResult.summary || '',
+            error: systemResult.error || '',
+            routed_to: routeTransition?.target || '',
+          },
         },
       },
     },
@@ -4788,6 +4806,19 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
 
   // 正常入口：创建任务对应的流程实例，并委派到初始状态对应角色
   const entryStateConfig = config.states[entryPoint.state];
+  const rawContextDeliverable =
+    opts.context?.[WORKFLOW_CONTEXT_KEYS.deliverable];
+  const contextDeliverable =
+    typeof rawContextDeliverable === 'string'
+      ? rawContextDeliverable.trim()
+      : '';
+  const requestedDeliverable =
+    typeof opts.deliverable === 'string' &&
+    isSafeWorkflowPathSegment(opts.deliverable.trim())
+      ? opts.deliverable.trim()
+      : contextDeliverable && isSafeWorkflowPathSegment(contextDeliverable)
+        ? contextDeliverable
+        : '';
   const workflowContext = mergeWorkflowContext(opts.context || {}, {
     [WORKFLOW_CONTEXT_KEYS.mainBranch]: opts.mainBranch || '',
     [WORKFLOW_CONTEXT_KEYS.workBranch]: opts.workBranch || '',
@@ -4797,7 +4828,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         { context: opts.context || {} },
         WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
       ),
-    [WORKFLOW_CONTEXT_KEYS.deliverable]: '',
+    [WORKFLOW_CONTEXT_KEYS.deliverable]: requestedDeliverable,
     [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]: opts.stagingBaseBranch || '',
     [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]: opts.stagingWorkBranch || '',
     [WORKFLOW_CONTEXT_KEYS.accessToken]: opts.accessToken || '',
@@ -5389,7 +5420,7 @@ export function onDelegationComplete(delegationId: string): void {
   }
   const payloadDeliverable =
     typeof payload.deliverable === 'string' ? payload.deliverable.trim() : '';
-  if (payloadDeliverable && isSafeWorkflowPathSegment(payloadDeliverable)) {
+  if (payloadDeliverable && workflowDeliverableDirExists(workflow, payloadDeliverable)) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.deliverable] = payloadDeliverable;
   }
   if (payload.main_branch) {

@@ -1,0 +1,458 @@
+{
+  "key": "deep_research",
+  "label": "Deep Research",
+  "description": "基于公开网页检索、证据抽取和引用校验生成交互式研究报告。",
+  "versions": [
+    {
+      "key": "deep_research",
+      "name": "Deep Research",
+      "description": "多阶段公开网页研究流程。",
+      "version": 1,
+      "status": "published",
+      "roles": {
+        "planner": {
+          "label": "研究规划",
+          "deliverable_file": "research_plan.json",
+          "channels": {
+            "web": "web_research_planner"
+          }
+        },
+        "collector": {
+          "label": "来源收集",
+          "deliverable_file": "sources.json",
+          "channels": {
+            "web": "web_research_collector"
+          }
+        },
+        "analyst": {
+          "label": "证据分析",
+          "deliverable_file": "findings.json",
+          "channels": {
+            "web": "web_research_analyst"
+          }
+        },
+        "writer": {
+          "label": "报告生成",
+          "deliverable_file": "report.json",
+          "channels": {
+            "web": "web_research_writer"
+          }
+        },
+        "reviewer": {
+          "label": "引用审查",
+          "deliverable_file": "review.json",
+          "channels": {
+            "web": "web_research_reviewer"
+          }
+        }
+      },
+      "artifacts": [
+        {
+          "artifact_type": "research_plan",
+          "title": "研究计划",
+          "path": "research_plan.json",
+          "source_role": "planner",
+          "required": true
+        },
+        {
+          "artifact_type": "research_sources",
+          "title": "来源清单",
+          "path": "sources.json",
+          "source_role": "collector",
+          "required": true
+        },
+        {
+          "artifact_type": "research_search_log",
+          "title": "检索记录",
+          "path": "search_log.json",
+          "source_role": "collector",
+          "required": true
+        },
+        {
+          "artifact_type": "research_evidence",
+          "title": "证据卡片",
+          "path": "evidence.json",
+          "source_role": "analyst",
+          "required": true
+        },
+        {
+          "artifact_type": "research_findings",
+          "title": "发现清单",
+          "path": "findings.json",
+          "source_role": "analyst",
+          "required": true
+        },
+        {
+          "artifact_type": "research_report_bundle",
+          "title": "交互式报告数据",
+          "path": "report.json",
+          "source_role": "writer",
+          "required": true
+        },
+        {
+          "artifact_type": "research_review",
+          "title": "引用审查",
+          "path": "review.json",
+          "source_role": "reviewer",
+          "required": true
+        },
+        {
+          "artifact_type": "traceability",
+          "title": "追踪矩阵",
+          "path": "traceability.json",
+          "required": true
+        },
+        {
+          "artifact_type": "research_markdown_export",
+          "title": "Markdown 导出",
+          "path": "exports/report.md"
+        },
+        {
+          "artifact_type": "research_print_export",
+          "title": "PDF 打印页",
+          "path": "exports/report.html"
+        }
+      ],
+      "entry_points": {
+        "plan": {
+          "label": "开始研究",
+          "state": "plan"
+        }
+      },
+      "states": {
+        "plan": {
+          "type": "delegation",
+          "label": "研究规划",
+          "artifact_contract": {
+            "ref": "deep_research.plan.v1"
+          },
+          "evaluator": {
+            "ref": "deep_research.plan.v1"
+          },
+          "delegate": {
+            "role": "planner",
+            "skill": "deep-research-plan",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n研究深度：{{depth}}\n来源范围：{{source_scope}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n来源限制：{{source_limits}}\n排除项：{{exclusions}}\n限制条件：{{constraints}}\n服务名称：{{service}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请输出 research_plan.json 和 traceability.json 初始版本，并调用 complete_delegation。",
+            "handoff": {
+              "input_schema": "deep_research.plan.input.v1",
+              "output_schema": "deep_research.plan.v1",
+              "artifact_contract_ref": "deep_research.plan.v1",
+              "success_criteria": [
+                "research_plan.json 写入交付目录",
+                "traceability.json 写入交付目录",
+                "返回 deliverable、verdict、summary、findings、evidence"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
+          },
+          "on_complete": {
+            "success": {
+              "target": "collect"
+            },
+            "failure": {
+              "target": "failed"
+            }
+          }
+        },
+        "collect": {
+          "type": "delegation",
+          "label": "来源收集",
+          "artifact_contract": {
+            "ref": "deep_research.collect.v1"
+          },
+          "evaluator": {
+            "ref": "deep_research.collect.v1"
+          },
+          "delegate": {
+            "role": "collector",
+            "skill": "deep-research-collect",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n研究计划：/workspace/projects/{{service}}/iteration/{{deliverable}}/research_plan.json\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只检索公开网页，使用 WebSearch、WebFetch、agent-browser，并在 delegation 内部使用 SDK agent team 并行探索。输出 sources.json、search_log.json 并更新 traceability.json，然后调用 complete_delegation。",
+            "handoff": {
+              "input_schema": "deep_research.collect.input.v1",
+              "output_schema": "deep_research.collect.v1",
+              "artifact_contract_ref": "deep_research.collect.v1",
+              "success_criteria": [
+                "sources.json 至少包含公开网页来源",
+                "search_log.json 记录查询、候选、入选和剔除原因",
+                "不编造 URL、标题、发布时间或来源",
+                "返回 deliverable、verdict、summary、findings、evidence"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
+          },
+          "on_complete": {
+            "success": {
+              "target": "analyze"
+            },
+            "failure": {
+              "target": "failed"
+            }
+          }
+        },
+        "analyze": {
+          "type": "delegation",
+          "label": "证据分析",
+          "artifact_contract": {
+            "ref": "deep_research.analyze.v1"
+          },
+          "evaluator": {
+            "ref": "deep_research.analyze.v1"
+          },
+          "delegate": {
+            "role": "analyst",
+            "skill": "deep-research-analyze",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n来源清单：/workspace/projects/{{service}}/iteration/{{deliverable}}/sources.json\n检索记录：/workspace/projects/{{service}}/iteration/{{deliverable}}/search_log.json\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请抽取 evidence.json、findings.json，更新 traceability.json，并调用 complete_delegation。",
+            "handoff": {
+              "input_schema": "deep_research.analyze.input.v1",
+              "output_schema": "deep_research.analyze.v1",
+              "artifact_contract_ref": "deep_research.analyze.v1",
+              "success_criteria": [
+                "evidence.json 每条证据绑定 source_id",
+                "findings.json 每条发现绑定 evidence 和 sources",
+                "冲突点、缺口和不确定性显式记录",
+                "返回 deliverable、verdict、summary、findings、evidence"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
+          },
+          "on_complete": {
+            "success": {
+              "target": "write"
+            },
+            "failure": {
+              "target": "failed"
+            }
+          }
+        },
+        "write": {
+          "type": "delegation",
+          "label": "报告生成",
+          "artifact_contract": {
+            "ref": "deep_research.write.v1"
+          },
+          "evaluator": {
+            "ref": "deep_research.write.v1"
+          },
+          "delegate": {
+            "role": "writer",
+            "skill": "deep-research-write",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只基于 research_plan.json、sources.json、evidence.json、findings.json 写结构化 report.json，不输出任意 HTML/CSS/JS，并调用 complete_delegation。",
+            "handoff": {
+              "input_schema": "deep_research.write.input.v1",
+              "output_schema": "deep_research.write.v1",
+              "artifact_contract_ref": "deep_research.write.v1",
+              "success_criteria": [
+                "report.json 符合结构化报告 schema",
+                "关键 claim 使用 sources.json 中存在的 source id 引用",
+                "Markdown 不是主产物",
+                "返回 deliverable、verdict、summary、findings、evidence"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
+          },
+          "on_complete": {
+            "success": {
+              "target": "review"
+            },
+            "failure": {
+              "target": "failed"
+            }
+          }
+        },
+        "review": {
+          "type": "delegation",
+          "label": "引用审查",
+          "artifact_contract": {
+            "ref": "deep_research.review.v1"
+          },
+          "evaluator": {
+            "ref": "deep_research.review.v1",
+            "on_pass": {
+              "target": "publish"
+            },
+            "on_needs_revision": {
+              "target": "collect"
+            },
+            "on_fail": {
+              "target": "failed"
+            },
+            "on_pending": {
+              "target": "review"
+            }
+          },
+          "delegate": {
+            "role": "reviewer",
+            "skill": "deep-research-review",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请校验 report.json、sources.json、evidence.json、findings.json 和 traceability.json，输出 review.json。review.json verdict 可为 passed、needs_revision、failed、pending，route 可为 collect、analyze、write、failed、publish。然后调用 complete_delegation。",
+            "handoff": {
+              "input_schema": "deep_research.review.input.v1",
+              "output_schema": "deep_research.review.v1",
+              "artifact_contract_ref": "deep_research.review.v1",
+              "success_criteria": [
+                "review.json 写入交付目录",
+                "校验每个关键 claim 是否有来源支撑",
+                "校验引用是否只指向存在的 source/evidence",
+                "返回 deliverable、verdict、summary、findings、evidence"
+              ],
+              "auto_retry": {
+                "enabled": false,
+                "max_attempts": 0,
+                "retryable_failures": []
+              }
+            }
+          },
+          "on_complete": {
+            "success": {
+              "target": "publish"
+            },
+            "failure": {
+              "target": "failed"
+            }
+          }
+        },
+        "publish": {
+          "type": "system",
+          "label": "导出发布",
+          "run": {
+            "steps": [
+              {
+                "id": "export_report",
+                "uses": "deep_research.export"
+              }
+            ]
+          },
+          "on_complete": {
+            "success": {
+              "target": "passed"
+            },
+            "failure": {
+              "target": "failed"
+            }
+          }
+        },
+        "passed": {
+          "type": "terminal",
+          "label": "研究完成"
+        },
+        "failed": {
+          "type": "terminal",
+          "label": "研究失败"
+        }
+      },
+      "status_labels": {
+        "plan": "研究规划",
+        "collect": "来源收集",
+        "analyze": "证据分析",
+        "write": "报告生成",
+        "review": "引用审查",
+        "publish": "导出发布",
+        "passed": "研究完成",
+        "failed": "研究失败"
+      },
+      "create_form": {
+        "fields": [
+          {
+            "key": "research_query",
+            "label": "研究问题",
+            "type": "textarea",
+            "required": true
+          },
+          {
+            "key": "depth",
+            "label": "研究深度",
+            "type": "choice",
+            "default_value": "standard",
+            "options": [
+              {
+                "value": "quick",
+                "label": "快速"
+              },
+              {
+                "value": "standard",
+                "label": "标准"
+              },
+              {
+                "value": "deep",
+                "label": "深入"
+              }
+            ]
+          },
+          {
+            "key": "source_scope",
+            "label": "来源范围",
+            "type": "choice",
+            "default_value": "public_web",
+            "options": [
+              {
+                "value": "public_web",
+                "label": "公开网页"
+              }
+            ]
+          },
+          {
+            "key": "language",
+            "label": "报告语言",
+            "type": "choice",
+            "default_value": "zh",
+            "options": [
+              {
+                "value": "zh",
+                "label": "中文"
+              },
+              {
+                "value": "en",
+                "label": "英文"
+              },
+              {
+                "value": "auto",
+                "label": "自动"
+              }
+            ]
+          },
+          {
+            "key": "report_style",
+            "label": "报告风格",
+            "type": "choice",
+            "default_value": "interactive",
+            "options": [
+              {
+                "value": "interactive",
+                "label": "交互式报告"
+              },
+              {
+                "value": "deep_report",
+                "label": "深度报告"
+              },
+              {
+                "value": "comparison",
+                "label": "对比分析"
+              }
+            ]
+          },
+          {
+            "key": "constraints",
+            "label": "限制条件",
+            "type": "textarea",
+            "required": false
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -174,6 +174,20 @@ import {
   resumePendingWikiJobs,
   stopWikiJob,
 } from '../wiki.js';
+import {
+  createDeepResearchTask,
+  deleteDeepResearchTask,
+  exportDeepResearchMarkdown,
+  exportDeepResearchPdf,
+  getDeepResearchBundleWithOptions,
+  getDeepResearchTaskDetail,
+  listDeepResearchTasks,
+  readDeepResearchEvidence,
+  readDeepResearchReport,
+  readDeepResearchSources,
+  resolveDeepResearchTaskId,
+  steerDeepResearchTask,
+} from '../deep-research.js';
 
 // --- Config ---
 const webEnv = readEnvFile(['WEB_PORT', 'WEB_TOKEN']);
@@ -1131,6 +1145,25 @@ class WebChannel {
         if (req.method === 'POST') {
           return this.apiSaveWorkflowDefinitionDraft(suffix, req, res);
         }
+      }
+      if (pathname === '/api/deep-research/tasks') {
+        if (req.method === 'GET') {
+          return this.apiListDeepResearchTasks(res);
+        }
+        if (req.method === 'POST') {
+          return this.apiCreateDeepResearchTask(req, res);
+        }
+      }
+      const deepResearchTaskMatch = pathname.match(
+        /^\/api\/deep-research\/tasks\/([^/]+)(?:\/(.+))?$/,
+      );
+      if (deepResearchTaskMatch) {
+        return this.apiDeepResearchTaskRoute(
+          decodeURIComponent(deepResearchTaskMatch[1]),
+          deepResearchTaskMatch[2] || '',
+          req,
+          res,
+        );
       }
       if (pathname === '/api/workbench/tasks') {
         if (req.method === 'DELETE') {
@@ -3419,6 +3452,215 @@ class WebChannel {
         card: buildHumanInputCard(item, detail.task),
       })),
     };
+  }
+
+  private writeJson(
+    res: http.ServerResponse,
+    statusCode: number,
+    payload: unknown,
+  ): void {
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(payload));
+  }
+
+  private serveGeneratedFile(
+    filePath: string,
+    contentType: string,
+    filename: string,
+    res: http.ServerResponse,
+    disposition: 'attachment' | 'inline' = 'attachment',
+  ): void {
+    const resolved = path.resolve(filePath);
+    const projectRoot = path.resolve(PROJECT_ROOT);
+    if (!isPathInsideBase(projectRoot, resolved)) {
+      this.writeJson(res, 403, { error: 'forbidden' });
+      return;
+    }
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+      this.writeJson(res, 404, { error: 'file not found' });
+      return;
+    }
+    const data = fs.readFileSync(resolved);
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Disposition': `${disposition}; filename="${filename.replace(/"/g, '')}"`,
+      'Cache-Control': 'no-store',
+    });
+    res.end(data);
+  }
+
+  private async apiListDeepResearchTasks(
+    res: http.ServerResponse,
+  ): Promise<void> {
+    this.writeJson(res, 200, { tasks: listDeepResearchTasks() });
+  }
+
+  private async apiCreateDeepResearchTask(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let body: unknown;
+    try {
+      body = await this.parseJsonBody(req);
+    } catch {
+      this.writeJson(res, 400, { error: 'Invalid JSON body' });
+      return;
+    }
+
+    const data = body as {
+      title?: string;
+      research_query?: string;
+      depth?: string;
+      language?: string;
+      report_style?: string;
+      source_scope?: string;
+      constraints?: string;
+      source_limits?: string;
+      exclusions?: string;
+      source_jid?: string;
+    };
+    const sourceJid = data.source_jid || this.findPreferredMainGroupJid() || '';
+    const result = createDeepResearchTask({
+      ...data,
+      source_jid: sourceJid,
+    });
+    if (result.error) {
+      this.writeJson(res, 400, { ok: false, error: result.error });
+      return;
+    }
+    this.writeJson(res, 200, {
+      ok: true,
+      workflow_id: result.workflowId,
+      task_id: result.taskId || null,
+      detail: this.withWorkbenchActionItemCards(result.detail || null),
+    });
+  }
+
+  private async apiDeepResearchTaskRoute(
+    rawTaskId: string,
+    suffix: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const taskId = resolveDeepResearchTaskId(rawTaskId);
+    if (!taskId) {
+      this.writeJson(res, 404, { error: 'Deep Research task not found' });
+      return;
+    }
+    const normalizedSuffix = suffix.replace(/^\/+|\/+$/g, '');
+
+    if (!normalizedSuffix && req.method === 'DELETE') {
+      const result = deleteDeepResearchTask(taskId);
+      if (result.error) {
+        this.writeJson(res, 404, { ok: false, error: result.error });
+        return;
+      }
+      this.writeJson(res, 200, { ok: true, deleted: result.deleted });
+      return;
+    }
+
+    if (!normalizedSuffix && req.method === 'GET') {
+      const detail = getDeepResearchTaskDetail(taskId);
+      this.writeJson(res, 200, this.withWorkbenchActionItemCards(detail));
+      return;
+    }
+
+    if (normalizedSuffix === 'bundle' && req.method === 'GET') {
+      const reqUrl = new URL(req.url || '/', 'http://localhost');
+      const bundle = getDeepResearchBundleWithOptions(taskId, {
+        full: reqUrl.searchParams.get('full') === '1',
+      });
+      if (!bundle) {
+        this.writeJson(res, 404, { error: 'Deep Research task not found' });
+        return;
+      }
+      this.writeJson(res, 200, {
+        ...bundle,
+        detail: this.withWorkbenchActionItemCards(bundle.detail),
+      });
+      return;
+    }
+
+    if (normalizedSuffix === 'report' && req.method === 'GET') {
+      this.writeJson(res, 200, { report: readDeepResearchReport(taskId) });
+      return;
+    }
+
+    if (normalizedSuffix === 'sources' && req.method === 'GET') {
+      this.writeJson(res, 200, { sources: readDeepResearchSources(taskId) });
+      return;
+    }
+
+    if (normalizedSuffix === 'evidence' && req.method === 'GET') {
+      this.writeJson(res, 200, { evidence: readDeepResearchEvidence(taskId) });
+      return;
+    }
+
+    if (normalizedSuffix === 'steer' && req.method === 'POST') {
+      let body: unknown;
+      try {
+        body = await this.parseJsonBody(req);
+      } catch {
+        this.writeJson(res, 400, { error: 'Invalid JSON body' });
+        return;
+      }
+      const data = body as { instruction?: string };
+      const result = steerDeepResearchTask({
+        taskId,
+        instruction: data.instruction || '',
+      });
+      if (result.error) {
+        this.writeJson(res, 400, { ok: false, error: result.error });
+        return;
+      }
+      this.writeJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (normalizedSuffix === 'export/markdown') {
+      const result = exportDeepResearchMarkdown(taskId);
+      if ('error' in result) {
+        this.writeJson(res, 400, { ok: false, error: result.error });
+        return;
+      }
+      if (req.method === 'GET') {
+        this.serveGeneratedFile(
+          result.absolute_path,
+          result.content_type,
+          result.filename,
+          res,
+        );
+        return;
+      }
+      if (req.method === 'POST') {
+        this.writeJson(res, 200, { ok: true, export: result });
+        return;
+      }
+    }
+
+    if (normalizedSuffix === 'export/pdf') {
+      const result = exportDeepResearchPdf(taskId);
+      if ('error' in result) {
+        this.writeJson(res, 400, { ok: false, error: result.error });
+        return;
+      }
+      if (req.method === 'GET') {
+        this.serveGeneratedFile(
+          result.absolute_path,
+          result.content_type,
+          result.filename,
+          res,
+          'inline',
+        );
+        return;
+      }
+      if (req.method === 'POST') {
+        this.writeJson(res, 200, { ok: true, export: result });
+        return;
+      }
+    }
+
+    this.writeJson(res, 404, { error: 'Deep Research route not found' });
   }
 
   private async apiCreateWorkbenchTask(

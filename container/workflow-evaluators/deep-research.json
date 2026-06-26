@@ -1,0 +1,92 @@
+[
+  {
+    "id": "deep_research.plan.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": ["research_plan", "traceability"]
+    },
+    "ai": {
+      "enabled": false,
+      "model": "default",
+      "rubric": "Judge whether the research plan has bounded scope, useful subquestions, public-web source strategy, quality criteria, and stop criteria.",
+      "max_context_bytes": 12000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "deep_research.collect.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": ["sources", "search_log", "traceability"]
+    },
+    "ai": {
+      "enabled": false,
+      "model": "default",
+      "rubric": "Judge whether sources are relevant public webpages, search logs explain selected and rejected URLs, and knowledge gaps are explicit.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "deep_research.analyze.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": ["evidence", "findings", "traceability"]
+    },
+    "ai": {
+      "enabled": false,
+      "model": "default",
+      "rubric": "Judge whether evidence maps to sources and findings map to evidence with conflicts and limitations preserved.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "deep_research.write.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": ["report"]
+    },
+    "ai": {
+      "enabled": false,
+      "model": "default",
+      "rubric": "Judge whether report.json is a structured interactive report, cites known sources, and avoids arbitrary HTML/CSS/JS.",
+      "max_context_bytes": 18000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  },
+  {
+    "id": "deep_research.review.v1",
+    "type": "hybrid",
+    "deterministic": {
+      "required_checks": ["review"]
+    },
+    "ai": {
+      "enabled": false,
+      "model": "default",
+      "rubric": "Judge whether review.json validates citation coverage, source quality, unresolved gaps, and route decision.",
+      "max_context_bytes": 16000
+    },
+    "status_mapping": {
+      "artifact_missing": "pending",
+      "schema_invalid": "failed",
+      "ai_uncertain": "pending"
+    }
+  }
+]
