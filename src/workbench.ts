@@ -338,6 +338,72 @@ function mapPersistedSubtask(
   };
 }
 
+function statusRankForDuplicateSubtask(status: string): number {
+  if (status === 'current') return 5;
+  if (status === 'failed' || status === 'cancelled') return 4;
+  if (status === 'completed') return 3;
+  if (status === 'pending') return 2;
+  return 1;
+}
+
+function timestampRank(value: string | undefined): number {
+  if (!value) return 0;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isBetterDuplicateSubtask(
+  candidate: WorkbenchSubtask,
+  current: WorkbenchSubtask,
+): boolean {
+  const candidateStatusRank = statusRankForDuplicateSubtask(candidate.status);
+  const currentStatusRank = statusRankForDuplicateSubtask(current.status);
+  if (candidateStatusRank !== currentStatusRank) {
+    return candidateStatusRank > currentStatusRank;
+  }
+  const candidateHasResult = !!candidate.result;
+  const currentHasResult = !!current.result;
+  if (candidateHasResult !== currentHasResult) {
+    return candidateHasResult;
+  }
+  return (
+    timestampRank(candidate.updated_at) > timestampRank(current.updated_at)
+  );
+}
+
+function dedupeSubtasksByDelegation(
+  subtasks: WorkbenchSubtask[],
+): WorkbenchSubtask[] {
+  const result: WorkbenchSubtask[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const subtask of subtasks) {
+    const key = subtask.delegation_id
+      ? `${subtask.stage_key}:${subtask.delegation_id}`
+      : '';
+    if (!key) {
+      result.push(subtask);
+      continue;
+    }
+
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, result.length);
+      result.push(subtask);
+      continue;
+    }
+
+    const existing = result[existingIndex];
+    if (existing && isBetterDuplicateSubtask(subtask, existing)) {
+      result[existingIndex] = subtask;
+    }
+  }
+
+  return result;
+}
+
 function mapPersistedEvent(item: WorkbenchEventRecord): WorkbenchTimelineEvent {
   return {
     id: item.id,
@@ -994,15 +1060,17 @@ export function getWorkbenchTaskDetail(
       task: toTaskItem(workflow),
       subtasks: sortSubtasksByWorkflowOrder(
         workflow,
-        listWorkbenchSubtasksByTask(task.id)
-          .filter((item) => visibleStageKeys.has(item.stage_key))
-          .map((item) =>
-            mapPersistedSubtask(
-              item,
-              workflow.workflow_type,
-              manuallySkippedSubtaskIds,
+        dedupeSubtasksByDelegation(
+          listWorkbenchSubtasksByTask(task.id)
+            .filter((item) => visibleStageKeys.has(item.stage_key))
+            .map((item) =>
+              mapPersistedSubtask(
+                item,
+                workflow.workflow_type,
+                manuallySkippedSubtaskIds,
+              ),
             ),
-          ),
+        ),
       ),
       timeline: sortTimelineEvents(events.map(mapPersistedEvent)),
       evaluations: listWorkflowStageEvaluationsByWorkflow(workflow.id).map(

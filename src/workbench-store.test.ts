@@ -9,6 +9,7 @@ import {
   createAskQuestion,
   createDelegation,
   createWorkflow as dbCreateWorkflow,
+  createWorkbenchSubtask as dbCreateWorkbenchSubtask,
   getAllRegisteredGroups,
   getLatestWorkflowStageEvaluation,
   getPendingWorkflowInterruptForState,
@@ -1420,7 +1421,7 @@ describe('workbench approval transition sync', () => {
       answers_json: null,
       current_index: 0,
       created_at: '2026-04-07T00:00:00.000Z',
-      expires_at: '2026-06-08T00:00:00.000Z',
+      expires_at: '2099-06-08T00:00:00.000Z',
       answered_at: null,
       responder_user_id: null,
     });
@@ -2060,6 +2061,202 @@ describe('workbench approval transition sync', () => {
         item.title.includes('修复中 -> 修复中'),
       ),
     ).toBe(false);
+  });
+
+  it('reuses the same re-entry subtask when retry delegation sync arrives before transition', () => {
+    dbCreateWorkflow({
+      id: 'wf-retry-delegation-before-transition',
+      name: '同阶段重跑',
+      service: 'order-service',
+      start_from: 'dev',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/retry-delegation-before-transition',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_retry_delegation_before_transition',
+        staging_work_branch:
+          'staging-deploy/feature-retry-delegation-before-transition',
+        access_token: '',
+      },
+      status: 'dev',
+      current_delegation_id: 'wf-del-retry-before-1',
+      round: 1,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:00:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-retry-delegation-before-transition');
+    createDelegation({
+      id: 'wf-del-retry-before-1',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'dev@g.us',
+      target_folder: 'web_dev',
+      task: '第一次开发',
+      status: 'completed',
+      result: '{"summary":"第一次失败"}',
+      outcome: 'failure',
+      requester_jid: null,
+      workflow_id: 'wf-retry-delegation-before-transition',
+      created_at: '2026-04-07T00:01:00.000Z',
+      updated_at: '2026-04-07T00:02:00.000Z',
+    });
+    updateDelegation('wf-del-retry-before-1', {
+      status: 'completed',
+      result: '{"summary":"第一次失败"}',
+      outcome: 'failure',
+    });
+    syncWorkbenchOnDelegationCreated(
+      'wf-retry-delegation-before-transition',
+      'wf-del-retry-before-1',
+    );
+    syncWorkbenchOnDelegationCompleted(
+      'wf-retry-delegation-before-transition',
+      'wf-del-retry-before-1',
+    );
+
+    updateWorkflow('wf-retry-delegation-before-transition', {
+      status: 'dev',
+      current_delegation_id: 'wf-del-retry-before-2',
+    });
+    createDelegation({
+      id: 'wf-del-retry-before-2',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'dev@g.us',
+      target_folder: 'web_dev',
+      task: '第二次开发',
+      status: 'pending',
+      result: null,
+      outcome: null,
+      requester_jid: null,
+      workflow_id: 'wf-retry-delegation-before-transition',
+      created_at: '2026-04-07T00:03:00.000Z',
+      updated_at: '2026-04-07T00:03:00.000Z',
+    });
+
+    syncWorkbenchOnDelegationCreated(
+      'wf-retry-delegation-before-transition',
+      'wf-del-retry-before-2',
+    );
+    syncWorkbenchOnTransition(
+      'wf-retry-delegation-before-transition',
+      'dev',
+      'dev',
+      'wf-del-retry-before-2',
+    );
+
+    const detail = getWorkbenchTaskDetail(
+      'wb-wf-retry-delegation-before-transition',
+    );
+    expect(detail).not.toBeNull();
+    const devSubtasks =
+      detail?.subtasks.filter((item) => item.stage_key === 'dev') || [];
+    expect(devSubtasks).toHaveLength(2);
+    expect(devSubtasks.map((item) => item.delegation_id)).toEqual([
+      'wf-del-retry-before-1',
+      'wf-del-retry-before-2',
+    ]);
+    expect(devSubtasks.map((item) => item.status)).toEqual([
+      'failed',
+      'current',
+    ]);
+    expect(
+      devSubtasks.filter(
+        (item) => item.delegation_id === 'wf-del-retry-before-2',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('hides duplicate historical subtasks for the same stage delegation pair', () => {
+    dbCreateWorkflow({
+      id: 'wf-duplicate-delegation-subtasks',
+      name: '重复节点去重',
+      service: 'order-service',
+      start_from: 'dev',
+      context: {
+        main_branch: '',
+        work_branch: 'feature/duplicate-delegation-subtasks',
+        staging_base_branch: 'staging',
+        deliverable: '2026-04-07_duplicate_delegation_subtasks',
+        staging_work_branch: 'staging-deploy/feature-duplicate-delegation',
+        access_token: '',
+      },
+      status: 'failed',
+      current_delegation_id: '',
+      round: 1,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-07T00:00:00.000Z',
+      updated_at: '2026-04-07T00:10:00.000Z',
+    });
+    syncWorkbenchOnWorkflowCreated('wf-duplicate-delegation-subtasks');
+    createDelegation({
+      id: 'wf-del-duplicate-subtasks',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'dev@g.us',
+      target_folder: 'web_dev',
+      task: '重复节点任务',
+      status: 'completed',
+      result: '需要修复',
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-duplicate-delegation-subtasks',
+      created_at: '2026-04-07T00:01:00.000Z',
+      updated_at: '2026-04-07T00:09:00.000Z',
+    });
+    dbCreateWorkbenchSubtask({
+      id: 'wb-subtask-wb-wf-duplicate-delegation-subtasks-dev-2',
+      task_id: 'wb-wf-duplicate-delegation-subtasks',
+      workflow_id: 'wf-duplicate-delegation-subtasks',
+      delegation_id: 'wf-del-duplicate-subtasks',
+      stage_key: 'dev',
+      title: '开发中',
+      role: 'dev',
+      group_folder: 'web_dev',
+      status: 'completed',
+      input_summary: null,
+      output_summary: null,
+      started_at: '2026-04-07T00:01:00.000Z',
+      finished_at: '2026-04-07T00:03:00.000Z',
+      updated_at: '2026-04-07T00:03:00.000Z',
+    });
+    dbCreateWorkbenchSubtask({
+      id: 'wb-subtask-wb-wf-duplicate-delegation-subtasks-dev-3',
+      task_id: 'wb-wf-duplicate-delegation-subtasks',
+      workflow_id: 'wf-duplicate-delegation-subtasks',
+      delegation_id: 'wf-del-duplicate-subtasks',
+      stage_key: 'dev',
+      title: '开发中',
+      role: 'dev',
+      group_folder: 'web_dev',
+      status: 'failed',
+      input_summary: null,
+      output_summary: '需要修复',
+      started_at: '2026-04-07T00:04:00.000Z',
+      finished_at: '2026-04-07T00:09:00.000Z',
+      updated_at: '2026-04-07T00:09:00.000Z',
+    });
+
+    const detail = getWorkbenchTaskDetail(
+      'wb-wf-duplicate-delegation-subtasks',
+      { sync: false },
+    );
+    expect(detail).not.toBeNull();
+    const devSubtasks =
+      detail?.subtasks.filter(
+        (item) => item.delegation_id === 'wf-del-duplicate-subtasks',
+      ) || [];
+    expect(devSubtasks).toHaveLength(1);
+    expect(devSubtasks[0]?.id).toBe(
+      'wb-subtask-wb-wf-duplicate-delegation-subtasks-dev-3',
+    );
+    expect(devSubtasks[0]?.status).toBe('failed');
+    expect(devSubtasks[0]?.result).toContain('需要修复');
   });
 
   it('allows returning from a completed interrupt subtask to that node', () => {
