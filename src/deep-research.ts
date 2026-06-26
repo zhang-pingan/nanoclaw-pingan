@@ -35,6 +35,8 @@ const DEFAULT_BUNDLE_SOURCE_LIMIT = 120;
 const DEFAULT_BUNDLE_EVIDENCE_LIMIT = 120;
 const DEFAULT_BUNDLE_FINDING_LIMIT = 120;
 const DEFAULT_BUNDLE_TEXT_LIMIT = 4000;
+const CONTINUATION_BUNDLE_TEXT_LIMIT = 1200;
+const CONTINUATION_MAX_TASKS = 6;
 const DEEP_RESEARCH_FILE_NAMES = new Set([
   REPORT_FILE,
   SOURCES_FILE,
@@ -55,8 +57,9 @@ export interface DeepResearchCreateInput {
   source_scope?: string;
   constraints?: string;
   source_limits?: string;
-  exclusions?: string;
   source_jid?: string;
+  parent_task_id?: string;
+  context_task_ids?: string[];
 }
 
 export interface DeepResearchExportResult {
@@ -129,15 +132,18 @@ export function buildDeepResearchContext(
   if (!isSafePathSegment(deliverable)) {
     throw new Error('failed to generate safe deliverable name');
   }
+  const continuation = buildContinuationContext(input);
   return {
     research_query: researchQuery,
-    depth: safeText(input.depth) || 'standard',
+    depth: safeText(input.depth) || 'deep',
     source_scope: safeText(input.source_scope) || 'public_web',
     language: safeText(input.language) || 'zh',
-    report_style: safeText(input.report_style) || 'interactive',
+    report_style: safeText(input.report_style) || 'deep_report',
     constraints: safeText(input.constraints),
     source_limits: safeText(input.source_limits),
-    exclusions: safeText(input.exclusions),
+    previous_research_context: continuation?.prompt || '',
+    previous_research_task_ids: continuation?.contextTaskIds || [],
+    parent_research_task_id: continuation?.parentTaskId || '',
     [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable,
   };
 }
@@ -148,6 +154,12 @@ export function createDeepResearchTask(input: DeepResearchCreateInput): {
   detail?: WorkbenchTaskDetail | null;
   error?: string;
 } {
+  if (Object.prototype.hasOwnProperty.call(input, 'exclusions')) {
+    return {
+      workflowId: '',
+      error: 'exclusions is no longer supported; use constraints',
+    };
+  }
   const researchQuery = safeText(input.research_query);
   const sourceJid = safeText(input.source_jid);
   if (!researchQuery)
@@ -230,7 +242,13 @@ function getExistingBundleDirForDeliverable(
 ): string | null {
   const value = safeText(deliverable);
   if (!service || !isSafePathSegment(value)) return null;
-  const candidate = path.join(PROJECT_ROOT, 'projects', service, 'iteration', value);
+  const candidate = path.join(
+    PROJECT_ROOT,
+    'projects',
+    service,
+    'iteration',
+    value,
+  );
   return fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
     ? candidate
     : null;
@@ -558,7 +576,10 @@ function truncateDeepResearchText(value: unknown, maxChars: number): unknown {
   return value.length > maxChars ? `${value.slice(0, maxChars)}...` : value;
 }
 
-function compactDeepResearchValue(value: unknown, maxTextChars: number): unknown {
+function compactDeepResearchValue(
+  value: unknown,
+  maxTextChars: number,
+): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => compactDeepResearchValue(item, maxTextChars));
   }
@@ -569,6 +590,112 @@ function compactDeepResearchValue(value: unknown, maxTextChars: number): unknown
       compactDeepResearchValue(entry, maxTextChars),
     ]),
   );
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+}
+
+function truncateContinuationArray(value: unknown, maxItems: number): unknown {
+  if (!Array.isArray(value)) return value ?? null;
+  return value
+    .slice(0, maxItems)
+    .map((item) =>
+      compactDeepResearchValue(item, CONTINUATION_BUNDLE_TEXT_LIMIT),
+    );
+}
+
+function buildContinuationContextTask(
+  taskId: string,
+): Record<string, unknown> | null {
+  const detail = getDeepResearchTaskDetail(taskId);
+  if (!detail) return null;
+  if (
+    detail.task.task_state === 'cancelled' ||
+    detail.task.workflow_status === 'cancelled'
+  ) {
+    return null;
+  }
+  const bundleDir = getDetailBundleDir(detail);
+  const read = (fileName: string) =>
+    bundleDir ? readJsonFile(path.join(bundleDir, fileName)) : null;
+  return {
+    task_id: detail.task.id,
+    workflow_id: detail.task.id,
+    title: detail.task.title,
+    research_query:
+      typeof detail.task.context?.research_query === 'string'
+        ? detail.task.context.research_query
+        : '',
+    created_at: detail.task.created_at,
+    updated_at: detail.task.updated_at,
+    status: detail.task.workflow_status_label || detail.task.workflow_status,
+    stage_outputs: detail.subtasks.map((item) => ({
+      stage_key: item.stage_key,
+      stage_label: item.stage_label,
+      status: item.status,
+      output_summary: item.result || '',
+      delegation_id: item.delegation_id || '',
+    })),
+    artifacts: {
+      research_plan: compactDeepResearchValue(
+        read(RESEARCH_PLAN_FILE),
+        CONTINUATION_BUNDLE_TEXT_LIMIT,
+      ),
+      sources: truncateContinuationArray(read(SOURCES_FILE), 30),
+      evidence: truncateContinuationArray(read(EVIDENCE_FILE), 30),
+      findings: truncateContinuationArray(read(FINDINGS_FILE), 30),
+      report: compactDeepResearchValue(
+        read(REPORT_FILE),
+        CONTINUATION_BUNDLE_TEXT_LIMIT,
+      ),
+      review: compactDeepResearchValue(
+        read(REVIEW_FILE),
+        CONTINUATION_BUNDLE_TEXT_LIMIT,
+      ),
+    },
+  };
+}
+
+function buildContinuationContext(input: DeepResearchCreateInput): {
+  parentTaskId: string;
+  contextTaskIds: string[];
+  prompt: string;
+} | null {
+  const parentTaskId = safeText(input.parent_task_id);
+  const explicitIds = parseStringArray(input.context_task_ids);
+  const ids = Array.from(
+    new Set(
+      [parentTaskId, ...explicitIds].map((id) => safeText(id)).filter(Boolean),
+    ),
+  ).slice(0, CONTINUATION_MAX_TASKS);
+  if (ids.length === 0) return null;
+
+  const tasks = ids
+    .map((id) => {
+      const resolved = resolveDeepResearchTaskId(id);
+      return resolved ? buildContinuationContextTask(resolved) : null;
+    })
+    .filter((item): item is Record<string, unknown> => item !== null);
+  if (tasks.length === 0) return null;
+
+  const payload = {
+    generated_at: new Date().toISOString(),
+    instruction:
+      '本次是 Deep Research 续研。以下历史研究问题、各阶段产物和最终产物只能作为参考上下文；新报告必须围绕当前研究问题重新检索、验证和引用公开网页来源。',
+    parent_task_id: parentTaskId || (ids[0] ?? ''),
+    tasks,
+  };
+  return {
+    parentTaskId: parentTaskId || (ids[0] ?? ''),
+    contextTaskIds: tasks
+      .map((task) => String(task.task_id || ''))
+      .filter(Boolean),
+    prompt: JSON.stringify(payload, null, 2),
+  };
 }
 
 function limitDeepResearchArray(

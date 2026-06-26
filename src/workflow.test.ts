@@ -48,10 +48,9 @@ import { getWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { getWorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 
 vi.mock('./host-script-runner.js', async () => {
-  const actual =
-    await vi.importActual<typeof import('./host-script-runner.js')>(
-      './host-script-runner.js',
-    );
+  const actual = await vi.importActual<
+    typeof import('./host-script-runner.js')
+  >('./host-script-runner.js');
   return {
     ...actual,
     runLocalHostScriptSync: vi.fn((scriptPath: string) => ({
@@ -2072,6 +2071,119 @@ describe('workflow metadata and branch flow', () => {
     ).toBe('needs_revision');
   });
 
+  it('creates target delegation when evaluator revision routes to another delegation state', () => {
+    const config = getWorkflowTypeConfig('dev_test');
+    const planReviewState = config?.states.plan_examine;
+    expect(planReviewState?.type).toBe('delegation');
+    const originalEvaluator = planReviewState!.evaluator;
+    planReviewState!.evaluator = {
+      ...(originalEvaluator || { ref: 'dev_test.plan_review.v1' }),
+      on_needs_revision: { target: 'plan' },
+    };
+    createWorkflow({
+      id: 'wf-plan-review-route-plan',
+      name: 'Plan review route plan',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        main_branch: 'main',
+        work_branch: 'feature/test_20260408',
+        deliverable: '2026-04-08_feature',
+        staging_base_branch: 'staging',
+        staging_work_branch: 'staging-deploy/feature-test_20260408',
+        access_token: '',
+        requirement_description: 'needs plan revision',
+        requirement_files: [],
+      },
+      status: 'plan_examine',
+      current_delegation_id: 'del-plan-review-route-plan',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    });
+    createWorkflowEvent({
+      id: 'wf-event-plan-created-before-review',
+      workflow_id: 'wf-plan-review-route-plan',
+      event_type: 'delegation_created',
+      state_key: 'plan',
+      ref_type: 'delegation',
+      ref_id: 'del-original-plan',
+      actor_json: null,
+      payload_json: JSON.stringify({
+        delegation_id: 'del-original-plan',
+        attempt: 1,
+      }),
+      idempotency_key: null,
+      created_at: '2026-04-08T00:00:00.000Z',
+    });
+    createDelegation({
+      id: 'del-plan-review-route-plan',
+      source_jid: 'main@g.us',
+      source_folder: 'web_main',
+      target_jid: 'plan-examine@g.us',
+      target_folder: 'web_plan_examine',
+      task: 'plan review task',
+      status: 'completed',
+      result: buildStructuredResult({
+        deliverable: '2026-04-08_feature',
+        main_branch: 'main',
+        work_branch: 'feature/test_20260408',
+        verdict: 'needs_revision',
+        summary: '需要回到 plan 修改。',
+        findings: [
+          {
+            code: 'needs_plan_revision',
+            severity: 'high',
+            message: '需要重新规划。',
+            stageKey: 'plan_examine',
+          },
+        ],
+      }),
+      outcome: 'success',
+      requester_jid: null,
+      workflow_id: 'wf-plan-review-route-plan',
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:01.000Z',
+    });
+
+    try {
+      onDelegationComplete('del-plan-review-route-plan');
+
+      const workflow = getWorkflow('wf-plan-review-route-plan');
+      expect(workflow?.status).toBe('plan');
+      expect(workflow?.current_delegation_id).toBeTruthy();
+      expect(workflow?.current_delegation_id).not.toBe(
+        'del-plan-review-route-plan',
+      );
+      const delegations = getDelegationsByWorkflow('wf-plan-review-route-plan');
+      const newDelegation = delegations.find(
+        (item) => item.id === workflow?.current_delegation_id,
+      );
+      expect(newDelegation?.target_folder).toBe('web_plan');
+      expect(newDelegation?.handoff_role).toBe('planner');
+      const createdEvents = listWorkflowEvents(
+        'wf-plan-review-route-plan',
+      ).filter(
+        (event) =>
+          event.event_type === 'delegation_created' &&
+          event.state_key === 'plan',
+      );
+      expect(createdEvents).toHaveLength(2);
+      const latestPayload = JSON.parse(
+        createdEvents[1]?.payload_json || '{}',
+      ) as { attempt?: number; idempotency_key?: string };
+      expect(latestPayload.attempt).toBe(2);
+      expect(latestPayload.idempotency_key).toBe(
+        'workflow_delegation:wf-plan-review-route-plan:plan:0:2',
+      );
+    } finally {
+      planReviewState!.evaluator = originalEvaluator;
+    }
+  });
+
   it('evaluates typed handoff result before falling back to raw result text', () => {
     writeDoc(
       '2026-04-08_feature',
@@ -2706,9 +2818,7 @@ describe('workflow metadata and branch flow', () => {
     );
     expect(skillsConfig.web_ios_plan).toBeUndefined();
     expect(skillsConfig.web_ios_acceptance).toEqual(['ios-acceptance-test']);
-    expect(skillsConfig.web_ios_preintegration).toEqual([
-      'ios-preintegration',
-    ]);
+    expect(skillsConfig.web_ios_preintegration).toEqual(['ios-preintegration']);
   });
 
   it('starts ios_dev_test from iOS recon and builds context pack', () => {
@@ -4144,12 +4254,12 @@ describe('system workflow action nodes', () => {
       expect(getDelegationsByWorkflow(result.workflowId)[0]?.task).toContain(
         '需求描述：route by ios branch',
       );
-      expect(getWorkflow(result.workflowId)?.context.last_system_state).toMatchObject(
-        {
-          state_key: 'branch_router',
-          routed_to: 'plan',
-        },
-      );
+      expect(
+        getWorkflow(result.workflowId)?.context.last_system_state,
+      ).toMatchObject({
+        state_key: 'branch_router',
+        routed_to: 'plan',
+      });
     } finally {
       config.entry_points.plan = originalEntry;
       if (originalRouter) {

@@ -17342,6 +17342,7 @@ body::after,
 #workbench-screen.active,
 #today-plan-screen.active,
 #assistant-screen.active,
+#deep-research-screen.active,
 #memory-management-screen.active,
 #knowledge-management-screen.active,
 #workflow-definitions-screen.active,
@@ -17354,6 +17355,7 @@ body::after,
 #workbench-screen,
 #today-plan-screen,
 #assistant-screen,
+#deep-research-screen,
 #memory-management-screen,
 #knowledge-management-screen,
 #workflow-definitions-screen,
@@ -20491,27 +20493,30 @@ textarea.workflow-wizard-input {
 
 #deep-research-screen {
   display: none;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
-  min-height: 100vh;
-  background: #f6f7f9;
-  color: #172033;
+  min-height: 0;
+  height: 100%;
+  background: #fbfbfa;
+  color: #1f2328;
 }
 
 #deep-research-screen.active {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  align-self: stretch;
+  grid-template-columns: 292px minmax(0, 1fr);
 }
 
 .deep-research-sidebar {
   min-width: 0;
-  border-right: 1px solid rgba(20, 32, 48, 0.1);
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
   background: #ffffff;
   display: flex;
   flex-direction: column;
 }
 
 .deep-research-sidebar-header,
-.deep-research-composer-head,
 .deep-research-progress-head {
   display: flex;
   align-items: center;
@@ -20520,59 +20525,49 @@ textarea.workflow-wizard-input {
 }
 
 .deep-research-sidebar-header {
-  padding: 18px 18px 12px;
+  padding: 16px 16px 12px;
 }
 
-.deep-research-sidebar-header h2,
-.deep-research-composer h2 {
+.deep-research-sidebar-header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1.25;
 }
 
+.deep-research-sidebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .deep-research-kicker {
-  color: #667085;
+  color: #6b7280;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .deep-research-filter-row {
-  padding: 0 18px 12px;
+  padding: 0 16px 10px;
 }
 
-.deep-research-select,
-.deep-research-field select,
-.deep-research-field input,
-.deep-research-field textarea {
+.deep-research-select {
   width: 100%;
   min-width: 0;
-  border: 1px solid rgba(20, 32, 48, 0.14);
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 8px;
   background: #ffffff;
-  color: #172033;
+  color: #1f2328;
   font: inherit;
-}
-
-.deep-research-select,
-.deep-research-field select,
-.deep-research-field input {
-  height: 36px;
-  padding: 0 10px;
-}
-
-.deep-research-field textarea {
-  resize: vertical;
-  padding: 10px;
-  line-height: 1.5;
 }
 
 .deep-research-task-list {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 8px 10px 18px;
+  padding: 6px 10px 18px;
 }
 
 .deep-research-task-item {
@@ -20584,14 +20579,14 @@ textarea.workflow-wizard-input {
   border-radius: 8px;
   background: transparent;
   color: inherit;
-  padding: 10px;
+  padding: 10px 9px;
   cursor: pointer;
 }
 
 .deep-research-task-item:hover,
 .deep-research-task-item.active {
-  background: #f0f4f8;
-  border-color: rgba(20, 32, 48, 0.08);
+  background: #f4f6f8;
+  border-color: rgba(15, 23, 42, 0.08);
 }
 
 .deep-research-task-title {
@@ -20607,8 +20602,8 @@ textarea.workflow-wizard-input {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 7px;
-  color: #667085;
+  margin-top: 6px;
+  color: #6b7280;
   font-size: 12px;
 }
 
@@ -20618,8 +20613,8 @@ textarea.workflow-wizard-input {
   max-width: 100%;
   border-radius: 999px;
   padding: 3px 8px;
-  background: #edf2f7;
-  color: #344054;
+  background: #f1f3f5;
+  color: #3f4652;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
@@ -20641,154 +20636,460 @@ textarea.workflow-wizard-input {
 }
 
 .deep-research-main {
+  position: relative;
   min-width: 0;
-  min-height: 100vh;
-  overflow: auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.deep-research-composer {
-  border-bottom: 1px solid rgba(20, 32, 48, 0.1);
-  background: #ffffff;
-  padding: 18px 22px;
+.deep-research-thread {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 54px 24px 150px;
 }
 
-.deep-research-actions,
-.deep-research-submit-row {
+.deep-research-mode-empty .deep-research-thread {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  justify-content: center;
+  padding: 24px;
 }
 
-.deep-research-form-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+.deep-research-mode-empty .deep-research-report {
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
-.deep-research-field {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: #344054;
-  font-size: 13px;
-  font-weight: 700;
+.deep-research-mode-empty .deep-research-chat-composer,
+.deep-research-mode-new .deep-research-thread {
+  display: none;
 }
 
-.deep-research-field-wide {
-  grid-column: span 4;
+.deep-research-mode-new {
+  justify-content: flex-end;
 }
 
-.deep-research-submit-row {
-  margin-top: 12px;
+.deep-research-mode-new .deep-research-chat-composer {
+  position: static;
+  padding: 24px;
+}
+
+.deep-research-progress,
+.deep-research-report {
+  max-width: 760px;
+  margin: 0 auto 18px;
 }
 
 .deep-research-muted {
-  color: #667085;
-  font-size: 13px;
-}
-
-.deep-research-body {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 0;
-  flex: 1;
-}
-
-.deep-research-report-column {
-  min-width: 0;
-  padding: 18px;
+  display: block;
+  max-width: 760px;
+  margin: 8px auto 0;
+  color: #6b7280;
+  font-size: 12px;
+  text-align: left;
 }
 
 .deep-research-progress {
-  min-height: 74px;
-  border: 1px solid rgba(20, 32, 48, 0.1);
-  border-radius: 8px;
+  min-height: 0;
+}
+
+.deep-research-trace-card {
+  border: 1px solid rgba(15, 23, 42, 0.11);
+  border-radius: 18px;
   background: #ffffff;
-  padding: 14px;
-  margin-bottom: 14px;
+  padding: 22px 22px 18px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.deep-research-trace-card h3 {
+  margin: 0 0 18px;
+  font-size: 19px;
+  line-height: 1.3;
 }
 
 .deep-research-progress-head strong {
   display: block;
   margin-top: 7px;
-  font-size: 16px;
+  font-size: 17px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
-.deep-research-stage-strip {
+.deep-research-progress-head small {
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.deep-research-trace-list {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 18px;
 }
 
-.deep-research-stage {
+.deep-research-trace-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  color: #2f333a;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.deep-research-trace-item span {
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
-  background: #f2f4f7;
-  color: #475467;
-  padding: 5px 9px;
+  border: 2px dashed #c9cdd3;
+  margin-top: 3px;
+}
+
+.deep-research-trace-item.completed span {
+  border-style: solid;
+  border-color: #19a463;
+  background: #19a463;
+  box-shadow: inset 0 0 0 4px #ffffff;
+}
+
+.deep-research-trace-item.current span,
+.deep-research-trace-item.running span {
+  border-style: solid;
+  border-color: #1d7ff2;
+  background: #dcecff;
+}
+
+.deep-research-trace-item.failed span,
+.deep-research-trace-item.cancelled span {
+  border-style: solid;
+  border-color: #c9352b;
+  background: #fde8e6;
+}
+
+.deep-research-trace-item small {
+  grid-column: 2;
+  color: #6b7280;
   font-size: 12px;
-  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
-.deep-research-stage.completed {
-  background: #e8f5ee;
-  color: #166534;
-}
-
-.deep-research-stage.current {
-  background: #e6f4ff;
-  color: #075985;
-}
-
-.deep-research-stage.failed {
-  background: #fdecec;
-  color: #b42318;
+.deep-research-trace-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
 }
 
 .deep-research-report {
   min-width: 0;
-  border: 1px solid rgba(20, 32, 48, 0.1);
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 28px;
   line-height: 1.65;
 }
 
+.deep-research-page-empty {
+  min-height: 260px;
+  color: #6b7280;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.deep-research-page-empty img {
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  opacity: 0.72;
+  filter: grayscale(0.12);
+}
+
+.deep-research-page-empty p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.deep-research-result-card {
+  border: 1px solid rgba(15, 23, 42, 0.11);
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.deep-research-result-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.deep-research-result-title {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #1f2328;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.deep-research-result-title > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.deep-research-doc-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #1683ff;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.deep-research-result-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.deep-research-chip-btn {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #4b5563;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.deep-research-chip-btn:hover {
+  color: #111827;
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+.deep-research-chat-composer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 24px 24px;
+  background: linear-gradient(
+    180deg,
+    rgba(251, 251, 250, 0),
+    #fbfbfa 34%,
+    #fbfbfa 100%
+  );
+}
+
+.deep-research-input-shell {
+  max-width: 860px;
+  min-height: 62px;
+  margin: 0 auto;
+  border: 1px solid rgba(15, 23, 42, 0.11);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 14px 44px rgba(15, 23, 42, 0.09);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 10px 22px;
+}
+
+.deep-research-input-shell textarea {
+  width: 100%;
+  max-height: 132px;
+  min-height: 24px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: #1f2328;
+  font: inherit;
+  font-size: 17px;
+  line-height: 1.45;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+
+.deep-research-input-shell textarea::placeholder {
+  color: #9ca3af;
+}
+
+.deep-research-input-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.deep-research-input-controls select,
+.deep-research-control-btn {
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #6b7280;
+  font: inherit;
+  font-weight: 700;
+  padding: 0 4px 0 7px;
+}
+
+.deep-research-input-controls select {
+  width: auto;
+  min-width: 0;
+}
+
+#deep-research-language-select {
+  max-width: 60px;
+}
+
+#deep-research-style-select {
+  max-width: 92px;
+}
+
+.deep-research-input-controls select:hover,
+.deep-research-control-btn:hover,
+.deep-research-control-btn.active {
+  background: #f3f4f6;
+  color: #1f2328;
+}
+
+.deep-research-start-btn {
+  height: 40px;
+  min-width: 72px;
+  border: 0;
+  border-radius: 999px;
+  background: #050505;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0 18px;
+}
+
+.deep-research-start-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.deep-research-constraints-panel {
+  max-width: 860px;
+  margin: 10px auto 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+.deep-research-constraints-panel textarea {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+  resize: vertical;
+  min-height: 76px;
+}
+
+.deep-research-report-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.deep-research-report-overlay-bar {
+  min-height: 60px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.deep-research-report-overlay-bar strong {
+  display: block;
+  max-width: 70vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deep-research-report-overlay-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 44px min(8vw, 96px) 72px;
+  line-height: 1.68;
+}
+
+.deep-research-report-overlay-content > * {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .deep-research-report-header h1 {
-  margin: 4px 0 8px;
-  font-size: 30px;
-  line-height: 1.15;
+  margin: 6px 0 10px;
+  font-size: 36px;
+  line-height: 1.18;
 }
 
 .deep-research-report-header p,
 .deep-research-report-section p,
 .deep-research-report-summary li {
-  color: #344054;
+  color: #343941;
 }
 
 .deep-research-report-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  color: #667085;
+  color: #6b7280;
   font-size: 12px;
 }
 
 .deep-research-report-summary,
 .deep-research-report-section {
-  margin-top: 26px;
+  margin-top: 30px;
 }
 
 .deep-research-report-summary h2,
 .deep-research-report-section h2 {
-  margin: 0 0 10px;
-  font-size: 20px;
+  margin: 0 0 12px;
+  font-size: 22px;
   line-height: 1.25;
 }
 
@@ -20801,7 +21102,7 @@ textarea.workflow-wizard-input {
 }
 
 .deep-research-citation {
-  border: 1px solid rgba(20, 32, 48, 0.16);
+  border: 1px solid rgba(15, 23, 42, 0.16);
   border-radius: 999px;
   background: #f8fafc;
   color: #0f609b;
@@ -20820,7 +21121,7 @@ textarea.workflow-wizard-input {
 .deep-research-metric-card,
 .deep-research-insight,
 .deep-research-mini-card {
-  border: 1px solid rgba(20, 32, 48, 0.1);
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 8px;
   background: #f9fafb;
   padding: 12px;
@@ -20829,7 +21130,7 @@ textarea.workflow-wizard-input {
 .deep-research-metric-card span,
 .deep-research-metric-card small {
   display: block;
-  color: #667085;
+  color: #6b7280;
   font-size: 12px;
 }
 
@@ -20845,7 +21146,7 @@ textarea.workflow-wizard-input {
 }
 
 .deep-research-timeline {
-  border-left: 2px solid #d0d5dd;
+  border-left: 2px solid #d1d5db;
   padding-left: 14px;
 }
 
@@ -20854,7 +21155,7 @@ textarea.workflow-wizard-input {
 }
 
 .deep-research-timeline-item time {
-  color: #667085;
+  color: #6b7280;
   font-size: 12px;
 }
 
@@ -20866,53 +21167,18 @@ textarea.workflow-wizard-input {
 
 .deep-research-source-cluster button {
   max-width: 100%;
-  border: 1px solid rgba(20, 32, 48, 0.14);
+  border: 1px solid rgba(15, 23, 42, 0.14);
   border-radius: 8px;
   background: #ffffff;
   padding: 7px 10px;
-  color: #344054;
+  color: #343941;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.deep-research-inspector {
-  min-width: 0;
-  border-left: 1px solid rgba(20, 32, 48, 0.1);
-  background: #ffffff;
-  display: flex;
-  flex-direction: column;
-}
-
-.deep-research-inspector-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-bottom: 1px solid rgba(20, 32, 48, 0.1);
-}
-
-.deep-research-tab {
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: #667085;
-  padding: 12px 6px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.deep-research-tab.active {
-  color: #172033;
-  box-shadow: inset 0 -2px 0 #2563eb;
-}
-
-.deep-research-inspector-content {
-  min-height: 0;
-  overflow: auto;
-  padding: 14px;
-}
-
 .deep-research-source-row {
-  border-bottom: 1px solid rgba(20, 32, 48, 0.08);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   padding: 12px 0;
 }
 
@@ -20929,7 +21195,7 @@ textarea.workflow-wizard-input {
 .deep-research-source-row span,
 .deep-research-source-row p,
 .deep-research-mini-card p {
-  color: #667085;
+  color: #6b7280;
   font-size: 13px;
 }
 
@@ -20951,31 +21217,16 @@ textarea.workflow-wizard-input {
   margin-bottom: 8px;
 }
 
-.deep-research-steer-box {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.deep-research-steer-box textarea {
-  width: 100%;
-  border: 1px solid rgba(20, 32, 48, 0.14);
-  border-radius: 8px;
-  padding: 10px;
-  font: inherit;
-  resize: vertical;
-}
-
 .deep-research-empty,
 .deep-research-empty-list {
-  color: #667085;
+  color: #6b7280;
   padding: 18px;
   text-align: center;
 }
 
 .deep-research-empty h3 {
   margin: 0 0 6px;
-  color: #172033;
+  color: #1f2328;
 }
 
 @media (max-width: 1180px) {
@@ -20983,13 +21234,8 @@ textarea.workflow-wizard-input {
     grid-template-columns: 260px minmax(0, 1fr);
   }
 
-  .deep-research-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .deep-research-inspector {
-    border-left: 0;
-    border-top: 1px solid rgba(20, 32, 48, 0.1);
+  .deep-research-input-shell {
+    max-width: 760px;
   }
 }
 
@@ -21000,28 +21246,46 @@ textarea.workflow-wizard-input {
 
   .deep-research-sidebar {
     border-right: 0;
-    border-bottom: 1px solid rgba(20, 32, 48, 0.1);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
     max-height: 280px;
   }
 
-  .deep-research-form-grid {
+  .deep-research-thread {
+    padding: 24px 14px 220px;
+  }
+
+  .deep-research-input-shell {
     grid-template-columns: 1fr;
+    border-radius: 18px;
+    padding: 10px 12px;
   }
 
-  .deep-research-field-wide {
-    grid-column: span 1;
+  .deep-research-input-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
-  .deep-research-composer-head {
+  .deep-research-result-topbar {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .deep-research-report {
-    padding: 18px;
+  .deep-research-result-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .deep-research-constraints-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .deep-research-report-overlay-content {
+    padding: 28px 18px 56px;
   }
 
   .deep-research-report-header h1 {
-    font-size: 24px;
+    font-size: 28px;
   }
 }

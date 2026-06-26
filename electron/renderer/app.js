@@ -573,6 +573,7 @@ var workbenchTimeline = document.getElementById('workbench-timeline');
 var deepResearchRefreshBtn = document.getElementById(
   'deep-research-refresh-btn',
 );
+var deepResearchNewBtn = document.getElementById('deep-research-new-btn');
 var deepResearchStatusFilter = document.getElementById(
   'deep-research-status-filter',
 );
@@ -580,14 +581,20 @@ var deepResearchTaskList = document.getElementById('deep-research-task-list');
 var deepResearchQueryInput = document.getElementById(
   'deep-research-query-input',
 );
-var deepResearchDepthSelect = document.getElementById(
-  'deep-research-depth-select',
-);
 var deepResearchLanguageSelect = document.getElementById(
   'deep-research-language-select',
 );
 var deepResearchStyleSelect = document.getElementById(
   'deep-research-style-select',
+);
+var deepResearchConstraintsToggleBtn = document.getElementById(
+  'deep-research-constraints-toggle-btn',
+);
+var deepResearchConstraintsSaveBtn = document.getElementById(
+  'deep-research-constraints-save-btn',
+);
+var deepResearchConstraintsPanel = document.getElementById(
+  'deep-research-constraints-panel',
 );
 var deepResearchConstraintsInput = document.getElementById(
   'deep-research-constraints-input',
@@ -596,22 +603,24 @@ var deepResearchCreateBtn = document.getElementById('deep-research-create-btn');
 var deepResearchCreateStatus = document.getElementById(
   'deep-research-create-status',
 );
-var deepResearchOpenWorkbenchBtn = document.getElementById(
-  'deep-research-open-workbench-btn',
-);
-var deepResearchExportMdBtn = document.getElementById(
-  'deep-research-export-md-btn',
-);
-var deepResearchExportPdfBtn = document.getElementById(
-  'deep-research-export-pdf-btn',
-);
+var deepResearchOpenWorkbenchBtn = null;
+var deepResearchExportMdBtn = null;
+var deepResearchExportPdfBtn = null;
 var deepResearchProgress = document.getElementById('deep-research-progress');
 var deepResearchReport = document.getElementById('deep-research-report');
-var deepResearchInspectorContent = document.getElementById(
-  'deep-research-inspector-content',
+var deepResearchInspectorContent = null;
+var deepResearchTabs = [];
+var deepResearchReportOverlay = document.getElementById(
+  'deep-research-report-overlay',
 );
-var deepResearchTabs = Array.from(
-  document.querySelectorAll('.deep-research-tab'),
+var deepResearchReportOverlayTitle = document.getElementById(
+  'deep-research-report-overlay-title',
+);
+var deepResearchReportOverlayCloseBtn = document.getElementById(
+  'deep-research-report-overlay-close-btn',
+);
+var deepResearchReportOverlayContent = document.getElementById(
+  'deep-research-report-overlay-content',
 );
 var todayPlanRefreshBtn = document.getElementById('today-plan-refresh-btn');
 var todayPlanViewHistoryBtn = document.getElementById(
@@ -697,11 +706,14 @@ var deepResearchTasks = [];
 var currentDeepResearchTaskId = '';
 var currentDeepResearchBundle = null;
 var currentDeepResearchTab = 'sources';
+var deepResearchViewMode = 'empty';
+var deepResearchConstraintsValue = '';
 var deepResearchPollingTimer = null;
 var deepResearchBundleInFlightTaskId = '';
 var deepResearchBundleQueuedTaskId = '';
 var deepResearchCreating = false;
 var deepResearchDeletingTaskId = '';
+var deepResearchCancellingTaskId = '';
 var agentRunTraceByGroup = {};
 var activePrimaryNavKey =
   initialAssistantTarget === 'assistant'
@@ -18076,6 +18088,13 @@ function getDeepResearchStatusTone(task) {
   return 'running';
 }
 
+function isDeepResearchCancelled(task) {
+  return (
+    task &&
+    (task.task_state === 'cancelled' || task.workflow_status === 'cancelled')
+  );
+}
+
 function getDeepResearchSourceMap(sources) {
   const map = new Map();
   (Array.isArray(sources) ? sources : []).forEach((source) => {
@@ -18168,19 +18187,69 @@ function renderDeepResearchBlock(block, sourceMap) {
   `;
 }
 
-function renderDeepResearchReport(bundle) {
+function buildDeepResearchSourceAppendix(sources) {
+  const items = Array.isArray(sources) ? sources : [];
+  if (items.length === 0) return '';
+  return `
+    <section class="deep-research-report-section" id="deep-research-overlay-sources">
+      <h2>来源</h2>
+      <div class="deep-research-source-appendix">
+        ${items
+          .map(
+            (source) => `
+          <div class="deep-research-source-row" data-deep-research-source-anchor="${escapeAttribute(source?.id || '')}">
+            <div>
+              <strong>${escapeHtml(source?.id || '--')} · ${escapeHtml(source?.title || '--')}</strong>
+              <span>${escapeHtml(source?.publisher || source?.source_type || '--')}</span>
+            </div>
+            <p>${escapeHtml(source?.summary || '')}</p>
+            ${source?.url ? `<a href="${escapeAttribute(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.url)}</a>` : ''}
+          </div>
+        `,
+          )
+          .join('')}
+      </div>
+    </section>
+  `;
+}
+
+function buildDeepResearchEvidenceAppendix(files) {
+  const evidence = Array.isArray(files?.evidence) ? files.evidence : [];
+  const findings = Array.isArray(files?.findings) ? files.findings : [];
+  if (evidence.length === 0 && findings.length === 0) return '';
+  return `
+    <section class="deep-research-report-section" id="deep-research-overlay-evidence">
+      <h2>证据</h2>
+      ${
+        findings.length
+          ? `
+        <div class="deep-research-inspector-section">
+          <h3>Findings</h3>
+          ${findings.map((item) => `<div class="deep-research-mini-card"><strong>${escapeHtml(item?.id || '--')}</strong><p>${escapeHtml(item?.claim || item?.notes || '')}</p></div>`).join('')}
+        </div>
+      `
+          : ''
+      }
+      ${
+        evidence.length
+          ? `
+        <div class="deep-research-inspector-section">
+          <h3>Evidence</h3>
+          ${evidence.map((item) => `<div class="deep-research-mini-card"><strong>${escapeHtml(item?.id || '--')} · ${escapeHtml(item?.source_id || '--')}</strong><p>${escapeHtml(item?.quote_or_summary || item?.notes || '')}</p></div>`).join('')}
+        </div>
+      `
+          : ''
+      }
+    </section>
+  `;
+}
+
+function buildDeepResearchFullReportHtml(bundle) {
   const report = bundle?.files?.report;
   const sources = bundle?.files?.sources;
   const sourceMap = getDeepResearchSourceMap(sources);
-  if (!deepResearchReport) return;
   if (!report || typeof report !== 'object') {
-    deepResearchReport.innerHTML = `
-      <div class="deep-research-empty">
-        <h3>报告尚未生成</h3>
-        <p>workflow 完成 writer 阶段后，这里会渲染 report.json。</p>
-      </div>
-    `;
-    return;
+    return '';
   }
   const summary =
     report.summary && typeof report.summary === 'object' ? report.summary : {};
@@ -18188,7 +18257,7 @@ function renderDeepResearchReport(bundle) {
   const limitations = Array.isArray(report.limitations)
     ? report.limitations
     : [];
-  deepResearchReport.innerHTML = `
+  return `
     <header class="deep-research-report-header">
       <div class="deep-research-kicker">Report Bundle</div>
       <h1>${escapeHtml(report.title || 'Deep Research Report')}</h1>
@@ -18231,19 +18300,119 @@ function renderDeepResearchReport(bundle) {
     `
         : ''
     }
+    ${buildDeepResearchSourceAppendix(sources)}
+    ${buildDeepResearchEvidenceAppendix(bundle?.files || {})}
   `;
-  deepResearchReport
+}
+
+function bindDeepResearchFullReportInteractions(container) {
+  if (!container) return;
+  container
     .querySelectorAll('[data-deep-research-source-id]')
     .forEach((el) => {
       el.addEventListener('click', () => {
-        currentDeepResearchTab = 'sources';
-        renderDeepResearchTabs();
         const sourceId = el.getAttribute('data-deep-research-source-id') || '';
-        const target = deepResearchInspectorContent?.querySelector(
-          `[data-source-row-id="${CSS.escape(sourceId)}"]`,
+        const target = container.querySelector(
+          `[data-deep-research-source-anchor="${CSS.escape(sourceId)}"]`,
         );
         if (target)
           target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    });
+}
+
+function getDeepResearchReportTitle(bundle) {
+  const report = bundle?.files?.report;
+  const task = bundle?.detail?.task;
+  return report?.title || task?.title || 'Deep Research Report';
+}
+
+function setDeepResearchViewMode(mode) {
+  deepResearchViewMode = mode;
+  if (!deepResearchScreen) return;
+  const main = deepResearchScreen.querySelector('.deep-research-main');
+  if (!main) return;
+  main.classList.toggle('deep-research-mode-empty', mode === 'empty');
+  main.classList.toggle('deep-research-mode-new', mode === 'new');
+  main.classList.toggle('deep-research-mode-detail', mode === 'detail');
+}
+
+function renderDeepResearchEmptyState() {
+  if (deepResearchProgress) deepResearchProgress.innerHTML = '';
+  if (!deepResearchReport) return;
+  deepResearchReport.innerHTML = `
+    <div class="deep-research-page-empty">
+      <img src="/assets/avatar-assistant.png" alt="Assistant avatar" />
+      <p>新建或选择一份研究</p>
+    </div>
+  `;
+}
+
+function renderDeepResearchReport(bundle) {
+  const report = bundle?.files?.report;
+  if (!deepResearchReport) return;
+  if (!report || typeof report !== 'object') {
+    deepResearchReport.innerHTML = '';
+    return;
+  }
+  const sources = Array.isArray(bundle?.files?.sources)
+    ? bundle.files.sources
+    : [];
+  const evidence = Array.isArray(bundle?.files?.evidence)
+    ? bundle.files.evidence
+    : [];
+  const title = getDeepResearchReportTitle(bundle);
+  deepResearchReport.innerHTML = `
+    <article class="deep-research-result-card">
+      <div class="deep-research-result-topbar">
+        <button type="button" class="deep-research-result-title" data-deep-research-action="open-report">
+          <span class="deep-research-doc-icon" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <path d="M14 2v6h6"></path>
+              <path d="M16 13H8"></path>
+              <path d="M16 17H8"></path>
+              <path d="M10 9H8"></path>
+            </svg>
+          </span>
+          <span>${escapeHtml(title)}</span>
+        </button>
+        <div class="deep-research-result-actions">
+          <button type="button" class="icon-btn" title="下载 Markdown" data-deep-research-action="download">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <path d="M7 10l5 5 5-5"></path>
+              <path d="M12 15V3"></path>
+            </svg>
+          </button>
+          <button type="button" class="deep-research-chip-btn" data-deep-research-action="sources">来源 ${escapeHtml(String(sources.length))}</button>
+          <button type="button" class="deep-research-chip-btn" data-deep-research-action="evidence">证据 ${escapeHtml(String(evidence.length))}</button>
+          <button type="button" class="icon-btn" title="打开完整报告" data-deep-research-action="open-report">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h6v6"></path>
+              <path d="M10 14 21 3"></path>
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </article>
+  `;
+  deepResearchReport
+    .querySelectorAll('[data-deep-research-action]')
+    .forEach((el) => {
+      el.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const action = el.getAttribute('data-deep-research-action') || '';
+        if (action === 'download') {
+          exportDeepResearch('markdown');
+        } else if (action === 'sources') {
+          openDeepResearchFullReport('sources');
+        } else if (action === 'evidence') {
+          openDeepResearchFullReport('evidence');
+        } else {
+          openDeepResearchFullReport();
+        }
       });
     });
 }
@@ -18256,35 +18425,84 @@ function renderDeepResearchProgress(detail) {
     deepResearchProgress.innerHTML = '';
     return;
   }
+  const stageItems = subtasks.length
+    ? subtasks
+    : [
+        { stage_label: '研究规划', status: 'pending' },
+        { stage_label: '来源收集', status: 'pending' },
+        { stage_label: '证据分析', status: 'pending' },
+        { stage_label: '报告生成', status: 'pending' },
+        { stage_label: '引用审查', status: 'pending' },
+      ];
   deepResearchProgress.innerHTML = `
-    <div class="deep-research-progress-head">
-      <div>
-        <span class="deep-research-status ${escapeAttribute(getDeepResearchStatusTone(task))}">${escapeHtml(task.workflow_status_label || task.workflow_status || '--')}</span>
-        <strong>${escapeHtml(task.title || '--')}</strong>
+    <div class="deep-research-trace-card">
+      <div class="deep-research-progress-head">
+        <div>
+          <span class="deep-research-status ${escapeAttribute(getDeepResearchStatusTone(task))}">${escapeHtml(task.workflow_status_label || task.workflow_status || '--')}</span>
+          <strong>${escapeHtml(task.title || '--')}</strong>
+        </div>
+        <small>${escapeHtml(task.workflow_stage_label || task.workflow_stage || '--')}</small>
       </div>
-      <small>${escapeHtml(task.workflow_stage_label || task.workflow_stage || '--')}</small>
-    </div>
-    <div class="deep-research-stage-strip">
-      ${subtasks
-        .map(
-          (item) => `
-        <span class="deep-research-stage ${escapeAttribute(item.status || 'pending')}">
-          ${escapeHtml(item.stage_label || item.stage_key || '--')}
-        </span>
-      `,
-        )
-        .join('')}
+      <div class="deep-research-trace-list">
+        ${stageItems
+          .map(
+            (item) => `
+          <div class="deep-research-trace-item ${escapeAttribute(item.status || 'pending')}">
+            <span></span>${escapeHtml(item.stage_label || item.stage_key || '--')}
+            ${item.trace?.current_step ? `<small>${escapeHtml(item.trace.current_step)}</small>` : ''}
+          </div>
+        `,
+          )
+          .join('')}
+      </div>
+      <div class="deep-research-trace-actions">
+        ${
+          !isDeepResearchTerminal(task)
+            ? `<button type="button" class="btn-ghost" data-deep-research-progress-action="cancel">取消</button>`
+            : ''
+        }
+        ${
+          currentDeepResearchBundle?.files?.report
+            ? `<button type="button" class="btn-primary" data-deep-research-progress-action="open-report">查看报告</button>`
+            : ''
+        }
+      </div>
     </div>
   `;
+  deepResearchProgress
+    .querySelectorAll('[data-deep-research-progress-action]')
+    .forEach((button) => {
+      button.addEventListener('click', () => {
+        const action =
+          button.getAttribute('data-deep-research-progress-action') || '';
+        if (action === 'cancel') cancelDeepResearchTask();
+        if (action === 'open-report') openDeepResearchFullReport();
+      });
+    });
 }
 
 function clearDeepResearchSelection() {
   currentDeepResearchTaskId = '';
   currentDeepResearchBundle = null;
-  renderDeepResearchProgress(null);
-  renderDeepResearchReport(null);
+  setDeepResearchViewMode('empty');
+  renderDeepResearchEmptyState();
   renderDeepResearchTabs();
   syncDeepResearchActions();
+}
+
+function startNewDeepResearch() {
+  currentDeepResearchTaskId = '';
+  currentDeepResearchBundle = null;
+  setDeepResearchViewMode('new');
+  renderDeepResearchProgress(null);
+  if (deepResearchReport) deepResearchReport.innerHTML = '';
+  renderDeepResearchTabs();
+  syncDeepResearchActions();
+  if (deepResearchQueryInput) {
+    deepResearchQueryInput.value = '';
+    resizeDeepResearchComposer();
+    deepResearchQueryInput.focus();
+  }
 }
 
 function renderDeepResearchTaskList() {
@@ -18292,9 +18510,15 @@ function renderDeepResearchTaskList() {
   const status = deepResearchStatusFilter?.value || 'all';
   const filtered = deepResearchTasks.filter(
     (task) => status === 'all' || task.task_state === status,
-  );
+    );
   if (filtered.length === 0) {
     deepResearchTaskList.innerHTML = `<div class="deep-research-empty-list">暂无研究任务</div>`;
+    if (deepResearchViewMode === 'detail') {
+      currentDeepResearchTaskId = '';
+      currentDeepResearchBundle = null;
+      setDeepResearchViewMode('empty');
+      renderDeepResearchEmptyState();
+    }
     return;
   }
   deepResearchTaskList.innerHTML = filtered
@@ -18326,79 +18550,7 @@ function renderDeepResearchTaskList() {
 }
 
 function renderDeepResearchTabs() {
-  deepResearchTabs.forEach((tab) => {
-    tab.classList.toggle(
-      'active',
-      tab.getAttribute('data-deep-research-tab') === currentDeepResearchTab,
-    );
-  });
-  if (!deepResearchInspectorContent) return;
-  const files = currentDeepResearchBundle?.files || {};
-  const detail = currentDeepResearchBundle?.detail;
-  if (currentDeepResearchTab === 'sources') {
-    const sources = Array.isArray(files.sources) ? files.sources : [];
-    deepResearchInspectorContent.innerHTML = sources.length
-      ? sources
-          .map(
-            (source) => `
-      <div class="deep-research-source-row" data-source-row-id="${escapeAttribute(source?.id || '')}">
-        <div>
-          <strong>${escapeHtml(source?.id || '--')} · ${escapeHtml(source?.title || '--')}</strong>
-          <span>${escapeHtml(source?.publisher || source?.source_type || '--')}</span>
-        </div>
-        <p>${escapeHtml(source?.summary || '')}</p>
-        ${source?.url ? `<a href="${escapeAttribute(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.url)}</a>` : ''}
-      </div>
-    `,
-          )
-          .join('')
-      : `<div class="deep-research-empty-list">暂无来源</div>`;
-    return;
-  }
-  if (currentDeepResearchTab === 'evidence') {
-    const evidence = Array.isArray(files.evidence) ? files.evidence : [];
-    const findings = Array.isArray(files.findings) ? files.findings : [];
-    deepResearchInspectorContent.innerHTML = `
-      <div class="deep-research-inspector-section">
-        <h3>Findings</h3>
-        ${findings.map((item) => `<div class="deep-research-mini-card"><strong>${escapeHtml(item?.id || '--')}</strong><p>${escapeHtml(item?.claim || item?.notes || '')}</p></div>`).join('') || `<div class="deep-research-empty-list">暂无发现</div>`}
-      </div>
-      <div class="deep-research-inspector-section">
-        <h3>Evidence</h3>
-        ${evidence.map((item) => `<div class="deep-research-mini-card"><strong>${escapeHtml(item?.id || '--')} · ${escapeHtml(item?.source_id || '--')}</strong><p>${escapeHtml(item?.quote_or_summary || item?.notes || '')}</p></div>`).join('') || `<div class="deep-research-empty-list">暂无证据</div>`}
-      </div>
-    `;
-    return;
-  }
-  if (currentDeepResearchTab === 'trace') {
-    const subtasks = Array.isArray(detail?.subtasks) ? detail.subtasks : [];
-    deepResearchInspectorContent.innerHTML =
-      subtasks
-        .map(
-          (item) => `
-      <div class="deep-research-mini-card">
-        <strong>${escapeHtml(item.stage_label || item.stage_key || '--')}</strong>
-        <p>${escapeHtml(item.status || '--')}${item.trace?.current_step ? ` · ${escapeHtml(item.trace.current_step)}` : ''}</p>
-        ${item.trace?.query_id ? `<small>${escapeHtml(item.trace.query_id)}</small>` : ''}
-      </div>
-    `,
-        )
-        .join('') || `<div class="deep-research-empty-list">暂无 Trace</div>`;
-    return;
-  }
-  deepResearchInspectorContent.innerHTML = `
-    <div class="deep-research-steer-box">
-      <textarea id="deep-research-steer-input" rows="5" placeholder="补查方向、排除来源或提高来源门槛"></textarea>
-      <button id="deep-research-steer-submit" class="btn-primary" ${currentDeepResearchTaskId ? '' : 'disabled'}>提交 Steering</button>
-    </div>
-  `;
-  const steerSubmit = document.getElementById('deep-research-steer-submit');
-  const steerInput = document.getElementById('deep-research-steer-input');
-  if (steerSubmit && steerInput) {
-    steerSubmit.addEventListener('click', () =>
-      submitDeepResearchSteer(steerInput.value),
-    );
-  }
+  return;
 }
 
 function syncDeepResearchActions() {
@@ -18408,6 +18560,125 @@ function syncDeepResearchActions() {
     deepResearchOpenWorkbenchBtn.disabled = !hasTask;
   if (deepResearchExportMdBtn) deepResearchExportMdBtn.disabled = !hasReport;
   if (deepResearchExportPdfBtn) deepResearchExportPdfBtn.disabled = !hasReport;
+}
+
+function getDeepResearchContinuationTaskIds() {
+  if (!currentDeepResearchTaskId || !currentDeepResearchBundle?.files?.report) {
+    return [];
+  }
+  if (isDeepResearchCancelled(currentDeepResearchBundle?.detail?.task)) {
+    return [];
+  }
+  const previousIds = Array.isArray(
+    currentDeepResearchBundle?.detail?.task?.context?.previous_research_task_ids,
+  )
+    ? currentDeepResearchBundle.detail.task.context.previous_research_task_ids
+    : [];
+  return Array.from(
+    new Set(
+      [currentDeepResearchTaskId, ...previousIds]
+        .map((id) => (typeof id === 'string' ? id.trim() : ''))
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function cancelDeepResearchTask() {
+  if (!currentDeepResearchTaskId || deepResearchCancellingTaskId) return;
+  if (
+    !(await openConfirmDialog('确认取消当前研究吗？', {
+      title: '取消研究',
+    }))
+  ) {
+    return;
+  }
+  const taskId = currentDeepResearchTaskId;
+  deepResearchCancellingTaskId = taskId;
+  try {
+    const res = await apiFetch('/api/workbench/task/action', {
+      method: 'POST',
+      body: JSON.stringify({
+        task_id: taskId,
+        action: 'cancel',
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    showToast('已取消当前研究');
+    await loadDeepResearchTasks(taskId);
+  } catch (err) {
+    console.error('Failed to cancel Deep Research task:', err);
+    alert(err instanceof Error ? err.message : '取消研究失败');
+  } finally {
+    deepResearchCancellingTaskId = '';
+  }
+}
+
+function resizeDeepResearchComposer() {
+  if (!deepResearchQueryInput) return;
+  deepResearchQueryInput.style.height = 'auto';
+  deepResearchQueryInput.style.height = `${Math.min(
+    deepResearchQueryInput.scrollHeight,
+    132,
+  )}px`;
+}
+
+function toggleDeepResearchConstraintsPanel(forceOpen) {
+  if (!deepResearchConstraintsPanel) return;
+  const shouldOpen =
+    typeof forceOpen === 'boolean'
+      ? forceOpen
+      : deepResearchConstraintsPanel.classList.contains('hidden');
+  deepResearchConstraintsPanel.classList.toggle('hidden', !shouldOpen);
+  if (shouldOpen) deepResearchConstraintsInput?.focus();
+}
+
+function saveDeepResearchConstraints() {
+  deepResearchConstraintsValue = deepResearchConstraintsInput?.value.trim() || '';
+  toggleDeepResearchConstraintsPanel(false);
+  if (deepResearchConstraintsToggleBtn) {
+    deepResearchConstraintsToggleBtn.classList.toggle(
+      'active',
+      !!deepResearchConstraintsValue,
+    );
+  }
+  if (deepResearchConstraintsValue) showToast('约束与排除项已保存', 1600);
+}
+
+function openDeepResearchFullReport(anchor) {
+  if (
+    !deepResearchReportOverlay ||
+    !deepResearchReportOverlayContent ||
+    !currentDeepResearchBundle
+  )
+    return;
+  deepResearchReportOverlayTitle.textContent =
+    getDeepResearchReportTitle(currentDeepResearchBundle);
+  deepResearchReportOverlayContent.innerHTML = buildDeepResearchFullReportHtml(
+    currentDeepResearchBundle,
+  );
+  bindDeepResearchFullReportInteractions(deepResearchReportOverlayContent);
+  deepResearchReportOverlay.classList.remove('hidden');
+  deepResearchReportOverlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => {
+    const targetId =
+      anchor === 'sources'
+        ? 'deep-research-overlay-sources'
+        : anchor === 'evidence'
+          ? 'deep-research-overlay-evidence'
+          : '';
+    const target = targetId
+      ? deepResearchReportOverlayContent.querySelector(`#${targetId}`)
+      : null;
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else deepResearchReportOverlayContent.scrollTo({ top: 0 });
+  });
+}
+
+function closeDeepResearchFullReport() {
+  if (!deepResearchReportOverlay) return;
+  deepResearchReportOverlay.classList.add('hidden');
+  deepResearchReportOverlay.setAttribute('aria-hidden', 'true');
 }
 
 async function loadDeepResearchTasks(preferredTaskId) {
@@ -18426,9 +18697,15 @@ async function loadDeepResearchTasks(preferredTaskId) {
               (task) => task.id === currentDeepResearchTaskId,
             )
           ? currentDeepResearchTaskId
-          : deepResearchTasks[0]?.id || '';
+          : '';
     if (nextTaskId) await loadDeepResearchBundle(nextTaskId);
-    else clearDeepResearchSelection();
+    else if (deepResearchViewMode !== 'new') {
+      currentDeepResearchTaskId = '';
+      currentDeepResearchBundle = null;
+      setDeepResearchViewMode('empty');
+      renderDeepResearchEmptyState();
+      syncDeepResearchActions();
+    }
   } catch (err) {
     console.error('Failed to load Deep Research tasks:', err);
     if (deepResearchTaskList)
@@ -18451,6 +18728,7 @@ async function loadDeepResearchBundle(taskId) {
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     currentDeepResearchTaskId = taskId;
     currentDeepResearchBundle = data;
+    setDeepResearchViewMode('detail');
     renderDeepResearchTaskList();
     renderDeepResearchProgress(data.detail);
     renderDeepResearchReport(data);
@@ -18490,11 +18768,13 @@ async function createDeepResearchTask() {
       method: 'POST',
       body: JSON.stringify({
         research_query: query,
-        depth: deepResearchDepthSelect?.value || 'standard',
+        depth: 'deep',
         language: deepResearchLanguageSelect?.value || 'zh',
-        report_style: deepResearchStyleSelect?.value || 'interactive',
-        constraints: deepResearchConstraintsInput?.value || '',
+        report_style: deepResearchStyleSelect?.value || 'deep_report',
+        constraints: deepResearchConstraintsValue,
         source_scope: 'public_web',
+        parent_task_id: getDeepResearchContinuationTaskIds()[0] || '',
+        context_task_ids: getDeepResearchContinuationTaskIds(),
       }),
     });
     const data = await res.json();
@@ -18502,6 +18782,10 @@ async function createDeepResearchTask() {
     const taskId = data.task_id || data.detail?.task?.id || '';
     showToast('Deep Research 已创建');
     if (deepResearchCreateStatus) deepResearchCreateStatus.textContent = '';
+    if (deepResearchQueryInput) {
+      deepResearchQueryInput.value = '';
+      resizeDeepResearchComposer();
+    }
     await loadDeepResearchTasks(taskId);
   } catch (err) {
     console.error('Failed to create Deep Research task:', err);
@@ -18537,7 +18821,10 @@ async function deleteDeepResearchTaskFromList(task) {
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     showToast(`已删除调研报告：${task.title || task.id}`);
     if (currentDeepResearchTaskId === task.id) {
-      clearDeepResearchSelection();
+      currentDeepResearchTaskId = '';
+      currentDeepResearchBundle = null;
+      setDeepResearchViewMode('empty');
+      renderDeepResearchEmptyState();
     }
     await loadDeepResearchTasks(preferredTaskId);
   } catch (err) {
@@ -18593,25 +18880,6 @@ function showDeepResearchTaskContextMenu(e, task) {
     }
   };
   requestAnimationFrame(() => document.addEventListener('click', closeHandler));
-}
-
-async function submitDeepResearchSteer(instruction) {
-  if (!currentDeepResearchTaskId || !instruction.trim()) return;
-  try {
-    const res = await apiFetch(
-      `/api/deep-research/tasks/${encodeURIComponent(currentDeepResearchTaskId)}/steer`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ instruction }),
-      },
-    );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-    showToast('Steering 已记录到 Workbench 评论');
-    await loadDeepResearchBundle(currentDeepResearchTaskId);
-  } catch (err) {
-    showToast(err instanceof Error ? err.message : 'Steering 提交失败', 2600);
-  }
 }
 
 function openDeepResearchWorkbench() {
@@ -28270,6 +28538,11 @@ if (deepResearchRefreshBtn) {
     loadDeepResearchTasks(currentDeepResearchTaskId || undefined);
   });
 }
+if (deepResearchNewBtn) {
+  deepResearchNewBtn.addEventListener('click', () => {
+    startNewDeepResearch();
+  });
+}
 if (deepResearchStatusFilter) {
   deepResearchStatusFilter.addEventListener('change', () => {
     renderDeepResearchTaskList();
@@ -28278,6 +28551,38 @@ if (deepResearchStatusFilter) {
 if (deepResearchCreateBtn) {
   deepResearchCreateBtn.addEventListener('click', () => {
     createDeepResearchTask();
+  });
+}
+if (deepResearchQueryInput) {
+  deepResearchQueryInput.addEventListener('input', () => {
+    resizeDeepResearchComposer();
+  });
+  deepResearchQueryInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      createDeepResearchTask();
+    }
+  });
+  resizeDeepResearchComposer();
+}
+if (deepResearchConstraintsToggleBtn) {
+  deepResearchConstraintsToggleBtn.addEventListener('click', () => {
+    toggleDeepResearchConstraintsPanel();
+  });
+}
+if (deepResearchConstraintsSaveBtn) {
+  deepResearchConstraintsSaveBtn.addEventListener('click', () => {
+    saveDeepResearchConstraints();
+  });
+}
+if (deepResearchReportOverlayCloseBtn) {
+  deepResearchReportOverlayCloseBtn.addEventListener('click', () => {
+    closeDeepResearchFullReport();
+  });
+}
+if (deepResearchReportOverlay) {
+  deepResearchReportOverlay.addEventListener('click', (event) => {
+    if (event.target === deepResearchReportOverlay) closeDeepResearchFullReport();
   });
 }
 if (deepResearchOpenWorkbenchBtn) {
@@ -28295,13 +28600,6 @@ if (deepResearchExportPdfBtn) {
     exportDeepResearch('pdf');
   });
 }
-deepResearchTabs.forEach((tab) => {
-  tab.addEventListener('click', () => {
-    currentDeepResearchTab =
-      tab.getAttribute('data-deep-research-tab') || 'sources';
-    renderDeepResearchTabs();
-  });
-});
 if (assistantRefreshBtn) {
   assistantRefreshBtn.addEventListener('click', () => {
     loadAssistantState();
@@ -29310,6 +29608,15 @@ copySelectedBtn.addEventListener('click', copySelectedMessages);
 deleteSelectedBtn.addEventListener('click', deleteSelectedMessages);
 cancelSelectBtn.addEventListener('click', exitMultiSelect);
 document.addEventListener('keydown', (e) => {
+  if (
+    e.key === 'Escape' &&
+    deepResearchReportOverlay &&
+    !deepResearchReportOverlay.classList.contains('hidden')
+  ) {
+    e.preventDefault();
+    closeDeepResearchFullReport();
+    return;
+  }
   if (
     (e.metaKey || e.ctrlKey) &&
     !e.shiftKey &&

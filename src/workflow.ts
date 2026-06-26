@@ -41,6 +41,7 @@ import {
   getWorkflowInterruptResumeAttemptByIdempotency,
   listExpiredPendingWorkflowInterrupts,
   listWorkflowInterruptsByWorkflow,
+  listWorkflowEvents,
   listRunnableWorkflowOutbox,
   markWorkflowInterruptExpired,
   listPendingWorkflowInterruptsByWorkflow,
@@ -1725,7 +1726,8 @@ function buildDelegationResultContextPatch(
       ? payloadRecord.deliverable.trim()
       : '';
   const workflowForPayload =
-    payloadDeliverable && workflowDeliverableDirExists(workflow, payloadDeliverable)
+    payloadDeliverable &&
+    workflowDeliverableDirExists(workflow, payloadDeliverable)
       ? {
           ...workflow,
           context: mergeWorkflowContext(workflow.context, {
@@ -2163,6 +2165,24 @@ function parseChannelArray(
       item === 'assistant' ||
       item === 'system',
   );
+}
+
+function countDelegationCreatedEventsForState(
+  workflowId: string,
+  stateKey: string,
+): number {
+  return listWorkflowEvents(workflowId).filter((event) => {
+    if (event.event_type !== 'delegation_created') return false;
+    if (event.state_key !== stateKey) return false;
+    return !!event.ref_id;
+  }).length;
+}
+
+function nextTransitionDelegationAttempt(
+  workflowId: string,
+  stateKey: string,
+): number {
+  return countDelegationCreatedEventsForState(workflowId, stateKey) + 1;
 }
 
 function jsonSchemaFromState(
@@ -4241,10 +4261,17 @@ function applyTransition(
   }
 
   const targetStateConfig = config.states[transition.target];
-  const useTargetDelegate =
-    extra?.fallbackToTargetDelegate === true &&
+  const isPassiveSelfLoopCandidate =
+    transition.target === fromStatus &&
     !transition.role &&
     !transition.skill &&
+    extra?.fallbackToTargetDelegate !== true;
+  const useTargetDelegate =
+    !transition.role &&
+    !transition.skill &&
+    !isPassiveSelfLoopCandidate &&
+    (extra?.fallbackToTargetDelegate === true ||
+      transition.target !== fromStatus) &&
     targetStateConfig?.type === 'delegation';
 
   // 3. Create durable delegation intent from the transition, or from the
@@ -4262,9 +4289,15 @@ function applyTransition(
     ? targetStateConfig?.handoff
     : transition.handoff;
   let delegationIntent: DelegationIntent | null = null;
+  let delegationAttempt = 1;
+  let delegationKey = '';
 
   if (delegateRole && delegateSkill) {
-    const delegationKey = `workflow_delegation:${workflow.id}:${transition.target}:${round}:1`;
+    delegationAttempt = nextTransitionDelegationAttempt(
+      workflow.id,
+      transition.target,
+    );
+    delegationKey = `workflow_delegation:${workflow.id}:${transition.target}:${round}:${delegationAttempt}`;
     const workflowForDelegate: Workflow = {
       ...workflow,
       ...updates,
@@ -4291,7 +4324,7 @@ function applyTransition(
       handoff: delegateHandoff,
       artifactContractRef: targetStateConfig?.artifact_contract?.ref,
       idempotencyKey: delegationKey,
-      attempt: 1,
+      attempt: delegationAttempt,
       extra,
     });
     if (prepared.status === 'blocked') {
@@ -4414,8 +4447,8 @@ function applyTransition(
       refId: updates.current_delegation_id,
       payload: {
         delegation_id: updates.current_delegation_id,
-        idempotency_key: `workflow_delegation:${workflow.id}:${transition.target}:${round}:1`,
-        attempt: 1,
+        idempotency_key: delegationKey,
+        attempt: delegationAttempt,
         target_folder: delegationIntent?.targetFolder || null,
         context_pack_path:
           getWorkflowContextValue(
@@ -5420,7 +5453,10 @@ export function onDelegationComplete(delegationId: string): void {
   }
   const payloadDeliverable =
     typeof payload.deliverable === 'string' ? payload.deliverable.trim() : '';
-  if (payloadDeliverable && workflowDeliverableDirExists(workflow, payloadDeliverable)) {
+  if (
+    payloadDeliverable &&
+    workflowDeliverableDirExists(workflow, payloadDeliverable)
+  ) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.deliverable] = payloadDeliverable;
   }
   if (payload.main_branch) {

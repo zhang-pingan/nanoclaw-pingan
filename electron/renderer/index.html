@@ -690,6 +690,25 @@
               </div>
               <div class="deep-research-sidebar-actions">
                 <button
+                  id="deep-research-new-btn"
+                  class="icon-btn"
+                  title="新建研究"
+                  aria-label="新建研究"
+                >
+                  <svg
+                    class="icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 5v14"></path>
+                    <path d="M5 12h14"></path>
+                  </svg>
+                </button>
+                <button
                   id="deep-research-refresh-btn"
                   class="icon-btn"
                   title="刷新研究任务"
@@ -730,139 +749,121 @@
             ></div>
           </aside>
 
-          <main class="deep-research-main">
-            <section class="deep-research-composer">
-              <div class="deep-research-composer-head">
-                <div>
-                  <div class="deep-research-kicker">New Research</div>
-                  <h2>公开网页深度研究</h2>
+          <main class="deep-research-main deep-research-mode-empty">
+            <section class="deep-research-thread">
+              <div
+                id="deep-research-progress"
+                class="deep-research-progress"
+              ></div>
+              <article id="deep-research-report" class="deep-research-report">
+                <div class="deep-research-page-empty">
+                  <img
+                    src="/assets/avatar-assistant.png"
+                    alt="Assistant avatar"
+                  />
+                  <p>新建或选择一份研究</p>
                 </div>
-                <div class="deep-research-actions">
-                  <button
-                    id="deep-research-open-workbench-btn"
-                    class="btn-ghost"
-                    disabled
+              </article>
+            </section>
+
+            <section class="deep-research-chat-composer">
+              <div class="deep-research-input-shell">
+                <textarea
+                  id="deep-research-query-input"
+                  rows="1"
+                  placeholder="获取详细报告"
+                ></textarea>
+                <div class="deep-research-input-controls">
+                  <select
+                    id="deep-research-language-select"
+                    aria-label="报告语言"
                   >
-                    打开 Workbench
-                  </button>
-                  <button
-                    id="deep-research-export-md-btn"
-                    class="btn-ghost"
-                    disabled
-                  >
-                    导出 Markdown
-                  </button>
-                  <button
-                    id="deep-research-export-pdf-btn"
-                    class="btn-primary"
-                    disabled
-                  >
-                    打印 PDF
-                  </button>
-                </div>
-              </div>
-              <div class="deep-research-form-grid">
-                <label class="deep-research-field deep-research-field-wide">
-                  <span>研究问题</span>
-                  <textarea
-                    id="deep-research-query-input"
-                    rows="3"
-                    placeholder="输入需要研究的问题"
-                  ></textarea>
-                </label>
-                <label class="deep-research-field">
-                  <span>深度</span>
-                  <select id="deep-research-depth-select">
-                    <option value="quick">快速</option>
-                    <option value="standard" selected>标准</option>
-                    <option value="deep">深入</option>
-                  </select>
-                </label>
-                <label class="deep-research-field">
-                  <span>语言</span>
-                  <select id="deep-research-language-select">
                     <option value="zh" selected>中文</option>
                     <option value="en">英文</option>
                     <option value="auto">自动</option>
                   </select>
-                </label>
-                <label class="deep-research-field">
-                  <span>报告风格</span>
-                  <select id="deep-research-style-select">
-                    <option value="interactive" selected>交互式报告</option>
-                    <option value="deep_report">深度报告</option>
+                  <select
+                    id="deep-research-style-select"
+                    aria-label="报告风格"
+                  >
+                    <option value="deep_report" selected>深度报告</option>
                     <option value="comparison">对比分析</option>
+                    <option value="interactive">交互式报告</option>
                   </select>
-                </label>
-                <label class="deep-research-field deep-research-field-wide">
-                  <span>约束与排除项</span>
-                  <textarea
-                    id="deep-research-constraints-input"
-                    rows="2"
-                    placeholder="来源偏好、排除网站、需要重点覆盖的角度"
-                  ></textarea>
-                </label>
-              </div>
-              <div class="deep-research-submit-row">
-                <button id="deep-research-create-btn" class="btn-primary">
-                  开始研究
-                </button>
-                <span
-                  id="deep-research-create-status"
-                  class="deep-research-muted"
-                ></span>
-              </div>
-            </section>
-
-            <section class="deep-research-body">
-              <div class="deep-research-report-column">
-                <div
-                  id="deep-research-progress"
-                  class="deep-research-progress"
-                ></div>
-                <article id="deep-research-report" class="deep-research-report">
-                  <div class="deep-research-empty">
-                    <h3>选择或创建一个研究任务</h3>
-                    <p>
-                      报告会从 report.json 渲染，底层 workflow
-                      仍同步出现在工作台。
-                    </p>
-                  </div>
-                </article>
-              </div>
-              <aside class="deep-research-inspector">
-                <div class="deep-research-inspector-tabs">
                   <button
-                    class="deep-research-tab active"
-                    data-deep-research-tab="sources"
+                    id="deep-research-constraints-toggle-btn"
+                    class="deep-research-control-btn"
+                    type="button"
                   >
-                    来源
+                    约束
                   </button>
                   <button
-                    class="deep-research-tab"
-                    data-deep-research-tab="evidence"
+                    id="deep-research-create-btn"
+                    class="deep-research-start-btn"
+                    type="button"
                   >
-                    证据
-                  </button>
-                  <button
-                    class="deep-research-tab"
-                    data-deep-research-tab="trace"
-                  >
-                    Trace
-                  </button>
-                  <button
-                    class="deep-research-tab"
-                    data-deep-research-tab="steer"
-                  >
-                    Steer
+                    开始
                   </button>
                 </div>
-                <div
-                  id="deep-research-inspector-content"
-                  class="deep-research-inspector-content"
-                ></div>
-              </aside>
+              </div>
+              <div
+                id="deep-research-constraints-panel"
+                class="deep-research-constraints-panel hidden"
+              >
+                <textarea
+                  id="deep-research-constraints-input"
+                  rows="3"
+                  placeholder="来源偏好、排除网站、重点覆盖角度"
+                ></textarea>
+                <button
+                  id="deep-research-constraints-save-btn"
+                  class="btn-primary"
+                  type="button"
+                >
+                  确认
+                </button>
+              </div>
+              <span
+                id="deep-research-create-status"
+                class="deep-research-muted"
+              ></span>
             </section>
+
+            <div
+              id="deep-research-report-overlay"
+              class="deep-research-report-overlay hidden"
+              aria-hidden="true"
+            >
+              <div class="deep-research-report-overlay-bar">
+                <div>
+                  <span class="deep-research-kicker">Deep Research</span>
+                  <strong id="deep-research-report-overlay-title"></strong>
+                </div>
+                <button
+                  id="deep-research-report-overlay-close-btn"
+                  class="icon-btn"
+                  title="关闭"
+                  aria-label="关闭完整报告"
+                >
+                  <svg
+                    class="icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                  </svg>
+                </button>
+              </div>
+              <article
+                id="deep-research-report-overlay-content"
+                class="deep-research-report-overlay-content"
+              ></article>
+            </div>
           </main>
         </section>
 

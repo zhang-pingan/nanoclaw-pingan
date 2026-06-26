@@ -210,6 +210,7 @@ function resolveSubtaskForDelegation(params: {
   taskId: string;
   workflow: Workflow;
   delegationId: string;
+  createIfNeeded?: boolean;
 }): ReturnType<typeof getWorkbenchSubtaskByStage> {
   const exactMatch = getWorkbenchSubtaskByDelegationId(
     params.taskId,
@@ -219,7 +220,122 @@ function resolveSubtaskForDelegation(params: {
   if (params.workflow.current_delegation_id !== params.delegationId) {
     return undefined;
   }
-  return getWorkbenchSubtaskByStage(params.taskId, params.workflow.status);
+  const stageSubtask = getWorkbenchSubtaskByStage(
+    params.taskId,
+    params.workflow.status,
+  );
+  const canReuseStageSubtask =
+    !!stageSubtask &&
+    (!stageSubtask.delegation_id ||
+      stageSubtask.delegation_id === params.delegationId);
+  if (!params.createIfNeeded || canReuseStageSubtask) {
+    return stageSubtask;
+  }
+
+  const createdSubtaskId = createStageSubtask({
+    workflow: params.workflow,
+    taskId: params.taskId,
+    stageKey: params.workflow.status,
+    status: 'current',
+    startedAt: params.workflow.updated_at,
+    updatedAt: params.workflow.updated_at,
+  });
+  return createdSubtaskId
+    ? getWorkbenchSubtaskByStage(params.taskId, params.workflow.status)
+    : stageSubtask;
+}
+
+function resolveTransitionTargetSubtask(params: {
+  taskId: string;
+  workflow: Workflow;
+  fromStatus: string;
+  toStatus: string;
+  delegationId?: string;
+}): ReturnType<typeof getWorkbenchSubtaskByStage> {
+  const isCurrentDelegation =
+    !!params.delegationId &&
+    params.workflow.current_delegation_id === params.delegationId;
+  if (isCurrentDelegation) {
+    const delegationSubtask = getWorkbenchSubtaskByDelegationId(
+      params.taskId,
+      params.delegationId!,
+    );
+    if (delegationSubtask?.stage_key === params.toStatus) {
+      return delegationSubtask;
+    }
+  }
+
+  const toSubtask = getWorkbenchSubtaskByStage(params.taskId, params.toStatus);
+  const hasDifferentDelegation =
+    !!toSubtask?.delegation_id &&
+    !!params.delegationId &&
+    toSubtask.delegation_id !== params.delegationId;
+  const shouldCreateReentrySubtask =
+    !!toSubtask &&
+    ((params.fromStatus !== 'paused' &&
+      toSubtask.stage_key === params.toStatus &&
+      toSubtask.status !== 'pending' &&
+      toSubtask.status !== 'current') ||
+      hasDifferentDelegation);
+
+  if (!shouldCreateReentrySubtask) return toSubtask;
+
+  const createdSubtaskId = createStageSubtask({
+    workflow: params.workflow,
+    taskId: params.taskId,
+    stageKey: params.toStatus,
+    status: 'current',
+    startedAt: params.workflow.updated_at,
+    updatedAt: params.workflow.updated_at,
+  });
+  return createdSubtaskId
+    ? getWorkbenchSubtaskByStage(params.taskId, params.toStatus)
+    : toSubtask;
+}
+
+function completeSiblingCurrentSubtasks(params: {
+  taskId: string;
+  workflowId: string;
+  stageKey: string;
+  keepSubtaskId: string;
+  updatedAt: string;
+}): Array<Record<string, unknown>> {
+  const events: Array<Record<string, unknown>> = [];
+  for (const subtask of listWorkbenchSubtasksByTask(params.taskId)) {
+    if (
+      subtask.id === params.keepSubtaskId ||
+      subtask.workflow_id !== params.workflowId ||
+      subtask.stage_key !== params.stageKey ||
+      subtask.status !== 'current'
+    ) {
+      continue;
+    }
+    updateWorkbenchSubtask(subtask.id, {
+      status: 'completed',
+      finished_at: subtask.finished_at || params.updatedAt,
+      updated_at: params.updatedAt,
+    });
+    events.push({
+      id: subtask.id,
+      stageKey: params.stageKey,
+      status: 'completed',
+    });
+  }
+  return events;
+}
+
+function resolveSubtaskStatusForDelegation(
+  delegation: Delegation,
+  isCurrentDelegation: boolean,
+): 'current' | 'completed' | 'failed' | 'pending' {
+  if (isCurrentDelegation && delegation.status === 'pending') {
+    return 'current';
+  }
+  if (delegation.outcome === 'failure' || delegation.status === 'failed') {
+    return 'failed';
+  }
+  if (delegation.status === 'completed') return 'completed';
+  return 'pending';
 }
 
 function upsertActionItem(params: {
@@ -1016,27 +1132,13 @@ export function syncWorkbenchOnTransition(
     });
   }
 
-  let toSubtask = getWorkbenchSubtaskByStage(task.id, toStatus);
-  const shouldCreateReentrySubtask =
-    !!toSubtask &&
-    fromStatus !== 'paused' &&
-    toSubtask.stage_key === toStatus &&
-    toSubtask.status !== 'pending' &&
-    toSubtask.status !== 'current';
-
-  if (shouldCreateReentrySubtask) {
-    const createdSubtaskId = createStageSubtask({
-      workflow,
-      taskId: task.id,
-      stageKey: toStatus,
-      status: 'current',
-      startedAt: workflow.updated_at,
-      updatedAt: workflow.updated_at,
-    });
-    toSubtask = createdSubtaskId
-      ? getWorkbenchSubtaskByStage(task.id, toStatus)
-      : toSubtask;
-  }
+  const toSubtask = resolveTransitionTargetSubtask({
+    taskId: task.id,
+    workflow,
+    fromStatus,
+    toStatus,
+    delegationId,
+  });
 
   if (toSubtask) {
     const nextStatus = workflow.status === 'paused' ? 'paused' : 'current';
@@ -1044,6 +1146,7 @@ export function syncWorkbenchOnTransition(
       status: nextStatus,
       delegation_id: delegationId ?? toSubtask.delegation_id,
       started_at: toSubtask.started_at || workflow.updated_at,
+      finished_at: nextStatus === 'current' ? null : toSubtask.finished_at,
       updated_at: workflow.updated_at,
     });
     subtaskEvents.push({
@@ -1052,6 +1155,17 @@ export function syncWorkbenchOnTransition(
       status: nextStatus,
       delegationId: delegationId ?? toSubtask.delegation_id,
     });
+    if (nextStatus === 'current') {
+      subtaskEvents.push(
+        ...completeSiblingCurrentSubtasks({
+          taskId: task.id,
+          workflowId,
+          stageKey: toStatus,
+          keepSubtaskId: toSubtask.id,
+          updatedAt: workflow.updated_at,
+        }),
+      );
+    }
   }
 
   for (const stageKey of resolveBypassedInterruptStages(
@@ -1213,14 +1327,23 @@ export function syncWorkbenchOnDelegationCreated(
     taskId: task.id,
     workflow,
     delegationId,
+    createIfNeeded: true,
   });
   if (subtask) {
+    const nextStatus = resolveSubtaskStatusForDelegation(
+      delegation,
+      workflow.current_delegation_id === delegation.id,
+    );
     updateWorkbenchSubtask(subtask.id, {
       delegation_id: delegation.id,
       group_folder: delegation.target_folder,
-      status: 'current',
+      status: nextStatus,
       input_summary: truncate(delegation.task, 240),
       started_at: subtask.started_at || delegation.created_at,
+      finished_at:
+        nextStatus === 'completed' || nextStatus === 'failed'
+          ? subtask.finished_at || delegation.updated_at
+          : null,
       updated_at: delegation.updated_at,
     });
     emitWorkbenchEvent({
@@ -1230,10 +1353,26 @@ export function syncWorkbenchOnDelegationCreated(
       payload: {
         id: subtask.id,
         delegationId: delegation.id,
-        status: 'current',
+        status: nextStatus,
         groupFolder: delegation.target_folder,
       },
     });
+    if (nextStatus === 'current') {
+      for (const payload of completeSiblingCurrentSubtasks({
+        taskId: task.id,
+        workflowId,
+        stageKey: subtask.stage_key,
+        keepSubtaskId: subtask.id,
+        updatedAt: delegation.updated_at,
+      })) {
+        emitWorkbenchEvent({
+          type: 'subtask_updated',
+          taskId: task.id,
+          workflowId,
+          payload,
+        });
+      }
+    }
   }
 
   createWorkbenchEvent({

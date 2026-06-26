@@ -132,7 +132,7 @@
           "delegate": {
             "role": "planner",
             "skill": "deep-research-plan",
-            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n研究深度：{{depth}}\n来源范围：{{source_scope}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n来源限制：{{source_limits}}\n排除项：{{exclusions}}\n限制条件：{{constraints}}\n服务名称：{{service}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请输出 research_plan.json 和 traceability.json 初始版本，并调用 complete_delegation。",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n研究深度：{{depth}}\n来源范围：{{source_scope}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n来源限制：{{source_limits}}\n约束与排除：{{constraints}}\n历史研究上下文：{{previous_research_context}}\n服务名称：{{service}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n如果历史研究上下文非空，请将其中的历史研究问题、各阶段产物和最终产物作为参考，规划本次围绕当前研究问题的续研范围；不要把历史结论直接当作新结论。请输出 research_plan.json 和 traceability.json 初始版本，并调用 complete_delegation。",
             "handoff": {
               "input_schema": "deep_research.plan.input.v1",
               "output_schema": "deep_research.plan.v1",
@@ -170,7 +170,7 @@
           "delegate": {
             "role": "collector",
             "skill": "deep-research-collect",
-            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n研究计划：/workspace/projects/{{service}}/iteration/{{deliverable}}/research_plan.json\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只检索公开网页，使用 WebSearch、WebFetch、agent-browser，并在 delegation 内部使用 SDK agent team 并行探索。输出 sources.json、search_log.json 并更新 traceability.json，然后调用 complete_delegation。",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n历史研究上下文：{{previous_research_context}}\n研究计划：/workspace/projects/{{service}}/iteration/{{deliverable}}/research_plan.json\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只检索公开网页，使用 WebSearch、WebFetch、agent-browser，并在 delegation 内部使用 SDK agent team 并行探索。若历史研究上下文非空，应优先补足当前问题相对历史产物的缺口和新证据。输出 sources.json、search_log.json 并更新 traceability.json，然后调用 complete_delegation。",
             "handoff": {
               "input_schema": "deep_research.collect.input.v1",
               "output_schema": "deep_research.collect.v1",
@@ -209,7 +209,7 @@
           "delegate": {
             "role": "analyst",
             "skill": "deep-research-analyze",
-            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n来源清单：/workspace/projects/{{service}}/iteration/{{deliverable}}/sources.json\n检索记录：/workspace/projects/{{service}}/iteration/{{deliverable}}/search_log.json\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请抽取 evidence.json、findings.json，更新 traceability.json，并调用 complete_delegation。",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n历史研究上下文：{{previous_research_context}}\n来源清单：/workspace/projects/{{service}}/iteration/{{deliverable}}/sources.json\n检索记录：/workspace/projects/{{service}}/iteration/{{deliverable}}/search_log.json\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请抽取 evidence.json、findings.json，更新 traceability.json；如果历史研究上下文非空，需要明确哪些发现继承为背景、哪些由本次新证据支撑、哪些被修正或推翻。然后调用 complete_delegation。",
             "handoff": {
               "input_schema": "deep_research.analyze.input.v1",
               "output_schema": "deep_research.analyze.v1",
@@ -248,7 +248,7 @@
           "delegate": {
             "role": "writer",
             "skill": "deep-research-write",
-            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只基于 research_plan.json、sources.json、evidence.json、findings.json 写结构化 report.json，不输出任意 HTML/CSS/JS，并调用 complete_delegation。",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n报告语言：{{language}}\n报告风格：{{report_style}}\n历史研究上下文：{{previous_research_context}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请只基于本次 research_plan.json、sources.json、evidence.json、findings.json 写结构化 report.json；历史研究上下文仅作为背景和对比线索，不得替代本次引用证据。不输出任意 HTML/CSS/JS，并调用 complete_delegation。",
             "handoff": {
               "input_schema": "deep_research.write.input.v1",
               "output_schema": "deep_research.write.v1",
@@ -299,7 +299,7 @@
           "delegate": {
             "role": "reviewer",
             "skill": "deep-research-review",
-            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请校验 report.json、sources.json、evidence.json、findings.json 和 traceability.json，输出 review.json。review.json verdict 可为 passed、needs_revision、failed、pending，route 可为 collect、analyze、write、failed、publish。然后调用 complete_delegation。",
+            "task_template": "流程类型：{{workflow_type}}\n研究问题：{{research_query}}\n历史研究上下文：{{previous_research_context}}\n交付目录：/workspace/projects/{{service}}/iteration/{{deliverable}}\n\n请校验 report.json、sources.json、evidence.json、findings.json 和 traceability.json，输出 review.json。若报告使用了历史研究上下文中的结论，必须确认其被本次 sources/evidence 支撑或被标注为背景。review.json verdict 可为 passed、needs_revision、failed、pending，route 可为 collect、analyze、write、failed、publish。然后调用 complete_delegation。",
             "handoff": {
               "input_schema": "deep_research.review.input.v1",
               "output_schema": "deep_research.review.v1",
@@ -377,7 +377,7 @@
             "key": "depth",
             "label": "研究深度",
             "type": "choice",
-            "default_value": "standard",
+            "default_value": "deep",
             "options": [
               {
                 "value": "quick",
@@ -429,7 +429,7 @@
             "key": "report_style",
             "label": "报告风格",
             "type": "choice",
-            "default_value": "interactive",
+            "default_value": "deep_report",
             "options": [
               {
                 "value": "interactive",

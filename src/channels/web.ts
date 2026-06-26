@@ -3516,8 +3516,9 @@ class WebChannel {
       source_scope?: string;
       constraints?: string;
       source_limits?: string;
-      exclusions?: string;
       source_jid?: string;
+      parent_task_id?: string;
+      context_task_ids?: string[];
     };
     const sourceJid = data.source_jid || this.findPreferredMainGroupJid() || '';
     const result = createDeepResearchTask({

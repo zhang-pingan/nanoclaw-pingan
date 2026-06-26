@@ -19,8 +19,7 @@ description: Use only in the deep_research workflow plan stage. Turn a research 
 - `报告语言`
 - `报告风格`
 - `来源限制`
-- `排除项`
-- `限制条件`
+- `约束与排除`
 - `交付目录`
 
 `来源范围` 当前只支持 `public_web`。如果用户要求本地文件、私有资料或登录后页面，写入 `limitations` / `open_questions`，不要尝试读取本地源码或私有文件。
@@ -42,8 +41,7 @@ description: Use only in the deep_research workflow plan stage. Turn a research 
     "source_scope": "public_web",
     "language": "zh",
     "depth": "standard",
-    "constraints": "",
-    "exclusions": []
+    "constraints": ""
   },
   "subquestions": [
     {
