@@ -107,11 +107,6 @@
     "web_test": ["delegation-worker"],
     "web_ios_recon": ["delegation-worker", "ios-recon"],
     "web_ios_preintegration": ["delegation-worker", "ios-preintegration"],
-    "web_ios_acceptance": ["delegation-worker", "ios-acceptance"],
-    "web_research_planner": ["delegation-worker"],
-    "web_research_collector": ["delegation-worker"],
-    "web_research_analyst": ["delegation-worker"],
-    "web_research_writer": ["delegation-worker"],
-    "web_research_reviewer": ["delegation-worker"]
+    "web_ios_acceptance": ["delegation-worker", "ios-acceptance"]
   }
 }

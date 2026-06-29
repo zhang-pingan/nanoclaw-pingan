@@ -19,14 +19,5 @@
   "assistant_main": ["macos", "devops", "self-evolution"],
   "web_ios_recon": ["ios-recon-requirement"],
   "web_ios_preintegration": ["ios-preintegration"],
-  "web_ios_acceptance": ["ios-acceptance-test"],
-  "web_research_planner": ["deep-research-plan"],
-  "web_research_collector": ["deep-research-collect", "agent-browser"],
-  "web_research_analyst": ["deep-research-analyze"],
-  "web_research_writer": ["deep-research-write"],
-  "web_research_reviewer": [
-    "deep-research-collect-review",
-    "deep-research-analyze-review",
-    "deep-research-review"
-  ]
+  "web_ios_acceptance": ["ios-acceptance-test"]
 }

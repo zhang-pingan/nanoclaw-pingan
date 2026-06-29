@@ -3498,18 +3498,11 @@ function isTerminalStatus(workflow: Workflow): boolean {
 }
 
 function transitionForEvaluation(
-  workflowTypeConfig: WorkflowTypeConfig,
+  _workflowTypeConfig: WorkflowTypeConfig,
   stateConfig: NonNullable<WorkflowTypeConfig['states'][string]>,
   evaluationStatus: ReturnType<typeof evaluateWorkflowStage>['status'],
-  payload?: ParsedDelegationPayload,
+  _payload?: ParsedDelegationPayload,
 ): StateTransition | undefined {
-  const routedTransition = transitionFromEvaluationRoute({
-    workflowTypeConfig,
-    stateConfig,
-    evaluationStatus,
-    route: payload?.route,
-  });
-  if (routedTransition) return routedTransition;
   return transitionForEvaluationDefault(stateConfig, evaluationStatus);
 }
 
@@ -3548,45 +3541,6 @@ function transitionForEvaluationDefault(
   }
   if (evaluationStatus === 'needs_revision' || evaluationStatus === 'failed') {
     return stateConfig.on_complete?.failure;
-  }
-  return undefined;
-}
-
-function transitionFromEvaluationRoute(input: {
-  workflowTypeConfig: WorkflowTypeConfig;
-  stateConfig: NonNullable<WorkflowTypeConfig['states'][string]>;
-  evaluationStatus: ReturnType<typeof evaluateWorkflowStage>['status'];
-  route: unknown;
-}): StateTransition | undefined {
-  if (!input.stateConfig.evaluator?.ref?.startsWith('deep_research.')) {
-    return undefined;
-  }
-  if (typeof input.route !== 'string') return undefined;
-  const target = input.route.trim();
-  const targetState = input.workflowTypeConfig.states[target];
-  if (!target || !targetState) return undefined;
-
-  const defaultTransition = transitionForEvaluationDefault(
-    input.stateConfig,
-    input.evaluationStatus,
-  );
-  const defaultTarget = defaultTransition?.target || '';
-
-  if (input.evaluationStatus === 'passed') {
-    return target === defaultTarget ? { target } : undefined;
-  }
-  if (input.evaluationStatus === 'failed') {
-    return target === defaultTarget || targetState.type === 'terminal'
-      ? { target }
-      : undefined;
-  }
-  if (input.evaluationStatus === 'pending') {
-    return target === defaultTarget || targetState.type === 'delegation'
-      ? { target }
-      : undefined;
-  }
-  if (input.evaluationStatus === 'needs_revision') {
-    return targetState.type === 'terminal' ? undefined : { target };
   }
   return undefined;
 }

@@ -999,56 +999,6 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
   );
 }
 
-const DEEP_RESEARCH_WEB_GROUPS: Array<{
-  folder: string;
-  name: string;
-  description: string;
-}> = [
-  {
-    folder: 'web_research_planner',
-    name: 'Deep Research Planner',
-    description: 'Deep Research 研究规划角色',
-  },
-  {
-    folder: 'web_research_collector',
-    name: 'Deep Research Collector',
-    description: 'Deep Research 公开网页来源收集角色',
-  },
-  {
-    folder: 'web_research_analyst',
-    name: 'Deep Research Analyst',
-    description: 'Deep Research 证据分析角色',
-  },
-  {
-    folder: 'web_research_writer',
-    name: 'Deep Research Writer',
-    description: 'Deep Research 结构化报告写作角色',
-  },
-  {
-    folder: 'web_research_reviewer',
-    name: 'Deep Research Reviewer',
-    description: 'Deep Research 引用审查角色',
-  },
-];
-
-function ensureDeepResearchGroupsRegistered(): void {
-  const registeredFolders = new Set(
-    Object.values(registeredGroups).map((group) => group.folder),
-  );
-  for (const group of DEEP_RESEARCH_WEB_GROUPS) {
-    if (registeredFolders.has(group.folder)) continue;
-    registerGroup(`web:${group.folder}`, {
-      name: group.name,
-      folder: group.folder,
-      trigger: '',
-      added_at: Date.now().toString(),
-      requiresTrigger: false,
-      isMain: false,
-      description: group.description,
-    });
-  }
-}
-
 /**
  * Get available groups list for the agent.
  * Returns registered groups, enriched with last-activity from chats table.
@@ -2929,7 +2879,6 @@ async function main(): Promise<void> {
   initDatabase();
   logger.info('Database initialized');
   loadState();
-  ensureDeepResearchGroupsRegistered();
   restoreRemoteControl();
 
   // Load MySQL configs from services.json for proxy

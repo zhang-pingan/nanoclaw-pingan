@@ -13,7 +13,6 @@ describe('workflow action registry', () => {
       'context.require',
       'context.set',
       'context.set_if_empty',
-      'deep_research.export',
       'json.parse',
       'script.run_local',
       'service.test_token',
@@ -78,12 +77,6 @@ describe('workflow action registry', () => {
             defaultValue: {},
           },
         ],
-      },
-      {
-        name: 'deep_research.export',
-        description:
-          'Generate Deep Research Markdown and printable HTML exports from report.json.',
-        params: undefined,
       },
       {
         name: 'json.parse',
