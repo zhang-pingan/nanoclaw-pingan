@@ -157,16 +157,6 @@ function makeTitle(prompt, outputText = '') {
   return clipText(prompt.replace(/\s+/g, ' '), 80) || 'Deep Research Report';
 }
 
-function buildInstructions() {
-  return [
-    'You are a senior research analyst.',
-    'Return a formal Markdown research report.',
-    'Use clear headings, an executive summary, methodology, analysis, risks or limitations, and source-grounded conclusions.',
-    'Make citations visible and clickable wherever the API provides them.',
-    'If evidence is weak or conflicting, state the uncertainty explicitly.',
-  ].join('\n');
-}
-
 function normalizeProvider(provider) {
   const value = safeText(provider) || DEFAULT_PROVIDER;
   return Object.hasOwn(PROVIDERS, value) ? value : DEFAULT_PROVIDER;
@@ -794,7 +784,6 @@ async function handleCreateResearch(req, res) {
   const payload = {
     model,
     input: prompt,
-    instructions: buildInstructions(),
     background: true,
     store: true,
     tools: [{ type: 'web_search_preview' }],
