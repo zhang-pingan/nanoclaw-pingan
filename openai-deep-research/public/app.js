@@ -8,6 +8,8 @@ const state = {
 const els = {
   providerSelect: document.getElementById('provider-select'),
   modelSelect: document.getElementById('model-select'),
+  reportTypePicker: document.getElementById('report-type-picker'),
+  reportTypeSelect: document.getElementById('report-type-select'),
   taskList: document.getElementById('task-list'),
   thread: document.getElementById('thread'),
   emptyState: document.getElementById('empty-state'),
@@ -123,6 +125,21 @@ function syncModelOptions() {
     .map((model) => `<option value="${escapeHtml(model)}">${escapeHtml(model)}</option>`)
     .join('');
   els.modelSelect.value = provider?.default_model || models[0] || '';
+
+  const reportTypes = Array.isArray(provider?.report_types) ? provider.report_types : [];
+  const showReportType = provider?.id === 'gpt-researcher' && reportTypes.length > 0;
+  els.reportTypePicker.hidden = !showReportType;
+  if (showReportType) {
+    els.reportTypeSelect.innerHTML = reportTypes
+      .map(
+        (reportType) =>
+          `<option value="${escapeHtml(reportType.id)}">${escapeHtml(reportType.label || reportType.id)}</option>`,
+      )
+      .join('');
+    els.reportTypeSelect.value = provider.default_report_type || reportTypes[0]?.id || '';
+  } else {
+    els.reportTypeSelect.innerHTML = '';
+  }
 }
 
 async function api(path, options = {}) {
@@ -205,6 +222,10 @@ function renderProgress(task) {
 
 function renderDocCard(task) {
   if (task.status !== 'completed' || !task.output_text) return '';
+  const reportType =
+    task.provider === 'gpt-researcher' && task.gpt_researcher_report_type
+      ? task.gpt_researcher_report_type
+      : task.model;
   return `
     <section class="doc-card">
       <div class="doc-card-top">
@@ -222,7 +243,7 @@ function renderDocCard(task) {
         <h2>${escapeHtml(task.title || 'Deep Research Report')}</h2>
         <div class="doc-stats">
           <span>${escapeHtml(task.provider_label || task.provider || 'Provider')}</span>
-          <span>${escapeHtml(task.model)}</span>
+          <span>${escapeHtml(reportType)}</span>
           <span>${task.stats?.source_count || 0} 个来源</span>
           <span>${task.usage?.total_tokens || '--'} tokens</span>
         </div>
@@ -319,15 +340,20 @@ function syncPolling() {
 
 async function createTask(prompt) {
   els.sendBtn.disabled = true;
+  const provider = els.providerSelect.value;
+  const body = {
+    prompt,
+    provider,
+    model: els.modelSelect.value,
+    max_tool_calls: 80,
+  };
+  if (provider === 'gpt-researcher' && els.reportTypeSelect.value) {
+    body.gpt_researcher_report_type = els.reportTypeSelect.value;
+  }
   try {
     const data = await api('/api/research', {
       method: 'POST',
-      body: JSON.stringify({
-        prompt,
-        provider: els.providerSelect.value,
-        model: els.modelSelect.value,
-        max_tool_calls: 80,
-      }),
+      body: JSON.stringify(body),
     });
     state.activeTask = data.task;
     els.promptInput.value = '';

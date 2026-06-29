@@ -37,6 +37,10 @@ function loadEnvFile(filePath) {
 
 loadEnvFile(ENV_FILE);
 
+const TASK_STORE_FILE = process.env.OPENAI_DEEP_RESEARCH_TASK_STORE
+  ? path.resolve(__dirname, process.env.OPENAI_DEEP_RESEARCH_TASK_STORE)
+  : path.join(__dirname, '.data', 'tasks.json');
+const TASK_STORE_VERSION = 1;
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '127.0.0.1';
 const OPENAI_BASE_URL =
@@ -52,8 +56,17 @@ const GPT_RESEARCHER_MODEL = 'gpt-researcher';
 const GPT_RESEARCHER_BASE_URL = (
   process.env.GPT_RESEARCHER_BASE_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '');
+const DEFAULT_GPT_RESEARCHER_REPORT_TYPE = 'research_report';
+const GPT_RESEARCHER_REPORT_TYPES = [
+  { id: 'research_report', label: 'Research report' },
+  { id: 'detailed_report', label: 'Detailed report' },
+  { id: 'deep', label: 'Deep research' },
+];
+const SUPPORTED_GPT_RESEARCHER_REPORT_TYPES = new Set(
+  GPT_RESEARCHER_REPORT_TYPES.map((type) => type.id),
+);
 const GPT_RESEARCHER_REPORT_TYPE =
-  process.env.GPT_RESEARCHER_REPORT_TYPE || 'research_report';
+  normalizeGptResearcherReportType(process.env.GPT_RESEARCHER_REPORT_TYPE);
 const GPT_RESEARCHER_REPORT_SOURCE =
   process.env.GPT_RESEARCHER_REPORT_SOURCE || 'web';
 const GPT_RESEARCHER_TONE = process.env.GPT_RESEARCHER_TONE || 'Objective';
@@ -94,6 +107,150 @@ const TERMINAL_STATUSES = new Set([
 const POLL_THROTTLE_MS = 2500;
 
 const tasks = new Map();
+
+function persistableTask(task) {
+  return {
+    id: task.id,
+    responseId: task.responseId || '',
+    provider: task.provider,
+    model: task.model,
+    gptResearcherReportType: task.gptResearcherReportType || '',
+    prompt: task.prompt,
+    title: task.title,
+    status: task.status,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    progress: Array.isArray(task.progress) ? task.progress : [],
+    sources: Array.isArray(task.sources) ? task.sources : [],
+    webCalls: Array.isArray(task.webCalls) ? task.webCalls : [],
+    fileCalls: Array.isArray(task.fileCalls) ? task.fileCalls : [],
+    mcpCalls: Array.isArray(task.mcpCalls) ? task.mcpCalls : [],
+    codeCalls: Array.isArray(task.codeCalls) ? task.codeCalls : [],
+    outputText: task.outputText || '',
+    annotations: Array.isArray(task.annotations) ? task.annotations : [],
+    usage: task.usage || null,
+    error: task.error || null,
+    incomplete_details: task.incomplete_details || null,
+    rawResponse: task.rawResponse || null,
+  };
+}
+
+function normalizeStoredTask(value) {
+  if (!value || typeof value !== 'object') return null;
+  const id = typeof value.id === 'string' ? value.id.trim() : '';
+  if (!id) return null;
+  const provider = normalizeProvider(value.provider);
+  const task = {
+    id,
+    responseId: typeof value.responseId === 'string' ? value.responseId : '',
+    provider,
+    model: normalizeModel(provider, value.model),
+    gptResearcherReportType:
+      provider === 'gpt-researcher'
+        ? normalizeGptResearcherReportType(
+            value.gptResearcherReportType || value.gpt_researcher_report_type,
+          )
+        : '',
+    prompt: typeof value.prompt === 'string' ? value.prompt : '',
+    title:
+      typeof value.title === 'string' && value.title.trim()
+        ? value.title
+        : makeTitle(typeof value.prompt === 'string' ? value.prompt : ''),
+    status: typeof value.status === 'string' ? value.status : 'queued',
+    createdAt:
+      typeof value.createdAt === 'string'
+        ? value.createdAt
+        : new Date().toISOString(),
+    updatedAt:
+      typeof value.updatedAt === 'string'
+        ? value.updatedAt
+        : new Date().toISOString(),
+    progress: Array.isArray(value.progress) ? value.progress : [],
+    sources: Array.isArray(value.sources) ? value.sources : [],
+    webCalls: Array.isArray(value.webCalls) ? value.webCalls : [],
+    fileCalls: Array.isArray(value.fileCalls) ? value.fileCalls : [],
+    mcpCalls: Array.isArray(value.mcpCalls) ? value.mcpCalls : [],
+    codeCalls: Array.isArray(value.codeCalls) ? value.codeCalls : [],
+    outputText: typeof value.outputText === 'string' ? value.outputText : '',
+    annotations: Array.isArray(value.annotations) ? value.annotations : [],
+    usage: value.usage || null,
+    error: value.error || null,
+    incomplete_details: value.incomplete_details || null,
+    rawResponse: value.rawResponse || null,
+  };
+  if (
+    !TERMINAL_STATUSES.has(task.status) &&
+    ((task.provider === 'openai' && !task.responseId) ||
+      task.provider === 'gpt-researcher')
+  ) {
+    task.status = 'failed';
+    task.error = {
+      message:
+        task.provider === 'gpt-researcher'
+          ? 'Task was interrupted by a server restart and cannot be resumed by GPT Researcher.'
+          : 'Task was interrupted before an OpenAI response id was available.',
+    };
+    task.updatedAt = new Date().toISOString();
+  }
+  task.progress = task.progress.length
+    ? task.progress
+    : buildProgress(task.rawResponse, task);
+  return task;
+}
+
+function persistTasks() {
+  const dir = path.dirname(TASK_STORE_FILE);
+  const payload = {
+    version: TASK_STORE_VERSION,
+    updated_at: new Date().toISOString(),
+    tasks: [...tasks.values()].map((task) => persistableTask(task)),
+  };
+  fs.mkdirSync(dir, { recursive: true });
+  const tempFile = `${TASK_STORE_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  fs.renameSync(tempFile, TASK_STORE_FILE);
+}
+
+function persistTasksQuietly() {
+  try {
+    persistTasks();
+  } catch (error) {
+    console.error(`Failed to persist Deep Research tasks: ${error.message}`);
+  }
+}
+
+function loadPersistedTasks() {
+  if (!fs.existsSync(TASK_STORE_FILE)) return;
+  let payload;
+  try {
+    payload = JSON.parse(fs.readFileSync(TASK_STORE_FILE, 'utf8'));
+  } catch (error) {
+    const backupFile = `${TASK_STORE_FILE}.corrupt-${Date.now()}`;
+    try {
+      fs.renameSync(TASK_STORE_FILE, backupFile);
+      console.error(
+        `Deep Research task store was corrupt and moved to ${backupFile}: ${error.message}`,
+      );
+    } catch (backupError) {
+      console.error(
+        `Deep Research task store is corrupt and could not be moved: ${backupError.message}`,
+      );
+    }
+    return;
+  }
+
+  const items = Array.isArray(payload?.tasks)
+    ? payload.tasks
+    : Array.isArray(payload)
+      ? payload
+      : [];
+  for (const item of items) {
+    const task = normalizeStoredTask(item);
+    if (!task) continue;
+    tasks.set(task.id, task);
+  }
+  console.log(`Loaded ${tasks.size} persisted Deep Research task(s)`);
+}
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -170,6 +327,17 @@ function normalizeModel(provider, model) {
   const value = safeText(model);
   if (provider === 'gpt-researcher') return GPT_RESEARCHER_MODEL;
   return SUPPORTED_OPENAI_MODELS.has(value) ? value : DEFAULT_OPENAI_MODEL;
+}
+
+function normalizeGptResearcherReportType(reportType) {
+  const value = safeText(reportType);
+  return SUPPORTED_GPT_RESEARCHER_REPORT_TYPES.has(value)
+    ? value
+    : DEFAULT_GPT_RESEARCHER_REPORT_TYPE;
+}
+
+function isSupportedGptResearcherReportType(reportType) {
+  return SUPPORTED_GPT_RESEARCHER_REPORT_TYPES.has(safeText(reportType));
 }
 
 function normalizeMaxToolCalls(value) {
@@ -610,6 +778,7 @@ function updateTaskFromResponse(task, response) {
   task.rawResponse = response;
   task.title = makeTitle(task.prompt, task.outputText);
   task.progress = buildProgress(response, task);
+  persistTasksQuietly();
 }
 
 function publicTask(task, options = {}) {
@@ -619,6 +788,7 @@ function publicTask(task, options = {}) {
     provider: task.provider,
     provider_label: providerLabel(task.provider),
     model: task.model,
+    gpt_researcher_report_type: task.gptResearcherReportType || null,
     prompt: task.prompt,
     title: task.title,
     status: task.status,
@@ -659,6 +829,7 @@ async function refreshTask(task) {
         body: error.body || null,
       };
       task.updatedAt = new Date().toISOString();
+      persistTasksQuietly();
       return task;
     })
     .finally(() => {
@@ -668,12 +839,16 @@ async function refreshTask(task) {
   return task.pollPromise;
 }
 
-function createResearchTask(provider, model, prompt) {
+function createResearchTask(provider, model, prompt, options = {}) {
   return {
     id: createTaskId(),
     responseId: '',
     provider,
     model,
+    gptResearcherReportType:
+      provider === 'gpt-researcher'
+        ? normalizeGptResearcherReportType(options.gptResearcherReportType)
+        : '',
     prompt,
     title: makeTitle(prompt),
     status: 'creating',
@@ -692,7 +867,7 @@ function createResearchTask(provider, model, prompt) {
 function buildGptResearcherPayload(task) {
   return {
     task: task.prompt,
-    report_type: GPT_RESEARCHER_REPORT_TYPE,
+    report_type: task.gptResearcherReportType || GPT_RESEARCHER_REPORT_TYPE,
     report_source: GPT_RESEARCHER_REPORT_SOURCE,
     tone: GPT_RESEARCHER_TONE,
     headers: {},
@@ -708,6 +883,7 @@ async function runGptResearcherTask(task) {
   task.status = 'running';
   task.updatedAt = new Date().toISOString();
   task.progress = buildProgress(null, task);
+  persistTasksQuietly();
 
   try {
     const response = await gptResearcherRequest('/report/', {
@@ -739,6 +915,7 @@ async function runGptResearcherTask(task) {
     task.title = makeTitle(task.prompt, task.outputText);
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
+    persistTasksQuietly();
   } catch (error) {
     if (error.name === 'AbortError' || task.status === 'cancelled') {
       task.status = 'cancelled';
@@ -752,8 +929,10 @@ async function runGptResearcherTask(task) {
     }
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
+    persistTasksQuietly();
   } finally {
     task.abortController = null;
+    persistTasksQuietly();
   }
 }
 
@@ -768,12 +947,27 @@ async function handleCreateResearch(req, res) {
   const provider = normalizeProvider(body.provider);
   const model = normalizeModel(provider, body.model);
   const maxToolCalls = normalizeMaxToolCalls(body.max_tool_calls);
-  const task = createResearchTask(provider, model, prompt);
+  const requestedReportType = safeText(
+    body.gpt_researcher_report_type || body.report_type,
+  );
+  if (
+    provider === 'gpt-researcher' &&
+    requestedReportType &&
+    !isSupportedGptResearcherReportType(requestedReportType)
+  ) {
+    sendJson(res, 400, { error: 'unsupported GPT Researcher report type' });
+    return;
+  }
+  const task = createResearchTask(provider, model, prompt, {
+    gptResearcherReportType: requestedReportType || GPT_RESEARCHER_REPORT_TYPE,
+  });
   tasks.set(task.id, task);
+  persistTasksQuietly();
 
   if (provider === 'gpt-researcher') {
     task.status = 'queued';
     task.progress = buildProgress(null, task);
+    persistTasksQuietly();
     setTimeout(() => {
       runGptResearcherTask(task);
     }, 0);
@@ -809,6 +1003,7 @@ async function handleCreateResearch(req, res) {
     };
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
+    persistTasksQuietly();
     throw error;
   }
 
@@ -823,6 +1018,7 @@ async function handleCancelTask(task, res) {
     task.status = 'cancelled';
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
+    persistTasksQuietly();
     sendJson(res, 200, { task: publicTask(task, { full: true }) });
     return;
   }
@@ -1019,6 +1215,8 @@ async function route(req, res) {
             label: PROVIDERS['gpt-researcher'].label,
             models: PROVIDERS['gpt-researcher'].models,
             default_model: PROVIDERS['gpt-researcher'].defaultModel,
+            report_types: GPT_RESEARCHER_REPORT_TYPES,
+            default_report_type: GPT_RESEARCHER_REPORT_TYPE,
             configured: !!GPT_RESEARCHER_BASE_URL,
           },
         ],
@@ -1094,6 +1292,15 @@ server.on('error', (error) => {
   console.error(`Failed to start OpenAI Deep Research web app: ${error.message}`);
   process.exitCode = 1;
 });
+
+loadPersistedTasks();
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    persistTasksQuietly();
+    process.exit(0);
+  });
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`OpenAI Deep Research web app listening on http://${HOST}:${PORT}`);

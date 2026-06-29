@@ -165,7 +165,12 @@ a {
   border-radius: 999px;
   background: #fff;
   color: var(--text);
+  max-width: 220px;
   padding: 0 34px 0 14px;
+}
+
+.report-type-picker select {
+  min-width: 150px;
 }
 
 .thread {
