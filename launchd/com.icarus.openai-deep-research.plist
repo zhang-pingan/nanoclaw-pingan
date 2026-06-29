@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.icarus.openai-deep-research</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>{{RUNNER_SCRIPT}}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{{APP_DIR}}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{NODE_BIN_DIR}}:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:{{HOME}}/.local/bin</string>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+        <key>NODE_BIN</key>
+        <string>{{NODE_PATH}}</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{LOG_FILE}}</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_FILE}}</string>
+</dict>
+</plist>
