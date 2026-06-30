@@ -42,6 +42,55 @@ When the UI provider is `GPT Researcher API`, this app calls
 `$GPT_RESEARCHER_BASE_URL/report/` and stores the returned report in the same
 viewer/export flow.
 
+## GPT Researcher service
+
+The local GPT Researcher service is checked out at:
+
+```bash
+/Users/chelaile/IdeaProjects/gpt-researcher
+```
+
+Start or refresh the service with Docker Compose:
+
+```bash
+cd /Users/chelaile/IdeaProjects/gpt-researcher
+docker compose up -d gpt-researcher gptr-nextjs
+docker compose ps
+```
+
+Compose services used by this app:
+
+| Service | Container | Image | Local URL | Purpose |
+| --- | --- | --- | --- | --- |
+| `gpt-researcher` | `gpt-researcher-gpt-researcher-1` | `gptresearcher/gpt-researcher` | `http://127.0.0.1:8000` | FastAPI backend used by `GPT_RESEARCHER_BASE_URL`; runs `uvicorn main:app --host ${HOST} --port ${PORT} --workers ${WORKERS}`. |
+| `gptr-nextjs` | `gpt-researcher-gptr-nextjs-1` | `gptresearcher/gptr-nextjs` | `http://127.0.0.1:3010` | GPT Researcher Next.js UI; optional for this app, useful for direct debugging. |
+
+Current observed container status on 2026-06-30:
+
+```text
+gpt-researcher-gpt-researcher-1  gptresearcher/gpt-researcher  0.0.0.0:8000->8000/tcp  Up 27 hours
+gpt-researcher-gptr-nextjs-1     gptresearcher/gptr-nextjs     0.0.0.0:3010->3010/tcp  Up 6 hours
+```
+
+The backend Compose service reads `/Users/chelaile/IdeaProjects/gpt-researcher/.env`
+and mounts these host directories into the container:
+
+```text
+my-docs  -> /usr/src/app/my-docs
+outputs  -> /usr/src/app/outputs
+logs     -> /usr/src/app/logs
+```
+
+For Deep Research integration, keep `deep-research/.env` pointed at the backend:
+
+```bash
+DEFAULT_RESEARCH_PROVIDER=gpt-researcher
+GPT_RESEARCHER_BASE_URL=http://127.0.0.1:8000
+```
+
+The GPT Researcher Next.js UI defaults to `http://localhost:8000` when
+`NEXT_PUBLIC_GPTR_API_URL` is not set.
+
 Agent integration options:
 
 ```bash
