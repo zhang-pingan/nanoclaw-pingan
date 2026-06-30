@@ -97,6 +97,10 @@ function isTerminal(task) {
   return ['completed', 'failed', 'cancelled', 'incomplete'].includes(task?.status);
 }
 
+function isReportReady(task) {
+  return task?.status === 'completed' && !!task.output_text;
+}
+
 function taskStatusText(task) {
   if (!task) return '';
   if (task.status === 'completed') return '研究完成';
@@ -285,11 +289,11 @@ function renderDocCard(task) {
       : task.model;
   const referenced = state.referencedTaskIds.has(task.id);
   const openButton =
-    task.status === 'completed' && task.output_text
+    isReportReady(task)
       ? `<button type="button" class="icon-btn" data-open-doc="${escapeHtml(task.id)}">全屏</button>`
       : '';
   const exports =
-    task.status === 'completed' && task.output_text
+    isReportReady(task)
       ? `<a class="icon-link" href="/api/research/${encodeURIComponent(task.id)}/export/markdown" download>MD</a>
          <a class="icon-link" href="/api/research/${encodeURIComponent(task.id)}/export/pdf" target="_blank" rel="noreferrer">PDF</a>`
       : '';
@@ -321,11 +325,13 @@ function renderDocCard(task) {
 }
 
 function renderTaskBlock(task) {
+  const docCard = isReportReady(task)
+    ? `<div style="height: 18px"></div>${renderDocCard(task)}`
+    : '';
   return `
     <div class="task-block" id="task-${escapeHtml(task.id)}">
       ${renderProgress(task)}
-      <div style="height: 18px"></div>
-      ${renderDocCard(task)}
+      ${docCard}
     </div>
   `;
 }

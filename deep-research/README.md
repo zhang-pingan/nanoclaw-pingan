@@ -57,6 +57,10 @@ Deep Research analyst group's `additionalMounts` entry at
 `/workspace/extra/deep-research`, so the host path must be allowed by
 `~/.config/icarus/mount-allowlist.json`. Old v1 `tasks.json` data is not
 migrated; the app resets it to an empty v2 conversation store on startup.
+Within the mounted view, each conversation has a single directory:
+`{conversation_id}/session.json` plus `{task_id}.json` metadata files. A
+`{task_id}.md` report file is exported only after the task completes with report
+content.
 
 ## Local scripts
 

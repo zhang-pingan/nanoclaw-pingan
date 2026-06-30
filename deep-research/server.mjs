@@ -95,8 +95,8 @@ const DEEP_RESEARCH_AGENT_SYSTEM = [
   'You are the Deep Research industry analyst agent for Icarus.',
   'You help inspect research reports, identify contradictions or gaps, propose follow-up research, and improve research prompts.',
   'Deep Research data is expected under the mounted_root provided in runtime context, normally /workspace/extra/deep-research.',
-  'Use sessions/{conversation_id}.json to inspect the current conversation task index.',
-  'Use tasks/{task_id}.json for task metadata and tasks/{task_id}.md for the full report.',
+  'Use {conversation_id}/session.json to inspect the current conversation task index.',
+  'Use {conversation_id}/{task_id}.json for task metadata and {conversation_id}/{task_id}.md for the full report when report_ready is true.',
   'Do not assume report contents you have not read. When task ids are referenced, read the referenced task files before making report-specific claims.',
   'Clearly separate facts read from reports from your analysis or recommendations.',
 ].join('\n');
@@ -416,13 +416,30 @@ function writeJsonFileAtomic(filePath, payload) {
   fs.renameSync(tempFile, filePath);
 }
 
+function isReportReady(task) {
+  return task.status === 'completed' && !!safeText(task.outputText);
+}
+
+function agentConversationRoot(conversationId) {
+  return `${ICARUS_AGENT_MOUNTED_ROOT}/${conversationId}`;
+}
+
+function agentMetadataPath(task) {
+  return `${agentConversationRoot(task.conversationId)}/${task.id}.json`;
+}
+
+function agentReportPath(task) {
+  return `${agentConversationRoot(task.conversationId)}/${task.id}.md`;
+}
+
 function exportAgentReadable() {
   const tempDir = `${AGENT_READABLE_DIR}.${process.pid}.tmp`;
   fs.rmSync(tempDir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(tempDir, 'sessions'), { recursive: true });
-  fs.mkdirSync(path.join(tempDir, 'tasks'), { recursive: true });
+  fs.mkdirSync(tempDir, { recursive: true });
 
   for (const conversation of conversations.values()) {
+    const conversationDir = path.join(tempDir, conversation.id);
+    fs.mkdirSync(conversationDir, { recursive: true });
     const conversationTasks = conversation.taskIds
       .map((taskId) => tasks.get(taskId))
       .filter(Boolean);
@@ -439,46 +456,52 @@ function exportAgentReadable() {
         provider: task.provider,
         model: task.model,
         prompt_preview: clipText(task.prompt.replace(/\s+/g, ' '), 240),
-        metadata_path: `${ICARUS_AGENT_MOUNTED_ROOT}/tasks/${task.id}.json`,
-        report_path: `${ICARUS_AGENT_MOUNTED_ROOT}/tasks/${task.id}.md`,
+        metadata_path: agentMetadataPath(task),
+        report_path: isReportReady(task) ? agentReportPath(task) : null,
+        report_ready: isReportReady(task),
         source_count: task.sources?.length || 0,
       })),
     };
     fs.writeFileSync(
-      path.join(tempDir, 'sessions', `${conversation.id}.json`),
+      path.join(conversationDir, 'session.json'),
       `${JSON.stringify(index, null, 2)}\n`,
       'utf8',
     );
-  }
 
-  for (const task of tasks.values()) {
-    const metadata = {
-      id: task.id,
-      conversation_id: task.conversationId,
-      title: task.title,
-      status: task.status,
-      provider: task.provider,
-      model: task.model,
-      gpt_researcher_report_type: task.gptResearcherReportType || null,
-      prompt: task.prompt,
-      created_at: task.createdAt,
-      updated_at: task.updatedAt,
-      report_path: `${ICARUS_AGENT_MOUNTED_ROOT}/tasks/${task.id}.md`,
-      source_count: task.sources?.length || 0,
-      sources: task.sources || [],
-      error: task.error || null,
-      incomplete_details: task.incomplete_details || null,
-    };
-    fs.writeFileSync(
-      path.join(tempDir, 'tasks', `${task.id}.json`),
-      `${JSON.stringify(metadata, null, 2)}\n`,
-      'utf8',
-    );
-    fs.writeFileSync(
-      path.join(tempDir, 'tasks', `${task.id}.md`),
-      reportMarkdown(task),
-      'utf8',
-    );
+    for (const task of conversationTasks) {
+      const reportReady = isReportReady(task);
+      const metadata = {
+        id: task.id,
+        conversation_id: task.conversationId,
+        title: task.title,
+        status: task.status,
+        provider: task.provider,
+        model: task.model,
+        gpt_researcher_report_type: task.gptResearcherReportType || null,
+        prompt: task.prompt,
+        created_at: task.createdAt,
+        updated_at: task.updatedAt,
+        metadata_path: agentMetadataPath(task),
+        report_path: reportReady ? agentReportPath(task) : null,
+        report_ready: reportReady,
+        source_count: task.sources?.length || 0,
+        sources: task.sources || [],
+        error: task.error || null,
+        incomplete_details: task.incomplete_details || null,
+      };
+      fs.writeFileSync(
+        path.join(conversationDir, `${task.id}.json`),
+        `${JSON.stringify(metadata, null, 2)}\n`,
+        'utf8',
+      );
+      if (reportReady) {
+        fs.writeFileSync(
+          path.join(conversationDir, `${task.id}.md`),
+          reportMarkdown(task),
+          'utf8',
+        );
+      }
+    }
   }
 
   fs.rmSync(AGENT_READABLE_DIR, { recursive: true, force: true });
@@ -785,9 +808,9 @@ function buildAgentRuntimePrompt(input) {
       : ['- none']),
     '',
     'File structure:',
-    '- sessions/{conversation_id}.json contains the task index for this conversation.',
-    '- tasks/{task_id}.json contains task metadata and report_path.',
-    '- tasks/{task_id}.md contains the full report.',
+    '- {conversation_id}/session.json contains the task index for this conversation.',
+    '- {conversation_id}/{task_id}.json contains task metadata, report_ready, and report_path.',
+    '- {conversation_id}/{task_id}.md contains the full report only after report_ready is true.',
     '[/Deep Research Runtime Context]',
     '',
     `User request:\n${input.message}`,

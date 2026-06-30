@@ -133,7 +133,7 @@ POST /internal/agent/chat
   "chat_jid": "web:deep-research-analyst",
   "session_id": "optional-existing-agent-session-id",
   "system": "Deep Research analyst stable system prompt...",
-  "message": "[Deep Research Runtime Context]\nconversation_id: drs_xxx\nmounted_root: /workspace/extra/deep-research\nreferenced_task_ids:\n- dr_task_1\n- dr_task_2\n\nFile structure:\n- sessions/{conversation_id}.json contains the task index for this conversation.\n- tasks/{task_id}.json contains task metadata and report_path.\n- tasks/{task_id}.md contains the full report.\n[/Deep Research Runtime Context]\n\nUser request:\n用户 @agent 后面的内容",
+  "message": "[Deep Research Runtime Context]\nconversation_id: drs_xxx\nmounted_root: /workspace/extra/deep-research\nreferenced_task_ids:\n- dr_task_1\n- dr_task_2\n\nFile structure:\n- {conversation_id}/session.json contains the task index for this conversation.\n- {conversation_id}/{task_id}.json contains task metadata, report_ready, and report_path.\n- {conversation_id}/{task_id}.md contains the full report only after report_ready is true.\n[/Deep Research Runtime Context]\n\nUser request:\n用户 @agent 后面的内容",
   "metadata": {
     "source": "deep-research",
     "conversation_id": "drs_xxx",
@@ -182,9 +182,8 @@ Icarus 侧建议增加一个专用 group/agent：
 
 ```text
 deep-research/.data/agent-readable/
-  sessions/
-    drs_xxx.json
-  tasks/
+  drs_xxx/
+    session.json
     dr_task_1.json
     dr_task_1.md
     dr_task_2.json
@@ -201,7 +200,7 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
 
 ### Session Index
 
-`sessions/{conversation_id}.json` 示例：
+`{conversation_id}/session.json` 示例：
 
 ```json
 {
@@ -218,8 +217,9 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
       "provider": "openai",
       "model": "o3-deep-research",
       "prompt_preview": "分析中国 AI 教育硬件市场...",
-      "metadata_path": "/workspace/extra/deep-research/tasks/dr_task_1.json",
-      "report_path": "/workspace/extra/deep-research/tasks/dr_task_1.md"
+      "metadata_path": "/workspace/extra/deep-research/drs_xxx/dr_task_1.json",
+      "report_path": "/workspace/extra/deep-research/drs_xxx/dr_task_1.md",
+      "report_ready": true
     }
   ]
 }
@@ -227,7 +227,7 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
 
 ### Task Metadata
 
-`tasks/{task_id}.json` 示例：
+`{conversation_id}/{task_id}.json` 示例：
 
 ```json
 {
@@ -240,7 +240,9 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
   "prompt": "分析中国 AI 教育硬件市场...",
   "created_at": "2026-06-29T00:00:00.000Z",
   "updated_at": "2026-06-29T00:00:00.000Z",
-  "report_path": "/workspace/extra/deep-research/tasks/dr_task_1.md",
+  "metadata_path": "/workspace/extra/deep-research/drs_xxx/dr_task_1.json",
+  "report_path": "/workspace/extra/deep-research/drs_xxx/dr_task_1.md",
+  "report_ready": true,
   "source_count": 24,
   "sources": [
     {
@@ -253,7 +255,7 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
 
 ### Task Report
 
-`tasks/{task_id}.md` 保存完整报告正文，包含 sources。报告未完成时可以不存在，或写入简短占位内容。
+`{conversation_id}/{task_id}.md` 保存完整报告正文，包含 sources。报告未完成时不生成该文件，metadata 中 `report_ready` 为 `false` 且 `report_path` 为 `null`。
 
 ## Agent Runtime Context
 
@@ -270,9 +272,9 @@ referenced_task_ids:
 - dr_task_2
 
 File structure:
-- sessions/{conversation_id}.json contains the task index for this conversation.
-- tasks/{task_id}.json contains task metadata and report_path.
-- tasks/{task_id}.md contains the full report.
+- {conversation_id}/session.json contains the task index for this conversation.
+- {conversation_id}/{task_id}.json contains task metadata, report_ready, and report_path.
+- {conversation_id}/{task_id}.md contains the full report only after report_ready is true.
 [/Deep Research Runtime Context]
 
 User request:
@@ -359,7 +361,7 @@ User request:
 ## 建议实施顺序
 
 1. 增加 conversation/task/message 的 store v2 结构；旧 store 直接重置为空。
-2. 增加 `.data/agent-readable` 导出器，同步 conversation index 和 task report 文件。
+2. 增加 `.data/agent-readable` 导出器，同步 conversation 目录、task metadata 和已完成 task report 文件。
 3. 前端改造为 conversation 列表和单 conversation 内多 task thread。
 4. 报告卡片增加“引用”按钮和 composer 引用 chips。
 5. Icarus 增加 session-capable `/internal/agent/chat` API。
