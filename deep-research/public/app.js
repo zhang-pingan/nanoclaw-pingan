@@ -543,7 +543,7 @@ function renderThread() {
 
 function openViewer(task) {
   els.viewerTitle.textContent = task.title || 'Deep Research Report';
-  els.viewerContent.innerHTML = markdownToHtml(task.output_text || '');
+  els.viewerContent.innerHTML = task.output_html || markdownToHtml(task.output_text || '');
   els.downloadMd.href = `/api/research/${encodeURIComponent(task.id)}/export/markdown`;
   els.downloadPdf.href = `/api/research/${encodeURIComponent(task.id)}/export/pdf`;
   els.viewer.classList.add('open');

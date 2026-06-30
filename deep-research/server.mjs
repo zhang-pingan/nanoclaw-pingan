@@ -4,6 +4,7 @@ import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import MarkdownIt from 'markdown-it';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,6 +117,34 @@ const PROVIDERS = {
     models: [GPT_RESEARCHER_MODEL],
     defaultModel: GPT_RESEARCHER_MODEL,
   },
+};
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: false,
+});
+const defaultTableOpen =
+  markdownRenderer.renderer.rules.table_open ||
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+const defaultTableClose =
+  markdownRenderer.renderer.rules.table_close ||
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+const defaultLinkOpen =
+  markdownRenderer.renderer.rules.link_open ||
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+markdownRenderer.renderer.rules.table_open = (tokens, idx, options, env, self) =>
+  `<div class="markdown-table-wrap">${defaultTableOpen(tokens, idx, options, env, self)}`;
+markdownRenderer.renderer.rules.table_close = (tokens, idx, options, env, self) =>
+  `${defaultTableClose(tokens, idx, options, env, self)}</div>`;
+markdownRenderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const targetIndex = token.attrIndex('target');
+  const relIndex = token.attrIndex('rel');
+  if (targetIndex < 0) token.attrPush(['target', '_blank']);
+  else token.attrs[targetIndex][1] = '_blank';
+  if (relIndex < 0) token.attrPush(['rel', 'noreferrer']);
+  else token.attrs[relIndex][1] = 'noreferrer';
+  return defaultLinkOpen(tokens, idx, options, env, self);
 };
 const DEFAULT_PROVIDER = Object.hasOwn(
   PROVIDERS,
@@ -1354,6 +1383,7 @@ function updateTaskFromResponse(task, response, options = {}) {
 }
 
 function publicTask(task, options = {}) {
+  const outputMarkdown = options.full ? reportMarkdown(task) : '';
   return {
     id: task.id,
     conversation_id: task.conversationId,
@@ -1380,6 +1410,7 @@ function publicTask(task, options = {}) {
     incomplete_details: task.incomplete_details,
     sources: task.sources || [],
     output_text: options.full ? task.outputText || '' : undefined,
+    output_html: options.full && outputMarkdown ? markdownToHtml(outputMarkdown) : undefined,
   };
 }
 
@@ -1880,64 +1911,8 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
-function renderInlineMarkdown(value) {
-  return escapeHtml(value)
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_match, label, url) => {
-      const safeUrl = escapeHtml(url);
-      return `<a href="${safeUrl}" target="_blank" rel="noreferrer">${label}</a>`;
-    });
-}
-
 function markdownToHtml(markdown) {
-  const lines = markdown.split(/\r?\n/);
-  const html = [];
-  let listOpen = false;
-  let paragraph = [];
-
-  const flushParagraph = () => {
-    if (paragraph.length === 0) return;
-    html.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
-    paragraph = [];
-  };
-  const closeList = () => {
-    if (!listOpen) return;
-    html.push('</ul>');
-    listOpen = false;
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      flushParagraph();
-      closeList();
-      continue;
-    }
-    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      flushParagraph();
-      closeList();
-      const level = heading[1].length;
-      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
-      continue;
-    }
-    if (/^[-*]\s+/.test(trimmed)) {
-      flushParagraph();
-      if (!listOpen) {
-        html.push('<ul>');
-        listOpen = true;
-      }
-      html.push(
-        `<li>${renderInlineMarkdown(trimmed.replace(/^[-*]\s+/, ''))}</li>`,
-      );
-      continue;
-    }
-    paragraph.push(trimmed);
-  }
-
-  flushParagraph();
-  closeList();
-  return html.join('\n');
+  return markdownRenderer.render(String(markdown || ''));
 }
 
 function printableHtml(task) {
@@ -1954,7 +1929,13 @@ function printableHtml(task) {
     h3 { font-size: 17px; margin: 24px 0 8px; }
     p, li { font-size: 14px; }
     a { color: #2563eb; overflow-wrap: anywhere; }
-    @media print { body { margin: 18mm auto; max-width: none; padding: 0; } }
+    .markdown-table-wrap { border: 1px solid #d1d5db; border-radius: 8px; margin: 18px 0 24px; max-width: 100%; overflow-x: auto; }
+    table { border-collapse: collapse; min-width: 680px; width: 100%; }
+    th, td { border-bottom: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb; font-size: 12px; line-height: 1.42; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f3f4f6; font-weight: 700; }
+    th:last-child, td:last-child { border-right: 0; }
+    tr:last-child td { border-bottom: 0; }
+    @media print { body { margin: 18mm auto; max-width: none; padding: 0; } .markdown-table-wrap { overflow: visible; } table { min-width: 0; page-break-inside: auto; } tr { break-inside: avoid; page-break-inside: avoid; } th, td { font-size: 10px; padding: 6px 7px; } }
   </style>
 </head>
 <body>
@@ -1982,12 +1963,13 @@ async function handleExport(task, type, res) {
     return;
   }
   if (type === 'pdf') {
+    const html = printableHtml(targetTask);
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Content-Disposition': 'inline; filename="deep-research-report.html"',
       'Cache-Control': 'no-store',
     });
-    res.end(printableHtml(targetTask));
+    res.end(html);
     return;
   }
   sendJson(res, 404, { error: 'export type not found' });

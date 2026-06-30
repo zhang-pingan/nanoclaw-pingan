@@ -866,6 +866,47 @@ a {
   font-size: 15px;
 }
 
+.markdown-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 18px 0 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.markdown-table-wrap table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+
+.markdown-table-wrap th,
+.markdown-table-wrap td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-table-wrap th {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.markdown-table-wrap td:last-child,
+.markdown-table-wrap th:last-child {
+  border-right: 0;
+}
+
+.markdown-table-wrap tr:last-child td {
+  border-bottom: 0;
+}
+
 .viewer-content a {
   color: var(--accent);
   overflow-wrap: anywhere;
