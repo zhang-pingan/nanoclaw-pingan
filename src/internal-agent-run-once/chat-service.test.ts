@@ -73,7 +73,7 @@ describe('InternalAgentChatService', () => {
       message: '对比引用报告',
       deep_research: {
         conversation_id: 'drs_1',
-        mounted_root: '/workspace/extra/openai-deep-research',
+        mounted_root: '/workspace/extra/deep-research',
         referenced_task_ids: ['dr_1', 'dr_2'],
       },
       metadata: { trace_id: 'msg_1' },
@@ -95,7 +95,7 @@ describe('InternalAgentChatService', () => {
     });
     expect(input.prompt).toContain('conversation_id: drs_1');
     expect(input.prompt).toContain(
-      'mounted_root: /workspace/extra/openai-deep-research',
+      'mounted_root: /workspace/extra/deep-research',
     );
     expect(input.prompt).toContain('- dr_1');
     expect(input.prompt).toContain('User request:\n对比引用报告');

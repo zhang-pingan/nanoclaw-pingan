@@ -1,11 +1,11 @@
-# OpenAI Deep Research Web
+# Deep Research Web
 
-Standalone web app for running OpenAI Deep Research conversations.
+Standalone web app for running Deep Research conversations.
 
 ## Run
 
 ```bash
-cd openai-deep-research
+cd deep-research
 cp .env.example .env
 # edit .env and set OPENAI_API_KEY
 npm start
@@ -14,7 +14,7 @@ npm start
 Optional:
 
 ```bash
-PORT=8787 OPENAI_DEEP_RESEARCH_DEFAULT_MODEL=o3-deep-research npm start
+PORT=8787 DEEP_RESEARCH_DEFAULT_MODEL=o3-deep-research npm start
 ```
 
 Open `http://localhost:8787`.
@@ -25,7 +25,7 @@ The UI is conversation-based:
 - `@agent ...` routes the message to the Icarus Deep Research analyst agent
 - report cards can be referenced before sending `@agent`
 
-Runtime configuration is loaded from `openai-deep-research/.env`.
+Runtime configuration is loaded from `deep-research/.env`.
 Shell environment variables override values in `.env`.
 
 Provider-related options:
@@ -51,10 +51,10 @@ ICARUS_INTERNAL_API_TOKEN=...
 ICARUS_DEEP_RESEARCH_AGENT_CHAT_JID=web:deep-research-analyst
 ```
 
-The fixed `openai-deep-research/.data/agent-readable` directory is exported as
+The fixed `deep-research/.data/agent-readable` directory is exported as
 a sanitized, read-only view for Icarus containers. Icarus mounts it through the
 Deep Research analyst group's `additionalMounts` entry at
-`/workspace/extra/openai-deep-research`, so the host path must be allowed by
+`/workspace/extra/deep-research`, so the host path must be allowed by
 `~/.config/icarus/mount-allowlist.json`. Old v1 `tasks.json` data is not
 migrated; the app resets it to an empty v2 conversation store on startup.
 
@@ -63,18 +63,18 @@ migrated; the app resets it to an empty v2 conversation store on startup.
 The repo also includes local shell wrappers:
 
 ```bash
-local/shell/openai-deep-research/start.sh
-local/shell/openai-deep-research/stop.sh
-local/shell/openai-deep-research/restart.sh
+local/shell/deep-research/start.sh
+local/shell/deep-research/stop.sh
+local/shell/deep-research/restart.sh
 ```
 
 Optional environment variables:
 
 ```bash
-PORT=8788 HOST=127.0.0.1 local/shell/openai-deep-research/start.sh
+PORT=8788 HOST=127.0.0.1 local/shell/deep-research/start.sh
 ```
 
-The local scripts also read `openai-deep-research/.env` before starting or
+The local scripts also read `deep-research/.env` before starting or
 stopping the service.
 
 ## Notes

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-APP_DIR="$ROOT_DIR/openai-deep-research"
+APP_DIR="$ROOT_DIR/deep-research"
 APP_ENTRY="$APP_DIR/server.mjs"
 
 parse_env_value() {

@@ -40,8 +40,8 @@ loadEnvFile(ENV_FILE);
 loadEnvFile(ROOT_ENV_FILE);
 
 const DATA_DIR = path.join(__dirname, '.data');
-const STORE_FILE = process.env.OPENAI_DEEP_RESEARCH_TASK_STORE
-  ? path.resolve(__dirname, process.env.OPENAI_DEEP_RESEARCH_TASK_STORE)
+const STORE_FILE = process.env.DEEP_RESEARCH_TASK_STORE
+  ? path.resolve(__dirname, process.env.DEEP_RESEARCH_TASK_STORE)
   : path.join(DATA_DIR, 'tasks.json');
 const AGENT_READABLE_DIR = path.join(DATA_DIR, 'agent-readable');
 const STORE_VERSION = 2;
@@ -50,7 +50,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const OPENAI_BASE_URL =
   process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 const DEFAULT_OPENAI_MODEL =
-  process.env.OPENAI_DEEP_RESEARCH_DEFAULT_MODEL || 'o3-deep-research';
+  process.env.DEEP_RESEARCH_DEFAULT_MODEL || 'o3-deep-research';
 const OPENAI_MODELS = ['o3-deep-research', 'o4-mini-deep-research'];
 const SUPPORTED_OPENAI_MODELS = new Set(OPENAI_MODELS);
 const GPT_RESEARCHER_MODEL = 'gpt-researcher';
@@ -90,12 +90,12 @@ const ICARUS_INTERNAL_API_TOKEN = process.env.ICARUS_INTERNAL_API_TOKEN || '';
 const ICARUS_AGENT_CHAT_JID =
   process.env.ICARUS_DEEP_RESEARCH_AGENT_CHAT_JID ||
   'web:deep-research-analyst';
-const ICARUS_AGENT_MOUNTED_ROOT = '/workspace/extra/openai-deep-research';
+const ICARUS_AGENT_MOUNTED_ROOT = '/workspace/extra/deep-research';
 
 const PROVIDERS = {
   openai: {
     id: 'openai',
-    label: 'OpenAI Deep Research',
+    label: 'Deep Research',
     models: OPENAI_MODELS,
     defaultModel: DEFAULT_OPENAI_MODEL,
   },
@@ -1329,7 +1329,7 @@ async function handleCreateResearch(conversation, req, res) {
     max_tool_calls: maxToolCalls,
     include: ['web_search_call.action.sources'],
     metadata: {
-      app: 'openai-deep-research-web',
+      app: 'deep-research-web',
       local_task_id: task.id,
       local_conversation_id: conversation.id,
     },
@@ -1413,7 +1413,7 @@ async function handleAgentChat(conversation, req, res) {
         referenced_task_ids: referencedTaskIds,
       },
       metadata: {
-        source: 'openai-deep-research',
+        source: 'deep-research',
         trace_id: userMessage.id,
       },
     });
@@ -1774,7 +1774,7 @@ const server = http.createServer((req, res) => {
 
 server.on('error', (error) => {
   console.error(
-    `Failed to start OpenAI Deep Research web app: ${error.message}`,
+    `Failed to start Deep Research web app: ${error.message}`,
   );
   process.exitCode = 1;
 });
@@ -1790,6 +1790,6 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 
 server.listen(PORT, HOST, () => {
   console.log(
-    `OpenAI Deep Research web app listening on http://${HOST}:${PORT}`,
+    `Deep Research web app listening on http://${HOST}:${PORT}`,
   );
 });

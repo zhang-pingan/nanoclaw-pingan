@@ -5,7 +5,7 @@ const deepResearchContextSchema = z.object({
   mounted_root: z
     .string()
     .min(1)
-    .default('/workspace/extra/openai-deep-research'),
+    .default('/workspace/extra/deep-research'),
   referenced_task_ids: z.array(z.string().min(1)).optional().default([]),
 });
 

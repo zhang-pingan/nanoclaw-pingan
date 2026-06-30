@@ -2,13 +2,13 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-APP_DIR="$ROOT_DIR/openai-deep-research"
+APP_DIR="$ROOT_DIR/deep-research"
 APP_ENTRY="$APP_DIR/server.mjs"
 RUNNER_SCRIPT="$SCRIPT_DIR/run.sh"
 RUNTIME_DIR="$SCRIPT_DIR/.runtime"
-PID_FILE="$RUNTIME_DIR/openai-deep-research.pid"
-LOG_FILE="$RUNTIME_DIR/openai-deep-research.log"
-LAUNCHD_LABEL="com.icarus.openai-deep-research"
+PID_FILE="$RUNTIME_DIR/deep-research.pid"
+LOG_FILE="$RUNTIME_DIR/deep-research.log"
+LAUNCHD_LABEL="com.icarus.deep-research"
 LAUNCHD_DOMAIN="gui/$(id -u)"
 LAUNCHD_TARGET="$LAUNCHD_DOMAIN/$LAUNCHD_LABEL"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
@@ -61,11 +61,11 @@ ensure_runtime_dir() {
 
 ensure_app_ready() {
   if [ ! -f "$APP_ENTRY" ]; then
-    echo "openai deep research app not found: $APP_ENTRY"
+    echo "deep research app not found: $APP_ENTRY"
     return 1
   fi
   if [ ! -f "$RUNNER_SCRIPT" ]; then
-    echo "openai deep research runner not found: $RUNNER_SCRIPT"
+    echo "deep research runner not found: $RUNNER_SCRIPT"
     return 1
   fi
   ensure_node_bin
@@ -123,7 +123,7 @@ install_launch_agent_plist() {
   if [ ! -f "$LAUNCH_AGENT_PLIST" ] || ! cmp -s "$rendered" "$LAUNCH_AGENT_PLIST"; then
     cp "$rendered" "$LAUNCH_AGENT_PLIST"
     LAUNCH_AGENT_PLIST_CHANGED=1
-    echo "openai deep research launch agent plist updated"
+    echo "deep research launch agent plist updated"
   else
     LAUNCH_AGENT_PLIST_CHANGED=0
   fi
@@ -165,13 +165,13 @@ wait_for_service() {
 
   for attempt in $(seq 1 20); do
     if is_service_healthy; then
-      echo "openai deep research is healthy at http://$HOST:$PORT"
+      echo "deep research is healthy at http://$HOST:$PORT"
       return 0
     fi
     sleep 1
   done
 
-  echo "openai deep research failed health check at $CONFIG_URL"
+  echo "deep research failed health check at $CONFIG_URL"
   if is_launch_agent_loaded; then
     launchctl print "$LAUNCHD_TARGET" || true
   fi
@@ -238,7 +238,7 @@ stop_running_direct_service() {
     kill "$pid" 2>/dev/null || true
     wait_for_exit "$pid" || true
     rm -f "$PID_FILE"
-    echo "openai deep research direct process stopped (pid: $pid)"
+    echo "deep research direct process stopped (pid: $pid)"
     stopped=0
   done
 
@@ -253,12 +253,12 @@ start_service() {
     if [ "$LAUNCH_AGENT_PLIST_CHANGED" -eq 1 ]; then
       bootout_launch_agent
       bootstrap_launch_agent
-      echo "openai deep research launch agent reloaded"
+      echo "deep research launch agent reloaded"
     else
-      echo "openai deep research launch agent already loaded"
+      echo "deep research launch agent already loaded"
       if ! is_service_healthy; then
         kickstart_launch_agent
-        echo "openai deep research launch agent restarted"
+        echo "deep research launch agent restarted"
       fi
     fi
     wait_for_service
@@ -266,7 +266,7 @@ start_service() {
   fi
 
   bootstrap_launch_agent
-  echo "openai deep research launch agent loaded"
+  echo "deep research launch agent loaded"
   wait_for_service
 }
 
@@ -278,17 +278,17 @@ restart_service() {
     if [ "$LAUNCH_AGENT_PLIST_CHANGED" -eq 1 ]; then
       bootout_launch_agent
       bootstrap_launch_agent
-      echo "openai deep research launch agent reloaded"
+      echo "deep research launch agent reloaded"
     else
       kickstart_launch_agent
-      echo "openai deep research launch agent restarted"
+      echo "deep research launch agent restarted"
     fi
     wait_for_service
     return 0
   fi
 
   bootstrap_launch_agent
-  echo "openai deep research launch agent loaded"
+  echo "deep research launch agent loaded"
   wait_for_service
 }
 
@@ -297,7 +297,7 @@ stop_service() {
 
   if is_launch_agent_loaded; then
     bootout_launch_agent
-    echo "openai deep research launch agent stopped"
+    echo "deep research launch agent stopped"
     stopped=0
   fi
 
@@ -306,6 +306,6 @@ stop_service() {
   fi
 
   if [ "$stopped" -eq 1 ]; then
-    echo "openai deep research not running"
+    echo "deep research not running"
   fi
 }

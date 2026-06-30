@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前 `openai-deep-research` 以 `tasks.json` 作为核心状态存储，页面语义接近“一个对话框只有一个 research task”。这会限制后续围绕同一主题连续产出多个调研报告、对报告进行追问、让 agent 辅助优化下一轮调研提示词等工作流。
+当前 `deep-research` 以 `tasks.json` 作为核心状态存储，页面语义接近“一个对话框只有一个 research task”。这会限制后续围绕同一主题连续产出多个调研报告、对报告进行追问、让 agent 辅助优化下一轮调研提示词等工作流。
 
 目标是把 Deep Research 改造成“研究对话”形态：
 
@@ -26,7 +26,7 @@
 - 第一阶段不做报告章节级引用，只做 task 级引用。
 - 第一阶段不改 Deep Research 报告生成 provider 的核心逻辑。
 - 第一阶段不让 agent 修改 Deep Research 原始运行数据。
-- 第一阶段不直接把整个 `openai-deep-research` 项目目录挂载给 agent。
+- 第一阶段不直接把整个 `deep-research` 项目目录挂载给 agent。
 
 ## 数据模型
 
@@ -135,11 +135,11 @@ POST /internal/agent/chat
   "message": "用户 @agent 后面的内容",
   "deep_research": {
     "conversation_id": "drs_xxx",
-    "mounted_root": "/workspace/extra/openai-deep-research",
+    "mounted_root": "/workspace/extra/deep-research",
     "referenced_task_ids": ["dr_task_1", "dr_task_2"]
   },
   "metadata": {
-    "source": "openai-deep-research"
+    "source": "deep-research"
   }
 }
 ```
@@ -178,12 +178,12 @@ Icarus 侧建议增加一个专用 group/agent：
 
 ## 只读资料挂载
 
-不要把整个 `openai-deep-research` 项目目录挂进 agent 容器，避免暴露 `.env`、运行脚本、内部实现文件等。
+不要把整个 `deep-research` 项目目录挂进 agent 容器，避免暴露 `.env`、运行脚本、内部实现文件等。
 
 建议由 Deep Research 服务维护一个专门给 agent 读取的资料目录：
 
 ```text
-openai-deep-research/.data/agent-readable/
+deep-research/.data/agent-readable/
   sessions/
     drs_xxx.json
   tasks/
@@ -196,7 +196,7 @@ openai-deep-research/.data/agent-readable/
 Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 中，容器内路径为：
 
 ```text
-/workspace/extra/openai-deep-research
+/workspace/extra/deep-research
 ```
 
 挂载权限只读，并继续受 `~/.config/icarus/mount-allowlist.json` 控制。agent 只读取索引和报告，不直接修改 Deep Research 状态。
@@ -220,8 +220,8 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
       "provider": "openai",
       "model": "o3-deep-research",
       "prompt_preview": "分析中国 AI 教育硬件市场...",
-      "metadata_path": "/workspace/extra/openai-deep-research/tasks/dr_task_1.json",
-      "report_path": "/workspace/extra/openai-deep-research/tasks/dr_task_1.md"
+      "metadata_path": "/workspace/extra/deep-research/tasks/dr_task_1.json",
+      "report_path": "/workspace/extra/deep-research/tasks/dr_task_1.md"
     }
   ]
 }
@@ -242,7 +242,7 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
   "prompt": "分析中国 AI 教育硬件市场...",
   "created_at": "2026-06-29T00:00:00.000Z",
   "updated_at": "2026-06-29T00:00:00.000Z",
-  "report_path": "/workspace/extra/openai-deep-research/tasks/dr_task_1.md",
+  "report_path": "/workspace/extra/deep-research/tasks/dr_task_1.md",
   "source_count": 24,
   "sources": [
     {
@@ -266,7 +266,7 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
 ```text
 [Deep Research Runtime Context]
 conversation_id: drs_xxx
-mounted_root: /workspace/extra/openai-deep-research
+mounted_root: /workspace/extra/deep-research
 referenced_task_ids:
 - dr_task_1
 - dr_task_2
@@ -366,7 +366,7 @@ User request:
 4. 报告卡片增加“引用”按钮和 composer 引用 chips。
 5. Icarus 增加 session-capable `/internal/agent/chat` API。
 6. Deep Research 增加 `@agent` 路由，调用 Icarus agent chat API。
-7. Icarus 通过 analyst group 的 `additionalMounts` 挂载 agent-readable 目录为 `/workspace/extra/openai-deep-research`。
+7. Icarus 通过 analyst group 的 `additionalMounts` 挂载 agent-readable 目录为 `/workspace/extra/deep-research`。
 8. 增加端到端验证：创建多个报告、引用报告、`@agent` 追问、刷新页面后继续同一 agent session。
 
 ## 关键决策
