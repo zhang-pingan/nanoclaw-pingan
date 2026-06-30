@@ -148,6 +148,39 @@ a {
   background: #ececee;
 }
 
+.context-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 128px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 45px rgba(17, 24, 39, 0.14);
+  padding: 6px;
+}
+
+.context-menu[hidden] {
+  display: none;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.context-menu button:hover {
+  background: #fff1ef;
+}
+
 .app-shell {
   min-height: 100%;
   margin-left: 260px;
@@ -253,10 +286,13 @@ a {
   max-width: 640px;
   border-radius: 24px;
   background: var(--panel-strong);
-  padding: 16px 20px;
+  padding: 12px 20px;
   color: var(--text);
   font-size: 17px;
   line-height: 1.55;
+}
+
+.prompt-bubble-content {
   white-space: pre-wrap;
 }
 
@@ -292,6 +328,28 @@ a {
   border-color: #ffd7d3;
   background: #fff8f7;
   color: var(--danger);
+}
+
+.message-row.pending-message .agent-bubble {
+  color: var(--muted);
+}
+
+.pending-agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  font-size: 14px;
+}
+
+.pending-dot {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: spin 0.9s linear infinite;
 }
 
 .message-refs {
@@ -501,7 +559,8 @@ a {
   left: max(292px, calc(260px + (100vw - 260px - 960px) / 2 + 32px));
   z-index: 20;
   display: grid;
-  grid-template-columns: 1fr 52px;
+  grid-template-columns: 42px 1fr 52px;
+  gap: 4px;
   align-items: end;
   border: 1px solid var(--border);
   border-radius: 28px;
@@ -519,6 +578,89 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.agent-picker {
+  position: fixed;
+  right: max(32px, calc((100vw - 260px - 960px) / 2 + 32px));
+  bottom: 92px;
+  left: max(292px, calc(260px + (100vw - 260px - 960px) / 2 + 32px));
+  z-index: 24;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 18px 55px rgba(17, 24, 39, 0.14);
+  padding: 6px;
+}
+
+.agent-picker[hidden] {
+  display: none;
+}
+
+.agent-picker.with-reference-bar {
+  bottom: 132px;
+}
+
+.agent-option {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  align-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.agent-option:hover,
+.agent-option.active {
+  background: var(--panel);
+}
+
+.agent-option-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  background: #111113;
+  color: #fff;
+  font-weight: 800;
+}
+
+.agent-option-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.agent-option-main strong,
+.agent-option-main span,
+.agent-option-key {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-option-main strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.agent-option-main span,
+.agent-option-key {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agent-option-key {
+  max-width: 210px;
 }
 
 .reference-chip {
@@ -549,6 +691,27 @@ a {
   border: 0;
   border-radius: 999px;
   cursor: pointer;
+}
+
+.agent-trigger-btn {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.agent-trigger-btn:hover,
+.agent-trigger-btn:focus-visible {
+  background: var(--panel);
+  color: var(--text);
+  outline: 0;
 }
 
 .composer textarea {
@@ -751,6 +914,24 @@ a {
     right: 14px;
     left: 14px;
     bottom: 14px;
+  }
+
+  .agent-picker {
+    right: 14px;
+    left: 14px;
+    bottom: 78px;
+  }
+
+  .agent-picker.with-reference-bar {
+    bottom: 116px;
+  }
+
+  .agent-option {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .agent-option-key {
+    display: none;
   }
 
   .reference-bar {

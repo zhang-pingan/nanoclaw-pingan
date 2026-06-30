@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前 `deep-research` 以 `tasks.json` 作为核心状态存储，页面语义接近“一个对话框只有一个 research task”。这会限制后续围绕同一主题连续产出多个调研报告、对报告进行追问、让 agent 辅助优化下一轮调研提示词等工作流。
+当前 `deep-research` 已从单文件 `tasks.json` 演进为按 conversation 拆分的 v3 目录 store，页面语义从“一个对话框只有一个 research task”转向“一个 conversation 内可连续产出多个 research task”。这支持后续围绕同一主题连续产出多个调研报告、对报告进行追问、让 agent 辅助优化下一轮调研提示词等工作流。
 
 目标是把 Deep Research 改造成“研究对话”形态：
 
@@ -19,7 +19,7 @@
 3. 支持 conversation 与 Icarus agent session 一对一绑定。
 4. 支持 report task 的“引用”交互，用户可在调用 agent 时显式引用一个或多个 task。
 5. 避免把所有报告内容直接塞进 LLM 上下文，改为通过容器只读挂载和文件索引按需读取。
-6. 旧 `tasks.json` 数据不做迁移；切换到 v2 后发现旧结构即重置为空 store。
+6. 旧 `tasks.json` 数据不做迁移；切换到 v3 目录 store 后直接删除历史数据并从空 store 开始。
 
 ## 非目标
 
@@ -333,14 +333,14 @@ User request:
 
 ## 旧数据处理
 
-旧版本只有 `tasks.json`，没有 conversation 概念。最终实现不迁移旧数据，直接丢弃旧 store。
+旧版本只有 `tasks.json`，没有目录化 conversation store。最终实现不迁移旧数据，直接丢弃旧 store。
 
 处理规则：
 
-1. 如果 store version 不是 v2，或缺少 `conversations/tasks/messages` 数组，启动时重置为空 v2 store。
+1. 默认内部 store 位于 `.data/store`，版本为 v3，并按 conversation 目录拆分。
 2. 不创建默认 conversation。
 3. 不为旧 task 生成 message。
-4. 同步清空并重建 `.data/agent-readable`。
+4. 启动时删除旧 `.data/tasks.json`，并同步清空重建 `.data/agent-readable`。
 
 ## 安全边界
 
@@ -360,7 +360,7 @@ User request:
 
 ## 建议实施顺序
 
-1. 增加 conversation/task/message 的 store v2 结构；旧 store 直接重置为空。
+1. 增加 conversation/task/message 的 v3 目录 store；旧 `tasks.json` store 直接删除。
 2. 增加 `.data/agent-readable` 导出器，同步 conversation 目录、task metadata 和已完成 task report 文件。
 3. 前端改造为 conversation 列表和单 conversation 内多 task thread。
 4. 报告卡片增加“引用”按钮和 composer 引用 chips。

@@ -47,7 +47,9 @@
     </section>
 
     <div class="reference-bar" id="reference-bar" hidden></div>
+    <div class="agent-picker" id="agent-picker" role="listbox" aria-label="选择 Agent" hidden></div>
     <form class="composer" id="composer">
+      <button class="agent-trigger-btn" id="agent-trigger-btn" type="button" aria-label="选择 Agent" aria-haspopup="listbox" aria-controls="agent-picker" aria-expanded="false" title="选择 Agent (@)">@</button>
       <textarea id="prompt-input" rows="1" placeholder="输入研究任务，或 @agent 追问"></textarea>
       <button class="send-btn" id="send-btn" type="submit" aria-label="发送">
         <span></span>
@@ -70,6 +72,10 @@
       </header>
       <article class="viewer-content" id="viewer-content"></article>
     </div>
+  </div>
+
+  <div class="context-menu" id="conversation-menu" hidden>
+    <button type="button" data-delete-conversation>删除对话</button>
   </div>
 
   <script src="/app.js" type="module"></script>

@@ -40,11 +40,13 @@ loadEnvFile(ENV_FILE);
 loadEnvFile(ROOT_ENV_FILE);
 
 const DATA_DIR = path.join(__dirname, '.data');
-const STORE_FILE = process.env.DEEP_RESEARCH_TASK_STORE
-  ? path.resolve(__dirname, process.env.DEEP_RESEARCH_TASK_STORE)
-  : path.join(DATA_DIR, 'tasks.json');
+const STORE_DIR = process.env.DEEP_RESEARCH_STORE_DIR
+  ? path.resolve(__dirname, process.env.DEEP_RESEARCH_STORE_DIR)
+  : path.join(DATA_DIR, 'store');
+const STORE_INDEX_FILE = path.join(STORE_DIR, 'index.json');
+const LEGACY_TASK_STORE_FILE = path.join(DATA_DIR, 'tasks.json');
 const AGENT_READABLE_DIR = path.join(DATA_DIR, 'agent-readable');
-const STORE_VERSION = 2;
+const STORE_VERSION = 3;
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '127.0.0.1';
 const OPENAI_BASE_URL =
@@ -128,10 +130,12 @@ const TERMINAL_STATUSES = new Set([
   'incomplete',
 ]);
 const POLL_THROTTLE_MS = 2500;
+const PROCESS_STARTED_AT_MS = Date.now();
 
 const conversations = new Map();
 const tasks = new Map();
 const messages = new Map();
+const taskRuntime = new Map();
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -250,6 +254,30 @@ function touchConversation(conversation) {
   conversation.updatedAt = new Date().toISOString();
 }
 
+function clearTaskRuntime(taskId) {
+  const runtime = taskRuntime.get(taskId);
+  if (runtime?.abortController) runtime.abortController.abort();
+  if (runtime) runtime.cancelRequested = true;
+  taskRuntime.delete(taskId);
+}
+
+function deleteConversation(conversationId) {
+  loadStoreFromDiskQuietly({ initialize: true });
+  const conversation = conversations.get(conversationId);
+  if (!conversation) return false;
+
+  for (const taskId of conversation.taskIds || []) {
+    clearTaskRuntime(taskId);
+    tasks.delete(taskId);
+  }
+  for (const messageId of conversation.messageIds || []) {
+    messages.delete(messageId);
+  }
+  conversations.delete(conversation.id);
+  persistStoreQuietly();
+  return true;
+}
+
 function addMessage(conversation, input) {
   const now = new Date().toISOString();
   const message = {
@@ -320,7 +348,6 @@ function persistableTask(task) {
     fileCalls: Array.isArray(task.fileCalls) ? task.fileCalls : [],
     mcpCalls: Array.isArray(task.mcpCalls) ? task.mcpCalls : [],
     codeCalls: Array.isArray(task.codeCalls) ? task.codeCalls : [],
-    outputText: task.outputText || '',
     annotations: Array.isArray(task.annotations) ? task.annotations : [],
     usage: task.usage || null,
     error: task.error || null,
@@ -416,6 +443,52 @@ function writeJsonFileAtomic(filePath, payload) {
   fs.renameSync(tempFile, filePath);
 }
 
+function writeTextFileAtomic(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempFile = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, content, 'utf8');
+  fs.renameSync(tempFile, filePath);
+}
+
+function runtimeForTask(taskId) {
+  let runtime = taskRuntime.get(taskId);
+  if (!runtime) {
+    runtime = {};
+    taskRuntime.set(taskId, runtime);
+  }
+  return runtime;
+}
+
+function conversationStoreDir(conversationId, rootDir = STORE_DIR) {
+  return path.join(rootDir, 'conversations', conversationId);
+}
+
+function conversationStoreFile(conversationId, rootDir = STORE_DIR) {
+  return path.join(
+    conversationStoreDir(conversationId, rootDir),
+    'conversation.json',
+  );
+}
+
+function messagesStoreFile(conversationId, rootDir = STORE_DIR) {
+  return path.join(
+    conversationStoreDir(conversationId, rootDir),
+    'messages.json',
+  );
+}
+
+function tasksStoreFile(conversationId, rootDir = STORE_DIR) {
+  return path.join(conversationStoreDir(conversationId, rootDir), 'tasks.json');
+}
+
+function reportStoreFile(task, rootDir = STORE_DIR) {
+  return path.join(
+    conversationStoreDir(task.conversationId, rootDir),
+    'reports',
+    `${task.id}.md`,
+  );
+}
+
 function isReportReady(task) {
   return task.status === 'completed' && !!safeText(task.outputText);
 }
@@ -509,14 +582,64 @@ function exportAgentReadable() {
 }
 
 function persistStore() {
+  const updatedAt = new Date().toISOString();
+  const tempDir = `${STORE_DIR}.${process.pid}.tmp`;
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(tempDir, 'conversations'), { recursive: true });
+
+  const conversationItems = [...conversations.values()].map(
+    persistableConversation,
+  );
   const payload = {
     version: STORE_VERSION,
-    updated_at: new Date().toISOString(),
-    conversations: [...conversations.values()].map(persistableConversation),
-    tasks: [...tasks.values()].map(persistableTask),
-    messages: [...messages.values()].map(persistableMessage),
+    updated_at: updatedAt,
+    conversation_ids: conversationItems.map((conversation) => conversation.id),
+    conversations: conversationItems.map((conversation) => ({
+      id: conversation.id,
+      title: conversation.title,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+      taskIds: conversation.taskIds,
+      messageIds: conversation.messageIds,
+    })),
   };
-  writeJsonFileAtomic(STORE_FILE, payload);
+  writeJsonFileAtomic(path.join(tempDir, 'index.json'), payload);
+
+  for (const conversation of conversations.values()) {
+    const conversationDir = conversationStoreDir(conversation.id, tempDir);
+    fs.mkdirSync(path.join(conversationDir, 'reports'), { recursive: true });
+    writeJsonFileAtomic(
+      conversationStoreFile(conversation.id, tempDir),
+      persistableConversation(conversation),
+    );
+
+    const conversationMessages = conversation.messageIds
+      .map((messageId) => messages.get(messageId))
+      .filter(Boolean)
+      .map(persistableMessage);
+    writeJsonFileAtomic(
+      messagesStoreFile(conversation.id, tempDir),
+      conversationMessages,
+    );
+
+    const conversationTasks = conversation.taskIds
+      .map((taskId) => tasks.get(taskId))
+      .filter(Boolean);
+    writeJsonFileAtomic(
+      tasksStoreFile(conversation.id, tempDir),
+      conversationTasks.map(persistableTask),
+    );
+
+    for (const task of conversationTasks) {
+      if (safeText(task.outputText)) {
+        writeTextFileAtomic(reportStoreFile(task, tempDir), task.outputText);
+      }
+    }
+  }
+
+  fs.mkdirSync(path.dirname(STORE_DIR), { recursive: true });
+  fs.rmSync(STORE_DIR, { recursive: true, force: true });
+  fs.renameSync(tempDir, STORE_DIR);
   exportAgentReadable();
 }
 
@@ -528,7 +651,7 @@ function persistStoreQuietly() {
   }
 }
 
-function resetStoreBecauseV1OrInvalid(reason) {
+function resetStore(reason) {
   conversations.clear();
   tasks.clear();
   messages.clear();
@@ -536,48 +659,169 @@ function resetStoreBecauseV1OrInvalid(reason) {
   persistStoreQuietly();
 }
 
-function loadPersistedStore() {
-  if (!fs.existsSync(STORE_FILE)) {
-    persistStoreQuietly();
+function clearPersistentState() {
+  conversations.clear();
+  tasks.clear();
+  messages.clear();
+}
+
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function readJsonArrayFile(filePath) {
+  const payload = readJsonFile(filePath);
+  if (!Array.isArray(payload)) {
+    throw new Error(`${path.basename(filePath)} must contain an array`);
+  }
+  return payload;
+}
+
+function removeLegacyTaskStoreQuietly() {
+  if (!fs.existsSync(LEGACY_TASK_STORE_FILE)) return;
+  try {
+    fs.rmSync(LEGACY_TASK_STORE_FILE, { force: true });
+    console.warn(
+      'Removed legacy Deep Research tasks.json; v3 store does not migrate history',
+    );
+  } catch (error) {
+    console.error(
+      `Failed to remove legacy Deep Research tasks.json: ${error.message}`,
+    );
+  }
+}
+
+function backupCorruptStoreQuietly() {
+  if (!fs.existsSync(STORE_DIR)) return;
+  try {
+    fs.renameSync(STORE_DIR, `${STORE_DIR}.corrupt-${Date.now()}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+function taskDateMs(value) {
+  const timestamp = Date.parse(safeText(value));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function markTaskFailedAfterRestart(task, message) {
+  task.status = 'failed';
+  task.error = { message };
+  task.updatedAt = new Date().toISOString();
+  task.progress = buildProgress(null, task);
+  const conversation = conversations.get(task.conversationId);
+  if (conversation) touchConversation(conversation);
+}
+
+function markUnrecoverableTasksAfterRestart() {
+  let changed = false;
+  for (const task of tasks.values()) {
+    if (TERMINAL_STATUSES.has(task.status)) continue;
+
+    const existedBeforeCurrentProcess =
+      taskDateMs(task.createdAt) < PROCESS_STARTED_AT_MS &&
+      taskDateMs(task.updatedAt) < PROCESS_STARTED_AT_MS;
+    if (!existedBeforeCurrentProcess) continue;
+
+    if (task.provider === 'gpt-researcher') {
+      markTaskFailedAfterRestart(
+        task,
+        'GPT Researcher task was interrupted by a Deep Research server restart and cannot be resumed.',
+      );
+      changed = true;
+      continue;
+    }
+
+    if (!task.responseId) {
+      markTaskFailedAfterRestart(
+        task,
+        'Deep Research task was interrupted before a response id was saved and cannot be resumed.',
+      );
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function loadStoreFromDisk(options = {}) {
+  const initialize = options.initialize === true;
+  const exportReadable = options.exportReadable === true;
+  const log = options.log === true;
+  removeLegacyTaskStoreQuietly();
+  clearPersistentState();
+
+  if (!fs.existsSync(STORE_INDEX_FILE)) {
+    if (initialize) persistStoreQuietly();
     return;
   }
+
   let payload;
   try {
-    payload = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
+    payload = readJsonFile(STORE_INDEX_FILE);
+    if (
+      payload?.version !== STORE_VERSION ||
+      !Array.isArray(payload.conversation_ids)
+    ) {
+      throw new Error('invalid v3 store index');
+    }
   } catch (error) {
-    const backupFile = `${STORE_FILE}.corrupt-${Date.now()}`;
-    try {
-      fs.renameSync(STORE_FILE, backupFile);
-    } catch {
-      /* ignore */
-    }
-    resetStoreBecauseV1OrInvalid(`invalid JSON (${error.message})`);
+    backupCorruptStoreQuietly();
+    resetStore(`invalid store index (${error.message})`);
     return;
   }
-  if (
-    payload?.version !== STORE_VERSION ||
-    !Array.isArray(payload.conversations) ||
-    !Array.isArray(payload.tasks) ||
-    !Array.isArray(payload.messages)
-  ) {
-    resetStoreBecauseV1OrInvalid('old tasks.json data is not migrated');
+
+  let shouldRewriteStore = false;
+  try {
+    for (const conversationId of payload.conversation_ids) {
+      const id = safeText(conversationId);
+      if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+        throw new Error(`invalid conversation id in store index: ${id}`);
+      }
+      if (!fs.existsSync(conversationStoreFile(id))) {
+        shouldRewriteStore = true;
+        continue;
+      }
+
+      const conversation = normalizeStoredConversation(
+        readJsonFile(conversationStoreFile(id)),
+      );
+      if (!conversation || conversation.id !== id) {
+        throw new Error(`invalid conversation store: ${id}`);
+      }
+      conversations.set(conversation.id, conversation);
+
+      const taskItems = fs.existsSync(tasksStoreFile(id))
+        ? readJsonArrayFile(tasksStoreFile(id))
+        : [];
+      if (!fs.existsSync(tasksStoreFile(id))) shouldRewriteStore = true;
+      for (const item of taskItems) {
+        const task = normalizeStoredTask(item);
+        if (!task || task.conversationId !== conversation.id) continue;
+        const reportFile = reportStoreFile(task);
+        if (fs.existsSync(reportFile)) {
+          task.outputText = fs.readFileSync(reportFile, 'utf8');
+        }
+        tasks.set(task.id, task);
+      }
+
+      const messageItems = fs.existsSync(messagesStoreFile(id))
+        ? readJsonArrayFile(messagesStoreFile(id))
+        : [];
+      if (!fs.existsSync(messagesStoreFile(id))) shouldRewriteStore = true;
+      for (const item of messageItems) {
+        const message = normalizeStoredMessage(item);
+        if (message && message.conversationId === conversation.id) {
+          messages.set(message.id, message);
+        }
+      }
+    }
+  } catch (error) {
+    backupCorruptStoreQuietly();
+    resetStore(`invalid conversation store (${error.message})`);
     return;
   }
-  for (const item of payload.conversations) {
-    const conversation = normalizeStoredConversation(item);
-    if (conversation) conversations.set(conversation.id, conversation);
-  }
-  for (const item of payload.tasks) {
-    const task = normalizeStoredTask(item);
-    if (task && conversations.has(task.conversationId))
-      tasks.set(task.id, task);
-  }
-  for (const item of payload.messages) {
-    const message = normalizeStoredMessage(item);
-    if (message && conversations.has(message.conversationId)) {
-      messages.set(message.id, message);
-    }
-  }
+
   for (const conversation of conversations.values()) {
     conversation.taskIds = conversation.taskIds.filter((taskId) =>
       tasks.has(taskId),
@@ -586,10 +830,32 @@ function loadPersistedStore() {
       messages.has(messageId),
     );
   }
-  console.log(
-    `Loaded ${conversations.size} Deep Research conversation(s), ${tasks.size} task(s)`,
-  );
+  if (markUnrecoverableTasksAfterRestart()) shouldRewriteStore = true;
+  if (log) {
+    console.log(
+      `Loaded ${conversations.size} Deep Research conversation(s), ${tasks.size} task(s)`,
+    );
+  }
+  if (shouldRewriteStore) persistStoreQuietly();
+  if (exportReadable) exportAgentReadable();
+}
+
+function loadStoreFromDiskQuietly(options = {}) {
+  try {
+    loadStoreFromDisk(options);
+  } catch (error) {
+    console.error(`Failed to load Deep Research store: ${error.message}`);
+    resetStore(`failed to load store (${error.message})`);
+  }
+}
+
+function updateStoredTask(taskId, updater) {
+  loadStoreFromDiskQuietly();
+  const task = tasks.get(taskId);
+  if (!task) return null;
+  const result = updater(task) || task;
   persistStoreQuietly();
+  return result;
 }
 
 async function openaiRequest(endpoint, options = {}) {
@@ -1059,7 +1325,7 @@ function buildProgress(response, task) {
   ];
 }
 
-function updateTaskFromResponse(task, response) {
+function updateTaskFromResponse(task, response, options = {}) {
   const extracted = extractOutput(response);
   const sources = extractSources(response, extracted);
   task.status = response.status || task.status;
@@ -1084,7 +1350,7 @@ function updateTaskFromResponse(task, response) {
     }
     touchConversation(conversation);
   }
-  persistStoreQuietly();
+  if (options.persist !== false) persistStoreQuietly();
 }
 
 function publicTask(task, options = {}) {
@@ -1161,31 +1427,37 @@ async function refreshTask(task) {
   if (task.provider !== 'openai') return task;
   if (!task.responseId || TERMINAL_STATUSES.has(task.status)) return task;
   const now = Date.now();
-  if (task.pollPromise) return task.pollPromise;
-  if (task.lastPollAt && now - task.lastPollAt < POLL_THROTTLE_MS) return task;
+  const runtime = runtimeForTask(task.id);
+  if (runtime.pollPromise) return runtime.pollPromise;
+  if (runtime.lastPollAt && now - runtime.lastPollAt < POLL_THROTTLE_MS)
+    return task;
 
-  task.lastPollAt = now;
-  task.pollPromise = openaiRequest(
+  runtime.lastPollAt = now;
+  runtime.pollPromise = openaiRequest(
     `/responses/${encodeURIComponent(task.responseId)}`,
   )
     .then((response) => {
-      updateTaskFromResponse(task, response);
-      return task;
+      const updatedTask = updateStoredTask(task.id, (storedTask) => {
+        storedTask.responseId = storedTask.responseId || task.responseId;
+        updateTaskFromResponse(storedTask, response, { persist: false });
+      });
+      return updatedTask || task;
     })
     .catch((error) => {
-      task.error = {
-        message: error.message,
-        body: error.body || null,
-      };
-      task.updatedAt = new Date().toISOString();
-      persistStoreQuietly();
+      updateStoredTask(task.id, (storedTask) => {
+        storedTask.error = {
+          message: error.message,
+          body: error.body || null,
+        };
+        storedTask.updatedAt = new Date().toISOString();
+      });
       return task;
     })
     .finally(() => {
-      task.pollPromise = null;
+      runtime.pollPromise = null;
     });
 
-  return task.pollPromise;
+  return runtime.pollPromise;
 }
 
 async function refreshConversationTasks(conversation) {
@@ -1251,19 +1523,25 @@ function buildGptResearcherPayload(task) {
 
 async function runGptResearcherTask(task) {
   const abortController = new AbortController();
-  task.abortController = abortController;
-  task.status = 'running';
-  task.updatedAt = new Date().toISOString();
-  task.progress = buildProgress(null, task);
-  persistStoreQuietly();
+  const runtime = runtimeForTask(task.id);
+  runtime.abortController = abortController;
+  runtime.cancelRequested = false;
+  const runningTask = updateStoredTask(task.id, (storedTask) => {
+    storedTask.status = 'running';
+    storedTask.updatedAt = new Date().toISOString();
+    storedTask.progress = buildProgress(null, storedTask);
+  });
+  if (!runningTask) {
+    runtime.abortController = null;
+    return;
+  }
 
   try {
     const response = await gptResearcherRequest('/report/', {
       method: 'POST',
-      body: JSON.stringify(buildGptResearcherPayload(task)),
+      body: JSON.stringify(buildGptResearcherPayload(runningTask)),
       signal: abortController.signal,
     });
-    if (task.status === 'cancelled') return;
 
     const extracted = extractGptResearcherReport(response);
     if (!safeText(extracted.outputText)) {
@@ -1272,44 +1550,53 @@ async function runGptResearcherTask(task) {
       throw error;
     }
 
-    task.responseId = safeText(response?.research_id) || task.id;
-    task.status = 'completed';
-    task.outputText = extracted.outputText;
-    task.sources = extracted.sources;
-    task.webCalls = extracted.sources.map((source) => ({
-      type: 'gpt_researcher_source',
-      source,
-    }));
-    task.rawResponse = response;
-    task.usage = response?.research_costs
-      ? { research_costs: response.research_costs }
-      : null;
-    task.title = makeTitle(task.prompt, task.outputText);
-    task.updatedAt = new Date().toISOString();
-    task.progress = buildProgress(null, task);
-    const conversation = conversations.get(task.conversationId);
-    if (conversation) {
-      if (conversation.title === '新研究对话') conversation.title = task.title;
-      touchConversation(conversation);
-    }
-    persistStoreQuietly();
+    updateStoredTask(task.id, (storedTask) => {
+      if (storedTask.status === 'cancelled' || runtime.cancelRequested) return;
+      storedTask.responseId = safeText(response?.research_id) || storedTask.id;
+      storedTask.status = 'completed';
+      storedTask.outputText = extracted.outputText;
+      storedTask.sources = extracted.sources;
+      storedTask.webCalls = extracted.sources.map((source) => ({
+        type: 'gpt_researcher_source',
+        source,
+      }));
+      storedTask.rawResponse = response;
+      storedTask.usage = response?.research_costs
+        ? { research_costs: response.research_costs }
+        : null;
+      storedTask.title = makeTitle(storedTask.prompt, storedTask.outputText);
+      storedTask.updatedAt = new Date().toISOString();
+      storedTask.progress = buildProgress(null, storedTask);
+      const conversation = conversations.get(storedTask.conversationId);
+      if (conversation) {
+        if (conversation.title === '新研究对话') {
+          conversation.title = storedTask.title;
+        }
+        touchConversation(conversation);
+      }
+    });
   } catch (error) {
-    if (error.name === 'AbortError' || task.status === 'cancelled') {
-      task.status = 'cancelled';
-      task.error = null;
-    } else {
-      task.status = 'failed';
-      task.error = {
-        message: error.message,
-        body: error.body || null,
-      };
-    }
-    task.updatedAt = new Date().toISOString();
-    task.progress = buildProgress(null, task);
-    persistStoreQuietly();
+    updateStoredTask(task.id, (storedTask) => {
+      if (
+        error.name === 'AbortError' ||
+        storedTask.status === 'cancelled' ||
+        runtime.cancelRequested
+      ) {
+        storedTask.status = 'cancelled';
+        storedTask.error = null;
+      } else {
+        storedTask.status = 'failed';
+        storedTask.error = {
+          message: error.message,
+          body: error.body || null,
+        };
+      }
+      storedTask.updatedAt = new Date().toISOString();
+      storedTask.progress = buildProgress(null, storedTask);
+    });
   } finally {
-    task.abortController = null;
-    persistStoreQuietly();
+    runtime.abortController = null;
+    runtime.cancelRequested = false;
   }
 }
 
@@ -1327,6 +1614,12 @@ async function handleCreateResearch(conversation, req, res) {
   const prompt = safeText(body.prompt);
   if (!prompt) {
     sendJson(res, 400, { error: 'prompt required' });
+    return;
+  }
+  loadStoreFromDiskQuietly();
+  conversation = conversations.get(conversation.id);
+  if (!conversation) {
+    sendJson(res, 404, { error: 'conversation not found' });
     return;
   }
 
@@ -1397,22 +1690,30 @@ async function handleCreateResearch(conversation, req, res) {
       body: JSON.stringify(payload),
     });
   } catch (error) {
-    task.status = 'failed';
-    task.error = {
-      message: error.message,
-      body: error.body || null,
-    };
-    task.updatedAt = new Date().toISOString();
-    task.progress = buildProgress(null, task);
-    persistStoreQuietly();
+    updateStoredTask(task.id, (storedTask) => {
+      storedTask.status = 'failed';
+      storedTask.error = {
+        message: error.message,
+        body: error.body || null,
+      };
+      storedTask.updatedAt = new Date().toISOString();
+      storedTask.progress = buildProgress(null, storedTask);
+    });
     throw error;
   }
 
-  task.responseId = response.id;
-  updateTaskFromResponse(task, response);
+  const updatedTask = updateStoredTask(task.id, (storedTask) => {
+    storedTask.responseId = response.id;
+    updateTaskFromResponse(storedTask, response, { persist: false });
+  });
+  const updatedConversation = conversations.get(conversation.id);
+  if (!updatedTask || !updatedConversation) {
+    sendJson(res, 404, { error: 'task no longer exists' });
+    return;
+  }
   sendJson(res, 200, {
-    conversation: publicConversation(conversation, { full: true }),
-    task: publicTask(task),
+    conversation: publicConversation(updatedConversation, { full: true }),
+    task: publicTask(updatedTask),
   });
 }
 
@@ -1442,6 +1743,12 @@ async function handleAgentChat(conversation, req, res) {
   const userText = stripAgentPrefix(body.content || body.message);
   if (!userText) {
     sendJson(res, 400, { error: 'agent message required' });
+    return;
+  }
+  loadStoreFromDiskQuietly();
+  conversation = conversations.get(conversation.id);
+  if (!conversation) {
+    sendJson(res, 404, { error: 'conversation not found' });
     return;
   }
   const referencedTaskIds = normalizeReferencedTaskIds(
@@ -1475,9 +1782,15 @@ async function handleAgentChat(conversation, req, res) {
         referenced_task_ids: referencedTaskIds,
       },
     });
-    conversation.agentSessionId =
-      result.session_id || conversation.agentSessionId;
-    addMessage(conversation, {
+    loadStoreFromDiskQuietly();
+    const currentConversation = conversations.get(conversation.id);
+    if (!currentConversation) {
+      sendJson(res, 404, { error: 'conversation no longer exists' });
+      return;
+    }
+    currentConversation.agentSessionId =
+      result.session_id || currentConversation.agentSessionId;
+    addMessage(currentConversation, {
       role: 'assistant',
       kind: 'agent_reply',
       content: result.text || '',
@@ -1485,34 +1798,45 @@ async function handleAgentChat(conversation, req, res) {
     });
     persistStoreQuietly();
     sendJson(res, 200, {
-      conversation: publicConversation(conversation, { full: true }),
+      conversation: publicConversation(currentConversation, { full: true }),
       agent: result,
     });
   } catch (error) {
-    addMessage(conversation, {
-      role: 'assistant',
-      kind: 'agent_error',
-      content: error.message || 'Agent request failed',
-      referencedTaskIds,
-      status: 'error',
-    });
-    persistStoreQuietly();
+    loadStoreFromDiskQuietly();
+    const currentConversation = conversations.get(conversation.id);
+    if (currentConversation) {
+      addMessage(currentConversation, {
+        role: 'assistant',
+        kind: 'agent_error',
+        content: error.message || 'Agent request failed',
+        referencedTaskIds,
+        status: 'error',
+      });
+      persistStoreQuietly();
+    }
     sendJson(res, error.statusCode || 502, {
       error: error.message || 'Agent request failed',
       detail: error.body || null,
-      conversation: publicConversation(conversation, { full: true }),
+      conversation: currentConversation
+        ? publicConversation(currentConversation, { full: true })
+        : null,
     });
   }
 }
 
 async function handleCancelTask(task, res) {
   if (task.provider === 'gpt-researcher') {
-    if (task.abortController) task.abortController.abort();
-    task.status = 'cancelled';
-    task.updatedAt = new Date().toISOString();
-    task.progress = buildProgress(null, task);
-    persistStoreQuietly();
-    sendJson(res, 200, { task: publicTask(task, { full: true }) });
+    const runtime = runtimeForTask(task.id);
+    runtime.cancelRequested = true;
+    if (runtime.abortController) runtime.abortController.abort();
+    const updatedTask = updateStoredTask(task.id, (storedTask) => {
+      storedTask.status = 'cancelled';
+      storedTask.updatedAt = new Date().toISOString();
+      storedTask.progress = buildProgress(null, storedTask);
+    });
+    sendJson(res, 200, {
+      task: publicTask(updatedTask || task, { full: true }),
+    });
     return;
   }
 
@@ -1524,8 +1848,10 @@ async function handleCancelTask(task, res) {
     `/responses/${encodeURIComponent(task.responseId)}/cancel`,
     { method: 'POST', body: '{}' },
   );
-  updateTaskFromResponse(task, response);
-  sendJson(res, 200, { task: publicTask(task, { full: true }) });
+  const updatedTask = updateStoredTask(task.id, (storedTask) => {
+    updateTaskFromResponse(storedTask, response, { persist: false });
+  });
+  sendJson(res, 200, { task: publicTask(updatedTask || task, { full: true }) });
 }
 
 function reportMarkdown(task) {
@@ -1639,8 +1965,10 @@ ${markdownToHtml(markdown)}
 }
 
 async function handleExport(task, type, res) {
-  if (!TERMINAL_STATUSES.has(task.status)) await refreshTask(task);
-  if (!safeText(task.outputText)) {
+  const targetTask = !TERMINAL_STATUSES.has(task.status)
+    ? await refreshTask(task)
+    : task;
+  if (!safeText(targetTask.outputText)) {
     sendJson(res, 400, { error: 'report is not ready' });
     return;
   }
@@ -1650,7 +1978,7 @@ async function handleExport(task, type, res) {
       'Content-Disposition': 'attachment; filename="deep-research-report.md"',
       'Cache-Control': 'no-store',
     });
-    res.end(reportMarkdown(task));
+    res.end(reportMarkdown(targetTask));
     return;
   }
   if (type === 'pdf') {
@@ -1659,7 +1987,7 @@ async function handleExport(task, type, res) {
       'Content-Disposition': 'inline; filename="deep-research-report.html"',
       'Cache-Control': 'no-store',
     });
-    res.end(printableHtml(task));
+    res.end(printableHtml(targetTask));
     return;
   }
   sendJson(res, 404, { error: 'export type not found' });
@@ -1709,6 +2037,10 @@ async function route(req, res) {
   const pathname = url.pathname;
 
   try {
+    if (pathname.startsWith('/api/')) {
+      loadStoreFromDiskQuietly({ initialize: true });
+    }
+
     if (pathname === '/api/config' && req.method === 'GET') {
       sendJson(res, 200, {
         providers: [
@@ -1735,6 +2067,16 @@ async function route(req, res) {
         api_configured: !!process.env.OPENAI_API_KEY,
         agent_configured: !!ICARUS_INTERNAL_API_TOKEN,
         agent_chat_jid: ICARUS_AGENT_CHAT_JID,
+        agents: [
+          {
+            id: 'agent',
+            mention: '@agent',
+            label: '行业分析师',
+            description: '检查报告矛盾、补充调研方向、优化下一轮提示词',
+            chat_jid: ICARUS_AGENT_CHAT_JID,
+            configured: !!ICARUS_INTERNAL_API_TOKEN,
+          },
+        ],
       });
       return;
     }
@@ -1756,16 +2098,25 @@ async function route(req, res) {
       /^\/api\/conversations\/([^/]+)(?:\/(.+))?$/,
     );
     if (conversationMatch) {
-      const conversation = findConversationOr404(
-        decodeURIComponent(conversationMatch[1]),
-        res,
-      );
-      if (!conversation) return;
+      const conversationId = decodeURIComponent(conversationMatch[1]);
       const suffix = conversationMatch[2] || '';
+      if (!suffix && req.method === 'DELETE') {
+        if (!deleteConversation(conversationId)) {
+          sendJson(res, 404, { error: 'conversation not found' });
+          return;
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      const conversation = findConversationOr404(conversationId, res);
+      if (!conversation) return;
       if (!suffix && req.method === 'GET') {
         await refreshConversationTasks(conversation);
+        const currentConversation =
+          conversations.get(conversation.id) || conversation;
         sendJson(res, 200, {
-          conversation: publicConversation(conversation, { full: true }),
+          conversation: publicConversation(currentConversation, { full: true }),
         });
         return;
       }
@@ -1792,8 +2143,8 @@ async function route(req, res) {
       }
       const suffix = researchMatch[2] || '';
       if (!suffix && req.method === 'GET') {
-        await refreshTask(task);
-        sendJson(res, 200, { task: publicTask(task, { full: true }) });
+        const refreshedTask = await refreshTask(task);
+        sendJson(res, 200, { task: publicTask(refreshedTask, { full: true }) });
         return;
       }
       if (suffix === 'cancel' && req.method === 'POST') {
@@ -1835,11 +2186,10 @@ server.on('error', (error) => {
   process.exitCode = 1;
 });
 
-loadPersistedStore();
+loadStoreFromDiskQuietly({ initialize: true, exportReadable: true, log: true });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    persistStoreQuietly();
     process.exit(0);
   });
 }

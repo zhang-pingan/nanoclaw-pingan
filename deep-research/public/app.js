@@ -4,7 +4,14 @@ const state = {
   pollTimer: null,
   conversations: [],
   referencedTaskIds: new Set(),
+  contextMenuConversationId: null,
+  agentPickerOpen: false,
+  activeAgentIndex: 0,
 };
+
+const VISIBLE_PROVIDER_IDS = new Set(['gpt-researcher']);
+
+const AGENT_PENDING_MESSAGE_ID = 'local-agent-pending';
 
 const els = {
   providerSelect: document.getElementById('provider-select'),
@@ -19,12 +26,15 @@ const els = {
   sendBtn: document.getElementById('send-btn'),
   newConversationBtn: document.getElementById('new-task-btn'),
   referenceBar: document.getElementById('reference-bar'),
+  agentPicker: document.getElementById('agent-picker'),
+  agentTriggerBtn: document.getElementById('agent-trigger-btn'),
   viewer: document.getElementById('viewer'),
   viewerTitle: document.getElementById('viewer-title'),
   viewerContent: document.getElementById('viewer-content'),
   closeViewer: document.getElementById('close-viewer'),
   downloadMd: document.getElementById('download-md'),
   downloadPdf: document.getElementById('download-pdf'),
+  conversationMenu: document.getElementById('conversation-menu'),
 };
 
 function escapeHtml(value) {
@@ -122,7 +132,8 @@ function taskById(id) {
 }
 
 function providerConfigs() {
-  return Array.isArray(state.config?.providers) ? state.config.providers : [];
+  const providers = Array.isArray(state.config?.providers) ? state.config.providers : [];
+  return providers.filter((provider) => VISIBLE_PROVIDER_IDS.has(provider.id));
 }
 
 function getProviderConfig(providerId) {
@@ -131,6 +142,31 @@ function getProviderConfig(providerId) {
     providerConfigs()[0] ||
     null
   );
+}
+
+function agentConfigs() {
+  const configuredAgents = Array.isArray(state.config?.agents)
+    ? state.config.agents
+    : [];
+  if (configuredAgents.length > 0) return configuredAgents;
+  return [
+    {
+      id: 'agent',
+      mention: '@agent',
+      label: '行业分析师',
+      description: '检查报告矛盾、补充调研方向、优化下一轮提示词',
+      chat_jid: state.config?.agent_chat_jid || 'web:deep-research-analyst',
+      configured: !!state.config?.agent_configured,
+    },
+  ];
+}
+
+function isAgentPrompt(prompt) {
+  return agentConfigs().some((agent) => {
+    const mention = agent.mention || '@agent';
+    const escaped = mention.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${escaped}(?:\\s|$)`, 'i').test(prompt);
+  });
 }
 
 function syncModelOptions() {
@@ -192,13 +228,112 @@ function renderConversationList() {
     .join('');
 
   els.conversationList.querySelectorAll('[data-conversation-id]').forEach((button) => {
-    button.addEventListener('click', () => loadConversation(button.dataset.conversationId));
+    button.addEventListener('click', () => {
+      closeConversationMenu();
+      loadConversation(button.dataset.conversationId);
+    });
+    button.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      openConversationMenu(
+        button.dataset.conversationId,
+        event.clientX,
+        event.clientY,
+      );
+    });
   });
+}
+
+function openConversationMenu(conversationId, x, y) {
+  state.contextMenuConversationId = conversationId;
+  els.conversationMenu.hidden = false;
+  els.conversationMenu.style.left = '0px';
+  els.conversationMenu.style.top = '0px';
+
+  const rect = els.conversationMenu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+  const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+  els.conversationMenu.style.left = `${left}px`;
+  els.conversationMenu.style.top = `${top}px`;
+}
+
+function closeConversationMenu() {
+  state.contextMenuConversationId = null;
+  els.conversationMenu.hidden = true;
+}
+
+function renderAgentPicker() {
+  const agents = agentConfigs();
+  const activeIndex = Math.min(state.activeAgentIndex, Math.max(agents.length - 1, 0));
+  state.activeAgentIndex = activeIndex;
+  els.agentPicker.innerHTML = agents
+    .map((agent, index) => {
+      const active = index === activeIndex ? ' active' : '';
+      const configured = agent.configured === false ? '未配置' : agent.chat_jid || '';
+      const mention = agent.mention || '@agent';
+      return `
+        <button
+          type="button"
+          class="agent-option${active}"
+          data-agent-index="${index}"
+          data-agent-mention="${escapeHtml(mention)}"
+          role="option"
+          aria-selected="${index === activeIndex ? 'true' : 'false'}"
+        >
+          <span class="agent-option-mark">@</span>
+          <span class="agent-option-main">
+            <strong>${escapeHtml(agent.label || mention)}</strong>
+            <span>${escapeHtml(agent.description || configured || mention)}</span>
+          </span>
+          <span class="agent-option-key">${escapeHtml(configured)}</span>
+        </button>
+      `;
+    })
+    .join('');
+}
+
+function openAgentPicker() {
+  state.agentPickerOpen = true;
+  state.activeAgentIndex = 0;
+  renderAgentPicker();
+  els.agentPicker.hidden = false;
+  els.agentTriggerBtn.setAttribute('aria-expanded', 'true');
+}
+
+function closeAgentPicker() {
+  state.agentPickerOpen = false;
+  els.agentPicker.hidden = true;
+  els.agentTriggerBtn.setAttribute('aria-expanded', 'false');
+}
+
+function selectActiveAgent() {
+  const agents = agentConfigs();
+  const agent = agents[state.activeAgentIndex] || agents[0];
+  if (!agent) return;
+  const mention = agent.mention || '@agent';
+  let content = els.promptInput.value.trimStart();
+  content = content.replace(/^@[^\s]*\s*/i, '').trimStart();
+  els.promptInput.value = content ? `${mention} ${content}` : `${mention} `;
+  resizeComposer();
+  closeAgentPicker();
+  els.promptInput.focus();
+  els.promptInput.setSelectionRange(
+    els.promptInput.value.length,
+    els.promptInput.value.length,
+  );
+}
+
+function moveAgentSelection(delta) {
+  const agents = agentConfigs();
+  if (agents.length === 0) return;
+  state.activeAgentIndex =
+    (state.activeAgentIndex + delta + agents.length) % agents.length;
+  renderAgentPicker();
 }
 
 function renderReferenceBar() {
   const ids = [...state.referencedTaskIds].filter((id) => taskById(id));
   state.referencedTaskIds = new Set(ids);
+  els.agentPicker.classList.toggle('with-reference-bar', ids.length > 0);
   if (ids.length === 0) {
     els.referenceBar.hidden = true;
     els.referenceBar.innerHTML = '';
@@ -234,12 +369,33 @@ function renderMessage(message) {
   const refHtml = refs.length
     ? `<div class="message-refs">引用：${refs.map(escapeHtml).join('、')}</div>`
     : '';
-  const kindClass = message.kind === 'agent_error' ? ' error-message' : '';
+  const kindClass =
+    message.kind === 'agent_error'
+      ? ' error-message'
+      : message.kind === 'agent_pending'
+        ? ' pending-message'
+        : '';
+  if (isUser) {
+    return `<div class="message-row user${kindClass}"><div class="prompt-bubble">${refHtml}<div class="prompt-bubble-content">${escapeHtml(message.content).trim()}</div></div></div>`;
+  }
+  if (message.kind === 'agent_pending') {
+    return `
+      <div class="message-row assistant pending-message">
+        <div class="agent-bubble">
+          ${refHtml}
+          <div class="pending-agent-status">
+            <span class="pending-dot"></span>
+            <span>${escapeHtml(message.content || '正在请求 Agent...')}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
   return `
-    <div class="message-row ${isUser ? 'user' : 'assistant'}${kindClass}">
-      <div class="${isUser ? 'prompt-bubble' : 'agent-bubble'}">
+    <div class="message-row assistant${kindClass}">
+      <div class="agent-bubble">
         ${refHtml}
-        ${message.kind?.startsWith('agent') && !isUser ? markdownToHtml(message.content) : escapeHtml(message.content)}
+        ${message.kind?.startsWith('agent') ? markdownToHtml(message.content) : escapeHtml(message.content)}
       </div>
     </div>
   `;
@@ -401,13 +557,17 @@ function closeViewer() {
 
 async function loadConfig() {
   state.config = await api('/api/config');
-  els.providerSelect.innerHTML = providerConfigs()
+  const providers = providerConfigs();
+  els.providerSelect.innerHTML = providers
     .map(
       (provider) =>
         `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label || provider.id)}</option>`,
     )
     .join('');
-  els.providerSelect.value = state.config.default_provider || providerConfigs()[0]?.id || 'openai';
+  const defaultProvider = providers.find(
+    (provider) => provider.id === state.config.default_provider,
+  );
+  els.providerSelect.value = defaultProvider?.id || providers[0]?.id || '';
   syncModelOptions();
 }
 
@@ -419,11 +579,41 @@ async function loadConversations() {
 
 async function loadConversation(id) {
   if (!id) return;
+  closeConversationMenu();
   const data = await api(`/api/conversations/${encodeURIComponent(id)}`);
   state.activeConversation = data.conversation;
   await loadConversations();
   renderThread();
   syncPolling();
+}
+
+async function deleteConversation(id) {
+  if (!id) return;
+  const conversation = state.conversations.find((item) => item.id === id);
+  const title = conversation?.title || '这个对话';
+  closeConversationMenu();
+  if (!window.confirm(`删除“${title}”及其所有研究文件？`)) return;
+
+  const wasActive = state.activeConversation?.id === id;
+  await api(`/api/conversations/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+
+  if (wasActive) {
+    state.activeConversation = null;
+    state.referencedTaskIds.clear();
+    closeViewer();
+    syncPolling();
+  }
+
+  await loadConversations();
+  if (wasActive) {
+    if (state.conversations[0]) {
+      await loadConversation(state.conversations[0].id);
+    } else {
+      renderThread();
+    }
+  }
 }
 
 async function ensureConversation() {
@@ -489,24 +679,83 @@ async function createTask(prompt) {
   }
 }
 
+function appendPendingAgentMessages(prompt, referencedTaskIds) {
+  if (!state.activeConversation) return;
+  const now = new Date().toISOString();
+  const userText = prompt.replace(/^@agent\b\s*/i, '').trim();
+  state.activeConversation.messages = [
+    ...(state.activeConversation.messages || []),
+    {
+      id: `local-agent-prompt-${Date.now()}`,
+      role: 'user',
+      kind: 'agent_prompt',
+      content: userText,
+      referenced_task_ids: referencedTaskIds,
+      created_at: now,
+    },
+    {
+      id: AGENT_PENDING_MESSAGE_ID,
+      role: 'assistant',
+      kind: 'agent_pending',
+      content: '正在请求 Agent...',
+      referenced_task_ids: referencedTaskIds,
+      created_at: now,
+    },
+  ];
+}
+
+function replacePendingAgentMessageWithError(error, referencedTaskIds) {
+  if (!state.activeConversation) return;
+  const messages = state.activeConversation.messages || [];
+  const pendingIndex = messages.findIndex(
+    (message) => message.id === AGENT_PENDING_MESSAGE_ID,
+  );
+  const errorMessage = {
+    id: `local-agent-error-${Date.now()}`,
+    role: 'assistant',
+    kind: 'agent_error',
+    content: error.message || 'Agent request failed',
+    referenced_task_ids: referencedTaskIds,
+  };
+  if (pendingIndex >= 0) {
+    state.activeConversation.messages = messages.map((message, index) =>
+      index === pendingIndex ? errorMessage : message,
+    );
+    return;
+  }
+  state.activeConversation.messages = [...messages, errorMessage];
+}
+
 async function sendAgentMessage(prompt) {
   els.sendBtn.disabled = true;
   const conversation = await ensureConversation();
+  const referencedTaskIds = [...state.referencedTaskIds];
+  appendPendingAgentMessages(prompt, referencedTaskIds);
+  state.referencedTaskIds.clear();
+  els.promptInput.value = '';
+  resizeComposer();
+  renderThread();
   try {
     const data = await api(`/api/conversations/${encodeURIComponent(conversation.id)}/agent`, {
       method: 'POST',
       body: JSON.stringify({
         content: prompt,
-        referenced_task_ids: [...state.referencedTaskIds],
+        referenced_task_ids: referencedTaskIds,
       }),
     });
     state.activeConversation = data.conversation;
-    state.referencedTaskIds.clear();
-    els.promptInput.value = '';
-    resizeComposer();
     await loadConversations();
     renderThread();
     syncPolling();
+  } catch (error) {
+    if (error.data?.conversation) {
+      state.activeConversation = error.data.conversation;
+      await loadConversations();
+    } else {
+      replacePendingAgentMessageWithError(error, referencedTaskIds);
+    }
+    renderThread();
+    console.error(error);
   } finally {
     els.sendBtn.disabled = false;
   }
@@ -540,7 +789,7 @@ els.composer.addEventListener('submit', (event) => {
   event.preventDefault();
   const prompt = els.promptInput.value.trim();
   if (!prompt) return;
-  const action = /^@agent\b/i.test(prompt) ? sendAgentMessage : createTask;
+  const action = isAgentPrompt(prompt) ? sendAgentMessage : createTask;
   action(prompt).catch((error) => {
     if (error.data?.conversation) {
       state.activeConversation = error.data.conversation;
@@ -581,10 +830,58 @@ els.composer.addEventListener('submit', (event) => {
 
 els.promptInput.addEventListener('input', resizeComposer);
 els.promptInput.addEventListener('keydown', (event) => {
+  if (state.agentPickerOpen) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveAgentSelection(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveAgentSelection(-1);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      selectActiveAgent();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeAgentPicker();
+      return;
+    }
+  }
+  if (event.key === '@') {
+    event.preventDefault();
+    openAgentPicker();
+    return;
+  }
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
     els.composer.requestSubmit();
   }
+});
+els.agentTriggerBtn.addEventListener('click', () => {
+  if (state.agentPickerOpen) closeAgentPicker();
+  else openAgentPicker();
+  els.promptInput.focus();
+});
+els.agentPicker.addEventListener('mousemove', (event) => {
+  const button = event.target.closest?.('[data-agent-index]');
+  if (!button) return;
+  const index = Number(button.dataset.agentIndex);
+  if (!Number.isNaN(index) && index !== state.activeAgentIndex) {
+    state.activeAgentIndex = index;
+    renderAgentPicker();
+  }
+});
+els.agentPicker.addEventListener('click', (event) => {
+  const button = event.target.closest?.('[data-agent-index]');
+  if (!button) return;
+  const index = Number(button.dataset.agentIndex);
+  if (!Number.isNaN(index)) state.activeAgentIndex = index;
+  selectActiveAgent();
 });
 els.closeViewer.addEventListener('click', closeViewer);
 els.viewer.addEventListener('click', (event) => {
@@ -592,6 +889,47 @@ els.viewer.addEventListener('click', (event) => {
 });
 els.newConversationBtn.addEventListener('click', resetView);
 els.providerSelect.addEventListener('change', syncModelOptions);
+els.conversationMenu.addEventListener('click', (event) => {
+  if (!event.target.closest?.('[data-delete-conversation]')) return;
+  deleteConversation(state.contextMenuConversationId).catch((error) => {
+    console.error(error);
+    window.alert(error.message);
+  });
+});
+document.addEventListener('click', (event) => {
+  if (
+    state.agentPickerOpen &&
+    !els.agentPicker.contains(event.target) &&
+    !els.agentTriggerBtn.contains(event.target)
+  ) {
+    closeAgentPicker();
+  }
+  if (els.conversationMenu.hidden) return;
+  if (els.conversationMenu.contains(event.target)) return;
+  closeConversationMenu();
+});
+document.addEventListener('contextmenu', (event) => {
+  if (event.target.closest?.('[data-conversation-id]')) return;
+  closeConversationMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeConversationMenu();
+    closeAgentPicker();
+  }
+});
+window.addEventListener('resize', () => {
+  closeConversationMenu();
+  closeAgentPicker();
+});
+window.addEventListener(
+  'scroll',
+  () => {
+    closeConversationMenu();
+    closeAgentPicker();
+  },
+  true,
+);
 
 await loadConfig();
 await loadConversations();
