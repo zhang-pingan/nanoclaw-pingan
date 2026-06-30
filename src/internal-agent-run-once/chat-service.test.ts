@@ -30,8 +30,8 @@ import type { RegisteredGroup } from '../types.js';
 import { InternalAgentChatService } from './chat-service.js';
 
 const group: RegisteredGroup = {
-  name: 'Deep Research Analyst',
-  folder: 'deep_research_analyst_test',
+  name: 'Chat Agent',
+  folder: 'chat_agent_test',
   trigger: '@agent',
   added_at: '2026-06-29T00:00:00.000Z',
 };
@@ -42,7 +42,7 @@ describe('InternalAgentChatService', () => {
     vi.mocked(runContainerAgent).mockReset();
   });
 
-  it('runs a resumable agent chat with Deep Research runtime context', async () => {
+  it('runs a resumable agent chat with caller-provided prompt and system', async () => {
     vi.mocked(runContainerAgent).mockImplementation(
       async (_group, _input, _onProcess, onOutput) => {
         await onOutput?.({
@@ -61,21 +61,17 @@ describe('InternalAgentChatService', () => {
     );
 
     const service = new InternalAgentChatService({
-      registeredGroups: () => ({ 'web:deep-research-analyst': group }),
+      registeredGroups: () => ({ 'web:chat-agent': group }),
       queue: new GroupQueue(),
       onProcess: vi.fn(),
       maxInputChars: 10000,
     });
 
     const result = await service.chat({
-      chat_jid: 'web:deep-research-analyst',
+      chat_jid: 'web:chat-agent',
       session_id: 'session-prev',
-      message: '对比引用报告',
-      deep_research: {
-        conversation_id: 'drs_1',
-        mounted_root: '/workspace/extra/deep-research',
-        referenced_task_ids: ['dr_1', 'dr_2'],
-      },
+      system: 'caller system prompt',
+      message: 'caller runtime context\n\nUser request:\n对比引用报告',
       metadata: { trace_id: 'msg_1' },
     });
 
@@ -93,12 +89,10 @@ describe('InternalAgentChatService', () => {
       isOneShot: true,
       requireResult: true,
     });
-    expect(input.prompt).toContain('conversation_id: drs_1');
-    expect(input.prompt).toContain(
-      'mounted_root: /workspace/extra/deep-research',
+    expect(input.prompt).toBe(
+      'caller runtime context\n\nUser request:\n对比引用报告',
     );
-    expect(input.prompt).toContain('- dr_1');
     expect(input.prompt).toContain('User request:\n对比引用报告');
-    expect(input.system).toContain('Deep Research industry analyst agent');
+    expect(input.system).toBe('caller system prompt');
   });
 });

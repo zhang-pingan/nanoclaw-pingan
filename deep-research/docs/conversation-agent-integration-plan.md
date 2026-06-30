@@ -132,14 +132,12 @@ POST /internal/agent/chat
 {
   "chat_jid": "web:deep-research-analyst",
   "session_id": "optional-existing-agent-session-id",
-  "message": "用户 @agent 后面的内容",
-  "deep_research": {
-    "conversation_id": "drs_xxx",
-    "mounted_root": "/workspace/extra/deep-research",
-    "referenced_task_ids": ["dr_task_1", "dr_task_2"]
-  },
+  "system": "Deep Research analyst stable system prompt...",
+  "message": "[Deep Research Runtime Context]\nconversation_id: drs_xxx\nmounted_root: /workspace/extra/deep-research\nreferenced_task_ids:\n- dr_task_1\n- dr_task_2\n\nFile structure:\n- sessions/{conversation_id}.json contains the task index for this conversation.\n- tasks/{task_id}.json contains task metadata and report_path.\n- tasks/{task_id}.md contains the full report.\n[/Deep Research Runtime Context]\n\nUser request:\n用户 @agent 后面的内容",
   "metadata": {
-    "source": "deep-research"
+    "source": "deep-research",
+    "conversation_id": "drs_xxx",
+    "referenced_task_ids": ["dr_task_1", "dr_task_2"]
   }
 }
 ```
@@ -261,7 +259,7 @@ Icarus 将该目录配置到 Deep Research analyst group 的 `additionalMounts` 
 
 不建议把所有 task 内容拼进 system prompt，也不建议依赖修改历史 transcript 来实现上下文覆盖。
 
-每次 `@agent` 调用时，在本轮 user prompt 前加入轻量 runtime context：
+每次 `@agent` 调用时，由 Deep Research 服务在本轮 user prompt 前加入轻量 runtime context，再把拼好的 `message` 传给 Icarus：
 
 ```text
 [Deep Research Runtime Context]
@@ -373,7 +371,7 @@ User request:
 
 - task 内容不直接塞入上下文。
 - agent 通过只读挂载目录渐进式读取 task。
-- `@agent` 调用每轮传入 conversation id 和 referenced task ids。
-- system prompt 只放稳定角色和文件结构说明。
+- Deep Research 调用方负责把 conversation id 和 referenced task ids 拼入本轮 message。
+- Deep Research 调用方负责传入稳定 system prompt；Icarus agent chat API 不内置 Deep Research 业务 prompt。
 - conversation 与 Icarus agent session 一对一绑定。
 - run-once 接口保持原语义，新增 session-capable chat 接口。

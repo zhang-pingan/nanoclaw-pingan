@@ -91,6 +91,15 @@ const ICARUS_AGENT_CHAT_JID =
   process.env.ICARUS_DEEP_RESEARCH_AGENT_CHAT_JID ||
   'web:deep-research-analyst';
 const ICARUS_AGENT_MOUNTED_ROOT = '/workspace/extra/deep-research';
+const DEEP_RESEARCH_AGENT_SYSTEM = [
+  'You are the Deep Research industry analyst agent for Icarus.',
+  'You help inspect research reports, identify contradictions or gaps, propose follow-up research, and improve research prompts.',
+  'Deep Research data is expected under the mounted_root provided in runtime context, normally /workspace/extra/deep-research.',
+  'Use sessions/{conversation_id}.json to inspect the current conversation task index.',
+  'Use tasks/{task_id}.json for task metadata and tasks/{task_id}.md for the full report.',
+  'Do not assume report contents you have not read. When task ids are referenced, read the referenced task files before making report-specific claims.',
+  'Clearly separate facts read from reports from your analysis or recommendations.',
+].join('\n');
 
 const PROVIDERS = {
   openai: {
@@ -762,6 +771,29 @@ async function icarusAgentChatRequest(payload) {
   return data;
 }
 
+function buildAgentRuntimePrompt(input) {
+  const referencedTaskIds = Array.isArray(input.referencedTaskIds)
+    ? input.referencedTaskIds
+    : [];
+  return [
+    '[Deep Research Runtime Context]',
+    `conversation_id: ${input.conversationId}`,
+    `mounted_root: ${input.mountedRoot}`,
+    'referenced_task_ids:',
+    ...(referencedTaskIds.length > 0
+      ? referencedTaskIds.map((taskId) => `- ${taskId}`)
+      : ['- none']),
+    '',
+    'File structure:',
+    '- sessions/{conversation_id}.json contains the task index for this conversation.',
+    '- tasks/{task_id}.json contains task metadata and report_path.',
+    '- tasks/{task_id}.md contains the full report.',
+    '[/Deep Research Runtime Context]',
+    '',
+    `User request:\n${input.message}`,
+  ].join('\n');
+}
+
 function normalizeUrlSources(values) {
   const byUrl = new Map();
   const queue = Array.isArray(values) ? [...values] : [];
@@ -1406,15 +1438,18 @@ async function handleAgentChat(conversation, req, res) {
     const result = await icarusAgentChatRequest({
       chat_jid: ICARUS_AGENT_CHAT_JID,
       session_id: conversation.agentSessionId || undefined,
-      message: userText,
-      deep_research: {
-        conversation_id: conversation.id,
-        mounted_root: ICARUS_AGENT_MOUNTED_ROOT,
-        referenced_task_ids: referencedTaskIds,
-      },
+      system: DEEP_RESEARCH_AGENT_SYSTEM,
+      message: buildAgentRuntimePrompt({
+        conversationId: conversation.id,
+        mountedRoot: ICARUS_AGENT_MOUNTED_ROOT,
+        referencedTaskIds,
+        message: userText,
+      }),
       metadata: {
         source: 'deep-research',
         trace_id: userMessage.id,
+        conversation_id: conversation.id,
+        referenced_task_ids: referencedTaskIds,
       },
     });
     conversation.agentSessionId =
@@ -1773,9 +1808,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.on('error', (error) => {
-  console.error(
-    `Failed to start Deep Research web app: ${error.message}`,
-  );
+  console.error(`Failed to start Deep Research web app: ${error.message}`);
   process.exitCode = 1;
 });
 
@@ -1789,7 +1822,5 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(
-    `Deep Research web app listening on http://${HOST}:${PORT}`,
-  );
+  console.log(`Deep Research web app listening on http://${HOST}:${PORT}`);
 });

@@ -76,43 +76,6 @@ function chatSlotTimeoutFailure(
   };
 }
 
-function defaultDeepResearchSystem(): string {
-  return [
-    'You are the Deep Research industry analyst agent for Icarus.',
-    'You help inspect research reports, identify contradictions or gaps, propose follow-up research, and improve research prompts.',
-    'Deep Research data is expected under the mounted_root provided in runtime context, normally /workspace/extra/deep-research.',
-    'Use sessions/{conversation_id}.json to inspect the current conversation task index.',
-    'Use tasks/{task_id}.json for task metadata and tasks/{task_id}.md for the full report.',
-    'Do not assume report contents you have not read. When task ids are referenced, read the referenced task files before making report-specific claims.',
-    'Clearly separate facts read from reports from your analysis or recommendations.',
-  ].join('\n');
-}
-
-function buildRuntimePrompt(
-  input: ReturnType<typeof parseAgentChatRequest>,
-): string {
-  if (!input.deep_research) return input.message;
-
-  const referenced = input.deep_research.referenced_task_ids;
-  return [
-    '[Deep Research Runtime Context]',
-    `conversation_id: ${input.deep_research.conversation_id}`,
-    `mounted_root: ${input.deep_research.mounted_root}`,
-    'referenced_task_ids:',
-    ...(referenced.length > 0
-      ? referenced.map((taskId) => `- ${taskId}`)
-      : ['- none']),
-    '',
-    'File structure:',
-    '- sessions/{conversation_id}.json contains the task index for this conversation.',
-    '- tasks/{task_id}.json contains task metadata and report_path.',
-    '- tasks/{task_id}.md contains the full report.',
-    '[/Deep Research Runtime Context]',
-    '',
-    `User request:\n${input.message}`,
-  ].join('\n');
-}
-
 export class InternalAgentChatService {
   constructor(private readonly opts: InternalAgentChatServiceOptions) {}
 
@@ -132,17 +95,16 @@ export class InternalAgentChatService {
       );
     }
 
-    const prompt = buildRuntimePrompt(request);
-    const system = [defaultDeepResearchSystem(), request.system]
-      .filter((value): value is string => Boolean(value && value.trim()))
-      .join('\n\n');
+    const prompt = request.message;
+    const system = request.system;
+    const systemForHash = system || '';
     const runId = createExecutionId();
     const queryId = createExecutionId();
     const selectedModel = await selectModel({
       prompt,
       isMain: group.isMain === true,
     });
-    const promptHash = sha256(`${system}\n${prompt}`);
+    const promptHash = sha256(`${systemForHash}\n${prompt}`);
 
     agentQueryTraceManager.startQuery({
       queryId,
@@ -151,7 +113,7 @@ export class InternalAgentChatService {
       sourceRefId:
         typeof request.metadata.trace_id === 'string'
           ? request.metadata.trace_id
-          : request.deep_research?.conversation_id,
+          : undefined,
       chatJid: request.chat_jid,
       groupFolder: group.folder,
       selectedModel: selectedModel.selectedModel,
@@ -170,13 +132,6 @@ export class InternalAgentChatService {
         sessionId: request.session_id || null,
         messageChars: request.message.length,
         injectedPromptChars: prompt.length,
-        deepResearch: request.deep_research
-          ? {
-              conversationId: request.deep_research.conversation_id,
-              referencedTaskIds: request.deep_research.referenced_task_ids,
-              mountedRoot: request.deep_research.mounted_root,
-            }
-          : null,
         metadata: request.metadata,
       },
     });
