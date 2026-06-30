@@ -2,12 +2,16 @@ import http from 'http';
 
 import { logger } from '../logger.js';
 import {
+  handleInternalAgentChat,
   handleInternalAgentRunOnceFileDownload,
   handleInternalAgentRunOnce,
+  AgentChatHandlerOptions,
   RunOnceHandlerOptions,
 } from './handler.js';
 
-export interface InternalAgentRunOnceServerOptions extends RunOnceHandlerOptions {
+export interface InternalAgentRunOnceServerOptions
+  extends RunOnceHandlerOptions,
+    AgentChatHandlerOptions {
   host: string;
   port: number;
 }
@@ -25,6 +29,15 @@ export function startInternalAgentRunOnceServer(
     if (reqUrl.pathname === '/internal/agent/run-once') {
       handleInternalAgentRunOnce(req, res, opts).catch((err) => {
         logger.error({ err }, 'Unhandled internal run-once request error');
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Internal server error' }));
+      });
+      return;
+    }
+
+    if (reqUrl.pathname === '/internal/agent/chat') {
+      handleInternalAgentChat(req, res, opts).catch((err) => {
+        logger.error({ err }, 'Unhandled internal agent chat request error');
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: 'Internal server error' }));
       });

@@ -380,7 +380,8 @@ export type AgentQuerySourceType =
   | 'web_action'
   | 'assistant_evolution'
   | 'assistant_action'
-  | 'internal_run_once';
+  | 'internal_run_once'
+  | 'internal_agent_chat';
 
 export interface AgentQueryRecord {
   id: string;

@@ -1,6 +1,6 @@
 # OpenAI Deep Research Web
 
-Standalone web app for running OpenAI Deep Research tasks.
+Standalone web app for running OpenAI Deep Research conversations.
 
 ## Run
 
@@ -19,6 +19,12 @@ PORT=8787 OPENAI_DEEP_RESEARCH_DEFAULT_MODEL=o3-deep-research npm start
 
 Open `http://localhost:8787`.
 
+The UI is conversation-based:
+
+- normal input creates a new research report task in the current conversation
+- `@agent ...` routes the message to the Icarus Deep Research analyst agent
+- report cards can be referenced before sending `@agent`
+
 Runtime configuration is loaded from `openai-deep-research/.env`.
 Shell environment variables override values in `.env`.
 
@@ -35,6 +41,22 @@ GPT_RESEARCHER_TONE=Objective
 When the UI provider is `GPT Researcher API`, this app calls
 `$GPT_RESEARCHER_BASE_URL/report/` and stores the returned report in the same
 viewer/export flow.
+
+Agent integration options:
+
+```bash
+ICARUS_INTERNAL_API_HOST=127.0.0.1
+ICARUS_INTERNAL_API_PORT=3004
+ICARUS_INTERNAL_API_TOKEN=...
+ICARUS_DEEP_RESEARCH_AGENT_CHAT_JID=web:deep-research-analyst
+```
+
+The fixed `openai-deep-research/.data/agent-readable` directory is exported as
+a sanitized, read-only view for Icarus containers. Icarus mounts it through the
+Deep Research analyst group's `additionalMounts` entry at
+`/workspace/extra/openai-deep-research`, so the host path must be allowed by
+`~/.config/icarus/mount-allowlist.json`. Old v1 `tasks.json` data is not
+migrated; the app resets it to an empty v2 conversation store on startup.
 
 ## Local scripts
 

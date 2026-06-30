@@ -148,6 +148,7 @@ import {
 import { selectModel } from './model-selector.js';
 import { getWorkflowTypeConfig } from './workflow-config.js';
 import { InternalAgentRunOnceService } from './internal-agent-run-once/service.js';
+import { InternalAgentChatService } from './internal-agent-run-once/chat-service.js';
 import { startInternalAgentRunOnceServer } from './internal-agent-run-once/server.js';
 
 // Re-export for backwards compatibility during refactor
@@ -2919,12 +2920,20 @@ async function main(): Promise<void> {
       queue.registerProcess(groupJid, proc, containerName, groupFolder),
     maxInputChars: ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS,
   });
+  const internalAgentChatService = new InternalAgentChatService({
+    registeredGroups: () => registeredGroups,
+    queue,
+    onProcess: (groupJid, proc, containerName, groupFolder) =>
+      queue.registerProcess(groupJid, proc, containerName, groupFolder),
+    maxInputChars: ICARUS_INTERNAL_AGENT_MAX_INPUT_CHARS,
+  });
   const internalRunOnceServer = startInternalAgentRunOnceServer({
     host: ICARUS_INTERNAL_API_HOST,
     port: ICARUS_INTERNAL_API_PORT,
     token: ICARUS_INTERNAL_API_TOKEN,
     maxBodyBytes: ICARUS_INTERNAL_API_MAX_BODY_BYTES,
     service: internalRunOnceService,
+    chatService: internalAgentChatService,
   });
 
   // Graceful shutdown handlers

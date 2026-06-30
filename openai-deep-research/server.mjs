@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const ENV_FILE = path.join(__dirname, '.env');
+const ROOT_ENV_FILE = path.resolve(__dirname, '..', '.env');
 
 function parseEnvValue(value) {
   let result = String(value || '').trim();
@@ -36,21 +37,21 @@ function loadEnvFile(filePath) {
 }
 
 loadEnvFile(ENV_FILE);
+loadEnvFile(ROOT_ENV_FILE);
 
-const TASK_STORE_FILE = process.env.OPENAI_DEEP_RESEARCH_TASK_STORE
+const DATA_DIR = path.join(__dirname, '.data');
+const STORE_FILE = process.env.OPENAI_DEEP_RESEARCH_TASK_STORE
   ? path.resolve(__dirname, process.env.OPENAI_DEEP_RESEARCH_TASK_STORE)
-  : path.join(__dirname, '.data', 'tasks.json');
-const TASK_STORE_VERSION = 1;
+  : path.join(DATA_DIR, 'tasks.json');
+const AGENT_READABLE_DIR = path.join(DATA_DIR, 'agent-readable');
+const STORE_VERSION = 2;
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '127.0.0.1';
 const OPENAI_BASE_URL =
   process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 const DEFAULT_OPENAI_MODEL =
   process.env.OPENAI_DEEP_RESEARCH_DEFAULT_MODEL || 'o3-deep-research';
-const OPENAI_MODELS = [
-  'o3-deep-research',
-  'o4-mini-deep-research',
-];
+const OPENAI_MODELS = ['o3-deep-research', 'o4-mini-deep-research'];
 const SUPPORTED_OPENAI_MODELS = new Set(OPENAI_MODELS);
 const GPT_RESEARCHER_MODEL = 'gpt-researcher';
 const GPT_RESEARCHER_BASE_URL = (
@@ -65,8 +66,9 @@ const GPT_RESEARCHER_REPORT_TYPES = [
 const SUPPORTED_GPT_RESEARCHER_REPORT_TYPES = new Set(
   GPT_RESEARCHER_REPORT_TYPES.map((type) => type.id),
 );
-const GPT_RESEARCHER_REPORT_TYPE =
-  normalizeGptResearcherReportType(process.env.GPT_RESEARCHER_REPORT_TYPE);
+const GPT_RESEARCHER_REPORT_TYPE = normalizeGptResearcherReportType(
+  process.env.GPT_RESEARCHER_REPORT_TYPE,
+);
 const GPT_RESEARCHER_REPORT_SOURCE =
   process.env.GPT_RESEARCHER_REPORT_SOURCE || 'web';
 const GPT_RESEARCHER_TONE = process.env.GPT_RESEARCHER_TONE || 'Objective';
@@ -78,6 +80,18 @@ const GPT_RESEARCHER_CONNECT_TIMEOUT_MS = Math.max(
   1_000,
   Number(process.env.GPT_RESEARCHER_CONNECT_TIMEOUT_MS || 10_000),
 );
+const ICARUS_INTERNAL_API_BASE_URL = (
+  process.env.ICARUS_INTERNAL_API_BASE_URL ||
+  `http://${process.env.ICARUS_INTERNAL_API_HOST || '127.0.0.1'}:${
+    process.env.ICARUS_INTERNAL_API_PORT || '3004'
+  }`
+).replace(/\/+$/, '');
+const ICARUS_INTERNAL_API_TOKEN = process.env.ICARUS_INTERNAL_API_TOKEN || '';
+const ICARUS_AGENT_CHAT_JID =
+  process.env.ICARUS_DEEP_RESEARCH_AGENT_CHAT_JID ||
+  'web:deep-research-analyst';
+const ICARUS_AGENT_MOUNTED_ROOT = '/workspace/extra/openai-deep-research';
+
 const PROVIDERS = {
   openai: {
     id: 'openai',
@@ -106,151 +120,9 @@ const TERMINAL_STATUSES = new Set([
 ]);
 const POLL_THROTTLE_MS = 2500;
 
+const conversations = new Map();
 const tasks = new Map();
-
-function persistableTask(task) {
-  return {
-    id: task.id,
-    responseId: task.responseId || '',
-    provider: task.provider,
-    model: task.model,
-    gptResearcherReportType: task.gptResearcherReportType || '',
-    prompt: task.prompt,
-    title: task.title,
-    status: task.status,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-    progress: Array.isArray(task.progress) ? task.progress : [],
-    sources: Array.isArray(task.sources) ? task.sources : [],
-    webCalls: Array.isArray(task.webCalls) ? task.webCalls : [],
-    fileCalls: Array.isArray(task.fileCalls) ? task.fileCalls : [],
-    mcpCalls: Array.isArray(task.mcpCalls) ? task.mcpCalls : [],
-    codeCalls: Array.isArray(task.codeCalls) ? task.codeCalls : [],
-    outputText: task.outputText || '',
-    annotations: Array.isArray(task.annotations) ? task.annotations : [],
-    usage: task.usage || null,
-    error: task.error || null,
-    incomplete_details: task.incomplete_details || null,
-    rawResponse: task.rawResponse || null,
-  };
-}
-
-function normalizeStoredTask(value) {
-  if (!value || typeof value !== 'object') return null;
-  const id = typeof value.id === 'string' ? value.id.trim() : '';
-  if (!id) return null;
-  const provider = normalizeProvider(value.provider);
-  const task = {
-    id,
-    responseId: typeof value.responseId === 'string' ? value.responseId : '',
-    provider,
-    model: normalizeModel(provider, value.model),
-    gptResearcherReportType:
-      provider === 'gpt-researcher'
-        ? normalizeGptResearcherReportType(
-            value.gptResearcherReportType || value.gpt_researcher_report_type,
-          )
-        : '',
-    prompt: typeof value.prompt === 'string' ? value.prompt : '',
-    title:
-      typeof value.title === 'string' && value.title.trim()
-        ? value.title
-        : makeTitle(typeof value.prompt === 'string' ? value.prompt : ''),
-    status: typeof value.status === 'string' ? value.status : 'queued',
-    createdAt:
-      typeof value.createdAt === 'string'
-        ? value.createdAt
-        : new Date().toISOString(),
-    updatedAt:
-      typeof value.updatedAt === 'string'
-        ? value.updatedAt
-        : new Date().toISOString(),
-    progress: Array.isArray(value.progress) ? value.progress : [],
-    sources: Array.isArray(value.sources) ? value.sources : [],
-    webCalls: Array.isArray(value.webCalls) ? value.webCalls : [],
-    fileCalls: Array.isArray(value.fileCalls) ? value.fileCalls : [],
-    mcpCalls: Array.isArray(value.mcpCalls) ? value.mcpCalls : [],
-    codeCalls: Array.isArray(value.codeCalls) ? value.codeCalls : [],
-    outputText: typeof value.outputText === 'string' ? value.outputText : '',
-    annotations: Array.isArray(value.annotations) ? value.annotations : [],
-    usage: value.usage || null,
-    error: value.error || null,
-    incomplete_details: value.incomplete_details || null,
-    rawResponse: value.rawResponse || null,
-  };
-  if (
-    !TERMINAL_STATUSES.has(task.status) &&
-    ((task.provider === 'openai' && !task.responseId) ||
-      task.provider === 'gpt-researcher')
-  ) {
-    task.status = 'failed';
-    task.error = {
-      message:
-        task.provider === 'gpt-researcher'
-          ? 'Task was interrupted by a server restart and cannot be resumed by GPT Researcher.'
-          : 'Task was interrupted before an OpenAI response id was available.',
-    };
-    task.updatedAt = new Date().toISOString();
-  }
-  task.progress = task.progress.length
-    ? task.progress
-    : buildProgress(task.rawResponse, task);
-  return task;
-}
-
-function persistTasks() {
-  const dir = path.dirname(TASK_STORE_FILE);
-  const payload = {
-    version: TASK_STORE_VERSION,
-    updated_at: new Date().toISOString(),
-    tasks: [...tasks.values()].map((task) => persistableTask(task)),
-  };
-  fs.mkdirSync(dir, { recursive: true });
-  const tempFile = `${TASK_STORE_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tempFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-  fs.renameSync(tempFile, TASK_STORE_FILE);
-}
-
-function persistTasksQuietly() {
-  try {
-    persistTasks();
-  } catch (error) {
-    console.error(`Failed to persist Deep Research tasks: ${error.message}`);
-  }
-}
-
-function loadPersistedTasks() {
-  if (!fs.existsSync(TASK_STORE_FILE)) return;
-  let payload;
-  try {
-    payload = JSON.parse(fs.readFileSync(TASK_STORE_FILE, 'utf8'));
-  } catch (error) {
-    const backupFile = `${TASK_STORE_FILE}.corrupt-${Date.now()}`;
-    try {
-      fs.renameSync(TASK_STORE_FILE, backupFile);
-      console.error(
-        `Deep Research task store was corrupt and moved to ${backupFile}: ${error.message}`,
-      );
-    } catch (backupError) {
-      console.error(
-        `Deep Research task store is corrupt and could not be moved: ${backupError.message}`,
-      );
-    }
-    return;
-  }
-
-  const items = Array.isArray(payload?.tasks)
-    ? payload.tasks
-    : Array.isArray(payload)
-      ? payload
-      : [];
-  for (const item of items) {
-    const task = normalizeStoredTask(item);
-    if (!task) continue;
-    tasks.set(task.id, task);
-  }
-  console.log(`Loaded ${tasks.size} persisted Deep Research task(s)`);
-}
+const messages = new Map();
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -259,14 +131,6 @@ function sendJson(res, statusCode, payload) {
     'Cache-Control': 'no-store',
   });
   res.end(body);
-}
-
-function sendText(res, statusCode, text, contentType) {
-  res.writeHead(statusCode, {
-    'Content-Type': contentType,
-    'Cache-Control': 'no-store',
-  });
-  res.end(text);
 }
 
 function readBody(req) {
@@ -302,10 +166,22 @@ function clipText(value, maxChars) {
   return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
 }
 
-function createTaskId() {
-  return `dr_${Date.now().toString(36)}_${crypto
+function createId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}_${crypto
     .randomBytes(4)
     .toString('hex')}`;
+}
+
+function createConversationId() {
+  return createId('drs');
+}
+
+function createTaskId() {
+  return createId('dr');
+}
+
+function createMessageId() {
+  return createId('msg');
 }
 
 function makeTitle(prompt, outputText = '') {
@@ -346,6 +222,344 @@ function normalizeMaxToolCalls(value) {
   return Math.max(10, Math.min(200, Math.floor(number)));
 }
 
+function createConversation(title = '') {
+  const now = new Date().toISOString();
+  const conversation = {
+    id: createConversationId(),
+    title: safeText(title) || '新研究对话',
+    createdAt: now,
+    updatedAt: now,
+    agentSessionId: '',
+    taskIds: [],
+    messageIds: [],
+  };
+  conversations.set(conversation.id, conversation);
+  return conversation;
+}
+
+function touchConversation(conversation) {
+  conversation.updatedAt = new Date().toISOString();
+}
+
+function addMessage(conversation, input) {
+  const now = new Date().toISOString();
+  const message = {
+    id: createMessageId(),
+    conversationId: conversation.id,
+    role: input.role,
+    kind: input.kind,
+    content: input.content || '',
+    taskId: input.taskId || '',
+    referencedTaskIds: Array.isArray(input.referencedTaskIds)
+      ? input.referencedTaskIds
+      : [],
+    status: input.status || '',
+    createdAt: now,
+  };
+  messages.set(message.id, message);
+  conversation.messageIds.push(message.id);
+  touchConversation(conversation);
+  return message;
+}
+
+function persistableConversation(conversation) {
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+    agentSessionId: conversation.agentSessionId || '',
+    taskIds: Array.isArray(conversation.taskIds) ? conversation.taskIds : [],
+    messageIds: Array.isArray(conversation.messageIds)
+      ? conversation.messageIds
+      : [],
+  };
+}
+
+function persistableMessage(message) {
+  return {
+    id: message.id,
+    conversationId: message.conversationId,
+    role: message.role,
+    kind: message.kind,
+    content: message.content || '',
+    taskId: message.taskId || '',
+    referencedTaskIds: Array.isArray(message.referencedTaskIds)
+      ? message.referencedTaskIds
+      : [],
+    status: message.status || '',
+    createdAt: message.createdAt,
+  };
+}
+
+function persistableTask(task) {
+  return {
+    id: task.id,
+    conversationId: task.conversationId,
+    responseId: task.responseId || '',
+    provider: task.provider,
+    model: task.model,
+    gptResearcherReportType: task.gptResearcherReportType || '',
+    prompt: task.prompt,
+    title: task.title,
+    status: task.status,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    progress: Array.isArray(task.progress) ? task.progress : [],
+    sources: Array.isArray(task.sources) ? task.sources : [],
+    webCalls: Array.isArray(task.webCalls) ? task.webCalls : [],
+    fileCalls: Array.isArray(task.fileCalls) ? task.fileCalls : [],
+    mcpCalls: Array.isArray(task.mcpCalls) ? task.mcpCalls : [],
+    codeCalls: Array.isArray(task.codeCalls) ? task.codeCalls : [],
+    outputText: task.outputText || '',
+    annotations: Array.isArray(task.annotations) ? task.annotations : [],
+    usage: task.usage || null,
+    error: task.error || null,
+    incomplete_details: task.incomplete_details || null,
+    rawResponse: task.rawResponse || null,
+  };
+}
+
+function normalizeStoredConversation(value) {
+  if (!value || typeof value !== 'object') return null;
+  const id = safeText(value.id);
+  if (!id) return null;
+  return {
+    id,
+    title: safeText(value.title) || '研究对话',
+    createdAt: safeText(value.createdAt) || new Date().toISOString(),
+    updatedAt: safeText(value.updatedAt) || new Date().toISOString(),
+    agentSessionId: safeText(value.agentSessionId),
+    taskIds: Array.isArray(value.taskIds)
+      ? value.taskIds.map(safeText).filter(Boolean)
+      : [],
+    messageIds: Array.isArray(value.messageIds)
+      ? value.messageIds.map(safeText).filter(Boolean)
+      : [],
+  };
+}
+
+function normalizeStoredMessage(value) {
+  if (!value || typeof value !== 'object') return null;
+  const id = safeText(value.id);
+  const conversationId = safeText(value.conversationId);
+  if (!id || !conversationId) return null;
+  const role = value.role === 'assistant' ? 'assistant' : 'user';
+  return {
+    id,
+    conversationId,
+    role,
+    kind: safeText(value.kind) || 'message',
+    content: typeof value.content === 'string' ? value.content : '',
+    taskId: safeText(value.taskId),
+    referencedTaskIds: Array.isArray(value.referencedTaskIds)
+      ? value.referencedTaskIds.map(safeText).filter(Boolean)
+      : [],
+    status: safeText(value.status),
+    createdAt: safeText(value.createdAt) || new Date().toISOString(),
+  };
+}
+
+function normalizeStoredTask(value) {
+  if (!value || typeof value !== 'object') return null;
+  const id = safeText(value.id);
+  const conversationId = safeText(value.conversationId);
+  if (!id || !conversationId) return null;
+  const provider = normalizeProvider(value.provider);
+  const task = {
+    id,
+    conversationId,
+    responseId: typeof value.responseId === 'string' ? value.responseId : '',
+    provider,
+    model: normalizeModel(provider, value.model),
+    gptResearcherReportType:
+      provider === 'gpt-researcher'
+        ? normalizeGptResearcherReportType(value.gptResearcherReportType)
+        : '',
+    prompt: typeof value.prompt === 'string' ? value.prompt : '',
+    title: safeText(value.title) || makeTitle(value.prompt || ''),
+    status: safeText(value.status) || 'queued',
+    createdAt: safeText(value.createdAt) || new Date().toISOString(),
+    updatedAt: safeText(value.updatedAt) || new Date().toISOString(),
+    progress: Array.isArray(value.progress) ? value.progress : [],
+    sources: Array.isArray(value.sources) ? value.sources : [],
+    webCalls: Array.isArray(value.webCalls) ? value.webCalls : [],
+    fileCalls: Array.isArray(value.fileCalls) ? value.fileCalls : [],
+    mcpCalls: Array.isArray(value.mcpCalls) ? value.mcpCalls : [],
+    codeCalls: Array.isArray(value.codeCalls) ? value.codeCalls : [],
+    outputText: typeof value.outputText === 'string' ? value.outputText : '',
+    annotations: Array.isArray(value.annotations) ? value.annotations : [],
+    usage: value.usage || null,
+    error: value.error || null,
+    incomplete_details: value.incomplete_details || null,
+    rawResponse: value.rawResponse || null,
+  };
+  task.progress = task.progress.length
+    ? task.progress
+    : buildProgress(task.rawResponse, task);
+  return task;
+}
+
+function writeJsonFileAtomic(filePath, payload) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempFile = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  fs.renameSync(tempFile, filePath);
+}
+
+function exportAgentReadable() {
+  const tempDir = `${AGENT_READABLE_DIR}.${process.pid}.tmp`;
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(tempDir, 'sessions'), { recursive: true });
+  fs.mkdirSync(path.join(tempDir, 'tasks'), { recursive: true });
+
+  for (const conversation of conversations.values()) {
+    const conversationTasks = conversation.taskIds
+      .map((taskId) => tasks.get(taskId))
+      .filter(Boolean);
+    const index = {
+      id: conversation.id,
+      title: conversation.title,
+      created_at: conversation.createdAt,
+      updated_at: conversation.updatedAt,
+      task_ids: conversationTasks.map((task) => task.id),
+      tasks: conversationTasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        provider: task.provider,
+        model: task.model,
+        prompt_preview: clipText(task.prompt.replace(/\s+/g, ' '), 240),
+        metadata_path: `${ICARUS_AGENT_MOUNTED_ROOT}/tasks/${task.id}.json`,
+        report_path: `${ICARUS_AGENT_MOUNTED_ROOT}/tasks/${task.id}.md`,
+        source_count: task.sources?.length || 0,
+      })),
+    };
+    fs.writeFileSync(
+      path.join(tempDir, 'sessions', `${conversation.id}.json`),
+      `${JSON.stringify(index, null, 2)}\n`,
+      'utf8',
+    );
+  }
+
+  for (const task of tasks.values()) {
+    const metadata = {
+      id: task.id,
+      conversation_id: task.conversationId,
+      title: task.title,
+      status: task.status,
+      provider: task.provider,
+      model: task.model,
+      gpt_researcher_report_type: task.gptResearcherReportType || null,
+      prompt: task.prompt,
+      created_at: task.createdAt,
+      updated_at: task.updatedAt,
+      report_path: `${ICARUS_AGENT_MOUNTED_ROOT}/tasks/${task.id}.md`,
+      source_count: task.sources?.length || 0,
+      sources: task.sources || [],
+      error: task.error || null,
+      incomplete_details: task.incomplete_details || null,
+    };
+    fs.writeFileSync(
+      path.join(tempDir, 'tasks', `${task.id}.json`),
+      `${JSON.stringify(metadata, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(tempDir, 'tasks', `${task.id}.md`),
+      reportMarkdown(task),
+      'utf8',
+    );
+  }
+
+  fs.rmSync(AGENT_READABLE_DIR, { recursive: true, force: true });
+  fs.renameSync(tempDir, AGENT_READABLE_DIR);
+}
+
+function persistStore() {
+  const payload = {
+    version: STORE_VERSION,
+    updated_at: new Date().toISOString(),
+    conversations: [...conversations.values()].map(persistableConversation),
+    tasks: [...tasks.values()].map(persistableTask),
+    messages: [...messages.values()].map(persistableMessage),
+  };
+  writeJsonFileAtomic(STORE_FILE, payload);
+  exportAgentReadable();
+}
+
+function persistStoreQuietly() {
+  try {
+    persistStore();
+  } catch (error) {
+    console.error(`Failed to persist Deep Research store: ${error.message}`);
+  }
+}
+
+function resetStoreBecauseV1OrInvalid(reason) {
+  conversations.clear();
+  tasks.clear();
+  messages.clear();
+  console.warn(`Resetting Deep Research store: ${reason}`);
+  persistStoreQuietly();
+}
+
+function loadPersistedStore() {
+  if (!fs.existsSync(STORE_FILE)) {
+    persistStoreQuietly();
+    return;
+  }
+  let payload;
+  try {
+    payload = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
+  } catch (error) {
+    const backupFile = `${STORE_FILE}.corrupt-${Date.now()}`;
+    try {
+      fs.renameSync(STORE_FILE, backupFile);
+    } catch {
+      /* ignore */
+    }
+    resetStoreBecauseV1OrInvalid(`invalid JSON (${error.message})`);
+    return;
+  }
+  if (
+    payload?.version !== STORE_VERSION ||
+    !Array.isArray(payload.conversations) ||
+    !Array.isArray(payload.tasks) ||
+    !Array.isArray(payload.messages)
+  ) {
+    resetStoreBecauseV1OrInvalid('old tasks.json data is not migrated');
+    return;
+  }
+  for (const item of payload.conversations) {
+    const conversation = normalizeStoredConversation(item);
+    if (conversation) conversations.set(conversation.id, conversation);
+  }
+  for (const item of payload.tasks) {
+    const task = normalizeStoredTask(item);
+    if (task && conversations.has(task.conversationId))
+      tasks.set(task.id, task);
+  }
+  for (const item of payload.messages) {
+    const message = normalizeStoredMessage(item);
+    if (message && conversations.has(message.conversationId)) {
+      messages.set(message.id, message);
+    }
+  }
+  for (const conversation of conversations.values()) {
+    conversation.taskIds = conversation.taskIds.filter((taskId) =>
+      tasks.has(taskId),
+    );
+    conversation.messageIds = conversation.messageIds.filter((messageId) =>
+      messages.has(messageId),
+    );
+  }
+  console.log(
+    `Loaded ${conversations.size} Deep Research conversation(s), ${tasks.size} task(s)`,
+  );
+  persistStoreQuietly();
+}
+
 async function openaiRequest(endpoint, options = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -384,7 +598,9 @@ async function openaiRequest(endpoint, options = {}) {
 }
 
 async function gptResearcherRequest(endpoint, options = {}) {
-  const url = `${GPT_RESEARCHER_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const url = `${GPT_RESEARCHER_BASE_URL}${
+    endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  }`;
   const urlObject = new URL(url);
   const headers = {
     'Content-Type': 'application/json',
@@ -395,11 +611,7 @@ async function gptResearcherRequest(endpoint, options = {}) {
   }
 
   const requestBody = options.body || '';
-  if (
-    requestBody &&
-    !headers['Content-Length'] &&
-    !headers['content-length']
-  ) {
+  if (requestBody && !headers['Content-Length'] && !headers['content-length']) {
     headers['Content-Length'] = Buffer.byteLength(requestBody);
   }
 
@@ -426,9 +638,7 @@ async function gptResearcherRequest(endpoint, options = {}) {
         connected = true;
         const chunks = [];
         response.setEncoding('utf8');
-        response.on('data', (chunk) => {
-          chunks.push(chunk);
-        });
+        response.on('data', (chunk) => chunks.push(chunk));
         response.on('end', () => {
           if (settled) return;
           settled = true;
@@ -525,6 +735,33 @@ async function gptResearcherRequest(endpoint, options = {}) {
   return body;
 }
 
+async function icarusAgentChatRequest(payload) {
+  if (!ICARUS_INTERNAL_API_TOKEN) {
+    const error = new Error('ICARUS_INTERNAL_API_TOKEN is not configured');
+    error.statusCode = 500;
+    throw error;
+  }
+  const response = await fetch(
+    `${ICARUS_INTERNAL_API_BASE_URL}/internal/agent/chat`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ICARUS_INTERNAL_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || 'Icarus agent chat failed');
+    error.statusCode = response.status;
+    error.body = data;
+    throw error;
+  }
+  return data;
+}
+
 function normalizeUrlSources(values) {
   const byUrl = new Map();
   const queue = Array.isArray(values) ? [...values] : [];
@@ -548,8 +785,9 @@ function normalizeUrlSources(values) {
       continue;
     }
     if (typeof value !== 'object') continue;
-    const nested = value.url || value.href || value.link || value.source_url;
-    const url = safeText(nested);
+    const url = safeText(
+      value.url || value.href || value.link || value.source_url,
+    );
     if (!url || byUrl.has(url)) continue;
     byUrl.set(url, {
       id: `SRC-${String(byUrl.size + 1).padStart(3, '0')}`,
@@ -577,11 +815,7 @@ function extractGptResearcherReport(response) {
     response?.source_urls,
   ]);
 
-  return {
-    outputText,
-    sources,
-    research,
-  };
+  return { outputText, sources, research };
 }
 
 function extractOutput(response) {
@@ -603,12 +837,14 @@ function extractOutput(response) {
     for (const part of item.content) {
       if (!part || part.type !== 'output_text') continue;
       if (typeof part.text === 'string') textParts.push(part.text);
-      if (Array.isArray(part.annotations)) annotations.push(...part.annotations);
+      if (Array.isArray(part.annotations))
+        annotations.push(...part.annotations);
     }
   }
 
   return {
-    outputText: safeText(response?.output_text) || textParts.join('\n\n').trim(),
+    outputText:
+      safeText(response?.output_text) || textParts.join('\n\n').trim(),
     annotations,
     webCalls,
     fileCalls,
@@ -667,8 +903,12 @@ function buildGptResearcherProgress(task) {
     {
       key: 'search',
       label: '检索公开网页来源',
-      detail: sourceCount > 0 ? `${sourceCount} 个引用来源` : 'GPT Researcher 正在检索资料',
-      status: sourceCount > 0 ? 'completed' : endedUnfinished ? 'failed' : 'active',
+      detail:
+        sourceCount > 0
+          ? `${sourceCount} 个引用来源`
+          : 'GPT Researcher 正在检索资料',
+      status:
+        sourceCount > 0 ? 'completed' : endedUnfinished ? 'failed' : 'active',
     },
     {
       key: 'analyze',
@@ -691,7 +931,8 @@ function buildGptResearcherProgress(task) {
 }
 
 function buildProgress(response, task) {
-  if (task.provider === 'gpt-researcher') return buildGptResearcherProgress(task);
+  if (task.provider === 'gpt-researcher')
+    return buildGptResearcherProgress(task);
 
   const extracted = response ? extractOutput(response) : null;
   const status = response?.status || task.status || 'queued';
@@ -706,7 +947,11 @@ function buildProgress(response, task) {
       key: 'created',
       label: '提交 Deep Research 任务',
       detail: task.responseId || '等待 OpenAI 响应',
-      status: task.responseId ? 'completed' : endedUnfinished ? 'failed' : 'active',
+      status: task.responseId
+        ? 'completed'
+        : endedUnfinished
+          ? 'failed'
+          : 'active',
     },
     {
       key: 'search',
@@ -724,9 +969,9 @@ function buildProgress(response, task) {
             : 'active'
           : endedUnfinished
             ? 'failed'
-          : status === 'queued'
-            ? 'pending'
-            : 'active',
+            : status === 'queued'
+              ? 'pending'
+              : 'active',
     },
     {
       key: 'analyze',
@@ -735,11 +980,10 @@ function buildProgress(response, task) {
         extracted?.codeCalls.length > 0
           ? `${extracted.codeCalls.length} 个代码分析活动`
           : '模型正在整理证据',
-      status:
-        hasText
-          ? 'completed'
-          : endedUnfinished
-            ? 'failed'
+      status: hasText
+        ? 'completed'
+        : endedUnfinished
+          ? 'failed'
           : searchCount > 0
             ? 'active'
             : 'pending',
@@ -778,12 +1022,20 @@ function updateTaskFromResponse(task, response) {
   task.rawResponse = response;
   task.title = makeTitle(task.prompt, task.outputText);
   task.progress = buildProgress(response, task);
-  persistTasksQuietly();
+  const conversation = conversations.get(task.conversationId);
+  if (conversation) {
+    if (conversation.title === '新研究对话') {
+      conversation.title = task.title;
+    }
+    touchConversation(conversation);
+  }
+  persistStoreQuietly();
 }
 
 function publicTask(task, options = {}) {
   return {
     id: task.id,
+    conversation_id: task.conversationId,
     response_id: task.responseId,
     provider: task.provider,
     provider_label: providerLabel(task.provider),
@@ -810,6 +1062,46 @@ function publicTask(task, options = {}) {
   };
 }
 
+function publicMessage(message) {
+  return {
+    id: message.id,
+    conversation_id: message.conversationId,
+    role: message.role,
+    kind: message.kind,
+    content: message.content || '',
+    task_id: message.taskId || null,
+    referenced_task_ids: message.referencedTaskIds || [],
+    status: message.status || null,
+    created_at: message.createdAt,
+  };
+}
+
+function publicConversation(conversation, options = {}) {
+  const conversationTasks = conversation.taskIds
+    .map((taskId) => tasks.get(taskId))
+    .filter(Boolean);
+  const conversationMessages = conversation.messageIds
+    .map((messageId) => messages.get(messageId))
+    .filter(Boolean);
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    created_at: conversation.createdAt,
+    updated_at: conversation.updatedAt,
+    agent_session_id: conversation.agentSessionId || null,
+    task_count: conversationTasks.length,
+    running_task_count: conversationTasks.filter(
+      (task) => !TERMINAL_STATUSES.has(task.status),
+    ).length,
+    tasks: options.full
+      ? conversationTasks.map((task) => publicTask(task, { full: true }))
+      : undefined,
+    messages: options.full
+      ? conversationMessages.map(publicMessage)
+      : undefined,
+  };
+}
+
 async function refreshTask(task) {
   if (task.provider !== 'openai') return task;
   if (!task.responseId || TERMINAL_STATUSES.has(task.status)) return task;
@@ -818,7 +1110,9 @@ async function refreshTask(task) {
   if (task.lastPollAt && now - task.lastPollAt < POLL_THROTTLE_MS) return task;
 
   task.lastPollAt = now;
-  task.pollPromise = openaiRequest(`/responses/${encodeURIComponent(task.responseId)}`)
+  task.pollPromise = openaiRequest(
+    `/responses/${encodeURIComponent(task.responseId)}`,
+  )
     .then((response) => {
       updateTaskFromResponse(task, response);
       return task;
@@ -829,7 +1123,7 @@ async function refreshTask(task) {
         body: error.body || null,
       };
       task.updatedAt = new Date().toISOString();
-      persistTasksQuietly();
+      persistStoreQuietly();
       return task;
     })
     .finally(() => {
@@ -839,9 +1133,26 @@ async function refreshTask(task) {
   return task.pollPromise;
 }
 
-function createResearchTask(provider, model, prompt, options = {}) {
-  return {
+async function refreshConversationTasks(conversation) {
+  await Promise.all(
+    conversation.taskIds
+      .map((taskId) => tasks.get(taskId))
+      .filter(Boolean)
+      .map((task) => refreshTask(task)),
+  );
+}
+
+function createResearchTask(
+  conversation,
+  provider,
+  model,
+  prompt,
+  options = {},
+) {
+  const now = new Date().toISOString();
+  const task = {
     id: createTaskId(),
+    conversationId: conversation.id,
     responseId: '',
     provider,
     model,
@@ -852,8 +1163,8 @@ function createResearchTask(provider, model, prompt, options = {}) {
     prompt,
     title: makeTitle(prompt),
     status: 'creating',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
     progress: [],
     sources: [],
     webCalls: [],
@@ -862,6 +1173,12 @@ function createResearchTask(provider, model, prompt, options = {}) {
     codeCalls: [],
     outputText: '',
   };
+  tasks.set(task.id, task);
+  conversation.taskIds.push(task.id);
+  if (conversation.title === '新研究对话') {
+    conversation.title = makeTitle(prompt);
+  }
+  return task;
 }
 
 function buildGptResearcherPayload(task) {
@@ -883,7 +1200,7 @@ async function runGptResearcherTask(task) {
   task.status = 'running';
   task.updatedAt = new Date().toISOString();
   task.progress = buildProgress(null, task);
-  persistTasksQuietly();
+  persistStoreQuietly();
 
   try {
     const response = await gptResearcherRequest('/report/', {
@@ -915,7 +1232,12 @@ async function runGptResearcherTask(task) {
     task.title = makeTitle(task.prompt, task.outputText);
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
-    persistTasksQuietly();
+    const conversation = conversations.get(task.conversationId);
+    if (conversation) {
+      if (conversation.title === '新研究对话') conversation.title = task.title;
+      touchConversation(conversation);
+    }
+    persistStoreQuietly();
   } catch (error) {
     if (error.name === 'AbortError' || task.status === 'cancelled') {
       task.status = 'cancelled';
@@ -929,14 +1251,23 @@ async function runGptResearcherTask(task) {
     }
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
-    persistTasksQuietly();
+    persistStoreQuietly();
   } finally {
     task.abortController = null;
-    persistTasksQuietly();
+    persistStoreQuietly();
   }
 }
 
-async function handleCreateResearch(req, res) {
+async function handleCreateConversation(req, res) {
+  const body = await readJsonBody(req);
+  const conversation = createConversation(body.title);
+  persistStoreQuietly();
+  sendJson(res, 200, {
+    conversation: publicConversation(conversation, { full: true }),
+  });
+}
+
+async function handleCreateResearch(conversation, req, res) {
   const body = await readJsonBody(req);
   const prompt = safeText(body.prompt);
   if (!prompt) {
@@ -958,20 +1289,34 @@ async function handleCreateResearch(req, res) {
     sendJson(res, 400, { error: 'unsupported GPT Researcher report type' });
     return;
   }
-  const task = createResearchTask(provider, model, prompt, {
+
+  addMessage(conversation, {
+    role: 'user',
+    kind: 'research_prompt',
+    content: prompt,
+  });
+  const task = createResearchTask(conversation, provider, model, prompt, {
     gptResearcherReportType: requestedReportType || GPT_RESEARCHER_REPORT_TYPE,
   });
-  tasks.set(task.id, task);
-  persistTasksQuietly();
+  addMessage(conversation, {
+    role: 'assistant',
+    kind: 'research_task',
+    content: task.title,
+    taskId: task.id,
+  });
+  persistStoreQuietly();
 
   if (provider === 'gpt-researcher') {
     task.status = 'queued';
     task.progress = buildProgress(null, task);
-    persistTasksQuietly();
+    persistStoreQuietly();
     setTimeout(() => {
       runGptResearcherTask(task);
     }, 0);
-    sendJson(res, 200, { task: publicTask(task, { full: true }) });
+    sendJson(res, 200, {
+      conversation: publicConversation(conversation, { full: true }),
+      task: publicTask(task),
+    });
     return;
   }
 
@@ -986,6 +1331,7 @@ async function handleCreateResearch(req, res) {
     metadata: {
       app: 'openai-deep-research-web',
       local_task_id: task.id,
+      local_conversation_id: conversation.id,
     },
   };
 
@@ -1003,13 +1349,102 @@ async function handleCreateResearch(req, res) {
     };
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
-    persistTasksQuietly();
+    persistStoreQuietly();
     throw error;
   }
 
   task.responseId = response.id;
   updateTaskFromResponse(task, response);
-  sendJson(res, 200, { task: publicTask(task, { full: true }) });
+  sendJson(res, 200, {
+    conversation: publicConversation(conversation, { full: true }),
+    task: publicTask(task),
+  });
+}
+
+function normalizeReferencedTaskIds(conversation, value) {
+  const input = Array.isArray(value) ? value : [];
+  const unique = [...new Set(input.map(safeText).filter(Boolean))];
+  const allowed = new Set(conversation.taskIds);
+  const invalid = unique.filter((taskId) => !allowed.has(taskId));
+  if (invalid.length > 0) {
+    const error = new Error(
+      `referenced task not in conversation: ${invalid.join(', ')}`,
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+  return unique;
+}
+
+function stripAgentPrefix(value) {
+  return safeText(value)
+    .replace(/^@agent\b\s*/i, '')
+    .trim();
+}
+
+async function handleAgentChat(conversation, req, res) {
+  const body = await readJsonBody(req);
+  const userText = stripAgentPrefix(body.content || body.message);
+  if (!userText) {
+    sendJson(res, 400, { error: 'agent message required' });
+    return;
+  }
+  const referencedTaskIds = normalizeReferencedTaskIds(
+    conversation,
+    body.referenced_task_ids,
+  );
+
+  const userMessage = addMessage(conversation, {
+    role: 'user',
+    kind: 'agent_prompt',
+    content: userText,
+    referencedTaskIds,
+  });
+  persistStoreQuietly();
+
+  try {
+    const result = await icarusAgentChatRequest({
+      chat_jid: ICARUS_AGENT_CHAT_JID,
+      session_id: conversation.agentSessionId || undefined,
+      message: userText,
+      deep_research: {
+        conversation_id: conversation.id,
+        mounted_root: ICARUS_AGENT_MOUNTED_ROOT,
+        referenced_task_ids: referencedTaskIds,
+      },
+      metadata: {
+        source: 'openai-deep-research',
+        trace_id: userMessage.id,
+      },
+    });
+    conversation.agentSessionId =
+      result.session_id || conversation.agentSessionId;
+    addMessage(conversation, {
+      role: 'assistant',
+      kind: 'agent_reply',
+      content: result.text || '',
+      referencedTaskIds,
+    });
+    persistStoreQuietly();
+    sendJson(res, 200, {
+      conversation: publicConversation(conversation, { full: true }),
+      agent: result,
+    });
+  } catch (error) {
+    addMessage(conversation, {
+      role: 'assistant',
+      kind: 'agent_error',
+      content: error.message || 'Agent request failed',
+      referencedTaskIds,
+      status: 'error',
+    });
+    persistStoreQuietly();
+    sendJson(res, error.statusCode || 502, {
+      error: error.message || 'Agent request failed',
+      detail: error.body || null,
+      conversation: publicConversation(conversation, { full: true }),
+    });
+  }
 }
 
 async function handleCancelTask(task, res) {
@@ -1018,7 +1453,7 @@ async function handleCancelTask(task, res) {
     task.status = 'cancelled';
     task.updatedAt = new Date().toISOString();
     task.progress = buildProgress(null, task);
-    persistTasksQuietly();
+    persistStoreQuietly();
     sendJson(res, 200, { task: publicTask(task, { full: true }) });
     return;
   }
@@ -1036,10 +1471,14 @@ async function handleCancelTask(task, res) {
 }
 
 function reportMarkdown(task) {
-  const body = safeText(task.outputText) || '# Deep Research Report\n\nNo report content available.\n';
+  const body =
+    safeText(task.outputText) ||
+    `# ${task.title || 'Deep Research Report'}\n\nStatus: ${task.status}\n\nNo report content available.\n`;
   const sources = Array.isArray(task.sources) ? task.sources : [];
   if (sources.length === 0) return `${body.trim()}\n`;
-  const hasSourcesHeading = /^##\s+(Sources|References|资料来源|来源)/im.test(body);
+  const hasSourcesHeading = /^##\s+(Sources|References|资料来源|来源)/im.test(
+    body,
+  );
   if (hasSourcesHeading) return `${body.trim()}\n`;
   return `${body.trim()}\n\n## Sources\n\n${sources
     .map((source, index) => {
@@ -1104,7 +1543,9 @@ function markdownToHtml(markdown) {
         html.push('<ul>');
         listOpen = true;
       }
-      html.push(`<li>${renderInlineMarkdown(trimmed.replace(/^[-*]\s+/, ''))}</li>`);
+      html.push(
+        `<li>${renderInlineMarkdown(trimmed.replace(/^[-*]\s+/, ''))}</li>`,
+      );
       continue;
     }
     paragraph.push(trimmed);
@@ -1169,7 +1610,8 @@ async function handleExport(task, type, res) {
 function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(url.pathname);
-  const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const relative =
+    pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const target = path.resolve(PUBLIC_DIR, relative);
   if (target !== PUBLIC_DIR && !target.startsWith(`${PUBLIC_DIR}${path.sep}`)) {
     sendJson(res, 403, { error: 'forbidden' });
@@ -1193,6 +1635,15 @@ function serveStatic(req, res) {
     'Cache-Control': 'no-store',
   });
   fs.createReadStream(target).pipe(res);
+}
+
+function findConversationOr404(id, res) {
+  const conversation = conversations.get(id);
+  if (!conversation) {
+    sendJson(res, 404, { error: 'conversation not found' });
+    return null;
+  }
+  return conversation;
 }
 
 async function route(req, res) {
@@ -1224,31 +1675,64 @@ async function route(req, res) {
         models: PROVIDERS[DEFAULT_PROVIDER].models,
         default_model: PROVIDERS[DEFAULT_PROVIDER].defaultModel,
         api_configured: !!process.env.OPENAI_API_KEY,
+        agent_configured: !!ICARUS_INTERNAL_API_TOKEN,
+        agent_chat_jid: ICARUS_AGENT_CHAT_JID,
       });
       return;
     }
 
-    if (pathname === '/api/research' && req.method === 'POST') {
-      await handleCreateResearch(req, res);
+    if (pathname === '/api/conversations' && req.method === 'GET') {
+      const items = [...conversations.values()]
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+        .map((conversation) => publicConversation(conversation));
+      sendJson(res, 200, { conversations: items });
       return;
     }
 
-    if (pathname === '/api/research/tasks' && req.method === 'GET') {
-      const items = [...tasks.values()]
-        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-        .map((task) => publicTask(task));
-      sendJson(res, 200, { tasks: items });
+    if (pathname === '/api/conversations' && req.method === 'POST') {
+      await handleCreateConversation(req, res);
       return;
     }
 
-    const match = pathname.match(/^\/api\/research\/([^/]+)(?:\/(.+))?$/);
-    if (match) {
-      const task = tasks.get(decodeURIComponent(match[1]));
+    const conversationMatch = pathname.match(
+      /^\/api\/conversations\/([^/]+)(?:\/(.+))?$/,
+    );
+    if (conversationMatch) {
+      const conversation = findConversationOr404(
+        decodeURIComponent(conversationMatch[1]),
+        res,
+      );
+      if (!conversation) return;
+      const suffix = conversationMatch[2] || '';
+      if (!suffix && req.method === 'GET') {
+        await refreshConversationTasks(conversation);
+        sendJson(res, 200, {
+          conversation: publicConversation(conversation, { full: true }),
+        });
+        return;
+      }
+      if (suffix === 'research' && req.method === 'POST') {
+        await handleCreateResearch(conversation, req, res);
+        return;
+      }
+      if (suffix === 'agent' && req.method === 'POST') {
+        await handleAgentChat(conversation, req, res);
+        return;
+      }
+      sendJson(res, 404, { error: 'route not found' });
+      return;
+    }
+
+    const researchMatch = pathname.match(
+      /^\/api\/research\/([^/]+)(?:\/(.+))?$/,
+    );
+    if (researchMatch) {
+      const task = tasks.get(decodeURIComponent(researchMatch[1]));
       if (!task) {
         sendJson(res, 404, { error: 'task not found' });
         return;
       }
-      const suffix = match[2] || '';
+      const suffix = researchMatch[2] || '';
       if (!suffix && req.method === 'GET') {
         await refreshTask(task);
         sendJson(res, 200, { task: publicTask(task, { full: true }) });
@@ -1289,19 +1773,23 @@ const server = http.createServer((req, res) => {
 });
 
 server.on('error', (error) => {
-  console.error(`Failed to start OpenAI Deep Research web app: ${error.message}`);
+  console.error(
+    `Failed to start OpenAI Deep Research web app: ${error.message}`,
+  );
   process.exitCode = 1;
 });
 
-loadPersistedTasks();
+loadPersistedStore();
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    persistTasksQuietly();
+    persistStoreQuietly();
     process.exit(0);
   });
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`OpenAI Deep Research web app listening on http://${HOST}:${PORT}`);
+  console.log(
+    `OpenAI Deep Research web app listening on http://${HOST}:${PORT}`,
+  );
 });

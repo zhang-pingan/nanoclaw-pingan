@@ -12,7 +12,7 @@
       <span class="brand-mark">DR</span>
       <span>Deep Research</span>
     </div>
-    <button class="new-chat-btn" id="new-task-btn" type="button">新研究</button>
+    <button class="new-chat-btn" id="new-task-btn" type="button">新对话</button>
     <section class="recent">
       <h2>最近</h2>
       <div id="task-list" class="task-list"></div>
@@ -42,12 +42,13 @@
       <div class="empty-state" id="empty-state">
         <div class="empty-mark">🔭</div>
         <h1>深度研究</h1>
-        <p>输入完整研究任务，模型会检索公开网页并生成可下载报告。</p>
+        <p>输入研究任务生成报告，或用 @agent 和行业分析师继续讨论。</p>
       </div>
     </section>
 
+    <div class="reference-bar" id="reference-bar" hidden></div>
     <form class="composer" id="composer">
-      <textarea id="prompt-input" rows="1" placeholder="获取详细报告"></textarea>
+      <textarea id="prompt-input" rows="1" placeholder="输入研究任务，或 @agent 追问"></textarea>
       <button class="send-btn" id="send-btn" type="submit" aria-label="发送">
         <span></span>
       </button>

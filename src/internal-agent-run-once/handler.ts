@@ -23,9 +23,20 @@ import {
 import { contentTypeForFile, resolveRunOnceDownloadFile } from './files.js';
 import { InternalAgentRunOnceService, RunOnceInputError } from './service.js';
 import { runOnceWorkspaceHostPath } from './trace-writer.js';
+import {
+  AgentChatResponse,
+  parseAgentChatRequest,
+} from './chat-schemas.js';
+import { InternalAgentChatService } from './chat-service.js';
 
 export interface RunOnceHandlerOptions {
   service: InternalAgentRunOnceService;
+  token: string;
+  maxBodyBytes: number;
+}
+
+export interface AgentChatHandlerOptions {
+  chatService: InternalAgentChatService;
   token: string;
   maxBodyBytes: number;
 }
@@ -233,6 +244,51 @@ export async function handleInternalAgentRunOnce(
       return;
     }
     logger.error({ err }, 'Internal run-once handler failed');
+    sendJson(res, 500, {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Internal server error',
+    });
+    return;
+  }
+
+  sendJson(res, result.ok ? 200 : 502, result);
+}
+
+export async function handleInternalAgentChat(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  opts: AgentChatHandlerOptions,
+): Promise<void> {
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    return;
+  }
+
+  if (!opts.token || bearerToken(req) !== opts.token) {
+    sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+    return;
+  }
+
+  let result: AgentChatResponse;
+  try {
+    const body = await readRequestBody(req, opts.maxBodyBytes);
+    const requestBody = parseJsonBuffer(body);
+    const request = parseAgentChatRequest(requestBody);
+    result = await opts.chatService.chat(request);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Invalid request body',
+        details: err.issues,
+      });
+      return;
+    }
+    if (err instanceof RunOnceInputError) {
+      sendJson(res, err.status, { ok: false, error: err.message });
+      return;
+    }
+    logger.error({ err }, 'Internal agent chat handler failed');
     sendJson(res, 500, {
       ok: false,
       error: err instanceof Error ? err.message : 'Internal server error',

@@ -1523,6 +1523,9 @@ function buildQueryOptions(
   );
 
   const useIsolatedSession = containerInput.isolatedSession === true;
+  const nonExternalSystemAppend = [globalClaudeMd, containerInput.system]
+    .filter((value): value is string => Boolean(value && value.trim()))
+    .join('\n\n');
 
   return {
     cwd: isExternalSystemOnce ? '/workspace/run-once' : '/workspace/group',
@@ -1532,11 +1535,11 @@ function buildQueryOptions(
     persistSession: useIsolatedSession ? false : undefined,
     systemPrompt: isExternalSystemOnce
       ? containerInput.system || ''
-      : globalClaudeMd
+      : nonExternalSystemAppend
         ? {
             type: 'preset' as const,
             preset: 'claude_code' as const,
-            append: globalClaudeMd,
+            append: nonExternalSystemAppend,
           }
         : undefined,
     allowedTools,

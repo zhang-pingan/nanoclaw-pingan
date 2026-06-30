@@ -101,6 +101,7 @@ vi.mock('child_process', async () => {
 
 import { runContainerAgent, ContainerOutput } from './container-runner.js';
 import { readEnvFile } from './env.js';
+import { validateAdditionalMounts } from './mount-security.js';
 import type { RegisteredGroup } from './types.js';
 
 const testGroup: RegisteredGroup = {
@@ -653,5 +654,50 @@ describe('container-runner timeout behavior', () => {
     fakeProc.emit('close', 0);
     await vi.advanceTimersByTimeAsync(10);
     await resultPromise;
+  });
+
+  it('mounts validated additional mounts', async () => {
+    const { spawn } = await import('child_process');
+    vi.mocked(validateAdditionalMounts).mockReturnValueOnce([
+      {
+        hostPath: '/host/deep-research-readable',
+        containerPath: '/workspace/extra/openai-deep-research',
+        readonly: true,
+      },
+    ]);
+
+    const group: RegisteredGroup = {
+      ...testGroup,
+      containerConfig: {
+        additionalMounts: [
+          {
+            hostPath: '/host/deep-research-readable',
+            containerPath: 'openai-deep-research',
+            readonly: true,
+          },
+        ],
+      },
+    };
+    const resultPromise = runContainerAgent(group, testInput, () => {});
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'ok',
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    expect(validateAdditionalMounts).toHaveBeenCalledWith(
+      group.containerConfig?.additionalMounts,
+      group.name,
+      false,
+    );
+    const calls = vi.mocked(spawn).mock.calls;
+    const args = calls[calls.length - 1][1] as string[];
+    expect(args).toContain(
+      '/host/deep-research-readable:/workspace/extra/openai-deep-research:ro',
+    );
   });
 });
