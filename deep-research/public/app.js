@@ -29,6 +29,7 @@ const els = {
   agentPicker: document.getElementById('agent-picker'),
   agentTriggerBtn: document.getElementById('agent-trigger-btn'),
   viewer: document.getElementById('viewer'),
+  viewerKicker: document.getElementById('viewer-kicker'),
   viewerTitle: document.getElementById('viewer-title'),
   viewerContent: document.getElementById('viewer-content'),
   closeViewer: document.getElementById('close-viewer'),
@@ -406,6 +407,10 @@ function renderProgress(task) {
   const meta = `${provider} · ${taskStatusText(task)} · ${task.stats?.search_count || 0} 个搜索 · ${task.stats?.source_count || 0} 个引用`;
   const steps = Array.isArray(task.progress) ? task.progress : [];
   const error = task.error?.message || task.error?.error?.message || '';
+  const hasPromptSupplement =
+    Array.isArray(task.prompt_enrichment?.supplemental_material) &&
+    task.prompt_enrichment.supplemental_material.length > 0 &&
+    !!(task.effective_prompt || task.prompt_enrichment?.effective_prompt);
   return `
     <div class="research-meta">${escapeHtml(meta)}</div>
     <section class="progress-card">
@@ -416,15 +421,21 @@ function renderProgress(task) {
           : `<div class="progress-list">
               ${steps
                 .map(
-                  (step) => `
+                  (step) => {
+                    const label =
+                      step.key === 'enrich' && hasPromptSupplement
+                        ? `<button type="button" class="progress-step-link" data-open-effective-prompt="${escapeHtml(task.id)}">${escapeHtml(step.label || '')}</button>`
+                        : `<strong>${escapeHtml(step.label || '')}</strong>`;
+                    return `
                 <div class="progress-step ${escapeHtml(step.status || 'pending')}">
                   <span class="step-dot"></span>
                   <div>
-                    <strong>${escapeHtml(step.label || '')}</strong>
+                    ${label}
                     <span>${escapeHtml(step.detail || '')}</span>
                   </div>
                 </div>
-              `,
+              `;
+                  },
                 )
                 .join('')}
             </div>`
@@ -525,6 +536,12 @@ function renderThread() {
       if (task) openViewer(task);
     });
   });
+  els.thread.querySelectorAll('[data-open-effective-prompt]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const task = taskById(button.dataset.openEffectivePrompt);
+      if (task) openPromptViewer(task);
+    });
+  });
   els.thread.querySelectorAll('[data-reference-task]').forEach((button) => {
     button.addEventListener('click', () => {
       const id = button.dataset.referenceTask;
@@ -542,10 +559,25 @@ function renderThread() {
 }
 
 function openViewer(task) {
+  els.viewerKicker.textContent = 'Report Bundle';
   els.viewerTitle.textContent = task.title || 'Deep Research Report';
   els.viewerContent.innerHTML = task.output_html || markdownToHtml(task.output_text || '');
+  els.downloadMd.hidden = false;
+  els.downloadPdf.hidden = false;
   els.downloadMd.href = `/api/research/${encodeURIComponent(task.id)}/export/markdown`;
   els.downloadPdf.href = `/api/research/${encodeURIComponent(task.id)}/export/pdf`;
+  els.viewer.classList.add('open');
+  els.viewer.setAttribute('aria-hidden', 'false');
+}
+
+function openPromptViewer(task) {
+  const effectivePrompt =
+    task.effective_prompt || task.prompt_enrichment?.effective_prompt || task.prompt || '';
+  els.viewerKicker.textContent = 'Effective Prompt';
+  els.viewerTitle.textContent = '包含补充资料的完整 Prompt';
+  els.viewerContent.innerHTML = `<pre class="prompt-viewer-pre">${escapeHtml(effectivePrompt)}</pre>`;
+  els.downloadMd.hidden = true;
+  els.downloadPdf.hidden = true;
   els.viewer.classList.add('open');
   els.viewer.setAttribute('aria-hidden', 'false');
 }

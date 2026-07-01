@@ -1375,14 +1375,14 @@ function buildEffectivePrompt(originalPrompt, enrichment) {
   return [
     originalPrompt,
     '',
-    '[Icarus direct data supplement]',
+    '[data supplement]',
     'The following material was fetched before GPT Researcher using direct APIs or local structured data. Treat it as supplied source material for this research task.',
     '',
     material,
     '',
     'Sources:',
     sources || 'none',
-    '[/Icarus direct data supplement]',
+    '[/data supplement]',
   ].join('\n');
 }
 

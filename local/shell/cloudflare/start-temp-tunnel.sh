@@ -10,6 +10,7 @@ ORIGIN_URL="${2:-http://localhost:3002}"
 CONFIG_FILE="${CLOUDFLARED_CONFIG:-${HOME}/.cloudflared/config.yml}"
 TUNNEL_NAME="${CLOUDFLARED_TUNNEL:-icarus}"
 PUBLIC_HOSTNAME="${CLOUDFLARED_HOSTNAME:-webhook.zwqbb.com}"
+DEEP_RESEARCH_HOSTNAME="${CLOUDFLARED_DEEP_RESEARCH_HOSTNAME:-deep-research.zwqbb.com}"
 
 mkdir -p "${RUNTIME_DIR}"
 
@@ -27,6 +28,9 @@ if [ -f "${PID_FILE}" ]; then
       echo "tunnel url: ${url}"
       echo "feishu webhook url: ${url}/webhook/feishu"
       echo "wecom webhook url: ${url}/webhook/wecom/app"
+      if [ "${MODE}" != "temp" ]; then
+        echo "deep research url: https://${DEEP_RESEARCH_HOSTNAME}"
+      fi
     else
       echo "log file: ${LOG_FILE}"
     fi
@@ -87,6 +91,9 @@ if [ -n "${url}" ]; then
   echo "tunnel ready: ${url}"
   echo "feishu webhook url: ${url}/webhook/feishu"
   echo "wecom webhook url: ${url}/webhook/wecom/app"
+  if [ "${MODE}" != "temp" ]; then
+    echo "deep research url: https://${DEEP_RESEARCH_HOSTNAME}"
+  fi
 else
   echo "tunnel started but url is not available yet"
   echo "check logs: ${LOG_FILE}"
