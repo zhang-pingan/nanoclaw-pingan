@@ -98,7 +98,16 @@ ICARUS_INTERNAL_API_HOST=127.0.0.1
 ICARUS_INTERNAL_API_PORT=3004
 ICARUS_INTERNAL_API_TOKEN=...
 ICARUS_DEEP_RESEARCH_AGENT_CHAT_JID=web:deep-research-analyst
+GPT_RESEARCHER_PROMPT_ENRICHMENT_ENABLED=true
 ```
+
+When GPT Researcher tasks run, Deep Research first asks the Icarus agent to
+inspect the original prompt and optionally add direct-API or local structured
+data. The agent is instructed not to use web search for this step. Deep Research
+then validates the returned JSON template, verifies that `original_prompt` is
+unchanged, rejects search/browser/Tavily sources, and submits the validated
+effective prompt to GPT Researcher. Set
+`GPT_RESEARCHER_PROMPT_ENRICHMENT_ENABLED=false` to bypass this pre-step.
 
 The fixed `deep-research/.data/agent-readable` directory is exported as
 a sanitized, read-only view for Icarus containers. Icarus mounts it through the
