@@ -165,6 +165,7 @@ let mascotDragging = false;
 let suppressNextMascotClick = false;
 let pendingFiles: File[] = [];
 let dragDepth = 0;
+let pausedAssistantNoticeDismissed = false;
 const pendingInboxActionItemIds = new Set<string>();
 const pendingInboxActionByItemId = new Map<string, string>();
 const inboxActionErrorsByItemId = new Map<string, string>();
@@ -640,17 +641,20 @@ function chatMessagePreviewBody(message: AssistantChatMessage): string {
 
 function renderIdle(): void {
   shell.classList.remove('attention');
-  const hideIdleBubble = Boolean(state?.settings.enabled);
+  const assistantEnabled = state?.settings.enabled === true;
+  const assistantPaused = state?.settings.enabled === false;
+  const hideIdleBubble =
+    assistantEnabled || (assistantPaused && pausedAssistantNoticeDismissed);
   shell.classList.toggle('bubble-hidden', hideIdleBubble);
   bubble.setAttribute('aria-hidden', hideIdleBubble ? 'true' : 'false');
   syncScene();
   bubbleKicker.textContent = 'Personal Assistant';
-  bubbleTitle.textContent = state?.settings.enabled
+  bubbleTitle.textContent = assistantEnabled
     ? '当前没有新的主动事项'
     : '个人助手已暂停';
-  bubbleBody.textContent = state?.settings.enabled
+  bubbleBody.textContent = assistantEnabled
     ? '我会继续观察今日计划、工作台任务、定时任务和 Agent 执行状态。'
-    : '可以在 Web 工作站的个人助手页重新启用。';
+    : '可以在 Web 工作站的个人助手页重新启用，也可以本次运行先忽略提醒。';
   bubbleActions.innerHTML = '';
   bubbleActions.append(
     button('打开工作站', 'primary', () =>
@@ -659,6 +663,14 @@ function renderIdle(): void {
       ),
     ),
   );
+  if (assistantPaused) {
+    bubbleActions.append(
+      button('忽略', '', () => {
+        pausedAssistantNoticeDismissed = true;
+        render();
+      }),
+    );
+  }
   updateAlertLayout();
 }
 
