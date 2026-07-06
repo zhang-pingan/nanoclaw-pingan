@@ -660,8 +660,8 @@ describe('container-runner timeout behavior', () => {
     const { spawn } = await import('child_process');
     vi.mocked(validateAdditionalMounts).mockReturnValueOnce([
       {
-        hostPath: '/host/deep-research-readable',
-        containerPath: '/workspace/extra/deep-research',
+        hostPath: '/host/report-readable',
+        containerPath: '/workspace/extra/report-data',
         readonly: true,
       },
     ]);
@@ -671,8 +671,8 @@ describe('container-runner timeout behavior', () => {
       containerConfig: {
         additionalMounts: [
           {
-            hostPath: '/host/deep-research-readable',
-            containerPath: 'deep-research',
+            hostPath: '/host/report-readable',
+            containerPath: 'report-data',
             readonly: true,
           },
         ],
@@ -697,7 +697,7 @@ describe('container-runner timeout behavior', () => {
     const calls = vi.mocked(spawn).mock.calls;
     const args = calls[calls.length - 1][1] as string[];
     expect(args).toContain(
-      '/host/deep-research-readable:/workspace/extra/deep-research:ro',
+      '/host/report-readable:/workspace/extra/report-data:ro',
     );
   });
 });

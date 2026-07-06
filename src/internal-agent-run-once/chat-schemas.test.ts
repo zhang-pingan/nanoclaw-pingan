@@ -21,15 +21,15 @@ describe('internal agent chat schemas', () => {
     });
   });
 
-  it('rejects Deep Research-specific context fields', () => {
+  it('rejects domain-specific context fields', () => {
     expect(() =>
       parseAgentChatRequest({
         chat_jid: 'web:l3agent',
         message: 'question',
-        deep_research: {
-          conversation_id: 'drs_1',
-          mounted_root: '/workspace/extra/deep-research',
-          referenced_task_ids: ['dr_1'],
+        report_context: {
+          report_id: 'report-1',
+          mounted_root: '/workspace/extra/report-data',
+          referenced_artifact_ids: ['artifact-1'],
         },
       }),
     ).toThrow();
