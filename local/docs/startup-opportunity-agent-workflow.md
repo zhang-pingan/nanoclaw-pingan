@@ -207,6 +207,12 @@ Icarus workflow runtime
 ```text
 行业 App 方向输入
   -> 研究规划
+  -> 调研种子探测
+      -> 用户/场景 seed
+      -> 问题/痛点 seed
+      -> 关键词 seed
+      -> 产品 seed
+      -> 数据源 seed
   -> 并行发现 lanes
       -> 证据收集
       -> 事实/痛点/竞品信息提取
@@ -591,7 +597,8 @@ global_score =
 class IndustryAppOpportunityWorkflow:
     async def run(self, direction: str):
         plan = await self.plan_research(direction)
-        discovery = await self.run_discovery_parallel(plan)
+        seeds = await self.probe_research_seeds(direction, plan)
+        discovery = await self.run_discovery_parallel(plan, seeds)
         validated = await self.validate_discovery_fan_in(discovery)
         merged = await self.merge_and_cluster(validated)
         enrichment = await self.run_enrichment_parallel(merged)
@@ -620,6 +627,30 @@ class ResearchPlanner:
 - 每条 lane 的 topN 数量。
 - 是否需要行业特定维度。
 
+### Seed Probe
+
+负责在 discovery lane 并行前做轻量调研种子探测。这里的 seed 是“后续调研的起点”，不是最终结论，也不是要求所有 lane 都围绕已有产品展开。
+
+`seed_probe` 产出多类 seed：
+
+```json
+{
+  "audience_seeds": ["新手宠物主", "高龄宠物家庭", "多宠家庭"],
+  "scenario_seeds": ["慢病管理", "走失寻回", "行为训练", "临终照护"],
+  "problem_seeds": ["用药提醒不可靠", "夜间急诊信息不足", "家庭成员协同困难"],
+  "keyword_seeds": ["宠物用药提醒", "猫咪应激", "宠物走失怎么办"],
+  "product_seeds": ["宠物健康 App", "宠物社区 App", "宠物电商 App"],
+  "source_seeds": ["App Store", "Google Play", "小红书", "知乎", "Reddit", "宠物论坛"]
+}
+```
+
+依赖规则：
+
+- `product_seed` 主要供 `top_products`、`review_mining`、`competitor_gap` 等产品相关 lane 使用。
+- `audience_pain`、`search_demand`、`trend_change` 不应依赖 `product_seed` 才能启动，它们可以从用户心智、搜索问题、社区讨论、政策和技术变化中发现尚未被产品充分覆盖的需求。
+- 已有产品在非产品 lane 中更多是 coverage gap 的佐证，而不一定是机会来源。
+- 如果 `product_seed` 不足，产品相关 lane 应继续做产品发现或返回 `insufficient_evidence`，不能用猜测产品列表支撑正式结论。
+
 ### Discovery Lane
 
 每个调研维度实现统一接口：
@@ -628,7 +659,12 @@ class ResearchPlanner:
 class DiscoveryLane:
     name: str
 
-    async def collect_evidence(self, direction: str, plan: LanePlan) -> list[EvidenceItem]:
+    async def collect_evidence(
+        self,
+        direction: str,
+        plan: LanePlan,
+        seed_context: SeedProbe,
+    ) -> list[EvidenceItem]:
         ...
 
     async def extract_findings(self, evidence: list[EvidenceItem]) -> list[Finding]:
@@ -955,6 +991,7 @@ Research Kernel 可以参考 GPT Researcher 的以下流程，但不直接成为
 
 ```text
 opportunity_planner
+opportunity_seed_researcher
 audience_pain_researcher
 top_products_researcher
 review_mining_researcher
@@ -975,6 +1012,7 @@ opportunity_reporter
 
 ```text
 research-plan.json
+seed-probe.json
 audience-pain-lane.json
 top-products-lane.json
 review-mining-lane.json
@@ -1000,7 +1038,8 @@ traceability.json
 
 ```text
 research_plan              delegation  LLM 规划 lane、关键词、数据源、topN、评分权重、Research Kernel 参数
-discovery_parallel         parallel    多 discovery lane 并行调研、抽取、维度内筛选
+seed_probe                 delegation  轻量探测用户、场景、问题、关键词、产品和数据源 seed
+discovery_parallel         parallel    基于多类 seed 的 discovery lane 并行调研、抽取、维度内筛选
 lane_result_validate       system      schema、evidence ref、必填字段、topN 数量校验
 opportunity_merge          delegation  语义合并、拆分判断、证据聚合
 enrichment_parallel        parallel    竞品、市场、商业化、获客、合规、反证并行补充检索
@@ -1022,6 +1061,8 @@ search_demand       搜索需求与内容缺口
 trend_change        趋势变化
 ```
 
+`seed_probe` 不应把业务流程变成产品中心调研。`product_seed` 只作为产品相关 branch 的输入；非产品 branch 仍可独立从用户心智、搜索需求、社区讨论和趋势变化中发现尚未被现有产品覆盖的强需求。后续的产品覆盖分析用于验证 coverage gap，而不是要求所有机会都来自已有产品缺口。
+
 `enrichment_parallel` branches：
 
 ```text
@@ -1041,6 +1082,7 @@ counter_evidence    反证、替代方案、失败案例
 
 ```text
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-research-plan/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-seed-probe/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-audience-pain-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-top-products-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-review-mining-recon/SKILL.md
@@ -1062,7 +1104,10 @@ counter_evidence    反证、替代方案、失败案例
 
 ```json
 {
-  "web_opportunity_planner": ["opportunity-research-plan"],
+  "web_opportunity_planner": [
+    "opportunity-research-plan",
+    "opportunity-seed-probe"
+  ],
   "web_opportunity_research": [
     "opportunity-audience-pain-recon",
     "opportunity-top-products-recon",
@@ -1092,9 +1137,10 @@ branch skill 的职责划分：
 | Branch | Skill | 核心职责 |
 |--------|-------|----------|
 | `research_plan` | `opportunity-research-plan` | 生成 lane 计划、query goals、数据源优先级、Research Kernel 参数和评分权重 |
+| `seed_probe` | `opportunity-seed-probe` | 轻量探测用户、场景、问题、关键词、产品和数据源 seed；不把所有 lane 绑定到已有产品 |
 | `audience_pain` | `opportunity-audience-pain-recon` | 从人群、场景、社区讨论和评论中挖掘痛点与候选机会 |
-| `top_products` | `opportunity-top-products-recon` | 找到头部产品、定位、功能覆盖、商业模式和覆盖缺口 |
-| `review_mining` | `opportunity-review-mining-recon` | 从低星评论、功能请求、投诉中提取未满足需求 |
+| `top_products` | `opportunity-top-products-recon` | 基于 `product_seed` 扩展头部产品、定位、功能覆盖、商业模式和覆盖缺口 |
+| `review_mining` | `opportunity-review-mining-recon` | 基于 `product_seed` 抓取低星评论、功能请求、投诉并提取未满足需求 |
 | `search_demand` | `opportunity-search-demand-recon` | 从搜索需求、问答和内容缺口中识别工具化机会 |
 | `trend_change` | `opportunity-trend-recon` | 从政策、技术、平台和消费变化中识别新窗口 |
 | `competitor_gap` | `opportunity-competitor-gap-recon` | 对合并机会验证竞品覆盖、满意度、迁移阻力和差异化空间 |
@@ -1173,6 +1219,7 @@ host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按
 
 ```text
 startup_opportunity.plan.v1
+startup_opportunity.seed_probe.v1
 startup_opportunity.discovery_lane_result.v1
 startup_opportunity.discovery_fan_in.v1
 startup_opportunity.merge.v1
@@ -1196,6 +1243,20 @@ startup_opportunity.traceability.v1
 ```
 
 branch-level contract 用于约束单个并行分支的输出；fan-in contract 用于约束 join 后给下游 state 的聚合上下文。
+
+`seed_probe.v1` 必须产出：
+
+```text
+startup_opportunity.seed_probe.v1
+  - audience_seeds
+  - scenario_seeds
+  - problem_seeds
+  - keyword_seeds
+  - product_seeds
+  - source_seeds
+  - seed_evidence_refs
+  - limitations
+```
 
 `discovery_parallel` 的每个 branch 必须产出：
 
@@ -1305,6 +1366,7 @@ Opportunity service -> 自己规划/执行/评分/报告 -> Icarus 只展示结�
 ```text
 Icarus workflow
   -> delegation: research_plan skill
+  -> delegation: seed_probe skill
   -> parallel: discovery branch delegations
   -> system/action: discovery fan-in validation
   -> delegation: opportunity merge
@@ -1383,6 +1445,7 @@ Research Kernel
 业务 workflow 范围：
 
 - `research_plan` 规划完整 discovery/enrichment research plan。
+- `seed_probe` 探测多类调研 seed，包括用户、场景、问题、关键词、产品和数据源；其中 `product_seed` 只作为产品相关 branch 的输入。
 - `discovery_parallel` 覆盖 5 条发现 branch：
   - 受众需求痛点。
   - 已有产品 Top 排名挖掘。
@@ -1418,6 +1481,7 @@ Research Kernel
 ```text
 direction
   -> research_plan
+  -> seed_probe
   -> discovery_parallel
       -> audience_pain
       -> top_products
