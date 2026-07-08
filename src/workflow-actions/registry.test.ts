@@ -181,12 +181,12 @@ describe('workflow action registry', () => {
       stateKey: 'prepare',
       params: {
         values: {
-          ios_work_branch: 'feature/generated',
+          staging_work_branch: 'staging/generated',
           work_branch: 'feature/new-server',
         },
       },
       context: {
-        ios_work_branch: '',
+        staging_work_branch: '',
         work_branch: 'feature/existing-server',
       },
       steps: {},
@@ -194,7 +194,7 @@ describe('workflow action registry', () => {
 
     expect(result.status).toBe('success');
     expect(result.contextPatch).toEqual({
-      ios_work_branch: 'feature/generated',
+      staging_work_branch: 'staging/generated',
     });
   });
 });

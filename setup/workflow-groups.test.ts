@@ -45,7 +45,7 @@ describe('workflow-groups setup step', () => {
     const output = await runWorkflowGroupsInTemp(['--channel', 'web']);
 
     expect(output).toContain('STATUS: success');
-    expect(output).toContain('REGISTERED: 9');
+    expect(output).toContain('REGISTERED: 6');
 
     const db = new Database(path.join(process.cwd(), 'store', 'messages.db'), {
       readonly: true,
@@ -66,9 +66,6 @@ describe('workflow-groups setup step', () => {
     expect(rows.map((row) => row.folder)).toEqual([
       'web_dev',
       'web_dev_examine',
-      'web_ios_acceptance',
-      'web_ios_preintegration',
-      'web_ios_recon',
       'web_ops',
       'web_plan',
       'web_plan_examine',
@@ -126,7 +123,7 @@ describe('workflow-groups setup step', () => {
     const output = await runWorkflowGroupsInTemp(['--channel', 'feishu']);
 
     expect(output).toContain('REGISTERED: 0');
-    expect(output).toContain('SKIPPED: 9');
+    expect(output).toContain('SKIPPED: 6');
   });
 
   it('registers feishu workflow groups from a chat-id mapping', async () => {
@@ -138,7 +135,7 @@ describe('workflow-groups setup step', () => {
     ]);
 
     expect(output).toContain('REGISTERED: 2');
-    expect(output).toContain('SKIPPED: 7');
+    expect(output).toContain('SKIPPED: 4');
 
     const db = new Database(path.join(process.cwd(), 'store', 'messages.db'), {
       readonly: true,

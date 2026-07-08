@@ -162,7 +162,7 @@ describe('workflow context pack', () => {
       'product-recon.json',
       JSON.stringify({
         version: 1,
-        platform: 'ios',
+        platform: 'web',
         service: SERVICE,
         session_id: 'SESSION-001',
         flows: [],
@@ -171,10 +171,10 @@ describe('workflow context pack', () => {
     );
 
     const result = buildWorkflowContextPack({
-      workflow: workflow({ workflow_type: 'ios_dev_test', status: 'plan' }),
+      workflow: workflow({ workflow_type: 'dev_test', status: 'plan' }),
       stageKey: 'plan',
       role: 'planner',
-      skill: 'ios-plan-requirement',
+      skill: 'plan-requirement',
       attempt: 1,
       targetFolder: 'web_plan',
       registeredGroups: { 'plan@g.us': group('web_plan') },
@@ -182,7 +182,7 @@ describe('workflow context pack', () => {
         readiness_policy: 'record_only',
         sources: [
           {
-            id: 'ios_recon_artifacts',
+            id: 'product_recon_artifacts',
             type: 'artifact',
             required: true,
             refs: ['product_recon', 'impact_analysis'],
@@ -197,12 +197,12 @@ describe('workflow context pack', () => {
       ]),
     );
     expect(result.pack.readiness.missing_required_sources).toContain(
-      'ios_recon_artifacts',
+      'product_recon_artifacts',
     );
     expect(result.pack.excluded_candidates).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          source_id: 'ios_recon_artifacts',
+          source_id: 'product_recon_artifacts',
           ref: 'impact_analysis',
           reason: 'path_missing',
         }),

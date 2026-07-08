@@ -2,22 +2,12 @@
   "global": ["agent-browser"],
   "feishu_ops": ["ops-staging-deploy", "devops"],
   "feishu_main": ["macos"],
-  "web_dev": [
-    "dev-requirement",
-    "dev-bugfix",
-    "fix-bug",
-    "fix-refix-bug",
-    "ios-backend-dev-requirement",
-    "ios-backend-bugfix"
-  ],
+  "web_dev": ["dev-requirement", "dev-bugfix", "fix-bug", "fix-refix-bug"],
   "web_dev_examine": ["dev-examine"],
   "web_plan_examine": ["plan-examine"],
-  "web_plan": ["plan-requirement", "ios-plan-requirement"],
+  "web_plan": ["plan-requirement"],
   "web_ops": ["ops-staging-deploy", "devops"],
   "web_test": ["test-requirement", "fix-test-bug", "devops"],
   "web_main": ["macos"],
-  "assistant_main": ["macos", "devops", "self-evolution"],
-  "web_ios_recon": ["ios-recon-requirement"],
-  "web_ios_preintegration": ["ios-preintegration"],
-  "web_ios_acceptance": ["ios-acceptance-test"]
+  "assistant_main": ["macos", "devops", "self-evolution"]
 }

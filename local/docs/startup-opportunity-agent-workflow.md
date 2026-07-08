@@ -19,7 +19,7 @@
 - Icarus 仓库：`/Users/chelaile/IdeaProjects/icarus`
 - GPT Researcher 仓库：`/Users/chelaile/IdeaProjects/gpt-researcher`
 
-创业机会 Agent 不是通用 deep research，也不是直接让模型基于一个行业方向生成候选创业点，而是通过多条明确的调研维度并行收集证据，从证据中挖掘候选机会，再经过维度内筛选、跨维度合并、补充检索、反证、综合排序，最终输出创业方向排名和分析报告。
+创业机会 Agent 不是通用 deep research，也不是直接让模型基于一个行业方向生成候选创业点，而是通过多条明确的调研维度并行收集原始证据并留痕，再从证据中提炼 claim、finding 和 insight 等判断层产物，后续基于判断层挖掘候选机会、筛选、合并、补充检索、反证和综合排序，最终输出创业方向排名和专业分析报告。
 
 本方案不按 MVP 分期设计，而是描述一版完整架构。实现时可以按工程风险拆任务，但文档目标是定义完整形态。
 
@@ -44,7 +44,7 @@ AI 教育 App
 - 目标用户
 - 核心痛点
 - 机会来源
-- 证据摘要
+- 判断依据摘要
 - 竞品覆盖度
 - 用户满意度缺口
 - 市场和商业化判断
@@ -65,10 +65,10 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 | 需求 | 通用 deep research | 创业机会 Agent |
 |------|--------------------|----------------|
 | 输入 | 一个研究问题 | 一个行业或 App 方向 |
-| 候选机会 | 可能由模型直接总结 | 必须从多类证据中挖掘 |
+| 候选机会 | 可能由模型直接总结 | 必须从多类证据提炼出的判断层中挖掘 |
 | 调研维度 | 动态扩展为主 | 预设维度 + 动态补充 |
 | 评估方式 | 自然语言综合 | 结构化评分、筛选、排序 |
-| 输出 | 一篇报告 | 多个机会方向排名 + 证据链 |
+| 输出 | 一篇报告 | 多个机会方向排名 + 可审计判断链 |
 | 决策逻辑 | 隐式 | 显式、可追溯、可调权重 |
 
 因此，该 Agent 服务不应直接把 `GPTResearcher(report_type="deep")` 作为主业务接口，也不应只复刻一次性 deep research prompt。正确方向是：参考 GPT Researcher 的高质量调研流程，抽象出 Icarus 自己的 Research Kernel，并让 workflow runtime 原生支持并行分支、分支质量门、fan-in 汇总和可追踪产物。
@@ -80,9 +80,9 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 明确 workflow action 只负责确定性系统操作；调研、检索控制、抽取、综合等非确定性任务由 agent delegation 节点完成。
 - 参考 GPT Researcher deep 的流程设计，抽象为可被 Icarus lane 复用的 Research Kernel。
 - 从行业 App 方向中发现多个候选创业机会。
-- 候选机会必须来自明确的调研维度和证据，而不是先验生成。
-- 每条调研维度独立、可并行地完成证据收集、机会提取和维度内筛选。
-- 对多维度筛选出的 topN 机会进行去重、聚类和证据合并。
+- 候选机会必须来自明确调研维度提炼出的 claim、finding 和 insight，而不是先验生成。
+- 每条调研维度独立、可并行地完成证据留痕、判断提炼、机会提取和维度内筛选。
+- 对多维度筛选出的 topN 机会进行去重、聚类和判断依据合并。
 - 对合并机会进行并行补充检索、竞品验证、市场/商业化判断、合规风险和反证调查。
 - 对合并后的机会进行跨维度综合排序。
 - 输出可解释的创业方向排名和具体分析总结。
@@ -93,14 +93,14 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 不直接替代 GPT Researcher 的通用研究报告能力。
 - 不把 GPT Researcher 作为黑盒主业务入口；它是流程参考和可选底层能力来源。
 - 不把 LLM 的自然语言报告作为唯一决策结果。
-- 不把成品服务降级成一次性报告生成；需要保留结构化证据、评分、反证和可追踪产物。
+- 不把成品服务降级成一次性报告生成；需要保留结构化判断层、评分、反证和可追踪审计产物。
 - 不把并行能力做成某个业务 workflow 的特例；并行/fan-in 是 Icarus workflow runtime 的通用能力。
 - 不用 MVP 范围定义本方案；本方案描述完整目标形态。
 - 不保证生成的方向一定可创业成功，系统输出的是基于公开信息和可获取证据的机会判断。
 
 ## 核心设计原则
 
-### 1. 机会来自证据，而不是先生成
+### 1. 机会来自判断层，而不是先生成
 
 错误流程：
 
@@ -111,15 +111,29 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 目标流程：
 
 ```text
-行业方向 -> 多维度调研 -> 从证据中提取机会 -> 筛选排序
+行业方向 -> 多维度调研 -> 原始证据留痕 -> 提炼判断层 -> 从判断层提取机会 -> 筛选排序
 ```
+
+原始证据只作为留痕、审计和置信度校验的底层材料，不直接作为后续调研结果生成或最终报告写作的语料。后续 workflow 只消费从证据中提炼出的结构化判断层：
+
+```text
+Evidence Store -> Claims -> Findings -> Insights -> Opportunities -> Scores -> Report
+```
+
+其中：
+
+- `Evidence` 是网页、评论、榜单、报告、帖子等原始材料，保存在 evidence store 中。
+- `Claim` 是从原始材料中抽取出的单条事实或判断。
+- `Finding` 是对多条 claim 的归纳发现。
+- `Insight` 是面向创业决策的洞察。
+- `Report` 使用专业报告结构表达判断，不按证据列表展开综述。
 
 ### 2. 调研维度既是发现通道，也是筛选通道
 
 每个调研维度不是只负责收集材料，而是完整产出：
 
 ```text
-Evidence -> Findings -> Opportunities -> Lane Scores -> TopN
+Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores -> TopN
 ```
 
 例如“已有产品 Top 排名挖掘”维度需要：
@@ -133,17 +147,19 @@ Evidence -> Findings -> Opportunities -> Lane Scores -> TopN
 
 ### 3. 先维度内筛选，再跨维度综合排序
 
-不同调研维度的证据质量和含义不同，不能在早期简单混合。每个维度先独立判断，产出本维度 topN；然后再做机会合并、证据聚合和全局评分。
+不同调研维度的判断质量和含义不同，不能在早期简单混合。每个维度先独立判断，产出本维度 topN；然后再做机会合并、判断依据聚合和全局评分。
 
-### 4. 所有结论保留证据链
+### 4. 所有结论保留可审计判断链
 
 每个机会方向的评分和结论都应能追溯到：
 
 - 来自哪个调研维度。
-- 使用了哪些来源。
-- 提取了哪些事实、痛点或缺口。
-- 哪些证据支持，哪些证据反驳。
+- 使用了哪些 claim、finding 和 insight。
+- 这些判断层产物背后有哪些 evidence refs。
+- 哪些判断支持机会，哪些判断构成反证。
 - 置信度如何。
+
+但最终报告不应围绕 evidence ref 展开写作，也不应把原始证据片段作为主要内容。证据只在审计链、附录、traceability artifact 或必要的脚注位置出现。
 
 ### 5. 并行是 workflow 一等能力
 
@@ -214,8 +230,8 @@ Icarus workflow runtime
       -> 产品 seed
       -> 数据源 seed
   -> 并行发现 lanes
-      -> 证据收集
-      -> 事实/痛点/竞品信息提取
+      -> 原始证据留痕
+      -> claim/finding/insight 提炼
       -> 候选机会生成
       -> 维度内评分
       -> 维度内 topN 筛选
@@ -255,7 +271,8 @@ Icarus workflow runtime
   -> 用户群体拆解
   -> 使用场景拆解
   -> 痛点查询生成
-  -> 证据收集
+  -> 原始证据留痕
+  -> claim/finding/insight 提炼
   -> 痛点聚类
   -> 候选机会提取
   -> 按痛点强度、频率、付费意愿、可解决性评分
@@ -270,7 +287,7 @@ Icarus workflow runtime
 | 目标用户清晰度 | 是否能明确谁在痛、为什么痛 |
 | 付费意愿 | 是否存在明显付费动机或替代支出 |
 | 可解决性 | App 是否能实际缓解该痛点 |
-| 证据置信度 | 来源数量、质量和一致性 |
+| 判断置信度 | claim/finding/insight 是否有足够来源支撑，来源质量和一致性如何 |
 
 ### 2. 已有产品 Top 排名挖掘 Lane
 
@@ -429,14 +446,14 @@ Icarus workflow runtime
     "慢病复诊和药品记录分散"
   ],
   "source_lanes": ["audience_pain", "top_products_gap", "review_mining"],
-  "evidence": [
+  "supporting_insights": [
     {
-      "claim": "现有用药提醒产品家庭协同能力不足",
-      "source_type": "app_review",
-      "url": "https://example.com/review",
+      "insight_id": "ins_001",
+      "summary": "现有用药提醒产品更偏个人提醒，家庭协同和长期慢病流程覆盖不足。",
       "confidence": 0.78
     }
   ],
+  "audit_refs": ["claim_001", "claim_002", "ev_001"],
   "lane_scores": {
     "audience_pain": 8.4,
     "top_products_gap": 7.2,
@@ -449,7 +466,13 @@ Icarus workflow runtime
 }
 ```
 
-## 证据数据模型
+## Evidence / Claim / Finding / Insight 分层模型
+
+原始证据只进入 evidence store，用于留痕、审计、来源校验和置信度计算。后续调研、合并、评分和报告生成不直接消费 `raw_text`，而是消费 `claim`、`finding` 和 `insight`。
+
+### Evidence Record
+
+Evidence record 记录来源和原始材料，不作为最终报告的写作语料。
 
 ```json
 {
@@ -459,14 +482,57 @@ Icarus workflow runtime
   "source_name": "App Store",
   "url": "https://example.com",
   "published_at": "2026-06-01",
-  "raw_text": "用户原始评论或网页摘要",
-  "extracted_claims": [
-    "用户抱怨提醒不稳定",
-    "用户希望家庭成员可以收到提醒状态"
-  ],
+  "raw_text": "用户原始评论或网页摘要，仅保存在 evidence store 中",
+  "claim_refs": ["claim_001", "claim_002"],
   "sentiment": "negative",
   "relevance": 0.86,
   "credibility": 0.72
+}
+```
+
+### Claim
+
+Claim 是从 evidence 中抽取出的单条事实、痛点、缺口或反证判断。Claim 可以引用 evidence id，但不携带原始证据全文。
+
+```json
+{
+  "id": "claim_001",
+  "lane": "review_mining",
+  "claim_type": "pain_point",
+  "statement": "部分用户对用药提醒稳定性和家庭成员同步能力不满意。",
+  "stance": "support",
+  "evidence_refs": ["ev_001"],
+  "confidence": 0.78,
+  "limitations": ["评论样本可能偏向负面用户"]
+}
+```
+
+### Finding
+
+Finding 是对多条 claim 的归纳发现，用于 lane 内候选机会生成。
+
+```json
+{
+  "id": "finding_001",
+  "lane": "review_mining",
+  "summary": "宠物或老人慢病管理场景中，提醒、记录和家庭协同经常被拆散在多个工具中。",
+  "claim_refs": ["claim_001", "claim_002"],
+  "confidence": 0.74
+}
+```
+
+### Insight
+
+Insight 是面向创业决策的洞察，用于跨 lane 合并、enrichment、评分和最终报告。
+
+```json
+{
+  "id": "ins_001",
+  "source_lanes": ["review_mining", "top_products"],
+  "summary": "围绕长期照护流程的一体化协同工具可能比单点提醒工具更有差异化空间。",
+  "finding_refs": ["finding_001", "finding_002"],
+  "decision_relevance": "opportunity_definition",
+  "confidence": 0.76
 }
 ```
 
@@ -477,11 +543,13 @@ Icarus workflow runtime
 ```text
 LaneResult
   - lane_name
-  - evidence_items
   - findings
+  - claims
+  - insights
   - opportunities
   - scored_opportunities
   - top_opportunities
+  - audit_refs
 ```
 
 维度内评分可采用 0-10 分，并保留理由：
@@ -521,7 +589,7 @@ LaneResult
   -> 标题和描述 embedding
   -> 语义聚类
   -> LLM 判断是否同类
-  -> 合并目标用户、场景、痛点和证据
+  -> 合并目标用户、场景、痛点、claim/finding/insight 引用
   -> 生成统一机会描述
 ```
 
@@ -548,7 +616,7 @@ LaneResult
 | 差异化空间 | 8% | 是否能建立清晰定位或壁垒 |
 | 竞争风险 | -5% | 竞争强度、巨头风险、同质化风险 |
 | 合规和平台风险 | -5% | 政策、医疗、金融、数据隐私等风险 |
-| 证据置信度 | 10% | 来源质量、一致性、证据数量 |
+| 判断置信度 | 10% | claim/finding/insight 的来源质量、一致性和覆盖度 |
 
 示例公式：
 
@@ -561,7 +629,7 @@ global_score =
   + acquisition_feasibility * 0.10
   + entry_version_feasibility * 0.10
   + differentiation * 0.08
-  + evidence_confidence * 0.10
+  + judgment_confidence * 0.10
   - competition_risk * 0.05
   - compliance_risk * 0.05
 ```
@@ -583,9 +651,9 @@ global_score =
     "differentiation": 7.9,
     "competition_risk": 5.2,
     "compliance_risk": 6.4,
-    "evidence_confidence": 7.6
+    "judgment_confidence": 7.6
   },
-  "rationale": "该方向痛点明确、切入版本较轻、评论和竞品缺口证据一致，但存在健康数据和老年用户使用门槛。"
+  "rationale": "该方向痛点明确、切入版本较轻、评论和竞品缺口相关判断一致，但存在健康数据和老年用户使用门槛。"
 }
 ```
 
@@ -602,7 +670,7 @@ class IndustryAppOpportunityWorkflow:
         validated = await self.validate_discovery_fan_in(discovery)
         merged = await self.merge_and_cluster(validated)
         enrichment = await self.run_enrichment_parallel(merged)
-        normalized = await self.normalize_evidence(enrichment)
+        normalized = await self.normalize_judgment_context(enrichment)
         enriched = await self.build_scoring_context(normalized)
         ranked = await self.global_rank(enriched)
         report = await self.write_final_report(direction, ranked)
@@ -659,18 +727,24 @@ class ResearchPlanner:
 class DiscoveryLane:
     name: str
 
-    async def collect_evidence(
+    async def collect_and_record_evidence(
         self,
         direction: str,
         plan: LanePlan,
         seed_context: SeedProbe,
-    ) -> list[EvidenceItem]:
+    ) -> list[EvidenceRef]:
         ...
 
-    async def extract_findings(self, evidence: list[EvidenceItem]) -> list[Finding]:
+    async def extract_claims(self, evidence_refs: list[EvidenceRef]) -> list[Claim]:
         ...
 
-    async def generate_opportunities(self, findings: list[Finding]) -> list[Opportunity]:
+    async def synthesize_findings(self, claims: list[Claim]) -> list[Finding]:
+        ...
+
+    async def synthesize_insights(self, findings: list[Finding]) -> list[Insight]:
+        ...
+
+    async def generate_opportunities(self, insights: list[Insight]) -> list[Opportunity]:
         ...
 
     async def score_opportunities(self, opportunities: list[Opportunity]) -> list[LaneScoredOpportunity]:
@@ -687,12 +761,12 @@ class OpportunityClusterer:
         ...
 ```
 
-### EvidenceEnricher
+### JudgmentEnricher
 
-负责对合并后的机会做并行补充验证，尤其是综合评分前的关键缺口。落地时它对应 `enrichment_parallel` state，而不是单个串行服务：
+负责对合并后的机会做并行补充验证，并把新增材料提炼为 claim、finding、insight 和 score input。落地时它对应 `enrichment_parallel` state，而不是单个串行服务：
 
 ```python
-class EvidenceEnricher:
+class JudgmentEnricher:
     async def run_parallel(self, opportunities: list[MergedOpportunity]) -> EnrichmentFanIn:
         ...
 ```
@@ -739,15 +813,17 @@ class OpportunityReporter:
   - 机会定义
   - 目标用户
   - 核心痛点
-  - 支持证据
+  - 关键判断依据
   - 竞品覆盖和满意度缺口
   - 商业模式
   - 切入版本建议
   - 风险和反证
 ## 被筛掉的机会
 ## 不确定性和后续验证建议
-## 参考来源
+## 审计追踪和参考来源
 ```
+
+最终报告的正文应围绕创业判断展开，避免按证据逐条综述。原始 evidence 只通过 traceability、附录、脚注或审计追踪出现；正文主要使用 opportunity、insight、score breakdown、risk 和 validation plan 等结构化结果。
 
 ## Icarus 落地设计
 
@@ -759,8 +835,8 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已经有完整 workflow
 - workflow state 类型在 `/Users/chelaile/IdeaProjects/icarus/src/workflow-definition.ts` 中固定为 `delegation`、`system`、`interrupt`、`terminal`。
 - delegation 会构建 handoff contract，委派给 container agent 执行 skill，并要求通过 `complete_delegation` 回传结构化结果。
 - action registry 在 `/Users/chelaile/IdeaProjects/icarus/src/workflow-actions/registry.ts` 中，目前 action handler 是同步 `run(input): WorkflowActionResult`，适合 deterministic 系统操作，不适合隐藏 LLM 推理。
-- `ios_dev_test` 已经提供了最接近的参考实现：`ios_recon` 是 workflow delegation，`ios-recon-requirement` skill 负责分析任务，host 侧 `/Users/chelaile/IdeaProjects/icarus/src/app-recon/*` 通过 MCP/IPC 提供受控工具和产物写盘。
-- container agent 的 allowed tools 已包含 `WebSearch`、`WebFetch` 和 `mcp__icarus__*`。在本方案中，agent/skill 负责研究意图、来源选择和抽取判断；host MCP tool 负责可审计的数据获取、归一化、写盘和 evidence record；通用 WebSearch/WebFetch 可以作为探索补充，但不替代领域 MCP 工具和 evidence store。
+- 现有 workflow delegation、handoff contract、context pack、artifact contract 和 MCP/IPC 分发链路已经提供了可复用的参考实现。
+- container agent 的 allowed tools 已包含 `WebSearch`、`WebFetch` 和 `mcp__icarus__*`。在本方案中，agent/skill 负责研究意图、来源选择、claim/finding/insight 提炼和业务判断；host MCP tool 负责可审计的数据获取、归一化、写盘和 evidence record；通用 WebSearch/WebFetch 可以作为探索补充，但不替代领域 MCP 工具和 evidence store。
 
 需要新增的通用能力：
 
@@ -920,22 +996,25 @@ initial_probe
   -> summarize initial context
   -> generate queries with research goals
   -> parallel search/fetch
-  -> context compression
-  -> extract findings with citations
+  -> evidence record
+  -> extract claims with evidence refs
+  -> synthesize findings
+  -> synthesize insights
   -> generate follow-up questions
   -> bounded recursive research
-  -> source curation
-  -> structured research context
+  -> source manifest curation
+  -> structured judgment context
 ```
 
 关键约束：
 
 - query 必须带 `research_goal`，避免只有关键词。
 - 每轮研究必须记录 `source_url`、`source_title`、`retrieved_at`、`query`、`research_goal`。
-- context compression 不能吞掉证据来源；压缩后的 finding 必须保留 citation refs。
+- 原始 evidence 只进入 evidence store；后续 context pack 默认只放 claim、finding、insight 和 evidence refs，不放 `raw_text`。
+- claim、finding、insight 必须保留 evidence refs，方便审计和置信度校验。
 - 递归追问必须有 `depth`、`breadth`、`max_sources`、`max_tokens`、`stop_conditions`。
 - 无可用来源时应显式返回 `insufficient_evidence`，不能生成貌似确定的结论。
-- Research Kernel 产物不是最终报告，而是 lane extraction 的输入。
+- Research Kernel 产物不是最终报告，也不是证据综述，而是 lane extraction 使用的结构化判断上下文。
 
 Research Kernel 可以参考 GPT Researcher 的以下流程，但不直接成为业务入口：
 
@@ -943,9 +1022,9 @@ Research Kernel 可以参考 GPT Researcher 的以下流程，但不直接成为
 - 每个 query 带 research goal。
 - breadth/depth 递归。
 - 并发执行多个 query。
-- 抓取后做 context compression。
-- synthesis 前做 source curation。
-- report writer 基于 curated context。
+- 抓取后写入 evidence store。
+- synthesis 前做 source manifest curation。
+- report writer 基于 curated judgment context，而不是基于原始证据片段。
 - 无资料时 abstain。
 
 ### 不单独做 Opportunity Service
@@ -965,12 +1044,13 @@ Research Kernel 可以参考 GPT Researcher 的以下流程，但不直接成为
 职责只包括：
 
 - 创建调研 session。
-- 记录搜索结果、网页、榜单、评论、claim、反证等 evidence。
+- 记录搜索结果、网页、榜单、评论等 raw evidence。
+- 记录 claim、finding、insight 与 evidence refs 的映射关系。
 - 校验 evidence ref 是否存在。
 - 写入 JSON/Markdown 产物。
 - 调用确定性外部 API，例如 App Store lookup、榜单 API、评论 API、趋势 API。
 - 做确定性归一化、去重、评分公式计算。
-- 提供 Research Kernel 所需的 batch search、fetch、compress、source curation 工具接口。
+- 提供 Research Kernel 所需的 batch search、fetch、source manifest 和 traceability 工具接口。
 
 它不负责：
 
@@ -1027,7 +1107,7 @@ acquisition-enrichment.json
 compliance-risk-enrichment.json
 counter-evidence-enrichment.json
 enrichment-fan-in.json
-normalized-evidence.json
+normalized-judgment-context.json
 ranking.json
 ranking-rationale.json
 startup-opportunity-report.md
@@ -1039,14 +1119,14 @@ traceability.json
 ```text
 research_plan              delegation  LLM 规划 lane、关键词、数据源、topN、评分权重、Research Kernel 参数
 seed_probe                 delegation  轻量探测用户、场景、问题、关键词、产品和数据源 seed
-discovery_parallel         parallel    基于多类 seed 的 discovery lane 并行调研、抽取、维度内筛选
-lane_result_validate       system      schema、evidence ref、必填字段、topN 数量校验
-opportunity_merge          delegation  语义合并、拆分判断、证据聚合
+discovery_parallel         parallel    基于多类 seed 的 discovery lane 并行调研、判断提炼、维度内筛选
+lane_result_validate       system      schema、evidence ref、判断层必填字段、topN 数量校验
+opportunity_merge          delegation  语义合并、拆分判断、判断依据聚合
 enrichment_parallel        parallel    竞品、市场、商业化、获客、合规、反证并行补充检索
-evidence_normalize         system      URL/source/product/opportunity/evidence 归一化和 deterministic dedupe
+judgment_context_normalize system      URL/source/product/evidence ref/claim/finding/insight 归一化和 deterministic dedupe
 global_score               system      确定性评分公式、排序、阈值过滤
 ranking_rationale          delegation  基于结构化分数生成排名解释
-quality_review             delegation  审核证据链、反证、评分解释是否一致
+quality_review             delegation  审核判断链、反证、评分解释是否一致
 final_report               delegation  输出 Markdown 报告、JSON 报告和 traceability
 done                       terminal
 ```
@@ -1144,7 +1224,7 @@ branch skill 的职责划分：
 | `search_demand` | `opportunity-search-demand-recon` | 从搜索需求、问答和内容缺口中识别工具化机会 |
 | `trend_change` | `opportunity-trend-recon` | 从政策、技术、平台和消费变化中识别新窗口 |
 | `competitor_gap` | `opportunity-competitor-gap-recon` | 对合并机会验证竞品覆盖、满意度、迁移阻力和差异化空间 |
-| `market_size` | `opportunity-market-size-recon` | 补充市场规模、增长、目标用户规模和消费能力证据 |
+| `market_size` | `opportunity-market-size-recon` | 补充市场规模、增长、目标用户规模和消费能力相关判断 |
 | `monetization` | `opportunity-monetization-recon` | 验证付费意愿、定价、订阅、交易抽佣或 B2B 变现路径 |
 | `acquisition` | `opportunity-acquisition-recon` | 验证 SEO、社区、平台、内容和合作获客路径 |
 | `compliance_risk` | `opportunity-compliance-risk-recon` | 识别政策、医疗、金融、隐私、平台规则等风险 |
@@ -1155,11 +1235,11 @@ branch skill 的职责划分：
 - 读取 Context Pack。
 - 使用 handoff contract 中的输入和成功标准。
 - 所有业务结论写成结构化 artifact。
-- evidence 引用必须可追踪。
+- evidence 引用必须可追踪，但 artifact 面向下游的主体内容应是 claim、finding、insight、opportunity 和 score input，不应携带原始 evidence 正文作为生成语料。
 - 无论成功/失败都调用 `complete_delegation`。
-- result 至少包含 `verdict`、`summary`、`findings`、`evidence`。
+- result 至少包含 `verdict`、`summary`、`claims`、`findings`、`insights`、`audit_refs`。
 
-这与 `/Users/chelaile/IdeaProjects/icarus/container/skills/ios-recon-requirement/SKILL.md` 的模式一致。
+这与现有 delegation skill 通过结构化 handoff 返回结果的模式一致。
 
 ### MCP 工具与 action 的边界
 
@@ -1170,7 +1250,7 @@ agent delegation 负责：
 - 决定查什么、为什么查、下一轮追问什么。
 - 给每个 query 明确 `research_goal`。
 - 判断哪些来源值得阅读和引用。
-- 从来源中抽取痛点、功能、缺口、反证和机会。
+- 从来源中提炼 claim、finding、insight，再基于判断层生成痛点、功能缺口、反证和机会。
 - 对语义相近机会做合并/拆分判断。
 - 在 evidence 不足时显式降置信度或返回 `insufficient_evidence`。
 
@@ -1191,7 +1271,7 @@ host MCP tool 负责：
 
 host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按 agent 给出的 query、URL、source type 和 research goal 执行可审计数据获取，并把结果写成 evidence record。它不负责决定行业机会、筛选候选方向或生成最终结论。
 
-这些工具通过 `/Users/chelaile/IdeaProjects/icarus/container/agent-runner/src/ipc-mcp-stdio.ts` 暴露，再通过 `/Users/chelaile/IdeaProjects/icarus/src/ipc.ts` 分发到 `/Users/chelaile/IdeaProjects/icarus/src/opportunity-recon/request-dispatcher.ts`，模式参考现有 `ios_app_request`。通用 `WebSearch`/`WebFetch` 仍可用于探索性补充，但产出进入正式 artifact 前必须经 host MCP tool 记录到 evidence store，或在 artifact 中标明 provenance 和 limitations。
+这些工具通过 `/Users/chelaile/IdeaProjects/icarus/container/agent-runner/src/ipc-mcp-stdio.ts` 暴露，再通过 `/Users/chelaile/IdeaProjects/icarus/src/ipc.ts` 分发到 `/Users/chelaile/IdeaProjects/icarus/src/opportunity-recon/request-dispatcher.ts`。通用 `WebSearch`/`WebFetch` 仍可用于探索性补充，但原始来源进入正式判断前必须经 host MCP tool 记录到 evidence store。正式 artifact 中只保留 evidence refs、source manifest、provenance、limitations 和判断层产物，不携带原始证据正文作为下游生成语料。
 
 适合 workflow action 的：
 
@@ -1265,12 +1345,15 @@ startup_opportunity.discovery_lane_result.v1
   - branch_key
   - research_goals
   - queries
-  - evidence_items
+  - evidence_refs
+  - claims
   - findings
+  - insights
   - candidate_opportunities
   - scored_opportunities
   - top_opportunities
   - insufficient_evidence
+  - audit_refs
   - limitations
 ```
 
@@ -1281,7 +1364,9 @@ branch_results
 branch_evaluation_summary
 failed_or_partial_branches
 all_top_opportunities
-evidence_manifest
+judgment_context
+source_manifest
+audit_refs
 limitations
 ```
 
@@ -1291,11 +1376,14 @@ limitations
 startup_opportunity.enrichment_branch_result.v1
   - branch_key
   - opportunity_refs
-  - evidence_items
+  - evidence_refs
   - claims
+  - findings
+  - insights
   - counter_claims
   - score_inputs
   - confidence
+  - audit_refs
   - limitations
 ```
 
@@ -1303,10 +1391,12 @@ startup_opportunity.enrichment_branch_result.v1
 
 ```text
 opportunity_enrichment_matrix
-evidence_manifest
+judgment_context
+source_manifest
 counter_evidence_summary
 score_inputs_by_opportunity
 failed_or_partial_branches
+audit_refs
 limitations
 ```
 
@@ -1337,7 +1427,7 @@ Workflow create input 应使用方向字段，而不是候选机会字段：
 {
   "direction": "宠物行业 App",
   "market": "中国",
-  "platform": ["iOS", "Android", "Web"],
+  "platform": ["Mobile", "Web"],
   "language": "zh-CN",
   "target_rank_count": 10,
   "lane_top_n": 8,
@@ -1371,7 +1461,7 @@ Icarus workflow
   -> system/action: discovery fan-in validation
   -> delegation: opportunity merge
   -> parallel: enrichment branch delegations
-  -> system/action: evidence normalization + deterministic scoring
+  -> system/action: judgment context normalization + deterministic scoring
   -> delegation: ranking rationale
   -> delegation: quality review
   -> delegation: final report
@@ -1391,7 +1481,7 @@ GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）在本�
 - query + research goal：每个 query 都带明确研究目标，而不是只有关键词。
 - breadth/depth recursion：用可配置 breadth/depth 做递归追问，并有停止条件。
 - concurrent sub-research：多个子问题并发执行，最后聚合上下文。
-- context compression with citations：压缩上下文时保留来源引用，不丢 evidence trace。
+- context compression with citations：压缩上下文时保留 evidence refs，不丢审计追踪。
 - source curation before synthesis：综合前先筛选来源质量、去重和记录 limitations。
 - abstain on no evidence：证据不足时明确拒绝确定性结论。
 
@@ -1407,7 +1497,7 @@ report = await researcher.write_report()
 
 - `deep` 的目标是围绕一个 query 做递归研究，不负责多 lane 机会挖掘。
 - `write_report()` 生成的是自然语言报告，不负责结构化评分和排序。
-- 创业机会判断需要固定 schema、权重、证据链和反证逻辑。
+- 创业机会判断需要固定 schema、权重、可审计判断链和反证逻辑。
 - 不同 lane 的筛选规则不同，不能交给通用报告 prompt 隐式完成。
 
 在 Icarus 中，推荐把这些机制沉淀为 `Parallel Research Kernel`：
@@ -1417,7 +1507,7 @@ Research Kernel
   -> 接收 branch 的 research goals、query seeds、source preferences 和 bounds
   -> 由 agent 控制 query expansion、source selection、follow-up 判断
   -> 通过 host MCP tool 执行 batch search/fetch/source record
-  -> 输出 structured research context，而不是最终业务报告
+  -> 输出 structured judgment context，而不是最终业务报告或证据综述
 ```
 
 如果确实复用 GPT Researcher 的某些底层实现，也应限制在 Research Kernel 的内部实现细节，例如 search adapter、scraper adapter、context compressor 或 source curation helper。复用边界必须满足：
@@ -1452,7 +1542,7 @@ Research Kernel
   - 用户评论与差评挖掘。
   - 搜索需求与内容缺口。
   - 趋势变化。
-- `opportunity_merge` 对 discovery topN 做语义聚类、拆分和证据合并。
+- `opportunity_merge` 对 discovery topN 做语义聚类、拆分和判断依据合并。
 - `enrichment_parallel` 覆盖 6 条补充验证 branch：
   - 竞品缺口。
   - 市场空间。
@@ -1461,7 +1551,7 @@ Research Kernel
   - 合规和平台风险。
   - 反证与替代方案。
 - `global_score` 使用确定性公式计算综合评分和排序。
-- `quality_review` 审核证据链、反证、评分解释、limitations 和报告一致性。
+- `quality_review` 审核判断链、反证、评分解释、limitations 和报告一致性。
 - `final_report` 输出 JSON、Markdown 和 traceability artifact。
 
 最终输出 top 10 创业机会，每个机会包含：
@@ -1470,7 +1560,7 @@ Research Kernel
 - 目标用户
 - 关键痛点
 - 机会来源 lane
-- 主要证据
+- 关键判断依据
 - 竞品缺口
 - 综合评分
 - 切入版本建议
@@ -1497,7 +1587,7 @@ direction
       -> acquisition
       -> compliance_risk
       -> counter_evidence
-  -> evidence_normalize
+  -> judgment_context_normalize
   -> global_score
   -> ranking_rationale
   -> quality_review
@@ -1545,8 +1635,8 @@ direction
 ## 风险与注意事项
 
 - 公开数据可能不完整，尤其是 App 榜单和评论数据。
-- LLM 提取痛点和机会时可能过度概括，需要 schema 和证据校验约束。
-- 排名不能只看高分，也要看证据置信度和反证。
+- LLM 提取痛点和机会时可能过度概括，需要 schema、evidence ref 和判断链校验约束。
+- 排名不能只看高分，也要看判断置信度和反证。
 - 不同行业的权重应允许配置，例如医疗健康类应提高合规风险权重。
 - 最终报告应明确不确定性，避免把研究结论包装成确定性商业建议。
 
@@ -1557,8 +1647,8 @@ direction
 ```text
 multi-lane opportunity mining
   + structured evaluation
-  + evidence-backed ranking
+  + judgment-backed ranking
   + decision-oriented reporting
 ```
 
-该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 workflow、parallel state、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度的证据挖掘，每条维度先独立筛选 topN，再通过聚类、补充检索、反证调查和综合评分生成最终创业方向排名。
+该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 workflow、parallel state、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度提炼出的 claim、finding 和 insight，每条维度先独立筛选 topN，再通过聚类、补充检索、反证调查和综合评分生成最终创业方向排名。

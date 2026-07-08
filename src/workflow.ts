@@ -155,8 +155,6 @@ interface ParsedDelegationPayload {
   deliverable?: string;
   main_branch?: string;
   work_branch?: string;
-  ios_work_branch?: string;
-  client_impact_required?: boolean | string;
   staging_base_branch?: string;
   staging_work_branch?: string;
   access_token?: string;
@@ -1723,31 +1721,7 @@ function buildDelegationResultContextPatch(
       >)
     : {};
   const payloadRecord = { ...payload };
-  const patch: WorkflowContext = {};
-  const payloadDeliverable =
-    typeof payloadRecord.deliverable === 'string'
-      ? payloadRecord.deliverable.trim()
-      : '';
-  const workflowForPayload =
-    payloadDeliverable &&
-    workflowDeliverableDirExists(workflow, payloadDeliverable)
-      ? {
-          ...workflow,
-          context: mergeWorkflowContext(workflow.context, {
-            [WORKFLOW_CONTEXT_KEYS.deliverable]: payloadDeliverable,
-          }),
-        }
-      : workflow;
-  const clientImpactRequired = extractClientImpactRequired(
-    payloadRecord,
-    workflowForPayload,
-  );
-  if (clientImpactRequired !== undefined) {
-    patch.client_impact_required = clientImpactRequired;
-  }
-
   return {
-    ...patch,
     [WORKFLOW_CONTEXT_STAGE_RESULTS_KEY]: {
       ...existingStageResults,
       [workflow.status]: payloadRecord,
@@ -1758,87 +1732,6 @@ function buildDelegationResultContextPatch(
       payload: payloadRecord,
     },
   };
-}
-
-function extractClientImpactRequired(
-  payload: Record<string, unknown>,
-  workflow?: Workflow,
-): boolean | string | undefined {
-  const direct = payload.client_impact_required;
-  if (
-    typeof direct === 'boolean' ||
-    (typeof direct === 'string' && direct.trim())
-  ) {
-    return typeof direct === 'string' ? direct.trim() : direct;
-  }
-  const impactAnalysis = getNestedValue(payload, ['impact_analysis']);
-  if (!impactAnalysis) return undefined;
-  if (typeof impactAnalysis === 'string') {
-    const artifact = workflow
-      ? readScopedWorkflowJsonArtifact(workflow, impactAnalysis)
-      : null;
-    if (artifact)
-      return extractClientImpactRequired({ impact_analysis: artifact });
-    return undefined;
-  }
-  const required = getNestedValue(impactAnalysis, [
-    'client_impact',
-    'required',
-  ]);
-  if (
-    typeof required === 'boolean' ||
-    (typeof required === 'string' && required.trim())
-  ) {
-    return typeof required === 'string' ? required.trim() : required;
-  }
-  return undefined;
-}
-
-function readScopedWorkflowJsonArtifact(
-  workflow: Pick<Workflow, 'service' | 'context'>,
-  workspacePath: string,
-): Record<string, unknown> | null {
-  const deliverable = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.deliverable,
-  );
-  if (!deliverable || !isSafeWorkflowPathSegment(deliverable)) return null;
-  const normalized = workspacePath.trim();
-  const allowedPrefix = `/workspace/projects/${workflow.service}/iteration/${deliverable}/`;
-  if (
-    !normalized.startsWith(allowedPrefix) ||
-    normalized.includes('\0') ||
-    normalized.split('/').some((segment) => segment === '..')
-  ) {
-    return null;
-  }
-  const hostPath = path.join(
-    PROJECT_ROOT,
-    normalized.replace(/^\/workspace\//, ''),
-  );
-  if (!fs.existsSync(hostPath) || !fs.statSync(hostPath).isFile()) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(hostPath, 'utf-8'));
-    return isPlainObject(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function buildIosImpactContextPatchFromArtifacts(
-  workflow: Pick<Workflow, 'service' | 'context'>,
-): WorkflowContext {
-  const impactAnalysisPath = buildArtifactRefPath(workflow, 'impact_analysis');
-  if (!impactAnalysisPath) return {};
-  const impactAnalysis = readScopedWorkflowJsonArtifact(
-    workflow,
-    impactAnalysisPath,
-  );
-  if (!impactAnalysis) return {};
-  const required = extractClientImpactRequired({
-    impact_analysis: impactAnalysis,
-  });
-  return required === undefined ? {} : { client_impact_required: required };
 }
 
 /** Get terminal state names from a workflow type config. */
@@ -1912,10 +1805,6 @@ function buildTemplateVars(
       workflow,
       WORKFLOW_CONTEXT_KEYS.workBranch,
     ),
-    ios_work_branch: getWorkflowContextValue(
-      workflow,
-      WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
-    ),
     id: workflow.id,
     round: workflow.round,
     deliverable:
@@ -1980,7 +1869,6 @@ function buildTemplateVars(
       workflow,
       'prototype_analysis',
     ),
-    ios_test_plan_path: buildArtifactRefPath(workflow, 'ios_test_plan'),
     acceptance_report_path: buildArtifactRefPath(workflow, 'acceptance_report'),
     delegation_result: extra?.delegationResult || '',
     result_summary: extra?.resultSummary || '',
@@ -4543,7 +4431,6 @@ export interface CreateWorkflowOpts {
   deliverable?: string;
   mainBranch?: string;
   workBranch?: string;
-  iosWorkBranch?: string;
   stagingBaseBranch?: string;
   stagingWorkBranch?: string;
   accessToken?: string;
@@ -4621,12 +4508,6 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         opts.mainBranch || deliverable.main_branch,
       [WORKFLOW_CONTEXT_KEYS.workBranch]:
         opts.workBranch || deliverable.work_branch,
-      [WORKFLOW_CONTEXT_KEYS.iosWorkBranch]:
-        opts.iosWorkBranch ||
-        getWorkflowContextValue(
-          { context: opts.context || {} },
-          WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
-        ),
       [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable.fileName,
       [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]:
         opts.stagingBaseBranch || deliverable.staging_base_branch,
@@ -4642,13 +4523,6 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           ),
       [WORKFLOW_CONTEXT_KEYS.requirementPreset]: opts.requirementPreset || '',
     });
-    Object.assign(
-      workflowContext,
-      buildIosImpactContextPatchFromArtifacts({
-        service: opts.service,
-        context: workflowContext,
-      }),
-    );
     Object.assign(
       workflowContext,
       materializeTestCaseFilesForDeliverable(
@@ -4867,12 +4741,6 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   const workflowContext = mergeWorkflowContext(opts.context || {}, {
     [WORKFLOW_CONTEXT_KEYS.mainBranch]: opts.mainBranch || '',
     [WORKFLOW_CONTEXT_KEYS.workBranch]: opts.workBranch || '',
-    [WORKFLOW_CONTEXT_KEYS.iosWorkBranch]:
-      opts.iosWorkBranch ||
-      getWorkflowContextValue(
-        { context: opts.context || {} },
-        WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
-      ),
     [WORKFLOW_CONTEXT_KEYS.deliverable]: requestedDeliverable,
     [WORKFLOW_CONTEXT_KEYS.stagingBaseBranch]: opts.stagingBaseBranch || '',
     [WORKFLOW_CONTEXT_KEYS.stagingWorkBranch]: opts.stagingWorkBranch || '',
@@ -5476,13 +5344,6 @@ export function onDelegationComplete(delegationId: string): void {
   }
   if (payload.work_branch) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.workBranch] = payload.work_branch;
-  }
-  if (payload.ios_work_branch) {
-    contextUpdates[WORKFLOW_CONTEXT_KEYS.iosWorkBranch] =
-      payload.ios_work_branch;
-  }
-  if (payload.client_impact_required !== undefined) {
-    contextUpdates.client_impact_required = payload.client_impact_required;
   }
   if (payload.staging_base_branch) {
     contextUpdates[WORKFLOW_CONTEXT_KEYS.stagingBaseBranch] =

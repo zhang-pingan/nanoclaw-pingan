@@ -1,6 +1,6 @@
 # Stage 评估器配置化 + 交付物体系去 Markdown 化方案
 
-> 本方案覆盖四块改造，全部为确定执行项（②③ 的首个消费者为 iOS Simulator Capability 方案，已确认要做，不再作为可选项）：
+> 本方案覆盖四块改造，全部为确定执行项：
 > - **主体**：stage 评估器去硬编码，退化为无 stageKey 分支的通用解释器。
 > - **①**：交付物目录扫描去 `.md` 化，让工作流可声明非 `.md` 交付物。
 > - **②**：JSON 交付物文件体字段存在性校验，挂在 `artifact` evaluator，与 `schema` evaluator 正交。
@@ -175,7 +175,7 @@ stageKey 不再决定"查什么文件、什么字段"，这些已由 artifact �
 
 ## 非 Markdown（JSON）交付物的一等公民支持（②③）
 
-> 首个消费者是 iOS Simulator Capability 方案的四类 JSON 产物（product-recon / impact-analysis / ios-test-plan / acceptance-report）。机制保持通用、不绑定该业务。
+> 机制保持通用，不绑定某个具体业务；JSON 产物可以由任意 workflow 声明和校验。
 
 ### ② JSON 交付物文件体字段校验（挂在 `artifact` evaluator）
 

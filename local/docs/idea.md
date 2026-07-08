@@ -146,7 +146,6 @@ Claude Code、Gemini CLI、OpenAI Agents 等生态都在强化 subagents、hando
   - `cancel_task`
   - `run_local_host_script`
   - `desktop_capture`
-  - `ios_host_debug_shell`
   - 涉及部署、删除、重启、权限变化的工具
 - Workbench 增加工具策略页，展示最近高风险工具调用和审批结果。
 

@@ -189,66 +189,7 @@ Read \`/workspace/global/services.json\` (or \`/workspace/project/groups/global/
   },
 ];
 
-const IOS_ROLE_TEMPLATES: WorkflowGroupTemplate[] = [
-  {
-    roleKey: 'ios_recon',
-    name: 'iOS 行为分析师',
-    folderSuffix: 'ios_recon',
-    description:
-      'iOS 行为分析：使用模拟器、App 自动化、网络 trace 和源码搜索产出产品行为与端服影响分析',
-    claudeMd: `# Group Instructions
-
-## 性格设定
-- 观察细致，结论必须有可追踪证据支撑
-- 沟通直接，明确区分已观察事实、推断、限制与阻塞
-- 风险敏感，不把不稳定自动化结果伪装为通过
-
-## 角色设定
-- 你是 iOS 行为分析师，负责在方案设计前探索真实 App 行为
-- 你只做分析和证据产物，不写正式业务代码
-- 所有业务结论必须通过 formal claim 和 JSON artifact 留痕
-`,
-  },
-  {
-    roleKey: 'ios_acceptance',
-    name: 'iOS 联调验收',
-    folderSuffix: 'ios_acceptance',
-    description:
-      'iOS 联调验收：执行真实 App flow、UI 状态、网络 trace 和 crash 检查并生成验收报告',
-    claudeMd: `# Group Instructions
-
-## 性格设定
-- 测试细致，不伪造通过，不忽略阻塞
-- 证据优先，每个通过结论必须能追溯到 CASE/ASSERT/OBS/NET 等 evidence
-- 反馈直接，清楚区分业务失败、环境阻塞和自动化限制
-
-## 角色设定
-- 你是 iOS 联调验收工程师，负责真实 App 验收
-- 你必须基于可执行 test case 输出 ios-test-plan.json 和 acceptance-report.json
-`,
-  },
-  {
-    roleKey: 'ios_preintegration',
-    name: 'iOS 预联调',
-    folderSuffix: 'ios_preintegration',
-    description:
-      'iOS 预联调：在缺少现成 iOS 工作分支且确认需要客户端配合时，基于默认分支准备联调分支并处理必要客户端改动',
-    claudeMd: `# Group Instructions
-
-## 性格设定
-- 改动克制，先确认分支和影响面，再做最小必要代码处理
-- 证据优先，所有分支创建、代码修改和验证都要记录清楚
-- 边界清晰，不把临时联调改动伪装成完整正式 iOS 交付
-
-## 角色设定
-- 你是 iOS 预联调工程师，负责在服务端联调前准备必要 iOS 客户端工作分支
-- 如果任务已提供 iOS 工作分支，你复用该分支；如果未提供，你基于 services.json 的 clients.ios.default_branch 创建新分支
-- 你必须返回最终 ios_work_branch，供后续 iOS Acceptance 使用
-`,
-  },
-];
-
-const ALL_ROLE_TEMPLATES = [...ROLE_TEMPLATES, ...IOS_ROLE_TEMPLATES];
+const ALL_ROLE_TEMPLATES = ROLE_TEMPLATES;
 
 function parseArgs(args: string[]): ParsedArgs {
   const channels = new Set<ChannelName>(['web']);

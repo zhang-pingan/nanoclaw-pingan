@@ -3,9 +3,15 @@
     "id": "dev_test.plan.v1",
     "version": 1,
     "description": "Plan stage must publish a plan document and branch metadata.",
-    "allowed_artifact_roots": ["/workspace/projects"],
+    "allowed_artifact_roots": [
+      "/workspace/projects"
+    ],
     "payload": {
-      "required": ["deliverable", "main_branch", "work_branch"],
+      "required": [
+        "deliverable",
+        "main_branch",
+        "work_branch"
+      ],
       "properties": {
         "deliverable": {
           "type": "string",
@@ -29,24 +35,39 @@
       {
         "path": "projects/{{service}}/iteration/{{deliverable}}/plan.md",
         "required": true,
-        "frontmatter_required": ["service", "deliverable", "doc_type"],
+        "frontmatter_required": [
+          "service",
+          "deliverable",
+          "doc_type"
+        ],
         "content_checks": [
           {
             "code": "missing_acceptance_criteria",
             "severity": "high",
-            "any_of": ["验收标准", "acceptance criteria"],
+            "any_of": [
+              "验收标准",
+              "acceptance criteria"
+            ],
             "message": "plan.md 缺少验收标准说明。"
           },
           {
             "code": "missing_scope_definition",
             "severity": "medium",
-            "any_of": ["范围", "scope", "边界"],
+            "any_of": [
+              "范围",
+              "scope",
+              "边界"
+            ],
             "message": "plan.md 缺少范围或边界定义。"
           },
           {
             "code": "missing_risk_assessment",
             "severity": "medium",
-            "any_of": ["风险", "约束", "限制"],
+            "any_of": [
+              "风险",
+              "约束",
+              "限制"
+            ],
             "message": "plan.md 缺少风险或约束说明。"
           }
         ],
@@ -63,9 +84,15 @@
     "id": "dev_test.dev.v1",
     "version": 1,
     "description": "Development stage must publish an implementation document and branch metadata.",
-    "allowed_artifact_roots": ["/workspace/projects"],
+    "allowed_artifact_roots": [
+      "/workspace/projects"
+    ],
     "payload": {
-      "required": ["deliverable", "main_branch", "work_branch"],
+      "required": [
+        "deliverable",
+        "main_branch",
+        "work_branch"
+      ],
       "properties": {
         "deliverable": {
           "type": "string",
@@ -89,24 +116,40 @@
       {
         "path": "projects/{{service}}/iteration/{{deliverable}}/dev.md",
         "required": true,
-        "frontmatter_required": ["service", "deliverable", "doc_type"],
+        "frontmatter_required": [
+          "service",
+          "deliverable",
+          "doc_type"
+        ],
         "content_checks": [
           {
             "code": "missing_plan_reference",
             "severity": "medium",
-            "any_of": ["plan\\.md", "方案"],
+            "any_of": [
+              "plan\\.md",
+              "方案"
+            ],
             "message": "dev.md 未明确引用方案产物或方案约束。"
           },
           {
             "code": "missing_impact_scope",
             "severity": "medium",
-            "any_of": ["影响范围", "影响面", "变更范围", "scope"],
+            "any_of": [
+              "影响范围",
+              "影响面",
+              "变更范围",
+              "scope"
+            ],
             "message": "dev.md 缺少影响范围说明。"
           },
           {
             "code": "missing_validation_notes",
             "severity": "high",
-            "any_of": ["验证", "自测", "测试"],
+            "any_of": [
+              "验证",
+              "自测",
+              "测试"
+            ],
             "message": "dev.md 缺少验证或自测说明。"
           }
         ],
@@ -124,7 +167,10 @@
     "version": 1,
     "description": "Deployment stage must return deployment branch metadata.",
     "payload": {
-      "required": ["main_branch", "work_branch"],
+      "required": [
+        "main_branch",
+        "work_branch"
+      ],
       "properties": {
         "main_branch": {
           "type": "string",
@@ -189,7 +235,11 @@
     "version": 1,
     "description": "Bug fix stage must return a deliverable and final work branch.",
     "payload": {
-      "required": ["deliverable", "main_branch", "work_branch"],
+      "required": [
+        "deliverable",
+        "main_branch",
+        "work_branch"
+      ],
       "properties": {
         "deliverable": {
           "type": "string",
@@ -211,7 +261,10 @@
     "version": 1,
     "description": "Bug deployment stage must return deployment branch metadata.",
     "payload": {
-      "required": ["main_branch", "work_branch"],
+      "required": [
+        "main_branch",
+        "work_branch"
+      ],
       "properties": {
         "main_branch": {
           "type": "string",
@@ -268,620 +321,6 @@
         "gt": 0,
         "then_status": "failed",
         "message": "测试未通过，失败用例数 {{failed}}。"
-      }
-    ]
-  },
-  {
-    "id": "ios_dev_test.ios_recon.v1",
-    "version": 1,
-    "description": "iOS recon stage must publish product recon and impact analysis JSON artifacts.",
-    "allowed_artifact_roots": ["/workspace/projects"],
-    "payload": {
-      "required": [
-        "deliverable",
-        "main_branch",
-        "work_branch",
-        "product_recon",
-        "impact_analysis"
-      ],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "main_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "work_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "product_recon": {
-          "type": "string",
-          "minLength": 1
-        },
-        "impact_analysis": {
-          "type": "string",
-          "minLength": 1
-        },
-        "prototype_analysis": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "files": [
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/product-recon.json",
-        "required": true,
-        "body_required_fields": [
-          "version",
-          "platform",
-          "service",
-          "session_id",
-          "flows",
-          "evidence"
-        ],
-        "max_bytes": 300000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/impact-analysis.json",
-        "required": true,
-        "body_required_fields": [
-          "version",
-          "service",
-          "platform",
-          "client_impact",
-          "server_impact",
-          "evidence"
-        ],
-        "body_checks": [
-          {
-            "type": "ios_impact_analysis",
-            "code_prefix": "ios_impact_analysis",
-            "severity": "high",
-            "then_status": "needs_revision"
-          }
-        ],
-        "max_bytes": 200000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/prototype-analysis.json",
-        "required": false,
-        "body_required_fields": [
-          "version",
-          "service",
-          "source_files",
-          "screens",
-          "evidence"
-        ],
-        "max_bytes": 200000
-      }
-    ]
-  },
-  {
-    "id": "ios_dev_test.plan.v1",
-    "version": 1,
-    "description": "iOS-aware plan stage must publish plan.md and traceability.json while requiring branch metadata.",
-    "allowed_artifact_roots": ["/workspace/projects"],
-    "payload": {
-      "required": ["deliverable", "main_branch", "work_branch"],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "main_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "work_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "traceability_path": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "files": [
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/product-recon.json",
-        "required": true,
-        "body_required_fields": [
-          "version",
-          "platform",
-          "service",
-          "session_id",
-          "flows",
-          "evidence"
-        ],
-        "max_bytes": 300000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/impact-analysis.json",
-        "required": true,
-        "body_required_fields": [
-          "version",
-          "service",
-          "platform",
-          "client_impact",
-          "server_impact",
-          "evidence"
-        ],
-        "body_checks": [
-          {
-            "type": "ios_impact_analysis",
-            "code_prefix": "ios_impact_analysis",
-            "severity": "high",
-            "then_status": "needs_revision"
-          }
-        ],
-        "max_bytes": 200000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/plan.md",
-        "required": true,
-        "frontmatter_required": ["service", "deliverable", "doc_type"],
-        "content_checks": [
-          {
-            "code": "missing_acceptance_criteria",
-            "severity": "high",
-            "any_of": ["验收标准", "acceptance criteria"],
-            "message": "plan.md 缺少验收标准说明。"
-          },
-          {
-            "code": "missing_scope_definition",
-            "severity": "medium",
-            "any_of": ["范围", "scope", "边界"],
-            "message": "plan.md 缺少范围或边界定义。"
-          },
-          {
-            "code": "missing_risk_assessment",
-            "severity": "medium",
-            "any_of": ["风险", "约束", "限制"],
-            "message": "plan.md 缺少风险或约束说明。"
-          },
-          {
-            "code": "missing_ios_coordination",
-            "severity": "medium",
-            "any_of": [
-              "iOS 配合",
-              "iOS协调",
-              "iOS 协调",
-              "客户端配合",
-              "无需 iOS",
-              "无需客户端",
-              "client_impact"
-            ],
-            "message": "plan.md 缺少 iOS 配合事项或无需 iOS 改动的证据说明。"
-          }
-        ],
-        "max_bytes": 220000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/traceability.json",
-        "required": true,
-        "body_required_fields": [
-          "statements",
-          "decisions",
-          "actions",
-          "acceptance_criteria",
-          "evidence",
-          "coverage",
-          "open_questions"
-        ],
-        "body_checks": [
-          {
-            "type": "ios_plan_traceability",
-            "code_prefix": "ios_plan_traceability",
-            "severity": "high",
-            "then_status": "needs_revision"
-          }
-        ],
-        "max_bytes": 200000
-      }
-    ]
-  },
-  {
-    "id": "ios_dev_test.plan_review.v1",
-    "version": 1,
-    "description": "iOS-aware plan review must return review verdict, findings, and evidence.",
-    "payload": {
-      "required": [
-        "deliverable",
-        "main_branch",
-        "work_branch",
-        "verdict",
-        "summary",
-        "findings",
-        "evidence"
-      ],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "main_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "work_branch": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    }
-  },
-  {
-    "id": "ios_dev_test.ios_preintegration.v1",
-    "version": 1,
-    "description": "iOS preintegration stage must return the final iOS work branch when client changes are prepared.",
-    "allowed_artifact_roots": [
-      "/workspace/projects"
-    ],
-    "payload": {
-      "required": [
-        "deliverable",
-        "main_branch",
-        "work_branch",
-        "verdict"
-      ],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "main_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "work_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "ios_work_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "verdict": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "files": [
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/ios-preintegration.md",
-        "required": false,
-        "frontmatter_required": [
-          "service",
-          "deliverable",
-          "doc_type"
-        ],
-        "max_bytes": 200000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/ios-preintegration-report.json",
-        "required": false,
-        "body_required_fields": [
-          "version",
-          "platform",
-          "service",
-          "ios_work_branch",
-          "base_branch",
-          "changes",
-          "verdict",
-          "evidence"
-        ],
-        "max_bytes": 200000
-      }
-    ]
-  },
-  {
-    "id": "ios_dev_test.dev.v1",
-    "version": 1,
-    "description": "iOS-aware backend dev stage must publish dev.md, traceability.json, and preserve branch metadata.",
-    "allowed_artifact_roots": ["/workspace/projects"],
-    "payload": {
-      "required": ["deliverable", "main_branch", "work_branch"],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "main_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "work_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "traceability_path": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "files": [
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/dev.md",
-        "required": true,
-        "frontmatter_required": ["service", "deliverable", "doc_type"],
-        "content_checks": [
-          {
-            "code": "missing_plan_reference",
-            "severity": "medium",
-            "any_of": ["plan\\.md", "方案"],
-            "message": "dev.md 未明确引用方案产物或方案约束。"
-          },
-          {
-            "code": "missing_impact_scope",
-            "severity": "medium",
-            "any_of": ["影响范围", "影响面", "变更范围", "scope"],
-            "message": "dev.md 缺少影响范围说明。"
-          },
-          {
-            "code": "missing_validation_notes",
-            "severity": "high",
-            "any_of": ["验证", "自测", "测试"],
-            "message": "dev.md 缺少验证或自测说明。"
-          },
-          {
-            "code": "missing_ios_dependency_notes",
-            "severity": "medium",
-            "any_of": ["iOS", "客户端", "联调"],
-            "message": "dev.md 缺少 iOS 联调依赖或客户端影响记录。"
-          }
-        ],
-        "max_bytes": 250000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/traceability.json",
-        "required": true,
-        "max_bytes": 200000
-      }
-    ]
-  },
-  {
-    "id": "ios_dev_test.dev_review.v1",
-    "version": 1,
-    "description": "iOS-aware dev review must return review verdict, findings, and evidence.",
-    "payload": {
-      "required": [
-        "deliverable",
-        "main_branch",
-        "work_branch",
-        "verdict",
-        "summary",
-        "findings",
-        "evidence"
-      ],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "main_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "work_branch": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    }
-  },
-  {
-    "id": "ios_dev_test.ops_deploy.v1",
-    "version": 1,
-    "description": "iOS-aware deployment stage must return deployment branch metadata.",
-    "payload": {
-      "required": ["main_branch", "work_branch"],
-      "properties": {
-        "main_branch": {
-          "type": "string",
-          "minLength": 1
-        },
-        "work_branch": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    }
-  },
-  {
-    "id": "ios_dev_test.ios_acceptance.v1",
-    "version": 1,
-    "description": "iOS acceptance stage must publish executable iOS test plan and acceptance report.",
-    "allowed_artifact_roots": ["/workspace/projects"],
-    "payload": {
-      "required": [
-        "deliverable",
-        "ios_test_plan",
-        "acceptance_report",
-        "total",
-        "passed",
-        "failed",
-        "blocked"
-      ],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "ios_test_plan": {
-          "type": "string",
-          "minLength": 1
-        },
-        "acceptance_report": {
-          "type": "string",
-          "minLength": 1
-        },
-        "total": {
-          "type": "number"
-        },
-        "passed": {
-          "type": "number"
-        },
-        "failed": {
-          "type": "number"
-        },
-        "blocked": {
-          "type": "number"
-        }
-      }
-    },
-    "payload_rules": [
-      {
-        "code": "ios_acceptance_cases_failed",
-        "severity": "high",
-        "field": "failed",
-        "gt": 0,
-        "then_status": "failed",
-        "message": "iOS 联调验收未通过，失败用例数 {{failed}}。"
-      },
-      {
-        "code": "ios_acceptance_cases_blocked",
-        "severity": "high",
-        "field": "blocked",
-        "gt": 0,
-        "then_status": "failed",
-        "message": "iOS 联调验收存在阻塞用例数 {{blocked}}。"
-      }
-    ],
-    "files": [
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/ios-test-plan.json",
-        "required": true,
-        "body_required_fields": [
-          "version",
-          "platform",
-          "service",
-          "session_purpose",
-          "cases",
-          "evidence"
-        ],
-        "max_bytes": 250000
-      },
-      {
-        "path": "projects/{{service}}/iteration/{{deliverable}}/acceptance-report.json",
-        "required": true,
-        "body_required_fields": [
-          "version",
-          "platform",
-          "service",
-          "session_id",
-          "summary.total",
-          "summary.passed",
-          "summary.failed",
-          "summary.blocked",
-          "cases",
-          "verdict",
-          "evidence"
-        ],
-        "body_payload_field_matches": [
-          {
-            "code": "ios_acceptance_report_total_mismatch",
-            "severity": "high",
-            "body_field": "summary.total",
-            "payload_field": "total",
-            "then_status": "failed",
-            "message": "acceptance-report.json summary.total ({{body_value}}) does not match payload.total ({{payload_value}})."
-          },
-          {
-            "code": "ios_acceptance_report_passed_mismatch",
-            "severity": "high",
-            "body_field": "summary.passed",
-            "payload_field": "passed",
-            "then_status": "failed",
-            "message": "acceptance-report.json summary.passed ({{body_value}}) does not match payload.passed ({{payload_value}})."
-          },
-          {
-            "code": "ios_acceptance_report_failed_mismatch",
-            "severity": "high",
-            "body_field": "summary.failed",
-            "payload_field": "failed",
-            "then_status": "failed",
-            "message": "acceptance-report.json summary.failed ({{body_value}}) does not match payload.failed ({{payload_value}})."
-          },
-          {
-            "code": "ios_acceptance_report_blocked_mismatch",
-            "severity": "high",
-            "body_field": "summary.blocked",
-            "payload_field": "blocked",
-            "then_status": "failed",
-            "message": "acceptance-report.json summary.blocked ({{body_value}}) does not match payload.blocked ({{payload_value}})."
-          }
-        ],
-        "body_checks": [
-          {
-            "type": "ios_acceptance_report",
-            "code_prefix": "ios_acceptance_report",
-            "severity": "high",
-            "then_status": "failed"
-          }
-        ],
-        "max_bytes": 300000
-      }
-    ]
-  },
-  {
-    "id": "ios_dev_test.testing.v1",
-    "version": 1,
-    "description": "Backend integration testing stage must return a structured test result and test document reference before iOS acceptance.",
-    "payload": {
-      "required": [
-        "deliverable",
-        "test_doc",
-        "total",
-        "passed",
-        "failed",
-        "blocked"
-      ],
-      "properties": {
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "test_doc": {
-          "type": "string",
-          "minLength": 1
-        },
-        "total": {
-          "type": "number"
-        },
-        "passed": {
-          "type": "number"
-        },
-        "failed": {
-          "type": "number"
-        },
-        "blocked": {
-          "type": "number"
-        }
-      }
-    },
-    "payload_rules": [
-      {
-        "code": "test_cases_failed",
-        "severity": "high",
-        "field": "failed",
-        "gt": 0,
-        "then_status": "failed",
-        "message": "测试未通过，失败用例数 {{failed}}。"
-      },
-      {
-        "code": "test_cases_blocked",
-        "severity": "high",
-        "field": "blocked",
-        "gt": 0,
-        "then_status": "failed",
-        "message": "测试存在阻塞用例数 {{blocked}}。"
       }
     ]
   }

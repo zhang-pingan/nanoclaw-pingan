@@ -299,7 +299,6 @@ export interface TemplateVars {
   service?: string;
   main_branch?: string;
   work_branch?: string;
-  ios_work_branch?: string;
   id?: string;
   round?: number;
   deliverable?: string;
@@ -314,7 +313,6 @@ export interface TemplateVars {
   product_recon_path?: string;
   impact_analysis_path?: string;
   prototype_analysis_path?: string;
-  ios_test_plan_path?: string;
   acceptance_report_path?: string;
   delegation_result?: string;
   result_summary?: string;

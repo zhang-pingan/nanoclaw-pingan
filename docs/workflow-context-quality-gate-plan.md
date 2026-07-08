@@ -221,7 +221,7 @@ Query Plan 必须写入 trace，便于审计“为什么收集这些材料”。
 - agent 阅读代码后在阶段产物中新增的代码 evidence，例如文件、符号、行号范围和摘要。
 - agent 执行 command、测试、脚本或 API 调用后新增的执行 evidence。
 - agent 检索 wiki、日志或其他授权 provider 后新增的外部 evidence。
-- iOS provider 产出的 screenshot、UI tree、network、crash、case/assert 记录。
+- 授权 provider 产出的截图、结构化状态、网络、日志、case/assert 记录。
 
 ### 3. Freshness Gate
 

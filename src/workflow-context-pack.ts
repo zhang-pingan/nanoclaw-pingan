@@ -215,7 +215,6 @@ function defaultFieldsForWorkflowInput(): string[] {
     WORKFLOW_CONTEXT_KEYS.testCaseFiles,
     WORKFLOW_CONTEXT_KEYS.mainBranch,
     WORKFLOW_CONTEXT_KEYS.workBranch,
-    WORKFLOW_CONTEXT_KEYS.iosWorkBranch,
     WORKFLOW_CONTEXT_KEYS.deliverable,
   ];
 }
@@ -225,7 +224,7 @@ function isSourceRequired(source: WorkflowContextRequirementSource): boolean {
 }
 
 function isOptionalWorkflowInputField(field: string): boolean {
-  return field === WORKFLOW_CONTEXT_KEYS.iosWorkBranch;
+  return false;
 }
 
 function buildQueryPlanSource(

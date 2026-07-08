@@ -4,39 +4,14 @@
     "git_url": "git@tx.git.chelaile.net.cn:dev/catstory.git",
     "default_branch": "master",
     "testToken": "",
-    "clients": {
-      "ios": {
-        "repo_path": "catapp",
-        "git_url": "git@git.chelaile.net.cn:3322/oversea/catstory.git",
-        "default_branch": "master",
-        "workspace": "ios/Runner.xcworkspace",
-        "scheme": "cn",
-        "bundle_id": "net.maoli.history.cn",
-        "app_name": "Runner-CN",
-        "simulator": "iPhone 17",
-        "configuration": "Debug-CN",
-        "automation": {
-          "driver": "appium",
-          "appium_server_url": "http://127.0.0.1:4723",
-          "launch_args": ["-UITestMode", "1", "-Environment", "staging"],
-          "launch_env": {
-            "ICARUS_NETWORK_LOG_ENABLED": "1"
-          },
-          "deep_links": {
-            "profile_edit": "catstory://profile/edit"
-          },
-          "network_log_path": "Library/Caches/IcarusNetworkLog/network.jsonl",
-          "app_log_path": "Library/Caches/IcarusAppLog/app.log",
-          "crash_log_path": "Library/Caches/IcarusCrashLog/crash.log"
-        }
-      }
-    },
     "jenkins_job": "上海-catstory",
     "staging": {
       "branch": "erp",
       "jenkins_job": "上海-catstory-pre",
       "domain": "https://preapi.maoli.net/catstory",
-      "log_hosts": ["139.196.13.81"],
+      "log_hosts": [
+        "139.196.13.81"
+      ],
       "logs_info": "/data/log/catstory/catstory.log",
       "logs_error": "/data/log/catstory/error.log",
       "mysql": {
@@ -47,14 +22,17 @@
       }
     },
     "user": "root",
-    "log_hosts": ["106.14.14.235","106.15.95.61"],
+    "log_hosts": [
+      "106.14.14.235",
+      "106.15.95.61"
+    ],
     "logs_info": "/data/log/catstory/catstory.log",
     "logs_error": "/data/log/catstory/error.log",
     "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(.*?)\\] \\[(.*?)\\] (\\w+) (\\S+) - (.*)$",
     "log_line_group_mapping": {
-      "time": 1 ,
-      "level": 4 ,
-      "logger": 5 ,
+      "time": 1,
+      "level": 4,
+      "logger": 5,
       "message": 6
     },
     "mysql": {
@@ -74,7 +52,9 @@
       "branch": "erp",
       "jenkins_job": "上海-push-service-pre",
       "domain": "https://preapi.maoli.net/push-platform",
-      "log_hosts": ["139.196.13.81"],
+      "log_hosts": [
+        "139.196.13.81"
+      ],
       "logs_info": "/data/log/push-service/push-platform.log",
       "logs_error": "/data/log/push-service/error.log",
       "mysql": {
@@ -85,14 +65,17 @@
       }
     },
     "user": "root",
-    "log_hosts": ["106.14.14.235","106.15.95.61"],
+    "log_hosts": [
+      "106.14.14.235",
+      "106.15.95.61"
+    ],
     "logs_info": "/data/log/push-service/push-platform.log",
     "logs_error": "/data/log/push-service/error.log",
     "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(.*?)\\] \\[(.*?)\\] (\\w+) (\\S+) - (.*)$",
     "log_line_group_mapping": {
-      "time": 1 ,
-      "level": 4 ,
-      "logger": 5 ,
+      "time": 1,
+      "level": 4,
+      "logger": 5,
       "message": 6
     },
     "mysql": {
@@ -112,7 +95,9 @@
       "branch": "erp",
       "jenkins_job": "上海-learning-platform-pre",
       "domain": "https://preapi.maoli.net/learning-platform",
-      "log_hosts": ["139.196.13.81"],
+      "log_hosts": [
+        "139.196.13.81"
+      ],
       "logs_info": "/data/log/learning-platform/content-platform.log",
       "logs_error": "/data/log/learning-platform/error.log",
       "mysql": {
@@ -123,14 +108,17 @@
       }
     },
     "user": "root",
-    "log_hosts": ["106.14.14.235","106.15.95.61"],
+    "log_hosts": [
+      "106.14.14.235",
+      "106.15.95.61"
+    ],
     "logs_info": "/data/log/learning-platform/content-platform.log",
     "logs_error": "/data/log/learning-platform/error.log",
     "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(.*?)\\] \\[(.*?)\\] (\\w+) (\\S+) - (.*)$",
     "log_line_group_mapping": {
-      "time": 1 ,
-      "level": 4 ,
-      "logger": 5 ,
+      "time": 1,
+      "level": 4,
+      "logger": 5,
       "message": 6
     },
     "mysql": {
@@ -150,7 +138,9 @@
       "branch": "erp",
       "jenkins_job": "上海-content-platform-pre",
       "domain": "https://preapi.maoli.net/content-platform",
-      "log_hosts": ["139.196.13.81"],
+      "log_hosts": [
+        "139.196.13.81"
+      ],
       "logs_info": "/data/log/content-platform/content-platform.log",
       "logs_error": "/data/log/content-platform/error.log",
       "mysql": {
@@ -161,14 +151,17 @@
       }
     },
     "user": "root",
-    "log_hosts": ["106.14.14.235","106.15.95.61"],
+    "log_hosts": [
+      "106.14.14.235",
+      "106.15.95.61"
+    ],
     "logs_info": "/data/log/content-platform/content-platform.log",
     "logs_error": "/data/log/content-platform/error.log",
     "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(.*?)\\] \\[(.*?)\\] (\\w+) (\\S+) - (.*)$",
     "log_line_group_mapping": {
-      "time": 1 ,
-      "level": 4 ,
-      "logger": 5 ,
+      "time": 1,
+      "level": 4,
+      "logger": 5,
       "message": 6
     },
     "mysql": {
@@ -188,7 +181,9 @@
       "branch": "erp",
       "jenkins_job": "上海-user-platform-pre",
       "domain": "https://preapi.maoli.net/user-platform",
-      "log_hosts": ["139.196.13.81"],
+      "log_hosts": [
+        "139.196.13.81"
+      ],
       "logs_info": "/data/log/user-platform/user-platform.log",
       "logs_error": "/data/log/user-platform/error.log",
       "mysql": {
@@ -199,14 +194,17 @@
       }
     },
     "user": "root",
-    "log_hosts": ["106.14.14.235","106.15.95.61"],
+    "log_hosts": [
+      "106.14.14.235",
+      "106.15.95.61"
+    ],
     "logs_info": "/data/log/user-platform/user-platform.log",
     "logs_error": "/data/log/user-platform/error.log",
     "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(.*?)\\] \\[(.*?)\\] (\\w+) (\\S+) - (.*)$",
     "log_line_group_mapping": {
-      "time": 1 ,
-      "level": 4 ,
-      "logger": 5 ,
+      "time": 1,
+      "level": 4,
+      "logger": 5,
       "message": 6
     },
     "mysql": {
@@ -226,7 +224,9 @@
       "branch": "erp",
       "jenkins_job": "上海-assets-pre",
       "domain": "https://preapi.maoli.net/asset-service",
-      "log_hosts": ["139.196.13.81"],
+      "log_hosts": [
+        "139.196.13.81"
+      ],
       "logs_info": "/data/log/assets/asset-platform.log",
       "logs_error": "/data/log/assets/error.log",
       "mysql": {
@@ -237,14 +237,17 @@
       }
     },
     "user": "root",
-    "log_hosts": ["106.14.14.235","106.15.95.61"],
+    "log_hosts": [
+      "106.14.14.235",
+      "106.15.95.61"
+    ],
     "logs_info": "/data/log/assets/asset-platform.log",
     "logs_error": "/data/log/assets/error.log",
     "log_line_pattern": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(.*?)\\] \\[(.*?)\\] (\\w+) (\\S+) - (.*)$",
     "log_line_group_mapping": {
-      "time": 1 ,
-      "level": 4 ,
-      "logger": 5 ,
+      "time": 1,
+      "level": 4,
+      "logger": 5,
       "message": 6
     },
     "mysql": {
