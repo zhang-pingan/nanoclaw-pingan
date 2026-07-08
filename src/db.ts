@@ -275,6 +275,24 @@ function createSchema(database: Database.Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS feature_group_bindings (
+      feature_id TEXT NOT NULL,
+      group_key TEXT NOT NULL,
+      group_jid TEXT NOT NULL,
+      group_folder TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (feature_id, group_key),
+      UNIQUE (group_jid),
+      UNIQUE (group_folder)
+    );
+    CREATE TABLE IF NOT EXISTS feature_migrations (
+      feature_id TEXT NOT NULL,
+      version TEXT NOT NULL,
+      checksum TEXT NOT NULL,
+      applied_at TEXT NOT NULL,
+      PRIMARY KEY (feature_id, version)
+    );
 
     CREATE TABLE IF NOT EXISTS agent_queries (
       id TEXT PRIMARY KEY,
@@ -2443,6 +2461,154 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     };
   }
   return result;
+}
+
+export interface FeatureGroupBindingRecord {
+  feature_id: string;
+  group_key: string;
+  group_jid: string;
+  group_folder: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getRegisteredGroupByFolder(
+  folder: string,
+): (RegisteredGroup & { jid: string }) | undefined {
+  const row = db
+    .prepare('SELECT jid FROM registered_groups WHERE folder = ?')
+    .get(folder) as { jid: string } | undefined;
+  return row ? getRegisteredGroup(row.jid) : undefined;
+}
+
+export function getFeatureGroupBinding(
+  featureId: string,
+  groupKey: string,
+): FeatureGroupBindingRecord | undefined {
+  return db
+    .prepare(
+      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
+       FROM feature_group_bindings
+       WHERE feature_id = ? AND group_key = ?`,
+    )
+    .get(featureId, groupKey) as FeatureGroupBindingRecord | undefined;
+}
+
+export function getFeatureGroupBindingByJid(
+  groupJid: string,
+): FeatureGroupBindingRecord | undefined {
+  return db
+    .prepare(
+      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
+       FROM feature_group_bindings
+       WHERE group_jid = ?`,
+    )
+    .get(groupJid) as FeatureGroupBindingRecord | undefined;
+}
+
+export function getFeatureGroupBindingByFolder(
+  groupFolder: string,
+): FeatureGroupBindingRecord | undefined {
+  return db
+    .prepare(
+      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
+       FROM feature_group_bindings
+       WHERE group_folder = ?`,
+    )
+    .get(groupFolder) as FeatureGroupBindingRecord | undefined;
+}
+
+export function listFeatureGroupBindings(
+  featureId?: string,
+): FeatureGroupBindingRecord[] {
+  if (featureId) {
+    return db
+      .prepare(
+        `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
+         FROM feature_group_bindings
+         WHERE feature_id = ?
+         ORDER BY group_key`,
+      )
+      .all(featureId) as FeatureGroupBindingRecord[];
+  }
+  return db
+    .prepare(
+      `SELECT feature_id, group_key, group_jid, group_folder, created_at, updated_at
+       FROM feature_group_bindings
+       ORDER BY feature_id, group_key`,
+    )
+    .all() as FeatureGroupBindingRecord[];
+}
+
+export function setFeatureGroupBinding(input: {
+  featureId: string;
+  groupKey: string;
+  groupJid: string;
+  groupFolder: string;
+  createdAt?: string;
+  updatedAt?: string;
+}): void {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO feature_group_bindings (
+       feature_id,
+       group_key,
+       group_jid,
+       group_folder,
+       created_at,
+       updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(feature_id, group_key)
+     DO UPDATE SET
+       group_jid = excluded.group_jid,
+       group_folder = excluded.group_folder,
+       updated_at = excluded.updated_at`,
+  ).run(
+    input.featureId,
+    input.groupKey,
+    input.groupJid,
+    input.groupFolder,
+    input.createdAt || now,
+    input.updatedAt || now,
+  );
+}
+
+export interface FeatureMigrationRecord {
+  feature_id: string;
+  version: string;
+  checksum: string;
+  applied_at: string;
+}
+
+export function getFeatureMigration(
+  featureId: string,
+  version: string,
+): FeatureMigrationRecord | undefined {
+  return db
+    .prepare(
+      `SELECT feature_id, version, checksum, applied_at
+       FROM feature_migrations
+       WHERE feature_id = ? AND version = ?`,
+    )
+    .get(featureId, version) as FeatureMigrationRecord | undefined;
+}
+
+export function recordFeatureMigration(input: {
+  featureId: string;
+  version: string;
+  checksum: string;
+  appliedAt?: string;
+}): void {
+  db.prepare(
+    `INSERT INTO feature_migrations (feature_id, version, checksum, applied_at)
+     VALUES (?, ?, ?, ?)`,
+  ).run(
+    input.featureId,
+    input.version,
+    input.checksum,
+    input.appliedAt || new Date().toISOString(),
+  );
 }
 
 // --- Delegation accessors ---
@@ -5949,7 +6115,9 @@ function countQuery(sql: string, ...values: unknown[]): number {
   return Number(row?.count || 0);
 }
 
-export function getAgentQueriesOverview(now: Date = new Date()): AgentQueriesOverview {
+export function getAgentQueriesOverview(
+  now: Date = new Date(),
+): AgentQueriesOverview {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const activeQueryCount = countQuery(
     `SELECT COUNT(*) AS count FROM agent_queries WHERE status = 'running'`,

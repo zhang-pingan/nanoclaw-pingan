@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { CardConfig } from './card-config.js';
+import { featureResources } from './features/registry.js';
 
 export const CARD_REGISTRY_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const CARDS_RELATIVE_DIR = 'container/cards';
@@ -32,6 +33,16 @@ function ensureCardsDir(): void {
   fs.mkdirSync(getCardsDir(), { recursive: true });
 }
 
+function getCardSourceDirs(): Array<{ dir: string; label: string }> {
+  return [
+    { dir: getCardsDir(), label: 'core' },
+    ...featureResources.list('cards').map((source) => ({
+      dir: source.dir,
+      label: `feature:${source.featureId}`,
+    })),
+  ];
+}
+
 function isCardGroup(input: unknown): input is Record<string, CardConfig> {
   return !!input && typeof input === 'object' && !Array.isArray(input);
 }
@@ -58,24 +69,55 @@ function readCardGroupFile(fileName: string): {
   };
 }
 
+function readCardGroupFileFromDir(
+  dir: string,
+  fileName: string,
+): {
+  workflowType: string;
+  cards: Record<string, CardConfig>;
+} {
+  const workflowType = path.basename(fileName, '.json');
+  const keyError = validateCardRegistryKey(workflowType);
+  if (keyError) throw new Error(`${fileName}: ${keyError}`);
+
+  const filePath = path.join(dir, fileName);
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as unknown;
+  if (!isCardGroup(raw)) {
+    throw new Error(
+      `${fileName}: card 文件必须是 card key 到 card config 的对象`,
+    );
+  }
+
+  return {
+    workflowType,
+    cards: raw,
+  };
+}
+
 export function readCardRegistryFromDir(): Record<
   string,
   Record<string, CardConfig>
 > {
-  const cardsDir = getCardsDir();
-  if (!fs.existsSync(cardsDir)) {
-    return {};
-  }
-
   const registry: Record<string, Record<string, CardConfig>> = {};
-  const files = fs
-    .readdirSync(cardsDir)
-    .filter((fileName) => fileName.endsWith('.json'))
-    .sort((a, b) => a.localeCompare(b));
+  for (const source of getCardSourceDirs()) {
+    if (!fs.existsSync(source.dir)) continue;
+    const files = fs
+      .readdirSync(source.dir)
+      .filter((fileName) => fileName.endsWith('.json'))
+      .sort((a, b) => a.localeCompare(b));
 
-  for (const fileName of files) {
-    const group = readCardGroupFile(fileName);
-    registry[group.workflowType] = group.cards;
+    for (const fileName of files) {
+      const group =
+        source.label === 'core'
+          ? readCardGroupFile(fileName)
+          : readCardGroupFileFromDir(source.dir, fileName);
+      if (registry[group.workflowType]) {
+        throw new Error(
+          `card registry key conflict "${group.workflowType}" from ${source.label}`,
+        );
+      }
+      registry[group.workflowType] = group.cards;
+    }
   }
 
   return registry;

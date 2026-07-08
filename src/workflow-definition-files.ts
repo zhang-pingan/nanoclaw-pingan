@@ -5,6 +5,7 @@ import {
   WorkflowDefinitionRegistry,
   WorkflowDefinitionVersionBundle,
 } from './workflow-definition.js';
+import { featureResources } from './features/registry.js';
 
 export const WORKFLOW_DEFINITION_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const WORKFLOW_DEFINITIONS_RELATIVE_DIR =
@@ -49,14 +50,28 @@ function isWorkflowDefinitionVersionBundle(
   );
 }
 
+function getWorkflowDefinitionSourceDirs(): Array<{
+  dir: string;
+  label: string;
+}> {
+  return [
+    { dir: getWorkflowDefinitionsDir(), label: 'core' },
+    ...featureResources.list('workflowDefinitions').map((source) => ({
+      dir: source.dir,
+      label: `feature:${source.featureId}`,
+    })),
+  ];
+}
+
 function readWorkflowDefinitionBundleFile(
+  dir: string,
   fileName: string,
 ): WorkflowDefinitionVersionBundle {
   const key = path.basename(fileName, '.json');
   const keyError = validateWorkflowDefinitionKey(key);
   if (keyError) throw new Error(`${fileName}: ${keyError}`);
 
-  const filePath = path.join(getWorkflowDefinitionsDir(), fileName);
+  const filePath = path.join(dir, fileName);
   const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as unknown;
   if (!isWorkflowDefinitionVersionBundle(raw)) {
     throw new Error(
@@ -72,20 +87,25 @@ function readWorkflowDefinitionBundleFile(
 }
 
 export function readWorkflowDefinitionRegistryFromDir(): WorkflowDefinitionRegistry {
-  const definitionsDir = getWorkflowDefinitionsDir();
-  if (!fs.existsSync(definitionsDir)) {
-    return { definitions: {} };
-  }
-
   const definitions: WorkflowDefinitionRegistry['definitions'] = {};
-  const files = fs
-    .readdirSync(definitionsDir)
-    .filter((fileName) => fileName.endsWith('.json'))
-    .sort((a, b) => a.localeCompare(b));
+  const sources = getWorkflowDefinitionSourceDirs();
 
-  for (const fileName of files) {
-    const bundle = readWorkflowDefinitionBundleFile(fileName);
-    definitions[bundle.key] = bundle;
+  for (const source of sources) {
+    if (!fs.existsSync(source.dir)) continue;
+    const files = fs
+      .readdirSync(source.dir)
+      .filter((fileName) => fileName.endsWith('.json'))
+      .sort((a, b) => a.localeCompare(b));
+
+    for (const fileName of files) {
+      const bundle = readWorkflowDefinitionBundleFile(source.dir, fileName);
+      if (definitions[bundle.key]) {
+        throw new Error(
+          `workflow definition key conflict "${bundle.key}" from ${source.label}`,
+        );
+      }
+      definitions[bundle.key] = bundle;
+    }
   }
 
   return { definitions };

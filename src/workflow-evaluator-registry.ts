@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { PROJECT_ROOT } from './config.js';
+import { featureResources } from './features/registry.js';
 import { logger } from './logger.js';
 
 export interface WorkflowEvaluatorConfig {
@@ -30,32 +31,51 @@ function evaluatorsDir(): string {
   return path.join(PROJECT_ROOT, 'container', 'workflow-evaluators');
 }
 
+function evaluatorSourceDirs(): Array<{ dir: string; label: string }> {
+  return [
+    { dir: evaluatorsDir(), label: 'core' },
+    ...featureResources.list('workflowEvaluators').map((source) => ({
+      dir: source.dir,
+      label: `feature:${source.featureId}`,
+    })),
+  ];
+}
+
 export function loadWorkflowEvaluatorRegistry(): Record<
   string,
   WorkflowEvaluatorConfig
 > {
   if (cachedEvaluators) return cachedEvaluators;
-  const dir = evaluatorsDir();
   const registry: Record<string, WorkflowEvaluatorConfig> = {};
-  if (!fs.existsSync(dir)) {
-    cachedEvaluators = registry;
-    return registry;
-  }
 
-  for (const entry of fs.readdirSync(dir)) {
-    if (!entry.endsWith('.json')) continue;
-    const fullPath = path.join(dir, entry);
-    try {
-      const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as
-        | WorkflowEvaluatorConfig
-        | WorkflowEvaluatorConfig[];
-      const configs = Array.isArray(parsed) ? parsed : [parsed];
-      for (const config of configs) {
-        if (!config?.id || !config.type) continue;
-        registry[config.id] = config;
+  for (const source of evaluatorSourceDirs()) {
+    if (!fs.existsSync(source.dir)) continue;
+    for (const entry of fs.readdirSync(source.dir)) {
+      if (!entry.endsWith('.json')) continue;
+      const fullPath = path.join(source.dir, entry);
+      try {
+        const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as
+          | WorkflowEvaluatorConfig
+          | WorkflowEvaluatorConfig[];
+        const configs = Array.isArray(parsed) ? parsed : [parsed];
+        for (const config of configs) {
+          if (!config?.id || !config.type) continue;
+          if (registry[config.id]) {
+            throw new Error(
+              `workflow evaluator id conflict "${config.id}" from ${source.label}`,
+            );
+          }
+          registry[config.id] = config;
+        }
+      } catch (err) {
+        logger.error(
+          { err, fullPath },
+          'Failed to load workflow evaluator config',
+        );
+        if (err instanceof Error && err.message.includes('conflict')) {
+          throw err;
+        }
       }
-    } catch (err) {
-      logger.error({ err, fullPath }, 'Failed to load workflow evaluator config');
     }
   }
 

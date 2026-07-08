@@ -50,6 +50,11 @@ import {
   DATA_DIR,
   PROJECT_ROOT,
 } from '../config.js';
+import {
+  featureApiRoutes,
+  getEnabledFeatureInfo,
+  resolveEnabledFeatureStaticPath,
+} from '../features/index.js';
 import { readEnvFile } from '../env.js';
 import {
   ensureUniqueUploadPath,
@@ -923,6 +928,15 @@ class WebChannel {
       if (pathname === '/' || pathname === '/index.html') {
         return this.serveFile('/index.html', 'text/html', res);
       }
+      if (pathname === '/api/features/enabled' && req.method === 'GET') {
+        return this.apiGetEnabledFeatures(res);
+      }
+      if (
+        pathname.startsWith('/api/features/') &&
+        (await featureApiRoutes.dispatch({ req, res, url: reqUrl }))
+      ) {
+        return;
+      }
       if (pathname.startsWith('/api/groups')) {
         return this.apiGetGroups(reqUrl, res);
       }
@@ -1312,6 +1326,9 @@ class WebChannel {
       if (pathname.startsWith('/api/files/')) {
         return this.apiServeFile(pathname, res);
       }
+      if (pathname.startsWith('/features/')) {
+        return this.serveEnabledFeatureStatic(pathname, res);
+      }
       // Shutdown endpoint — only POST, no auth (localhost only via 127.0.0.1 binding)
       if (pathname === '/api/shutdown' && req.method === 'POST') {
         logger.info('Shutdown requested via web channel API');
@@ -1412,10 +1429,68 @@ class WebChannel {
     res.end(data);
   }
 
+  private serveEnabledFeatureStatic(
+    pathname: string,
+    res: http.ServerResponse,
+  ): void {
+    let resolved: { filePath: string; featureId: string } | null;
+    try {
+      resolved = resolveEnabledFeatureStaticPath(pathname);
+    } catch {
+      resolved = null;
+    }
+    if (
+      !resolved ||
+      !fs.existsSync(resolved.filePath) ||
+      fs.statSync(resolved.filePath).isDirectory()
+    ) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
+    const ext = path.extname(resolved.filePath);
+    const mime: Record<string, string> = {
+      '.js': 'application/javascript',
+      '.mjs': 'application/javascript',
+      '.css': 'text/css',
+      '.html': 'text/html',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.woff2': 'font/woff2',
+    };
+    const data = fs.readFileSync(resolved.filePath);
+    res.writeHead(200, {
+      'Content-Type': mime[ext] || 'application/octet-stream',
+    });
+    res.end(data);
+  }
+
   private getRegisteredGroupChannel(jid: string, folder: string): string {
     const folderChannel = folder.includes('_') ? folder.split('_')[0] : '';
     if (folderChannel) return folderChannel;
     return jid.includes(':') ? jid.split(':')[0] : '';
+  }
+
+  private apiGetEnabledFeatures(res: http.ServerResponse): void {
+    const features = getEnabledFeatureInfo().map((feature) => ({
+      id: feature.id,
+      name: feature.name,
+      version: feature.version,
+      description: feature.description,
+      apiPrefix: feature.apiPrefix,
+      rendererEntryUrl: feature.rendererEntryUrl,
+      nav: feature.nav.map((item) => ({
+        key: item.key,
+        label: item.label,
+        order: item.order,
+        rendererEntryUrl: item.rendererEntryUrl,
+      })),
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ features }));
   }
 
   private apiGetGroups(reqUrl: URL, res: http.ServerResponse): void {

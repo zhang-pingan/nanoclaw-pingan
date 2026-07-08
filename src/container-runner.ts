@@ -37,6 +37,10 @@ import {
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { ClassifiedFailure, classifyFailure } from './failure-taxonomy.js';
+import {
+  prepareMergedMcpConfigDir,
+  syncContainerSkills,
+} from './features/container-resources.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
@@ -512,35 +516,10 @@ function buildVolumeMounts(
     );
   }
 
-  // Sync skills from container/skills/ into each group's .claude/skills/
-  // Uses skills.json to determine which skills go to which group:
-  //   "global" → all groups, "{folder}" → only that group
-  const skillsSrc = path.join(process.cwd(), 'container', 'skills');
+  // Sync enabled core/feature skills into each group's .claude/skills/.
   const skillsDst = path.join(groupSessionsDir, 'skills');
-  if (!isExternalSystemOnce && fs.existsSync(skillsSrc)) {
-    const skillsConfigPath = path.join(skillsSrc, 'skills.json');
-    let allowedSkills: Set<string> | null = null; // null = copy all (fallback)
-    if (fs.existsSync(skillsConfigPath)) {
-      try {
-        const skillsConfig = JSON.parse(
-          fs.readFileSync(skillsConfigPath, 'utf-8'),
-        ) as Record<string, string[]>;
-        allowedSkills = new Set<string>(skillsConfig['global'] || []);
-        const groupSkills = skillsConfig[group.folder];
-        if (groupSkills) {
-          for (const s of groupSkills) allowedSkills.add(s);
-        }
-      } catch (err) {
-        logger.warn({ err }, 'Failed to parse skills.json, syncing all skills');
-      }
-    }
-    for (const skillDir of fs.readdirSync(skillsSrc)) {
-      const srcDir = path.join(skillsSrc, skillDir);
-      if (!fs.statSync(srcDir).isDirectory()) continue;
-      if (allowedSkills && !allowedSkills.has(skillDir)) continue;
-      const dstDir = path.join(skillsDst, skillDir);
-      fs.cpSync(srcDir, dstDir, { recursive: true });
-    }
+  if (!isExternalSystemOnce) {
+    syncContainerSkills({ groupFolder: group.folder, skillsDst });
   }
   mounts.push({
     hostPath: groupSessionsDir,
@@ -574,8 +553,8 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  const mcpConfigDir = path.join(projectRoot, 'container', 'mcp');
-  if (fs.existsSync(mcpConfigDir)) {
+  const mcpConfigDir = prepareMergedMcpConfigDir(group.folder);
+  if (mcpConfigDir && fs.existsSync(mcpConfigDir)) {
     mounts.push({
       hostPath: mcpConfigDir,
       containerPath: '/workspace/mcp',
@@ -1317,7 +1296,10 @@ export async function runContainerAgent(
           JSON.stringify(input, null, 2),
           ``,
           `=== Container Args ===`,
-          sanitizeTracePreview(containerArgs.join(' '), Number.MAX_SAFE_INTEGER),
+          sanitizeTracePreview(
+            containerArgs.join(' '),
+            Number.MAX_SAFE_INTEGER,
+          ),
           ``,
           `=== Mounts ===`,
           mounts
@@ -1389,7 +1371,9 @@ export async function runContainerAgent(
               error,
               classifyContainerFailure(
                 new Error(error),
-                code === 137 ? 'container_killed_137' : 'container_exit_nonzero',
+                code === 137
+                  ? 'container_killed_137'
+                  : 'container_exit_nonzero',
                 true,
               ),
             ),

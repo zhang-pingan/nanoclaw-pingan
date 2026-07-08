@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { PROJECT_ROOT } from './config.js';
+import { featureResources } from './features/registry.js';
 import { logger } from './logger.js';
 import type {
   Workflow,
@@ -102,38 +103,53 @@ function contractsDir(): string {
   return path.join(PROJECT_ROOT, 'container', 'artifact-contracts');
 }
 
+function contractSourceDirs(): Array<{ dir: string; label: string }> {
+  return [
+    { dir: contractsDir(), label: 'core' },
+    ...featureResources.list('artifactContracts').map((source) => ({
+      dir: source.dir,
+      label: `feature:${source.featureId}`,
+    })),
+  ];
+}
+
 export function loadWorkflowArtifactContracts(): Record<
   string,
   WorkflowArtifactContract
 > {
   if (cachedContracts) return cachedContracts;
-  const dir = contractsDir();
   const registry: Record<string, WorkflowArtifactContract> = {};
   const sources: Record<string, string> = {};
-  if (!fs.existsSync(dir)) {
-    cachedContracts = registry;
-    cachedContractSources = sources;
-    return registry;
-  }
 
-  for (const entry of fs.readdirSync(dir)) {
-    if (!entry.endsWith('.json')) continue;
-    const fullPath = path.join(dir, entry);
-    try {
-      const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as
-        | WorkflowArtifactContract
-        | WorkflowArtifactContract[];
-      const contracts = Array.isArray(parsed) ? parsed : [parsed];
-      for (const contract of contracts) {
-        if (!contract?.id) continue;
-        registry[contract.id] = contract;
-        sources[contract.id] = fullPath;
+  for (const source of contractSourceDirs()) {
+    if (!fs.existsSync(source.dir)) continue;
+    for (const entry of fs.readdirSync(source.dir)) {
+      if (!entry.endsWith('.json')) continue;
+      const fullPath = path.join(source.dir, entry);
+      try {
+        const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as
+          | WorkflowArtifactContract
+          | WorkflowArtifactContract[];
+        const contracts = Array.isArray(parsed) ? parsed : [parsed];
+        for (const contract of contracts) {
+          if (!contract?.id) continue;
+          if (registry[contract.id]) {
+            throw new Error(
+              `artifact contract id conflict "${contract.id}" from ${source.label}`,
+            );
+          }
+          registry[contract.id] = contract;
+          sources[contract.id] = fullPath;
+        }
+      } catch (err) {
+        logger.error(
+          { err, fullPath },
+          'Failed to load workflow artifact contract',
+        );
+        if (err instanceof Error && err.message.includes('conflict')) {
+          throw err;
+        }
       }
-    } catch (err) {
-      logger.error(
-        { err, fullPath },
-        'Failed to load workflow artifact contract',
-      );
     }
   }
 

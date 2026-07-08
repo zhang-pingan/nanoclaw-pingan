@@ -6,14 +6,8 @@
  * The engine (workflow.ts) reads them once at init and drives state
  * transitions generically instead of hard-coding each workflow type.
  */
-import fs from 'fs';
-
 import { CardConfig, validateCardConfig } from './card-config.js';
-import {
-  CARDS_RELATIVE_DIR,
-  getCardsDir,
-  readCardRegistryFromDir,
-} from './card-files.js';
+import { readCardRegistryFromDir } from './card-files.js';
 import { logger } from './logger.js';
 import {
   WorkflowCreateForm,
@@ -32,7 +26,6 @@ import {
   WorkflowQualityGate,
 } from './workflow-definition.js';
 import {
-  getWorkflowDefinitionsDir,
   readWorkflowDefinitionRegistryFromDir,
   WORKFLOW_DEFINITIONS_RELATIVE_DIR,
 } from './workflow-definition-files.js';
@@ -151,27 +144,12 @@ export function loadWorkflowConfigs(): Record<
   string,
   WorkflowTypeConfig
 > | null {
-  const definitionsDir = getWorkflowDefinitionsDir();
-  const cardsDir = getCardsDir();
-
-  if (!fs.existsSync(definitionsDir)) {
-    lastLoadError = `Workflow 未启用：未找到 ${WORKFLOW_DEFINITIONS_RELATIVE_DIR}`;
-    logger.info(lastLoadError);
-    return null;
-  }
-
-  if (!fs.existsSync(cardsDir)) {
-    lastLoadError = `Workflow 未启用：未找到 ${CARDS_RELATIVE_DIR}`;
-    logger.info(lastLoadError);
-    return null;
-  }
-
   try {
     const rawCards = readCardRegistryFromDir();
 
     const registry = readWorkflowDefinitionRegistryFromDir();
     if (Object.keys(registry.definitions).length === 0) {
-      lastLoadError = `Workflow 未启用：${WORKFLOW_DEFINITIONS_RELATIVE_DIR} 下没有 workflow definition JSON 文件`;
+      lastLoadError = `Workflow 未启用：${WORKFLOW_DEFINITIONS_RELATIVE_DIR} 和已启用 feature workflowDefinitions 下没有 workflow definition JSON 文件`;
       logger.info(lastLoadError);
       return null;
     }

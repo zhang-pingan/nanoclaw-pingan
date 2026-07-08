@@ -1,0 +1,109 @@
+import { logger as coreLogger } from '../logger.js';
+import { FeatureApiRegistry, NavigationRegistry } from './registry.js';
+import { FeatureManifest } from './manifest.js';
+import { FeatureMigrationRegistry } from './migrations.js';
+import { FeatureResourceRegistry } from './registry.js';
+
+export interface FeatureModule {
+  activate(context: FeatureContext): Promise<void> | void;
+  deactivate?(context: FeatureContext): Promise<void> | void;
+}
+
+export interface FeatureLogger {
+  info: (obj: unknown, msg?: string) => void;
+  warn: (obj: unknown, msg?: string) => void;
+  error: (obj: unknown, msg?: string) => void;
+  debug: (obj: unknown, msg?: string) => void;
+}
+
+export interface EventRegistry {
+  subscribe: (eventName: string, handler: (event: unknown) => void) => void;
+}
+
+export interface PermissionRegistry {
+  requireHostAction: (action: string) => void;
+  requireFileScope: (scope: string) => void;
+  requireMcpServer: (server: string) => void;
+}
+
+export interface AuditService {
+  record: (event: {
+    featureId: string;
+    action: string;
+    status: 'success' | 'failure';
+    payloadHash?: string;
+    metadata?: Record<string, unknown>;
+  }) => void;
+}
+
+export interface FeatureContext {
+  featureId: string;
+  featureRoot: string;
+  manifest: FeatureManifest;
+  logger: FeatureLogger;
+  api: FeatureApiRegistry;
+  nav: NavigationRegistry;
+  workflowAssets: FeatureResourceRegistry;
+  containerResources: FeatureResourceRegistry;
+  mcp: FeatureResourceRegistry;
+  db: FeatureMigrationRegistry;
+  events: EventRegistry;
+  permissions: PermissionRegistry;
+  audit: AuditService;
+}
+
+export function createFeatureLogger(featureId: string): FeatureLogger {
+  return {
+    info: (obj, msg) => coreLogger.info({ featureId, value: obj }, msg),
+    warn: (obj, msg) => coreLogger.warn({ featureId, value: obj }, msg),
+    error: (obj, msg) => coreLogger.error({ featureId, value: obj }, msg),
+    debug: (obj, msg) => coreLogger.debug({ featureId, value: obj }, msg),
+  };
+}
+
+export function createPermissionRegistry(
+  manifest: FeatureManifest,
+): PermissionRegistry {
+  const hostActions = new Set(manifest.permissions?.hostActions || []);
+  const fileScopes = new Set(manifest.permissions?.fileScopes || []);
+  const mcpServers = new Set(manifest.permissions?.mcpServers || []);
+  return {
+    requireHostAction: (action) => {
+      if (!hostActions.has(action)) {
+        throw new Error(
+          `Feature ${manifest.id} did not declare host action permission "${action}"`,
+        );
+      }
+    },
+    requireFileScope: (scope) => {
+      if (!fileScopes.has(scope)) {
+        throw new Error(
+          `Feature ${manifest.id} did not declare file scope permission "${scope}"`,
+        );
+      }
+    },
+    requireMcpServer: (server) => {
+      if (!mcpServers.has(server)) {
+        throw new Error(
+          `Feature ${manifest.id} did not declare MCP server permission "${server}"`,
+        );
+      }
+    },
+  };
+}
+
+export function createEventRegistry(): EventRegistry {
+  return {
+    subscribe: () => {
+      throw new Error('Feature event subscriptions are not available yet');
+    },
+  };
+}
+
+export function createAuditService(featureId: string): AuditService {
+  return {
+    record: (event) => {
+      coreLogger.info({ featureId, event }, 'Feature audit event');
+    },
+  };
+}

@@ -81,6 +81,7 @@ import {
   storeMessage,
   getWorkflow,
 } from './db.js';
+import { activateConfiguredFeatures } from './features/index.js';
 import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
 import { GroupQueue, OneShotAgentSlotEvent } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
@@ -2879,6 +2880,7 @@ async function main(): Promise<void> {
   ensureContainerSystemRunning();
   initDatabase();
   logger.info('Database initialized');
+  await activateConfiguredFeatures();
   loadState();
   restoreRemoteControl();
 
