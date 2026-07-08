@@ -81,10 +81,16 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 参考 GPT Researcher deep 的流程设计，抽象为可被 Icarus lane 复用的 Research Kernel。
 - 从行业 App 方向中发现多个候选创业机会。
 - 在正式调研前明确市场、平台、商业模式、团队能力、风险偏好和验证周期等 scope assumptions。
+- 从真实用户语言中识别尚未被现有产品占稳的 mental positioning，而不是只生成产品功能或品类名称。
 - 候选机会必须来自明确调研维度提炼出的 claim、finding 和 insight，而不是先验生成。
 - 候选机会必须建模为可被验证或推翻的 opportunity thesis，而不是只有方向标题和摘要。
 - 每条调研维度独立、可并行地完成证据留痕、判断提炼、机会提取和维度内筛选。
 - 每条调研维度都必须输出支持判断、反对判断、不确定性和 kill conditions，避免只做正向论证。
+- 每个候选机会必须说明用户会在什么入口场景、带着哪句自然语言触发使用，以及现有解法为什么在该场景失效。
+- 如果机会依赖 AI/LLM 能力，必须先与通用 LLM + prompt-only baseline 比较，判断真实差距和模型升级风险。
+- 每个候选机会必须判断核心价值位于 output、workflow 还是 outcome 层，避免把一次性输出误判为创业机会。
+- 每个候选机会必须区分用户触发语言和买单方购买语言，验证使用动机能否转化为预算、ROI 或风险降低。
+- 对依赖持续指导、协作、个性化或自动化的机会，必须建模用户状态、上下文连续性和可沉淀的数据闭环。
 - 对多维度筛选出的 topN 机会进行去重、聚类和判断依据合并。
 - 对合并机会进行并行补充检索、竞品验证、市场/商业化判断、合规风险和反证调查。
 - 对合并后的机会进行跨维度综合排序、敏感性分析和排名稳定性判断。
@@ -100,6 +106,9 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 不把成品服务降级成一次性报告生成；需要保留结构化判断层、评分、反证和可追踪审计产物。
 - 不把并行能力做成某个业务 workflow 的特例；并行/fan-in 是 Icarus workflow runtime 的通用能力。
 - 不默认“做 App”一定是正确答案；如果非 App 替代方案、线下服务、人工流程或现有工作流更优，需要在报告中说明。
+- 不把 `AI Tutor`、`智能助手`、`错题本`、`社区`、`SaaS` 这类功能词或品类词直接当作机会定位；它们必须回到用户自然语言和入口场景中验证。
+- 不把基础 LLM 能力、prompt 技巧或单次生成结果直接当作护城河；必须证明产品价值超出通用模型可快速复制的范围。
+- 不把“用户会试用”直接等同于“买单方会购买”；购买语言、预算来源和决策标准需要单独验证。
 - 不用 MVP 范围定义本方案；本方案描述完整目标形态。
 - 不保证生成的方向一定可创业成功，系统输出的是基于公开信息和可获取证据的机会判断。
 
@@ -145,10 +154,15 @@ Evidence Store -> Claims -> Findings -> Insights -> Opportunities -> Scores -> R
 现在用户用什么替代方案解决？
 为什么现有方案不够好？
 谁是使用者、购买者、付费者和决策者？
+用户触发语言如何翻译成买单方购买语言？
 为什么现在愿意付钱或改变行为？
 如何低成本触达第一批用户？
 小团队能否在 4-8 周内验证核心假设？
 第一个切入版本和 beachhead segment 是什么？
+核心价值在 output、workflow 还是 outcome 层？
+产品是否需要持续用户状态、上下文记忆或协作闭环？
+如果依赖 AI/LLM，通用 LLM + prompt-only 是否已经足够解决？
+能力本身是否会被模型升级、平台内置或竞品功能更新快速商品化？
 什么证据会推翻这个机会？
 ```
 
@@ -156,12 +170,174 @@ Evidence Store -> Claims -> Findings -> Insights -> Opportunities -> Scores -> R
 
 ```text
 Opportunity = user/job/pain + current alternative + gap + buyer/payer
-  + entry wedge + distribution path + why now + risks + validation plan
+  + buyer language + value layer + state/context + entry wedge
+  + distribution path + why now + LLM baseline/commoditization risk
+  + risks + validation plan
 ```
 
-没有明确买单方、切入楔子、替代方案对比或可验证假设的候选方向，应降级为 `watchlist` 或 `insufficient_evidence`，不能直接进入强推荐。
+没有明确买单方、买单语言、切入楔子、替代方案对比、价值层判断、AI/LLM baseline 或可验证假设的候选方向，应降级为 `watchlist` 或 `insufficient_evidence`，不能直接进入强推荐。
 
-### 3. 输入方向必须先被约束和假设化
+### 3. 心智定位不是功能，而是用户会想起你的那句话
+
+创业机会需要找到用户脑子里已经存在、但还没有被现有产品稳固占领的 mental positioning。它不是功能名、技术名或产品品类。
+
+错误定位：
+
+```text
+AI Tutor
+智能错题本
+行业工具 App
+一对一助手
+视频讲解
+```
+
+目标定位：
+
+```text
+用户自然语言 -> 具体入口场景 -> 当前解法失效 -> 新产品被想起
+```
+
+例如教育场景里，“AI 讲题”是功能，“辅助线想不到”才是学生会在卡住时自然说出的入口心智。通用到其他行业，也应优先寻找类似表达：
+
+- “我每次都不知道从哪开始。”
+- “现在这个流程太乱，没人知道最新状态。”
+- “表格能记，但一到多人协作就崩。”
+- “平台给了答案，但我还是不知道下一步怎么做。”
+
+每个高优先级机会必须产出：
+
+```text
+mental_positioning
+trigger_phrase
+entry_scene
+solution_failure_scene
+next_action_after_failure
+mental_position_occupation
+```
+
+如果一个机会只能被描述为功能，而无法被目标用户用自然语言复述为“我在 X 时会用它解决 Y”，则不能作为强推荐。
+
+### 4. 真实用户语言先于需求总结
+
+workflow 应先挖用户原话，再做需求抽象。不要一开始就问“用户有什么需求”，而要先问：
+
+```text
+用户反复怎么说？
+这些话出现在哪些场景？
+哪些话是自然语言，哪些只是产品经理词汇？
+哪句话对应一个可打开产品的瞬间？
+```
+
+`user_language_mining` 的目标不是生成机会，而是形成可审计的语言材料：
+
+- 高频自然表达。
+- 原话所属人群和场景。
+- 情绪强度和频率。
+- 是否是用户自己的话，而不是媒体、厂商、老师、顾问或模型总结。
+- 对应的 mental model：用户真正认为自己哪里卡住。
+
+后续 opportunity thesis 必须能回连到这些自然表达，否则说明机会可能是模型概括出来的，而不是市场里已有的心智。
+
+### 5. 找机会要看现有解法何时失效
+
+创业机会往往不是出现在“用户完全没有解决方案”的地方，而是出现在“用户已经用了现有方案，但仍然失败”的地方。
+
+每个高质量机会都应回答：
+
+```text
+用户当前用什么解决？
+这个解法在哪个具体场景失效？
+用户怎么抱怨这个失效？
+失效后用户下一步去哪里？
+这个 next action 是否代表迁移动机？
+```
+
+`solution_failure` 与普通竞品分析不同。普通竞品分析看竞品功能和差评；solution failure 关注：
+
+- 答案有了，但无法完成任务。
+- 工具能用，但不能处理关键边界情况。
+- 流程存在，但在复盘、协作、交接或异常时断链。
+- 用户继续换 App、找真人、问社区、做表格、手工补救。
+
+如果现有解法失效后用户没有明显 next action，或者用户只是轻微抱怨但不迁移，机会优先级应降低。
+
+### 6. 先做 LLM 能力基线，而不是假设 AI 就是机会
+
+如果候选机会依赖 AI/LLM 能力，workflow 必须先回答：通用 LLM 加上高质量 prompt、现成插件或现有平台功能，是否已经能完成用户任务。
+
+基线测试不是为了否定 AI 机会，而是避免把已经商品化的生成能力包装成创业方向。每个 AI 相关机会至少要产出：
+
+```text
+baseline_task
+prompt_only_baseline_result
+mainstream_llm_solved_level
+product_required_capability
+remaining_gap_after_baseline
+model_upgrade_risk
+```
+
+如果通用 LLM + prompt-only 已经能以足够低成本完成核心任务，且产品没有工作流嵌入、专有数据、分发渠道、执行闭环或结果责任，机会应降级为 `watchlist` 或 `reject`。
+
+### 7. 能力会商品化，机会要落在不可轻易复制的系统价值上
+
+能力商品化风险不只来自 LLM。OCR、语音识别、推荐、搜索、支付、身份认证、模板生成、数据抓取、自动摘要等能力，都可能被模型升级、平台内置、开源组件、API 降价或头部产品功能更新快速抹平。
+
+每个候选机会都应检查：
+
+```text
+核心能力是谁控制的？
+这个能力是否正在快速降价或开源化？
+平台或头部产品是否有强动机内置它？
+用户是否只为能力本身付费，而不是为结果或流程闭环付费？
+产品是否拥有专有数据、工作流嵌入、渠道、信任、合规资质或网络效应？
+```
+
+如果机会的差异化只来自“比别人多调用一次模型/接口/模板”，而没有可沉淀的系统价值，应提高 `capability_commoditization_risk` 并降低推荐档位。
+
+### 8. 机会价值要区分 output、workflow 和 outcome
+
+一次性输出通常最容易被替代，工作流嵌入和结果改善才更接近可创业的价值。workflow 需要判断机会主要创造哪一层价值：
+
+```text
+output value: 生成一段内容、答案、计划、摘要或建议。
+workflow value: 改变任务流、协作流、审核流、交付流或决策流。
+outcome value: 降低成本、提高转化、减少风险、节省时间、提升成功率。
+```
+
+强机会不一定完全没有 output value，但必须说明 output 如何进入用户真实工作流，并通过可观测指标改善 outcome。例如“生成报告”不是机会，“把报告变成审批、交付、追踪和复盘闭环，并让团队少返工”才可能是机会。
+
+### 9. 用户状态和上下文连续性是重要机会资产
+
+许多高质量产品不是因为单次回答更好，而是因为它长期知道用户当前状态、历史行为、约束、偏好、协作关系和待完成任务。对持续指导、自动化、协作、运营、健康、金融、教育、招聘、销售等方向，必须明确用户状态模型。
+
+每个相关机会应产出：
+
+```text
+state_variables
+context_sources
+state_update_triggers
+memory_retention_boundary
+personalization_or_automation_logic
+privacy_and_permission_boundary
+```
+
+如果一个机会可以被用户每次重新打开通用工具、复制上下文并得到相同效果，说明状态和上下文壁垒弱，评分应主要看获客、品牌、价格或服务能力，而不能把“个性化”空泛地当作壁垒。
+
+### 10. 用户语言和买单语言必须分开验证
+
+用户触发语言回答“什么时候会想起这个产品”，买单语言回答“为什么愿意为它付钱或批准预算”。两者经常不是同一句话。
+
+```text
+user trigger phrase: 我现在卡在哪里？
+buyer purchase language: 这件事为什么值得花钱解决？
+decision criteria: 买单方用什么标准判断值不值？
+budget source: 预算来自哪里？
+marketing bridge: 如何把用户痛点翻译成买单方认可的结果、风险或 ROI？
+```
+
+ToC、B2B、B2B2C、家庭决策、企业采购和平台生态的买单语言差异很大。机会 thesis 必须同时保留用户原话和买单方购买语言；如果只有用户喜欢但买单方无法用预算、风险、效率或收益解释购买理由，应降低 `payer_clarity` 和 `monetization`。
+
+### 11. 输入方向必须先被约束和假设化
 
 “宠物行业 App”这类输入过宽，不同市场、团队能力、平台约束和风险偏好会得到不同结论。正式调研前必须先做 `scope_framing`：
 
@@ -175,7 +351,7 @@ Opportunity = user/job/pain + current alternative + gap + buyer/payer
 
 如果用户没有显式提供这些约束，workflow 应生成默认假设，并在最终报告和 JSON artifact 中明确记录。
 
-### 4. 调研维度既是发现通道，也是筛选通道
+### 12. 调研维度既是发现通道，也是筛选通道
 
 每个调研维度不是只负责收集材料，而是完整产出：
 
@@ -193,11 +369,11 @@ Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores 
 - 输出支持 claims、反对 claims、不确定性和 kill conditions。
 - 按该维度规则筛出 topN。
 
-### 5. 先维度内筛选，再跨维度综合排序
+### 13. 先维度内筛选，再跨维度综合排序
 
 不同调研维度的判断质量和含义不同，不能在早期简单混合。每个维度先独立判断，产出本维度 topN；然后再做机会合并、判断依据聚合和全局评分。
 
-### 6. 反证前置，而不是只在末尾复核
+### 14. 反证前置，而不是只在末尾复核
 
 反证不应只在 enrichment 阶段才出现。每条 discovery lane 都必须主动寻找与本 lane 候选机会相反的证据，包括：
 
@@ -210,20 +386,34 @@ Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores 
 
 lane 内筛选前必须执行 pre-kill gate。触发 kill condition 的机会可以进入附录或观察池，但不能作为正式 top opportunity 输出。
 
-### 7. 所有结论保留可审计判断链
+### 15. 自然复述测试是定位验证的一部分
+
+高质量机会不仅要验证用户是否愿意试用，还要验证用户是否能自然复述产品定位。验证计划应包含 natural restatement test：
+
+```text
+用户是否会说：“我遇到 X 时会用它。”
+用户是否能区分：“它不是 Y，而是帮我解决 Z。”
+用户是否会用 trigger phrase 主动描述这个产品。
+```
+
+如果目标用户不能自然复述 mental positioning，或者复述成已有大厂/竞品已经占领的功能词，说明该机会的入口心智仍未成立，应降级为 `quick_validation` 或 `watchlist`。
+
+### 16. 所有结论保留可审计判断链
 
 每个机会方向的评分和结论都应能追溯到：
 
 - 来自哪个调研维度。
 - 使用了哪些 claim、finding 和 insight。
 - 这些判断层产物背后有哪些 evidence refs。
+- 机会对应哪些 user language samples 和 trigger phrases。
+- 哪些现有解法失效场景支撑该机会。
 - 哪些判断支持机会，哪些判断构成反证。
 - 证据是否独立、是否近期、是否来自目标地区、是否存在样本偏差。
 - 置信度如何。
 
 但最终报告不应围绕 evidence ref 展开写作，也不应把原始证据片段作为主要内容。证据只在审计链、附录、traceability artifact 或必要的脚注位置出现。
 
-### 8. 并行是 workflow 一等能力
+### 17. 并行是 workflow 一等能力
 
 多 lane 调研、多 query 搜索、多机会 enrichment、多 reviewer 复核都不应被隐藏在一个 agent 节点内部。隐藏并行会降低 workflow 层可观测性、可恢复性和质量门控制。
 
@@ -239,7 +429,7 @@ workflow state: parallel
   -> fan-in context
 ```
 
-### 9. Action 只做确定性系统操作
+### 18. Action 只做确定性系统操作
 
 workflow action 的职责边界：
 
@@ -305,14 +495,17 @@ Icarus workflow runtime
       -> 可软件化节点
   -> 并行发现 lanes
       -> 原始证据留痕
+      -> 用户自然语言和 trigger phrase 挖掘
+      -> 现有解法失效场景和 next action 挖掘
       -> claim/finding/insight 提炼
       -> 候选机会生成
+      -> mental positioning 和 entry scene 识别
       -> 支持/反对 claims 和 kill conditions
       -> 维度内评分
       -> pre-kill gate
       -> 维度内 topN 筛选
   -> lane artifact/evaluator 校验
-  -> 机会 thesis 合成
+  -> 机会 thesis 与 mental positioning 合成
   -> 机会去重与聚类
   -> 并行 enrichment lanes
       -> 竞品缺口
@@ -327,12 +520,52 @@ Icarus workflow runtime
   -> 排名与推荐
   -> 对抗式质量复核
   -> 验证计划生成
+      -> 自然复述测试
+      -> 付费/试用/迁移动作测试
   -> JSON + Markdown 最终报告生成
 ```
 
 ## 调研维度设计
 
-### 1. 受众需求痛点 Lane
+### 1. 用户真实语言与心智定位 Lane
+
+目标：从真实用户原话中发现高频、强情绪、能对应产品打开瞬间的 mental positioning，避免把功能词误判为创业机会。
+
+典型数据源：
+
+- Reddit、知乎、小红书、贴吧、论坛等社区内容
+- B站/YouTube/TikTok 等视频评论
+- App Store、Google Play、应用市场评论
+- 问答社区、产品评论站、客服/投诉公开材料
+- 用户访谈逐字稿和公开 UGC
+
+处理流程：
+
+```text
+行业方向
+  -> 数据源优先级设定
+  -> 用户原话采集
+  -> 高频自然表达聚类
+  -> 剔除功能词、营销词、媒体词和模型总结词
+  -> 提取 trigger phrase
+  -> 分析用户真正认为自己卡在哪里
+  -> 识别候选 mental positioning
+  -> 判断是否对应明确入口场景
+```
+
+维度内评分指标：
+
+| 指标 | 说明 |
+|------|------|
+| 自然语言强度 | 是否是用户真实表达，而不是产品功能词或专家总结 |
+| 频率 | 是否在多个独立来源中重复出现 |
+| 情绪强度 | 是否带有焦虑、愤怒、急迫、无助、浪费时间或金钱损失 |
+| 入口明确度 | 这句话是否对应用户会打开产品的具体时刻 |
+| 人群清晰度 | 能否明确谁在说这句话 |
+| 心智未占领度 | 现有大厂、内容平台、社区或线下服务是否已经占稳这句话 |
+| 可复述性 | 用户是否可能自然说出“遇到 X 就用这个” |
+
+### 2. 受众需求痛点 Lane
 
 目标：从用户群体和真实场景出发，发现强需求和未满足痛点。
 
@@ -368,8 +601,9 @@ Icarus workflow runtime
 | 付费意愿 | 是否存在明显付费动机或替代支出 |
 | 可解决性 | App 是否能实际缓解该痛点 |
 | 判断置信度 | claim/finding/insight 是否有足够来源支撑，来源质量和一致性如何 |
+| 语言可追溯性 | 痛点是否能回连到用户原话和 trigger phrase |
 
-### 2. JTBD 与任务流拆解 Lane
+### 3. JTBD 与任务流拆解 Lane
 
 目标：从用户要完成的任务和实际工作流出发，识别流程断点、信息不对称、协作摩擦和可软件化节点。
 
@@ -405,8 +639,9 @@ Icarus workflow runtime
 | 替代方案劣势 | Excel、微信群、人工服务、线下中介、通用工具等替代方案是否明显不足 |
 | 软件化潜力 | App/Web/SaaS 是否能比现有方案更低成本、更稳定或更可扩展 |
 | 切入楔子清晰度 | 是否能定义一个足够小、足够痛、可验证的 beachhead segment |
+| 入口场景清晰度 | 能否明确用户在工作流哪一刻打开产品 |
 
-### 3. 已有产品 Top 排名挖掘 Lane
+### 4. 已有产品 Top 排名挖掘 Lane
 
 目标：从排行榜头部产品中识别主流需求、产品覆盖范围和仍然存在的机会缺口。
 
@@ -443,8 +678,9 @@ Icarus workflow runtime
 | 迁移阻力 | 用户从现有产品切换是否困难 |
 | 商业模式验证 | 头部产品是否证明用户愿意付费或有变现空间 |
 | 买单方清晰度 | 现有产品是否揭示了使用者、购买者、付费者和决策者之间的关系 |
+| 心智占领度 | 头部产品是否已经占据该机会对应的用户 trigger phrase 或品类心智 |
 
-### 4. 用户评论与差评挖掘 Lane
+### 5. 用户评论与差评挖掘 Lane
 
 目标：从现有 App 评论中提取未满足需求、功能请求和体验缺陷。
 
@@ -480,8 +716,9 @@ Icarus workflow runtime
 | 可修复性 | 新产品或垂直产品是否能更好解决 |
 | 现有产品惯性 | 头部产品是否因体量、架构或定位难以修复 |
 | 反证密度 | 正面评论、替代方案满意度或产品近期更新是否削弱该机会 |
+| 失效后行为 | 用户差评后是否出现换产品、找真人、问社区、手工补救等 next action |
 
-### 5. 搜索需求与内容缺口 Lane
+### 6. 搜索需求与内容缺口 Lane
 
 目标：从搜索行为和内容供给中发现需求旺盛但产品供给不足的方向。
 
@@ -514,8 +751,9 @@ Icarus workflow runtime
 | 工具化潜力 | 内容答案是否可以被产品流程替代 |
 | 获客可行性 | SEO、内容、社区渠道是否可触达用户 |
 | 工具转化风险 | 用户是否只是寻求一次性答案，而不是愿意持续使用工具 |
+| trigger phrase 匹配度 | 搜索词是否是用户自然表达，而不是供给侧内容标题 |
 
-### 6. 趋势变化 Lane
+### 7. 趋势变化 Lane
 
 目标：识别政策、技术、平台、消费习惯变化带来的新窗口。
 
@@ -549,7 +787,7 @@ Icarus workflow runtime
 | 进入窗口 | 新进入者是否有机会建立优势 |
 | 风险 | 政策、平台或技术不确定性 |
 
-### 7. 替代方案与非 App 竞争 Lane
+### 8. 替代方案与非 App 竞争 Lane
 
 目标：判断目标用户当前如何解决问题，App 是否真的优于现有替代方案，以及机会是否被非软件因素限制。
 
@@ -584,6 +822,42 @@ Icarus workflow runtime
 | 防御性 | 如果用通用工具或现有平台也能快速复制，差异化是否不足 |
 | 否定风险 | 替代方案证据是否足以触发 kill condition |
 
+### 9. 现有解法失效场景 Lane
+
+目标：识别用户已经尝试现有解决方案但仍然失败的具体场景，以及失败后的 next action。它关注迁移动机，不只是竞品缺口。
+
+典型数据源：
+
+- 竞品差评和流失评论
+- 社区求助帖、二次求助帖、追问和补救流程
+- “已经用了 X 但还是不行”类用户表达
+- 公开客服投诉、论坛问题、产品评论
+- 教程、工具、服务使用后的失败反馈
+
+处理流程：
+
+```text
+行业方向或候选机会
+  -> 当前解决方案枚举
+  -> 失效场景识别
+  -> 用户原话和 trigger phrase 记录
+  -> 失效原因聚类
+  -> 失败后的 next action 识别
+  -> 判断 next action 是否代表迁移动机
+  -> 映射到候选 mental positioning 和 opportunity thesis
+```
+
+维度内评分指标：
+
+| 指标 | 说明 |
+|------|------|
+| 失效明确度 | 用户是否明确表达“用了现有方案仍然失败” |
+| 失效频率 | 该失效是否在多个场景或来源中重复出现 |
+| 失败后迁移动机 | 用户是否换 App、找真人、问社区、付费、手工补救或继续追问 |
+| 当前解法惯性 | 现有解法是否因产品定位、商业模式、流程或技术限制难以修复 |
+| 新产品入口清晰度 | 失效瞬间是否能自然转化为新产品打开场景 |
+| 心智空白 | 该失效对应的用户语言是否尚未被明确产品占领 |
+
 ## 候选机会数据模型
 
 候选机会必须是结构化对象，避免只保存自然语言摘要。
@@ -594,12 +868,33 @@ Icarus workflow runtime
   "title": "面向独居老人的用药提醒与家庭协同 App",
   "description": "帮助独居老人管理用药、复诊和家庭成员远程确认。",
   "opportunity_thesis": "异地子女需要低成本确认独居老人慢病用药和复诊执行情况；现有个人提醒工具缺少家庭协同和长期健康记录，因此可以从家庭协同用药提醒切入。",
+  "mental_positioning": "远程确认老人是否真的按时用药",
+  "trigger_phrase": "我不在身边，不知道老人到底有没有按时吃药",
+  "entry_scene": "子女在异地，老人每日用药、漏服或复诊前后需要远程确认时",
+  "user_language_samples": [
+    {
+      "sample_id": "uls_001",
+      "text": "我不在家，没法确认老人有没有按时吃药。",
+      "source": "社区讨论",
+      "confidence": 0.72
+    }
+  ],
   "target_users": ["独居老人", "异地子女", "慢病患者家庭"],
   "buyer": ["异地子女"],
   "payer": ["异地子女", "慢病患者家庭"],
   "decision_maker": ["家庭照护负责人"],
   "budget_source": "家庭健康管理和慢病照护支出",
   "purchase_trigger": "老人漏服、复诊延误、子女无法远程确认照护状态",
+  "buyer_purchase_language": [
+    "降低老人漏服和复诊延误风险",
+    "不用反复打电话也能确认照护执行情况",
+    "让家庭照护记录可追踪、可交接"
+  ],
+  "marketing_bridge": {
+    "user_trigger_phrase": "我不在身边，不知道老人到底有没有按时吃药",
+    "buyer_purchase_phrase": "用较低成本确认老人慢病照护是否执行到位，减少漏服和家庭沟通成本",
+    "decision_criteria": ["执行确认率", "家庭重复沟通次数", "复诊记录完整度"]
+  },
   "primary_scenarios": ["每日用药提醒", "漏服告警", "复诊记录", "家庭协同"],
   "job_to_be_done": "让家庭成员在不频繁打电话的情况下确认老人是否按时用药、复诊和记录慢病信息。",
   "pain_points": [
@@ -609,13 +904,46 @@ Icarus workflow runtime
   ],
   "current_alternatives": ["电话确认", "微信提醒", "普通闹钟", "纸质用药记录", "通用用药提醒 App"],
   "alternative_gap": "普通提醒工具解决个人提醒，但不能稳定完成家庭确认、复诊协同和长期记录沉淀。",
+  "value_layer": {
+    "primary": "workflow_outcome",
+    "output_value": "提醒文案、用药计划和健康摘要本身价值有限，容易被通用工具替代。",
+    "workflow_value": "把提醒、确认、漏服补救、复诊记录和家庭同步串成持续闭环。",
+    "outcome_metric": ["漏服确认闭环率", "复诊记录完整率", "家庭重复沟通次数下降"]
+  },
+  "user_state_context_model": {
+    "state_variables": ["老人每日用药状态", "漏服记录", "复诊计划", "家庭成员确认状态"],
+    "context_sources": ["提醒确认记录", "家庭成员备注", "复诊记录", "药品清单"],
+    "state_update_triggers": ["到点未确认", "家庭成员补记", "复诊日期变更", "漏服补救完成"],
+    "memory_retention_boundary": "只保留照护执行和慢病流程相关记录，不做诊断结论。",
+    "privacy_and_permission_boundary": "家庭成员授权共享，健康数据导出和删除可控。"
+  },
+  "solution_failure_scene": "电话、微信和普通提醒可以提示一次，但不能形成可追踪的执行确认、漏服补救和长期记录。",
+  "solution_failure_modes": ["无法异步确认", "漏服后缺少闭环", "记录分散", "家庭成员之间状态不同步"],
+  "next_action_after_failure": ["反复打电话", "让其他家人确认", "手动记录", "寻找家庭共享提醒工具"],
+  "mental_position_occupation": {
+    "status": "partially_occupied",
+    "occupied_by": ["通用用药提醒 App", "微信/电话"],
+    "white_space": "家庭协同确认和长期慢病流程尚未被稳定占领"
+  },
   "beachhead_segment": "异地子女照护的独居慢病老人家庭",
   "entry_wedge": "家庭协同用药提醒、漏服确认和复诊记录",
   "why_now": "远程家庭照护需求增加，老年慢病管理数字化工具成熟，但通用提醒工具仍偏个人使用。",
   "initial_distribution_channel": ["慢病社区内容", "子女照护人群社群", "药店/基层诊所合作"],
   "expansion_path": ["复诊档案", "检查报告归档", "家庭健康日历", "护理服务和保险导流"],
   "defensibility_hypothesis": "通过家庭协同记录、长期健康数据和照护工作流沉淀提高迁移成本。",
-  "source_lanes": ["audience_pain", "job_to_be_done", "top_products_gap", "review_mining"],
+  "llm_capability_baseline": {
+    "applies": false,
+    "baseline_task": "生成用药提醒建议或照护清单",
+    "prompt_only_baseline_result": "通用 LLM 可以生成提醒建议，但不能持续追踪执行、同步家庭状态或形成漏服补救闭环。",
+    "remaining_gap_after_baseline": "真实价值来自状态追踪、多人确认、异常闭环和长期记录，而不是单次生成建议。",
+    "model_upgrade_risk": "low"
+  },
+  "capability_commoditization_risk": {
+    "risk_level": "medium",
+    "risk_reason": "提醒、摘要和记录功能容易被平台复制，但家庭协同状态、长期照护数据和线下触达不容易被纯模型能力直接替代。",
+    "mitigation": ["家庭协同工作流沉淀", "长期照护记录迁移成本", "慢病社区和诊所渠道"]
+  },
+  "source_lanes": ["user_language_mining", "audience_pain", "job_to_be_done", "top_products_gap", "review_mining", "solution_failure"],
   "supporting_insights": [
     {
       "insight_id": "ins_001",
@@ -631,16 +959,18 @@ Icarus workflow runtime
   ],
   "audit_refs": ["claim_001", "claim_002", "ev_001"],
   "lane_scores": {
+    "user_language_mining": 7.9,
     "audience_pain": 8.4,
     "job_to_be_done": 8.1,
     "top_products_gap": 7.2,
-    "review_mining": 8.8
+    "review_mining": 8.8,
+    "solution_failure": 8.0
   },
   "score_band": "strong_candidate",
   "global_score": 8.1,
   "rank_stability": 0.74,
   "sensitivity": {
-    "most_sensitive_dimensions": ["acquisition_feasibility", "payer_clarity"],
+    "most_sensitive_dimensions": ["workflow_outcome_value", "buyer_language_clarity", "capability_commoditization_risk"],
     "downside_case_score": 6.4,
     "upside_case_score": 8.7
   },
@@ -655,6 +985,11 @@ Icarus workflow runtime
   "validation_plan": {
     "7_day_test": "访谈 10 个异地照护家庭，验证漏服确认和复诊记录是否是高频痛点。",
     "30_day_mvp": "用微信小程序或轻量 Web 原型测试提醒、确认和家庭共享流程。",
+    "natural_restatement_test": "用户能否自然复述为：不在身边时，用它确认老人有没有按时吃药。",
+    "prompt_only_baseline_test": "让用户用通用 LLM 生成照护清单，比较其是否能替代持续提醒、多人确认和漏服补救闭环。",
+    "buyer_purchase_language_test": "验证异地子女是否会用“降低漏服风险、减少反复沟通、照护记录可追踪”解释付费理由。",
+    "state_context_value_test": "验证用户是否愿意持续记录用药确认、复诊和家庭备注，以及这些状态是否降低重复沟通。",
+    "workflow_outcome_metric_test": "跟踪 2 周内漏服确认闭环率、家庭重复沟通次数和复诊记录完整度。",
     "success_threshold": "30% 以上访谈对象愿意留下联系方式或试用，至少 5 个家庭愿意为高级功能付费。",
     "failure_threshold": "多数用户表示电话/微信已经足够，或只愿免费使用提醒功能。"
   }
@@ -686,6 +1021,8 @@ Evidence record 记录来源和原始材料，不作为最终报告的写作语�
   "source_independence": "primary",
   "source_bias": "negative-review-heavy",
   "evidence_role": "support",
+  "user_language_role": "trigger_phrase",
+  "solution_failure_role": "current_solution_failed",
   "raw_text": "用户原始评论或网页摘要，仅保存在 evidence store 中",
   "claim_refs": ["claim_001", "claim_002"],
   "sentiment": "negative",
@@ -707,6 +1044,9 @@ Claim 是从 evidence 中抽取出的单条事实、痛点、缺口或反证判�
   "claim_type": "pain_point",
   "statement": "部分用户对用药提醒稳定性和家庭成员同步能力不满意。",
   "stance": "support",
+  "trigger_phrase_refs": ["uls_001"],
+  "mental_positioning_refs": ["mp_001"],
+  "solution_failure_refs": ["sf_001"],
   "opportunity_refs": ["opp_001"],
   "evidence_refs": ["ev_001"],
   "evidence_independence": 0.72,
@@ -827,37 +1167,59 @@ lane 内筛选前必须执行 pre-kill gate。每个机会至少有一个明确�
 
 | 维度 | 权重示例 | 说明 |
 |------|----------|------|
-| 需求强度 | 20% | 用户痛点是否真实且强烈 |
-| 市场空间 | 15% | 用户规模、消费能力、增长趋势 |
-| 现有产品缺口 | 15% | 头部产品是否存在覆盖或满意度缺口 |
-| 买单方明确度 | 8% | 使用者、购买者、付费者和决策者是否清楚 |
-| 付费和商业化 | 10% | 是否有付费意愿、订阅、交易或 B2B 变现 |
-| 获客可行性 | 10% | 是否有清晰低成本触达渠道 |
-| 切入版本可行性 | 8% | 小团队是否能在合理时间内验证 |
-| 验证可行性 | 7% | 7-30 天内是否能用访谈、落地页、原型或人工服务验证 |
-| 差异化空间 | 8% | 是否能建立清晰定位或壁垒 |
-| 时机窗口 | 6% | 为什么现在是较好的进入时点 |
+| 需求强度 | 16% | 用户痛点是否真实且强烈 |
+| 用户语言强度 | 7% | 是否来自真实用户高频自然表达，而不是功能词或营销词 |
+| 入口场景清晰度 | 6% | 用户会在什么具体时刻打开产品是否明确 |
+| 解法失效强度 | 7% | 用户是否已经尝试现有方案但仍失败，并出现 next action |
+| 心智未占领度 | 6% | 该 trigger phrase 是否尚未被大厂、内容平台或线下服务稳固占领 |
+| 工作流/结果价值 | 9% | 机会是否从单次 output 进入 workflow 或 outcome 改善 |
+| 用户状态/上下文价值 | 6% | 是否能沉淀持续状态、上下文、协作记录或自动化闭环 |
+| 市场空间 | 10% | 用户规模、消费能力、增长趋势 |
+| 现有产品缺口 | 8% | 头部产品是否存在覆盖或满意度缺口 |
+| 买单方明确度 | 7% | 使用者、购买者、付费者和决策者是否清楚 |
+| 买单语言清晰度 | 6% | 用户触发语言是否能翻译成预算、ROI、效率、风险或家庭支出理由 |
+| 付费和商业化 | 7% | 是否有付费意愿、订阅、交易或 B2B 变现 |
+| 获客可行性 | 7% | 是否有清晰低成本触达渠道 |
+| 切入版本可行性 | 6% | 小团队是否能在合理时间内验证 |
+| 验证可行性 | 6% | 7-30 天内是否能用访谈、落地页、原型或人工服务验证 |
+| 自然复述可验证性 | 5% | 是否能通过用户复述确认 mental positioning 成立 |
+| LLM 基线差距 | 6% | 若依赖 AI/LLM，是否明显优于通用 LLM + prompt-only baseline；不依赖时按中性或低权重处理 |
+| 差异化空间 | 6% | 是否能建立清晰定位或壁垒 |
+| 时机窗口 | 4% | 为什么现在是较好的进入时点 |
 | 替代方案风险 | -6% | 用户当前替代方案是否已经足够好 |
+| 能力商品化风险 | -7% | 核心能力是否会被模型升级、平台内置、API 降价或竞品功能快速抹平 |
 | 竞争风险 | -5% | 竞争强度、巨头风险、同质化风险 |
 | 合规和平台风险 | -5% | 政策、医疗、金融、数据隐私等风险 |
 | 判断置信度 | 10% | claim/finding/insight 的来源质量、一致性和覆盖度 |
+
+权重应按行业和 scope assumptions 做归一化配置；上表用于表达相对重要性，不要求各项在文档中手工合计为 100%。
 
 示例公式：
 
 ```text
 global_score =
-  demand_strength * 0.20
-  + market_potential * 0.15
-  + product_gap * 0.15
-  + payer_clarity * 0.08
-  + monetization * 0.10
-  + acquisition_feasibility * 0.10
-  + entry_version_feasibility * 0.08
-  + validation_feasibility * 0.07
-  + differentiation * 0.08
-  + timing_window * 0.06
+  demand_strength * 0.16
+  + user_language_strength * 0.07
+  + entry_scene_clarity * 0.06
+  + solution_failure_strength * 0.07
+  + mental_position_white_space * 0.06
+  + workflow_outcome_value * 0.09
+  + state_context_value * 0.06
+  + market_potential * 0.10
+  + product_gap * 0.08
+  + payer_clarity * 0.07
+  + buyer_language_clarity * 0.06
+  + monetization * 0.07
+  + acquisition_feasibility * 0.07
+  + entry_version_feasibility * 0.06
+  + validation_feasibility * 0.06
+  + natural_restatement_testability * 0.05
+  + llm_baseline_gap * 0.06
+  + differentiation * 0.06
+  + timing_window * 0.04
   + judgment_confidence * 0.10
   - substitute_risk * 0.06
+  - capability_commoditization_risk * 0.07
   - competition_risk * 0.05
   - compliance_risk * 0.05
 ```
@@ -874,22 +1236,32 @@ global_score =
   "rank": 1,
   "score_breakdown": {
     "demand_strength": 8.8,
+    "user_language_strength": 7.9,
+    "entry_scene_clarity": 8.4,
+    "solution_failure_strength": 8.0,
+    "mental_position_white_space": 7.3,
+    "workflow_outcome_value": 8.6,
+    "state_context_value": 8.1,
     "market_potential": 7.5,
     "product_gap": 8.2,
     "payer_clarity": 8.0,
+    "buyer_language_clarity": 7.7,
     "monetization": 7.4,
     "acquisition_feasibility": 7.8,
     "entry_version_feasibility": 8.6,
     "validation_feasibility": 8.2,
+    "natural_restatement_testability": 7.8,
+    "llm_baseline_gap": 7.0,
     "differentiation": 7.9,
     "timing_window": 7.2,
     "substitute_risk": 5.8,
+    "capability_commoditization_risk": 4.8,
     "competition_risk": 5.2,
     "compliance_risk": 6.4,
     "judgment_confidence": 7.6
   },
   "sensitivity_analysis": {
-    "most_sensitive_dimensions": ["acquisition_feasibility", "payer_clarity", "substitute_risk"],
+    "most_sensitive_dimensions": ["workflow_outcome_value", "acquisition_feasibility", "buyer_language_clarity", "capability_commoditization_risk"],
     "downside_case_score": 6.4,
     "expected_case_score": 8.1,
     "upside_case_score": 8.7,
@@ -969,7 +1341,7 @@ class ResearchPlanner:
 - 每条 lane 的数据源优先级。
 - 每条 lane 的 topN 数量。
 - 是否需要行业特定维度。
-- 好机会判定标准、kill gate 规则、评分权重和敏感性分析参数。
+- 好机会判定标准、mental positioning 规则、kill gate 规则、评分权重和敏感性分析参数。
 
 ### Seed Probe
 
@@ -1009,7 +1381,57 @@ class OpportunitySpaceMapper:
 - 高频任务和 JTBD。
 - 当前替代方案、workaround 和非 App 竞争。
 - 工作流摩擦点和可软件化节点。
+- 用户状态、上下文连续性、协作对象和数据沉淀机会。
+- 用户触发语言、买单方购买语言和 purchase trigger 假设。
 - 初始机会 thesis 假设和待推翻问题。
+
+### User Language Miner
+
+作为 `user_language_mining` discovery branch 的实现，负责从 UGC、评论、问答和访谈材料中挖掘用户真实语言和候选 mental positioning：
+
+```python
+class UserLanguageMiner:
+    async def mine(
+        self,
+        direction: str,
+        scope: ScopeFrame,
+        seed_context: SeedProbe,
+    ) -> UserLanguageMap:
+        ...
+```
+
+输出包括：
+
+- 高频自然表达和原话样本。
+- trigger phrases。
+- 用户真正认为自己卡住的位置。
+- 入口场景候选。
+- 功能词、营销词和供给侧词汇剔除结果。
+- 候选 mental positioning、频率、情绪强度和未占领度。
+
+### Solution Failure Mapper
+
+作为 `solution_failure` discovery branch 的实现，负责识别现有解法在哪些场景失效，以及用户失败后的 next action：
+
+```python
+class SolutionFailureMapper:
+    async def map(
+        self,
+        direction: str,
+        scope: ScopeFrame,
+        seed_context: SeedProbe,
+    ) -> SolutionFailureMap:
+        ...
+```
+
+输出包括：
+
+- 当前解决方案和替代路径。
+- solution failure scenes。
+- 失效原因聚类。
+- 用户原话和 evidence refs。
+- next action after failure，例如换产品、问真人、问社区、手工补救、付费或放弃。
+- 迁移动机强度和可转化入口。
 
 依赖规则：
 
@@ -1054,7 +1476,7 @@ class DiscoveryLane:
         ...
 ```
 
-每个 Discovery Lane 必须输出支持 claims、反对 claims、uncertainties 和 kill conditions。反证强或关键字段缺失的机会应被降级，不应进入 topN。
+每个 Discovery Lane 必须输出支持 claims、反对 claims、uncertainties、kill conditions、trigger phrase refs 和 solution failure refs。反证强或关键字段缺失的机会应被降级，不应进入 topN。
 
 ### Opportunity Thesis Synthesizer
 
@@ -1062,11 +1484,14 @@ class DiscoveryLane:
 
 ```python
 class OpportunityThesisSynthesizer:
-    async def synthesize(self, lane_results: list[LaneResult]) -> list[OpportunityThesis]:
+    async def synthesize(
+        self,
+        lane_results: list[LaneResult],
+    ) -> list[OpportunityThesis]:
         ...
 ```
 
-每个 thesis 必须包含 `user`、`job_to_be_done`、`pain`、`current_alternatives`、`gap`、`buyer`、`payer`、`entry_wedge`、`why_now`、`distribution_path`、`kill_criteria` 和 `validation_hypotheses`。
+每个 thesis 必须包含 `user`、`job_to_be_done`、`pain`、`current_alternatives`、`gap`、`buyer`、`payer`、`buyer_purchase_language`、`marketing_bridge`、`mental_positioning`、`trigger_phrase`、`entry_scene`、`solution_failure_scene`、`next_action_after_failure`、`mental_position_occupation`、`value_layer`、`user_state_context_model`、`entry_wedge`、`why_now`、`distribution_path`、`llm_capability_baseline`、`capability_commoditization_risk`、`kill_criteria` 和 `validation_hypotheses`。
 
 ### OpportunityClusterer
 
@@ -1098,6 +1523,46 @@ class JudgmentEnricher:
 - 替代方案
 - 反证信息
 - 可行性和早期单位经济
+- LLM capability benchmark 和 prompt-only baseline
+- 能力商品化风险，包括模型升级、平台内置、API 降价和开源替代
+- output/workflow/outcome 价值层判断
+- 用户状态、上下文连续性、数据闭环和隐私边界
+- 买单语言、预算来源、决策标准和用户语言到购买语言的映射
+
+### LLM Capability Benchmarker
+
+作为 `llm_capability_benchmark` enrichment branch 的实现，负责验证 AI/LLM 相关机会是否真的超出通用模型和 prompt-only 的能力范围：
+
+```python
+class LLMCapabilityBenchmarker:
+    async def benchmark(self, opportunities: list[MergedOpportunity]) -> list[LLMBaselineResult]:
+        ...
+```
+
+输出包括：
+
+- 每个机会的 AI/LLM 依赖点。
+- baseline task 和 prompt-only baseline result。
+- 通用 LLM 是否已经足够解决核心任务。
+- 产品需要补足的工作流、数据、执行、合规或分发能力。
+- model upgrade risk 和剩余差距。
+
+### Value, Context and Buyer Language Enricher
+
+作为 `workflow_outcome_value`、`state_context_continuity` 和 `buyer_purchase_language` enrichment branch 的通用能力说明，负责把候选机会从“用户喜欢的功能”转成可购买、可留存、可验证的产品假设：
+
+```python
+class OpportunityValueContextEnricher:
+    async def enrich(self, opportunities: list[MergedOpportunity]) -> list[ValueContextResult]:
+        ...
+```
+
+输出包括：
+
+- output/workflow/outcome 三层价值判断和 outcome metric。
+- state variables、context sources、state update triggers 和 privacy boundary。
+- buyer purchase language、budget source、decision criteria 和 marketing bridge。
+- 对 `payer_clarity`、`monetization`、`workflow_outcome_value`、`state_context_value` 和 `capability_commoditization_risk` 的 score input。
 
 ### GlobalRanker
 
@@ -1131,7 +1596,7 @@ class ValidationPlanner:
         ...
 ```
 
-每个机会至少包含 7 天验证动作、30 天 MVP、访谈对象、落地页或原型测试方式、成功阈值、失败阈值和最关键待验证假设。
+每个机会至少包含 7 天验证动作、30 天 MVP、访谈对象、落地页或原型测试方式、自然复述测试、prompt-only baseline 测试、买单语言测试、状态上下文价值测试、成功阈值、失败阈值和最关键待验证假设。
 
 ### Reporter
 
@@ -1154,10 +1619,13 @@ class OpportunityReporter:
 ## 研究方法
 ## Top 机会详解
   - 机会 thesis
+  - mental positioning、trigger phrase 和 entry scene
   - 目标用户、买单方、付费方和决策者
   - JTBD 和当前工作流
   - 核心痛点
+  - 现有解法失效场景和 next action
   - 当前替代方案和非 App 竞争
+  - 心智是否被已有产品/内容/服务占领
   - 切入楔子、beachhead segment 和 why now
   - 关键判断依据
   - 竞品覆盖和满意度缺口
@@ -1167,14 +1635,16 @@ class OpportunityReporter:
   - 综合评分、推荐档位、敏感性分析和排名稳定性
   - 风险和反证
   - kill criteria
-  - 7 天验证动作和 30 天 MVP 建议
+  - 自然复述测试、7 天验证动作和 30 天 MVP 建议
 ## 被筛掉的机会
 ## 观察池机会
+## 用户自然语言和心智定位摘要
+## 现有解法失效场景地图
 ## 不确定性、关键假设和后续验证建议
 ## 审计追踪和参考来源
 ```
 
-最终报告的正文应围绕创业判断展开，避免按证据逐条综述。原始 evidence 只通过 traceability、附录、脚注或审计追踪出现；正文主要使用 opportunity thesis、insight、score breakdown、risk、counter evidence、sensitivity analysis 和 validation plan 等结构化结果。报告必须允许给出“不建议做独立 App，建议从服务、插件、小程序或人工验证切入”的结论。
+最终报告的正文应围绕创业判断展开，避免按证据逐条综述。原始 evidence 只通过 traceability、附录、脚注或审计追踪出现；正文主要使用 opportunity thesis、mental positioning、trigger phrase、entry scene、solution failure map、insight、score breakdown、risk、counter evidence、sensitivity analysis 和 validation plan 等结构化结果。报告必须允许给出“不建议做独立 App，建议从服务、插件、小程序或人工验证切入”的结论。
 
 ## Icarus 落地设计
 
@@ -1228,10 +1698,10 @@ type WorkflowDefinitionState =
 {
   "type": "parallel",
   "label": "多维度机会发现",
-  "max_concurrency": 7,
+  "max_concurrency": 9,
   "join_policy": {
     "type": "all_completed",
-    "min_success": 6,
+    "min_success": 8,
     "allow_failed_branches": true
   },
   "branches": [
@@ -1428,6 +1898,7 @@ opportunity_scope_framer
 opportunity_planner
 opportunity_seed_researcher
 opportunity_space_mapper
+user_language_researcher
 audience_pain_researcher
 job_to_be_done_researcher
 top_products_researcher
@@ -1435,6 +1906,7 @@ review_mining_researcher
 search_demand_researcher
 trend_researcher
 substitute_researcher
+solution_failure_researcher
 competitor_gap_researcher
 market_size_researcher
 monetization_researcher
@@ -1455,6 +1927,7 @@ scope-frame.json
 research-plan.json
 seed-probe.json
 opportunity-space-map.json
+user-language-mining.json
 audience-pain-lane.json
 job-to-be-done-lane.json
 top-products-lane.json
@@ -1462,6 +1935,7 @@ review-mining-lane.json
 search-demand-lane.json
 trend-lane.json
 substitutes-workarounds-lane.json
+solution-failure-map.json
 discovery-fan-in.json
 opportunity-theses.json
 merged-opportunities.json
@@ -1472,6 +1946,11 @@ acquisition-enrichment.json
 compliance-risk-enrichment.json
 counter-evidence-enrichment.json
 feasibility-unit-economics-enrichment.json
+llm-capability-benchmark.json
+capability-commoditization-risk.json
+workflow-outcome-value-enrichment.json
+state-context-continuity-enrichment.json
+buyer-purchase-language-enrichment.json
 enrichment-fan-in.json
 normalized-judgment-context.json
 ranking.json
@@ -1489,17 +1968,17 @@ scope_framing               delegation  明确市场、平台、商业模式、�
 research_plan               delegation  LLM 规划 lane、关键词、数据源、topN、评分权重、kill gate、Research Kernel 参数
 seed_probe                  delegation  轻量探测用户、场景、问题、关键词、产品和数据源 seed
 opportunity_space_map       delegation  建立用户角色、JTBD、工作流、替代方案、可软件化节点和初始 thesis 假设
-discovery_parallel          parallel    基于多类 seed 和 opportunity space 的 discovery lane 并行调研、判断提炼、维度内筛选
-lane_result_validate        system      schema、evidence ref、判断层必填字段、support/opposition、kill conditions、topN 数量校验
-opportunity_thesis          delegation  将 lane topN 机会转成可验证 thesis，补齐买单方、替代方案、entry wedge、why now、kill criteria
+discovery_parallel          parallel    基于 seed 和 opportunity space 的 9 条 discovery lane 并行调研
+lane_result_validate        system      schema、evidence ref、trigger phrase、solution failure、support/opposition、kill conditions、topN 数量校验
+opportunity_thesis          delegation  将 lane topN 机会转成可验证 thesis，补齐买单方、mental positioning、entry scene、solution failure、entry wedge、why now、kill criteria
 opportunity_merge           delegation  语义合并、拆分判断、判断依据聚合
-enrichment_parallel         parallel    竞品、市场、商业化、获客、合规、反证、替代方案、可行性并行补充检索
+enrichment_parallel         parallel    竞品、市场、商业化、获客、合规、反证、替代方案、可行性、LLM 基线、能力商品化、价值层、状态上下文和买单语言并行补充检索
 judgment_context_normalize  system      URL/source/product/evidence ref/claim/finding/insight 归一化和 deterministic dedupe
 global_score                system      确定性评分公式、排序、阈值过滤和推荐档位
 sensitivity_analysis        system      权重扰动、关键假设扰动、置信度扰动、rank stability 和 rank range 计算
 ranking_rationale           delegation  基于结构化分数、反证和敏感性分析生成排名解释
 quality_review              delegation  审核判断链、反证、评分解释、limitations 和报告一致性
-validation_plan             delegation  生成 7 天验证动作、30 天 MVP、访谈对象、成功阈值和失败阈值
+validation_plan             delegation  生成自然复述、prompt-only baseline、买单语言、状态上下文、7 天验证动作、30 天 MVP、成功阈值和失败阈值
 final_report                delegation  输出 Markdown 报告、JSON 报告和 traceability
 done                        terminal
 ```
@@ -1508,12 +1987,14 @@ done                        terminal
 
 ```text
 audience_pain              受众需求痛点
+user_language_mining       用户真实语言与心智定位
 job_to_be_done             JTBD 与任务流拆解
 top_products               已有产品 Top 排名挖掘
 review_mining              用户评论与差评挖掘
 search_demand              搜索需求与内容缺口
 trend_change               趋势变化
 substitutes_workarounds    替代方案与非 App 竞争
+solution_failure           现有解法失效场景
 ```
 
 `seed_probe` 不应把业务流程变成产品中心调研。`product_seed` 只作为产品相关 branch 的输入；非产品 branch 仍可独立从用户心智、搜索需求、社区讨论、任务流、替代方案和趋势变化中发现尚未被现有产品覆盖的强需求。后续的产品覆盖分析用于验证 coverage gap，而不是要求所有机会都来自已有产品缺口。
@@ -1528,6 +2009,11 @@ acquisition                 SEO、社区、渠道、平台获客
 compliance_risk             政策、医疗、金融、隐私、平台风险
 counter_evidence            反证、替代方案、失败案例
 feasibility_unit_economics  小团队可行性、交付复杂度和早期单位经济
+llm_capability_benchmark    通用 LLM + prompt-only baseline、模型升级风险
+capability_commoditization  模型、平台、API、开源和竞品更新导致的能力商品化风险
+workflow_outcome_value      output/workflow/outcome 价值层和 outcome metric
+state_context_continuity    用户状态、上下文连续性、数据闭环和隐私边界
+buyer_purchase_language     买单语言、预算来源、决策标准和 marketing bridge
 ```
 
 这两个并行阶段都必须作为 workflow runtime 的 `parallel` state 表达，而不是用单个 agent 节点内部的子任务代替。内部子任务可以作为 agent 自己的执行优化，但不能替代 workflow 层对 branch 状态、产物和评测的可观测性。
@@ -1541,6 +2027,7 @@ feasibility_unit_economics  小团队可行性、交付复杂度和早期单位�
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-research-plan/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-seed-probe/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-space-map/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-user-language-mining/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-audience-pain-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-job-to-be-done-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-top-products-recon/SKILL.md
@@ -1548,6 +2035,7 @@ feasibility_unit_economics  小团队可行性、交付复杂度和早期单位�
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-search-demand-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-trend-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-substitutes-recon/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-solution-failure-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-thesis-synthesis/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-merge-synthesis/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-competitor-gap-recon/SKILL.md
@@ -1557,6 +2045,11 @@ feasibility_unit_economics  小团队可行性、交付复杂度和早期单位�
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-compliance-risk-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-counter-evidence/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-feasibility-unit-economics/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-llm-capability-benchmark/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-capability-commoditization/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-workflow-outcome-value/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-state-context-continuity/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-buyer-purchase-language/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-ranking-rationale/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-quality-review/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-validation-plan/SKILL.md
@@ -1574,13 +2067,15 @@ feasibility_unit_economics  小团队可行性、交付复杂度和早期单位�
     "opportunity-space-map"
   ],
   "web_opportunity_research": [
+    "opportunity-user-language-mining",
     "opportunity-audience-pain-recon",
     "opportunity-job-to-be-done-recon",
     "opportunity-top-products-recon",
     "opportunity-review-mining-recon",
     "opportunity-search-demand-recon",
     "opportunity-trend-recon",
-    "opportunity-substitutes-recon"
+    "opportunity-substitutes-recon",
+    "opportunity-solution-failure-recon"
   ],
   "web_opportunity_enrichment": [
     "opportunity-competitor-gap-recon",
@@ -1589,7 +2084,12 @@ feasibility_unit_economics  小团队可行性、交付复杂度和早期单位�
     "opportunity-acquisition-recon",
     "opportunity-compliance-risk-recon",
     "opportunity-counter-evidence",
-    "opportunity-feasibility-unit-economics"
+    "opportunity-feasibility-unit-economics",
+    "opportunity-llm-capability-benchmark",
+    "opportunity-capability-commoditization",
+    "opportunity-workflow-outcome-value",
+    "opportunity-state-context-continuity",
+    "opportunity-buyer-purchase-language"
   ],
   "web_opportunity_synthesis": [
     "opportunity-thesis-synthesis",
@@ -1609,7 +2109,8 @@ branch skill 的职责划分：
 | `scope_framing` | `opportunity-scope-framing` | 明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设 |
 | `research_plan` | `opportunity-research-plan` | 生成 lane 计划、query goals、数据源优先级、Research Kernel 参数、评分权重和 kill gate 规则 |
 | `seed_probe` | `opportunity-seed-probe` | 轻量探测用户、场景、问题、关键词、产品和数据源 seed；不把所有 lane 绑定到已有产品 |
-| `opportunity_space_map` | `opportunity-space-map` | 建立用户角色、JTBD、当前替代方案、工作流摩擦点和可软件化节点 |
+| `opportunity_space_map` | `opportunity-space-map` | 建立用户角色、JTBD、当前替代方案、工作流摩擦点、可软件化节点、状态上下文和买单语言假设 |
+| `user_language_mining` | `opportunity-user-language-mining` | 从真实 UGC 中挖掘用户自然语言、trigger phrase、mental positioning 和入口场景 |
 | `audience_pain` | `opportunity-audience-pain-recon` | 从人群、场景、社区讨论和评论中挖掘痛点与候选机会 |
 | `job_to_be_done` | `opportunity-job-to-be-done-recon` | 从任务流、流程断点、协作摩擦和工作流价值中挖掘机会 |
 | `top_products` | `opportunity-top-products-recon` | 基于 `product_seed` 扩展头部产品、定位、功能覆盖、商业模式和覆盖缺口 |
@@ -1617,7 +2118,8 @@ branch skill 的职责划分：
 | `search_demand` | `opportunity-search-demand-recon` | 从搜索需求、问答和内容缺口中识别工具化机会 |
 | `trend_change` | `opportunity-trend-recon` | 从政策、技术、平台和消费变化中识别新窗口 |
 | `substitutes_workarounds` | `opportunity-substitutes-recon` | 验证当前替代方案、非 App 竞争、切换阻力和 App 必要性 |
-| `opportunity_thesis` | `opportunity-thesis-synthesis` | 将候选机会转为可验证 thesis，补齐买单方、entry wedge、why now、kill criteria |
+| `solution_failure` | `opportunity-solution-failure-recon` | 识别现有解法失效场景、失败原因、next action 和迁移动机 |
+| `opportunity_thesis` | `opportunity-thesis-synthesis` | 将候选机会转为可验证 thesis，补齐买单语言、mental positioning、entry scene、solution failure、价值层、状态上下文、LLM baseline、能力商品化风险、entry wedge、why now、kill criteria |
 | `competitor_gap` | `opportunity-competitor-gap-recon` | 对合并机会验证竞品覆盖、满意度、迁移阻力和差异化空间 |
 | `market_size` | `opportunity-market-size-recon` | 补充市场规模、增长、目标用户规模和消费能力相关判断 |
 | `monetization` | `opportunity-monetization-recon` | 验证付费意愿、定价、订阅、交易抽佣或 B2B 变现路径 |
@@ -1625,7 +2127,12 @@ branch skill 的职责划分：
 | `compliance_risk` | `opportunity-compliance-risk-recon` | 识别政策、医疗、金融、隐私、平台规则等风险 |
 | `counter_evidence` | `opportunity-counter-evidence` | 查找替代方案、失败案例、需求被高估证据和反方观点 |
 | `feasibility_unit_economics` | `opportunity-feasibility-unit-economics` | 判断小团队交付复杂度、运营依赖、毛利结构和早期单位经济 |
-| `validation_plan` | `opportunity-validation-plan` | 为推荐机会生成 7 天验证、30 天 MVP、成功阈值和失败阈值 |
+| `llm_capability_benchmark` | `opportunity-llm-capability-benchmark` | 验证 AI/LLM 相关机会相对通用 LLM + prompt-only baseline 的真实差距 |
+| `capability_commoditization` | `opportunity-capability-commoditization` | 判断核心能力被模型升级、平台内置、API 降价、开源或竞品更新抹平的风险 |
+| `workflow_outcome_value` | `opportunity-workflow-outcome-value` | 区分 output、workflow 和 outcome 价值，定义 outcome metric |
+| `state_context_continuity` | `opportunity-state-context-continuity` | 建模用户状态、上下文来源、状态更新触发器、数据闭环和隐私边界 |
+| `buyer_purchase_language` | `opportunity-buyer-purchase-language` | 验证买单语言、预算来源、决策标准和用户语言到购买语言的映射 |
+| `validation_plan` | `opportunity-validation-plan` | 为推荐机会生成自然复述、prompt-only baseline、买单语言、状态上下文、7 天验证、30 天 MVP、成功阈值和失败阈值 |
 
 每个 skill 必须要求：
 
@@ -1633,7 +2140,7 @@ branch skill 的职责划分：
 - 使用 handoff contract 中的输入和成功标准。
 - 所有业务结论写成结构化 artifact。
 - evidence 引用必须可追踪，但 artifact 面向下游的主体内容应是 claim、finding、insight、opportunity 和 score input，不应携带原始 evidence 正文作为生成语料。
-- discovery skill 必须分别输出 supporting claims、opposing claims、uncertainties 和 kill conditions。
+- discovery skill 必须分别输出 supporting claims、opposing claims、uncertainties、trigger phrase refs、solution failure refs 和 kill conditions。
 - 无论成功/失败都调用 `complete_delegation`。
 - result 至少包含 `verdict`、`summary`、`claims`、`findings`、`insights`、`opposing_claims`、`kill_conditions`、`audit_refs`。
 
@@ -1651,6 +2158,10 @@ agent delegation 负责：
 - 从来源中提炼 claim、finding、insight，再基于判断层生成痛点、功能缺口、反证和机会。
 - 对语义相近机会做合并/拆分判断。
 - 判断买单方、替代方案、entry wedge、why now 和 kill criteria 是否成立。
+- 判断 trigger phrase、entry scene、solution failure scene 和 mental position occupation 是否成立。
+- 判断 AI/LLM baseline、prompt-only baseline、model upgrade risk 和能力商品化风险是否成立。
+- 判断机会价值主要位于 output、workflow 还是 outcome 层，以及 outcome metric 是否可验证。
+- 判断用户状态、上下文连续性、买单语言和 marketing bridge 是否能支撑留存与购买。
 - 在 evidence 不足时显式降置信度或返回 `insufficient_evidence`。
 
 host MCP tool 负责：
@@ -1670,6 +2181,10 @@ host MCP tool 负责：
 - `opportunity_calculate_score`
 - `opportunity_calculate_sensitivity`
 - `opportunity_validate_traceability`
+- `opportunity_validate_user_language_refs`
+- `opportunity_validate_solution_failure_refs`
+- `opportunity_validate_llm_baseline`
+- `opportunity_validate_buyer_language_refs`
 
 host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按 agent 给出的 query、URL、source type 和 research goal 执行可审计数据获取，并把结果写成 evidence record。它不负责决定行业机会、筛选候选方向或生成最终结论。
 
@@ -1680,6 +2195,8 @@ host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按
 - `context.set`、`context.require` 这类已有上下文操作。
 - branch artifact schema validation。
 - evidence ref validation 和 source manifest 校验。
+- user language refs、trigger phrase refs 和 solution failure refs 校验。
+- llm baseline、buyer language、value layer 和 state context 字段完整性校验。
 - deterministic dedupe，例如 URL canonicalization、product id 归一化。
 - deterministic global scoring。
 - deterministic sensitivity analysis 和 rank stability 计算。
@@ -1705,12 +2222,19 @@ startup_opportunity.scope_frame.v1
 startup_opportunity.plan.v1
 startup_opportunity.seed_probe.v1
 startup_opportunity.opportunity_space_map.v1
+startup_opportunity.user_language_map.v1
+startup_opportunity.solution_failure_map.v1
 startup_opportunity.discovery_lane_result.v1
 startup_opportunity.discovery_fan_in.v1
 startup_opportunity.opportunity_thesis.v1
 startup_opportunity.merge.v1
 startup_opportunity.enrichment_branch_result.v1
 startup_opportunity.enrichment_fan_in.v1
+startup_opportunity.llm_capability_benchmark.v1
+startup_opportunity.capability_commoditization_risk.v1
+startup_opportunity.value_layer_analysis.v1
+startup_opportunity.user_state_context_model.v1
+startup_opportunity.buyer_purchase_language.v1
 startup_opportunity.ranking.v1
 startup_opportunity.sensitivity.v1
 startup_opportunity.validation_plan.v1
@@ -1778,8 +2302,45 @@ startup_opportunity.opportunity_space_map.v1
   - workaround_patterns
   - workflow_friction_points
   - software_leverage_points
+  - state_context_opportunities
+  - buyer_purchase_language_hypotheses
   - initial_thesis_hypotheses
   - disconfirming_questions
+  - audit_refs
+  - limitations
+```
+
+`user_language_map.v1` 必须产出：
+
+```text
+startup_opportunity.user_language_map.v1
+  - user_language_samples
+  - natural_expressions
+  - trigger_phrases
+  - rejected_function_terms
+  - mental_model_clusters
+  - candidate_mental_positions
+  - entry_scene_candidates
+  - frequency
+  - emotion_intensity
+  - source_manifest
+  - audit_refs
+  - limitations
+```
+
+`solution_failure_map.v1` 必须产出：
+
+```text
+startup_opportunity.solution_failure_map.v1
+  - current_solutions
+  - solution_failure_scenes
+  - failure_modes
+  - user_language_refs
+  - next_actions_after_failure
+  - migration_intent
+  - current_solution_inertia
+  - opportunity_entry_candidates
+  - source_manifest
   - audit_refs
   - limitations
 ```
@@ -1798,6 +2359,9 @@ startup_opportunity.discovery_lane_result.v1
   - findings
   - insights
   - candidate_opportunities
+  - user_language_refs
+  - trigger_phrase_refs
+  - solution_failure_refs
   - scored_opportunities
   - kill_conditions
   - pre_kill_decisions
@@ -1818,6 +2382,8 @@ failed_or_partial_branches
 all_top_opportunities
 judgment_context
 source_manifest
+user_language_summary
+solution_failure_summary
 opposing_claims_summary
 pre_kill_summary
 audit_refs
@@ -1835,17 +2401,31 @@ opportunity_theses
   - buyer
   - payer
   - decision_maker
+  - buyer_purchase_language
+  - marketing_bridge
   - job_to_be_done
+  - mental_positioning
+  - trigger_phrase
+  - entry_scene
   - current_alternatives
   - alternative_gap
+  - value_layer
+  - user_state_context_model
+  - solution_failure_scene
+  - next_action_after_failure
+  - mental_position_occupation
   - entry_wedge
   - beachhead_segment
   - why_now
   - initial_distribution_channel
   - expansion_path
   - defensibility_hypothesis
+  - llm_capability_baseline
+  - capability_commoditization_risk
   - supporting_claim_refs
   - opposing_claim_refs
+  - user_language_refs
+  - solution_failure_refs
   - kill_criteria
   - validation_hypotheses
   - confidence
@@ -1864,6 +2444,11 @@ startup_opportunity.enrichment_branch_result.v1
   - insights
   - counter_claims
   - score_inputs
+  - llm_capability_baseline
+  - capability_commoditization_risk
+  - value_layer
+  - user_state_context_model
+  - buyer_purchase_language
   - sensitivity_inputs
   - confidence
   - audit_refs
@@ -1879,7 +2464,91 @@ source_manifest
 counter_evidence_summary
 score_inputs_by_opportunity
 sensitivity_inputs_by_opportunity
+llm_capability_baselines_by_opportunity
+commoditization_risk_by_opportunity
+value_layer_by_opportunity
+state_context_models_by_opportunity
+buyer_purchase_language_by_opportunity
 failed_or_partial_branches
+audit_refs
+limitations
+```
+
+`llm_capability_benchmark.v1` 必须包含：
+
+```text
+opportunity_id
+ai_dependency_points
+baseline_task
+prompt_only_baseline_result
+mainstream_llm_solved_level
+remaining_gap_after_baseline
+model_upgrade_risk
+score_input
+audit_refs
+limitations
+```
+
+`capability_commoditization_risk.v1` 必须包含：
+
+```text
+opportunity_id
+core_capabilities
+commoditization_vectors
+platform_or_model_bundle_risk
+api_or_open_source_substitution_risk
+incumbent_fast_follow_risk
+defensibility_assets
+risk_level
+mitigation
+score_input
+audit_refs
+limitations
+```
+
+`value_layer_analysis.v1` 必须包含：
+
+```text
+opportunity_id
+output_value
+workflow_value
+outcome_value
+primary_value_layer
+outcome_metrics
+workflow_embedding_points
+score_input
+audit_refs
+limitations
+```
+
+`user_state_context_model.v1` 必须包含：
+
+```text
+opportunity_id
+state_variables
+context_sources
+state_update_triggers
+memory_retention_boundary
+personalization_or_automation_logic
+privacy_and_permission_boundary
+state_context_moat
+score_input
+audit_refs
+limitations
+```
+
+`buyer_purchase_language.v1` 必须包含：
+
+```text
+opportunity_id
+user_trigger_phrases
+buyer_purchase_language
+budget_source
+decision_criteria
+purchase_trigger
+marketing_bridge
+willingness_to_pay_evidence_refs
+score_input
 audit_refs
 limitations
 ```
@@ -1905,6 +2574,14 @@ validation_plans
   - opportunity_id
   - critical_hypotheses
   - interview_targets
+  - natural_restatement_test
+  - trigger_phrase_test
+  - mental_position_test
+  - prompt_only_baseline_test
+  - model_upgrade_sensitivity_test
+  - buyer_purchase_language_test
+  - state_context_value_test
+  - workflow_outcome_metric_test
   - 7_day_test
   - 30_day_mvp
   - willingness_to_pay_test
@@ -2063,7 +2740,8 @@ Research Kernel
 - `research_plan` 规划完整 discovery/enrichment research plan、kill gate、评分权重和敏感性参数。
 - `seed_probe` 探测多类调研 seed，包括用户、场景、问题、关键词、产品和数据源；其中 `product_seed` 只作为产品相关 branch 的输入。
 - `opportunity_space_map` 建立用户角色、JTBD、当前替代方案、工作流摩擦点和可软件化节点。
-- `discovery_parallel` 覆盖 7 条发现 branch：
+- `discovery_parallel` 覆盖 9 条发现 branch：
+  - 用户真实语言与心智定位。
   - 受众需求痛点。
   - JTBD 与任务流拆解。
   - 已有产品 Top 排名挖掘。
@@ -2071,10 +2749,11 @@ Research Kernel
   - 搜索需求与内容缺口。
   - 趋势变化。
   - 替代方案与非 App 竞争。
-- `lane_result_validate` 校验 schema、evidence ref、support/opposition、kill conditions 和 topN。
-- `opportunity_thesis` 对 discovery topN 补齐买单方、替代方案、entry wedge、why now、kill criteria 和验证假设。
+  - 现有解法失效场景。
+- `lane_result_validate` 校验 schema、evidence ref、trigger phrase、solution failure refs、support/opposition、kill conditions 和 topN。
+- `opportunity_thesis` 对 discovery topN 补齐买单方、mental positioning、entry scene、solution failure、entry wedge、why now、kill criteria 和验证假设。
 - `opportunity_merge` 对 opportunity thesis 做语义聚类、拆分和判断依据合并。
-- `enrichment_parallel` 覆盖 7 条补充验证 branch：
+- `enrichment_parallel` 覆盖 12 条补充验证 branch：
   - 竞品缺口。
   - 市场空间。
   - 商业化。
@@ -2082,17 +2761,27 @@ Research Kernel
   - 合规和平台风险。
   - 反证与替代方案。
   - 小团队可行性和早期单位经济。
+  - LLM capability benchmark 和 prompt-only baseline。
+  - 能力商品化风险。
+  - output/workflow/outcome 价值层。
+  - 用户状态、上下文连续性和数据闭环。
+  - 买单语言、预算来源和决策标准。
 - `global_score` 使用确定性公式计算综合评分、排序和推荐档位。
 - `sensitivity_analysis` 计算 downside/expected/upside score、rank range、rank stability 和最敏感假设。
 - `quality_review` 审核判断链、反证、评分解释、limitations 和报告一致性。
-- `validation_plan` 输出 7 天验证动作、30 天 MVP、访谈对象、成功阈值和失败阈值。
+- `validation_plan` 输出自然复述测试、prompt-only baseline 测试、买单语言测试、状态上下文价值测试、7 天验证动作、30 天 MVP、访谈对象、成功阈值和失败阈值。
 - `final_report` 输出 JSON、Markdown 和 traceability artifact。
 
 最终输出 top 10 创业机会，每个机会包含：
 
 - 标题、一句话定义和 opportunity thesis
+- mental positioning、trigger phrase、entry scene 和用户原话样本
 - 目标用户、买单方、付费方和决策者
+- 买单语言、预算来源、决策标准和 marketing bridge
 - JTBD、当前工作流和当前替代方案
+- output/workflow/outcome 价值层、outcome metric、用户状态和上下文模型
+- 现有解法失效场景、失效原因和 next action
+- LLM capability baseline、prompt-only baseline、model upgrade risk 和能力商品化风险
 - 关键痛点
 - 机会来源 lane
 - 关键判断依据
@@ -2101,7 +2790,7 @@ Research Kernel
 - beachhead segment、entry wedge 和 why now
 - 切入版本建议
 - 主要风险、反证和 kill criteria
-- 7 天验证动作、30 天 MVP、成功阈值和失败阈值
+- 自然复述测试、7 天验证动作、30 天 MVP、成功阈值和失败阈值
 
 ### 完整 Workflow
 
@@ -2112,6 +2801,7 @@ direction
   -> seed_probe
   -> opportunity_space_map
   -> discovery_parallel
+      -> user_language_mining
       -> audience_pain
       -> job_to_be_done
       -> top_products
@@ -2119,6 +2809,7 @@ direction
       -> search_demand
       -> trend_change
       -> substitutes_workarounds
+      -> solution_failure
   -> lane_result_validate
   -> opportunity_thesis
   -> opportunity_merge
@@ -2130,6 +2821,11 @@ direction
       -> compliance_risk
       -> counter_evidence
       -> feasibility_unit_economics
+      -> llm_capability_benchmark
+      -> capability_commoditization
+      -> workflow_outcome_value
+      -> state_context_continuity
+      -> buyer_purchase_language
   -> judgment_context_normalize
   -> global_score
   -> sensitivity_analysis
@@ -2161,11 +2857,13 @@ direction
 
 | Lane | 发现方向 |
 |------|----------|
+| 用户真实语言与心智定位 | 用户反复表达“老了以后各种检查、用药、复诊都记不清”“家里人不知道宠物最近吃药和复诊情况” |
 | 受众需求痛点 | 宠物慢病管理、上门喂养、宠物训练 |
 | JTBD 与任务流拆解 | 长期用药、复诊、检查报告、家庭成员协同和异常提醒是连续任务流 |
 | Top 产品挖掘 | 宠物社区、电商、健康记录已有产品多，但垂直慢病协同不足 |
 | 评论挖掘 | 用户抱怨提醒不准、记录分散、服务质量不稳定 |
 | 替代方案与非 App 竞争 | 微信群、备忘录、宠物医院纸质记录和人工提醒仍是主要替代方案 |
+| 现有解法失效场景 | 备忘录/微信群能提醒一次，但复诊、化验单、用药执行和家庭同步无法形成闭环 |
 
 合并后机会：
 
@@ -2177,13 +2875,18 @@ direction
 
 - 目标用户：高龄宠物主人、多宠家庭、慢病宠物家庭。
 - 买单方：高龄宠物主人、愿意为宠物健康管理付费的家庭成员。
+- Mental positioning：宠物长期生病后，家里没人能完整记住和同步“吃了什么药、什么时候复诊、上次检查结果是什么”。
+- Trigger phrase：宠物慢病记录太乱了，家里人也同步不上。
+- Entry scene：宠物复诊、换药、检查报告出来、家庭成员交接照护时打开。
 - JTBD：持续记录病情、用药、复诊和检查报告，并让家庭成员共同确认执行情况。
 - 痛点：长期用药、复诊、检查记录、家庭成员协同。
 - 当前替代方案：微信提醒、备忘录、纸质记录、宠物医院单次沟通和通用宠物记录 App。
+- 现有解法失效：微信/备忘录无法把报告、用药、复诊、异常症状和家庭确认串成长期照护链路。
+- Next action：翻聊天记录、问家人、找宠物医院记录、重新拍报告、换 App 或手工整理表格。
 - 竞品缺口：通用宠物记录产品存在，但围绕慢病流程的深度不足。
 - 切入楔子：高龄猫/犬慢病家庭的用药提醒、复诊提醒、检查报告归档和家庭共享。
 - Why now：高龄宠物和宠物医疗消费增长，用户愿意为长期健康管理投入，但现有 App 多偏社区、电商或泛记录。
-- 验证计划：7 天内访谈 10-15 个慢病宠物家庭，30 天内用轻量原型测试健康档案、用药提醒和复诊共享。
+- 验证计划：7 天内访谈 10-15 个慢病宠物家庭，30 天内用轻量原型测试健康档案、用药提醒和复诊共享；自然复述测试要求用户能说出“宠物慢病记录乱、家里人同步不上时会用它”。
 - kill criteria：用户认为微信/备忘录足够，或宠物医院闭环服务已经覆盖该需求，或用户只愿免费使用提醒功能。
 - 风险：宠物医疗数据标准化、与线下宠物医院合作难度。
 
@@ -2194,6 +2897,14 @@ direction
 - 排名不能只看高分，也要看判断置信度、证据独立性、反证、敏感性和 rank stability。
 - 多个来源可能来自同一转载链或同一评论样本，不能机械累加为高置信度。
 - 用户表达需求不等于存在付费意愿，必须单独验证买单方、预算来源和 purchase trigger。
+- 用户触发语言不等于买单语言；家庭、企业、平台和个人购买的决策标准不同，必须分别验证。
+- 用户原话不等于 mental positioning 已成立；必须验证用户是否能自然复述“遇到 X 时会用它”。
+- `AI`、`助手`、`管理 App`、`平台` 这类供给侧词汇不能直接作为机会定位，必须落回 trigger phrase 和 entry scene。
+- 通用 LLM + prompt-only 如果已经能完成核心任务，且产品没有工作流嵌入、专有数据、状态连续性或结果责任，该方向应降级。
+- 核心能力若高度依赖可商品化 API、平台功能或模型升级，需要单独提高 commodity risk，不能只用“现在体验更好”支撑推荐。
+- 一次性 output 容易被替代；缺少 workflow 或 outcome 指标的方向不应被评为强机会。
+- 状态和上下文连续性如果无法通过用户授权、数据来源和隐私边界落地，就不能被空泛地当作壁垒。
+- 解法失效后如果没有 next action，说明用户可能只是抱怨，不一定有迁移动机。
 - App 不一定是最佳形态；小程序、插件、服务撮合、人工 concierge 或线下服务可能是更合理的切入方式。
 - Top 机会必须包含 kill criteria 和验证计划，否则容易把方向包装成不可执行的商业建议。
 - 不同行业的权重应允许配置，例如医疗健康类应提高合规风险权重。
@@ -2205,6 +2916,12 @@ direction
 
 ```text
 multi-lane opportunity mining
+  + user-language mental positioning
+  + buyer-language purchase validation
+  + solution-failure mapping
+  + LLM capability baseline and commoditization risk check
+  + workflow/outcome value analysis
+  + user-state and context-continuity modeling
   + structured evaluation
   + opportunity thesis
   + counter-evidence and kill gates
@@ -2214,4 +2931,4 @@ multi-lane opportunity mining
   + decision-oriented reporting
 ```
 
-该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 workflow、parallel state、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度提炼出的 claim、finding 和 insight，每条维度先独立筛选 topN，并在 lane 内完成反证和 kill gate，再通过 thesis 合成、聚类、补充检索、敏感性分析、验证计划和综合评分生成最终创业方向排名。
+该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 workflow、parallel state、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度提炼出的 claim、finding 和 insight，每条维度先独立筛选 topN，并在 lane 内完成用户语言挖掘、买单语言验证、解法失效识别、反证和 kill gate，再通过 thesis 合成、聚类、LLM baseline、能力商品化风险、工作流/结果价值、状态上下文建模、敏感性分析、自然复述测试、验证计划和综合评分生成最终创业方向排名。
