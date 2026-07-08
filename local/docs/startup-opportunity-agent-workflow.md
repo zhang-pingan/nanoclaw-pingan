@@ -1228,10 +1228,10 @@ type WorkflowDefinitionState =
 {
   "type": "parallel",
   "label": "多维度机会发现",
-  "max_concurrency": 6,
+  "max_concurrency": 7,
   "join_policy": {
     "type": "all_completed",
-    "min_success": 5,
+    "min_success": 6,
     "allow_failed_branches": true
   },
   "branches": [
@@ -1256,6 +1256,8 @@ type WorkflowDefinitionState =
           { "type": "artifact", "blocking": true },
           { "type": "evidence", "blocking": true },
           { "type": "consistency", "blocking": true },
+          { "type": "counter_evidence", "blocking": true },
+          { "type": "kill_conditions", "blocking": true },
           { "type": "llm_judge", "blocking": false }
         ]
       }
@@ -1360,9 +1362,10 @@ initial_probe
 关键约束：
 
 - query 必须带 `research_goal`，避免只有关键词。
-- 每轮研究必须记录 `source_url`、`source_title`、`retrieved_at`、`query`、`research_goal`。
+- 每轮研究必须记录 `source_url`、`source_title`、`retrieved_at`、`query`、`research_goal`、`geo`、`language`、`source_independence` 和 `source_bias`。
 - 原始 evidence 只进入 evidence store；后续 context pack 默认只放 claim、finding、insight 和 evidence refs，不放 `raw_text`。
 - claim、finding、insight 必须保留 evidence refs，方便审计和置信度校验。
+- 支持 claims 和 opposing claims 必须分开记录；不能只保存正向证据。
 - 递归追问必须有 `depth`、`breadth`、`max_sources`、`max_tokens`、`stop_conditions`。
 - 无可用来源时应显式返回 `insufficient_evidence`，不能生成貌似确定的结论。
 - Research Kernel 产物不是最终报告，也不是证据综述，而是 lane extraction 使用的结构化判断上下文。
@@ -1400,7 +1403,7 @@ Research Kernel 可以参考 GPT Researcher 的以下流程，但不直接成为
 - 校验 evidence ref 是否存在。
 - 写入 JSON/Markdown 产物。
 - 调用确定性外部 API，例如 App Store lookup、榜单 API、评论 API、趋势 API。
-- 做确定性归一化、去重、评分公式计算。
+- 做确定性归一化、去重、评分公式计算、敏感性分析和排名稳定性计算。
 - 提供 Research Kernel 所需的 batch search、fetch、source manifest 和 traceability 工具接口。
 
 它不负责：
@@ -1421,20 +1424,26 @@ Research Kernel 可以参考 GPT Researcher 的以下流程，但不直接成为
 建议 roles：
 
 ```text
+opportunity_scope_framer
 opportunity_planner
 opportunity_seed_researcher
+opportunity_space_mapper
 audience_pain_researcher
+job_to_be_done_researcher
 top_products_researcher
 review_mining_researcher
 search_demand_researcher
 trend_researcher
+substitute_researcher
 competitor_gap_researcher
 market_size_researcher
 monetization_researcher
 acquisition_researcher
 compliance_risk_researcher
 counter_evidence_researcher
+opportunity_thesis_synthesizer
 opportunity_synthesizer
+opportunity_validation_planner
 opportunity_reviewer
 opportunity_reporter
 ```
@@ -1442,14 +1451,19 @@ opportunity_reporter
 建议 artifacts：
 
 ```text
+scope-frame.json
 research-plan.json
 seed-probe.json
+opportunity-space-map.json
 audience-pain-lane.json
+job-to-be-done-lane.json
 top-products-lane.json
 review-mining-lane.json
 search-demand-lane.json
 trend-lane.json
+substitutes-workarounds-lane.json
 discovery-fan-in.json
+opportunity-theses.json
 merged-opportunities.json
 competitor-gap-enrichment.json
 market-size-enrichment.json
@@ -1457,10 +1471,13 @@ monetization-enrichment.json
 acquisition-enrichment.json
 compliance-risk-enrichment.json
 counter-evidence-enrichment.json
+feasibility-unit-economics-enrichment.json
 enrichment-fan-in.json
 normalized-judgment-context.json
 ranking.json
+sensitivity-analysis.json
 ranking-rationale.json
+validation-plan.json
 startup-opportunity-report.md
 traceability.json
 ```
@@ -1468,41 +1485,49 @@ traceability.json
 建议 workflow states：
 
 ```text
-research_plan              delegation  LLM 规划 lane、关键词、数据源、topN、评分权重、Research Kernel 参数
-seed_probe                 delegation  轻量探测用户、场景、问题、关键词、产品和数据源 seed
-discovery_parallel         parallel    基于多类 seed 的 discovery lane 并行调研、判断提炼、维度内筛选
-lane_result_validate       system      schema、evidence ref、判断层必填字段、topN 数量校验
-opportunity_merge          delegation  语义合并、拆分判断、判断依据聚合
-enrichment_parallel        parallel    竞品、市场、商业化、获客、合规、反证并行补充检索
-judgment_context_normalize system      URL/source/product/evidence ref/claim/finding/insight 归一化和 deterministic dedupe
-global_score               system      确定性评分公式、排序、阈值过滤
-ranking_rationale          delegation  基于结构化分数生成排名解释
-quality_review             delegation  审核判断链、反证、评分解释是否一致
-final_report               delegation  输出 Markdown 报告、JSON 报告和 traceability
-done                       terminal
+scope_framing               delegation  明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设
+research_plan               delegation  LLM 规划 lane、关键词、数据源、topN、评分权重、kill gate、Research Kernel 参数
+seed_probe                  delegation  轻量探测用户、场景、问题、关键词、产品和数据源 seed
+opportunity_space_map       delegation  建立用户角色、JTBD、工作流、替代方案、可软件化节点和初始 thesis 假设
+discovery_parallel          parallel    基于多类 seed 和 opportunity space 的 discovery lane 并行调研、判断提炼、维度内筛选
+lane_result_validate        system      schema、evidence ref、判断层必填字段、support/opposition、kill conditions、topN 数量校验
+opportunity_thesis          delegation  将 lane topN 机会转成可验证 thesis，补齐买单方、替代方案、entry wedge、why now、kill criteria
+opportunity_merge           delegation  语义合并、拆分判断、判断依据聚合
+enrichment_parallel         parallel    竞品、市场、商业化、获客、合规、反证、替代方案、可行性并行补充检索
+judgment_context_normalize  system      URL/source/product/evidence ref/claim/finding/insight 归一化和 deterministic dedupe
+global_score                system      确定性评分公式、排序、阈值过滤和推荐档位
+sensitivity_analysis        system      权重扰动、关键假设扰动、置信度扰动、rank stability 和 rank range 计算
+ranking_rationale           delegation  基于结构化分数、反证和敏感性分析生成排名解释
+quality_review              delegation  审核判断链、反证、评分解释、limitations 和报告一致性
+validation_plan             delegation  生成 7 天验证动作、30 天 MVP、访谈对象、成功阈值和失败阈值
+final_report                delegation  输出 Markdown 报告、JSON 报告和 traceability
+done                        terminal
 ```
 
 `discovery_parallel` branches：
 
 ```text
-audience_pain       受众需求痛点
-top_products        已有产品 Top 排名挖掘
-review_mining       用户评论与差评挖掘
-search_demand       搜索需求与内容缺口
-trend_change        趋势变化
+audience_pain              受众需求痛点
+job_to_be_done             JTBD 与任务流拆解
+top_products               已有产品 Top 排名挖掘
+review_mining              用户评论与差评挖掘
+search_demand              搜索需求与内容缺口
+trend_change               趋势变化
+substitutes_workarounds    替代方案与非 App 竞争
 ```
 
-`seed_probe` 不应把业务流程变成产品中心调研。`product_seed` 只作为产品相关 branch 的输入；非产品 branch 仍可独立从用户心智、搜索需求、社区讨论和趋势变化中发现尚未被现有产品覆盖的强需求。后续的产品覆盖分析用于验证 coverage gap，而不是要求所有机会都来自已有产品缺口。
+`seed_probe` 不应把业务流程变成产品中心调研。`product_seed` 只作为产品相关 branch 的输入；非产品 branch 仍可独立从用户心智、搜索需求、社区讨论、任务流、替代方案和趋势变化中发现尚未被现有产品覆盖的强需求。后续的产品覆盖分析用于验证 coverage gap，而不是要求所有机会都来自已有产品缺口。
 
 `enrichment_parallel` branches：
 
 ```text
-competitor_gap      竞品覆盖、满意度、迁移阻力
-market_size         市场空间、增长、用户规模
-monetization        定价、付费意愿、商业模式
-acquisition         SEO、社区、渠道、平台获客
-compliance_risk     政策、医疗、金融、隐私、平台风险
-counter_evidence    反证、替代方案、失败案例
+competitor_gap              竞品覆盖、满意度、迁移阻力
+market_size                 市场空间、增长、用户规模
+monetization                定价、付费意愿、商业模式
+acquisition                 SEO、社区、渠道、平台获客
+compliance_risk             政策、医疗、金融、隐私、平台风险
+counter_evidence            反证、替代方案、失败案例
+feasibility_unit_economics  小团队可行性、交付复杂度和早期单位经济
 ```
 
 这两个并行阶段都必须作为 workflow runtime 的 `parallel` state 表达，而不是用单个 agent 节点内部的子任务代替。内部子任务可以作为 agent 自己的执行优化，但不能替代 workflow 层对 branch 状态、产物和评测的可观测性。
@@ -1512,13 +1537,18 @@ counter_evidence    反证、替代方案、失败案例
 新增 skills：
 
 ```text
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-scope-framing/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-research-plan/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-seed-probe/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-space-map/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-audience-pain-recon/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-job-to-be-done-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-top-products-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-review-mining-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-search-demand-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-trend-recon/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-substitutes-recon/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-thesis-synthesis/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-merge-synthesis/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-competitor-gap-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-market-size-recon/SKILL.md
@@ -1526,8 +1556,10 @@ counter_evidence    反证、替代方案、失败案例
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-acquisition-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-compliance-risk-recon/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-counter-evidence/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-feasibility-unit-economics/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-ranking-rationale/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-quality-review/SKILL.md
+/Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-validation-plan/SKILL.md
 /Users/chelaile/IdeaProjects/icarus/container/skills/opportunity-report-writer/SKILL.md
 ```
 
@@ -1536,15 +1568,19 @@ counter_evidence    反证、替代方案、失败案例
 ```json
 {
   "web_opportunity_planner": [
+    "opportunity-scope-framing",
     "opportunity-research-plan",
-    "opportunity-seed-probe"
+    "opportunity-seed-probe",
+    "opportunity-space-map"
   ],
   "web_opportunity_research": [
     "opportunity-audience-pain-recon",
+    "opportunity-job-to-be-done-recon",
     "opportunity-top-products-recon",
     "opportunity-review-mining-recon",
     "opportunity-search-demand-recon",
-    "opportunity-trend-recon"
+    "opportunity-trend-recon",
+    "opportunity-substitutes-recon"
   ],
   "web_opportunity_enrichment": [
     "opportunity-competitor-gap-recon",
@@ -1552,11 +1588,14 @@ counter_evidence    反证、替代方案、失败案例
     "opportunity-monetization-recon",
     "opportunity-acquisition-recon",
     "opportunity-compliance-risk-recon",
-    "opportunity-counter-evidence"
+    "opportunity-counter-evidence",
+    "opportunity-feasibility-unit-economics"
   ],
   "web_opportunity_synthesis": [
+    "opportunity-thesis-synthesis",
     "opportunity-merge-synthesis",
     "opportunity-ranking-rationale",
+    "opportunity-validation-plan",
     "opportunity-report-writer"
   ],
   "web_opportunity_review": ["opportunity-quality-review"]
@@ -1567,19 +1606,26 @@ branch skill 的职责划分：
 
 | Branch | Skill | 核心职责 |
 |--------|-------|----------|
-| `research_plan` | `opportunity-research-plan` | 生成 lane 计划、query goals、数据源优先级、Research Kernel 参数和评分权重 |
+| `scope_framing` | `opportunity-scope-framing` | 明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设 |
+| `research_plan` | `opportunity-research-plan` | 生成 lane 计划、query goals、数据源优先级、Research Kernel 参数、评分权重和 kill gate 规则 |
 | `seed_probe` | `opportunity-seed-probe` | 轻量探测用户、场景、问题、关键词、产品和数据源 seed；不把所有 lane 绑定到已有产品 |
+| `opportunity_space_map` | `opportunity-space-map` | 建立用户角色、JTBD、当前替代方案、工作流摩擦点和可软件化节点 |
 | `audience_pain` | `opportunity-audience-pain-recon` | 从人群、场景、社区讨论和评论中挖掘痛点与候选机会 |
+| `job_to_be_done` | `opportunity-job-to-be-done-recon` | 从任务流、流程断点、协作摩擦和工作流价值中挖掘机会 |
 | `top_products` | `opportunity-top-products-recon` | 基于 `product_seed` 扩展头部产品、定位、功能覆盖、商业模式和覆盖缺口 |
 | `review_mining` | `opportunity-review-mining-recon` | 基于 `product_seed` 抓取低星评论、功能请求、投诉并提取未满足需求 |
 | `search_demand` | `opportunity-search-demand-recon` | 从搜索需求、问答和内容缺口中识别工具化机会 |
 | `trend_change` | `opportunity-trend-recon` | 从政策、技术、平台和消费变化中识别新窗口 |
+| `substitutes_workarounds` | `opportunity-substitutes-recon` | 验证当前替代方案、非 App 竞争、切换阻力和 App 必要性 |
+| `opportunity_thesis` | `opportunity-thesis-synthesis` | 将候选机会转为可验证 thesis，补齐买单方、entry wedge、why now、kill criteria |
 | `competitor_gap` | `opportunity-competitor-gap-recon` | 对合并机会验证竞品覆盖、满意度、迁移阻力和差异化空间 |
 | `market_size` | `opportunity-market-size-recon` | 补充市场规模、增长、目标用户规模和消费能力相关判断 |
 | `monetization` | `opportunity-monetization-recon` | 验证付费意愿、定价、订阅、交易抽佣或 B2B 变现路径 |
 | `acquisition` | `opportunity-acquisition-recon` | 验证 SEO、社区、平台、内容和合作获客路径 |
 | `compliance_risk` | `opportunity-compliance-risk-recon` | 识别政策、医疗、金融、隐私、平台规则等风险 |
 | `counter_evidence` | `opportunity-counter-evidence` | 查找替代方案、失败案例、需求被高估证据和反方观点 |
+| `feasibility_unit_economics` | `opportunity-feasibility-unit-economics` | 判断小团队交付复杂度、运营依赖、毛利结构和早期单位经济 |
+| `validation_plan` | `opportunity-validation-plan` | 为推荐机会生成 7 天验证、30 天 MVP、成功阈值和失败阈值 |
 
 每个 skill 必须要求：
 
@@ -1587,8 +1633,9 @@ branch skill 的职责划分：
 - 使用 handoff contract 中的输入和成功标准。
 - 所有业务结论写成结构化 artifact。
 - evidence 引用必须可追踪，但 artifact 面向下游的主体内容应是 claim、finding、insight、opportunity 和 score input，不应携带原始 evidence 正文作为生成语料。
+- discovery skill 必须分别输出 supporting claims、opposing claims、uncertainties 和 kill conditions。
 - 无论成功/失败都调用 `complete_delegation`。
-- result 至少包含 `verdict`、`summary`、`claims`、`findings`、`insights`、`audit_refs`。
+- result 至少包含 `verdict`、`summary`、`claims`、`findings`、`insights`、`opposing_claims`、`kill_conditions`、`audit_refs`。
 
 这与现有 delegation skill 通过结构化 handoff 返回结果的模式一致。
 
@@ -1603,6 +1650,7 @@ agent delegation 负责：
 - 判断哪些来源值得阅读和引用。
 - 从来源中提炼 claim、finding、insight，再基于判断层生成痛点、功能缺口、反证和机会。
 - 对语义相近机会做合并/拆分判断。
+- 判断买单方、替代方案、entry wedge、why now 和 kill criteria 是否成立。
 - 在 evidence 不足时显式降置信度或返回 `insufficient_evidence`。
 
 host MCP tool 负责：
@@ -1619,6 +1667,9 @@ host MCP tool 负责：
 - `opportunity_normalize_product`
 - `opportunity_canonicalize_source`
 - `opportunity_get_evidence_manifest`
+- `opportunity_calculate_score`
+- `opportunity_calculate_sensitivity`
+- `opportunity_validate_traceability`
 
 host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按 agent 给出的 query、URL、source type 和 research goal 执行可审计数据获取，并把结果写成 evidence record。它不负责决定行业机会、筛选候选方向或生成最终结论。
 
@@ -1631,6 +1682,7 @@ host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按
 - evidence ref validation 和 source manifest 校验。
 - deterministic dedupe，例如 URL canonicalization、product id 归一化。
 - deterministic global scoring。
+- deterministic sensitivity analysis 和 rank stability 计算。
 - join policy 检查后的 fan-in context patch。
 - 阈值过滤、状态路由和 retry 决策。
 
@@ -1649,14 +1701,19 @@ host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按
 新增 artifact contracts：
 
 ```text
+startup_opportunity.scope_frame.v1
 startup_opportunity.plan.v1
 startup_opportunity.seed_probe.v1
+startup_opportunity.opportunity_space_map.v1
 startup_opportunity.discovery_lane_result.v1
 startup_opportunity.discovery_fan_in.v1
+startup_opportunity.opportunity_thesis.v1
 startup_opportunity.merge.v1
 startup_opportunity.enrichment_branch_result.v1
 startup_opportunity.enrichment_fan_in.v1
 startup_opportunity.ranking.v1
+startup_opportunity.sensitivity.v1
+startup_opportunity.validation_plan.v1
 startup_opportunity.report.v1
 startup_opportunity.traceability.v1
 ```
@@ -1675,6 +1732,24 @@ startup_opportunity.traceability.v1
 
 branch-level contract 用于约束单个并行分支的输出；fan-in contract 用于约束 join 后给下游 state 的聚合上下文。
 
+`scope_frame.v1` 必须产出：
+
+```text
+startup_opportunity.scope_frame.v1
+  - direction
+  - market
+  - language
+  - platform
+  - business_model_preferences
+  - team_capability_constraints
+  - validation_budget
+  - validation_timeline
+  - risk_preferences
+  - app_required
+  - assumptions
+  - open_questions
+```
+
 `seed_probe.v1` 必须产出：
 
 ```text
@@ -1689,6 +1764,26 @@ startup_opportunity.seed_probe.v1
   - limitations
 ```
 
+`opportunity_space_map.v1` 必须产出：
+
+```text
+startup_opportunity.opportunity_space_map.v1
+  - user_roles
+  - buyer_roles
+  - payer_roles
+  - decision_makers
+  - jobs_to_be_done
+  - workflow_maps
+  - current_alternatives
+  - workaround_patterns
+  - workflow_friction_points
+  - software_leverage_points
+  - initial_thesis_hypotheses
+  - disconfirming_questions
+  - audit_refs
+  - limitations
+```
+
 `discovery_parallel` 的每个 branch 必须产出：
 
 ```text
@@ -1698,10 +1793,16 @@ startup_opportunity.discovery_lane_result.v1
   - queries
   - evidence_refs
   - claims
+  - supporting_claims
+  - opposing_claims
   - findings
   - insights
   - candidate_opportunities
   - scored_opportunities
+  - kill_conditions
+  - pre_kill_decisions
+  - rejected_opportunities
+  - watchlist_opportunities
   - top_opportunities
   - insufficient_evidence
   - audit_refs
@@ -1717,8 +1818,38 @@ failed_or_partial_branches
 all_top_opportunities
 judgment_context
 source_manifest
+opposing_claims_summary
+pre_kill_summary
 audit_refs
 limitations
+```
+
+`opportunity_thesis.v1` 必须包含：
+
+```text
+opportunity_theses
+  - id
+  - title
+  - opportunity_thesis
+  - user
+  - buyer
+  - payer
+  - decision_maker
+  - job_to_be_done
+  - current_alternatives
+  - alternative_gap
+  - entry_wedge
+  - beachhead_segment
+  - why_now
+  - initial_distribution_channel
+  - expansion_path
+  - defensibility_hypothesis
+  - supporting_claim_refs
+  - opposing_claim_refs
+  - kill_criteria
+  - validation_hypotheses
+  - confidence
+  - audit_refs
 ```
 
 `enrichment_parallel` 的每个 branch 必须产出：
@@ -1733,6 +1864,7 @@ startup_opportunity.enrichment_branch_result.v1
   - insights
   - counter_claims
   - score_inputs
+  - sensitivity_inputs
   - confidence
   - audit_refs
   - limitations
@@ -1746,9 +1878,39 @@ judgment_context
 source_manifest
 counter_evidence_summary
 score_inputs_by_opportunity
+sensitivity_inputs_by_opportunity
 failed_or_partial_branches
 audit_refs
 limitations
+```
+
+`sensitivity.v1` 必须包含：
+
+```text
+ranked_opportunities
+  - opportunity_id
+  - expected_case_score
+  - downside_case_score
+  - upside_case_score
+  - rank_range
+  - rank_stability
+  - most_sensitive_dimensions
+  - assumptions_to_validate_first
+```
+
+`validation_plan.v1` 必须包含：
+
+```text
+validation_plans
+  - opportunity_id
+  - critical_hypotheses
+  - interview_targets
+  - 7_day_test
+  - 30_day_mvp
+  - willingness_to_pay_test
+  - success_threshold
+  - failure_threshold
+  - next_decision
 ```
 
 示例 branch 配置：
@@ -1764,6 +1926,8 @@ limitations
       { "type": "artifact", "blocking": true },
       { "type": "evidence", "blocking": true },
       { "type": "consistency", "blocking": true },
+      { "type": "counter_evidence", "blocking": true },
+      { "type": "kill_conditions", "blocking": true },
       { "type": "llm_judge", "blocking": false }
     ]
   }
@@ -1780,13 +1944,19 @@ Workflow create input 应使用方向字段，而不是候选机会字段：
   "market": "中国",
   "platform": ["Mobile", "Web"],
   "language": "zh-CN",
+  "business_model_preferences": ["ToC 订阅", "交易撮合"],
+  "team_capability_constraints": ["小团队", "无重线下运营能力", "可做内容获客"],
+  "validation_timeline": "30 days",
+  "validation_budget": "low",
+  "risk_preferences": ["不做医疗诊断", "避免强监管金融"],
+  "app_required": false,
   "target_rank_count": 10,
   "lane_top_n": 8,
   "constraints": ["不做医疗诊断", "优先 ToC 订阅或交易撮合"]
 }
 ```
 
-Icarus 的 `WorkflowContext` 是 `Record<string, unknown>`，`createNewWorkflow` 会 merge `opts.context`，template rendering 也支持从 context 中取值。因此可以通过 `context.direction` 等字段进入 workflow template；如果前端创建表单要更友好，再扩展 `create_form` 字段配置。
+Icarus 的 `WorkflowContext` 是 `Record<string, unknown>`，`createNewWorkflow` 会 merge `opts.context`，template rendering 也支持从 context 中取值。因此可以通过 `context.direction` 等字段进入 workflow template；如果前端创建表单要更友好，再扩展 `create_form` 字段配置。用户未提供的 scope 字段应由 `scope_framing` 生成默认 assumptions，并进入最终报告。
 
 ### 最终推荐结构
 
@@ -1806,15 +1976,19 @@ Opportunity service -> 自己规划/执行/评分/报告 -> Icarus 只展示结�
 
 ```text
 Icarus workflow
+  -> delegation: scope_framing skill
   -> delegation: research_plan skill
   -> delegation: seed_probe skill
+  -> delegation: opportunity_space_map skill
   -> parallel: discovery branch delegations
   -> system/action: discovery fan-in validation
+  -> delegation: opportunity_thesis skill
   -> delegation: opportunity merge
   -> parallel: enrichment branch delegations
-  -> system/action: judgment context normalization + deterministic scoring
+  -> system/action: judgment context normalization + deterministic scoring + sensitivity analysis
   -> delegation: ranking rationale
   -> delegation: quality review
+  -> delegation: validation plan
   -> delegation: final report
   -> artifact contract + evaluator + quality gate
   -> final report artifacts
@@ -1881,55 +2055,72 @@ Research Kernel
 - workbench/trace 能展示 parallel run、branch 状态、artifact、evaluation 和 limitations。
 - workflow action 支持必要的异步 deterministic 操作，但不承载 LLM 调研。
 - host MCP tool/evidence store 支持可审计 search/fetch/API 数据记录。
-- Research Kernel 支持 query goal、并行检索、上下文压缩、递归追问、source curation 和 insufficient evidence。
+- Research Kernel 支持 query goal、并行检索、上下文压缩、递归追问、source curation、source independence、opposing claims 和 insufficient evidence。
 
 业务 workflow 范围：
 
-- `research_plan` 规划完整 discovery/enrichment research plan。
+- `scope_framing` 明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设。
+- `research_plan` 规划完整 discovery/enrichment research plan、kill gate、评分权重和敏感性参数。
 - `seed_probe` 探测多类调研 seed，包括用户、场景、问题、关键词、产品和数据源；其中 `product_seed` 只作为产品相关 branch 的输入。
-- `discovery_parallel` 覆盖 5 条发现 branch：
+- `opportunity_space_map` 建立用户角色、JTBD、当前替代方案、工作流摩擦点和可软件化节点。
+- `discovery_parallel` 覆盖 7 条发现 branch：
   - 受众需求痛点。
+  - JTBD 与任务流拆解。
   - 已有产品 Top 排名挖掘。
   - 用户评论与差评挖掘。
   - 搜索需求与内容缺口。
   - 趋势变化。
-- `opportunity_merge` 对 discovery topN 做语义聚类、拆分和判断依据合并。
-- `enrichment_parallel` 覆盖 6 条补充验证 branch：
+  - 替代方案与非 App 竞争。
+- `lane_result_validate` 校验 schema、evidence ref、support/opposition、kill conditions 和 topN。
+- `opportunity_thesis` 对 discovery topN 补齐买单方、替代方案、entry wedge、why now、kill criteria 和验证假设。
+- `opportunity_merge` 对 opportunity thesis 做语义聚类、拆分和判断依据合并。
+- `enrichment_parallel` 覆盖 7 条补充验证 branch：
   - 竞品缺口。
   - 市场空间。
   - 商业化。
   - 获客路径。
   - 合规和平台风险。
   - 反证与替代方案。
-- `global_score` 使用确定性公式计算综合评分和排序。
+  - 小团队可行性和早期单位经济。
+- `global_score` 使用确定性公式计算综合评分、排序和推荐档位。
+- `sensitivity_analysis` 计算 downside/expected/upside score、rank range、rank stability 和最敏感假设。
 - `quality_review` 审核判断链、反证、评分解释、limitations 和报告一致性。
+- `validation_plan` 输出 7 天验证动作、30 天 MVP、访谈对象、成功阈值和失败阈值。
 - `final_report` 输出 JSON、Markdown 和 traceability artifact。
 
 最终输出 top 10 创业机会，每个机会包含：
 
-- 标题和一句话定义
-- 目标用户
+- 标题、一句话定义和 opportunity thesis
+- 目标用户、买单方、付费方和决策者
+- JTBD、当前工作流和当前替代方案
 - 关键痛点
 - 机会来源 lane
 - 关键判断依据
 - 竞品缺口
-- 综合评分
+- 综合评分、推荐档位、敏感性分析和排名稳定性
+- beachhead segment、entry wedge 和 why now
 - 切入版本建议
-- 主要风险
+- 主要风险、反证和 kill criteria
+- 7 天验证动作、30 天 MVP、成功阈值和失败阈值
 
 ### 完整 Workflow
 
 ```text
 direction
+  -> scope_framing
   -> research_plan
   -> seed_probe
+  -> opportunity_space_map
   -> discovery_parallel
       -> audience_pain
+      -> job_to_be_done
       -> top_products
       -> review_mining
       -> search_demand
       -> trend_change
+      -> substitutes_workarounds
   -> lane_result_validate
+  -> opportunity_thesis
   -> opportunity_merge
   -> enrichment_parallel
       -> competitor_gap
@@ -1938,10 +2129,13 @@ direction
       -> acquisition
       -> compliance_risk
       -> counter_evidence
+      -> feasibility_unit_economics
   -> judgment_context_normalize
   -> global_score
+  -> sensitivity_analysis
   -> ranking_rationale
   -> quality_review
+  -> validation_plan
   -> final_report
   -> done
 ```
@@ -1950,8 +2144,10 @@ direction
 
 - 引入人工可调权重。
 - 支持多国家/地区市场比较。
+- 支持 scope assumptions 模板，例如“小团队低预算”“ToB 高客单”“只做小程序/插件”。
 - 支持输出结构化 JSON + Markdown 双格式。
 - 支持用户在报告后追问某个机会，进入二次深挖。
+- 支持用户选择某个机会进入真实验证 workflow，例如访谈脚本、落地页、MVP 任务拆解。
 
 ## 示例：宠物行业 App
 
@@ -1966,8 +2162,10 @@ direction
 | Lane | 发现方向 |
 |------|----------|
 | 受众需求痛点 | 宠物慢病管理、上门喂养、宠物训练 |
+| JTBD 与任务流拆解 | 长期用药、复诊、检查报告、家庭成员协同和异常提醒是连续任务流 |
 | Top 产品挖掘 | 宠物社区、电商、健康记录已有产品多，但垂直慢病协同不足 |
 | 评论挖掘 | 用户抱怨提醒不准、记录分散、服务质量不稳定 |
+| 替代方案与非 App 竞争 | 微信群、备忘录、宠物医院纸质记录和人工提醒仍是主要替代方案 |
 
 合并后机会：
 
@@ -1978,16 +2176,26 @@ direction
 综合判断：
 
 - 目标用户：高龄宠物主人、多宠家庭、慢病宠物家庭。
+- 买单方：高龄宠物主人、愿意为宠物健康管理付费的家庭成员。
+- JTBD：持续记录病情、用药、复诊和检查报告，并让家庭成员共同确认执行情况。
 - 痛点：长期用药、复诊、检查记录、家庭成员协同。
+- 当前替代方案：微信提醒、备忘录、纸质记录、宠物医院单次沟通和通用宠物记录 App。
 - 竞品缺口：通用宠物记录产品存在，但围绕慢病流程的深度不足。
-- 切入版本：健康档案、用药提醒、复诊提醒、检查报告归档、家庭共享。
+- 切入楔子：高龄猫/犬慢病家庭的用药提醒、复诊提醒、检查报告归档和家庭共享。
+- Why now：高龄宠物和宠物医疗消费增长，用户愿意为长期健康管理投入，但现有 App 多偏社区、电商或泛记录。
+- 验证计划：7 天内访谈 10-15 个慢病宠物家庭，30 天内用轻量原型测试健康档案、用药提醒和复诊共享。
+- kill criteria：用户认为微信/备忘录足够，或宠物医院闭环服务已经覆盖该需求，或用户只愿免费使用提醒功能。
 - 风险：宠物医疗数据标准化、与线下宠物医院合作难度。
 
 ## 风险与注意事项
 
 - 公开数据可能不完整，尤其是 App 榜单和评论数据。
 - LLM 提取痛点和机会时可能过度概括，需要 schema、evidence ref 和判断链校验约束。
-- 排名不能只看高分，也要看判断置信度和反证。
+- 排名不能只看高分，也要看判断置信度、证据独立性、反证、敏感性和 rank stability。
+- 多个来源可能来自同一转载链或同一评论样本，不能机械累加为高置信度。
+- 用户表达需求不等于存在付费意愿，必须单独验证买单方、预算来源和 purchase trigger。
+- App 不一定是最佳形态；小程序、插件、服务撮合、人工 concierge 或线下服务可能是更合理的切入方式。
+- Top 机会必须包含 kill criteria 和验证计划，否则容易把方向包装成不可执行的商业建议。
 - 不同行业的权重应允许配置，例如医疗健康类应提高合规风险权重。
 - 最终报告应明确不确定性，避免把研究结论包装成确定性商业建议。
 
@@ -1998,8 +2206,12 @@ direction
 ```text
 multi-lane opportunity mining
   + structured evaluation
+  + opportunity thesis
+  + counter-evidence and kill gates
   + judgment-backed ranking
+  + sensitivity-aware recommendation
+  + validation planning
   + decision-oriented reporting
 ```
 
-该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 workflow、parallel state、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度提炼出的 claim、finding 和 insight，每条维度先独立筛选 topN，再通过聚类、补充检索、反证调查和综合评分生成最终创业方向排名。
+该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 workflow、parallel state、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度提炼出的 claim、finding 和 insight，每条维度先独立筛选 topN，并在 lane 内完成反证和 kill gate，再通过 thesis 合成、聚类、补充检索、敏感性分析、验证计划和综合评分生成最终创业方向排名。
