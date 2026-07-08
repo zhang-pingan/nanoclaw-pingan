@@ -46,7 +46,6 @@ projects
 local/shell/cloudflare/.runtime
 local/shell/electron/.runtime
 local/shell/assistant/.runtime
-local/shell/appium/.runtime
 knowledge
 assistant/renderer/assets/scifi
 .codex/*

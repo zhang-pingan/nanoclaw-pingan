@@ -6501,8 +6501,6 @@ function getWorkflowDefinitionGroupChannel(group) {
 
 function getDefaultWorkflowDefinitionDeliverableFile(roleKey = '') {
   if (roleKey === 'planner') return 'plan.md';
-  if (roleKey === 'ios_recon') return 'product-recon.json';
-  if (roleKey === 'ios_acceptance') return 'acceptance-report.json';
   if (roleKey === 'test') return 'test.md';
   return 'dev.md';
 }

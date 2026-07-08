@@ -80,12 +80,16 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 明确 workflow action 只负责确定性系统操作；调研、检索控制、抽取、综合等非确定性任务由 agent delegation 节点完成。
 - 参考 GPT Researcher deep 的流程设计，抽象为可被 Icarus lane 复用的 Research Kernel。
 - 从行业 App 方向中发现多个候选创业机会。
+- 在正式调研前明确市场、平台、商业模式、团队能力、风险偏好和验证周期等 scope assumptions。
 - 候选机会必须来自明确调研维度提炼出的 claim、finding 和 insight，而不是先验生成。
+- 候选机会必须建模为可被验证或推翻的 opportunity thesis，而不是只有方向标题和摘要。
 - 每条调研维度独立、可并行地完成证据留痕、判断提炼、机会提取和维度内筛选。
+- 每条调研维度都必须输出支持判断、反对判断、不确定性和 kill conditions，避免只做正向论证。
 - 对多维度筛选出的 topN 机会进行去重、聚类和判断依据合并。
 - 对合并机会进行并行补充检索、竞品验证、市场/商业化判断、合规风险和反证调查。
-- 对合并后的机会进行跨维度综合排序。
+- 对合并后的机会进行跨维度综合排序、敏感性分析和排名稳定性判断。
 - 输出可解释的创业方向排名和具体分析总结。
+- 输出每个推荐机会的验证计划、成功阈值和失败阈值，帮助用户决定下一步是否投入。
 - 支持扩展新的调研维度、评分规则和数据源。
 
 ## 非目标
@@ -95,6 +99,7 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 不把 LLM 的自然语言报告作为唯一决策结果。
 - 不把成品服务降级成一次性报告生成；需要保留结构化判断层、评分、反证和可追踪审计产物。
 - 不把并行能力做成某个业务 workflow 的特例；并行/fan-in 是 Icarus workflow runtime 的通用能力。
+- 不默认“做 App”一定是正确答案；如果非 App 替代方案、线下服务、人工流程或现有工作流更优，需要在报告中说明。
 - 不用 MVP 范围定义本方案；本方案描述完整目标形态。
 - 不保证生成的方向一定可创业成功，系统输出的是基于公开信息和可获取证据的机会判断。
 
@@ -128,12 +133,54 @@ Evidence Store -> Claims -> Findings -> Insights -> Opportunities -> Scores -> R
 - `Insight` 是面向创业决策的洞察。
 - `Report` 使用专业报告结构表达判断，不按证据列表展开综述。
 
-### 2. 调研维度既是发现通道，也是筛选通道
+### 2. 高质量机会先被定义，再被发现
+
+系统需要先定义什么是“值得推进的创业机会”，再去调研和排序。否则 workflow 可能产出证据充分但创业价值不足的方向。
+
+每个候选机会必须回答以下一组 first-principles 问题：
+
+```text
+谁有问题？
+问题发生在什么任务或场景？
+现在用户用什么替代方案解决？
+为什么现有方案不够好？
+谁是使用者、购买者、付费者和决策者？
+为什么现在愿意付钱或改变行为？
+如何低成本触达第一批用户？
+小团队能否在 4-8 周内验证核心假设？
+第一个切入版本和 beachhead segment 是什么？
+什么证据会推翻这个机会？
+```
+
+因此，候选机会不是普通摘要，而是 opportunity thesis：
+
+```text
+Opportunity = user/job/pain + current alternative + gap + buyer/payer
+  + entry wedge + distribution path + why now + risks + validation plan
+```
+
+没有明确买单方、切入楔子、替代方案对比或可验证假设的候选方向，应降级为 `watchlist` 或 `insufficient_evidence`，不能直接进入强推荐。
+
+### 3. 输入方向必须先被约束和假设化
+
+“宠物行业 App”这类输入过宽，不同市场、团队能力、平台约束和风险偏好会得到不同结论。正式调研前必须先做 `scope_framing`：
+
+- 目标地区和语言，例如中国、美国、跨境市场。
+- 平台形态，例如 Mobile、Web、小程序、插件、B2B SaaS。
+- 商业模式偏好，例如 ToC 订阅、交易撮合、B2B、B2B2C。
+- 团队能力和资源约束，例如是否能做线下运营、是否有行业资源、是否能接入供应链。
+- 验证周期和预算，例如 7 天、30 天或 90 天验证。
+- 风险偏好，例如是否接受医疗、金融、未成年人、隐私或平台依赖风险。
+- 是否必须是纯 App；如果非 App 方案更合理，应允许报告给出“不建议做独立 App”的结论。
+
+如果用户没有显式提供这些约束，workflow 应生成默认假设，并在最终报告和 JSON artifact 中明确记录。
+
+### 4. 调研维度既是发现通道，也是筛选通道
 
 每个调研维度不是只负责收集材料，而是完整产出：
 
 ```text
-Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores -> TopN
+Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores -> Kill Gate -> TopN
 ```
 
 例如“已有产品 Top 排名挖掘”维度需要：
@@ -143,13 +190,27 @@ Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores 
 - 挖掘用户评论、低星反馈、功能请求。
 - 判断是否存在覆盖不足、满意度不足、差异化缺口。
 - 生成该维度下的候选机会。
+- 输出支持 claims、反对 claims、不确定性和 kill conditions。
 - 按该维度规则筛出 topN。
 
-### 3. 先维度内筛选，再跨维度综合排序
+### 5. 先维度内筛选，再跨维度综合排序
 
 不同调研维度的判断质量和含义不同，不能在早期简单混合。每个维度先独立判断，产出本维度 topN；然后再做机会合并、判断依据聚合和全局评分。
 
-### 4. 所有结论保留可审计判断链
+### 6. 反证前置，而不是只在末尾复核
+
+反证不应只在 enrichment 阶段才出现。每条 discovery lane 都必须主动寻找与本 lane 候选机会相反的证据，包括：
+
+- 用户痛点是否只属于小众极端样本。
+- 用户是否已有足够好的免费替代方案。
+- 用户是否表达需求但缺乏付费意愿。
+- 现有产品是否已经在快速补齐缺口。
+- App 是否不是最佳交付形态。
+- 合规、平台、供应链或获客成本是否足以否定机会。
+
+lane 内筛选前必须执行 pre-kill gate。触发 kill condition 的机会可以进入附录或观察池，但不能作为正式 top opportunity 输出。
+
+### 7. 所有结论保留可审计判断链
 
 每个机会方向的评分和结论都应能追溯到：
 
@@ -157,11 +218,12 @@ Evidence refs -> Claims -> Findings -> Insights -> Opportunities -> Lane Scores 
 - 使用了哪些 claim、finding 和 insight。
 - 这些判断层产物背后有哪些 evidence refs。
 - 哪些判断支持机会，哪些判断构成反证。
+- 证据是否独立、是否近期、是否来自目标地区、是否存在样本偏差。
 - 置信度如何。
 
 但最终报告不应围绕 evidence ref 展开写作，也不应把原始证据片段作为主要内容。证据只在审计链、附录、traceability artifact 或必要的脚注位置出现。
 
-### 5. 并行是 workflow 一等能力
+### 8. 并行是 workflow 一等能力
 
 多 lane 调研、多 query 搜索、多机会 enrichment、多 reviewer 复核都不应被隐藏在一个 agent 节点内部。隐藏并行会降低 workflow 层可观测性、可恢复性和质量门控制。
 
@@ -177,7 +239,7 @@ workflow state: parallel
   -> fan-in context
 ```
 
-### 6. Action 只做确定性系统操作
+### 9. Action 只做确定性系统操作
 
 workflow action 的职责边界：
 
@@ -222,6 +284,12 @@ Icarus workflow runtime
 
 ```text
 行业 App 方向输入
+  -> Scope Framing
+      -> 市场/地区/语言
+      -> 平台和交付形态
+      -> 商业模式偏好
+      -> 团队能力和验证周期约束
+      -> 风险偏好和默认假设
   -> 研究规划
   -> 调研种子探测
       -> 用户/场景 seed
@@ -229,13 +297,22 @@ Icarus workflow runtime
       -> 关键词 seed
       -> 产品 seed
       -> 数据源 seed
+  -> 机会空间和任务流地图
+      -> 用户角色
+      -> 高频任务
+      -> 当前替代方案
+      -> 工作流摩擦点
+      -> 可软件化节点
   -> 并行发现 lanes
       -> 原始证据留痕
       -> claim/finding/insight 提炼
       -> 候选机会生成
+      -> 支持/反对 claims 和 kill conditions
       -> 维度内评分
+      -> pre-kill gate
       -> 维度内 topN 筛选
   -> lane artifact/evaluator 校验
+  -> 机会 thesis 合成
   -> 机会去重与聚类
   -> 并行 enrichment lanes
       -> 竞品缺口
@@ -244,9 +321,12 @@ Icarus workflow runtime
       -> 获客路径
       -> 合规和平台风险
       -> 反证与替代方案
+      -> 可行性和早期单位经济
   -> 跨维度综合评分
+  -> 敏感性分析和排名稳定性判断
   -> 排名与推荐
-  -> 质量复核
+  -> 对抗式质量复核
+  -> 验证计划生成
   -> JSON + Markdown 最终报告生成
 ```
 
@@ -289,7 +369,44 @@ Icarus workflow runtime
 | 可解决性 | App 是否能实际缓解该痛点 |
 | 判断置信度 | claim/finding/insight 是否有足够来源支撑，来源质量和一致性如何 |
 
-### 2. 已有产品 Top 排名挖掘 Lane
+### 2. JTBD 与任务流拆解 Lane
+
+目标：从用户要完成的任务和实际工作流出发，识别流程断点、信息不对称、协作摩擦和可软件化节点。
+
+典型数据源：
+
+- 行业流程文章、教程和操作指南
+- 用户访谈、问答平台、社区长帖
+- B2B/SaaS 案例、岗位职责、服务流程说明
+- 线下服务商、代理、中介和人工服务页面
+- 现有产品 onboarding、帮助中心和用户手册
+
+处理流程：
+
+```text
+行业方向
+  -> 用户角色拆解
+  -> 高频 job/task 识别
+  -> 当前工作流地图
+  -> 当前替代方案和 workaround 记录
+  -> 流程摩擦点提取
+  -> 可软件化/自动化/协同化节点判断
+  -> 候选机会 thesis 生成
+  -> 按任务频率、任务价值、流程摩擦、切入可行性评分
+```
+
+维度内评分指标：
+
+| 指标 | 说明 |
+|------|------|
+| 任务频率 | 用户是否反复执行该任务 |
+| 任务价值 | 任务是否影响收入、成本、效率、安全、健康或情绪 |
+| 流程摩擦 | 当前流程是否存在明显断点、重复录入、信息不透明或协作成本 |
+| 替代方案劣势 | Excel、微信群、人工服务、线下中介、通用工具等替代方案是否明显不足 |
+| 软件化潜力 | App/Web/SaaS 是否能比现有方案更低成本、更稳定或更可扩展 |
+| 切入楔子清晰度 | 是否能定义一个足够小、足够痛、可验证的 beachhead segment |
+
+### 3. 已有产品 Top 排名挖掘 Lane
 
 目标：从排行榜头部产品中识别主流需求、产品覆盖范围和仍然存在的机会缺口。
 
@@ -325,8 +442,9 @@ Icarus workflow runtime
 | 竞争集中度 | 头部产品是否过于强势 |
 | 迁移阻力 | 用户从现有产品切换是否困难 |
 | 商业模式验证 | 头部产品是否证明用户愿意付费或有变现空间 |
+| 买单方清晰度 | 现有产品是否揭示了使用者、购买者、付费者和决策者之间的关系 |
 
-### 3. 用户评论与差评挖掘 Lane
+### 4. 用户评论与差评挖掘 Lane
 
 目标：从现有 App 评论中提取未满足需求、功能请求和体验缺陷。
 
@@ -361,8 +479,9 @@ Icarus workflow runtime
 | 影响程度 | 问题是否影响核心流程 |
 | 可修复性 | 新产品或垂直产品是否能更好解决 |
 | 现有产品惯性 | 头部产品是否因体量、架构或定位难以修复 |
+| 反证密度 | 正面评论、替代方案满意度或产品近期更新是否削弱该机会 |
 
-### 4. 搜索需求与内容缺口 Lane
+### 5. 搜索需求与内容缺口 Lane
 
 目标：从搜索行为和内容供给中发现需求旺盛但产品供给不足的方向。
 
@@ -394,8 +513,9 @@ Icarus workflow runtime
 | 问题重复性 | 用户是否反复问类似问题 |
 | 工具化潜力 | 内容答案是否可以被产品流程替代 |
 | 获客可行性 | SEO、内容、社区渠道是否可触达用户 |
+| 工具转化风险 | 用户是否只是寻求一次性答案，而不是愿意持续使用工具 |
 
-### 5. 趋势变化 Lane
+### 6. 趋势变化 Lane
 
 目标：识别政策、技术、平台、消费习惯变化带来的新窗口。
 
@@ -429,6 +549,41 @@ Icarus workflow runtime
 | 进入窗口 | 新进入者是否有机会建立优势 |
 | 风险 | 政策、平台或技术不确定性 |
 
+### 7. 替代方案与非 App 竞争 Lane
+
+目标：判断目标用户当前如何解决问题，App 是否真的优于现有替代方案，以及机会是否被非软件因素限制。
+
+典型数据源：
+
+- 用户社区中的 workaround 分享
+- Excel/Notion/微信群/小程序/表单模板等轻量工具
+- 线下服务商、代理、中介、咨询和人工代办
+- 企业内部流程、岗位职责和外包服务页面
+- 竞品评论中提到的替代产品和流失原因
+
+处理流程：
+
+```text
+行业方向或候选机会
+  -> 当前替代方案枚举
+  -> 替代方案成本、体验和可获得性分析
+  -> 用户切换阻力判断
+  -> 非 App 交付形态比较
+  -> App 解法必要性判断
+  -> 候选机会降级、改写或保留
+```
+
+维度内评分指标：
+
+| 指标 | 说明 |
+|------|------|
+| 替代方案强度 | 当前替代方案是否已经足够便宜、方便、可信 |
+| 切换阻力 | 用户迁移数据、习惯、关系链或工作流的成本 |
+| App 必要性 | 独立 App 是否比小程序、插件、SaaS、服务撮合或线下服务更合理 |
+| 服务依赖度 | 机会是否依赖重运营、供应链、线下交付或人工服务 |
+| 防御性 | 如果用通用工具或现有平台也能快速复制，差异化是否不足 |
+| 否定风险 | 替代方案证据是否足以触发 kill condition |
+
 ## 候选机会数据模型
 
 候选机会必须是结构化对象，避免只保存自然语言摘要。
@@ -438,14 +593,29 @@ Icarus workflow runtime
   "id": "opp_001",
   "title": "面向独居老人的用药提醒与家庭协同 App",
   "description": "帮助独居老人管理用药、复诊和家庭成员远程确认。",
+  "opportunity_thesis": "异地子女需要低成本确认独居老人慢病用药和复诊执行情况；现有个人提醒工具缺少家庭协同和长期健康记录，因此可以从家庭协同用药提醒切入。",
   "target_users": ["独居老人", "异地子女", "慢病患者家庭"],
+  "buyer": ["异地子女"],
+  "payer": ["异地子女", "慢病患者家庭"],
+  "decision_maker": ["家庭照护负责人"],
+  "budget_source": "家庭健康管理和慢病照护支出",
+  "purchase_trigger": "老人漏服、复诊延误、子女无法远程确认照护状态",
   "primary_scenarios": ["每日用药提醒", "漏服告警", "复诊记录", "家庭协同"],
+  "job_to_be_done": "让家庭成员在不频繁打电话的情况下确认老人是否按时用药、复诊和记录慢病信息。",
   "pain_points": [
     "老人容易忘记用药",
     "子女无法确认是否按时服药",
     "慢病复诊和药品记录分散"
   ],
-  "source_lanes": ["audience_pain", "top_products_gap", "review_mining"],
+  "current_alternatives": ["电话确认", "微信提醒", "普通闹钟", "纸质用药记录", "通用用药提醒 App"],
+  "alternative_gap": "普通提醒工具解决个人提醒，但不能稳定完成家庭确认、复诊协同和长期记录沉淀。",
+  "beachhead_segment": "异地子女照护的独居慢病老人家庭",
+  "entry_wedge": "家庭协同用药提醒、漏服确认和复诊记录",
+  "why_now": "远程家庭照护需求增加，老年慢病管理数字化工具成熟，但通用提醒工具仍偏个人使用。",
+  "initial_distribution_channel": ["慢病社区内容", "子女照护人群社群", "药店/基层诊所合作"],
+  "expansion_path": ["复诊档案", "检查报告归档", "家庭健康日历", "护理服务和保险导流"],
+  "defensibility_hypothesis": "通过家庭协同记录、长期健康数据和照护工作流沉淀提高迁移成本。",
+  "source_lanes": ["audience_pain", "job_to_be_done", "top_products_gap", "review_mining"],
   "supporting_insights": [
     {
       "insight_id": "ins_001",
@@ -453,16 +623,41 @@ Icarus workflow runtime
       "confidence": 0.78
     }
   ],
+  "opposing_claims": [
+    {
+      "claim_id": "claim_009",
+      "summary": "部分家庭可能继续使用微信和电话完成低频照护确认。"
+    }
+  ],
   "audit_refs": ["claim_001", "claim_002", "ev_001"],
   "lane_scores": {
     "audience_pain": 8.4,
+    "job_to_be_done": 8.1,
     "top_products_gap": 7.2,
     "review_mining": 8.8
   },
+  "score_band": "strong_candidate",
   "global_score": 8.1,
+  "rank_stability": 0.74,
+  "sensitivity": {
+    "most_sensitive_dimensions": ["acquisition_feasibility", "payer_clarity"],
+    "downside_case_score": 6.4,
+    "upside_case_score": 8.7
+  },
   "confidence": 0.76,
   "risks": ["老年用户使用门槛", "医疗健康合规边界"],
-  "entry_version": "家庭协同用药提醒、复诊记录和漏服通知。"
+  "kill_criteria": [
+    "目标家庭不愿为远程确认功能付费",
+    "微信/电话等轻量替代方案已经足够满足需求",
+    "健康数据合规成本超过早期团队可承受范围"
+  ],
+  "entry_version": "家庭协同用药提醒、复诊记录和漏服通知。",
+  "validation_plan": {
+    "7_day_test": "访谈 10 个异地照护家庭，验证漏服确认和复诊记录是否是高频痛点。",
+    "30_day_mvp": "用微信小程序或轻量 Web 原型测试提醒、确认和家庭共享流程。",
+    "success_threshold": "30% 以上访谈对象愿意留下联系方式或试用，至少 5 个家庭愿意为高级功能付费。",
+    "failure_threshold": "多数用户表示电话/微信已经足够，或只愿免费使用提醒功能。"
+  }
 }
 ```
 
@@ -482,6 +677,15 @@ Evidence record 记录来源和原始材料，不作为最终报告的写作语�
   "source_name": "App Store",
   "url": "https://example.com",
   "published_at": "2026-06-01",
+  "retrieved_at": "2026-07-01T10:20:00Z",
+  "query": "用药提醒 App 家庭协同 差评",
+  "research_goal": "验证现有提醒工具是否存在家庭同步和长期慢病流程缺口",
+  "geo": "CN",
+  "language": "zh-CN",
+  "sample_size": 120,
+  "source_independence": "primary",
+  "source_bias": "negative-review-heavy",
+  "evidence_role": "support",
   "raw_text": "用户原始评论或网页摘要，仅保存在 evidence store 中",
   "claim_refs": ["claim_001", "claim_002"],
   "sentiment": "negative",
@@ -489,6 +693,8 @@ Evidence record 记录来源和原始材料，不作为最终报告的写作语�
   "credibility": 0.72
 }
 ```
+
+证据置信度不能只按 evidence 数量累加。多个转载、互相引用或来自同一评论样本的来源，应按低独立性处理；目标地区、发布时间、样本规模和样本偏差都应进入 confidence 计算。
 
 ### Claim
 
@@ -501,7 +707,10 @@ Claim 是从 evidence 中抽取出的单条事实、痛点、缺口或反证判�
   "claim_type": "pain_point",
   "statement": "部分用户对用药提醒稳定性和家庭成员同步能力不满意。",
   "stance": "support",
+  "opportunity_refs": ["opp_001"],
   "evidence_refs": ["ev_001"],
+  "evidence_independence": 0.72,
+  "sample_bias": "评论样本可能偏向强不满用户",
   "confidence": 0.78,
   "limitations": ["评论样本可能偏向负面用户"]
 }
@@ -545,12 +754,18 @@ LaneResult
   - lane_name
   - findings
   - claims
+  - supporting_claims
+  - opposing_claims
   - insights
   - opportunities
   - scored_opportunities
+  - kill_conditions
+  - pre_kill_decisions
   - top_opportunities
   - audit_refs
 ```
+
+lane 内筛选前必须执行 pre-kill gate。每个机会至少有一个明确的可推翻条件；如果反证强度超过支持证据，或者买单方、替代方案、触达路径、合规边界无法说明，应进入 `rejected_opportunities` 或 `watchlist`，而不是进入 topN。
 
 维度内评分可采用 0-10 分，并保留理由：
 
@@ -563,8 +778,13 @@ LaneResult
     "coverage_gap": 8.5,
     "satisfaction_gap": 7.4,
     "differentiation": 7.6,
-    "competition_risk": 6.2
+    "competition_risk": 6.2,
+    "payer_clarity": 7.8,
+    "alternative_weakness": 7.1,
+    "pre_kill_risk": 4.4
   },
+  "opposing_claim_refs": ["claim_009"],
+  "kill_conditions": ["用户继续使用微信/电话即可满足低频确认需求"],
   "rationale": "头部产品覆盖通用提醒，但家庭协同、长期慢病管理和复诊记录不足。"
 }
 ```
@@ -601,7 +821,7 @@ LaneResult
 
 ## 综合评分与排序
 
-综合评分不应简单平均所有 lane 分数，而应基于创业判断维度重新评估。
+综合评分不应简单平均所有 lane 分数，而应基于创业判断维度重新评估。最终排序也不应只输出一个 `global_score`，还应输出置信度、排名稳定性、敏感性分析和推荐档位。
 
 建议全局评分维度：
 
@@ -610,10 +830,14 @@ LaneResult
 | 需求强度 | 20% | 用户痛点是否真实且强烈 |
 | 市场空间 | 15% | 用户规模、消费能力、增长趋势 |
 | 现有产品缺口 | 15% | 头部产品是否存在覆盖或满意度缺口 |
-| 付费和商业化 | 12% | 是否有付费意愿、订阅、交易或 B2B 变现 |
+| 买单方明确度 | 8% | 使用者、购买者、付费者和决策者是否清楚 |
+| 付费和商业化 | 10% | 是否有付费意愿、订阅、交易或 B2B 变现 |
 | 获客可行性 | 10% | 是否有清晰低成本触达渠道 |
-| 切入版本可行性 | 10% | 小团队是否能在合理时间内验证 |
+| 切入版本可行性 | 8% | 小团队是否能在合理时间内验证 |
+| 验证可行性 | 7% | 7-30 天内是否能用访谈、落地页、原型或人工服务验证 |
 | 差异化空间 | 8% | 是否能建立清晰定位或壁垒 |
+| 时机窗口 | 6% | 为什么现在是较好的进入时点 |
+| 替代方案风险 | -6% | 用户当前替代方案是否已经足够好 |
 | 竞争风险 | -5% | 竞争强度、巨头风险、同质化风险 |
 | 合规和平台风险 | -5% | 政策、医疗、金融、数据隐私等风险 |
 | 判断置信度 | 10% | claim/finding/insight 的来源质量、一致性和覆盖度 |
@@ -625,37 +849,65 @@ global_score =
   demand_strength * 0.20
   + market_potential * 0.15
   + product_gap * 0.15
-  + monetization * 0.12
+  + payer_clarity * 0.08
+  + monetization * 0.10
   + acquisition_feasibility * 0.10
-  + entry_version_feasibility * 0.10
+  + entry_version_feasibility * 0.08
+  + validation_feasibility * 0.07
   + differentiation * 0.08
+  + timing_window * 0.06
   + judgment_confidence * 0.10
+  - substitute_risk * 0.06
   - competition_risk * 0.05
   - compliance_risk * 0.05
 ```
 
-评分输出必须包含解释：
+评分输出必须包含解释、档位、敏感性分析和排名稳定性：
 
 ```json
 {
   "opportunity_id": "opp_001",
+  "score_band": "strong_candidate",
   "global_score": 8.1,
+  "confidence_score": 7.6,
+  "rank_stability": 0.74,
   "rank": 1,
   "score_breakdown": {
     "demand_strength": 8.8,
     "market_potential": 7.5,
     "product_gap": 8.2,
+    "payer_clarity": 8.0,
     "monetization": 7.4,
     "acquisition_feasibility": 7.8,
     "entry_version_feasibility": 8.6,
+    "validation_feasibility": 8.2,
     "differentiation": 7.9,
+    "timing_window": 7.2,
+    "substitute_risk": 5.8,
     "competition_risk": 5.2,
     "compliance_risk": 6.4,
     "judgment_confidence": 7.6
   },
+  "sensitivity_analysis": {
+    "most_sensitive_dimensions": ["acquisition_feasibility", "payer_clarity", "substitute_risk"],
+    "downside_case_score": 6.4,
+    "expected_case_score": 8.1,
+    "upside_case_score": 8.7,
+    "rank_range": [1, 4]
+  },
+  "recommendation": "值得快速验证",
   "rationale": "该方向痛点明确、切入版本较轻、评论和竞品缺口相关判断一致，但存在健康数据和老年用户使用门槛。"
 }
 ```
+
+推荐档位建议：
+
+| 档位 | 含义 |
+|------|------|
+| `strong_candidate` | 证据、买单方、切入版本和验证路径都较清晰，建议优先验证 |
+| `quick_validation` | 方向有潜力，但关键假设需要低成本快速验证 |
+| `watchlist` | 趋势或需求存在，但证据、时机或商业化不足 |
+| `reject` | 反证、替代方案、合规风险或获客成本足以否定当前机会 |
 
 ## 系统模块划分
 
@@ -664,18 +916,41 @@ global_score =
 ```python
 class IndustryAppOpportunityWorkflow:
     async def run(self, direction: str):
-        plan = await self.plan_research(direction)
-        seeds = await self.probe_research_seeds(direction, plan)
-        discovery = await self.run_discovery_parallel(plan, seeds)
+        scope = await self.frame_scope(direction)
+        plan = await self.plan_research(direction, scope)
+        seeds = await self.probe_research_seeds(direction, scope, plan)
+        opportunity_space = await self.map_opportunity_space(direction, scope, seeds)
+        discovery = await self.run_discovery_parallel(plan, seeds, opportunity_space)
         validated = await self.validate_discovery_fan_in(discovery)
-        merged = await self.merge_and_cluster(validated)
+        thesis = await self.synthesize_opportunity_theses(validated)
+        merged = await self.merge_and_cluster(thesis)
         enrichment = await self.run_enrichment_parallel(merged)
         normalized = await self.normalize_judgment_context(enrichment)
         enriched = await self.build_scoring_context(normalized)
         ranked = await self.global_rank(enriched)
-        report = await self.write_final_report(direction, ranked)
+        sensitivity = await self.analyze_score_sensitivity(ranked)
+        validation_plan = await self.build_validation_plan(sensitivity)
+        report = await self.write_final_report(direction, validation_plan)
         return report
 ```
+
+### Scope Framer
+
+负责把宽泛输入转成明确的研究边界和默认假设：
+
+```python
+class ScopeFramer:
+    async def frame(self, direction: str, user_constraints: dict | None) -> ScopeFrame:
+        ...
+```
+
+输出包括：
+
+- 目标市场、地区、语言和平台。
+- 商业模式偏好和是否必须是 App。
+- 团队能力、预算和验证周期。
+- 风险偏好和行业限制。
+- 默认 assumptions 和 open questions。
 
 ### Planner
 
@@ -683,7 +958,7 @@ class IndustryAppOpportunityWorkflow:
 
 ```python
 class ResearchPlanner:
-    async def plan(self, direction: str) -> ResearchPlan:
+    async def plan(self, direction: str, scope: ScopeFrame) -> ResearchPlan:
         ...
 ```
 
@@ -694,6 +969,7 @@ class ResearchPlanner:
 - 每条 lane 的数据源优先级。
 - 每条 lane 的 topN 数量。
 - 是否需要行业特定维度。
+- 好机会判定标准、kill gate 规则、评分权重和敏感性分析参数。
 
 ### Seed Probe
 
@@ -711,6 +987,29 @@ class ResearchPlanner:
   "source_seeds": ["App Store", "Google Play", "小红书", "知乎", "Reddit", "宠物论坛"]
 }
 ```
+
+### Opportunity Space Mapper
+
+负责在 discovery 并行前建立粗粒度机会空间地图，避免所有研究都围绕现有产品或搜索热词展开：
+
+```python
+class OpportunitySpaceMapper:
+    async def map(
+        self,
+        direction: str,
+        scope: ScopeFrame,
+        seed_context: SeedProbe,
+    ) -> OpportunitySpaceMap:
+        ...
+```
+
+输出包括：
+
+- 用户角色和买单角色。
+- 高频任务和 JTBD。
+- 当前替代方案、workaround 和非 App 竞争。
+- 工作流摩擦点和可软件化节点。
+- 初始机会 thesis 假设和待推翻问题。
 
 依赖规则：
 
@@ -732,6 +1031,7 @@ class DiscoveryLane:
         direction: str,
         plan: LanePlan,
         seed_context: SeedProbe,
+        opportunity_space: OpportunitySpaceMap,
     ) -> list[EvidenceRef]:
         ...
 
@@ -749,7 +1049,24 @@ class DiscoveryLane:
 
     async def score_opportunities(self, opportunities: list[Opportunity]) -> list[LaneScoredOpportunity]:
         ...
+
+    async def pre_kill_opportunities(self, opportunities: list[Opportunity]) -> list[PreKillDecision]:
+        ...
 ```
+
+每个 Discovery Lane 必须输出支持 claims、反对 claims、uncertainties 和 kill conditions。反证强或关键字段缺失的机会应被降级，不应进入 topN。
+
+### Opportunity Thesis Synthesizer
+
+负责把 lane 产出的候选机会转成可验证的 opportunity thesis：
+
+```python
+class OpportunityThesisSynthesizer:
+    async def synthesize(self, lane_results: list[LaneResult]) -> list[OpportunityThesis]:
+        ...
+```
+
+每个 thesis 必须包含 `user`、`job_to_be_done`、`pain`、`current_alternatives`、`gap`、`buyer`、`payer`、`entry_wedge`、`why_now`、`distribution_path`、`kill_criteria` 和 `validation_hypotheses`。
 
 ### OpportunityClusterer
 
@@ -757,7 +1074,7 @@ class DiscoveryLane:
 
 ```python
 class OpportunityClusterer:
-    async def merge(self, lane_results: list[LaneResult]) -> list[MergedOpportunity]:
+    async def merge(self, theses: list[OpportunityThesis]) -> list[MergedOpportunity]:
         ...
 ```
 
@@ -780,6 +1097,7 @@ class JudgmentEnricher:
 - 合规风险
 - 替代方案
 - 反证信息
+- 可行性和早期单位经济
 
 ### GlobalRanker
 
@@ -791,13 +1109,37 @@ class GlobalRanker:
         ...
 ```
 
+### Sensitivity Analyzer
+
+负责判断排名对权重、证据置信度和关键假设变化是否稳定：
+
+```python
+class SensitivityAnalyzer:
+    async def analyze(self, ranked: list[RankedOpportunity]) -> list[RankedOpportunityWithSensitivity]:
+        ...
+```
+
+输出包括 `downside_case_score`、`expected_case_score`、`upside_case_score`、`rank_range`、`rank_stability` 和 `most_sensitive_dimensions`。
+
+### Validation Planner
+
+负责把推荐机会转成可执行的验证计划：
+
+```python
+class ValidationPlanner:
+    async def plan(self, ranked: list[RankedOpportunityWithSensitivity]) -> ValidationPlan:
+        ...
+```
+
+每个机会至少包含 7 天验证动作、30 天 MVP、访谈对象、落地页或原型测试方式、成功阈值、失败阈值和最关键待验证假设。
+
 ### Reporter
 
 负责最终报告生成：
 
 ```python
 class OpportunityReporter:
-    async def write(self, direction: str, ranked: list[RankedOpportunity]) -> str:
+    async def write(self, direction: str, validation_plan: ValidationPlan) -> str:
         ...
 ```
 
@@ -807,23 +1149,32 @@ class OpportunityReporter:
 # 行业 App 创业机会调研报告
 
 ## 结论摘要
+## Scope Assumptions
 ## 排名总览
 ## 研究方法
 ## Top 机会详解
-  - 机会定义
-  - 目标用户
+  - 机会 thesis
+  - 目标用户、买单方、付费方和决策者
+  - JTBD 和当前工作流
   - 核心痛点
+  - 当前替代方案和非 App 竞争
+  - 切入楔子、beachhead segment 和 why now
   - 关键判断依据
   - 竞品覆盖和满意度缺口
   - 商业模式
+  - 获客路径
   - 切入版本建议
+  - 综合评分、推荐档位、敏感性分析和排名稳定性
   - 风险和反证
+  - kill criteria
+  - 7 天验证动作和 30 天 MVP 建议
 ## 被筛掉的机会
-## 不确定性和后续验证建议
+## 观察池机会
+## 不确定性、关键假设和后续验证建议
 ## 审计追踪和参考来源
 ```
 
-最终报告的正文应围绕创业判断展开，避免按证据逐条综述。原始 evidence 只通过 traceability、附录、脚注或审计追踪出现；正文主要使用 opportunity、insight、score breakdown、risk 和 validation plan 等结构化结果。
+最终报告的正文应围绕创业判断展开，避免按证据逐条综述。原始 evidence 只通过 traceability、附录、脚注或审计追踪出现；正文主要使用 opportunity thesis、insight、score breakdown、risk、counter evidence、sensitivity analysis 和 validation plan 等结构化结果。报告必须允许给出“不建议做独立 App，建议从服务、插件、小程序或人工验证切入”的结论。
 
 ## Icarus 落地设计
 
