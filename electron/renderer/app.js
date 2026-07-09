@@ -6446,11 +6446,11 @@ function parseWorkflowDefinitionJsonDocument() {
     parsed = rawValue.trim() ? JSON.parse(rawValue) : {};
   } catch (err) {
     throw new Error(
-      `流程定义 JSON 解析失败：${err instanceof Error ? err.message : String(err)}`,
+      `流程配置 JSON 解析失败：${err instanceof Error ? err.message : String(err)}`,
     );
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('流程定义 JSON 必须是对象');
+    throw new Error('流程配置 JSON 必须是对象');
   }
   return parsed;
 }
@@ -13627,7 +13627,7 @@ function renderWorkflowDefinitionDetailPane() {
     workflowDefinitionSummary.textContent =
       bundle.description ||
       displayDefinition?.description ||
-      '当前 workflow definition 暂无描述。';
+      '当前流程暂无描述。';
   }
   if (workflowDefinitionMeta) {
     const meta = [];
@@ -13739,7 +13739,7 @@ function renderWorkflowDefinitionList() {
     workflowDefinitionBundles.length === 0
   ) {
     workflowDefinitionList.innerHTML =
-      '<div class="workflow-definition-list-empty">还没有 workflow definitions，点击右上角 + 开始创建。</div>';
+      '<div class="workflow-definition-list-empty">还没有流程，点击右上角 + 开始创建。</div>';
     return;
   }
   workflowDefinitionBundles.forEach((bundle) => {
@@ -13815,7 +13815,7 @@ async function loadWorkflowDefinitionDetail(key) {
     console.error('Failed to load workflow definition detail:', err);
     currentWorkflowDefinitionDetail = null;
     renderWorkflowDefinitionDetailPane();
-    alert(err instanceof Error ? err.message : '流程定义详情加载失败');
+    alert(err instanceof Error ? err.message : '流程详情加载失败');
   }
 }
 
@@ -13912,7 +13912,7 @@ async function loadWorkflowDefinitions(options = {}) {
     renderWorkflowDefinitionList();
     renderWorkflowDefinitionDetailPane();
     if (workflowDefinitionList) {
-      workflowDefinitionList.innerHTML = `<div class="workflow-definition-list-empty">流程定义加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+      workflowDefinitionList.innerHTML = `<div class="workflow-definition-list-empty">流程列表加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
     }
   } finally {
     if (workflowDefinitionRefreshBtn) {
@@ -13973,7 +13973,7 @@ function collectWorkflowDefinitionPublishLocalErrors() {
 
 async function publishWorkflowDefinitionDraft() {
   if (!currentWorkflowDefinitionKey) {
-    alert('请先选择 workflow definition');
+    alert('请先选择流程');
     return;
   }
   const localValidation = collectWorkflowDefinitionPublishLocalErrors();
@@ -14213,7 +14213,7 @@ async function deleteWorkflowDefinitionVersion(version) {
 
 async function createWorkflowDefinition() {
   const rawKey = await openTextPrompt('输入新的 workflow key', '', {
-    title: '新建流程定义',
+    title: '新建流程',
   });
   const key = (rawKey || '').trim();
   if (!key) return;
@@ -14222,16 +14222,16 @@ async function createWorkflowDefinition() {
     return;
   }
   if (workflowDefinitionBundles.some((bundle) => bundle.key === key)) {
-    alert(`workflow definition "${key}" 已存在`);
+    alert(`流程 "${key}" 已存在`);
     return;
   }
   const name = (
-    (await openTextPrompt('输入流程名称', key, { title: '新建流程定义' })) ||
+    (await openTextPrompt('输入流程名称', key, { title: '新建流程' })) ||
     key
   ).trim();
   const description = (
     (await openTextPrompt('输入流程描述（可选）', '', {
-      title: '新建流程定义',
+      title: '新建流程',
       multiline: true,
     })) || ''
   ).trim();
@@ -14269,7 +14269,7 @@ async function createWorkflowDefinition() {
     await loadWorkflowDefinitionDetail(key);
   } catch (err) {
     console.error('Failed to create workflow definition:', err);
-    alert(err instanceof Error ? err.message : '创建流程定义失败');
+    alert(err instanceof Error ? err.message : '创建流程失败');
   }
 }
 
@@ -15396,7 +15396,7 @@ async function jumpToWorkflowDefinitionState(workflowKey, stateKey) {
   } catch (err) {
     console.error('Failed to jump to workflow definition state:', err);
     alert(
-      err instanceof Error ? err.message : '跳转到 workflow definition 失败',
+      err instanceof Error ? err.message : '跳转到流程失败',
     );
   }
 }
@@ -22580,7 +22580,7 @@ async function openWorkflowDefinitionCreateFormPreview() {
       <div class="workflow-wizard-header">
         <div>
           <div class="workflow-wizard-title">创建任务表单预览</div>
-          <div class="workflow-definition-panel-note">点击按钮时才生成，基于当前选中的流程定义实时渲染。</div>
+          <div class="workflow-definition-panel-note">点击按钮时才生成，基于当前选中的流程实时渲染。</div>
         </div>
         <button type="button" class="icon-btn" id="workflow-definition-create-form-preview-close" title="关闭">×</button>
       </div>
@@ -22595,7 +22595,7 @@ async function openWorkflowDefinitionCreateFormPreview() {
           <div class="workflow-wizard-label">流程类型</div>
           <div class="workflow-wizard-flow-summary">
             <div class="workflow-wizard-flow-title">${escapeHtml(workflowType.name)}</div>
-            <div class="workflow-wizard-flow-caption">这是当前流程定义对应的创建任务表单实时预览，不会真正提交任务。</div>
+            <div class="workflow-wizard-flow-caption">这是当前流程对应的创建任务表单实时预览，不会真正提交任务。</div>
           </div>
         </div>
         <div class="workflow-wizard-section">
