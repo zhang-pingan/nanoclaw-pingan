@@ -13,11 +13,15 @@ import {
   saveLocalFeatureRuntimeConfig,
 } from './config.js';
 import { assertPathInsideFeature, LoadedFeatureManifest } from './manifest.js';
-import { activateConfiguredFeatures, scanInstalledFeatures } from './runtime.js';
+import {
+  activateConfiguredFeatures,
+  scanInstalledFeatures,
+} from './runtime.js';
 import { getWorkflowDefinitionsDir } from '../workflow-definition-files.js';
 import { clearWorkflowArtifactContractCache } from '../workflow-artifact-contract.js';
 import { loadWorkflowConfigs } from '../workflow-config.js';
 import { clearWorkflowEvaluatorRegistryCache } from '../workflow-evaluator-registry.js';
+import { getFeatureOwnedTablePrefixes } from './naming.js';
 
 export interface FeatureOwnedTableSummary {
   name: string;
@@ -31,6 +35,22 @@ export interface FeatureDeletionSummary {
   projectionTables: FeatureOwnedTableSummary[];
   counts: Record<string, number>;
   paths: string[];
+}
+
+export interface FeatureManagementHostHooks {
+  reloadRegisteredGroups?: () => void;
+  stopFeatureGroups?: (
+    groups: FeatureDeletionSummary['groups'],
+    context: { featureId: string; action: 'delete_data' },
+  ) => Promise<void> | void;
+}
+
+let hostHooks: FeatureManagementHostHooks = {};
+
+export function configureFeatureManagementHostHooks(
+  hooks: FeatureManagementHostHooks,
+): void {
+  hostHooks = { ...hooks };
 }
 
 export function listFeatureManagementInfo(): Array<{
@@ -117,6 +137,7 @@ export async function setFeatureEnabledAndApply(input: {
   try {
     await activateConfiguredFeatures();
     reloadFeatureDependentRegistries();
+    reloadRegisteredGroupsFromHost();
     return {
       ...result,
       restartRequired: false,
@@ -128,6 +149,7 @@ export async function setFeatureEnabledAndApply(input: {
       try {
         await activateConfiguredFeatures();
         reloadFeatureDependentRegistries();
+        reloadRegisteredGroupsFromHost();
       } catch (rollbackErr) {
         logger.error(
           { err: rollbackErr, featureId: input.featureId },
@@ -219,6 +241,7 @@ export async function deleteFeatureData(featureId: string): Promise<{
       throw new Error(disabled.error);
     }
   }
+  await stopFeatureGroupsForDeletion(featureId, summary.groups);
 
   const groupFolders = summary.groups.map((group) => group.folder);
   const groupJids = summary.groups.map((group) => group.jid);
@@ -295,6 +318,7 @@ export async function deleteFeatureData(featureId: string): Promise<{
       metadata: { summary },
     });
   })();
+  reloadRegisteredGroupsFromHost();
 
   return { summary, restartRequired: false };
 }
@@ -388,9 +412,23 @@ function reloadFeatureDependentRegistries(): void {
   loadWorkflowConfigs();
 }
 
-function featureOwnedTablePrefixes(featureId: string): string[] {
-  const normalized = featureId.replace(/[^A-Za-z0-9]+/g, '_');
-  return [...new Set([`feature_${normalized}_`, `feature_${featureId}_`])];
+function reloadRegisteredGroupsFromHost(): void {
+  try {
+    hostHooks.reloadRegisteredGroups?.();
+  } catch (err) {
+    logger.error({ err }, 'Feature host registered group reload failed');
+  }
+}
+
+async function stopFeatureGroupsForDeletion(
+  featureId: string,
+  groups: FeatureDeletionSummary['groups'],
+): Promise<void> {
+  if (!groups.length) return;
+  await hostHooks.stopFeatureGroups?.(groups, {
+    featureId,
+    action: 'delete_data',
+  });
 }
 
 function escapeSqlLike(value: string): string {
@@ -416,7 +454,7 @@ function listFeatureOwnedProjectionTables(
   const stmt = database.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ? ESCAPE '\\'",
   );
-  for (const prefix of featureOwnedTablePrefixes(featureId)) {
+  for (const prefix of getFeatureOwnedTablePrefixes(featureId)) {
     for (const row of stmt.all(`${escapeSqlLike(prefix)}%`) as Array<{
       name: string;
     }>) {

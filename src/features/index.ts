@@ -6,6 +6,11 @@ export type {
   FeatureResources,
 } from './manifest.js';
 export type { FeatureContext, FeatureModule } from './context.js';
+export type {
+  FeatureDeletionSummary,
+  FeatureManagementHostHooks,
+} from './management.js';
+export { publishFeatureEvent } from './context.js';
 export {
   activateConfiguredFeatures,
   deactivateConfiguredFeatures,
@@ -21,6 +26,7 @@ export {
   featureResources,
 } from './registry.js';
 export {
+  configureFeatureManagementHostHooks,
   deleteFeatureData,
   getFeatureDeletionSummary,
   listFeatureManagementInfo,
