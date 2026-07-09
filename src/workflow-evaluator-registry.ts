@@ -90,6 +90,10 @@ export function getWorkflowEvaluatorConfig(
   return loadWorkflowEvaluatorRegistry()[ref];
 }
 
-export function clearWorkflowEvaluatorRegistryCacheForTest(): void {
+export function clearWorkflowEvaluatorRegistryCache(): void {
   cachedEvaluators = null;
+}
+
+export function clearWorkflowEvaluatorRegistryCacheForTest(): void {
+  clearWorkflowEvaluatorRegistryCache();
 }

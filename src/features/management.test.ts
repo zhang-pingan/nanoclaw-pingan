@@ -97,9 +97,92 @@ describe('feature management', () => {
       management.getFeatureDeletionSummary('example-feature').counts.workflows,
     ).toBe(1);
 
-    management.deleteFeatureData('example-feature');
+    await management.deleteFeatureData('example-feature');
 
     expect(db.getWorkflow('core-workflow')).toBeTruthy();
     expect(db.getWorkflow('feature-workflow')).toBeUndefined();
+  });
+
+  it('keeps DB state retryable when filesystem deletion fails', async () => {
+    const workspace = setupFeatureWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const now = new Date().toISOString();
+    db.setRegisteredGroup('feature:example-feature:main', {
+      name: 'Example Feature',
+      folder: 'example_feature_main',
+      trigger: '@Andy',
+      added_at: now,
+      requiresTrigger: false,
+    });
+    db.setFeatureGroupBinding({
+      featureId: 'example-feature',
+      groupKey: 'main',
+      groupJid: 'feature:example-feature:main',
+      groupFolder: 'example_feature_main',
+    });
+    db.createWorkflow({
+      id: 'feature-workflow',
+      name: 'Shared Flow',
+      service: 'claude',
+      start_from: 'start',
+      context: {},
+      status: 'active',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'feature:example-feature:main',
+      paused_from: null,
+      workflow_type: 'shared_flow',
+      feature_id: 'example-feature',
+      created_at: now,
+      updated_at: now,
+    });
+    fs.mkdirSync(path.join(workspace, 'groups', 'example_feature_main'), {
+      recursive: true,
+    });
+
+    const management = await import('./management.js');
+    const rmSpy = vi.spyOn(fs, 'rmSync').mockImplementationOnce(() => {
+      throw new Error('rm failed');
+    });
+    try {
+      await expect(
+        management.deleteFeatureData('example-feature'),
+      ).rejects.toThrow(/rm failed/);
+    } finally {
+      rmSpy.mockRestore();
+    }
+
+    expect(db.getWorkflow('feature-workflow')).toBeTruthy();
+    expect(db.getFeatureGroupBinding('example-feature', 'main')).toBeTruthy();
+  });
+
+  it('drops feature-owned projection tables during data deletion', async () => {
+    setupFeatureWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    db.getDatabase().exec(`
+      CREATE TABLE feature_example_feature_projection (
+        id TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+      INSERT INTO feature_example_feature_projection (id, value)
+      VALUES ('row-1', 'value');
+    `);
+
+    const management = await import('./management.js');
+    const summary = management.getFeatureDeletionSummary('example-feature');
+    expect(summary.counts.feature_projection_tables).toBe(1);
+    expect(summary.counts.feature_projection_rows).toBe(1);
+
+    await management.deleteFeatureData('example-feature');
+
+    const table = db
+      .getDatabase()
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'feature_example_feature_projection'",
+      )
+      .get();
+    expect(table).toBeUndefined();
   });
 });

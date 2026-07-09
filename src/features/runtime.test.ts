@@ -203,6 +203,36 @@ describe('feature runtime', () => {
     );
   });
 
+  it('applies feature disable immediately by clearing runtime registries', async () => {
+    setupFeatureWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const runtime = await import('./runtime.js');
+    const management = await import('./management.js');
+    const { featureApiRoutes } = await import('./registry.js');
+
+    await runtime.activateConfiguredFeatures();
+    expect(runtime.getEnabledFeatureInfo()).toHaveLength(1);
+
+    const result = await management.setFeatureEnabledAndApply({
+      featureId: 'example-feature',
+      enabled: false,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.runtimeApplied).toBe(true);
+    expect(runtime.getEnabledFeatureInfo()).toHaveLength(0);
+    const handled = await featureApiRoutes.dispatch({
+      req: { method: 'GET' } as never,
+      res: {
+        writeHead: () => undefined,
+        end: () => undefined,
+      } as never,
+      url: new URL('http://localhost/api/features/example-feature/ping'),
+    });
+    expect(handled).toBe(false);
+  });
+
   it('requires feature MCP profiles to be declared in permissions', async () => {
     const workspace = setupFeatureWorkspace();
     const featureRoot = path.join(workspace, 'features', 'example-feature');

@@ -10,6 +10,11 @@ interface SkillSource {
   dir: string;
 }
 
+interface ResourceSource {
+  featureId: string;
+  dir: string;
+}
+
 export function syncContainerSkills(input: {
   groupFolder: string;
   skillsDst: string;
@@ -36,6 +41,87 @@ export function syncContainerSkills(input: {
       skillsDst: input.skillsDst,
     });
   }
+}
+
+export function syncContainerAgents(input: {
+  groupFolder: string;
+  agentsDst: string;
+}): void {
+  const sources: ResourceSource[] = featureResources
+    .list('agents')
+    .filter((source) => !!source.featureId)
+    .map((source) => ({
+      featureId: source.featureId as string,
+      dir: source.dir,
+    }));
+  if (!sources.length) {
+    removeManagedFeatureResourceEntries(input.agentsDst);
+    return;
+  }
+
+  fs.mkdirSync(input.agentsDst, { recursive: true });
+  removeManagedFeatureResourceEntries(input.agentsDst);
+  for (const source of sources) {
+    syncNamedResourceEntries({
+      source,
+      dst: input.agentsDst,
+      allowedExtensions: new Set(['.md']),
+    });
+  }
+}
+
+export function prepareFeatureResourceMountDir(groupFolder: string): string | null {
+  const sources = [
+    ...featureResources.list('scripts').map((source) => ({
+      kind: 'scripts' as const,
+      featureId: source.featureId,
+      dir: source.dir,
+    })),
+    ...featureResources.list('templates').map((source) => ({
+      kind: 'templates' as const,
+      featureId: source.featureId,
+      dir: source.dir,
+    })),
+  ].filter(
+    (source): source is {
+      kind: 'scripts' | 'templates';
+      featureId: string;
+      dir: string;
+    } => !!source.featureId,
+  );
+  const targetDir = path.join(DATA_DIR, 'sessions', groupFolder, 'feature-resources');
+  fs.rmSync(targetDir, { recursive: true, force: true });
+  if (!sources.length) return null;
+
+  const manifest: Array<{
+    featureId: string;
+    kind: 'scripts' | 'templates';
+    containerPath: string;
+  }> = [];
+  for (const source of sources) {
+    if (!fs.existsSync(source.dir)) continue;
+    const dst = path.join(targetDir, source.featureId, source.kind);
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    fs.cpSync(source.dir, dst, { recursive: true, force: true });
+    if (source.kind === 'scripts') {
+      makeTreeNonExecutable(dst);
+    }
+    manifest.push({
+      featureId: source.featureId,
+      kind: source.kind,
+      containerPath: `/workspace/feature-resources/${source.featureId}/${source.kind}`,
+    });
+  }
+  if (!manifest.length) {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    return null;
+  }
+  fs.writeFileSync(
+    path.join(targetDir, 'manifest.json'),
+    `${JSON.stringify({ resources: manifest }, null, 2)}\n`,
+    'utf-8',
+  );
+  return targetDir;
 }
 
 export function prepareMergedMcpConfigDir(groupFolder: string): string | null {
@@ -124,6 +210,61 @@ function removeManagedFeatureSkillDirs(skillsDst: string): void {
       continue;
     }
     fs.rmSync(path.join(skillsDst, entry), { recursive: true, force: true });
+  }
+}
+
+function removeManagedFeatureResourceEntries(dst: string): void {
+  if (!fs.existsSync(dst)) return;
+  const installedIds = scanInstalledFeatureIds();
+  if (installedIds.length === 0) return;
+  for (const entry of fs.readdirSync(dst)) {
+    if (!installedIds.some((featureId) => entry.startsWith(`${featureId}-`))) {
+      continue;
+    }
+    fs.rmSync(path.join(dst, entry), { recursive: true, force: true });
+  }
+}
+
+function syncNamedResourceEntries(input: {
+  source: ResourceSource;
+  dst: string;
+  allowedExtensions?: Set<string>;
+}): void {
+  if (!fs.existsSync(input.source.dir)) return;
+  for (const entry of fs.readdirSync(input.source.dir)) {
+    const src = path.join(input.source.dir, entry);
+    const stat = fs.statSync(src);
+    if (stat.isFile()) {
+      if (
+        input.allowedExtensions &&
+        !input.allowedExtensions.has(path.extname(entry))
+      ) {
+        continue;
+      }
+      const parsed = path.parse(entry);
+      const dstName = `${input.source.featureId}-${parsed.name}${parsed.ext}`;
+      fs.copyFileSync(src, path.join(input.dst, dstName));
+      continue;
+    }
+    if (!stat.isDirectory()) continue;
+    const dstName = `${input.source.featureId}-${entry}`;
+    fs.cpSync(src, path.join(input.dst, dstName), {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+function makeTreeNonExecutable(root: string): void {
+  if (!fs.existsSync(root)) return;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      fs.chmodSync(fullPath, 0o755);
+      makeTreeNonExecutable(fullPath);
+      continue;
+    }
+    if (entry.isFile()) fs.chmodSync(fullPath, 0o644);
   }
 }
 

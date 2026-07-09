@@ -330,6 +330,12 @@ var configurationServicesToggle = document.getElementById(
 var configurationServiceList = document.getElementById(
   'configuration-service-list',
 );
+var configurationFeaturesToggle = document.getElementById(
+  'configuration-features-toggle',
+);
+var configurationFeatureList = document.getElementById(
+  'configuration-feature-list',
+);
 var configurationServiceRefreshBtn = document.getElementById(
   'configuration-service-refresh-btn',
 );
@@ -374,6 +380,36 @@ var configurationServiceJsonFormatBtn = document.getElementById(
 );
 var configurationServiceJsonApplyBtn = document.getElementById(
   'configuration-service-json-apply-btn',
+);
+var configurationFeatureEmpty = document.getElementById(
+  'configuration-feature-empty',
+);
+var configurationFeatureDetail = document.getElementById(
+  'configuration-feature-detail',
+);
+var configurationFeatureTitle = document.getElementById(
+  'configuration-feature-title',
+);
+var configurationFeatureSummary = document.getElementById(
+  'configuration-feature-summary',
+);
+var configurationFeatureMeta = document.getElementById(
+  'configuration-feature-meta',
+);
+var configurationFeatureStatus = document.getElementById(
+  'configuration-feature-status',
+);
+var configurationFeatureToggleBtn = document.getElementById(
+  'configuration-feature-toggle-btn',
+);
+var configurationFeatureDeleteDataBtn = document.getElementById(
+  'configuration-feature-delete-data-btn',
+);
+var configurationFeatureDeleteSummary = document.getElementById(
+  'configuration-feature-delete-summary',
+);
+var configurationFeatureResources = document.getElementById(
+  'configuration-feature-resources',
 );
 var configurationServiceFieldInputs = Array.from(
   document.querySelectorAll('[data-service-config-path]'),
@@ -727,6 +763,12 @@ var serviceConfigFilePath = '';
 var serviceConfigSaving = false;
 var serviceConfigFieldError = '';
 var serviceConfigListExpanded = true;
+var configurationMode = 'services';
+var featureConfigItems = [];
+var currentFeatureConfigId = '';
+var featureConfigRequestSeq = 0;
+var featureConfigListExpanded = true;
+var featureConfigActionBusy = false;
 var workflowDefinitionReferenceDetails = {};
 var cardsDragState = null;
 var cardsPreviewPresets = {
@@ -2832,6 +2874,7 @@ function setPrimaryNav(navKey) {
   }
   if (navKey === 'configuration') {
     loadServiceConfigs({ preserveSelection: true });
+    loadFeatureConfigs({ preserveSelection: true });
   }
   if (navKey === 'trace-monitor') {
     loadTraceMonitorData({ force: false });
@@ -27477,10 +27520,17 @@ function renderServiceConfigList() {
 
 function renderServiceConfigDetail() {
   const hasSelection = Boolean(currentServiceConfigName);
+  const showServices = configurationMode === 'services';
   if (configurationServiceEmpty)
-    configurationServiceEmpty.classList.toggle('hidden', hasSelection);
+    configurationServiceEmpty.classList.toggle(
+      'hidden',
+      !showServices || hasSelection,
+    );
   if (configurationServiceDetail)
-    configurationServiceDetail.classList.toggle('hidden', !hasSelection);
+    configurationServiceDetail.classList.toggle(
+      'hidden',
+      !showServices || !hasSelection,
+    );
   if (!hasSelection) {
     updateServiceConfigDirty(false);
     return;
@@ -27707,6 +27757,373 @@ async function deleteCurrentServiceConfig() {
   updateServiceConfigDirty(true);
   renderServiceConfigList();
   await saveServiceConfigs();
+}
+
+function setConfigurationMode(mode) {
+  configurationMode = mode === 'features' ? 'features' : 'services';
+  const showServices = configurationMode === 'services';
+  if (configurationServicesToggle) {
+    configurationServicesToggle.classList.toggle('active', showServices);
+  }
+  if (configurationFeaturesToggle) {
+    configurationFeaturesToggle.classList.toggle('active', !showServices);
+  }
+  if (configurationServiceAddBtn) {
+    configurationServiceAddBtn.classList.toggle('hidden', !showServices);
+  }
+  if (configurationServiceEmpty) {
+    configurationServiceEmpty.classList.toggle(
+      'hidden',
+      !showServices || Boolean(currentServiceConfigName),
+    );
+  }
+  if (configurationServiceDetail) {
+    configurationServiceDetail.classList.toggle(
+      'hidden',
+      !showServices || !currentServiceConfigName,
+    );
+  }
+  if (configurationFeatureEmpty) {
+    configurationFeatureEmpty.classList.toggle(
+      'hidden',
+      showServices || Boolean(currentFeatureConfigId),
+    );
+  }
+  if (configurationFeatureDetail) {
+    configurationFeatureDetail.classList.toggle(
+      'hidden',
+      showServices || !currentFeatureConfigId,
+    );
+  }
+  if (!showServices) renderFeatureConfigDetail();
+}
+
+function renderFeatureConfigList() {
+  if (!configurationFeatureList) return;
+  if (configurationFeaturesToggle) {
+    configurationFeaturesToggle.setAttribute(
+      'aria-expanded',
+      featureConfigListExpanded ? 'true' : 'false',
+    );
+    const group = configurationFeaturesToggle.closest('.configuration-nav-group');
+    if (group) group.classList.toggle('expanded', featureConfigListExpanded);
+    const chevron = configurationFeaturesToggle.querySelector(
+      '.configuration-nav-chevron',
+    );
+    if (chevron) chevron.textContent = featureConfigListExpanded ? '▾' : '▸';
+  }
+  configurationFeatureList.classList.toggle(
+    'hidden',
+    !featureConfigListExpanded,
+  );
+  if (!featureConfigListExpanded) return;
+  if (!featureConfigItems.length) {
+    configurationFeatureList.innerHTML =
+      '<div class="workflow-definition-list-empty">暂无可用功能包</div>';
+    return;
+  }
+  configurationFeatureList.innerHTML = featureConfigItems
+    .map((feature) => {
+      const enabled = Boolean(feature.enabled);
+      return `
+        <button type="button" class="workflow-definition-list-item configuration-service-item${feature.id === currentFeatureConfigId ? ' active' : ''}" data-feature-config-id="${escapeAttribute(feature.id)}">
+          <div class="workflow-definition-list-head">
+            <div class="workflow-definition-list-title">${escapeHtml(feature.name || feature.id)}</div>
+            <span class="workflow-definition-pill workflow-definition-main-pill">${enabled ? 'enabled' : 'disabled'}</span>
+          </div>
+          <p class="workflow-definition-list-desc">${escapeHtml(feature.description || feature.id)}</p>
+          <div class="workflow-definition-list-meta">
+            <span class="workflow-definition-pill"><strong>ID</strong>${escapeHtml(feature.id)}</span>
+            <span class="workflow-definition-pill"><strong>Version</strong>${escapeHtml(feature.version || '--')}</span>
+          </div>
+        </button>
+      `;
+    })
+    .join('');
+  Array.from(
+    configurationFeatureList.querySelectorAll('[data-feature-config-id]'),
+  ).forEach((button) => {
+    button.addEventListener('click', () => {
+      const featureId = button.getAttribute('data-feature-config-id') || '';
+      selectFeatureConfig(featureId);
+    });
+  });
+}
+
+function getSelectedFeatureConfig() {
+  return (
+    featureConfigItems.find((feature) => feature.id === currentFeatureConfigId) ||
+    null
+  );
+}
+
+function selectFeatureConfig(featureId) {
+  if (!featureId) return;
+  const feature = featureConfigItems.find((item) => item.id === featureId);
+  if (!feature) return;
+  currentFeatureConfigId = feature.id;
+  setConfigurationMode('features');
+  renderFeatureConfigList();
+  renderFeatureConfigDetail();
+  loadFeatureDeletionSummary(feature.id).catch((err) => {
+    if (currentFeatureConfigId !== feature.id) return;
+    renderFeatureDeletionSummaryError(err);
+  });
+}
+
+function renderFeatureConfigDetail() {
+  const feature = getSelectedFeatureConfig();
+  const showFeatureDetail = configurationMode === 'features' && Boolean(feature);
+  if (configurationFeatureEmpty) {
+    configurationFeatureEmpty.classList.toggle('hidden', showFeatureDetail);
+  }
+  if (configurationFeatureDetail) {
+    configurationFeatureDetail.classList.toggle('hidden', !showFeatureDetail);
+  }
+  if (!feature) return;
+  if (configurationFeatureTitle) {
+    configurationFeatureTitle.textContent = feature.name || feature.id;
+  }
+  if (configurationFeatureSummary) {
+    configurationFeatureSummary.textContent =
+      feature.description || 'No description';
+  }
+  if (configurationFeatureStatus) {
+    configurationFeatureStatus.textContent = feature.enabled
+      ? 'enabled'
+      : 'disabled';
+    configurationFeatureStatus.dataset.state = feature.enabled
+      ? 'saved'
+      : 'dirty';
+  }
+  if (configurationFeatureToggleBtn) {
+    configurationFeatureToggleBtn.disabled = featureConfigActionBusy;
+    configurationFeatureToggleBtn.textContent = feature.enabled
+      ? '仅停用'
+      : '启用';
+  }
+  if (configurationFeatureDeleteDataBtn) {
+    configurationFeatureDeleteDataBtn.disabled = featureConfigActionBusy;
+  }
+  if (configurationFeatureMeta) {
+    configurationFeatureMeta.innerHTML = [
+      { label: 'ID', value: feature.id },
+      { label: 'Version', value: feature.version || '--' },
+      { label: 'API', value: feature.apiPrefix || '--' },
+      { label: 'Nav', value: String(feature.nav_count || 0) },
+    ]
+      .map(
+        (item) =>
+          `<span class="workflow-definition-pill"><strong>${escapeHtml(item.label)}</strong>${escapeHtml(String(item.value))}</span>`,
+      )
+      .join('');
+  }
+  if (configurationFeatureResources) {
+    const resources =
+      feature.resources && typeof feature.resources === 'object'
+        ? Object.entries(feature.resources).filter(([, value]) => value)
+        : [];
+    configurationFeatureResources.innerHTML = resources.length
+      ? resources
+          .map(
+            ([kind, value]) =>
+              `<span class="workflow-definition-pill"><strong>${escapeHtml(kind)}</strong>${escapeHtml(String(value))}</span>`,
+          )
+          .join('')
+      : '<div class="workflow-definition-list-empty">未声明资源</div>';
+  }
+}
+
+function renderFeatureDeletionSummary(summary) {
+  if (!configurationFeatureDeleteSummary) return;
+  const counts = summary?.counts || {};
+  const metrics = [
+    ['Groups', counts.groups],
+    ['Workflows', counts.workflows],
+    ['Tasks', counts.workbench_tasks],
+    ['Traces', counts.agent_queries],
+    ['Messages', counts.messages],
+    ['Projection Tables', counts.feature_projection_tables],
+    ['Projection Rows', counts.feature_projection_rows],
+    ['Runtime Paths', Array.isArray(summary?.paths) ? summary.paths.length : 0],
+    ['Migrations', counts.feature_migrations],
+  ];
+  configurationFeatureDeleteSummary.innerHTML = metrics
+    .map(
+      ([label, value]) => `
+        <div class="configuration-feature-metric">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(String(value ?? 0))}</strong>
+        </div>
+      `,
+    )
+    .join('');
+}
+
+function renderFeatureDeletionSummaryError(err) {
+  if (!configurationFeatureDeleteSummary) return;
+  configurationFeatureDeleteSummary.innerHTML = `<div class="workflow-definition-list-empty">删除摘要加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+}
+
+async function loadFeatureDeletionSummary(featureId) {
+  if (!configurationFeatureDeleteSummary || !featureId) return null;
+  configurationFeatureDeleteSummary.innerHTML =
+    '<div class="workflow-definition-list-empty">加载删除摘要中...</div>';
+  const res = await apiFetch(
+    `/api/features/${encodeURIComponent(featureId)}/delete-summary`,
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (currentFeatureConfigId === featureId) {
+    renderFeatureDeletionSummary(data.summary || {});
+  }
+  return data.summary || null;
+}
+
+async function loadFeatureConfigs(options = {}) {
+  if (!configurationFeatureList) return;
+  const requestSeq = ++featureConfigRequestSeq;
+  const preserveSelection = options.preserveSelection !== false;
+  configurationFeatureList.innerHTML =
+    '<div class="workflow-definition-list-empty">加载功能包中...</div>';
+  try {
+    const res = await apiFetch('/api/features/config');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (requestSeq !== featureConfigRequestSeq) return;
+    featureConfigItems = Array.isArray(data.features) ? data.features : [];
+    const nextSelection =
+      preserveSelection &&
+      currentFeatureConfigId &&
+      featureConfigItems.some((feature) => feature.id === currentFeatureConfigId)
+        ? currentFeatureConfigId
+        : featureConfigItems[0]?.id || '';
+    currentFeatureConfigId = nextSelection;
+    renderFeatureConfigList();
+    if (configurationMode === 'features') {
+      renderFeatureConfigDetail();
+      if (currentFeatureConfigId) {
+        await loadFeatureDeletionSummary(currentFeatureConfigId);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load feature config:', err);
+    configurationFeatureList.innerHTML = `<div class="workflow-definition-list-empty">加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+  }
+}
+
+async function setSelectedFeatureEnabled(enabled) {
+  const feature = getSelectedFeatureConfig();
+  if (!feature || featureConfigActionBusy) return;
+  if (!enabled) {
+    const confirmed = await openConfirmDialog(
+      `确认仅停用功能包 ${feature.id}？历史数据和 group 会保留。`,
+      {
+        title: '仅停用功能包',
+        confirmText: '仅停用',
+        cancelText: '取消',
+      },
+    );
+    if (!confirmed) return;
+  }
+  featureConfigActionBusy = true;
+  renderFeatureConfigDetail();
+  try {
+    const action = enabled ? 'enable' : 'disable';
+    const res = await apiFetch(
+      `/api/features/${encodeURIComponent(feature.id)}/${action}`,
+      { method: 'POST' },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(enabled ? '功能包已启用' : '功能包已停用', 1800);
+    invalidateWorkflowCreateOptionsCache();
+    await loadEnabledFeatures();
+    await loadFeatureConfigs({ preserveSelection: true });
+  } catch (err) {
+    showToast(
+      `操作失败：${err instanceof Error ? err.message : String(err)}`,
+      2600,
+    );
+  } finally {
+    featureConfigActionBusy = false;
+    renderFeatureConfigDetail();
+  }
+}
+
+function formatFeatureDeletionConfirmMessage(feature, summary) {
+  const counts = summary?.counts || {};
+  return [
+    `功能包：${feature.id}`,
+    `Groups：${counts.groups || 0}`,
+    `Workflows：${counts.workflows || 0}`,
+    `Workbench Tasks：${counts.workbench_tasks || 0}`,
+    `Traces：${counts.agent_queries || 0}`,
+    `Projection Tables：${counts.feature_projection_tables || 0}`,
+    `Runtime Paths：${Array.isArray(summary?.paths) ? summary.paths.length : 0}`,
+  ].join('\n');
+}
+
+async function deleteSelectedFeatureData() {
+  const feature = getSelectedFeatureConfig();
+  if (!feature || featureConfigActionBusy) return;
+  let summary;
+  try {
+    summary = await loadFeatureDeletionSummary(feature.id);
+  } catch (err) {
+    showToast(
+      `删除摘要加载失败：${err instanceof Error ? err.message : String(err)}`,
+      2600,
+    );
+    return;
+  }
+  const reviewed = await openConfirmDialog(
+    formatFeatureDeletionConfirmMessage(feature, summary),
+    {
+      title: '停用并删除摘要',
+      confirmText: '继续',
+      cancelText: '取消',
+      confirmButtonClassName: 'btn-primary',
+    },
+  );
+  if (!reviewed) return;
+  const confirmed = await openConfirmDialog(
+    `二次确认删除功能包 ${feature.id} 的历史数据、独占 group 和运行目录。`,
+    {
+      title: '确认删除功能包数据',
+      confirmText: '停用并删除',
+      cancelText: '取消',
+      confirmButtonClassName: 'btn-primary',
+    },
+  );
+  if (!confirmed) return;
+
+  featureConfigActionBusy = true;
+  renderFeatureConfigDetail();
+  try {
+    const res = await apiFetch(
+      `/api/features/${encodeURIComponent(feature.id)}/delete-data`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ confirm: true }),
+      },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast('功能包数据已删除', 2200);
+    invalidateWorkflowCreateOptionsCache();
+    await loadEnabledFeatures();
+    await loadFeatureConfigs({ preserveSelection: true });
+  } catch (err) {
+    showToast(
+      `删除失败：${err instanceof Error ? err.message : String(err)}`,
+      3200,
+    );
+    await loadFeatureDeletionSummary(feature.id).catch(() => undefined);
+  } finally {
+    featureConfigActionBusy = false;
+    renderFeatureConfigDetail();
+  }
 }
 
 function handleConfigRealtimeEvent(event) {
@@ -28046,7 +28463,10 @@ if (cardsManagementSectionAddBtn) {
 }
 if (configurationServiceRefreshBtn) {
   configurationServiceRefreshBtn.addEventListener('click', async () => {
-    await loadServiceConfigs({ preserveSelection: true });
+    await Promise.all([
+      loadServiceConfigs({ preserveSelection: true }),
+      loadFeatureConfigs({ preserveSelection: true }),
+    ]);
   });
 }
 if (configurationServiceAddBtn) {
@@ -28058,8 +28478,28 @@ if (configurationServiceAddBtn) {
 }
 if (configurationServicesToggle) {
   configurationServicesToggle.addEventListener('click', () => {
+    if (configurationMode !== 'services') {
+      setConfigurationMode('services');
+      renderServiceConfigList();
+      renderServiceConfigDetail();
+      return;
+    }
     serviceConfigListExpanded = !serviceConfigListExpanded;
     renderServiceConfigList();
+  });
+}
+if (configurationFeaturesToggle) {
+  configurationFeaturesToggle.addEventListener('click', () => {
+    if (configurationMode !== 'features') {
+      setConfigurationMode('features');
+      renderFeatureConfigList();
+      if (!featureConfigItems.length) {
+        loadFeatureConfigs({ preserveSelection: true });
+      }
+      return;
+    }
+    featureConfigListExpanded = !featureConfigListExpanded;
+    renderFeatureConfigList();
   });
 }
 if (configurationServiceSaveBtn) {
@@ -28115,6 +28555,18 @@ if (configurationServiceJsonFormatBtn) {
 if (configurationServiceJsonApplyBtn) {
   configurationServiceJsonApplyBtn.addEventListener('click', () => {
     updateServiceConfigFromJson(true);
+  });
+}
+if (configurationFeatureToggleBtn) {
+  configurationFeatureToggleBtn.addEventListener('click', async () => {
+    const feature = getSelectedFeatureConfig();
+    if (!feature) return;
+    await setSelectedFeatureEnabled(!feature.enabled);
+  });
+}
+if (configurationFeatureDeleteDataBtn) {
+  configurationFeatureDeleteDataBtn.addEventListener('click', async () => {
+    await deleteSelectedFeatureData();
   });
 }
 [

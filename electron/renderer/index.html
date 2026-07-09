@@ -2844,6 +2844,35 @@
                   class="workflow-definition-list configuration-service-list"
                 ></div>
               </section>
+              <section class="configuration-nav-group expanded">
+                <button
+                  type="button"
+                  class="configuration-nav-item"
+                  id="configuration-features-toggle"
+                  data-config-section="features"
+                  aria-expanded="true"
+                >
+                  <span class="configuration-nav-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M4 6h7v7H4z"></path>
+                      <path d="M13 6h7v7h-7z"></path>
+                      <path d="M4 15h7v3H4z"></path>
+                      <path d="M13 15h7v3h-7z"></path>
+                    </svg>
+                  </span>
+                  <span class="configuration-nav-copy">
+                    <strong>功能包</strong>
+                    <small>local/features.json</small>
+                  </span>
+                  <span class="configuration-nav-chevron" aria-hidden="true"
+                    >▾</span
+                  >
+                </button>
+                <div
+                  id="configuration-feature-list"
+                  class="workflow-definition-list configuration-service-list"
+                ></div>
+              </section>
             </div>
           </aside>
 
@@ -2867,6 +2896,20 @@
                   左侧新增或选择一个服务，维护仓库、分支、日志、Jenkins、MySQL
                   与预发配置。
                 </p>
+              </div>
+            </div>
+
+            <div
+              id="configuration-feature-empty"
+              class="workflow-definition-empty configuration-empty doraemon-tertiary-empty hidden"
+            >
+              <div class="tertiary-empty-content">
+                <img
+                  src="/assets/avatar-assistant.png"
+                  alt="Assistant avatar"
+                />
+                <h3>功能包</h3>
+                <p>左侧选择一个功能包，查看启用状态、资源和删除摘要。</p>
               </div>
             </div>
 
@@ -3210,6 +3253,87 @@
                     class="configuration-json-editor"
                     spellcheck="false"
                   ></textarea>
+                </section>
+              </section>
+            </div>
+
+            <div
+              id="configuration-feature-detail"
+              class="configuration-feature-detail hidden"
+            >
+              <section class="configuration-service-hero">
+                <div class="configuration-service-hero-main">
+                  <div class="workflow-definition-kicker configuration-kicker">
+                    Feature Package
+                  </div>
+                  <h2 id="configuration-feature-title">--</h2>
+                  <p
+                    id="configuration-feature-summary"
+                    class="workflow-definition-summary"
+                  ></p>
+                  <div
+                    id="configuration-feature-meta"
+                    class="workflow-definition-meta"
+                  ></div>
+                </div>
+                <div class="configuration-service-hero-side">
+                  <span
+                    id="configuration-feature-status"
+                    class="workflow-definition-pill configuration-save-status"
+                    >--</span
+                  >
+                  <div
+                    class="workflow-definition-hero-actions configuration-service-actions"
+                  >
+                    <button
+                      id="configuration-feature-delete-data-btn"
+                      class="btn-ghost danger"
+                    >
+                      停用并删除
+                    </button>
+                    <button
+                      id="configuration-feature-toggle-btn"
+                      class="btn-primary"
+                    >
+                      启用
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="configuration-overview-grid configuration-feature-grid">
+                <section class="configuration-panel">
+                  <div class="workflow-definition-panel-head">
+                    <div>
+                      <div class="workflow-definition-panel-title">
+                        删除摘要
+                      </div>
+                      <div class="workflow-definition-panel-note">
+                        group、workflow、trace、projection 与运行目录
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    id="configuration-feature-delete-summary"
+                    class="configuration-feature-summary-grid"
+                  ></div>
+                </section>
+
+                <section class="configuration-panel">
+                  <div class="workflow-definition-panel-head">
+                    <div>
+                      <div class="workflow-definition-panel-title">
+                        声明资源
+                      </div>
+                      <div class="workflow-definition-panel-note">
+                        manifest 中声明并由 runtime 加载的资源
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    id="configuration-feature-resources"
+                    class="configuration-feature-resource-list"
+                  ></div>
                 </section>
               </section>
             </div>

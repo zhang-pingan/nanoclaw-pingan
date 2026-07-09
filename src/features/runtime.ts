@@ -37,11 +37,18 @@ export interface FeatureRuntimeState {
   enabledInfo: EnabledFeatureRuntimeInfo[];
 }
 
+interface ActiveFeatureHost {
+  featureId: string;
+  module: FeatureModule;
+  context: FeatureContext;
+}
+
 let state: FeatureRuntimeState = {
   installed: [],
   enabled: [],
   enabledInfo: [],
 };
+let activeHosts: ActiveFeatureHost[] = [];
 
 const RESOURCE_KINDS: Array<keyof FeatureResources> = [
   'workflowDefinitions',
@@ -56,8 +63,10 @@ const RESOURCE_KINDS: Array<keyof FeatureResources> = [
 ];
 
 export async function activateConfiguredFeatures(): Promise<FeatureRuntimeState> {
+  await deactivateActiveHosts();
   resetFeatureRegistries();
   featureMigrations.clear();
+  const nextActiveHosts: ActiveFeatureHost[] = [];
 
   const installed = scanInstalledFeatures();
   const enabledIds = loadFeatureRuntimeConfig().enabled;
@@ -90,10 +99,24 @@ export async function activateConfiguredFeatures(): Promise<FeatureRuntimeState>
     runImplicitFeatureMigrations(feature);
   }
 
-  for (const feature of enabled) {
-    await activateHostEntry(feature);
+  try {
+    for (const feature of enabled) {
+      const activeHost = await activateHostEntry(feature);
+      if (activeHost) nextActiveHosts.push(activeHost);
+    }
+    await featureMigrations.runRegisteredMigrations();
+  } catch (err) {
+    await deactivateHosts(nextActiveHosts);
+    resetFeatureRegistries();
+    featureMigrations.clear();
+    state = {
+      installed,
+      enabled: [],
+      enabledInfo: [],
+    };
+    throw err;
   }
-  await featureMigrations.runRegisteredMigrations();
+  activeHosts = nextActiveHosts;
 
   state = {
     installed,
@@ -105,6 +128,17 @@ export async function activateConfiguredFeatures(): Promise<FeatureRuntimeState>
     'Feature runtime activated',
   );
   return state;
+}
+
+export async function deactivateConfiguredFeatures(): Promise<void> {
+  await deactivateActiveHosts();
+  resetFeatureRegistries();
+  featureMigrations.clear();
+  state = {
+    installed: scanInstalledFeatures(),
+    enabled: [],
+    enabledInfo: [],
+  };
 }
 
 export function getFeatureRuntimeState(): FeatureRuntimeState {
@@ -294,8 +328,8 @@ function runImplicitFeatureMigrations(feature: LoadedFeatureManifest): void {
 
 async function activateHostEntry(
   feature: LoadedFeatureManifest,
-): Promise<void> {
-  if (!feature.manifest.hostEntry) return;
+): Promise<ActiveFeatureHost | null> {
+  if (!feature.manifest.hostEntry) return null;
   const entryPath = resolveEntryPath(feature.root, feature.manifest.hostEntry);
   const moduleUrl = pathToFileURL(entryPath).href;
   const imported = (await import(moduleUrl)) as
@@ -307,7 +341,34 @@ async function activateHostEntry(
       `Feature ${feature.manifest.id} hostEntry must export activate(context)`,
     );
   }
-  await module.activate(createFeatureContext(feature));
+  const context = createFeatureContext(feature);
+  await module.activate(context);
+  return {
+    featureId: feature.manifest.id,
+    module,
+    context,
+  };
+}
+
+async function deactivateActiveHosts(): Promise<void> {
+  if (!activeHosts.length) return;
+  const hosts = activeHosts;
+  activeHosts = [];
+  await deactivateHosts(hosts);
+}
+
+async function deactivateHosts(hosts: ActiveFeatureHost[]): Promise<void> {
+  for (const host of [...hosts].reverse()) {
+    if (typeof host.module.deactivate !== 'function') continue;
+    try {
+      await host.module.deactivate(host.context);
+    } catch (err) {
+      logger.error(
+        { err, featureId: host.featureId },
+        'Feature host deactivate failed',
+      );
+    }
+  }
 }
 
 function createFeatureContext(feature: LoadedFeatureManifest): FeatureContext {

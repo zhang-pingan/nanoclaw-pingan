@@ -13,13 +13,22 @@ import {
   saveLocalFeatureRuntimeConfig,
 } from './config.js';
 import { assertPathInsideFeature, LoadedFeatureManifest } from './manifest.js';
-import { scanInstalledFeatures } from './runtime.js';
+import { activateConfiguredFeatures, scanInstalledFeatures } from './runtime.js';
 import { getWorkflowDefinitionsDir } from '../workflow-definition-files.js';
+import { clearWorkflowArtifactContractCache } from '../workflow-artifact-contract.js';
+import { loadWorkflowConfigs } from '../workflow-config.js';
+import { clearWorkflowEvaluatorRegistryCache } from '../workflow-evaluator-registry.js';
+
+export interface FeatureOwnedTableSummary {
+  name: string;
+  rows: number;
+}
 
 export interface FeatureDeletionSummary {
   featureId: string;
   workflowTypes: string[];
   groups: Array<{ key: string; jid: string; folder: string }>;
+  projectionTables: FeatureOwnedTableSummary[];
   counts: Record<string, number>;
   paths: string[];
 }
@@ -30,6 +39,9 @@ export function listFeatureManagementInfo(): Array<{
   version: string;
   enabled: boolean;
   description?: string;
+  apiPrefix?: string;
+  nav_count: number;
+  resources: Record<string, string>;
 }> {
   const config = loadFeatureRuntimeConfig();
   const enabled = new Set(config.enabled);
@@ -39,6 +51,14 @@ export function listFeatureManagementInfo(): Array<{
     version: feature.manifest.version,
     description: feature.manifest.description,
     enabled: enabled.has(feature.manifest.id),
+    apiPrefix:
+      feature.manifest.apiPrefix || `/api/features/${feature.manifest.id}`,
+    nav_count: (feature.manifest.nav || []).length,
+    resources: Object.fromEntries(
+      Object.entries(feature.manifest.resources || {}).filter(
+        ([, value]) => typeof value === 'string' && value.trim(),
+      ),
+    ) as Record<string, string>,
   }));
 }
 
@@ -80,6 +100,52 @@ export function setFeatureEnabled(input: {
   return { enabled, source: 'local', restartRequired: true };
 }
 
+export async function setFeatureEnabledAndApply(input: {
+  featureId: string;
+  enabled: boolean;
+}): Promise<{
+  enabled: string[];
+  source: string;
+  restartRequired: boolean;
+  runtimeApplied?: boolean;
+  error?: string;
+}> {
+  const previous = loadFeatureRuntimeConfig();
+  const result = setFeatureEnabled(input);
+  if (result.error) return result;
+
+  try {
+    await activateConfiguredFeatures();
+    reloadFeatureDependentRegistries();
+    return {
+      ...result,
+      restartRequired: false,
+      runtimeApplied: true,
+    };
+  } catch (err) {
+    if (previous.source !== 'env') {
+      saveLocalFeatureRuntimeConfig(previous.enabled);
+      try {
+        await activateConfiguredFeatures();
+        reloadFeatureDependentRegistries();
+      } catch (rollbackErr) {
+        logger.error(
+          { err: rollbackErr, featureId: input.featureId },
+          'Feature runtime rollback failed',
+        );
+      }
+    }
+    return {
+      enabled: previous.enabled,
+      source: previous.source,
+      restartRequired: true,
+      error: `Feature runtime reload failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+}
+
 export function getFeatureDeletionSummary(
   featureId: string,
 ): FeatureDeletionSummary {
@@ -96,6 +162,7 @@ export function getFeatureDeletionSummary(
     featureId,
     workflowTypes,
   );
+  const projectionTables = listFeatureOwnedProjectionTables(featureId);
   const workflowIds = listOwnedWorkflowIds({
     featureId,
     workflowTypes: legacyWorkflowTypes,
@@ -123,20 +190,36 @@ export function getFeatureDeletionSummary(
       'feature_id = ?',
       featureId,
     ),
+    feature_projection_tables: projectionTables.length,
+    feature_projection_rows: projectionTables.reduce(
+      (sum, table) => sum + table.rows,
+      0,
+    ),
   };
   const paths = groups.flatMap((group) => [
     path.join(GROUPS_DIR, group.folder),
     path.join(DATA_DIR, 'sessions', group.folder),
     path.join(DATA_DIR, 'ipc', group.folder),
   ]);
-  return { featureId, workflowTypes, groups, counts, paths };
+  return { featureId, workflowTypes, groups, projectionTables, counts, paths };
 }
 
-export function deleteFeatureData(featureId: string): {
+export async function deleteFeatureData(featureId: string): Promise<{
   summary: FeatureDeletionSummary;
   restartRequired: boolean;
-} {
+}> {
   const summary = getFeatureDeletionSummary(featureId);
+  const config = loadFeatureRuntimeConfig();
+  if (config.enabled.includes(featureId)) {
+    const disabled = await setFeatureEnabledAndApply({
+      featureId,
+      enabled: false,
+    });
+    if (disabled.error) {
+      throw new Error(disabled.error);
+    }
+  }
+
   const groupFolders = summary.groups.map((group) => group.folder);
   const groupJids = summary.groups.map((group) => group.jid);
   const legacyWorkflowTypes = listLegacyWorkflowTypesSafeForDeletion(
@@ -154,6 +237,12 @@ export function deleteFeatureData(featureId: string): {
     legacyWorkflowTypes,
     groupFolders,
   );
+
+  for (const targetPath of summary.paths) {
+    if (!fs.existsSync(targetPath)) continue;
+    fs.rmSync(targetPath, { recursive: true, force: false });
+  }
+
   const database = getDatabase();
   database.transaction(() => {
     deleteByValues('agent_query_events', 'query_id', queryIds);
@@ -198,6 +287,7 @@ export function deleteFeatureData(featureId: string): {
     database
       .prepare('DELETE FROM feature_migrations WHERE feature_id = ?')
       .run(featureId);
+    dropFeatureOwnedProjectionTables(summary.projectionTables);
     recordFeatureAuditEvent({
       featureId,
       action: 'feature.delete_data',
@@ -206,19 +296,7 @@ export function deleteFeatureData(featureId: string): {
     });
   })();
 
-  for (const targetPath of summary.paths) {
-    if (!fs.existsSync(targetPath)) continue;
-    fs.rmSync(targetPath, { recursive: true, force: false });
-  }
-
-  const disabled = setFeatureEnabled({ featureId, enabled: false });
-  if (disabled.error) {
-    logger.warn(
-      { featureId, error: disabled.error },
-      'Feature data deleted but feature config was not updated',
-    );
-  }
-  return { summary, restartRequired: true };
+  return { summary, restartRequired: false };
 }
 
 function getInstalledFeature(featureId: string): LoadedFeatureManifest {
@@ -302,6 +380,61 @@ function countRowsByValues(
     count += Number(row?.count || 0);
   }
   return count;
+}
+
+function reloadFeatureDependentRegistries(): void {
+  clearWorkflowArtifactContractCache();
+  clearWorkflowEvaluatorRegistryCache();
+  loadWorkflowConfigs();
+}
+
+function featureOwnedTablePrefixes(featureId: string): string[] {
+  const normalized = featureId.replace(/[^A-Za-z0-9]+/g, '_');
+  return [...new Set([`feature_${normalized}_`, `feature_${featureId}_`])];
+}
+
+function escapeSqlLike(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function quoteSqlIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function countRowsInTable(tableName: string): number {
+  const row = getDatabase()
+    .prepare(`SELECT COUNT(*) AS count FROM ${quoteSqlIdentifier(tableName)}`)
+    .get() as { count: number } | undefined;
+  return Number(row?.count || 0);
+}
+
+function listFeatureOwnedProjectionTables(
+  featureId: string,
+): FeatureOwnedTableSummary[] {
+  const database = getDatabase();
+  const names = new Set<string>();
+  const stmt = database.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ? ESCAPE '\\'",
+  );
+  for (const prefix of featureOwnedTablePrefixes(featureId)) {
+    for (const row of stmt.all(`${escapeSqlLike(prefix)}%`) as Array<{
+      name: string;
+    }>) {
+      if (!row.name.startsWith('sqlite_')) names.add(row.name);
+    }
+  }
+  return [...names]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ name, rows: countRowsInTable(name) }));
+}
+
+function dropFeatureOwnedProjectionTables(
+  tables: FeatureOwnedTableSummary[],
+): void {
+  const database = getDatabase();
+  for (const table of tables) {
+    database.exec(`DROP TABLE IF EXISTS ${quoteSqlIdentifier(table.name)}`);
+  }
 }
 
 function listOwnedWorkflowIds(input: {

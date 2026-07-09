@@ -8,6 +8,7 @@ export type {
 export type { FeatureContext, FeatureModule } from './context.js';
 export {
   activateConfiguredFeatures,
+  deactivateConfiguredFeatures,
   getEnabledFeatureById,
   getEnabledFeatureInfo,
   getFeatureRuntimeState,
@@ -24,4 +25,5 @@ export {
   getFeatureDeletionSummary,
   listFeatureManagementInfo,
   setFeatureEnabled,
+  setFeatureEnabledAndApply,
 } from './management.js';

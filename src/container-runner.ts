@@ -38,7 +38,9 @@ import {
 import { detectAuthMode } from './credential-proxy.js';
 import { ClassifiedFailure, classifyFailure } from './failure-taxonomy.js';
 import {
+  prepareFeatureResourceMountDir,
   prepareMergedMcpConfigDir,
+  syncContainerAgents,
   syncContainerSkills,
 } from './features/container-resources.js';
 import { validateAdditionalMounts } from './mount-security.js';
@@ -520,6 +522,10 @@ function buildVolumeMounts(
   const skillsDst = path.join(groupSessionsDir, 'skills');
   if (!isExternalSystemOnce) {
     syncContainerSkills({ groupFolder: group.folder, skillsDst });
+    syncContainerAgents({
+      groupFolder: group.folder,
+      agentsDst: path.join(groupSessionsDir, 'agents'),
+    });
   }
   mounts.push({
     hostPath: groupSessionsDir,
@@ -558,6 +564,17 @@ function buildVolumeMounts(
     mounts.push({
       hostPath: mcpConfigDir,
       containerPath: '/workspace/mcp',
+      readonly: true,
+    });
+  }
+
+  const featureResourceDir = !isExternalSystemOnce
+    ? prepareFeatureResourceMountDir(group.folder)
+    : null;
+  if (featureResourceDir && fs.existsSync(featureResourceDir)) {
+    mounts.push({
+      hostPath: featureResourceDir,
+      containerPath: '/workspace/feature-resources',
       readonly: true,
     });
   }

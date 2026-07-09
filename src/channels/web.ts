@@ -57,7 +57,7 @@ import {
   getEnabledFeatureInfo,
   listFeatureManagementInfo,
   resolveEnabledFeatureStaticPath,
-  setFeatureEnabled,
+  setFeatureEnabledAndApply,
 } from '../features/index.js';
 import { readEnvFile } from '../env.js';
 import {
@@ -1532,7 +1532,7 @@ class WebChannel {
           res.end(JSON.stringify({ error: 'Method not allowed' }));
           return true;
         }
-        const result = setFeatureEnabled({
+        const result = await setFeatureEnabledAndApply({
           featureId,
           enabled: action === 'enable',
         });
@@ -1573,7 +1573,7 @@ class WebChannel {
           res.end(JSON.stringify({ error: 'confirm=true required' }));
           return true;
         }
-        const result = deleteFeatureData(featureId);
+        const result = await deleteFeatureData(featureId);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, ...result }));
         return true;

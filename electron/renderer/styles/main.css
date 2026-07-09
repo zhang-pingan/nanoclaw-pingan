@@ -9271,6 +9271,12 @@ body {
   gap: 18px;
 }
 
+.configuration-feature-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .configuration-service-hero {
   padding: 22px 24px;
   display: flex;
@@ -9307,6 +9313,16 @@ body {
   gap: 8px;
 }
 
+.configuration-service-actions .btn-ghost.danger {
+  color: var(--minimal-danger, #dc2626);
+}
+
+.configuration-service-actions .btn-ghost.danger:hover {
+  border-color: rgba(220, 38, 38, 0.24);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--minimal-danger, #dc2626);
+}
+
 .configuration-save-status {
   min-height: 32px;
 }
@@ -9316,6 +9332,10 @@ body {
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.82fr);
   gap: 18px;
   align-items: start;
+}
+
+.configuration-feature-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .configuration-editor-panel,
@@ -9388,6 +9408,47 @@ body {
 
 .configuration-service-item .workflow-definition-list-desc {
   -webkit-line-clamp: 1;
+}
+
+.configuration-feature-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.configuration-feature-metric {
+  min-width: 0;
+  border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fbfbfc;
+}
+
+.configuration-feature-metric span {
+  display: block;
+  color: var(--minimal-text-muted, #667085);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.configuration-feature-metric strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--minimal-text, #202327);
+  font-size: 16px;
+  font-weight: 720;
+}
+
+.configuration-feature-resource-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 14px;
+}
+
+.configuration-feature-resource-list .workflow-definition-pill {
+  max-width: 100%;
 }
 
 #trace-monitor-screen {
