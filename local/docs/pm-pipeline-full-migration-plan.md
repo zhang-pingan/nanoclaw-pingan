@@ -21,7 +21,8 @@ Icarus 已经有 workflow runtime、container agent、artifact contract、interr
 Workflow Runtime：统一执行内核
 Workbench Core：通用执行基础设施、数据协议、组件能力
 Execution Console：通用调试、观察、兜底控制台
-PM Pipeline：独立一级业务应用，复用 Workflow Runtime 和 Workbench Core
+Feature Package Runtime：功能包启用、资源注册、独占 group、API/nav 动态加载
+PM Pipeline：`features/pm-pipeline` 功能包，启用后成为独立一级业务应用
 ```
 
 核心原则：
@@ -30,22 +31,24 @@ PM Pipeline：独立一级业务应用，复用 Workflow Runtime 和 Workbench C
 - PM Pipeline 不以现有 Workbench 页面为主入口。
 - Workbench 不再承担所有业务的统一操作台角色。
 - Workbench 拆成底层能力 `Workbench Core` 和兜底页面 `Execution Console`。
-- 各业务应用拥有自己的一级页面和领域交互，但共享 workflow、trace、artifact、human review、permission、audit 等底层协议。
+- PM Pipeline 不直接写进 Icarus core，而是作为仓库内 feature package 接入。
+- 各业务应用拥有自己的一级页面和领域交互，但通过 Feature Package Runtime 共享 workflow、trace、artifact、human review、permission、audit 等底层协议。
 
 ## 目标
 
 - 完整迁移 `ai_workspace_pm` 的 PM 产研包流水线。
 - 保持 prompt、agent 文档、skill 文档、模板、脚本、目录、CSV schema、产出包契约不变。
 - 把 Claude Code 的 `/command + subagent + skill + hook` 运行模型替换为 Icarus 的 `workflow + container delegation + host action + human review`。
-- 为 PM Pipeline 新增一级导航和专属页面，支持丰富交互。
+- 以 `features/pm-pipeline` 新增 PM Pipeline 一级导航和专属页面，支持丰富交互。
 - 让所有执行状态落在统一 workflow runtime 中，避免 PM 页面和通用控制台出现双状态。
 - 保留通用 Execution Console 的观察、暂停、重试、取消、trace 排障能力。
-- 后续其他复杂 agent 业务也按同一模式扩展：独立业务页面 + 共享底层执行基础设施。
+- 后续其他复杂 agent 业务也按同一模式扩展：feature package + 独立业务页面 + 共享底层执行基础设施。
 
 ## 非目标
 
 - 不要求 PM 页面兼容现有 Workbench 的页面形态。
 - 不把现有 Workbench 继续设计成所有业务的主操作入口。
+- 不把 PM Pipeline 的 API、页面、workflow、agent、skill、脚本直接静态写入 core 目录或 `src/channels/web.ts`。
 - 不重写原有 PM prompt 的业务语义。
 - 不把 PM 产物转换成 Icarus 私有格式后丢失原文件事实源。
 - 不建立第二套独立于 workflow runtime 的 PM 执行状态机。
@@ -53,6 +56,22 @@ PM Pipeline：独立一级业务应用，复用 Workflow Runtime 和 Workbench C
 ## 总体架构
 
 ```text
+features/pm-pipeline
+  - feature.json
+  - host/
+  - renderer/
+  - container/
+        |
+        v
+Feature Package Runtime
+  - 启用配置 local/features.json / ICARUS_FEATURES
+  - feature manifest 校验
+  - PM Pipeline 一级导航动态注册
+  - feature API prefix 动态注册
+  - workflow / card / artifact contract / skill / agent / script 资源注册
+  - requiredGroups 独占 group provisioning
+        |
+        v
 PM Pipeline 一级页面
   - 总览
   - 待办 / Gate
@@ -80,9 +99,9 @@ Workflow Runtime
         |
         v
 Container Agent / Host Actions
-  - 读取原 .claude/agents
-  - 调用原 .claude/skills
-  - 执行白名单 scripts
+  - 读取 feature/container/agents 或 PM workspace .claude/agents
+  - 调用 feature/container/skills 或 PM workspace .claude/skills
+  - 执行 feature/container/scripts 或 PM workspace scripts 的白名单 host action
   - 写入原目录结构和产物
         |
         v
@@ -113,6 +132,150 @@ Workflow Runtime
 ```
 
 Execution Console 是兜底和调试工具，不是 PM 的主使用界面。
+
+## 作为 Feature Package 实现
+
+PM Pipeline 必须按已实现的 Feature Package Runtime 接入 Icarus，而不是继续向 core 追加业务代码。
+
+功能包 id：
+
+```text
+pm-pipeline
+```
+
+推荐目录：
+
+```text
+features/pm-pipeline/
+  feature.json
+  host/
+    index.ts
+    api.ts
+    projection.ts
+    schedules.ts
+    host-actions.ts
+    migrations/
+      001_pm_pipeline_projection.sql
+  renderer/
+    index.ts
+    routes.ts
+    styles.css
+    components/
+  container/
+    groups/
+      main/
+        CLAUDE.md
+    workflow-definitions/
+      pm_new_feature.json
+      pm_init_project.json
+      pm_init_docs.json
+      pm_promote_deliverable.json
+      pm_dev_verify.json
+      pm_pipeline_review.json
+      pm_optimize_prompts.json
+      pm_iterate_a2.json
+      pm_iterate_a7.json
+    cards/
+    agents/
+    skills/
+    artifact-contracts/
+    workflow-evaluators/
+    scripts/
+    templates/
+  README.md
+```
+
+`feature.json` 草案：
+
+```json
+{
+  "id": "pm-pipeline",
+  "name": "PM Pipeline",
+  "version": "0.1.0",
+  "description": "PM product-delivery pipeline feature package",
+  "hostEntry": "./host/index.js",
+  "rendererEntry": "./renderer/index.js",
+  "apiPrefix": "/api/features/pm-pipeline",
+  "nav": [
+    {
+      "key": "pm-pipeline",
+      "label": "PM Pipeline",
+      "order": 300
+    }
+  ],
+  "requiredGroups": [
+    {
+      "key": "main",
+      "jid": "feature:pm-pipeline:main",
+      "name": "PM Pipeline",
+      "folder": "pm_pipeline_main",
+      "requiresTrigger": false,
+      "description": "PM Pipeline dedicated agent group",
+      "claudeMd": "./container/groups/main/CLAUDE.md"
+    }
+  ],
+  "resources": {
+    "workflowDefinitions": "./container/workflow-definitions",
+    "cards": "./container/cards",
+    "agents": "./container/agents",
+    "skills": "./container/skills",
+    "artifactContracts": "./container/artifact-contracts",
+    "workflowEvaluators": "./container/workflow-evaluators",
+    "scripts": "./container/scripts",
+    "templates": "./container/templates"
+  },
+  "permissions": {
+    "hostActions": [
+      "pmPipeline.runScript",
+      "pmPipeline.promoteDeliverable",
+      "pmPipeline.promptPatchTransaction",
+      "pmPipeline.syncWorkspace"
+    ],
+    "fileScopes": ["pmWorkspace"],
+    "mcpServers": []
+  }
+}
+```
+
+启用方式：
+
+```json
+{
+  "enabled": ["pm-pipeline"]
+}
+```
+
+或：
+
+```bash
+ICARUS_FEATURES=pm-pipeline
+```
+
+实现边界：
+
+- `features/pm-pipeline/host/index.ts` 只通过 `FeatureContext` 注册 API、projection、schedule、event subscription、host action adapter，不静态修改 `src/channels/web.ts`。
+- PM API 全部挂在 `/api/features/pm-pipeline/*`，只做 projection 查询、workspace registry 管理、workflow command 包装和设置读写。
+- PM 一级导航来自 manifest 的 `nav`，renderer 入口通过 `/features/pm-pipeline/renderer/index.js` 动态加载。
+- PM workflow definitions、cards、artifact contracts、workflow evaluators、agents、skills、scripts、templates 都通过 manifest 的 `resources` 注册。
+- PM workflow definitions 使用当前 runtime 已支持的 `.json` `WorkflowDefinitionVersionBundle` 文件，文件名 key 必须与 bundle.key 一致。
+- 启用 feature 时由 core provisioning 创建 `feature:pm-pipeline:main` 独占 group 和 `groups/pm_pipeline_main/CLAUDE.md`。
+- Feature migration 只能创建 `feature_pm_pipeline_*` 前缀表，例如 `feature_pm_pipeline_workspaces`、`feature_pm_pipeline_projection_cache`、`feature_pm_pipeline_schedule_state`。
+- Feature projection 可以缓存 PM 业务视图，但不能成为执行事实源。workflow DB、human review、trace、PM workspace 文件事实源仍是权威。
+- Feature 禁用后不允许新建 PM workflow；历史 workflow 在 Execution Console 只读可见。选择“停用并删除”时由 core feature deletion service 清理 feature-owned group、projection、workflow 历史和 runtime 目录。
+
+PM workspace 和 PM feature 的关系：
+
+```text
+features/pm-pipeline/
+  功能包代码、页面、workflow definition、agent/skill 模板、artifact contract、host action adapter
+
+data/features/pm-pipeline/workspaces/{workspaceId}/ 或已注册 external workspace
+  项目事实源：PROJECT-PROFILE.md、CLAUDE.md、product-docs、deliverables、evals、knowledge、optimization、scripts、pipeline-state.json
+```
+
+也就是说，feature package 提供“产品和运行时能力”，PM workspace 保存“某个项目的真实产物和长期记忆”。
+
+PM feature 产物路径由 PM feature 自己定义，不由 Icarus core 规定。Icarus core 只提供 `data/features/{featureId}` feature data root、workflow storage root、artifact index、contract、权限、审计和删除机制。
 
 ## 分层职责
 
@@ -156,6 +319,27 @@ Workbench Core 是共享基础设施，不是一个具体页面。
 - 不限制 PM Pipeline 增加领域组件。
 - 不让通用数据模型取代业务投影模型。
 
+### Feature Package Runtime
+
+Feature Package Runtime 是功能包扩展层，负责让 PM Pipeline 作为可启用/停用的业务包接入 Icarus。
+
+职责：
+
+- 扫描 `features/*/feature.json`。
+- 根据 `local/features.json` 或 `ICARUS_FEATURES` 启用功能包。
+- 校验 manifest、资源路径、API prefix、nav key、required group、permissions。
+- Provision feature 独占 group。
+- 注册 feature API、nav、renderer entry、workflow definitions、cards、artifact contracts、workflow evaluators、agents、skills、scripts、templates。
+- 运行 feature migrations。
+- 支持 feature 停用和“停用并删除”。
+
+不承担：
+
+- 不理解 PM 业务阶段和 Gate 语义。
+- 不保存 PM 执行状态。
+- 不替 feature 实现页面、projection 或 host action。
+- 不允许 feature 绕过 core workflow、permission、audit 和 container isolation。
+
 ### Execution Console
 
 Execution Console 是通用兜底控制台。
@@ -175,11 +359,11 @@ Execution Console 是通用兜底控制台。
 
 ### PM Pipeline
 
-PM Pipeline 是独立一级业务应用。
+PM Pipeline 是 `pm-pipeline` feature package 启用后注册出来的独立一级业务应用。
 
 职责：
 
-- 提供 PM 专属导航、页面、交互和数据视图。
+- 通过 manifest 提供 PM 专属导航、页面、交互和数据视图。
 - 把一句话需求、初始化、交付包、Gate、评估沉淀、prompt 自进化做成产品化体验。
 - 将 PM 操作翻译成 workflow command。
 - 从 workflow 和文件事实源生成 PM projection。
@@ -190,6 +374,7 @@ PM Pipeline 是独立一级业务应用。
 - 不维护独立执行状态机。
 - 不绕过 workflow runtime 直接推进阶段。
 - 不绕过 script/hook/contract 做危险状态变更。
+- 不通过 core 静态 import、硬编码路由或硬编码导航接入。
 
 ## PM Pipeline 页面设计
 
@@ -513,27 +698,32 @@ PM 页面动作：
 
 | Claude Code 资产/能力 | Icarus 迁移后 |
 | --- | --- |
-| `.claude/commands/*.md` | workflow definition + PM 页面入口 |
+| `.claude/commands/*.md` | `features/pm-pipeline/container/workflow-definitions` 的编译输入 + PM 页面入口参考 |
 | `Agent(subagent_type=...)` | workflow delegation |
-| `.claude/agents/*.md` | container agent persona/source prompt |
-| `.claude/skills/*` | container skills，路径兼容或 adapter 映射 |
-| `.claude/settings.json deny` | host/container policy + mount policy + tool guard |
+| `.claude/agents/*.md` | `features/pm-pipeline/container/agents` 的 agent persona/source prompt；运行时也要兼容 PM workspace 原路径 |
+| `.claude/skills/*` | `features/pm-pipeline/container/skills` 的 container skills，路径兼容或 adapter 映射 |
+| `.claude/settings.json deny` | feature permissions + host/container policy + mount policy + tool guard |
 | Claude Code PreToolUse hook | container runner tool policy / host hook |
 | Claude Code PostToolUse hook | artifact/csv write validator |
 | Claude Code SessionStart hook | workflow/session context injection |
 | `AskUserQuestion` | human review / workflow interrupt |
-| `.claude/workflows/*.js` | host action 或 container workflow adapter |
-| `scripts/*.sh` | allowlisted host script runner |
+| `.claude/workflows/*.js` | `features/pm-pipeline/host` 中的 host action 或 container workflow adapter |
+| `scripts/*.sh` | `features/pm-pipeline/container/scripts` 声明 + allowlisted host action runner；PM workspace 原脚本保持可调用 |
 | `pipeline-state.json` | 文件事实源保留，workflow DB 做镜像 |
 
 ## PM Workspace 设计
 
 迁移后需要支持多个 PM workspace。
 
-每个 PM workspace 保留原目录结构：
+每个 PM workspace 保留原目录结构，但物理根分两种模式：
+
+- `managed`：由 PM feature 管理，默认在 `data/features/pm-pipeline/workspaces/{workspaceId}`。
+- `external`：注册已有目录，例如 `/Users/chelaile/IdeaProjects/ai_workspace_pm`，core 不默认删除该目录。
+
+Managed workspace：
 
 ```text
-pm-workspaces/{workspaceId}/
+data/features/pm-pipeline/workspaces/{workspaceId}/
   PROJECT-PROFILE.md
   CLAUDE.md
   .claude/
@@ -547,27 +737,47 @@ pm-workspaces/{workspaceId}/
   scripts/
 ```
 
-也可以直接注册现有目录：
+External workspace：
 
 ```text
 /Users/chelaile/IdeaProjects/ai_workspace_pm
 ```
 
-Icarus 保存 workspace registry：
+PM workspace 目录结构是 PM feature 的领域契约，不是 Icarus core 的通用契约。其他 feature 可以在 `data/features/{featureId}` 下定义完全不同的业务结构。
+
+`pm-pipeline` feature 保存 workspace registry。实现上使用 feature-owned 表，表名必须带 `feature_pm_pipeline_` 前缀，例如 `feature_pm_pipeline_workspaces`。
 
 ```ts
 interface PmWorkspace {
   id: string;
   name: string;
+  storageMode: 'managed' | 'external';
   rootPath: string;
   status: 'ready' | 'needs_init' | 'disabled';
   projectProfilePath: string;
+  artifactRoot: string;
+  contextPackRoot: string;
   createdAt: string;
   updatedAt: string;
 }
 ```
 
 所有 PM workflow 都必须绑定 `pmWorkspaceId`。
+
+PM workflow 的 storage root 由 PM feature 设置：
+
+```text
+artifactRoot = {workspace.rootPath}/deliverables/{packageId}
+contextPackRoot = {workspace.rootPath}/workflow-context/{workflowId}/{stageKey}
+```
+
+Workbench artifact 只索引 PM feature 产物文件，例如：
+
+```text
+data/features/pm-pipeline/workspaces/ws1/deliverables/PKG/01-需求范围与边界.md
+```
+
+Artifact contract 由 PM feature 定义，例如 `pm.deliverable_package.v1`、`pm.prompt_regression_result.v1`，负责校验 PM workspace 下的业务文件结构。Icarus core 不解释 PM 目录语义，只做 path safety、artifact index、contract evaluation、permission、audit 和 deletion summary。
 
 ## 完整 workflow 清单
 
@@ -899,7 +1109,7 @@ PM 脚本必须白名单执行。
 
 ## PM Pipeline Domain Projection
 
-需要新增 PM 专属投影层。
+需要新增 PM 专属投影层。该投影层属于 `pm-pipeline` feature，由 `features/pm-pipeline/host/projection.ts` 维护，通过 `/api/features/pm-pipeline/*` 查询 API 暴露给 renderer。
 
 示例接口：
 
@@ -928,7 +1138,7 @@ Projection 来源：
 - `pipeline-state.json`。
 - script 输出和 artifact contract evaluation。
 
-Projection 可以缓存，但不能成为执行事实源。
+Projection 可以缓存到 `feature_pm_pipeline_*` 表，但不能成为执行事实源。缓存必须可从 workflow DB、human review、trace、artifact contract、PM workspace 文件事实源重建。
 
 ## 与 Execution Console 的关系
 
@@ -1005,7 +1215,53 @@ Icarus 的 DB 是执行和索引事实，不替代这些文件产物。
 
 ## 迁移资产清单
 
-从 `ai_workspace_pm` 迁移：
+从 `ai_workspace_pm` 迁移时分两类处理。
+
+进入 `features/pm-pipeline` 的功能包运行资产：
+
+```text
+.claude/agents/
+.claude/commands/
+.claude/skills/
+.claude/workflows/
+.claude/settings.json
+deliverables/_template/
+deliverables/_交付包终审清单.md
+scripts/
+docs/服务说明/
+README.md
+```
+
+保留在 PM workspace 的项目事实源。Managed 模式下根目录是 `data/features/pm-pipeline/workspaces/{workspaceId}`；external 模式下根目录是注册的现有目录：
+
+```text
+PROJECT-PROFILE.md
+CLAUDE.md
+product-docs/
+deliverables/
+test/
+evals/
+knowledge/
+optimization/
+pipeline-state.json
+code/
+scripts/
+README.md
+```
+
+其中：
+
+- `.claude/commands` 作为 workflow 编译输入或人工参考，不直接作为运行入口。
+- `.claude/agents` 原文进入 `features/pm-pipeline/container/agents`，同时运行时兼容 PM workspace 原路径。
+- `.claude/skills` 进入 `features/pm-pipeline/container/skills`，同时保持路径兼容。
+- `.claude/workflows` 迁成 `features/pm-pipeline/host` 的 host action 或 container workflow adapter。
+- `scripts` 一部分作为 feature 提供的通用脚本模板和 allowlist runner，一部分作为 PM workspace 项目脚本事实源保留。
+- `deliverables/_template` 进入 feature templates，同时初始化时复制或同步到 PM workspace。
+- `evals/knowledge/optimization/product-docs/test/deliverables` 的项目实例数据保留在 PM workspace，不进入 feature 包。
+
+`features/pm-pipeline` 的资源目录应尽量保存通用模板、prompt、workflow definition、contract、adapter；具体项目沉淀和交付产物必须留在 workspace。
+
+历史完整资产清单参考：
 
 ```text
 .claude/agents/
@@ -1027,20 +1283,23 @@ CLAUDE.md
 README.md
 ```
 
-其中：
-
-- `.claude/commands` 作为 workflow 编译输入或人工参考，不直接作为运行入口。
-- `.claude/agents` 原文作为 stage persona。
-- `.claude/skills` 保持路径兼容，供 agent 读取。
-- `scripts` 保持原样，外层加 allowlist runner。
-- `deliverables/_template` 保持原样。
-
 ## 验收标准
 
 完整迁移的验收不以自然语言输出逐字一致为标准，而以流程、契约、状态和产物一致为标准。
 
 必须满足：
 
+- `features/pm-pipeline/feature.json` 可被 Feature Package Runtime 扫描、校验和启用。
+- 未启用 `pm-pipeline` 时，PM 导航、PM API、PM workflow create option、PM container resources、PM migrations、PM schedules 都不可用。
+- 启用 `pm-pipeline` 后，一级导航出现 PM Pipeline，API prefix 为 `/api/features/pm-pipeline`。
+- 启用 `pm-pipeline` 后，core 自动 provision `feature:pm-pipeline:main` 独占 group 和 `groups/pm_pipeline_main/CLAUDE.md`。
+- PM workflow definitions、cards、artifact contracts、agents、skills、scripts、templates 均通过 feature resources 注册，不静态写入 core 资源目录。
+- PM projection/config/cache 表均使用 `feature_pm_pipeline_` 前缀。
+- `src/channels/web.ts`、core renderer 主文件和 core workflow registry 不出现 PM 业务静态 import 或 PM 业务硬编码路由。
+- Managed PM workspace 默认创建在 `data/features/pm-pipeline/workspaces/{workspaceId}`；external workspace 可注册已有目录。
+- PM workflow 的 artifact root 指向 PM workspace 的 `deliverables/{packageId}`，不依赖 `projects/{service}/iteration/{deliverable}`。
+- PM workflow 的 context pack root 指向 PM workspace 的 `workflow-context/{workflowId}/{stageKey}`，不依赖 `projects/{service}/workflow-context`。
+- Workbench artifact 能索引 PM workspace 下的 PM 业务文件，并通过 PM artifact contract 校验。
 - 原 `/new-feature` 的 A1-A7 顺序和条件分支一致。
 - 所有 Gate 均显式暂停，PM 不确认不继续。
 - UI 类需求触发 A1.5，非 UI 类跳过并留痕。
@@ -1057,6 +1316,16 @@ README.md
 
 ## 风险与处理
 
+### 风险 0：名义上是 feature，实际仍耦合进 core
+
+处理：
+
+- PM 业务 API 只能通过 `FeatureContext.api` 注册到 `/api/features/pm-pipeline/*`。
+- PM 一级导航只能来自 `feature.json` manifest。
+- PM renderer 必须是 feature renderer entry，不能继续并入 core 主 `app.js` 的业务分支。
+- PM workflow、card、agent、skill、artifact contract、script 必须通过 feature resource registry 加载。
+- core 只保留通用 extension point、feature management 和 Execution Console 能力。
+
 ### 风险 1：PM 页面过强，绕开 workflow
 
 处理：
@@ -1064,6 +1333,15 @@ README.md
 - 所有业务动作只能调用 workflow command。
 - 页面无权直接推进 stage。
 - 所有 stage transition 由 workflow runtime 写 event。
+
+### 风险 1.5：PM 产物路径被迫贴合 `projects/{service}`
+
+处理：
+
+- PM feature 自己定义 PM workspace 目录契约。
+- PM workflow 明确设置 artifact root 和 context pack root。
+- PM artifact contract 校验 PM workspace 下的业务文件。
+- Workbench artifact 只做索引，不决定 PM 业务目录结构。
 
 ### 风险 2：为了兼容 Console 限制 PM 页面
 
@@ -1101,16 +1379,18 @@ README.md
 
 虽然本方案按完整迁移设计，不以 MVP 为目标，但工程落地仍建议按依赖顺序实现，避免循环返工：
 
-1. PM workspace registry。
-2. Workbench Core / Execution Console 分层整理。
-3. Human review 通用协议。
-4. PM asset adapter：agents、skills、scripts、templates。
-5. PM workflow definitions。
-6. PM Pipeline Domain API / Projection。
-7. PM Pipeline 一级页面。
-8. Hook/policy 等价层。
-9. Golden replay 验收集。
-10. 完整迁移验收和旧 Claude Code 入口冻结。
+1. 创建 `features/pm-pipeline` scaffold：`feature.json`、host、renderer、container、required group、README。
+2. 将 PM Pipeline 加入 `local/features.json` 开发启用，并验证 feature runtime 可动态启用/停用。
+3. PM workspace registry：使用 `feature_pm_pipeline_workspaces` 等 feature-owned 表。
+4. Workbench Core / Execution Console 分层整理。
+5. Human review 通用协议。
+6. PM asset adapter：agents、skills、scripts、templates 迁入 feature resources，同时兼容 PM workspace 原路径。
+7. PM workflow definitions 迁入 `features/pm-pipeline/container/workflow-definitions`。
+8. PM Pipeline Domain API / Projection：通过 `/api/features/pm-pipeline/*` 暴露。
+9. PM Pipeline renderer 一级页面：通过 feature renderer entry 动态加载。
+10. Hook/policy 等价层和 feature permissions/host action allowlist。
+11. Golden replay 验收集。
+12. 完整迁移验收和旧 Claude Code 入口冻结。
 
 这不是功能裁剪，只是实现依赖顺序。
 
@@ -1119,6 +1399,17 @@ README.md
 最终 Icarus 中会形成一套可复用模式：
 
 ```text
+features/{featureId}
+  -> feature.json
+  -> host API / projection / schedules / migrations
+  -> renderer entry / 业务一级页面
+  -> container resources
+        |
+        v
+Feature Package Runtime
+  -> nav / api / resources / group provisioning / enable-disable
+        |
+        v
 业务一级页面
   -> 业务 Domain Projection
   -> Workflow Runtime
@@ -1129,4 +1420,4 @@ Execution Console
   -> 同一个 Workflow Runtime
 ```
 
-PM Pipeline 是第一套复杂业务应用。后续其他 agent team、运维流程、自我进化、员工支持、知识生产等，都可以复用这套结构：独立业务页面，不共享页面上限；统一执行内核，不分裂状态和审计。
+PM Pipeline 是第一套复杂业务 feature package。后续其他 agent team、运维流程、自我进化、员工支持、知识生产等，都可以复用这套结构：feature package 动态启用；独立业务页面，不共享页面上限；统一执行内核，不分裂状态和审计。

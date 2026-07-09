@@ -42,40 +42,85 @@
               <span class="primary-nav-dot"></span>
               <span class="primary-nav-label">工作台</span>
             </button>
-            <button class="primary-nav-item" data-nav-key="assistant">
-              <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">个人助手</span>
-            </button>
-            <button
-              class="primary-nav-item"
-              data-nav-key="workflow-definitions"
-            >
-              <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">流程管理</span>
-            </button>
-            <button class="primary-nav-item" data-nav-key="cards-management">
-              <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">卡片管理</span>
-            </button>
-            <button class="primary-nav-item" data-nav-key="configuration">
-              <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">配置管理</span>
-            </button>
-            <button class="primary-nav-item" data-nav-key="memory-management">
-              <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">记忆管理</span>
-            </button>
-            <button
-              class="primary-nav-item"
-              data-nav-key="knowledge-management"
-            >
-              <span class="primary-nav-dot"></span>
-              <span class="primary-nav-label">知识库管理</span>
-            </button>
             <button class="primary-nav-item" data-nav-key="trace-monitor">
               <span class="primary-nav-dot"></span>
               <span class="primary-nav-label">Trace 监控</span>
             </button>
+            <div
+              id="component-management-nav-group"
+              class="primary-nav-group expanded"
+              data-nav-group="component-management"
+            >
+              <button
+                id="component-management-nav-toggle"
+                class="primary-nav-group-toggle"
+                type="button"
+                aria-expanded="true"
+                aria-controls="component-management-nav-children"
+              >
+                <span class="primary-nav-dot"></span>
+                <span class="primary-nav-label">组件管理</span>
+                <svg
+                  class="primary-nav-caret"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+              <div
+                id="component-management-nav-children"
+                class="primary-nav-children"
+              >
+                <button
+                  class="primary-nav-item primary-nav-child"
+                  data-nav-key="assistant"
+                >
+                  <span class="primary-nav-dot"></span>
+                  <span class="primary-nav-label">个人助手</span>
+                </button>
+                <button
+                  class="primary-nav-item primary-nav-child"
+                  data-nav-key="workflow-definitions"
+                >
+                  <span class="primary-nav-dot"></span>
+                  <span class="primary-nav-label">流程管理</span>
+                </button>
+                <button
+                  class="primary-nav-item primary-nav-child"
+                  data-nav-key="cards-management"
+                >
+                  <span class="primary-nav-dot"></span>
+                  <span class="primary-nav-label">卡片管理</span>
+                </button>
+                <button
+                  class="primary-nav-item primary-nav-child"
+                  data-nav-key="configuration"
+                >
+                  <span class="primary-nav-dot"></span>
+                  <span class="primary-nav-label">配置管理</span>
+                </button>
+                <button
+                  class="primary-nav-item primary-nav-child"
+                  data-nav-key="memory-management"
+                >
+                  <span class="primary-nav-dot"></span>
+                  <span class="primary-nav-label">记忆管理</span>
+                </button>
+                <button
+                  class="primary-nav-item primary-nav-child"
+                  data-nav-key="knowledge-management"
+                >
+                  <span class="primary-nav-dot"></span>
+                  <span class="primary-nav-label">知识库管理</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div id="primary-sidebar-tools" class="primary-sidebar-tools">
             <button id="open-schedulers" class="section-header schedulers-btn">

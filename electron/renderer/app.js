@@ -503,10 +503,28 @@ var knowledgePageKindFilter = document.getElementById(
 var sidebar = document.getElementById('sidebar');
 var sidebarCollapse = document.getElementById('sidebar-collapse');
 var primaryNav = document.getElementById('primary-nav');
+var componentManagementNavGroup = document.getElementById(
+  'component-management-nav-group',
+);
+var componentManagementNavToggle = document.getElementById(
+  'component-management-nav-toggle',
+);
+var componentManagementNavChildren = document.getElementById(
+  'component-management-nav-children',
+);
 var primaryNavItems = Array.from(
   document.querySelectorAll('.primary-nav-item'),
 );
 var primaryNavScrollTimer = null;
+var componentManagementNavKeys = [
+  'assistant',
+  'workflow-definitions',
+  'cards-management',
+  'configuration',
+  'memory-management',
+  'knowledge-management',
+];
+var componentManagementNavExpanded = true;
 var groupsList = document.getElementById('groups-list');
 var refreshGroupsBtn = document.getElementById('refresh-groups');
 var resetAllSessionsBtn = document.getElementById('reset-all-sessions');
@@ -2827,19 +2845,58 @@ function applyScreenVisibility() {
   }
 }
 
-function setPrimaryNav(navKey) {
-  if (navKey === null || navKey === void 0) return;
-  activePrimaryNavKey = navKey;
-  todayPlanVisible = false;
-  if (navKey !== 'knowledge-management' && knowledgeJobsPanel) {
-    knowledgeJobsPanel.classList.remove('open');
+function isComponentManagementNavKey(navKey) {
+  return componentManagementNavKeys.includes(navKey);
+}
+
+function setComponentManagementNavExpanded(expanded) {
+  componentManagementNavExpanded = !!expanded;
+  if (componentManagementNavGroup) {
+    componentManagementNavGroup.classList.toggle(
+      'expanded',
+      componentManagementNavExpanded,
+    );
+    componentManagementNavGroup.classList.toggle(
+      'collapsed',
+      !componentManagementNavExpanded,
+    );
   }
+  if (componentManagementNavToggle) {
+    componentManagementNavToggle.setAttribute(
+      'aria-expanded',
+      componentManagementNavExpanded ? 'true' : 'false',
+    );
+  }
+  if (componentManagementNavChildren) {
+    componentManagementNavChildren.hidden = !componentManagementNavExpanded;
+  }
+}
+
+function syncPrimaryNavActiveState() {
+  const navKey = todayPlanVisible ? '' : activePrimaryNavKey;
+  const componentNavActive = isComponentManagementNavKey(navKey);
   primaryNavItems.forEach((item) => {
     item.classList.toggle(
       'active',
       item.getAttribute('data-nav-key') === navKey,
     );
   });
+  if (componentManagementNavToggle) {
+    componentManagementNavToggle.classList.toggle('active', componentNavActive);
+  }
+}
+
+function setPrimaryNav(navKey) {
+  if (navKey === null || navKey === void 0) return;
+  activePrimaryNavKey = navKey;
+  todayPlanVisible = false;
+  if (isComponentManagementNavKey(navKey)) {
+    setComponentManagementNavExpanded(true);
+  }
+  if (navKey !== 'knowledge-management' && knowledgeJobsPanel) {
+    knowledgeJobsPanel.classList.remove('open');
+  }
+  syncPrimaryNavActiveState();
   applyScreenVisibility();
   if (navKey === 'memory-management') {
     renderDoctorPanel();
@@ -2967,6 +3024,11 @@ function renderFeatureNavItems(features) {
     (a, b) => a.order - b.order || a.item.label.localeCompare(b.item.label),
   );
   enabledFeatureRuntimeItems = navItems;
+  const featureInsertBefore =
+    componentManagementNavGroup &&
+    componentManagementNavGroup.parentElement === primaryNav
+      ? componentManagementNavGroup
+      : null;
 
   navItems.forEach((entry) => {
     const button = document.createElement('button');
@@ -2979,15 +3041,10 @@ function renderFeatureNavItems(features) {
       <span class="primary-nav-label">${escapeHtml(entry.item.label || entry.feature.name)}</span>
     `;
     button.addEventListener('click', () => setPrimaryNav(entry.navKey));
-    primaryNav.appendChild(button);
+    primaryNav.insertBefore(button, featureInsertBefore);
   });
   refreshPrimaryNavItems();
-  primaryNavItems.forEach((item) => {
-    item.classList.toggle(
-      'active',
-      item.getAttribute('data-nav-key') === activePrimaryNavKey,
-    );
-  });
+  syncPrimaryNavActiveState();
 }
 
 async function mountFeatureRenderer(entry) {
@@ -28166,10 +28223,14 @@ if (primaryNav) {
     }, 700);
   });
 
-  if (todayPlanVisible) {
-    primaryNavItems.forEach((item) => {
-      item.classList.toggle('active', false);
+  if (componentManagementNavToggle) {
+    componentManagementNavToggle.addEventListener('click', () => {
+      setComponentManagementNavExpanded(!componentManagementNavExpanded);
     });
+  }
+
+  if (todayPlanVisible) {
+    syncPrimaryNavActiveState();
     applyScreenVisibility();
     loadTodayPlanOverview({ forceOpenToday: true, showEmptyWhenNoToday: true });
   } else {
