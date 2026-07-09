@@ -54,15 +54,14 @@ PM Pipeline：独立一级业务应用，复用 Workflow Runtime 和 Workbench C
 
 ```text
 PM Pipeline 一级页面
-  - 控制台
-  - 新需求孵化
-  - 项目接入
-  - 存量基线
+  - 总览
+  - 待办 / Gate
+  - 需求开发
   - 交付包
-  - Gate 决策中心
+  - 评估沉淀
+  - Prompt 自进化
   - Agent 轨迹
-  - 知识沉淀
-  - Prompt 优化
+  - 设置
         |
         v
 PM Pipeline Domain API / Projection
@@ -181,7 +180,7 @@ PM Pipeline 是独立一级业务应用。
 职责：
 
 - 提供 PM 专属导航、页面、交互和数据视图。
-- 把一句话需求、项目接入、存量基线、交付包、Gate、沉淀、prompt 优化做成产品化体验。
+- 把一句话需求、初始化、交付包、Gate、评估沉淀、prompt 自进化做成产品化体验。
 - 将 PM 操作翻译成 workflow command。
 - 从 workflow 和文件事实源生成 PM projection。
 - 保留原流水线的文档、脚本、产物和目录契约。
@@ -194,30 +193,85 @@ PM Pipeline 是独立一级业务应用。
 
 ## PM Pipeline 页面设计
 
-### 1. 控制台
+页面按 PM 业务组织，不按底层 workflow 名称组织。二级导航只放长期稳定工作区；一次性初始化、定时触发、promote、regression 等具体动作放在总览卡片、设置或三级详情页按钮中。
+
+推荐二级导航：
+
+```text
+PM Pipeline
+├─ 总览
+├─ 待办 / Gate
+├─ 需求开发
+├─ 交付包
+├─ 评估沉淀
+├─ Prompt 自进化
+├─ Agent 轨迹
+└─ 设置
+```
+
+不单独设置 `初始化` 二级导航。`init-project` / `init-docs` 是 workspace bootstrap 动作，放在总览的初始化卡片中；执行完成后主按钮置灰，保留查看记录、重新校验、修复缺失项等次级动作。
+
+不单独设置 `周期任务` 二级导航。weekly/monthly 的 schedule 配置归 `设置`，最近状态和手动快捷触发放在 `总览`，周期评估结果归 `评估沉淀`，prompt patch 审批和版本管理归 `Prompt 自进化`。
+
+### 1. 总览
 
 展示：
 
-- 当前进行中的需求包。
-- 卡在哪个 Gate。
-- 正在运行的 agent。
-- `.draft`、`.active`、`.done` 包数量。
-- 待 PM 决策事项。
-- 本周 done、逃逸缺陷、pending patches。
+- 当前 workspace 健康状态。
+- 进行中的 workflow：需求开发、promote、周报、prompt 月更、初始化修复等。
+- 待 PM 处理：Gate、rubric 抽样、prompt patch 审批、retrospect 漏登处置、regression fail 决策。
+- 最新 `.draft`、`.active`、`.done` 包。
+- 最近周报、pending prompt patches、下次 weekly/monthly 定时任务时间。
+- Workspace 初始化卡片：`init-project`、`init-docs` 是否已完成。
 
 主要动作：
 
-- 进入需求包详情。
-- 处理待决策 Gate。
-- 查看失败 workflow。
-- 跳转 Execution Console 排障。
+- `发起新需求`：创建 `pm_new_feature` workflow。
+- `继续最近需求`：跳转需求详情。
+- `查看全部需求`：进入需求开发二级页。
+- `开始 init-project` / `开始 init-docs`：仅未完成时可点，完成后置灰。
+- `查看初始化记录`、`重新校验`、`修复缺失项`。
+- `立即跑周报`：创建 `pm_pipeline_review` workflow。
+- `开始 prompt 月更`：创建 `pm_optimize_prompts` workflow。
+- `打开 Execution Console`：排障入口。
 
-### 2. 新需求孵化
+总览只做状态摘要、初始化提示和高频快捷入口，不承载完整编辑、审批、promote 或 prompt 合并能力。
+
+### 2. 待办 / Gate
+
+集中展示所有 human review / workflow interrupt。
+
+能力：
+
+- 需求 Gate：Gate 1、1.5a、1.5b、2、3。
+- A2 soft gate 警告逐条裁决。
+- D1 模块拆分确认、D2 存量基线裁决。
+- 周报 rubric 抽样确认。
+- retrospect 漏登处置。
+- prompt patch approval。
+- regression fail 后的保留 pending / reject 决策。
+- 初始化失败后的修复确认。
+
+详情页动作：
+
+- `批准`、`拒绝`、`要求修改`、`跳过`。
+- `重试`、`回退`、`指派到某 workflow`。
+- `查看上下文`、`打开原产物`、`打开 trace`。
+
+要求：
+
+- 每个问题必须用业务语言呈现。
+- 每个选项带业务后果。
+- 决策最终调用 `resumeWorkflowInterrupt` 或等价 workflow command。
+- 决策写回对应 markdown、`pipeline-state.json` 和 workflow interrupt。
+
+### 3. 需求开发
 
 对应原 `/new-feature`。
 
 能力：
 
+- 需求列表和状态筛选。
 - 一句话需求输入。
 - 附件上传。
 - kebab-case slug 确认。
@@ -229,40 +283,18 @@ PM Pipeline 是独立一级业务应用。
 - A5 建议业务化展示。
 - 打包前终审报告展示。
 
+详情页动作：
+
+- `新建需求`、`继续流程`、`暂停`、`取消`。
+- `重试当前阶段`、`回退到上一阶段`、`跳过非必要阶段`。
+- `生成 .draft`、`运行 final check`。
+- `打开 trace`、`打开 Console`。
+
 底层仍然推进一个 `pm_new_feature` workflow。
 
-### 3. 项目接入
+需求详情只放本需求相关动作，不放周期评估、prompt 自进化、workspace 设置等跨需求入口。
 
-对应原 `/init-project`。
-
-能力：
-
-- 收集 git URL、分支、推送策略、项目名、验收环境。
-- 展示代码扫描证据。
-- 展示技术栈、端结构、核心架构黑名单候选。
-- 展示领域术语候选。
-- 展示视觉基线候选。
-- 展示双轴适配能力矩阵。
-- 写入 `PROJECT-PROFILE.md` 前逐项确认。
-
-底层推进 `pm_init_project` workflow。
-
-### 4. 存量基线
-
-对应原 `/init-docs`。
-
-能力：
-
-- 模块拆分提案。
-- Gate D1 确认。
-- 每模块 6 件套状态。
-- Gate D2 裁决台。
-- 用例生成和 lint 结果。
-- `product-docs/00-产品全景.md` 和 `test/test-cases` 状态。
-
-底层推进 `pm_init_docs` workflow。
-
-### 5. 交付包
+### 4. 交付包
 
 对应 `.draft/.active/.done/archive` 管理。
 
@@ -275,43 +307,25 @@ PM Pipeline 是独立一级业务应用。
 - `deliverable-final-check.sh` 报告。
 - promote 状态机动作。
 - dev-verify 和 PM 灰度体验记录。
+- retrospect 是否完成。
+- baseline backflow 状态。
+
+详情页动作：
+
+- `promote 到 .active`。
+- `promote 到 .done`。
+- `归档`。
+- `运行 dev-verify`。
+- `补跑 retrospect`。
+- `校验 evals`。
+- `同步 baseline backflow`。
+- `查看 99-状态`。
+- `查看提交记录`。
+- `打开包目录`。
 
 promote 必须调用原 `scripts/promote.sh` 或等价 host action，不能直接改名移动目录。
 
-### 6. Gate 决策中心
-
-集中展示所有待 PM 回复事项。
-
-能力：
-
-- Gate 1 Q&A。
-- Gate 1.5a 视觉含糊点。
-- Gate 1.5b 截图确认。
-- Gate 2 A5 决策。
-- Gate 3 打包确认。
-- D1 模块拆分确认。
-- D2 存量基线裁决。
-- A2 soft gate 警告裁决。
-
-要求：
-
-- 每个问题必须用业务语言呈现。
-- 每个选项带业务后果。
-- 决策写回对应 markdown、`pipeline-state.json` 和 workflow interrupt。
-
-### 7. Agent 轨迹
-
-能力：
-
-- 查看 A1/A1.5/A2/A3/A4/A5/A6/A7 每次调用。
-- 查看 prompt、agent definition、handoff envelope。
-- 查看输出、结构化 result、耗时、模型。
-- 查看失败原因、retry 记录、artifact contract 校验。
-- 支持对单 stage 发起 retry 或回退。
-
-完整 trace 可以跳转 Execution Console。
-
-### 8. 知识沉淀
+### 5. 评估沉淀
 
 对应：
 
@@ -324,25 +338,125 @@ promote 必须调用原 `scripts/promote.sh` 或等价 host action，不能直�
 
 能力：
 
+- 周报列表和周报详情。
 - 趋势图和表格。
-- 周报入口。
 - escape 分析。
 - loop 收敛指标。
+- rubric 抽样状态。
+- case 索引查看。
 - pattern 查看。
 
-### 9. Prompt 优化
+建议内部 tabs：
+
+- `周报`
+- `runs`
+- `loops`
+- `escapes`
+- `cases`
+- `patterns`
+- `rubrics`
+
+详情页动作：
+
+- `查看周报`。
+- `生成本周 rubric 骨架`。
+- `标记 pattern dormant`。
+- `恢复 pattern active`。
+- `导出 CSV`。
+- `打开关联交付包`。
+- `打开关联 trace`。
+- `跳转 Prompt 自进化`。
+
+评估沉淀只展示周期评估结果和知识库，不承担 prompt patch 合并。
+
+### 6. Prompt 自进化
 
 对应原 `/optimize-prompts`。
 
 能力：
 
-- 查看 `optimization/patches-pending`。
-- 查看 `agent-versions.json`。
+- pending patch backlog。
+- 按 agent、锚点、重复次数、优先级聚合。
 - prompt patch diff。
-- 批准、拒绝、应用、归档。
-- prompt version 和 changelog。
+- LOCKED 检查结果。
+- transaction 状态。
+- regression-set pass/fail。
+- applied/rejected 历史。
+- `agent-versions.json`。
+- `PROMPT-CHANGELOG.md`。
+
+建议内部 tabs：
+
+- `Pending`
+- `审批中`
+- `Regression`
+- `Applied`
+- `Rejected`
+- `Agent Versions`
+- `Changelog`
+
+详情页动作：
+
+- `开始月更`。
+- `只看某 agent`。
+- `批准 patch`。
+- `拒绝 patch`。
+- `改写后批准`。
+- `保留到下月`。
+- `运行 regression`。
+- `提交 transaction`。
+- `丢弃 transaction`。
+- `查看 regression trace`。
 
 底层推进 `pm_optimize_prompts` workflow。
+
+定时月更只能启动 workflow 并停在审批 gate，不能自动合并 prompt patch。
+
+### 7. Agent 轨迹
+
+能力：
+
+- 按 workflow、stage、agent 筛选调用记录。
+- 查看 A1/A1.5/A2/A3/A4/A5/A6/A7 每次调用。
+- 查看 prompt、agent definition、handoff envelope。
+- 查看输出、结构化 result、耗时、模型。
+- 查看失败原因、retry 记录、artifact contract 校验。
+
+详情页动作：
+
+- `按 workflow 筛选`。
+- `按 agent 筛选`。
+- `查看 prompt`。
+- `查看原始输出`。
+- `重试 stage`。
+- `打开关联 artifact`。
+- `打开 Execution Console`。
+
+Agent 轨迹是排障和审计页，不承担业务审批。
+
+### 8. 设置
+
+设置负责 workspace 的持续维护，不负责承载日常业务流程。
+
+分组：
+
+- `Workspace`：名称、路径、项目 profile、目录健康检查。
+- `Git / Repo`：业务仓路径、默认分支、hooks 安装状态、push policy、只读/写保护规则。
+- `自动化 / 定时任务`：weekly `pm_pipeline_review`、monthly `pm_optimize_prompts` 的启用状态、schedule、trigger history、手动重跑指定周期。
+- `执行策略`：host action allowlist、container mount、脚本权限。
+- `Artifact / Projection`：contract 开关、文件事实源对账、重建 projection。
+- `审计`：初始化记录、配置变更记录、执行日志。
+
+详情页动作：
+
+- `切换 workspace`。
+- `编辑 schedule`。
+- `校验 workspace`。
+- `同步文件事实源`。
+- `重建 projection`。
+- `查看审计日志`。
+
+`init-project` 负责 bootstrap：创建 workspace 初始结构、写 `PROJECT-PROFILE.md` / `CLAUDE.md` / `.claude` assets、初始化 scripts/hooks/git policy 默认值并做首次校验。初始化后，git、repo、hooks、schedule、allowlist、mount policy 等配置修改都归设置页维护。
 
 ## 执行状态与页面状态
 
@@ -549,6 +663,13 @@ load_package
 
 迁移 `/pipeline-review`：
 
+触发方式：
+
+- 定时任务：按 workspace 配置的 weekly schedule 创建 `pm_pipeline_review` workflow。
+- PM 手动按钮：PM Pipeline「评估沉淀 / 周报」入口手动创建同一个 workflow，可指定周次。
+- 两种触发都只发 workflow command，不直接调用 evaluator 或写周报。
+- 同一 workspace + 同一周次只允许一个运行中的 `pm_pipeline_review`；重复触发进入已有 workflow 或提示 PM 重跑确认。
+
 ```text
 load_evals
 -> run_pipeline_evaluator
@@ -560,14 +681,56 @@ load_evals
 
 迁移 `/optimize-prompts`：
 
+触发方式：
+
+- 定时任务：按 workspace 配置的 monthly schedule 创建 `pm_optimize_prompts` workflow。
+- PM 手动按钮：PM Pipeline「Prompt 自进化」入口手动创建同一个 workflow，可选择全量 pending 或指定 agent。
+- 两种触发都必须进入 `gate_prompt_change_approval`，不得定时自动应用 prompt patch。
+- 同一 workspace + 同一月度周期只允许一个运行中的 `pm_optimize_prompts`；手动重跑必须复用 pending/applied/rejected 文件事实源做幂等检查。
+
 ```text
 load_pending_patches
 -> evaluate_patch_set
 -> gate_prompt_change_approval
--> apply_prompt_changes
--> bump_agent_versions
--> write_changelog
+-> begin_prompt_patch_transaction
+-> apply_patch_to_shadow_workspace
+-> run_regression_set_in_container
+-> if_pass_commit_prompt_transaction
+-> if_fail_discard_transaction_and_write_rejected
 -> completed
+```
+
+`pm_optimize_prompts` 的 regression-set 和回滚推荐采用事务工作区方案，不在真实 PM workspace 上先改后回滚。
+
+关键约束：
+
+- `gate_prompt_change_approval` 只批准候选 patch 和目标 diff，不直接修改 `.claude/agents/*.md`。
+- regression 通过前，真实文件事实源保持不变，包括 `.claude/agents/*.md`、`optimization/agent-versions.json`、`optimization/PROMPT-CHANGELOG.md`、`patches-pending/applied/rejected`。
+- Host action 创建 `PromptPatchTransaction`，在 workflow execution storage 中准备 shadow workspace。实现上可以复制受控文件，也可以在具备条件时用 git worktree，但协议不依赖 git。
+- Host action 在 shadow workspace 内执行确定性文件操作：LOCKED 锚点校验、应用 diff、生成 patch id、预写版本变更、预写 changelog、标记 pending 处理结果。
+- Container adapter 挂载 shadow workspace 跑 regression-set：加载修改后的目标 agent prompt，读取 `evals/regression-set/cases.csv` 和 `expected/<case_id>/<agent>/`，逐 case 调用目标 agent，输出结构化 pass/fail 结果和 trace。
+- regression 全 pass 后，Host action 才把 shadow workspace 中的受控变更提交回真实 PM workspace，并落盘 `patches-applied`、`PROMPT-CHANGELOG.md`、`agent-versions.json`、pending 处理标记。
+- regression fail 时，不需要回滚真实文件；直接丢弃 transaction workspace，并按 PM 决策写 `patches-rejected` 或保留 pending。失败 case、actual/expected 摘要和 trace 必须记录到 workflow artifact。
+- 页面只展示 patch diff、审批 gate、regression 结果和 commit/reject 状态；页面无权直接编辑 prompt 文件。
+
+结构化 regression result 示例：
+
+```ts
+interface PmPromptRegressionResult {
+  transactionId: string;
+  workspaceId: string;
+  agent: string;
+  oldVersion: string;
+  proposedVersion: string;
+  cases: Array<{
+    caseId: string;
+    result: 'pass' | 'fail';
+    expected: string;
+    actual: string;
+    reason?: string;
+    traceId?: string;
+  }>;
+}
 ```
 
 ### pm_iterate_a2 / pm_iterate_a7
@@ -615,6 +778,7 @@ load_target_draft
 - `pm.evals_escapes.v1`
 - `pm.knowledge_cases.v1`
 - `pm.prompt_patch.v1`
+- `pm.prompt_regression_result.v1`
 
 Contract 不替代原脚本。脚本仍是权威机械检查之一，contract 用于 Icarus 统一展示、阻断、trace 和质量门。
 
