@@ -22,8 +22,7 @@
     "setup": "tsx setup/index.ts",
     "auth": "tsx src/whatsapp-auth.ts",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "migrate:workflow-storage": "tsx scripts/migrate-workflow-storage.ts"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "axios": "^1.13.6",
