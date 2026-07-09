@@ -39,6 +39,8 @@ var knowledgeManagementScreen = document.getElementById(
   'knowledge-management-screen',
 );
 var traceMonitorScreen = document.getElementById('trace-monitor-screen');
+var featureRuntimeScreen = document.getElementById('feature-runtime-screen');
+var featureRuntimeOutlet = document.getElementById('feature-runtime-outlet');
 var workflowDefinitionList = document.getElementById(
   'workflow-definition-list',
 );
@@ -657,7 +659,7 @@ var activePrimaryNavKey =
       ? 'workbench'
       : initialAssistantTarget === 'trace-monitor'
         ? 'trace-monitor'
-          : 'agent-groups';
+        : 'agent-groups';
 var todayPlanVisible = initialAssistantTarget === 'today-plan';
 var todayPlanOverview = null;
 var currentTodayPlan = null;
@@ -708,6 +710,11 @@ var currentCardSelection = null;
 var cardsManagementExpandedGroups = {};
 var cardsManagementGroupsInitialized = false;
 var cardsManagementEditMode = false;
+var enabledFeatureRuntimeItems = [];
+var featureRendererModules = new Map();
+var featureRendererCleanups = new Map();
+var mountedFeatureNavKey = '';
+var featureRendererMountSeq = 0;
 var cardsManagementEditSnapshot = null;
 var cardsRequestSeq = 0;
 var serviceConfigRegistry = {};
@@ -2719,6 +2726,8 @@ function setConnectionStatus(status) {
 
 function applyScreenVisibility() {
   const showTodayPlan = todayPlanVisible;
+  const showFeatureRuntime =
+    !showTodayPlan && getFeatureRuntimeItem(activePrimaryNavKey);
   const showWorkbench = !showTodayPlan && activePrimaryNavKey === 'workbench';
   const showAssistant = !showTodayPlan && activePrimaryNavKey === 'assistant';
   const showWorkspace =
@@ -2770,6 +2779,9 @@ function applyScreenVisibility() {
   }
   if (traceMonitorScreen) {
     traceMonitorScreen.classList.toggle('active', showTraceMonitor);
+  }
+  if (featureRuntimeScreen) {
+    featureRuntimeScreen.classList.toggle('active', !!showFeatureRuntime);
   }
 }
 
@@ -2824,6 +2836,16 @@ function setPrimaryNav(navKey) {
   if (navKey === 'trace-monitor') {
     loadTraceMonitorData({ force: false });
   }
+  const featureItem = getFeatureRuntimeItem(navKey);
+  if (featureItem) {
+    mountFeatureRenderer(featureItem).catch((err) => {
+      if (activePrimaryNavKey !== featureItem.navKey) return;
+      console.error('Failed to mount feature renderer:', err);
+      renderFeatureRuntimeStatus(err.message || 'Feature renderer failed');
+    });
+  } else {
+    unmountCurrentFeatureRenderer();
+  }
 }
 
 function toggleTodayPlanScreen() {
@@ -2835,6 +2857,7 @@ function toggleTodayPlanScreen() {
 }
 
 function cyclePrimaryNav(step) {
+  refreshPrimaryNavItems();
   if (!primaryNavItems.length) return;
   const currentIndex = primaryNavItems.findIndex(
     (item) => item.getAttribute('data-nav-key') === activePrimaryNavKey,
@@ -2848,6 +2871,170 @@ function cyclePrimaryNav(step) {
   if (nextNavKey) {
     setPrimaryNav(nextNavKey);
   }
+}
+
+function refreshPrimaryNavItems() {
+  primaryNavItems = Array.from(document.querySelectorAll('.primary-nav-item'));
+}
+
+function featureRuntimeNavKey(feature, item) {
+  return `feature:${feature.id}:${item.key}`;
+}
+
+function getFeatureRuntimeItem(navKey) {
+  return (
+    enabledFeatureRuntimeItems.find((item) => item.navKey === navKey) || null
+  );
+}
+
+function renderFeatureRuntimeStatus(message) {
+  if (!featureRuntimeOutlet) return;
+  featureRuntimeOutlet.innerHTML = `<div class="feature-runtime-status">${escapeHtml(message)}</div>`;
+}
+
+async function loadEnabledFeatures() {
+  if (!primaryNav) return;
+  try {
+    const res = await apiFetch('/api/features/enabled');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderFeatureNavItems(Array.isArray(data.features) ? data.features : []);
+  } catch (err) {
+    console.error('Failed to load enabled features:', err);
+  }
+}
+
+function renderFeatureNavItems(features) {
+  const existing = primaryNav.querySelectorAll('[data-feature-nav="true"]');
+  existing.forEach((item) => item.remove());
+  enabledFeatureRuntimeItems = [];
+
+  const navItems = [];
+  features.forEach((feature) => {
+    (feature.nav || []).forEach((item) => {
+      navItems.push({
+        feature,
+        item,
+        navKey: featureRuntimeNavKey(feature, item),
+        order: Number.isFinite(item.order) ? item.order : 0,
+      });
+    });
+  });
+  navItems.sort(
+    (a, b) => a.order - b.order || a.item.label.localeCompare(b.item.label),
+  );
+  enabledFeatureRuntimeItems = navItems;
+
+  navItems.forEach((entry) => {
+    const button = document.createElement('button');
+    button.className = 'primary-nav-item';
+    button.setAttribute('data-nav-key', entry.navKey);
+    button.setAttribute('data-feature-nav', 'true');
+    button.setAttribute('data-feature-id', entry.feature.id);
+    button.innerHTML = `
+      <span class="primary-nav-dot"></span>
+      <span class="primary-nav-label">${escapeHtml(entry.item.label || entry.feature.name)}</span>
+    `;
+    button.addEventListener('click', () => setPrimaryNav(entry.navKey));
+    primaryNav.appendChild(button);
+  });
+  refreshPrimaryNavItems();
+  primaryNavItems.forEach((item) => {
+    item.classList.toggle(
+      'active',
+      item.getAttribute('data-nav-key') === activePrimaryNavKey,
+    );
+  });
+}
+
+async function mountFeatureRenderer(entry) {
+  if (!featureRuntimeOutlet) return;
+  if (mountedFeatureNavKey === entry.navKey) return;
+  const mountSeq = ++featureRendererMountSeq;
+  const cleanup = featureRendererCleanups.get(mountedFeatureNavKey);
+  if (typeof cleanup === 'function') {
+    try {
+      cleanup();
+    } catch (err) {
+      console.warn('Feature renderer cleanup failed:', err);
+    }
+  }
+  featureRuntimeOutlet.innerHTML = '';
+  renderFeatureRuntimeStatus('Loading...');
+  const entryUrl =
+    entry.item.rendererEntryUrl || entry.feature.rendererEntryUrl;
+  if (!entryUrl) {
+    renderFeatureRuntimeStatus('Feature renderer entry is not configured');
+    mountedFeatureNavKey = entry.navKey;
+    return;
+  }
+  let mod = featureRendererModules.get(entryUrl);
+  if (!mod) {
+    mod = await import(apiUrl(entryUrl));
+    featureRendererModules.set(entryUrl, mod);
+  }
+  if (
+    mountSeq !== featureRendererMountSeq ||
+    activePrimaryNavKey !== entry.navKey
+  ) {
+    return;
+  }
+  featureRuntimeOutlet.innerHTML = '';
+  const mount =
+    typeof mod.mount === 'function' ? mod.mount : mod.default?.mount;
+  if (typeof mount !== 'function') {
+    renderFeatureRuntimeStatus('Feature renderer does not export mount()');
+    mountedFeatureNavKey = entry.navKey;
+    return;
+  }
+  const result = await mount({
+    root: featureRuntimeOutlet,
+    feature: entry.feature,
+    navItem: entry.item,
+    apiFetch,
+    apiUrl,
+    showToast,
+  });
+  if (
+    mountSeq !== featureRendererMountSeq ||
+    activePrimaryNavKey !== entry.navKey
+  ) {
+    try {
+      if (typeof result === 'function') {
+        result();
+      } else if (result && typeof result.unmount === 'function') {
+        result.unmount();
+      }
+    } catch (err) {
+      console.warn('Feature renderer cleanup failed:', err);
+    }
+    return;
+  }
+  if (typeof result === 'function') {
+    featureRendererCleanups.set(entry.navKey, result);
+  } else if (result && typeof result.unmount === 'function') {
+    featureRendererCleanups.set(entry.navKey, () => result.unmount());
+  }
+  mountedFeatureNavKey = entry.navKey;
+}
+
+function unmountCurrentFeatureRenderer() {
+  featureRendererMountSeq += 1;
+  if (!mountedFeatureNavKey) {
+    if (featureRuntimeOutlet) featureRuntimeOutlet.innerHTML = '';
+    return;
+  }
+  const cleanup = featureRendererCleanups.get(mountedFeatureNavKey);
+  if (typeof cleanup === 'function') {
+    try {
+      cleanup();
+    } catch (err) {
+      console.warn('Feature renderer cleanup failed:', err);
+    }
+  }
+  featureRendererCleanups.delete(mountedFeatureNavKey);
+  mountedFeatureNavKey = '';
+  if (featureRuntimeOutlet) featureRuntimeOutlet.innerHTML = '';
 }
 
 function openSchedulersPanel() {
@@ -27549,6 +27736,7 @@ document.addEventListener(
 connectWS();
 loadGroups();
 warmWorkflowCreateOptions();
+loadEnabledFeatures();
 
 // --- Event listeners ---
 if (primaryNav) {

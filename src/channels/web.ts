@@ -51,9 +51,13 @@ import {
   PROJECT_ROOT,
 } from '../config.js';
 import {
+  deleteFeatureData,
   featureApiRoutes,
+  getFeatureDeletionSummary,
   getEnabledFeatureInfo,
+  listFeatureManagementInfo,
   resolveEnabledFeatureStaticPath,
+  setFeatureEnabled,
 } from '../features/index.js';
 import { readEnvFile } from '../env.js';
 import {
@@ -931,6 +935,17 @@ class WebChannel {
       if (pathname === '/api/features/enabled' && req.method === 'GET') {
         return this.apiGetEnabledFeatures(res);
       }
+      if (pathname === '/api/features/config' && req.method === 'GET') {
+        return this.apiGetFeatureConfig(res);
+      }
+      if (pathname.startsWith('/api/features/')) {
+        const handledFeatureManagement = await this.handleFeatureManagementApi(
+          pathname,
+          req,
+          res,
+        );
+        if (handledFeatureManagement) return;
+      }
       if (
         pathname.startsWith('/api/features/') &&
         (await featureApiRoutes.dispatch({ req, res, url: reqUrl }))
@@ -1491,6 +1506,89 @@ class WebChannel {
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ features }));
+  }
+
+  private apiGetFeatureConfig(res: http.ServerResponse): void {
+    const features = listFeatureManagementInfo();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ features }));
+  }
+
+  private async handleFeatureManagementApi(
+    pathname: string,
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<boolean> {
+    const match = pathname.match(
+      /^\/api\/features\/([^/]+)\/(enable|disable|delete-summary|delete-data)$/,
+    );
+    if (!match) return false;
+    const featureId = decodeURIComponent(match[1]);
+    const action = match[2];
+    try {
+      if (action === 'enable' || action === 'disable') {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return true;
+        }
+        const result = setFeatureEnabled({
+          featureId,
+          enabled: action === 'enable',
+        });
+        if (result.error) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: result.error }));
+          return true;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ...result }));
+        return true;
+      }
+      if (action === 'delete-summary') {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return true;
+        }
+        const summary = getFeatureDeletionSummary(featureId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ summary }));
+        return true;
+      }
+      if (action === 'delete-data') {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return true;
+        }
+        let body: unknown = {};
+        try {
+          body = await this.parseJsonBody(req);
+        } catch {
+          // Fall through to confirmation validation.
+        }
+        if ((body as { confirm?: unknown }).confirm !== true) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'confirm=true required' }));
+          return true;
+        }
+        const result = deleteFeatureData(featureId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ...result }));
+        return true;
+      }
+    } catch (err) {
+      logger.error({ err, featureId, action }, 'Feature management API error');
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return true;
+    }
+    return false;
   }
 
   private apiGetGroups(reqUrl: URL, res: http.ServerResponse): void {
@@ -3045,6 +3143,8 @@ class WebChannel {
       source_file: entry.source_file
         ? path.relative(PROJECT_ROOT, entry.source_file)
         : null,
+      source_feature_id: entry.source_feature_id,
+      readonly: entry.readonly,
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ contracts }));
@@ -3277,7 +3377,17 @@ class WebChannel {
       return;
     }
 
-    writeCardRegistry(cards);
+    try {
+      writeCardRegistry(cards);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return;
+    }
     loadWorkflowConfigs();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
@@ -3409,7 +3519,17 @@ class WebChannel {
       return;
     }
 
-    writeCardRegistry(nextCards);
+    try {
+      writeCardRegistry(nextCards);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return;
+    }
     loadWorkflowConfigs();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(

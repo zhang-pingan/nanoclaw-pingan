@@ -63,3 +63,12 @@ export function loadFeatureRuntimeConfig(): FeatureRuntimeConfig {
   });
   return { enabled: unique(ids), source: 'local' };
 }
+
+export function saveLocalFeatureRuntimeConfig(enabled: string[]): void {
+  fs.mkdirSync(path.dirname(LOCAL_FEATURES_CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(
+    LOCAL_FEATURES_CONFIG_PATH,
+    `${JSON.stringify({ enabled: unique(enabled) }, null, 2)}\n`,
+    'utf-8',
+  );
+}

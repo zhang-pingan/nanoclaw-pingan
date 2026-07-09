@@ -302,9 +302,11 @@ export function normalizeFeatureManifest(input: unknown): {
     permissions: normalizePermissions(input.permissions, errors),
   };
 
+  const defaultApiPrefix = `/api/features/${manifest.id}`;
   if (
     manifest.apiPrefix &&
-    !manifest.apiPrefix.startsWith(`/api/features/${manifest.id}`)
+    manifest.apiPrefix !== defaultApiPrefix &&
+    !manifest.apiPrefix.startsWith(`${defaultApiPrefix}/`)
   ) {
     errors.push(
       `apiPrefix "${manifest.apiPrefix}" must start with /api/features/${manifest.id}`,

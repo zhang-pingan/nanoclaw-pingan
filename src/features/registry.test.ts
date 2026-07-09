@@ -61,4 +61,33 @@ describe('feature API route registry', () => {
       registry.register({ featureId: 'another-feature', ...route }),
     ).toThrow(/conflict/);
   });
+
+  it('detects prefix and exact route overlaps', () => {
+    const registry = new ApiRouteRegistry();
+    registry.registerPrefix({
+      featureId: 'example-feature',
+      apiPrefix: '/api/features/example-feature',
+      prefix: '/api/features/example-feature',
+      handler: () => undefined,
+    });
+
+    expect(() =>
+      registry.register({
+        featureId: 'another-feature',
+        apiPrefix: '/api/features/another-feature',
+        method: 'GET',
+        path: '/api/features/another-feature/ping',
+        handler: () => undefined,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      registry.register({
+        featureId: 'example-feature',
+        apiPrefix: '/api/features/example-feature',
+        method: 'GET',
+        path: '/api/features/example-feature/ping',
+        handler: () => undefined,
+      }),
+    ).toThrow(/overlaps prefix/);
+  });
 });

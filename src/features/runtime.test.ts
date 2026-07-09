@@ -168,5 +168,62 @@ describe('feature runtime', () => {
     ).toMatchObject({
       body: 'Example',
     });
+    expect(() =>
+      runtime.resolveEnabledFeatureStaticPath(
+        '/features/example-feature/feature.json',
+      ),
+    ).toThrow(/renderer/);
+    expect(
+      runtime.resolveEnabledFeatureStaticPath(
+        '/features/example-feature/renderer/index.js',
+      )?.filePath,
+    ).toContain(
+      path.join('features', 'example-feature', 'renderer', 'index.js'),
+    );
+  });
+
+  it('rejects enabled features with missing declared resource directories', async () => {
+    setupFeatureWorkspace();
+    fs.rmSync(
+      path.join(
+        tempDir as string,
+        'features',
+        'example-feature',
+        'container',
+        'cards',
+      ),
+      { recursive: true, force: true },
+    );
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const runtime = await import('./runtime.js');
+
+    await expect(runtime.activateConfiguredFeatures()).rejects.toThrow(
+      /resources.cards not found/,
+    );
+  });
+
+  it('requires feature MCP profiles to be declared in permissions', async () => {
+    const workspace = setupFeatureWorkspace();
+    const featureRoot = path.join(workspace, 'features', 'example-feature');
+    fs.mkdirSync(path.join(featureRoot, 'container', 'mcp'), {
+      recursive: true,
+    });
+    writeJson(path.join(featureRoot, 'container', 'mcp', 'mcp.json'), {
+      profiles: { example_mcp: [] },
+      groups: { global: ['example_mcp'] },
+    });
+    const manifestPath = path.join(featureRoot, 'feature.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+    manifest.resources.mcp = './container/mcp';
+    writeJson(manifestPath, manifest);
+
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const runtime = await import('./runtime.js');
+
+    await expect(runtime.activateConfiguredFeatures()).rejects.toThrow(
+      /permissions\.mcpServers/,
+    );
   });
 });

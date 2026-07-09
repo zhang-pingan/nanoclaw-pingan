@@ -89,6 +89,7 @@ import {
   WorkflowDefinitionTransition,
   WorkflowManualRequirementCreateConfig,
 } from './workflow-definition.js';
+import { getWorkflowDefinitionFeatureId } from './workflow-definition-files.js';
 import {
   getDeliverableFileNameForRole,
   getWorkflowArtifactFileNameForRef,
@@ -1133,9 +1134,20 @@ function validateActiveWorkflowGate(): void {
     const config = getWorkflowTypeConfig(workflow.workflow_type);
     const state = config?.states[workflow.status];
     if (!config) {
-      invalid.push(
-        `${workflow.id}: unknown workflow_type ${workflow.workflow_type}`,
-      );
+      if (workflow.feature_id) {
+        logger.warn(
+          {
+            workflowId: workflow.id,
+            workflowType: workflow.workflow_type,
+            featureId: workflow.feature_id,
+          },
+          'Skipping disabled feature workflow during active workflow gate',
+        );
+      } else {
+        invalid.push(
+          `${workflow.id}: unknown workflow_type ${workflow.workflow_type}`,
+        );
+      }
       continue;
     }
     if (workflow.status !== 'paused' && !state) {
@@ -4445,6 +4457,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
   error?: string;
 } {
   const workflowType = opts.workflowType;
+  const featureId = getWorkflowDefinitionFeatureId(workflowType);
 
   // Check if workflow type config exists
   const config = getWorkflowTypeConfig(workflowType);
@@ -4538,6 +4551,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
           source_jid: opts.sourceJid,
           paused_from: null,
           workflow_type: workflowType,
+          feature_id: featureId,
           created_at: now,
           updated_at: now,
         },
@@ -4557,6 +4571,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       source_jid: opts.sourceJid,
       paused_from: null,
       workflow_type: workflowType,
+      feature_id: featureId,
       created_at: now,
       updated_at: now,
     });

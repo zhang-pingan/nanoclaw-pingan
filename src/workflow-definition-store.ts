@@ -11,6 +11,7 @@ import {
 import { getPublishedWorkflowDefinitions } from './workflow-definition-registry.js';
 import {
   readWorkflowDefinitionRegistryFromDir,
+  readWorkflowDefinitionRegistryWithSources,
   validateWorkflowDefinitionKey,
   writeWorkflowDefinitionBundle,
   writeWorkflowDefinitionRegistryToDir,
@@ -51,8 +52,10 @@ export function listWorkflowDefinitionBundles(): Array<{
   published_version: number | null;
   draft_version: number | null;
   version_count: number;
+  source_feature_id: string | null;
+  readonly: boolean;
 }> {
-  const registry = readWorkflowDefinitionRegistry();
+  const { registry, sources } = readWorkflowDefinitionRegistryWithSources();
   return Object.values(registry.definitions)
     .map((bundle) => {
       const versions = sortVersions(bundle.versions);
@@ -69,6 +72,8 @@ export function listWorkflowDefinitionBundles(): Array<{
           : null,
         draft_version: drafts.length ? drafts[drafts.length - 1].version : null,
         version_count: versions.length,
+        source_feature_id: sources[bundle.key]?.featureId || null,
+        readonly: !!sources[bundle.key]?.featureId,
       };
     })
     .sort((a, b) => a.key.localeCompare(b.key));
@@ -140,7 +145,11 @@ export function saveWorkflowDefinitionDraft(input: {
     versions: sortVersions(versions),
   };
 
-  writeWorkflowDefinitionBundle(registry.definitions[input.key]);
+  try {
+    writeWorkflowDefinitionBundle(registry.definitions[input.key]);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
   return { definition };
 }
 
@@ -189,7 +198,11 @@ export function publishWorkflowDefinitionVersion(input: {
     return version;
   });
 
-  writeWorkflowDefinitionBundle(bundle);
+  try {
+    writeWorkflowDefinitionBundle(bundle);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
   return {
     definition: bundle.versions.find(
       (version) => version.version === target.version,
@@ -232,6 +245,10 @@ export function deleteWorkflowDefinitionVersion(input: {
   }
 
   bundle.versions = remaining;
-  writeWorkflowDefinitionBundle(bundle);
+  try {
+    writeWorkflowDefinitionBundle(bundle);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
   return { ok: true };
 }

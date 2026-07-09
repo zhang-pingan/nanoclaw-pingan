@@ -19,3 +19,9 @@ export {
   featureNavigation,
   featureResources,
 } from './registry.js';
+export {
+  deleteFeatureData,
+  getFeatureDeletionSummary,
+  listFeatureManagementInfo,
+  setFeatureEnabled,
+} from './management.js';

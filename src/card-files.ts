@@ -33,12 +33,26 @@ function ensureCardsDir(): void {
   fs.mkdirSync(getCardsDir(), { recursive: true });
 }
 
-function getCardSourceDirs(): Array<{ dir: string; label: string }> {
+interface CardSourceDir {
+  dir: string;
+  label: string;
+  featureId: string | null;
+}
+
+export interface CardGroupSource {
+  featureId: string | null;
+  label: string;
+  dir: string;
+  filePath: string;
+}
+
+function getCardSourceDirs(): CardSourceDir[] {
   return [
-    { dir: getCardsDir(), label: 'core' },
+    { dir: getCardsDir(), label: 'core', featureId: null },
     ...featureResources.list('cards').map((source) => ({
       dir: source.dir,
       label: `feature:${source.featureId}`,
+      featureId: source.featureId,
     })),
   ];
 }
@@ -98,7 +112,15 @@ export function readCardRegistryFromDir(): Record<
   string,
   Record<string, CardConfig>
 > {
+  return readCardRegistryWithSources().registry;
+}
+
+export function readCardRegistryWithSources(): {
+  registry: Record<string, Record<string, CardConfig>>;
+  sources: Record<string, CardGroupSource>;
+} {
   const registry: Record<string, Record<string, CardConfig>> = {};
+  const cardSources: Record<string, CardGroupSource> = {};
   for (const source of getCardSourceDirs()) {
     if (!fs.existsSync(source.dir)) continue;
     const files = fs
@@ -117,10 +139,31 @@ export function readCardRegistryFromDir(): Record<
         );
       }
       registry[group.workflowType] = group.cards;
+      cardSources[group.workflowType] = {
+        featureId: source.featureId,
+        label: source.label,
+        dir: source.dir,
+        filePath: path.join(source.dir, fileName),
+      };
     }
   }
 
-  return registry;
+  return { registry, sources: cardSources };
+}
+
+export function getCardGroupSource(
+  workflowType: string,
+): CardGroupSource | null {
+  return readCardRegistryWithSources().sources[workflowType] || null;
+}
+
+function assertCoreWritableCardGroup(workflowType: string): void {
+  const source = getCardGroupSource(workflowType);
+  if (source?.featureId) {
+    throw new Error(
+      `Card group "${workflowType}" is owned by feature "${source.featureId}" and cannot be edited from the core editor`,
+    );
+  }
 }
 
 export function writeCardGroup(
@@ -129,6 +172,7 @@ export function writeCardGroup(
 ): void {
   const keyError = validateCardRegistryKey(workflowType);
   if (keyError) throw new Error(keyError);
+  assertCoreWritableCardGroup(workflowType);
   ensureCardsDir();
   fs.writeFileSync(
     getCardGroupFilePath(workflowType),
@@ -141,6 +185,9 @@ export function writeCardRegistryToDir(
   registry: Record<string, Record<string, CardConfig>>,
 ): void {
   ensureCardsDir();
+  for (const workflowType of Object.keys(registry)) {
+    assertCoreWritableCardGroup(workflowType);
+  }
 
   for (const [workflowType, cards] of Object.entries(registry)) {
     writeCardGroup(workflowType, cards);

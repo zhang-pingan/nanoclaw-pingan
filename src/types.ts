@@ -592,6 +592,7 @@ export interface Workflow {
   source_jid: string;
   paused_from: WorkflowStatus | null;
   workflow_type: string;
+  feature_id?: string | null;
   created_at: string;
   updated_at: string;
 }

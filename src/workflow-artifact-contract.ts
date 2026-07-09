@@ -98,17 +98,23 @@ export interface WorkflowArtifactPayloadValidationIssue {
 
 let cachedContracts: Record<string, WorkflowArtifactContract> | null = null;
 let cachedContractSources: Record<string, string> | null = null;
+let cachedContractSourceFeatureIds: Record<string, string | null> | null = null;
 
 function contractsDir(): string {
   return path.join(PROJECT_ROOT, 'container', 'artifact-contracts');
 }
 
-function contractSourceDirs(): Array<{ dir: string; label: string }> {
+function contractSourceDirs(): Array<{
+  dir: string;
+  label: string;
+  featureId: string | null;
+}> {
   return [
-    { dir: contractsDir(), label: 'core' },
+    { dir: contractsDir(), label: 'core', featureId: null },
     ...featureResources.list('artifactContracts').map((source) => ({
       dir: source.dir,
       label: `feature:${source.featureId}`,
+      featureId: source.featureId,
     })),
   ];
 }
@@ -120,6 +126,7 @@ export function loadWorkflowArtifactContracts(): Record<
   if (cachedContracts) return cachedContracts;
   const registry: Record<string, WorkflowArtifactContract> = {};
   const sources: Record<string, string> = {};
+  const sourceFeatureIds: Record<string, string | null> = {};
 
   for (const source of contractSourceDirs()) {
     if (!fs.existsSync(source.dir)) continue;
@@ -140,6 +147,7 @@ export function loadWorkflowArtifactContracts(): Record<
           }
           registry[contract.id] = contract;
           sources[contract.id] = fullPath;
+          sourceFeatureIds[contract.id] = source.featureId;
         }
       } catch (err) {
         logger.error(
@@ -155,6 +163,7 @@ export function loadWorkflowArtifactContracts(): Record<
 
   cachedContracts = registry;
   cachedContractSources = sources;
+  cachedContractSourceFeatureIds = sourceFeatureIds;
   return registry;
 }
 
@@ -168,12 +177,16 @@ export function getWorkflowArtifactContract(
 export function listWorkflowArtifactContracts(): Array<{
   contract: WorkflowArtifactContract;
   source_file: string | null;
+  source_feature_id: string | null;
+  readonly: boolean;
 }> {
   const registry = loadWorkflowArtifactContracts();
   return Object.entries(registry)
     .map(([id, contract]) => ({
       contract,
       source_file: cachedContractSources?.[id] || null,
+      source_feature_id: cachedContractSourceFeatureIds?.[id] || null,
+      readonly: !!cachedContractSourceFeatureIds?.[id],
     }))
     .sort((a, b) => a.contract.id.localeCompare(b.contract.id));
 }
@@ -243,6 +256,12 @@ export function saveWorkflowArtifactContract(input: {
   }
 
   loadWorkflowArtifactContracts();
+  const sourceFeatureId = cachedContractSourceFeatureIds?.[ref] || null;
+  if (sourceFeatureId) {
+    return {
+      error: `Artifact contract "${ref}" is owned by feature "${sourceFeatureId}" and cannot be edited from the core editor`,
+    };
+  }
   const sourceFile = cachedContractSources?.[ref];
   if (!sourceFile) {
     return { error: `Artifact contract "${ref}" not found` };
@@ -771,6 +790,7 @@ export function evaluateWorkflowArtifactContract(input: {
 export function clearWorkflowArtifactContractCache(): void {
   cachedContracts = null;
   cachedContractSources = null;
+  cachedContractSourceFeatureIds = null;
 }
 
 export function clearWorkflowArtifactContractCacheForTest(): void {

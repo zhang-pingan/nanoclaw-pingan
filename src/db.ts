@@ -293,6 +293,16 @@ function createSchema(database: Database.Database): void {
       applied_at TEXT NOT NULL,
       PRIMARY KEY (feature_id, version)
     );
+    CREATE TABLE IF NOT EXISTS feature_audit_events (
+      id TEXT PRIMARY KEY,
+      feature_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_feature_audit_events_feature
+      ON feature_audit_events(feature_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS agent_queries (
       id TEXT PRIMARY KEY,
@@ -548,6 +558,7 @@ function createSchema(database: Database.Database): void {
       source_jid TEXT NOT NULL,
       paused_from TEXT,
       workflow_type TEXT DEFAULT 'dev_test',
+      feature_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -1087,6 +1098,12 @@ function createSchema(database: Database.Database): void {
     /* column already exists */
   }
 
+  try {
+    database.exec(`ALTER TABLE workflows ADD COLUMN feature_id TEXT`);
+  } catch {
+    /* column already exists */
+  }
+
   normalizeWorkflowSchema(database);
 
   try {
@@ -1489,6 +1506,7 @@ function normalizeWorkflowSchema(database: Database.Database): void {
       source_jid TEXT NOT NULL,
       paused_from TEXT,
       workflow_type TEXT DEFAULT 'dev_test',
+      feature_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -1506,6 +1524,7 @@ function normalizeWorkflowSchema(database: Database.Database): void {
       source_jid,
       paused_from,
       workflow_type,
+      ${columnNames.has('feature_id') ? 'feature_id' : 'NULL AS feature_id'},
       created_at,
       updated_at,
       ${columnNames.has('context_json') ? 'context_json' : 'NULL AS context_json'},
@@ -1522,8 +1541,8 @@ function normalizeWorkflowSchema(database: Database.Database): void {
     INSERT INTO workflows_next (
       id, name, service, start_from, context_json, status,
       current_delegation_id, round, source_jid, paused_from,
-      workflow_type, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      workflow_type, feature_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const row of selectRows.all() as Array<Record<string, unknown>>) {
@@ -1552,6 +1571,7 @@ function normalizeWorkflowSchema(database: Database.Database): void {
       row.source_jid,
       row.paused_from ?? null,
       row.workflow_type ?? 'dev_test',
+      row.feature_id ?? null,
       row.created_at,
       row.updated_at,
     );
@@ -1588,6 +1608,10 @@ function hydrateWorkflowRow(
         ? null
         : String(row.paused_from),
     workflow_type: String(row.workflow_type || 'dev_test'),
+    feature_id:
+      row.feature_id === null || row.feature_id === undefined
+        ? null
+        : String(row.feature_id),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -2611,6 +2635,28 @@ export function recordFeatureMigration(input: {
   );
 }
 
+export function recordFeatureAuditEvent(input: {
+  featureId: string;
+  action: string;
+  status: 'success' | 'failure';
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+}): void {
+  const createdAt = input.createdAt || new Date().toISOString();
+  db.prepare(
+    `INSERT INTO feature_audit_events (
+       id, feature_id, action, status, metadata_json, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    `feature-audit-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    input.featureId,
+    input.action,
+    input.status,
+    input.metadata ? JSON.stringify(input.metadata) : null,
+    createdAt,
+  );
+}
+
 // --- Delegation accessors ---
 
 export function createDelegation(delegation: Delegation): void {
@@ -2824,8 +2870,8 @@ export function getExpiredPendingAskQuestions(
 
 export function createWorkflow(workflow: Workflow): void {
   db.prepare(
-    `INSERT INTO workflows (id, name, service, start_from, context_json, status, current_delegation_id, round, source_jid, paused_from, workflow_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflows (id, name, service, start_from, context_json, status, current_delegation_id, round, source_jid, paused_from, workflow_type, feature_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     workflow.id,
     workflow.name,
@@ -2838,6 +2884,7 @@ export function createWorkflow(workflow: Workflow): void {
     workflow.source_jid,
     workflow.paused_from || null,
     workflow.workflow_type,
+    workflow.feature_id || null,
     workflow.created_at,
     workflow.updated_at,
   );

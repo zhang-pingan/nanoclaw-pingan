@@ -50,15 +50,26 @@ function isWorkflowDefinitionVersionBundle(
   );
 }
 
-function getWorkflowDefinitionSourceDirs(): Array<{
+interface WorkflowDefinitionSourceDir {
   dir: string;
   label: string;
-}> {
+  featureId: string | null;
+}
+
+export interface WorkflowDefinitionSource {
+  featureId: string | null;
+  label: string;
+  dir: string;
+  filePath: string;
+}
+
+function getWorkflowDefinitionSourceDirs(): WorkflowDefinitionSourceDir[] {
   return [
-    { dir: getWorkflowDefinitionsDir(), label: 'core' },
+    { dir: getWorkflowDefinitionsDir(), label: 'core', featureId: null },
     ...featureResources.list('workflowDefinitions').map((source) => ({
       dir: source.dir,
       label: `feature:${source.featureId}`,
+      featureId: source.featureId,
     })),
   ];
 }
@@ -86,8 +97,12 @@ function readWorkflowDefinitionBundleFile(
   return raw;
 }
 
-export function readWorkflowDefinitionRegistryFromDir(): WorkflowDefinitionRegistry {
+export function readWorkflowDefinitionRegistryWithSources(): {
+  registry: WorkflowDefinitionRegistry;
+  sources: Record<string, WorkflowDefinitionSource>;
+} {
   const definitions: WorkflowDefinitionRegistry['definitions'] = {};
+  const definitionSources: Record<string, WorkflowDefinitionSource> = {};
   const sources = getWorkflowDefinitionSourceDirs();
 
   for (const source of sources) {
@@ -105,10 +120,39 @@ export function readWorkflowDefinitionRegistryFromDir(): WorkflowDefinitionRegis
         );
       }
       definitions[bundle.key] = bundle;
+      definitionSources[bundle.key] = {
+        featureId: source.featureId,
+        label: source.label,
+        dir: source.dir,
+        filePath: path.join(source.dir, fileName),
+      };
     }
   }
 
-  return { definitions };
+  return { registry: { definitions }, sources: definitionSources };
+}
+
+export function readWorkflowDefinitionRegistryFromDir(): WorkflowDefinitionRegistry {
+  return readWorkflowDefinitionRegistryWithSources().registry;
+}
+
+export function getWorkflowDefinitionSource(
+  key: string,
+): WorkflowDefinitionSource | null {
+  return readWorkflowDefinitionRegistryWithSources().sources[key] || null;
+}
+
+export function getWorkflowDefinitionFeatureId(key: string): string | null {
+  return getWorkflowDefinitionSource(key)?.featureId || null;
+}
+
+function assertCoreWritableWorkflowDefinition(key: string): void {
+  const source = getWorkflowDefinitionSource(key);
+  if (source?.featureId) {
+    throw new Error(
+      `Workflow definition "${key}" is owned by feature "${source.featureId}" and cannot be edited from the core editor`,
+    );
+  }
 }
 
 export function writeWorkflowDefinitionBundle(
@@ -116,6 +160,7 @@ export function writeWorkflowDefinitionBundle(
 ): void {
   const keyError = validateWorkflowDefinitionKey(bundle.key);
   if (keyError) throw new Error(keyError);
+  assertCoreWritableWorkflowDefinition(bundle.key);
   ensureWorkflowDefinitionsDir();
   fs.writeFileSync(
     getWorkflowDefinitionFilePath(bundle.key),
@@ -128,6 +173,9 @@ export function writeWorkflowDefinitionRegistryToDir(
   registry: WorkflowDefinitionRegistry,
 ): void {
   ensureWorkflowDefinitionsDir();
+  for (const key of Object.keys(registry.definitions)) {
+    assertCoreWritableWorkflowDefinition(key);
+  }
 
   for (const [key, bundle] of Object.entries(registry.definitions)) {
     if (bundle.key !== key) {

@@ -54,6 +54,7 @@ export function runFeatureMigrations(source: FeatureMigrationSource): void {
     const version = path.basename(fileName, '.sql');
     const fullPath = path.join(source.dir, fileName);
     const sql = fs.readFileSync(fullPath, 'utf-8');
+    assertFeatureMigrationSqlAllowed(source.featureId, version, sql);
     const checksum = crypto.createHash('sha256').update(sql).digest('hex');
     const existing = getFeatureMigration(source.featureId, version);
     if (existing) {
@@ -79,5 +80,46 @@ export function runFeatureMigrations(source: FeatureMigrationSource): void {
       { featureId: source.featureId, version, file: fullPath },
       'Feature migration applied',
     );
+  }
+}
+
+const CORE_TABLE_PATTERNS = [
+  'registered_groups',
+  'feature_group_bindings',
+  'feature_migrations',
+  'workflows',
+  'workbench_',
+  'agent_queries',
+  'workflow_events',
+  'workflow_interrupts',
+  'workflow_checkpoints',
+  'workflow_outbox',
+  'delegations',
+  'messages',
+  'chats',
+  'sessions',
+  'router_state',
+  'scheduled_tasks',
+  'memories',
+  'knowledge_',
+];
+
+function assertFeatureMigrationSqlAllowed(
+  featureId: string,
+  version: string,
+  sql: string,
+): void {
+  const normalized = sql
+    .replace(/--.*$/gm, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .toLowerCase();
+  for (const tablePattern of CORE_TABLE_PATTERNS) {
+    const escaped = tablePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b${escaped}[a-z0-9_]*\\b`, 'i');
+    if (pattern.test(normalized)) {
+      throw new Error(
+        `Feature ${featureId} migration ${version} references protected core table pattern "${tablePattern}"`,
+      );
+    }
   }
 }

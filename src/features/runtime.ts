@@ -137,6 +137,11 @@ export function resolveEnabledFeatureStaticPath(
   const rest = decodeURIComponent(match[2]);
   const feature = getEnabledFeatureById(featureId);
   if (!feature) return null;
+  if (rest !== 'renderer' && !rest.startsWith('renderer/')) {
+    throw new Error(
+      `feature static path ${urlPathname} must stay under renderer/`,
+    );
+  }
   const filePath = assertPathInsideFeature(
     feature.root,
     `./${rest}`,
@@ -211,12 +216,17 @@ function registerDeclaredResources(feature: LoadedFeatureManifest): void {
       relativePath,
       `resources.${kind}`,
     );
-    if (!fs.existsSync(dir)) continue;
+    if (!fs.existsSync(dir)) {
+      throw new Error(
+        `Feature ${feature.manifest.id} resources.${kind} not found: ${dir}`,
+      );
+    }
     if (!fs.statSync(dir).isDirectory()) {
       throw new Error(
         `Feature ${feature.manifest.id} resources.${kind} must be a directory: ${dir}`,
       );
     }
+    validateDeclaredResourcePermissions(feature.manifest, kind, dir);
     featureResources.register({
       featureId: feature.manifest.id,
       kind,
@@ -225,9 +235,46 @@ function registerDeclaredResources(feature: LoadedFeatureManifest): void {
   }
 }
 
+function validateDeclaredResourcePermissions(
+  manifest: FeatureManifest,
+  kind: keyof FeatureResources,
+  dir: string,
+): void {
+  if (kind === 'scripts' && !(manifest.permissions?.hostActions || []).length) {
+    throw new Error(
+      `Feature ${manifest.id} declares scripts resources but no permissions.hostActions`,
+    );
+  }
+  if (kind !== 'mcp') return;
+  const configPath = path.join(dir, 'mcp.json');
+  if (!fs.existsSync(configPath)) return;
+  const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`Feature ${manifest.id} MCP config must be an object`);
+  }
+  const profiles = (parsed as { profiles?: unknown }).profiles;
+  if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    throw new Error(
+      `Feature ${manifest.id} MCP config must declare a profiles object`,
+    );
+  }
+  const declaredServers = new Set(manifest.permissions?.mcpServers || []);
+  for (const profileKey of Object.keys(profiles)) {
+    if (!declaredServers.has(profileKey)) {
+      throw new Error(
+        `Feature ${manifest.id} MCP profile "${profileKey}" is not declared in permissions.mcpServers`,
+      );
+    }
+  }
+}
+
 function registerDeclaredNavigation(feature: LoadedFeatureManifest): void {
   const rendererEntryUrl = feature.manifest.rendererEntry
-    ? featureEntryUrl(feature.manifest.id, feature.manifest.rendererEntry)
+    ? featureEntryUrl(
+        feature.root,
+        feature.manifest.id,
+        feature.manifest.rendererEntry,
+      )
     : undefined;
   for (const item of feature.manifest.nav || []) {
     featureNavigation.register({
@@ -291,7 +338,11 @@ function buildEnabledFeatureInfo(
   feature: LoadedFeatureManifest,
 ): EnabledFeatureRuntimeInfo {
   const rendererEntryUrl = feature.manifest.rendererEntry
-    ? featureEntryUrl(feature.manifest.id, feature.manifest.rendererEntry)
+    ? featureEntryUrl(
+        feature.root,
+        feature.manifest.id,
+        feature.manifest.rendererEntry,
+      )
     : undefined;
   return {
     id: feature.manifest.id,
@@ -309,8 +360,26 @@ function buildEnabledFeatureInfo(
   };
 }
 
-function featureEntryUrl(featureId: string, relativePath: string): string {
+function featureEntryUrl(
+  featureRoot: string,
+  featureId: string,
+  relativePath: string,
+): string {
   const normalized = relativePath.replace(/^\.\//, '').replace(/^\/+/, '');
+  const resolved = assertPathInsideFeature(
+    featureRoot,
+    normalized,
+    'rendererEntry',
+  );
+  const rendererRoot = path.join(path.resolve(featureRoot), 'renderer');
+  if (
+    resolved !== rendererRoot &&
+    !resolved.startsWith(rendererRoot + path.sep)
+  ) {
+    throw new Error(
+      `Feature ${featureId} rendererEntry must stay under renderer/`,
+    );
+  }
   return `/features/${encodeURIComponent(featureId)}/${normalized}`;
 }
 

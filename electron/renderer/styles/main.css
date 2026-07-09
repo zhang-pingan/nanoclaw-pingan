@@ -9404,6 +9404,33 @@ body {
   display: flex;
 }
 
+#feature-runtime-screen {
+  flex: 1;
+  min-width: 0;
+  display: none;
+  background: var(--bg-primary);
+}
+
+#feature-runtime-screen.active {
+  display: flex;
+}
+
+.feature-runtime-outlet {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg-primary);
+}
+
+.feature-runtime-status {
+  width: 100%;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .trace-monitor-sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
@@ -17347,7 +17374,8 @@ body::after,
 #workflow-definitions-screen.active,
 #cards-management-screen.active,
 #configuration-screen.active,
-#trace-monitor-screen.active {
+#trace-monitor-screen.active,
+#feature-runtime-screen.active {
   background: var(--minimal-bg);
 }
 
@@ -20488,6 +20516,3 @@ textarea.workflow-wizard-input {
     max-height: 260px;
   }
 }
-
-
-

@@ -65,6 +65,16 @@ export class ApiRouteRegistry {
     const normalizedPath = normalizeApiPath(route.path);
     const normalizedPrefix = normalizeApiPath(route.apiPrefix);
     assertPathUnderPrefix(normalizedPath, normalizedPrefix, route.featureId);
+    const overlappingPrefix = this.prefixRoutes.find(
+      (existing) =>
+        normalizedPath === existing.prefix ||
+        normalizedPath.startsWith(existing.prefix + '/'),
+    );
+    if (overlappingPrefix) {
+      throw new Error(
+        `Feature API route conflict: ${route.method} ${normalizedPath} overlaps prefix ${overlappingPrefix.prefix} registered by ${overlappingPrefix.featureId}`,
+      );
+    }
     const key = `${route.method} ${normalizedPath}`;
     const existing = this.exactRoutes.get(key);
     if (existing) {
@@ -89,6 +99,16 @@ export class ApiRouteRegistry {
     const normalizedPrefix = normalizeApiPath(route.prefix);
     const allowedPrefix = normalizeApiPath(route.apiPrefix);
     assertPathUnderPrefix(normalizedPrefix, allowedPrefix, route.featureId);
+    for (const exact of this.exactRoutes.values()) {
+      if (
+        exact.path === normalizedPrefix ||
+        exact.path.startsWith(normalizedPrefix + '/')
+      ) {
+        throw new Error(
+          `Feature API prefix conflict: ${normalizedPrefix} overlaps ${exact.method} ${exact.path} registered by ${exact.featureId}`,
+        );
+      }
+    }
     for (const existing of this.prefixRoutes) {
       if (
         normalizedPrefix === existing.prefix ||
