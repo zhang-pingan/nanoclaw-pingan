@@ -151,10 +151,7 @@
                 "id": "service_codebase_location",
                 "type": "codebase_location",
                 "required": false,
-                "fields": [
-                  "repo_path",
-                  "container_path"
-                ],
+                "fields": ["repo_path", "container_path"],
                 "verify_exists": true,
                 "verify_mounted_for_role": true
               }
@@ -280,10 +277,7 @@
           },
           "kind": "approval",
           "title": "方案复核审批",
-          "allowed_actions": [
-            "approve",
-            "revise"
-          ],
+          "allowed_actions": ["approve", "revise"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -350,11 +344,7 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
         },
         "dev": {
           "type": "delegation",
@@ -383,18 +373,13 @@
                 "id": "plan_artifact",
                 "type": "artifact",
                 "required": false,
-                "refs": [
-                  "plan_doc"
-                ]
+                "refs": ["plan_doc"]
               },
               {
                 "id": "service_codebase_location",
                 "type": "codebase_location",
                 "required": false,
-                "fields": [
-                  "repo_path",
-                  "container_path"
-                ],
+                "fields": ["repo_path", "container_path"],
                 "verify_exists": true,
                 "verify_mounted_for_role": true
               }
@@ -524,10 +509,7 @@
           },
           "kind": "approval",
           "title": "确认回修或继续后续流程",
-          "allowed_actions": [
-            "approve",
-            "revise"
-          ],
+          "allowed_actions": ["approve", "revise"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -576,11 +558,7 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
         },
         "awaiting_confirm": {
           "type": "interrupt",
@@ -590,9 +568,7 @@
           },
           "kind": "approval",
           "title": "确认预发部署",
-          "allowed_actions": [
-            "approve"
-          ],
+          "allowed_actions": ["approve"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -632,11 +608,7 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
         },
         "ops_deploy": {
           "type": "delegation",
@@ -755,10 +727,7 @@
           },
           "kind": "credential",
           "title": "确认测试 Token",
-          "allowed_actions": [
-            "submit",
-            "skip"
-          ],
+          "allowed_actions": ["submit", "skip"],
           "resume_payload_schema": {
             "schema": {
               "type": "object",
@@ -824,11 +793,7 @@
               }
             }
           },
-          "allowed_channels": [
-            "web",
-            "feishu",
-            "assistant"
-          ]
+          "allowed_channels": ["web", "feishu", "assistant"]
         },
         "testing": {
           "type": "delegation",
@@ -989,10 +954,7 @@
         "paused": "⏸ 已中断"
       },
       "metadata": {
-        "tags": [
-          "default",
-          "delivery"
-        ]
+        "tags": ["default", "delivery"]
       },
       "create_form": {
         "fields": [
@@ -1004,9 +966,7 @@
             "required": true,
             "helper_text": "从 Plan 入口创建时，直接填写完整需求描述。",
             "visible_when": {
-              "entry_points": [
-                "plan"
-              ]
+              "entry_points": ["plan"]
             }
           },
           {
@@ -1015,9 +975,7 @@
             "type": "file_uploads",
             "helper_text": "支持上传多个文件，创建后会把文件地址一起带给 Plan Agent。",
             "visible_when": {
-              "entry_points": [
-                "plan"
-              ]
+              "entry_points": ["plan"]
             }
           },
           {
@@ -1033,10 +991,7 @@
             "searchable": true,
             "helper_text": "从 Dev 或 Testing 入口创建时，选择已有需求目录，用于定位交付物与历史文档。",
             "visible_when": {
-              "entry_points": [
-                "dev",
-                "testing"
-              ]
+              "entry_points": ["dev", "testing"]
             }
           },
           {
@@ -1052,6 +1007,16 @@
             "placeholder": "填写实际工作分支，如 erp_manhua 或 feature/xxx"
           }
         ]
+      },
+      "storage": {
+        "artifact_root": {
+          "kind": "workflow_runtime",
+          "path": "artifacts/{{deliverable}}"
+        },
+        "context_pack_root": {
+          "kind": "workflow_runtime",
+          "path": "context/{{stage_key}}"
+        }
       }
     }
   ]

@@ -650,6 +650,12 @@ export interface WorkbenchArtifactRecord {
   artifact_type: string;
   title: string;
   path: string;
+  location_kind?: string | null;
+  location_uri?: string | null;
+  host_path?: string | null;
+  container_path?: string | null;
+  feature_id?: string | null;
+  metadata_json?: string | null;
   source_role: string | null;
   created_at: string;
 }

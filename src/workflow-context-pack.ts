@@ -5,6 +5,7 @@ import path from 'path';
 import { GROUPS_DIR, PROJECT_ROOT, REPOS_DIR } from './config.js';
 import type { RegisteredGroup, Workflow } from './types.js';
 import type {
+  WorkflowStorageConfig,
   WorkflowContextRequirementSource,
   WorkflowContextRequirements,
 } from './workflow-definition.js';
@@ -14,6 +15,12 @@ import {
   WORKFLOW_CONTEXT_KEYS,
   WorkflowContext,
 } from './workflow-context.js';
+import {
+  isPathInsideResolvedRoot,
+  resolveWorkflowArtifactLocation,
+  resolveWorkflowStorageRoot,
+  resolveWorkspacePathToHost,
+} from './workflow-storage.js';
 
 export type WorkflowContextReadinessStatus =
   | 'ready'
@@ -89,6 +96,7 @@ interface BuildContextPackInput {
   targetFolder: string;
   registeredGroups: Record<string, RegisteredGroup>;
   contextRequirements?: WorkflowContextRequirements;
+  storage?: WorkflowStorageConfig;
 }
 
 interface ServiceConfig {
@@ -115,19 +123,6 @@ function assertSafePathSegment(label: string, value: string): void {
   }
 }
 
-function isSafeWorkspacePathSegment(value: string): boolean {
-  const segment = value.trim();
-  return (
-    !!segment &&
-    !segment.includes('\0') &&
-    segment !== '.' &&
-    segment !== '..' &&
-    !segment.includes('/') &&
-    !segment.includes('\\') &&
-    !path.isAbsolute(segment)
-  );
-}
-
 function isSafeRelativeRepoPath(repoPath: string): boolean {
   const normalized = repoPath.trim();
   return (
@@ -138,30 +133,6 @@ function isSafeRelativeRepoPath(repoPath: string): boolean {
     normalized.split('/').every((segment) => {
       return !!segment && segment !== '.' && segment !== '..';
     })
-  );
-}
-
-function workspaceContextPath(
-  service: string,
-  workflowId: string,
-  stageKey: string,
-  fileName: string,
-): string {
-  return `/workspace/projects/${service}/workflow-context/${workflowId}/${stageKey}/${fileName}`;
-}
-
-function contextPackHostDir(
-  service: string,
-  workflowId: string,
-  stageKey: string,
-): string {
-  return path.join(
-    PROJECT_ROOT,
-    'projects',
-    service,
-    'workflow-context',
-    workflowId,
-    stageKey,
   );
 }
 
@@ -300,16 +271,18 @@ function nextRefId(
   return `${prefix}-${String(count + 1).padStart(3, '0')}`;
 }
 
-function artifactPathFromRef(workflow: Workflow, ref: string): string {
+function artifactPathFromRef(
+  workflow: Workflow,
+  ref: string,
+  storage?: WorkflowStorageConfig,
+): string {
   const fileName = getWorkflowArtifactFileNameForRef(ref);
   if (fileName) {
-    const deliverable = getWorkflowContextValue(
+    return resolveWorkflowArtifactLocation({
       workflow,
-      WORKFLOW_CONTEXT_KEYS.deliverable,
-    );
-    if (deliverable) {
-      return `/workspace/projects/${workflow.service}/iteration/${deliverable}/${fileName}`;
-    }
+      storage,
+      artifactPath: fileName,
+    }).containerPath;
   }
   const contextValue = workflow.context[ref];
   return typeof contextValue === 'string' ? contextValue.trim() : '';
@@ -318,6 +291,7 @@ function artifactPathFromRef(workflow: Workflow, ref: string): string {
 function scopedHostPathFromWorkspacePath(input: {
   workflow: Workflow;
   workspacePath: string;
+  storage?: WorkflowStorageConfig;
   allowedKinds: Array<'deliverable' | 'context_pack'>;
 }): { hostPath: string; error?: string } {
   const workspacePath = input.workspacePath.trim();
@@ -329,40 +303,40 @@ function scopedHostPathFromWorkspacePath(input: {
     return { hostPath: '', error: 'path_invalid' };
   }
 
-  const allowedPrefixes: string[] = [];
+  const allowedRoots = [];
   if (input.allowedKinds.includes('deliverable')) {
-    const deliverable = getWorkflowContextValue(
-      input.workflow,
-      WORKFLOW_CONTEXT_KEYS.deliverable,
+    allowedRoots.push(
+      resolveWorkflowStorageRoot({
+        workflow: input.workflow,
+        storage: input.storage,
+        root: 'artifact_root',
+      }),
     );
-    if (deliverable && isSafeWorkspacePathSegment(deliverable)) {
-      allowedPrefixes.push(
-        `/workspace/projects/${input.workflow.service}/iteration/${deliverable}/`,
-      );
-    }
   }
   if (input.allowedKinds.includes('context_pack')) {
-    allowedPrefixes.push(
-      `/workspace/projects/${input.workflow.service}/workflow-context/${input.workflow.id}/`,
+    allowedRoots.push(
+      resolveWorkflowStorageRoot({
+        workflow: input.workflow,
+        storage: input.storage,
+        root: 'context_pack_root',
+        stageKey: input.workflow.status,
+      }),
     );
   }
 
+  const resolved = resolveWorkspacePathToHost(workspacePath);
+  if (!resolved) return { hostPath: '', error: 'unsupported_path' };
+  if (allowedRoots.length === 0) {
+    return { hostPath: '', error: 'scope_mismatch' };
+  }
   if (
-    allowedPrefixes.length === 0 ||
-    !allowedPrefixes.some((prefix) => workspacePath.startsWith(prefix))
+    !allowedRoots.some((root) =>
+      isPathInsideResolvedRoot(resolved.hostPath, root),
+    )
   ) {
     return { hostPath: '', error: 'scope_mismatch' };
   }
-
-  if (workspacePath.startsWith('/workspace/projects/')) {
-    return {
-      hostPath: path.join(
-        PROJECT_ROOT,
-        workspacePath.replace(/^\/workspace\//, ''),
-      ),
-    };
-  }
-  return { hostPath: '', error: 'unsupported_path' };
+  return { hostPath: resolved.hostPath };
 }
 
 function artifactStalenessReason(input: {
@@ -441,6 +415,7 @@ function collectWorkflowInputSource(input: {
 
 function collectArtifactSource(input: {
   workflow: Workflow;
+  storage?: WorkflowStorageConfig;
   source: WorkflowContextRequirementSource;
   missing: string[];
   evidence: Array<Record<string, unknown>>;
@@ -460,10 +435,15 @@ function collectArtifactSource(input: {
 
   let foundCount = 0;
   sourceRefs.forEach((ref) => {
-    const workspacePath = artifactPathFromRef(input.workflow, ref);
+    const workspacePath = artifactPathFromRef(
+      input.workflow,
+      ref,
+      input.storage,
+    );
     const resolved = workspacePath
       ? scopedHostPathFromWorkspacePath({
           workflow: input.workflow,
+          storage: input.storage,
           workspacePath,
           allowedKinds: ['deliverable'],
         })
@@ -740,19 +720,20 @@ function atomicWriteContent(filePath: string, content: string): void {
 export function buildWorkflowContextPack(
   input: BuildContextPackInput,
 ): WorkflowContextPackBuildResult {
-  assertSafePathSegment('service', input.workflow.service);
   assertSafePathSegment('workflow_id', input.workflow.id);
   assertSafePathSegment('stage_key', input.stageKey);
 
   const sources = input.contextRequirements?.sources || [];
   const immutableFileName = `context-pack.r${input.workflow.round}.a${input.attempt}.json`;
   const latestFileName = 'latest.json';
-  const hostDir = contextPackHostDir(
-    input.workflow.service,
-    input.workflow.id,
-    input.stageKey,
-  );
-  fs.mkdirSync(hostDir, { recursive: true });
+  const contextRoot = resolveWorkflowStorageRoot({
+    workflow: input.workflow,
+    storage: input.storage,
+    root: 'context_pack_root',
+    stageKey: input.stageKey,
+    create: true,
+  });
+  const hostDir = contextRoot.hostPath;
 
   const missingRequiredSources: string[] = [];
   const openQuestions: string[] = [];
@@ -778,6 +759,7 @@ export function buildWorkflowContextPack(
       priorArtifacts.push(
         ...collectArtifactSource({
           workflow: input.workflow,
+          storage: input.storage,
           source,
           missing: missingRequiredSources,
           evidence: evidenceIndex,
@@ -813,18 +795,8 @@ export function buildWorkflowContextPack(
     open_questions: openQuestions,
     conflicts,
   };
-  const immutablePackPath = workspaceContextPath(
-    input.workflow.service,
-    input.workflow.id,
-    input.stageKey,
-    immutableFileName,
-  );
-  const latestPackPath = workspaceContextPath(
-    input.workflow.service,
-    input.workflow.id,
-    input.stageKey,
-    latestFileName,
-  );
+  const immutablePackPath = `${contextRoot.containerPath}/${immutableFileName}`;
+  const latestPackPath = `${contextRoot.containerPath}/${latestFileName}`;
   const generatedAt = new Date().toISOString();
   const packWithoutHash: WorkflowContextPack = {
     version: 1,

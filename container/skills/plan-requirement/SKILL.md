@@ -33,7 +33,7 @@ description: Use only in the dev_test workflow. Design implementation plans for 
    - `附件文件：...` 下列出的本地文件地址
    - 如果 `附件文件` 为 `无`，按无附件处理
 2. 项目概述参考:
-   - 检查 `/workspace/projects/{服务名}/docs` 下是否存在文档。如果存在，阅读文档了解
+   - 检查 `/workspace/workflows/{workflowId}/scratch/docs` 下是否存在文档。如果存在，阅读文档了解
    - 使用 `wiki_search` 获取知识库中关于该服务的内容进行了解
 3. 优先阅读需求附件中可直接打开的文件（PRD、原型、接口文档、日志、截图说明等），提炼目标、约束与验收口径
 4. 阅读项目代码中相关的文件，理解现有实现,当文档和代码有冲突时以代码为准
@@ -71,7 +71,10 @@ description: Use only in the dev_test workflow. Design implementation plans for 
       "id": "downstream_change",
       "question": "如果涉及下游服务，是否接受同步改造？",
       "options": [
-        { "label": "需要下游同步改造", "description": "方案中同时覆盖下游改动" },
+        {
+          "label": "需要下游同步改造",
+          "description": "方案中同时覆盖下游改动"
+        },
         { "label": "本次不改下游", "description": "仅在本服务内规避或兼容" }
       ]
     }
@@ -157,12 +160,12 @@ doc_type: plan
 
 ### 步骤 4：保存方案文档
 
-将方案保存到 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/plan.md`。
+将方案保存到 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/plan.md`。
 
-例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md`
+例如：`/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/plan.md`
 
 - 文档内容即步骤 3 中的完整方案
-- 同时保存 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/traceability.json`
+- 同时保存 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/traceability.json`
 - `traceability.json` 必须是 JSON object，至少包含：
   - `statements`、`decisions`、`actions`、`acceptance_criteria`、`evidence`、`coverage`、`open_questions`
   - `coverage` 必须覆盖 Context Pack 里的 required `INPUT-*`
@@ -188,7 +191,7 @@ doc_type: plan
      - `summary`
      - `findings`：数组，可为空
      - `evidence`：数组，至少包含方案文档或关键信息来源
-     - `traceability_path`：`/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/traceability.json`
+     - `traceability_path`：`/workspace/workflows/{workflowId}/artifacts/{deliverable}/traceability.json`
    - 成功返回示例：
 
 ```json
@@ -199,28 +202,28 @@ doc_type: plan
   "work_branch": "feature/user-nickname_20260320",
   "verdict": "passed",
   "summary": "方案文档已产出，可以进入方案审核。",
-  "traceability_path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/traceability.json",
+  "traceability_path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/traceability.json",
   "findings": [],
   "evidence": [
     {
       "type": "artifact",
       "refId": "EVID-PLAN-001",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/plan.md",
       "summary": "已写入 plan.md"
     }
   ]
 }
 ```
 
-   - 若失败，`result` 也应尽量返回 JSON，至少说明 `summary`、`error`、`progress`，并保留已确认的 `service/main_branch/work_branch/deliverable`
-   - **deliverable 是文件夹名**，不含 `.md` 后缀
-   - 若委派消息已提供 `工作分支`，成功回传时这里必须原样返回该值
+- 若失败，`result` 也应尽量返回 JSON，至少说明 `summary`、`error`、`progress`，并保留已确认的 `service/main_branch/work_branch/deliverable`
+- **deliverable 是文件夹名**，不含 `.md` 后缀
+- 若委派消息已提供 `工作分支`，成功回传时这里必须原样返回该值
 
 ## 处理修改意见
 
 如果你收到的任务中包含 `[方案修改意见]`，说明用户对上一版方案提出了修改意见：
 
-1. 阅读之前保存的方案文档（位于 `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md`）
+1. 阅读之前保存的方案文档（位于 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/plan.md`）
 2. 根据修改意见调整方案
 3. 重新发送更新后的方案给用户
 4. 覆盖保存方案文档

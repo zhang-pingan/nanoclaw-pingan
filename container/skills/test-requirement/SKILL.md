@@ -24,15 +24,15 @@ description: Use only in the dev_test workflow. Test implemented features in fir
 
 ### 1. 文档分析
 
-1. 从任务描述中获取交付文档路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/dev.md`，提取：
+1. 从任务描述中获取交付文档路径，阅读 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/dev.md`，提取：
    - 需求描述与实现方案
    - 变更文件列表
    - 接口和数据库变更
    - 文档中的测试要点
-   - 如任务中提供了“测试用例文档”路径，必须先阅读并使用这些文档中的用例；路径通常为 `/workspace/projects/{服务名}/iteration/{文件夹名}/test-cases.md`
+   - 如任务中提供了“测试用例文档”路径，必须先阅读并使用这些文档中的用例；路径通常为 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/test-cases.md`
    - 如任务中提供了 `access_token`，提取该值，并在后续接口测试中统一拼装为 `Authorization: Bearer {access_token}` 请求头
    - 优先采用任务消息中明确给出的 `主分支`、`工作分支`；若文档中的分支信息与消息不一致，以消息为准，并在测试报告中说明
-2. 确认测试文档路径，优先使用任务中明确给出的 `测试文档：xxx`；若未给出，则默认使用 `/workspace/projects/{服务名}/iteration/{文件夹名}/test.md`
+2. 确认测试文档路径，优先使用任务中明确给出的 `测试文档：xxx`；若未给出，则默认使用 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/test.md`
 3. 阅读项目代码中对应的变更文件，理解实际实现
 4. 如有不清楚或者缺失测试信息(比如接口需要登录鉴权，则需要提供 `access_token`，需要具体的业务id等)的地方，优先使用提问工具向用户确认：
    - 有明确选项的决策题（如是否继续测试、是否接受已知问题、是否覆盖某类回归范围）使用 `mcp__icarus__ask_user_question`
@@ -41,7 +41,7 @@ description: Use only in the dev_test workflow. Test implemented features in fir
 
 ### 2. 测试用例生成
 
-1. 如果任务中提供了测试用例文档路径，必须读取 `/workspace/projects/{服务名}/iteration/{文件夹名}/test-cases.md` 或任务列出的其他路径；`test.md` 中的测试用例必须使用该文档内的全部用例，保留原用例意图、关键步骤和预期结果；不得无故删减、替换或重写成另一套口径
+1. 如果任务中提供了测试用例文档路径，必须读取 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/test-cases.md` 或任务列出的其他路径；`test.md` 中的测试用例必须使用该文档内的全部用例，保留原用例意图、关键步骤和预期结果；不得无故删减、替换或重写成另一套口径
 2. 可根据需求、方案、开发文档和代码额外补充必要的边界、异常、兼容性或回归用例，并在 `test.md` 中与原有用例一起编号
 3. 如果未提供测试用例文档，根据文档和代码生成测试用例，并写入 `test.md`
 4. 若 `test.md` 已存在但内容不完整，可在原文件内补全，不要创建多个测试文档
@@ -83,10 +83,10 @@ description: Use only in the dev_test workflow. Test implemented features in fir
 ### 3. 测试执行
 
 1. 按用例逐条执行，综合以下手段验证：
-   - *代码审查*：阅读变更代码确认逻辑正确性
-   - *接口测试*：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求和响应；若接口需要登录鉴权，优先使用任务中提供的 `access_token`，并显式拼装 `Authorization: Bearer {access_token}` 请求头。
-   - *日志验证*：SSH 到 `staging.log_hosts`，查看 `staging.logs_info` 和 `staging.logs_error`
-   - *数据库验证*：通过 MySQL 代理查询 `staging.mysql` 预发数据库，验证数据变更是否符合预期，注意预发表后缀加 `_gray`
+   - _代码审查_：阅读变更代码确认逻辑正确性
+   - _接口测试_：通过 `curl` 调用预发环境接口（`staging.domain`）验证请求和响应；若接口需要登录鉴权，优先使用任务中提供的 `access_token`，并显式拼装 `Authorization: Bearer {access_token}` 请求头。
+   - _日志验证_：SSH 到 `staging.log_hosts`，查看 `staging.logs_info` 和 `staging.logs_error`
+   - _数据库验证_：通过 MySQL 代理查询 `staging.mysql` 预发数据库，验证数据变更是否符合预期，注意预发表后缀加 `_gray`
 2. 对每条用例记录结果，在 `[ ]` 框内直接标记：
    - 通过：`[x]`
    - 失败：`[!]`
@@ -98,7 +98,7 @@ description: Use only in the dev_test workflow. Test implemented features in fir
 ### 4. 测试报告
 
 1. 测试完成后，不新建独立测试报告文档，而是在同一个 `test.md` 中补充首轮“测试报告”
-2. 示例路径：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md`
+2. 示例路径：`/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md`
 3. 测试报告格式示例：
 
 ```markdown
@@ -113,6 +113,7 @@ doc_type: test
 # 测试报告
 
 ## 基本信息
+
 - 需求名称：{名称}
 - 测试日期：{日期}
 - 测试环境：{staging.domain}
@@ -121,6 +122,7 @@ doc_type: test
 - 测试依据：{需求实现文档名}
 
 ## 测试概况
+
 - 总用例数：{N}
 - 通过：{N} ✅
 - 失败：{N} ❌
@@ -130,6 +132,7 @@ doc_type: test
 ## 失败用例详情
 
 ### BUG-001: {问题标题}
+
 - 关联用例：TC-{xxx}
 - 严重程度：严重/一般/轻微
 - 问题描述：{具体描述}
@@ -143,12 +146,14 @@ doc_type: test
 ### BUG-002: ...
 
 ## 通过用例清单
-| 编号 | 标题 | 结果 |
-|------|------|------|
-| TC-001 | {标题} | ✅ |
-| TC-002 | {标题} | ❌ |
+
+| 编号   | 标题   | 结果 |
+| ------ | ------ | ---- |
+| TC-001 | {标题} | ✅   |
+| TC-002 | {标题} | ❌   |
 
 ## 测试结论
+
 {整体评估：是否可以发布，还需要修复哪些问题}
 ```
 
@@ -181,14 +186,14 @@ doc_type: test
   "deliverable": "2026-03-20_用户昵称功能",
   "main_branch": "已确认主分支",
   "work_branch": "已确认工作分支",
-  "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+  "test_doc": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
   "verdict": "passed",
   "summary": "共 10 条，通过 10 条，失败 0 条，阻塞 0 条",
   "findings": [],
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
       "summary": "已写入测试报告"
     }
   ]
@@ -220,7 +225,7 @@ doc_type: test
   "deliverable": "2026-03-20_用户昵称功能",
   "main_branch": "已确认主分支",
   "work_branch": "已确认工作分支",
-  "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+  "test_doc": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
   "verdict": "failed",
   "summary": "共 10 条，通过 8 条，失败 2 条，阻塞 0 条",
   "findings": [
@@ -229,14 +234,14 @@ doc_type: test
       "severity": "high",
       "message": "BUG-001 昵称长度超限时接口未返回预期错误。",
       "stageKey": "testing",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
       "suggestion": "修复昵称长度校验与错误码返回。"
     }
   ],
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
       "summary": "测试报告中记录了 2 个失败用例"
     }
   ]
@@ -295,17 +300,21 @@ doc_type: test
 # Round {N} 复测结果
 
 ## 回归范围
+
 - BUG-001 / TC-001
 - BUG-002 / TC-004
 
 ## 回归结果
+
 - BUG-001：已修复 / 未修复
 - BUG-002：已修复 / 未修复
 
 ## 新发现问题
+
 - 无
 
 ## 本轮结论
+
 {是否通过复测，是否还需继续修复}
 ```
 
@@ -323,9 +332,9 @@ doc_type: test
 
 ## 通用规则
 
-- *基于代码验证*：不仅看文档描述，要读实际代码确认实现是否正确
-- *覆盖边界情况*：空值、极端值、并发、权限等边界场景必须覆盖
-- *鉴权不可省略*：涉及受保护接口时，执行接口测试前先从任务描述中提取 `access_token`，并在所有相关 `curl` 请求中携带拼装后的 `Authorization: Bearer {access_token}` 请求头
-- *问题描述精准*：每个 bug 都要有明确的复现步骤和预期/实际对比
-- *回归意识*：关注变更是否影响已有功能，必要时补充回归用例
-- *首测复测一体化*：首测负责建立基线，复测负责沿用基线并验证修复结果，不要把复测当成全新需求测试
+- _基于代码验证_：不仅看文档描述，要读实际代码确认实现是否正确
+- _覆盖边界情况_：空值、极端值、并发、权限等边界场景必须覆盖
+- _鉴权不可省略_：涉及受保护接口时，执行接口测试前先从任务描述中提取 `access_token`，并在所有相关 `curl` 请求中携带拼装后的 `Authorization: Bearer {access_token}` 请求头
+- _问题描述精准_：每个 bug 都要有明确的复现步骤和预期/实际对比
+- _回归意识_：关注变更是否影响已有功能，必要时补充回归用例
+- _首测复测一体化_：首测负责建立基线，复测负责沿用基线并验证修复结果，不要把复测当成全新需求测试

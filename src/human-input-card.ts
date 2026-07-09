@@ -19,6 +19,7 @@ import {
 } from './workflow-config.js';
 import { WORKFLOW_CONTEXT_KEYS } from './workflow-context.js';
 import { getDeliverableFileNameForRole } from './workflow-artifacts.js';
+import { resolveWorkflowArtifactLocation } from './workflow-storage.js';
 import {
   asJsonObject,
   schemaInputs,
@@ -128,8 +129,30 @@ function buildTemplateVars(task: WorkbenchTaskItem): TemplateVars {
   const workflowConfig = task.workflow_type
     ? getWorkflowTypeConfig(task.workflow_type)
     : null;
+  const workflow = getWorkflowForTask(task);
   const deliverableFile = (role: string) =>
     getDeliverableFileNameForRole(role, workflowConfig?.roles);
+  const artifactDocPath = (role: string): string => {
+    const fileName = deliverableFile(role);
+    if (!fileName) return '';
+    if (workflow) {
+      try {
+        return resolveWorkflowArtifactLocation({
+          workflow,
+          storage: workflowConfig?.storage,
+          artifactPath: fileName,
+        }).containerPath;
+      } catch {
+        return '';
+      }
+    }
+    const workflowId = task.id.startsWith('wb-') ? task.id.slice(3) : task.id;
+    const deliverable =
+      typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
+        ? (context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
+        : '';
+    return `/workspace/workflows/${workflowId}/artifacts/${deliverable}/${fileName}`;
+  };
   const contextVars = Object.fromEntries(
     Object.entries(context).map(([key, value]) => [
       key,
@@ -168,6 +191,7 @@ function buildTemplateVars(task: WorkbenchTaskItem): TemplateVars {
         ? (context[WORKFLOW_CONTEXT_KEYS.accessToken] as string)
         : '',
     id: task.id.startsWith('wb-') ? task.id.slice(3) : task.id,
+    workflow_id: task.id.startsWith('wb-') ? task.id.slice(3) : task.id,
     round: task.round,
     deliverable:
       typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
@@ -188,21 +212,9 @@ function buildTemplateVars(task: WorkbenchTaskItem): TemplateVars {
           .map((item) => `- ${item}`)
           .join('\n') || '无'
       : '无',
-    plan_doc: `/workspace/projects/${task.service}/iteration/${
-      typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
-        ? (context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
-        : ''
-    }/${deliverableFile('planner')}`,
-    dev_doc: `/workspace/projects/${task.service}/iteration/${
-      typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
-        ? (context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
-        : ''
-    }/${deliverableFile('dev')}`,
-    test_doc: `/workspace/projects/${task.service}/iteration/${
-      typeof context[WORKFLOW_CONTEXT_KEYS.deliverable] === 'string'
-        ? (context[WORKFLOW_CONTEXT_KEYS.deliverable] as string)
-        : ''
-    }/${deliverableFile('test')}`,
+    plan_doc: artifactDocPath('planner'),
+    dev_doc: artifactDocPath('dev'),
+    test_doc: artifactDocPath('test'),
     delegation_result: '',
     result_summary: '',
     revision_text: '',

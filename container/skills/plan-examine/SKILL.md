@@ -12,13 +12,14 @@ description: Use only in the dev_test workflow. Review requirement implementatio
 ## 目标
 
 对“需求评估师”输出的方案进行有效评估，明确：
+
 - 是否可执行
 - 是否覆盖关键风险与边界
 - 是否具备可验证与可回滚能力
 
 ## 审核流程
 
-1. 从任务描述中获取方案文件路径，方案文档: `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` 
+1. 从任务描述中获取方案文件路径，方案文档: `/workspace/workflows/{workflowId}/artifacts/{deliverable}/plan.md`
    如果文档缺失则停止进行并使用`complete_delegation` 回传结果（`outcome=failure`）
 2. 根据服务名获取服务配置文件路径`repo_path`，进入仓库目录`/workspace/repos/{repo_path}`，检出并更新`主分支`
 3. 按以下维度逐项评估并记录结论（通过/需修改/缺失）：
@@ -61,7 +62,7 @@ description: Use only in the dev_test workflow. Review requirement implementatio
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/plan.md",
       "summary": "已审阅 plan.md"
     }
   ]
@@ -83,14 +84,14 @@ description: Use only in the dev_test workflow. Review requirement implementatio
       "severity": "high",
       "message": "没有说明发布失败后的回滚步骤。",
       "stageKey": "plan_examine",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/plan.md",
       "suggestion": "补充回滚触发条件、回滚步骤和数据影响。"
     }
   ],
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/plan.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/plan.md",
       "summary": "plan.md 中未找到回滚章节"
     }
   ]

@@ -19,6 +19,8 @@ import {
   WorkflowContextSourceType,
   WorkflowQualityGate,
   WorkflowQualityGateEvaluatorType,
+  WorkflowStorageConfig,
+  WorkflowStorageRootKind,
 } from './workflow-definition.js';
 import { getWorkflowArtifactContract } from './workflow-artifact-contract.js';
 import { isValidDeliverableFileName } from './workflow-artifacts.js';
@@ -27,6 +29,12 @@ const SUPPORTED_CONTEXT_SOURCE_TYPES = new Set<WorkflowContextSourceType>([
   'workflow_input',
   'artifact',
   'codebase_location',
+]);
+
+const SUPPORTED_STORAGE_ROOT_KINDS = new Set<WorkflowStorageRootKind>([
+  'workflow_runtime',
+  'feature_data',
+  'external_feature_data',
 ]);
 
 const IMPLEMENTED_QUALITY_GATE_EVALUATORS =
@@ -105,6 +113,7 @@ export interface CompiledWorkflowConfig {
     string,
     { channels: Record<string, string>; deliverable_file?: string }
   >;
+  storage?: WorkflowStorageConfig;
   artifacts?: WorkflowDefinitionArtifactDisplay[];
   entry_points: Record<
     string,
@@ -131,6 +140,18 @@ function isSafeArtifactDisplayPath(value: string): boolean {
     !trimmed.includes('\\') &&
     !normalized.split('/').some((segment) => segment === '..') &&
     (!path.isAbsolute(trimmed) || trimmed.startsWith('/workspace/'))
+  );
+}
+
+function isSafeStorageTemplatePath(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  const normalized = trimmed.replace(/^\/+/, '');
+  return (
+    !trimmed.includes('\0') &&
+    !trimmed.includes('\\') &&
+    !path.isAbsolute(trimmed) &&
+    !normalized.split('/').some((segment) => segment === '..')
   );
 }
 
@@ -236,6 +257,38 @@ export function validateWorkflowDefinition(
   const roleNames = new Set(Object.keys(definition.roles));
   const entryPointNames = new Set(Object.keys(definition.entry_points));
   const createFieldKeys = new Set<string>();
+
+  for (const rootName of ['artifact_root', 'context_pack_root'] as const) {
+    const storageRoot = definition.storage?.[rootName];
+    if (!storageRoot) continue;
+    if (!SUPPORTED_STORAGE_ROOT_KINDS.has(storageRoot.kind)) {
+      errors.push(
+        `${definition.key}.storage.${rootName}.kind "${storageRoot.kind}" is not supported`,
+      );
+    }
+    if (
+      storageRoot.path !== undefined &&
+      !isSafeStorageTemplatePath(storageRoot.path)
+    ) {
+      errors.push(
+        `${definition.key}.storage.${rootName}.path must be a safe relative path template`,
+      );
+    }
+    if (storageRoot.kind === 'feature_data' && storageRoot.feature_id === '') {
+      errors.push(
+        `${definition.key}.storage.${rootName}.feature_id must be non-empty when provided`,
+      );
+    }
+    if (
+      storageRoot.kind === 'external_feature_data' &&
+      !storageRoot.root_id?.trim()
+    ) {
+      errors.push(
+        `${definition.key}.storage.${rootName}.root_id is required for external_feature_data`,
+      );
+    }
+  }
+
   const validateArtifactContractRef = (
     basePath: string,
     ref: string | undefined,
@@ -305,7 +358,11 @@ export function validateWorkflowDefinition(
     basePath: string,
     transition: WorkflowDefinitionConditionalTransition,
   ): void => {
-    if (!transition || typeof transition !== 'object' || Array.isArray(transition)) {
+    if (
+      !transition ||
+      typeof transition !== 'object' ||
+      Array.isArray(transition)
+    ) {
       errors.push(`${basePath} must be an object`);
       return;
     }
@@ -996,6 +1053,7 @@ export function compileWorkflowDefinition(
         },
       ]),
     ),
+    storage: definition.storage,
     artifacts: definition.artifacts,
     entry_points: Object.fromEntries(
       Object.entries(definition.entry_points).map(([entryKey, entry]) => [

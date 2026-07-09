@@ -62,6 +62,7 @@ import {
   renderTemplate,
 } from './workflow-config.js';
 import { resolveWorkflowArtifactDefinitions } from './workflow-artifacts.js';
+import { resolveLocationUri } from './workflow-storage.js';
 import { syncWorkbenchFromWorkflow } from './workbench-store.js';
 import { emitWorkbenchEvent } from './workbench-events.js';
 import {
@@ -141,6 +142,11 @@ export interface WorkbenchArtifact {
   artifact_type: string;
   path: string;
   absolute_path: string;
+  location_kind?: string;
+  location_uri?: string;
+  host_path?: string;
+  container_path?: string;
+  feature_id?: string;
   exists: boolean;
   created_at?: string;
   generated_by_query?: WorkbenchTraceSummary;
@@ -428,15 +434,33 @@ function mapPersistedEvent(item: WorkbenchEventRecord): WorkbenchTimelineEvent {
 function mapPersistedArtifact(
   item: WorkbenchArtifactRecord,
 ): WorkbenchArtifact {
-  const fullPath = path.join(PROJECT_ROOT, item.path);
+  let fullPath = item.host_path || '';
+  let containerPath = item.container_path || item.path;
+  let displayPath = item.location_uri || item.container_path || item.path;
+  if (!fullPath && item.location_uri) {
+    try {
+      const location = resolveLocationUri(item.location_uri);
+      fullPath = location.hostPath;
+      containerPath = location.containerPath;
+      displayPath = location.locationUri;
+    } catch {
+      fullPath = '';
+    }
+  }
+  const needsMigration = !item.location_kind || !item.location_uri;
   const trace = getLatestTraceForArtifact(item);
   return {
     id: item.id,
     title: item.title,
     artifact_type: item.artifact_type,
-    path: item.path,
+    path: needsMigration ? `migration-required:${item.path}` : displayPath,
     absolute_path: fullPath,
-    exists: fs.existsSync(fullPath),
+    location_kind: item.location_kind || undefined,
+    location_uri: item.location_uri || undefined,
+    host_path: fullPath || undefined,
+    container_path: containerPath || undefined,
+    feature_id: item.feature_id || undefined,
+    exists: !!fullPath && fs.existsSync(fullPath),
     created_at: item.created_at,
     generated_by_query: trace,
   };
@@ -679,37 +703,25 @@ function buildSubtasks(
 }
 
 function buildArtifacts(workflow: Workflow): WorkbenchArtifact[] {
-  const deliverable = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.deliverable,
-  );
-  if (!workflow.service || !deliverable) return [];
-
-  const baseDir = path.join(
-    PROJECT_ROOT,
-    'projects',
-    workflow.service,
-    'iteration',
-    deliverable,
-  );
-
   const workflowConfig = getWorkflowTypeConfig(workflow.workflow_type);
   const artifactDefinitions = resolveWorkflowArtifactDefinitions(
     workflowConfig?.artifacts,
     workflow,
+    workflowConfig?.storage,
   );
   return artifactDefinitions.map((candidate) => {
-    const relativePath =
-      candidate.project_path ||
-      path.relative(PROJECT_ROOT, path.join(baseDir, candidate.file));
-    const fullPath = path.join(PROJECT_ROOT, relativePath);
     return {
-      id: `${workflow.id}-${candidate.file}`,
+      id: `${workflow.id}-${candidate.location_uri}`,
       title: candidate.title,
       artifact_type: candidate.artifact_type,
-      path: relativePath,
-      absolute_path: fullPath,
-      exists: fs.existsSync(fullPath),
+      path: candidate.container_path,
+      absolute_path: candidate.host_path,
+      location_kind: candidate.location_kind,
+      location_uri: candidate.location_uri,
+      host_path: candidate.host_path,
+      container_path: candidate.container_path,
+      feature_id: candidate.feature_id || undefined,
+      exists: fs.existsSync(candidate.host_path),
       created_at: workflow.updated_at,
       generated_by_query: toTraceSummary(
         candidate.source_role

@@ -5,7 +5,7 @@
       "title_template": "📋 方案复核审批",
       "color": "orange"
     },
-    "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：projects/{{service}}/iteration/{{deliverable}}/plan.md\n\n请选择：\n1) 直接继续后续流程（进入开发）\n2) 回到 Plan 修改（可填写补充修改意见）",
+    "body_template": "**流程 ID**：{{id}}\n**服务**：{{service}}\n**交付文档**：/workspace/workflows/{{id}}/artifacts/{{deliverable}}/plan.md\n\n请选择：\n1) 直接继续后续流程（进入开发）\n2) 回到 Plan 修改（可填写补充修改意见）",
     "actions": [
       {
         "id": "approve",

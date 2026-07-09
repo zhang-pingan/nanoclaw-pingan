@@ -31,8 +31,26 @@ export interface WorkflowDefinitionArtifactDisplay {
   artifact_type: string;
   title: string;
   path: string;
+  root?: 'artifact_root' | 'context_pack_root';
   source_role?: string;
   required?: boolean;
+}
+
+export type WorkflowStorageRootKind =
+  | 'workflow_runtime'
+  | 'feature_data'
+  | 'external_feature_data';
+
+export interface WorkflowStorageRootConfig {
+  kind: WorkflowStorageRootKind;
+  path?: string;
+  feature_id?: string;
+  root_id?: string;
+}
+
+export interface WorkflowStorageConfig {
+  artifact_root?: WorkflowStorageRootConfig;
+  context_pack_root?: WorkflowStorageRootConfig;
 }
 
 export interface WorkflowManualRequirementCreateFile {
@@ -304,6 +322,7 @@ export interface WorkflowDefinition {
   version: number;
   status: 'draft' | 'published' | 'archived';
   roles: Record<string, WorkflowDefinitionRole>;
+  storage?: WorkflowStorageConfig;
   entry_points: Record<string, WorkflowDefinitionEntryPoint>;
   artifacts?: WorkflowDefinitionArtifactDisplay[];
   states: Record<string, WorkflowDefinitionState>;

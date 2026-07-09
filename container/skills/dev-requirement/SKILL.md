@@ -13,7 +13,7 @@ description: Use only in the dev_test workflow. Implement features based on appr
 
 ### 步骤 1：阅读方案
 
-1. 从任务描述中获取方案文件路径，阅读 `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` 中的方案内容
+1. 从任务描述中获取方案文件路径，阅读 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/plan.md` 中的方案内容
 2. 优先从任务消息读取 `主分支：xxx`、`工作分支：xxx` 等分支参数；若消息未提供 `主分支`，再读取 `/workspace/global/services.json` 获取服务的 `default_branch`
 3. 读取 `/workspace/global/services.json` 中对应服务的 `repo_path`，进入真实代码仓库 `/workspace/repos/{repo_path}`：
    - 开发、提交、push、代码搜索、测试执行都必须在 `/workspace/repos/{repo_path}` 下进行
@@ -36,9 +36,9 @@ description: Use only in the dev_test workflow. Implement features based on appr
 
 ### 步骤 4：生成交付文档
 
-生成交付文档并保存到 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/dev.md`。
+生成交付文档并保存到 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/dev.md`。
 
-例如：`/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/dev.md`
+例如：`/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/dev.md`
 
 ```markdown
 ---
@@ -52,48 +52,58 @@ doc_type: dev
 # 需求实现报告
 
 ## 基本信息
+
 - 需求名称：{名称}
 - 完成日期：{日期}
 - 工作分支：{分支名}
 - 需求描述：{完整的需求描述}
 
 ## 实现方案
+
 {方案概述，包含技术选型和设计决策}
 
 ## 变更明细
 
 ### 修改的文件
-| 文件 | 变更类型 | 变更说明 |
-|------|---------|---------|
+
+| 文件   | 变更类型       | 变更说明   |
+| ------ | -------------- | ---------- |
 | {路径} | 新增/修改/删除 | {具体说明} |
 
 ### 关键代码变更
+
 {每个文件的核心变更逻辑，附关键代码片段}
 
 ## 接口变更（如有）
+
 ### 新增接口
+
 - {接口路径} — {方法} — {说明}
   - 请求参数：{参数说明}
   - 返回格式：{返回说明}
 
 ### 修改的接口
+
 - {接口路径} — {变更说明}
 
 ## 数据库变更（如有）
+
 - {表名} — {变更说明}
 
 ## 测试要点
+
 - {测试点1}：{预期行为}
 - {测试点2}：{预期行为}
 - {边界情况}：{预期行为}
 
 ## 注意事项
+
 - {部署注意事项}
 - {数据迁移注意事项}
 - {兼容性注意事项}
 ```
 
-同时保存 `/workspace/projects/{服务名}/iteration/{日期}_{需求简称}/traceability.json`。
+同时保存 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/traceability.json`。
 
 - `traceability.json` 必须是 JSON object，至少包含 `statements`、`decisions`、`actions`、`acceptance_criteria`、`evidence`、`coverage`、`open_questions`
 - `coverage` 必须覆盖 Context Pack 里的 required `INPUT-*`，并继承或引用方案阶段的重要 `ART-*` / evidence
@@ -121,26 +131,26 @@ doc_type: dev
   "deliverable": "2026-03-20_用户昵称功能",
   "verdict": "passed",
   "summary": "需求开发完成，可以进入开发复核。",
-  "traceability_path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/traceability.json",
+  "traceability_path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/traceability.json",
   "findings": [],
   "evidence": [
     {
       "type": "artifact",
       "refId": "EVID-DEV-001",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/dev.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/dev.md",
       "summary": "已写入 dev.md 并同步交付说明"
     }
   ]
 }
 ```
 
-   - 若失败，`result` 也应尽量返回 JSON，至少说明 `summary`、`error`、`progress`，并保留已确认的分支与交付目录
-   - **deliverable 是文件夹名**，不含 `.md` 后缀
-   - 若任务消息已提供 `主分支`、`工作分支`，成功回传时这里必须原样返回；不要替换成新的 `feature/...`
+- 若失败，`result` 也应尽量返回 JSON，至少说明 `summary`、`error`、`progress`，并保留已确认的分支与交付目录
+- **deliverable 是文件夹名**，不含 `.md` 后缀
+- 若任务消息已提供 `主分支`、`工作分支`，成功回传时这里必须原样返回；不要替换成新的 `feature/...`
 
 ## 工作原则
 
-- *先读代码再说话*：对任何需求，先浏览相关代码，理解现有架构再给建议
-- *澄清优先用提问工具*：凡是“需要用户明确选择/确认后才能继续”的问题，优先使用 `mcp__icarus__ask_user_question` 或 `request_human_input`
-- *最小改动原则*：优先在现有架构上扩展，避免大范围重构
-- *可测试性*：实现时考虑如何验证，交付文档中的测试要点要具体可执行
+- _先读代码再说话_：对任何需求，先浏览相关代码，理解现有架构再给建议
+- _澄清优先用提问工具_：凡是“需要用户明确选择/确认后才能继续”的问题，优先使用 `mcp__icarus__ask_user_question` 或 `request_human_input`
+- _最小改动原则_：优先在现有架构上扩展，避免大范围重构
+- _可测试性_：实现时考虑如何验证，交付文档中的测试要点要具体可执行

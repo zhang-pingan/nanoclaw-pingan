@@ -52,13 +52,12 @@ function group(folder: string): RegisteredGroup {
 }
 
 function writeDeliverable(fileName: string, content: string): void {
-  const deliverable = workflow().context.deliverable as string;
   const dir = path.join(
     PROJECT_ROOT,
-    'projects',
-    SERVICE,
-    'iteration',
-    deliverable,
+    'data',
+    'workflows',
+    WORKFLOW_ID,
+    'artifacts',
   );
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, fileName), content);
@@ -91,7 +90,7 @@ const REQUIREMENTS: WorkflowContextRequirements = {
 
 describe('workflow context pack', () => {
   beforeEach(() => {
-    fs.rmSync(path.join(PROJECT_ROOT, 'projects', SERVICE), {
+    fs.rmSync(path.join(PROJECT_ROOT, 'data', 'workflows', WORKFLOW_ID), {
       recursive: true,
       force: true,
     });
@@ -124,10 +123,10 @@ describe('workflow context pack', () => {
       .readdirSync(
         path.join(
           PROJECT_ROOT,
-          'projects',
-          SERVICE,
-          'workflow-context',
+          'data',
+          'workflows',
           WORKFLOW_ID,
+          'context',
           'plan',
         ),
       )
@@ -137,8 +136,8 @@ describe('workflow context pack', () => {
 
   it('keeps context pack prompt short and points to latest only', () => {
     const context = {
-      [WORKFLOW_CONTEXT_KEYS.contextPackPath]: `/workspace/projects/${SERVICE}/workflow-context/${WORKFLOW_ID}/plan/latest.json`,
-      [WORKFLOW_CONTEXT_KEYS.contextPackImmutablePath]: `/workspace/projects/${SERVICE}/workflow-context/${WORKFLOW_ID}/plan/context-pack.r1.a1.json`,
+      [WORKFLOW_CONTEXT_KEYS.contextPackPath]: `/workspace/workflows/${WORKFLOW_ID}/context/plan/latest.json`,
+      [WORKFLOW_CONTEXT_KEYS.contextPackImmutablePath]: `/workspace/workflows/${WORKFLOW_ID}/context/plan/context-pack.r1.a1.json`,
       [WORKFLOW_CONTEXT_KEYS.contextPackHash]: 'sha256:abc',
       [WORKFLOW_CONTEXT_KEYS.contextPackSummary]: 'readiness=warning; inputs=4',
       [WORKFLOW_CONTEXT_KEYS.contextPackOpenQuestions]: '缺少工作分支',
@@ -148,7 +147,7 @@ describe('workflow context pack', () => {
     const prompt = buildContextPackPromptInstructions(context);
 
     expect(prompt).toContain('[Context Pack]');
-    expect(prompt).toContain('latest: /workspace/projects/');
+    expect(prompt).toContain('latest: /workspace/workflows/');
     expect(prompt).toContain('执行前请读取 latest');
     expect(prompt).not.toContain('immutable:');
     expect(prompt).not.toContain('hash:');

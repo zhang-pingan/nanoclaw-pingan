@@ -15,9 +15,9 @@ description: Use only in the dev_test workflow. Fix bugs in service code on the 
    - 同时读取消息中明确给出的 `主分支：xxx`，后续排查、回写和结果返回都优先沿用消息中的值
    - 优先使用消息中明确给出的 `工作分支：xxx`
    - 若消息中未给出工作分支，则从交付文档中查找 `工作分支：xxx`
-   - 交付文档优先读取：`/workspace/projects/{service}/iteration/{deliverable}/dev.md`
+   - 交付文档优先读取：`/workspace/workflows/{workflowId}/artifacts/{deliverable}/dev.md`
    - 若仍无法确定工作分支，不要自行创建新分支，也不要猜测；应停止修改并通过 `complete_delegation` 返回失败，说明“缺少明确工作分支，无法安全修复”
-   - 同时确认测试文档路径：`/workspace/projects/{service}/iteration/{deliverable}/test.md`
+   - 同时确认测试文档路径：`/workspace/workflows/{workflowId}/artifacts/{deliverable}/test.md`
 2. 阅读 BUG 详情，并结合测试文档确认本轮待修复问题
    - 除了读取消息中给出的 BUG、测试报告和补充说明，还要结合 `test.md` 中当前仍待修复的 BUG 列表一起判断
    - 如果两者不一致，应以测试文档中的最新待修复状态为准，并结合消息判断本轮优先级
@@ -28,7 +28,7 @@ description: Use only in the dev_test workflow. Fix bugs in service code on the 
 4. 提交并 push 当前工作分支
 5. 更新测试文档，在测试文档末尾追加修复记录
    - 测试文档路径优先使用消息中明确给出的 `测试文档：xxx`
-   - 若消息中未给出，则使用 `/workspace/projects/{service}/iteration/{deliverable}/test.md`
+   - 若消息中未给出，则使用 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/test.md`
    - 追加位置应在测试报告之后，作为后续回归测试的修复追踪记录
    - 修复记录中的 `BUG ID` 必须与测试报告中的 BUG 编号保持一致，例如 `BUG-001`
    - 修复记录只记录本轮实际已完成修复并已提交到当前工作分支的 BUG
@@ -39,9 +39,11 @@ description: Use only in the dev_test workflow. Fix bugs in service code on the 
 
 ```markdown
 ## 修复记录
+
 ### Round {N} - {日期}
-| BUG ID | 问题 | 修复说明 |
-|--------|------|---------|
+
+| BUG ID  | 问题   | 修复说明   |
+| ------- | ------ | ---------- |
 | BUG-001 | {问题} | {修复方式} |
 ```
 
@@ -64,7 +66,7 @@ description: Use only in the dev_test workflow. Fix bugs in service code on the 
   "main_branch": "main",
   "work_branch": "feature/user-nickname_20260320",
   "deliverable": "2026-03-20_用户昵称功能",
-  "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+  "test_doc": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
   "verdict": "passed",
   "fixed_bugs": [
     {
@@ -85,7 +87,7 @@ description: Use only in the dev_test workflow. Fix bugs in service code on the 
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
       "summary": "已在 test.md 追加修复记录"
     }
   ]
@@ -100,7 +102,7 @@ description: Use only in the dev_test workflow. Fix bugs in service code on the 
   "main_branch": "main",
   "work_branch": "",
   "deliverable": "2026-03-20_用户昵称功能",
-  "test_doc": "/workspace/projects/catstory/iteration/2026-03-20_用户昵称功能/test.md",
+  "test_doc": "/workspace/workflows/wf-example/artifacts/2026-03-20_用户昵称功能/test.md",
   "fixed_bugs": [],
   "summary": "缺少明确工作分支，未执行修复",
   "error": "委派消息和交付文档中都未提供可确认的工作分支，无法安全修改代码"

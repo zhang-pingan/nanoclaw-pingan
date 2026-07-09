@@ -31,34 +31,39 @@ description: Use only in the fix_test workflow. Verify a fix_test bug fix on sta
      - 有明确选项的决策题（如是否继续测试、是否接受已知问题、是否覆盖某类回归范围）使用 `mcp__icarus__ask_user_question`
      - 需要用户补充测试信息、验收口径等自由文本时，使用 `request_human_input`
      - 不要仅用 `mcp__icarus__send_message` 做阻塞型确认
-5. 将验证结果写入 `/workspace/projects/{服务名}/iteration/{deliverable}/fix-test.md`。
+5. 将验证结果写入 `/workspace/workflows/{workflowId}/artifacts/{deliverable}/fix-test.md`。
 6. 调用 `complete_delegation` 返回结构化结果。
 
 ## 测试文档建议格式
 
 ```markdown
 ---
-service: {服务名}
-deliverable: {交付目录}
-work_branch: {工作分支}
+service: { 服务名 }
+deliverable: { 交付目录 }
+work_branch: { 工作分支 }
 doc_type: fix-test
 ---
 
 # Bug 测试验证报告
 
 ## Bug 信息
+
 {Bug 描述}
 
 ## 验证范围
+
 - {验证点}
 
 ## 验证结果
-| 编号 | 验证点 | 结果 | 证据 |
-|------|--------|------|------|
+
+| 编号   | 验证点   | 结果           | 证据   |
+| ------ | -------- | -------------- | ------ |
 | TC-001 | {验证点} | 通过/失败/阻塞 | {证据} |
 
 ## 未通过问题
+
 ### BUG-001: {问题标题}
+
 - 关联用例：TC-001
 - 问题描述：{描述}
 - 复现步骤：{步骤}
@@ -66,6 +71,7 @@ doc_type: fix-test
 - 实际行为：{实际}
 
 ## 结论
+
 {是否通过}
 ```
 
@@ -101,7 +107,7 @@ doc_type: fix-test
   "service": "catstory",
   "work_branch": "bugfix/login-500",
   "deliverable": "2026-04-27_bugfix_login-500",
-  "test_doc": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix-test.md",
+  "test_doc": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/fix-test.md",
   "total": 5,
   "passed": 5,
   "failed": 0,
@@ -113,7 +119,7 @@ doc_type: fix-test
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix-test.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/fix-test.md",
       "summary": "已写入 Bug 测试验证报告"
     }
   ]
@@ -127,7 +133,7 @@ doc_type: fix-test
   "service": "catstory",
   "work_branch": "bugfix/login-500",
   "deliverable": "2026-04-27_bugfix_login-500",
-  "test_doc": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix-test.md",
+  "test_doc": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/fix-test.md",
   "total": 5,
   "passed": 4,
   "failed": 1,
@@ -148,14 +154,14 @@ doc_type: fix-test
       "severity": "high",
       "message": "BUG-001 登录态为空时仍返回 500。",
       "stageKey": "bug_test",
-      "path": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix-test.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/fix-test.md",
       "suggestion": "继续修复空登录态分支的异常处理。"
     }
   ],
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix-test.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/fix-test.md",
       "summary": "测试报告中记录 1 个未通过问题"
     }
   ]

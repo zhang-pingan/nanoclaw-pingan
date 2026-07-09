@@ -9,14 +9,17 @@ import {
   clearWorkflowArtifactContractCacheForTest,
   evaluateWorkflowArtifactContract,
 } from './workflow-artifact-contract.js';
+import { loadWorkflowConfigs } from './workflow-config.js';
 
 const TEST_SERVICE = 'artifact-contract-test-service';
 const DELIVERABLE = '2026-05-29_artifact';
+const WORKFLOW_ID = 'wf-artifact-test';
 const ITERATION_DIR = path.join(
   PROJECT_ROOT,
-  'projects',
-  TEST_SERVICE,
-  'iteration',
+  'data',
+  'workflows',
+  WORKFLOW_ID,
+  'artifacts',
   DELIVERABLE,
 );
 const CONTRACTS_DIR = path.join(
@@ -31,7 +34,7 @@ const TEMP_CONTRACT_FILE = path.join(
 
 function makeWorkflow(): Workflow {
   return {
-    id: 'wf-artifact-test',
+    id: WORKFLOW_ID,
     name: 'Artifact contract test',
     service: TEST_SERVICE,
     start_from: 'plan',
@@ -58,6 +61,7 @@ describe('workflow artifact contract declarative rules', () => {
   beforeEach(() => {
     fs.rmSync(ITERATION_DIR, { recursive: true, force: true });
     clearWorkflowArtifactContractCacheForTest();
+    loadWorkflowConfigs();
   });
 
   afterAll(() => {
@@ -159,10 +163,11 @@ describe('workflow artifact contract declarative rules', () => {
         {
           id: 'test.json_deliverable.v1',
           version: 1,
-          allowed_artifact_roots: ['/workspace/projects'],
+          allowed_artifact_roots: ['root:artifact_root'],
           files: [
             {
-              path: `projects/{{service}}/iteration/{{deliverable}}/report.json`,
+              path: 'report.json',
+              root: 'artifact_root',
               required: true,
               body_required_fields: ['version', 'platform', 'flows'],
             },
@@ -199,10 +204,11 @@ describe('workflow artifact contract declarative rules', () => {
         {
           id: 'test.json_deliverable.v1',
           version: 1,
-          allowed_artifact_roots: ['/workspace/projects'],
+          allowed_artifact_roots: ['root:artifact_root'],
           files: [
             {
-              path: `projects/{{service}}/iteration/{{deliverable}}/report.json`,
+              path: 'report.json',
+              root: 'artifact_root',
               required: true,
               body_required_fields: ['version', 'platform', 'flows'],
             },
@@ -239,10 +245,11 @@ describe('workflow artifact contract declarative rules', () => {
       JSON.stringify({
         id: 'test.json_deliverable.v1',
         version: 1,
-        allowed_artifact_roots: ['/workspace/projects'],
+        allowed_artifact_roots: ['root:artifact_root'],
         files: [
           {
-            path: `projects/{{service}}/iteration/{{deliverable}}/report.json`,
+            path: 'report.json',
+            root: 'artifact_root',
             required: true,
             body_required_fields: ['version'],
           },

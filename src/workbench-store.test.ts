@@ -137,6 +137,39 @@ const PLAN_EXAMINE_GROUP: RegisteredGroup = {
 };
 
 const WORKBENCH_TEST_SERVICE = 'workbench-store-test-service';
+const WORKBENCH_WORKFLOW_DATA_DIR = path.join(
+  PROJECT_ROOT,
+  'data',
+  'workflows',
+);
+
+function workbenchArtifactDir(workflowId: string, deliverable: string): string {
+  return path.join(
+    WORKBENCH_WORKFLOW_DATA_DIR,
+    workflowId,
+    'artifacts',
+    deliverable,
+  );
+}
+
+function removeWorkbenchWorkflowDataFixtures(): void {
+  if (!fs.existsSync(WORKBENCH_WORKFLOW_DATA_DIR)) return;
+  for (const entry of fs.readdirSync(WORKBENCH_WORKFLOW_DATA_DIR)) {
+    if (
+      ![
+        'wf-contract-json-artifact',
+        'wf-trace-summary',
+        'wf-plan-eval-pending',
+      ].some((prefix) => entry.startsWith(prefix))
+    ) {
+      continue;
+    }
+    fs.rmSync(path.join(WORKBENCH_WORKFLOW_DATA_DIR, entry), {
+      recursive: true,
+      force: true,
+    });
+  }
+}
 
 beforeEach(() => {
   _initTestDatabase();
@@ -144,6 +177,7 @@ beforeEach(() => {
     recursive: true,
     force: true,
   });
+  removeWorkbenchWorkflowDataFixtures();
   initWorkbenchEvents(() => {});
   setRegisteredGroup('main@g.us', MAIN_GROUP);
   setRegisteredGroup('ops@g.us', OPS_GROUP);
@@ -245,12 +279,19 @@ describe('workbench approval transition sync', () => {
       'wf-plan-eval-pending',
       'plan',
     );
-    expect(evaluation?.status).toBe('pending');
+    expect(evaluation?.status).toBe('failed');
 
     const detail = getWorkbenchTaskDetail('wb-wf-plan-eval-pending');
     expect(detail).not.toBeNull();
     expect(detail?.task.workflow_stage).toBe('plan');
-    expect(detail?.evaluations[0]?.status).toBe('pending');
+    expect(
+      detail?.evaluations.some(
+        (item) =>
+          item.stage_key === 'plan' &&
+          item.evaluator_type === 'quality_gate' &&
+          item.status === 'failed',
+      ),
+    ).toBe(true);
     expect(detail?.action_items).toHaveLength(1);
     expect(detail?.action_items[0]?.title).toContain('需要处理');
     expect(
@@ -456,27 +497,13 @@ describe('workbench approval transition sync', () => {
       output_preview: 'done',
     });
 
-    fs.mkdirSync(
-      path.join(
-        PROJECT_ROOT,
-        'projects',
-        WORKBENCH_TEST_SERVICE,
-        'iteration',
-        '2026-04-07_trace_summary',
-      ),
-      { recursive: true },
+    const devArtifactDir = workbenchArtifactDir(
+      'wf-trace-summary',
+      '2026-04-07_trace_summary',
     );
-    fs.writeFileSync(
-      path.join(
-        PROJECT_ROOT,
-        'projects',
-        WORKBENCH_TEST_SERVICE,
-        'iteration',
-        '2026-04-07_trace_summary',
-        'dev.md',
-      ),
-      '# dev',
-    );
+    fs.mkdirSync(devArtifactDir, { recursive: true });
+    fs.writeFileSync(path.join(devArtifactDir, 'dev.md'), '# dev');
+    syncWorkbenchOnWorkflowUpdated('wf-trace-summary');
 
     const detail = getWorkbenchTaskDetail('wb-wf-trace-summary');
     const devStage = detail?.subtasks.find((item) => item.stage_key === 'dev');
@@ -520,15 +547,13 @@ describe('workbench approval transition sync', () => {
     });
     syncWorkbenchOnWorkflowCreated('wf-contract-json-artifact');
 
-    const iterationDir = path.join(
-      PROJECT_ROOT,
-      'projects',
-      WORKBENCH_TEST_SERVICE,
-      'iteration',
+    const artifactDir = workbenchArtifactDir(
+      'wf-contract-json-artifact',
       '2026-04-07_contract_json',
     );
-    fs.mkdirSync(iterationDir, { recursive: true });
-    fs.writeFileSync(path.join(iterationDir, 'traceability.json'), '{}');
+    fs.mkdirSync(artifactDir, { recursive: true });
+    fs.writeFileSync(path.join(artifactDir, 'traceability.json'), '{}');
+    syncWorkbenchOnWorkflowUpdated('wf-contract-json-artifact');
 
     const detail = getWorkbenchTaskDetail('wb-wf-contract-json-artifact');
     const traceabilityArtifact = detail?.artifacts.find((item) =>
@@ -537,7 +562,7 @@ describe('workbench approval transition sync', () => {
     expect(traceabilityArtifact).toMatchObject({
       title: '追踪矩阵',
       artifact_type: 'traceability',
-      path: `projects/${WORKBENCH_TEST_SERVICE}/iteration/2026-04-07_contract_json/traceability.json`,
+      path: 'workflow://wf-contract-json-artifact/artifacts/2026-04-07_contract_json/traceability.json',
       exists: true,
     });
   });

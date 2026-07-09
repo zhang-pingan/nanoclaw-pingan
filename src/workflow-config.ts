@@ -6,6 +6,8 @@
  * The engine (workflow.ts) reads them once at init and drives state
  * transitions generically instead of hard-coding each workflow type.
  */
+import path from 'path';
+
 import { CardConfig, validateCardConfig } from './card-config.js';
 import { readCardRegistryFromDir } from './card-files.js';
 import { logger } from './logger.js';
@@ -24,6 +26,8 @@ import {
   WorkflowDefinitionTimeoutPolicy,
   WorkflowContextRequirements,
   WorkflowQualityGate,
+  WorkflowStorageConfig,
+  WorkflowStorageRootKind,
 } from './workflow-definition.js';
 import {
   readWorkflowDefinitionRegistryFromDir,
@@ -121,6 +125,7 @@ export interface EntryPointConfig {
 export interface WorkflowTypeConfig {
   name: string;
   roles: Record<string, RoleConfig>;
+  storage?: WorkflowStorageConfig;
   artifacts?: WorkflowDefinitionArtifactDisplay[];
   entry_points: Record<string, EntryPointConfig>;
   states: Record<string, StateConfig>;
@@ -363,6 +368,24 @@ export function renderTemplate(
 // Validator
 // -------------------------------------------------------
 
+const SUPPORTED_STORAGE_ROOT_KINDS = new Set<WorkflowStorageRootKind>([
+  'workflow_runtime',
+  'feature_data',
+  'external_feature_data',
+]);
+
+function isSafeStorageTemplatePath(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  const normalized = trimmed.replace(/^\/+/, '');
+  return (
+    !trimmed.includes('\0') &&
+    !trimmed.includes('\\') &&
+    !path.isAbsolute(trimmed) &&
+    !normalized.split('/').some((segment) => segment === '..')
+  );
+}
+
 export function validateConfig(
   typeName: string,
   config: WorkflowTypeConfig,
@@ -370,6 +393,37 @@ export function validateConfig(
 ): string[] {
   const errors: string[] = [];
   const stateNames = new Set(Object.keys(config.states));
+
+  for (const rootName of ['artifact_root', 'context_pack_root'] as const) {
+    const storageRoot = config.storage?.[rootName];
+    if (!storageRoot) continue;
+    if (!SUPPORTED_STORAGE_ROOT_KINDS.has(storageRoot.kind)) {
+      errors.push(
+        `${typeName}.storage.${rootName}.kind "${storageRoot.kind}" is not supported`,
+      );
+    }
+    if (
+      storageRoot.path !== undefined &&
+      !isSafeStorageTemplatePath(storageRoot.path)
+    ) {
+      errors.push(
+        `${typeName}.storage.${rootName}.path must be a safe relative path template`,
+      );
+    }
+    if (storageRoot.kind === 'feature_data' && storageRoot.feature_id === '') {
+      errors.push(
+        `${typeName}.storage.${rootName}.feature_id must be non-empty when provided`,
+      );
+    }
+    if (
+      storageRoot.kind === 'external_feature_data' &&
+      !storageRoot.root_id?.trim()
+    ) {
+      errors.push(
+        `${typeName}.storage.${rootName}.root_id is required for external_feature_data`,
+      );
+    }
+  }
 
   if (config.artifacts !== undefined && !Array.isArray(config.artifacts)) {
     errors.push(`${typeName}.artifacts must be an array`);

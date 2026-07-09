@@ -149,15 +149,53 @@ function resumePendingInterruptForTest(
 
 const TEST_SERVICE = 'workflow-test-service';
 const DELIVERABLE = '2026-04-08_feature';
-const ITERATION_DIR = path.join(
-  PROJECT_ROOT,
-  'projects',
-  TEST_SERVICE,
-  'iteration',
-);
+const WORKFLOW_DATA_DIR = path.join(PROJECT_ROOT, 'data', 'workflows');
 
-function writeDoc(dirName: string, fileName: string, content: string): void {
-  const dir = path.join(ITERATION_DIR, dirName);
+function artifactDir(workflowId: string, dirName: string): string {
+  return path.join(WORKFLOW_DATA_DIR, workflowId, 'artifacts', dirName);
+}
+
+function artifactAgentPath(
+  workflowId: string,
+  dirName: string,
+  fileName: string,
+): string {
+  return `/workspace/workflows/${workflowId}/artifacts/${dirName}/${fileName}`;
+}
+
+function mockWorkflowId(
+  now: number,
+  randomValue: number,
+): { workflowId: string; restore: () => void } {
+  const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+  const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(randomValue);
+  return {
+    workflowId: `wf-${now}-${randomValue.toString(36).slice(2, 8)}`,
+    restore: () => {
+      nowSpy.mockRestore();
+      randomSpy.mockRestore();
+    },
+  };
+}
+
+function removeWorkflowDataFixtures(prefixes: string[]): void {
+  if (!fs.existsSync(WORKFLOW_DATA_DIR)) return;
+  for (const entry of fs.readdirSync(WORKFLOW_DATA_DIR)) {
+    if (!prefixes.some((prefix) => entry.startsWith(prefix))) continue;
+    fs.rmSync(path.join(WORKFLOW_DATA_DIR, entry), {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+function writeDoc(
+  dirName: string,
+  fileName: string,
+  content: string,
+  workflowId: string,
+): void {
+  const dir = artifactDir(workflowId, dirName);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, fileName), content);
 }
@@ -183,8 +221,9 @@ function buildStructuredResult(
 function writeTraceability(
   dirName: string,
   content: Record<string, unknown>,
+  workflowId: string,
 ): void {
-  const dir = path.join(ITERATION_DIR, dirName);
+  const dir = artifactDir(workflowId, dirName);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, 'traceability.json'),
@@ -232,7 +271,7 @@ function buildTraceability(
       {
         refId: 'EVID-ART-001',
         type: 'artifact',
-        path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+        path: artifactAgentPath('wf-plan', '2026-04-08_feature', 'plan.md'),
         summary: '阶段文档已写入交付目录',
       },
     ],
@@ -254,10 +293,10 @@ function readContextPackInputRefs(
 ): string[] {
   const contextPackPath = path.join(
     PROJECT_ROOT,
-    'projects',
-    TEST_SERVICE,
-    'workflow-context',
+    'data',
+    'workflows',
     workflowId,
+    'context',
     stageKey,
     'latest.json',
   );
@@ -294,6 +333,7 @@ function rewriteTraceabilityForContextPack(input: {
         evidence: ['EVID-ART-001'],
       })),
     }),
+    input.workflowId,
   );
 }
 
@@ -344,6 +384,12 @@ beforeEach(() => {
     recursive: true,
     force: true,
   });
+  removeWorkflowDataFixtures([
+    'wf-178358197900',
+    'wf-plan',
+    'wf-fix',
+    'wf-testing',
+  ]);
   fs.rmSync(WEB_UPLOADS_DIR, {
     recursive: true,
     force: true,
@@ -896,20 +942,27 @@ describe('durable interrupt runtime', () => {
 
 describe('workflow metadata and branch flow', () => {
   it('reads deliverable metadata from front matter for dev entry', () => {
+    const mocked = mockWorkflowId(1783581979001, 0.123456);
     writeDoc(
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\nstaging_base_branch: staging\nstaging_work_branch: staging-deploy/feature-test_20260408\ndoc_type: plan\n---\n\n# Plan\n`,
+      mocked.workflowId,
     );
 
-    const result = createNewWorkflow({
-      title: 'Test feature',
-      service: TEST_SERVICE,
-      sourceJid: 'main@g.us',
-      startFrom: 'dev',
-      workflowType: 'dev_test',
-      deliverable: '2026-04-08_feature',
-    });
+    let result;
+    try {
+      result = createNewWorkflow({
+        title: 'Test feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'dev',
+        workflowType: 'dev_test',
+        deliverable: '2026-04-08_feature',
+      });
+    } finally {
+      mocked.restore();
+    }
 
     expect(result.error).toBeUndefined();
     const workflow = getWorkflow(result.workflowId);
@@ -938,20 +991,27 @@ describe('workflow metadata and branch flow', () => {
   });
 
   it('rejects deliverable entry when required role file is missing', () => {
+    const mocked = mockWorkflowId(1783581979002, 0.123456);
     writeDoc(
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\n---\n\n# Plan\n`,
+      mocked.workflowId,
     );
 
-    const result = createNewWorkflow({
-      title: 'Test feature',
-      service: TEST_SERVICE,
-      sourceJid: 'main@g.us',
-      startFrom: 'testing',
-      workflowType: 'dev_test',
-      deliverable: '2026-04-08_feature',
-    });
+    let result;
+    try {
+      result = createNewWorkflow({
+        title: 'Test feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'testing',
+        workflowType: 'dev_test',
+        deliverable: '2026-04-08_feature',
+      });
+    } finally {
+      mocked.restore();
+    }
 
     expect(result.error).toContain('需要交付物 dev.md');
     expect(getWorkflow(result.workflowId)).toBeUndefined();
@@ -985,7 +1045,7 @@ describe('workflow metadata and branch flow', () => {
           WORKFLOW_CONTEXT_KEYS.contextPackPath,
         ),
     ).toContain(
-      `/workspace/projects/${TEST_SERVICE}/workflow-context/${workflow?.id}/plan/latest.json`,
+      `/workspace/workflows/${workflow?.id}/context/plan/latest.json`,
     );
     expect(
       workflow &&
@@ -1004,7 +1064,7 @@ describe('workflow metadata and branch flow', () => {
     expect(delegations[0]?.task).toContain('[Context Pack]');
     expect(delegations[0]?.task).toContain('CODEBASE-* 只表示代码库位置');
     expect(delegations[0]?.task).toContain(
-      `/workspace/projects/${TEST_SERVICE}/workflow-context/${workflow?.id}/plan/latest.json`,
+      `/workspace/workflows/${workflow?.id}/context/plan/latest.json`,
     );
     expect(delegations[0]?.task).not.toContain('immutable:');
     expect(delegations[0]?.task).not.toContain('hash: sha256:');
@@ -1021,13 +1081,13 @@ describe('workflow metadata and branch flow', () => {
     const input = JSON.parse(delegations[0]?.handoff_input_json || '{}');
     expect(input.stage_key).toBe('plan');
     expect(input.rendered_task).toContain('需求描述：需要支持用户昵称输入表情');
-    expect(input.context.context_pack_path).toContain('/workflow-context/');
+    expect(input.context.context_pack_path).toContain('/context/');
     const contextPackPath = path.join(
       PROJECT_ROOT,
-      'projects',
-      TEST_SERVICE,
-      'workflow-context',
+      'data',
+      'workflows',
       result.workflowId,
+      'context',
       'plan',
       'latest.json',
     );
@@ -1066,7 +1126,10 @@ describe('workflow metadata and branch flow', () => {
     expect(contextPack.codebase_location_refs[0].repo_path).toBe('');
     const immutablePackPath = path.join(
       PROJECT_ROOT,
-      contextPack.immutable_pack_path.replace(/^\/workspace\//, ''),
+      contextPack.immutable_pack_path.replace(
+        /^\/workspace\/workflows\//,
+        'data/workflows/',
+      ),
     );
     expect(fs.existsSync(immutablePackPath)).toBe(true);
     const immutablePackContent = fs.readFileSync(immutablePackPath, 'utf-8');
@@ -1383,7 +1446,11 @@ describe('workflow metadata and branch flow', () => {
     expect(refixDelegation?.task).toContain('Round 1');
     expect(refixDelegation?.task).toContain('BUG-001');
     expect(refixDelegation?.task).toContain(
-      '/workspace/projects/workflow-test-service/iteration/2026-04-08_bugfix_login-empty-500/fix-test.md',
+      artifactAgentPath(
+        'wf-fix-test-failed',
+        '2026-04-08_bugfix_login-empty-500',
+        'fix-test.md',
+      ),
     );
   });
 
@@ -1392,6 +1459,7 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_missing_trace',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_missing_trace\nmain_branch: main\nwork_branch: feature/missing-trace\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 覆盖需求\n\n## 验收标准\n- 满足质量门\n\n## 风险\n- 需要补证据\n`,
+      'wf-plan-missing-trace',
     );
     createWorkflow({
       id: 'wf-plan-missing-trace',
@@ -1477,8 +1545,13 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/cross-trace\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 只允许当前交付目录证据\n\n## 验收标准\n- scope gate 生效\n\n## 风险\n- 防止串用其他交付物\n`,
+      result.workflowId,
     );
-    writeTraceability('2026-04-08_other', buildTraceability());
+    writeTraceability(
+      '2026-04-08_other',
+      buildTraceability(),
+      result.workflowId,
+    );
 
     updateDelegation(delegation!.id, {
       status: 'completed',
@@ -1488,7 +1561,11 @@ describe('workflow metadata and branch flow', () => {
         deliverable: '2026-04-08_feature',
         main_branch: 'main',
         work_branch: 'feature/cross-trace',
-        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_other/traceability.json`,
+        traceability_path: artifactAgentPath(
+          result.workflowId,
+          '2026-04-08_other',
+          'traceability.json',
+        ),
         summary: '方案产物错误引用了其他交付目录的 traceability。',
       }),
     });
@@ -1517,7 +1594,7 @@ describe('workflow metadata and branch flow', () => {
       parseEvaluationFindings(consistency)
         .map((finding) => finding.message || '')
         .join('\n'),
-    ).toContain('outside current service/deliverable');
+    ).toContain('outside current artifact root');
   });
 
   it('rejects traceability evidence paths outside the current deliverable', () => {
@@ -1536,11 +1613,13 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/evidence-scope\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 只允许当前交付目录 evidence\n\n## 验收标准\n- evidence scope gate 生效\n\n## 风险\n- 防止串用其他交付物\n`,
+      result.workflowId,
     );
     writeDoc(
       '2026-04-08_other',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_other\ndoc_type: plan\n---\n\n# Other Plan\n`,
+      result.workflowId,
     );
     const inputRefs = readContextPackInputRefs(result.workflowId, 'plan');
     writeTraceability(
@@ -1550,7 +1629,11 @@ describe('workflow metadata and branch flow', () => {
           {
             refId: 'EVID-ART-001',
             type: 'artifact',
-            path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_other/plan.md`,
+            path: artifactAgentPath(
+              result.workflowId,
+              '2026-04-08_other',
+              'plan.md',
+            ),
             summary: '错误引用了其他交付目录的方案文档',
           },
         ],
@@ -1560,6 +1643,7 @@ describe('workflow metadata and branch flow', () => {
           evidence: ['EVID-ART-001'],
         })),
       }),
+      result.workflowId,
     );
 
     updateDelegation(delegation!.id, {
@@ -1570,7 +1654,11 @@ describe('workflow metadata and branch flow', () => {
         deliverable: '2026-04-08_feature',
         main_branch: 'main',
         work_branch: 'feature/evidence-scope',
-        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/traceability.json`,
+        traceability_path: artifactAgentPath(
+          result.workflowId,
+          '2026-04-08_feature',
+          'traceability.json',
+        ),
         summary: '方案产物的 evidence 错误引用了其他交付目录。',
       }),
     });
@@ -1586,7 +1674,7 @@ describe('workflow metadata and branch flow', () => {
       parseEvaluationFindings(evidence)
         .map((finding) => finding.message || '')
         .join('\n'),
-    ).toContain('outside current service/deliverable');
+    ).toContain('outside current artifact root');
   });
 
   it('does not persist unsafe deliverable values from delegation results', () => {
@@ -1637,6 +1725,7 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 支持昵称规则改造\n\n## 验收标准\n- 支持完整技术方案输出\n\n## 风险\n- 需要兼容历史数据\n`,
+      'wf-plan',
     );
     createWorkflow({
       id: 'wf-plan',
@@ -1666,7 +1755,11 @@ describe('workflow metadata and branch flow', () => {
       workflowId: 'wf-plan',
       stageKey: 'plan',
       deliverable: '2026-04-08_feature',
-      documentPath: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+      documentPath: artifactAgentPath(
+        'wf-plan',
+        '2026-04-08_feature',
+        'plan.md',
+      ),
     });
     createDelegation({
       id: 'del-plan',
@@ -1681,7 +1774,11 @@ describe('workflow metadata and branch flow', () => {
         deliverable: '2026-04-08_feature',
         main_branch: 'main',
         work_branch: 'feature/test_20260408',
-        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/traceability.json`,
+        traceability_path: artifactAgentPath(
+          'wf-plan',
+          '2026-04-08_feature',
+          'traceability.json',
+        ),
         summary: '方案已完成，可以进入审核',
       }),
       outcome: 'success',
@@ -1744,7 +1841,7 @@ describe('workflow metadata and branch flow', () => {
     expect(latest?.handoff_role).toBe('plan_examiner');
     expect(latest?.handoff_skill).toBe('plan-examine');
     expect(latest?.task).toContain(
-      `方案文件：/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+      `方案文件：${artifactAgentPath('wf-plan', '2026-04-08_feature', 'plan.md')}`,
     );
     expect(latest?.task).toContain(
       '原始需求描述：为用户昵称功能输出完整技术方案。',
@@ -1760,6 +1857,7 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 支持昵称规则改造\n\n## 验收标准\n- 支持测试用例文档传递\n\n## 风险\n- 需要保留用户提供的用例口径\n`,
+      'wf-plan-test-cases',
     );
     createWorkflow({
       id: 'wf-plan-test-cases',
@@ -1790,7 +1888,11 @@ describe('workflow metadata and branch flow', () => {
       workflowId: 'wf-plan-test-cases',
       stageKey: 'plan',
       deliverable: '2026-04-08_feature',
-      documentPath: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/plan.md`,
+      documentPath: artifactAgentPath(
+        'wf-plan-test-cases',
+        '2026-04-08_feature',
+        'plan.md',
+      ),
     });
     createDelegation({
       id: 'del-plan-test-cases',
@@ -1804,7 +1906,11 @@ describe('workflow metadata and branch flow', () => {
         deliverable: '2026-04-08_feature',
         main_branch: 'main',
         work_branch: 'feature/test_20260408',
-        traceability_path: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/traceability.json`,
+        traceability_path: artifactAgentPath(
+          'wf-plan-test-cases',
+          '2026-04-08_feature',
+          'traceability.json',
+        ),
         summary: '方案已完成',
       }),
       outcome: 'success',
@@ -1816,10 +1922,13 @@ describe('workflow metadata and branch flow', () => {
 
     onDelegationComplete('del-plan-test-cases');
 
-    const materializedAgentPath = `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/test-cases.md`;
-    const materializedHostPath = path.join(
-      ITERATION_DIR,
+    const materializedAgentPath = artifactAgentPath(
+      'wf-plan-test-cases',
       '2026-04-08_feature',
+      'test-cases.md',
+    );
+    const materializedHostPath = path.join(
+      artifactDir('wf-plan-test-cases', '2026-04-08_feature'),
       'test-cases.md',
     );
     expect(fs.readFileSync(materializedHostPath, 'utf-8')).toContain('TC-001');
@@ -1861,27 +1970,37 @@ describe('workflow metadata and branch flow', () => {
       'existing-dev-cases.md',
     );
     fs.writeFileSync(uploadedCaseFile, '# 测试用例\n\n- TC-010 既有需求用例\n');
+    const mocked = mockWorkflowId(1783581979003, 0.123456);
     writeDoc(
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\ndoc_type: plan\n---\n\n# Plan\n`,
+      mocked.workflowId,
     );
 
-    const result = createNewWorkflow({
-      title: 'Existing dev entry with cases',
-      service: TEST_SERVICE,
-      sourceJid: 'main@g.us',
-      startFrom: 'dev',
-      workflowType: 'dev_test',
-      deliverable: '2026-04-08_feature',
-      testCaseFiles: [uploadedCaseFile],
-    });
+    let result;
+    try {
+      result = createNewWorkflow({
+        title: 'Existing dev entry with cases',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'dev',
+        workflowType: 'dev_test',
+        deliverable: '2026-04-08_feature',
+        testCaseFiles: [uploadedCaseFile],
+      });
+    } finally {
+      mocked.restore();
+    }
 
     expect(result.error).toBeUndefined();
-    const materializedAgentPath = `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_feature/test-cases.md`;
-    const materializedHostPath = path.join(
-      ITERATION_DIR,
+    const materializedAgentPath = artifactAgentPath(
+      mocked.workflowId,
       '2026-04-08_feature',
+      'test-cases.md',
+    );
+    const materializedHostPath = path.join(
+      artifactDir(mocked.workflowId, '2026-04-08_feature'),
       'test-cases.md',
     );
     expect(fs.readFileSync(materializedHostPath, 'utf-8')).toContain('TC-010');
@@ -1943,8 +2062,8 @@ describe('workflow metadata and branch flow', () => {
       'wf-plan-pending',
       'plan',
     );
-    expect(evaluation?.status).toBe('pending');
-    expect(evaluation?.summary).toContain('Quality gate pending');
+    expect(evaluation?.status).toBe('failed');
+    expect(evaluation?.summary).toContain('Quality gate failed');
   });
 
   it('routes plan review revision verdict while keeping outcome success', () => {
@@ -1952,6 +2071,7 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 支持昵称规则改造\n\n## 验收标准\n- 支持完整技术方案输出\n\n## 风险\n- 需要兼容历史数据\n`,
+      'wf-plan-review-needs-revision',
     );
     createWorkflow({
       id: 'wf-plan-review-needs-revision',
@@ -2144,6 +2264,7 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 支持昵称规则改造\n\n## 验收标准\n- 支持完整技术方案输出\n\n## 风险\n- 需要兼容历史数据\n`,
+      'wf-plan-review-typed-result',
     );
     createWorkflow({
       id: 'wf-plan-review-typed-result',
@@ -2224,6 +2345,7 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'plan.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\ndoc_type: plan\n---\n\n# 方案\n\n## 范围\n- 支持昵称规则改造\n\n## 验收标准\n- 支持完整技术方案输出\n\n## 风险\n- 需要兼容历史数据\n`,
+      'wf-plan-review-legacy-outcome',
     );
     createWorkflow({
       id: 'wf-plan-review-legacy-outcome',
@@ -2350,6 +2472,7 @@ describe('workflow metadata and branch flow', () => {
       '2026-04-08_feature',
       'test.md',
       `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_feature\nmain_branch: main\nwork_branch: feature/test_20260408\nstaging_base_branch: staging\nstaging_work_branch: staging-deploy/feature-test_20260408\ndoc_type: test\n---\n\n# 测试报告\n`,
+      'wf-testing-business-failure',
     );
     createWorkflow({
       id: 'wf-testing-business-failure',

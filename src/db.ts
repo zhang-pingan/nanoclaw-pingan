@@ -624,6 +624,12 @@ function createSchema(database: Database.Database): void {
       artifact_type TEXT NOT NULL,
       title TEXT NOT NULL,
       path TEXT NOT NULL,
+      location_kind TEXT,
+      location_uri TEXT,
+      host_path TEXT,
+      container_path TEXT,
+      feature_id TEXT,
+      metadata_json TEXT,
       source_role TEXT,
       created_at TEXT NOT NULL
     );
@@ -1175,6 +1181,21 @@ function createSchema(database: Database.Database): void {
       OR task_state = 'running'
       OR task_state NOT IN ('running', 'success', 'failed', 'cancelled')
   `);
+
+  for (const column of [
+    'location_kind TEXT',
+    'location_uri TEXT',
+    'host_path TEXT',
+    'container_path TEXT',
+    'feature_id TEXT',
+    'metadata_json TEXT',
+  ]) {
+    try {
+      database.exec(`ALTER TABLE workbench_artifacts ADD COLUMN ${column}`);
+    } catch {
+      /* column already exists */
+    }
+  }
 
   // Add workflow_id column to delegations (migration for existing DBs)
   try {
@@ -3884,8 +3905,10 @@ export function listWorkbenchEventsByTask(
 export function createWorkbenchArtifact(record: WorkbenchArtifactRecord): void {
   db.prepare(
     `INSERT OR REPLACE INTO workbench_artifacts (
-      id, task_id, workflow_id, artifact_type, title, path, source_role, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, task_id, workflow_id, artifact_type, title, path,
+      location_kind, location_uri, host_path, container_path, feature_id,
+      metadata_json, source_role, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     record.id,
     record.task_id,
@@ -3893,6 +3916,12 @@ export function createWorkbenchArtifact(record: WorkbenchArtifactRecord): void {
     record.artifact_type,
     record.title,
     record.path,
+    record.location_kind || null,
+    record.location_uri || null,
+    record.host_path || null,
+    record.container_path || null,
+    record.feature_id || null,
+    record.metadata_json || null,
     record.source_role,
     record.created_at,
   );
@@ -3906,6 +3935,28 @@ export function listWorkbenchArtifactsByTask(
       'SELECT * FROM workbench_artifacts WHERE task_id = ? ORDER BY created_at DESC',
     )
     .all(taskId) as WorkbenchArtifactRecord[];
+}
+
+export function listUnmigratedWorkbenchArtifacts(
+  limit = 50,
+): WorkbenchArtifactRecord[] {
+  return db
+    .prepare(
+      `SELECT * FROM workbench_artifacts
+       WHERE location_kind IS NULL OR location_uri IS NULL OR location_kind = '' OR location_uri = ''
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+    .all(limit) as WorkbenchArtifactRecord[];
+}
+
+export function assertWorkbenchArtifactLocationsMigrated(): void {
+  const records = listUnmigratedWorkbenchArtifacts(10);
+  if (records.length === 0) return;
+  const examples = records.map((item) => `${item.id}:${item.path}`).join(', ');
+  throw new Error(
+    `Workbench artifact location migration required for ${records.length} record(s): ${examples}`,
+  );
 }
 
 export function createWorkbenchActionItem(

@@ -20,6 +20,7 @@ import {
 import { getWorkflowDefinitionsDir } from '../workflow-definition-files.js';
 import { clearWorkflowArtifactContractCache } from '../workflow-artifact-contract.js';
 import { loadWorkflowConfigs } from '../workflow-config.js';
+import { getFeatureDataRoot } from '../workflow-storage.js';
 import { clearWorkflowEvaluatorRegistryCache } from '../workflow-evaluator-registry.js';
 import { getFeatureOwnedTablePrefixes } from './naming.js';
 
@@ -218,11 +219,15 @@ export function getFeatureDeletionSummary(
       0,
     ),
   };
-  const paths = groups.flatMap((group) => [
-    path.join(GROUPS_DIR, group.folder),
-    path.join(DATA_DIR, 'sessions', group.folder),
-    path.join(DATA_DIR, 'ipc', group.folder),
-  ]);
+  const featureDataRoot = getFeatureDataRoot(featureId);
+  const paths = [
+    featureDataRoot.rootPath,
+    ...groups.flatMap((group) => [
+      path.join(GROUPS_DIR, group.folder),
+      path.join(DATA_DIR, 'sessions', group.folder),
+      path.join(DATA_DIR, 'ipc', group.folder),
+    ]),
+  ];
   return { featureId, workflowTypes, groups, projectionTables, counts, paths };
 }
 

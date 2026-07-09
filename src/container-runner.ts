@@ -25,6 +25,7 @@ import {
   SSH_KEY_PATH,
   TIMEZONE,
 } from './config.js';
+import { getWorkflow } from './db.js';
 import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
@@ -45,6 +46,10 @@ import {
 } from './features/container-resources.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
+import {
+  getFeatureDataRoot,
+  getWorkflowRuntimeRoot,
+} from './workflow-storage.js';
 
 const HOME_DIR = process.env.HOME || os.homedir();
 const DEFAULT_HOST_MAVEN_SETTINGS_PATH = path.join(
@@ -414,7 +419,7 @@ function emitTraceEvent(
 function buildVolumeMounts(
   group: RegisteredGroup,
   isMain: boolean,
-  opts: { externalSystemOnce?: boolean } = {},
+  opts: { externalSystemOnce?: boolean; workflowId?: string } = {},
 ): VolumeMount[] {
   const mounts: VolumeMount[] = [];
   const projectRoot = process.cwd();
@@ -475,15 +480,26 @@ function buildVolumeMounts(
         readonly: true,
       });
     }
+  }
 
-    // Shared projects directory (read-write for all groups)
-    const projectsDir = path.join(projectRoot, 'projects');
-    fs.mkdirSync(projectsDir, { recursive: true });
+  if (opts.workflowId) {
+    const workflow = getWorkflow(opts.workflowId);
+    const runtimeRoot = getWorkflowRuntimeRoot(opts.workflowId);
+    fs.mkdirSync(runtimeRoot.hostPath, { recursive: true });
     mounts.push({
-      hostPath: projectsDir,
-      containerPath: '/workspace/projects',
+      hostPath: runtimeRoot.hostPath,
+      containerPath: runtimeRoot.containerPath,
       readonly: false,
     });
+    if (workflow?.feature_id) {
+      const featureDataRoot = getFeatureDataRoot(workflow.feature_id);
+      fs.mkdirSync(featureDataRoot.rootPath, { recursive: true });
+      mounts.push({
+        hostPath: featureDataRoot.rootPath,
+        containerPath: `/workspace/features/${featureDataRoot.featureId}/data`,
+        readonly: false,
+      });
+    }
   }
 
   // Per-group Claude sessions directory (isolated from other groups)
@@ -835,6 +851,7 @@ export async function runContainerAgent(
 
   const mounts = buildVolumeMounts(group, input.isMain, {
     externalSystemOnce: input.executionMode === 'external_system_once',
+    workflowId: input.executionContext?.workflowId,
   });
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `icarus-${safeName}-${Date.now()}`;

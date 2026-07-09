@@ -12,12 +12,22 @@ import type {
   WorkflowStageEvaluationStatus,
   WorkflowStageEvaluatorType,
 } from './types.js';
-import type { WorkflowQualityGate } from './workflow-definition.js';
+import type {
+  WorkflowQualityGate,
+  WorkflowStorageConfig,
+} from './workflow-definition.js';
 import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
+import { getWorkflowTypeConfig } from './workflow-config.js';
 import { parseDelegationHandoffResult } from './workflow-handoff.js';
+import {
+  isPathInsideResolvedRoot,
+  resolveWorkflowArtifactLocation,
+  resolveWorkflowStorageRoot,
+  resolveWorkspacePathToHost,
+} from './workflow-storage.js';
 
 type Severity = WorkflowEvalFinding['severity'];
 
@@ -161,8 +171,13 @@ function isSafeRelativeRepoPath(repoPath: string): boolean {
 }
 
 function currentRepoPath(): string {
-  const relative = path.relative(REPOS_DIR, PROJECT_ROOT).split(path.sep).join('/');
-  return isSafeRelativeRepoPath(relative) ? relative : path.basename(PROJECT_ROOT);
+  const relative = path
+    .relative(REPOS_DIR, PROJECT_ROOT)
+    .split(path.sep)
+    .join('/');
+  return isSafeRelativeRepoPath(relative)
+    ? relative
+    : path.basename(PROJECT_ROOT);
 }
 
 function serviceRepoPath(workflow: Workflow): string {
@@ -196,23 +211,27 @@ type ScopedWorkspacePathKind = 'deliverable' | 'context_pack';
 
 function scopedWorkspacePrefixes(
   workflow: Workflow,
+  storage: WorkflowStorageConfig | undefined,
   kinds: ScopedWorkspacePathKind[],
 ): string[] {
   const prefixes: string[] = [];
   if (kinds.includes('deliverable')) {
-    const deliverable = getWorkflowContextValue(
-      workflow,
-      WORKFLOW_CONTEXT_KEYS.deliverable,
+    prefixes.push(
+      resolveWorkflowStorageRoot({
+        workflow,
+        storage,
+        root: 'artifact_root',
+      }).containerPath,
     );
-    if (deliverable && isSafeWorkspacePathSegment(deliverable)) {
-      prefixes.push(
-        `/workspace/projects/${workflow.service}/iteration/${deliverable}/`,
-      );
-    }
   }
   if (kinds.includes('context_pack')) {
     prefixes.push(
-      `/workspace/projects/${workflow.service}/workflow-context/${workflow.id}/`,
+      resolveWorkflowStorageRoot({
+        workflow,
+        storage,
+        root: 'context_pack_root',
+        stageKey: workflow.status,
+      }).containerPath,
     );
   }
   return prefixes;
@@ -222,6 +241,7 @@ function scopedWorkspaceToHostPath(input: {
   workflow: Workflow;
   workspacePath: string;
   allowedKinds: ScopedWorkspacePathKind[];
+  storage?: WorkflowStorageConfig;
 }): { hostPath: string; error?: string } {
   const workspacePath = input.workspacePath.trim();
   if (!workspacePath) return { hostPath: '', error: 'path_missing' };
@@ -231,22 +251,35 @@ function scopedWorkspaceToHostPath(input: {
   ) {
     return { hostPath: '', error: 'path_invalid' };
   }
-  if (!workspacePath.startsWith('/workspace/projects/')) {
-    return { hostPath: '', error: 'unsupported_path' };
-  }
-  const prefixes = scopedWorkspacePrefixes(input.workflow, input.allowedKinds);
+  const resolved = resolveWorkspacePathToHost(workspacePath);
+  if (!resolved) return { hostPath: '', error: 'unsupported_path' };
+  const prefixes = scopedWorkspacePrefixes(
+    input.workflow,
+    input.storage,
+    input.allowedKinds,
+  );
   if (
     prefixes.length === 0 ||
     !prefixes.some((prefix) => workspacePath.startsWith(prefix))
   ) {
     return { hostPath: '', error: 'scope_mismatch' };
   }
-  return {
-    hostPath: path.join(
-      PROJECT_ROOT,
-      workspacePath.replace(/^\/workspace\//, ''),
-    ),
-  };
+  const allowedRoots = input.allowedKinds.map((kind) =>
+    resolveWorkflowStorageRoot({
+      workflow: input.workflow,
+      storage: input.storage,
+      root: kind === 'deliverable' ? 'artifact_root' : 'context_pack_root',
+      stageKey: input.workflow.status,
+    }),
+  );
+  if (
+    !allowedRoots.some((root) =>
+      isPathInsideResolvedRoot(resolved.hostPath, root),
+    )
+  ) {
+    return { hostPath: '', error: 'scope_mismatch' };
+  }
+  return { hostPath: resolved.hostPath };
 }
 
 function workspaceEvidenceScopeError(input: {
@@ -284,23 +317,28 @@ function workspaceEvidenceScopeError(input: {
     workflow: input.workflow,
     workspacePath,
     allowedKinds: ['deliverable'],
+    storage: getWorkflowTypeConfig(input.workflow.workflow_type)?.storage,
   });
   return resolved.error || '';
 }
 
 function defaultTraceabilityWorkspacePath(workflow: Workflow): string {
-  const deliverable = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.deliverable,
-  );
-  if (!deliverable || !isSafeWorkspacePathSegment(deliverable)) return '';
-  return `/workspace/projects/${workflow.service}/iteration/${deliverable}/traceability.json`;
+  try {
+    return resolveWorkflowArtifactLocation({
+      workflow,
+      storage: getWorkflowTypeConfig(workflow.workflow_type)?.storage,
+      artifactPath: 'traceability.json',
+    }).containerPath;
+  } catch {
+    return '';
+  }
 }
 
 function loadJsonFile(input: {
   workflow: Workflow;
   workspacePath: string;
   allowedKinds: ScopedWorkspacePathKind[];
+  storage?: WorkflowStorageConfig;
 }): LoadedContextPack {
   const workspacePath = input.workspacePath;
   if (!workspacePath) {
@@ -362,6 +400,7 @@ function loadContextPack(workflow: Workflow): LoadedContextPack {
     workflow,
     workspacePath,
     allowedKinds: ['context_pack'],
+    storage: getWorkflowTypeConfig(workflow.workflow_type)?.storage,
   });
 }
 
@@ -397,6 +436,7 @@ function loadTraceability(input: {
     workflow: input.workflow,
     workspacePath,
     allowedKinds: ['deliverable'],
+    storage: getWorkflowTypeConfig(input.workflow.workflow_type)?.storage,
   });
   if (!loaded.pack) {
     return {
@@ -573,7 +613,8 @@ function evaluateSchema(input: {
       pushFinding(findings, {
         code: 'schema.verdict_invalid',
         severity: 'high',
-        message: 'Payload verdict must be passed, failed, needs_revision, or pending',
+        message:
+          'Payload verdict must be passed, failed, needs_revision, or pending',
         stageKey: input.stageKey,
         path: 'verdict',
       });
@@ -634,7 +675,9 @@ function evaluateSchema(input: {
   });
 }
 
-function collectContextPackEvidenceRefs(pack: Record<string, unknown> | null): Set<string> {
+function collectContextPackEvidenceRefs(
+  pack: Record<string, unknown> | null,
+): Set<string> {
   const refs = new Set<string>();
   const arrays = [
     pack?.evidence_index,
@@ -727,7 +770,8 @@ function payloadEvidenceRefs(payload: Record<string, unknown>): Set<string> {
   if (!Array.isArray(payload.evidence)) return refs;
   for (const item of payload.evidence) {
     if (!isPlainObject(item)) continue;
-    const ref = trimText(item.refId) || trimText(item.ref_id) || trimText(item.id);
+    const ref =
+      trimText(item.refId) || trimText(item.ref_id) || trimText(item.id);
     if (ref) refs.add(ref);
   }
   return refs;
@@ -818,7 +862,8 @@ function evaluateContextCoverage(input: {
     return makeResult({
       evaluatorType: 'context_coverage',
       status: 'needs_revision',
-      summary: 'Context coverage failed because traceability artifact is missing',
+      summary:
+        'Context coverage failed because traceability artifact is missing',
       findings,
       evidence,
     });
@@ -948,7 +993,9 @@ function evaluateContextCoverage(input: {
   });
 }
 
-function evidenceType(item: Record<string, unknown>): WorkflowEvalEvidence['type'] {
+function evidenceType(
+  item: Record<string, unknown>,
+): WorkflowEvalEvidence['type'] {
   const type = trimText(item.type);
   if (
     type === 'artifact' ||
@@ -989,7 +1036,7 @@ function validateEvidenceWorkspacePaths(input: {
     });
     if (scopeError) {
       input.missing(
-        `${field} is outside current service/deliverable (${scopeError}): ${value}`,
+        `${field} is outside current artifact root (${scopeError}): ${value}`,
       );
     }
   }
@@ -1022,7 +1069,13 @@ function validateEvidenceItem(input: {
   if (type === 'code') {
     if (!trimText(input.item.path)) missing('code evidence requires path');
     if (
-      !hasAnyField(input.item, ['branch', 'commit', 'repoPath', 'repo_path', 'repo'])
+      !hasAnyField(input.item, [
+        'branch',
+        'commit',
+        'repoPath',
+        'repo_path',
+        'repo',
+      ])
     ) {
       missing('code evidence requires branch, commit, repo, or repoPath');
     }
@@ -1036,7 +1089,8 @@ function validateEvidenceItem(input: {
       missing('code evidence should include symbol or line range', 'medium');
     }
   } else if (type === 'command') {
-    if (!trimText(input.item.command)) missing('command evidence requires command');
+    if (!trimText(input.item.command))
+      missing('command evidence requires command');
     if (!trimText(input.item.cwd)) missing('command evidence requires cwd');
     if (
       typeof input.item.exitCode !== 'number' &&
@@ -1045,7 +1099,9 @@ function validateEvidenceItem(input: {
       missing('command evidence requires exitCode');
     }
   } else if (type === 'test_result') {
-    if (!hasAnyField(input.item, ['command', 'reportPath', 'report_path', 'path'])) {
+    if (
+      !hasAnyField(input.item, ['command', 'reportPath', 'report_path', 'path'])
+    ) {
       missing('test_result evidence requires command, reportPath, or path');
     }
   } else if (type === 'wiki') {
@@ -1061,7 +1117,8 @@ function validateEvidenceItem(input: {
       missing('log evidence requires timeRange or query');
     }
   } else if (type === 'provider') {
-    if (!trimText(input.item.source)) missing('provider evidence requires source');
+    if (!trimText(input.item.source))
+      missing('provider evidence requires source');
     if (
       !hasAnyField(input.item, ['path', 'url', 'reportPath', 'report_path']) &&
       !isPlainObject(input.item.metadata)
@@ -1180,7 +1237,8 @@ function evaluateEvidence(input: {
     pushFinding(findings, {
       code: 'traceability.artifact_missing',
       severity: 'high',
-      message: 'Evidence evaluator requires traceability artifact when Context Pack is present',
+      message:
+        'Evidence evaluator requires traceability artifact when Context Pack is present',
       stageKey: input.stageKey,
       path: tracePath || undefined,
     });
@@ -1230,7 +1288,10 @@ function evaluateConsistency(input: {
     ['service', input.workflow.service],
     [
       'deliverable',
-      getWorkflowContextValue(input.workflow, WORKFLOW_CONTEXT_KEYS.deliverable),
+      getWorkflowContextValue(
+        input.workflow,
+        WORKFLOW_CONTEXT_KEYS.deliverable,
+      ),
     ],
     [
       'main_branch',
@@ -1264,12 +1325,20 @@ function evaluateConsistency(input: {
     tracePath &&
     deliverable &&
     tracePath !== 'payload.traceability' &&
-    !tracePath.includes(`/projects/${input.workflow.service}/iteration/${deliverable}/`)
+    !tracePath.startsWith(
+      `${
+        resolveWorkflowStorageRoot({
+          workflow: input.workflow,
+          storage: getWorkflowTypeConfig(input.workflow.workflow_type)?.storage,
+          root: 'artifact_root',
+        }).containerPath
+      }/`,
+    )
   ) {
     pushFinding(findings, {
       code: 'consistency.traceability_path_mismatch',
       severity: 'high',
-      message: `Traceability path is outside current service/deliverable: ${tracePath}`,
+      message: `Traceability path is outside current artifact root: ${tracePath}`,
       stageKey: input.stageKey,
       path: input.traceability.hostPath || tracePath,
     });
@@ -1311,7 +1380,8 @@ function evaluateExecution(input: {
     pushFinding(findings, {
       code: 'execution.evidence_missing',
       severity: 'high',
-      message: 'Execution evaluator requires command, test_result, or provider evidence',
+      message:
+        'Execution evaluator requires command, test_result, or provider evidence',
       stageKey: input.stageKey,
       path: input.traceability.hostPath || input.traceability.workspacePath,
     });
@@ -1441,7 +1511,10 @@ export function buildWorkflowQualityGateEvaluation(input: {
   const contextPack = loadContextPack(input.workflow);
   const traceability = loadTraceability({ workflow: input.workflow, payload });
   const evaluatorConfig = configuredEvaluators(input.qualityGate);
-  const resultsByType = new Map<WorkflowStageEvaluatorType, WorkflowStageEvalResult>();
+  const resultsByType = new Map<
+    WorkflowStageEvaluatorType,
+    WorkflowStageEvalResult
+  >();
   resultsByType.set(
     'schema',
     evaluateSchema({
@@ -1462,7 +1535,8 @@ export function buildWorkflowQualityGateEvaluation(input: {
       makeResult({
         evaluatorType: 'artifact',
         status: 'passed',
-        summary: 'Artifact evaluator skipped because no artifact contract is configured',
+        summary:
+          'Artifact evaluator skipped because no artifact contract is configured',
       }),
     );
   }
@@ -1514,7 +1588,8 @@ export function buildWorkflowQualityGateEvaluation(input: {
       evaluatorType: 'llm_judge',
       status: 'pending',
       score: input.stageEvaluation.score,
-      summary: 'LLM judge runs as a sidecar and is not part of deterministic aggregation yet',
+      summary:
+        'LLM judge runs as a sidecar and is not part of deterministic aggregation yet',
       evidence: [
         {
           type: 'workflow_state',

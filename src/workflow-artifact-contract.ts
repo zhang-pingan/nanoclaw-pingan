@@ -15,6 +15,13 @@ import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
+import { getWorkflowTypeConfig } from './workflow-config.js';
+import {
+  isPathInsideResolvedRoot,
+  resolveAllowedStorageRoot,
+  resolveWorkflowArtifactLocation,
+  resolveWorkspacePathToHost,
+} from './workflow-storage.js';
 
 type JsonSchema = {
   type?: string;
@@ -70,6 +77,7 @@ export interface WorkflowArtifactContract {
   description?: string;
   files?: Array<{
     path: string;
+    root?: 'artifact_root' | 'context_pack_root';
     required: boolean;
     allowed_roots?: string[];
     must_exist?: boolean;
@@ -306,35 +314,62 @@ export function saveWorkflowArtifactContract(input: {
   }
 }
 
-function resolveContractPath(workflow: Workflow, rawPath: string): string {
-  const deliverable = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.deliverable,
-  );
+function resolveContractPath(
+  workflow: Workflow,
+  rawPath: string,
+  root?: 'artifact_root' | 'context_pack_root',
+): { hostPath: string; containerPath: string; locationUri: string } {
+  const storage = getWorkflowTypeConfig(workflow.workflow_type)?.storage;
   const rendered = rawPath
     .replace(/\{\{service\}\}/g, workflow.service)
-    .replace(/\{\{deliverable\}\}/g, deliverable || '');
+    .replace(
+      /\{\{deliverable\}\}/g,
+      getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable) ||
+        '',
+    );
   if (rendered.startsWith('/workspace/')) {
-    return path.join(PROJECT_ROOT, rendered.replace(/^\/workspace\//, ''));
+    const resolved = resolveWorkspacePathToHost(rendered);
+    if (!resolved) {
+      throw new Error(`Unsupported workspace artifact path: ${rawPath}`);
+    }
+    return {
+      hostPath: resolved.hostPath,
+      containerPath: resolved.containerPath,
+      locationUri: resolved.locationUri,
+    };
   }
-  return path.isAbsolute(rendered)
-    ? rendered
-    : path.join(PROJECT_ROOT, rendered);
+  const resolved = resolveWorkflowArtifactLocation({
+    workflow,
+    storage,
+    artifactPath: rendered,
+    root: root || 'artifact_root',
+  });
+  return {
+    hostPath: resolved.hostPath,
+    containerPath: resolved.containerPath,
+    locationUri: resolved.locationUri,
+  };
 }
 
-function isUnderAllowedRoot(filePath: string, allowedRoots: string[]): boolean {
+function isUnderAllowedRoot(
+  workflow: Workflow,
+  filePath: string,
+  allowedRoots: string[],
+): boolean {
   if (allowedRoots.length === 0) return true;
-  const resolvedPath = path.resolve(filePath);
+  const storage = getWorkflowTypeConfig(workflow.workflow_type)?.storage;
   return allowedRoots.some((root) => {
-    const resolvedRoot = path.resolve(
-      root.startsWith('/workspace/')
-        ? path.join(PROJECT_ROOT, root.replace(/^\/workspace\//, ''))
-        : root,
-    );
-    return (
-      resolvedPath === resolvedRoot ||
-      resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)
-    );
+    try {
+      const resolvedRoot = resolveAllowedStorageRoot({
+        workflow,
+        storage,
+        allowedRoot: root,
+        stageKey: workflow.status,
+      });
+      return !!resolvedRoot && isPathInsideResolvedRoot(filePath, resolvedRoot);
+    } catch {
+      return false;
+    }
   });
 }
 
@@ -573,18 +608,37 @@ export function evaluateWorkflowArtifactContract(input: {
   }
 
   for (const file of contract.files || []) {
-    const fullPath = resolveContractPath(input.workflow, file.path);
+    let resolvedPath: {
+      hostPath: string;
+      containerPath: string;
+      locationUri: string;
+    };
+    try {
+      resolvedPath = resolveContractPath(input.workflow, file.path, file.root);
+    } catch (err) {
+      findings.push({
+        code: 'artifact_contract.path_outside_allowed_roots',
+        severity: 'critical',
+        message: `Artifact path cannot be resolved: ${file.path} (${
+          err instanceof Error ? err.message : String(err)
+        })`,
+        stageKey: input.workflow.status,
+        path: file.path,
+      });
+      continue;
+    }
+    const fullPath = resolvedPath.hostPath;
     const allowedRoots = [
       ...(contract.allowed_artifact_roots || []),
       ...(file.allowed_roots || []),
     ];
-    if (!isUnderAllowedRoot(fullPath, allowedRoots)) {
+    if (!isUnderAllowedRoot(input.workflow, fullPath, allowedRoots)) {
       findings.push({
         code: 'artifact_contract.path_outside_allowed_roots',
         severity: 'critical',
         message: `Artifact path is outside allowed roots: ${file.path}`,
         stageKey: input.workflow.status,
-        path: fullPath,
+        path: resolvedPath.containerPath,
       });
       continue;
     }
@@ -595,7 +649,7 @@ export function evaluateWorkflowArtifactContract(input: {
         severity: 'high',
         message: `Required artifact is missing: ${file.path}`,
         stageKey: input.workflow.status,
-        path: fullPath,
+        path: resolvedPath.containerPath,
       });
       continue;
     }
@@ -612,7 +666,7 @@ export function evaluateWorkflowArtifactContract(input: {
           severity: 'high',
           message: `Artifact frontmatter is missing: ${file.path}`,
           stageKey: input.workflow.status,
-          path: fullPath,
+          path: resolvedPath.containerPath,
         });
       }
       for (const requiredKey of file.frontmatter_required || []) {
@@ -622,7 +676,7 @@ export function evaluateWorkflowArtifactContract(input: {
             severity: 'high',
             message: `Artifact frontmatter missing required field "${requiredKey}": ${file.path}`,
             stageKey: input.workflow.status,
-            path: fullPath,
+            path: resolvedPath.containerPath,
           });
         }
       }
@@ -637,7 +691,7 @@ export function evaluateWorkflowArtifactContract(input: {
             severity: 'high',
             message: error,
             stageKey: input.workflow.status,
-            path: fullPath,
+            path: resolvedPath.containerPath,
           });
         }
       }
@@ -647,7 +701,7 @@ export function evaluateWorkflowArtifactContract(input: {
           severity: 'medium',
           message: `Artifact exceeds max_bytes: ${file.path}`,
           stageKey: input.workflow.status,
-          path: fullPath,
+          path: resolvedPath.containerPath,
         });
       }
       for (const check of file.content_checks || []) {
@@ -658,7 +712,7 @@ export function evaluateWorkflowArtifactContract(input: {
             severity,
             message: check.message,
             stageKey: input.workflow.status,
-            path: fullPath,
+            path: resolvedPath.containerPath,
             suggestion: check.suggestion,
           });
           // A failed content check means the document exists but is
@@ -688,7 +742,7 @@ export function evaluateWorkflowArtifactContract(input: {
             severity: 'high',
             message: `Artifact body is not valid JSON: ${file.path}`,
             stageKey: input.workflow.status,
-            path: fullPath,
+            path: resolvedPath.containerPath,
           });
         } else {
           for (const field of file.body_required_fields || []) {
@@ -698,7 +752,7 @@ export function evaluateWorkflowArtifactContract(input: {
                 severity: 'high',
                 message: `Artifact body missing required field "${field}": ${file.path}`,
                 stageKey: input.workflow.status,
-                path: fullPath,
+                path: resolvedPath.containerPath,
               });
             }
           }
@@ -719,7 +773,7 @@ export function evaluateWorkflowArtifactContract(input: {
                   payload_value: payloadValue,
                 }),
                 stageKey: input.workflow.status,
-                path: fullPath,
+                path: resolvedPath.containerPath,
                 suggestion: match.suggestion,
               });
               semanticFindingCodes.add(match.code);
@@ -730,7 +784,7 @@ export function evaluateWorkflowArtifactContract(input: {
       }
       evidence.push({
         type: 'artifact',
-        path: fullPath,
+        path: resolvedPath.containerPath,
         summary: `Artifact contract file present: ${file.path}`,
       });
     }

@@ -57,7 +57,7 @@ description: Use only in the fix_test workflow. Re-fix bugs that failed fix_test
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/projects/catstory/iteration/2026-04-27_bugfix_login-500/fix.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/fix.md",
       "summary": "已在 fix.md 追加复修记录"
     }
   ]

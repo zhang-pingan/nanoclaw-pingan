@@ -27,6 +27,7 @@ import {
   createWorkflowOutbox,
   createWorkflowStageEvaluation,
   createWorkflow as dbCreateWorkflow,
+  assertWorkbenchArtifactLocationsMigrated,
   getAllActiveWorkflows,
   getAllWorkflows,
   getDelegation,
@@ -135,6 +136,10 @@ import {
   WorkflowContextPack,
 } from './workflow-context-pack.js';
 import {
+  resolveWorkflowArtifactLocation,
+  resolveWorkflowStorageRoot,
+} from './workflow-storage.js';
+import {
   buildWorkflowQualityGateEvaluation,
   buildWorkflowQualityGateRecords,
 } from './workflow-quality-gate.js';
@@ -193,20 +198,31 @@ function isSafeWorkflowPathSegment(value: string): boolean {
 }
 
 function workflowDeliverableDirExists(
-  workflow: Pick<Workflow, 'service'>,
+  workflow: Workflow,
   deliverable: string,
 ): boolean {
-  if (!workflow.service || !isSafeWorkflowPathSegment(deliverable)) {
+  if (!isSafeWorkflowPathSegment(deliverable)) {
     return false;
   }
-  const dir = path.join(
-    PROJECT_ROOT,
-    'projects',
-    workflow.service,
-    'iteration',
-    deliverable.trim(),
-  );
-  return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+  try {
+    const config = getWorkflowTypeConfig(workflow.workflow_type);
+    const root = resolveWorkflowStorageRoot({
+      workflow: {
+        ...workflow,
+        context: {
+          ...workflow.context,
+          [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable.trim(),
+        },
+      },
+      storage: config?.storage,
+      root: 'artifact_root',
+    });
+    return (
+      fs.existsSync(root.hostPath) && fs.statSync(root.hostPath).isDirectory()
+    );
+  } catch {
+    return false;
+  }
 }
 
 interface WorkflowCheckpointPayload {
@@ -1128,6 +1144,7 @@ export function processWorkflowOutbox(limit = 50): void {
 }
 
 function validateActiveWorkflowGate(): void {
+  assertWorkbenchArtifactLocationsMigrated();
   const activeWorkflows = getAllActiveWorkflows();
   const invalid: string[] = [];
   for (const workflow of activeWorkflows) {
@@ -1453,19 +1470,40 @@ function readMetadataFromFile(filePath: string): Partial<DeliverableMetadata> {
   };
 }
 
-/** Read a specific deliverable directory and return its metadata. */
-function readDeliverableDir(
-  service: string,
-  dirName: string,
-): DeliverableMetadata | null {
+/** Read a specific workflow artifact root directory and return its metadata. */
+function readDeliverableDir(input: {
+  workflowId: string;
+  workflowType: string;
+  service: string;
+  sourceJid: string;
+  dirName: string;
+  context?: WorkflowContext;
+}): DeliverableMetadata | null {
+  const dirName = input.dirName;
   if (!isSafeWorkflowPathSegment(dirName)) return null;
-  const delivDir = path.join(
-    PROJECT_ROOT,
-    'projects',
-    service,
-    'iteration',
-    dirName,
-  );
+  const delivDir = resolveWorkflowStorageRoot({
+    workflow: {
+      id: input.workflowId,
+      name: '',
+      service: input.service,
+      start_from: '',
+      context: {
+        ...(input.context || {}),
+        [WORKFLOW_CONTEXT_KEYS.deliverable]: dirName,
+      },
+      status: 'pending',
+      current_delegation_id: '',
+      round: 1,
+      source_jid: input.sourceJid,
+      paused_from: null,
+      workflow_type: input.workflowType,
+      feature_id: getWorkflowDefinitionFeatureId(input.workflowType),
+      created_at: '',
+      updated_at: '',
+    },
+    storage: getWorkflowTypeConfig(input.workflowType)?.storage,
+    root: 'artifact_root',
+  }).hostPath;
   if (!fs.existsSync(delivDir)) return null;
 
   // Accept any regular deliverable file, not just `.md`. The workflow's
@@ -1506,15 +1544,50 @@ function isPathInsideDir(baseDir: string, targetPath: string): boolean {
   return !!relative && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-function mapProjectHostPathToAgentPath(filePath: string): string {
+function workflowWithDeliverable(
+  workflow: Workflow,
+  deliverable: string,
+): Workflow {
+  return {
+    ...workflow,
+    context: {
+      ...workflow.context,
+      [WORKFLOW_CONTEXT_KEYS.deliverable]: deliverable,
+    },
+  };
+}
+
+function artifactRootForDeliverable(
+  workflow: Workflow,
+  deliverable: string,
+  create = false,
+): { hostPath: string; containerPath: string } | null {
+  if (!isSafeWorkflowPathSegment(deliverable)) return null;
+  try {
+    const config = getWorkflowTypeConfig(workflow.workflow_type);
+    return resolveWorkflowStorageRoot({
+      workflow: workflowWithDeliverable(workflow, deliverable),
+      storage: config?.storage,
+      root: 'artifact_root',
+      create,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function mapArtifactHostPathToAgentPath(
+  artifactRoot: { hostPath: string; containerPath: string },
+  filePath: string,
+): string {
   const relative = path.relative(
-    path.join(PROJECT_ROOT, 'projects'),
+    path.resolve(artifactRoot.hostPath),
     path.resolve(filePath),
   );
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
     return filePath;
   }
-  return `/workspace/projects/${relative.split(path.sep).join('/')}`;
+  return `${artifactRoot.containerPath}/${relative.split(path.sep).join('/')}`;
 }
 
 function sanitizeProjectMarkdownFilename(
@@ -1553,20 +1626,13 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function listDeliverableTestCaseFiles(
-  service: string,
+  workflow: Workflow,
   deliverable: string,
 ): string[] {
-  if (!isSafeWorkflowPathSegment(deliverable)) return [];
-  const deliverableDir = path.join(
-    PROJECT_ROOT,
-    'projects',
-    service,
-    'iteration',
-    deliverable,
-  );
-  if (!fs.existsSync(deliverableDir)) return [];
+  const artifactRoot = artifactRootForDeliverable(workflow, deliverable);
+  if (!artifactRoot || !fs.existsSync(artifactRoot.hostPath)) return [];
   return fs
-    .readdirSync(deliverableDir)
+    .readdirSync(artifactRoot.hostPath)
     .filter(
       (fileName) =>
         fileName === `${TEST_CASE_FILE_BASENAME}.md` ||
@@ -1574,7 +1640,10 @@ function listDeliverableTestCaseFiles(
     )
     .sort((a, b) => a.localeCompare(b, 'zh-CN'))
     .map((fileName) =>
-      mapProjectHostPathToAgentPath(path.join(deliverableDir, fileName)),
+      mapArtifactHostPathToAgentPath(
+        artifactRoot,
+        path.join(artifactRoot.hostPath, fileName),
+      ),
     );
 }
 
@@ -1594,26 +1663,21 @@ function materializeTestCaseFilesForDeliverable(
   );
   const currentFiles = uniqueStrings([
     ...originalFiles,
-    ...listDeliverableTestCaseFiles(workflow.service, deliverable),
+    ...listDeliverableTestCaseFiles(workflow, deliverable),
   ]);
   if (currentFiles.length === 0) return {};
 
-  const deliverableDir = path.join(
-    PROJECT_ROOT,
-    'projects',
-    workflow.service,
-    'iteration',
-    deliverable,
-  );
-  if (!fs.existsSync(deliverableDir)) return {};
+  const artifactRoot = artifactRootForDeliverable(workflow, deliverable, true);
+  if (!artifactRoot) return {};
 
   const materializedFiles = uniqueStrings(
     currentFiles.map((filePath, index) => {
-      if (filePath.startsWith('/workspace/projects/')) return filePath;
+      if (filePath.startsWith('/workspace/workflows/')) return filePath;
+      if (filePath.startsWith('/workspace/features/')) return filePath;
 
       const resolvedPath = path.resolve(filePath);
-      if (isPathInsideDir(deliverableDir, resolvedPath)) {
-        return mapProjectHostPathToAgentPath(resolvedPath);
+      if (isPathInsideDir(artifactRoot.hostPath, resolvedPath)) {
+        return mapArtifactHostPathToAgentPath(artifactRoot, resolvedPath);
       }
 
       if (!isPathInsideDir(WEB_UPLOADS_DIR, resolvedPath)) return filePath;
@@ -1622,11 +1686,11 @@ function materializeTestCaseFilesForDeliverable(
       }
 
       const destination = uniquePathInDir(
-        deliverableDir,
+        artifactRoot.hostPath,
         sanitizeProjectMarkdownFilename(resolvedPath, index),
       );
       fs.copyFileSync(resolvedPath, destination);
-      return mapProjectHostPathToAgentPath(destination);
+      return mapArtifactHostPathToAgentPath(artifactRoot, destination);
     }),
   );
 
@@ -1639,24 +1703,20 @@ function materializeTestCaseFilesForDeliverable(
     : {};
 }
 
-function buildDocPath(
-  workflow: Pick<Workflow, 'service' | 'context'>,
-  fileName: string,
-): string {
-  const deliverable = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.deliverable,
-  );
-  if (!deliverable || !isSafeWorkflowPathSegment(deliverable)) {
+function buildDocPath(workflow: Workflow, fileName: string): string {
+  if (!fileName) return '';
+  try {
+    return resolveWorkflowArtifactLocation({
+      workflow,
+      storage: getWorkflowTypeConfig(workflow.workflow_type)?.storage,
+      artifactPath: fileName,
+    }).containerPath;
+  } catch {
     return '';
   }
-  return `/workspace/projects/${workflow.service}/iteration/${deliverable}/${fileName}`;
 }
 
-function buildArtifactRefPath(
-  workflow: Pick<Workflow, 'service' | 'context'>,
-  ref: string,
-): string {
+function buildArtifactRefPath(workflow: Workflow, ref: string): string {
   const fileName = getWorkflowArtifactFileNameForRef(ref);
   return fileName ? buildDocPath(workflow, fileName) : '';
 }
@@ -1818,6 +1878,7 @@ function buildTemplateVars(
       WORKFLOW_CONTEXT_KEYS.workBranch,
     ),
     id: workflow.id,
+    workflow_id: workflow.id,
     round: workflow.round,
     deliverable:
       getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.deliverable) ||
@@ -3243,6 +3304,7 @@ function createDelegationForState(input: {
     targetFolder,
     registeredGroups: getDeps().registeredGroups(),
     contextRequirements: input.stateConfig.context_requirements,
+    storage: getWorkflowTypeConfig(workflowForDelegate.workflow_type)?.storage,
   });
   const contextPatch = mergeWorkflowContext(
     beforeHook.contextPatch,
@@ -4497,11 +4559,18 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       };
     }
 
-    const deliverable = readDeliverableDir(opts.service, opts.deliverable);
+    const deliverable = readDeliverableDir({
+      workflowId,
+      workflowType,
+      service: opts.service,
+      sourceJid: opts.sourceJid,
+      dirName: opts.deliverable,
+      context: opts.context,
+    });
     if (!deliverable) {
       return {
         workflowId,
-        error: `交付文档目录 "${opts.deliverable}" 不存在 (projects/${opts.service}/iteration/${opts.deliverable}/)`,
+        error: `交付文档目录 "${opts.deliverable}" 不存在 (data/workflows/${workflowId}/artifacts/${opts.deliverable}/)`,
       };
     }
     const requiredDeliverableFiles =
@@ -4512,7 +4581,7 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
     if (missingDeliverableFiles.length > 0) {
       return {
         workflowId,
-        error: `入口 "${opts.startFrom}" 需要交付物 ${missingDeliverableFiles.join(', ')}，但目录 projects/${opts.service}/iteration/${opts.deliverable}/ 中未找到。`,
+        error: `入口 "${opts.startFrom}" 需要交付物 ${missingDeliverableFiles.join(', ')}，但 workflow artifact root data/workflows/${workflowId}/artifacts/${opts.deliverable}/ 中未找到。`,
       };
     }
 

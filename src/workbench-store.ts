@@ -1,7 +1,5 @@
 import fs from 'fs';
-import path from 'path';
 
-import { PROJECT_ROOT } from './config.js';
 import {
   createWorkbenchActionItem,
   createWorkbenchArtifact,
@@ -515,39 +513,29 @@ function buildEvaluationEventBody(params: {
 }
 
 function ensureArtifacts(workflow: Workflow): void {
-  const deliverable = getWorkflowContextValue(
-    workflow,
-    WORKFLOW_CONTEXT_KEYS.deliverable,
-  );
-  if (!deliverable || !workflow.service) return;
   const task = getWorkbenchTaskByWorkflowId(workflow.id);
   if (!task) return;
 
-  const baseDir = path.join(
-    PROJECT_ROOT,
-    'projects',
-    workflow.service,
-    'iteration',
-    deliverable,
-  );
   const workflowConfig = getWorkflowTypeConfig(workflow.workflow_type);
   const artifactDefinitions = resolveWorkflowArtifactDefinitions(
     workflowConfig?.artifacts,
     workflow,
+    workflowConfig?.storage,
   );
   for (const def of artifactDefinitions) {
-    const relativePath =
-      def.project_path ||
-      path.relative(PROJECT_ROOT, path.join(baseDir, def.file));
-    const fullPath = path.join(PROJECT_ROOT, relativePath);
-    if (!fs.existsSync(fullPath)) continue;
+    if (!fs.existsSync(def.host_path)) continue;
     createWorkbenchArtifact({
-      id: `${task.id}-${def.file}`,
+      id: `${task.id}-${def.location_uri}`,
       task_id: task.id,
       workflow_id: workflow.id,
       artifact_type: def.artifact_type,
       title: def.title,
-      path: relativePath,
+      path: def.container_path,
+      location_kind: def.location_kind,
+      location_uri: def.location_uri,
+      host_path: def.host_path,
+      container_path: def.container_path,
+      feature_id: def.feature_id || null,
       source_role: def.source_role,
       created_at: workflow.updated_at,
     });
@@ -556,10 +544,11 @@ function ensureArtifacts(workflow: Workflow): void {
       taskId: task.id,
       workflowId: workflow.id,
       payload: {
-        id: `${task.id}-${def.file}`,
+        id: `${task.id}-${def.location_uri}`,
         title: def.title,
-        path: relativePath,
-        absolutePath: fullPath,
+        path: def.container_path,
+        locationUri: def.location_uri,
+        absolutePath: def.host_path,
         createdAt: workflow.updated_at,
       },
     });

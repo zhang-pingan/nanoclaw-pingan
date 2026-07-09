@@ -12,13 +12,14 @@ description: Use only in the dev_test workflow. Review implemented code against 
 ## 目标
 
 对开发产出做独立复核，明确：
+
 - 实际实现是否与方案一致
 - 代码质量与可维护性是否达标
 - 是否存在阻断上线的风险
 
 ## 复核流程
 
-1. 从任务描述中获取方案文件路径，方案文档: `/workspace/projects/{服务名}/iteration/{文件夹名}/plan.md` , 开发交付文档: `/workspace/projects/{服务名}/iteration/{文件夹名}/dev.md`
+1. 从任务描述中获取方案文件路径，方案文档: `/workspace/workflows/{workflowId}/artifacts/{deliverable}/plan.md` , 开发交付文档: `/workspace/workflows/{workflowId}/artifacts/{deliverable}/dev.md`
    确认目标范围与约束；如果文档缺失则停止进行并使用`complete_delegation` 回传结果（`outcome=failure`）
 2. 根据服务名获取服务配置文件路径`repo_path`，进入仓库目录`/workspace/repos/{repo_path}`，检出并更新`工作分支`
 3. 对照实现进行一致性检查（功能点、接口、数据结构、异常路径）
@@ -41,7 +42,7 @@ description: Use only in the dev_test workflow. Review implemented code against 
 ## 输出格式
 
 ```markdown
-*开发复核结果*
+_开发复核结果_
 
 结论：{通过 / 不通过}
 
@@ -49,15 +50,18 @@ description: Use only in the dev_test workflow. Review implemented code against 
 • {一句话总结}
 
 一致性检查：
+
 1. {与方案一致/不一致点}
 2. {与方案一致/不一致点}
 
 代码审查问题（按优先级）：
+
 1. {问题}
 2. {问题}
 3. {问题}
 
 修复建议：
+
 1. {建议}
 2. {建议}
 3. {建议}
