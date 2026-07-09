@@ -1,4 +1,5 @@
 import { logger as coreLogger } from '../logger.js';
+import { recordFeatureAuditEvent } from '../db.js';
 import { FeatureApiRegistry, NavigationRegistry } from './registry.js';
 import { FeatureManifest } from './manifest.js';
 import { FeatureMigrationRegistry } from './migrations.js';
@@ -17,7 +18,10 @@ export interface FeatureLogger {
 }
 
 export interface EventRegistry {
-  subscribe: (eventName: string, handler: (event: unknown) => void) => void;
+  subscribe: (
+    eventName: string,
+    handler: (event: unknown) => void,
+  ) => () => void;
 }
 
 export interface PermissionRegistry {
@@ -28,7 +32,6 @@ export interface PermissionRegistry {
 
 export interface AuditService {
   record: (event: {
-    featureId: string;
     action: string;
     status: 'success' | 'failure';
     payloadHash?: string;
@@ -61,6 +64,16 @@ export function createFeatureLogger(featureId: string): FeatureLogger {
   };
 }
 
+type FeatureEventSubscription = {
+  featureId: string;
+  handler: (event: unknown) => void;
+};
+
+const featureEventSubscriptions = new Map<
+  string,
+  Set<FeatureEventSubscription>
+>();
+
 export function createPermissionRegistry(
   manifest: FeatureManifest,
 ): PermissionRegistry {
@@ -92,18 +105,62 @@ export function createPermissionRegistry(
   };
 }
 
-export function createEventRegistry(): EventRegistry {
+export function createEventRegistry(featureId: string): EventRegistry {
   return {
-    subscribe: () => {
-      throw new Error('Feature event subscriptions are not available yet');
+    subscribe: (eventName, handler) => {
+      const subscriptions =
+        featureEventSubscriptions.get(eventName) ||
+        new Set<FeatureEventSubscription>();
+      featureEventSubscriptions.set(eventName, subscriptions);
+      const subscription = { featureId, handler };
+      subscriptions.add(subscription);
+      return () => {
+        subscriptions.delete(subscription);
+        if (subscriptions.size === 0)
+          featureEventSubscriptions.delete(eventName);
+      };
     },
   };
+}
+
+export function publishFeatureEvent(eventName: string, event: unknown): void {
+  const subscriptions = featureEventSubscriptions.get(eventName);
+  if (!subscriptions) return;
+  for (const subscription of [...subscriptions]) {
+    try {
+      subscription.handler(event);
+    } catch (err) {
+      coreLogger.error(
+        { err, featureId: subscription.featureId, eventName },
+        'Feature event subscription failed',
+      );
+    }
+  }
+}
+
+export function clearFeatureEventSubscriptions(featureId: string): void {
+  for (const [eventName, subscriptions] of featureEventSubscriptions) {
+    for (const subscription of [...subscriptions]) {
+      if (subscription.featureId === featureId) {
+        subscriptions.delete(subscription);
+      }
+    }
+    if (subscriptions.size === 0) featureEventSubscriptions.delete(eventName);
+  }
 }
 
 export function createAuditService(featureId: string): AuditService {
   return {
     record: (event) => {
-      coreLogger.info({ featureId, event }, 'Feature audit event');
+      recordFeatureAuditEvent({
+        featureId,
+        action: event.action,
+        status: event.status,
+        metadata: {
+          ...(event.metadata || {}),
+          ...(event.payloadHash ? { payloadHash: event.payloadHash } : {}),
+        },
+      });
     },
   };
 }

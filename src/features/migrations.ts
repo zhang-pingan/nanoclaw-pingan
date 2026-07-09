@@ -8,6 +8,10 @@ import {
   recordFeatureMigration,
 } from '../db.js';
 import { logger } from '../logger.js';
+import {
+  getFeatureOwnedTablePrefixes,
+  isFeatureOwnedTableName,
+} from './naming.js';
 
 export interface FeatureMigrationSource {
   featureId: string;
@@ -87,21 +91,31 @@ const CORE_TABLE_PATTERNS = [
   'registered_groups',
   'feature_group_bindings',
   'feature_migrations',
+  'feature_audit_events',
   'workflows',
   'workbench_',
   'agent_queries',
+  'agent_query_',
+  'agent_inbox_items',
   'workflow_events',
   'workflow_interrupts',
   'workflow_checkpoints',
   'workflow_outbox',
   'delegations',
   'messages',
+  'messages_fts',
   'chats',
   'sessions',
   'router_state',
   'scheduled_tasks',
+  'ask_questions',
   'memories',
+  'memories_fts',
+  'memory_',
   'knowledge_',
+  'today_plan',
+  'assistant_',
+  'wiki_',
 ];
 
 function assertFeatureMigrationSqlAllowed(
@@ -122,4 +136,51 @@ function assertFeatureMigrationSqlAllowed(
       );
     }
   }
+  for (const tableName of extractReferencedTableNames(normalized)) {
+    if (tableName.startsWith('sqlite_')) continue;
+    if (isFeatureOwnedTableName(featureId, tableName)) continue;
+    throw new Error(
+      `Feature ${featureId} migration ${version} references table "${tableName}", but feature migrations may only use feature-owned table prefixes: ${getFeatureOwnedTablePrefixes(featureId).join(', ')}`,
+    );
+  }
+}
+
+function extractReferencedTableNames(sql: string): string[] {
+  const names = new Set<string>();
+  const patterns = [
+    /\bcreate\s+(?:virtual\s+)?table(?:\s+if\s+not\s+exists)?\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\bdrop\s+table(?:\s+if\s+exists)?\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\balter\s+table\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\binsert\s+(?:or\s+[a-z_]+\s+)?into\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\breplace\s+into\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\bupdate\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\bdelete\s+from\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\bfrom\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\bjoin\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\breferences\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\bcreate\s+(?:unique\s+)?index(?:\s+if\s+not\s+exists)?\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)\s+on\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+    /\bcreate\s+trigger(?:\s+if\s+not\s+exists)?\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)\s+(?:before|after|instead\s+of)\s+\w+\s+on\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[a-z_][a-z0-9_]*)/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of sql.matchAll(pattern)) {
+      const rawName = match[2] || match[1];
+      const name = normalizeSqlIdentifier(rawName);
+      if (name) names.add(name);
+    }
+  }
+  return [...names];
+}
+
+function normalizeSqlIdentifier(rawName: string | undefined): string | null {
+  if (!rawName) return null;
+  const trimmed = rawName.trim();
+  if (!trimmed) return null;
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith('`') && trimmed.endsWith('`')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
 }

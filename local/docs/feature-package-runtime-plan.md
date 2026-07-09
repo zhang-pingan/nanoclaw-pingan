@@ -527,6 +527,7 @@ templates
 加载原则：
 
 - 只把 enabled feature 的资源同步或挂载进容器。
+- 第一阶段 feature-scoped 的 skills、agents、MCP、scripts、templates 默认只对该 feature 通过 `feature_group_bindings` 绑定的独占 group 可见；未绑定 group 只能看到 core 资源，避免跨功能包资源泄露。后续如需跨 group 共享，必须在 manifest 中增加显式可见范围。
 - 资源进入容器前经过 manifest 和 permission 校验。
 - scripts 不直接开放给 agent 任意执行，必须通过 host action 或白名单策略。
 - MCP server 必须声明权限、可见目录、凭证来源和审计策略。
@@ -582,6 +583,8 @@ feature_migrations
   checksum
   applied_at
 ```
+
+Feature migration 只能创建或修改当前 feature 拥有的表。表名必须使用 `feature_<normalizedFeatureId>_` 前缀，例如 `feature_example_feature_projection`；禁止 migration 触碰 core 表、其他 feature 表或无归属前缀的表。删除摘要和“停用并删除”也按同一前缀识别 feature projection/config/cache 表。
 
 Projection 构建方式：
 

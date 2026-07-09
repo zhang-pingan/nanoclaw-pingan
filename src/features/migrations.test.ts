@@ -46,4 +46,75 @@ describe('feature migrations', () => {
       }),
     ).toThrow(/protected core table/);
   });
+
+  it('rejects migrations that touch unowned table names', async () => {
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-feature-migration-'),
+    );
+    process.chdir(tempDir);
+    const migrationDir = path.join(
+      tempDir,
+      'features',
+      'example-feature',
+      'host',
+      'migrations',
+    );
+    fs.mkdirSync(migrationDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(migrationDir, '001_bad.sql'),
+      'CREATE TABLE example_projection (id TEXT PRIMARY KEY);\n',
+      'utf-8',
+    );
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const migrations = await import('./migrations.js');
+
+    expect(() =>
+      migrations.runFeatureMigrations({
+        featureId: 'example-feature',
+        dir: migrationDir,
+      }),
+    ).toThrow(/feature-owned table prefixes/);
+  });
+
+  it('allows migrations that only touch feature-owned table prefixes', async () => {
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-feature-migration-'),
+    );
+    process.chdir(tempDir);
+    const migrationDir = path.join(
+      tempDir,
+      'features',
+      'example-feature',
+      'host',
+      'migrations',
+    );
+    fs.mkdirSync(migrationDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(migrationDir, '001_projection.sql'),
+      [
+        'CREATE TABLE feature_example_feature_projection (id TEXT PRIMARY KEY, value TEXT);',
+        'CREATE INDEX idx_feature_example_feature_projection_value ON feature_example_feature_projection(value);',
+        "INSERT INTO feature_example_feature_projection (id, value) VALUES ('1', 'ok');",
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const migrations = await import('./migrations.js');
+
+    migrations.runFeatureMigrations({
+      featureId: 'example-feature',
+      dir: migrationDir,
+    });
+
+    const row = db
+      .getDatabase()
+      .prepare(
+        'SELECT value FROM feature_example_feature_projection WHERE id = ?',
+      )
+      .get('1') as { value: string } | undefined;
+    expect(row?.value).toBe('ok');
+  });
 });

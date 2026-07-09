@@ -185,4 +185,69 @@ describe('feature management', () => {
       .get();
     expect(table).toBeUndefined();
   });
+
+  it('stops feature groups before data deletion and reloads registered groups', async () => {
+    const workspace = setupFeatureWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const now = new Date().toISOString();
+    db.setRegisteredGroup('feature:example-feature:main', {
+      name: 'Example Feature',
+      folder: 'example_feature_main',
+      trigger: '@Andy',
+      added_at: now,
+      requiresTrigger: false,
+    });
+    db.setFeatureGroupBinding({
+      featureId: 'example-feature',
+      groupKey: 'main',
+      groupJid: 'feature:example-feature:main',
+      groupFolder: 'example_feature_main',
+    });
+    fs.mkdirSync(path.join(workspace, 'groups', 'example_feature_main'), {
+      recursive: true,
+    });
+
+    const stopped: string[] = [];
+    let reloadCount = 0;
+    const management = await import('./management.js');
+    management.configureFeatureManagementHostHooks({
+      stopFeatureGroups: (groups) => {
+        stopped.push(...groups.map((group) => group.jid));
+      },
+      reloadRegisteredGroups: () => {
+        reloadCount += 1;
+      },
+    });
+
+    await management.deleteFeatureData('example-feature');
+
+    expect(stopped).toEqual(['feature:example-feature:main']);
+    expect(reloadCount).toBe(1);
+    expect(
+      db.getFeatureGroupBinding('example-feature', 'main'),
+    ).toBeUndefined();
+  });
+
+  it('reloads registered groups after applying feature enable changes', async () => {
+    setupFeatureWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    let reloadCount = 0;
+    const management = await import('./management.js');
+    management.configureFeatureManagementHostHooks({
+      reloadRegisteredGroups: () => {
+        reloadCount += 1;
+      },
+    });
+
+    const result = await management.setFeatureEnabledAndApply({
+      featureId: 'example-feature',
+      enabled: true,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.runtimeApplied).toBe(true);
+    expect(reloadCount).toBe(1);
+  });
 });

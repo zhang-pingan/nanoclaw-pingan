@@ -18,6 +18,7 @@ import {
   createEventRegistry,
   createFeatureLogger,
   createPermissionRegistry,
+  clearFeatureEventSubscriptions,
   FeatureContext,
   FeatureModule,
 } from './context.js';
@@ -342,7 +343,12 @@ async function activateHostEntry(
     );
   }
   const context = createFeatureContext(feature);
-  await module.activate(context);
+  try {
+    await module.activate(context);
+  } catch (err) {
+    clearFeatureEventSubscriptions(feature.manifest.id);
+    throw err;
+  }
   return {
     featureId: feature.manifest.id,
     module,
@@ -359,14 +365,17 @@ async function deactivateActiveHosts(): Promise<void> {
 
 async function deactivateHosts(hosts: ActiveFeatureHost[]): Promise<void> {
   for (const host of [...hosts].reverse()) {
-    if (typeof host.module.deactivate !== 'function') continue;
     try {
-      await host.module.deactivate(host.context);
+      if (typeof host.module.deactivate === 'function') {
+        await host.module.deactivate(host.context);
+      }
     } catch (err) {
       logger.error(
         { err, featureId: host.featureId },
         'Feature host deactivate failed',
       );
+    } finally {
+      clearFeatureEventSubscriptions(host.featureId);
     }
   }
 }
@@ -389,7 +398,7 @@ function createFeatureContext(feature: LoadedFeatureManifest): FeatureContext {
     containerResources: featureResources,
     mcp: featureResources,
     db: featureMigrations,
-    events: createEventRegistry(),
+    events: createEventRegistry(feature.manifest.id),
     permissions: createPermissionRegistry(feature.manifest),
     audit: createAuditService(feature.manifest.id),
   };

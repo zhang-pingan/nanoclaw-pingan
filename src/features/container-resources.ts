@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { DATA_DIR } from '../config.js';
+import { getFeatureGroupBindingByFolder } from '../db.js';
 import { logger } from '../logger.js';
 import { featureResources } from './registry.js';
 
@@ -24,10 +25,15 @@ export function syncContainerSkills(input: {
       featureId: null,
       dir: path.join(process.cwd(), 'container', 'skills'),
     },
-    ...featureResources.list('skills').map((source) => ({
-      featureId: source.featureId,
-      dir: source.dir,
-    })),
+    ...featureResources
+      .list('skills')
+      .filter((source) =>
+        isFeatureResourceVisibleToGroup(source.featureId, input.groupFolder),
+      )
+      .map((source) => ({
+        featureId: source.featureId,
+        dir: source.dir,
+      })),
   ];
 
   fs.mkdirSync(input.skillsDst, { recursive: true });
@@ -49,7 +55,11 @@ export function syncContainerAgents(input: {
 }): void {
   const sources: ResourceSource[] = featureResources
     .list('agents')
-    .filter((source) => !!source.featureId)
+    .filter(
+      (source) =>
+        !!source.featureId &&
+        isFeatureResourceVisibleToGroup(source.featureId, input.groupFolder),
+    )
     .map((source) => ({
       featureId: source.featureId as string,
       dir: source.dir,
@@ -70,7 +80,9 @@ export function syncContainerAgents(input: {
   }
 }
 
-export function prepareFeatureResourceMountDir(groupFolder: string): string | null {
+export function prepareFeatureResourceMountDir(
+  groupFolder: string,
+): string | null {
   const sources = [
     ...featureResources.list('scripts').map((source) => ({
       kind: 'scripts' as const,
@@ -82,14 +94,25 @@ export function prepareFeatureResourceMountDir(groupFolder: string): string | nu
       featureId: source.featureId,
       dir: source.dir,
     })),
-  ].filter(
-    (source): source is {
-      kind: 'scripts' | 'templates';
-      featureId: string;
-      dir: string;
-    } => !!source.featureId,
+  ]
+    .filter(
+      (
+        source,
+      ): source is {
+        kind: 'scripts' | 'templates';
+        featureId: string;
+        dir: string;
+      } => !!source.featureId,
+    )
+    .filter((source) =>
+      isFeatureResourceVisibleToGroup(source.featureId, groupFolder),
+    );
+  const targetDir = path.join(
+    DATA_DIR,
+    'sessions',
+    groupFolder,
+    'feature-resources',
   );
-  const targetDir = path.join(DATA_DIR, 'sessions', groupFolder, 'feature-resources');
   fs.rmSync(targetDir, { recursive: true, force: true });
   if (!sources.length) return null;
 
@@ -127,10 +150,15 @@ export function prepareFeatureResourceMountDir(groupFolder: string): string | nu
 export function prepareMergedMcpConfigDir(groupFolder: string): string | null {
   const sources = [
     { featureId: null, dir: path.join(process.cwd(), 'container', 'mcp') },
-    ...featureResources.list('mcp').map((source) => ({
-      featureId: source.featureId,
-      dir: source.dir,
-    })),
+    ...featureResources
+      .list('mcp')
+      .filter((source) =>
+        isFeatureResourceVisibleToGroup(source.featureId, groupFolder),
+      )
+      .map((source) => ({
+        featureId: source.featureId,
+        dir: source.dir,
+      })),
   ];
   const configs: Array<{ label: string; config: Record<string, unknown> }> = [];
   for (const source of sources) {
@@ -287,6 +315,15 @@ function scanInstalledFeatureIds(): string[] {
       }
     })
     .filter((id): id is string => !!id);
+}
+
+function isFeatureResourceVisibleToGroup(
+  featureId: string | null,
+  groupFolder: string,
+): boolean {
+  if (!featureId) return true;
+  const binding = getFeatureGroupBindingByFolder(groupFolder);
+  return binding?.feature_id === featureId;
 }
 
 function mergeMcpConfigs(

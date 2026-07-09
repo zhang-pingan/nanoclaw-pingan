@@ -81,7 +81,11 @@ import {
   storeMessage,
   getWorkflow,
 } from './db.js';
-import { activateConfiguredFeatures } from './features/index.js';
+import {
+  activateConfiguredFeatures,
+  configureFeatureManagementHostHooks,
+  type FeatureDeletionSummary,
+} from './features/index.js';
 import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
 import { GroupQueue, OneShotAgentSlotEvent } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
@@ -970,6 +974,32 @@ function loadState(): void {
     { groupCount: Object.keys(registeredGroups).length },
     'State loaded',
   );
+}
+
+function reloadRegisteredGroupsFromDb(): void {
+  registeredGroups = getAllRegisteredGroups();
+  logger.info(
+    { groupCount: Object.keys(registeredGroups).length },
+    'Registered groups reloaded',
+  );
+}
+
+async function stopFeatureGroupsForDeletion(
+  groups: FeatureDeletionSummary['groups'],
+): Promise<void> {
+  for (const group of groups) {
+    const stopResult = await queue.stopAgent(group.jid);
+    if (!stopResult.ok && stopResult.error !== 'Agent is not active') {
+      logger.warn(
+        { groupJid: group.jid, featureGroup: group, error: stopResult.error },
+        'Failed to stop feature group before deletion',
+      );
+      throw new Error(
+        `Failed to stop feature group ${group.jid}: ${stopResult.error}`,
+      );
+    }
+    queue.purgeGroupState(group.jid, 'feature_delete_data');
+  }
 }
 
 function saveState(): void {
@@ -2880,6 +2910,10 @@ async function main(): Promise<void> {
   ensureContainerSystemRunning();
   initDatabase();
   logger.info('Database initialized');
+  configureFeatureManagementHostHooks({
+    reloadRegisteredGroups: reloadRegisteredGroupsFromDb,
+    stopFeatureGroups: (groups) => stopFeatureGroupsForDeletion(groups),
+  });
   await activateConfiguredFeatures();
   loadState();
   restoreRemoteControl();

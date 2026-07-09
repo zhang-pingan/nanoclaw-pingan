@@ -588,6 +588,25 @@ export class GroupQueue {
     return Boolean(state.active && (state.process || state.containerName));
   }
 
+  purgeGroupState(groupJid: string, reason = 'purge_group_state'): void {
+    const state = this.groups.get(groupJid);
+    this.waitingGroups = this.waitingGroups.filter((jid) => jid !== groupJid);
+    if (!state) return;
+
+    state.pendingMessages = false;
+    state.pendingTasks = [];
+    state.stopRequested = true;
+    for (const item of state.pendingOneShots.splice(0)) {
+      clearTimeout(item.timeoutHandle);
+      item.reject(new Error(`Group ${groupJid} purged: ${reason}`));
+    }
+
+    if (!state.active) {
+      this.groups.delete(groupJid);
+    }
+    this.emitStatusChange();
+  }
+
   canPipeMessage(groupJid: string): boolean {
     const state = this.getGroup(groupJid);
     return Boolean(

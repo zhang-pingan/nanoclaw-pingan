@@ -27,6 +27,14 @@ function setupWorkspace(): string {
 describe('feature container resources', () => {
   it('syncs feature agents into the Claude agents directory', async () => {
     const workspace = setupWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    db.setFeatureGroupBinding({
+      featureId: 'example-feature',
+      groupKey: 'main',
+      groupJid: 'feature:example-feature:main',
+      groupFolder: 'main',
+    });
     const agentsDir = path.join(
       workspace,
       'features',
@@ -49,7 +57,13 @@ describe('feature container resources', () => {
       dir: agentsDir,
     });
 
-    const agentsDst = path.join(workspace, 'data', 'sessions', 'main', 'agents');
+    const agentsDst = path.join(
+      workspace,
+      'data',
+      'sessions',
+      'main',
+      'agents',
+    );
     syncContainerAgents({ groupFolder: 'main', agentsDst });
 
     expect(
@@ -62,6 +76,14 @@ describe('feature container resources', () => {
 
   it('prepares read-only feature scripts and templates mount content', async () => {
     const workspace = setupWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    db.setFeatureGroupBinding({
+      featureId: 'example-feature',
+      groupKey: 'main',
+      groupJid: 'feature:example-feature:main',
+      groupFolder: 'main',
+    });
     const scriptsDir = path.join(
       workspace,
       'features',
@@ -81,12 +103,15 @@ describe('feature container resources', () => {
     const scriptPath = path.join(scriptsDir, 'run.sh');
     fs.writeFileSync(scriptPath, '#!/bin/sh\necho ok\n', 'utf-8');
     fs.chmodSync(scriptPath, 0o755);
-    fs.writeFileSync(path.join(templatesDir, 'prompt.txt'), 'Prompt\n', 'utf-8');
+    fs.writeFileSync(
+      path.join(templatesDir, 'prompt.txt'),
+      'Prompt\n',
+      'utf-8',
+    );
 
     const { featureResources } = await import('./registry.js');
-    const { prepareFeatureResourceMountDir } = await import(
-      './container-resources.js'
-    );
+    const { prepareFeatureResourceMountDir } =
+      await import('./container-resources.js');
     featureResources.register({
       featureId: 'example-feature',
       kind: 'scripts',
@@ -136,5 +161,67 @@ describe('feature container resources', () => {
         }),
       ]),
     );
+  });
+
+  it('does not expose feature-scoped resources to unrelated groups', async () => {
+    const workspace = setupWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    db.setFeatureGroupBinding({
+      featureId: 'example-feature',
+      groupKey: 'main',
+      groupJid: 'feature:example-feature:main',
+      groupFolder: 'feature_main',
+    });
+    const agentsDir = path.join(
+      workspace,
+      'features',
+      'example-feature',
+      'container',
+      'agents',
+    );
+    const scriptsDir = path.join(
+      workspace,
+      'features',
+      'example-feature',
+      'container',
+      'scripts',
+    );
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.mkdirSync(scriptsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentsDir, 'reviewer.md'),
+      '# Reviewer\n',
+      'utf-8',
+    );
+    fs.writeFileSync(path.join(scriptsDir, 'run.sh'), '#!/bin/sh\n', 'utf-8');
+
+    const { featureResources } = await import('./registry.js');
+    const { prepareFeatureResourceMountDir, syncContainerAgents } =
+      await import('./container-resources.js');
+    featureResources.register({
+      featureId: 'example-feature',
+      kind: 'agents',
+      dir: agentsDir,
+    });
+    featureResources.register({
+      featureId: 'example-feature',
+      kind: 'scripts',
+      dir: scriptsDir,
+    });
+
+    const agentsDst = path.join(
+      workspace,
+      'data',
+      'sessions',
+      'other',
+      'agents',
+    );
+    syncContainerAgents({ groupFolder: 'other', agentsDst });
+
+    expect(
+      fs.existsSync(path.join(agentsDst, 'example-feature-reviewer.md')),
+    ).toBe(false);
+    expect(prepareFeatureResourceMountDir('other')).toBeNull();
   });
 });
