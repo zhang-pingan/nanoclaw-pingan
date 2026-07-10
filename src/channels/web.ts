@@ -139,6 +139,10 @@ import {
   retryWorkflowStage,
   returnWorkflowToInterruptStage,
 } from '../workflow.js';
+import {
+  createStagedWorkflowRequirement,
+  listWorkflowRequirementOptions,
+} from '../workflow-requirements.js';
 import { loadMysqlConfigs } from '../mysql-proxy.js';
 import {
   completeTodayPlan,
@@ -2827,45 +2831,7 @@ class WebChannel {
       }
     }
 
-    const requirementsByService: Record<
-      string,
-      Array<{ requirement_name: string; deliverables: string[] }>
-    > = {};
-
-    for (const service of services) {
-      const iterationDir = path.join(
-        process.cwd(),
-        'projects',
-        service,
-        'iteration',
-      );
-      if (!fs.existsSync(iterationDir)) {
-        requirementsByService[service] = [];
-        continue;
-      }
-
-      const requirements = fs
-        .readdirSync(iterationDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => {
-          const reqDir = path.join(iterationDir, d.name);
-          const deliverables = fs
-            .readdirSync(reqDir, { withFileTypes: true })
-            .filter((entry) => entry.isFile())
-            .map((entry) => entry.name)
-            .sort((a, b) => a.localeCompare(b, 'zh-CN'));
-
-          return {
-            requirement_name: d.name,
-            deliverables,
-          };
-        })
-        .sort((a, b) =>
-          b.requirement_name.localeCompare(a.requirement_name, 'zh-CN'),
-        );
-
-      requirementsByService[service] = requirements;
-    }
+    const requirementsByService = listWorkflowRequirementOptions(services);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
@@ -2980,46 +2946,31 @@ class WebChannel {
         writes.push({ filename: fileConfig.filename, data: part.data });
       }
 
-      const iterationDir = path.resolve(
-        PROJECT_ROOT,
-        'projects',
-        service,
-        'iteration',
-      );
-      const requirementDir = path.resolve(iterationDir, requirementName);
-      if (!isPathInsideBase(iterationDir, requirementDir)) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: '需求名称非法' }));
-        return;
-      }
-      if (fs.existsSync(requirementDir)) {
+      const existingRequirements = listWorkflowRequirementOptions([service])[
+        service
+      ];
+      if (
+        existingRequirements?.some(
+          (item) => item.requirement_name === requirementName,
+        )
+      ) {
         res.writeHead(409, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: '需求目录已存在' }));
         return;
       }
 
-      fs.mkdirSync(iterationDir, { recursive: true });
-      fs.mkdirSync(requirementDir);
-      try {
-        for (const item of writes) {
-          fs.writeFileSync(path.join(requirementDir, item.filename), item.data);
-        }
-      } catch (err) {
-        fs.rmSync(requirementDir, { recursive: true, force: true });
-        throw err;
-      }
-
-      const deliverables = writes
-        .map((item) => item.filename)
-        .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+      const requirement = createStagedWorkflowRequirement({
+        service,
+        requirementName,
+        files: writes,
+      });
       logger.info(
         {
           workflowType,
           entryPoint,
           service,
           requirementName,
-          deliverables,
-          requirementDir,
+          deliverables: requirement.deliverables,
         },
         'Workbench requirement created from web client',
       );
@@ -3028,10 +2979,7 @@ class WebChannel {
       res.end(
         JSON.stringify({
           ok: true,
-          requirement: {
-            requirement_name: requirementName,
-            deliverables,
-          },
+          requirement,
         }),
       );
     } catch (err) {

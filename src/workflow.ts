@@ -139,6 +139,7 @@ import {
   resolveWorkflowArtifactLocation,
   resolveWorkflowStorageRoot,
 } from './workflow-storage.js';
+import { materializeWorkflowRequirementForWorkflow } from './workflow-requirements.js';
 import {
   buildWorkflowQualityGateEvaluation,
   buildWorkflowQualityGateRecords,
@@ -4559,6 +4560,37 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
       };
     }
 
+    const requiredDeliverableFiles =
+      getWorkflowEntryPointRequiredDeliverableFiles(config, entryPoint);
+    try {
+      materializeWorkflowRequirementForWorkflow({
+        workflow: {
+          id: workflowId,
+          name: opts.title,
+          service: opts.service,
+          start_from: opts.startFrom,
+          context: opts.context || {},
+          status: entryPoint.state,
+          current_delegation_id: '',
+          round: 0,
+          source_jid: opts.sourceJid,
+          paused_from: null,
+          workflow_type: workflowType,
+          feature_id: featureId,
+          created_at: now,
+          updated_at: now,
+        },
+        storage: config.storage,
+        deliverable: opts.deliverable,
+        requiredFiles: requiredDeliverableFiles,
+      });
+    } catch (err) {
+      logger.warn(
+        { err, workflowId, workflowType, deliverable: opts.deliverable },
+        'Failed to materialize workflow requirement before deliverable validation',
+      );
+    }
+
     const deliverable = readDeliverableDir({
       workflowId,
       workflowType,
@@ -4573,8 +4605,6 @@ export function createNewWorkflow(opts: CreateWorkflowOpts): {
         error: `交付文档目录 "${opts.deliverable}" 不存在 (data/workflows/${workflowId}/artifacts/${opts.deliverable}/)`,
       };
     }
-    const requiredDeliverableFiles =
-      getWorkflowEntryPointRequiredDeliverableFiles(config, entryPoint);
     const missingDeliverableFiles = requiredDeliverableFiles.filter(
       (fileName) => !deliverable.files.includes(fileName),
     );

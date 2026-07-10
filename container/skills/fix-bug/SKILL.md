@@ -28,7 +28,7 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
 5. 在确认好的工作分支上复现或定位 Bug，再做最小必要修改。
 6. 完成后执行可行的验证命令，提交并 push 工作分支。
 7. 创建或更新修复文档：
-   - 路径：`/workspace/workflows/{服务名}/iteration/{日期}_bugfix_{简短标题}/fix.md`
+   - 路径：`/workspace/workflows/{workflowId}/artifacts/{deliverable}/dev.md`
    - 文档需要包含 Bug 描述、附件、定位结论、修改文件、验证结果、分支信息。
 8. 调用 `complete_delegation` 返回结构化结果。
 
@@ -63,7 +63,7 @@ description: Use only in the fix_test workflow. Fix a user-reported bug on the s
   "evidence": [
     {
       "type": "artifact",
-      "path": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/fix.md",
+      "path": "/workspace/workflows/wf-example/artifacts/2026-04-27_bugfix_login-500/dev.md",
       "summary": "已写入 Bug 修复文档"
     }
   ]

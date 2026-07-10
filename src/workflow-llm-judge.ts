@@ -13,6 +13,7 @@ import type {
   WorkflowStageEvaluationRecord,
   WorkflowStageEvaluationStatus,
 } from './types.js';
+import { enrichWorkflowEvalEvidence } from './workflow-evidence.js';
 import type { WorkflowEvaluatorConfig } from './workflow-evaluator-registry.js';
 
 const LLM_JUDGE_STAGE_SUFFIX = ':llm_judge';
@@ -129,6 +130,11 @@ function parseEvidence(value: unknown): WorkflowEvalEvidence[] {
           : 'message',
       refId: trimText(entry.refId) || undefined,
       path: trimText(entry.path) || undefined,
+      location_kind: trimText(entry.location_kind) || undefined,
+      location_uri: trimText(entry.location_uri) || undefined,
+      host_path: trimText(entry.host_path) || undefined,
+      container_path: trimText(entry.container_path) || undefined,
+      root_location_uri: trimText(entry.root_location_uri) || undefined,
       summary,
     });
   }
@@ -163,6 +169,11 @@ function buildSidecarRecord(input: {
   updatedAt?: string;
 }): WorkflowStageEvaluationRecord {
   const timestamp = input.updatedAt || recordTimestamp(input);
+  const evidence = enrichWorkflowEvalEvidence({
+    workflow: input.workflow,
+    stageKey: input.stageKey,
+    evidence: input.result.evidence,
+  });
   return {
     id: sidecarRecordId(input),
     workflow_id: input.workflow.id,
@@ -173,7 +184,7 @@ function buildSidecarRecord(input: {
     score: input.result.score,
     summary: input.result.summary,
     findings_json: JSON.stringify(input.result.findings),
-    evidence_json: JSON.stringify(input.result.evidence),
+    evidence_json: JSON.stringify(evidence),
     created_at: recordTimestamp(input),
     updated_at: timestamp,
   };

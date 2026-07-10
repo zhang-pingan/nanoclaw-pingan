@@ -13,6 +13,7 @@ import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
+import { enrichWorkflowEvalEvidence } from './workflow-evidence.js';
 import { parseDelegationHandoffResult } from './workflow-handoff.js';
 
 interface ParsedDelegationPayload {
@@ -286,6 +287,28 @@ function collectPayloadEvidence(
         path:
           typeof entry.path === 'string' && entry.path.trim()
             ? entry.path.trim()
+            : undefined,
+        location_kind:
+          typeof entry.location_kind === 'string' && entry.location_kind.trim()
+            ? entry.location_kind.trim()
+            : undefined,
+        location_uri:
+          typeof entry.location_uri === 'string' && entry.location_uri.trim()
+            ? entry.location_uri.trim()
+            : undefined,
+        host_path:
+          typeof entry.host_path === 'string' && entry.host_path.trim()
+            ? entry.host_path.trim()
+            : undefined,
+        container_path:
+          typeof entry.container_path === 'string' &&
+          entry.container_path.trim()
+            ? entry.container_path.trim()
+            : undefined,
+        root_location_uri:
+          typeof entry.root_location_uri === 'string' &&
+          entry.root_location_uri.trim()
+            ? entry.root_location_uri.trim()
             : undefined,
         source:
           typeof entry.source === 'string' && entry.source.trim()
@@ -578,6 +601,11 @@ export function buildWorkflowStageEvaluationRecord(params: {
   const id = params.delegation?.id
     ? `wf-stage-eval-${params.delegation.id}`
     : `wf-stage-eval-${params.workflow.id}-${params.stageKey}-${timestamp}`;
+  const evidence = enrichWorkflowEvalEvidence({
+    workflow: params.workflow,
+    stageKey: params.stageKey,
+    evidence: params.result.evidence,
+  });
   return {
     id,
     workflow_id: params.workflow.id,
@@ -588,7 +616,7 @@ export function buildWorkflowStageEvaluationRecord(params: {
     score: params.result.score,
     summary: params.result.summary,
     findings_json: JSON.stringify(params.result.findings),
-    evidence_json: JSON.stringify(params.result.evidence),
+    evidence_json: JSON.stringify(evidence),
     created_at: timestamp,
     updated_at: timestamp,
   };

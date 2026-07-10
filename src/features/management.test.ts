@@ -186,6 +186,79 @@ describe('feature management', () => {
     expect(table).toBeUndefined();
   });
 
+  it('deletes feature-owned workflow runtime directories', async () => {
+    setupFeatureWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const now = new Date().toISOString();
+    db.createWorkflow({
+      id: 'feature-workflow',
+      name: 'Shared Flow',
+      service: 'claude',
+      start_from: 'start',
+      context: {},
+      status: 'active',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'feature:example-feature:main',
+      paused_from: null,
+      workflow_type: 'shared_flow',
+      feature_id: 'example-feature',
+      created_at: now,
+      updated_at: now,
+    });
+    const { getWorkflowRuntimeRoot } = await import('../workflow-storage.js');
+    const runtimeDir = getWorkflowRuntimeRoot('feature-workflow').hostPath;
+    fs.mkdirSync(path.join(runtimeDir, 'artifacts', 'deliverable'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(runtimeDir, 'artifacts', 'deliverable', 'plan.md'),
+      '# Plan\n',
+    );
+
+    const management = await import('./management.js');
+    const summary = management.getFeatureDeletionSummary('example-feature');
+    expect(summary.paths).toContain(runtimeDir);
+
+    await management.deleteFeatureData('example-feature');
+
+    expect(fs.existsSync(runtimeDir)).toBe(false);
+  });
+
+  it('reports external feature data roots without deleting them', async () => {
+    const workspace = setupFeatureWorkspace();
+    const db = await import('../db.js');
+    db._initTestDatabase();
+    const externalRoot = path.join(workspace, 'external-workspace');
+    fs.mkdirSync(externalRoot, { recursive: true });
+    fs.writeFileSync(path.join(externalRoot, 'keep.txt'), 'keep\n');
+    const { registerExternalFeatureDataRoot } =
+      await import('../workflow-storage.js');
+    registerExternalFeatureDataRoot({
+      featureId: 'example-feature',
+      rootId: 'workspace',
+      rootPath: externalRoot,
+      readonly: true,
+    });
+
+    const management = await import('./management.js');
+    const summary = management.getFeatureDeletionSummary('example-feature');
+    expect(summary.counts.external_feature_data_roots).toBe(1);
+    expect(summary.externalDataRoots).toEqual([
+      {
+        rootId: 'workspace',
+        rootPath: externalRoot,
+        readonly: true,
+      },
+    ]);
+    expect(summary.paths).not.toContain(externalRoot);
+
+    await management.deleteFeatureData('example-feature');
+
+    expect(fs.existsSync(path.join(externalRoot, 'keep.txt'))).toBe(true);
+  });
+
   it('stops feature groups before data deletion and reloads registered groups', async () => {
     const workspace = setupFeatureWorkspace();
     const db = await import('../db.js');

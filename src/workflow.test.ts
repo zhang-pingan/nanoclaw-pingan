@@ -25,7 +25,7 @@ import {
   updateWorkflow,
 } from './db.js';
 import { PROJECT_ROOT, WEB_UPLOADS_DIR } from './config.js';
-import type { RegisteredGroup } from './types.js';
+import type { RegisteredGroup, Workflow } from './types.js';
 import {
   createNewWorkflow,
   getAvailableWorkflowTypes,
@@ -37,6 +37,11 @@ import {
   runWorkflowWatchdogOnce,
   stopWorkflowRuntimeForTest,
 } from './workflow.js';
+import { buildWorkflowStageEvaluationRecord } from './workflow-stage-evaluation.js';
+import {
+  createStagedWorkflowRequirement,
+  listWorkflowRequirementOptions,
+} from './workflow-requirements.js';
 import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
@@ -381,6 +386,10 @@ beforeEach(() => {
   stopWorkflowRuntimeForTest();
   _initTestDatabase();
   fs.rmSync(path.join(PROJECT_ROOT, 'projects', TEST_SERVICE), {
+    recursive: true,
+    force: true,
+  });
+  fs.rmSync(path.join(WORKFLOW_DATA_DIR, '_requirements', TEST_SERVICE), {
     recursive: true,
     force: true,
   });
@@ -990,6 +999,119 @@ describe('workflow metadata and branch flow', () => {
     ).toBe('staging-deploy/feature-test_20260408');
   });
 
+  it('materializes staged requirements into the new workflow artifact root', () => {
+    createStagedWorkflowRequirement({
+      service: TEST_SERVICE,
+      requirementName: '2026-04-08_staged_feature',
+      files: [
+        {
+          filename: 'plan.md',
+          data: Buffer.from(
+            `---\nservice: ${TEST_SERVICE}\ndeliverable: 2026-04-08_staged_feature\nmain_branch: main\nwork_branch: feature/staged\n---\n\n# Plan\n`,
+            'utf-8',
+          ),
+        },
+      ],
+    });
+    expect(
+      listWorkflowRequirementOptions([TEST_SERVICE])[TEST_SERVICE],
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          requirement_name: '2026-04-08_staged_feature',
+          deliverables: ['plan.md'],
+        },
+      ]),
+    );
+
+    const mocked = mockWorkflowId(1783581979004, 0.123456);
+    let result;
+    try {
+      result = createNewWorkflow({
+        title: 'Staged feature',
+        service: TEST_SERVICE,
+        sourceJid: 'main@g.us',
+        startFrom: 'dev',
+        workflowType: 'dev_test',
+        deliverable: '2026-04-08_staged_feature',
+      });
+    } finally {
+      mocked.restore();
+    }
+
+    expect(result.error).toBeUndefined();
+    const copiedPlan = path.join(
+      artifactDir(mocked.workflowId, '2026-04-08_staged_feature'),
+      'plan.md',
+    );
+    expect(fs.readFileSync(copiedPlan, 'utf-8')).toContain('feature/staged');
+    const workflow = getWorkflow(result.workflowId);
+    expect(
+      workflow &&
+        getWorkflowContextValue(workflow, WORKFLOW_CONTEXT_KEYS.workBranch),
+    ).toBe('feature/staged');
+  });
+
+  it('stores evaluation artifact evidence with location metadata', () => {
+    const workflowId = 'wf-evidence-location';
+    writeDoc('2026-04-08_feature', 'plan.md', '# Plan\n', workflowId);
+    const workflow: Workflow = {
+      id: workflowId,
+      name: 'Evidence location',
+      service: TEST_SERVICE,
+      start_from: 'plan',
+      context: {
+        deliverable: '2026-04-08_feature',
+      },
+      status: 'plan',
+      current_delegation_id: '',
+      round: 0,
+      source_jid: 'main@g.us',
+      paused_from: null,
+      workflow_type: 'dev_test',
+      feature_id: null,
+      created_at: '2026-04-08T00:00:00.000Z',
+      updated_at: '2026-04-08T00:00:00.000Z',
+    };
+
+    const record = buildWorkflowStageEvaluationRecord({
+      workflow,
+      stageKey: 'plan',
+      result: {
+        status: 'passed',
+        score: 100,
+        summary: 'ok',
+        findings: [],
+        evidence: [
+          {
+            type: 'artifact',
+            path: artifactAgentPath(
+              workflowId,
+              '2026-04-08_feature',
+              'plan.md',
+            ),
+            summary: 'plan written',
+          },
+        ],
+        evaluatorType: 'rules',
+      },
+    });
+    const evidence = JSON.parse(record.evidence_json || '[]');
+
+    expect(evidence[0]).toMatchObject({
+      type: 'artifact',
+      path: artifactAgentPath(workflowId, '2026-04-08_feature', 'plan.md'),
+      location_kind: 'workflow_runtime',
+      location_uri:
+        'workflow://wf-evidence-location/artifacts/2026-04-08_feature/plan.md',
+      container_path: artifactAgentPath(
+        workflowId,
+        '2026-04-08_feature',
+        'plan.md',
+      ),
+    });
+  });
+
   it('rejects deliverable entry when required role file is missing', () => {
     const mocked = mockWorkflowId(1783581979002, 0.123456);
     writeDoc(
@@ -1404,7 +1526,11 @@ describe('workflow metadata and branch flow', () => {
         work_branch: 'bugfix/login-empty-500',
         staging_work_branch: 'staging-deploy/bugfix-login-empty-500',
         deliverable: '2026-04-08_bugfix_login-empty-500',
-        test_doc: `/workspace/projects/${TEST_SERVICE}/iteration/2026-04-08_bugfix_login-empty-500/fix-test.md`,
+        test_doc: artifactAgentPath(
+          'wf-fix-test-failed',
+          '2026-04-08_bugfix_login-empty-500',
+          'test.md',
+        ),
         total: 3,
         passed: 2,
         failed: 1,
@@ -1449,7 +1575,7 @@ describe('workflow metadata and branch flow', () => {
       artifactAgentPath(
         'wf-fix-test-failed',
         '2026-04-08_bugfix_login-empty-500',
-        'fix-test.md',
+        'test.md',
       ),
     );
   });
@@ -2733,6 +2859,10 @@ describe('workflow metadata and branch flow', () => {
     );
 
     const fixTest = getWorkflowTypeConfig('fix_test');
+    expect(fixTest?.roles.dev.deliverable_file).toBe('dev.md');
+    expect(fixTest?.roles.test.deliverable_file).toBe('test.md');
+    expect(JSON.stringify(fixTest)).not.toContain('fix.md');
+    expect(JSON.stringify(fixTest)).not.toContain('fix-test.md');
     expect(fixTest?.states.bug_fix.evaluator?.ref).toBe('fix_test.bug_fix.v1');
     expect(fixTest?.states.bug_test.artifact_contract?.ref).toBe(
       'fix_test.bug_test.v1',

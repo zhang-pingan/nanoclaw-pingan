@@ -20,6 +20,7 @@ import {
   getWorkflowContextValue,
   WORKFLOW_CONTEXT_KEYS,
 } from './workflow-context.js';
+import { enrichWorkflowEvalEvidence } from './workflow-evidence.js';
 import { getWorkflowTypeConfig } from './workflow-config.js';
 import { parseDelegationHandoffResult } from './workflow-handoff.js';
 import {
@@ -1696,26 +1697,39 @@ export function buildWorkflowQualityGateRecords(input: {
   componentRecords: WorkflowStageEvaluationRecord[];
 } {
   const timestamp = input.delegation?.updated_at || input.workflow.updated_at;
-  const componentRecords = input.evaluation.componentResults.map((item) => ({
-    id: componentRecordId({
+  const componentRecords = input.evaluation.componentResults.map((item) => {
+    const stageKey = `${input.stageKey}:${item.evaluatorType}`;
+    const evidence = enrichWorkflowEvalEvidence({
       workflow: input.workflow,
-      stageKey: input.stageKey,
-      delegation: input.delegation,
-      evaluatorType: item.evaluatorType,
-      timestamp,
-    }),
-    workflow_id: input.workflow.id,
-    delegation_id: input.delegation?.id || null,
-    stage_key: `${input.stageKey}:${item.evaluatorType}`,
-    evaluator_type: item.evaluatorType,
-    status: item.result.status,
-    score: item.result.score,
-    summary: item.result.summary,
-    findings_json: JSON.stringify(item.result.findings),
-    evidence_json: JSON.stringify(item.result.evidence),
-    created_at: timestamp,
-    updated_at: timestamp,
-  }));
+      stageKey,
+      evidence: item.result.evidence,
+    });
+    return {
+      id: componentRecordId({
+        workflow: input.workflow,
+        stageKey: input.stageKey,
+        delegation: input.delegation,
+        evaluatorType: item.evaluatorType,
+        timestamp,
+      }),
+      workflow_id: input.workflow.id,
+      delegation_id: input.delegation?.id || null,
+      stage_key: stageKey,
+      evaluator_type: item.evaluatorType,
+      status: item.result.status,
+      score: item.result.score,
+      summary: item.result.summary,
+      findings_json: JSON.stringify(item.result.findings),
+      evidence_json: JSON.stringify(evidence),
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+  });
+  const finalEvidence = enrichWorkflowEvalEvidence({
+    workflow: input.workflow,
+    stageKey: input.stageKey,
+    evidence: input.evaluation.finalResult.evidence,
+  });
   const finalRecord: WorkflowStageEvaluationRecord = {
     id: primaryRecordId({
       workflow: input.workflow,
@@ -1731,7 +1745,7 @@ export function buildWorkflowQualityGateRecords(input: {
     score: input.evaluation.finalResult.score,
     summary: input.evaluation.finalResult.summary,
     findings_json: JSON.stringify(input.evaluation.finalResult.findings),
-    evidence_json: JSON.stringify(input.evaluation.finalResult.evidence),
+    evidence_json: JSON.stringify(finalEvidence),
     created_at: timestamp,
     updated_at: timestamp,
   };

@@ -142,6 +142,11 @@ export interface WorkflowEvalEvidence {
     | 'provider';
   refId?: string;
   path?: string;
+  location_kind?: string;
+  location_uri?: string;
+  host_path?: string;
+  container_path?: string;
+  root_location_uri?: string;
   source?: string;
   service?: string;
   repo?: string;

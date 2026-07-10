@@ -20,7 +20,11 @@ import {
 import { getWorkflowDefinitionsDir } from '../workflow-definition-files.js';
 import { clearWorkflowArtifactContractCache } from '../workflow-artifact-contract.js';
 import { loadWorkflowConfigs } from '../workflow-config.js';
-import { getFeatureDataRoot } from '../workflow-storage.js';
+import {
+  getFeatureDataRoot,
+  getWorkflowRuntimeRoot,
+  listExternalFeatureDataRoots,
+} from '../workflow-storage.js';
 import { clearWorkflowEvaluatorRegistryCache } from '../workflow-evaluator-registry.js';
 import { getFeatureOwnedTablePrefixes } from './naming.js';
 
@@ -34,6 +38,11 @@ export interface FeatureDeletionSummary {
   workflowTypes: string[];
   groups: Array<{ key: string; jid: string; folder: string }>;
   projectionTables: FeatureOwnedTableSummary[];
+  externalDataRoots: Array<{
+    rootId: string;
+    rootPath: string;
+    readonly: boolean;
+  }>;
   counts: Record<string, number>;
   paths: string[];
 }
@@ -186,6 +195,13 @@ export function getFeatureDeletionSummary(
     workflowTypes,
   );
   const projectionTables = listFeatureOwnedProjectionTables(featureId);
+  const externalDataRoots = listExternalFeatureDataRoots(featureId).map(
+    (root) => ({
+      rootId: root.rootId || '',
+      rootPath: root.rootPath,
+      readonly: root.readonly !== false,
+    }),
+  );
   const workflowIds = listOwnedWorkflowIds({
     featureId,
     workflowTypes: legacyWorkflowTypes,
@@ -218,17 +234,29 @@ export function getFeatureDeletionSummary(
       (sum, table) => sum + table.rows,
       0,
     ),
+    external_feature_data_roots: externalDataRoots.length,
   };
   const featureDataRoot = getFeatureDataRoot(featureId);
   const paths = [
     featureDataRoot.rootPath,
+    ...workflowIds.map(
+      (workflowId) => getWorkflowRuntimeRoot(workflowId).hostPath,
+    ),
     ...groups.flatMap((group) => [
       path.join(GROUPS_DIR, group.folder),
       path.join(DATA_DIR, 'sessions', group.folder),
       path.join(DATA_DIR, 'ipc', group.folder),
     ]),
   ];
-  return { featureId, workflowTypes, groups, projectionTables, counts, paths };
+  return {
+    featureId,
+    workflowTypes,
+    groups,
+    projectionTables,
+    externalDataRoots,
+    counts,
+    paths,
+  };
 }
 
 export async function deleteFeatureData(featureId: string): Promise<{

@@ -282,6 +282,15 @@ export function getExternalFeatureDataRoot(
   );
 }
 
+export function listExternalFeatureDataRoots(
+  featureId: string,
+): FeatureDataRoot[] {
+  const safeFeatureId = assertSafeId('feature_id', featureId);
+  return Array.from(externalFeatureDataRoots.values())
+    .filter((root) => root.featureId === safeFeatureId)
+    .sort((a, b) => (a.rootId || '').localeCompare(b.rootId || ''));
+}
+
 export function resolveFeatureDataPath(
   featureId: string,
   relativePath: string,

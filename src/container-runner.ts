@@ -48,6 +48,7 @@ import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 import {
   getFeatureDataRoot,
+  listExternalFeatureDataRoots,
   getWorkflowRuntimeRoot,
 } from './workflow-storage.js';
 
@@ -499,6 +500,19 @@ function buildVolumeMounts(
         containerPath: `/workspace/features/${featureDataRoot.featureId}/data`,
         readonly: false,
       });
+      for (const externalRoot of listExternalFeatureDataRoots(
+        workflow.feature_id,
+      )) {
+        if (!fs.existsSync(externalRoot.rootPath)) {
+          if (externalRoot.readonly !== false) continue;
+          fs.mkdirSync(externalRoot.rootPath, { recursive: true });
+        }
+        mounts.push({
+          hostPath: externalRoot.rootPath,
+          containerPath: `/workspace/features/${externalRoot.featureId}/external/${externalRoot.rootId}`,
+          readonly: externalRoot.readonly !== false,
+        });
+      }
     }
   }
 

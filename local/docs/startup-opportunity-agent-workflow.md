@@ -1,4 +1,4 @@
-# RFC: 并行研究 Workflow 架构与行业 App 创业机会调研 Agent
+# RFC: 行业 App 创业机会调研 Agent Recipe
 
 > **状态**: 提案
 > **作者**: 社区贡献者
@@ -7,10 +7,19 @@
 
 ## 概述
 
-该设计方案从第三方架构视角描述两层内容：
+该设计方案描述一套面向“某个行业 App 方向”的创业机会调研 Agent Recipe。它不再承载 Icarus core workflow runtime 的框架改造设计；parallel/fan-in、静态 workflow、运行时动态 DAG、graph compiler、graph execution、checkpoint、Workbench/Trace 展示等通用能力统一由以下框架方案定义：
 
-1. Icarus 需要新增 first-class parallel/fan-in workflow 能力，使它可以支撑完整的多分支 RAG、调研、评审和综合流程。
-2. 在该能力之上，定义一个面向“某个行业 App 方向”的创业机会调研 Agent Workflow。
+```text
+docs/dynamic-workflow-dag-framework.md
+```
+
+本方案只补充说明创业机会调研如何基于该通用 Dynamic Workflow DAG 框架实现：
+
+- domain recipe、role、skill、artifact contract 和 evaluator。
+- 调研 lane catalog 和默认策略。
+- opportunity thesis、判断层模型、评分、反证和报告结构。
+- planner 如何生成本次执行的动态 workflow graph spec。
+- graph 执行后的业务 fan-in、gap analysis、follow-up graph、综合排序和最终报告。
 
 方案同时涉及 GPT Researcher 与 Icarus 两个项目，但不以任一仓库作为唯一叙述主体。
 
@@ -19,7 +28,7 @@
 - Icarus 仓库：`/Users/chelaile/IdeaProjects/icarus`
 - GPT Researcher 仓库：`/Users/chelaile/IdeaProjects/gpt-researcher`
 
-创业机会 Agent 不是通用 deep research，也不是直接让模型基于一个行业方向生成候选创业点，而是通过多条明确的调研维度并行收集原始证据并留痕，再从证据中提炼 claim、finding 和 insight 等判断层产物，后续基于判断层挖掘候选机会、筛选、合并、补充检索、反证和综合排序，最终输出创业方向排名和专业分析报告。
+创业机会 Agent 不是通用 deep research，也不是直接让模型基于一个行业方向生成候选创业点，而是通过 planner 生成本次调研所需的动态 DAG，对多条调研维度、补充验证、反证和复核节点进行并行或条件执行。每个节点收集原始证据并留痕，再从证据中提炼 claim、finding 和 insight 等判断层产物，后续基于判断层挖掘候选机会、筛选、合并、补充检索、反证和综合排序，最终输出创业方向排名和专业分析报告。
 
 本方案不按 MVP 分期设计，而是描述一版完整架构。实现时可以按工程风险拆任务，但文档目标是定义完整形态。
 
@@ -56,9 +65,9 @@ AI 教育 App
 
 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）当前更偏向通用研究报告生成，尤其是 `deep` 模式，重点是围绕一个查询进行初始检索、扩展问题、并发子研究、递归追问、上下文压缩、来源筛选并生成综合报告。实际使用中，GPT Researcher deep 生成的调研报告质量较高，说明它的流程设计有重要参考价值。
 
-Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delegation、skill、artifact contract、evaluator、host/container/IPC/MCP 等基础能力，但当前 workflow runtime 仍以单状态推进和单 `current_delegation_id` 为核心。它可以表达顺序工作流，却不足以自然表达多 lane 调研、多 query 检索、多来源并行 enrichment、多 reviewer 并行复核这类复杂 RAG 图。
+Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delegation、skill、artifact contract、evaluator、host/container/IPC/MCP 等基础能力。通用 workflow runtime 如何从固定顺序推进扩展到 static parallel 和 runtime-generated DAG，由 `docs/dynamic-workflow-dag-framework.md` 统一定义。
 
-因此，本方案的核心动机不是简单新增一个创业机会 workflow，而是补齐 Icarus 的并行研究 workflow 能力，再用创业机会调研作为第一个完整业务实例。
+因此，本方案的核心动机不是新增第二套 Opportunity workflow engine，也不是在业务文档中定义 core framework，而是在通用 Dynamic Workflow DAG 框架之上定义创业机会调研这个 domain recipe。
 
 创业机会调研需要更强的业务 workflow 控制：
 
@@ -71,12 +80,12 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 | 输出 | 一篇报告 | 多个机会方向排名 + 可审计判断链 |
 | 决策逻辑 | 隐式 | 显式、可追溯、可调权重 |
 
-因此，该 Agent 服务不应直接把 `GPTResearcher(report_type="deep")` 作为主业务接口，也不应只复刻一次性 deep research prompt。正确方向是：参考 GPT Researcher 的高质量调研流程，抽象出 Icarus 自己的 Research Kernel，并让 workflow runtime 原生支持并行分支、分支质量门、fan-in 汇总和可追踪产物。
+因此，该 Agent 服务不应直接把 `GPTResearcher(report_type="deep")` 作为主业务接口，也不应只复刻一次性 deep research prompt。正确方向是：参考 GPT Researcher 的高质量调研流程，抽象出 Icarus 自己的 Research Kernel，并通过通用 Dynamic Workflow DAG 框架执行可追踪的并行、条件和 follow-up 节点。
 
 ## 目标
 
-- 新增 Icarus first-class parallel/fan-in workflow 能力，支撑完整多分支 RAG/调研流程。
-- 将并行分支建模为 workflow runtime 的一等状态，而不是藏在 action、agent 子任务或某个外部 service 中。
+- 基于 Icarus Dynamic Workflow DAG 框架实现创业机会调研 recipe，而不是新增业务专用 workflow engine。
+- 让 `research_plan` 生成本次执行的动态 graph spec，实际启用哪些 lane、节点依赖、并行组、补充验证和 follow-up 由 planner 决定。
 - 明确 workflow action 只负责确定性系统操作；调研、检索控制、抽取、综合等非确定性任务由 agent delegation 节点完成。
 - 参考 GPT Researcher deep 的流程设计，抽象为可被 Icarus lane 复用的 Research Kernel。
 - 从行业 App 方向中发现多个候选创业机会。
@@ -104,7 +113,7 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 不把 GPT Researcher 作为黑盒主业务入口；它是流程参考和可选底层能力来源。
 - 不把 LLM 的自然语言报告作为唯一决策结果。
 - 不把成品服务降级成一次性报告生成；需要保留结构化判断层、评分、反证和可追踪审计产物。
-- 不把并行能力做成某个业务 workflow 的特例；并行/fan-in 是 Icarus workflow runtime 的通用能力。
+- 不在本方案中重新定义 core workflow runtime；并行/fan-in 和动态 DAG 是 `docs/dynamic-workflow-dag-framework.md` 的通用能力。
 - 不默认“做 App”一定是正确答案；如果非 App 替代方案、线下服务、人工流程或现有工作流更优，需要在报告中说明。
 - 不把 `AI Tutor`、`智能助手`、`错题本`、`社区`、`SaaS` 这类功能词或品类词直接当作机会定位；它们必须回到用户自然语言和入口场景中验证。
 - 不把基础 LLM 能力、prompt 技巧或单次生成结果直接当作护城河；必须证明产品价值超出通用模型可快速复制的范围。
@@ -413,20 +422,20 @@ lane 内筛选前必须执行 pre-kill gate。触发 kill condition 的机会可
 
 但最终报告不应围绕 evidence ref 展开写作，也不应把原始证据片段作为主要内容。证据只在审计链、附录、traceability artifact 或必要的脚注位置出现。
 
-### 17. 并行是 workflow 一等能力
+### 17. 并行和动态 DAG 来自通用 workflow 框架
 
 多 lane 调研、多 query 搜索、多机会 enrichment、多 reviewer 复核都不应被隐藏在一个 agent 节点内部。隐藏并行会降低 workflow 层可观测性、可恢复性和质量门控制。
 
-目标形态：
+本方案基于 `docs/dynamic-workflow-dag-framework.md` 的通用能力表达这些执行关系。固定模板可以使用 static parallel state；完整创业机会调研应由 planner 生成 runtime graph spec，经 compiler 校验后执行。
 
 ```text
-workflow state: parallel
-  -> branch delegation A
-  -> branch delegation B
-  -> branch delegation C
-  -> branch artifact/evaluator per branch
-  -> join policy
+startup opportunity recipe
+  -> planner generated graph spec
+  -> generic graph compiler
+  -> generic graph execution
+  -> node-level artifact/evaluator
   -> fan-in context
+  -> domain synthesis
 ```
 
 ### 18. Action 只做确定性系统操作
@@ -460,15 +469,13 @@ workflow action 的职责边界：
 
 ### 架构层 Workflow
 
+通用 workflow 框架不在本文定义，详见：
+
 ```text
-Icarus workflow runtime
-  -> delegation/system/interrupt/terminal
-  -> 新增 parallel/fan-in state
-  -> branch-level delegation + artifact contract + evaluator
-  -> join policy
-  -> fan-in context pack
-  -> downstream delegation/system states
+docs/dynamic-workflow-dag-framework.md
 ```
+
+本文只假设该框架已经提供 static workflow、static parallel、dynamic graph、graph compiler、node-level artifact/evaluator、fan-in context、checkpoint 和 Workbench/Trace 可观测性。
 
 ### 创业机会业务 Workflow
 
@@ -480,7 +487,7 @@ Icarus workflow runtime
       -> 商业模式偏好
       -> 团队能力和验证周期约束
       -> 风险偏好和默认假设
-  -> 研究规划
+  -> 研究策略规划
   -> 调研种子探测
       -> 用户/场景 seed
       -> 问题/痛点 seed
@@ -493,7 +500,8 @@ Icarus workflow runtime
       -> 当前替代方案
       -> 工作流摩擦点
       -> 可软件化节点
-  -> 并行发现 lanes
+  -> 生成 discovery graph spec
+  -> 执行动态 discovery graph
       -> 原始证据留痕
       -> 用户自然语言和 trigger phrase 挖掘
       -> 现有解法失效场景和 next action 挖掘
@@ -504,10 +512,12 @@ Icarus workflow runtime
       -> 维度内评分
       -> pre-kill gate
       -> 维度内 topN 筛选
-  -> lane artifact/evaluator 校验
+  -> graph node artifact/evaluator 校验
+  -> gap analysis 和 follow-up graph 规划
   -> 机会 thesis 与 mental positioning 合成
   -> 机会去重与聚类
-  -> 并行 enrichment lanes
+  -> 生成 enrichment / validation graph spec
+  -> 执行动态 enrichment / validation graph
       -> 竞品缺口
       -> 市场空间
       -> 商业化
@@ -1292,11 +1302,16 @@ class IndustryAppOpportunityWorkflow:
         plan = await self.plan_research(direction, scope)
         seeds = await self.probe_research_seeds(direction, scope, plan)
         opportunity_space = await self.map_opportunity_space(direction, scope, seeds)
-        discovery = await self.run_discovery_parallel(plan, seeds, opportunity_space)
+        discovery_graph = await self.plan_discovery_graph(plan, seeds, opportunity_space)
+        discovery = await self.execute_workflow_graph(discovery_graph)
+        followup_graph = await self.plan_followup_graph(discovery)
+        followup = await self.execute_workflow_graph(followup_graph)
+        discovery = await self.merge_graph_results(discovery, followup)
         validated = await self.validate_discovery_fan_in(discovery)
         thesis = await self.synthesize_opportunity_theses(validated)
         merged = await self.merge_and_cluster(thesis)
-        enrichment = await self.run_enrichment_parallel(merged)
+        enrichment_graph = await self.plan_enrichment_graph(merged)
+        enrichment = await self.execute_workflow_graph(enrichment_graph)
         normalized = await self.normalize_judgment_context(enrichment)
         enriched = await self.build_scoring_context(normalized)
         ranked = await self.global_rank(enriched)
@@ -1387,7 +1402,7 @@ class OpportunitySpaceMapper:
 
 ### User Language Miner
 
-作为 `user_language_mining` discovery branch 的实现，负责从 UGC、评论、问答和访谈材料中挖掘用户真实语言和候选 mental positioning：
+作为 `user_language_mining` discovery lane node 的实现，负责从 UGC、评论、问答和访谈材料中挖掘用户真实语言和候选 mental positioning：
 
 ```python
 class UserLanguageMiner:
@@ -1411,7 +1426,7 @@ class UserLanguageMiner:
 
 ### Solution Failure Mapper
 
-作为 `solution_failure` discovery branch 的实现，负责识别现有解法在哪些场景失效，以及用户失败后的 next action：
+作为 `solution_failure` discovery lane node 的实现，负责识别现有解法在哪些场景失效，以及用户失败后的 next action：
 
 ```python
 class SolutionFailureMapper:
@@ -1505,11 +1520,11 @@ class OpportunityClusterer:
 
 ### JudgmentEnricher
 
-负责对合并后的机会做并行补充验证，并把新增材料提炼为 claim、finding、insight 和 score input。落地时它对应 `enrichment_parallel` state，而不是单个串行服务：
+负责对合并后的机会规划补充验证节点，并把新增材料提炼为 claim、finding、insight 和 score input。落地时它对应 dynamic enrichment graph 中的一组可并行、可依赖、可条件跳过的 graph node，而不是单个串行服务：
 
 ```python
 class JudgmentEnricher:
-    async def run_parallel(self, opportunities: list[MergedOpportunity]) -> EnrichmentFanIn:
+    async def plan_graph(self, opportunities: list[MergedOpportunity]) -> WorkflowGraphSpec:
         ...
 ```
 
@@ -1531,7 +1546,7 @@ class JudgmentEnricher:
 
 ### LLM Capability Benchmarker
 
-作为 `llm_capability_benchmark` enrichment branch 的实现，负责验证 AI/LLM 相关机会是否真的超出通用模型和 prompt-only 的能力范围：
+作为 `llm_capability_benchmark` enrichment node 的实现，负责验证 AI/LLM 相关机会是否真的超出通用模型和 prompt-only 的能力范围：
 
 ```python
 class LLMCapabilityBenchmarker:
@@ -1549,7 +1564,7 @@ class LLMCapabilityBenchmarker:
 
 ### Value, Context and Buyer Language Enricher
 
-作为 `workflow_outcome_value`、`state_context_continuity` 和 `buyer_purchase_language` enrichment branch 的通用能力说明，负责把候选机会从“用户喜欢的功能”转成可购买、可留存、可验证的产品假设：
+作为 `workflow_outcome_value`、`state_context_continuity` 和 `buyer_purchase_language` enrichment node 的通用能力说明，负责把候选机会从“用户喜欢的功能”转成可购买、可留存、可验证的产品假设：
 
 ```python
 class OpportunityValueContextEnricher:
@@ -1648,165 +1663,34 @@ class OpportunityReporter:
 
 ## Icarus 落地设计
 
-### 已确认的 Icarus 架构边界
+### 框架依赖
 
-Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已经有完整 workflow 编排层，不需要再做一个独立的 Opportunity workflow engine；但需要把 workflow runtime 从“单状态单委派”升级为能表达并行研究图：
+Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已经有完整 workflow 编排层，本方案不新增第二套 Opportunity workflow engine。通用 workflow runtime 的改造，包括：
 
-- workflow definition 位于 `/Users/chelaile/IdeaProjects/icarus/container/workflow-definitions/*.json`，由 `/Users/chelaile/IdeaProjects/icarus/src/workflow.ts` 驱动。
-- workflow state 类型在 `/Users/chelaile/IdeaProjects/icarus/src/workflow-definition.ts` 中固定为 `delegation`、`system`、`interrupt`、`terminal`。
-- delegation 会构建 handoff contract，委派给 container agent 执行 skill，并要求通过 `complete_delegation` 回传结构化结果。
-- action registry 在 `/Users/chelaile/IdeaProjects/icarus/src/workflow-actions/registry.ts` 中，目前 action handler 是同步 `run(input): WorkflowActionResult`，适合 deterministic 系统操作，不适合隐藏 LLM 推理。
-- 现有 workflow delegation、handoff contract、context pack、artifact contract 和 MCP/IPC 分发链路已经提供了可复用的参考实现。
-- container agent 的 allowed tools 已包含 `WebSearch`、`WebFetch` 和 `mcp__icarus__*`。在本方案中，agent/skill 负责研究意图、来源选择、claim/finding/insight 提炼和业务判断；host MCP tool 负责可审计的数据获取、归一化、写盘和 evidence record；通用 WebSearch/WebFetch 可以作为探索补充，但不替代领域 MCP 工具和 evidence store。
+- static parallel state。
+- runtime-generated graph state。
+- graph compiler。
+- graph run/node/edge 持久化。
+- node-level delegation、artifact contract、evaluator、quality gate。
+- join policy、fan-in context、branch/node retry、checkpoint。
+- Workbench/Trace 对 parallel 和 dynamic DAG 的可观测性。
 
-需要新增的通用能力：
+统一由 `docs/dynamic-workflow-dag-framework.md` 定义。
 
-- workflow definition state 新增 `parallel` 类型。
-- workflow runtime 支持一个 parallel state 下创建多个 branch delegation。
-- 每个 branch 有独立 handoff、context pack、artifact contract、evaluator、retry 和执行结果。
-- 主 workflow 停留在 parallel state，直到 join policy 满足后才 fan-in 到下一状态。
-- workbench、Trace、checkpoint、pause/cancel/resume 都能感知 parallel run。
-
-因此，该设计方案在 Icarus 中的正确形态是：
+创业机会调研 recipe 只负责在该框架之上定义业务节点、skill、artifact、evaluator、评分规则和报告结构。执行形态是：
 
 ```text
 Icarus workflow = 唯一编排层
-  delegation state = LLM 推理、规划、抽取、综合、报告
-  parallel state = 多 branch delegation/fan-in
+  static states = scope、planning、compile、synthesis、report 等外层控制
+  dynamic graph state = 本次调研的发现、补充验证、反证、复核和 follow-up DAG
+  delegation node = LLM 推理、规划、抽取、综合、报告
+  system node/action = context/schema/score/validate/dedupe/fan-in 等确定性操作
   skill = 每类 agent 节点的执行规约
   host MCP tool = 可审计、可复用、确定性的领域工具
-  workflow action = context/schema/score/validate 等非 LLM 系统动作
-  artifact contract + evaluator = 每阶段质量门
+  artifact contract + evaluator = 每个 graph node 的质量门
 ```
 
-### Parallel Runtime 设计
-
-新增 state 类型：
-
-```ts
-type WorkflowDefinitionState =
-  | WorkflowDefinitionDelegationState
-  | WorkflowDefinitionParallelState
-  | WorkflowDefinitionInterruptState
-  | WorkflowDefinitionTerminalState
-  | WorkflowDefinitionSystemState;
-```
-
-`parallel` state 建议结构：
-
-```json
-{
-  "type": "parallel",
-  "label": "多维度机会发现",
-  "max_concurrency": 9,
-  "join_policy": {
-    "type": "all_completed",
-    "min_success": 8,
-    "allow_failed_branches": true
-  },
-  "branches": [
-    {
-      "key": "audience_pain",
-      "label": "受众需求痛点",
-      "delegate": {
-        "role": "audience_pain_researcher",
-        "skill": "opportunity-audience-pain-recon",
-        "task_template": "..."
-      },
-      "artifact_contract": {
-        "ref": "startup_opportunity.discovery_lane_result.v1"
-      },
-      "evaluator": {
-        "ref": "startup_opportunity.discovery_lane_result.v1"
-      },
-      "quality_gate": {
-        "pass_policy": "all_blocking_pass",
-        "evaluators": [
-          { "type": "schema", "blocking": true },
-          { "type": "artifact", "blocking": true },
-          { "type": "evidence", "blocking": true },
-          { "type": "consistency", "blocking": true },
-          { "type": "counter_evidence", "blocking": true },
-          { "type": "kill_conditions", "blocking": true },
-          { "type": "llm_judge", "blocking": false }
-        ]
-      }
-    }
-  ],
-  "on_join": {
-    "success": { "target": "lane_result_validate" },
-    "partial": { "target": "quality_review" },
-    "failure": { "target": "quality_review" }
-  }
-}
-```
-
-持久化建议：
-
-```text
-workflows
-  - current_delegation_id         legacy / non-parallel active delegation
-  - current_parallel_run_id       active parallel run
-
-workflow_parallel_runs
-  - id
-  - workflow_id
-  - state_key
-  - status                       running | joining | completed | failed | cancelled | paused
-  - join_policy_json
-  - fan_in_context_json
-  - created_at
-  - updated_at
-
-workflow_parallel_branches
-  - id
-  - run_id
-  - workflow_id
-  - state_key
-  - branch_key
-  - branch_label
-  - delegation_id
-  - status                       pending | running | completed | failed | needs_revision | cancelled | skipped
-  - attempt
-  - result_json
-  - evaluation_id
-  - artifact_refs_json
-  - error
-  - created_at
-  - updated_at
-```
-
-运行时规则：
-
-- 进入 `parallel` state 时创建 `workflow_parallel_run` 和所有 branch 记录。
-- 根据 `max_concurrency` 创建或调度 branch delegation。
-- branch delegation 完成后只更新 branch 状态和 branch evaluation，不推进主 workflow。
-- 每个 branch 仍走现有 handoff contract、artifact contract、quality gate 和 llm judge sidecar。
-- parallel state 定期或在 branch 完成事件中检查 join policy。
-- join policy 满足时写入 fan-in context，例如 branch results、artifact refs、evaluation summary、failed branches 和 limitations。
-- fan-in 后主 workflow 应通过 `on_join.success`、`on_join.partial` 或 `on_join.failure` 转移。
-- pause/cancel/resume 应作用于 run 下所有 active branch。
-- retry 应支持 branch 级 retry，不能重跑整个 parallel state，除非 workflow definition 明确配置。
-- checkpoint 应记录 parallel run id、branch attempts 和 fan-in context hash。
-
-join policy 建议：
-
-| Policy | 含义 |
-|--------|------|
-| `all_completed` | 所有 branch 到达 completed/failed/cancelled 终态后 join |
-| `all_success` | 所有 branch 必须成功，否则 failure |
-| `min_success` | 成功 branch 数达到阈值即可 success 或 partial |
-| `required_branches` | 指定 branch 必须成功，其他 branch 可失败但进入 limitations |
-| `best_effort` | 所有可运行 branch 完成后 join，失败 branch 进入不确定性 |
-
-工作台展示要求：
-
-- parallel state 在任务时间线中显示为一个阶段。
-- 阶段内展示 branch 列表、状态、delegation、artifact、evaluation、retry 次数。
-- 用户可以对单个 branch retry，也可以对整个 parallel state retry。
-- failed/pending branch 必须进入最终报告的 limitations 或 open questions。
-
-### Parallel Research Kernel
+### Research Kernel
 
 为了吸收 GPT Researcher deep 的优势，Icarus 应抽象一个可被 lane skill 调用的研究内核。它不是顶层业务编排器，而是一组可复用流程规范和工具组合。
 
@@ -1927,6 +1811,8 @@ scope-frame.json
 research-plan.json
 seed-probe.json
 opportunity-space-map.json
+discovery-graph-spec.json
+discovery-graph-fan-in.json
 user-language-mining.json
 audience-pain-lane.json
 job-to-be-done-lane.json
@@ -1936,9 +1822,10 @@ search-demand-lane.json
 trend-lane.json
 substitutes-workarounds-lane.json
 solution-failure-map.json
-discovery-fan-in.json
 opportunity-theses.json
 merged-opportunities.json
+enrichment-graph-spec.json
+enrichment-graph-fan-in.json
 competitor-gap-enrichment.json
 market-size-enrichment.json
 monetization-enrichment.json
@@ -1965,14 +1852,22 @@ traceability.json
 
 ```text
 scope_framing               delegation  明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设
-research_plan               delegation  LLM 规划 lane、关键词、数据源、topN、评分权重、kill gate、Research Kernel 参数
+research_plan               delegation  LLM 规划调研策略、lane catalog 选择、关键词、数据源、topN、评分权重、kill gate、Research Kernel 参数
 seed_probe                  delegation  轻量探测用户、场景、问题、关键词、产品和数据源 seed
 opportunity_space_map       delegation  建立用户角色、JTBD、工作流、替代方案、可软件化节点和初始 thesis 假设
-discovery_parallel          parallel    基于 seed 和 opportunity space 的 9 条 discovery lane 并行调研
-lane_result_validate        system      schema、evidence ref、trigger phrase、solution failure、support/opposition、kill conditions、topN 数量校验
+discovery_graph_plan        delegation  基于 scope、seed 和 opportunity space 生成本次 discovery DAG spec
+discovery_graph_compile     system      使用通用 workflow DAG compiler 校验 node、依赖、role、skill、artifact contract、预算和 join policy
+discovery_graph_execute     graph       执行本次 discovery DAG，可能包含并行、依赖、条件、join 和局部 retry
+discovery_gap_analysis      delegation  基于 fan-in context 识别证据缺口、冲突、弱判断和需要补充的机会
+followup_graph_plan         delegation  按缺口生成可选 follow-up DAG spec
+followup_graph_compile      system      编译并校验 follow-up DAG spec
+followup_graph_execute      graph       执行补充调研、反证或复核节点；无补充需求时可跳过
+lane_result_validate        system      对 graph fan-in 后的 lane result 做 schema、evidence ref、trigger phrase、solution failure、support/opposition、kill conditions、topN 数量校验
 opportunity_thesis          delegation  将 lane topN 机会转成可验证 thesis，补齐买单方、mental positioning、entry scene、solution failure、entry wedge、why now、kill criteria
 opportunity_merge           delegation  语义合并、拆分判断、判断依据聚合
-enrichment_parallel         parallel    竞品、市场、商业化、获客、合规、反证、替代方案、可行性、LLM 基线、能力商品化、价值层、状态上下文和买单语言并行补充检索
+enrichment_graph_plan       delegation  基于合并机会生成 enrichment / validation DAG spec
+enrichment_graph_compile    system      使用通用 workflow DAG compiler 校验 enrichment graph
+enrichment_graph_execute    graph       执行竞品、市场、商业化、获客、合规、反证、替代方案、可行性、LLM 基线、能力商品化、价值层、状态上下文和买单语言等节点
 judgment_context_normalize  system      URL/source/product/evidence ref/claim/finding/insight 归一化和 deterministic dedupe
 global_score                system      确定性评分公式、排序、阈值过滤和推荐档位
 sensitivity_analysis        system      权重扰动、关键假设扰动、置信度扰动、rank stability 和 rank range 计算
@@ -1983,7 +1878,7 @@ final_report                delegation  输出 Markdown 报告、JSON 报告和 
 done                        terminal
 ```
 
-`discovery_parallel` branches：
+Discovery graph 的默认 lane catalog：
 
 ```text
 audience_pain              受众需求痛点
@@ -1997,9 +1892,11 @@ substitutes_workarounds    替代方案与非 App 竞争
 solution_failure           现有解法失效场景
 ```
 
-`seed_probe` 不应把业务流程变成产品中心调研。`product_seed` 只作为产品相关 branch 的输入；非产品 branch 仍可独立从用户心智、搜索需求、社区讨论、任务流、替代方案和趋势变化中发现尚未被现有产品覆盖的强需求。后续的产品覆盖分析用于验证 coverage gap，而不是要求所有机会都来自已有产品缺口。
+这些 lane 是 recipe 提供的可选能力，不是每次固定全量执行。`discovery_graph_plan` 必须根据 scope、seed、机会空间、数据可得性和预算生成本次 graph spec，决定启用哪些 lane、是否拆分行业特定 lane、节点之间的依赖、并发组、join policy 和 follow-up 条件。
 
-`enrichment_parallel` branches：
+`seed_probe` 不应把业务流程变成产品中心调研。`product_seed` 只作为产品相关 node 的输入；非产品 node 仍可独立从用户心智、搜索需求、社区讨论、任务流、替代方案和趋势变化中发现尚未被现有产品覆盖的强需求。后续的产品覆盖分析用于验证 coverage gap，而不是要求所有机会都来自已有产品缺口。
+
+Enrichment graph 的默认 lane catalog：
 
 ```text
 competitor_gap              竞品覆盖、满意度、迁移阻力
@@ -2016,7 +1913,9 @@ state_context_continuity    用户状态、上下文连续性、数据闭环和�
 buyer_purchase_language     买单语言、预算来源、决策标准和 marketing bridge
 ```
 
-这两个并行阶段都必须作为 workflow runtime 的 `parallel` state 表达，而不是用单个 agent 节点内部的子任务代替。内部子任务可以作为 agent 自己的执行优化，但不能替代 workflow 层对 branch 状态、产物和评测的可观测性。
+Enrichment graph 同样不是固定 12 个 node。planner 应按机会类型、证据缺口和风险选择节点；例如非 AI 机会可以跳过或降权 LLM baseline，强监管行业必须增加合规和反证深挖，买单方不清晰时必须增加 buyer purchase language 节点。
+
+所有实际执行的 lane、enrichment、review 和 follow-up 节点都必须落在通用 Dynamic Workflow DAG 框架的 graph run 中，而不是藏在单个 agent 节点内部。内部子任务可以作为 agent 自己的执行优化，但不能替代 workflow 层对 node 状态、产物、评测、retry 和 limitations 的可观测性。
 
 ### Skill 设计
 
@@ -2102,9 +2001,9 @@ buyer_purchase_language     买单语言、预算来源、决策标准和 market
 }
 ```
 
-branch skill 的职责划分：
+Graph node skill 的职责划分：
 
-| Branch | Skill | 核心职责 |
+| Node | Skill | 核心职责 |
 |--------|-------|----------|
 | `scope_framing` | `opportunity-scope-framing` | 明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设 |
 | `research_plan` | `opportunity-research-plan` | 生成 lane 计划、query goals、数据源优先级、Research Kernel 参数、评分权重和 kill gate 规则 |
@@ -2193,7 +2092,7 @@ host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按
 适合 workflow action 的：
 
 - `context.set`、`context.require` 这类已有上下文操作。
-- branch artifact schema validation。
+- graph node artifact schema validation。
 - evidence ref validation 和 source manifest 校验。
 - user language refs、trigger phrase refs 和 solution failure refs 校验。
 - llm baseline、buyer language、value layer 和 state context 字段完整性校验。
@@ -2345,11 +2244,12 @@ startup_opportunity.solution_failure_map.v1
   - limitations
 ```
 
-`discovery_parallel` 的每个 branch 必须产出：
+Discovery graph 中每个 lane node 必须产出：
 
 ```text
 startup_opportunity.discovery_lane_result.v1
-  - branch_key
+  - node_key
+  - lane_type
   - research_goals
   - queries
   - evidence_refs
@@ -2432,11 +2332,12 @@ opportunity_theses
   - audit_refs
 ```
 
-`enrichment_parallel` 的每个 branch 必须产出：
+Enrichment graph 中每个 enrichment node 必须产出：
 
 ```text
 startup_opportunity.enrichment_branch_result.v1
-  - branch_key
+  - node_key
+  - enrichment_type
   - opportunity_refs
   - evidence_refs
   - claims
@@ -2590,7 +2491,7 @@ validation_plans
   - next_decision
 ```
 
-示例 branch 配置：
+示例 graph node 配置：
 
 ```json
 {
@@ -2657,11 +2558,17 @@ Icarus workflow
   -> delegation: research_plan skill
   -> delegation: seed_probe skill
   -> delegation: opportunity_space_map skill
-  -> parallel: discovery branch delegations
+  -> delegation: discovery_graph_plan skill
+  -> system/action: generic workflow DAG compile
+  -> graph: discovery graph execution
+  -> delegation: discovery_gap_analysis skill
+  -> optional graph: follow-up graph execution
   -> system/action: discovery fan-in validation
   -> delegation: opportunity_thesis skill
   -> delegation: opportunity merge
-  -> parallel: enrichment branch delegations
+  -> delegation: enrichment_graph_plan skill
+  -> system/action: generic workflow DAG compile
+  -> graph: enrichment / validation graph execution
   -> system/action: judgment context normalization + deterministic scoring + sensitivity analysis
   -> delegation: ranking rationale
   -> delegation: quality review
@@ -2671,7 +2578,7 @@ Icarus workflow
   -> final report artifacts
 ```
 
-这种结构既满足“并行 lane 是 workflow runtime 一等状态”的架构要求，也保留了 Icarus 当前 host/container/MCP/skill 的职责边界。
+这种结构既把动态 DAG 交给通用 workflow 框架执行，也保留了 Icarus 当前 host/container/MCP/skill 的职责边界。创业机会 recipe 只定义业务节点和产物契约，不定义 core runtime。
 
 ## GPT Researcher 项目关系
 
@@ -2702,11 +2609,11 @@ report = await researcher.write_report()
 - 创业机会判断需要固定 schema、权重、可审计判断链和反证逻辑。
 - 不同 lane 的筛选规则不同，不能交给通用报告 prompt 隐式完成。
 
-在 Icarus 中，推荐把这些机制沉淀为 `Parallel Research Kernel`：
+在 Icarus 中，推荐把这些机制沉淀为 `Research Kernel`：
 
 ```text
 Research Kernel
-  -> 接收 branch 的 research goals、query seeds、source preferences 和 bounds
+  -> 接收 graph node 的 research goals、query seeds、source preferences 和 bounds
   -> 由 agent 控制 query expansion、source selection、follow-up 判断
   -> 通过 host MCP tool 执行 batch search/fetch/source record
   -> 输出 structured judgment context，而不是最终业务报告或证据综述
@@ -2717,7 +2624,7 @@ Research Kernel
 - 不让 GPT Researcher 决定创业机会 schema、评分或排序。
 - 不让 GPT Researcher report writer 直接产出最终业务报告。
 - 所有来源必须进入 Icarus evidence store。
-- 所有 branch 输出必须通过 Icarus artifact contract 和 evaluator。
+- 所有 graph node 输出必须通过 Icarus artifact contract 和 evaluator。
 
 创业机会调研 workflow 自己控制候选机会生成、合并、反证、评分、排序和最终报告。
 
@@ -2727,45 +2634,24 @@ Research Kernel
 
 架构层范围：
 
-- workflow definition 支持 `parallel` state。
-- runtime 支持 branch delegation、branch retry、join policy、fan-in context 和 checkpoint。
-- workbench/trace 能展示 parallel run、branch 状态、artifact、evaluation 和 limitations。
-- workflow action 支持必要的异步 deterministic 操作，但不承载 LLM 调研。
-- host MCP tool/evidence store 支持可审计 search/fetch/API 数据记录。
-- Research Kernel 支持 query goal、并行检索、上下文压缩、递归追问、source curation、source independence、opposing claims 和 insufficient evidence。
+- 通用 Dynamic Workflow DAG、static parallel、graph compiler、graph execution、join policy、fan-in context、checkpoint、Workbench/Trace 展示等由 `docs/dynamic-workflow-dag-framework.md` 定义。
+- 本方案只声明创业机会调研对该框架的使用方式和业务契约。
 
 业务 workflow 范围：
 
 - `scope_framing` 明确市场、平台、商业模式、团队能力、验证周期、风险偏好和默认假设。
-- `research_plan` 规划完整 discovery/enrichment research plan、kill gate、评分权重和敏感性参数。
-- `seed_probe` 探测多类调研 seed，包括用户、场景、问题、关键词、产品和数据源；其中 `product_seed` 只作为产品相关 branch 的输入。
+- `research_plan` 规划完整 discovery/enrichment strategy、lane catalog 选择、kill gate、评分权重和敏感性参数。
+- `seed_probe` 探测多类调研 seed，包括用户、场景、问题、关键词、产品和数据源；其中 `product_seed` 只作为产品相关 node 的输入。
 - `opportunity_space_map` 建立用户角色、JTBD、当前替代方案、工作流摩擦点和可软件化节点。
-- `discovery_parallel` 覆盖 9 条发现 branch：
-  - 用户真实语言与心智定位。
-  - 受众需求痛点。
-  - JTBD 与任务流拆解。
-  - 已有产品 Top 排名挖掘。
-  - 用户评论与差评挖掘。
-  - 搜索需求与内容缺口。
-  - 趋势变化。
-  - 替代方案与非 App 竞争。
-  - 现有解法失效场景。
+- `discovery_graph_plan` 生成本次 discovery DAG spec，按任务选择默认 lane catalog、行业特定 lane、节点依赖、并发组、join policy 和 follow-up 条件。
+- `discovery_graph_execute` 基于通用 graph state 执行发现节点；默认 lane catalog 包括用户语言、受众痛点、JTBD、Top 产品、评论挖掘、搜索需求、趋势、替代方案和现有解法失效。
+- `discovery_gap_analysis` 对 fan-in context 识别证据缺口、冲突、弱判断和补充调研需求。
+- `followup_graph_plan` / `followup_graph_execute` 按缺口执行补充调研、反证或复核；无补充需求时可跳过。
 - `lane_result_validate` 校验 schema、evidence ref、trigger phrase、solution failure refs、support/opposition、kill conditions 和 topN。
 - `opportunity_thesis` 对 discovery topN 补齐买单方、mental positioning、entry scene、solution failure、entry wedge、why now、kill criteria 和验证假设。
 - `opportunity_merge` 对 opportunity thesis 做语义聚类、拆分和判断依据合并。
-- `enrichment_parallel` 覆盖 12 条补充验证 branch：
-  - 竞品缺口。
-  - 市场空间。
-  - 商业化。
-  - 获客路径。
-  - 合规和平台风险。
-  - 反证与替代方案。
-  - 小团队可行性和早期单位经济。
-  - LLM capability benchmark 和 prompt-only baseline。
-  - 能力商品化风险。
-  - output/workflow/outcome 价值层。
-  - 用户状态、上下文连续性和数据闭环。
-  - 买单语言、预算来源和决策标准。
+- `enrichment_graph_plan` 生成本次 enrichment / validation DAG spec。
+- `enrichment_graph_execute` 执行补充验证节点；默认 lane catalog 包括竞品缺口、市场空间、商业化、获客、合规、反证、可行性和早期单位经济、LLM baseline、能力商品化风险、output/workflow/outcome 价值层、状态上下文和买单语言。
 - `global_score` 使用确定性公式计算综合评分、排序和推荐档位。
 - `sensitivity_analysis` 计算 downside/expected/upside score、rank range、rank stability 和最敏感假设。
 - `quality_review` 审核判断链、反证、评分解释、limitations 和报告一致性。
@@ -2800,32 +2686,29 @@ direction
   -> research_plan
   -> seed_probe
   -> opportunity_space_map
-  -> discovery_parallel
-      -> user_language_mining
-      -> audience_pain
-      -> job_to_be_done
-      -> top_products
-      -> review_mining
-      -> search_demand
-      -> trend_change
-      -> substitutes_workarounds
-      -> solution_failure
+  -> discovery_graph_plan
+      -> planner selects lane catalog nodes
+      -> planner may add industry-specific nodes
+      -> planner defines dependencies, parallel groups and join policy
+  -> discovery_graph_compile
+  -> discovery_graph_execute
+      -> dynamic graph nodes such as user_language_mining / audience_pain / job_to_be_done / review_mining
+      -> node-level artifact contract and evaluator
+      -> fan-in context
+  -> discovery_gap_analysis
+  -> optional followup_graph_plan
+  -> optional followup_graph_compile
+  -> optional followup_graph_execute
   -> lane_result_validate
   -> opportunity_thesis
   -> opportunity_merge
-  -> enrichment_parallel
-      -> competitor_gap
-      -> market_size
-      -> monetization
-      -> acquisition
-      -> compliance_risk
-      -> counter_evidence
-      -> feasibility_unit_economics
-      -> llm_capability_benchmark
-      -> capability_commoditization
-      -> workflow_outcome_value
-      -> state_context_continuity
-      -> buyer_purchase_language
+  -> enrichment_graph_plan
+      -> planner selects validation/enrichment nodes by opportunity type and evidence gaps
+  -> enrichment_graph_compile
+  -> enrichment_graph_execute
+      -> dynamic graph nodes such as competitor_gap / market_size / counter_evidence / buyer_purchase_language
+      -> node-level artifact contract and evaluator
+      -> fan-in context
   -> judgment_context_normalize
   -> global_score
   -> sensitivity_analysis
@@ -2931,4 +2814,4 @@ multi-lane opportunity mining
   + decision-oriented reporting
 ```
 
-该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 workflow、parallel state、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度提炼出的 claim、finding 和 insight，每条维度先独立筛选 topN，并在 lane 内完成用户语言挖掘、买单语言验证、解法失效识别、反证和 kill gate，再通过 thesis 合成、聚类、LLM baseline、能力商品化风险、工作流/结果价值、状态上下文建模、敏感性分析、自然复述测试、验证计划和综合评分生成最终创业方向排名。
+该 Agent 服务应借鉴 GPT Researcher 项目（`/Users/chelaile/IdeaProjects/gpt-researcher`）的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain 等流程机制，并在 Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）中沉淀为 Research Kernel。主流程应落在 Icarus 的 Dynamic Workflow DAG、delegation、skill、MCP tool、artifact contract 和 evaluator 体系内。候选机会应来自多条调研维度提炼出的 claim、finding 和 insight，每条维度先独立筛选 topN，并在 lane 内完成用户语言挖掘、买单语言验证、解法失效识别、反证和 kill gate，再通过 thesis 合成、聚类、LLM baseline、能力商品化风险、工作流/结果价值、状态上下文建模、敏感性分析、自然复述测试、验证计划和综合评分生成最终创业方向排名。
