@@ -34,6 +34,8 @@ PM Pipeline：`features/pm-pipeline` 功能包，启用后成为独立一级业�
 - PM Pipeline 不直接写进 Icarus core，而是作为仓库内 feature package 接入。
 - 各业务应用拥有自己的一级页面和领域交互，但通过 Feature Package Runtime 共享 workflow、trace、artifact、human review、permission、audit 等底层协议。
 
+本文以 `local/docs/dynamic-workflow-dag-framework.md` 为唯一目标执行合同：Workflow Definition 固定外层 State/transition，每个 non-terminal State Activation 统一 lower 到 Graph Run；复杂阶段使用多节点 graph state，简单 delegation/system/interrupt state lower 为单节点 Graph。不存在 parallel state、旧 completion handler、多步骤 `system.run.steps`、transition 内嵌 delegate 或 graph/sequential 双轨 Runtime。
+
 ## 目标
 
 - 完整迁移 `ai_workspace_pm` 的 PM 产研包流水线。
@@ -89,19 +91,19 @@ PM Pipeline Domain API / Projection
         |
         v
 Workflow Runtime
-  - state machine
-  - delegation
-  - interrupt / human review
-  - system action
-  - artifact contract
-  - retry / pause / cancel / skip
-  - trace / event / audit
+  - trusted outer State/transition + unified Graph Runtime
+  - exact Recipe/Capability/Interface/Policy/Wait Contract
+  - durable approval wait / human review
+  - domain resource claim + effect/outbox/receipt
+  - immutable artifact snapshot + evaluator/quality gate
+  - retry / pause / cancel / explicit rework transition
+  - trace / event / audit / recovery
         |
         v
 Container Agent / Host Actions
-  - 读取 feature/container/agents 或 PM workspace .claude/agents
-  - 调用 feature/container/skills 或 PM workspace .claude/skills
-  - 执行 feature/container/scripts 或 PM workspace scripts 的白名单 host action
+  - 按 pinned capability/executor snapshot 读取 versioned agent/skill source
+  - 不在 active run 中读取 live/latest PM workspace prompt
+  - 通过独立 typed system capability 执行每个 allowlisted script
   - 写入原目录结构和产物
         |
         v
@@ -124,7 +126,7 @@ Execution Console
   - 通用 timeline
   - 通用 artifact 列表
   - 通用 action item
-  - pause / retry / cancel / skip
+  - pause / retry-wait / cancel / policy-authorized manual skip
   - raw trace / event / payload 排障
         |
         v
@@ -175,6 +177,15 @@ features/pm-pipeline/
       pm_optimize_prompts.json
       pm_iterate_a2.json
       pm_iterate_a7.json
+    workflow-recipes/
+    workflow-routing-scopes/
+    workflow-execution-policies/
+    workflow-capabilities/
+    workflow-schemas/
+    workflow-graph-interfaces/
+    workflow-graph-templates/
+    workflow-graph-policies/
+    workflow-wait-contracts/
     cards/
     agents/
     skills/
@@ -216,6 +227,15 @@ features/pm-pipeline/
   ],
   "resources": {
     "workflowDefinitions": "./container/workflow-definitions",
+    "workflowRecipes": "./container/workflow-recipes",
+    "workflowRoutingScopes": "./container/workflow-routing-scopes",
+    "workflowExecutionPolicies": "./container/workflow-execution-policies",
+    "workflowCapabilities": "./container/workflow-capabilities",
+    "workflowSchemas": "./container/workflow-schemas",
+    "workflowGraphInterfaces": "./container/workflow-graph-interfaces",
+    "workflowGraphTemplates": "./container/workflow-graph-templates",
+    "workflowGraphPolicies": "./container/workflow-graph-policies",
+    "workflowWaitContracts": "./container/workflow-wait-contracts",
     "cards": "./container/cards",
     "agents": "./container/agents",
     "skills": "./container/skills",
@@ -226,7 +246,11 @@ features/pm-pipeline/
   },
   "permissions": {
     "hostActions": [
-      "pmPipeline.runScript",
+      "pmPipeline.nextId",
+      "pmPipeline.deliverableFinalCheck",
+      "pmPipeline.validateEvals",
+      "pmPipeline.validatePipelineState",
+      "pmPipeline.lintCases",
       "pmPipeline.promoteDeliverable",
       "pmPipeline.promptPatchTransaction",
       "pmPipeline.syncWorkspace"
@@ -256,12 +280,40 @@ ICARUS_FEATURES=pm-pipeline
 - `features/pm-pipeline/host/index.ts` 只通过 `FeatureContext` 注册 API、projection、schedule、event subscription、host action adapter，不静态修改 `src/channels/web.ts`。
 - PM API 全部挂在 `/api/features/pm-pipeline/*`，只做 projection 查询、workspace registry 管理、workflow command 包装和设置读写。
 - PM 一级导航来自 manifest 的 `nav`，renderer 入口通过 `/features/pm-pipeline/renderer/index.js` 动态加载。
-- PM workflow definitions、cards、artifact contracts、workflow evaluators、agents、skills、scripts、templates 都通过 manifest 的 `resources` 注册。
-- PM workflow definitions 使用当前 runtime 已支持的 `.json` `WorkflowDefinitionVersionBundle` 文件，文件名 key 必须与 bundle.key 一致。
+- PM Recipe、workflow definitions、capabilities、schemas、graph interfaces/templates/policies、wait contracts、cards、artifact contracts、workflow evaluators、agents、skills、scripts、templates 都通过 manifest 的 `resources` 注册。当前 `src/features/manifest.ts` 尚未支持新增 Graph resource 字段，必须先按 Dynamic Framework 扩展 parser/registry/management/test。
+- PM workflow definitions 使用目标 Runtime 的 versioned Definition bundle；旧 `.json` `WorkflowDefinitionVersionBundle` 只作为迁移输入，不能把旧多步骤 system action、transition delegate 或 completion handler 原样保留成旁路。
 - 启用 feature 时由 core provisioning 创建 `feature:pm-pipeline:main` 独占 group 和 `groups/pm_pipeline_main/CLAUDE.md`。
 - Feature migration 只能创建 `feature_pm_pipeline_*` 前缀表，例如 `feature_pm_pipeline_workspaces`、`feature_pm_pipeline_projection_cache`、`feature_pm_pipeline_schedule_state`。
 - Feature projection 可以缓存 PM 业务视图，但不能成为执行事实源。workflow DB、human review、trace、PM workspace 文件事实源仍是权威。
-- Feature 禁用后不允许新建 PM workflow；历史 workflow 在 Execution Console 只读可见。选择“停用并删除”时由 core feature deletion service 清理 feature-owned group、projection、workflow 历史和 runtime 目录。
+- Feature `draining` 后不允许新建 PM Workflow，但必须继续加载 pinned executor/resource 让 active run 收敛；active refs 清零后才能 `disabled`。选择“停用并删除”时还必须满足 retention、无 published/active ref、无 action-required/quarantined run，并由 deletion service 分开清理 feature-owned domain data 与可验证的 Graph audit snapshot。
+
+### PM Task Intake 与 Recipe 选择
+
+PM 页面按钮和 schedule 已经明确表达任务种类，因此默认不调用 LLM Macro Router，而是使用单候选 routing scope 产生 deterministic decision：
+
+```text
+发起新需求       -> pm-pipeline.new-feature@1
+初始化项目       -> pm-pipeline.init-project@1
+初始化文档       -> pm-pipeline.init-docs@1
+promote          -> pm-pipeline.promote-deliverable@1
+运行周报         -> pm-pipeline.pipeline-review@1
+Prompt 月更      -> pm-pipeline.optimize-prompts@1
+```
+
+PM Feature 因此有意不发布 `workflowRoutingCapabilities` 资源目录：所有 Feature-local routing scope 的 `router_capability_ref=null`，由 deterministic resolver 校验显式 RecipeRef。若通用聊天入口需要识别 PM 任务，使用 core/global scope 发布并固定的 Domain Router；PM Feature 只提供其 bounded child scope，不能复用业务 capability 充当 Router。未来只有在 PM scope 内确实出现多个自然语言意图且确定性字段无法区分时，才新增独立、pure、无 tool 权限的 routing capability 及对应 manifest 目录。
+
+每个 Recipe 固定 exact Definition/entrypoint、Workflow execution policy、input/output schema、launch policy 和 domain resource claims。通用聊天入口如果允许识别 PM 任务，必须先经过 global Domain Router 再进入 PM routing scope，不能把 Startup Opportunity、产品设计等 Definition 与 PM Recipe 放入同一个无界候选集合。
+
+所有创建请求使用稳定 `creation_key`：
+
+```text
+new feature:     pm:new-feature:{workspace_id}:{request_id}
+weekly review:   pm:pipeline-review:{workspace_id}:{iso_week}
+monthly prompt:  pm:optimize-prompts:{workspace_id}:{year_month}:{target_set_hash}
+promote:         pm:promote:{workspace_id}:{package_id}:{target_state}
+```
+
+重复点击、scheduler redelivery、API retry 或 transition effect 必须返回同一个 Workflow。`promote`、prompt apply 和其他有写副作用的 Recipe 使用 `confirm` 或 `manual_only` launch policy，不能仅凭模糊自然语言自动启动。
 
 PM workspace 和 PM feature 的关系：
 
@@ -285,13 +337,13 @@ Workflow Runtime 是真正的底层执行面。
 
 职责：
 
-- 保存 workflow 实例、状态、round、context。
-- 推进 delegation、interrupt、system state、terminal state。
-- 创建和恢复 human review。
+- 保存 Task Intake/Recipe、workflow instance、State Activation、Graph Run/Scope/Node、lifetime counter 和 immutable context/output snapshot。
+- 将 delegation/system/interrupt/graph state 统一 lower/执行为 Graph，并只由 root completion cut 推进外层 transition。
+- 创建和恢复 versioned approval wait/human review。
 - 记录 agent trace、event、checkpoint、stage evaluation。
-- 执行 retry、pause、resume、cancel、skip。
-- 调用 artifact contract 和 quality gate。
-- 调用 host action 和 container agent。
+- 执行 retry、pause、resume、cancel、definition-authorized rework/manual skip。
+- 调用 capability 固定的 artifact contract、evaluator 和 quality gate。
+- 通过 effect/outbox/domain claim 调用 host system capability 和 container delegation capability。
 
 不承担：
 
@@ -309,7 +361,7 @@ Workbench Core 是共享基础设施，不是一个具体页面。
 - Workflow projection 基础查询。
 - Timeline、trace、artifact、action item、human review 的通用协议。
 - Artifact preview registry。
-- Command dispatch：`resumeWorkflowInterrupt`、`retryWorkflowStage`、`pauseWorkflow` 等。
+- Command dispatch：`createWorkflowFromRecipe`、`resolveWorkflowWait`、`pause/resume/cancelWorkflow`、Definition-authorized rework/remediation 等。
 - Permission、risk、audit、idempotency。
 - 前端通用组件，如 trace viewer、timeline、artifact viewer、action panel。
 
@@ -329,9 +381,9 @@ Feature Package Runtime 是功能包扩展层，负责让 PM Pipeline 作为可�
 - 根据 `local/features.json` 或 `ICARUS_FEATURES` 启用功能包。
 - 校验 manifest、资源路径、API prefix、nav key、required group、permissions。
 - Provision feature 独占 group。
-- 注册 feature API、nav、renderer entry、workflow definitions、cards、artifact contracts、workflow evaluators、agents、skills、scripts、templates。
+- 注册 feature API、nav、renderer entry、Recipe/routing/execution policy、workflow definitions、capabilities、schemas、graph interfaces/templates/policies、wait contracts、cards、artifact contracts、workflow evaluators、agents、skills、scripts、templates。
 - 运行 feature migrations。
-- 支持 feature 停用和“停用并删除”。
+- 支持 feature `enabled -> draining -> disabled -> deleting`，并按 active executable refs 与 retention 阻止不安全停用/删除。
 
 不承担：
 
@@ -348,7 +400,7 @@ Execution Console 是通用兜底控制台。
 
 - 查看所有 workflow。
 - 查看通用 timeline、trace、artifact、interrupt。
-- 做通用 pause、retry、cancel、skip。
+- 做通用 pause、retry-wait、cancel 和 policy-authorized manual skip。
 - 排查失败 stage、agent output、contract validation。
 - 当业务页面没有覆盖某类异常时，提供兜底操作。
 
@@ -440,15 +492,15 @@ PM Pipeline
 详情页动作：
 
 - `批准`、`拒绝`、`要求修改`、`跳过`。
-- `重试`、`回退`、`指派到某 workflow`。
+- `重试等待`、`要求修改`、`启动 allowlisted follow-up workflow`；不得传任意 target State/Workflow。
 - `查看上下文`、`打开原产物`、`打开 trace`。
 
 要求：
 
 - 每个问题必须用业务语言呈现。
 - 每个选项带业务后果。
-- 决策最终调用 `resumeWorkflowInterrupt` 或等价 workflow command。
-- 决策写回对应 markdown、`pipeline-state.json` 和 workflow interrupt。
+- 决策最终调用 `resolveWorkflowWait`，携带 wait expected version、action、typed payload 和 idempotency key。
+- Wait CAS 只发布 typed resolution；对应 Markdown/`pipeline-state.json` 由下游 mutation capability 写回并保存 receipt/snapshot。
 
 ### 3. 需求开发
 
@@ -471,7 +523,7 @@ PM Pipeline
 详情页动作：
 
 - `新建需求`、`继续流程`、`暂停`、`取消`。
-- `重试当前阶段`、`回退到上一阶段`、`跳过非必要阶段`。
+- `提前 retry-wait`、`执行 Definition 声明的返工命令`、`paused 后按 policy 跳过允许节点`。
 - `生成 .draft`、`运行 final check`。
 - `打开 trace`、`打开 Console`。
 
@@ -613,7 +665,7 @@ promote 必须调用原 `scripts/promote.sh` 或等价 host action，不能直�
 - `按 agent 筛选`。
 - `查看 prompt`。
 - `查看原始输出`。
-- `重试 stage`。
+- `提前 retry-wait` 或执行 Definition 声明的 rework command。
 - `打开关联 artifact`。
 - `打开 Execution Console`。
 
@@ -647,15 +699,14 @@ Agent 轨迹是排障和审计页，不承担业务审批。
 
 禁止 PM 页面维护独立执行状态。
 
-唯一执行状态来自：
+唯一执行状态来自 Graph Store 及其通用协议：
 
-- workflow table。
-- workflow events。
-- workflow interrupts / human review。
-- delegations。
-- agent query trace。
-- artifact contract records。
--文件事实源中的 `pipeline-state.json`。
+- Task Intake/Recipe/Workflow/State Activation/Graph Run tables。
+- workflow graph events、completion cuts 和 checkpoints。
+- durable waits / human review。
+- node attempts、agent query trace、effect receipt 和 immutable artifact records。
+
+`pipeline-state.json`、deliverable 目录名和 CSV 是领域文件事实，不是 scheduler/transition 的执行状态。Projection 同时读取 Graph Store、最新成功 snapshot 和 live workspace hash，显示一致、待同步或 external drift；它不能从 live file 推断并直接推进 Workflow。
 
 PM 页面通过 projection 转换为领域视图。
 
@@ -674,7 +725,7 @@ pm projection:
   关联材料：A5 报告、A4 范围审核、A3 技术方案
 ```
 
-PM 页面动作翻译成 workflow command。
+PM 页面动作翻译成 versioned workflow command；文件更新由 resume 后的 system capability 完成。
 
 示例：
 
@@ -683,9 +734,11 @@ PM 页面动作：
   通过 Gate 1.5b，进入 A2
 
 底层 command：
-  resumeWorkflowInterrupt({
+  resolveWorkflowWait({
     workflowId,
-    interruptId,
+    waitId,
+    expectedVersion,
+    idempotencyKey,
     action: "approve",
     payload: {
       gate: "gate_1_5b",
@@ -699,17 +752,17 @@ PM 页面动作：
 | Claude Code 资产/能力 | Icarus 迁移后 |
 | --- | --- |
 | `.claude/commands/*.md` | `features/pm-pipeline/container/workflow-definitions` 的编译输入 + PM 页面入口参考 |
-| `Agent(subagent_type=...)` | workflow delegation |
-| `.claude/agents/*.md` | `features/pm-pipeline/container/agents` 的 agent persona/source prompt；运行时也要兼容 PM workspace 原路径 |
-| `.claude/skills/*` | `features/pm-pipeline/container/skills` 的 container skills，路径兼容或 adapter 映射 |
+| `Agent(subagent_type=...)` | exact versioned delegation capability node |
+| `.claude/agents/*.md` | prompt authoring source；发布为 versioned agent/executor/capability snapshot，active run 不读取 live path |
+| `.claude/skills/*` | skill authoring source；发布为 capability dependency，路径 adapter 只服务 publisher/staging |
 | `.claude/settings.json deny` | feature permissions + host/container policy + mount policy + tool guard |
 | Claude Code PreToolUse hook | container runner tool policy / host hook |
 | Claude Code PostToolUse hook | artifact/csv write validator |
 | Claude Code SessionStart hook | workflow/session context injection |
 | `AskUserQuestion` | human review / workflow interrupt |
-| `.claude/workflows/*.js` | `features/pm-pipeline/host` 中的 host action 或 container workflow adapter |
-| `scripts/*.sh` | `features/pm-pipeline/container/scripts` 声明 + allowlisted host action runner；PM workspace 原脚本保持可调用 |
-| `pipeline-state.json` | 文件事实源保留，workflow DB 做镜像 |
+| `.claude/workflows/*.js` | 单操作迁为 exact system capability；多步骤/Agent/等待流程迁为 Graph/Workflow |
+| `scripts/*.sh` | 一脚本一 system capability，固定 hash、typed args、cwd resolver、effect/cancellation contract |
+| `pipeline-state.json` | 兼容领域文件保留，通过 effect receipt/snapshot 与 Graph Store 对账，不作为执行状态镜像 |
 
 ## PM Workspace 设计
 
@@ -771,15 +824,98 @@ artifactRoot = {workspace.rootPath}/deliverables/{packageId}
 contextPackRoot = {workspace.rootPath}/workflow-context/{workflowId}/{stageKey}
 ```
 
-Workbench artifact 只索引 PM feature 产物文件，例如：
+Workbench 可以解析 PM feature live 产物路径用于打开/编辑，但每个成功 node 的权威执行 artifact 必须是 immutable snapshot，例如 live path：
 
 ```text
 data/features/pm-pipeline/workspaces/ws1/deliverables/PKG/01-需求范围与边界.md
 ```
 
-Artifact contract 由 PM feature 定义，例如 `pm.deliverable_package.v1`、`pm.prompt_regression_result.v1`，负责校验 PM workspace 下的业务文件结构。Icarus core 不解释 PM 目录语义，只做 path safety、artifact index、contract evaluation、permission、audit 和 deletion summary。
+Artifact contract 由 PM feature 定义，例如 `pm.deliverable_package.v1`、`pm.prompt_regression_result.v1`，负责校验 PM workspace 下的业务文件结构和 immutable directory manifest。Icarus core 不解释 PM 目录语义，只做 path safety、live locator、immutable snapshot/index、contract evaluation、permission、audit 和 deletion summary。
+
+### 强协议 1：PM Workspace Mutation 与 Immutable Snapshot
+
+SQLite 与 workspace filesystem 不能假装处于同一个事务。权威边界固定为：Graph Store 是执行状态事实源；PM workspace 是可移植领域文件事实源；Graph Value/Blob Store 中的 immutable snapshot 是某次 node 成功和恢复审计事实；`pipeline-state.json` 是由受控 capability 维护的兼容领域文件，不是第二套 scheduler。
+
+所有写文件、移动 deliverable、写 CSV、应用 prompt patch 或同步 baseline 的 system capability 必须执行：
+
+```text
+持有匹配的 domain resource claim + fencing token
+  -> DB persist effect intent(operation key, expected-before hash/version)
+  -> staging/shadow workspace prepare（支持时）
+  -> transaction 外 apply
+  -> validate script + authoritative after-state verify
+  -> DB persist receipt(before/after hash, changed paths, external revision)
+  -> 复制文件/目录 manifest 到 immutable blob snapshot
+  -> artifact/evaluator/quality gate
+  -> node succeeded + outer transition
+```
+
+外部 apply 成功但 receipt 未知时先按 operation key/文件 revision 对账；无法证明时进入 `action_required`，不得创建新 attempt 盲目重做。Node success、Gate 展示和后续 context pack 引用 immutable snapshot/hash；用户打开编辑时才解析 live workspace path，并显示 live hash 是否仍与 snapshot 一致。目录 snapshot 按安全相对路径排序保存 manifest，禁止 hard link 充当 immutable 历史。
+
+`pipeline-state.json` 更新也是 effect，不与 root cut 假装原子：对应 node 只有 receipt + snapshot 成功后才完成；若 DB 已提交 intent 而文件未完成，由 recovery 使用同 operation key 补齐。外部人工改文件导致 expected-before mismatch 时拒绝覆盖并进入 reconcile action，不能以最后写入者获胜。
+
+### 强协议 2：跨 Workflow Domain Resource Claims
+
+所有 PM Recipe 在创建 Workflow 的 T0 transaction 原子获得最细粒度 durable claim；冲突返回 `resource_busy`，不能先创建 Workflow 再异步抢锁：
+
+```text
+pm:workspace-bootstrap:{workspace_id}                    exclusive
+pm:package:{workspace_id}:{package_id}                   exclusive
+pm:deliverable-lifecycle:{workspace_id}                  exclusive
+pm:prompt-target:{workspace_id}:{agent_or_target_set}    exclusive
+pm:evals:{workspace_id}:{period}                         exclusive
+pm:workspace-read:{workspace_id}                         shared
+```
+
+Claim key 由 Recipe 对 schema-valid frozen input 的 JSON Pointer 计算，不接受页面/Planner 自报最终 key。每次 acquisition 产生单调 fencing token并传给 host adapter；stale token mutation 必须被拒绝。Claim 不因 worker lease、pause、crash 或 human wait 自动过期，只在 Workflow terminal/可信 cancel compensation 后释放；`action_required/quarantined` 默认继续持有。Recipe 必须避免用 workspace 全局 exclusive claim 包住长人工等待，除非业务确实要求阻断所有写入。
+
+### 强协议 3：跨 Attempt 业务幂等与独立 Script Capability
+
+`graph_attempt_id` 只足以处理同一 attempt 的 outbox redelivery。PM mutation capability 必须选择 trusted effect key strategy：
+
+```text
+promote:
+  namespace = pm.promote-deliverable
+  business_input = workspace_id + package_id + expected_state + target_state
+
+prompt commit:
+  namespace = pm.prompt-commit
+  business_input = workspace_id + transaction_id + target_set_hash
+
+weekly report:
+  namespace = pm.weekly-report
+  business_input = workspace_id + iso_week + source_snapshot_hash
+
+package generation revision:
+  scope = node             # node retry 对同一逻辑输出对账
+```
+
+删除 `pmPipeline.runScript` 泛化权限。每个 script/adapter 注册独立 exact system capability，固定 executable hash、typed args、cwd resolver、file scope、artifact/evaluator、effect/cancellation contract。Planner、页面和 Agent 不能传任意 script path、shell fragment 或 cwd；workspace script 只有在 capability allowlist、相对路径 resolver、content hash/version 和 tool guard 全部通过后执行。
+
+初始 effect/cancellation 分类：
+
+| Capability | Effect | Cancellation |
+| --- | --- | --- |
+| workspace scan / final check / lint | `pure` | `fence_only` |
+| write requirement/test/report | `idempotent`，node 或 business-input key | cooperative staging abandon；apply 后对账完成 |
+| promote deliverable | `idempotent`，package transition business key | active mutation 不允许 early close；未知结果 action-required |
+| prompt shadow prepare/regression | `idempotent`，transaction id | cooperative discard shadow |
+| prompt commit/publish | `idempotent`，transaction id + target hash | active commit 不允许 early close；按 receipt 对账 |
+| git push/外部不可逆发布 | 默认 `manual_only` + idempotent provider key；无法幂等时不得注册 | 必须有可证明 compensation，否则禁止进入 Runtime |
+
+Compiler 对含 active mutable effect 的 scope 禁止不安全 early close/fail-fast；Definition 应把 mutation 放在短、单一职责 State，先完成人工确认，再开始 effect，避免在不可中断 mutation 中等待用户。
+
+### Workflow Lifetime Policy 与 Runtime Safety
+
+每个 PM Recipe 发布 finite Workflow execution policy，至少约束 `max_state_activations`、`max_graph_runs`、`max_state_transitions`、`max_child_workflows`、总 attempts/tool/token/cost 和业务 deadline。A2/A7 回炉、Gate revision 和 follow-up 跨 activation 累计，不能通过进入新 State 重置。Human approval 可以按 wait contract 显式 indefinite，但这不取消 node/spec/map/attempt/outbox/blob 的部署级 finite RuntimeSafetyCeilings。
+
+`pm_new_feature`、`pm_init_docs` 等长流程使用不同 policy；`pm_promote_deliverable`、weekly review 等短流程使用更小 ceiling。Workbench/PM 页面展示已消费预算、剩余回炉次数、held claims 和 deadline，超限走 Definition 固定 `escalate/manual_review` named exit，不由 Planner 猜测继续。
 
 ## 完整 workflow 清单
+
+下列列表描述 Workflow Definition 的宏观 State/transition topology，不表示每个名称都必须是一个旧式 handler。稳定业务阶段和人工 Gate 保留为 State boundary；阶段内部需要并行、output condition、fan-in 或多步骤时使用 graph state，其内部单位是 Graph Node。简单 delegation/system/interrupt state 由 lowerer 自动成为单节点 Graph。UI/non-UI、A5 是否需要、soft gate 和 pass/fail 路由必须由 typed node output + named exit 表达，不能继续使用 transition 内嵌 delegate、`system.run.steps` 或旧 completion handler。
+
+Planner 不是 PM Workflow 的默认必需组件。A1-A7 主拓扑固定；只有测试矩阵、模块扫描、regression case 等确实需要按输入动态生成节点时，才由专用 Micro Planner capability 为指定 graph state 生成 Scope Spec。Planner 无权删除 Gate、改变 promote 规则或扩大 script/file 权限。
 
 ### pm_init_project
 
@@ -878,7 +1014,7 @@ load_package
 - 定时任务：按 workspace 配置的 weekly schedule 创建 `pm_pipeline_review` workflow。
 - PM 手动按钮：PM Pipeline「评估沉淀 / 周报」入口手动创建同一个 workflow，可指定周次。
 - 两种触发都只发 workflow command，不直接调用 evaluator 或写周报。
-- 同一 workspace + 同一周次只允许一个运行中的 `pm_pipeline_review`；重复触发进入已有 workflow 或提示 PM 重跑确认。
+- 同一 workspace + 同一周次使用同一 creation key，重复触发返回已有 Workflow。已 terminal 后确需重跑，必须经确认创建带 `rerun:{n}` 的新 key，并记录 `replay_of` lineage；不能删除或重开原 run。
 
 ```text
 load_evals
@@ -896,7 +1032,7 @@ load_evals
 - 定时任务：按 workspace 配置的 monthly schedule 创建 `pm_optimize_prompts` workflow。
 - PM 手动按钮：PM Pipeline「Prompt 自进化」入口手动创建同一个 workflow，可选择全量 pending 或指定 agent。
 - 两种触发都必须进入 `gate_prompt_change_approval`，不得定时自动应用 prompt patch。
-- 同一 workspace + 同一月度周期只允许一个运行中的 `pm_optimize_prompts`；手动重跑必须复用 pending/applied/rejected 文件事实源做幂等检查。
+- 同一 workspace + 同一月度周期/target-set hash 使用同一 creation key；重复触发返回已有 Workflow。手动重跑经确认使用新 rerun key，并从 immutable pending/applied/rejected snapshot 与 live hash 做 expected-before 校验。
 
 ```text
 load_pending_patches
@@ -922,6 +1058,21 @@ load_pending_patches
 - regression 全 pass 后，Host action 才把 shadow workspace 中的受控变更提交回真实 PM workspace，并落盘 `patches-applied`、`PROMPT-CHANGELOG.md`、`agent-versions.json`、pending 处理标记。
 - regression fail 时，不需要回滚真实文件；直接丢弃 transaction workspace，并按 PM 决策写 `patches-rejected` 或保留 pending。失败 case、actual/expected 摘要和 trace 必须记录到 workflow artifact。
 - 页面只展示 patch diff、审批 gate、regression 结果和 commit/reject 状态；页面无权直接编辑 prompt 文件。
+
+`.claude/agents/*.md` 是 prompt authoring source，不是 active run 的 live execution source。每个 PM delegation capability 固化 prompt/role/skill/executor exact ref/hash，Workflow 创建时由 Recipe snapshot pin；active run、retry 和 recovery 不读取 workspace latest prompt。
+
+Regression 全 pass 后的发布事务顺序固定为：
+
+```text
+commit authoring files with pm.prompt-commit operation key + receipt
+  -> publish new agent/skill/executor/capability versions
+  -> publish new Definition version referring to exact capability refs
+  -> publish new Recipe version
+  -> atomically switch PM creation catalog to the new exact RecipeRef
+  -> old active workflows continue on old executable snapshot
+```
+
+任何中间失败都保留当前已激活 RecipeRef，新 Workflow 不读取半发布资源；run 进入 `action_required` 完成相同 transaction id 的发布或明确废弃。禁止覆盖相同 `(resource id, version)`，也禁止用 `latest` 在 Graph dispatch 时解析 prompt。Feature upgrade 若不能并存旧 executable，必须保持 `draining` 直到旧 active run 关闭。
 
 结构化 regression result 示例：
 
@@ -955,6 +1106,8 @@ load_target_draft
 -> completed_or_escalate
 ```
 
+每轮 fix/review 使用新的 Node Attempt 或 Definition 明确的 rework State Activation，不能重开已 terminal Node/State。Round cap 同时由业务 rule 与 Workflow execution policy 的 `max_state_activations/max_state_transitions/usage_budget` 强制；进入新 activation 不重置累计预算，超限进入 `escalate` named exit。
+
 ### pm_named_case_workflows
 
 迁移：
@@ -963,7 +1116,28 @@ load_target_draft
 - `gen-cases-spec`
 - `coverage-audit`
 
-作为 host action 或 container workflow adapter 调用，结果仍写回原文件。
+单一确定性操作发布为 system capability；包含多 Agent、多步骤、retry 或 human decision 的流程必须成为 Graph/Workflow，不能隐藏在 host action/container adapter 内。结果仍通过 mutation protocol 写回原文件并保存 immutable snapshot。
+
+## PM Capability Catalog
+
+Definition 和 Graph Node 不再直接组合 `agent + skill + action + artifact contract`。Feature publisher 为 A1-A7、review、report、script、promote、prompt transaction 等每种不同执行合同发布 exact capability，固定：executor implementation、persona/skill/prompt snapshot、typed ports、artifact/evaluator/quality gate、required tools/MCP/file scopes、retry/timeout、effect key 和 cancellation。
+
+```text
+pm.a1-gap-questions@1
+pm.a1-write-requirement@1
+pm.visual-clarification@1
+pm.a2-requirement-review@1
+pm.a3-tech-architecture@1
+pm.a4-scope-review@1
+pm.a6-generate-test-cases@1
+pm.a7-test-case-review@1
+pm.deliverable-final-check@1
+pm.promote-deliverable@1
+pm.prompt-regression@1
+pm.prompt-commit-and-publish@1
+```
+
+Node 只能提供 `capability_ref`、typed input binding 和更严格 retry/timeout。通用 `run-any-agent`、`run-any-script`、允许动态 prompt/tool/path 的 capability 禁止发布。不同 PM workspace 的 prompt 变体若改变执行合同，必须成为独立 versioned capability/Recipe dependency；不能把 workspace path 当作运行时 prompt override。
 
 ## Artifact Contract
 
@@ -992,9 +1166,13 @@ load_target_draft
 
 Contract 不替代原脚本。脚本仍是权威机械检查之一，contract 用于 Icarus 统一展示、阻断、trace 和质量门。
 
+上述名称在文档中是简写，registry 中统一使用 `{ id, version }` exact VersionedRef。Artifact/evaluator/quality gate 由 capability 固定；成功记录同时引用 live workspace locator、expected after hash 和 immutable snapshot。脚本 validation fail 属于 attempt quality decision，不直接改写外层 State。
+
 ## Human Review 统一协议
 
 PM Gate 不应该只是页面表单，而应该统一进入 human review/interrupt 协议。
+
+目标 Runtime 中每类 Gate 发布 exact versioned approval wait contract，固定 correlation、payload/output schema、authorization、allowed channels、timeout/indefinite policy 和 action names。Interrupt authoring state lower 为一个 wait node；approval resolution 只发布 typed output，后续写 Markdown/`pipeline-state.json` 的 mutation 必须由独立 system capability 按 effect protocol 完成，不能把 DB wait CAS 与 filesystem write 假装成一个事务。
 
 Gate 类型：
 
@@ -1023,6 +1201,8 @@ type PmGateKind =
 - audit fields。
 - idempotency key。
 
+每个 action 映射 Definition 中固定 named exit/transition，例如 `approve -> a2`、`request_revision -> 新的 a1 activation`、`reject -> cancelled/rejected terminal`。页面不能提交任意 target State；“回退”总是创建新的 State Activation 并保留旧 cut/artifact，不重开旧 Node。
+
 PM 页面负责领域渲染，Execution Console 可用通用 action item 兜底展示。
 
 ## Hook 与防护迁移
@@ -1043,7 +1223,7 @@ PM 页面负责领域渲染，Execution Console 可用通用 action item 兜底�
 - container mount policy。
 - file write policy。
 - host script allowlist。
-- workflow action permission。
+- system capability/effect permission。
 
 例如：
 
@@ -1066,22 +1246,23 @@ PM 页面负责领域渲染，Execution Console 可用通用 action item 兜底�
 
 ### post-csv-validate
 
-迁移为 write observer：
+迁移为对应 CSV mutation capability 固定的 blocking evaluator：
 
-- 监听 evals/test CSV 写入。
-- 写后自动执行对应 validate script。
-- 失败时标记当前 stage needs_revision 或 failure。
+- mutation receipt 前执行对应 validate script 并保存 stdout/stderr/hash。
+- validation pass 后才生成 immutable CSV snapshot并允许 node succeeded。
+- validation fail 产生 attempt quality `needs_revision/fail`，不由异步 observer 直接改 State。
+- 外部人工写入由 reconciliation scanner 发现 hash drift，只创建 action item，不越过 Graph CAS 修改已完成 node。
 
 ### session-start-brief
 
 迁移为 workflow context pack：
 
 - 在每个 PM delegation 前注入当前 workspace brief。
-- 包含 active/draft/done 状态、pending gates、ledger 对账。
+- 基于本次 node frozen input、immutable workspace manifest 和显式 provenance 生成，包含 active/draft/done 状态、pending gates、ledger 对账；active attempt 不重读 live brief。
 
 ## Script Runner
 
-PM 脚本必须白名单执行。
+PM 脚本必须一脚本一 capability 白名单执行；下面的列表是 publisher 输入，不是 runtime 接受任意 path 的通用 runner。
 
 允许列表初始包括：
 
@@ -1099,13 +1280,16 @@ PM 脚本必须白名单执行。
 
 所有执行记录写入 workflow event：
 
+- capability/executor exact ref 与 implementation hash。
+- operation key、domain claim id 和 fencing token。
 - script path。
-- args。
-- cwd。
+- schema-valid typed args。
+- resolver 计算出的安全 cwd。
 - exit code。
 - stdout/stderr 摘要。
 - duration。
 - produced artifacts。
+- before/after state hash、effect receipt 与 immutable snapshot ref。
 
 ## PM Pipeline Domain Projection
 
@@ -1131,14 +1315,15 @@ interface PmPipelineRun {
 
 Projection 来源：
 
-- workflow DB。
+- Task Intake/Recipe/Workflow/Graph Store。
 - workbench/action/human review 表。
 - agent query trace。
-- PM workspace 文件扫描。
-- `pipeline-state.json`。
-- script 输出和 artifact contract evaluation。
+- effect receipt、domain claims 和 immutable artifact snapshots。
+- PM workspace 文件扫描与 live-vs-snapshot hash drift。
+- `pipeline-state.json` 及其最后成功 receipt/snapshot。
+- script capability output 和 artifact contract evaluation。
 
-Projection 可以缓存到 `feature_pm_pipeline_*` 表，但不能成为执行事实源。缓存必须可从 workflow DB、human review、trace、artifact contract、PM workspace 文件事实源重建。
+Projection 可以缓存到 `feature_pm_pipeline_*` 表，但不能成为执行事实源。缓存必须可从 Graph Store、human review、trace、effect receipt、immutable artifact 和 PM workspace 领域文件重建；重建只恢复视图，不补写或猜测 Workflow transition。
 
 ## 与 Execution Console 的关系
 
@@ -1155,7 +1340,7 @@ Console 应展示：
 - artifacts。
 - traces。
 - raw payload。
-- pause/retry/cancel/skip。
+- pause/retry-wait/cancel/policy-authorized skip。
 
 Console 不需要展示：
 
@@ -1180,24 +1365,27 @@ pipeline-state.json 保存 current_step=A4
 
 正确模式：
 
-- workflow 是执行事实。
-- `pipeline-state.json` 是原流水线兼容事实。
-- PM projection 负责对账。
-- 对账不一致时进入异常状态，由 Console 或 PM 修复动作处理。
+- Graph Store/cut 是执行事实。
+- `pipeline-state.json` 和 deliverable 文件是 PM 领域事实，每次受控 mutation 保存 receipt 与 immutable snapshot。
+- PM projection 展示 Graph 状态、最后成功 snapshot 与 live file hash 的三方关系。
+- expected-before mismatch、receipt 不确定或 external drift 进入 `action_required/reconciliation`，修复动作使用同 operation key/fencing token，不能直接改 Graph 状态。
 
 ### 领域动作必须落回通用 command
 
 PM 页面所有动作最终调用：
 
-- `createWorkflow`
-- `resumeWorkflowInterrupt`
-- `retryWorkflowStage`
-- `returnWorkflowToStage`
+- `createWorkflowFromRecipe`（包含 creation key 与 claim acquisition）
+- `resolveWorkflowWait`（approval contract + expected version + idempotency key）
 - `pauseWorkflow`
+- `resumeWorkflow`
 - `cancelWorkflow`
-- `runWorkflowAction`
+- `advanceRetryWait`（只提前未 terminal 的 retry-wait）
+- `executeDefinitionCommand`（只能选择 Definition 声明的 rework/remediation named command）
+- `requestManualNodeSkip`（仅 paused、expected version、且 Definition/policy 明确允许）
 
 不得直接改 workflow 表或直接移动包状态。
+
+不提供任意 `returnWorkflowToStage`、`retryWorkflowStage` 或通用 `runWorkflowAction` 旁路。业务“回退”通过 Gate/Review named exit 进入 Definition 固定 target，并创建新的 State Activation/Graph Run；旧 cut、attempt 和 artifact 永不重开。页面若需要“让 A3 重写”，必须调用 Definition 已发布的 `request_a3_revision` command，而不是传入自由 target=`a3`。
 
 ### 文件事实源保持原样
 
@@ -1211,7 +1399,7 @@ PM 页面所有动作最终调用：
 - `knowledge/*.csv`
 - `optimization/*`
 
-Icarus 的 DB 是执行和索引事实，不替代这些文件产物。
+Icarus Graph Store 是执行事实，不替代这些 live 文件产物；但每次 node success 必须保存对应 immutable snapshot/manifest/hash，确保 retry、恢复和审计不依赖后来已被修改的 live path。
 
 ## 迁移资产清单
 
@@ -1293,13 +1481,14 @@ README.md
 - 未启用 `pm-pipeline` 时，PM 导航、PM API、PM workflow create option、PM container resources、PM migrations、PM schedules 都不可用。
 - 启用 `pm-pipeline` 后，一级导航出现 PM Pipeline，API prefix 为 `/api/features/pm-pipeline`。
 - 启用 `pm-pipeline` 后，core 自动 provision `feature:pm-pipeline:main` 独占 group 和 `groups/pm_pipeline_main/CLAUDE.md`。
-- PM workflow definitions、cards、artifact contracts、agents、skills、scripts、templates 均通过 feature resources 注册，不静态写入 core 资源目录。
+- PM Recipe/routing scope/execution policy、workflow definitions、capabilities、schemas、graph interfaces/templates/policies、wait contracts、cards、artifact contracts、agents、skills、scripts、templates 均通过 feature resources 注册，不静态写入 core 资源目录。
 - PM projection/config/cache 表均使用 `feature_pm_pipeline_` 前缀。
 - `src/channels/web.ts`、core renderer 主文件和 core workflow registry 不出现 PM 业务静态 import 或 PM 业务硬编码路由。
 - Managed PM workspace 默认创建在 `data/features/pm-pipeline/workspaces/{workspaceId}`；external workspace 可注册已有目录。
 - PM workflow 的 artifact root 指向 PM workspace 的 `deliverables/{packageId}`，不依赖 `projects/{service}/iteration/{deliverable}`。
 - PM workflow 的 context pack root 指向 PM workspace 的 `workflow-context/{workflowId}/{stageKey}`，不依赖 `projects/{service}/workflow-context`。
 - Workbench artifact 能索引 PM workspace 下的 PM 业务文件，并通过 PM artifact contract 校验。
+- 每个成功 mutation node 都有 operation key、claim/fencing token、before/after receipt 和 immutable file/directory snapshot；live workspace 后续变化不改写历史 artifact。
 - 原 `/new-feature` 的 A1-A7 顺序和条件分支一致。
 - 所有 Gate 均显式暂停，PM 不确认不继续。
 - UI 类需求触发 A1.5，非 UI 类跳过并留痕。
@@ -1310,8 +1499,13 @@ README.md
 - `.draft -> .active -> .done -> archive` 必须通过 promote action。
 - `.done` 后 retrospector 写入 `runs.csv`、`loops.csv`、`cases.csv`、`patches-pending`。
 - `pipeline-state.json` 保留并被持续更新。
+- 同一 schedule/API/button creation key 的并发或重复请求只产生一个 Workflow；同一 package/prompt target 的冲突 Workflow 在 T0 原子返回 `resource_busy`。
 - PM 页面和 Execution Console 看到同一个 workflow 状态。
 - retry、pause、cancel、skip 不产生状态分裂。
+- Definition-authorized rework 创建新 activation，不重开 terminal State/Node；任意 target 回退和通用 action 旁路被拒绝。
+- Prompt regression 通过后发布新 capability/Definition/Recipe version；旧 active run 继续使用旧 executable snapshot，新 run 使用新 exact RecipeRef。
+- Feature draining 阻止新 Workflow 但不卸载 active run executor；action-required/quarantined run 未处置前不能 disable/delete。
+- Crash fixture 覆盖 promote/prompt commit/CSV write 的 intent、apply、receipt、snapshot 各边界，外部结果不确定时不重复写并进入 action-required。
 - 原 `code/` 写保护和 archive 写保护仍生效。
 
 ## 风险与处理
@@ -1355,17 +1549,25 @@ README.md
 
 处理：
 
-- 每个关键 state 增加 reconciliation action。
-- Projection 显示对账异常。
-- `pipeline-state.json`、deliverable 状态、workflow status 三方对账。
+- 所有 mutation 使用 intent -> apply -> verify receipt -> immutable snapshot -> node success 协议。
+- Projection 显示 Graph cut、最后成功 snapshot 和 live file hash，不以最后写入者获胜。
+- `pipeline-state.json`、deliverable 状态、effect receipt、workflow status 四方对账；expected-before mismatch 进入 action-required。
+
+### 风险 3.5：多个 Workflow 并发修改同一 Workspace
+
+处理：
+
+- Recipe 在 T0 按 workspace/package/prompt/evals 粒度原子获得 durable claim。
+- Host adapter 强制检查单调 fencing token，stale worker 即使仍在运行也不能写入。
+- Claim 不靠普通 lease 自动过期，terminal/cancel/abandon 释放均保留审计。
 
 ### 风险 4：原 prompt 路径依赖强
 
 处理：
 
-- PM workspace 保留原目录结构。
-- container 内尽量挂载成与原工作区一致的路径。
-- 对 `.claude/skills` 和 `scripts` 做路径兼容。
+- PM workspace 保留原目录结构作为 authoring/domain source。
+- Publisher/staging adapter 可以提供原路径兼容，但 active run 只使用 pinned executable/capability snapshot。
+- Prompt patch 发布新 capability/Definition/Recipe version，不原地改变旧 run 执行合同。
 
 ### 风险 5：LLM 输出无法逐字一致
 
@@ -1379,18 +1581,20 @@ README.md
 
 虽然本方案按完整迁移设计，不以 MVP 为目标，但工程落地仍建议按依赖顺序实现，避免循环返工：
 
-1. 创建 `features/pm-pipeline` scaffold：`feature.json`、host、renderer、container、required group、README。
-2. 将 PM Pipeline 加入 `local/features.json` 开发启用，并验证 feature runtime 可动态启用/停用。
-3. PM workspace registry：使用 `feature_pm_pipeline_workspaces` 等 feature-owned 表。
-4. Workbench Core / Execution Console 分层整理。
-5. Human review 通用协议。
-6. PM asset adapter：agents、skills、scripts、templates 迁入 feature resources，同时兼容 PM workspace 原路径。
-7. PM workflow definitions 迁入 `features/pm-pipeline/container/workflow-definitions`。
-8. PM Pipeline Domain API / Projection：通过 `/api/features/pm-pipeline/*` 暴露。
-9. PM Pipeline renderer 一级页面：通过 feature renderer entry 动态加载。
-10. Hook/policy 等价层和 feature permissions/host action allowlist。
-11. Golden replay 验收集。
-12. 完整迁移验收和旧 Claude Code 入口冻结。
+1. 先完成 `dynamic-workflow-dag-framework.md` 的统一 Graph Runtime、T0 Recipe creation、Feature Graph resource manifest、domain claims、effect receipt/snapshot、wait contract 和 draining/executor retention。
+2. 创建 `features/pm-pipeline` scaffold：`feature.json`、host、renderer、container、required group、README。
+3. 发布 PM Recipe/routing scope/execution policy/capability/schema/interface/template/wait resources，并以 compiler fixture 验证依赖 closure。
+4. 将 PM Pipeline 加入 `local/features.json` 开发启用，并验证 `enabled -> draining -> disabled`，而不是 active run 直接只读停尸。
+5. PM workspace registry：使用 `feature_pm_pipeline_workspaces` 等 feature-owned 表；同时接入 creation key 和 core domain claim。
+6. Workbench Core / Execution Console 分层整理，展示 Graph、claim、effect receipt、snapshot 和 live drift。
+7. Human review 统一为 versioned approval wait contract + Definition named exits。
+8. PM asset publisher：agents、skills、scripts、templates 迁入 Feature authoring resources并发布 exact executable/capability version。
+9. PM workflow definitions 迁入 `features/pm-pipeline/container/workflow-definitions`，删除旧多步骤 system/transition delegate/任意回退旁路。
+10. PM Pipeline Domain API / Projection：通过 `/api/features/pm-pipeline/*` 暴露。
+11. PM Pipeline renderer 一级页面：通过 feature renderer entry 动态加载。
+12. Hook/policy 等价层、一脚本一 capability、typed args/cwd resolver 和 file guard。
+13. Golden replay、concurrency、T0 creation、T1-T8 crash、mutable effect 和 old/new prompt version 验收集。
+14. 完整迁移验收和旧 Claude Code 入口冻结。
 
 这不是功能裁剪，只是实现依赖顺序。
 
@@ -1407,14 +1611,16 @@ features/{featureId}
         |
         v
 Feature Package Runtime
-  -> nav / api / resources / group provisioning / enable-disable
+  -> nav / api / Recipe + Graph resources / group provisioning
+  -> enabled / draining / disabled / deleting
         |
         v
 业务一级页面
   -> 业务 Domain Projection
-  -> Workflow Runtime
-  -> Container Agent / Host Action
-  -> 文件或外部系统事实源
+  -> Task Intake + exact Recipe creation
+  -> Unified Graph Runtime + domain claims + effect journal
+  -> Versioned Capability / Container Agent / Host Adapter
+  -> live 文件领域事实 + immutable execution snapshots
 
 Execution Console
   -> 同一个 Workflow Runtime
