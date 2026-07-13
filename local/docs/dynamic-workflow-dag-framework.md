@@ -19,7 +19,7 @@
 
 ## 已确认决策索引
 
-本索引记录会话 `019f509b-2e43-7592-b47e-34096533bc93` 已确认并在本文落地的 11 个架构细节点与 4 个工程优化点；索引不是第二份规范，权威细节仍以对应章节的类型、DDL、事务和验收条款为准。
+本索引记录会话 `019f509b-2e43-7592-b47e-34096533bc93` 及其续接讨论已确认并在本文落地的 11 个架构细节点与 10 个工程优化点；索引不是第二份规范，权威细节仍以对应章节的类型、DDL、事务和验收条款为准。
 
 | ID | 已确认结论 | 主要落点 |
 | --- | --- | --- |
@@ -38,6 +38,12 @@
 | E2 | Fixture、Property、Model、Virtual Clock/Fake Adapter 与 Fault Injection 并存 | 测试策略与模型验证 |
 | E3 | T3/T7 按 versioned Supported Limits 测真实 SQLite 最坏事务 | SQLite Execution Profile、验收 |
 | E4 | Workflow 权威数据使用独立 `workflow-runtime.db`，跨库仅 Outbox Projection | SQLite Execution Profile、模块边界 |
+| E5 | Outbox 使用 versioned finite Delivery Policy、typed result、Reconcile 与 Effect-specific dead-letter 后果 | Outbox、Attempt History、恢复 |
+| E6 | 显式 Publish 生成 Feature Execution Artifact；Run 固定 Core Protocol/ABI、Executor 与 Prompt exact refs | Registry、Executor、Core 升级 |
+| E7 | Early Rule first-eligible；Settled Rule priority-first；竞速语义必须显式选择 | Completion Policy、T3/T7 |
+| E8 | Blob 使用 Write Intent、file/directory fsync、no-replace install、GC 状态机与 Backup Pin | Value/Blob Store、备份恢复 |
+| E9 | Workbench、Feature、API、Automation 共用 Runtime Command Gateway、Actor/Delegation 与不可变审计 | Runtime Command、Workbench |
+| E10 | 权威时间统一 UTC Unix milliseconds；删除 `control_epoch`，统一 CHECK、Partial Index 与字段命名 | 持久化模型、SQLite DDL |
 
 ## 背景
 
@@ -134,6 +140,12 @@ Workflow Instance                     外层状态机，可循环和长期运行
 21. `work_fence_epoch` 只拒绝普通工作；Cancel、Reconcile、Compensation 与 Finalizer 绑定 winning `close_request_id`，Ancestor close 不覆盖已有 descendant request。
 22. Workflow 权威事实位于独立 `workflow-runtime.db`；Workbench/messages 只保存可重建 Projection，跨库同步只使用幂等 Outbox。
 23. Value/Blob Store 第一版不做机密性与 Value 级权限隔离，但必须保证 Hash/Schema/长度/provenance、有限 retention/physical capacity，且 Credential 原文永不落盘。
+24. 只有显式 Publish 产生 Feature/Core/Local Prompt 可执行版本；Run 固定 exact Protocol、ABI、Artifact、Prompt 与 Registry closure refs/hashes，任何升级都不能 silent fallback。
+25. Outbox Delivery Policy 的 delivery/reconcile attempts、attempt timeout、总 duration 与 backoff 均为 finite versioned contract；unknown outcome 先 Reconcile，Dead Letter 后果由可信 Effect Contract 决定。
+26. Early Completion 固定 first-eligibility-event 竞速语义，Settled Completion 在候选集合封闭后按 priority；需要高优先级覆盖时不得使用 Early。
+27. Blob 在 DB 引用前完成 file fsync、no-replace install 与 directory fsync；GC、Backup 和新引用通过 Write Intent、状态机与 Pin 协调，Referenced Missing Blob 必须 quarantine。
+28. Workbench、Feature、API 与 Automation 共用 Runtime Command Gateway；Actor/Delegation、Permission/Policy/State Guard 与所有命令结果形成不可变审计。
+29. 权威时间全部是 UTC Unix milliseconds `*_at_ms`；CAS 使用 `row_version`，Fencing 使用明确 epoch，状态与关键字段组合由 SQLite CHECK/Partial Index 执行。
 
 ## 术语
 
@@ -251,15 +263,19 @@ interface WorkflowRecipeDescriptor {
   recipe_hash: string;
 }
 
+interface WorkflowPromptBinding {
+  prompt_family_ref: VersionedRef;
+  prompt_contract_ref: VersionedRef;
+  base_prompt_ref: VersionedRef;
+  selection_policy_ref: VersionedRef;
+}
+
 interface WorkflowRoutingCapability {
   ref: VersionedRef;
   executor_ref: VersionedRef;
   role_ref?: VersionedRef;
   skill_refs: VersionedRef[];
-  prompt_template_snapshot: {
-    template: string;
-    template_hash: string;
-  };
+  prompt_binding: WorkflowPromptBinding;
   input_schema_ref: VersionedRef;
   output_schema_ref: VersionedRef;
   timeout_ms: number;
@@ -394,6 +410,12 @@ interface WorkflowRuntimeSafetyCeilings {
     max_items_per_map: number;
     max_child_concurrency_per_map: number;
   };
+  registry: {
+    max_snapshot_entries: number;
+    max_dependency_depth: number;
+    max_execution_artifact_bytes: number;
+    max_total_pinned_execution_bytes_per_run: number;
+  };
   execution: {
     max_attempts_per_node: number;
     max_attempt_duration_ms: number;
@@ -404,6 +426,8 @@ interface WorkflowRuntimeSafetyCeilings {
     max_evaluator_attempts_per_evaluation: number;
     max_evaluator_duration_ms: number;
     max_outbox_attempts_per_message: number;
+    max_outbox_reconcile_attempts_per_message: number;
+    max_outbox_attempt_duration_ms: number;
     max_outbox_delivery_duration_ms: number;
   };
   wait: {
@@ -461,7 +485,9 @@ Safety ceilings 是 pinned、确定性的命名配置，不是隐藏默认值；
 | `run.max_nodes_total` | run account | T2b materialize | root engine error 或 child owner failure |
 | `map.max_items_per_map` | map node account | seal manifest | `map_item_limit_exceeded` |
 | `run.max_attempts_total` | run account | retry schedule/attempt create | Node 不再重试 |
+| `registry.max_snapshot_entries` | run registry closure | Run snapshot creation | 拒绝创建/发布过宽 Allowlist |
 | `execution.max_attempt_duration_ms` | attempt | deadline watchdog | timeout + work fence |
+| `execution.max_outbox_attempts_per_message` | outbox message | delivery/reconcile claim | dead-letter/action-required |
 | `wait.max_pending_signal_age_ms` | inbox event | ingress/sweeper | `unmatched_expired` |
 | `DeploymentRuntimeCapacity.max_active_executions` | deployment capacity | scheduler admission | 保持 ready/backpressure |
 | `DeploymentRuntimeCapacity.max_physical_blob_bytes` | blob allocation | blob reservation/GC | backpressure/action-required |
@@ -524,7 +550,7 @@ interface WorkflowGraphBuildRetryPolicy {
   max_attempts: number | null;
   initial_backoff_ms: number;
   max_backoff_ms: number | null;
-  deadline_ms: number | null;
+  max_duration_ms: number | null;
 }
 
 interface WorkflowGraphPolicyRequest {
@@ -543,7 +569,7 @@ interface WorkflowGraphPolicyRequest {
   } | null;
   build_retry: Pick<
     WorkflowGraphBuildRetryPolicy,
-    'max_attempts' | 'deadline_ms'
+    'max_attempts' | 'max_duration_ms'
   > | null;
   limits: NullableWorkflowGraphLimits;
   usage_budget: NullableWorkflowUsageBudget;
@@ -705,11 +731,11 @@ interface WorkflowDefinitionTerminalState extends WorkflowDefinitionStateBase {
 
 Root interface 的所有 exit 必须被 `exit_routes` 完整覆盖。Runtime spec 可以选择内部 graph 结构、trigger 和 completion policy，但只能引用 envelope 允许的资源；外层 transition、typed context patch、final output binding、权限和 configured limit 永远属于受信任 definition。
 
-`WorkflowGraphPolicyProfile` 是 policy registry 中的 versioned immutable record，不是 source 内联权限对象。Effective business policy 按 global、workflow、state、parent compiled snapshot、child profile request 的顺序逐层求交：所有 allowlist 与 `allowed_recovery_kinds` 取集合交集；boolean permission 使用逻辑 AND；`max_impact` 与 numeric limit 只能逐层收紧并取最小有限值；child build 只能降低 `max_attempts/deadline_ms`，不能改写 inherited backoff。Root/State envelope 的权限数组和 boolean 必须显式配置，不能用 `null` 表示全部允许；child request 的 `null` 只表示继承 parent。Numeric limit/budget 的 `null` 表示不增加业务 ceiling，`0` 表示禁止消费；child 的 `null` 不能移除 parent 已有的有限限制。不存在隐藏 business limit，配置创建器必须生成全部 numeric 字段并以 `null` 初始化；部署级 finite `RuntimeSafetyCeilings` 始终另行取最小值。
+`WorkflowGraphPolicyProfile` 是 policy registry 中的 versioned immutable record，不是 source 内联权限对象。Effective business policy 按 global、workflow、state、parent compiled snapshot、child profile request 的顺序逐层求交：所有 allowlist 与 `allowed_recovery_kinds` 取集合交集；boolean permission 使用逻辑 AND；`max_impact` 与 numeric limit 只能逐层收紧并取最小有限值；child build 只能降低 `max_attempts/max_duration_ms`，不能改写 inherited backoff。Root/State envelope 的权限数组和 boolean 必须显式配置，不能用 `null` 表示全部允许；child request 的 `null` 只表示继承 parent。Numeric limit/budget 的 `null` 表示不增加业务 ceiling，`0` 表示禁止消费；child 的 `null` 不能移除 parent 已有的有限限制。不存在隐藏 business limit，配置创建器必须生成全部 numeric 字段并以 `null` 初始化；部署级 finite `RuntimeSafetyCeilings` 始终另行取最小值。
 
 Child request 的 allowlist 表示 ceiling 而不是 required dependency；其中 parent 未允许的 ref 在交集后自然移除，空交集本身可以是合法的“该类资源全部禁止”。只有 child source 实际引用 effective allowlist 外资源时 compiler 才报 `*_not_allowed`。Child profile ref 本身必须位于 parent `allowed_child_policy_refs`，否则不能应用。
 
-`build_retry=null` 的 root/parent policy 表示只 acquisition 一次，child 不能重新启用 retry；child request 的 null 表示继承。Parent 已启用时 child 只能把 non-null `max_attempts/deadline_ms` 变得更严格，null 表示不增加 ceiling，backoff 继续继承 parent，不能由动态 source 改写。
+`build_retry=null` 的 root/parent policy 表示只 acquisition 一次，child 不能重新启用 retry；child request 的 null 表示继承。Parent 已启用时 child 只能把 non-null `max_attempts/max_duration_ms` 变得更严格，null 表示不增加 ceiling，backoff 继续继承 parent，不能由动态 source 改写。
 
 `WorkflowDefinitionStateBase.type` 要扩展为上述完整 union，但不增加 `parallel` state。多个 ready node 的并发 claim 已是 Graph Runtime 原生能力；Workbench 可以批量创建并行布局，但保存结果仍是标准 `GraphScopeSpec`，不提供 public parallel DSL/builder。单节点 state 的 `on_complete/on_resume/on_expire/on_wait_cancelled` lower 为 root interface exits 和受信任 route mapping，不能继续由旧 completion handler 单独推进 workflow；需要 output condition、多级 route 或多步骤执行时直接使用 `graph`。
 
@@ -717,7 +743,7 @@ Delegation、system、interrupt authoring state 均保持严格单节点语义�
 
 所有 executable authoring state 都显式携带完整 `WorkflowGraphPolicyEnvelope`；单节点 state 也不能由 lowerer 注入隐藏 business limits/permissions。配置创建器为其 numeric limits/usage budget 生成全量 null 字段，权限 allowlist/boolean 则必须显式填写；lowerer 同时绑定 run 创建时冻结的 safety snapshot，State 无权移除。
 
-所有 delegation/system node 一律引用精确 `capability_ref: VersionedRef`，不再允许 runtime 直接组合 `role + skill + action`，也不允许 `latest`、版本范围或 runtime fallback。Feature package 在 publish 时注册 versioned capability；definition lowering 只生成 capability reference 和 typed bindings。Capability 固定 executor、prompt 骨架、role/skill、权限、port、artifact/evaluator/quality、retry ceiling、effect 和 cancellation contract；node 只能绑定 typed input，并收紧 retry/timeout，不能覆盖执行配置。具体任务要求可以作为 capability 声明的 typed input，但不能借 input 扩大权限或替换 trusted prompt 骨架。
+所有 delegation/system node 一律引用精确 `capability_ref: VersionedRef`，不再允许 runtime 直接组合 `role + skill + action`，也不允许 `latest`、版本范围或 runtime fallback。Feature package 在 publish 时注册 versioned capability；definition lowering 只生成 capability reference 和 typed bindings。Capability 固定 executor、Prompt Family/Contract/选择策略、role/skill、权限、port、artifact/evaluator/quality、retry ceiling、effect 和 cancellation contract；受信任创建面把当前有效 Base/Local Prompt 解析为 exact ref/hash 并写 Run Snapshot，node 只能绑定 typed input、收紧 retry/timeout，不能覆盖执行配置。具体任务要求可以作为 capability 声明的 typed input，但不能借 input 扩大权限或替换受保护 Prompt Section。
 
 Root Graph 的四类结果使用独立可信路径：normal named exit 由 `exit_routes` 完整覆盖；engine error 走 `on_error`；local graph cancel 走 `on_local_cancel`；global workflow cancel 固定终止 Workflow Instance、清空 current run，不能执行 state transition。Child 的 `parent_close` 只在 Graph 内部收敛，不触发外层 transition。
 
@@ -1513,7 +1539,7 @@ Port 的权威来源固定：capability node 从精确 `capability_ref` 对应�
 - Signal/approval resolve 和 timer fire 使 node `succeeded` 并发布唯一 required `resolution` output；bounded wait 超时使 node `failed/wait_timeout`，manual cancel 使 node `cancelled/wait_cancelled`。
 - 持久化时间统一使用 UTC Unix milliseconds；ISO string 只用于展示。`timeout_ms` 在 arm transaction 中转换为 immutable `deadline_at_ms = armed_at_ms + timeout_ms`，restart/pause 不延长 deadline。Timer typed input 提供 absolute deadline；arm 时已过期则立即成功 fire。任何有限 signal/approval timeout 与 timer deadline 都受 `wait.max_finite_wait_duration_ms` 限制，non-null business `max_wait_duration_ms` 只会进一步收紧。
 - 没有 timeout 的 signal/approval 还要求 contract `allow_indefinite=true` 且 effective envelope 显式 `allow_indefinite_waits=true`；numeric max-duration 的 null 不会自动授权 indefinite wait。Indefinite Wait 没有自己的业务 deadline，但仍受有限 Workflow lifetime deadline；Timer 永远必须有 deadline。
-- Inbox transaction 分配单调 `inbox_seq` 与 Runtime `received_at_ms`，不信任 provider timestamp。同一 Wait 按 `inbox_seq` 决定先后；timeout 只考虑已提交且 `received_at_ms <= deadline_at_ms` 的 valid event，网络层先到但未提交的请求不能击败已提交 timeout。Signal、timeout 和 cancel 仍竞争同一个 `status=armed + saved work epochs + version` CAS。
+- Inbox transaction 分配单调 `inbox_seq` 与 Runtime `received_at_ms`，不信任 provider timestamp。同一 Wait 按 `inbox_seq` 决定先后；timeout 只考虑已提交且 `received_at_ms <= deadline_at_ms` 的 valid event，网络层先到但未提交的请求不能击败已提交 timeout。Signal、timeout 和 cancel 仍竞争同一个 `status=armed + saved work epochs + row_version` CAS。
 - Pending Signal 始终受有限部署级 TTL 控制：`expires_at_ms = received_at_ms + min(runtime safety age, non-null contract prearm TTL)`；Contract null 只表示不进一步缩短，不能关闭 Safety TTL。数量按 deployment/workflow/run/principal-provider 分层限制，并限制单 payload 与 correlation bytes。重复 provider event 不重复占额度；rejected/expired/late 使用独立有限审计 retention。Registration delivery 耗尽后 node `failed/wait_registration_failed`。Contract hash/invariant mismatch 是 scope orchestration error。
 - Runtime 使用可注入 `Clock` 便于测试，生产读取本机 UTC epoch；保存最近调度时间 watermark 并对明显时钟回拨/跳变写 operational warning，但绝不改写已提交 deadline。
 
@@ -1679,14 +1705,24 @@ interface CompletionCandidateSelector {
 
 interface CompletionRuleSpec {
   id: string;
-  priority: number;
   when: CompletionFactExpr;
   select: CompletionCandidateSelector;
 }
 
 interface ScopeCompletionPolicySpec {
-  early_rules?: CompletionRuleSpec[];
-  settled_rules: CompletionRuleSpec[];
+  early_rules?: Array<
+    CompletionRuleSpec & {
+      phase: 'early';
+      arbitration: 'first_eligible';
+      same_event_priority: number;
+    }
+  >;
+  settled_rules: Array<
+    CompletionRuleSpec & {
+      phase: 'settled';
+      priority: number;
+    }
+  >;
   no_match: 'error';
   early_close: 'cancel_and_fence_remaining';
 }
@@ -1696,20 +1732,21 @@ interface ScopeCompletionPolicySpec {
 
 Completion 规则：
 
-1. Rule 只有在 `when=true` 且 selector 匹配至少一个 persisted candidate 时才适用。Priority 数值越大优先级越高。
+1. Rule 只有在 `when=true` 且 selector 匹配至少一个 persisted candidate 时才适用。每条 Rule 在发布时固定为 `early` 或 `settled`；Run 内不可修改 phase/arbitration。
 2. 每个 candidate/node-terminal fact transaction 都必须在分配 durable event seq 后，对 post-state 计算 early rules，并为首次适用的 rule 写 immutable eligibility record。Eligibility 保存 rule、candidate/fact snapshot 和最早 `eligibility_event_seq`。
-3. Run control=running 时，同一 fact transaction 尝试插入唯一 close request：先选最小 eligibility event seq，同 seq 再按 `priority DESC, rule_id ASC`；paused 时只积累 eligibility，resume 使用相同排序，不能按恢复时的当前 candidates 重选。
-4. `first_reached` 在 eligibility fact snapshot 内使用 durable `candidate_seq`；settled transaction 在同一个 fixed-point event seq 上评估所有 rules，按 `priority DESC, rule_id ASC` 选择，并持久化 `phase=settled` eligibility 与 close request。
-5. Early rule 只能使用 compiler 可证明的单调 predicate，例如 `count >= N` 和正向 `and/or`；禁止 `not/eq/lte` 等可能被未来事实推翻的判断。
-6. `lowest_terminal_node_id` 和全局 exit priority 只允许 settled 阶段，除非 compiler 能证明候选集合已经封闭。
-7. Coordinator 永远选择一个 candidate，不隐式聚合多个 candidate。Quorum output 必须先由显式 reducer 生成一个 terminal candidate。
-8. Close request 冻结 selected candidate/fact frontier，原子递增目标及 descendant fence epoch，并创建 cancel/compensation effects；scope 进入 `closing`，尚未写最终 completion cut。Root request 同时递增 run fence。
-9. Close request 后的 late agent result、signal、timer 和 child completion 只能写审计，不能改变 selected candidate 或 frontier。
-10. Scope quiescent 后没有 rule/candidate 匹配是 engine error `no_exit_selected`，不能猜成业务 failure。
-11. `all_nodes_terminal` 只统计该 scope 自己的 nodes；single child owner 在 child cut 前不是 terminal，map quorum/fail-fast owner 在 materialized remainder 的 cut/compensation 收敛前也不是 terminal，因此 child lifecycle 不会被遗漏。
-12. Settled rules 只在 reconciler 达到 fixed point 后运行。Quiescent 要求该 scope 的所有 node 已 terminal、所有 control/data resolution 已封闭、没有尚可 materialize 的 owner child 或 held controller reservation；pending node 必须先被证明 trigger/input impossible 并 terminalize，不能因暂时没有 ready work 就提前结算。Paused/resuming scope 不视为可自动 settled 的 quiescent scope；其事实先积累并在 resume drain 中仲裁。
-13. Scope 只有所有逻辑工作已 fenced、required compensation 已 terminal 或转为 action-required 后才写 completion cut 并进入 closed。外部物理 cancel ACK 不阻塞逻辑关闭；其晚到结果受 fence 拒绝。
-14. Routing、data resolution、condition、schema、ledger 或 invariant error 绕过正常 completion rules，直接创建 `engine_error` close request、fence scope，并最终产生 `GraphScopeOutcome.kind='errored'`。Root 按 pinned `on_error` 路由；child 按 owner mapping 收敛。
+3. Early Rule 固定使用 `first_eligible`：Run control=running 时，同一 fact transaction 尝试插入唯一 close request，先选最小 eligibility event seq，同 seq 再按 `same_event_priority DESC, rule_id ASC`。它明确接受有效 Fact 的权威数据库提交顺序影响业务结果，但不信任 provider timestamp、worker clock 或网络到达时间。
+4. Paused 时只积累 eligibility；resume 仍按 `eligibility_event_seq ASC, same_event_priority DESC, rule_id ASC` 仲裁，不能按恢复时已经存在的全部 candidates 重选。一次已发生执行的恢复结果因此确定，但重新运行 Workflow 时外部物理完成顺序仍可能不同。
+5. `first_reached` 在 eligibility fact snapshot 内使用 durable `candidate_seq`；settled transaction 只在候选集合封闭后评估所有 settled rules，按 `priority DESC, rule_id ASC` 选择，并持久化 `phase=settled` eligibility 与 close request。必须保证高优先级结果覆盖低优先级结果时只能使用 settled rule，不能声明“early 但等待未来高优先级”。
+6. Early rule 只能使用 compiler 可证明的单调 predicate，例如 `count >= N` 和正向 `and/or`；禁止 `not/eq/lte` 等可能被未来事实推翻的判断。第一版不提供隐藏的 priority grace window；需要等待窗口时使用显式 Timer/Join Node。
+7. `lowest_terminal_node_id` 和全局 exit priority 只允许 settled 阶段，除非 compiler 能证明候选集合已经封闭。
+8. Coordinator 永远选择一个 candidate，不隐式聚合多个 candidate。Quorum output 必须先由显式 reducer 生成一个 terminal candidate。
+9. Close request 冻结 selected candidate/fact frontier，原子递增目标及 descendant fence epoch，并创建 cancel/compensation effects；scope 进入 `closing`，尚未写最终 completion cut。Root request 同时递增 run fence。
+10. Close request 后的 late agent result、signal、timer 和 child completion 只能写审计，不能改变 selected candidate 或 frontier。
+11. Scope quiescent 后没有 rule/candidate 匹配是 engine error `no_exit_selected`，不能猜成业务 failure。
+12. `all_nodes_terminal` 只统计该 scope 自己的 nodes；single child owner 在 child cut 前不是 terminal，map quorum/fail-fast owner 在 materialized remainder 的 cut/compensation 收敛前也不是 terminal，因此 child lifecycle 不会被遗漏。
+13. Settled rules 只在 reconciler 达到 fixed point 后运行。Quiescent 要求该 scope 的所有 node 已 terminal、所有 control/data resolution 已封闭、没有尚可 materialize 的 owner child 或 held controller reservation；pending node 必须先被证明 trigger/input impossible 并 terminalize，不能因暂时没有 ready work 就提前结算。Paused/resuming scope 不视为可自动 settled 的 quiescent scope；其事实先积累并在 resume drain 中仲裁。
+14. Scope 只有所有逻辑工作已 fenced、required compensation 已 terminal 或转为 action-required 后才写 completion cut 并进入 closed。外部物理 cancel ACK 不阻塞逻辑关闭；其晚到结果受 fence 拒绝。
+15. Routing、data resolution、condition、schema、ledger 或 invariant error 绕过正常 completion rules，直接创建 `engine_error` close request、fence scope，并最终产生 `GraphScopeOutcome.kind='errored'`。Root 按 pinned `on_error` 路由；child 按 owner mapping 收敛。
 
 ```ts
 type GraphScopeOutcome =
@@ -1752,10 +1789,7 @@ interface WorkflowGraphCapability {
   executor_ref: VersionedRef;
   role_ref?: VersionedRef;
   skill_refs: VersionedRef[];
-  prompt_template_snapshot?: {
-    template: string;
-    template_hash: string;
-  };
+  prompt_binding?: WorkflowPromptBinding;
   input_ports: Record<PortName, NodeInputPortContract>;
   output_ports: Record<PortName, NodeOutputPortContract>;
   artifact_contract_ref?: VersionedRef;
@@ -1812,7 +1846,7 @@ type CapabilityCancellationContract =
 ```
 
 - Planner 只能引用 catalog 中已授权 capability，不能声明 executor 或权限。
-- Capability 是不可变、版本化的完整执行合同；node 不得覆盖其 executor、role/skill、prompt template、port、permission、artifact/evaluator/quality、effect 或 cancellation。Prompt template 初期直接固化在 capability snapshot 中，不单独建立 registry；出现明确跨 capability 复用需求后再提升为独立 versioned resource。
+- Capability 是不可变、版本化的完整执行合同；node 不得覆盖其 executor、role/skill、prompt family/contract、port、permission、artifact/evaluator/quality、effect 或 cancellation。Feature 发布的 Base Prompt 与通过进化门禁的 Local Prompt Variant 都是独立 immutable registry resource；Capability 固定 Prompt Family、Contract 与可信选择策略，Run 创建面解析当前有效 Prompt 后立即固化 exact ref/hash，Planner 和 Executor 均不能改写。
 - Capability 可以声明 `task`、`instructions` 等 typed input 供 planner 提供本次业务内容，但这些值始终按 data 处理，不能替换 trusted prompt 骨架、选择额外 tool 或扩大权限。禁止注册允许任意 role/skill/tool/prompt 的 `run-any-agent` 类 capability。
 - Capability 必须在 `artifact_contract_ref/no_artifact_expected` 中恰选一个，并在 `evaluator_ref/no_evaluation_expected` 中恰选一个；blocking quality gate 必须与对应 evaluator/artifact contract compatible。
 - Compiled node 固化完整 binding snapshot/hash；dispatch 不重新解析或 fallback。
@@ -1859,33 +1893,109 @@ workflow_registry_resources
   - owner_kind/owner_id        core | feature
   - canonical_payload/ref
   - content_hash
-  - published_at
+  - published_at_ms
 
 UNIQUE(resource_type, resource_id, resource_version)
 ```
 
-- 相同 `(resource_type, id, version)` 的内容发布后不可修改；再次加载相同 ref、不同 hash 必须失败，修改只能发布新 version。Feature version 与其中各 resource version 相互独立。
+- 只有显式 Publish 才能生成可执行版本。Authoring Source、Git checkout、安装目录或运行中 Candidate 的变化本身不改变 Registry；Publish 必须依次冻结输入、构建 Artifact、计算 Hash、验证 Schema/permission/effect/ABI/dependency closure、写 immutable records，最后原子切换新 Workflow 创建入口。任一步失败都不能留下 launchable 半成品版本。
+- 相同 `(resource_type, id, version)` 的内容发布后不可修改；再次加载相同 ref、不同 hash 必须失败，修改只能发布新 version。Feature Release 与其中各 resource version 相互独立；只修改 Renderer/UI 时可以发布新的 Feature Release 但复用相同 Execution Artifact Hash。
 - Workflow definition 发布时解析所有精确 ref，并保存 definition dependency ref/hash；依赖缺失或冲突时不能发布。
 - Recipe 发布时解析 Definition/entrypoint、execution policy、Context Contract、input/output schema、child Recipe allowlist 和 resource claim pointer，并从所有可达 Capability/Tool/MCP/Action/file/transition/child Recipe 派生 effect-impact、recovery-kind 与 permission closure；派生结果超过作者 `effect_ceiling` 时拒绝发布。Routing Scope 发布时验证 target 精确存在、scope graph 无环且不存在跨 owner 越权引用。
-- Run 创建时固定本次 registry snapshot。由于 `expand` 可以在运行中选择 policy allowlist 内尚未被静态 plan 使用的资源，snapshot 必须覆盖所有 allowlisted capability/interface/template/wait/policy 及 schema 传递依赖，不能只覆盖当前 nodes。
-- Snapshot 可以引用 immutable registry rows，不必重复 payload；某个 Compiled Plan 实际使用的 capability/interface/policy/wait/schema 合同必须完整固化进 plan，而不是只保存 package 文件路径。
-- Published definition 或 active run 仍引用 resource 时禁止删除该 version；active run 仍依赖 executor 时禁止 disable/uninstall 提供实现的 Feature。升级顺序固定为发布新 resource、发布引用新 ref 的 definition、等待旧 run closed、archive 旧 definition，最后才允许清理旧 resource。
-- Closed run 保留完整 contract snapshot 用于审计，即使对应 Feature 之后已卸载。
+- Run 创建时固定本次 registry snapshot。由于 `expand` 可以在运行中选择 policy allowlist 内尚未被静态 plan 使用的资源，snapshot 必须覆盖 effective allowlist 的 capability/interface/template/wait/policy、Prompt Family 与全部 schema/Artifact 传递依赖，不能只覆盖当前 nodes。
+- Snapshot 使用 content-addressed reusable dependency-closure manifest，只保存 exact refs/hashes、manifest ref/hash 与 retention handle，不为每个 Run 复制合同或 Artifact 字节。相同 Recipe、Policy 与 Allowlist 的 Run 可以共享同一个 closure manifest；某个 Compiled Plan 实际使用的合同仍完整固化进 plan。
 
-Capability 的 `executor_ref` 必须解析到 versioned executable implementation record，至少保存 provider Feature/release、entry symbol、implementation artifact hash、runtime compatibility 和 availability status。仅保存 capability JSON 而覆盖本地 JS/skill/script 文件不能保证旧 run 可恢复。实现必须二选一：保留多版本 executable artifact 并按 pinned ref dispatch；或在旧 active run 关闭前阻止 Feature upgrade。长时间 approval/wait 场景推荐前者。
+第一版执行发布单元固定为 Feature Release 级 Node Bundle，而不是每个 Executor 单独构建复杂依赖闭包：
+
+```ts
+interface FeatureExecutionArtifact {
+  ref: VersionedRef;
+  feature_release_ref: VersionedRef;
+  runtime_kind: 'node_bundle';
+  artifact_ref: string;
+  artifact_hash: string;
+  entry_symbols: string[];
+  runtime_abi_major: 1;
+  dependency_manifest_ref: string;
+  dependency_manifest_hash: string;
+}
+
+interface ExecutorImplementation {
+  ref: VersionedRef;
+  provider_feature_ref: VersionedRef;
+  execution_artifact_ref: VersionedRef;
+  execution_artifact_hash: string;
+  entry_symbol: string;
+  runtime_abi_major: 1;
+  implementation_hash: string;
+}
+```
+
+一个 Feature Artifact 可以提供多个 Executor Entry；Graph Node 仍只引用 Capability，Capability 再解析到 exact Executor Record 和 Artifact/Entry。Published Executor 禁止执行当前 `features/{featureId}` workspace 文件；Node Bundle 必须自包含执行依赖并在隔离 Worker/Process 中加载，旧 Run 不受 Feature Page、Host API 或安装目录升级影响。第一版不实现 Container、多 Node Runtime、Compatibility Pack 或每 Executor 独立 GC，但 Artifact 抽象保留未来拆分空间。
+
+Icarus Core Release 与 Feature Release 是两个升级面：
+
+```ts
+interface IcarusCoreCompatibility {
+  core_release_ref: VersionedRef;
+  core_build_hash: string;
+  supported_run_protocol_majors: number[];   // 第一版仅 1
+  supported_executor_abi_majors: number[];   // 第一版仅 1
+  registry_schema_version: number;
+  database_schema_version: number;
+}
+```
+
+- `Run Protocol` 约束 Graph lifecycle、Close/Cut、Receipt、Retry 与恢复语义；`Executor ABI` 约束 Core 与 Executor Worker 的通信；两者不是同一版本。Run Snapshot 同时保存 `run_protocol_major=1`、`executor_abi_major=1` 与 Core Build/DB Schema 元数据。
+- Core/Feature Release 先进入 `staged`，升级器扫描所有 launchable Published refs 以及 active/closing/action-required/quarantined Run，验证新 Core 的 Protocol/ABI/Registry/DB Compatibility Matrix 后才允许原子激活新创建入口。
+- 同一 Major 内只允许向后兼容的新增。未来 breaking v2 若仍有 v1 强引用，必须提供 v1 compatibility runner 或等待/可信取消旧 Run；第一版只预留门禁，不提前实现多 ABI Runner。禁止把旧 Run 自动迁移到新 Executor、Prompt 或 Protocol。
+- DB migration 使用 expand-first；旧 Run/旧协议引用归零前不能删除旧字段和语义。Core 回滚也必须通过 DB/Protocol 兼容检查，不能只替换 App 二进制。
+
+Artifact/Resource 至少存在三类强引用：
+
+```text
+Published Reference   仍可创建新 Workflow
+Active Reference      active/closing/action-required/quarantined Run
+Retention Pin         管理员调查或备份恢复窗口
+```
+
+Run 关闭事务释放 Active Retention Handle。只有三类强引用全部归零并超过 versioned replay/backup grace period 后，GC 才能删除可执行字节；Closed Run 长期保留 exact ref/hash、contract、closure manifest、evaluation summary 与 tombstone，但超过 replay retention 后不再声称可以重新执行旧代码。Reference Count 只作查询优化，权威清理由 DB roots 的 mark-and-sweep 决定。
 
 Feature 生命周期固定为：
 
 ```text
 enabled   -> 可以创建新 Workflow，旧 run 正常执行
-draining  -> 禁止新建，保留 API/executor/resource 供 active run 收敛
+draining  -> 禁止新建，Feature UI/API 可升级，旧 execution artifact 供 active run 收敛
 disabled  -> active run/reference 已清零，不加载业务入口；审计 snapshot 仍保留
-deleting  -> 满足 retention、无 active/published ref，并完成二次确认后清理 feature-owned data
+deleting  -> 满足 retention、无 active/published/pinned ref，并完成二次确认后清理 feature-owned data
 ```
 
-`disable` 不能把 active run 变成只读僵尸。Force disable 必须先对全部 active Workflow 发 global cancel，等待 fence/required compensation/cut 收敛；quarantined/action-required run 未被可信处置前禁止删除依赖。Closed run 的审计 contract/blob retention 与 Feature projection/domain data deletion分别计算，不能因删除页面数据破坏 completion cut 的可验证性。
+`disable` 不能把 active run 变成只读僵尸。Force disable 必须先对全部 active Workflow 发 global cancel，等待 fence/required compensation/cut 收敛；quarantined/action-required run 未被可信处置前禁止删除依赖。Feature Renderer/Page 不需要为旧 Run 保留，但 Execution Artifact、Prompt Variant 与合同按强引用独立保留。Closed run 的审计 contract/blob retention 与 Feature projection/domain data deletion分别计算。
 
-Prompt/skill/script 自进化不得原地覆盖 published resource。Regression 通过后固定顺序为：提交新的 authoring source、发布新的 executor/capability version、发布引用新 ref 的 Definition/Recipe version、原子切换新创建请求使用的 RecipeRef；已有 intake/run 继续使用旧 snapshot。任何 `latest` 解析只允许发生在受信任创建面，并立即固化 exact ref，Graph build/dispatch/recovery 永远不读取 latest。
+Prompt 自进化使用独立的 Base/Local Variant 模型，禁止改写 Feature Release 文件：
+
+```ts
+interface LocalPromptRevision {
+  ref: VersionedRef;
+  prompt_family_ref: VersionedRef;
+  base_prompt_ref: VersionedRef;
+  parent_local_ref: VersionedRef | null;
+  content_ref: string;
+  content_hash: string;
+  prompt_contract_hash: string;
+  evolution_reason_ref: string;
+  evaluator_ref: VersionedRef;
+  evaluation_result_ref: string;
+  promoted_by_actor_ref: string;
+  published_at_ms: number;
+}
+```
+
+- Feature Publish 产生 immutable Base Prompt；自进化只生成 Candidate，必须通过受信任 Evaluator/Promotion Policy 后执行可审计的 Local Publish，才成为新 Run 可选择的 Local Variant。普通 Executor 不能直接修改 active prompt pointer。
+- Prompt 分为受保护 section 与允许进化 section；permission、tool contract、安全约束、变量/输出协议不能由本地进化覆盖。Local Variant 存入 Runtime Registry/Value Store，不写回 `features/{featureId}`。
+- Feature 升级遇到 `Base A + Local C + Base B` 时执行 Registry 层结构化三方 Rebase。Contract 相同可自动生成 Candidate 并使用新版 Evaluator 验证；Contract 改变必须迁移或重新进化，禁止直接继承。
+- Rebase 未通过时，新 Feature 可以 staged，未受影响 Capability 可以激活；受影响 Capability 继续使用旧 Published execution/prompt，不静默丢弃 Local Variant。官方安全约束变更时受保护 section 以上游为准；用户也可以显式恢复官方 Base，同时保留 Local 历史。
+- 任何 current/latest 指针只允许在受信任创建面解析并立即固化 exact ref/hash；Graph build/dispatch/recovery 永远不读取 latest。
 
 ## Compiler
 
@@ -2049,7 +2159,7 @@ workflow_graph_resource_accounts
   - hard_limit           effective finite ceiling；取 runtime safety ceiling 与全部 non-null business limits 的最小值
   - reserved_amount
   - consumed_amount
-  - version
+  - row_version
 
 workflow_graph_resource_reservations
   - id
@@ -2060,12 +2170,12 @@ workflow_graph_resource_reservations
   - settlement_mode      consume_on_create | hold_then_release | incremental
   - reserved_remaining/consumed_amount
   - status               held | committed | released
-  - created_at/settled_at/version
+  - created_at_ms/settled_at_ms/row_version
 
 workflow_graph_resource_reservation_postings
   - reservation_id/account_id
   - reserved_remaining/consumed_amount
-  - status/version
+  - status/row_version
 
 workflow_graph_resource_ledger_entries
   - id
@@ -2076,7 +2186,7 @@ workflow_graph_resource_ledger_entries
   - delta_reserved/delta_consumed
   - idempotency_key
   - previous_chain_hash/chain_hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(account_scope_kind, account_scope_id, resource_type)
 UNIQUE(graph_run_id, consumer_kind, consumer_id, resource_type, purpose)
@@ -2090,7 +2200,7 @@ workflow_graph_scheduler_admissions
   - eligible_event_seq
   - execution_reservation_id
   - capacity_config_hash/runtime_supported_limits_hash
-  - created_at
+  - created_at_ms
 ```
 
 - Account 表示额度作用域，Reservation 表示具体消费者；两者不得再共用 `owner_kind/id`。Map 使用 `account_scope_kind=node`，不增加 map owner 类型；原 `target group` 统一改成 Capability Catalog 固定的 versioned `execution_group_ref`，Planner/Source 不能选择 group 规避容量。
@@ -2143,12 +2253,12 @@ workflow_domain_resource_claims
   - source_intake_id/creation_key
   - fencing_token                shared 时为 null；exclusive 时固定
   - status                       held | release_pending | released
-  - acquired_at/released_at/version
+  - acquired_at_ms/released_at_ms/row_version
 
 workflow_domain_resource_heads
   - namespace/key_hash
   - current_fencing_token
-  - version
+  - row_version
 
 UNIQUE(owner_workflow_id, namespace, key_hash)
 INDEX(namespace, key_hash, status, mode)
@@ -2161,6 +2271,92 @@ T0 创建事务必须在插入 Workflow 前原子检查 shared/exclusive compati
 第一版 Claim 只允许在 T0 根据可信 Task Input 获取。Graph 只能选择 Recipe 已获得的逻辑 claim spec id，不能在运行时发现 raw key 后动态抢锁；需要修改新资源时，由 trusted transition 创建使用新 Recipe/T0 的 child Workflow，避免动态多资源加锁和死锁。Recipe 应使用最细业务 key，避免一个长时间 human wait 用 workspace 全局锁阻塞无关 package。
 
 同一 `creation_key + creation_intent_hash` 重放若已存在 Workflow，返回原 Workflow 和原 claims；同 key 不同 intent 必须返回 `idempotency_conflict`，不得静默复用旧 Workflow，也不得因为当前 claim 冲突创建第二个实例。Claim acquisition/release、Workflow lifecycle event 和 outbox effect 使用稳定 idempotency key。Workbench 必须展示 owner、key summary、mode、token、held duration 和解除条件，但不得泄露 secret key material。
+
+## 持久化字段、时间与 SQLite 约束
+
+所有权威时间使用 SQLite `INTEGER` 保存 UTC Unix milliseconds。Absolute instant 统一后缀 `_at_ms`；持续时长按语义使用 `_duration_ms`、`_timeout_ms`、`_backoff_ms`、`_ttl_ms` 或 `_age_ms`。权威 DDL 禁止 `created_at`、ISO string、秒级 Unix timestamp、SQLite `CURRENT_TIMESTAMP` 与含义不明的 `timestamps` 缩写；ISO 8601 只在 API、Workbench Projection 与日志展示时生成。
+
+Runtime 通过可注入 `RuntimeClock` 获取生产 UTC epoch；一个权威事务只读取一次 `txn_now_ms`。Provider 自报时间必须命名为 `provider_occurred_at_ms`，只用于审计，不能决定 Signal/Timeout/Completion 仲裁。Runtime 保存最近 scheduling watermark 并对明显时钟回拨/跳变写 operational warning，但不修改已冻结 deadline；事实顺序始终使用 `event_seq/inbox_seq`。
+
+字段语义固定：
+
+| 后缀/字段 | 唯一含义 |
+| --- | --- |
+| `row_version` | 可变行 Optimistic CAS，每次状态修改递增 |
+| `revision` | 不可变业务修订号 |
+| `epoch` | Fencing generation，使旧工作永久失效 |
+| `seq` | Append-only stream 严格顺序 |
+| `*_no` | 同一 owner 内逻辑序号，例如 attempt_no |
+| `*_count` | 累计数量，不表达顺序 |
+
+原 `workflow_graph_runs.control_epoch` 删除：Pause/Resume 使用 `control + row_version` CAS；Close/Cancel 使用 `work_fence_epoch`；Worker Ownership 使用 lease token。若未来需要调度代数，必须新增语义明确、具有完整递增/校验协议的 `scheduling_generation`，不能保留未使用通用 epoch。
+
+每个 enum/status 必须由 SQLite `CHECK` 执行，不能只靠 TypeScript；terminal/outcome/timestamp 组合也必须在 DDL 中约束。示例：
+
+```sql
+CHECK (control IN ('running', 'paused', 'resuming', 'cancelling'));
+CHECK (operational_state IN (
+  'healthy', 'action_required', 'quarantined', 'administratively_abandoned'
+));
+CHECK (row_version >= 0);
+CHECK (work_fence_epoch >= 0);
+CHECK (
+  (lifecycle = 'closed'
+   AND completion_cut_id IS NOT NULL
+   AND outcome_kind IS NOT NULL
+   AND finished_at_ms IS NOT NULL)
+  OR
+  (lifecycle <> 'closed' AND completion_cut_id IS NULL)
+);
+CHECK (
+  operational_state <> 'administratively_abandoned'
+  OR (lifecycle <> 'closed' AND completion_cut_id IS NULL AND outcome_kind IS NULL)
+);
+```
+
+`normal` outcome 要求 exit/output 合同字段，`errored` 要求 error code/ref，`cancelled` 要求 cancel reason；互斥字段必须为空。Wait、Attempt、Build、Retry、Outbox、Blob Intent 各自声明 status/time CHECK，例如 armed wait 必须具有 `armed_at_ms`，scheduled retry 必须具有 `eligible_at_ms`。Boolean 使用 INTEGER 并 `CHECK(value IN (0,1))`；count/seq/epoch/length 非负，attempt_no 从 1 开始；timestamp/duration 必须是 JS safe integer，绝对 deadline 加法必须检查溢出。
+
+只为 Scheduler、Watchdog、Recovery、GC/Retention 的实际扫描建立 partial/composite index，不给所有 `created_at_ms` 盲目建索引：
+
+```sql
+CREATE INDEX idx_runs_deadline
+ON workflow_graph_runs(deadline_at_ms, id)
+WHERE lifecycle <> 'closed' AND deadline_at_ms IS NOT NULL;
+
+CREATE INDEX idx_attempt_execution_deadline
+ON workflow_graph_node_attempts(execution_deadline_at_ms, id)
+WHERE phase = 'running';
+
+CREATE INDEX idx_retry_due
+ON workflow_graph_retry_schedules(eligible_at_ms, id)
+WHERE status = 'scheduled';
+
+CREATE INDEX idx_wait_deadline
+ON workflow_graph_waits(deadline_at_ms, id)
+WHERE status = 'armed' AND deadline_at_ms IS NOT NULL;
+
+CREATE INDEX idx_outbox_due
+ON workflow_outbox(next_attempt_at_ms, id)
+WHERE status = 'pending';
+
+CREATE INDEX idx_attempt_lease_expiry
+ON workflow_graph_node_attempts(lease_expires_at_ms, id)
+WHERE lease_owner IS NOT NULL;
+
+CREATE INDEX idx_outbox_lease_expiry
+ON workflow_outbox(lease_expires_at_ms, id)
+WHERE status IN ('processing', 'reconciling');
+
+CREATE INDEX idx_pending_signal_expiry
+ON workflow_graph_inbox_events(expires_at_ms, inbox_seq)
+WHERE disposition = 'pending';
+
+CREATE INDEX idx_blob_intent_expiry
+ON workflow_blob_write_intents(lease_expires_at_ms, id)
+WHERE status IN ('preparing', 'installed');
+```
+
+以下持久化清单中的字段均为 Normative 名称；不得再用 `version/timestamps`、`lease owner/token/expires_at` 等草稿缩写代替真实 DDL。
 
 ## 持久化模型
 
@@ -2214,13 +2410,63 @@ interface StoredValueMetadata {
 
 第一版威胁模型限定为本地单用户、本机账号与数据目录可信、已加载 Feature/Plugin 处于同一读取信任域；暂不实现应用层加密、Value 级多用户/跨 Feature 授权、数据分类、HMAC 或 cryptographic erasure。这只延期机密性与读取隔离，不削弱 Capability permission、Domain Claim、fencing 和 mutation gateway。
 
-Blob path 由内容 SHA-256 决定，例如 `data/workflow-runtime/blobs/sha256/ab/cd/<full-hash>`；相同 bytes 复用相同 blob，已发布内容永不原地覆盖。所有 Value 无论 inline/blob 都保存并在读取/恢复时验证 Schema、Hash、byte length、owner 与 provenance。Credential、Cookie、private key、数据库密码等秘密原文禁止写入 Value/Blob Store，只保存 `credential_ref`；带 token 的 URL 也必须改为 opaque locator ref。SQLite 与 filesystem 不能组成一个事务，因此写入顺序固定：先生成 canonical bytes、校验 schema/non-null byte limit、计算 hash，写同 filesystem temp file，`fsync + atomic rename` 到 hash path，最后在 SQLite transaction 中提交 blob metadata 与业务引用。Rename 后、DB commit 前 crash 只产生 orphan blob；DB 绝不能先提交尚未 durable 的文件引用。Recovery 逐字节校验 length/hash。
+Blob path 由内容 SHA-256 决定，例如 `data/workflow-runtime/blobs/sha256/ab/cd/<full-hash>`；相同 bytes 复用相同 blob，已发布内容永不原地覆盖。所有 Value 无论 inline/blob 都保存并在读取/恢复时验证 Schema、Hash、byte length、owner 与 provenance。Credential、Cookie、private key、数据库密码等秘密原文禁止写入 Value/Blob Store，只保存 `credential_ref`；带 token 的 URL 也必须改为 opaque locator ref。
+
+SQLite 与 filesystem 不能组成一个事务，因此 Blob 写入使用持久 Write Intent 与固定的 file-first 顺序：
+
+```text
+workflow_blob_write_intents
+  - id
+  - expected_hash/expected_byte_length
+  - reserved_physical_bytes
+  - status                 preparing | installed | committed | abandoned
+  - lease_owner/lease_token/lease_expires_at_ms
+  - created_at_ms/updated_at_ms
+```
+
+```text
+1. DB 预留 physical blob capacity，创建 Write Intent
+2. 在 Blob Store 同一 filesystem 创建唯一 temp file
+3. 写入完整 canonical bytes，同时计算 hash/length
+4. 校验 schema、hash、length 与 safety/business byte limits
+5. fsync temp file
+6. install-if-absent 到 content-hash final path
+7. fsync final parent directory
+8. SQLite transaction 原子提交 blob metadata、Value、业务引用与 Intent=committed
+9. 结算实际 physical allocation，释放差额
+```
+
+首次创建 hash fan-out 目录时必须 fsync 新目录的父目录；实现可以在 Store 初始化时预创建并持久化全部分片目录。删除或安装 final path 后都必须 fsync parent directory，仅 `fsync(file)+rename` 不构成完整掉电保证。
+
+相同 Hash 的并发 Writer 使用 no-replace install：一个成功安装，其他 Writer 得到 already-exists 后验证现有 Hash/Length、删除自己的 temp 并释放预留。禁止普通 rename 静默覆盖已发布 Blob。Rename/install 后、DB commit 前 crash 只产生 final orphan；DB 绝不能先提交尚未 durable 的文件引用。
 
 Workspace artifact 是可变文件，node succeeded 前必须复制/提交为 immutable blob snapshot，或绑定具有 immutable/versioned 保证的 external locator 与 expected hash。目录型 artifact 保存按安全相对 path 排序的 file manifest/hash，禁止 hard link 充当 immutable snapshot。
 
 Immutable 不等于永久保存。`transient` 在短 grace 后清理；`run_recovery` 在 Active/closing/action-required/quarantined 期间强制保留，Closed 后按有限期限清理；`workflow_audit` 长期保留 Hash/Schema/Cut/receipt summary，payload 可到期删除；`user_artifact` 按 Recipe/用户策略；`pinned` 必须人工解除。Payload 删除后保留 value id/hash/length/schema/provenance、`payload_pruned_at_ms` 与 tombstone，不能伪造仍可完整重放。
 
-无引用 temp/blob 通过带 grace period 的 mark-and-sweep GC 清理。Deployment physical blob capacity 使用可释放 allocation：写前预留预计物理字节；soft high-water 触发 GC/限流，hard limit 或 minimum-free-disk reserve 触发 backpressure/action-required，不得写完后才发现磁盘耗尽，也不得删除 Active Run 必需数据。Closed Run reachability 必须按 retention class 而不是永久保留全部 payload。
+Blob Object 使用权威状态机：
+
+```text
+workflow_blob_objects
+  - blob_hash PRIMARY KEY
+  - byte_length
+  - state                  live | gc_candidate | deleting | deleted | corrupt
+  - gc_epoch
+  - created_at_ms/deleted_at_ms
+```
+
+业务引用只能绑定 `state=live`。GC 的 Mark Transaction 从 Value、Manifest 成员、Published/Active Registry、Retention、Write Intent 与 Backup Pin 计算 Reachability，把超过 grace 且无 Root 的 `live -> gc_candidate`；Sweep Transaction 再次确认无引用并 CAS `gc_candidate -> deleting`，随后删除文件、fsync parent directory，最后事务提交 `deleting -> deleted`、释放 physical allocation 并保留 tombstone。新引用可以在删除前事务性恢复 `gc_candidate -> live`，但进入 `deleting` 后禁止绑定。
+
+Crash Recovery 固定处理：
+
+- temp + 有效 Write Intent：继续或重建同一写入；过期 Intent 的 temp 在 temp grace 后删除。
+- final file 存在但无 Blob Object/有效 Intent：校验 path/hash/length，超过 orphan grace 后删除。
+- `gc_candidate`：重新计算 Reachability；`deleting`：根据文件是否仍存在继续删除或完成 tombstone。
+- `live` 且有引用但文件缺失，或路径 Hash 与内容不符：标记 `corrupt` 并 quarantine；禁止重新生成相似内容伪装成原 Blob，只能从可信备份恢复相同 Hash。
+
+Orphan Scanner、GC 与 Blob Writer 必须共用一个 Blob Store Coordinator。Deployment physical blob capacity 使用可释放 allocation：写前预留预计物理字节；soft high-water 触发 GC/限流，hard limit 或 minimum-free-disk reserve 触发 backpressure/action-required。Closed Run Reachability 按 retention class 计算，不永久保留全部 payload。
+
+Runtime DB 与 Blob Store 使用一致备份协议：WorkflowRuntimeStore 建立短暂 Backup Barrier，暂停新的权威写事务与 GC；使用 SQLite Backup API 生成 DB Snapshot，从该 Snapshot 枚举 Reachable Blob 并在 Live DB 创建 Backup Pins，随后解除 Barrier、复制被 Pin Blob、写 Backup Manifest 并原子提交备份。备份完成前 GC 不得删除 Pin；备份过期/删除后释放。恢复必须校验 Manifest 中所有 Hash/Length，执行 missing-blob 与 orphan scan，通过后才开放 Runtime。
 
 ### Intake、Routing 与 Creation
 
@@ -2239,7 +2485,8 @@ workflow_task_intakes
   - selected_recipe_ref/hash
   - current_revision_id/no/hash
   - workflow_id
-  - next_attempt_no/version/timestamps
+  - next_attempt_no/row_version
+  - created_at_ms/updated_at_ms
 
 workflow_task_intake_revisions
   - id/intake_id/revision_no/parent_revision_id
@@ -2250,7 +2497,7 @@ workflow_task_intake_revisions
   - source_routing_attempt_id
   - actor/principal_ref
   - idempotency_key
-  - created_at
+  - created_at_ms
 
 UNIQUE(intake_id, revision_no)
 UNIQUE(intake_id, idempotency_key)
@@ -2265,7 +2512,7 @@ workflow_routing_attempts
   - decision_kind/target_ref
   - confidence_micros
   - reason_codes_json/missing_fields_json
-  - created_at
+  - created_at_ms
 
 workflow_creation_requests
   - id/intake_id
@@ -2281,7 +2528,7 @@ workflow_creation_requests
   - status                  pending | blocked_retryable | awaiting_confirmation |
                             created | rejected_permanent | cancelled
   - workflow_id/error_code
-  - created_at/updated_at
+  - created_at_ms/updated_at_ms
 
 workflow_launch_confirmations
   - id/intake_id/intake_revision_id/input_hash
@@ -2289,12 +2536,12 @@ workflow_launch_confirmations
   - recipe_ref/hash
   - creation_intent_hash
   - actor_ref/action        approve | decline
-  - expires_at_ms/idempotency_key/created_at
+  - expires_at_ms/idempotency_key/created_at_ms
 
 workflow_creation_attempts
   - id/creation_request_id/attempt_no
   - status/error_code/retry_at_ms
-  - created_at
+  - created_at_ms
 
 UNIQUE(creation_domain, creation_key)
 UNIQUE(intake_id, attempt_no)
@@ -2311,7 +2558,7 @@ UNIQUE(intake_id, idempotency_key)
 
 ```text
 workflows
-  - recipe_ref/version/hash
+  - recipe_ref/recipe_version/recipe_hash
   - creation_request_id/creation_domain/creation_key
   - workflow_execution_policy_ref/hash
   - workflow_input_ref/hash/schema_ref/schema_hash
@@ -2328,6 +2575,7 @@ workflows
   - final_error_code/error_ref
   - final_cancel_reason
   - revision
+  - created_at_ms/updated_at_ms/finished_at_ms
 
 UNIQUE(creation_domain, creation_key)
 
@@ -2339,8 +2587,13 @@ workflow_graph_runs
   - workflow_definition_version
   - state_config_json/hash
   - registry_snapshot_ref/hash       覆盖 effective allowlist 与传递依赖
+  - registry_retention_handle_id
   - runtime_safety_snapshot_ref/hash
   - runtime_supported_limits_hash
+  - core_release_ref/core_build_hash
+  - run_protocol_major
+  - executor_abi_major
+  - database_schema_version
   - source_seed_hash
   - root_scope_id
   - root_build_id
@@ -2356,7 +2609,6 @@ workflow_graph_runs
   - root_cancel_scope       nullable；local_graph | workflow
   - root_close_request_id
   - completion_cut_id
-  - control_epoch
   - work_fence_epoch
   - outcome_kind
   - exit_name
@@ -2364,12 +2616,15 @@ workflow_graph_runs
   - error_code/error_ref
   - next_event_seq
   - last_admission_seq
-  - version
-  - started_at/finished_at/created_at/updated_at
+  - row_version
+  - started_at_ms/finished_at_ms/created_at_ms/updated_at_ms
 
 UNIQUE(workflow_id, state_instance_id)
-CHECK lifecycle!='closed' OR completion_cut_id IS NOT NULL
-CHECK lifecycle!='closed' OR outcome_kind IS NOT NULL
+CHECK ((lifecycle='closed' AND completion_cut_id IS NOT NULL AND
+        outcome_kind IS NOT NULL AND finished_at_ms IS NOT NULL)
+       OR (lifecycle!='closed' AND completion_cut_id IS NULL))
+CHECK (operational_state!='administratively_abandoned' OR
+       (lifecycle!='closed' AND completion_cut_id IS NULL AND outcome_kind IS NULL))
 
 workflow_state_transition_history
   - id
@@ -2382,7 +2637,7 @@ workflow_state_transition_history
   - target_run_id                     nullable for workflow terminal
   - workflow_revision
   - context_patch_hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(source_state_instance_id)
 UNIQUE(completion_cut_id)
@@ -2393,7 +2648,7 @@ workflow_relations
   - source_state_instance_id/source_run_id/source_completion_cut_id
   - transition_effect_id/relation_kind
   - recipe_ref/creation_key
-  - created_at
+  - created_at_ms
 
 UNIQUE(parent_workflow_id, source_completion_cut_id, transition_effect_id)
 UNIQUE(child_workflow_id)
@@ -2404,7 +2659,7 @@ workflow_context_snapshots
   - previous_snapshot_id/hash
   - slots_manifest_ref/hash
   - snapshot_hash
-  - created_at
+  - created_at_ms
 
 workflow_context_slot_values
   - snapshot_id/slot_name
@@ -2417,7 +2672,7 @@ workflow_context_patches
   - source_port/pointer/target_slot
   - old_value_hash/new_value_hash
   - patch_ref/hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(workflow_id, revision)
 UNIQUE(snapshot_id, slot_name)
@@ -2443,7 +2698,7 @@ workflow_graph_scope_plans
   - interface_snapshot_json/hash
   - policy_snapshot_json/hash
   - capability_catalog_hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(graph_run_id, plan_hash)
 
@@ -2469,8 +2724,8 @@ workflow_graph_scopes
   - completion_cut_id
   - next_resolution_seq
   - next_candidate_seq
-  - version
-  - created_at/finished_at/updated_at
+  - row_version
+  - created_at_ms/finished_at_ms/updated_at_ms
 
 UNIQUE(graph_run_id, parent_scope_id, owner_node_id, child_key)
 UNIQUE(graph_run_id) WHERE parent_scope_id IS NULL
@@ -2489,7 +2744,7 @@ workflow_graph_run_manifest
   - expansion_hash/item_count
   - previous_manifest_hash
   - manifest_hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(graph_run_id, manifest_seq)
 ```
@@ -2522,10 +2777,11 @@ workflow_graph_scope_builds
   - compiled_plan_id/hash
   - scope_id
   - materialization_reservation_group_id
-  - attempt_count/next_attempt_at/deadline_at
-  - lease owner/token/expires_at
+  - attempt_count/next_attempt_at_ms/deadline_at_ms
+  - lease_owner/lease_token/lease_expires_at_ms
   - error_code/error_json
-  - version/timestamps
+  - row_version
+  - created_at_ms/updated_at_ms
 
 UNIQUE(graph_run_id, owner_node_id, invocation_key)
 UNIQUE(graph_run_id) WHERE scope_kind='root'
@@ -2539,7 +2795,7 @@ workflow_graph_expansion_manifests
   - manifest_json/ref/hash
   - item_count
   - child_completion_policy_json/hash
-  - sealed_at/version
+  - sealed_at_ms/row_version
 
 UNIQUE(owner_node_id)
 ```
@@ -2550,7 +2806,7 @@ Root source 的冻结规则固定：inline 来自 published definition snapshot�
 
 Compiler 是 pure deterministic component，不能调用模型修复 frozen source。Closed-schema、interface、policy、DAG、condition、completion 或 permission error 立即进入 `failed`，不得对同一 build 静默改写 source。需要 AI 修正时，使用显式 planner capability：每个 planner attempt 生成 candidate，evaluator 使用同一 Scope Compiler dry-run 并把 structured diagnostics 作为 `needs_revision` 反馈；只有最终 pass attempt 才发布 Graph Spec output。Root context/artifact source 编译失败走本次 activation `on_error`；需要新 source 时创建新的 activation/run。Expand 同样只消费 owner 已 seal 的最终 candidate。
 
-`build_retry=null` 表示只做一次 acquisition；非 null build retry 的 `max_attempts` 包含首次 acquisition，`max_attempts=null` 表示不设置业务次数 ceiling，`deadline_ms=null` 表示不设置业务总时长 ceiling，启用 retry 时必须显式配置 `initial_backoff_ms`，不注入默认业务值。实际 attempt count 与 duration 仍受 `execution.max_build_attempts_per_build/max_build_duration_ms` 和 run total safety ceiling。只有 immutable locator 获取等 transient error 可以按该策略重试；compile error 永不 retry。Build 创建事务写 `attempt_count=1` 和配置存在时的 absolute deadline，restart/pause 不能延长。每次外部 snapshot/compile 都必须持有 build lease，并以 `build_id + status + lease_token + source/input/compiler hashes + saved run/owner-scope work epochs + version` CAS 提交，stale compiler 不能覆盖新状态。
+`build_retry=null` 表示只做一次 acquisition；非 null build retry 的 `max_attempts` 包含首次 acquisition，`max_attempts=null` 表示不设置业务次数 ceiling，`max_duration_ms=null` 表示不设置业务总时长 ceiling，启用 retry 时必须显式配置 `initial_backoff_ms`，不注入默认业务值。实际 attempt count 与 duration 仍受 `execution.max_build_attempts_per_build/max_build_duration_ms` 和 run total safety ceiling。只有 immutable locator 获取等 transient error 可以按该策略重试；compile error 永不 retry。Build 创建事务写 `attempt_count=1` 和配置存在时的 absolute deadline，restart/pause 不能延长。每次外部 snapshot/compile 都必须持有 build lease，并以 `build_id + status + lease_token + source/input/compiler hashes + saved run/owner-scope work epochs + row_version` CAS 提交，stale compiler 不能覆盖新状态。
 
 ```text
 workflow_graph_map_item_results
@@ -2564,7 +2820,7 @@ workflow_graph_map_item_results
   - exit_name/error_code/reason
   - output_ref/hash
   - completion_seq/fence_event_seq
-  - version/created_at/resolved_at
+  - row_version/created_at_ms/resolved_at_ms
 
 UNIQUE(owner_node_id, item_index)
 UNIQUE(owner_node_id, item_key_hash)
@@ -2578,7 +2834,7 @@ Seal map Expansion Manifest 时同时创建覆盖全部 index 的 `open` result 
 workflow_graph_nodes
   - id
   - graph_run_id/scope_id/node_key
-  - node_type/capability_ref/version/hash
+  - node_type/capability_ref/capability_version/capability_hash
   - normalized_node_json
   - phase
   - trigger_state          unknown | true | false | error
@@ -2596,8 +2852,8 @@ workflow_graph_nodes
   - controller_decision_json/hash
   - controller_remaining_count
   - controller_reservation_group_id
-  - version
-  - ready_at/terminal_at/created_at/updated_at
+  - row_version
+  - ready_at_ms/terminal_at_ms/created_at_ms/updated_at_ms
 
 UNIQUE(scope_id, node_key)
 
@@ -2621,9 +2877,11 @@ workflow_graph_node_attempts
   - acceptance_state       open | fenced
   - run_work_fence_epoch/scope_work_fence_epoch
   - resource_reservation_group_id
-  - lease owner/token/expires/heartbeat
-  - evaluation lease/retry/deadline
-  - version/timestamps
+  - lease_owner/lease_token/lease_expires_at_ms/heartbeat_at_ms
+  - evaluation_lease_owner/evaluation_lease_token/evaluation_lease_expires_at_ms
+  - evaluation_attempt_count/evaluation_next_attempt_at_ms/evaluation_deadline_at_ms
+  - row_version
+  - created_at_ms/updated_at_ms/finished_at_ms
 
 UNIQUE(node_id, attempt_no)
 UNIQUE(delegation_id) WHERE delegation_id IS NOT NULL
@@ -2636,7 +2894,7 @@ workflow_graph_retry_schedules
   - backoff_ms/eligible_at_ms
   - attempt_reservation_id
   - status                 scheduled | consumed | cancelled
-  - version/created_at/updated_at
+  - row_version/created_at_ms/updated_at_ms
 
 UNIQUE(node_id, next_attempt_no)
 
@@ -2648,10 +2906,10 @@ workflow_graph_waits
   - payload_ref/hash
   - status                 registering | armed | resolved | timed_out | cancelled
   - armed_at_ms/deadline_at_ms/resolved_at_ms
-  - registration_lease owner/token/expires
+  - registration_lease_owner/registration_lease_token/registration_lease_expires_at_ms
   - run_work_fence_epoch/scope_work_fence_epoch
   - resource_reservation_group_id
-  - version/timestamps
+  - row_version/created_at_ms/updated_at_ms
 
 UNIQUE(graph_run_id, contract_ref, correlation_key_hash)
 UNIQUE(node_id)
@@ -2663,7 +2921,7 @@ Dispatch timeout 与 execution timeout 分开持久化：前者从开始交给 p
 
 Retry 决策在失败事务中冻结绝对 `eligible_at_ms`、policy hash、reason、backoff，并为下一 Attempt 预留累计额度；重启后禁止重算 backoff，pause 不延长时间。到期后 schedule 以 CAS `scheduled -> consumed` 创建 exact next attempt。Lease expiry 只表示 Worker 失去提交权，不代表 execution timeout；有 external execution id 时必须先 reconcile。Effectful timeout 只有 pure、可证明幂等、已确认未执行，或已完成必要 compensation 时才能重试；外部状态未知进入 `action_required`。
 
-Signal、timeout 和 cancel 只竞争同一个 `status=armed + saved work epochs + version` CAS，不要求外部 signal sender 持有 registration lease。首次成功者写 resolution event 并 terminalize node；相同 provider event 为 duplicate，不同事件竞争同一 Wait 时首个成功、其余 conflict，Wait 关闭后到达为 late。Arm 前 valid event 按 correlation pending，arm transaction 只消费最小 `inbox_seq`，其余按不可变 winner 归类。
+Signal、timeout 和 cancel 只竞争同一个 `status=armed + saved work epochs + row_version` CAS，不要求外部 signal sender 持有 registration lease。首次成功者写 resolution event 并 terminalize node；相同 provider event 为 duplicate，不同事件竞争同一 Wait 时首个成功、其余 conflict，Wait 关闭后到达为 late。Arm 前 valid event 按 correlation pending，arm transaction 只消费最小 `inbox_seq`，其余按不可变 winner 归类。
 
 ### Edge Resolution、Candidate 与 Cut
 
@@ -2681,21 +2939,21 @@ workflow_graph_control_edge_resolutions
   - decision_input_hash
   - decision_json/error_code
   - resolution_seq
-  - resolved_at/version
+  - resolved_at_ms/row_version
 
 workflow_graph_data_edge_resolutions
   - edge_id PRIMARY KEY
   - state                  unresolved | available | unavailable | error
   - value_ref/hash/schema_hash/source_attempt_id
   - resolution_seq
-  - resolved_at/version
+  - resolved_at_ms/row_version
 
 workflow_graph_terminal_candidates
   - id/scope_id/terminal_node_id
   - exit_name
   - output_snapshot_ref/hash
   - candidate_seq
-  - created_at
+  - created_at_ms
 
 UNIQUE(scope_id, terminal_node_id)
 
@@ -2705,7 +2963,7 @@ workflow_graph_completion_eligibilities
   - eligibility_event_seq
   - selected_candidate_id
   - fact_snapshot_json/hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(scope_id, rule_id)
 
@@ -2723,7 +2981,7 @@ workflow_graph_scope_close_requests
   - error_code/error_ref
   - cancel_payload_json/hash
   - request_hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(scope_id)
 UNIQUE(scope_id, id)
@@ -2737,7 +2995,7 @@ workflow_graph_completion_cuts
   - completion_policy_hash
   - cut_event_seq
   - cut_hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(scope_id)
 UNIQUE(close_request_id)
@@ -2750,14 +3008,14 @@ workflow_graph_child_completion_consumptions
                            map_slot_fenced | non_publish_parent_fenced |
                            non_publish_owner_fenced
   - parent_work_fence_epoch
-  - disposition_event_seq/created_at
+  - disposition_event_seq/created_at_ms
 
 workflow_graph_subtree_fence_manifests
   - id/graph_run_id/source_close_request_id
   - scope_epochs_manifest_ref/hash
   - fenced_work_manifest_ref/hash
   - cleanup_effect_keys_manifest_ref/hash
-  - subtree_fence_hash/created_at
+  - subtree_fence_hash/created_at_ms
 
 UNIQUE(child_scope_id)
 UNIQUE(source_close_request_id)
@@ -2792,7 +3050,7 @@ workflow_graph_late_results
   - source_event_id
   - payload_ref/hash
   - fence_reason
-  - received_at
+  - received_at_ms
 
 workflow_graph_effect_operations
   - id
@@ -2810,8 +3068,8 @@ workflow_graph_effect_operations
   - after_state_ref/hash
   - immutable_output_snapshot_ref/hash
   - compensation_ref/hash
-  - lease owner/token/expires_at
-  - version/timestamps
+  - lease_owner/lease_token/lease_expires_at_ms
+  - row_version/created_at_ms/updated_at_ms
 
 workflow_graph_effect_operation_claims
   - operation_id/claim_id/claim_spec_id
@@ -2825,7 +3083,7 @@ workflow_graph_events
   - scope_id/node_id/attempt_id
   - event_type/idempotency_key
   - payload_json/ref/hash
-  - occurred_at/created_at
+  - occurred_at_ms/created_at_ms
 
 UNIQUE(provider, provider_event_id)
 INDEX(graph_run_id, contract_ref, correlation_key_hash, disposition, inbox_seq)
@@ -2861,7 +3119,7 @@ T1  standalone activation ingress:
 
 T2a compile result persistence:
     outside tx resolve frozen locator and run pinned pure compiler;
-    CAS build lease + source/input/compiler hashes + saved work epochs + version;
+    CAS build lease + source/input/compiler hashes + saved work epochs + row_version;
     insert immutable parent/static-child plan closure; set build=compiled;
     non-retryable failure sets build=failed and records the appropriate fact
 
@@ -2902,15 +3160,15 @@ T5  dispatch capability:
     execute outside tx using stable attempt/effect idempotency key
 
 T6a internal worker result:
-    CAS attempt phase + worker lease_token + saved work epochs + version;
+    CAS attempt phase + worker lease_token + saved work epochs + row_version;
     validate artifact/evaluation, retry or terminalize and publish once
 
 T6b delegation callback:
     CAS delegation_id/external_execution_id + acceptance=open + saved work epochs
-    + version; never require the external callback to possess a worker lease
+    + row_version; never require the external callback to possess a worker lease
 
 T6c wait resolution:
-    signal/timeout/cancel compete on status=armed + saved work epochs + version;
+    signal/timeout/cancel compete on status=armed + saved work epochs + row_version;
     registration lease only protects registration work, not external delivery
 
 T6d durable deadline and retry timers:
@@ -2978,28 +3236,28 @@ T8 的 route source 由 root outcome kind 唯一决定：`completed` 使用 sele
 
 ```text
 workflow: id + status + state_instance_id + current_graph_run_id + revision
-run:      id + lifecycle + control + operational_state + work_fence_epoch + manifest_seq + version
-scope:    id + lifecycle + work_fence_epoch + close_request_id + version
-node:     id + phase + current_attempt_no + version
+run:      id + lifecycle + control + operational_state + work_fence_epoch + manifest_seq + row_version
+scope:    id + lifecycle + work_fence_epoch + close_request_id + row_version
+node:     id + phase + current_attempt_no + row_version
 build submit:
           id + status + lease_token + source_hash + input_hash +
-          compiler_snapshot_hash + saved run/owner-scope epochs + version
+          compiler_snapshot_hash + saved run/owner-scope epochs + row_version
 materialize root:
           build=compiled + run.control=running + root shell=materializing + epochs
 materialize child:
           build=compiled + run.control=running + owner scope/node active + epochs
 worker submit:
-          attempt id + phase + lease_token + saved run/scope epochs + version
+          attempt id + phase + lease_token + saved run/scope epochs + row_version
 delegation callback:
           delegation_id + external_execution_id + acceptance=open +
-          saved run/scope epochs + version
+          saved run/scope epochs + row_version
 wait delivery:
-          wait id + status=armed + saved run/scope epochs + version
+          wait id + status=armed + saved run/scope epochs + row_version
 child consumption:
-          child cut + owner/controller state + map slot state/version +
-          saved run/owner-scope epochs + owner version
-edge:     id + state=unresolved + version
-ledger:   account ids + versions + reservation idempotency key
+          child cut + owner/controller state + map slot state/row_version +
+          saved run/owner-scope epochs + owner row_version
+edge:     id + state=unresolved + row_version
+ledger:   account ids + row_versions + reservation idempotency key
 eligibility: UNIQUE(scope_id, rule_id)
 close:    UNIQUE(scope_id)
 cut:      UNIQUE(scope_id)
@@ -3047,33 +3305,182 @@ Benchmark 分为 Smoke、Supported Limit、Beyond Limit 与 25/50/100% Scaling�
 - Evaluator pending 在同一 attempt 上使用独立 lease/retry/deadline，不重复 agent/action；capability 中 non-null business次数/deadline 进一步收紧 `execution.max_evaluator_attempts_per_evaluation/max_evaluator_duration_ms` 与 run total safety ceiling，不注入隐藏默认业务 ceiling。
 - Node terminal 后不重开；重新运行 root graph 通过外层 transition 创建新 activation/run。
 - Pause CAS workflow/run 并传播 scheduling barrier；paused 时允许 result、signal/timer/timeout、terminal fact、edge resolution、trigger/input seal、`ready/skipped` 和 early eligibility，禁止 claim、scope materialize、尚未 dispatch 的 execution 与普通 completion close request。显式 local/global cancel 仍可通过 T7c 抢占 paused run。Ready node 可以形成但不能启动；already-running external work 不因 pause 自动取消。
-- Resume command CAS `paused -> resuming`。Resuming barrier 内先按 `(error_event_seq, scope_depth, stable_fact_id)` 处理 setup/orchestration error，再对全 run early eligibility 按 `(eligibility_event_seq ASC, priority DESC, rule_id ASC, scope_id ASC)` 竞争，最后执行 settled arbitration，循环到 fixed point 后才 CAS `resuming -> running`。每个 winning request 仍在其 T7a 事务完成 subtree fence；整个 drain 可以拆成多个短事务，crash 后从 `resuming` 恢复，期间不得 claim/materialize/dispatch。较早 child eligibility 不会被较晚 ancestor request 改写。
-- Manual node skip/cancel 只允许 graph paused 且携带 expected versions；随后仍按正常 terminal/edge resolution 协议收敛。Active cancel 必须遵守 capability cancellation contract；manual retry 只能提前尚未 terminal 的 retry-wait，不能重新打开 terminal node。
+- Resume command CAS `paused -> resuming`。Resuming barrier 内先按 `(error_event_seq, scope_depth, stable_fact_id)` 处理 setup/orchestration error，再对全 run early eligibility 按 `(eligibility_event_seq ASC, same_event_priority DESC, rule_id ASC, scope_id ASC)` 竞争，最后执行 settled arbitration，循环到 fixed point 后才 CAS `resuming -> running`。每个 winning request 仍在其 T7a 事务完成 subtree fence；整个 drain 可以拆成多个短事务，crash 后从 `resuming` 恢复，期间不得 claim/materialize/dispatch。较早 child eligibility 不会被较晚 ancestor request 改写。
+- Manual node skip 与 retry-wait advance 只允许 graph paused 且携带 expected versions；Cancel 不要求先 Pause，而是直接通过 T7c/T7a 的 Close Request CAS 和 subtree fence 原子抢占。Skip 只允许 Published Command Policy 明确授权、Node 尚未 terminal 且不存在 outcome-unknown effect；它发布 `skipped/manual_skip` fact 并按正常 T3 协议收敛，不能伪造 output。Active effect 必须先 fence/cancel/reconcile，不能直接 skip。Manual retry 只能消费已有 schedule、追加同 effect-key remediation 或重新 reconcile，不能重新打开 terminal node，也不能绕过原 Policy/Safety/Ledger ceiling。
 - Runtime 不提供任意 `returnWorkflowToStage` 或“重开 terminal State/Node”命令。业务返工、回炉和回退必须由 published Definition 的 named exit/transition 明确授权，并创建新的 State Activation/Graph Run；旧 activation、cut 和 artifact 保持不可变。Console 只能触发 Definition 声明的 remediation/rework command，不能指定任意 target state。
 - Local graph cancel 与 global workflow cancel 使用 T7c 原子入口；parent early close 使用 T7a 的 subtree fence。Normal/error/local/global cancel 竞争同一个 close-request unique CAS，输家只写已晚到的 command audit，不能改写已冻结路由。
 - Active compensatable effect 在 cancellation policy 要求时创建 compensation outbox；scope 只有所有 required compensation terminal 后才能完成 closing。
 - Workflow terminal transaction 在全部 required effect/compensation 收敛后把 held domain claims 标记 `release_pending` 并写 deterministic release effect；本地 claim 可同事务 released。`action_required/quarantined` 默认继续持有 claim，人工 abandon 是否释放必须由 Recipe risk policy 显式允许并保留 fencing audit。
 - 晚到 completion、signal 或 outbox delivery 只记录 audit，不得越过 completion fence。
 
+## Workflow Runtime Command 授权与审计
+
+Workbench、Feature Page、Feature Host API、External API 与 Automation 都只是入口，统一调用 Workflow Runtime Command Gateway；任何入口都不得直接写 Runtime 表或通过 Projection 改变权威状态。
+
+```ts
+type WorkflowCommandActorKind =
+  | 'human'
+  | 'feature_service'
+  | 'automation'
+  | 'system';
+
+interface WorkflowRuntimeCommand {
+  command_id: string;
+  idempotency_key: string;
+  command_type: string;
+  target_ref: string;
+  expected_row_version: number;
+  reason_code: string;
+  reason_text?: string;
+  evidence_refs: string[];
+}
+```
+
+Actor、权限、认证 Session 与 Delegation Chain 由服务端生成，客户端不得自报 `actor_ref/roles`。本地单用户部署使用稳定 `human:local-owner`，不能把所有人工操作记为 system。Feature Page 中的用户点击仍以 Human Actor 记录，并保存 `entrypoint=feature_page/source_feature_id`；Feature 后台自动操作使用独立 `feature_service:<id>`。Feature 代表用户调用时保存 `actor=human` 与 `delegated_via=feature_service`，有效权限取用户权限、Feature Manifest command ceiling、Published Recipe/Command Policy 与当前状态 guard 的交集，避免 confused deputy。
+
+建议权限至少拆成：
+
+```text
+workflow.cancel.own
+workflow.operate
+workflow.remediate_receipt
+workflow.cancel.any
+workflow.administrative_abandon
+```
+
+Definition/Recipe 固定 versioned `WorkflowCommandPolicy`，声明 manual skip、retry advance、允许的 cancel scope、receipt remediation contract、administrative abandon 与 claim disposition。UI 根据 Projection 展示按钮仅是提示；Gateway 必须在权威事务内重新检查 Actor permission、resource scope、Feature ceiling、Published Policy、expected row version 与当前状态。
+
+```text
+workflow_runtime_commands
+  - command_id/idempotency_key
+  - command_type/target_kind/target_id
+  - actor_ref/actor_kind/auth_session_ref
+  - entrypoint/source_feature_id/delegation_chain_ref
+  - required_permission
+  - command_policy_ref/command_policy_hash
+  - expected_row_version
+  - reason_code/reason_text_ref/evidence_manifest_ref
+  - request_hash
+  - authorization_result      allowed | denied
+  - execution_result          applied | denied | conflict | duplicate | late
+  - target_before_hash/target_after_hash
+  - resulting_event_seq/close_request_id/effect_ref
+  - requested_at_ms/decided_at_ms/applied_at_ms
+
+UNIQUE(idempotency_key)
+```
+
+相同 idempotency key/request hash 返回原结果；同 key 不同请求返回 `idempotency_conflict`。所有 authenticated applied、denied、conflict、duplicate 与 late 请求都追加不可变审计，不能覆盖旧行。
+
+命令语义固定：
+
+- Manual Skip 不能跳过 required compensation、outcome-unknown effect 或填写虚假 Output。
+- Retry 不能重开 terminal Node/Attempt；业务返工使用 Definition 发布的 typed Rework Command 创建新 Activation/Run。
+- Receipt Remediation 只能按原 effect key/external id Reconcile、提交 Adapter 可验证 Receipt 或 immutable before/after snapshot、或证明 not-applied 后重投；人工文字只能是审计备注，不能直接把 Mutable Effect 改成 succeeded。
+- Administrative Abandon 只允许专门权限、强制 reason/evidence 与二次确认。它停止 scheduler、标记 `administratively_abandoned`，但不生成 Completion Cut、不伪造 normal/error/cancel、不触发正常 transition。Held Claim 默认保留；只有 Published Abandon Policy 允许且已建立可信新 Fence/处置证明时才可释放。
+- Feature 自定义“批准、拒绝、重新生成、接受交付物”等业务操作必须发布 typed Business Command Contract，并 lower 为 Signal、新 Activation 或 Published Rework；不得映射成任意状态跳转或 Admin 数据修改。
+
 ## Outbox、Lease 与恢复
 
-Outbox 是 at-least-once。每条 effect 具有 deterministic message id、lease owner/token/expiry，以及显式配置的 nullable business attempt/deadline ceiling 和 dead-letter policy；null 不注入默认业务 ceiling，但 `execution.max_outbox_attempts_per_message/max_outbox_delivery_duration_ms` safety ceiling 始终适用。Dead-letter 与相应 attempt/wait/effect state 推进必须同事务完成。
+Outbox 是 at-least-once，但 Delivery Policy 必须是可信、版本化、所有次数与时长均有限的 Registry Resource；Graph/Planner 不能选择 Adapter、Policy、Lane 或 Dead-letter 后果。Capability、Wait Contract、Transition Effect 与 Core System Effect 在 Publish 时固定 exact Policy Ref；Effect 创建时把有效 Policy Snapshot/Hash 写入 Outbox，恢复不读取 latest。
+
+```ts
+interface WorkflowOutboxDeliveryPolicy {
+  ref: VersionedRef;
+  max_delivery_attempts: number;      // 包含第一次调用
+  max_reconcile_attempts: number;
+  delivery_duration_ms: number;
+  attempt_timeout_ms: number;
+  initial_backoff_ms: number;
+  max_backoff_ms: number;
+  backoff: 'fixed' | 'exponential';
+  deterministic_jitter_micros: number;
+  honor_retry_after: boolean;
+  retryable_error_codes: string[];
+  permanent_error_codes: string[];
+  policy_hash: string;
+}
+
+interface OutboxEffectContract {
+  effect_type: string;
+  adapter_ref: VersionedRef;
+  delivery_policy_ref: VersionedRef;
+  delivery_lane: 'normal_execution' | 'close_cleanup' | 'system_projection';
+  reconciliation:
+    | { type: 'not_required' }
+    | { type: 'by_effect_key'; reconcile_action_ref: VersionedRef };
+  idempotency: 'provider_key' | 'external_lookup' | 'best_effort';
+  delivery_requirement: 'required' | 'best_effort';
+}
+```
+
+第一版发布五个基线 Profile；修改数字只能发布新 Policy Version，不改变已有 Effect：
+
+| Profile | delivery/reconcile attempts | duration / attempt timeout | exponential backoff | 典型用途 |
+| --- | --- | --- | --- | --- |
+| `normal_delivery@1` | 8 / 4 | 15 min / 60 sec | 1 sec -> 60 sec | dispatch、wait registration |
+| `notification@1` | 5 / 2 | 15 min / 30 sec | 2 sec -> 120 sec | notification、card |
+| `control_cleanup@1` | 16 / 8 | 24 h / 60 sec | 2 sec -> 10 min | cooperative cancel、普通 cleanup |
+| `critical_cleanup@1` | 32 / 16 | 72 h / 5 min | 5 sec -> 30 min | required compensation、claim release |
+| `projection@1` | 20 / 4 | 24 h / 30 sec | 5 sec -> 5 min | Workbench/Feature projection |
+
+所有 Profile 使用 `deterministic_jitter_micros=200000`（±20%）。Effective attempts/duration 取 exact Policy Snapshot 与 finite Runtime Safety Ceiling 的更严格值并在创建时冻结。Normal lane 还受 Workflow deadline 限制；close-cleanup 使用独立 cleanup deadline，可以在 Workflow deadline 后继续；system projection 不回滚权威 Workflow。Backoff 固定为 `min(max_backoff, initial_backoff * 2^(attempt_no-1))` 加由 `effect_key + attempt_no` 决定的 deterministic jitter。Provider `Retry-After` 是最短等待时间；若超出最终 deadline 则停止自动投递。Circuit Breaker 未实际调用 Provider 时不增加 attempt，但 deadline 继续流逝。
+
+```ts
+type OutboxDeliveryResult =
+  | { kind: 'delivered'; receipt_ref?: string; external_id?: string }
+  | { kind: 'retryable_failure'; code: string; retry_after_ms?: number }
+  | { kind: 'permanent_failure'; code: string }
+  | { kind: 'unknown_outcome'; code: string; external_id?: string };
+```
+
+Adapter 禁止让 Runtime 解析异常字符串。`unknown_outcome` 表示外部可能已成功，必须进入 `reconciling` 并按 effect key/external id 查询，禁止立即重投；有限 Reconcile 耗尽后进入 `action_required`。Worker Crash 若已开始外部调用但无结果同样按 unknown outcome 处理，只有合同明确证明同 key 安全重放时才能直接 redeliver。
 
 ```text
 workflow_outbox
-  - effect_key UNIQUE
-  - aggregate_type/id/version
-  - effect_type
-  - payload_ref/hash
-  - status                 pending | processing | succeeded | dead_letter
-  - attempt_count/max_attempts       max_attempts nullable
-  - next_attempt_at/deadline_at      deadline_at nullable
-  - lease owner/token/expires_at
-  - last_error
-  - created_at/delivered_at
+  - id/effect_key UNIQUE
+  - aggregate_type/aggregate_id/aggregate_row_version
+  - effect_type/adapter_ref
+  - delivery_policy_ref/delivery_policy_hash/policy_snapshot_ref
+  - delivery_lane/delivery_requirement
+  - payload_ref/payload_hash
+  - status                 pending | processing | reconciling |
+                           succeeded | dead_letter | action_required
+  - delivery_attempt_count/reconcile_attempt_count
+  - next_attempt_at_ms/deadline_at_ms
+  - lease_owner/lease_token/lease_expires_at_ms
+  - last_result_kind/last_error_code
+  - created_at_ms/delivered_at_ms/updated_at_ms
+
+workflow_outbox_attempts
+  - id/outbox_id/attempt_no
+  - attempt_kind           deliver | reconcile
+  - adapter_ref/adapter_hash/policy_hash
+  - lease_owner/lease_token
+  - request_ref/request_hash
+  - result_kind/result_code
+  - receipt_ref/receipt_hash/external_id
+  - started_at_ms/finished_at_ms/next_attempt_at_ms
+
+UNIQUE(outbox_id, attempt_no)
 ```
 
-Delegation/action/wait/cancel/compensation adapter 必须接受稳定 effect key。Delegation id 从 graph attempt 确定性派生；相同 attempt 重投使用相同 delegation/effect id，adapter 应按 idempotency key 返回已有 execution 或允许按 external id 对账。Crash 发生在外部成功、outbox 标记成功之前时允许同 key重放；物理执行可能重复，Runtime 只承诺外部投递 at-least-once，以及通过 provider event id inbox 去重、attempt acceptance CAS 和 unique key 使数据库 node/output/edge/cut/transition effect exactly-once。无法幂等、无法补偿且存在不可逆 effect 的 capability 不得注册。Dispatch dead-letter 必须与 attempt failure/retry、ledger release 同事务；cancel/notification dead-letter 不能重开已 closed graph，只能创建 action item。
+Dead Letter 只表示自动投递停止，不统一决定 Graph 状态，也不移动/删除原 Outbox Row。业务后果由可信 `effect_type` 固定：
+
+| Effect | Dead-letter/action-required 后果 |
+| --- | --- |
+| Capability dispatch | 原子生成 Attempt failure，再由 Node Retry Policy 仲裁；unknown outcome 保持 action-required |
+| Wait registration | Wait/Node `failed/wait_registration_failed`；Signal 已赢得 CAS 时迟到失败只审计 |
+| Required child creation | Transition action-required；best-effort child 仅记录 delivery failure |
+| Cooperative cancel | 不重开 Graph，创建 operational action/warning |
+| Required compensation | Run action-required，阻止 Cut 并继续持有 Domain Claim |
+| Notification/Card | Workflow 不回滚，只记录 Delivery Failure |
+| Workbench/Feature Projection | Projection degraded，可由 Runtime Event 重建 |
+| Domain claim release | Claim 保持 `release_pending`，不得错误授权新 holder |
+
+Dead-letter 与相应 attempt/wait/effect/ledger 推进必须同事务完成。暂停时不领取新的 normal-delivery；close-cleanup 与 system-projection 继续。Manual remediation 只能在原 Attempt History 后追加有限的新预算、使用相同 effect key，不能清零历史。
+
+Delegation/action/wait/cancel/compensation adapter 必须接受稳定 effect key。Delegation id 从 graph attempt 确定性派生；相同 attempt 重投使用相同 delegation/effect id，adapter 应按 idempotency key 返回已有 execution 或允许按 external id 对账。Crash 发生在外部成功、outbox 标记成功之前时允许同 key 对账/重放；物理执行可能重复，Runtime 只承诺外部投递 at-least-once，以及通过 provider event id inbox 去重、attempt acceptance CAS 和 unique key 使数据库 node/output/edge/cut/transition effect exactly-once。无法幂等、无法补偿且存在不可逆 effect 的 capability 不得注册。
 
 恢复顺序：
 
@@ -3110,7 +3517,7 @@ workflow_checkpoints
   - workflow_revision
   - source_state_instance_id/source_run_id/completion_cut_id
   - snapshot_json/ref/hash
-  - created_at
+  - created_at_ms
 
 UNIQUE(workflow_id, checkpoint_version)
 UNIQUE(completion_cut_id)
@@ -3233,7 +3640,7 @@ Workbench 以 state activation 为一个顶层阶段，内部展示：
 - Terminal candidates、selected completion rule、completion cut 和被 early-close fencing 的节点。
 - Map item progress、稳定 item key/index、selected quorum set、sealed result manifest 和按需 dereference 的 item output。
 
-操作请求必须携带 `run/scope/node/attempt/wait expected version + idempotency_key`。Pause 后才允许 manual skip/cancel/retry-wait advance；所有操作通过 runtime command API，不直接更新投影表。
+操作请求必须携带目标 `expected_row_version + idempotency_key`，并统一通过 Workflow Runtime Command Gateway。Manual skip/retry-wait advance 要求 paused；cancel 不要求预先 pause。Workbench 与 Feature UI 不直接更新 Projection 或 Runtime 表，Actor、Delegation、授权决定和 applied/denied/conflict/duplicate/late 结果均按上述合同审计。
 
 Trace 分两层：
 
@@ -3277,6 +3684,10 @@ root scope
 | `workflow-domain-claims.ts`            | 外部领域资源 shared/exclusive claim、fencing token 与释放              |
 | `workflow-graph-types.ts`              | Source/compiled IR、ports、condition、state 和 error types            |
 | `workflow-registry-store.ts`           | Core/Feature versioned resource 发布、dependency、hash 与 retention   |
+| `workflow-release-publisher.ts`        | Core/Feature staged publish、Execution Artifact 构建与原子激活        |
+| `workflow-execution-artifacts.ts`      | Feature Release Node Bundle、Executor Entry、Protocol/ABI 与 GC       |
+| `workflow-prompt-registry.ts`          | Base/Local Prompt、Promotion、三方 Rebase、Evaluator 与 active pointer |
+| `workflow-core-upgrade.ts`             | Run Protocol/Executor ABI/Registry/DB compatibility preflight         |
 | `workflow-schema-registry.ts`          | JSON Schema 2020-12、strict parse、RFC 6901 resolver 与 snapshot      |
 | `workflow-graph-interface-registry.ts` | Versioned scope interface 加载、hash 和兼容校验                       |
 | `workflow-graph-policy-registry.ts`    | Versioned child policy profile、逐层 intersection 与 snapshot         |
@@ -3285,12 +3696,14 @@ root scope
 | `workflow-graph-compiler.ts`           | Pure normalize、binding、DAG、condition、completion 和 policy 校验    |
 | `workflow-runtime-store.ts`            | 独立 Runtime DB Connection Factory、唯一写入口、PRAGMA 与事务调度     |
 | `workflow-graph-store.ts`              | Run Manifest、Expansion Manifest、scope/node/edge/wait/cut CAS store  |
-| `workflow-value-store.ts`              | Inline value、content-addressed blob、immutable artifact 与 GC        |
+| `workflow-value-store.ts`              | Inline value、Blob Write Intent/no-replace/fsync、GC、Backup Pin      |
 | `workflow-graph-ledger.ts`             | 原子 reservation、consumption、release 和 invariant check             |
 | `workflow-graph-reconciler.ts`         | Edge resolution、trigger、input seal、readiness 和 completion         |
 | `workflow-node-execution.ts`           | Delegation/system preparation、artifact、evaluation、effect key/receipt journal |
 | `workflow-graph-child-runtime.ts`      | Subgraph/expand/map materialization 与 owner completion               |
 | `workflow-graph-waits.ts`              | Signal/timer/approval registration、delivery 和 timeout               |
+| `workflow-outbox.ts`                   | Versioned Delivery Policy、deliver/reconcile、Attempt History/Dead Letter |
+| `workflow-runtime-commands.ts`         | Actor/Delegation、授权、typed business/admin command 与不可变审计     |
 | `workflow-graph-runtime.ts`            | Run lifecycle、pause/cancel、claim、closing 和 recovery coordination  |
 | `workflow-definition-lowering.ts`      | 单节点 authoring state 与 graph state 到统一 root Scope Plan          |
 | `workflow-graph-projection.ts`         | Workbench/read model 与 graph event projection                        |
@@ -3322,8 +3735,13 @@ subgraph/map; signal/timer/cancel; pure/idempotent/compensatable effect
 | Wait | Signal/timeout/cancel 最多一个 winner；provider event 不重复消费；correlation 只绑定一个 Wait；expired pending 不再匹配 |
 | Creation | same key+intent 同实例；same key+different intent conflict；confirmation 不能跨 revision |
 | Child/Close | Parent fence 后 Child Cut 只能 non-publish；Ancestor 不覆盖已有 Child request；Map slot 只有一个 terminal outcome |
+| Registry/Upgrade | Publish 后 ref/hash 不变；旧 Run 固定旧 Artifact/Prompt/Protocol；不兼容 Core/Feature Release 无法激活 |
+| Outbox | delivery/reconcile 尝试有限；unknown outcome 不盲重投；Dead Letter 不会按错误 Effect 语义推进 Graph |
+| Blob | DB 引用只指向 durable live Blob；GC 不删除新引用/Backup Pin；Crash 后只产生可识别 orphan 或 quarantine |
+| Command | Feature/Workbench 同命令得到相同授权；Actor 不可伪造；denied/duplicate/late 不改变目标状态 |
+| Time/DDL | 权威时间均为 safe-integer `*_at_ms`；状态 CHECK、row version 与 partial-index 查询覆盖一致 |
 
-所有时间测试使用 Virtual Clock，禁止真实 `sleep()`；Fake Adapter 可确定性返回 `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`。Fault Injection 覆盖 intent、dispatch、external apply、receipt、Node output、Close Request、Completion Cut、Workflow transition 各边界的提交前后；SQLite 事务内 crash 必须全回滚，外部 effect 边界按 operation key/receipt/reconciliation 收敛。
+所有时间测试使用 Virtual Clock，禁止真实 `sleep()`；Fake Adapter 可确定性返回 `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`。Fault Injection 覆盖 intent、dispatch、external apply、receipt、Node output、Close Request、Completion Cut、Workflow transition，以及 Blob file fsync/install/directory fsync/DB commit、GC mark/delete/finalize、backup pin/copy 各边界；SQLite 事务内 crash 必须全回滚，外部 effect 边界按 operation key/receipt/reconciliation 收敛。Upgrade fixture 覆盖 Core Protocol/ABI 兼容与拒绝、Prompt Rebase pass/fail、安全 section 覆盖和旧 Run exact snapshot。
 
 CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 property；完整回归扩大 seed、事件长度和 crash point；发布门禁另运行真实 SQLite 的 Supported Limit T3/T7 benchmark。所有随机失败都必须能由 seed + shrunk event list 完整重放。
 
@@ -3331,15 +3749,15 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 
 项目仍处于无实际用户/历史运行数据的开发阶段，因此不建设上线灰度、双写、旧 checkpoint 恢复或历史 execution migration。开发按以下依赖顺序推进，但最终只保留一套 Runtime：
 
-1. Recipe/routing/execution-policy registry、Task Intake/T0、Feature resource manifest 扩展、RuntimeSafetyCeilings 与 exact executable retention。
+1. Recipe/routing/execution-policy registry、Task Intake/T0、Feature resource manifest 扩展、RuntimeSafetyCeilings、显式 Publish、Feature Execution Artifact 与 Core Protocol/ABI compatibility preflight。
 2. Graph Source/Compiled IR、strict JSON Schema、RFC 8785/hash 与 versioned registries。
 3. Pure Graph Compiler：binding、DAG、condition/trigger/input、completion、policy/safety 与 static child closure。
-4. 独立 `workflow-runtime.db`、WorkflowRuntimeStore/Connection Factory、Value/Blob Store、CAS、Manifest、Ledger、domain claims 与 T1-T8 transaction primitives。
-5. Delegation/system/wait/join/terminal 基础 Runtime、effect key/mutable receipt 与 external adapter/inbox/outbox。
+4. 独立 `workflow-runtime.db`、WorkflowRuntimeStore/Connection Factory、规范化 UTC millisecond DDL、Value/Blob Write Intent/GC/Backup、CAS、Manifest、Ledger、domain claims 与 T1-T8 transaction primitives。
+5. Delegation/system/wait/join/terminal 基础 Runtime、effect key/mutable receipt、versioned Outbox Delivery Policy、typed adapter result 与 external adapter/inbox/outbox。
 6. Subgraph/expand/map、quorum/fail-fast、hierarchical fence、child Workflow effect 与 compensation barrier。
 7. Pause/resuming/cancel、root coordinator、checkpoint、domain claim release 与 recovery。
 8. Reference Model、Property/Model/Fault tests 与真实 SQLite Supported Limit T3/T7 benchmark。
-9. Workbench projection/command API，并删除旧 scheduler/completion/retry/interrupt/transition 旁路。
+9. Workflow Runtime Command Gateway、Actor/Delegation/Audit、Workbench/Feature projection/command API，并删除旧 scheduler/completion/retry/interrupt/transition 旁路。
 10. 框架稳定后另行迁移现有 `dev_test`、`fix_test` definition 和领域 capability；它们不阻塞 core framework 的实现，但在成为可执行 definition 前必须满足新 contract。
 
 当前不做多机/分布式吞吐目标，但真实文件 SQLite 的 T3/T7 Supported Limit、WAL、复杂度和绝对事务时长是发布门禁；允许配置不得超过已认证 profile。若未来部署边界从本地单机变化，再单独评估 PostgreSQL 或分布式 scheduler。
@@ -3364,8 +3782,10 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 - Recipe 固定 Definition/entrypoint/execution policy/Context Contract/input-output schema/child allowlist；Publisher 从 Capability/Tool/MCP/file/transition/child Recipe 闭包派生 impact/recovery/permission，超过 effect ceiling 时拒绝。Micro Planner 只能生成指定 graph state 的 Scope Spec。
 - 所有非 terminal state authoring type lower 到同一 Graph Runtime，不存在 sequential/graph 双轨 completion。
 - Definition/Source 只有 `graph` 一种 DAG 配置格式；多个 ready node 在 executor capacity 内并发 claim，不存在 parallel state、node、builder、table 或 scheduler。
-- Capability、interface、template、policy、wait contract 和 schema 使用 immutable exact VersionedRef；definition dependency 与 run allowlist snapshot 固定 hash，active run/published definition 引用期间不能删除 resource/executor。
-- Recipe、routing scope、Workflow execution policy 和 executable implementation 同样使用 immutable exact VersionedRef；Feature `enabled -> draining -> disabled -> deleting` 不会使 active run 丢失 executor，prompt/skill/script 更新只通过新版本发布。
+- Capability、interface、template、policy、wait contract、Prompt 与 schema 使用 immutable exact VersionedRef；Run Snapshot 使用可复用 dependency-closure manifest，并为 effective Allowlist 全部依赖建立 Retention Handle，不复制 Artifact 字节。
+- 只有显式 Publish 生成 Feature Release/Execution Artifact。第一版一个 Feature Release 对应一个 immutable Node Bundle、多个 exact Executor Entry、单一 Run Protocol v1/Executor ABI v1；Feature Page/UI 更新不会使 active run 丢失执行内容。
+- Core/Feature Release 经过 staged install、Published/Active 引用扫描、Run Protocol/Executor ABI/Registry/DB compatibility preflight 后才原子激活新创建入口；breaking Major 不会静默迁移旧 Run。
+- Base Prompt 与 Local Published Variant 分离；自进化 Candidate 只有通过 Promotion Policy/Evaluator 后才能 Local Publish。Feature 升级对旧 Base、本地 Variant、新 Base 做结构化 Rebase，Contract 变化或评估失败时受影响 Capability 不切换。
 - Strict JSON 拒绝 duplicate key/unknown field/非标准值；受限 `icarus.workflow-schema/1`、RFC 6901、RFC 8785 与 domain-separated SHA-256 fixture 产生稳定 source/plan hash。不同 Schema 连接必须保存 sound subtype proof，non-total pointer/无法证明/隐藏转换均拒绝。
 - 每个 activation 唯一 root run；child scope 只以 append-only Run Manifest 增加，已存在 plan 永不修改。
 - Compiler 对 control/data/guard dependency 并集做无环检查，并拒绝跨 scope edge。
@@ -3378,7 +3798,7 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 - Subgraph 精确实现固定 interface；Child Completion 只保存 output envelope ref/hash，需要的 Child Port 可直接 expose 为 Owner Port且不复制/重复计费。
 - Expand 使用 frozen candidate、pinned registry/policy 编译 child scope，无法修改 parent plan 或扩大权限。
 - Map 冻结 collection并预建全部 result slot；最终发布 sealed ordered Result Manifest，不内嵌成员 payload。完整数组只能由显式 Materializer/Reducer 生成；quorum cut 后 late child 不能改写 selected set。
-- Terminal candidate 与 completion rule 支持 settled arbitration 和安全 early close；completion cut 只写一次。
+- Terminal candidate 与 completion rule 支持 settled arbitration 和安全 early close；Early 固定 first-eligibility event、同 event 用 same-event priority，Settled 在候选封闭后按 priority；第一版无隐藏 grace window，completion cut 只写一次。
 - Root normal exit、engine error、local cancel 和 global cancel 使用不同可信路由。
 - Early close/cancel 对 active effectful node 执行 fencing，并按 effect contract 完成幂等取消或 compensation。
 - Parent/root close 在同一事务为整个 subtree 建立 request/work fence manifest；stale ordinary work 无法穿越 saved work epoch，cleanup 按 winning close request 和独立 lane 收敛。Ancestor 不覆盖已有 Child request，Child Cut 与 Parent consumption disposition 分开且只写一次。
@@ -3387,7 +3807,8 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 - RuntimeSafetyCeilings 按 workflow/run/scope/map/execution/wait/value 等作用域分组、全部显式 finite并进入 hash；Pinned Safety 与 Live Capacity 分开，logical/stored/physical bytes 分开计账，每项均有 Enforcement Matrix。
 - Workflow lifetime ledger 跨 activation/run 强制 activation、transition、child workflow、duration 与 usage budget；业务循环不能通过新 activation 重置累计额度。
 - Shared claim 只读、mutation 必须 exclusive；Capability claim slot 原子绑定全部 required claims，mutation gateway 在最终提交前逐项验证 held/current fencing token。第一版禁止 Graph 运行时动态抢锁。
-- Inline value、large output 和 artifact 统一经 immutable Value/Blob Store；第一版暂不做机密性/Value 权限隔离，但强制完整性、有限 Retention、GC/磁盘 backpressure 与 Credential 原文不落盘。
+- Inline value、large output 和 artifact 统一经 immutable Value/Blob Store；Blob 使用 Write Intent、容量预留、file fsync、no-replace install、directory fsync、最后 DB ref commit。GC 使用 `live -> gc_candidate -> deleting -> deleted` 与 Backup Pin；temp/final orphan、missing/corrupt 与一致备份均有 crash fixture。
+- Outbox Policy exact version、delivery/reconcile attempts、attempt timeout、总 duration 和 backoff 全部 finite并固化；unknown outcome 先 Reconcile，不同 Effect 的 dead-letter 后果按合同验证，Attempt History 不覆盖。
 - Duplicate completion/signal/outbox/finalizer 不会重复发布 output、解析 edge、创建 child、写 cut 或推进 workflow。
 - Mutable mutation 的 crash fixture 覆盖 intent 前后、外部 apply 前后、receipt/snapshot 前后；跨 attempt 使用 node/business key 时不会重复 promote/commit，stale fencing token 被拒绝，结果不确定进入 action-required。
 - Pause 不丢弃 active result、signal 或 timeout，也不延长 deadline；resume 先进入 recoverable `resuming` barrier，drain pending error/eligibility/settled fact 后才开放 scheduler。
@@ -3396,9 +3817,11 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 - 普通 node 不写共享 workflow context；只有 root coordinator 在 T8 提交受信任 typed Context Patch 和 terminal output binding。
 - Transition history 与 checkpoint unique key 证明 root cut 只推进一次；checkpoint 的 nullable root plan、Run Manifest、ledger、close/cut/output hashes 能定位完整动态执行历史。
 - Trusted child-workflow effect 对 source cut/effect/creation key exactly-once，写 parent-child lineage 并受 child Recipe allowlist/lifetime budget 约束；需要同步结果的流程使用 subgraph 或显式 wait/signal。
-- Workbench 展示 scope tree、DAG、edge resolution、input seal、attempt/wait、ledger、candidate 和 completion cut，并用 expected version fencing 操作。
+- Workbench、Feature Page、API 与 Automation 共用 Runtime Command Gateway；Human/Feature Service/System Actor、Delegation Chain、Permission/Policy/State Guard 和 applied/denied/conflict/duplicate/late 审计均可验证。Receipt remediation 不能人工改成功，administrative abandon 不伪造 cut/outcome。
+- Workbench 展示 scope tree、DAG、edge resolution、input seal、attempt/wait、ledger、candidate 和 completion cut，并用 expected row version fencing 操作。
 - Engine error、action-required 与 quarantine 边界明确；integrity quarantine 停止所有状态推进且不能伪造 cut，只能恢复可信数据或写独立审计的 administrative abandon。
 - Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建 Projection；跨库只走幂等 Outbox，所有 Runtime 连接由统一 Factory 设置生产 PRAGMA。
+- 权威 DDL 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。
 - Fixture、Property Test、独立 Reference Model、Virtual Clock/Fake Adapter 与 Fault Injection 同为强制门禁；随机失败保存 seed、shrinking 后转成永久回归 Fixture。
 - T3/T7 使用真实文件 SQLite 在 versioned Supported Limit 上覆盖最坏 Graph/Scope 形状；配置不得超过认证上限，并同时通过复杂度、正确性和绝对短事务预算。
 - Domain recipe 能组合完整 graph 能力而无需修改 core runtime。
