@@ -1,6 +1,6 @@
 # Dynamic Workflow Graph Runtime 完整架构方案
 
-> **状态**: 已确认目标架构（开发期实现基线）
+> **状态**: 已确认目标架构（开发期实现基线；Store/Runtime 开工受 Executable DDL Gate 与 certified Supported Limits 门禁约束）
 > **范围**: Icarus core workflow runtime
 > **目标**: 统一静态 workflow、并行执行、运行时 DAG、条件路由、局部汇合、持久等待、子图和受约束动态扩图。
 
@@ -19,7 +19,7 @@
 
 ## 已确认决策索引
 
-本索引记录会话 `019f509b-2e43-7592-b47e-34096533bc93` 及其续接讨论已确认并在本文落地的 11 个架构细节点与 10 个工程优化点；索引不是第二份规范，权威细节仍以对应章节的类型、DDL、事务和验收条款为准。
+本索引记录会话 `019f509b-2e43-7592-b47e-34096533bc93` 及其续接讨论已确认并在本文落地的 11 个架构细节点与 13 个工程优化点；索引不是第二份规范，权威细节仍以对应章节的类型、DDL、事务和验收条款为准。
 
 | ID | 已确认结论 | 主要落点 |
 | --- | --- | --- |
@@ -44,6 +44,9 @@
 | E8 | Blob 使用 Write Intent、file/directory fsync、no-replace install、GC 状态机与 Backup Pin | Value/Blob Store、备份恢复 |
 | E9 | Workbench、Feature、API、Automation 共用 Runtime Command Gateway、Actor/Delegation 与不可变审计 | Runtime Command、Workbench |
 | E10 | 权威时间统一 UTC Unix milliseconds；删除 `control_epoch`，统一 CHECK、Partial Index 与字段命名 | 持久化模型、SQLite DDL |
+| E11 | Required compensation 只有成功 terminal 才解除 Cut barrier；`action_required` fail-closed | Completion、T7/T8、Outbox |
+| E12 | Safety 与 certified Supported Limits 执行终止性交叉约束，保证合法 Run 一定可原子 root fence | Runtime Safety、SQLite Profile |
+| E13 | 持久化清单明确为 Logical Schema；Executable DDL、Manifest、constraint/query-plan fixture 是 Store 前置门禁 | 持久化模型、验收 |
 
 ## 背景
 
@@ -146,6 +149,9 @@ Workflow Instance                     外层状态机，可循环和长期运行
 27. Blob 在 DB 引用前完成 file fsync、no-replace install 与 directory fsync；GC、Backup 和新引用通过 Write Intent、状态机与 Pin 协调，Referenced Missing Blob 必须 quarantine。
 28. Workbench、Feature、API 与 Automation 共用 Runtime Command Gateway；Actor/Delegation、Permission/Policy/State Guard 与所有命令结果形成不可变审计。
 29. 权威时间全部是 UTC Unix milliseconds `*_at_ms`；CAS 使用 `row_version`，Fencing 使用明确 epoch，状态与关键字段组合由 SQLite CHECK/Partial Index 执行。
+30. Required compensation 的 `action_required/dead_letter/unknown` 均不算收敛；Scope 保持 closing、Run 保持 action-required并阻止 Child/Root Cut，只有成功 remediation 可继续，administrative abandon 不生成 Cut。
+31. Runtime 只能加载与当前 DDL schema hash、Core build、SQLite version 和生产 PRAGMA 匹配的 certified Supported Limits；Safety Ceiling 必须满足 root-fence 终止性交叉约束。
+32. 本文持久化字段清单是 Normative Logical Schema，不是伪装成 SQL 的缩写 DDL；首个 Store patch 前必须产出并通过真实 SQLite 验证的完整 executable migration 与 Schema Manifest。
 
 ## 术语
 
@@ -392,6 +398,7 @@ interface WorkflowRuntimeSafetyCeilings {
     max_map_items_total: number;
     max_attempts_total: number;
     max_waits_total: number;
+    max_builds_total: number;
     max_build_attempts_total: number;
     max_evaluator_attempts_total: number;
     max_effect_operations_total: number;
@@ -467,30 +474,85 @@ interface RuntimeSupportedLimits {
   max_scopes_total: number;
   max_nodes_total: number;
   max_edges_total: number;
+  max_attempts_total: number;
+  max_waits_total: number;
+  max_builds_total: number;
+  max_effect_operations_total: number;
   max_facts_per_transaction: number;
+  max_frontier_bytes: number;
   max_subtree_scopes_per_fence: number;
+  max_subtree_nodes_per_fence: number;
+  max_subtree_edges_per_fence: number;
+  max_subtree_attempts_per_fence: number;
+  max_subtree_waits_per_fence: number;
+  max_subtree_builds_per_fence: number;
+  max_subtree_map_slots_per_fence: number;
+  max_subtree_effects_per_fence: number;
+  max_t7_derived_facts_per_fence: number;
+  max_subtree_fence_manifest_bytes: number;
   max_map_items_total: number;
+  certification: {
+    status: 'certified';
+    schema_hash: string;
+    sqlite_version: string;
+    core_build_hash: string;
+    limit_derivation_hash: string;
+    reference_machine: string;
+    t3_max_transaction_duration_ms: number;
+    t7_max_transaction_duration_ms: number;
+    certified_at_ms: number;
+  };
   profile_hash: string;
 }
 ```
 
 Safety ceilings 是 pinned、确定性的命名配置，不是隐藏默认值；启动时必须提供全部有限正整数并记录 config hash。字段名称必须显式表达 `total/per_*` 作用域。Effective enforcement 取 safety ceiling 与所有 non-null global/Recipe/Definition/State/child business limit 的最小值；业务 `null` 表示不进一步收紧，`0` 表示禁止消费。Plan、Run、routing decision 和 Workbench 必须同时展示 business policy snapshot 与 safety snapshot/hash。
 
-`DeploymentRuntimeCapacity` 是可动态调整的物理容量，不进入 Plan 语义；不足时产生 backpressure，ready work 保持 ready，不得转成 engine error。每次 admission 记录 capacity config hash。启动时还必须逐字段验证 configured safety ceiling 不超过当前版本认证的 `RuntimeSupportedLimits`；不满足时启动失败，不能运行到中途才发现 T3/T7 无法原子处理合法规模。
+`DeploymentRuntimeCapacity` 是可动态调整的物理容量，不进入 Plan 语义；不足时产生 backpressure，ready work 保持 ready，不得转成 engine error。每次 admission 记录 capacity config hash。`RuntimeSupportedLimits` 不是手写默认值；它必须由相同 DDL/schema hash、Core build、SQLite version、生产 PRAGMA 和参考机器上的发布 benchmark 生成并以 `status=certified` 发布。缺少 certified profile、profile 与当前 schema/Core/SQLite 不匹配，或配置超过认证值时 Runtime 启动失败。
 
-每个 Safety 字段必须进入规范 Enforcement Matrix，至少记录作用域、Account、执行组件、检查时点、reserve/consume/release、失败结果、错误码与是否进入 Plan hash。最低映射如下：
+启动时不只做同名字段比较，还必须验证下列终止性不等式；它们保证任意被配置允许并成功 materialize 的 Run 都能由一次不可拆 T7 root fence 收敛，不能出现“能创建、不能取消”的合法状态：
+
+```text
+safety.run.max_scopes_total            <= supported.max_subtree_scopes_per_fence
+safety.run.max_nodes_total             <= supported.max_subtree_nodes_per_fence
+safety.run.max_edges_total             <= supported.max_subtree_edges_per_fence
+safety.run.max_attempts_total          <= supported.max_subtree_attempts_per_fence
+safety.run.max_waits_total             <= supported.max_subtree_waits_per_fence
+safety.run.max_builds_total            <= supported.max_subtree_builds_per_fence
+safety.run.max_map_items_total         <= supported.max_subtree_map_slots_per_fence
+safety.run.max_effect_operations_total <= supported.max_subtree_effects_per_fence
+deriveWorstCaseT7Facts(safety)          <= supported.max_t7_derived_facts_per_fence
+deriveWorstCaseT7ManifestBytes(safety)  <= supported.max_subtree_fence_manifest_bytes
+safety.reconciliation.max_facts_per_transaction
+                                          <= supported.max_facts_per_transaction
+safety.scope.max_frontier_bytes        <= supported.max_frontier_bytes
+```
+
+同名总量还分别要求 `safety.run.max_scopes_total/max_nodes_total/max_edges_total/max_attempts_total/max_waits_total/max_builds_total/max_effect_operations_total/max_map_items_total` 不超过 Supported 对应字段；`safety.scope.max_nodes_per_scope/max_edges_per_scope` 也不得超过 Supported 的 node/edge 总量。`deriveWorstCaseT7Facts/ManifestBytes` 是 Run Protocol versioned pure function，保守覆盖 scopes/nodes/edges/attempts/waits/builds/map slots/effects、close requests、eligibilities、events、固定 ID/hash 编码和 canonical manifest overhead；函数版本/hash 进入 certification/profile hash，不能由部署配置改写。Compiler 对每个 Plan 计算保守的 `max_reconcile_facts_per_ingress`、最大 source fan-out 和最大 frontier bytes；超过 Safety 或 Supported profile 时在 materialize 前拒绝。T2b、Map Manifest seal、retry/wait/effect 创建必须先在同一事务预留导致未来 root fence 所需的累计对象额度，再插入对象；不得等 T3/T7 已开始后以“事务太大”为业务错误中断。若 benchmark 无法覆盖某个合法形状，只能降低 certified profile 或修改协议后发布新 Run Protocol，不能依靠运行时猜测分批 fence。
+
+每个 Safety 字段必须进入规范 Enforcement Matrix，记录作用域、Account、执行组件、检查时点、reserve/consume/release、失败结果、错误码与是否进入 Plan hash。Published Safety Profile 必须把下列分组展开为每个具体字段的一对一记录；存在未映射字段、重复 owner 或缺少检查时点时发布失败：
 
 | Limit | Owner/对象 | Enforcement | 达限结果 |
 | --- | --- | --- | --- |
-| `run.max_nodes_total` | run account | T2b materialize | root engine error 或 child owner failure |
-| `map.max_items_per_map` | map node account | seal manifest | `map_item_limit_exceeded` |
-| `run.max_attempts_total` | run account | retry schedule/attempt create | Node 不再重试 |
-| `registry.max_snapshot_entries` | run registry closure | Run snapshot creation | 拒绝创建/发布过宽 Allowlist |
-| `execution.max_attempt_duration_ms` | attempt | deadline watchdog | timeout + work fence |
-| `execution.max_outbox_attempts_per_message` | outbox message | delivery/reconcile claim | dead-letter/action-required |
-| `wait.max_pending_signal_age_ms` | inbox event | ingress/sweeper | `unmatched_expired` |
+| `routing.*` | intake/routing/schema object | T0 ingress、registry publish、router step | request/registry 拒绝，独立 `routing_*_limit_exceeded` |
+| `workflow.*` | workflow lifetime account/watchdog | T0/T1/T8 reserve/commit、deadline watchdog | creation/transition 拒绝或 global cancel |
+| `run.max_scopes/nodes/edges/map_items/builds/build_attempts/attempts/waits/evaluator_attempts/effects/facts_*` | run cumulative account | T2/T3/T4/T6 创建前 reserve/commit | root engine error 或 child owner/node failure；不得部分创建 |
+| `run.max_logical_output_bytes_total/max_stored_bytes_total` | run byte account | Value intent/publish 前 reserve，commit 后结算 | output/value contract failure |
+| `scope.max_nodes/edges/spec_bytes/nesting_depth/frontier_bytes` | scope/plan | compiler + T2b/T7 preflight | compile/materialize 拒绝 |
+| `map.max_items_per_map/max_child_concurrency_per_map` | map node account/controller | seal manifest、scheduler admission | `map_item_limit_exceeded` 或 backpressure |
+| `registry.*` | registry closure/artifact | publish + Run snapshot creation | 拒绝发布或创建过宽/过大 closure |
+| `execution.max_attempts/build_attempts/evaluator_attempts_*` | node/build/evaluation account | attempt/schedule 创建前 commit | 不再 retry 或 node/build failure |
+| `execution.*_duration_ms/max_retry_backoff_ms` | attempt/build/evaluator/outbox deadline | freeze deadline/backoff + watchdog | timeout/failure/dead-letter/action-required |
+| `wait.max_finite_wait_duration_ms` | wait | compiler + arm transaction | compile/arm 拒绝 |
+| `wait.max_pending_signals_per_*` | deployment/workflow/run/principal-provider account | inbox ingress reserve、resolve/expire release | ingress rate/limit rejection |
+| `wait.max_pending_signal_age/payload/correlation_*` | inbox/wait | ingress + sweeper + arm | `unmatched_expired` 或 payload/correlation rejection |
+| `reconciliation.max_condition_ast_nodes/max_condition_steps_per_evaluation` | compiled condition/evaluation | compiler + T3 evaluator | compile rejection 或 condition error |
+| `reconciliation.max_facts_per_transaction` | T3 fact wave | compiler conservative proof + T3 preflight | materialize rejection；T3 不允许中途截断 |
+| `value.max_single_value/artifact/files/manifest_*` | Value/Artifact intent | snapshot/publish 前 validate + reserve | value/artifact contract failure |
 | `DeploymentRuntimeCapacity.max_active_executions` | deployment capacity | scheduler admission | 保持 ready/backpressure |
+| `DeploymentRuntimeCapacity.max_active_waits/max_pending_signals/max_outbox_inflight` | deployment live slot | arm/ingress/outbox claim | 保持 pending/backpressure |
 | `DeploymentRuntimeCapacity.max_physical_blob_bytes` | blob allocation | blob reservation/GC | backpressure/action-required |
+| `DeploymentRuntimeCapacity.soft_blob_high_water_bytes/minimum_free_disk_bytes` | Blob Store Coordinator | allocation preflight/GC | 触发 GC、限流或拒绝新 allocation |
 
 累计 Quota、单对象上限与时间上限产生结构化 terminal/error；可释放 Capacity 只控制 admission。Logical output bytes 在业务值首次发布时计费，Data Edge、Context Slot 或 Child expose 复用同一 ref 不重复计费；Run stored bytes 计本 Run 的逻辑持久对象；physical blob bytes 只在创建新内容文件时分配并在 GC 删除后释放。内容去重不能帮助 Workflow 绕过 logical quota。
 
@@ -1657,7 +1719,7 @@ Map node 成功时，`all_settled/record` 和成功的 `all_accepted` 将全部 
 
 业务确实需要完整数组时，必须显式调用 versioned deterministic Materializer/Reducer system Node：它按 index 分页加载成员 ref、验证 hash/schema、执行 item/总字节限制并发布新的普通 Value。该新数组重新收取 logical output bytes；Map manifest 只按元数据字节计费。GC reachability 从 manifest 遍历全部成员 ref，Workbench 默认分页展示 slot metadata，仅打开具体 item 时 dereference payload。
 
-Quorum/fail-fast decision 后 controller 进入 durable `closing_remaining`，winner set 与所有 fenced slot 已不可变，但 map owner 尚不 terminal。只有每个已 materialize remainder 都产生 non-publish cut、required compensation 已 terminal/action-required，且 open build/controller reservation 已清零后，owner 才发布最终 envelope 或 failure。这样下游不会在被截断 child 仍可能产生未结 effect 时越过 map 边界。
+Quorum/fail-fast decision 后 controller 进入 durable `closing_remaining`，winner set 与所有 fenced slot 已不可变，但 map owner 尚不 terminal。只有每个已 materialize remainder 都产生 non-publish cut、required compensation 已成功 terminal，且 open build/controller reservation 已清零后，owner 才发布最终 envelope 或 failure。Required compensation 进入 `action_required` 时 Map 保持 `closing_remaining` 并阻止 owner terminal/Cut；可信 remediation 成功后才能继续，无法恢复时只能 administrative abandon，且 abandon 不生成 Cut。这样下游不会在被截断 child 仍可能产生未结 effect 时越过 map 边界。
 
 ### Terminal
 
@@ -1745,7 +1807,7 @@ Completion 规则：
 11. Scope quiescent 后没有 rule/candidate 匹配是 engine error `no_exit_selected`，不能猜成业务 failure。
 12. `all_nodes_terminal` 只统计该 scope 自己的 nodes；single child owner 在 child cut 前不是 terminal，map quorum/fail-fast owner 在 materialized remainder 的 cut/compensation 收敛前也不是 terminal，因此 child lifecycle 不会被遗漏。
 13. Settled rules 只在 reconciler 达到 fixed point 后运行。Quiescent 要求该 scope 的所有 node 已 terminal、所有 control/data resolution 已封闭、没有尚可 materialize 的 owner child 或 held controller reservation；pending node 必须先被证明 trigger/input impossible 并 terminalize，不能因暂时没有 ready work 就提前结算。Paused/resuming scope 不视为可自动 settled 的 quiescent scope；其事实先积累并在 resume drain 中仲裁。
-14. Scope 只有所有逻辑工作已 fenced、required compensation 已 terminal 或转为 action-required 后才写 completion cut 并进入 closed。外部物理 cancel ACK 不阻塞逻辑关闭；其晚到结果受 fence 拒绝。
+14. Scope 只有所有逻辑工作已 fenced、required compensation 已成功 terminal 后，才写 completion cut 并进入 closed。Required compensation 的 `action_required` 表示尚未收敛：Scope 保持 `lifecycle=closing`，Run 保持 `operational_state=action_required`，继续持有必要 Domain Claim 并阻止 Cut。可信 remediation 成功后可继续 finalizer；无法恢复时只能 administrative abandon，且 abandon 不生成 Cut。`fence_only/cooperative` 合同已证明可安全丢弃的外部物理 cancel ACK 不阻塞逻辑关闭；其晚到结果受 fence 拒绝。
 15. Routing、data resolution、condition、schema、ledger 或 invariant error 绕过正常 completion rules，直接创建 `engine_error` close request、fence scope，并最终产生 `GraphScopeOutcome.kind='errored'`。Root 按 pinned `on_error` 路由；child 按 owner mapping 收敛。
 
 ```ts
@@ -1858,10 +1920,10 @@ type CapabilityCancellationContract =
 - `business_input` 的 namespace 在 registry 中全局唯一，所列 port 必须是 required、sealed、非 secret 的 single value；operation key 在 effect intent transaction 中由 Runtime 计算并持久化。Adapter 不能接受调用方自报 key，也不能把不同 frozen input 合并成同一 receipt。
 - `compensatable` capability 的外部 operation 必须先写 effect intent，再执行，再写 receipt；compensation 同样通过 outbox、幂等键和 lease。
 - `fence_only` 只适用于没有未记录不可逆 effect、可以安全丢弃 late result 的执行；`cooperative` 会发稳定 cancel effect，但物理 ACK 不阻塞逻辑 close，因此 capability 必须显式保证 cancel 丢失/延迟时仍可安全 abandon。不能满足该保证的 effect 必须使用 compensation。
-- `requires_compensation` 必须与 `effect.type=compensatable` 配对，并使 scope closing 等待 compensation terminal 或 action-required。
+- `requires_compensation` 必须与 `effect.type=compensatable` 配对，并使 scope closing 等待 compensation 成功 terminal；`action_required` 只表示自动处理耗尽并等待可信 remediation，不算收敛且不能放行 Completion Cut。
 - 所有 capability 都必须实现上述一种 cancellation contract，因为 global workflow cancel 可以在任意时刻发生；没有安全 fence/cancel/compensation 语义的 capability 不得注册到 Graph Runtime。
 - Early close、manual cancel 或 parent cancellation 可能截断 active effectful node。Compiler 必须根据 cancellation/effect contract 证明该组合可 fence、cooperative cancel 或 compensation。
-- Compensation failure 不回滚数据库历史；scope/run 进入结构化 engine error 或 action-required 状态并保留 effect journal。
+- Compensation failure 不回滚数据库历史；scope/run 进入 `action_required` 并保留 effect journal、必要 Domain Claim 和原 close authority。只有使用相同 effect key 的可信 remediation 成功才能解除 Cut barrier；无法恢复时 administrative abandon 只归档、不生成 Cut。普通 engine error route、manual skip 或数据库手改不能绕过 required compensation。
 - Capability 的每个 `required_claims` slot 必须由 Node 绑定到 Recipe 已授权的逻辑 claim spec id。Compiler 校验 namespace、access、State `allowed_claim_ids` 与 mode；Source 不能提供 raw resource key、数据库 claim id 或 fencing token。`read` 可绑定 shared/exclusive，`write` 只能绑定 exclusive。
 
 ### Mutable External Resource Mutation
@@ -2152,7 +2214,8 @@ workflow_graph_resource_accounts
                            execution_group
   - resource_type        state_activations_total | graph_runs_total |
                          state_transitions_total | child_workflows_total |
-                         scopes_total | nodes_total | attempts_total | waits_total |
+                         scopes_total | nodes_total | builds_total | build_attempts_total |
+                         attempts_total | waits_total |
                          active_waits | logical_output_bytes | stored_bytes |
                          active_executions | effect_ops |
                          optional: tokens | tool_calls | cost_micros
@@ -2209,6 +2272,7 @@ workflow_graph_scheduler_admissions
 - Ledger entries 是事实源；account counters 是可从 hash chain 验证和重建的 cache。Run 保存 `ledger_seq/ledger_head_hash`。
 - 一个 logical admission 使用 `reservation_group_id` 聚合，但每种 resource 都创建独立 reservation；不能用一个 header status 同时表示永久 attempt 消费、可释放 executor slot和其他增量 charge。
 - Materialize scope 时分别创建并 commit `scopes_total/nodes_total` reservation。
+- 创建 Scope Build 时 commit `builds_total`，每次 acquisition/compile attempt 另行 commit `build_attempts_total`，其 hard limit 来自 `run.max_build_attempts_total`；两者不能共用一个 counter。Build 即使失败或被 fence 也不回退累计次数。
 - T0/T1/T8 创建 activation、root run、transition 或 child workflow 时分别在 Workflow account commit `state_activations_total/graph_runs_total/state_transitions_total/child_workflows_total`；这些累计额度跨 run 不释放。
 - 创建 attempt 时 commit `attempts_total`，并为执行期创建 held `active_executions` slot；attempt terminal/fenced 后释放 slot。
 - Arm wait 时 commit `waits_total` 并 hold `active_waits`；wait terminal 后只释放 `active_waits`，累计次数不会回退。
@@ -2319,9 +2383,9 @@ CHECK (
 只为 Scheduler、Watchdog、Recovery、GC/Retention 的实际扫描建立 partial/composite index，不给所有 `created_at_ms` 盲目建索引：
 
 ```sql
-CREATE INDEX idx_runs_deadline
-ON workflow_graph_runs(deadline_at_ms, id)
-WHERE lifecycle <> 'closed' AND deadline_at_ms IS NOT NULL;
+CREATE INDEX idx_workflows_deadline
+ON workflows(deadline_at_ms, id)
+WHERE finished_at_ms IS NULL AND deadline_at_ms IS NOT NULL;
 
 CREATE INDEX idx_attempt_execution_deadline
 ON workflow_graph_node_attempts(execution_deadline_at_ms, id)
@@ -2337,7 +2401,7 @@ WHERE status = 'armed' AND deadline_at_ms IS NOT NULL;
 
 CREATE INDEX idx_outbox_due
 ON workflow_outbox(next_attempt_at_ms, id)
-WHERE status = 'pending';
+WHERE status IN ('pending', 'reconciling');
 
 CREATE INDEX idx_attempt_lease_expiry
 ON workflow_graph_node_attempts(lease_expires_at_ms, id)
@@ -2356,7 +2420,20 @@ ON workflow_blob_write_intents(lease_expires_at_ms, id)
 WHERE status IN ('preparing', 'installed');
 ```
 
-以下持久化清单中的字段均为 Normative 名称；不得再用 `version/timestamps`、`lease owner/token/expires_at` 等草稿缩写代替真实 DDL。
+以下持久化清单是 Normative Logical Schema：字段名、状态值、唯一性、关系与事务语义具有约束力，但 `a/b/c` 行是多个独立列的紧凑写法，代码块本身不是可直接交给 SQLite 的 `CREATE TABLE`。不得把逻辑清单误称为 executable DDL，也不得再用 `version/timestamps`、`lease owner/token/expires_at` 等草稿缩写代替真实列。
+
+### Executable DDL Gate
+
+实现 `WorkflowRuntimeStore` 前必须先从本文 Logical Schema 冻结一份 canonical `workflow-runtime-schema-v1`，并满足以下阻塞门禁；DDL 未通过时不得开始 Store、Reconciler 或迁移业务 Definition：
+
+1. Canonical migration 必须为每个 Logical Schema 对象展开完整 `CREATE TABLE/INDEX/TRIGGER`，明确 SQLite type、`NOT NULL`、default、enum/status CHECK、terminal 字段组合 CHECK、JS safe-integer CHECK、PK、全部单列/复合 FK、UNIQUE 与 Partial Index。禁止 `error fields`、`ref/hash` 或隐含 nullable 等缩写进入 migration。
+2. Schema Manifest 逐表列出 column/type/nullability/default、PK/UK/FK/CHECK/index，并计算 domain-separated `schema_hash`。TypeScript contract、Store query、RuntimeSupportedLimits certification 和 Core compatibility record 必须固定同一 hash；文档清单与 Manifest 不一致时以发布失败处理，不能由 Store 猜测。
+3. CI 必须在空的真实文件 SQLite 上按顺序执行 migration，关闭连接后重新打开，并通过 `PRAGMA integrity_check`、`PRAGMA foreign_key_check`、`PRAGMA journal_mode`/`synchronous`/`foreign_keys` 验证；随后从 `sqlite_schema` 与 `pragma_table_info/foreign_key_list/index_list` 重建 Manifest 并逐字节匹配发布快照。
+4. Constraint fixture 必须证明每个 enum 非法值、负数/溢出时间、terminal 字段互斥错误、cross-run/cross-scope FK、重复 idempotency key、第二个 root scope/cut/close request 和 stale composite lineage 均由 SQLite 拒绝，而不是只由 TypeScript 拒绝。
+5. Query-plan fixture 对 Scheduler、Watchdog、Recovery、T3/T7、GC 和 Outbox 的固定查询运行 `EXPLAIN QUERY PLAN`，断言使用认证 index。任何 Logical Schema 新字段或状态变更必须先更新 migration、Manifest、fixtures 和 `database_schema_version`，再更新 Runtime 代码。
+6. 首个可执行 migration 的验收包括本文所有持久化对象，不能只建 Graph happy-path 表；Intake/Creation、Registry/Retention、Value/Blob、Ledger/Claim、Run/Scope/Node、Inbox/Outbox/Effect、Command/Audit 和 Checkpoint 同属 v1 原子交付边界。
+
+当前文档中的 SQL index 示例必须引用 Logical Schema 实际存在的列。例如 Workflow deadline 位于 `workflows.deadline_at_ms`，不得在没有该列的 `workflow_graph_runs` 上建索引；Outbox due index 同时覆盖 `pending/reconciling`。DDL Gate 的 empty-database smoke test 必须在提交首个 Runtime Store patch 时先落地并作为后续实现的前置依赖。
 
 ## 持久化模型
 
@@ -2558,6 +2635,9 @@ UNIQUE(intake_id, idempotency_key)
 
 ```text
 workflows
+  - id
+  - status                  active | completed | errored | cancelled |
+                            action_required | quarantined | administratively_abandoned
   - recipe_ref/recipe_version/recipe_hash
   - creation_request_id/creation_domain/creation_key
   - workflow_execution_policy_ref/hash
@@ -3061,7 +3141,8 @@ workflow_graph_effect_operations
   - close_request_id       close_cleanup 时 required
   - effect_type
   - status                 intended | dispatched | succeeded | failed |
-                           compensation_pending | compensated | action_required
+                           compensation_pending | compensated |
+                           compensation_not_required | action_required
   - request_ref/hash
   - receipt_ref/hash
   - before_state_ref/hash
@@ -3189,7 +3270,8 @@ T7a scope close primitive:
     each winning close_request_id in the same transaction
 
 T7b child DB finalizer/consumer:
-    after logical fences and required compensation settle, insert child cut;
+    after logical fences and required compensation successfully settle, insert child cut;
+    action_required compensation keeps child closing and blocks the cut;
     subgraph/expand + accepting owner -> close child and terminalize owner;
     map running + slot open -> close child, fill slot + seq, reconcile policy;
     decision tx freezes selected set/slots and batch-T7a closes materialized losers;
@@ -3205,7 +3287,8 @@ T7c cancel ingress:
     loser leaves control/cancel scope unchanged and records late command only
 
 T8  root commit and outer transition:
-    require root/run closing, matching request and subtree compensation settled;
+    require root/run closing, matching request and subtree compensation successfully
+    settled; action_required compensation blocks this transaction;
     insert unique root cut; close root/run; CAS workflow revision;
     commit trusted context patch + transition history + checkpoint + outbox;
     if target is non-terminal, reuse T1 activation/run/root core setup in this tx:
@@ -3228,7 +3311,7 @@ T8 的 route source 由 root outcome kind 唯一决定：`completed` 使用 sele
 
 同一 T3a post-state 同时产生 engine error 与 normal eligibility 时，两者都保留审计事实，但 `engine_error` 先调用 T7a；只有不存在 error fact 时才按 eligibility 排序创建 normal request。这样 schema/routing/invariant error 不会被同事务内恰好出现的业务 candidate 掩盖。
 
-`T7a` 对 target 插入 winning request；对每个尚无 request 的 open descendant 插入 canonical `parent_close` request，已有 close request 只保留并参与同一 subtree work fence，绝不覆盖其 candidate/reason。事务同时把 pending/ready/active controller work 收敛为 fenced terminal fact、关闭 open map slots、释放可释放 held reservation，并保存每个 Scope old/new epoch、被 fenced 对象与 cleanup effect key 的可验证 manifest。此后 finalizer 可以为每个 descendant 生成 cut，target cut 必须等待 descendant cut 与 required compensation 收敛，不能仅凭 epoch 已递增就关闭 parent。Epoch 已更新但 manifest/cleanup 集不完整属于 quarantine，Recovery 不得猜测补齐原子事实。
+`T7a` 对 target 插入 winning request；对每个尚无 request 的 open descendant 插入 canonical `parent_close` request，已有 close request 只保留并参与同一 subtree work fence，绝不覆盖其 candidate/reason。事务同时把 pending/ready/active controller work 收敛为 fenced terminal fact、关闭 open map slots、释放可释放 held reservation，并保存每个 Scope old/new epoch、被 fenced 对象与 cleanup effect key 的可验证 manifest。此后 finalizer 可以为每个 descendant 生成 cut，target cut 必须等待 descendant cut 与 required compensation 成功收敛，不能仅凭 epoch 已递增或 compensation 进入 `action_required` 就关闭 parent。Epoch 已更新但 manifest/cleanup 集不完整属于 quarantine，Recovery 不得猜测补齐原子事实。
 
 普通 execution lane 只在 `running + active` 下凭 saved work epochs 执行；`close_cleanup` lane 在 `closing/cancelling` 下凭 winning `close_request_id` 执行 Cancel、Reconcile、Compensation 与 Finalizer。Ancestor 再次 fence 不会使已有 cleanup 失效。Cleanup 仍受 Claim、operation key、attempt ceiling 和 Outbox policy 约束，不能借 lane 绕过资源控制。
 
@@ -3310,6 +3393,7 @@ Benchmark 分为 Smoke、Supported Limit、Beyond Limit 与 25/50/100% Scaling�
 - Runtime 不提供任意 `returnWorkflowToStage` 或“重开 terminal State/Node”命令。业务返工、回炉和回退必须由 published Definition 的 named exit/transition 明确授权，并创建新的 State Activation/Graph Run；旧 activation、cut 和 artifact 保持不可变。Console 只能触发 Definition 声明的 remediation/rework command，不能指定任意 target state。
 - Local graph cancel 与 global workflow cancel 使用 T7c 原子入口；parent early close 使用 T7a 的 subtree fence。Normal/error/local/global cancel 竞争同一个 close-request unique CAS，输家只写已晚到的 command audit，不能改写已冻结路由。
 - Active compensatable effect 在 cancellation policy 要求时创建 compensation outbox；scope 只有所有 required compensation terminal 后才能完成 closing。
+- Required compensation 的成功 terminal 状态只有 `compensated`，以及合同证明原 operation `not_applied` 时的 `compensation_not_required`。`failed/dead_letter/action_required/unknown` 均不满足 Cut barrier。普通 retry、skip、engine-error route 或数据库手改不能跳过 barrier；无法恢复时只能走不生成 Cut/outcome 的 administrative abandon。
 - Workflow terminal transaction 在全部 required effect/compensation 收敛后把 held domain claims 标记 `release_pending` 并写 deterministic release effect；本地 claim 可同事务 released。`action_required/quarantined` 默认继续持有 claim，人工 abandon 是否释放必须由 Recipe risk policy 显式允许并保留 fencing audit。
 - 晚到 completion、signal 或 outbox delivery 只记录 audit，不得越过 completion fence。
 
@@ -3527,7 +3611,7 @@ UNIQUE(completion_cut_id)
 
 ```json
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "checkpointVersion": 34,
   "workflowId": "...",
   "stateKey": "target_graph_state",
@@ -3552,7 +3636,7 @@ UNIQUE(completion_cut_id)
       "lifecycle": "initializing",
       "control": "running",
       "operationalState": "healthy",
-      "controlEpoch": 0,
+      "rowVersion": 0,
       "workFenceEpoch": 0,
       "rootScopeId": "scope:new-root",
       "rootBuildId": "build:new-root",
@@ -3578,7 +3662,7 @@ UNIQUE(completion_cut_id)
       "lifecycle": "closed",
       "control": "running",
       "operationalState": "healthy",
-      "controlEpoch": 1,
+      "rowVersion": 17,
       "workFenceEpoch": 2,
       "rootScopeId": "scope:previous-root",
       "rootBuildId": "build:previous-root",
@@ -3600,11 +3684,11 @@ UNIQUE(completion_cut_id)
       "outputHash": "sha256:previous-output"
     }
   },
-  "updatedAt": "2026-07-10T12:00:00.000Z"
+  "updatedAtMs": 1783684800000
 }
 ```
 
-Graph-to-Graph transition 时 `completed` 保存旧 run 的完整水位，`current` 指向同一 T8 创建的新 activation/root run。首次 activation 时 `completed=null`；terminal transition 时 `current=null`。Initializing current 的 `rootScopeId/rootBuildId/sourceSeedHash` 已存在，`rootPlanHash` 合法为 null。Checkpoint 不复制 scope/node/edge/attempt；Graph Store 才是执行事实源。
+Graph-to-Graph transition 时 `completed` 保存旧 run 的完整水位，`current` 指向同一 T8 创建的新 activation/root run。首次 activation 时 `completed=null`；terminal transition 时 `current=null`。Initializing current 的 `rootScopeId/rootBuildId/sourceSeedHash` 已存在，`rootPlanHash` 合法为 null。Checkpoint 不保存已删除的 `controlEpoch`；`rowVersion` 只用于定位该水位对应的 Run 行，不充当调度 generation。Checkpoint 内权威时间同样使用 Unix millisecond `*AtMs`，只有 API/Workbench projection 可以派生 ISO string。Checkpoint 不复制 scope/node/edge/attempt；Graph Store 才是执行事实源。
 
 ## Context、Artifact 与 Quality Gate
 
@@ -3752,11 +3836,11 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 1. Recipe/routing/execution-policy registry、Task Intake/T0、Feature resource manifest 扩展、RuntimeSafetyCeilings、显式 Publish、Feature Execution Artifact 与 Core Protocol/ABI compatibility preflight。
 2. Graph Source/Compiled IR、strict JSON Schema、RFC 8785/hash 与 versioned registries。
 3. Pure Graph Compiler：binding、DAG、condition/trigger/input、completion、policy/safety 与 static child closure。
-4. 独立 `workflow-runtime.db`、WorkflowRuntimeStore/Connection Factory、规范化 UTC millisecond DDL、Value/Blob Write Intent/GC/Backup、CAS、Manifest、Ledger、domain claims 与 T1-T8 transaction primitives。
+4. 先完成覆盖全部持久化对象的 canonical executable migration、Schema Manifest、constraint/query-plan fixture 和 empty-file SQLite DDL Gate；通过后再实现独立 `workflow-runtime.db`、WorkflowRuntimeStore/Connection Factory、Value/Blob Write Intent/GC/Backup、CAS、Manifest、Ledger、domain claims 与 T1-T8 transaction primitives。
 5. Delegation/system/wait/join/terminal 基础 Runtime、effect key/mutable receipt、versioned Outbox Delivery Policy、typed adapter result 与 external adapter/inbox/outbox。
 6. Subgraph/expand/map、quorum/fail-fast、hierarchical fence、child Workflow effect 与 compensation barrier。
 7. Pause/resuming/cancel、root coordinator、checkpoint、domain claim release 与 recovery。
-8. Reference Model、Property/Model/Fault tests 与真实 SQLite Supported Limit T3/T7 benchmark。
+8. Reference Model、Property/Model/Fault tests 与真实 SQLite Supported Limit T3/T7 benchmark；发布与当前 schema/Core/SQLite/PRAGMA 绑定的首个 certified profile，未认证配置不能启动 Runtime。
 9. Workflow Runtime Command Gateway、Actor/Delegation/Audit、Workbench/Feature projection/command API，并删除旧 scheduler/completion/retry/interrupt/transition 旁路。
 10. 框架稳定后另行迁移现有 `dev_test`、`fix_test` definition 和领域 capability；它们不阻塞 core framework 的实现，但在成为可执行 definition 前必须满足新 contract。
 
@@ -3800,11 +3884,11 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 - Map 冻结 collection并预建全部 result slot；最终发布 sealed ordered Result Manifest，不内嵌成员 payload。完整数组只能由显式 Materializer/Reducer 生成；quorum cut 后 late child 不能改写 selected set。
 - Terminal candidate 与 completion rule 支持 settled arbitration 和安全 early close；Early 固定 first-eligibility event、同 event 用 same-event priority，Settled 在候选封闭后按 priority；第一版无隐藏 grace window，completion cut 只写一次。
 - Root normal exit、engine error、local cancel 和 global cancel 使用不同可信路由。
-- Early close/cancel 对 active effectful node 执行 fencing，并按 effect contract 完成幂等取消或 compensation。
+- Early close/cancel 对 active effectful node 执行 fencing，并按 effect contract 完成幂等取消或 compensation。Required compensation 的 `action_required/dead_letter/unknown` 阻止 Map owner、Child Cut 和 Root Cut；只有 `compensated/compensation_not_required` 可通过 barrier，administrative abandon 不伪造 Cut。
 - Parent/root close 在同一事务为整个 subtree 建立 request/work fence manifest；stale ordinary work 无法穿越 saved work epoch，cleanup 按 winning close request 和独立 lane 收敛。Ancestor 不覆盖已有 Child request，Child Cut 与 Parent consumption disposition 分开且只写一次。
 - Child policy profile 对 allowlist/recovery-kind 取交集、boolean AND、impact 与 numeric ceiling 逐层收紧；null child request 只表示继承。Compiled plan 保存完整 effective snapshot。
 - Ledger 明确区分 account scope 与 consumer；一个 Reservation 通过 Posting 原子更新 deployment/workflow/run/scope/node/execution-group accounts，保持 non-negative/under-limit/守恒与确定性失败顺序。
-- RuntimeSafetyCeilings 按 workflow/run/scope/map/execution/wait/value 等作用域分组、全部显式 finite并进入 hash；Pinned Safety 与 Live Capacity 分开，logical/stored/physical bytes 分开计账，每项均有 Enforcement Matrix。
+- RuntimeSafetyCeilings 按 workflow/run/scope/map/execution/wait/value 等作用域分组、全部显式 finite并进入 hash；Pinned Safety 与 Live Capacity 分开，logical/stored/physical bytes 分开计账，每项均有一对一 Enforcement Matrix。启动必须加载 schema/Core/SQLite/PRAGMA 匹配的 certified Supported Limits，并验证 run total 不超过一次 T7 root fence 的 scopes/nodes/edges/attempts/waits/builds/map slots/effects 认证上限。
 - Workflow lifetime ledger 跨 activation/run 强制 activation、transition、child workflow、duration 与 usage budget；业务循环不能通过新 activation 重置累计额度。
 - Shared claim 只读、mutation 必须 exclusive；Capability claim slot 原子绑定全部 required claims，mutation gateway 在最终提交前逐项验证 held/current fencing token。第一版禁止 Graph 运行时动态抢锁。
 - Inline value、large output 和 artifact 统一经 immutable Value/Blob Store；Blob 使用 Write Intent、容量预留、file fsync、no-replace install、directory fsync、最后 DB ref commit。GC 使用 `live -> gc_candidate -> deleting -> deleted` 与 Backup Pin；temp/final orphan、missing/corrupt 与一致备份均有 crash fixture。
@@ -3821,7 +3905,8 @@ CI 分层：普通提交运行固定 seed、小型 exhaustive 和数百组 prope
 - Workbench 展示 scope tree、DAG、edge resolution、input seal、attempt/wait、ledger、candidate 和 completion cut，并用 expected row version fencing 操作。
 - Engine error、action-required 与 quarantine 边界明确；integrity quarantine 停止所有状态推进且不能伪造 cut，只能恢复可信数据或写独立审计的 administrative abandon。
 - Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建 Projection；跨库只走幂等 Outbox，所有 Runtime 连接由统一 Factory 设置生产 PRAGMA。
-- 权威 DDL 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。
+- Logical Schema 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。Executable DDL Gate 必须覆盖全部持久化对象，并通过真实文件 SQLite migration、reopen、integrity/foreign-key check、Schema Manifest、constraint fixture 与固定查询的 query-plan fixture。
+- Checkpoint schema v7 不含 `controlEpoch`，只保存用于水位定位的 `rowVersion`；权威更新时间使用 `updatedAtMs` safe integer，ISO 时间只能由 API/Workbench projection 派生。
 - Fixture、Property Test、独立 Reference Model、Virtual Clock/Fake Adapter 与 Fault Injection 同为强制门禁；随机失败保存 seed、shrinking 后转成永久回归 Fixture。
 - T3/T7 使用真实文件 SQLite 在 versioned Supported Limit 上覆盖最坏 Graph/Scope 形状；配置不得超过认证上限，并同时通过复杂度、正确性和绝对短事务预算。
 - Domain recipe 能组合完整 graph 能力而无需修改 core runtime。
