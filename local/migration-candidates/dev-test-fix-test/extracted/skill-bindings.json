@@ -1,0 +1,14 @@
+{
+  "feishu_ops": ["ops-staging-deploy"],
+  "web_dev": [
+    "dev-requirement",
+    "dev-bugfix",
+    "fix-bug",
+    "fix-refix-bug"
+  ],
+  "web_dev_examine": ["dev-examine"],
+  "web_plan_examine": ["plan-examine"],
+  "web_plan": ["plan-requirement"],
+  "web_ops": ["ops-staging-deploy"],
+  "web_test": ["test-requirement", "fix-test-bug"]
+}
