@@ -51,7 +51,7 @@
 
 - 单次会话只限制施工范围，不限制规范上下文；每次都完整阅读规范。
 - 架构规范是语义权威，Contract Pack 是落地后的机器权威，本文只记录进度。
-- 所有新 Runtime 实现位于 `src/workflow-runtime/`；不得向 `src/` 顶层增加新的 Workflow Runtime 模块。
+- 所有新 Runtime 语义实现位于 `src/workflow-runtime/`；不得向 `src/` 顶层增加新的 Workflow Runtime 模块。无 Node 前置依赖的 managed toolchain bootstrap/launcher 与既有 setup/launchd renderer 是唯一 host-infrastructure 例外，不得包含 Runtime 语义。
 - 严格遵守 G0-G9 依赖。G0 完成前不得开始 Store、Compiler 或 durable T0；Executable DDL Gate 完成前不得实现 `WorkflowRuntimeStore`、Reconciler 或 production Domain Definition。
 - G0 后只有规范声明可并行的工作并行；并行工作必须拥有不重叠的文件边界和独立退出证据。
 - 每个提交对应一个可独立复核、可独立回退的施工切片，不以一个巨大提交跨越多个 Gate。
@@ -76,7 +76,7 @@
 | `npx vitest run setup/legacy-workflow-boundary.test.ts` | PASS，6 tests |
 | legacy migration candidate boundary | 当前定向测试通过；G0 仍需机器生成的完整 absence/coverage/candidate manifests |
 
-2026-07-15 工具链目标按本机默认开发环境重新冻结为 Node `26.5.0`、npm `11.17.0`、`darwin/arm64`；后续 G0.1 必须直接使用该默认环境生成 lock/native 验证证据，不要求另装第二套 Node。
+2026-07-15 工具链目标按本机默认开发环境重新冻结为 Node `26.5.0`、npm `11.17.0`、`darwin/arm64`。G0.1 不要求用户手工安装或切换系统 Node；项目 bootstrap 自动安装已验证的 official distribution 到 Icarus runtime home，最终 lock/native/build/test 和 Core service 只使用该 managed runtime，系统默认环境保持不变。
 
 已知 G0 工具链差距：
 
@@ -93,15 +93,18 @@
 | `fast-check` | 缺失 | exact `4.9.0` dev dependency |
 | `@types/node` | `^22.10.0` | exact `26.1.1` |
 | `@types/better-sqlite3` | `^7.6.12` | exact `7.6.13` |
-| Agent Container base | `node:22-slim` | `node:26.5.0-slim` immutable digest，需按规范区分 Agent Container 与 Executor Artifact identity |
+| Managed Node distribution | 不存在 | official `node-v26.5.0-darwin-arm64.tar.gz` + pinned archive/executable hash |
+| Core service Node source | launchd 直接执行 `/opt/homebrew/bin/node` moving symlink | launchd 只执行 stable Icarus Runtime Launcher，由其选择并验证 active managed runtime |
 
 这些差距是 G0.1 的施工输入，不是已发现的架构冲突。
+
+Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；它不进入本机 Core launcher、SQLite certification key 或 G0.1 修改范围。Electron 内置 Node 同样不属于 Core Runtime identity。
 
 ## Gate 总览
 
 | Gate | 状态 | 依赖 | 退出证据 | 完成提交 |
 | --- | --- | --- | --- | --- |
-| G0 Contract Pack / Static Baseline | `READY` | 无 | schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes | - |
+| G0 Contract Pack / Static Baseline | `READY` | 无 | managed distribution/Launcher proof + schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes | - |
 | G1 DDL / Store | `NOT_READY` | G0 | executable migration + Schema Manifest + SQLite fixtures | - |
 | G2 Compiler / Golden | `NOT_READY` | G0 | sealed Golden Bundle + compiler/toolchain hash | - |
 | G3 Registry / Authoring / Publish | `NOT_READY` | G1 + G2 | manifest/authoring/publish/retention/ABI fixtures | - |
@@ -127,7 +130,7 @@
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、测试模型、发布门禁、absence baseline | `READY` | G0.1 |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `READY` | G0.1 |
 
 ## G0 施工切片
 
@@ -135,7 +138,7 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 
 | 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
 | --- | --- | --- | --- | --- |
-| G0.1 | Toolchain Identity | `READY` | Node/npm/direct dependency/lock/CI identity 一致，基础构建与测试通过 | - |
+| G0.1 | Toolchain Identity | `READY` | Node/npm/direct dependency/lock/CI/managed distribution/launcher identity 一致，基础构建与测试通过 | - |
 | G0.2 | Contract Pack Foundation | `NOT_READY` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | - |
 | G0.3 | Closed Schemas | `NOT_READY` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | - |
 | G0.4 | Catalogs and Protocol Tables | `NOT_READY` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | - |
@@ -151,7 +154,7 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 
 **工作包**：I11
 
-**目标**：把 Core Runtime/Compiler/CI 的工具链输入固定到规范 S25 与 Compiler Conformance Toolchain 指定的 exact identity，为后续 Contract Pack hash、Golden 和 SQLite certification 建立可重放基线；本切片不创建 Runtime Store、Compiler 语义实现或 production activation。
+**目标**：把 Core Runtime/Compiler/CI 的工具链输入固定到规范 S25 与 Compiler Conformance Toolchain 指定的 exact identity，并交付不修改系统 Node 的 managed distribution bootstrap、exec wrapper、stable Runtime Launcher 与 launchd binding，为后续 Contract Pack hash、Golden 和 SQLite certification 建立可重放基线；本切片不创建 Runtime Store、Compiler 语义实现或 production activation。
 
 **必须重点复读**：
 
@@ -168,8 +171,9 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 - `package.json`
 - `package-lock.json`
 - `.github/workflows/ci.yml` 及确实需要保持 Node/npm identity 一致的 CI 配置
-- 与 Node base identity 直接相关的 Container/Executor build 配置；修改前必须先区分规范中的 Core Runtime、Agent Container 和 Executor Artifact，不得把 SQLite certification identity 错误传播到无关 Electron runtime
-- `src/workflow-runtime/contracts/` 下仅限表达 toolchain identity 所必需的最小目录或 manifest schema；若其完整语义属于 G0.2，应留到下一切片
+- `src/workflow-runtime/contracts/toolchain/` 下仅限 G0.1 所需的 Managed Node Distribution Manifest/schema/hash fixture 与最小 Compiler toolchain identity；Distribution schema 可以内联 exact ref shape，通用 artifact envelope/VersionedRef/hash helper 仍留到 G0.2
+- `setup.sh`、`scripts/runtime-toolchain.sh`、`scripts/runtime-launcher.sh` 及其仅与 managed Node install/verify/exec 直接相关的 helper
+- `setup/platform.ts`、`setup/service.ts`、`setup/launchd.ts`、`launchd/`、`local/shell/` 中仅限把 Core service/restart path 从 system Node 切换为 stable Runtime Launcher 的配置
 - 与本切片直接相关的定向测试
 - 本进度文档
 
@@ -177,28 +181,43 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 
 - 不实现 Workflow Runtime、Store、DDL、Compiler lowering/normalization/proof、Registry、T0-T8 或 UI。
 - 不生成或宣称 Sealed Golden Bundle、certified SQLite Profile 或 Supported Limits。
-- 不使用 floating semver、moving container tag 或手写伪造的 native/release identity。
-- 不顺手升级规范未要求的依赖；若 Node 24 导致其他依赖不兼容，记录最小问题并按规范联动评审。
+- 不调用 Homebrew、nvm/fnm/Volta 或其他 system version manager，不修改系统 Node/npm、shell profile、全局 symlink，或把用户现有 launchd Node path 保留为兼容 fallback。
+- 不使用 floating semver、moving system Node path，不手写伪造 native/release/certification identity；Distribution archive/executable hash 必须由 official bytes 实测并与 checked-in Manifest 一致。
+- 不修改 Agent Container/VM image 或 Electron Node identity；它们不属于本切片。
+- 不顺手升级规范未要求的依赖；若 Node 26 导致其他依赖不兼容，记录最小问题并按规范联动评审。
 
 **退出条件**：
 
 1. `.nvmrc`、CI Node source 和 `packageManager` 与规范 exact identity 一致。
 2. 规范列出的 direct runtime/dev dependencies 使用 exact version，无 `^`/`~`，lockfile integrity 更新完成。
-3. 实际运行时 `node --version` 与 `npm --version` 可验证；若当前 shell 未切换到 pinned toolchain，不得用旧 Node 生成最终 lock 或 native-module 证据。
-4. Agent Container/Executor identity 按规范正确处理；immutable digest 无法在本环境可靠确认时，不能伪造，必须记录为本切片 blocker 或明确拆分并证明不影响 Core G0.1 退出条件。
-5. `npm ci`、typecheck、基础测试和 legacy boundary test 在 pinned toolchain 下通过。
-6. CI 使用 `.nvmrc`，并执行 lockfile install；任何新增 toolchain conformance check 有稳定失败信息。
-7. 本文记录实际命令、版本输出、测试结果和 commit。
+3. Checked-in `ManagedNodeRuntimeDistributionManifest` 固定 official Node `26.5.0` darwin/arm64 archive URL、archive hash `sha256:ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9`、executable hash `sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4` 与 bundled npm `11.17.0`；hash 由真实 bytes 验证，不是手写占位。
+4. Fresh temporary runtime home 的 bootstrap 能自动、安全、幂等地 side-by-side 安装 managed distribution，且安装前后系统 `command -v node/npm` 与版本完全不变；archive/hash/npm mismatch、unsafe entry、partial install 和 invalid pointer 均有稳定 fail-closed 结果。
+5. 本地最终 `npm ci`、typecheck、完整测试、legacy boundary 和 native-module load 全部通过 `scripts/runtime-toolchain.sh exec -- ...` 运行；证据中的 `process.execPath/version` 必须属于 active content-addressed installation，不得使用当前 shell/system Node。
+6. launchd `ProgramArguments[0]`、setup service 与 restart script 只调用 stable Icarus Runtime Launcher。Launcher 从自身 `realpath` 推导 runtime root，忽略继承环境中的 root/PATH override，原子读取 active pointer，验证 containment、Manifest、Node executable hash/version 与 Core binding 后 `exec`；managed runtime 缺失/损坏时退出，测试证明不会 fallback 到 PATH、Homebrew 或 system Node。
+7. CI 使用 `.nvmrc`，在 lock install 前验证 Node/npm exact identity 并执行 `npm ci`；CI bootstrap/launcher fixture 把 production-identical Launcher 安装到临时布局，由其自身路径解析临时 root，不写用户或系统路径且不依赖 production 环境覆盖，失败信息稳定。
+8. Agent Container/VM image 和 Electron 文件无改动；G0.1 证据明确它们不属于 Core managed runtime/SQLite certification identity。
+9. 本文记录实际命令、系统环境前后值、managed runtime 版本/路径/hash、测试结果和 commit。
 
 **最低验证命令**：
 
 ```bash
+command -v node
 node --version
+command -v npm
 npm --version
-npm ci
-npm run typecheck
-npm test
-npx vitest run setup/legacy-workflow-boundary.test.ts
+./scripts/runtime-toolchain.sh install
+./scripts/runtime-toolchain.sh verify
+./scripts/runtime-toolchain.sh exec -- node --version
+./scripts/runtime-toolchain.sh exec -- npm --version
+./scripts/runtime-toolchain.sh exec -- npm ci
+./scripts/runtime-toolchain.sh exec -- npm run typecheck
+./scripts/runtime-toolchain.sh exec -- npm test
+./scripts/runtime-toolchain.sh exec -- npx vitest run setup/toolchain-identity.test.ts setup/runtime-toolchain.test.ts setup/service.test.ts
+./scripts/runtime-toolchain.sh exec -- npx vitest run setup/legacy-workflow-boundary.test.ts
+command -v node
+node --version
+command -v npm
+npm --version
 git diff --check
 ```
 
@@ -212,12 +231,12 @@ git diff --check
 
 | ID | 类型 | 状态 | 描述 | 处理 Gate/切片 |
 | --- | --- | --- | --- | --- |
-| R-001 | Toolchain | OPEN | 当前 Node/npm/依赖/CI 与规范 exact identity 不一致 | G0.1 |
-| R-002 | Container identity | OPEN | 当前 Agent Container 使用 `node:22-slim` moving tag；需按规范确认 Core、Agent Container、Executor Artifact 的正确固定边界和可验证 digest | G0.1 |
+| R-001 | Toolchain | OPEN | 当前 Node/npm/依赖/CI 与规范 exact identity 不一致，且 managed distribution/bootstrap/exec wrapper 尚不存在 | G0.1 |
+| R-002 | Host launch identity | OPEN | 当前 launchd/setup/restart path 直接解析 `/opt/homebrew/bin/node` 或 `command -v node`；必须改为 managed distribution + stable Launcher，且无 system fallback | G0.1 |
 | R-003 | Static proof | OPEN | 当前只有定向 legacy boundary test，尚无规范要求的 AST/API/UI/schema/filesystem/resource manifests | G0.7 |
 | R-004 | Contract drift | OPEN | 规范尚未转换为 Machine-readable Contract Pack，Markdown 与未来机器合同的一致性尚未由 CI 证明 | G0.2-G0.9 |
 | R-005 | DDL feasibility | DEFERRED | Logical Schema 尚未转换为 executable migration；不代表已发现冲突，但 G1 必须以真实 SQLite Gate 验证 | G1 |
-| R-006 | Certification | DEFERRED | Product Floor 和 profile 已冻结，Supported Limits 与事务预算尚未 benchmark 认证 | G8 |
+| R-006 | Certification | DEFERRED | Product Floor 和 profile 已冻结；Launcher/Core Release/Managed Node executable/native module 完整 key、Supported Limits 与事务预算尚未 benchmark 认证 | G8 |
 
 ## 下一步
 

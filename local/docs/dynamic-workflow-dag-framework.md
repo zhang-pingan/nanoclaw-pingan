@@ -55,12 +55,13 @@
 | I8 | Subgraph、Expand、Map 与 child scope lifecycle | [Subgraph 与 Expand](#subgraph-与-expand)、[Map](#map) | [Scope Build 与 Expansion Manifest](#scope-build-与-expansion-manifest)、[Resource Ledger 与调度](#resource-ledger-与调度)、[Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Edge Resolution、Candidate 与 Cut](#edge-resolutioncandidate-与-cut) | T2a、T2b、T3、T7a、T7b |
 | I9 | Completion、Pause/Cancel、Compensation、Operational Blocker、Root Finalization、Root Coordinator 与 Recovery | [Completion Policy、Early Close 与 Named Exit](#completion-policyearly-close-与-named-exit)、[Retry、Pause、Cancel 与 Compensation](#retrypausecancel-与-compensation) | [Edge Resolution、Candidate 与 Cut](#edge-resolutioncandidate-与-cut)、[Workflow 与 Run](#workflow-与-run)、[事务边界与 CAS](#事务边界与-cas)、[Outbox、Lease 与恢复](#outboxlease-与恢复)、[Snapshot 与 Checkpoint](#snapshot-与-checkpoint) | T3b、T6e、T7a、T7b、T7c、T8、Root Finalization/Recovery/Fault fixtures |
 | I10 | Runtime Command、权限、Runtime Center 与 Trace | [Workflow Runtime Command 授权与审计](#workflow-runtime-command-授权与审计)、[Runtime Center（运行中心）与 Trace](#runtime-center运行中心与-trace) | [权限与安全](#权限与安全)、[SQLite Execution Profile](#sqlite-execution-profile)、[Outbox、Lease 与恢复](#outboxlease-与恢复)、[模块边界](#模块边界) | T7c、T8、Command/Trace properties、projection outbox |
-| I11 | Contract Pack、测试模型、发布门禁、静态 absence baseline 与开发期交付 | [测试策略与模型验证](#测试策略与模型验证) | [Compiler Conformance Toolchain](#compiler-conformance-toolchain)、[开发期实施顺序](#开发期实施顺序)、[开发期直接重构约束](#开发期直接重构约束)、[完整验收标准](#完整验收标准)、[SQLite Execution Profile](#sqlite-execution-profile) | Contract Pack、Sealed Golden、Fixture/Property/Model/Fault、Product Floor benchmark、absence/coverage gate |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、静态 absence baseline 与开发期交付 | [测试策略与模型验证](#测试策略与模型验证) | [Compiler Conformance Toolchain](#compiler-conformance-toolchain)、[开发期实施顺序](#开发期实施顺序)、[开发期直接重构约束](#开发期直接重构约束)、[完整验收标准](#完整验收标准)、[SQLite Execution Profile](#sqlite-execution-profile) | Managed distribution/Launcher proof、Contract Pack、Sealed Golden、Fixture/Property/Model/Fault、Product Floor benchmark、absence/coverage gate |
 
 ### 变更联动检查
 
 | 发生变化的合同 | 必须同步检查 |
 | --- | --- |
+| Node/npm、Managed Distribution 或 Runtime Launcher | `.nvmrc`、packageManager/lock、CI、Distribution Manifest/hash、managed install/active pointer、launchd/setup/restart、Compiler Toolchain、SQLite Profile/Supported Limits、Golden 与 G9 activation audit |
 | Source IR、Node/Port/Condition 或 Compiled IR | closed schema、canonicalization/hash、assignability proof、Compiler error、plan snapshot、fixture 与 property generator |
 | Workflow/Run/Scope/Node 状态或持久化字段 | Logical Schema、CHECK/FK/Index、CAS、T0-T8、Recovery、Checkpoint、projection 与 model/fault test |
 | Policy、Safety Limit、Ledger Account 或 Supported Limit | policy intersection、Compiler/materialize preflight、reservation/posting、scheduler admission、root-fence 终止性与 benchmark profile |
@@ -74,7 +75,7 @@
 
 1. 在任务说明中写明工作包 ID、计划修改的模块以及已经读取的必读章节。
 2. 搜索目标类型、表、事务编号和验收关键词在全文中的全部引用，确认不存在未纳入计划的跨章节约束。
-3. 若任务涉及 Store，先确认 executable migration 与 Schema Manifest 门禁；若会启动非 test-only Runtime，再确认匹配环境的 certified Supported Limits、`local_single_user` deployment profile、静态 absence baseline 与产品 surface coverage manifest。
+3. 若任务涉及 Store，先确认 executable migration 与 Schema Manifest 门禁；若会启动非 test-only Runtime，再确认 stable Launcher/active Managed Node Distribution、匹配环境的 certified Supported Limits、`local_single_user` deployment profile、静态 absence baseline 与产品 surface coverage manifest。
 
 完成编码后：
 
@@ -138,7 +139,7 @@
 | S22 | Production v1 首发目标固定为 `local_single_user + node_service + darwin/arm64`，并冻结产品支持下限、事务预算、Retention 与 Blob Capacity baseline | Runtime Safety、SQLite Profile、Retention、Production Gate |
 | S23 | `ProductSurfaceCoverageManifest` 与机器生成的 source/API/UI/schema/filesystem negative fixtures 共同证明已删除 surface 保持 absent；removed entry 不要求伪造 replacement | Removed Surface、CI |
 | S24 | 实施使用 machine-readable Contract Pack、可并行 gate DAG、独立 sealed Golden oracle 与 `src/workflow-runtime/` 模块边界 | Compiler Toolchain、实施顺序、模块边界 |
-| S25 | Core Runtime/Compiler 固定 Node `26.5.0`、npm `11.17.0` 与 exact direct toolchain packages；`.nvmrc`/CI/lock integrity/Executor image identity 一致 | Compiler Toolchain、SQLite Profile、实施顺序 |
+| S25 | Core Runtime/Compiler 固定 Node `26.5.0`、npm `11.17.0` 与 exact direct toolchain packages；`.nvmrc`/CI/lock integrity/managed distribution identity 一致 | Compiler Toolchain、SQLite Profile、实施顺序 |
 | S26 | 首个 `local_single_user_safety@1`、Live Capacity baseline 与 `local_single_user_sqlite@1` 数值冻结；Safety immutable versioned、Capacity 可热调、SQLite restart/re-cert bound | Runtime Safety、SQLite Profile、Production Gate |
 | S27 | Runtime Command 使用 closed union、typed target、closed permission/reason/denial catalogs 与 first-class `WorkflowControlOwnership`；Administrative Abandon 强制 intent-bound 二次确认 | Creation、Command、权限与安全 |
 | S28 | Golden 由 AI/实现者起草、`human:local-owner` 语义批准、隔离 `golden-review/golden-seal` 打包；AI 和 Production Compiler 均不得批准 expected artifact | Compiler Conformance、发布门禁 |
@@ -149,6 +150,7 @@
 | S33 | Card 展示使用 versioned `CardPresentationContract` 和 typed action binding；Card delivery/UI 不是 Workflow 状态源 | Card Presentation、Outbox、Command |
 | S34 | Runtime Center 使用可重建 Projection API、稳定 deep link 和独立 renderer bundle；Feature renderer 保持独立 entry | Runtime Center、Projection、模块边界 |
 | S35 | 单 Agent 目标迭代复用同一 logical Node 的 immutable Attempt；`needs_revision` 通过 typed feedback continuation 创建下一 Attempt，耗尽后确定性失败，不新增 loop State/Node 或 Graph cycle | Delegation/System、Attempt、Retry、Recovery |
+| S36 | 本机 Core `node_service` 由项目托管的 content-addressed Node distribution 与稳定 Runtime Launcher 启动；launchd 不直接引用系统 Node，缺失或 identity mismatch 时禁止 fallback | Compiler Toolchain、SQLite Profile、模块边界、Production Gate |
 
 ## 背景
 
@@ -253,7 +255,7 @@ Workflow Instance                     外层状态机，可循环和长期运行
 28. 运行中心、Feature、API 与 Automation 共用 Runtime Command Gateway；Actor/Delegation、Permission/Policy/State Guard 与所有命令结果形成不可变审计。
 29. 权威时间全部是 UTC Unix milliseconds `*_at_ms`；CAS 使用 `row_version`，Fencing 使用明确 epoch，状态与关键字段组合由 SQLite CHECK/Partial Index 执行。
 30. Required compensation 的 `action_required/dead_letter/unknown` 均不算收敛；Scope 保持 closing、Run 保持 action-required并阻止 Child/Root Cut，只有成功 remediation 可继续，administrative abandon 不生成 Cut。
-31. Runtime 只能加载与当前 deployment/runtime/platform/arch/release artifact、DDL schema hash、Core build、Node/SQLite binary/compile options/native module、minimum machine class、startup smoke 和 versioned SQLite Execution Profile 逐项匹配的 certified Supported Limits；Safety Ceiling 必须满足 Product Floor 与 root-fence 终止性交叉约束。
+31. Runtime 只能加载与当前 deployment/runtime/platform/arch/release artifact、DDL schema hash、Core build、stable Launcher/managed Node distribution、Node/SQLite binary/compile options/native module、minimum machine class、startup smoke 和 versioned SQLite Execution Profile 逐项匹配的 certified Supported Limits；Safety Ceiling 必须满足 Product Floor 与 root-fence 终止性交叉约束。
 32. 本文持久化字段清单是 Normative Logical Schema，不是伪装成 SQL 的缩写 DDL；首个 Store patch 前必须产出并通过真实 SQLite 验证的完整 executable migration 与 Schema Manifest。
 33. Trace 是独立于 Workflow Projection 的通用执行观测模型；Workflow correlation 可空，且任一非空的下级标识必须具有完整上级所属链。非 terminal execution 验证 `workflow -> activation -> run -> scope -> node -> attempt`；terminal activation 合法地在 activation 层结束，禁止为其或独立 Agent 对话伪造 Run/Scope/Node。
 34. Direct Child Recipe allowlist 唯一归 Parent Recipe 所有，并与该 Recipe entrypoint 可达的 `start_child_workflow` exact refs 集合完全相等；Definition 不声明第二份 allowlist。Child Recipe dependency graph 第一版必须无环。
@@ -262,13 +264,14 @@ Workflow Instance                     外层状态机，可循环和长期运行
 37. 每个 Workflow 都必须具有真实 `Task Intake -> Revision -> Routing Attempt -> Creation Request` provenance。Required Child 的 provenance 由 Root Finalization Coordinator 根据 close/effect 的可信事实确定性创建；T8 不得直接插入一个没有 `creation_request_id` 的 Child，也不得伪造 nullable intake 旁路。
 38. Run/Workflow 的 `operational_state=action_required/quarantined` 由 open Operational Blocker 集合决定；Workflow business `status=active/completed/errored/cancelled` 不因 post-terminal cleanup blocker 被覆盖。恢复只能通过 T6e 关闭 blocker；只要仍有任一 open blocker，就不得把 operational state 设为 `healthy` 或恢复不符合 lifecycle/control 的普通 scheduler。
 39. SQLite 内部权威对象之间不得用无法建立真实 FK 的通用 `kind/id` 表示所有权或目标。多类型关系使用每种目标独立 nullable 列、真实 FK 和 exactly-one CHECK；仅外部 Principal/Provider/Locator 可以使用明确命名的 opaque `*_ref`。
-40. Production profile 必须匹配 `deployment_profile/runtime_surface/platform/arch/release_artifact/Node/SQLite/native module/Execution Profile` 完整认证键，并达到本文首发产品支持下限；低于下限不能以“认证值更小”为由静默上线。
+40. Production profile 必须匹配 `deployment_profile/runtime_surface/platform/arch/release_artifact/Launcher/managed Node distribution/Node executable/SQLite/native module/Execution Profile` 完整认证键，并达到本文首发产品支持下限；低于下限不能以“认证值更小”为由静默上线。
 41. Runtime 实施和 Production activation 都以机器生成的静态 absence baseline 与 `ProductSurfaceCoverageManifest` 为前提。任一已删除创建/控制/projection surface、旧 schema/resource key、绕过 Runtime Gateway 的直接 import 或候选资料可达路径重新出现时 fail-closed。
 42. Golden Conformance Bundle 的 expected diagnostics/Plan bytes/hash 必须来自独立手工审阅并 sealed 的 oracle artifact；生产 Compiler 或 `--accept` 模式不得生成自己的 expected output。
 43. 前置清理完成后，旧 Workflow 表/列/行、关联聊天、artifact/context、状态标签、旧代码、配置、Definition/Evaluator/Artifact Contract、测试 fixture、data directory 与兼容路径必须持续 absent；新 Runtime 不建立 archive/tombstone/compatibility reader，也不把任何旧业务资产或历史资料候选导入 Registry、Fixture、Build 或 Runtime。
 44. Production Registry 可以没有任何 launchable Domain Recipe。Contract Pack、Compiler、Store、Runtime 与 certification 使用 test-only synthetic Recipe/Definition；它们只存在于隔离测试 root，不得发布到 Production Registry 或形成创建入口。
 45. 没有 Published Recipe 时，通用 Intake 返回稳定 `no_route_available`，不得暴露全局 Definition/Capability 选择器；Runtime Center 在零 Recipe、零 Workflow、零 Run 时返回正常空 Projection。
 46. 单 Agent 目标迭代不改变 DAG 或 Node input snapshot：每次真实重执行创建一个 immutable Attempt，non-initial Attempt 恰好引用同 Node 的相邻 parent，parent 最多一个后继。`needs_revision`、typed feedback、Schedule 和下一 Attempt reservation 原子提交；只有 pass 发布 logical output，Node/Run/Workflow 三层额度耗尽保持不同结果。
+47. Production `node_service` 只能由稳定 Icarus Runtime Launcher 启动项目托管的 exact Node distribution。launchd、setup service 和 restart script 不得直接执行 `command -v node`、`/opt/homebrew/bin/node`、`/opt/homebrew/opt/node*` 或其他 moving system path；managed runtime 缺失、版本/hash 不匹配时必须 fail-closed，禁止回退系统 Node。Agent Container 的 VM 镜像身份由独立镜像门禁负责，不进入本机 Core launcher 或 SQLite certification key。
 
 ## 术语
 
@@ -629,9 +632,12 @@ interface SQLiteExecutionProfile {
   sqlite_compile_options_hash: string;
   better_sqlite3_version: string;
   better_sqlite3_native_module_hash: string;
+  managed_node_distribution_ref: VersionedRef;
+  managed_node_distribution_hash: string;
   node_runtime_version: string;
   node_executable_hash: string;
   release_artifact_hash: string;
+  runtime_launcher_hash: string;
   profile_hash: string;
 }
 
@@ -667,6 +673,9 @@ interface RuntimeSupportedLimits {
     release_artifact_hash: string;
     database_schema_hash: string;
     core_build_hash: string;
+    runtime_launcher_hash: string;
+    managed_node_distribution_ref: VersionedRef;
+    managed_node_distribution_hash: string;
     sqlite_execution_profile_ref: VersionedRef;
     sqlite_execution_profile_hash: string;
     benchmark_harness_version: string;
@@ -717,7 +726,7 @@ Safety ceilings 是 pinned、确定性的命名配置，不是隐藏默认值；
 
 Capacity 调低不会 cancel 已 admission 的工作；只停止新 admission，直到使用量回到新值以下。Blob hard limit 调低到当前 allocation 以下时进入可观测 `over_capacity`，阻止新 allocation并触发 GC，不删除仍被引用的数据；`minimum_free_disk_bytes` 只能调高，达到新阈值后立即阻止新 allocation。Capacity 改变不创建新 Safety version，也不能用于放宽 pinned quota。
 
-`RuntimeSupportedLimits` 不是手写默认值；它必须由相同 deployment/runtime/platform/arch/release artifact、DDL/schema hash、Core build、SQLite binary/compile options、完整 `SQLiteExecutionProfile` 和参考机器上的发布 benchmark 生成并以 `status=certified` 发布。Production v1 唯一首发认证目标是 `local_single_user + node_service + darwin/arm64`；Electron Renderer/Main、测试 Node、Rosetta/x64 或其他系统不得复用该认证。Electron 只通过 Runtime API/Command Gateway 访问，不得打开 Runtime DB。缺少 certified profile、profile 与当前完整认证键不匹配，或配置超过认证值时生产 Runtime 启动失败。
+`RuntimeSupportedLimits` 不是手写默认值；它必须由相同 deployment/runtime/platform/arch/release artifact、DDL/schema hash、Core build、Runtime Launcher、Managed Node Distribution、Node executable、SQLite binary/compile options、完整 `SQLiteExecutionProfile` 和参考机器上的发布 benchmark 生成并以 `status=certified` 发布。Production v1 唯一首发认证目标是 `local_single_user + node_service + darwin/arm64`；系统 Node、Electron Renderer/Main、测试 Node、Rosetta/x64 或其他系统不得复用该认证。Electron 只通过 Runtime API/Command Gateway 访问，不得打开 Runtime DB。缺少 certified profile、profile 与当前完整认证键不匹配，或配置超过认证值时生产 Runtime 启动失败。
 
 启动时先验证 certified profile 达到 `local_single_user_product_floor@1`，再做同名字段比较与下列终止性不等式；它们保证任意被配置允许并成功 materialize 的 Run 都能由一次不可拆 T7 root fence 收敛，不能出现“能创建、不能取消”的合法状态：
 
@@ -2789,6 +2798,7 @@ Workflow Definition Compiler、Scope Compiler 和 Static Lowerer 是不同信任
 
 ```text
 src/workflow-runtime/contracts/
+  toolchain/               Managed Node distribution、Compiler toolchain 与 launcher identity
   schemas/                 Definition/Recipe/Command/Transition/Source/Compiled IR JSON Schema
   catalogs/                Error Catalog、Fact/Event taxonomy、domain separators、format registry
   protocols/               lifecycle/control/operational transition tables、T0-T8/T6e command tables
@@ -2825,7 +2835,33 @@ Production v1 的 G0 精确工具链基线固定如下；`package.json` 中这�
 | `@types/node` | `26.1.1` | Dev dependency |
 | `@types/better-sqlite3` | `7.6.13` | Dev dependency |
 
-Repository 使用内容为 `26.5.0` 的 exact `.nvmrc` 作为唯一 Node version-manager source；CI 通过 `node-version-file: .nvmrc` 加载同一 patch，`package.json.packageManager` 固定 `npm@11.17.0`。Agent Container 不进入 SQLite certification key，但它的 Executor Artifact 必须固定 `node:26.5.0-slim` 的 immutable image digest，不能保留 moving tag。Electron 内置 Node 只属于 API client，不是 Runtime Node identity。
+Repository 使用内容为 `26.5.0` 的 exact `.nvmrc` 作为唯一 Node version-manager source；CI 通过 `node-version-file: .nvmrc` 加载同一 patch，`package.json.packageManager` 固定 `npm@11.17.0`。本机开发、build、native install 和 Core `node_service` 不依赖用户修改系统 Node，也不依赖 nvm/fnm/Volta、shell profile 或 Homebrew moving symlink，而是使用下列项目托管的 distribution。Agent Container 位于独立 VM，其 Node identity 由 VM image gate 保证，不属于本机 managed runtime、G0.1 或 SQLite certification key；Electron 内置 Node 只属于 API client，也不是 Runtime Node identity。
+
+```ts
+interface ManagedNodeRuntimeDistributionManifest {
+  format: 'icarus.managed-node-runtime-distribution/1';
+  ref: VersionedRef;
+  node_runtime_version: string;
+  npm_version: string;
+  platform: 'darwin';
+  arch: 'arm64';
+  distribution_origin: 'nodejs_official';
+  archive_filename: string;
+  archive_url: string;
+  archive_sha256: string;
+  node_executable_relative_path: 'bin/node';
+  node_executable_sha256: string;
+  manifest_hash: string;
+}
+```
+
+Production v1 的 exact distribution 固定为 `node-v26.5.0-darwin-arm64.tar.gz`、`https://nodejs.org/dist/v26.5.0/node-v26.5.0-darwin-arm64.tar.gz`、archive hash `sha256:ee920559aaa2391569cff4d737e3b83963430e3a14dedd91bfe0ff53171b5af9`、解包后 `bin/node` hash `sha256:cbee2298aee5cc476bf8d5441e7348b627254a39d869743a5b04489028c729d4`，且内置 npm 必须为 `11.17.0`。这些值来自已验证的 Node.js official distribution；Contract Pack 必须逐字节保存，bootstrap 不得只在运行时下载 moving `SHASUMS256.txt` 后信任同源返回，也不得从本机 Homebrew keg 复制二进制伪装成相同 distribution。
+
+Managed runtime 默认安装到 `~/Library/Application Support/Icarus/toolchains/node/<version>/<platform>-<arch>/<archive-sha256>/`。Bootstrap 由不依赖 Node 的 platform shell entry 执行：strict parse checked-in Manifest，下载到同 filesystem 临时目录，验证 archive hash，安全解包，拒绝 path traversal/symlink escape，验证 `bin/node` hash、`node --version` 和 bundled `npm --version`，再以 no-replace install + directory fsync 提交。已存在相同目录时必须完整复验；相同 ref 不同 hash 是 integrity failure。下载和解包只发生在 setup/upgrade，不发生在服务启动路径。
+
+`~/Library/Application Support/Icarus/bin/icarus-runtime` 是 launchd 唯一允许执行的稳定 Runtime Launcher；它从自身 `realpath` 所在的安装布局推导 runtime root，不读取 `HOME`、`PATH` 或 `ICARUS_*_HOME` 等继承环境来改写 production root，再通过原子 `active-node` pointer 选择上述 content-addressed installation，验证 pointer containment、Distribution Manifest、Node version/executable hash 和 active Core Release binding 后 `exec` managed `bin/node`。Setup 先旁路安装并验证新 distribution，再原子切换 pointer；旧进程继续使用原 binary，重启后才使用新 pointer。Launcher、pointer 或 managed runtime 缺失/损坏时返回稳定 identity error并退出，绝不尝试 `PATH`、`command -v node`、Homebrew、version manager 或 Electron Node fallback。测试把完全相同的 Launcher 安装到隔离临时布局并由其自身路径解析临时 root，不向 production Launcher 暴露 runtime-root override。Launcher source/hash 属于 Core Release artifact、SQLite Profile 与 G9 activation audit。
+
+本地所有最终 lock/native 证据和开发验证统一通过 `scripts/runtime-toolchain.sh exec -- <command>` 进入 managed `PATH`；`setup.sh` 负责在首次使用时自动安装，无需用户预装或切换系统 Node。CI 仍由 `actions/setup-node` 按 `.nvmrc` 提供同版本 Linux Node，并验证 npm/package-lock identity；CI Node executable hash 不复用 darwin/arm64 SQLite certification。
 
 依赖必须作为 direct dependency 由上述 exact package/lock integrity 固定，不能依赖 transitive Ajv v6 或 semver floating resolution。Repository wrapper、Workflow Schema Profile、format registry、subtype/proof algorithm 和 Plan normalizer 都是 versioned Core source；其源码 hash、Node/npm identity 与 package-lock hash 一并进入下列 Manifest。任何包版本、配置、wrapper source 或 runtime version 变化都产生新的 `compiler_version/toolchain_hash`，必须重跑全部 Golden Bundle；不能在旧 version 下静默改变输出。
 
@@ -4824,7 +4860,9 @@ data/workflow-runtime/workflow-runtime.db
 data/workflow-runtime/blobs/
 ```
 
-Production v1 固定发布 `local_single_user_sqlite@1`：`busy_timeout_ms=5000`、`page_size=4096`、`auto_vacuum=incremental`、`temp_store=memory`、`wal_autocheckpoint_pages=4096`、`journal_size_limit_bytes=67108864`、`cache_size_kib=32768`、`mmap_size_bytes=0`、`trusted_schema=false`、`recursive_triggers=false`、`read_uncommitted=false`、`locking_mode=normal`、`read_only_query_only=true`，并沿用类型中固定的 `journal_mode=wal/synchronous=full/foreign_keys=true`。Node/SQLite/source/compile-options/native module/release artifact 等 identity 字段在 exact Node `26.5.0` + `better-sqlite3@12.11.1` release build 上生成，不能手写或从开发机复制；G8 前该 Profile 只有 candidate 状态，不得伪造 `certified`。
+Production v1 固定发布 `local_single_user_sqlite@1`：`busy_timeout_ms=5000`、`page_size=4096`、`auto_vacuum=incremental`、`temp_store=memory`、`wal_autocheckpoint_pages=4096`、`journal_size_limit_bytes=67108864`、`cache_size_kib=32768`、`mmap_size_bytes=0`、`trusted_schema=false`、`recursive_triggers=false`、`read_uncommitted=false`、`locking_mode=normal`、`read_only_query_only=true`，并沿用类型中固定的 `journal_mode=wal/synchronous=full/foreign_keys=true`。Launcher/Node/SQLite/source/compile-options/native module/release artifact 等 identity 字段在 exact Node `26.5.0` + `better-sqlite3@12.11.1` release build 上生成，不能手写或从开发机复制；G8 前该 Profile 只有 candidate 状态，不得伪造 `certified`。
+
+上述 Node identity 必须来自 active `ManagedNodeRuntimeDistributionManifest` 对应的 content-addressed installation。G8 benchmark/certification 使用 managed launcher 启动的同一 `bin/node` 安装、构建并加载 `better-sqlite3`；G9 startup 重新验证 `realpath(process.execPath)` 位于 active managed installation、executable hash 与 Distribution/SQLite Profile 一致、launchd `ProgramArguments[0]` 为稳定 Icarus Runtime Launcher，且 Launcher/Core Release hash 与 activation audit 一致。仅有 `.nvmrc`、当前 shell `node --version` 或系统默认 Node 恰好相同不构成 Production runtime identity。
 
 `page_size/auto_vacuum` 是建库属性；修改必须新建/迁移数据库并重新认证。其他 PRAGMA 即使 SQLite 允许在连接上修改，Production 也只能通过新 immutable Profile、进程重启、DDL/smoke/benchmark 和新 certification key 应用，不能 hot reload。`auto_vacuum=incremental` 必须由 Blob/Store Coordinator 执行 bounded incremental-vacuum maintenance，禁止在普通请求事务内做无界 vacuum。
 
@@ -4852,7 +4890,7 @@ database.pragma('locking_mode = NORMAL');
 if (readOnly) database.pragma('query_only = ON');
 ```
 
-Profile loader 必须先验证 numeric 字段为有限 JS safe integer；除显式允许 `mmap_size_bytes=0` 的字段外均为正整数，enum/boolean 为 closed value，再允许上述 interpolation。Connection Factory 还要读取并回验全部 Profile PRAGMA 和 database-level `page_size/auto_vacuum`，并验证 deployment profile、runtime surface、`process.platform/process.arch`、release artifact hash、Node executable hash/version、SQLite version/source id、compile options hash、`better-sqlite3` version/native module hash 与 Profile/Certification 完全一致；Production activation 还要验证 minimum machine class，并在同一数据卷临时目录运行 certification 固定的 startup smoke harness，保存结果 hash/duration。不能只设置 PRAGMA 而忽略 identity fields，也不能自动改写数据库来迎合不匹配的 Profile。Repository 使用 exact `.nvmrc=26.5.0`、`packageManager=npm@11.17.0` 和 CI release image 固定 Node/npm patch identity；`package.json engines` 只能表达开发兼容性，不能作为 certification identity。
+Profile loader 必须先验证 numeric 字段为有限 JS safe integer；除显式允许 `mmap_size_bytes=0` 的字段外均为正整数，enum/boolean 为 closed value，再允许上述 interpolation。Connection Factory 还要读取并回验全部 Profile PRAGMA 和 database-level `page_size/auto_vacuum`，并验证 deployment profile、runtime surface、`process.platform/process.arch`、release artifact hash、Runtime Launcher hash、managed Node distribution ref/hash、Node executable hash/version、SQLite version/source id、compile options hash、`better-sqlite3` version/native module hash 与 Profile/Certification 完全一致；Production activation 还要验证 minimum machine class，并在同一数据卷临时目录运行 certification 固定的 startup smoke harness，保存结果 hash/duration。不能只设置 PRAGMA 而忽略 identity fields，也不能自动改写数据库来迎合不匹配的 Profile。Repository 使用 exact `.nvmrc=26.5.0`、`packageManager=npm@11.17.0` 和 CI toolchain 固定 Node/npm patch identity；`package.json engines` 只能表达开发兼容性，不能作为 certification identity。Production Core 启动禁止读取系统 Node 或根据当前 PATH/环境变量改写 active distribution/profile。
 
 关键 CAS transaction 使用 `BEGIN IMMEDIATE`，避免读取状态后才在写阶段失败；所有 composite FK/unique constraint 必须由 SQLite 实际执行。需要 WAL、durability、Writer 竞争或 crash 行为的测试必须使用真实文件 SQLite，不能用 `:memory:`。Runtime DB 与 Blob 目录作为一组恢复资产，备份使用 SQLite Backup API/一致性快照；恢复后执行 blob length/hash 与 orphan scan。
 
@@ -5475,11 +5513,15 @@ root scope
 
 ## 模块边界
 
-全部新实现位于 `src/workflow-runtime/`，禁止继续向 `src/` 顶层增加 `workflow-*.ts`。目录与职责固定如下：
+全部 Runtime 语义实现位于 `src/workflow-runtime/`，禁止继续向 `src/` 顶层增加 `workflow-*.ts`。唯一 host-infrastructure 例外是必须在 Node 尚未安装时可运行的 platform bootstrap、managed toolchain wrapper、stable Runtime Launcher，以及把 launchd 指向该 Launcher 的既有 setup/service renderer；它们只能安装、选择、验证并 `exec` Core，不能包含 Workflow、Store、Compiler 或 Registry 语义。目录与职责固定如下：
 
 | Module | 职责 |
 | --- | --- |
-| `contracts/` | Machine-readable Schema/Catalog/Protocol/Safety/DDL metadata 与生成类型 |
+| `contracts/` | Machine-readable Toolchain/Schema/Catalog/Protocol/Safety/DDL metadata 与生成类型 |
+| `src/workflow-runtime/contracts/toolchain/` | Managed Node Distribution Manifest/schema、Compiler Toolchain identity 与 hash fixture |
+| `setup.sh`、`scripts/runtime-toolchain.sh` | 无 Node 前置依赖的 managed distribution install/verify/exec bootstrap；不得修改系统 Node |
+| `scripts/runtime-launcher.sh` | stable launcher source；从自身安装位置解析 root，只验证 active pointer/distribution/Core binding 并 `exec` managed Node；production 不接受环境覆盖 |
+| `setup/service.ts`、`setup/launchd.ts`、`launchd/` | 生成/安装只指向 stable Runtime Launcher 的 service config；不得解析系统 Node 路径 |
 | `creation/recipe-registry.ts` | Recipe/routing scope/execution policy 发布、依赖、版本与 owner 校验 |
 | `creation/task-intake.ts` | Task envelope、clarification/confirmation、transition intake 与 routing attempt |
 | `creation/routing-resolver.ts` | 受限 Macro Router、deterministic resolution、T0/T0p 与幂等创建 |
@@ -5520,7 +5562,7 @@ root scope
 | `projection/runtime-center-api.ts` | closed list/detail cursor/filter/sort、status 与 typed deep link API |
 | `projection/runtime-center-renderer/` | 独立 Runtime Center renderer entry/bundle；不得 import Feature renderer |
 
-依赖方向固定为 `contracts <- compiler/registry/store <- creation/runtime <- projection/host adapters`。`contracts` 不 import DB、Feature 或 Runtime；Compiler 只读 immutable contract/registry snapshot，不 import Store transaction；Store 不 import Compiler 或业务 Adapter；Projection/Renderer 不获得 write connection；外部 Worker/Adapter 只能调用 Callback/Broker/Command API。CI 使用 dependency test 扫描 import graph，发现逆向依赖或 Runtime DB 直写即失败。
+依赖方向固定为 `contracts <- compiler/registry/store <- creation/runtime <- projection/host adapters`。`contracts` 不 import DB、Feature 或 Runtime；Compiler 只读 immutable contract/registry snapshot，不 import Store transaction；Store 不 import Compiler 或业务 Adapter；Projection/Renderer 不获得 write connection；外部 Worker/Adapter 只能调用 Callback/Broker/Command API。Host bootstrap/launcher 只能读取 closed Toolchain/Core Release Manifest，不得 import Runtime TypeScript、打开 Runtime DB、读取 Feature resource 或根据 PATH 猜 Node。CI 使用 dependency test 扫描 import graph，发现逆向依赖、Runtime DB 直写或 system-Node fallback 即失败。
 
 新的 outer workflow coordinator 只负责 activation 边界和 root completion 后的外层 transition；开发 baseline 已不存在可复用的旧 orchestration implementation。Graph Runtime 不依赖 Runtime Center UI；UI 通过 projection/query 和 command API 交互。全局 Trace 查询依赖通用 Trace Store 与 correlation query，不把独立 Agent execution 反向写成 Workflow Projection。
 
@@ -5546,6 +5588,7 @@ action-required/quarantine blocker; remediation success/retry/exhaustion
 
 | Area | 必须始终成立 |
 | --- | --- |
+| Host toolchain | Bootstrap 在临时 runtime home 安装 exact official distribution且不修改系统 Node；archive/executable/npm mismatch、unsafe archive entry、partial install、invalid active pointer 全部 fail-closed；launchd 只指向 stable Launcher；Launcher 不读取 PATH、不 fallback，并使实际 `process.execPath/version/hash` 匹配 active Manifest |
 | Compiler | pinned Toolchain 重放 Golden Bundle 逐字节一致；canonicalization 幂等；set-like 顺序不改 plan hash；accepted graph 无依赖环；无法证明 assignability 必须拒绝 |
 | Runtime | Node terminal 不重开；Edge/Cut/Close 只提交一次；Trigger/Input snapshot 不变；Close 后普通结果不 publish |
 | Quality revision | Node input snapshot 跨轮不变；每个 non-initial Attempt 恰有一个同 Node 相邻 parent且 parent 最多一个后继；needs-revision/feedback/Schedule/reservation 全成或全不变；下一 Context Pack 只引用 exact latest envelope；pass 只发布一次；fail 不 retry；Node ceiling、Run shared budget 与 Workflow deadline 产生不同终态 |
@@ -5562,9 +5605,9 @@ action-required/quarantine blocker; remediation success/retry/exhaustion
 | Trace | 独立 Agent Trace 不要求 Workflow；non-null Workflow correlation 所属链完整；对话发起 Workflow 可同时按 causation 与 Attempt 查询；禁止 orphan/伪造关联 |
 | Time/DDL | 权威时间均为 safe-integer `*_at_ms`；Activation/Finalization/Fact/Blocker/Command 的状态 CHECK、row version、typed FK/exactly-one 与 partial-index 查询覆盖一致；database/connection PRAGMA 与完整 certification key 逐项匹配 Profile |
 
-所有时间测试使用 Virtual Clock，禁止真实 `sleep()`；Fake Adapter 可确定性返回 `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`。Fault Injection 覆盖 intent、dispatch、external apply、receipt、Evaluator decision/feedback envelope/quality-revision Schedule/next Attempt、quality exhaustion detail、Node output、Fact/Event、Close Request、T0p transition provenance、Root Finalization preflight/retry、T8 required-child + Intake/Creation Request + source-activation completion原子提交、Operational Blocker create/T6e resolve/last-blocker state restore、Administrative Abandon request/expiry/confirm/consume、Notification intent/delivery failure、Completion Cut、Workflow transition，以及 Blob file fsync/install/directory fsync/DB commit、GC mark/delete/finalize和backup pin/copy边界；SQLite 事务内 crash 必须全回滚，外部 effect 边界按 operation key/receipt/reconciliation 收敛。Upgrade fixture 覆盖 Core Protocol/ABI 兼容与拒绝、Prompt Rebase pass/fail、安全 section 覆盖和旧 Run exact snapshot。
+所有时间测试使用 Virtual Clock，禁止真实 `sleep()`；Fake Adapter 可确定性返回 `not_applied/applied_with_receipt/applied_but_receipt_lost/still_running/unknown/cancelled/compensated`。Fault Injection 覆盖 managed Node archive download/hash/安全解包、temp install/fsync/no-replace/active-pointer swap、Launcher verify/exec，intent、dispatch、external apply、receipt、Evaluator decision/feedback envelope/quality-revision Schedule/next Attempt、quality exhaustion detail、Node output、Fact/Event、Close Request、T0p transition provenance、Root Finalization preflight/retry、T8 required-child + Intake/Creation Request + source-activation completion原子提交、Operational Blocker create/T6e resolve/last-blocker state restore、Administrative Abandon request/expiry/confirm/consume、Notification intent/delivery failure、Completion Cut、Workflow transition，以及 Blob file fsync/install/directory fsync/DB commit、GC mark/delete/finalize和backup pin/copy边界；SQLite 事务内 crash 必须全回滚，外部 effect 边界按 operation key/receipt/reconciliation 收敛。Upgrade fixture 覆盖 managed Node side-by-side install/rollback、Core Protocol/ABI 兼容与拒绝、Prompt Rebase pass/fail、安全 section 覆盖和旧 Run exact snapshot。
 
-CI 分层：普通提交运行 Contract Pack conformance、Sealed Compiler Golden Bundle、固定 seed、小型 exhaustive、数百组 property、真实 data/store root write boundary、静态 absence baseline、removed surface negative fixtures 与候选目录不可达证明；完整回归扩大 seed、事件长度和 crash point；发布门禁另运行真实 SQLite 的 Supported Limit T3/T7/Root Finalization benchmark，并对同一 source build 重新生成 absence/coverage hash。所有随机失败都必须能由 seed + shrunk event list 完整重放。
+CI 分层：普通提交运行 managed toolchain manifest/bootstrap/launcher/launchd conformance（使用临时 runtime home 和本地 archive fixture，不写系统目录）、Contract Pack conformance、Sealed Compiler Golden Bundle、固定 seed、小型 exhaustive、数百组 property、真实 data/store root write boundary、静态 absence baseline、removed surface negative fixtures 与候选目录不可达证明；完整回归扩大 seed、事件长度和 crash point；发布门禁另运行真实 managed darwin/arm64 Node distribution、真实 SQLite 的 Supported Limit T3/T7/Root Finalization benchmark，并对同一 source build 重新生成 absence/coverage hash。所有随机失败都必须能由 seed + shrunk event list 完整重放。
 
 ## 开发期实施顺序
 
@@ -5572,7 +5615,7 @@ CI 分层：普通提交运行 Contract Pack conformance、Sealed Compiler Golde
 
 本文批准即授权从第 1 步开始实施，不再等待额外架构确认。Contract Pack、Executable DDL、Schema Manifest、Sealed Golden Bundle 与 certified Supported Limits 是对应 gate 必须实际生成并由 CI/benchmark 证明的 exit artifact，不是批准本文前要伪造的附件，也不能因目标架构已确认而跳过。下列编号表示 capability gate，不表示所有工作必须串行；只有依赖 gate 通过后才能合并依赖它的实现。当前“可直接执行”指可以从 Contract Pack/Spec Stabilization 开工，不表示 Store 或 Production 已提前通过后续门禁。
 
-1. **Spec Stabilization / Contract Pack Gate**：在 `src/workflow-runtime/contracts/` 冻结 Definition/Recipe/Command/Transition、Feature Manifest vNext、Card Presentation、Source/Compiled IR、Logical Schema typed relation metadata、Operational Blocker/T6e、`local_single_user_safety@1`/Capacity baseline/Product Floor/Retention、`local_single_user_sqlite@1`、Compiler Toolchain Manifest、Command/Permission/Reason/Denial Catalog 和 Golden Draft/Review；按本文 S25 固定工具链 identity；生成并通过静态 absence、surface coverage 与 candidate boundary manifest，不实现 durable T0。
+1. **Spec Stabilization / Contract Pack Gate**：在 `src/workflow-runtime/contracts/` 冻结 Managed Node Runtime Distribution/Compiler Toolchain、Definition/Recipe/Command/Transition、Feature Manifest vNext、Card Presentation、Source/Compiled IR、Logical Schema typed relation metadata、Operational Blocker/T6e、`local_single_user_safety@1`/Capacity baseline/Product Floor/Retention、`local_single_user_sqlite@1`、Command/Permission/Reason/Denial Catalog 和 Golden Draft/Review；按本文 S25 固定 Node/npm/package identity，并交付不修改系统 Node 的 side-by-side bootstrap、managed exec wrapper、stable Runtime Launcher、launchd binding 与 fail-closed fixture；生成并通过静态 absence、surface coverage 与 candidate boundary manifest，不实现 durable T0。
 2. **DDL 与 Store 基座 Gate**：产出覆盖全部持久化对象的 canonical executable migration、Schema Manifest、typed-FK/schema-lint、constraint/query-plan fixtures 和 empty-file SQLite DDL Gate；通过后实现独立 `workflow-runtime.db`、Connection Factory、短事务/CAS 与基础 query API。
 3. **确定性 Compiler / Sealed Golden Gate**：可在第 1 步通过后与第 2 步并行；按 pinned Toolchain 实现 strict parser、Schema/Profile、RFC 8785/domain hash、Definition/Scope Compiler、binding、DAG、condition/trigger/input、completion、policy/safety、Proof/Program 与 static child closure。Expected Plan/diagnostics 由独立 oracle review + `golden-seal` 生成 sealed artifact；逐字节通过完整 Sealed Golden Bundle 后才允许 Publisher 激活 executable resource。
 4. **Value/Registry/Authoring/Publish 基座**：实现 Value/Blob Write Intent/GC/Backup、Registry/Closure/Snapshot/Retention、Feature Manifest vNext、staged Publish、Execution Artifact 与 Core Protocol/ABI compatibility preflight；实现 `scaffold -> validate -> compile -> dry-run -> review -> publish -> activate` developer toolchain。此时尚不开放 Workflow 创建入口。
@@ -5581,13 +5624,13 @@ CI 分层：普通提交运行 Contract Pack conformance、Sealed Compiler Golde
 7. **动态结构与关闭协议**：实现 subgraph/expand/map、quorum/fail-fast、hierarchical fence、Fact Store、Root Finalization Schedule、required/best-effort child Workflow effect、T7/T8 与 compensation barrier。
 8. **控制、Card、Projection 与恢复**：实现 pause/resuming/cancel、root coordinator、checkpoint、domain claim handoff/release、T6e、Recovery、Runtime Command Gateway、Card Presentation/typed action、Runtime Center Projection/API/deep link 与独立 renderer bundle；仍只在 test-only bootstrap 下执行未认证 Runtime。
 9. **认证门禁**：完成独立 Reference Model、Property/Model/Fault tests 与真实 SQLite Supported Limit T3/T7/Root-Finalization benchmark，达到 Product Floor/transaction budget，并发布与完整 certification key 精确绑定的首个 certified profile。
-10. **Production Activation**：对同一 release build 重新生成并校验 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`，加载 G8 certified profile并运行 startup smoke；随后原子激活 Core/Feature Registry pointer 与 Runtime Center Projection generation。Production Recipe inventory 可以为空；为空时验证通用 Intake=`no_route_available`、Runtime Center Workflow/待处理空状态和非 Workflow Trace 正常。存在 Published Recipe 时只验证其标准 Publish/Activate 合同，不增加任何历史候选特例。
+10. **Production Activation**：对同一 release build 重新生成并校验 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`，由 stable Launcher 启动 active managed Node distribution，验证 Launcher/Core Release/Distribution/Node executable/native module/SQLite Profile 完整 certification key并运行 startup smoke；随后原子激活 Core/Feature Registry pointer 与 Runtime Center Projection generation。Production Recipe inventory 可以为空；为空时验证通用 Intake=`no_route_available`、Runtime Center Workflow/待处理空状态和非 Workflow Trace 正常。存在 Published Recipe 时只验证其标准 Publish/Activate 合同，不增加任何历史候选特例。
 
 Gate 依赖与可并行关系固定如下：
 
 | Gate | Depends on | 可并行工作 | Exit artifact |
 | --- | --- | --- | --- |
-| G0 Contract Pack/Static Baseline | 无 | 无 | schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes |
+| G0 Contract Pack/Static Baseline | 无 | 无 | managed toolchain/launcher proof + schemas/catalogs/protocols/safety/draft bundle + absence/coverage/candidate hashes |
 | G1 DDL/Store | G0 | G2 Compiler | migration + Schema Manifest + SQLite fixtures |
 | G2 Compiler/Golden | G0 | G1 DDL | sealed Golden Bundle + compiler/toolchain hash |
 | G3 Registry/Authoring/Publish | G1 + G2 | Reference Model skeleton | manifest/authoring/publish/retention/ABI fixtures |
@@ -5678,6 +5721,7 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 - 数据库 schema、composite FK、unique/CAS、outbox 和 checkpoint 以本文最终模型建立开发期 baseline；不存在需要兼容的历史执行记录。
 - 前置清理前的 Workflow execution/history、关联聊天、projection、audit、artifact/context/business asset 一律不导入 `workflow-runtime.db`，也不归档。静态 absence baseline 必须持续证明旧表/列/行、filesystem tree、route、resource 与 writer 不存在；不建立双写、compatibility reader、archive、tombstone 或恢复副本。
 - Contract Pack 是类型、closed enum、protocol、Safety/Retention 和 DDL metadata 的唯一机器权威；新代码全部位于 `src/workflow-runtime/` 并通过 import boundary test，禁止在 `src/` 顶层继续堆叠新 Runtime 模块。
+- Core build、native install、测试与 `node_service` 共用 exact managed Node distribution；系统 Node 只可用于启动无 Node 依赖的 bootstrap，不能成为 lock/native/Runtime 证据。launchd 与 restart/setup path 一次性切换到 stable Runtime Launcher，不保留“开发用 managed Node、生产用 `command -v node`”双轨，也不在 managed runtime 不可用时兼容回退。
 - Sealed Compiler Golden Bundle 固定 raw bytes、完整 Registry/Policy/Safety、hand-reviewed diagnostics、canonical Plan 与 source/plan/proof/program hash，覆盖 static lowering、condition、wait、nested subgraph、expand、map 和 policy intersection；production Compiler 不能生成 expected artifact。Crash fixtures 覆盖 T1-T8/T6e、Fact/Event、Operational Blocker 与 Root Finalization 每个 commit 前后。
 - 旧 Workbench/Workflow 表、计数、状态标签、旧 state 字段、API/UI 分支和 projection 代码保持 absent；新 Runtime Center Projection 从 Graph Store/Event 在新 schema 中全量重建，不复用旧表、旧列、旧 label 或兼容 alias。UI 聚合不得把独立 Agent Trace 写成 Workflow 权威事实。
 - Migration candidate 只受独立不可达与 checksum gate 管理；新 Recipe/Capability、test fixture、Feature loader、Compiler、Build 和 Runtime 不读取候选文件，也不为候选内容建立特判。
@@ -5703,7 +5747,8 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 - Authoring/Publish 必须完整通过 `scaffold -> validate -> compile -> dry-run -> review -> publish -> activate`；每个 stage 的 input/output/hash/diagnostics 可审计，source/staging/dry-run/Published ownership 分离，dry-run 证明 Active Registry/Event head 不变，`human:local-owner` approval 绑定完整 diff，Publish/Activate crash 后幂等恢复。v1 不暴露通用可视化 Workflow/Card 编辑器。
 - Base Prompt 与 Local Published Variant 分离；自进化 Candidate 只有通过 Promotion Policy/Evaluator 后才能 Local Publish。Feature 升级对旧 Base、本地 Variant、新 Base 做结构化 Rebase，Contract 变化或评估失败时受影响 Capability 不切换。
 - Strict JSON 拒绝 duplicate key/unknown field/非标准值；受限 `icarus.workflow-schema/1`、RFC 6901、RFC 8785 与 domain-separated SHA-256 fixture 产生稳定 source/plan hash。不同 Schema 连接必须保存 sound subtype proof，non-total pointer/无法证明/隐藏转换均拒绝。
-- Contract Pack 对 Schema/Catalog/Protocol/Safety/Retention/typed relation metadata 提供唯一 machine-readable truth，并与 TypeScript/Markdown conformance；Core/Compiler 使用 Node `26.5.0`、npm `11.17.0`、`better-sqlite3@12.11.1`、`jsonc-parser@3.3.1`、Ajv `8.20.0` Draft 2020-12、`ajv-formats@3.0.1`、`json-canonicalize@2.0.0`、`fast-check@4.9.0` 与 exact lock integrity。`.nvmrc`/CI/packageManager/Executor image identity 不一致时失败。Sealed Golden Bundle 的 expected artifact 由 AI/实现者起草、`human:local-owner` 通过隔离 `golden-review` 语义批准、`golden-seal` 打包；Production Compiler/AI 无 auto-accept/approval 路径，raw bytes、Registry/Policy/Safety、diagnostics、canonical Plan bytes 与全部 Hash 逐字节重放。Toolchain/Node/wrapper 改变但 version/hash 未改变时发布失败。
+- Contract Pack 对 Toolchain/Schema/Catalog/Protocol/Safety/Retention/typed relation metadata 提供唯一 machine-readable truth，并与 TypeScript/Markdown conformance；Core/Compiler 使用 Node `26.5.0`、npm `11.17.0`、`better-sqlite3@12.11.1`、`jsonc-parser@3.3.1`、Ajv `8.20.0` Draft 2020-12、`ajv-formats@3.0.1`、`json-canonicalize@2.0.0`、`fast-check@4.9.0` 与 exact lock integrity。`.nvmrc`、CI、packageManager、Managed Node Distribution Manifest、managed exec wrapper、Runtime Launcher 与实际 `process.execPath/version/hash` 任一不一致时失败。Sealed Golden Bundle 的 expected artifact 由 AI/实现者起草、`human:local-owner` 通过隔离 `golden-review` 语义批准、`golden-seal` 打包；Production Compiler/AI 无 auto-accept/approval 路径，raw bytes、Registry/Policy/Safety、diagnostics、canonical Plan bytes 与全部 Hash 逐字节重放。Toolchain/Node/wrapper 改变但 version/hash 未改变时发布失败。
+- Fresh-home toolchain fixture 能在不预装匹配 Node、且不修改调用前后系统 `node/npm` path/version 的情况下，自动安装 exact official darwin/arm64 distribution并用它完成 lock/native install、typecheck 和 test。重复 install 幂等；archive/executable/npm hash mismatch、安全解包失败、partial install、active pointer 越界/损坏和 managed runtime 删除均 fail-closed。Fixture 把 production-identical Launcher 安装到临时布局并验证其按自身 `realpath` 定位该布局；继承环境不能把它改指系统 Node 或其他 runtime root。launchd 永久只执行 stable Icarus Runtime Launcher，Node 升级只旁路安装并原子切换 pointer，不要求用户编辑 plist。Agent Container 继续由独立 VM image gate 启动，不参与该 fixture。
 - 每次进入 State 都创建唯一 Activation；每个 non-terminal activation 唯一对应 root run，T8 对 normal/error/local/global-cancel 路径都原子执行 source activation `active -> completed`。Terminal activation 不创建 Run、在 T8 原子完成并保留为 Workflow 最终 `state_instance_id`；Administrative Abandon 则把当前 non-terminal activation `active -> abandoned`，不生成 Cut。Child scope 只以 append-only Run Manifest 增加，已存在 plan 永不修改。
 - Compiler 对 control/data/guard dependency 并集做无环检查，并拒绝跨 scope edge。
 - Condition 只读取允许的 frozen fact，route group 解析原子、确定且可重放。
@@ -5744,11 +5789,11 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 - 全局 Trace 保留 Workflow 与非 Workflow 执行；独立对话 Trace 只要求 conversation/message/agent execution correlation，Workflow Trace 的 activation/run/scope/node/attempt 所属链可验证。对话发起 Workflow 时支持 causation 与 Attempt 双向查询，禁止为了统一展示创建伪 Workflow。
 - Feature UI 负责领域任务发起、产出解释和 typed Business Command；Runtime Center 只提供跨 Feature 索引、统一待处理、通用 Runtime Command、诊断、审计和深链，不重复实现完整领域工作面。
 - Engine error、action-required 与 quarantine 边界明确；integrity quarantine 停止所有状态推进且不能伪造 cut，只能恢复可信数据或写独立审计的 administrative abandon。
-- Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建的新 Projection；跨库只走幂等 Outbox。Bootstrap 在建表前固定 database-level `page_size=4096/auto_vacuum=incremental`；所有 Runtime 连接由统一 Factory 按 `local_single_user_sqlite@1` 设置并回验 WAL/FULL/FK、timeout/temp/checkpoint、journal/cache/mmap 与 trusted-schema/trigger/read/locking/query-only 全部 PRAGMA，启动同时核对 SQLite/source/compile-options、`better-sqlite3@12.11.1` native module 与 Node `26.5.0` identity。SQLite Profile 只能通过新 version、重启和重新认证修改，不能 production hot reload。
+- Workflow 权威事实只写独立 `workflow-runtime.db`，`messages.db` 仅保存可重建的新 Projection；跨库只走幂等 Outbox。Bootstrap 在建表前固定 database-level `page_size=4096/auto_vacuum=incremental`；所有 Runtime 连接由统一 Factory 按 `local_single_user_sqlite@1` 设置并回验 WAL/FULL/FK、timeout/temp/checkpoint、journal/cache/mmap 与 trusted-schema/trigger/read/locking/query-only 全部 PRAGMA，启动同时核对 SQLite/source/compile-options、`better-sqlite3@12.11.1` native module、Managed Node Distribution ref/hash、Node `26.5.0` executable hash 与 stable Launcher/Core Release identity。SQLite Profile 只能通过新 version、重启和重新认证修改，不能 production hot reload。
 - Logical Schema 不含 `control_epoch`、无后缀时间或 `version/timestamps` 缩写；absolute time 全部是 UTC Unix millisecond `*_at_ms`，CAS 使用 `row_version`，状态组合由 SQLite CHECK，Deadline/Retry/Lease/Outbox/TTL 使用 Partial Index。内部多类型关系全部展开为 typed nullable FK + exactly-one CHECK，external ref 在 Manifest 显式标注；migration 不含 polymorphic `kind/id`、`error fields/error_json` 或无 target metadata 的裸 ref。Executable DDL Gate 必须覆盖 Value ownership、Registry/Retention/Backup、Activation/Transition/Root Finalization、Fact/Operational Blocker、Command/Confirmation/Invocation 等全部持久化对象，并通过真实文件 SQLite migration、reopen、integrity/foreign-key check、Schema Manifest、constraint/schema-lint fixture 与固定查询的 query-plan fixture。
 - Checkpoint schema v7 不含 `controlEpoch`，只保存用于水位定位的 `rowVersion`；权威更新时间使用 `updatedAtMs` safe integer，ISO 时间只能由 API/运行中心 projection 派生。
 - Fixture、Property Test、独立 Reference Model、Virtual Clock/Fake Adapter 与 Fault Injection 同为强制门禁；随机失败保存 seed、shrinking 后转成永久回归 Fixture。
 - T3/T7/Root Finalization 使用真实文件 SQLite 在 versioned Supported Limit 上覆盖最坏 Graph/Scope/required-child 形状；certified profile 达到 `local_single_user_product_floor@1`，并通过 T3/T7/T8 p99 250/1000/500 ms、复杂度和正确性预算；配置不得超过认证上限。
 - 未认证阶段只有 fixture/Fake Adapter/test-data-dir 隔离的 test-only bootstrap 可以执行；任何真实 ingress/Adapter 的 Production Runtime 都必须加载与 DDL/Core/SQLite binary+compile options/Execution Profile/benchmark harness 精确匹配的 certified profile。
-- Production v1 只允许 `local_single_user + node_service + darwin/arm64` 完整 certification key、稳定 `human:local-owner` 与可信 Publisher/Executor；Electron/其他架构不能复用 profile，未受信任执行代码和远程多用户模式必须 fail-closed。Activation 对同一 source build 验证 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`：旧 table/column/row、旧关联字段、artifact/context asset、旧 data root、代码/route/config/Definition/Evaluator/Artifact Contract/fixture/import 全部 absent，removed surface 不得恢复，候选目录不得进入可执行闭包；不允许 archive/tombstone/compatibility reader 或历史导入路径。
+- Production v1 只允许 `local_single_user + node_service + darwin/arm64` 完整 certification key、stable Launcher + active managed Node distribution、稳定 `human:local-owner` 与可信 Publisher/Executor；系统 Node、Electron/其他架构不能复用 profile，未受信任执行代码和远程多用户模式必须 fail-closed。Activation 对同一 source build 验证 `WorkflowRuntimeAbsenceBaseline`、`ProductSurfaceCoverageManifest` 与 `MigrationCandidateBoundaryManifest`：旧 table/column/row、旧关联字段、artifact/context asset、旧 data root、代码/route/config/Definition/Evaluator/Artifact Contract/fixture/import 全部 absent，removed surface 不得恢复，候选目录不得进入可执行闭包；不允许 archive/tombstone/compatibility reader 或历史导入路径。
 - Domain recipe 能组合完整 graph 能力而无需修改 core runtime。
