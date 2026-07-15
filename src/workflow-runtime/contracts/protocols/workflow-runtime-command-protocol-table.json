@@ -1,0 +1,499 @@
+{
+  "format": "icarus.workflow-runtime-command-protocol-table/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-command-protocol-table",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-command-protocol-table:1\n",
+  "hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789",
+  "payload": {
+    "run_protocol_major": 1,
+    "target_kinds": [
+      "workflow",
+      "run",
+      "node",
+      "retry_schedule",
+      "effect_operation",
+      "operational_blocker"
+    ],
+    "authorization_intersection": [
+      "actor_permission",
+      "resource_scope_or_ownership",
+      "feature_ceiling",
+      "published_command_policy",
+      "state_guard",
+      "expected_row_version"
+    ],
+    "confirmation_ttl_ms": 300000,
+    "entries": [
+      {
+        "command_type": "pause_run",
+        "target_kind": "run",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.operate"
+        },
+        "allowed_reason_codes": [
+          "operator_requested",
+          "investigation"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 0,
+        "confirmation_ref_required": false,
+        "policy_guard": "command_policy_allow_pause",
+        "state_guard": "run_running_nonclosed_healthy",
+        "transaction_protocol": "COMMAND",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "resume_run",
+        "target_kind": "run",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.operate"
+        },
+        "allowed_reason_codes": [
+          "operator_requested",
+          "investigation"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 0,
+        "confirmation_ref_required": false,
+        "policy_guard": "command_policy_allow_resume",
+        "state_guard": "run_paused_nonclosed_healthy",
+        "transaction_protocol": "COMMAND",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "cancel_run",
+        "target_kind": "run",
+        "permission_rule": {
+          "kind": "ownership_or_fallback",
+          "own_permission": "workflow.cancel.own",
+          "fallback_permission": "workflow.cancel.any"
+        },
+        "allowed_reason_codes": [
+          "operator_requested",
+          "superseded",
+          "invalid_input",
+          "no_longer_needed",
+          "unrecoverable_state",
+          "external_effect_unverifiable"
+        ],
+        "allowed_actor_kinds": [
+          "human",
+          "feature_service",
+          "automation"
+        ],
+        "minimum_evidence_refs": 0,
+        "confirmation_ref_required": false,
+        "policy_guard": "command_policy_allows_local_graph_cancel",
+        "state_guard": "current_run_nonclosed_healthy",
+        "transaction_protocol": "T7c",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "cancel_workflow",
+        "target_kind": "workflow",
+        "permission_rule": {
+          "kind": "ownership_or_fallback",
+          "own_permission": "workflow.cancel.own",
+          "fallback_permission": "workflow.cancel.any"
+        },
+        "allowed_reason_codes": [
+          "operator_requested",
+          "superseded",
+          "invalid_input",
+          "no_longer_needed",
+          "deadline_enforced",
+          "safety_enforced",
+          "unrecoverable_state",
+          "external_effect_unverifiable"
+        ],
+        "allowed_actor_kinds": [
+          "human",
+          "feature_service",
+          "automation",
+          "system"
+        ],
+        "system_grant": {
+          "actor_kind": "system",
+          "reason_codes": [
+            "deadline_enforced",
+            "safety_enforced"
+          ],
+          "predicate": "due_target",
+          "authority_scope": "cancel_workflow_only"
+        },
+        "minimum_evidence_refs": 0,
+        "confirmation_ref_required": false,
+        "policy_guard": "command_policy_allows_workflow_cancel_or_system_grant",
+        "state_guard": "workflow_active_current_run_nonclosed_healthy",
+        "transaction_protocol": "T7c",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "skip_node",
+        "target_kind": "node",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.node.skip"
+        },
+        "allowed_reason_codes": [
+          "operator_requested",
+          "invalid_input",
+          "no_longer_needed"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 0,
+        "confirmation_ref_required": false,
+        "policy_guard": "command_policy_allow_manual_skip",
+        "state_guard": "run_paused_node_nonterminal_no_unknown_effect",
+        "transaction_protocol": "COMMAND",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "advance_retry_schedule",
+        "target_kind": "retry_schedule",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.retry.advance"
+        },
+        "allowed_reason_codes": [
+          "operator_requested",
+          "dependency_recovered",
+          "credential_restored"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 0,
+        "confirmation_ref_required": false,
+        "policy_guard": "command_policy_allow_retry_wait_advance",
+        "state_guard": "run_paused_schedule_scheduled_node_retry_wait_healthy",
+        "transaction_protocol": "T6d",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "reconcile_effect",
+        "target_kind": "effect_operation",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.effect.remediate"
+        },
+        "allowed_reason_codes": [
+          "investigation",
+          "dependency_recovered",
+          "credential_restored",
+          "receipt_recovered",
+          "provider_reconciled",
+          "not_applied_verified"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 0,
+        "confirmation_ref_required": false,
+        "policy_guard": "receipt_remediation_contract_allows_reconcile",
+        "state_guard": "effect_open_or_action_required_same_effect_key",
+        "transaction_protocol": "T6e",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "submit_effect_receipt",
+        "target_kind": "effect_operation",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.effect.remediate"
+        },
+        "allowed_reason_codes": [
+          "receipt_recovered",
+          "provider_reconciled"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 1,
+        "confirmation_ref_required": false,
+        "policy_guard": "receipt_remediation_contract_allows_verified_receipt",
+        "state_guard": "effect_open_or_action_required_same_effect_key",
+        "transaction_protocol": "T6e",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "verify_effect_not_applied",
+        "target_kind": "effect_operation",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.effect.remediate"
+        },
+        "allowed_reason_codes": [
+          "not_applied_verified",
+          "provider_reconciled"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 1,
+        "confirmation_ref_required": false,
+        "policy_guard": "receipt_remediation_contract_allows_not_applied_proof",
+        "state_guard": "effect_open_or_action_required_same_effect_key",
+        "transaction_protocol": "T6e",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "remediate_operational_blocker",
+        "target_kind": "operational_blocker",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.blocker.remediate"
+        },
+        "allowed_reason_codes": [
+          "investigation",
+          "dependency_recovered",
+          "credential_restored",
+          "receipt_recovered",
+          "provider_reconciled",
+          "not_applied_verified"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 1,
+        "confirmation_ref_required": false,
+        "policy_guard": "operational_remediation_policy_allows_blocker_kind",
+        "state_guard": "blocker_open_action_required_source_verifiable",
+        "transaction_protocol": "T6e",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "restore_integrity",
+        "target_kind": "operational_blocker",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.integrity.restore"
+        },
+        "allowed_reason_codes": [
+          "backup_restored",
+          "hash_revalidated"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 1,
+        "confirmation_ref_required": false,
+        "policy_guard": "trusted_integrity_restore_evidence_required",
+        "state_guard": "integrity_quarantine_blocker_open",
+        "transaction_protocol": "T6e",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "request_administrative_abandon",
+        "target_kind": "workflow",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.administrative_abandon"
+        },
+        "allowed_reason_codes": [
+          "unrecoverable_state",
+          "external_effect_unverifiable",
+          "data_loss_accepted"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 1,
+        "confirmation_ref_required": false,
+        "policy_guard": "command_policy_administrative_abandon_allowed",
+        "state_guard": "workflow_active_current_nonterminal_activation",
+        "transaction_protocol": "COMMAND",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      },
+      {
+        "command_type": "confirm_administrative_abandon",
+        "target_kind": "workflow",
+        "permission_rule": {
+          "kind": "single",
+          "permission": "workflow.administrative_abandon"
+        },
+        "allowed_reason_codes": [
+          "unrecoverable_state",
+          "external_effect_unverifiable",
+          "data_loss_accepted"
+        ],
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "minimum_evidence_refs": 1,
+        "confirmation_ref_required": true,
+        "policy_guard": "command_policy_administrative_abandon_allowed",
+        "state_guard": "matching_pending_confirmation_same_human_session_request_evidence_version_within_300000ms",
+        "transaction_protocol": "COMMAND",
+        "denial_codes": [
+          "permission_denied",
+          "feature_ceiling_denied",
+          "command_policy_denied",
+          "state_guard_failed",
+          "target_not_found",
+          "target_kind_invalid",
+          "row_version_conflict",
+          "evidence_invalid",
+          "confirmation_required",
+          "idempotency_conflict",
+          "late_command"
+        ]
+      }
+    ]
+  }
+}

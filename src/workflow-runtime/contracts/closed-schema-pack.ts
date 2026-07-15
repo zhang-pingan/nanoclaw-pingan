@@ -40,8 +40,15 @@ const positiveCasesPath = 'conformance/closed-schemas/positive-cases.json';
 const negativeCasesPath = 'conformance/closed-schemas/negative-cases.json';
 const domainCatalogPath = 'catalogs/closed-schema-domain-separators.json';
 
-const futureReservedDirectories = [
+const recordedFutureReservedDirectories = [
   'protocols',
+  'safety',
+  'sqlite',
+  'conformance/draft',
+  'conformance/sealed',
+] as const;
+
+const stillReservedDirectories = [
   'safety',
   'sqlite',
   'conformance/draft',
@@ -217,7 +224,7 @@ function buildManifest(
         .sort((left, right) =>
           asciiCompare(String(left.path), String(right.path)),
         ),
-      future_reserved_directories: [...futureReservedDirectories],
+      future_reserved_directories: [...recordedFutureReservedDirectories],
     },
   );
 }
@@ -642,7 +649,7 @@ function validateDirectoryBoundaries(): void {
   if (fixtureFiles.join('\n') !== 'negative-cases.json\npositive-cases.json') {
     throw new Error('Closed-schema fixture directory boundary drift');
   }
-  for (const directory of futureReservedDirectories) {
+  for (const directory of stillReservedDirectories) {
     const entries = fs.readdirSync(absoluteContractPath(directory));
     if (entries.length !== 1 || entries[0] !== '.gitkeep') {
       throw new Error(`Future Gate directory contains artifacts: ${directory}`);

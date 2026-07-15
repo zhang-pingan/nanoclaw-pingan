@@ -73,7 +73,6 @@ const foundationReservedDirectories = [
 ] as const;
 
 const stillReservedDirectories = [
-  'protocols',
   'safety',
   'sqlite',
   'conformance/draft',

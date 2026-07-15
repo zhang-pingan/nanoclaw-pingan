@@ -1,0 +1,1700 @@
+{
+  "format": "icarus.workflow-runtime-state-transition-tables/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-state-transition-tables",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-state-transition-tables:1\n",
+  "hash": "sha256:040569c46e94e5c66de4a3327b9f80fb6dba17c78518d019f1c335be4842132f",
+  "payload": {
+    "run_protocol_major": 1,
+    "transition_policy": "listed_edges_only",
+    "terminal_reopen": "forbidden",
+    "machines": [
+      {
+        "machine_id": "workflow_status",
+        "field": "workflows.status",
+        "initial_values": [
+          "active"
+        ],
+        "values": [
+          {
+            "value": "active",
+            "terminal": false
+          },
+          {
+            "value": "completed",
+            "terminal": true
+          },
+          {
+            "value": "errored",
+            "terminal": true
+          },
+          {
+            "value": "cancelled",
+            "terminal": true
+          },
+          {
+            "value": "administratively_abandoned",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "active",
+            "to": "completed",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "terminal_normal_transition_committed"
+          },
+          {
+            "from": "active",
+            "to": "errored",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "terminal_error_transition_committed"
+          },
+          {
+            "from": "active",
+            "to": "cancelled",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "global_workflow_cancel_committed"
+          },
+          {
+            "from": "active",
+            "to": "administratively_abandoned",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "confirmed_administrative_abandon"
+          }
+        ]
+      },
+      {
+        "machine_id": "state_activation_status",
+        "field": "workflow_state_activations.status",
+        "initial_values": [
+          "active",
+          "completed"
+        ],
+        "values": [
+          {
+            "value": "active",
+            "terminal": false
+          },
+          {
+            "value": "completed",
+            "terminal": true
+          },
+          {
+            "value": "abandoned",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "active",
+            "to": "completed",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "source_activation_consumed_or_terminal_activation_created"
+          },
+          {
+            "from": "active",
+            "to": "abandoned",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "non_terminal_activation_administratively_abandoned"
+          }
+        ]
+      },
+      {
+        "machine_id": "run_lifecycle",
+        "field": "workflow_graph_runs.lifecycle",
+        "initial_values": [
+          "initializing"
+        ],
+        "values": [
+          {
+            "value": "initializing",
+            "terminal": false
+          },
+          {
+            "value": "executing",
+            "terminal": false
+          },
+          {
+            "value": "closing",
+            "terminal": false
+          },
+          {
+            "value": "closed",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "initializing",
+            "to": "executing",
+            "protocols": [
+              "T2b"
+            ],
+            "guard": "root_scope_materialized"
+          },
+          {
+            "from": "initializing",
+            "to": "closing",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "root_setup_error_or_cancel_wins"
+          },
+          {
+            "from": "executing",
+            "to": "closing",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "root_close_request_wins"
+          },
+          {
+            "from": "closing",
+            "to": "closed",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "root_cut_and_outer_transition_commit"
+          }
+        ]
+      },
+      {
+        "machine_id": "run_control",
+        "field": "workflow_graph_runs.control",
+        "initial_values": [
+          "running"
+        ],
+        "values": [
+          {
+            "value": "running",
+            "terminal": false
+          },
+          {
+            "value": "paused",
+            "terminal": false
+          },
+          {
+            "value": "resuming",
+            "terminal": false
+          },
+          {
+            "value": "cancelling",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "running",
+            "to": "paused",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "pause_command_applied"
+          },
+          {
+            "from": "paused",
+            "to": "resuming",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "resume_command_applied"
+          },
+          {
+            "from": "resuming",
+            "to": "running",
+            "protocols": [
+              "RECOVERY"
+            ],
+            "guard": "resume_drain_reaches_fixed_point"
+          },
+          {
+            "from": "running",
+            "to": "cancelling",
+            "protocols": [
+              "T7c"
+            ],
+            "guard": "cancel_close_request_wins"
+          },
+          {
+            "from": "paused",
+            "to": "cancelling",
+            "protocols": [
+              "T7c"
+            ],
+            "guard": "cancel_close_request_wins"
+          },
+          {
+            "from": "resuming",
+            "to": "cancelling",
+            "protocols": [
+              "T7c"
+            ],
+            "guard": "cancel_close_request_wins"
+          }
+        ]
+      },
+      {
+        "machine_id": "run_operational_state",
+        "field": "workflow_graph_runs.operational_state",
+        "initial_values": [
+          "healthy"
+        ],
+        "values": [
+          {
+            "value": "healthy",
+            "terminal": false
+          },
+          {
+            "value": "action_required",
+            "terminal": false
+          },
+          {
+            "value": "quarantined",
+            "terminal": false
+          },
+          {
+            "value": "administratively_abandoned",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "healthy",
+            "to": "action_required",
+            "protocols": [
+              "BLOCKER_TRIGGER"
+            ],
+            "guard": "highest_open_blocker_severity_action_required"
+          },
+          {
+            "from": "healthy",
+            "to": "quarantined",
+            "protocols": [
+              "BLOCKER_TRIGGER"
+            ],
+            "guard": "highest_open_blocker_severity_quarantine"
+          },
+          {
+            "from": "action_required",
+            "to": "quarantined",
+            "protocols": [
+              "BLOCKER_TRIGGER"
+            ],
+            "guard": "quarantine_blocker_opened"
+          },
+          {
+            "from": "action_required",
+            "to": "healthy",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "last_open_blocker_resolved"
+          },
+          {
+            "from": "quarantined",
+            "to": "action_required",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "integrity_restored_and_action_required_blocker_remains"
+          },
+          {
+            "from": "quarantined",
+            "to": "healthy",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "integrity_restored_and_no_open_blocker_remains"
+          },
+          {
+            "from": "healthy",
+            "to": "administratively_abandoned",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "confirmed_administrative_abandon"
+          },
+          {
+            "from": "action_required",
+            "to": "administratively_abandoned",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "confirmed_administrative_abandon"
+          },
+          {
+            "from": "quarantined",
+            "to": "administratively_abandoned",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "confirmed_administrative_abandon"
+          }
+        ]
+      },
+      {
+        "machine_id": "scope_lifecycle",
+        "field": "workflow_graph_scopes.lifecycle",
+        "initial_values": [
+          "materializing"
+        ],
+        "values": [
+          {
+            "value": "materializing",
+            "terminal": false
+          },
+          {
+            "value": "active",
+            "terminal": false
+          },
+          {
+            "value": "closing",
+            "terminal": false
+          },
+          {
+            "value": "closed",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "materializing",
+            "to": "active",
+            "protocols": [
+              "T2b"
+            ],
+            "guard": "scope_materialization_committed"
+          },
+          {
+            "from": "materializing",
+            "to": "closing",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "root_setup_error_or_cancel_wins"
+          },
+          {
+            "from": "active",
+            "to": "closing",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_close_request_wins"
+          },
+          {
+            "from": "closing",
+            "to": "closed",
+            "protocols": [
+              "T7b",
+              "T8"
+            ],
+            "guard": "completion_cut_committed_after_cleanup_barrier"
+          }
+        ]
+      },
+      {
+        "machine_id": "node_phase",
+        "field": "workflow_graph_nodes.phase",
+        "initial_values": [
+          "pending"
+        ],
+        "values": [
+          {
+            "value": "pending",
+            "terminal": false
+          },
+          {
+            "value": "ready",
+            "terminal": false
+          },
+          {
+            "value": "active",
+            "terminal": false
+          },
+          {
+            "value": "waiting",
+            "terminal": false
+          },
+          {
+            "value": "retry_wait",
+            "terminal": false
+          },
+          {
+            "value": "terminal",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "pending",
+            "to": "ready",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "trigger_true_and_inputs_sealed"
+          },
+          {
+            "from": "pending",
+            "to": "terminal",
+            "protocols": [
+              "T3a",
+              "T7a"
+            ],
+            "guard": "trigger_or_input_impossible_or_fenced"
+          },
+          {
+            "from": "ready",
+            "to": "active",
+            "protocols": [
+              "T4"
+            ],
+            "guard": "kind_activation_committed"
+          },
+          {
+            "from": "ready",
+            "to": "terminal",
+            "protocols": [
+              "COMMAND",
+              "T7a"
+            ],
+            "guard": "manual_skip_or_fence"
+          },
+          {
+            "from": "active",
+            "to": "waiting",
+            "protocols": [
+              "T4"
+            ],
+            "guard": "wait_armed"
+          },
+          {
+            "from": "active",
+            "to": "retry_wait",
+            "protocols": [
+              "T6a"
+            ],
+            "guard": "continuation_schedule_created"
+          },
+          {
+            "from": "active",
+            "to": "terminal",
+            "protocols": [
+              "T4",
+              "T6a",
+              "T7a",
+              "T7b"
+            ],
+            "guard": "node_outcome_or_fence_committed"
+          },
+          {
+            "from": "waiting",
+            "to": "terminal",
+            "protocols": [
+              "T6c",
+              "T7a"
+            ],
+            "guard": "wait_resolution_or_fence_wins"
+          },
+          {
+            "from": "retry_wait",
+            "to": "active",
+            "protocols": [
+              "T6d"
+            ],
+            "guard": "retry_schedule_consumed"
+          },
+          {
+            "from": "retry_wait",
+            "to": "terminal",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          }
+        ]
+      },
+      {
+        "machine_id": "node_trigger_state",
+        "field": "workflow_graph_nodes.trigger_state",
+        "initial_values": [
+          "unknown"
+        ],
+        "values": [
+          {
+            "value": "unknown",
+            "terminal": false
+          },
+          {
+            "value": "true",
+            "terminal": true
+          },
+          {
+            "value": "false",
+            "terminal": true
+          },
+          {
+            "value": "error",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "unknown",
+            "to": "true",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "trigger_program_decided"
+          },
+          {
+            "from": "unknown",
+            "to": "false",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "trigger_program_decided"
+          },
+          {
+            "from": "unknown",
+            "to": "error",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "trigger_program_decided"
+          }
+        ]
+      },
+      {
+        "machine_id": "node_input_state",
+        "field": "workflow_graph_nodes.input_state",
+        "initial_values": [
+          "open"
+        ],
+        "values": [
+          {
+            "value": "open",
+            "terminal": false
+          },
+          {
+            "value": "sealed",
+            "terminal": true
+          },
+          {
+            "value": "impossible",
+            "terminal": true
+          },
+          {
+            "value": "error",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "open",
+            "to": "sealed",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "input_aggregation_decided"
+          },
+          {
+            "from": "open",
+            "to": "impossible",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "input_aggregation_decided"
+          },
+          {
+            "from": "open",
+            "to": "error",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "input_aggregation_decided"
+          }
+        ]
+      },
+      {
+        "machine_id": "attempt_phase",
+        "field": "workflow_graph_node_attempts.phase",
+        "initial_values": [
+          "preparing"
+        ],
+        "values": [
+          {
+            "value": "preparing",
+            "terminal": false
+          },
+          {
+            "value": "dispatch_pending",
+            "terminal": false
+          },
+          {
+            "value": "running",
+            "terminal": false
+          },
+          {
+            "value": "evaluating",
+            "terminal": false
+          },
+          {
+            "value": "terminal",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "preparing",
+            "to": "dispatch_pending",
+            "protocols": [
+              "T5"
+            ],
+            "guard": "external_dispatch_intent_committed"
+          },
+          {
+            "from": "preparing",
+            "to": "running",
+            "protocols": [
+              "T5"
+            ],
+            "guard": "internal_execution_started"
+          },
+          {
+            "from": "preparing",
+            "to": "terminal",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          },
+          {
+            "from": "dispatch_pending",
+            "to": "running",
+            "protocols": [
+              "T6b"
+            ],
+            "guard": "provider_acceptance_committed"
+          },
+          {
+            "from": "dispatch_pending",
+            "to": "terminal",
+            "protocols": [
+              "T6a",
+              "T6d",
+              "T7a"
+            ],
+            "guard": "dispatch_failure_timeout_or_fence"
+          },
+          {
+            "from": "running",
+            "to": "evaluating",
+            "protocols": [
+              "T6a"
+            ],
+            "guard": "execution_succeeded_and_evaluator_required"
+          },
+          {
+            "from": "running",
+            "to": "terminal",
+            "protocols": [
+              "T6a",
+              "T6d",
+              "T7a"
+            ],
+            "guard": "execution_terminal_timeout_or_fence"
+          },
+          {
+            "from": "evaluating",
+            "to": "terminal",
+            "protocols": [
+              "T6a",
+              "T7a"
+            ],
+            "guard": "quality_decision_or_fence_committed"
+          }
+        ]
+      },
+      {
+        "machine_id": "retry_schedule_status",
+        "field": "workflow_graph_retry_schedules.status",
+        "initial_values": [
+          "scheduled"
+        ],
+        "values": [
+          {
+            "value": "scheduled",
+            "terminal": false
+          },
+          {
+            "value": "consumed",
+            "terminal": true
+          },
+          {
+            "value": "cancelled",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "scheduled",
+            "to": "consumed",
+            "protocols": [
+              "T6d"
+            ],
+            "guard": "eligible_timer_or_authorized_advance_wins"
+          },
+          {
+            "from": "scheduled",
+            "to": "cancelled",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          }
+        ]
+      },
+      {
+        "machine_id": "wait_status",
+        "field": "workflow_graph_waits.status",
+        "initial_values": [
+          "registering"
+        ],
+        "values": [
+          {
+            "value": "registering",
+            "terminal": false
+          },
+          {
+            "value": "armed",
+            "terminal": false
+          },
+          {
+            "value": "resolved",
+            "terminal": true
+          },
+          {
+            "value": "timed_out",
+            "terminal": true
+          },
+          {
+            "value": "cancelled",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "registering",
+            "to": "armed",
+            "protocols": [
+              "T4"
+            ],
+            "guard": "wait_registration_committed"
+          },
+          {
+            "from": "registering",
+            "to": "cancelled",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          },
+          {
+            "from": "armed",
+            "to": "resolved",
+            "protocols": [
+              "T6c"
+            ],
+            "guard": "signal_or_timer_success_wins"
+          },
+          {
+            "from": "armed",
+            "to": "timed_out",
+            "protocols": [
+              "T6c"
+            ],
+            "guard": "timeout_wins"
+          },
+          {
+            "from": "armed",
+            "to": "cancelled",
+            "protocols": [
+              "T6c",
+              "T7a"
+            ],
+            "guard": "wait_cancel_or_scope_fence_wins"
+          }
+        ]
+      },
+      {
+        "machine_id": "scope_build_status",
+        "field": "workflow_graph_scope_builds.status",
+        "initial_values": [
+          "pending_snapshot"
+        ],
+        "values": [
+          {
+            "value": "pending_snapshot",
+            "terminal": false
+          },
+          {
+            "value": "ready_to_compile",
+            "terminal": false
+          },
+          {
+            "value": "compiling",
+            "terminal": false
+          },
+          {
+            "value": "compiled",
+            "terminal": false
+          },
+          {
+            "value": "materialized",
+            "terminal": true
+          },
+          {
+            "value": "failed",
+            "terminal": true
+          },
+          {
+            "value": "fenced",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "pending_snapshot",
+            "to": "ready_to_compile",
+            "protocols": [
+              "T2a"
+            ],
+            "guard": "source_snapshot_frozen"
+          },
+          {
+            "from": "ready_to_compile",
+            "to": "compiling",
+            "protocols": [
+              "T2a"
+            ],
+            "guard": "compile_lease_acquired"
+          },
+          {
+            "from": "compiling",
+            "to": "compiled",
+            "protocols": [
+              "T2a"
+            ],
+            "guard": "compiled_plan_persisted"
+          },
+          {
+            "from": "compiled",
+            "to": "materialized",
+            "protocols": [
+              "T2b"
+            ],
+            "guard": "scope_materialization_committed"
+          },
+          {
+            "from": "pending_snapshot",
+            "to": "failed",
+            "protocols": [
+              "T2a"
+            ],
+            "guard": "non_retryable_build_failure_or_retry_exhausted"
+          },
+          {
+            "from": "ready_to_compile",
+            "to": "failed",
+            "protocols": [
+              "T2a"
+            ],
+            "guard": "non_retryable_build_failure_or_retry_exhausted"
+          },
+          {
+            "from": "compiling",
+            "to": "failed",
+            "protocols": [
+              "T2a"
+            ],
+            "guard": "non_retryable_build_failure_or_retry_exhausted"
+          },
+          {
+            "from": "pending_snapshot",
+            "to": "fenced",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          },
+          {
+            "from": "ready_to_compile",
+            "to": "fenced",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          },
+          {
+            "from": "compiling",
+            "to": "fenced",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          },
+          {
+            "from": "compiled",
+            "to": "fenced",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "scope_fence_wins"
+          }
+        ]
+      },
+      {
+        "machine_id": "control_edge_resolution",
+        "field": "workflow_graph_control_edge_resolutions.state",
+        "initial_values": [
+          "unresolved"
+        ],
+        "values": [
+          {
+            "value": "unresolved",
+            "terminal": false
+          },
+          {
+            "value": "taken",
+            "terminal": true
+          },
+          {
+            "value": "not_taken",
+            "terminal": true
+          },
+          {
+            "value": "error",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "unresolved",
+            "to": "taken",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "route_group_resolution_committed"
+          },
+          {
+            "from": "unresolved",
+            "to": "not_taken",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "route_group_resolution_committed"
+          },
+          {
+            "from": "unresolved",
+            "to": "error",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "route_group_resolution_committed"
+          }
+        ]
+      },
+      {
+        "machine_id": "data_edge_resolution",
+        "field": "workflow_graph_data_edge_resolutions.state",
+        "initial_values": [
+          "unresolved"
+        ],
+        "values": [
+          {
+            "value": "unresolved",
+            "terminal": false
+          },
+          {
+            "value": "available",
+            "terminal": true
+          },
+          {
+            "value": "unavailable",
+            "terminal": true
+          },
+          {
+            "value": "error",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "unresolved",
+            "to": "available",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "data_source_resolution_committed"
+          },
+          {
+            "from": "unresolved",
+            "to": "unavailable",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "data_source_resolution_committed"
+          },
+          {
+            "from": "unresolved",
+            "to": "error",
+            "protocols": [
+              "T3a"
+            ],
+            "guard": "data_source_resolution_committed"
+          }
+        ]
+      },
+      {
+        "machine_id": "map_item_outcome_state",
+        "field": "workflow_graph_map_item_results.outcome_state",
+        "initial_values": [
+          "open"
+        ],
+        "values": [
+          {
+            "value": "open",
+            "terminal": false
+          },
+          {
+            "value": "completed",
+            "terminal": true
+          },
+          {
+            "value": "errored",
+            "terminal": true
+          },
+          {
+            "value": "cancelled",
+            "terminal": true
+          },
+          {
+            "value": "fenced",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "open",
+            "to": "completed",
+            "protocols": [
+              "T7b"
+            ],
+            "guard": "accepting_child_cut_consumed"
+          },
+          {
+            "from": "open",
+            "to": "errored",
+            "protocols": [
+              "T2a",
+              "T7b"
+            ],
+            "guard": "build_failure_or_child_error_consumed"
+          },
+          {
+            "from": "open",
+            "to": "cancelled",
+            "protocols": [
+              "T7b"
+            ],
+            "guard": "child_cancel_consumed"
+          },
+          {
+            "from": "open",
+            "to": "fenced",
+            "protocols": [
+              "T7a",
+              "T7b"
+            ],
+            "guard": "parent_close_or_controller_decision_fence"
+          }
+        ]
+      },
+      {
+        "machine_id": "controller_state",
+        "field": "workflow_graph_nodes.controller_state",
+        "initial_values": [
+          "sealing"
+        ],
+        "values": [
+          {
+            "value": "sealing",
+            "terminal": false
+          },
+          {
+            "value": "running",
+            "terminal": false
+          },
+          {
+            "value": "closing_remaining",
+            "terminal": false
+          },
+          {
+            "value": "settled",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "sealing",
+            "to": "running",
+            "protocols": [
+              "T4"
+            ],
+            "guard": "expansion_manifest_sealed"
+          },
+          {
+            "from": "sealing",
+            "to": "settled",
+            "protocols": [
+              "T4",
+              "T7a"
+            ],
+            "guard": "empty_or_fenced_controller"
+          },
+          {
+            "from": "running",
+            "to": "closing_remaining",
+            "protocols": [
+              "T7b"
+            ],
+            "guard": "quorum_or_fail_fast_decision_frozen"
+          },
+          {
+            "from": "running",
+            "to": "settled",
+            "protocols": [
+              "T7b"
+            ],
+            "guard": "all_items_settled"
+          },
+          {
+            "from": "closing_remaining",
+            "to": "settled",
+            "protocols": [
+              "T7b"
+            ],
+            "guard": "all_loser_cleanup_barriers_settled"
+          }
+        ]
+      },
+      {
+        "machine_id": "effect_operation_status",
+        "field": "workflow_graph_effect_operations.status",
+        "initial_values": [
+          "intended"
+        ],
+        "values": [
+          {
+            "value": "intended",
+            "terminal": false
+          },
+          {
+            "value": "dispatched",
+            "terminal": false
+          },
+          {
+            "value": "succeeded",
+            "terminal": false
+          },
+          {
+            "value": "failed",
+            "terminal": true
+          },
+          {
+            "value": "compensation_pending",
+            "terminal": false
+          },
+          {
+            "value": "compensated",
+            "terminal": true
+          },
+          {
+            "value": "compensation_not_required",
+            "terminal": true
+          },
+          {
+            "value": "action_required",
+            "terminal": false
+          }
+        ],
+        "transitions": [
+          {
+            "from": "intended",
+            "to": "dispatched",
+            "protocols": [
+              "T5"
+            ],
+            "guard": "outbox_delivery_started"
+          },
+          {
+            "from": "intended",
+            "to": "compensation_not_required",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "not_applied_proof_committed"
+          },
+          {
+            "from": "dispatched",
+            "to": "succeeded",
+            "protocols": [
+              "T6a",
+              "T6d",
+              "T6e"
+            ],
+            "guard": "effect_result_or_reconciliation_committed"
+          },
+          {
+            "from": "dispatched",
+            "to": "failed",
+            "protocols": [
+              "T6a",
+              "T6d",
+              "T6e"
+            ],
+            "guard": "effect_result_or_reconciliation_committed"
+          },
+          {
+            "from": "dispatched",
+            "to": "action_required",
+            "protocols": [
+              "T6a",
+              "T6d",
+              "T6e"
+            ],
+            "guard": "effect_result_or_reconciliation_committed"
+          },
+          {
+            "from": "succeeded",
+            "to": "compensation_pending",
+            "protocols": [
+              "T7a"
+            ],
+            "guard": "required_compensation_intent_committed"
+          },
+          {
+            "from": "compensation_pending",
+            "to": "compensated",
+            "protocols": [
+              "T6e",
+              "T7b"
+            ],
+            "guard": "compensation_result_committed"
+          },
+          {
+            "from": "compensation_pending",
+            "to": "action_required",
+            "protocols": [
+              "T6e",
+              "T7b"
+            ],
+            "guard": "compensation_result_committed"
+          },
+          {
+            "from": "action_required",
+            "to": "succeeded",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "verified_receipt_or_after_snapshot_restored"
+          },
+          {
+            "from": "action_required",
+            "to": "compensated",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "same_effect_key_compensation_verified"
+          },
+          {
+            "from": "action_required",
+            "to": "compensation_not_required",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "not_applied_proof_committed"
+          }
+        ]
+      },
+      {
+        "machine_id": "outbox_status",
+        "field": "workflow_outbox.status",
+        "initial_values": [
+          "pending"
+        ],
+        "values": [
+          {
+            "value": "pending",
+            "terminal": false
+          },
+          {
+            "value": "processing",
+            "terminal": false
+          },
+          {
+            "value": "reconciling",
+            "terminal": false
+          },
+          {
+            "value": "succeeded",
+            "terminal": true
+          },
+          {
+            "value": "dead_letter",
+            "terminal": true
+          },
+          {
+            "value": "action_required",
+            "terminal": false
+          }
+        ],
+        "transitions": [
+          {
+            "from": "pending",
+            "to": "processing",
+            "protocols": [
+              "OUTBOX"
+            ],
+            "guard": "delivery_lease_acquired"
+          },
+          {
+            "from": "processing",
+            "to": "pending",
+            "protocols": [
+              "OUTBOX"
+            ],
+            "guard": "retryable_failure_scheduled"
+          },
+          {
+            "from": "processing",
+            "to": "reconciling",
+            "protocols": [
+              "OUTBOX"
+            ],
+            "guard": "unknown_outcome_recorded"
+          },
+          {
+            "from": "processing",
+            "to": "succeeded",
+            "protocols": [
+              "OUTBOX"
+            ],
+            "guard": "delivery_terminal_result_committed"
+          },
+          {
+            "from": "processing",
+            "to": "dead_letter",
+            "protocols": [
+              "OUTBOX"
+            ],
+            "guard": "delivery_terminal_result_committed"
+          },
+          {
+            "from": "processing",
+            "to": "action_required",
+            "protocols": [
+              "OUTBOX"
+            ],
+            "guard": "delivery_terminal_result_committed"
+          },
+          {
+            "from": "reconciling",
+            "to": "reconciling",
+            "protocols": [
+              "OUTBOX"
+            ],
+            "guard": "reconcile_retry_scheduled"
+          },
+          {
+            "from": "reconciling",
+            "to": "succeeded",
+            "protocols": [
+              "OUTBOX",
+              "T6e"
+            ],
+            "guard": "reconcile_terminal_result_committed"
+          },
+          {
+            "from": "reconciling",
+            "to": "dead_letter",
+            "protocols": [
+              "OUTBOX",
+              "T6e"
+            ],
+            "guard": "reconcile_terminal_result_committed"
+          },
+          {
+            "from": "reconciling",
+            "to": "action_required",
+            "protocols": [
+              "OUTBOX",
+              "T6e"
+            ],
+            "guard": "reconcile_terminal_result_committed"
+          },
+          {
+            "from": "action_required",
+            "to": "succeeded",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "source_specific_verification_committed"
+          }
+        ]
+      },
+      {
+        "machine_id": "operational_blocker_status",
+        "field": "workflow_operational_blockers.status",
+        "initial_values": [
+          "open"
+        ],
+        "values": [
+          {
+            "value": "open",
+            "terminal": false
+          },
+          {
+            "value": "resolved",
+            "terminal": true
+          },
+          {
+            "value": "abandoned",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "open",
+            "to": "resolved",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "source_specific_verification_succeeded"
+          },
+          {
+            "from": "open",
+            "to": "abandoned",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "confirmed_administrative_abandon"
+          }
+        ]
+      },
+      {
+        "machine_id": "root_finalization_status",
+        "field": "workflow_root_finalization_schedules.status",
+        "initial_values": [
+          "pending"
+        ],
+        "values": [
+          {
+            "value": "pending",
+            "terminal": false
+          },
+          {
+            "value": "retry_wait",
+            "terminal": false
+          },
+          {
+            "value": "ready",
+            "terminal": false
+          },
+          {
+            "value": "succeeded",
+            "terminal": true
+          },
+          {
+            "value": "exhausted",
+            "terminal": false
+          },
+          {
+            "value": "cancelled",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "pending",
+            "to": "retry_wait",
+            "protocols": [
+              "ROOT_FINALIZER"
+            ],
+            "guard": "finalization_attempt_result_committed"
+          },
+          {
+            "from": "pending",
+            "to": "ready",
+            "protocols": [
+              "ROOT_FINALIZER"
+            ],
+            "guard": "finalization_attempt_result_committed"
+          },
+          {
+            "from": "pending",
+            "to": "exhausted",
+            "protocols": [
+              "ROOT_FINALIZER"
+            ],
+            "guard": "finalization_attempt_result_committed"
+          },
+          {
+            "from": "pending",
+            "to": "cancelled",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "parent_administratively_abandoned"
+          },
+          {
+            "from": "retry_wait",
+            "to": "retry_wait",
+            "protocols": [
+              "ROOT_FINALIZER"
+            ],
+            "guard": "eligible_finalization_attempt_result_committed"
+          },
+          {
+            "from": "retry_wait",
+            "to": "ready",
+            "protocols": [
+              "ROOT_FINALIZER"
+            ],
+            "guard": "eligible_finalization_attempt_result_committed"
+          },
+          {
+            "from": "retry_wait",
+            "to": "exhausted",
+            "protocols": [
+              "ROOT_FINALIZER"
+            ],
+            "guard": "eligible_finalization_attempt_result_committed"
+          },
+          {
+            "from": "retry_wait",
+            "to": "cancelled",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "parent_administratively_abandoned"
+          },
+          {
+            "from": "ready",
+            "to": "succeeded",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "atomic_root_commit_or_conflict_result_committed"
+          },
+          {
+            "from": "ready",
+            "to": "retry_wait",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "atomic_root_commit_or_conflict_result_committed"
+          },
+          {
+            "from": "ready",
+            "to": "exhausted",
+            "protocols": [
+              "T8"
+            ],
+            "guard": "atomic_root_commit_or_conflict_result_committed"
+          },
+          {
+            "from": "ready",
+            "to": "cancelled",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "parent_administratively_abandoned"
+          },
+          {
+            "from": "exhausted",
+            "to": "ready",
+            "protocols": [
+              "T6e"
+            ],
+            "guard": "remediation_preflight_ready_before_same_tx_t8"
+          },
+          {
+            "from": "exhausted",
+            "to": "succeeded",
+            "protocols": [
+              "T6e",
+              "T8"
+            ],
+            "guard": "same_transaction_remediation_and_root_commit"
+          }
+        ]
+      },
+      {
+        "machine_id": "command_confirmation_status",
+        "field": "workflow_runtime_command_confirmations.status",
+        "initial_values": [
+          "pending"
+        ],
+        "values": [
+          {
+            "value": "pending",
+            "terminal": false
+          },
+          {
+            "value": "consumed",
+            "terminal": true
+          },
+          {
+            "value": "expired",
+            "terminal": true
+          }
+        ],
+        "transitions": [
+          {
+            "from": "pending",
+            "to": "consumed",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "same_human_session_confirmation_applied_within_ttl"
+          },
+          {
+            "from": "pending",
+            "to": "expired",
+            "protocols": [
+              "COMMAND"
+            ],
+            "guard": "confirmation_ttl_elapsed"
+          }
+        ]
+      }
+    ]
+  }
+}

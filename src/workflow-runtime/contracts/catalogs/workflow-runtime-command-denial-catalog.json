@@ -1,0 +1,80 @@
+{
+  "format": "icarus.workflow-runtime-command-denial-catalog/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-command-denial-catalog",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-command-denial-catalog:1\n",
+  "hash": "sha256:a575624b248184018a14708525b4caf9f8b57ec50c417dd0f2f1142e88c1dfda",
+  "payload": {
+    "entries": [
+      {
+        "denial_code": "permission_denied",
+        "execution_result": "denied",
+        "retry_disposition": "authorization_change",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "feature_ceiling_denied",
+        "execution_result": "denied",
+        "retry_disposition": "authorization_change",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "command_policy_denied",
+        "execution_result": "denied",
+        "retry_disposition": "authorization_change",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "state_guard_failed",
+        "execution_result": "denied",
+        "retry_disposition": "state_refresh",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "target_not_found",
+        "execution_result": "denied",
+        "retry_disposition": "never",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "target_kind_invalid",
+        "execution_result": "denied",
+        "retry_disposition": "request_revision",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "row_version_conflict",
+        "execution_result": "conflict",
+        "retry_disposition": "state_refresh",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "evidence_invalid",
+        "execution_result": "denied",
+        "retry_disposition": "request_revision",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "confirmation_required",
+        "execution_result": "denied",
+        "retry_disposition": "confirmation_flow",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "idempotency_conflict",
+        "execution_result": "conflict",
+        "retry_disposition": "new_idempotency_key",
+        "target_mutated": false
+      },
+      {
+        "denial_code": "late_command",
+        "execution_result": "late",
+        "retry_disposition": "never",
+        "target_mutated": false
+      }
+    ]
+  }
+}

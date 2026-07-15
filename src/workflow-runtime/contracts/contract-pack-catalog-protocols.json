@@ -1,0 +1,168 @@
+{
+  "format": "icarus.workflow-contract-pack-catalog-protocols/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-catalog-protocols",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-catalog-protocols:1\n",
+  "hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+  "payload": {
+    "gate": "G0.4",
+    "status": "catalogs_and_protocol_tables",
+    "run_protocol_major": 1,
+    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+    "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+    "compiler_error_code_count": 27,
+    "fact_kind_count": 13,
+    "event_type_count": 39,
+    "permission_count": 9,
+    "command_reason_count": 17,
+    "command_denial_count": 11,
+    "command_count": 13,
+    "state_machine_count": 22,
+    "transaction_protocol_count": 18,
+    "positive_case_count": 9,
+    "negative_case_count": 20,
+    "artifacts": [
+      {
+        "path": "catalogs/catalog-protocol-domain-separators.json",
+        "format": "icarus.workflow-catalog-protocol-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-catalog-protocol-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-catalog-protocol-domain-separators:1\n",
+        "hash": "sha256:5d917b7ade76e5c28341429d288841bd891b604dbb0f266157ebd8cc3c78c16f"
+      },
+      {
+        "path": "catalogs/workflow-compiler-error-catalog.json",
+        "format": "icarus.workflow-compiler-error-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-error-catalog",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-error-catalog:1\n",
+        "hash": "sha256:a5b27ca8ed6c6ad6ffa018f085c1333f09a7eb380435fd61f03b7f260fdca540"
+      },
+      {
+        "path": "catalogs/workflow-runtime-command-denial-catalog.json",
+        "format": "icarus.workflow-runtime-command-denial-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-command-denial-catalog",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-command-denial-catalog:1\n",
+        "hash": "sha256:a575624b248184018a14708525b4caf9f8b57ec50c417dd0f2f1142e88c1dfda"
+      },
+      {
+        "path": "catalogs/workflow-runtime-command-reason-catalog.json",
+        "format": "icarus.workflow-runtime-command-reason-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-command-reason-catalog",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-command-reason-catalog:1\n",
+        "hash": "sha256:124ea820f405134b7c2df016880a5dba2f0b7a546fd931361040d838872b2694"
+      },
+      {
+        "path": "catalogs/workflow-runtime-event-catalog.json",
+        "format": "icarus.workflow-runtime-event-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-event-catalog",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-event-catalog:1\n",
+        "hash": "sha256:f06b2cd19314341e64df1dade1d1c497804c79cac1b0fdad5f0f03f57f3e41e5"
+      },
+      {
+        "path": "catalogs/workflow-runtime-fact-catalog.json",
+        "format": "icarus.workflow-runtime-fact-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-fact-catalog",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-fact-catalog:1\n",
+        "hash": "sha256:69cce4dab2cafd93c9db6836e98782b6a78ca10a5080ef7740371c9557ebd64e"
+      },
+      {
+        "path": "catalogs/workflow-runtime-permission-catalog.json",
+        "format": "icarus.workflow-runtime-permission-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-permission-catalog",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-permission-catalog:1\n",
+        "hash": "sha256:5b28c4f1f6da5e4fd6a8cb37e20a0e09a9547c3acf98fb02aa86f2cbfcfb7b6c"
+      },
+      {
+        "path": "conformance/catalog-protocols/negative-cases.json",
+        "format": "icarus.workflow-catalog-protocol-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-catalog-protocol-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-catalog-protocol-negative-cases:1\n",
+        "hash": "sha256:89f9fecd0b462459292bfa9fab6ec74393ce0f81ee5d25f9378c81a51d918169"
+      },
+      {
+        "path": "conformance/catalog-protocols/positive-cases.json",
+        "format": "icarus.workflow-catalog-protocol-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-catalog-protocol-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-catalog-protocol-positive-cases:1\n",
+        "hash": "sha256:5256999eab702bba4f545abf4e6af7561edc5b73cb1df074a88048395530fd46"
+      },
+      {
+        "path": "protocols/workflow-run-transaction-protocol-table.json",
+        "format": "icarus.workflow-run-transaction-protocol-table/1",
+        "ref": {
+          "id": "icarus.workflow-run-transaction-protocol-table",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-run-transaction-protocol-table:1\n",
+        "hash": "sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0"
+      },
+      {
+        "path": "protocols/workflow-runtime-command-protocol-table.json",
+        "format": "icarus.workflow-runtime-command-protocol-table/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-command-protocol-table",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-command-protocol-table:1\n",
+        "hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789"
+      },
+      {
+        "path": "protocols/workflow-runtime-state-transition-tables.json",
+        "format": "icarus.workflow-runtime-state-transition-tables/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-state-transition-tables",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-state-transition-tables:1\n",
+        "hash": "sha256:040569c46e94e5c66de4a3327b9f80fb6dba17c78518d019f1c335be4842132f"
+      }
+    ],
+    "future_reserved_directories": [
+      "safety",
+      "sqlite",
+      "conformance/draft",
+      "conformance/sealed"
+    ]
+  }
+}

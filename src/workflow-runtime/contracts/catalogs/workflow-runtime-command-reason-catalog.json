@@ -1,0 +1,156 @@
+{
+  "format": "icarus.workflow-runtime-command-reason-catalog/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-command-reason-catalog",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-command-reason-catalog:1\n",
+  "hash": "sha256:124ea820f405134b7c2df016880a5dba2f0b7a546fd931361040d838872b2694",
+  "payload": {
+    "entries": [
+      {
+        "reason_code": "operator_requested",
+        "reason_class": "operator",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": false
+      },
+      {
+        "reason_code": "investigation",
+        "reason_class": "operator",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": false
+      },
+      {
+        "reason_code": "superseded",
+        "reason_class": "business",
+        "allowed_actor_kinds": [
+          "human",
+          "feature_service",
+          "automation"
+        ],
+        "evidence_required": false
+      },
+      {
+        "reason_code": "invalid_input",
+        "reason_class": "business",
+        "allowed_actor_kinds": [
+          "human",
+          "feature_service",
+          "automation"
+        ],
+        "evidence_required": false
+      },
+      {
+        "reason_code": "no_longer_needed",
+        "reason_class": "business",
+        "allowed_actor_kinds": [
+          "human",
+          "feature_service",
+          "automation"
+        ],
+        "evidence_required": false
+      },
+      {
+        "reason_code": "dependency_recovered",
+        "reason_class": "remediation",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "credential_restored",
+        "reason_class": "remediation",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "receipt_recovered",
+        "reason_class": "remediation",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "provider_reconciled",
+        "reason_class": "remediation",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "not_applied_verified",
+        "reason_class": "remediation",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "backup_restored",
+        "reason_class": "integrity",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "hash_revalidated",
+        "reason_class": "integrity",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "deadline_enforced",
+        "reason_class": "system_enforcement",
+        "allowed_actor_kinds": [
+          "system"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "safety_enforced",
+        "reason_class": "system_enforcement",
+        "allowed_actor_kinds": [
+          "system"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "unrecoverable_state",
+        "reason_class": "administrative_abandon",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "external_effect_unverifiable",
+        "reason_class": "administrative_abandon",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      },
+      {
+        "reason_code": "data_loss_accepted",
+        "reason_class": "administrative_abandon",
+        "allowed_actor_kinds": [
+          "human"
+        ],
+        "evidence_required": true
+      }
+    ]
+  }
+}

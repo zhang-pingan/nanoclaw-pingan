@@ -2,7 +2,7 @@
 
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G0 Contract Pack / Static Baseline
-> **下一施工切片**: G0.4 Catalogs and Protocol Tables
+> **下一施工切片**: G0.5 Safety / Retention / SQLite Contracts
 > **最后更新**: 2026-07-15
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -130,7 +130,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1/G0.2/G0.3 DONE；G0.4 READY |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.4 DONE；G0.5 READY |
 
 ## G0 施工切片
 
@@ -141,12 +141,65 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | G0.1 | Toolchain Identity | `DONE` | Node/npm/direct dependency/lock/CI/managed distribution/launcher identity 一致，基础构建与测试通过 | 本原子提交 |
 | G0.2 | Contract Pack Foundation | `DONE` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | 本原子提交 |
 | G0.3 | Closed Schemas | `DONE` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | 本原子提交 |
-| G0.4 | Catalogs and Protocol Tables | `READY` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | - |
-| G0.5 | Safety / Retention / SQLite Contracts | `NOT_READY` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | - |
+| G0.4 | Catalogs and Protocol Tables | `DONE` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | 本原子提交 |
+| G0.5 | Safety / Retention / SQLite Contracts | `READY` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | - |
 | G0.6 | Logical Schema Metadata | `NOT_READY` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | - |
 | G0.7 | Static Absence and Surface Gates | `NOT_READY` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | - |
 | G0.8 | Golden Draft and Review Input | `NOT_READY` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | - |
 | G0.9 | G0 Conformance Exit | `NOT_READY` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | - |
+
+## 已完成切片：G0.4 Catalogs and Protocol Tables
+
+**状态**：`DONE`
+
+**工作包**：I11；合同联动 I3/I5/I9/I10，仅冻结 closed catalog 与声明性 protocol table，不实现 Compiler、Store、Registry、Runtime Command、T0-T8 或 Runtime Center 语义。
+
+I11/G0.4 已完成 Error/Fact/Event/Permission/Reason/Denial Catalog、Runtime Command Catalog、22 组状态转换表与 18 个 T0-T8/T6e 事务协议的机器化、TypeScript conformance、正反例、确定性生成/只读检查和 CI 接入。G0 总 Gate 继续为 `IN_PROGRESS`，仅 G0.5 转为 `READY`；G1-G9 未推进。
+
+已完成交付：
+
+- `catalogs/` 新增 27-code Compiler Error Catalog，固定 diagnostic phase、retryability 与稳定排序键；Error code TypeScript union 与架构规范逐项一致。
+- Run Protocol v1 固定 13 类 Fact、唯一 `fact_kind_rank`、T3 queue ordering，以及 39 类 Runtime Event；13 类 fact-backed Event 与 Fact 同 type/seq 原子映射，26 类 audit-only Event 明确禁止创建 Fact 或消费 `facts_total`。
+- Runtime Command 合同固定 9 个 Permission、17 个 Reason、11 个 Denial 与 13 个 Command。每个 Command 逐项绑定六种 typed target、permission/ownership rule、allowed reason/actor、evidence 下限、Published Policy guard、state guard、transaction protocol 与 denial set；Deadline/Safety Watchdog 只通过 `cancel_workflow + due_target` 专用 System Grant，不能获得 `cancel_run` 或通用 admin authority。
+- `protocols/workflow-runtime-state-transition-tables.json` 固定 22 个 Workflow/Activation/Run/Scope/Node/Attempt/Build/Wait/Edge/Map/Effect/Outbox/Blocker/Finalization/Confirmation state machine；只允许列出的 transition，terminal reopen 全局禁止，Operational state 只按 open blocker 集合/T6e 或 Administrative Abandon 推进。
+- `protocols/workflow-run-transaction-protocol-table.json` 覆盖 18 个 `T0/T0p/T1/T2a/T2b/T3a/T3b/T4/T5/T6a/T6b/T6c/T6d/T6e/T7a/T7b/T7c/T8` 协议，逐项固定 `BEGIN IMMEDIATE`、external-work boundary、precondition、CAS guard、atomic write set、idempotency/unique、failure/late outcome 与 forbidden action；它是声明性机器合同，不包含 Runtime 实现。
+- `conformance/catalog-protocols/` 包含 9 个正例与 20 个负例，覆盖 missing/open catalog value、Fact rank/Event mapping、Feature ceiling、Reason actor、Denial mutation、terminal reopen、Command target/reason/evidence/confirmation、T6e coverage、T5 external boundary 与 T8 partial child creation。
+- 新增独立 `catalog-protocol-domain-separators` registry 和 `contract-pack-catalog-protocols` manifest，CLI `generate/check` 与 CI 统一校验 G0.2/G0.3/G0.4；G0.2 foundation 与 G0.3 closed-schema manifest 被 exact hash pin 住，旧机器产物逐字节未改。
+- 架构规范补齐 Run Protocol v1 的 exact Fact rank 与 Runtime Event taxonomy，使新增 Contract Pack 值具有正文语义；没有开始 G0.5 Safety/Capacity/Retention/SQLite Profile/Enforcement Matrix。
+- `safety/`、`sqlite/`、`conformance/draft/` 与 `conformance/sealed/` 仍各自只含 `.gitkeep`；没有创建 Golden、DDL/Store、Registry、Compiler lowering/proof、Runtime、Runtime Center 或 UI artifact。
+
+最终 Artifact hashes：
+
+| Artifact | Hash |
+| --- | --- |
+| G0.4 catalog/protocol manifest | `sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607` |
+| Compiler Error Catalog | `sha256:a5b27ca8ed6c6ad6ffa018f085c1333f09a7eb380435fd61f03b7f260fdca540` |
+| Runtime Fact Catalog | `sha256:69cce4dab2cafd93c9db6836e98782b6a78ca10a5080ef7740371c9557ebd64e` |
+| Runtime Event Catalog | `sha256:f06b2cd19314341e64df1dade1d1c497804c79cac1b0fdad5f0f03f57f3e41e5` |
+| Runtime Permission Catalog | `sha256:5b28c4f1f6da5e4fd6a8cb37e20a0e09a9547c3acf98fb02aa86f2cbfcfb7b6c` |
+| Runtime Command Reason / Denial Catalog | `sha256:124ea820f405134b7c2df016880a5dba2f0b7a546fd931361040d838872b2694` / `sha256:a575624b248184018a14708525b4caf9f8b57ec50c417dd0f2f1142e88c1dfda` |
+| State Transition Tables | `sha256:040569c46e94e5c66de4a3327b9f80fb6dba17c78518d019f1c335be4842132f` |
+| Runtime Command Protocol Table | `sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789` |
+| T0-T8/T6e Transaction Protocol Table | `sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0` |
+| Positive / negative fixture artifacts | `sha256:5256999eab702bba4f545abf4e6af7561edc5b73cb1df074a88048395530fd46` / `sha256:89f9fecd0b462459292bfa9fab6ec74393ce0f81ee5d25f9378c81a51d918169` |
+
+最终退出验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run contracts:generate`（连续两次） | PASS；两次 G0.4 manifest 均为 `sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607`，G0.3/G0.2 均保持指定 hash；仅有 R-010 DEP0205 非阻塞告警 |
+| 完整 JSON/reserved tree digest | PASS；初始、第一次 generate、第二次 generate 均为 `fe36b23866a59868f8f626b07f6a0ac8e06011b63c2d2cf3dad44eb9708b9797` |
+| managed `npm run contracts:check` | PASS；foundation/closed-schema/catalog-protocol 三个 pack 均只读通过 |
+| managed `npm ci` | PASS；554 packages installed；`package-lock.json` SHA-256 仍为 `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085`；30 项既有 audit 告警保持 R-007 |
+| managed `npm run typecheck` | PASS |
+| managed `npm run test:g0.2` / `test:g0.3` / `test:g0.4` | PASS；11 / 5 / 7 tests；G0.4 check 内执行 9 positive / 20 negative fixtures |
+| managed legacy boundary | PASS，1 file / 6 tests |
+| managed `npm run build` | PASS |
+| managed targeted Prettier `--check` | PASS；全部新增/修改 Contract Pack TypeScript 符合 pinned Prettier |
+| managed `npm test` | 70 files / 641 tests PASS，1 file / 1 test FAIL；范围外 `src/credential-proxy.test.ts` 的既有异步 trace assertion 在 250ms 内只观察到 `model_request_started`，未观察到 `model_resolution`；单文件重跑同样为 20 PASS / 1 FAIL。G0.4 未修改 credential proxy/trace 文件，定向 Contract/Boundary/Build 全部通过，记录为 R-012，不改范围外代码 |
+| prior-pack/boundary scan | PASS；指定基线 G0.3 commit `f3cb8a8` 已复核；foundation manifest `sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d` 与 G0.3 manifest `sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8` 及全部既有 JSON bytes 未改；`package-lock.json`、toolchain/Launcher/setup/launchd/container/Electron 无改动；G0.5+ reserved 目录只有 `.gitkeep` |
+| concurrent repository commits | 施工期间出现 `982e3b6` 与 `5989b8e` 两个范围外进度文档措辞提交，第二个逐字回退第一个，净 tree 等于 `f3cb8a8`；G0.4 保留两者并以 `5989b8e` 为父提交，不改写历史 |
+| `git diff --check` | PASS |
 
 ## 已完成切片：G0.3 Closed Schemas
 
@@ -433,14 +486,16 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-001 | Toolchain | CLOSED | exact Node/npm/direct dependency/lock/CI/managed distribution 已落地，最终 managed install/ci/typecheck/test/build 全部通过 | G0.1 |
 | R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | OPEN | 当前只有定向 legacy boundary test，尚无规范要求的 AST/API/UI/schema/filesystem/resource manifests | G0.7 |
-| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 foundation 与 G0.3 closed Domain Schema 已原子交付；Catalog/Protocol/Safety/DDL metadata 及 Markdown 双向覆盖仍未完成 | G0.4-G0.9 |
+| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 foundation、G0.3 closed Domain Schema 与 G0.4 Catalog/Protocol 已原子交付；Safety/Retention/SQLite、DDL metadata、absence/surface 与完整 Markdown 双向覆盖仍未完成 | G0.5-G0.9 |
 | R-005 | DDL feasibility | DEFERRED | Logical Schema 尚未转换为 executable migration；不代表已发现冲突，但 G1 必须以真实 SQLite Gate 验证 | G1 |
 | R-006 | Certification | DEFERRED | Product Floor 和 profile 已冻结；Launcher/Core Release/Managed Node executable/native module 完整 key、Supported Limits 与事务预算尚未 benchmark 认证 | G8 |
 | R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
 | R-008 | Formatting baseline | OPEN_OUT_OF_SCOPE | 仓库既有 `npm run format:check` 对 34 个 G0.2 外旧 TypeScript 文件报差异；G0.2 新文件 targeted Prettier 通过，未把无关批量格式化混入原子提交 | 独立维护 |
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
+| R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | managed full suite 的范围外 `credential-proxy` async trace test 未在 250ms 内观察到 `model_resolution`，完整与单文件重跑均复现；G0.4 未修改相关文件，全部 Contract/Boundary/Build 验证通过 | 独立测试稳定性维护 |
 
 ## 下一步
 
-下一会话开始 `G0.4 Catalogs and Protocol Tables`。先完整阅读架构规范和本文，复核本次 G0.3 原子提交及其八个 closed Schema/fixtures/conformance，再按 G0.4 范围机器化 Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表。G0 总 Gate 继续为 `IN_PROGRESS`；不得越过 G0.4 开始 G0.5、G1 Store/DDL、G2 Compiler lowering/normalization/proof、Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI。
+下一会话开始 `G0.5 Safety / Retention / SQLite Contracts`。先完整阅读架构规范和本文，复核本次 G0.4 原子提交、六类 Catalog、Command Catalog、22 个状态机、18 个事务协议、9 positive / 20 negative fixtures、manifest hash 与 G0.2/G0.3 identity，再只按 G0.5 范围机器化 `local_single_user_safety@1`、Deployment Capacity schema/baseline、`local_single_user_product_floor@1`、`local_single_user_retention@1`、`local_single_user_sqlite@1` candidate 和逐字段 Enforcement Matrix。G0 总 Gate 继续为 `IN_PROGRESS`；不得越过 G0.5 开始 G0.6、G1 Store/DDL、G2 Compiler lowering/normalization/proof、Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI。开始前复核 R-012，但不要把范围外测试修复混入 G0.5 原子提交。

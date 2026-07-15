@@ -1,0 +1,66 @@
+{
+  "format": "icarus.workflow-catalog-protocol-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-catalog-protocol-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-catalog-protocol-domain-separators:1\n",
+  "hash": "sha256:5d917b7ade76e5c28341429d288841bd891b604dbb0f266157ebd8cc3c78c16f",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.workflow-catalog-protocol-domain-separators/1",
+        "domain_separator": "icarus:workflow-catalog-protocol-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-catalog-protocol-negative-cases/1",
+        "domain_separator": "icarus:workflow-catalog-protocol-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-catalog-protocol-positive-cases/1",
+        "domain_separator": "icarus:workflow-catalog-protocol-positive-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-compiler-error-catalog/1",
+        "domain_separator": "icarus:workflow-compiler-error-catalog:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-pack-catalog-protocols/1",
+        "domain_separator": "icarus:workflow-contract-pack-catalog-protocols:1\n"
+      },
+      {
+        "format": "icarus.workflow-run-transaction-protocol-table/1",
+        "domain_separator": "icarus:workflow-run-transaction-protocol-table:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-command-denial-catalog/1",
+        "domain_separator": "icarus:workflow-runtime-command-denial-catalog:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-command-protocol-table/1",
+        "domain_separator": "icarus:workflow-runtime-command-protocol-table:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-command-reason-catalog/1",
+        "domain_separator": "icarus:workflow-runtime-command-reason-catalog:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-event-catalog/1",
+        "domain_separator": "icarus:workflow-runtime-event-catalog:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-fact-catalog/1",
+        "domain_separator": "icarus:workflow-runtime-fact-catalog:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-permission-catalog/1",
+        "domain_separator": "icarus:workflow-runtime-permission-catalog:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-state-transition-tables/1",
+        "domain_separator": "icarus:workflow-runtime-state-transition-tables:1\n"
+      }
+    ]
+  }
+}

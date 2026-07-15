@@ -149,12 +149,11 @@ describe('G0.3 closed schema Contract Pack', () => {
     }
   });
 
-  it('keeps G0.4+ directories empty and the G0.2 foundation byte identity stable', () => {
+  it('keeps G0.5+ directories empty and the G0.2 foundation byte identity stable', () => {
     expect(readArtifact('contract-pack-foundation.json').hash).toBe(
       'sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d',
     );
     for (const directory of [
-      'protocols',
       'safety',
       'sqlite',
       'conformance/draft',

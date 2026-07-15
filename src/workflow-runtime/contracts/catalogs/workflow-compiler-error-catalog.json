@@ -1,0 +1,170 @@
+{
+  "format": "icarus.workflow-compiler-error-catalog/1",
+  "ref": {
+    "id": "icarus.workflow-compiler-error-catalog",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-compiler-error-catalog:1\n",
+  "hash": "sha256:a5b27ca8ed6c6ad6ffa018f085c1333f09a7eb380435fd61f03b7f260fdca540",
+  "payload": {
+    "diagnostic_phases": [
+      "parse",
+      "schema",
+      "bind",
+      "prove",
+      "normalize",
+      "hash"
+    ],
+    "retryabilities": [
+      "source_revision_required",
+      "registry_revision_required",
+      "never"
+    ],
+    "error_codes": [
+      "json_syntax_invalid",
+      "json_duplicate_key",
+      "schema_unknown_field",
+      "schema_profile_keyword_unsupported",
+      "registry_ref_unpinned",
+      "registry_ref_not_found",
+      "graph_id_duplicate",
+      "graph_endpoint_not_found",
+      "graph_cross_scope_edge",
+      "graph_dependency_cycle",
+      "condition_type_mismatch",
+      "condition_complexity_exceeded",
+      "json_pointer_non_total",
+      "schema_not_assignable",
+      "route_group_ambiguous",
+      "trigger_contract_invalid",
+      "completion_contract_invalid",
+      "early_completion_non_monotone",
+      "early_completion_cancellation_unsafe",
+      "capability_not_allowed",
+      "policy_escalation",
+      "quality_revision_contract_invalid",
+      "quality_revision_effect_key_incompatible",
+      "child_recipe_set_mismatch",
+      "child_recipe_dependency_cycle",
+      "runtime_safety_limit_exceeded",
+      "compiler_integrity_mismatch"
+    ],
+    "entries": {
+      "json_syntax_invalid": {
+        "retryability": "source_revision_required",
+        "default_phase": "parse"
+      },
+      "json_duplicate_key": {
+        "retryability": "source_revision_required",
+        "default_phase": "parse"
+      },
+      "schema_unknown_field": {
+        "retryability": "source_revision_required",
+        "default_phase": "schema"
+      },
+      "schema_profile_keyword_unsupported": {
+        "retryability": "source_revision_required",
+        "default_phase": "schema"
+      },
+      "registry_ref_unpinned": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind"
+      },
+      "registry_ref_not_found": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind"
+      },
+      "graph_id_duplicate": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind"
+      },
+      "graph_endpoint_not_found": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind"
+      },
+      "graph_cross_scope_edge": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind"
+      },
+      "graph_dependency_cycle": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "condition_type_mismatch": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "condition_complexity_exceeded": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "json_pointer_non_total": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "schema_not_assignable": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "route_group_ambiguous": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "trigger_contract_invalid": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "completion_contract_invalid": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "early_completion_non_monotone": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "early_completion_cancellation_unsafe": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "capability_not_allowed": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind"
+      },
+      "policy_escalation": {
+        "retryability": "source_revision_required",
+        "default_phase": "bind"
+      },
+      "quality_revision_contract_invalid": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind"
+      },
+      "quality_revision_effect_key_incompatible": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind"
+      },
+      "child_recipe_set_mismatch": {
+        "retryability": "registry_revision_required",
+        "default_phase": "bind"
+      },
+      "child_recipe_dependency_cycle": {
+        "retryability": "registry_revision_required",
+        "default_phase": "prove"
+      },
+      "runtime_safety_limit_exceeded": {
+        "retryability": "source_revision_required",
+        "default_phase": "prove"
+      },
+      "compiler_integrity_mismatch": {
+        "retryability": "never",
+        "default_phase": "hash"
+      }
+    },
+    "diagnostic_sort_key": [
+      "instance_pointer",
+      "code",
+      "stable_object_id",
+      "schema_pointer"
+    ]
+  }
+}

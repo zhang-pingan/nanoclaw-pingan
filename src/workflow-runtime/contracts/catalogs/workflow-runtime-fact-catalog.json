@@ -1,0 +1,150 @@
+{
+  "format": "icarus.workflow-runtime-fact-catalog/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-fact-catalog",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-fact-catalog:1\n",
+  "hash": "sha256:69cce4dab2cafd93c9db6836e98782b6a78ca10a5080ef7740371c9557ebd64e",
+  "payload": {
+    "run_protocol_major": 1,
+    "queue_order": [
+      "causal_wave_asc",
+      "fact_kind_rank_asc",
+      "stable_object_id_asc"
+    ],
+    "entries": [
+      {
+        "fact_kind": "orchestration_error",
+        "fact_kind_rank": 0,
+        "stable_object_kind": "orchestration_error",
+        "producer_protocols": [
+          "T2a",
+          "T3a",
+          "T3b",
+          "T7a"
+        ],
+        "ingress": true
+      },
+      {
+        "fact_kind": "node_output_published",
+        "fact_kind_rank": 10,
+        "stable_object_kind": "node",
+        "producer_protocols": [
+          "T3a",
+          "T6a",
+          "T7b"
+        ],
+        "ingress": true
+      },
+      {
+        "fact_kind": "node_terminal",
+        "fact_kind_rank": 20,
+        "stable_object_kind": "node",
+        "producer_protocols": [
+          "T3a",
+          "T4",
+          "T6a",
+          "T6c",
+          "T7a",
+          "T7b"
+        ],
+        "ingress": true
+      },
+      {
+        "fact_kind": "wait_resolved",
+        "fact_kind_rank": 30,
+        "stable_object_kind": "wait",
+        "producer_protocols": [
+          "T6c"
+        ],
+        "ingress": true
+      },
+      {
+        "fact_kind": "build_failed",
+        "fact_kind_rank": 40,
+        "stable_object_kind": "scope_build",
+        "producer_protocols": [
+          "T2a"
+        ],
+        "ingress": true
+      },
+      {
+        "fact_kind": "control_edge_resolved",
+        "fact_kind_rank": 50,
+        "stable_object_kind": "control_edge",
+        "producer_protocols": [
+          "T3a"
+        ],
+        "ingress": false
+      },
+      {
+        "fact_kind": "data_edge_resolved",
+        "fact_kind_rank": 60,
+        "stable_object_kind": "data_edge",
+        "producer_protocols": [
+          "T3a"
+        ],
+        "ingress": false
+      },
+      {
+        "fact_kind": "trigger_decided",
+        "fact_kind_rank": 70,
+        "stable_object_kind": "node",
+        "producer_protocols": [
+          "T3a"
+        ],
+        "ingress": false
+      },
+      {
+        "fact_kind": "input_sealed",
+        "fact_kind_rank": 80,
+        "stable_object_kind": "node",
+        "producer_protocols": [
+          "T3a"
+        ],
+        "ingress": false
+      },
+      {
+        "fact_kind": "node_ready",
+        "fact_kind_rank": 90,
+        "stable_object_kind": "node",
+        "producer_protocols": [
+          "T3a"
+        ],
+        "ingress": false
+      },
+      {
+        "fact_kind": "node_skipped",
+        "fact_kind_rank": 100,
+        "stable_object_kind": "node",
+        "producer_protocols": [
+          "T3a",
+          "T7a"
+        ],
+        "ingress": false
+      },
+      {
+        "fact_kind": "terminal_candidate",
+        "fact_kind_rank": 110,
+        "stable_object_kind": "terminal_candidate",
+        "producer_protocols": [
+          "T3a",
+          "T4"
+        ],
+        "ingress": false
+      },
+      {
+        "fact_kind": "completion_eligibility",
+        "fact_kind_rank": 120,
+        "stable_object_kind": "completion_eligibility",
+        "producer_protocols": [
+          "T3a",
+          "T3b"
+        ],
+        "ingress": false
+      }
+    ]
+  }
+}

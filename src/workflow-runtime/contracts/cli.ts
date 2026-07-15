@@ -6,6 +6,10 @@ import {
   checkContractPackClosedSchemas,
   generateContractPackClosedSchemas,
 } from './closed-schema-pack.js';
+import {
+  checkContractPackCatalogProtocols,
+  generateContractPackCatalogProtocols,
+} from './catalog-protocol-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -20,7 +24,8 @@ if (
   usage();
 }
 
-let currentPack: 'foundation' | 'closed_schemas' = 'foundation';
+let currentPack: 'foundation' | 'closed_schemas' | 'catalog_protocols' =
+  'foundation';
 
 try {
   const foundationManifest =
@@ -37,6 +42,16 @@ try {
       : checkContractPackClosedSchemas();
   console.log(`contract_pack_closed_schemas=${command}:ok`);
   console.log(`contract_pack_closed_schemas_hash=${closedSchemaManifest.hash}`);
+
+  currentPack = 'catalog_protocols';
+  const catalogProtocolManifest =
+    command === 'generate'
+      ? generateContractPackCatalogProtocols()
+      : checkContractPackCatalogProtocols();
+  console.log(`contract_pack_catalog_protocols=${command}:ok`);
+  console.log(
+    `contract_pack_catalog_protocols_hash=${catalogProtocolManifest.hash}`,
+  );
 } catch (error) {
   console.error(
     `contract_pack_${currentPack}=${command}:failed: ${

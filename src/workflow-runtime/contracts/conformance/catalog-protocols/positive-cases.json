@@ -1,0 +1,68 @@
+{
+  "format": "icarus.workflow-catalog-protocol-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-catalog-protocol-positive-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-catalog-protocol-positive-cases:1\n",
+  "hash": "sha256:5256999eab702bba4f545abf4e6af7561edc5b73cb1df074a88048395530fd46",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "compiler_error_catalog_exact",
+        "artifact_format": "icarus.workflow-compiler-error-catalog/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:a5b27ca8ed6c6ad6ffa018f085c1333f09a7eb380435fd61f03b7f260fdca540"
+      },
+      {
+        "case_id": "runtime_fact_catalog_exact",
+        "artifact_format": "icarus.workflow-runtime-fact-catalog/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:69cce4dab2cafd93c9db6836e98782b6a78ca10a5080ef7740371c9557ebd64e"
+      },
+      {
+        "case_id": "runtime_event_catalog_exact",
+        "artifact_format": "icarus.workflow-runtime-event-catalog/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:f06b2cd19314341e64df1dade1d1c497804c79cac1b0fdad5f0f03f57f3e41e5"
+      },
+      {
+        "case_id": "runtime_permission_catalog_exact",
+        "artifact_format": "icarus.workflow-runtime-permission-catalog/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:5b28c4f1f6da5e4fd6a8cb37e20a0e09a9547c3acf98fb02aa86f2cbfcfb7b6c"
+      },
+      {
+        "case_id": "runtime_command_reason_catalog_exact",
+        "artifact_format": "icarus.workflow-runtime-command-reason-catalog/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:124ea820f405134b7c2df016880a5dba2f0b7a546fd931361040d838872b2694"
+      },
+      {
+        "case_id": "runtime_command_denial_catalog_exact",
+        "artifact_format": "icarus.workflow-runtime-command-denial-catalog/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:a575624b248184018a14708525b4caf9f8b57ec50c417dd0f2f1142e88c1dfda"
+      },
+      {
+        "case_id": "runtime_state_transition_tables_exact",
+        "artifact_format": "icarus.workflow-runtime-state-transition-tables/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:040569c46e94e5c66de4a3327b9f80fb6dba17c78518d019f1c335be4842132f"
+      },
+      {
+        "case_id": "runtime_command_protocol_table_exact",
+        "artifact_format": "icarus.workflow-runtime-command-protocol-table/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:b12b07b29e9335593c969033c133d221b244798fc079db5fb398b23fbae10789"
+      },
+      {
+        "case_id": "run_transaction_protocol_table_exact",
+        "artifact_format": "icarus.workflow-run-transaction-protocol-table/1",
+        "assertion": "valid_exact_artifact",
+        "expected_artifact_hash": "sha256:7c55b3eff2f29e5dfcbb057d5ff014697ba2e9a421287afa19ec850540cce5f0"
+      }
+    ]
+  }
+}

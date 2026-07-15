@@ -1,0 +1,382 @@
+{
+  "format": "icarus.workflow-runtime-event-catalog/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-event-catalog",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-event-catalog:1\n",
+  "hash": "sha256:f06b2cd19314341e64df1dade1d1c497804c79cac1b0fdad5f0f03f57f3e41e5",
+  "payload": {
+    "run_protocol_major": 1,
+    "sequence_scope": "graph_run",
+    "fact_event_rule": "same_graph_run_and_event_sequence_atomic",
+    "audit_only_fact_accounting": "forbidden",
+    "entries": [
+      {
+        "event_type": "node_terminal",
+        "event_class": "fact_backed",
+        "fact_kind": "node_terminal",
+        "producer_protocols": [
+          "T3a",
+          "T4",
+          "T6a",
+          "T6c",
+          "T7a",
+          "T7b"
+        ]
+      },
+      {
+        "event_type": "node_output_published",
+        "event_class": "fact_backed",
+        "fact_kind": "node_output_published",
+        "producer_protocols": [
+          "T3a",
+          "T6a",
+          "T7b"
+        ]
+      },
+      {
+        "event_type": "wait_resolved",
+        "event_class": "fact_backed",
+        "fact_kind": "wait_resolved",
+        "producer_protocols": [
+          "T6c"
+        ]
+      },
+      {
+        "event_type": "build_failed",
+        "event_class": "fact_backed",
+        "fact_kind": "build_failed",
+        "producer_protocols": [
+          "T2a"
+        ]
+      },
+      {
+        "event_type": "control_edge_resolved",
+        "event_class": "fact_backed",
+        "fact_kind": "control_edge_resolved",
+        "producer_protocols": [
+          "T3a"
+        ]
+      },
+      {
+        "event_type": "data_edge_resolved",
+        "event_class": "fact_backed",
+        "fact_kind": "data_edge_resolved",
+        "producer_protocols": [
+          "T3a"
+        ]
+      },
+      {
+        "event_type": "trigger_decided",
+        "event_class": "fact_backed",
+        "fact_kind": "trigger_decided",
+        "producer_protocols": [
+          "T3a"
+        ]
+      },
+      {
+        "event_type": "input_sealed",
+        "event_class": "fact_backed",
+        "fact_kind": "input_sealed",
+        "producer_protocols": [
+          "T3a"
+        ]
+      },
+      {
+        "event_type": "node_ready",
+        "event_class": "fact_backed",
+        "fact_kind": "node_ready",
+        "producer_protocols": [
+          "T3a"
+        ]
+      },
+      {
+        "event_type": "node_skipped",
+        "event_class": "fact_backed",
+        "fact_kind": "node_skipped",
+        "producer_protocols": [
+          "T3a",
+          "T7a"
+        ]
+      },
+      {
+        "event_type": "terminal_candidate",
+        "event_class": "fact_backed",
+        "fact_kind": "terminal_candidate",
+        "producer_protocols": [
+          "T3a",
+          "T4"
+        ]
+      },
+      {
+        "event_type": "completion_eligibility",
+        "event_class": "fact_backed",
+        "fact_kind": "completion_eligibility",
+        "producer_protocols": [
+          "T3a",
+          "T3b"
+        ]
+      },
+      {
+        "event_type": "orchestration_error",
+        "event_class": "fact_backed",
+        "fact_kind": "orchestration_error",
+        "producer_protocols": [
+          "T2a",
+          "T3a",
+          "T3b",
+          "T7a"
+        ]
+      },
+      {
+        "event_type": "workflow_created",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T0",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "state_activation_created",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T0",
+          "T1",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "run_created",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T0",
+          "T1",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "scope_materialized",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T2b"
+        ]
+      },
+      {
+        "event_type": "expansion_sealed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T4"
+        ]
+      },
+      {
+        "event_type": "scheduler_admitted",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T4"
+        ]
+      },
+      {
+        "event_type": "attempt_created",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T4",
+          "T6d"
+        ]
+      },
+      {
+        "event_type": "attempt_phase_changed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T5",
+          "T6a",
+          "T6b",
+          "T6d",
+          "T7a"
+        ]
+      },
+      {
+        "event_type": "retry_schedule_created",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T6a"
+        ]
+      },
+      {
+        "event_type": "retry_schedule_consumed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T6d"
+        ]
+      },
+      {
+        "event_type": "wait_armed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T4"
+        ]
+      },
+      {
+        "event_type": "scope_close_requested",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T3a",
+          "T3b",
+          "T7a",
+          "T7c"
+        ]
+      },
+      {
+        "event_type": "subtree_fenced",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T7a"
+        ]
+      },
+      {
+        "event_type": "effect_operation_changed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T5",
+          "T6d",
+          "T6e",
+          "T7a"
+        ]
+      },
+      {
+        "event_type": "compensation_changed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T6e",
+          "T7a",
+          "T7b"
+        ]
+      },
+      {
+        "event_type": "completion_cut_committed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T7b",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "child_completion_consumed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T7b"
+        ]
+      },
+      {
+        "event_type": "run_control_changed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "COMMAND",
+          "RECOVERY",
+          "T7c"
+        ]
+      },
+      {
+        "event_type": "operational_blocker_changed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "OUTBOX",
+          "RECOVERY",
+          "T6d",
+          "T6e",
+          "T7a"
+        ]
+      },
+      {
+        "event_type": "runtime_command_decided",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "COMMAND",
+          "T6e",
+          "T7c"
+        ]
+      },
+      {
+        "event_type": "workflow_transition_committed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T8"
+        ]
+      },
+      {
+        "event_type": "workflow_terminal_committed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "COMMAND",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "root_finalization_changed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T0p",
+          "T6e",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "domain_claim_changed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "OUTBOX",
+          "T0",
+          "T6e",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "ledger_posting_committed",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T0",
+          "T1",
+          "T2b",
+          "T3a",
+          "T4",
+          "T6a",
+          "T8"
+        ]
+      },
+      {
+        "event_type": "recovery_decision_recorded",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "RECOVERY"
+        ]
+      }
+    ]
+  }
+}

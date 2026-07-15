@@ -1,0 +1,79 @@
+{
+  "format": "icarus.workflow-runtime-permission-catalog/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-permission-catalog",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-permission-catalog:1\n",
+  "hash": "sha256:5b28c4f1f6da5e4fd6a8cb37e20a0e09a9547c3acf98fb02aa86f2cbfcfb7b6c",
+  "payload": {
+    "deployment_profile": "local_single_user",
+    "local_human_actor_ref": "human:local-owner",
+    "entries": [
+      {
+        "permission": "workflow.operate",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": true,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      },
+      {
+        "permission": "workflow.cancel.own",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": true,
+        "feature_service_or_automation_grantable": true,
+        "ownership_required": true
+      },
+      {
+        "permission": "workflow.cancel.any",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": false,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      },
+      {
+        "permission": "workflow.node.skip",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": true,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      },
+      {
+        "permission": "workflow.retry.advance",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": true,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      },
+      {
+        "permission": "workflow.effect.remediate",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": true,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      },
+      {
+        "permission": "workflow.blocker.remediate",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": true,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      },
+      {
+        "permission": "workflow.integrity.restore",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": false,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      },
+      {
+        "permission": "workflow.administrative_abandon",
+        "human_local_owner": true,
+        "feature_human_ceiling_allowed": false,
+        "feature_service_or_automation_grantable": false,
+        "ownership_required": false
+      }
+    ]
+  }
+}

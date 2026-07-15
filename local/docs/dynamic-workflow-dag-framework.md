@@ -4628,6 +4628,41 @@ UNIQUE(idempotency_key)
 
 `workflow_graph_facts` 是 T3 fixed-point 的 immutable 权威输入/派生事实，不等同于通用审计 Event。`fact_kind` 的 Run Protocol v1 closed taxonomy 固定为 `node_terminal | node_output_published | wait_resolved | build_failed | control_edge_resolved | data_edge_resolved | trigger_decided | input_sealed | node_ready | node_skipped | terminal_candidate | completion_eligibility | orchestration_error`；增加或改变 kind 语义必须发布新 Run Protocol。每条 Fact 先消费 `facts_total`，再与对应 Event 使用同一 `event_seq` 原子插入，Fact 的 `(graph_run_id,event_seq)` 复合 FK 指向 Event 的 `(graph_run_id,seq)`；Projection delivery、Trace span、Command viewed、Notification attempt 等纯审计只写各自 Event/History，不创建 Fact。`fact_key` 按产生它的 immutable source fact/object/decision 派生，重复 T3 ingress 返回原 Fact，不重复计费。Event、effect journal、outbox 和 ledger 都使用稳定 idempotency key，并通过 run 的 `next_event_seq` 分配有序审计事件。
 
+Run Protocol v1 的 `fact_kind_rank` 固定如下；T3 queue 先按 `causal_wave`，再按该 rank，最后按 `stable_object_id` 排序。Rank 是协议常量，不得按数据库枚举顺序、TypeScript union 顺序或当前实现插入顺序推导：
+
+| Fact kind | Rank |
+| --- | ---: |
+| `orchestration_error` | 0 |
+| `node_output_published` | 10 |
+| `node_terminal` | 20 |
+| `wait_resolved` | 30 |
+| `build_failed` | 40 |
+| `control_edge_resolved` | 50 |
+| `data_edge_resolved` | 60 |
+| `trigger_decided` | 70 |
+| `input_sealed` | 80 |
+| `node_ready` | 90 |
+| `node_skipped` | 100 |
+| `terminal_candidate` | 110 |
+| `completion_eligibility` | 120 |
+
+Fact-backed Runtime Event 的 `event_type` 与对应 `fact_kind` 完全相同，且必须同 `(graph_run_id,event_seq)` 原子写入。Run Protocol v1 另固定以下 audit-only `event_type`；它们具有 Runtime Event 顺序和稳定 idempotency key，但不得创建 Fact 或消费 `facts_total`：
+
+```text
+workflow_created | state_activation_created | run_created |
+scope_materialized | expansion_sealed | scheduler_admitted |
+attempt_created | attempt_phase_changed | retry_schedule_created |
+retry_schedule_consumed | wait_armed | scope_close_requested |
+subtree_fenced | effect_operation_changed | compensation_changed |
+completion_cut_committed | child_completion_consumed | run_control_changed |
+operational_blocker_changed | runtime_command_decided |
+workflow_transition_committed | workflow_terminal_committed |
+root_finalization_changed | domain_claim_changed |
+ledger_posting_committed | recovery_decision_recorded
+```
+
+Projection/Trace/Notification 自有 delivery/span/attempt audit 不进入上述 Graph Run Event taxonomy；其 producer-specific History/Outbox 仍按各自合同持久化。新增或重命名 Runtime Event type 与修改 Fact/Event 映射同样需要发布新 Run Protocol，而不能由 producer 写开放字符串。
+
 ## 事务边界与 CAS
 
 长操作不得在 SQLite transaction 中 await。关键事务如下：
