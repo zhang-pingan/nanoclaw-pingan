@@ -1,0 +1,54 @@
+{
+  "format": "icarus.workflow-foundation-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-foundation-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-foundation-domain-separators:1\n",
+  "hash": "sha256:637a5bdf3353efba20776c0df1b601f6b2eaba6541a14f6268dbab0a6b972611",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.managed-node-runtime-distribution/1",
+        "domain_separator": "icarus:managed-node-runtime-distribution:1\n"
+      },
+      {
+        "format": "icarus.workflow-canonical-hash-profile/1",
+        "domain_separator": "icarus:workflow-canonical-hash-profile:1\n"
+      },
+      {
+        "format": "icarus.workflow-compiler-toolchain-inputs/1",
+        "domain_separator": "icarus:workflow-compiler-toolchain-inputs:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-artifact-envelope-schema/1",
+        "domain_separator": "icarus:workflow-contract-artifact-envelope-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-foundation-negative-cases/1",
+        "domain_separator": "icarus:workflow-contract-foundation-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-hash-vectors/1",
+        "domain_separator": "icarus:workflow-contract-hash-vectors:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-pack-foundation/1",
+        "domain_separator": "icarus:workflow-contract-pack-foundation:1\n"
+      },
+      {
+        "format": "icarus.workflow-foundation-domain-separators/1",
+        "domain_separator": "icarus:workflow-foundation-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-strict-json-profile/1",
+        "domain_separator": "icarus:workflow-strict-json-profile:1\n"
+      },
+      {
+        "format": "icarus.workflow-versioned-ref-schema/1",
+        "domain_separator": "icarus:workflow-versioned-ref-schema:1\n"
+      }
+    ]
+  }
+}

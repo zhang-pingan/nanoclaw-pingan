@@ -1,0 +1,31 @@
+{
+  "format": "icarus.workflow-canonical-hash-profile/1",
+  "ref": {
+    "id": "icarus.workflow-canonical-hash-profile",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-canonical-hash-profile:1\n",
+  "hash": "sha256:e023e815062e4534469bc8704284c7f47950c0a52a330a004d8905ccaf66157a",
+  "payload": {
+    "algorithm": "sha256",
+    "implementation": "node:crypto",
+    "canonicalization": {
+      "standard": "RFC8785",
+      "package": "json-canonicalize",
+      "version": "2.0.0",
+      "encoding": "utf-8",
+      "unicode_normalization": "none"
+    },
+    "domain_separator": {
+      "encoding": "ascii",
+      "terminator": "LF",
+      "pattern": "^icarus:(?:[a-z0-9]+(?:-[a-z0-9]+)*:)+[1-9][0-9]*\\n$",
+      "input_order": "domain_separator_then_canonical_json"
+    },
+    "output": {
+      "format": "sha256:<64 lowercase hex>",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

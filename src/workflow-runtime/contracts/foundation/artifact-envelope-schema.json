@@ -1,0 +1,84 @@
+{
+  "format": "icarus.workflow-contract-artifact-envelope-schema/1",
+  "ref": {
+    "id": "icarus.workflow-contract-artifact-envelope-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-artifact-envelope-schema:1\n",
+  "hash": "sha256:347656d1f99a293a839250f1f363d609b302c7e881d174c3789981ada67f1546",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-contract-artifact-envelope/1",
+    "title": "WorkflowContractArtifactEnvelopeV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "ref",
+      "version",
+      "domain_separator",
+      "hash",
+      "payload"
+    ],
+    "properties": {
+      "format": {
+        "type": "string",
+        "pattern": "^icarus\\.[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/[1-9][0-9]*$"
+      },
+      "ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "domain_separator": {
+        "type": "string",
+        "pattern": "^icarus:(?:[a-z0-9]+(?:-[a-z0-9]+)*:)+[1-9][0-9]*\\n$"
+      },
+      "hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "payload": {
+        "type": "object"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

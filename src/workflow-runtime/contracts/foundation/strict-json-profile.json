@@ -1,0 +1,35 @@
+{
+  "format": "icarus.workflow-strict-json-profile/1",
+  "ref": {
+    "id": "icarus.workflow-strict-json-profile",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-strict-json-profile:1\n",
+  "hash": "sha256:8b01a0e87b5851b9243d41b07b6883b91de5fe1ab446d019a3f3f62bedf5c28e",
+  "payload": {
+    "lexer_parser": {
+      "package": "jsonc-parser",
+      "version": "3.3.1",
+      "api": "visitor_then_materialize"
+    },
+    "options": {
+      "disallow_comments": true,
+      "allow_trailing_comma": false,
+      "allow_empty_content": false
+    },
+    "duplicate_key_policy": "reject_before_materialize",
+    "number_policy": {
+      "finite_only": true,
+      "safe_integer_required_for_integers": true,
+      "high_precision_representation": "string_schema"
+    },
+    "unicode_policy": {
+      "encoding": "utf-8",
+      "reject_invalid_utf8": true,
+      "reject_unpaired_surrogates": true,
+      "unicode_normalization": "none"
+    },
+    "programmatic_value_policy": "plain_json_only"
+  }
+}

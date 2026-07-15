@@ -15,6 +15,8 @@
     "dev:assistant": "node scripts/build-assistant.mjs && electron dist-assistant/main.cjs",
     "build:assistant": "node scripts/build-assistant.mjs",
     "package:mac": "npm run build && npm run build:electron && electron-builder --mac",
+    "contracts:generate": "tsx src/workflow-runtime/contracts/cli.ts generate",
+    "contracts:check": "tsx src/workflow-runtime/contracts/cli.ts check",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:fix": "prettier --write \"src/**/*.ts\"",
@@ -23,6 +25,7 @@
     "setup": "tsx setup/index.ts",
     "auth": "tsx src/whatsapp-auth.ts",
     "test": "vitest run",
+    "test:g0.2": "vitest run src/workflow-runtime/contracts",
     "test:watch": "vitest"
   },
   "dependencies": {

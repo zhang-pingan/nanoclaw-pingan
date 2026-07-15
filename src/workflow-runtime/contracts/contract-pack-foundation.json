@@ -1,0 +1,126 @@
+{
+  "format": "icarus.workflow-contract-pack-foundation/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-foundation",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-foundation:1\n",
+  "hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+  "payload": {
+    "gate": "G0.2",
+    "status": "foundation",
+    "artifact_envelope_format": "icarus.workflow-contract-artifact-envelope-schema/1",
+    "artifacts": [
+      {
+        "path": "catalogs/foundation-domain-separators.json",
+        "format": "icarus.workflow-foundation-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-foundation-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-foundation-domain-separators:1\n",
+        "hash": "sha256:637a5bdf3353efba20776c0df1b601f6b2eaba6541a14f6268dbab0a6b972611"
+      },
+      {
+        "path": "conformance/foundation/hash-vectors.json",
+        "format": "icarus.workflow-contract-hash-vectors/1",
+        "ref": {
+          "id": "icarus.workflow-contract-hash-vectors",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-contract-hash-vectors:1\n",
+        "hash": "sha256:ebe286769316c8b7ccad33c94e33c32e7752cc518e355e0e64241827c272889a"
+      },
+      {
+        "path": "conformance/foundation/negative-cases.json",
+        "format": "icarus.workflow-contract-foundation-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-contract-foundation-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-contract-foundation-negative-cases:1\n",
+        "hash": "sha256:8b3291d54684d6e4a648ca314dce2827319400609b88d94c23bfdb15b532017e"
+      },
+      {
+        "path": "foundation/artifact-envelope-schema.json",
+        "format": "icarus.workflow-contract-artifact-envelope-schema/1",
+        "ref": {
+          "id": "icarus.workflow-contract-artifact-envelope-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-contract-artifact-envelope-schema:1\n",
+        "hash": "sha256:347656d1f99a293a839250f1f363d609b302c7e881d174c3789981ada67f1546"
+      },
+      {
+        "path": "foundation/canonical-hash-profile.json",
+        "format": "icarus.workflow-canonical-hash-profile/1",
+        "ref": {
+          "id": "icarus.workflow-canonical-hash-profile",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-canonical-hash-profile:1\n",
+        "hash": "sha256:e023e815062e4534469bc8704284c7f47950c0a52a330a004d8905ccaf66157a"
+      },
+      {
+        "path": "foundation/strict-json-profile.json",
+        "format": "icarus.workflow-strict-json-profile/1",
+        "ref": {
+          "id": "icarus.workflow-strict-json-profile",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-strict-json-profile:1\n",
+        "hash": "sha256:8b01a0e87b5851b9243d41b07b6883b91de5fe1ab446d019a3f3f62bedf5c28e"
+      },
+      {
+        "path": "foundation/versioned-ref-schema.json",
+        "format": "icarus.workflow-versioned-ref-schema/1",
+        "ref": {
+          "id": "icarus.workflow-versioned-ref-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-versioned-ref-schema:1\n",
+        "hash": "sha256:7a22150ce8d6e8127e882a6ed79975e578d2fd6a28dfab002490c17cfdd196bd"
+      }
+    ],
+    "toolchain_inputs": [
+      {
+        "path": "toolchain/compiler-toolchain-inputs.json",
+        "format": "icarus.workflow-compiler-toolchain-inputs/1",
+        "ref": {
+          "id": "icarus.workflow-compiler-toolchain-inputs",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiler-toolchain-inputs:1\n",
+        "hash": "sha256:3ad720b0283ec45be37acb596f8afb1e50a40f177fbc0c3ee2ff419aba43557b"
+      },
+      {
+        "path": "toolchain/node-v26.5.0-darwin-arm64.json",
+        "format": "icarus.managed-node-runtime-distribution/1",
+        "ref": {
+          "id": "nodejs.node-v26.5.0-darwin-arm64",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:managed-node-runtime-distribution:1\n",
+        "hash": "sha256:0824f5044057d6ff26dc45022b842342f148b2dda2f0dd0feb17dd0b045f6cad"
+      }
+    ],
+    "reserved_directories": [
+      "schemas",
+      "protocols",
+      "safety",
+      "sqlite",
+      "conformance/draft",
+      "conformance/sealed"
+    ]
+  }
+}

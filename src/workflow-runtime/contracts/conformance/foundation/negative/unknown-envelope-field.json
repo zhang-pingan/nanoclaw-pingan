@@ -1,0 +1,9 @@
+{
+  "format": "icarus.test-contract/1",
+  "ref": {"id": "test.contract", "version": "1.0.0"},
+  "version": 1,
+  "domain_separator": "icarus:test-contract:1\n",
+  "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "payload": {"value": 1},
+  "unknown": true
+}

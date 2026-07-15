@@ -1,0 +1,85 @@
+{
+  "format": "icarus.workflow-contract-hash-vectors/1",
+  "ref": {
+    "id": "icarus.workflow-contract-hash-vectors",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-hash-vectors:1\n",
+  "hash": "sha256:ebe286769316c8b7ccad33c94e33c32e7752cc518e355e0e64241827c272889a",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "object_key_order",
+        "domain_separator": "icarus:test-contract-object:1\n",
+        "input": {
+          "z": 3,
+          "a": 1,
+          "nested": {
+            "b": 2,
+            "a": 1
+          }
+        },
+        "canonical_json": "{\"a\":1,\"nested\":{\"a\":1,\"b\":2},\"z\":3}",
+        "expected_hash": "sha256:9dcc0e6d747ce4bfc97751d7214599777404f4db5862a91e6474ea805b84eaba"
+      },
+      {
+        "case_id": "array_order_preserved",
+        "domain_separator": "icarus:test-contract-array:1\n",
+        "input": {
+          "items": [
+            3,
+            1,
+            2
+          ]
+        },
+        "canonical_json": "{\"items\":[3,1,2]}",
+        "expected_hash": "sha256:43dc38eb14631764da9a6ab4bec36f7d3e0b958e90940fda17b9464109ae2153"
+      },
+      {
+        "case_id": "utf8_without_normalization",
+        "domain_separator": "icarus:test-contract-unicode:1\n",
+        "input": {
+          "text": "雪"
+        },
+        "canonical_json": "{\"text\":\"雪\"}",
+        "expected_hash": "sha256:bb693232ffcc4db2e4848ecc24a08b879cb04970d0577453739bc97f80aa5236"
+      },
+      {
+        "case_id": "rfc8785_profile_compatible_value_serialization",
+        "domain_separator": "icarus:test-rfc8785-values:1\n",
+        "input": {
+          "numbers": [
+            333333333.3333333,
+            4.5,
+            0.002,
+            1e-27
+          ],
+          "string": "€$\u000f\nA'B\"\\\"/",
+          "literals": [
+            null,
+            true,
+            false
+          ]
+        },
+        "canonical_json": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\"/\"}",
+        "expected_hash": "sha256:5ef00b12a39c2f0d0442da8c4cc8dce9a327f6d7295db0f3a4800550f3f030c8"
+      },
+      {
+        "case_id": "rfc8785_property_sorting",
+        "domain_separator": "icarus:test-rfc8785-property-order:1\n",
+        "input": {
+          "1": "One",
+          "€": "Euro Sign",
+          "\r": "Carriage Return",
+          "דּ": "Hebrew Letter Dalet With Dagesh",
+          "😀": "Emoji: Grinning Face",
+          "": "Control",
+          "ö": "Latin Small Letter O With Diaeresis"
+        },
+        "canonical_json": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+        "expected_hash": "sha256:a0bf38b5130d40138320b9ef1be4e3a47cf7bfb77c7898906f6bcea8141239df"
+      }
+    ]
+  }
+}

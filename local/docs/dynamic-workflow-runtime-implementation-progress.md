@@ -2,7 +2,7 @@
 
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G0 Contract Pack / Static Baseline
-> **下一施工切片**: G0.2 Contract Pack Foundation
+> **下一施工切片**: G0.3 Closed Schemas
 > **最后更新**: 2026-07-15
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -130,7 +130,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `DONE` | G0.1（本原子提交） |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1/G0.2 DONE；G0.3 READY |
 
 ## G0 施工切片
 
@@ -139,8 +139,8 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | 切片 | 内容 | 状态 | 主要退出条件 | 完成提交 |
 | --- | --- | --- | --- | --- |
 | G0.1 | Toolchain Identity | `DONE` | Node/npm/direct dependency/lock/CI/managed distribution/launcher identity 一致，基础构建与测试通过 | 本原子提交 |
-| G0.2 | Contract Pack Foundation | `READY` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | - |
-| G0.3 | Closed Schemas | `NOT_READY` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | - |
+| G0.2 | Contract Pack Foundation | `DONE` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | 本原子提交 |
+| G0.3 | Closed Schemas | `READY` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | - |
 | G0.4 | Catalogs and Protocol Tables | `NOT_READY` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | - |
 | G0.5 | Safety / Retention / SQLite Contracts | `NOT_READY` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | - |
 | G0.6 | Logical Schema Metadata | `NOT_READY` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | - |
@@ -148,7 +148,7 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | G0.8 | Golden Draft and Review Input | `NOT_READY` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | - |
 | G0.9 | G0 Conformance Exit | `NOT_READY` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | - |
 
-## 当前施工切片：G0.1 Toolchain Identity
+## 已完成切片：G0.1 Toolchain Identity
 
 **状态**：`DONE`
 
@@ -225,7 +225,116 @@ git diff --check
 
 如果完整 `npm test` 存在与本切片无关的已知失败，必须保存具体失败并证明不是工具链变更导致；不得只运行定向测试后宣称完成。
 
+## 已完成切片：G0.2 Contract Pack Foundation
+
+**状态**：`DONE`
+
+**工作包**：I11
+
+**目标**：建立不包含 Domain Runtime 语义的 Contract Pack 公共底座：通用 closed artifact envelope、closed exact `VersionedRef`、strict JSON parse、RFC 8785 canonical JSON、ASCII domain-separated SHA-256、foundation machine artifacts/fixtures、确定性 generate/check 入口与 CI skeleton；复用并验证 G0.1 toolchain artifact identity，但不把候选 toolchain 输入伪装为完整 Compiler Toolchain、Core Release 或认证 artifact。
+
+**范围边界**：
+
+- 所有实现位于 `src/workflow-runtime/contracts/`，依赖方向保持 `contracts` 不 import Compiler、Store、Registry、Feature 或 Runtime。
+- `schemas/`、`protocols/`、`safety/`、`sqlite/`、`conformance/draft/` 与 `conformance/sealed/` 本切片只建立 reserved directory，不包含后续切片 artifact；`.gitkeep` 不构成 G0.3-G0.8 交付证据。
+- 没有实现 Definition/Recipe/Command/Transition 等 closed Domain Schema、DDL/Store、Compiler normalizer/proof、Golden sealing、Registry、T0-T8、Runtime Center 或 UI。
+- 没有修改 Agent Container/VM image、Electron identity、`package-lock.json` 或 G0.1 managed Node/Launcher/Core binding；Core binding 仍为 `development_checkout`。
+
+**退出条件与最低验证**：
+
+```bash
+./scripts/runtime-toolchain.sh exec -- npm ci
+./scripts/runtime-toolchain.sh exec -- npm run contracts:check
+./scripts/runtime-toolchain.sh exec -- npm run typecheck
+./scripts/runtime-toolchain.sh exec -- npm test
+./scripts/runtime-toolchain.sh exec -- npm run test:g0.2
+./scripts/runtime-toolchain.sh exec -- npx vitest run setup/legacy-workflow-boundary.test.ts
+./scripts/runtime-toolchain.sh exec -- npm run build
+./scripts/runtime-toolchain.sh exec -- npx prettier --check 'src/workflow-runtime/contracts/*.ts'
+./scripts/runtime-toolchain.sh bind-core --project-root "$PWD" --entry dist/index.js
+git diff --check
+```
+
 ## 施工记录
+
+### 2026-07-15：G0.2 Contract Pack Foundation（DONE）
+
+I11/G0.2 的 Contract Pack 公共机器合同、fixture、确定性生成/只读检查和 CI conformance 已完成最终代码/合同审查、完整退出验证与原子交付。审查期间已有提交 `32f3c5193940f7a5dedee14d13e7c736c25fd401` 在 `main` 新增范围外文档 `local/docs/evaluation-self-evolution-framework.md`；最终暂存集以该 HEAD 为父提交，只包含 G0.2 文件，没有撤销、修改或重复纳入该文档。G0.2 为 `DONE`，G0.3 转为 `READY`；G0 总 Gate 继续为 `IN_PROGRESS`，G0.4-G0.9 与 G1-G9 状态未推进。
+
+已完成交付：
+
+- 通用 artifact envelope 固定 closed `format/ref/version/domain_separator/hash/payload`；format revision、envelope version 与 domain revision 必须一致，hash 覆盖去除自身 hash 后的完整 canonical envelope。
+- standalone 与 envelope-embedded `VersionedRef` Schema 逐字节语义一致，只允许 closed `{id,version}` 和 immutable exact version token，拒绝 unknown field、`latest/LATEST`、range 与 `1.x`。
+- `strict-json.ts` 使用 pinned `jsonc-parser@3.3.1` visitor 先检测 duplicate key/path，再 materialize；comments、trailing comma、empty/invalid UTF-8、non-finite/unsafe integer、string/object-key unpaired surrogate、Proxy、sparse/accessor/cyclic/custom/non-JSON value均 fail-closed。
+- `hash.ts` 使用 pinned `json-canonicalize@2.0.0` RFC 8785 JCS、Node `crypto` SHA-256、带终止 LF 的 versioned ASCII domain separator和 `sha256:<64 lowercase hex>`；不同 domain 的相同 payload hash 不相等。
+- foundation machine artifacts 包含 envelope/VersionedRef Schema、strict JSON/hash profile、domain separator registry、hand-authored canonical/hash vectors与 negative case manifest；新增 RFC 8785 完整官方 value sample 的 direct JCS conformance、strict-profile-compatible number/string machine vector和官方 UTF-16 property-order vector。Domain registry 一对一覆盖全部 G0.2 artifacts及 G0.1 managed distribution/compiler-input artifact。
+- 每个 negative fixture 的 raw bytes 现在以 `source_sha256` 进入 negative-case artifact，再进入 foundation manifest；同类失败内容替换也会改变 hash chain。
+- `contracts:generate` 只确定性刷新 foundation hash/vector/negative fixture source hash/manifest；`contracts:check` 不写文件并逐字节校验生成结果、Schema/TypeScript key/pattern/semantic conformance、domain coverage、negative raw bytes、reserved directory 只含 `.gitkeep`、G0.1 artifact/domain hash、真实 package-lock bytes、exact direct package version/integrity 和 Node/npm identity。
+- CI 在 `npm ci` 后、format/typecheck/test 前运行 `npm run contracts:check`；`npm run test:g0.2` 提供独立定向入口。11 个定向测试还覆盖固定 seed 的 200 组 object insertion-order property、Proxy/unpaired-surrogate fail-closed和拒绝动态 import/require 的 `contracts` import boundary。
+
+Artifact hashes：
+
+| Artifact | Hash |
+| --- | --- |
+| Contract Pack foundation manifest | `sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d` |
+| Artifact envelope schema | `sha256:347656d1f99a293a839250f1f363d609b302c7e881d174c3789981ada67f1546` |
+| VersionedRef schema | `sha256:7a22150ce8d6e8127e882a6ed79975e578d2fd6a28dfab002490c17cfdd196bd` |
+| Strict JSON profile | `sha256:8b01a0e87b5851b9243d41b07b6883b91de5fe1ab446d019a3f3f62bedf5c28e` |
+| Canonical hash profile | `sha256:e023e815062e4534469bc8704284c7f47950c0a52a330a004d8905ccaf66157a` |
+| Foundation domain separators | `sha256:637a5bdf3353efba20776c0df1b601f6b2eaba6541a14f6268dbab0a6b972611` |
+| Hash vectors | `sha256:ebe286769316c8b7ccad33c94e33c32e7752cc518e355e0e64241827c272889a` |
+| Negative cases | `sha256:8b3291d54684d6e4a648ca314dce2827319400609b88d94c23bfdb15b532017e` |
+
+早期暂停会话中、最终审查修复前的验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm ci` | PASS；554 packages installed；30 项既有 audit 告警保持 R-007，不运行会漂移 exact lock 的自动修复 |
+| managed `npm run contracts:check` | PASS；manifest hash `sha256:76011bf5d07175015a922aef71b9a56e3681e7e83951560d15df08efc333d6c3` |
+| generate -> check idempotence | PASS；重复 generate 前后 JSON/reserved tree digest 均为 `3b20e92caed18b1b2faa051566d14411c7e92b2b6ebb701162e24e05b80df588` |
+| managed `npm run typecheck` | PASS |
+| managed `npm test` | PASS，69 files / 630 tests |
+| managed `npm run test:g0.2` | PASS，1 file / 11 tests；含 200-run fixed-seed property |
+| managed legacy boundary | PASS，1 file / 6 tests |
+| managed `npm run build` | PASS |
+| Contract Pack targeted Prettier | PASS；仓库既有全局 format baseline 仍有 34 个本切片外旧文件差异，记录为 R-008且未混入原子提交 |
+| managed runtime/Core binding | PASS；Node `v26.5.0 darwin/arm64` 来自 active content-addressed distribution；binding kind 仍为 `development_checkout` |
+| final boundary/generation scan | 暂停会话记录为 PASS；`git diff --check` 通过；`container/`、Electron、build scripts、`package-lock.json` 无改动；原子提交前仍须根据最终 diff 重做边界检查 |
+
+2026-07-15 最终审查会话完成全文/进度文档、I11/S10/S13/S18/S24/S25/S26/S28、Compiler Conformance、模块边界、测试/实施/重构/验收、基线提交 `620863a` 与全部 G0.2 tracked/untracked 文件审查。修复了 programmatic JSON 对象键末尾 high-surrogate 检测、Proxy fail-open、reserved directory 非预期 artifact、G0.1 lock/package replay不足、VersionedRef/Schema/profile 持续一致性、动态 import boundary、RFC 8785 vector coverage、negative fixture raw byte hash chain和进度文档旧 domain hash。
+
+审查修复后的定向证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run contracts:generate` | PASS；foundation manifest `sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d` |
+| managed `npm run contracts:check` | PASS；同一 manifest hash；仅报告 Node `DEP0205 module.register()` deprecation warning，退出码 0。告警来自 Node 26 下的 `tsx` loader；替换 loader/升级非规范依赖不属于 G0.2，保留为非阻塞已知告警 |
+| managed `npm run typecheck` | PASS |
+| managed `npm run test:g0.2` | PASS，1 file / 11 tests；含 200-run fixed-seed property和新增 fail-closed/conformance assertions |
+| targeted Prettier write | PASS；所有 `src/workflow-runtime/contracts/*.ts` 已按 pinned Prettier 格式化 |
+| `git diff --check` | PASS |
+
+最终退出验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run contracts:generate`（连续两次） | PASS；两次 foundation manifest 均为 `sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d` |
+| JSON/reserved tree generate 幂等 digest | PASS；初始、第一次 generate 后、第二次 generate 后均为 `c9f1b5e75982901efdd50789cf76e7352433edcf47d2e231798f779eec4435ed` |
+| managed `npm ci` | PASS；554 packages installed；`package-lock.json` SHA-256 为 `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085`；30 项既有 audit 告警保持 R-007 |
+| managed `npm run contracts:check` | PASS；foundation manifest hash 不变；check 前后 JSON/reserved tree digest 均为 `c9f1b5e75982901efdd50789cf76e7352433edcf47d2e231798f779eec4435ed`，证明只读；Node `DEP0205 module.register()` 告警保持 R-010 |
+| managed `npm run typecheck` | PASS |
+| managed `npm test` | PASS，69 files / 630 tests |
+| managed `npm run test:g0.2` | PASS，1 file / 11 tests；含 fixed-seed 200-run property 与 fail-closed/conformance assertions |
+| managed `npx vitest run setup/legacy-workflow-boundary.test.ts` | PASS，1 file / 6 tests |
+| managed `npm run build` | PASS |
+| managed targeted Prettier `--check` | PASS；全部 `src/workflow-runtime/contracts/*.ts` 符合 pinned Prettier |
+| `runtime-toolchain.sh bind-core` | PASS；Core binding kind 为 `development_checkout` |
+| final boundary/status scan | PASS；最终 HEAD 仍为 `32f3c51`；`package-lock.json`、`container/`、Electron、build scripts、G0.1 managed toolchain/launcher/setup/launchd 文件无 G0.2 改动；无 symlink/临时文件/无关生成物；reserved 目录各自只含 `.gitkeep` |
+| `git diff --check` | PASS |
+
+G0.1 基线提交 `620863a7f9cf8c08cd00caef3f962bf3755d97ab` 的对象、完整文件清单、diff check、工具链/lock/launcher边界与完整回归均已复核；当前 HEAD 在其后只多出范围外文档提交 `32f3c51`，G0.2 没有修改 G0.1 identity bytes。最终原子提交只包含 G0.2 实现、fixtures、machine artifacts、测试、CI、package scripts 与本文。
+
+本切片没有产生完整 Compiler Toolchain Manifest、closed Domain Schema、Sealed Golden、Core Release、Executor Artifact、SQLite Profile 或 Supported Limits certification。
 
 ### 2026-07-15：G0.1 Toolchain Identity（DONE）
 
@@ -271,11 +380,14 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-001 | Toolchain | CLOSED | exact Node/npm/direct dependency/lock/CI/managed distribution 已落地，最终 managed install/ci/typecheck/test/build 全部通过 | G0.1 |
 | R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | OPEN | 当前只有定向 legacy boundary test，尚无规范要求的 AST/API/UI/schema/filesystem/resource manifests | G0.7 |
-| R-004 | Contract drift | OPEN | 规范尚未转换为 Machine-readable Contract Pack，Markdown 与未来机器合同的一致性尚未由 CI 证明 | G0.2-G0.9 |
+| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 已原子交付 artifact/ref/strict-json/hash machine foundation 与 CI check；Domain Schema/Catalog/Protocol/Safety/DDL metadata 及 Markdown 双向覆盖仍未完成 | G0.3-G0.9 |
 | R-005 | DDL feasibility | DEFERRED | Logical Schema 尚未转换为 executable migration；不代表已发现冲突，但 G1 必须以真实 SQLite Gate 验证 | G1 |
 | R-006 | Certification | DEFERRED | Product Floor 和 profile 已冻结；Launcher/Core Release/Managed Node executable/native module 完整 key、Supported Limits 与事务预算尚未 benchmark 认证 | G8 |
 | R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
+| R-008 | Formatting baseline | OPEN_OUT_OF_SCOPE | 仓库既有 `npm run format:check` 对 34 个 G0.2 外旧 TypeScript 文件报差异；G0.2 新文件 targeted Prettier 通过，未把无关批量格式化混入原子提交 | 独立维护 |
+| R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
+| R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 
 ## 下一步
 
-开始 `G0.2 Contract Pack Foundation`。保持 G0 总 Gate 为 `IN_PROGRESS`，工作包仍按实现索引重新确认；只实现 artifact envelope、VersionedRef、domain-separated hash、strict parse、Contract Pack 目录/CI 骨架及其 fixture，不开始 G0.3 closed schema、G1 Store/DDL、G2 Compiler lowering/Golden、Registry、T0-T8 或 UI。新会话仍须完整阅读架构规范和本文，并从本原子提交检查工作树与 G0.1 最终证据。
+下一会话开始 `G0.3 Closed Schemas`。先完整阅读架构规范和本文，复核本次 G0.2 原子提交及其 machine foundation，再按 G0.3 范围冻结 Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR closed schemas、TypeScript conformance 与 negative fixtures。G0 总 Gate 继续为 `IN_PROGRESS`；不得越过 G0.3 开始 G0.4、G1 Store/DDL、G2 Compiler lowering/normalization/proof、Golden sealing、Registry、T0-T8、Runtime Center 或 UI。

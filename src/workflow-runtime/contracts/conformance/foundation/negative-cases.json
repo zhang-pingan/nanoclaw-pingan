@@ -1,0 +1,68 @@
+{
+  "format": "icarus.workflow-contract-foundation-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-contract-foundation-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-foundation-negative-cases:1\n",
+  "hash": "sha256:8b3291d54684d6e4a648ca314dce2827319400609b88d94c23bfdb15b532017e",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "duplicate_key",
+        "path": "conformance/foundation/negative/duplicate-key.json",
+        "expected_error": "json_duplicate_key",
+        "source_sha256": "sha256:c5b38509352b0d6b081db4e840fd97cea8a6fa13dae47eb01b3462723f5d393a"
+      },
+      {
+        "case_id": "comment",
+        "path": "conformance/foundation/negative/comment.json",
+        "expected_error": "json_syntax_invalid",
+        "source_sha256": "sha256:9733651404ff0cf265e0082a4bc6d45d0a41a1a720489dd81dc705c43f750aa6"
+      },
+      {
+        "case_id": "trailing_comma",
+        "path": "conformance/foundation/negative/trailing-comma.json",
+        "expected_error": "json_syntax_invalid",
+        "source_sha256": "sha256:7343527e3248d936d03996e967206acd46b25e239eb7a8f7f7075025602c1cfb"
+      },
+      {
+        "case_id": "unsafe_integer",
+        "path": "conformance/foundation/negative/unsafe-integer.json",
+        "expected_error": "json_unsafe_integer",
+        "source_sha256": "sha256:5c3b781ad8e7948f7c271ecb64766d72bf721959840ef8f59326782a4d3bbc77"
+      },
+      {
+        "case_id": "unknown_envelope_field",
+        "path": "conformance/foundation/negative/unknown-envelope-field.json",
+        "expected_error": "artifact_envelope_invalid",
+        "source_sha256": "sha256:be5d3cb1c71107c062d4fcde17cf4d6f99e6e93c8406e2fdab251343060f98c4"
+      },
+      {
+        "case_id": "mutable_version_ref",
+        "path": "conformance/foundation/negative/mutable-version-ref.json",
+        "expected_error": "versioned_ref_invalid",
+        "source_sha256": "sha256:9be819273a5a0e50b237e83ac4dc1370465c01ffcbf660af62c555e719eb03b2"
+      },
+      {
+        "case_id": "uppercase_hash",
+        "path": "conformance/foundation/negative/uppercase-hash.json",
+        "expected_error": "hash_format_invalid",
+        "source_sha256": "sha256:faf17d81196f994fad4531f132f0222337b321c47e4946a6e2223d03da907b89"
+      },
+      {
+        "case_id": "invalid_domain_separator",
+        "path": "conformance/foundation/negative/invalid-domain-separator.json",
+        "expected_error": "domain_separator_invalid",
+        "source_sha256": "sha256:2724d90611a2349d37381072be9074de844d103d7e37d5ed0d13fffeaa188fd2"
+      },
+      {
+        "case_id": "wrong_artifact_hash",
+        "path": "conformance/foundation/negative/wrong-artifact-hash.json",
+        "expected_error": "artifact_hash_mismatch",
+        "source_sha256": "sha256:93c29b4c2ee90997db3066afeb70f4355b0bfbaa2bfa666e73d3446845ad4dea"
+      }
+    ]
+  }
+}

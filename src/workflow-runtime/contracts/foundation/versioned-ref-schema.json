@@ -1,0 +1,45 @@
+{
+  "format": "icarus.workflow-versioned-ref-schema/1",
+  "ref": {
+    "id": "icarus.workflow-versioned-ref-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-versioned-ref-schema:1\n",
+  "hash": "sha256:7a22150ce8d6e8127e882a6ed79975e578d2fd6a28dfab002490c17cfdd196bd",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/versioned-ref/1",
+    "title": "VersionedRef",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "version"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+      },
+      "version": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+        "not": {
+          "anyOf": [
+            {
+              "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+            },
+            {
+              "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
