@@ -16,7 +16,7 @@
 
 每个新会话开始施工前必须：
 
-1. 阅读 `local/docs/dynamic-workflow-dag-framework.md`。
+1. 完整阅读 `local/docs/dynamic-workflow-dag-framework.md`，不得用本文或局部摘要代替全文。
 2. 阅读本文，确认当前 Gate、下一施工切片、已完成证据和未解决风险。
 3. 执行 `git status --short`、`git branch --show-current`、`git log -5 --oneline`，并阅读本文记录的最后一个施工提交。
 4. 根据规范“实现索引”确定工作包 ID，重点复读其主要入口、必须联读、核心不变量和完整验收标准。
