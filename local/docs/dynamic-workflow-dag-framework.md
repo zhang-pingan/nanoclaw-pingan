@@ -2018,7 +2018,7 @@ Capability node compile 还必须把 Capability/State request、Graph Policy 与
 - 每次执行创建 immutable attempt；execution outcome 与 quality decision 分开保存。
 - `needs_revision` 只属于 execution succeeded 后的 attempt quality decision，不是 execution failure、Node terminal status 或 Graph cycle。它要求 Capability 显式发布 non-null `quality_revision_policy`，Evaluator 必须同时返回符合 pinned schema/size 的 actionable feedback；缺少、超限或 schema/hash 不匹配是 `evaluation_contract_violation`，不得用空 feedback 猜测下一轮任务。
 - Node-level input snapshot 始终不变。下一 Attempt 只通过 attempt-specific Context Pack 获得原始 frozen input、紧邻上一 Attempt 的 candidate/evaluation/feedback refs 和 continuation lineage；v1 不把完整历史正文反复注入，也不允许 Executor 隐式读取 state 级 latest、其他 Attempt 临时文件或 live Workflow Context。完整链仍由 Attempt rows/Trace 可审计。
-- execution retry 与 quality revision 都会真实重新执行 Agent/Action并创建新 Attempt，共享 effective `max_attempts`、Node/Run attempt ledger、deadline 与 usage budget，但 continuation kind 和触发规则不同。`retry_on` 只仲裁 execution failed reason；合法 `needs_revision` 不需要出现在 `retry_on`，也不能借 quality revision 绕过总 Attempt 上限。
+- execution retry 与 quality revision 都会真实重新执行 Agent/Action 并创建新 Attempt，共享 effective `max_attempts`、Node/Run attempt ledger、deadline 与 usage budget，但 continuation kind 和触发规则不同。`retry_on` 只仲裁 execution failed reason；合法 `needs_revision` 不需要出现在 `retry_on`，也不能借 quality revision 绕过总 Attempt 上限。
 
 ```ts
 type AttemptContinuationKind =
@@ -4359,11 +4359,12 @@ workflow_graph_node_attempts
 UNIQUE(node_id, attempt_no)
 UNIQUE(delegation_id) WHERE delegation_id IS NOT NULL
 UNIQUE(parent_attempt_id) WHERE parent_attempt_id IS NOT NULL
+UNIQUE(graph_run_id, scope_id, node_id, id, attempt_no)
 
 workflow_graph_retry_schedules
   - id
   - graph_run_id/scope_id/node_id
-  - source_attempt_id/next_attempt_no
+  - source_attempt_id/source_attempt_no/next_attempt_no
   - continuation_kind      execution_retry | quality_revision
   - quality_revision_feedback_ref/hash
   - retry_reason_code/retry_policy_hash
@@ -4394,13 +4395,13 @@ UNIQUE(node_id)
 
 Node-level `trigger_cut` 和 input snapshot 是所有 node type 的恢复事实源。Delegation/system attempt 只引用并复制对应 hash，不能重新选择 edge；join/wait/subgraph/expand/map/terminal 即使没有普通 attempt，也必须基于 node snapshot 执行。
 
-Attempt continuation 组合必须由 SQLite CHECK 与 composite FK 同时约束：`attempt_no=1` 恰为 `initial + parent_attempt_id/parent_attempt_no=NULL`；`attempt_no>1` 恰为 non-initial、`parent_attempt_no=attempt_no-1`，且 composite self FK 证明 parent 属于相同 `(graph_run_id, scope_id, node_id)`。Schedule 的 `source_attempt_id` 也以 composite FK 绑定同 Node，且 `next_attempt_no=source_attempt.attempt_no+1`。`quality_revision` Attempt/Schedule 必须携带 parent/source 产生的同 ref/hash feedback envelope，`execution_retry` 必须为空；Attempt 恰在 `quality_decision=needs_revision` 时具有 feedback envelope，pass/fail/其他状态必须为空。Quality Schedule 的 `retry_reason_code` 固定为 closed code `quality_needs_revision`，不能由 Evaluator 提供。`UNIQUE(parent_attempt_id)` 与 `UNIQUE(source_attempt_id)` 分别保证一个 Attempt 最多产生一个实际后继和一个 Schedule；Schedule unique 与 CAS 保证 crash/recovery 不分叉 continuation chain。Context Pack ref/hash 必须与 canonical continuation、Node input snapshot 和 pinned binding 一致；同 Attempt 重建得到不同 hash 属于 integrity violation。
+Attempt continuation 组合必须由 SQLite CHECK 与 composite FK 同时约束：`attempt_no=1` 恰为 `initial + parent_attempt_id/parent_attempt_no=NULL`；`attempt_no>1` 恰为 non-initial、`parent_attempt_no=attempt_no-1`，且 composite self FK 证明 parent 属于相同 `(graph_run_id, scope_id, node_id)`。Schedule 保存 `source_attempt_id/source_attempt_no`，以同一 Attempt composite key 绑定同 Node，并以 CHECK 强制 `next_attempt_no=source_attempt_no+1`。`quality_revision` Attempt/Schedule 必须携带 parent/source 产生的同 ref/hash feedback envelope，`execution_retry` 必须为空；Attempt 恰在 `quality_decision=needs_revision` 时具有 feedback envelope，pass/fail/其他状态必须为空。Quality Schedule 的 `retry_reason_code` 固定为 closed code `quality_needs_revision`，不能由 Evaluator 提供。`UNIQUE(parent_attempt_id)` 与 `UNIQUE(source_attempt_id)` 分别保证一个 Attempt 最多产生一个实际后继和一个 Schedule；Schedule unique 与 CAS 保证 crash/recovery 不分叉 continuation chain。Context Pack ref/hash 必须与 canonical continuation、Node input snapshot 和 pinned binding 一致；同 Attempt 重建得到不同 hash 属于 integrity violation。
 
 Dispatch timeout 与 execution timeout 分开持久化：前者从开始交给 provider 计时，后者只从 provider 接受或内部 worker 正式 `running` 时计时，不能让 pause/排队误耗执行时间。Watchdog 以 CAS fence `acceptance_state=open`，写 `attempt_execution_timeout` fact，再按 effect contract 创建 cancel/reconcile/compensation；late callback 不能发布 Node output，但经验证 receipt 仍可用于对账或补偿。
 
 Retry 决策在失败事务中冻结绝对 `eligible_at_ms`、policy hash、reason、backoff，并为下一 Attempt 预留累计额度；重启后禁止重算 backoff，pause 不延长时间。到期后 schedule 以 CAS `scheduled -> consumed` 创建 exact next attempt。Lease expiry 只表示 Worker 失去提交权，不代表 execution timeout；有 external execution id 时必须先 reconcile。Effectful timeout 只有 pure、可证明幂等、已确认未执行，或已完成必要 compensation 时才能重试；外部状态未知进入 `action_required`。
 
-Quality revision 使用同一 durable Schedule/CAS 协议，但不是 execution failure：T6a 必须先持久化 evaluator 的 `needs_revision`、validated feedback envelope、`continuation_kind=quality_revision` Schedule 和下一 Attempt 的 ledger reservation，随后才能结束当前 Attempt。Schedule 的 feedback ref/hash 是下一 Context Pack 的唯一 continuation 输入；重复 evaluator callback 若 decision/envelope hash 相同视为 duplicate，若不同则是 integrity violation。Quality revision 的 trusted backoff/eligible time按 Capability 固定 Retry Policy 计算并冻结，不能由 Evaluator feedback 提供或延长 deadline。
+Quality revision 使用同一 durable Schedule/CAS 协议，但不是 execution failure：T6a 必须先持久化 evaluator 的 `needs_revision`、validated feedback envelope、`continuation_kind=quality_revision` Schedule 和下一 Attempt 的 ledger reservation，随后才能结束当前 Attempt。Schedule 的 feedback ref/hash 是下一 Context Pack 的唯一 continuation 输入；重复 evaluator callback 若 decision/envelope hash 相同视为 duplicate，若不同则是 integrity violation。Quality revision 的 trusted backoff/eligible time 按 Capability 固定 Retry Policy 计算并冻结，不能由 Evaluator feedback 提供或延长 deadline。
 
 Signal、timeout 和 cancel 只竞争同一个 `status=armed + saved work epochs + row_version` CAS，不要求外部 signal sender 持有 registration lease。首次成功者写 resolution event 并 terminalize node；相同 provider event 为 duplicate，不同事件竞争同一 Wait 时首个成功、其余 conflict，Wait 关闭后到达为 late。Arm 前 valid event 按 correlation pending，arm transaction 只消费最小 `inbox_seq`，其余按不可变 winner 归类。
 
@@ -4887,7 +4888,7 @@ Production v1 的 `local_single_user_product_floor@1` 是发布最低能力，�
 - `max_attempts` 包含首次 Attempt；每次 execution retry 或 quality revision 都创建新 immutable Attempt。
 - Workflow 在 T0 冻结 `deadline_at_ms = started_at_ms + effective_max_duration_ms`。Durable watchdog 到期后用稳定 command key 调用 T7c 全局策略取消；若 normal close request 先提交则 deadline 是 late command，反之 deadline 先赢则后续 normal completion 只审计。Workflow deadline 不走业务 `on_error/on_local_cancel`。
 - Retry reason 使用 catalog 定义的结构化 taxonomy。`retry_request` 省略时使用 capability trusted policy；显式 request 的 `max_attempts` 与所有 non-null global/state/capability business ceiling及 `execution.max_attempts_per_node` safety ceiling 取最小值，形成 frozen `effective_node_max_attempts`；null business ceiling 不注入默认次数，但 safety ceiling 始终 finite。`run.max_attempts_total` 是多个 Node 共享的独立累计 account，不预先并入单 Node 数字。`retry_on` 省略时继承 capability allowlist，显式空数组禁用 execution retry，但不改变 Capability 是否允许 quality revision；把总 `max_attempts` 收紧为 1 可以同时禁止任何真实重执行。Backoff 只来自 trusted capability，并受 `execution.max_retry_backoff_ms` 限制。
-- execution failed 只有 reason 位于 effective `retry_on` 且仍有 Node/Run额度时才创建 `continuation_kind=execution_retry` Schedule。Evaluator `fail` 表示候选确定性不可接受，立即以 `failed/quality_rejected` terminalize Node，不进入 retry；Evaluator `needs_revision` 只由 non-null `quality_revision_policy` 仲裁，并创建 `continuation_kind=quality_revision` Schedule。
+- execution failed 只有 reason 位于 effective `retry_on` 且仍有 Node/Run 额度时才创建 `continuation_kind=execution_retry` Schedule。Evaluator `fail` 表示候选确定性不可接受，立即以 `failed/quality_rejected` terminalize Node，不进入 retry；Evaluator `needs_revision` 只由 non-null `quality_revision_policy` 仲裁，并创建 `continuation_kind=quality_revision` Schedule。
 - 合法 `needs_revision` 到达 `attempt_no = effective_node_max_attempts` 时，T6a 在同一事务保存最后一个 feedback envelope、创建 `QualityRevisionExhaustionDetailV1` 作为 Attempt error detail、terminalize Attempt 和 Node 为 `failed/quality_revision_exhausted`，并按正常 T3 发布 Node terminal fact/解析 failure route；candidate result/artifact 继续作为 Attempt 审计事实，但不得发布为 logical Node output。该结果是预期业务 failure，不走 root `on_error`，也不能由 manual retry 重新打开。
 - 若 `attempt_no < effective_node_max_attempts`，但下一 Attempt 对 `run.max_attempts_total` 的原子 reservation 失败，则 terminalize `failed/attempt_budget_exhausted` 并保存结构化 resource limit detail；它不能谎报 `quality_revision_exhausted`。Workflow deadline、global cancel、effect unknown/action-required 与 integrity quarantine 继续使用各自既有协议，均不得改写为 quality exhaustion。
 - Evaluator pending 在同一 attempt 上使用独立 lease/retry/deadline，不重复 agent/action；capability 中 non-null business次数/deadline 进一步收紧 `execution.max_evaluator_attempts_per_evaluation/max_evaluator_duration_ms` 与 run total safety ceiling，不注入隐藏默认业务 ceiling。
@@ -5161,11 +5162,11 @@ Delegation/action/wait/cancel/compensation adapter 必须接受稳定 effect key
 2. 优先处理已有 close request 的 scope/run：验证 request transaction 已持久化完整 subtree work-fence manifest 与 close-cleanup effects，只重放已存在 key 的 outbox delivery；若原子 manifest/effect 缺失则 quarantine，恢复器不能事后“重建”原始事务。
 3. Run control 为 `resuming` 时先继续 deterministic resume drain；在 pending error/eligibility/settled fact fixed point 前不得 claim/materialize/dispatch。随后回收 Scope Build snapshot/compiler lease，只读取 frozen seed/locator，相同 source/input/compiler hashes 重跑 pinned pure compiler。Paused/resuming run 可以停在 `compiled`，不能 materialize。
 4. 验证 scope ownership tree、unique child key、plan/input hash、sealed Expansion Manifest、map result slots 和 ledger account cache 守恒。
-5. 回收 preparing attempt；基于 node-level trigger cut/input snapshot、continuation kind、parent composite FK 和已保存 feedback envelope 在同一 Attempt 下重建完全相同的 Context Pack。Quality revision 缺失 parent envelope、parent 不相邻/不属于同一 Node 或重建 hash 不同均进入 quarantine，不能退化为 initial/retry或重新调用 Evaluator生成 feedback。
+5. 回收 preparing attempt；基于 node-level trigger cut/input snapshot、continuation kind、parent composite FK 和已保存 feedback envelope 在同一 Attempt 下重建完全相同的 Context Pack。Quality revision 缺失 parent envelope、parent 不相邻/不属于同一 Node 或重建 hash 不同均进入 quarantine，不能退化为 initial/retry 或重新调用 Evaluator 生成 feedback。
 6. `dispatch_pending` 仅在 run.control=running 时重投同一个 outbox effect；paused/resuming 时保持 pending。Running delegation 先按 external id 对账，不因普通 worker lease 过期重复 dispatch。
 7. Pure/idempotent system action 可按同一 attempt key 重放；compensatable action 先对账 effect receipt，再决定继续或补偿。
    Mutable mutation 还必须比较 domain claim fencing token、external before/after revision 与 immutable snapshot；外部状态不确定时进入 action-required，不得盲目产生新 operation key。
-8. 回收 evaluator lease，在同一 Attempt 基于 frozen result 继续 evaluation。已提交 `needs_revision` 必须与唯一 feedback envelope、唯一 scheduled/consumed quality-revision continuation 全部同时存在；因为它们属于同一 T6a transaction，部分存在是 integrity violation而不是待补偿工作。Consumed Schedule 与 next Attempt 也必须同事务存在，Recovery 不能再创建第二个后继。
+8. 回收 evaluator lease，在同一 Attempt 基于 frozen result 继续 evaluation。已提交 `needs_revision` 必须与唯一 feedback envelope、唯一 scheduled/consumed quality-revision continuation 全部同时存在；因为它们属于同一 T6a transaction，部分存在是 integrity violation 而不是待补偿工作。Consumed Schedule 与 next Attempt 也必须同事务存在，Recovery 不能再创建第二个后继。
 9. 回收 wait registration；signal、timeout、cancel 继续竞争同一 armed CAS，重复 payload 按 inbox idempotency key 归类。
 10. 对 `subgraph/expand/map` 从 sealed Expansion Manifest 按 unique invocation key 补齐 build/materialization，或以 T7b 消费已完成 child outcome；不能重读 planner live output。
 11. 从 persisted edge resolution 验证 trigger/input fixed point；已有 trigger cut/input snapshot 的 node 不重新选 edge。任何 terminal/candidate fact 缺少应原子生成的 eligibility 都是 invariant violation，禁止事后补齐。
@@ -5286,8 +5287,8 @@ Graph-to-Graph transition 时 `completed` 保存旧 run 的完整水位，`curre
 - Artifact、evaluation、effect receipt 和 result 按 run/scope/node/attempt 隔离，不覆盖 state 级 `latest.json`。
 - Capability 必须恰好声明 artifact/evaluator binding 或受信任的 `no_*_expected`。
 - Quality gate 决定 attempt pass/needs_revision/fail；只有最终 pass attempt 能发布 logical node output。`needs_revision` 必须生成符合 Capability pinned feedback schema/hash/size 的 immutable Value 和 `QualityRevisionFeedbackEnvelopeV1`；下一 Attempt 只消费紧邻 parent envelope，禁止用未 seal 的 evaluator stdout、Trace summary 或可变文件代替。
-- 每个 Attempt 的 Context Pack 都保存 Node input snapshot ref/hash和 canonical continuation。Initial 没有 parent；execution retry只携带结构化 retry reason；quality revision携带 parent candidate/evaluation/feedback refs。Context Pack builder 对同一 pinned facts 必须产生相同 hash，Recovery 只可重建缺失的相同 bytes/hash，不能重新调用模型总结 feedback。
-- Quality revision exhaustion 只发布 Node failed fact和 immutable error detail，不发布最后 candidate。后续业务 State 若需要显式接收“不合格候选”必须另行发布 typed remediation/rework合同，不能把 failed Attempt result伪装成 `completed_output`。
+- 每个 Attempt 的 Context Pack 都保存 Node input snapshot ref/hash 和 canonical continuation。Initial 没有 parent；execution retry 只携带结构化 retry reason；quality revision 携带 parent candidate/evaluation/feedback refs。Context Pack builder 对同一 pinned facts 必须产生相同 hash，Recovery 只可重建缺失的相同 bytes/hash，不能重新调用模型总结 feedback。
+- Quality revision exhaustion 只发布 Node failed fact 和 immutable error detail，不发布最后 candidate。后续业务 State 若需要显式接收“不合格候选”必须另行发布 typed remediation/rework 合同，不能把 failed Attempt result 伪装成 `completed_output`。
 - 普通 node 不能修改共享 workflow context。Child completion 只发布 owner output refs；root coordinator 仅在 T8 按受信任 Transition 的 typed Context Patch 创建新的 immutable Context Snapshot。Slot 复用原 Value Ref，不复制业务字节；summary 只属于 projection。Error/cancel transition 使用 canonical no-op patch，除非 published transition 明确定义兼容的 typed patch。Terminal state 的 final output binding 与 Context Patch 分开校验。
 
 ## 权限与安全
@@ -5708,7 +5709,7 @@ Absence generator 使用 TypeScript AST/import graph、Web route enumeration、E
 - Condition 只读取允许的 frozen fact，route group 解析原子、确定且可重放。
 - Trigger 三值逻辑能正确区分 ready、`route_not_selected` 和 unresolved，不会提前 skip。
 - Data port aggregation/seal 能确定性选择 value；completion-order 模式完整记录选择事实。
-- Delegation/system execution retry 与 quality revision 都保留 immutable Attempt history 和 durable Schedule，但使用 closed continuation kind；`needs_revision` 必须原子保存 typed latest feedback envelope并成为下一 Context Pack 的唯一 revision输入。`pass` 只发布最终 output，`fail` 不 retry；Node ceiling 得到 `quality_revision_exhausted` + immutable exhaustion detail，Run shared attempt不足得到 `attempt_budget_exhausted`，Workflow deadline仍走 global cancel。Dispatch/execution deadline、eligible time 与 Workflow deadline 均可在 crash 后恢复，任何 crash/replay 都不能分叉 parent/child Attempt或重复执行同一 Schedule。
+- Delegation/system execution retry 与 quality revision 都保留 immutable Attempt history 和 durable Schedule，但使用 closed continuation kind；`needs_revision` 必须原子保存 typed latest feedback envelope 并成为下一 Context Pack 的唯一 revision 输入。`pass` 只发布最终 output，`fail` 不 retry；Node ceiling 得到 `quality_revision_exhausted` + immutable exhaustion detail，Run shared attempt 不足得到 `attempt_budget_exhausted`，Workflow deadline 仍走 global cancel。Dispatch/execution deadline、eligible time 与 Workflow deadline 均可在 crash 后恢复，任何 crash/replay 都不能分叉 parent/child Attempt 或重复执行同一 Schedule。
 - Wait contract 必须来自 pinned allowlist；correlation 在 Run 内唯一且不复用，provider event/registration key 分离。Pre-arm signal 受有限 TTL、分层容量和 ingress/binding 两阶段授权；signal/timeout/cancel 由 `inbox_seq`、received time 与 CAS 唯一决定。
 - Explicit join 不隐藏业务计算，all/any/quorum fan-in 均可通过 typed port 表达。
 - Subgraph 精确实现固定 interface；Child Completion 只保存 output envelope ref/hash，需要的 Child Port 可直接 expose 为 Owner Port且不复制/重复计费。
