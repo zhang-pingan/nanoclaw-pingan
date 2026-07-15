@@ -1,0 +1,189 @@
+{
+  "format": "icarus.workflow-runtime-query-catalog-schema/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-query-catalog-schema",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-query-catalog-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-runtime-query-catalog:1",
+    "title": "Workflow Runtime Query Catalog v1 payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_id",
+      "executable_status",
+      "sql_text_status",
+      "query_count",
+      "queries"
+    ],
+    "properties": {
+      "schema_id": {
+        "const": "workflow-runtime-schema-v1"
+      },
+      "executable_status": {
+        "const": "non_executable"
+      },
+      "sql_text_status": {
+        "const": "absent"
+      },
+      "query_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "queries": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/query"
+        },
+        "minItems": 1
+      }
+    },
+    "$defs": {
+      "order": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "column",
+          "direction"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "direction": {
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          }
+        }
+      },
+      "query": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "query_id",
+          "owner",
+          "purpose",
+          "table",
+          "join_tables",
+          "equality_columns",
+          "range_columns",
+          "state_predicate_intent",
+          "order_by",
+          "result_cardinality",
+          "required_index_id",
+          "execution_status"
+        ],
+        "properties": {
+          "query_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "owner": {
+            "enum": [
+              "scheduler",
+              "workflow_watchdog",
+              "attempt_watchdog",
+              "retry_timer",
+              "wait_timer",
+              "outbox_worker",
+              "recovery",
+              "operational_remediation",
+              "root_finalizer",
+              "reconciler",
+              "subtree_fencer",
+              "blob_coordinator",
+              "retention_gc",
+              "command_gateway",
+              "checkpoint_loader"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          },
+          "table": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "join_tables": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "uniqueItems": true
+          },
+          "equality_columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "uniqueItems": true
+          },
+          "range_columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "uniqueItems": true
+          },
+          "state_predicate_intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "order_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/order"
+            }
+          },
+          "result_cardinality": {
+            "enum": [
+              "zero_or_one",
+              "many",
+              "bounded_batch"
+            ]
+          },
+          "required_index_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "execution_status": {
+            "const": "intent_only"
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:591b50d9acd00e625f93c7fc0f53a631afcde34e70d51723f9798c1b2ca3c25a"
+}

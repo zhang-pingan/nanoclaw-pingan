@@ -1,0 +1,44 @@
+{
+  "format": "icarus.workflow-logical-schema-positive-cases/1",
+  "ref": {
+    "id": "icarus.workflow-logical-schema-positive-cases",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-logical-schema-positive-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "all_normative_tables_and_columns",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "assertion": "all_normative_tables_and_columns"
+      },
+      {
+        "case_id": "complete_check_key_fk_index_intent",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "assertion": "complete_constraint_intent"
+      },
+      {
+        "case_id": "typed_internal_relations",
+        "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "assertion": "typed_internal_relations"
+      },
+      {
+        "case_id": "explicit_external_references",
+        "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "assertion": "explicit_external_references"
+      },
+      {
+        "case_id": "query_index_coverage",
+        "target_format": "icarus.workflow-runtime-query-catalog/1",
+        "assertion": "query_index_coverage"
+      },
+      {
+        "case_id": "metadata_only_boundary",
+        "target_format": "icarus.workflow-runtime-query-catalog/1",
+        "assertion": "metadata_only_boundary"
+      }
+    ]
+  },
+  "hash": "sha256:bf29a3e5bb8da0dadf5d293532218b224d74cc13835b7361e86016a85975b1e5"
+}

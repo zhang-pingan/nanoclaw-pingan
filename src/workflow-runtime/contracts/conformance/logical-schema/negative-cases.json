@@ -1,0 +1,453 @@
+{
+  "format": "icarus.workflow-logical-schema-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-logical-schema-negative-cases",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-logical-schema-negative-cases:1\n",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "source_rejects_unknown_top_level_field",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "add",
+          "pointer": "/sql",
+          "value": "executable_statement_forbidden"
+        },
+        "expected_stage": "schema",
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_missing_table_count",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "remove",
+          "pointer": "/table_count"
+        },
+        "expected_stage": "schema",
+        "expected_keyword": "required",
+        "expected_instance_pointer": "",
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_table_field",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "add",
+          "pointer": "/tables/44/create_sql",
+          "value": "forbidden"
+        },
+        "expected_stage": "schema",
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/tables/44",
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_column_type",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/columns/0/logical_type",
+          "value": "blob"
+        },
+        "expected_stage": "schema",
+        "expected_keyword": "enum",
+        "expected_instance_pointer": "/tables/44/columns/0/logical_type",
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "query_rejects_embedded_sql_text",
+        "target_format": "icarus.workflow-runtime-query-catalog/1",
+        "mutation": {
+          "operation": "add",
+          "pointer": "/queries/5/sql_text",
+          "value": "SELECT 1"
+        },
+        "expected_stage": "schema",
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/queries/5",
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "relation_rejects_unknown_relation_kind",
+        "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/relations/43/relation_kind",
+          "value": "polymorphic"
+        },
+        "expected_stage": "schema",
+        "expected_keyword": "enum",
+        "expected_instance_pointer": "/relations/43/relation_kind",
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_table_count_drift",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/table_count",
+          "value": 73
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_column_count_drift",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/column_count",
+          "value": 1
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_missing_normative_table",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "remove",
+          "pointer": "/tables/44"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_duplicate_table_name",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/9/name",
+          "value": "workflow_graph_scopes"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_duplicate_column_name",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/columns/1/name",
+          "value": "id"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_column_ordinal_drift",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/columns/0/ordinal",
+          "value": 2
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_nullable_primary_key",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/columns/0/nullable",
+          "value": true
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_primary_key_column",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/primary_key/columns/0",
+          "value": "missing_id"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_fk_source_column",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/foreign_keys/3/source_columns/0",
+          "value": "missing_plan_id"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_fk_target_table",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/foreign_keys/3/target_table",
+          "value": "workflow_missing_table"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_fk_target_column",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/foreign_keys/3/target_columns/0",
+          "value": "missing_plan_id"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_unique_column",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/unique_keys/1/columns/0",
+          "value": "missing_run_id"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_check_column",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/checks/21/columns/0",
+          "value": "missing_scope_kind"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unknown_index_column",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/indexes/0/columns/0",
+          "value": "missing_graph_run_id"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_polymorphic_owner_kind",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/9/columns/1/name",
+          "value": "owner_kind"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_control_epoch",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/columns/1/name",
+          "value": "control_epoch"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_generic_error_json",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/44/columns/1/name",
+          "value": "error_json"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_unqualified_absolute_time",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/30/columns/49/name",
+          "value": "created_at"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_missing_external_metadata",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/tables/9/columns/5/external_reference",
+          "value": null
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "relation_rejects_count_drift",
+        "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/internal_relation_count",
+          "value": 0
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "relation_rejects_missing_relation",
+        "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "mutation": {
+          "operation": "remove",
+          "pointer": "/relations/43"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "relation_rejects_target_drift",
+        "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/relations/43/target_table",
+          "value": "workflow_values"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "relation_rejects_external_validator_loss",
+        "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/relations/0/validator_owner",
+          "value": null
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "query_rejects_count_drift",
+        "target_format": "icarus.workflow-runtime-query-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/query_count",
+          "value": 1
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "query_rejects_unknown_table",
+        "target_format": "icarus.workflow-runtime-query-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/queries/5/table",
+          "value": "workflow_missing_table"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "query_rejects_unknown_column",
+        "target_format": "icarus.workflow-runtime-query-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/queries/5/range_columns/0",
+          "value": "missing_deadline_at_ms"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "query_rejects_unknown_index",
+        "target_format": "icarus.workflow-runtime-query-catalog/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/queries/5/required_index_id",
+          "value": "idx:missing"
+        },
+        "expected_stage": "semantic",
+        "expected_keyword": null,
+        "expected_instance_pointer": null,
+        "expected_code": "logical_schema_contract_drift"
+      },
+      {
+        "case_id": "source_rejects_executable_status_spoof",
+        "target_format": "icarus.workflow-runtime-logical-schema-source/1",
+        "mutation": {
+          "operation": "replace",
+          "pointer": "/executable_status",
+          "value": "executable"
+        },
+        "expected_stage": "schema",
+        "expected_keyword": "const",
+        "expected_instance_pointer": "/executable_status",
+        "expected_code": "logical_schema_contract_drift"
+      }
+    ]
+  },
+  "hash": "sha256:02f82b1e365bafcf031f928fd9fa950b1b8890719a07aee8d24a45f37e8280cc"
+}

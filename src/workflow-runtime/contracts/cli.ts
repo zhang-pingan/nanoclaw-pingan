@@ -14,6 +14,10 @@ import {
   checkContractPackSafetySqlite,
   generateContractPackSafetySqlite,
 } from './safety-sqlite-pack.js';
+import {
+  checkContractPackLogicalSchema,
+  generateContractPackLogicalSchema,
+} from './logical-schema-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -32,7 +36,8 @@ let currentPack:
   | 'foundation'
   | 'closed_schemas'
   | 'catalog_protocols'
-  | 'safety_sqlite' = 'foundation';
+  | 'safety_sqlite'
+  | 'logical_schema' = 'foundation';
 
 try {
   const foundationManifest =
@@ -67,6 +72,16 @@ try {
       : checkContractPackSafetySqlite();
   console.log(`contract_pack_safety_sqlite=${command}:ok`);
   console.log(`contract_pack_safety_sqlite_hash=${safetySqliteManifest.hash}`);
+
+  currentPack = 'logical_schema';
+  const logicalSchemaManifest =
+    command === 'generate'
+      ? generateContractPackLogicalSchema()
+      : checkContractPackLogicalSchema();
+  console.log(`contract_pack_logical_schema=${command}:ok`);
+  console.log(
+    `contract_pack_logical_schema_hash=${logicalSchemaManifest.hash}`,
+  );
 } catch (error) {
   console.error(
     `contract_pack_${currentPack}=${command}:failed: ${

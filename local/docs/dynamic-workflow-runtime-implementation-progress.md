@@ -2,7 +2,7 @@
 
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G0 Contract Pack / Static Baseline
-> **下一施工切片**: G0.6 Logical Schema Metadata
+> **下一施工切片**: G0.7 Static Absence and Surface Gates
 > **最后更新**: 2026-07-15
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -130,7 +130,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.5 DONE；G0.6 READY |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1-G0.6 DONE；G0.7 READY |
 
 ## G0 施工切片
 
@@ -143,10 +143,54 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | G0.3 | Closed Schemas | `DONE` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | 本原子提交 |
 | G0.4 | Catalogs and Protocol Tables | `DONE` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | 本原子提交 |
 | G0.5 | Safety / Retention / SQLite Contracts | `DONE` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | 本原子提交 |
-| G0.6 | Logical Schema Metadata | `READY` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | - |
-| G0.7 | Static Absence and Surface Gates | `NOT_READY` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | - |
+| G0.6 | Logical Schema Metadata | `DONE` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | 本原子提交 |
+| G0.7 | Static Absence and Surface Gates | `READY` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | - |
 | G0.8 | Golden Draft and Review Input | `NOT_READY` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | - |
 | G0.9 | G0 Conformance Exit | `NOT_READY` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | - |
+
+## 已完成切片：G0.6 Logical Schema Metadata
+
+**状态**：`DONE`
+
+**工作包**：I11；合同联动 I2/I4/I5/I7/I9/I10，仅冻结 Normative Logical Schema metadata contract，不生成或执行 SQL/DDL，不实现 migration、Store、SQLite Connection Factory、Compiler、Registry、Runtime 或 UI。
+
+I11/G0.6 已完成全部 74 个唯一 Normative Logical Schema 对象的 canonical manifest source、逐表逐列 metadata、typed relation/external reference、CHECK/UK/FK/index intent、query catalog、TypeScript/Schema conformance、正反例和确定性生成/只读检查。G0 总 Gate 继续为 `IN_PROGRESS`，仅 G0.7 转为 `READY`；G1-G9 未推进。
+
+已完成交付：
+
+- `workflow-runtime-logical-schema-source@1` 按规范顺序冻结 74 张表和 1,221 个展开列的 ordinal、logical/SQLite type intent、nullability、default/safe-integer/enum、relation ownership、PK/UK/CHECK/FK/index intent；禁止 bare internal `*_ref`、polymorphic `owner_kind/id`/`target_kind/id`、`control_epoch`、generic error 字段和歧义时间列。
+- 345 条 internal typed FK 与 43 条 explicit external reference 逐项声明 source/target column、delete/deferrability 或 validator owner/reference domain；Value 关系固定使用 `(value_id, hash) -> workflow_values(id, content_hash)`，所有 FK target 必须是已声明 PK/UK。
+- 74 张表共同冻结 345 FK、129 UK、759 CHECK 与 25 index intent；状态/nullable payload、lineage、exactly-one/all-or-none、closed target mapping 和有序值约束均进入机器 metadata，不包含可执行 constraint expression 或 DDL。
+- Query Catalog 固定 24 条 scheduler/watchdog/timer/outbox/recovery/remediation/finalizer/reconciler/fencer/blob/retention/command/checkpoint query intent；每条 query 与 required index 双向引用，明确 equality/range/order/cardinality，但 `sql_text_status=absent`、`execution_status=intent_only`。
+- 新增 3 个 Draft 2020-12 closed schema，以及完整的 TypeScript/Schema object keyset 与 G0.4 state-machine enum conformance；6 positive / 34 negative fixtures 覆盖 closed object、全部对象/列、计数、typed relation、external validator、PK/UK target、constraint/index/query reference、禁止列、metadata-only 和 exact baseline drift。
+- 新增独立 `logical-schema-domain-separators` registry 与 `contract-pack-logical-schema` manifest；CLI `generate/check` 和 CI 统一检查 G0.2-G0.6，并 exact pin G0.2-G0.5 manifest identity。
+- `local_single_user_sqlite@1` 保持 `candidate/not_certified` 且 observation/certification identity 未填充；本切片没有 SQL text、executable migration、Schema Manifest、Connection Factory、SQLite open/PRAGMA、Supported Limits、Compiler/Golden、Registry/Runtime 语义或 UI，`conformance/draft/` 与 `sealed/` 仍只含 `.gitkeep`。
+
+最终 Artifact hashes：
+
+| Artifact | Hash |
+| --- | --- |
+| G0.6 Logical Schema Metadata manifest | `sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520` |
+| Logical Schema source schema / metadata | `sha256:6ffb28049db3064532ed1c60d809f33c379b393a73c3b3c4ff4c611cda0f47eb` / `sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214` |
+| Typed Relation Catalog schema / metadata | `sha256:06001e856248e9a5d4a0b5dcda928dc56d6c71408a4ef245a9b1396bdd5895f0` / `sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99` |
+| Query Catalog schema / metadata | `sha256:591b50d9acd00e625f93c7fc0f53a631afcde34e70d51723f9798c1b2ca3c25a` / `sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d` |
+| Positive / negative fixture artifacts | `sha256:bf29a3e5bb8da0dadf5d293532218b224d74cc13835b7361e86016a85975b1e5` / `sha256:02f82b1e365bafcf031f928fd9fa950b1b8890719a07aee8d24a45f37e8280cc` |
+| Logical Schema domain separators | `sha256:fedfca88cad19f9ddb4711188c5e22a25db10779abd8eb1f0c6d3c72cfd49871` |
+
+最终退出验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run contracts:generate` | PASS；G0.6 manifest 稳定为 `sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520`；G0.2/G0.3/G0.4/G0.5 分别保持 `sha256:e85b654...637d`、`sha256:c5ea281...a3a8`、`sha256:e4947c5...607`、`sha256:76b8e11...b428`；仅有 R-010 DEP0205 非阻塞告警 |
+| managed `npm run contracts:check` | PASS；G0.2-G0.6 完整合同只读检查全部通过，hash 与 generate 一致 |
+| managed `npm run typecheck` | PASS |
+| managed G0.2-G0.6 directed tests | PASS，5 files / 40 tests；分别为 11 / 5 / 7 / 9 / 8 tests，G0.6 check 内执行 6 positive / 34 negative fixtures |
+| managed `npm test` | 72/73 files、658/659 tests；唯一失败为范围外 R-012 `credential-proxy` 250ms async trace intermittent baseline，G0.6 与其余 658 tests 全部通过；未修改 credential-proxy/trace 文件或测试 |
+| managed legacy boundary | PASS，1 file / 6 tests |
+| managed `npm run build` | PASS |
+| managed targeted Prettier `--check` | PASS；全部本切片 TypeScript/README/package script 符合 pinned Prettier |
+| final metadata/boundary/status scan | PASS；无 SQL/DDL/migration/Schema Manifest/Store/SQLite open/PRAGMA/Compiler/Golden/Registry/Runtime/UI 实现，SQLite profile 仍为 candidate，reserved Golden 目录未写入，范围外 introduction 文档未暂存 |
+| `git diff --check` | PASS |
 
 ## 已完成切片：G0.5 Safety / Retention / SQLite Contracts
 
@@ -536,16 +580,16 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-001 | Toolchain | CLOSED | exact Node/npm/direct dependency/lock/CI/managed distribution 已落地，最终 managed install/ci/typecheck/test/build 全部通过 | G0.1 |
 | R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | OPEN | 当前只有定向 legacy boundary test，尚无规范要求的 AST/API/UI/schema/filesystem/resource manifests | G0.7 |
-| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 foundation、G0.3 closed Domain Schema、G0.4 Catalog/Protocol 与 G0.5 Safety/Retention/SQLite 已原子交付；Logical Schema metadata、absence/surface、Golden Draft 与完整 Markdown 双向覆盖仍未完成 | G0.6-G0.9 |
-| R-005 | DDL feasibility | DEFERRED | Logical Schema 尚未转换为 executable migration；不代表已发现冲突，但 G1 必须以真实 SQLite Gate 验证 | G1 |
+| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 foundation、G0.3 closed Domain Schema、G0.4 Catalog/Protocol、G0.5 Safety/Retention/SQLite 与 G0.6 Logical Schema Metadata 已原子交付；absence/surface、Golden Draft 与完整 Markdown 双向覆盖仍未完成 | G0.7-G0.9 |
+| R-005 | DDL feasibility | DEFERRED | Logical Schema metadata 已冻结但尚未转换为 executable migration；不代表已发现冲突，G1 必须以真实 SQLite Gate 验证 | G1 |
 | R-006 | Certification | DEFERRED | Product Floor、Safety/Retention 与 SQLite candidate 已冻结；SQLite/source/compile-options/native module、Launcher/Core Release 完整 key、Supported Limits 与事务预算尚未 benchmark 认证，candidate identity 字段保持 null | G8 |
 | R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
 | R-008 | Formatting baseline | OPEN_OUT_OF_SCOPE | 仓库既有 `npm run format:check` 对 34 个 G0.2 外旧 TypeScript 文件报差异；G0.2 新文件 targeted Prettier 通过，未把无关批量格式化混入原子提交 | 独立维护 |
 | R-009 | Concurrent repository change | CLOSED | `32f3c51` 只新增范围外 evaluation 文档；G0.2 最终 HEAD/边界和 staged set 已验证，提交保留且未混入 G0.2 内容 | G0.2 |
 | R-010 | Node loader deprecation | OPEN_OUT_OF_SCOPE | Node 26 下 pinned `tsx` loader 在 `contracts:generate/check` 报 `DEP0205 module.register()` deprecation warning，但命令退出码为 0；G0.2 不升级非规范依赖或替换工具链 | 独立工具链维护 |
 | R-011 | Concurrent repository change | CLOSED | G0.4 施工期间新增 `982e3b6/5989b8e`，只对进度文档同一句措辞修改后逐字回退，净 tree 未改变；G0.4 保留提交并在其上原子交付 | G0.4 |
-| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.5 会话开始时范围外 `credential-proxy` async trace 单文件在 250ms 内只观察到 `model_request_started`（20 PASS / 1 FAIL）；中间完整 suite 曾全部通过，最终 post-expansion 完整 suite 再次复现同一唯一失败（71/72 files、650/651 tests）。属于 intermittent baseline；G0.5 未修改相关文件或测试 | 独立测试稳定性维护 |
+| R-012 | Full regression baseline | OPEN_OUT_OF_SCOPE | G0.5 已记录范围外 `credential-proxy` async trace 250ms intermittent；G0.6 完整 suite 再次仅复现同一失败，结果为 72/73 files、658/659 tests，仍只观察到 `model_request_started` 而未及时观察到 `model_resolution`。G0.6 未修改相关文件或测试 | 独立测试稳定性维护 |
 
 ## 下一步
 
-下一会话开始 `G0.6 Logical Schema Metadata`。先完整阅读架构规范和本文，复核本次 G0.5 原子提交、6 个 closed schema、69/7/76 字段覆盖、7 positive / 30 negative fixtures、G0.5 manifest 与 G0.2/G0.3/G0.4 identity，再只按 G0.6 范围机器化覆盖本文全部 Normative Logical Schema 对象的 canonical manifest source、逐列 metadata、typed relation/external ref metadata、CHECK/UK/FK/index intent 和 query catalog。G0.6 仍不是 executable migration 或 Store：不得开始 G1 DDL/Store、真实 SQLite Connection Factory/PRAGMA、G2 Compiler、Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI；不得把 `local_single_user_sqlite@1` candidate 伪装为 certified，不得修复范围外 R-012。
+下一会话开始 `G0.7 Static Absence and Surface Gates`。先完整阅读架构规范和本文，复核本次 G0.6 原子提交、74/1,221 Logical Schema table/column、345 internal/43 external relations、345/129/759/25 FK/UK/CHECK/index intents、24 query intents、3 closed schemas、6 positive / 34 negative fixtures、G0.6 manifest 与 G0.2-G0.5 identity。然后只按 G0.7 范围实现规范要求的 static absence、API/UI/schema/filesystem/resource surface coverage、candidate boundary generator/manifest 和 negative fixtures；不得开始 G0.8 Golden Draft、G1 DDL/Store/SQLite execution、G2 Compiler/Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI，不得把 candidate 宣称为 certified，不得修复范围外 R-012。

@@ -1,0 +1,619 @@
+{
+  "format": "icarus.workflow-runtime-query-catalog/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-query-catalog",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-query-catalog:1\n",
+  "payload": {
+    "schema_id": "workflow-runtime-schema-v1",
+    "executable_status": "non_executable",
+    "sql_text_status": "absent",
+    "query_count": 24,
+    "queries": [
+      {
+        "query_id": "query:scheduler_ready_nodes",
+        "owner": "scheduler",
+        "purpose": "durable fair admission of ready nodes",
+        "table": "workflow_graph_nodes",
+        "join_tables": [],
+        "equality_columns": [
+          "phase"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": "phase = 'ready'",
+        "order_by": [
+          {
+            "column": "activation_event_seq",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:nodes:ready",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:workflow_deadline_due",
+        "owner": "workflow_watchdog",
+        "purpose": "find unfinished workflows whose frozen deadline is due",
+        "table": "workflows",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "deadline_at_ms"
+        ],
+        "state_predicate_intent": "finished_at_ms is null and deadline_at_ms is non-null",
+        "order_by": [
+          {
+            "column": "deadline_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:workflows:deadline",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:attempt_execution_deadline_due",
+        "owner": "attempt_watchdog",
+        "purpose": "find running attempts whose execution deadline is due",
+        "table": "workflow_graph_node_attempts",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "execution_deadline_at_ms"
+        ],
+        "state_predicate_intent": "phase = 'running'",
+        "order_by": [
+          {
+            "column": "execution_deadline_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:node_attempts:execution_deadline",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:evaluation_due",
+        "owner": "attempt_watchdog",
+        "purpose": "continue bounded evaluator work",
+        "table": "workflow_graph_node_attempts",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "evaluation_next_attempt_at_ms"
+        ],
+        "state_predicate_intent": "phase = 'evaluating'",
+        "order_by": [
+          {
+            "column": "evaluation_next_attempt_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:node_attempts:evaluation_due",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:retry_schedule_due",
+        "owner": "retry_timer",
+        "purpose": "consume scheduled retry or quality-revision continuation",
+        "table": "workflow_graph_retry_schedules",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "eligible_at_ms"
+        ],
+        "state_predicate_intent": "status = 'scheduled'",
+        "order_by": [
+          {
+            "column": "eligible_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:retry_schedules:due",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:wait_deadline_due",
+        "owner": "wait_timer",
+        "purpose": "resolve armed finite waits at their deadline",
+        "table": "workflow_graph_waits",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "deadline_at_ms"
+        ],
+        "state_predicate_intent": "status = 'armed' and deadline_at_ms is non-null",
+        "order_by": [
+          {
+            "column": "deadline_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:waits:deadline",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:outbox_due",
+        "owner": "outbox_worker",
+        "purpose": "claim due delivery or reconciliation work",
+        "table": "workflow_outbox",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "next_attempt_at_ms"
+        ],
+        "state_predicate_intent": "status in ('pending','reconciling')",
+        "order_by": [
+          {
+            "column": "next_attempt_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:outbox:due",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:outbox_lease_expired",
+        "owner": "recovery",
+        "purpose": "recover processing or reconciling outbox leases",
+        "table": "workflow_outbox",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "lease_expires_at_ms"
+        ],
+        "state_predicate_intent": "status in ('processing','reconciling')",
+        "order_by": [
+          {
+            "column": "lease_expires_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:outbox:lease_expiry",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:attempt_lease_expired",
+        "owner": "recovery",
+        "purpose": "recover stale internal attempt worker leases",
+        "table": "workflow_graph_node_attempts",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "lease_expires_at_ms"
+        ],
+        "state_predicate_intent": "lease_owner is non-null",
+        "order_by": [
+          {
+            "column": "lease_expires_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:node_attempts:lease_expiry",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:pending_signal_match",
+        "owner": "reconciler",
+        "purpose": "match pre-arm signal by exact run contract and correlation",
+        "table": "workflow_graph_inbox_events",
+        "join_tables": [],
+        "equality_columns": [
+          "graph_run_id",
+          "contract_resource_id",
+          "correlation_key_hash",
+          "disposition"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": "disposition = 'pending'",
+        "order_by": [
+          {
+            "column": "inbox_seq",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:inbox_events:correlation",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:pending_signal_expiry",
+        "owner": "retention_gc",
+        "purpose": "expire unmatched pending signals by frozen TTL",
+        "table": "workflow_graph_inbox_events",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "expires_at_ms"
+        ],
+        "state_predicate_intent": "disposition = 'pending'",
+        "order_by": [
+          {
+            "column": "expires_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "inbox_seq",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:inbox_events:expiry",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:blob_intent_expiry",
+        "owner": "blob_coordinator",
+        "purpose": "recover or abandon expired blob write intents",
+        "table": "workflow_blob_write_intents",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "lease_expires_at_ms"
+        ],
+        "state_predicate_intent": "status in ('preparing','installed')",
+        "order_by": [
+          {
+            "column": "lease_expires_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:blob_write_intents:expiry",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:blob_gc_candidates",
+        "owner": "retention_gc",
+        "purpose": "scan blob GC state machine work",
+        "table": "workflow_blob_objects",
+        "join_tables": [],
+        "equality_columns": [
+          "state"
+        ],
+        "range_columns": [
+          "gc_epoch"
+        ],
+        "state_predicate_intent": "state in ('live','gc_candidate','deleting')",
+        "order_by": [
+          {
+            "column": "gc_epoch",
+            "direction": "asc"
+          },
+          {
+            "column": "blob_hash",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:blob_objects:gc_state",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:open_operational_blockers",
+        "owner": "recovery",
+        "purpose": "derive effective operational state from open blockers",
+        "table": "workflow_operational_blockers",
+        "join_tables": [],
+        "equality_columns": [
+          "graph_run_id",
+          "status"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": "status = 'open'",
+        "order_by": [
+          {
+            "column": "severity",
+            "direction": "desc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:operational_blockers:open",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:operational_remediation_due",
+        "owner": "operational_remediation",
+        "purpose": "continue only the frozen remediation lane",
+        "table": "workflow_operational_blockers",
+        "join_tables": [],
+        "equality_columns": [],
+        "range_columns": [
+          "next_remediation_at_ms"
+        ],
+        "state_predicate_intent": "status = 'open' and next_remediation_at_ms is non-null",
+        "order_by": [
+          {
+            "column": "next_remediation_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:operational_blockers:remediation_due",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:root_finalization_due",
+        "owner": "root_finalizer",
+        "purpose": "continue finite required-child finalization schedules",
+        "table": "workflow_root_finalization_schedules",
+        "join_tables": [],
+        "equality_columns": [
+          "status"
+        ],
+        "range_columns": [
+          "next_eligible_at_ms"
+        ],
+        "state_predicate_intent": "status in ('pending','retry_wait')",
+        "order_by": [
+          {
+            "column": "next_eligible_at_ms",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:root_finalization_schedules:due",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:t3_affected_edges",
+        "owner": "reconciler",
+        "purpose": "find only affected control/data edges for a scope fact",
+        "table": "workflow_graph_edges",
+        "join_tables": [],
+        "equality_columns": [
+          "scope_id",
+          "edge_kind"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:edges:scope_kind",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:t3_fact_frontier",
+        "owner": "reconciler",
+        "purpose": "read an ordered scope fact frontier",
+        "table": "workflow_graph_facts",
+        "join_tables": [],
+        "equality_columns": [
+          "graph_run_id",
+          "scope_id"
+        ],
+        "range_columns": [
+          "event_seq"
+        ],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "event_seq",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:facts:scope_event",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:t3_fact_queue",
+        "owner": "reconciler",
+        "purpose": "drain deterministic causal fact queue",
+        "table": "workflow_graph_facts",
+        "join_tables": [],
+        "equality_columns": [
+          "graph_run_id"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "causal_wave",
+            "direction": "asc"
+          },
+          {
+            "column": "fact_kind",
+            "direction": "asc"
+          },
+          {
+            "column": "stable_object_id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:facts:queue",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:resume_eligibility_arbitration",
+        "owner": "reconciler",
+        "purpose": "arbitrate persisted eligibility during resume drain",
+        "table": "workflow_graph_completion_eligibilities",
+        "join_tables": [],
+        "equality_columns": [
+          "graph_run_id"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "eligibility_event_seq",
+            "direction": "asc"
+          },
+          {
+            "column": "rule_id",
+            "direction": "asc"
+          },
+          {
+            "column": "scope_id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:completion_eligibilities:arbitration",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:subtree_scopes",
+        "owner": "subtree_fencer",
+        "purpose": "enumerate a complete descendant scope set for one atomic fence",
+        "table": "workflow_graph_scopes",
+        "join_tables": [],
+        "equality_columns": [
+          "graph_run_id",
+          "parent_scope_id"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "depth",
+            "direction": "asc"
+          },
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:scopes:parent",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:value_children",
+        "owner": "retention_gc",
+        "purpose": "walk immutable Value manifest reachability",
+        "table": "workflow_value_edges",
+        "join_tables": [],
+        "equality_columns": [
+          "parent_value_id"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "relation_kind",
+            "direction": "asc"
+          },
+          {
+            "column": "member_index",
+            "direction": "asc"
+          },
+          {
+            "column": "member_key",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:value_edges:parent",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:command_idempotency_lookup",
+        "owner": "command_gateway",
+        "purpose": "resolve canonical command header by trusted domain and key",
+        "table": "workflow_runtime_commands",
+        "join_tables": [],
+        "equality_columns": [
+          "idempotency_domain",
+          "idempotency_key"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:runtime_commands:idempotency",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:latest_checkpoint",
+        "owner": "checkpoint_loader",
+        "purpose": "load latest workflow checkpoint watermark",
+        "table": "workflow_checkpoints",
+        "join_tables": [],
+        "equality_columns": [
+          "workflow_id"
+        ],
+        "range_columns": [],
+        "state_predicate_intent": null,
+        "order_by": [
+          {
+            "column": "checkpoint_version",
+            "direction": "desc"
+          }
+        ],
+        "result_cardinality": "zero_or_one",
+        "required_index_id": "idx:checkpoints:workflow_version",
+        "execution_status": "intent_only"
+      }
+    ]
+  },
+  "hash": "sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d"
+}

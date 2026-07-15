@@ -1,0 +1,152 @@
+{
+  "format": "icarus.workflow-contract-pack-logical-schema/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-logical-schema",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-logical-schema:1\n",
+  "payload": {
+    "gate": "G0.6",
+    "status": "logical_schema_metadata_contract",
+    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+    "closed_schema_manifest_hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+    "catalog_protocol_manifest_hash": "sha256:e4947c515a28b3baf6782a980db9c26d32612b3c6acd3cd04348e73bd54ff607",
+    "safety_sqlite_manifest_hash": "sha256:76b8e1196ac422500be9c79a767e673e9c30fa3d9bbb1dc12fc54613cd40b428",
+    "schema_count": 3,
+    "table_count": 74,
+    "column_count": 1221,
+    "internal_relation_count": 345,
+    "external_reference_count": 43,
+    "foreign_key_intent_count": 345,
+    "unique_key_intent_count": 129,
+    "check_intent_count": 759,
+    "index_intent_count": 25,
+    "query_count": 24,
+    "positive_case_count": 6,
+    "negative_case_count": 34,
+    "sqlite_profile_status": "candidate",
+    "certification_status": "not_certified",
+    "executable_ddl_status": "absent",
+    "executable_schema_manifest_status": "absent",
+    "sqlite_connection_factory_status": "absent",
+    "sql_text_status": "absent",
+    "artifacts": [
+      {
+        "path": "catalogs/logical-schema-domain-separators.json",
+        "format": "icarus.workflow-logical-schema-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-logical-schema-domain-separators",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-logical-schema-domain-separators:1\n",
+        "hash": "sha256:fedfca88cad19f9ddb4711188c5e22a25db10779abd8eb1f0c6d3c72cfd49871"
+      },
+      {
+        "path": "conformance/logical-schema/negative-cases.json",
+        "format": "icarus.workflow-logical-schema-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-logical-schema-negative-cases",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-logical-schema-negative-cases:1\n",
+        "hash": "sha256:02f82b1e365bafcf031f928fd9fa950b1b8890719a07aee8d24a45f37e8280cc"
+      },
+      {
+        "path": "conformance/logical-schema/positive-cases.json",
+        "format": "icarus.workflow-logical-schema-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-logical-schema-positive-cases",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-logical-schema-positive-cases:1\n",
+        "hash": "sha256:bf29a3e5bb8da0dadf5d293532218b224d74cc13835b7361e86016a85975b1e5"
+      },
+      {
+        "path": "sqlite/workflow-runtime-logical-schema-source-schema.json",
+        "format": "icarus.workflow-runtime-logical-schema-source-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-logical-schema-source-schema",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-logical-schema-source-schema:1\n",
+        "hash": "sha256:6ffb28049db3064532ed1c60d809f33c379b393a73c3b3c4ff4c611cda0f47eb"
+      },
+      {
+        "path": "sqlite/workflow-runtime-logical-schema-source@1.json",
+        "format": "icarus.workflow-runtime-logical-schema-source/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-logical-schema-source",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-logical-schema-source:1\n",
+        "hash": "sha256:ef5221d3465f1214c3c0aad3660f57b119d03eb4b5127428d6a1f881a6260214"
+      },
+      {
+        "path": "sqlite/workflow-runtime-query-catalog-schema.json",
+        "format": "icarus.workflow-runtime-query-catalog-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-query-catalog-schema",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-query-catalog-schema:1\n",
+        "hash": "sha256:591b50d9acd00e625f93c7fc0f53a631afcde34e70d51723f9798c1b2ca3c25a"
+      },
+      {
+        "path": "sqlite/workflow-runtime-query-catalog@1.json",
+        "format": "icarus.workflow-runtime-query-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-query-catalog",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-query-catalog:1\n",
+        "hash": "sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d"
+      },
+      {
+        "path": "sqlite/workflow-runtime-typed-relation-catalog-schema.json",
+        "format": "icarus.workflow-runtime-typed-relation-catalog-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-typed-relation-catalog-schema",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-typed-relation-catalog-schema:1\n",
+        "hash": "sha256:06001e856248e9a5d4a0b5dcda928dc56d6c71408a4ef245a9b1396bdd5895f0"
+      },
+      {
+        "path": "sqlite/workflow-runtime-typed-relation-catalog@1.json",
+        "format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-typed-relation-catalog",
+          "version": "1"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-typed-relation-catalog:1\n",
+        "hash": "sha256:20babbfc787ac8a6006243180ef6e867bef8b454c41a527f4b8f20c8f6dd0d99"
+      }
+    ],
+    "next_reserved_directories": [
+      "conformance/draft",
+      "conformance/sealed"
+    ],
+    "explicitly_absent_artifacts": [
+      "executable_migration",
+      "executable_schema_manifest",
+      "sqlite_connection_factory",
+      "sqlite_open_or_pragma_execution",
+      "workflow_runtime_store",
+      "runtime_supported_limits_certification",
+      "compiler_or_golden_sealing",
+      "registry_or_runtime_semantics",
+      "runtime_center_or_ui"
+    ]
+  },
+  "hash": "sha256:32de639cc0ee6c6f33aa4291ea03ffa55b0a22752190fb88862e72a3f6857520"
+}

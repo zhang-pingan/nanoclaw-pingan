@@ -29,6 +29,7 @@
     "test:g0.3": "vitest run src/workflow-runtime/contracts/closed-schemas.test.ts",
     "test:g0.4": "vitest run src/workflow-runtime/contracts/catalog-protocols.test.ts",
     "test:g0.5": "vitest run src/workflow-runtime/contracts/safety-sqlite.test.ts",
+    "test:g0.6": "vitest run src/workflow-runtime/contracts/logical-schema.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

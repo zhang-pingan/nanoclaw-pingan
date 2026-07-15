@@ -1,0 +1,515 @@
+{
+  "format": "icarus.workflow-runtime-logical-schema-source-schema/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-logical-schema-source-schema",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-logical-schema-source-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-runtime-logical-schema-source:1",
+    "title": "Workflow Runtime Logical Schema Source v1 payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_id",
+      "database_name",
+      "contract_stage",
+      "executable_status",
+      "ddl_generation_status",
+      "sqlite_open_status",
+      "table_count",
+      "column_count",
+      "tables",
+      "forbidden_logical_columns",
+      "relation_policy"
+    ],
+    "properties": {
+      "schema_id": {
+        "const": "workflow-runtime-schema-v1"
+      },
+      "database_name": {
+        "const": "workflow-runtime.db"
+      },
+      "contract_stage": {
+        "const": "logical_metadata"
+      },
+      "executable_status": {
+        "const": "non_executable"
+      },
+      "ddl_generation_status": {
+        "const": "forbidden_in_g0_6"
+      },
+      "sqlite_open_status": {
+        "const": "forbidden_in_g0_6"
+      },
+      "table_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "column_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "tables": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/table"
+        },
+        "minItems": 1
+      },
+      "forbidden_logical_columns": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "relation_policy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "internal_targets",
+          "external_targets",
+          "polymorphic_kind_id",
+          "generic_error_fields"
+        ],
+        "properties": {
+          "internal_targets": {
+            "const": "typed_foreign_keys_only"
+          },
+          "external_targets": {
+            "const": "explicit_external_reference_metadata"
+          },
+          "polymorphic_kind_id": {
+            "const": "forbidden"
+          },
+          "generic_error_fields": {
+            "const": "forbidden"
+          }
+        }
+      }
+    },
+    "$defs": {
+      "external_reference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "validator_owner",
+          "reference_domain",
+          "immutable"
+        ],
+        "properties": {
+          "validator_owner": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "reference_domain": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "immutable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "column": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ordinal",
+          "name",
+          "logical_type",
+          "sqlite_type_intent",
+          "nullable",
+          "default_intent",
+          "safe_integer_intent",
+          "enum_values",
+          "relation_ids",
+          "external_reference"
+        ],
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "logical_type": {
+            "enum": [
+              "identifier",
+              "text",
+              "hash",
+              "canonical_json",
+              "integer",
+              "boolean_integer",
+              "external_reference"
+            ]
+          },
+          "sqlite_type_intent": {
+            "enum": [
+              "TEXT",
+              "INTEGER"
+            ]
+          },
+          "nullable": {
+            "type": "boolean"
+          },
+          "default_intent": {
+            "type": "null"
+          },
+          "safe_integer_intent": {
+            "enum": [
+              "not_applicable",
+              "non_negative",
+              "positive"
+            ]
+          },
+          "enum_values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "relation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_.:-]*$"
+            },
+            "uniqueItems": true
+          },
+          "external_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/external_reference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "primary_key": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "columns",
+          "auto_increment_intent"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "auto_increment_intent": {
+            "type": "boolean"
+          }
+        }
+      },
+      "foreign_key": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relation_id",
+          "source_columns",
+          "target_table",
+          "target_columns",
+          "on_delete",
+          "deferrability"
+        ],
+        "properties": {
+          "relation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "source_columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "target_table": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "target_columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "on_delete": {
+            "enum": [
+              "restrict",
+              "cascade",
+              "set_null"
+            ]
+          },
+          "deferrability": {
+            "enum": [
+              "not_deferrable",
+              "deferred"
+            ]
+          }
+        }
+      },
+      "unique_key": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key_id",
+          "columns",
+          "predicate_intent"
+        ],
+        "properties": {
+          "key_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "predicate_intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "check": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_id",
+          "kind",
+          "columns",
+          "expression_intent"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "kind": {
+            "enum": [
+              "enum_membership",
+              "hash_format",
+              "safe_integer",
+              "boolean_integer",
+              "exactly_one",
+              "at_most_one",
+              "all_or_none",
+              "state_field_consistency",
+              "ordered_values",
+              "cross_column_equality",
+              "closed_target_mapping",
+              "lineage_consistency"
+            ]
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "expression_intent": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "index": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index_id",
+          "kind",
+          "columns",
+          "predicate_intent",
+          "supports_query_ids"
+        ],
+        "properties": {
+          "index_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "kind": {
+            "enum": [
+              "lookup",
+              "scan",
+              "ordering",
+              "watchdog",
+              "recovery",
+              "gc_retention"
+            ]
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "minItems": 1
+          },
+          "predicate_intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "supports_query_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_.:-]*$"
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "table": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ordinal",
+          "name",
+          "source_section",
+          "columns",
+          "primary_key",
+          "foreign_keys",
+          "unique_keys",
+          "checks",
+          "indexes"
+        ],
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "source_section": {
+            "type": "string",
+            "minLength": 1
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/column"
+            },
+            "minItems": 1
+          },
+          "primary_key": {
+            "$ref": "#/$defs/primary_key"
+          },
+          "foreign_keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/foreign_key"
+            }
+          },
+          "unique_keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/unique_key"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/check"
+            }
+          },
+          "indexes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/index"
+            }
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:6ffb28049db3064532ed1c60d809f33c379b393a73c3b3c4ff4c611cda0f47eb"
+}

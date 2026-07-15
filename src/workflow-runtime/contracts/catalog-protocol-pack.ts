@@ -633,6 +633,7 @@ function validateDirectoryBoundaries(): void {
   const allowedCatalogFiles = new Set([
     ...expectedCatalogFiles,
     'safety-sqlite-domain-separators.json',
+    'logical-schema-domain-separators.json',
   ]);
   const actualCatalogFiles = fs
     .readdirSync(absoluteContractPath('catalogs'))

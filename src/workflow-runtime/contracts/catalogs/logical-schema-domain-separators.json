@@ -1,0 +1,54 @@
+{
+  "format": "icarus.workflow-logical-schema-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-logical-schema-domain-separators",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-logical-schema-domain-separators:1\n",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.workflow-contract-pack-logical-schema/1",
+        "domain_separator": "icarus:workflow-contract-pack-logical-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-logical-schema-domain-separators/1",
+        "domain_separator": "icarus:workflow-logical-schema-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-logical-schema-negative-cases/1",
+        "domain_separator": "icarus:workflow-logical-schema-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-logical-schema-positive-cases/1",
+        "domain_separator": "icarus:workflow-logical-schema-positive-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-logical-schema-source-schema/1",
+        "domain_separator": "icarus:workflow-runtime-logical-schema-source-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-logical-schema-source/1",
+        "domain_separator": "icarus:workflow-runtime-logical-schema-source:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-query-catalog-schema/1",
+        "domain_separator": "icarus:workflow-runtime-query-catalog-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-query-catalog/1",
+        "domain_separator": "icarus:workflow-runtime-query-catalog:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-typed-relation-catalog-schema/1",
+        "domain_separator": "icarus:workflow-runtime-typed-relation-catalog-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-typed-relation-catalog/1",
+        "domain_separator": "icarus:workflow-runtime-typed-relation-catalog:1\n"
+      }
+    ]
+  },
+  "hash": "sha256:fedfca88cad19f9ddb4711188c5e22a25db10779abd8eb1f0c6d3c72cfd49871"
+}

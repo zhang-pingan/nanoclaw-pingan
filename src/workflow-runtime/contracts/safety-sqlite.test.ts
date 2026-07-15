@@ -246,16 +246,19 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
     expect(() => checkContractPackSafetySqlite()).not.toThrow();
   });
 
-  it('keeps G0.6, DDL, Golden, and certification artifacts absent', () => {
+  it('keeps G0.5 free of G0.6, DDL, Golden, and certification semantics', () => {
     const formats = buildSafetySqliteSemanticArtifacts().map(
       ([, artifact]) => artifact.format,
     );
     expect(formats).not.toContain('icarus.workflow-runtime-schema-manifest/1');
     expect(formats).not.toContain('icarus.runtime-supported-limits/1');
-    expect(fs.readdirSync(path.join(contractsRoot, 'sqlite')).sort()).toEqual([
-      'local_single_user_sqlite@1.json',
-      'sqlite-execution-profile-schema.json',
-    ]);
+    const sqliteFiles = fs
+      .readdirSync(path.join(contractsRoot, 'sqlite'))
+      .sort();
+    expect(sqliteFiles).toContain('local_single_user_sqlite@1.json');
+    expect(sqliteFiles).toContain('sqlite-execution-profile-schema.json');
+    expect(sqliteFiles).not.toContain('workflow-runtime-schema-manifest.json');
+    expect(sqliteFiles).not.toContain('workflow-runtime-migration.sql');
     for (const directory of ['conformance/draft', 'conformance/sealed']) {
       expect(fs.readdirSync(path.join(contractsRoot, directory))).toEqual([
         '.gitkeep',

@@ -914,8 +914,22 @@ function validateDirectoryBoundaries(): void {
   const actualSqliteFiles = fs
     .readdirSync(absoluteContractPath('sqlite'))
     .sort(asciiCompare);
-  if (actualSqliteFiles.join('\n') !== expectedSqliteFiles.join('\n')) {
-    throw new Error('SQLite directory contains G0.6/DDL or missing artifacts');
+  const allowedSqliteFiles = new Set([
+    ...expectedSqliteFiles,
+    'workflow-runtime-logical-schema-source-schema.json',
+    'workflow-runtime-logical-schema-source@1.json',
+    'workflow-runtime-query-catalog-schema.json',
+    'workflow-runtime-query-catalog@1.json',
+    'workflow-runtime-typed-relation-catalog-schema.json',
+    'workflow-runtime-typed-relation-catalog@1.json',
+  ]);
+  if (
+    expectedSqliteFiles.some((file) => !actualSqliteFiles.includes(file)) ||
+    actualSqliteFiles.some((file) => !allowedSqliteFiles.has(file))
+  ) {
+    throw new Error(
+      'SQLite directory contains missing or out-of-slice artifacts',
+    );
   }
 
   const fixtureFiles = fs

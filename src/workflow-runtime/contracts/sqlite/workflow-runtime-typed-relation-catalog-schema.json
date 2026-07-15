@@ -1,0 +1,173 @@
+{
+  "format": "icarus.workflow-runtime-typed-relation-catalog-schema/1",
+  "ref": {
+    "id": "icarus.workflow-runtime-typed-relation-catalog-schema",
+    "version": "1"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-runtime-typed-relation-catalog-schema:1\n",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:icarus:workflow-runtime-typed-relation-catalog:1",
+    "title": "Workflow Runtime Typed Relation Catalog v1 payload",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_id",
+      "executable_status",
+      "internal_relation_count",
+      "external_reference_count",
+      "relations"
+    ],
+    "properties": {
+      "schema_id": {
+        "const": "workflow-runtime-schema-v1"
+      },
+      "executable_status": {
+        "const": "non_executable"
+      },
+      "internal_relation_count": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "external_reference_count": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "relations": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/relation"
+        }
+      }
+    },
+    "$defs": {
+      "relation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relation_id",
+          "relation_kind",
+          "source_table",
+          "source_columns",
+          "target_table",
+          "target_columns",
+          "on_delete",
+          "deferrability",
+          "validator_owner",
+          "reference_domain"
+        ],
+        "properties": {
+          "relation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_.:-]*$"
+          },
+          "relation_kind": {
+            "enum": [
+              "foreign_key",
+              "external_reference"
+            ]
+          },
+          "source_table": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "source_columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "target_table": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_columns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "uniqueItems": true
+          },
+          "on_delete": {
+            "anyOf": [
+              {
+                "enum": [
+                  "restrict",
+                  "cascade",
+                  "set_null"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deferrability": {
+            "anyOf": [
+              {
+                "enum": [
+                  "not_deferrable",
+                  "deferred"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validator_owner": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[a-z][a-z0-9_.:-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_domain": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[a-z][a-z0-9_.:-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "hash": "sha256:06001e856248e9a5d4a0b5dcda928dc56d6c71408a4ef245a9b1396bdd5895f0"
+}
