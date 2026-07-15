@@ -3,7 +3,7 @@
 > **状态**: READY
 > **当前 Gate**: G0 Contract Pack / Static Baseline
 > **下一施工切片**: G0.1 Toolchain Identity
-> **最后更新**: 2026-07-14
+> **最后更新**: 2026-07-15
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
 ## 文档职责
@@ -76,22 +76,24 @@
 | `npx vitest run setup/legacy-workflow-boundary.test.ts` | PASS，6 tests |
 | legacy migration candidate boundary | 当前定向测试通过；G0 仍需机器生成的完整 absence/coverage/candidate manifests |
 
+2026-07-15 工具链目标按本机默认开发环境重新冻结为 Node `26.5.0`、npm `11.17.0`、`darwin/arm64`；后续 G0.1 必须直接使用该默认环境生成 lock/native 验证证据，不要求另装第二套 Node。
+
 已知 G0 工具链差距：
 
 | 项目 | 当前仓库 | 规范目标 |
 | --- | --- | --- |
-| `.nvmrc` | `22` | exact `24.18.0` |
+| `.nvmrc` | `22` | exact `26.5.0` |
 | CI Node | hard-coded `20` | `node-version-file: .nvmrc` |
-| `packageManager` | 缺失 | exact `npm@11.16.0` |
+| `packageManager` | 缺失 | exact `npm@11.17.0` |
 | `better-sqlite3` | `^11.8.1` | exact `12.11.1` |
 | `jsonc-parser` | 缺失 | exact `3.3.1` direct dependency |
 | `ajv` | 缺失 | exact `8.20.0` direct dependency |
 | `ajv-formats` | 缺失 | exact `3.0.1` direct dependency |
 | `json-canonicalize` | 缺失 | exact `2.0.0` direct dependency |
 | `fast-check` | 缺失 | exact `4.9.0` dev dependency |
-| `@types/node` | `^22.10.0` | exact `24.13.3` |
+| `@types/node` | `^22.10.0` | exact `26.1.1` |
 | `@types/better-sqlite3` | `^7.6.12` | exact `7.6.13` |
-| Agent Container base | `node:22-slim` | `node:24.18.0-slim` immutable digest，需按规范区分 Agent Container 与 Executor Artifact identity |
+| Agent Container base | `node:22-slim` | `node:26.5.0-slim` immutable digest，需按规范区分 Agent Container 与 Executor Artifact identity |
 
 这些差距是 G0.1 的施工输入，不是已发现的架构冲突。
 
