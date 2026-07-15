@@ -1,0 +1,289 @@
+{
+  "format": "icarus.workflow-recipe-schema/1",
+  "ref": {
+    "id": "icarus.workflow-recipe-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-recipe-schema:1\n",
+  "hash": "sha256:c2768894c7fe6aab492f11d2948a4c92ccefbadc44cb094e103df4a8cdca9bb2",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-recipe/1",
+    "title": "WorkflowRecipeDescriptor",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "ref",
+      "owner_feature_id",
+      "recipe_family",
+      "task_kinds",
+      "workflow_definition_ref",
+      "entry_point",
+      "workflow_execution_policy_ref",
+      "context_contract_ref",
+      "workflow_command_policy_ref",
+      "input_schema_ref",
+      "output_schema_ref",
+      "launch_policy",
+      "effect_ceiling",
+      "derived_effect_summary",
+      "required_permissions",
+      "allowed_child_recipe_refs",
+      "resource_claims",
+      "recipe_hash"
+    ],
+    "properties": {
+      "ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "owner_feature_id": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "recipe_family": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+      },
+      "task_kinds": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "workflow_definition_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "entry_point": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+      },
+      "workflow_execution_policy_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "context_contract_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "workflow_command_policy_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "input_schema_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "output_schema_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "launch_policy": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "confirm",
+          "manual_only"
+        ]
+      },
+      "effect_ceiling": {
+        "type": "string",
+        "enum": [
+          "read_only",
+          "mutable_effects",
+          "irreversible"
+        ]
+      },
+      "derived_effect_summary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_impact",
+          "recovery_kinds",
+          "permission_refs",
+          "dependency_closure_hash"
+        ],
+        "properties": {
+          "max_impact": {
+            "type": "string",
+            "enum": [
+              "read_only",
+              "mutable_effects",
+              "irreversible"
+            ]
+          },
+          "recovery_kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pure",
+                "idempotent",
+                "compensatable"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "permission_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "uniqueItems": true
+          },
+          "dependency_closure_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "required_permissions": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+        },
+        "uniqueItems": true
+      },
+      "allowed_child_recipe_refs": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/versioned_ref"
+        },
+        "uniqueItems": true
+      },
+      "resource_claims": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "namespace",
+            "mode",
+            "key_json_pointers",
+            "hold_until"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "namespace": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "shared",
+                "exclusive"
+              ]
+            },
+            "key_json_pointers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "hold_until": {
+              "const": "workflow_terminal"
+            }
+          }
+        },
+        "uniqueItems": true
+      },
+      "recipe_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

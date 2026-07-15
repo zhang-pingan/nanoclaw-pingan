@@ -1,0 +1,62 @@
+{
+  "format": "icarus.workflow-closed-schema-domain-separators/1",
+  "ref": {
+    "id": "icarus.workflow-closed-schema-domain-separators",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-closed-schema-domain-separators:1\n",
+  "hash": "sha256:a30a17e0fe62f8de42c6689ffd7d38f2cfb5d2cc56b180b113c18683ea63c635",
+  "payload": {
+    "entries": [
+      {
+        "format": "icarus.workflow-card-presentation-schema/1",
+        "domain_separator": "icarus:workflow-card-presentation-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-closed-schema-domain-separators/1",
+        "domain_separator": "icarus:workflow-closed-schema-domain-separators:1\n"
+      },
+      {
+        "format": "icarus.workflow-closed-schema-negative-cases/1",
+        "domain_separator": "icarus:workflow-closed-schema-negative-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-closed-schema-positive-cases/1",
+        "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n"
+      },
+      {
+        "format": "icarus.workflow-compiled-scope-plan-schema/1",
+        "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-contract-pack-closed-schemas/1",
+        "domain_separator": "icarus:workflow-contract-pack-closed-schemas:1\n"
+      },
+      {
+        "format": "icarus.workflow-definition-schema/1",
+        "domain_separator": "icarus:workflow-definition-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "domain_separator": "icarus:workflow-feature-manifest-v2-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-graph-scope-source-schema/1",
+        "domain_separator": "icarus:workflow-graph-scope-source-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-recipe-schema/1",
+        "domain_separator": "icarus:workflow-recipe-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-runtime-command-schema/1",
+        "domain_separator": "icarus:workflow-runtime-command-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-transition-schema/1",
+        "domain_separator": "icarus:workflow-transition-schema:1\n"
+      }
+    ]
+  }
+}

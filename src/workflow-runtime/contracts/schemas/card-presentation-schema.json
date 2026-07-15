@@ -1,0 +1,343 @@
+{
+  "format": "icarus.workflow-card-presentation-schema/1",
+  "ref": {
+    "id": "icarus.workflow-card-presentation-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-card-presentation-schema:1\n",
+  "hash": "sha256:866cdf382a1cd70cfcd52c2b0173f66ce9aebeecd8b8f79c200ecd5202cde829",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/card-presentation/1",
+    "title": "CardPresentationContract",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "ref",
+      "owner_feature_id",
+      "template_ref",
+      "template_hash",
+      "variable_schema_ref",
+      "variable_schema_hash",
+      "supported_channel_adapters",
+      "render_limits",
+      "fallback_text_template_ref",
+      "actions",
+      "snapshot_retention_policy_ref",
+      "deterministic_render_fixture_ref",
+      "deterministic_render_fixture_hash",
+      "contract_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.card-presentation/1"
+      },
+      "ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "owner_feature_id": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "template_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "template_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "variable_schema_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "variable_schema_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "supported_channel_adapters": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "adapter_ref",
+            "adapter_hash",
+            "render_profile_ref"
+          ],
+          "properties": {
+            "adapter_ref": {
+              "$ref": "#/$defs/versioned_ref"
+            },
+            "adapter_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "render_profile_ref": {
+              "$ref": "#/$defs/versioned_ref"
+            }
+          }
+        },
+        "minItems": 1
+      },
+      "render_limits": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_payload_bytes",
+          "max_text_bytes",
+          "max_actions"
+        ],
+        "properties": {
+          "max_payload_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_text_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "max_actions": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "fallback_text_template_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "actions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action_id",
+            "label",
+            "binding",
+            "required_permission",
+            "idempotency_domain",
+            "expires_after_ms"
+          ],
+          "properties": {
+            "action_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "binding": {
+              "$ref": "#/$defs/card_action_binding"
+            },
+            "required_permission": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "idempotency_domain": {
+              "const": "card_interaction"
+            },
+            "expires_after_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        }
+      },
+      "snapshot_retention_policy_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "deterministic_render_fixture_ref": {
+        "type": "string",
+        "minLength": 1
+      },
+      "deterministic_render_fixture_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "contract_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      },
+      "card_action_binding": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action_kind",
+              "wait_contract_ref",
+              "action_value",
+              "correlation_variable"
+            ],
+            "properties": {
+              "action_kind": {
+                "const": "wait_signal"
+              },
+              "wait_contract_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "action_value": {
+                "type": "string",
+                "minLength": 1
+              },
+              "correlation_variable": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action_kind",
+              "business_command_contract_ref",
+              "command_input_variable"
+            ],
+            "properties": {
+              "action_kind": {
+                "const": "business_command"
+              },
+              "business_command_contract_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "command_input_variable": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action_kind",
+              "command_type",
+              "target_binding"
+            ],
+            "properties": {
+              "action_kind": {
+                "const": "runtime_command"
+              },
+              "command_type": {
+                "type": "string",
+                "enum": [
+                  "pause_run",
+                  "resume_run",
+                  "cancel_run",
+                  "cancel_workflow",
+                  "skip_node",
+                  "advance_retry_schedule",
+                  "reconcile_effect",
+                  "submit_effect_receipt",
+                  "verify_effect_not_applied",
+                  "remediate_operational_blocker",
+                  "restore_integrity",
+                  "request_administrative_abandon",
+                  "confirm_administrative_abandon"
+                ]
+              },
+              "target_binding": {
+                "type": "string",
+                "enum": [
+                  "workflow",
+                  "run",
+                  "node",
+                  "retry_schedule",
+                  "effect_operation",
+                  "operational_blocker"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

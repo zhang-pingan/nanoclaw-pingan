@@ -1,0 +1,531 @@
+{
+  "format": "icarus.workflow-transition-schema/1",
+  "ref": {
+    "id": "icarus.workflow-transition-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-transition-schema:1\n",
+  "hash": "sha256:9807b8c0100a893d54821f59cfadaa0adb0939b8e2b0ce4c678e408c5f4b9e1f",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-transition/1",
+    "title": "WorkflowDefinitionTransition",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "target"
+    ],
+    "properties": {
+      "target": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+      },
+      "context_patch": {
+        "$ref": "#/$defs/context_patch"
+      },
+      "notify": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contract_ref",
+          "input_bindings"
+        ],
+        "properties": {
+          "contract_ref": {
+            "$ref": "#/$defs/versioned_ref"
+          },
+          "input_bindings": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$": {
+                "$ref": "#/$defs/value_binding"
+              }
+            }
+          }
+        }
+      },
+      "card": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ref"
+        ],
+        "properties": {
+          "ref": {
+            "$ref": "#/$defs/versioned_ref"
+          }
+        }
+      },
+      "effects": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operations"
+        ],
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/transition_effect"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      },
+      "value_binding": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "const": "workflow_input"
+              },
+              "pointer": {
+                "type": "string",
+                "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "slot"
+            ],
+            "properties": {
+              "source": {
+                "const": "context_slot"
+              },
+              "slot": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+              },
+              "pointer": {
+                "type": "string",
+                "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "port"
+            ],
+            "properties": {
+              "source": {
+                "const": "completed_output"
+              },
+              "port": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+              },
+              "pointer": {
+                "type": "string",
+                "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "ref"
+            ],
+            "properties": {
+              "source": {
+                "const": "artifact"
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "json_pointer": {
+                "type": "string",
+                "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "value"
+            ],
+            "properties": {
+              "source": {
+                "const": "constant"
+              },
+              "value": {
+                "$ref": "#/$defs/json_value"
+              }
+            }
+          }
+        ]
+      },
+      "context_patch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "set",
+          "clear"
+        ],
+        "properties": {
+          "set": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$": {
+                "$ref": "#/$defs/value_binding"
+              }
+            }
+          },
+          "clear": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "transition_effect": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "recipe_ref",
+              "routing_scope_ref",
+              "principal_binding",
+              "creation_domain",
+              "relation_kind",
+              "input_bindings",
+              "delivery_requirement",
+              "finalization_policy_ref"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+              },
+              "type": {
+                "const": "start_child_workflow"
+              },
+              "recipe_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "routing_scope_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "principal_binding": {
+                "const": "inherit_parent_principal"
+              },
+              "creation_domain": {
+                "const": "parent_workflow_lineage"
+              },
+              "relation_kind": {
+                "type": "string",
+                "enum": [
+                  "follow_up",
+                  "background",
+                  "validation",
+                  "domain_defined"
+                ]
+              },
+              "input_bindings": {
+                "type": "object",
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "source",
+                          "slot"
+                        ],
+                        "properties": {
+                          "source": {
+                            "const": "context_slot"
+                          },
+                          "slot": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+                          },
+                          "pointer": {
+                            "type": "string",
+                            "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "source",
+                          "port"
+                        ],
+                        "properties": {
+                          "source": {
+                            "const": "completed_output"
+                          },
+                          "port": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+                          },
+                          "pointer": {
+                            "type": "string",
+                            "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "source",
+                          "value"
+                        ],
+                        "properties": {
+                          "source": {
+                            "const": "constant"
+                          },
+                          "value": {
+                            "$ref": "#/$defs/json_value"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "delivery_requirement": {
+                "const": "required"
+              },
+              "finalization_policy_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "recipe_ref",
+              "routing_scope_ref",
+              "principal_binding",
+              "creation_domain",
+              "relation_kind",
+              "input_bindings",
+              "delivery_requirement",
+              "outbox_delivery_policy_ref"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+              },
+              "type": {
+                "const": "start_child_workflow"
+              },
+              "recipe_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "routing_scope_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "principal_binding": {
+                "const": "inherit_parent_principal"
+              },
+              "creation_domain": {
+                "const": "parent_workflow_lineage"
+              },
+              "relation_kind": {
+                "type": "string",
+                "enum": [
+                  "follow_up",
+                  "background",
+                  "validation",
+                  "domain_defined"
+                ]
+              },
+              "input_bindings": {
+                "type": "object",
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "source",
+                          "slot"
+                        ],
+                        "properties": {
+                          "source": {
+                            "const": "context_slot"
+                          },
+                          "slot": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+                          },
+                          "pointer": {
+                            "type": "string",
+                            "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "source",
+                          "port"
+                        ],
+                        "properties": {
+                          "source": {
+                            "const": "completed_output"
+                          },
+                          "port": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+                          },
+                          "pointer": {
+                            "type": "string",
+                            "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "source",
+                          "value"
+                        ],
+                        "properties": {
+                          "source": {
+                            "const": "constant"
+                          },
+                          "value": {
+                            "$ref": "#/$defs/json_value"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "delivery_requirement": {
+                "const": "best_effort"
+              },
+              "outbox_delivery_policy_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

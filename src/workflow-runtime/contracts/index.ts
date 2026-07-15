@@ -26,3 +26,21 @@ export type {
   VersionedRef,
 } from './types.js';
 export { VersionedRefError, parseVersionedRef } from './versioned-ref.js';
+export type {
+  CardPresentationDocument,
+  CompiledScopePlanDocument,
+  FeatureManifestVNextDocument,
+  FeatureWorkflowResourceKind,
+  GraphNodeType,
+  GraphScopeSourceDocument,
+  WorkflowCommandReasonCode,
+  WorkflowCommandType,
+  WorkflowDefinitionDocument,
+  WorkflowGraphInputBinding,
+  WorkflowRecipeDocument,
+  WorkflowRuntimeCommandDocument,
+  WorkflowStateType,
+  WorkflowTransitionEffectInputBinding,
+  WorkflowTransitionDocument,
+  WorkflowValueBinding,
+} from './closed-schema-types.js';

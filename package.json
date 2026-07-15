@@ -25,7 +25,8 @@
     "setup": "tsx setup/index.ts",
     "auth": "tsx src/whatsapp-auth.ts",
     "test": "vitest run",
-    "test:g0.2": "vitest run src/workflow-runtime/contracts",
+    "test:g0.2": "vitest run src/workflow-runtime/contracts/foundation.test.ts",
+    "test:g0.3": "vitest run src/workflow-runtime/contracts/closed-schemas.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

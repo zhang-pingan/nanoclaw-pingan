@@ -63,8 +63,16 @@ const foundationArtifactPaths = [
 
 const foundationManifestPath = 'contract-pack-foundation.json';
 
-const reservedDirectories = [
+const foundationReservedDirectories = [
   'schemas',
+  'protocols',
+  'safety',
+  'sqlite',
+  'conformance/draft',
+  'conformance/sealed',
+] as const;
+
+const stillReservedDirectories = [
   'protocols',
   'safety',
   'sqlite',
@@ -469,7 +477,7 @@ function buildFoundationManifest(
         .map(([relativePath, artifact]) => descriptor(relativePath, artifact))
         .sort((left, right) => asciiCompare(left.path, right.path)),
       toolchain_inputs: verifyG01ToolchainArtifacts(),
-      reserved_directories: [...reservedDirectories],
+      reserved_directories: [...foundationReservedDirectories],
     },
   };
   return {
@@ -827,7 +835,7 @@ function validateHashVectors(artifacts: ContractArtifactEnvelope[]): void {
 }
 
 function validateReservedDirectories(): void {
-  for (const directory of reservedDirectories) {
+  for (const directory of stillReservedDirectories) {
     const absoluteDirectory = absoluteContractPath(directory);
     if (!fs.lstatSync(absoluteDirectory).isDirectory()) {
       throw new Error(`Reserved Contract Pack directory missing: ${directory}`);

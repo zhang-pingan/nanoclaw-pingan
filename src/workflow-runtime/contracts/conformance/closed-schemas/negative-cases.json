@@ -1,0 +1,2290 @@
+{
+  "format": "icarus.workflow-closed-schema-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-closed-schema-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-closed-schema-negative-cases:1\n",
+  "hash": "sha256:83b0ce8c333e68281ed54b4ef49d38383375e22fa415a57a6a513236896fc3e2",
+  "payload": {
+    "cases": [
+      {
+        "case_id": "definition_rejects_legacy_role",
+        "schema_format": "icarus.workflow-definition-schema/1",
+        "instance": {
+          "format": "icarus.workflow-definition/1",
+          "ref": {
+            "id": "example.workflow",
+            "version": "1.0.0"
+          },
+          "owner_feature_id": "example-feature",
+          "name": "Example workflow",
+          "context_contract_ref": {
+            "id": "example.context",
+            "version": "1.0.0"
+          },
+          "entry_points": {
+            "default": {
+              "state_key": "start"
+            }
+          },
+          "states": {
+            "start": {
+              "type": "delegation",
+              "capability_ref": {
+                "id": "example.capability",
+                "version": "1.0.0"
+              },
+              "policy": {
+                "allowed_node_types": [
+                  "delegation",
+                  "system",
+                  "wait",
+                  "join",
+                  "subgraph",
+                  "expand",
+                  "map",
+                  "terminal"
+                ],
+                "allowed_capabilities": [
+                  {
+                    "id": "example.capability",
+                    "version": "1.0.0"
+                  }
+                ],
+                "allowed_templates": [],
+                "allowed_interface_refs": [
+                  {
+                    "id": "example.interface",
+                    "version": "1.0.0"
+                  }
+                ],
+                "allowed_wait_contracts": [],
+                "allowed_child_policy_refs": [],
+                "allowed_claim_ids": [],
+                "allow_early_close": false,
+                "allow_indefinite_waits": false,
+                "effect_policy": {
+                  "allowed_recovery_kinds": [
+                    "pure"
+                  ],
+                  "max_impact": "read_only"
+                },
+                "build_retry": null,
+                "limits": {
+                  "max_scopes": null,
+                  "max_nodes": 0,
+                  "max_nodes_per_scope": null,
+                  "max_edges_per_scope": null,
+                  "max_nesting_depth": null,
+                  "max_map_items": null,
+                  "max_concurrency": 0,
+                  "max_total_attempts": null,
+                  "max_total_waits": null,
+                  "max_total_output_bytes": 0,
+                  "max_scope_spec_bytes": null,
+                  "max_condition_steps": null,
+                  "max_wait_duration_ms": null,
+                  "max_pending_signals": null,
+                  "max_fixed_point_facts": null,
+                  "max_frontier_bytes": null
+                },
+                "usage_budget": {
+                  "max_total_tool_calls": 0,
+                  "max_total_input_tokens": null,
+                  "max_total_output_tokens": null,
+                  "max_total_cost_micros": null
+                }
+              },
+              "input_bindings": {},
+              "retry_request": null,
+              "timeout_ms": null,
+              "on_complete": {
+                "success": {
+                  "target": "done"
+                },
+                "failure": {
+                  "target": "done"
+                }
+              },
+              "on_error": {
+                "target": "done"
+              },
+              "on_local_cancel": {
+                "target": "done"
+              },
+              "role": "legacy-role"
+            },
+            "done": {
+              "type": "terminal",
+              "terminal_kind": "normal",
+              "output_binding": {
+                "source": "constant",
+                "value": {
+                  "status": "done"
+                }
+              }
+            }
+          },
+          "definition_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/states/start",
+        "expected_additional_property": "role"
+      },
+      {
+        "case_id": "definition_rejects_before_delegate",
+        "schema_format": "icarus.workflow-definition-schema/1",
+        "instance": {
+          "format": "icarus.workflow-definition/1",
+          "ref": {
+            "id": "example.workflow",
+            "version": "1.0.0"
+          },
+          "owner_feature_id": "example-feature",
+          "name": "Example workflow",
+          "context_contract_ref": {
+            "id": "example.context",
+            "version": "1.0.0"
+          },
+          "entry_points": {
+            "default": {
+              "state_key": "start"
+            }
+          },
+          "states": {
+            "start": {
+              "type": "delegation",
+              "capability_ref": {
+                "id": "example.capability",
+                "version": "1.0.0"
+              },
+              "policy": {
+                "allowed_node_types": [
+                  "delegation",
+                  "system",
+                  "wait",
+                  "join",
+                  "subgraph",
+                  "expand",
+                  "map",
+                  "terminal"
+                ],
+                "allowed_capabilities": [
+                  {
+                    "id": "example.capability",
+                    "version": "1.0.0"
+                  }
+                ],
+                "allowed_templates": [],
+                "allowed_interface_refs": [
+                  {
+                    "id": "example.interface",
+                    "version": "1.0.0"
+                  }
+                ],
+                "allowed_wait_contracts": [],
+                "allowed_child_policy_refs": [],
+                "allowed_claim_ids": [],
+                "allow_early_close": false,
+                "allow_indefinite_waits": false,
+                "effect_policy": {
+                  "allowed_recovery_kinds": [
+                    "pure"
+                  ],
+                  "max_impact": "read_only"
+                },
+                "build_retry": null,
+                "limits": {
+                  "max_scopes": null,
+                  "max_nodes": 0,
+                  "max_nodes_per_scope": null,
+                  "max_edges_per_scope": null,
+                  "max_nesting_depth": null,
+                  "max_map_items": null,
+                  "max_concurrency": 0,
+                  "max_total_attempts": null,
+                  "max_total_waits": null,
+                  "max_total_output_bytes": 0,
+                  "max_scope_spec_bytes": null,
+                  "max_condition_steps": null,
+                  "max_wait_duration_ms": null,
+                  "max_pending_signals": null,
+                  "max_fixed_point_facts": null,
+                  "max_frontier_bytes": null
+                },
+                "usage_budget": {
+                  "max_total_tool_calls": 0,
+                  "max_total_input_tokens": null,
+                  "max_total_output_tokens": null,
+                  "max_total_cost_micros": null
+                }
+              },
+              "input_bindings": {},
+              "retry_request": null,
+              "timeout_ms": null,
+              "on_complete": {
+                "success": {
+                  "target": "done"
+                },
+                "failure": {
+                  "target": "done"
+                }
+              },
+              "on_error": {
+                "target": "done"
+              },
+              "on_local_cancel": {
+                "target": "done"
+              },
+              "before_delegate": []
+            },
+            "done": {
+              "type": "terminal",
+              "terminal_kind": "normal",
+              "output_binding": {
+                "source": "constant",
+                "value": {
+                  "status": "done"
+                }
+              }
+            }
+          },
+          "definition_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/states/start",
+        "expected_additional_property": "before_delegate"
+      },
+      {
+        "case_id": "definition_rejects_system_run_steps",
+        "schema_format": "icarus.workflow-definition-schema/1",
+        "instance": {
+          "format": "icarus.workflow-definition/1",
+          "ref": {
+            "id": "example.workflow",
+            "version": "1.0.0"
+          },
+          "owner_feature_id": "example-feature",
+          "name": "Example workflow",
+          "context_contract_ref": {
+            "id": "example.context",
+            "version": "1.0.0"
+          },
+          "entry_points": {
+            "default": {
+              "state_key": "start"
+            }
+          },
+          "states": {
+            "start": {
+              "type": "system",
+              "capability_ref": {
+                "id": "example.capability",
+                "version": "1.0.0"
+              },
+              "policy": {
+                "allowed_node_types": [
+                  "delegation",
+                  "system",
+                  "wait",
+                  "join",
+                  "subgraph",
+                  "expand",
+                  "map",
+                  "terminal"
+                ],
+                "allowed_capabilities": [
+                  {
+                    "id": "example.capability",
+                    "version": "1.0.0"
+                  }
+                ],
+                "allowed_templates": [],
+                "allowed_interface_refs": [
+                  {
+                    "id": "example.interface",
+                    "version": "1.0.0"
+                  }
+                ],
+                "allowed_wait_contracts": [],
+                "allowed_child_policy_refs": [],
+                "allowed_claim_ids": [],
+                "allow_early_close": false,
+                "allow_indefinite_waits": false,
+                "effect_policy": {
+                  "allowed_recovery_kinds": [
+                    "pure"
+                  ],
+                  "max_impact": "read_only"
+                },
+                "build_retry": null,
+                "limits": {
+                  "max_scopes": null,
+                  "max_nodes": 0,
+                  "max_nodes_per_scope": null,
+                  "max_edges_per_scope": null,
+                  "max_nesting_depth": null,
+                  "max_map_items": null,
+                  "max_concurrency": 0,
+                  "max_total_attempts": null,
+                  "max_total_waits": null,
+                  "max_total_output_bytes": 0,
+                  "max_scope_spec_bytes": null,
+                  "max_condition_steps": null,
+                  "max_wait_duration_ms": null,
+                  "max_pending_signals": null,
+                  "max_fixed_point_facts": null,
+                  "max_frontier_bytes": null
+                },
+                "usage_budget": {
+                  "max_total_tool_calls": 0,
+                  "max_total_input_tokens": null,
+                  "max_total_output_tokens": null,
+                  "max_total_cost_micros": null
+                }
+              },
+              "input_bindings": {},
+              "retry_request": null,
+              "timeout_ms": null,
+              "on_complete": {
+                "success": {
+                  "target": "done"
+                },
+                "failure": {
+                  "target": "done"
+                }
+              },
+              "on_error": {
+                "target": "done"
+              },
+              "on_local_cancel": {
+                "target": "done"
+              },
+              "run": {
+                "steps": []
+              }
+            },
+            "done": {
+              "type": "terminal",
+              "terminal_kind": "normal",
+              "output_binding": {
+                "source": "constant",
+                "value": {
+                  "status": "done"
+                }
+              }
+            }
+          },
+          "definition_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/states/start",
+        "expected_additional_property": "run"
+      },
+      {
+        "case_id": "transition_rejects_notification_delivery_requirement",
+        "schema_format": "icarus.workflow-transition-schema/1",
+        "instance": {
+          "target": "done",
+          "notify": {
+            "contract_ref": {
+              "id": "example.notification",
+              "version": "1.0.0"
+            },
+            "input_bindings": {},
+            "delivery_requirement": "required"
+          }
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/notify",
+        "expected_additional_property": "delivery_requirement"
+      },
+      {
+        "case_id": "transition_rejects_child_creation_key_template",
+        "schema_format": "icarus.workflow-transition-schema/1",
+        "instance": {
+          "target": "done",
+          "effects": {
+            "operations": [
+              {
+                "id": "child",
+                "type": "start_child_workflow",
+                "recipe_ref": {
+                  "id": "example.child-recipe",
+                  "version": "1.0.0"
+                },
+                "routing_scope_ref": {
+                  "id": "example.child-routing",
+                  "version": "1.0.0"
+                },
+                "principal_binding": "inherit_parent_principal",
+                "creation_domain": "parent_workflow_lineage",
+                "creation_key_template": "legacy-{workflow}",
+                "relation_kind": "follow_up",
+                "input_bindings": {},
+                "delivery_requirement": "required",
+                "finalization_policy_ref": {
+                  "id": "example.finalization",
+                  "version": "1.0.0"
+                }
+              }
+            ]
+          }
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/effects/operations/0",
+        "expected_additional_property": "creation_key_template"
+      },
+      {
+        "case_id": "transition_rejects_both_child_delivery_policies",
+        "schema_format": "icarus.workflow-transition-schema/1",
+        "instance": {
+          "target": "done",
+          "effects": {
+            "operations": [
+              {
+                "id": "child",
+                "type": "start_child_workflow",
+                "recipe_ref": {
+                  "id": "example.child-recipe",
+                  "version": "1.0.0"
+                },
+                "routing_scope_ref": {
+                  "id": "example.child-routing",
+                  "version": "1.0.0"
+                },
+                "principal_binding": "inherit_parent_principal",
+                "creation_domain": "parent_workflow_lineage",
+                "relation_kind": "follow_up",
+                "input_bindings": {},
+                "delivery_requirement": "required",
+                "finalization_policy_ref": {
+                  "id": "example.finalization",
+                  "version": "1.0.0"
+                },
+                "outbox_delivery_policy_ref": {
+                  "id": "example.outbox",
+                  "version": "1.0.0"
+                }
+              }
+            ]
+          }
+        },
+        "expected_keyword": "oneOf",
+        "expected_instance_pointer": "/effects/operations/0",
+        "expected_additional_property": null
+      },
+      {
+        "case_id": "transition_rejects_legacy_delegate",
+        "schema_format": "icarus.workflow-transition-schema/1",
+        "instance": {
+          "target": "done",
+          "delegate": {
+            "role": "legacy-role"
+          }
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "delegate"
+      },
+      {
+        "case_id": "recipe_rejects_mutable_child_ref",
+        "schema_format": "icarus.workflow-recipe-schema/1",
+        "instance": {
+          "ref": {
+            "id": "example.recipe",
+            "version": "1.0.0"
+          },
+          "owner_feature_id": "example-feature",
+          "recipe_family": "example",
+          "task_kinds": [
+            "example_task"
+          ],
+          "workflow_definition_ref": {
+            "id": "example.workflow",
+            "version": "1.0.0"
+          },
+          "entry_point": "default",
+          "workflow_execution_policy_ref": {
+            "id": "example.execution-policy",
+            "version": "1.0.0"
+          },
+          "context_contract_ref": {
+            "id": "example.context",
+            "version": "1.0.0"
+          },
+          "workflow_command_policy_ref": {
+            "id": "example.command-policy",
+            "version": "1.0.0"
+          },
+          "input_schema_ref": {
+            "id": "example.input",
+            "version": "1.0.0"
+          },
+          "output_schema_ref": {
+            "id": "example.output",
+            "version": "1.0.0"
+          },
+          "launch_policy": "confirm",
+          "effect_ceiling": "read_only",
+          "derived_effect_summary": {
+            "max_impact": "read_only",
+            "recovery_kinds": [
+              "pure"
+            ],
+            "permission_refs": [],
+            "dependency_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "required_permissions": [],
+          "allowed_child_recipe_refs": [
+            {
+              "id": "example.child",
+              "version": "latest"
+            }
+          ],
+          "resource_claims": [],
+          "recipe_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected_keyword": "not",
+        "expected_instance_pointer": "/allowed_child_recipe_refs/0/version",
+        "expected_additional_property": null
+      },
+      {
+        "case_id": "recipe_rejects_unknown_definition_allowlist",
+        "schema_format": "icarus.workflow-recipe-schema/1",
+        "instance": {
+          "ref": {
+            "id": "example.recipe",
+            "version": "1.0.0"
+          },
+          "owner_feature_id": "example-feature",
+          "recipe_family": "example",
+          "task_kinds": [
+            "example_task"
+          ],
+          "workflow_definition_ref": {
+            "id": "example.workflow",
+            "version": "1.0.0"
+          },
+          "entry_point": "default",
+          "workflow_execution_policy_ref": {
+            "id": "example.execution-policy",
+            "version": "1.0.0"
+          },
+          "context_contract_ref": {
+            "id": "example.context",
+            "version": "1.0.0"
+          },
+          "workflow_command_policy_ref": {
+            "id": "example.command-policy",
+            "version": "1.0.0"
+          },
+          "input_schema_ref": {
+            "id": "example.input",
+            "version": "1.0.0"
+          },
+          "output_schema_ref": {
+            "id": "example.output",
+            "version": "1.0.0"
+          },
+          "launch_policy": "confirm",
+          "effect_ceiling": "read_only",
+          "derived_effect_summary": {
+            "max_impact": "read_only",
+            "recovery_kinds": [
+              "pure"
+            ],
+            "permission_refs": [],
+            "dependency_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "required_permissions": [],
+          "allowed_child_recipe_refs": [],
+          "resource_claims": [],
+          "recipe_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "allowed_definition_refs": []
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "allowed_definition_refs"
+      },
+      {
+        "case_id": "command_rejects_open_target_ref",
+        "schema_format": "icarus.workflow-runtime-command-schema/1",
+        "instance": {
+          "command_id": "command-1",
+          "idempotency_key": "operator-command-1",
+          "expected_row_version": 3,
+          "reason_code": "operator_requested",
+          "evidence_refs": [],
+          "command_type": "pause_run",
+          "target": {
+            "target_ref": "run-1"
+          }
+        },
+        "expected_keyword": "required",
+        "expected_instance_pointer": "/target",
+        "expected_additional_property": null
+      },
+      {
+        "case_id": "command_rejects_client_actor",
+        "schema_format": "icarus.workflow-runtime-command-schema/1",
+        "instance": {
+          "command_id": "command-1",
+          "idempotency_key": "operator-command-1",
+          "expected_row_version": 3,
+          "reason_code": "operator_requested",
+          "evidence_refs": [],
+          "command_type": "pause_run",
+          "target": {
+            "run_id": "run-1"
+          },
+          "actor_ref": "human:forged"
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "actor_ref"
+      },
+      {
+        "case_id": "feature_manifest_rejects_workflowDefinitions",
+        "schema_format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "instance": {
+          "format": "icarus.feature-manifest/2",
+          "feature_ref": {
+            "id": "example.feature",
+            "version": "1.0.0"
+          },
+          "namespace": "example",
+          "owner_principal_ref": "human:local-owner",
+          "dependencies": [],
+          "package_resources": {
+            "skills": [],
+            "agents": [],
+            "mcp": [],
+            "scripts": [],
+            "templates": []
+          },
+          "extension_surfaces": {
+            "api_entry": null,
+            "nav_entry": null,
+            "renderer_entry": null
+          },
+          "dynamic_workflow_resources": [
+            {
+              "kind": "definition",
+              "ref": {
+                "id": "example.workflow",
+                "version": "1.0.0"
+              },
+              "source_path": "workflow-src/ab/example.workflow.json",
+              "expected_source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ],
+          "ownership": {
+            "feature_source_root": "features/example",
+            "workflow_source_root": "features/example/workflow-src",
+            "execution_bundle_owner": "feature_release",
+            "registry_namespace": "example"
+          },
+          "lifecycle": {
+            "draining_policy_ref": {
+              "id": "example.draining",
+              "version": "1.0.0"
+            },
+            "retention_policy_ref": {
+              "id": "example.retention",
+              "version": "1.0.0"
+            },
+            "deletion_policy_ref": {
+              "id": "example.deletion",
+              "version": "1.0.0"
+            }
+          },
+          "manifest_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "workflowDefinitions": []
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "workflowDefinitions"
+      },
+      {
+        "case_id": "feature_manifest_rejects_cards",
+        "schema_format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "instance": {
+          "format": "icarus.feature-manifest/2",
+          "feature_ref": {
+            "id": "example.feature",
+            "version": "1.0.0"
+          },
+          "namespace": "example",
+          "owner_principal_ref": "human:local-owner",
+          "dependencies": [],
+          "package_resources": {
+            "skills": [],
+            "agents": [],
+            "mcp": [],
+            "scripts": [],
+            "templates": []
+          },
+          "extension_surfaces": {
+            "api_entry": null,
+            "nav_entry": null,
+            "renderer_entry": null
+          },
+          "dynamic_workflow_resources": [
+            {
+              "kind": "definition",
+              "ref": {
+                "id": "example.workflow",
+                "version": "1.0.0"
+              },
+              "source_path": "workflow-src/ab/example.workflow.json",
+              "expected_source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ],
+          "ownership": {
+            "feature_source_root": "features/example",
+            "workflow_source_root": "features/example/workflow-src",
+            "execution_bundle_owner": "feature_release",
+            "registry_namespace": "example"
+          },
+          "lifecycle": {
+            "draining_policy_ref": {
+              "id": "example.draining",
+              "version": "1.0.0"
+            },
+            "retention_policy_ref": {
+              "id": "example.retention",
+              "version": "1.0.0"
+            },
+            "deletion_policy_ref": {
+              "id": "example.deletion",
+              "version": "1.0.0"
+            }
+          },
+          "manifest_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "cards": []
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "cards"
+      },
+      {
+        "case_id": "feature_manifest_rejects_artifactContracts",
+        "schema_format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "instance": {
+          "format": "icarus.feature-manifest/2",
+          "feature_ref": {
+            "id": "example.feature",
+            "version": "1.0.0"
+          },
+          "namespace": "example",
+          "owner_principal_ref": "human:local-owner",
+          "dependencies": [],
+          "package_resources": {
+            "skills": [],
+            "agents": [],
+            "mcp": [],
+            "scripts": [],
+            "templates": []
+          },
+          "extension_surfaces": {
+            "api_entry": null,
+            "nav_entry": null,
+            "renderer_entry": null
+          },
+          "dynamic_workflow_resources": [
+            {
+              "kind": "definition",
+              "ref": {
+                "id": "example.workflow",
+                "version": "1.0.0"
+              },
+              "source_path": "workflow-src/ab/example.workflow.json",
+              "expected_source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ],
+          "ownership": {
+            "feature_source_root": "features/example",
+            "workflow_source_root": "features/example/workflow-src",
+            "execution_bundle_owner": "feature_release",
+            "registry_namespace": "example"
+          },
+          "lifecycle": {
+            "draining_policy_ref": {
+              "id": "example.draining",
+              "version": "1.0.0"
+            },
+            "retention_policy_ref": {
+              "id": "example.retention",
+              "version": "1.0.0"
+            },
+            "deletion_policy_ref": {
+              "id": "example.deletion",
+              "version": "1.0.0"
+            }
+          },
+          "manifest_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "artifactContracts": []
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "artifactContracts"
+      },
+      {
+        "case_id": "feature_manifest_rejects_workflowEvaluators",
+        "schema_format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "instance": {
+          "format": "icarus.feature-manifest/2",
+          "feature_ref": {
+            "id": "example.feature",
+            "version": "1.0.0"
+          },
+          "namespace": "example",
+          "owner_principal_ref": "human:local-owner",
+          "dependencies": [],
+          "package_resources": {
+            "skills": [],
+            "agents": [],
+            "mcp": [],
+            "scripts": [],
+            "templates": []
+          },
+          "extension_surfaces": {
+            "api_entry": null,
+            "nav_entry": null,
+            "renderer_entry": null
+          },
+          "dynamic_workflow_resources": [
+            {
+              "kind": "definition",
+              "ref": {
+                "id": "example.workflow",
+                "version": "1.0.0"
+              },
+              "source_path": "workflow-src/ab/example.workflow.json",
+              "expected_source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ],
+          "ownership": {
+            "feature_source_root": "features/example",
+            "workflow_source_root": "features/example/workflow-src",
+            "execution_bundle_owner": "feature_release",
+            "registry_namespace": "example"
+          },
+          "lifecycle": {
+            "draining_policy_ref": {
+              "id": "example.draining",
+              "version": "1.0.0"
+            },
+            "retention_policy_ref": {
+              "id": "example.retention",
+              "version": "1.0.0"
+            },
+            "deletion_policy_ref": {
+              "id": "example.deletion",
+              "version": "1.0.0"
+            }
+          },
+          "manifest_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "workflowEvaluators": []
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "workflowEvaluators"
+      },
+      {
+        "case_id": "feature_manifest_rejects_parent_source_path",
+        "schema_format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "instance": {
+          "format": "icarus.feature-manifest/2",
+          "feature_ref": {
+            "id": "example.feature",
+            "version": "1.0.0"
+          },
+          "namespace": "example",
+          "owner_principal_ref": "human:local-owner",
+          "dependencies": [],
+          "package_resources": {
+            "skills": [],
+            "agents": [],
+            "mcp": [],
+            "scripts": [],
+            "templates": []
+          },
+          "extension_surfaces": {
+            "api_entry": null,
+            "nav_entry": null,
+            "renderer_entry": null
+          },
+          "dynamic_workflow_resources": [
+            {
+              "kind": "definition",
+              "ref": {
+                "id": "example.workflow",
+                "version": "1.0.0"
+              },
+              "source_path": "workflow-src/../example.workflow.json",
+              "expected_source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ],
+          "ownership": {
+            "feature_source_root": "features/example",
+            "workflow_source_root": "features/example/workflow-src",
+            "execution_bundle_owner": "feature_release",
+            "registry_namespace": "example"
+          },
+          "lifecycle": {
+            "draining_policy_ref": {
+              "id": "example.draining",
+              "version": "1.0.0"
+            },
+            "retention_policy_ref": {
+              "id": "example.retention",
+              "version": "1.0.0"
+            },
+            "deletion_policy_ref": {
+              "id": "example.deletion",
+              "version": "1.0.0"
+            }
+          },
+          "manifest_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected_keyword": "pattern",
+        "expected_instance_pointer": "/dynamic_workflow_resources/0/source_path",
+        "expected_additional_property": null
+      },
+      {
+        "case_id": "card_rejects_required_delivery",
+        "schema_format": "icarus.workflow-card-presentation-schema/1",
+        "instance": {
+          "format": "icarus.card-presentation/1",
+          "ref": {
+            "id": "example.card",
+            "version": "1.0.0"
+          },
+          "owner_feature_id": "example-feature",
+          "template_ref": {
+            "id": "example.card-template",
+            "version": "1.0.0"
+          },
+          "template_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "variable_schema_ref": {
+            "id": "example.card-variables",
+            "version": "1.0.0"
+          },
+          "variable_schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "supported_channel_adapters": [
+            {
+              "adapter_ref": {
+                "id": "example.channel-adapter",
+                "version": "1.0.0"
+              },
+              "adapter_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "render_profile_ref": {
+                "id": "example.render-profile",
+                "version": "1.0.0"
+              }
+            }
+          ],
+          "render_limits": {
+            "max_payload_bytes": 65536,
+            "max_text_bytes": 8192,
+            "max_actions": 4
+          },
+          "fallback_text_template_ref": {
+            "id": "example.fallback-template",
+            "version": "1.0.0"
+          },
+          "actions": [
+            {
+              "action_id": "pause",
+              "label": "Pause",
+              "binding": {
+                "action_kind": "runtime_command",
+                "command_type": "pause_run",
+                "target_binding": "run"
+              },
+              "required_permission": "workflow.operate",
+              "idempotency_domain": "card_interaction",
+              "expires_after_ms": 300000
+            }
+          ],
+          "snapshot_retention_policy_ref": {
+            "id": "example.card-retention",
+            "version": "1.0.0"
+          },
+          "deterministic_render_fixture_ref": "fixture:example-card",
+          "deterministic_render_fixture_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "contract_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "delivery_requirement": "required"
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "delivery_requirement"
+      },
+      {
+        "case_id": "source_rejects_loop_node",
+        "schema_format": "icarus.workflow-graph-scope-source-schema/1",
+        "instance": {
+          "format": "icarus.workflow-graph-scope/1",
+          "scope_key": "minimal",
+          "interface_ref": {
+            "id": "example.interface",
+            "version": "1.0.0"
+          },
+          "nodes": [
+            {
+              "id": "loop",
+              "type": "loop",
+              "trigger": {
+                "type": "root"
+              }
+            }
+          ],
+          "control_edges": [],
+          "data_edges": [],
+          "completion": {
+            "settled_rules": [
+              {
+                "id": "select_done",
+                "when": {
+                  "fact": "all_nodes_terminal"
+                },
+                "select": {
+                  "exits": [
+                    "done"
+                  ],
+                  "pick": {
+                    "type": "lowest_terminal_node_id"
+                  }
+                },
+                "phase": "settled",
+                "priority": 100
+              }
+            ],
+            "no_match": "error",
+            "early_close": "cancel_and_fence_remaining"
+          },
+          "requested_limits": {
+            "max_scopes": null,
+            "max_nodes": 0,
+            "max_nodes_per_scope": null,
+            "max_edges_per_scope": null,
+            "max_nesting_depth": null,
+            "max_map_items": null,
+            "max_concurrency": 0,
+            "max_total_attempts": null,
+            "max_total_waits": null,
+            "max_total_output_bytes": 0,
+            "max_scope_spec_bytes": null,
+            "max_condition_steps": null,
+            "max_wait_duration_ms": null,
+            "max_pending_signals": null,
+            "max_fixed_point_facts": null,
+            "max_frontier_bytes": null
+          }
+        },
+        "expected_keyword": "oneOf",
+        "expected_instance_pointer": "/nodes/0",
+        "expected_additional_property": null
+      },
+      {
+        "case_id": "source_rejects_scheduler_priority",
+        "schema_format": "icarus.workflow-graph-scope-source-schema/1",
+        "instance": {
+          "format": "icarus.workflow-graph-scope/1",
+          "scope_key": "minimal",
+          "interface_ref": {
+            "id": "example.interface",
+            "version": "1.0.0"
+          },
+          "nodes": [
+            {
+              "id": "done",
+              "type": "terminal",
+              "trigger": {
+                "type": "root"
+              },
+              "exit": "done",
+              "scheduler_priority": 100
+            }
+          ],
+          "control_edges": [],
+          "data_edges": [],
+          "completion": {
+            "settled_rules": [
+              {
+                "id": "select_done",
+                "when": {
+                  "fact": "all_nodes_terminal"
+                },
+                "select": {
+                  "exits": [
+                    "done"
+                  ],
+                  "pick": {
+                    "type": "lowest_terminal_node_id"
+                  }
+                },
+                "phase": "settled",
+                "priority": 100
+              }
+            ],
+            "no_match": "error",
+            "early_close": "cancel_and_fence_remaining"
+          },
+          "requested_limits": {
+            "max_scopes": null,
+            "max_nodes": 0,
+            "max_nodes_per_scope": null,
+            "max_edges_per_scope": null,
+            "max_nesting_depth": null,
+            "max_map_items": null,
+            "max_concurrency": 0,
+            "max_total_attempts": null,
+            "max_total_waits": null,
+            "max_total_output_bytes": 0,
+            "max_scope_spec_bytes": null,
+            "max_condition_steps": null,
+            "max_wait_duration_ms": null,
+            "max_pending_signals": null,
+            "max_fixed_point_facts": null,
+            "max_frontier_bytes": null
+          }
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "/nodes/0",
+        "expected_additional_property": "scheduler_priority"
+      },
+      {
+        "case_id": "compiled_plan_rejects_unknown_field",
+        "schema_format": "icarus.workflow-compiled-scope-plan-schema/1",
+        "instance": {
+          "format": "icarus.workflow-graph-scope-plan/1",
+          "compiler_version": "fixture-compiler-1",
+          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "compiler_toolchain_ref": {
+            "id": "example.compiler-toolchain",
+            "version": "1.0.0"
+          },
+          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "canonical_normalizer_version": "1",
+          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "proof_algorithm_version": "1",
+          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "policy_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "effective_policy_snapshot": {
+            "allowed_node_types": [
+              "delegation",
+              "system",
+              "wait",
+              "join",
+              "subgraph",
+              "expand",
+              "map",
+              "terminal"
+            ],
+            "allowed_capabilities": [
+              {
+                "id": "example.capability",
+                "version": "1.0.0"
+              }
+            ],
+            "allowed_templates": [],
+            "allowed_interface_refs": [
+              {
+                "id": "example.interface",
+                "version": "1.0.0"
+              }
+            ],
+            "allowed_wait_contracts": [],
+            "allowed_child_policy_refs": [],
+            "allowed_claim_ids": [],
+            "allow_early_close": false,
+            "allow_indefinite_waits": false,
+            "effect_policy": {
+              "allowed_recovery_kinds": [
+                "pure"
+              ],
+              "max_impact": "read_only"
+            },
+            "build_retry": null,
+            "limits": {
+              "max_scopes": null,
+              "max_nodes": 0,
+              "max_nodes_per_scope": null,
+              "max_edges_per_scope": null,
+              "max_nesting_depth": null,
+              "max_map_items": null,
+              "max_concurrency": 0,
+              "max_total_attempts": null,
+              "max_total_waits": null,
+              "max_total_output_bytes": 0,
+              "max_scope_spec_bytes": null,
+              "max_condition_steps": null,
+              "max_wait_duration_ms": null,
+              "max_pending_signals": null,
+              "max_fixed_point_facts": null,
+              "max_frontier_bytes": null
+            },
+            "usage_budget": {
+              "max_total_tool_calls": 0,
+              "max_total_input_tokens": null,
+              "max_total_output_tokens": null,
+              "max_total_cost_micros": null
+            }
+          },
+          "capability_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "wait_contract_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "interface_snapshot": {
+            "ref": {
+              "id": "example.interface",
+              "version": "1.0.0"
+            },
+            "inputs": {},
+            "exits": {
+              "done": {
+                "output_ports": {}
+              }
+            }
+          },
+          "nodes": [
+            {
+              "id": "work",
+              "type": "system",
+              "source_config_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "trigger_program": {
+                "normalized_expression": {
+                  "type": "root"
+                },
+                "referenced_edge_ids": [],
+                "max_steps": 1,
+                "truth_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "input_ports": {
+                "request": {
+                  "schema": {
+                    "type": "generated",
+                    "generator": "join_expose",
+                    "parameter_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "schema_ref": "schema:request",
+                    "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                  },
+                  "max_bytes": 0,
+                  "aggregation": {
+                    "type": "single",
+                    "required": false,
+                    "select": "only"
+                  }
+                }
+              },
+              "output_ports": {
+                "result": {
+                  "schema": {
+                    "type": "registry",
+                    "ref": {
+                      "id": "example.output",
+                      "version": "1.0.0"
+                    },
+                    "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                  },
+                  "max_bytes": null,
+                  "required": true
+                }
+              },
+              "effective_limits": {
+                "max_attempts": 0
+              },
+              "capability_binding": {
+                "ref": {
+                  "id": "example.capability",
+                  "version": "1.0.0"
+                },
+                "node_type": "system",
+                "executor_ref": {
+                  "id": "example.executor",
+                  "version": "1.0.0"
+                },
+                "skill_refs": [],
+                "input_ports": {},
+                "output_ports": {},
+                "no_artifact_expected": true,
+                "no_evaluation_expected": true,
+                "quality_revision_policy": null,
+                "required_tools": [],
+                "required_mcp_methods": [],
+                "required_file_scopes": [],
+                "required_claims": [],
+                "allowed_groups": [],
+                "retry_policy": {
+                  "max_attempts": null,
+                  "retry_on": [],
+                  "backoff": "fixed"
+                },
+                "timeout_ceiling_ms": null,
+                "effect_impact": "read_only",
+                "effect": {
+                  "type": "pure"
+                },
+                "cancellation": {
+                  "type": "fence_only",
+                  "safe_to_abandon": true
+                },
+                "dependency_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "effective_retry_policy": {
+                "effective_node_max_attempts": 1,
+                "effective_retry_on": [],
+                "backoff": "fixed",
+                "quality_revision": null,
+                "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            },
+            {
+              "id": "done",
+              "type": "terminal",
+              "source_config_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "trigger_program": {
+                "normalized_expression": {
+                  "type": "root"
+                },
+                "referenced_edge_ids": [],
+                "max_steps": 1,
+                "truth_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "input_ports": {},
+              "output_ports": {},
+              "effective_limits": {},
+              "exit": "done"
+            }
+          ],
+          "route_groups": [],
+          "control_edges": [],
+          "data_edges": [],
+          "completion": {
+            "early_rules": [],
+            "settled_rules": [
+              {
+                "id": "select_done",
+                "phase": "settled",
+                "normalized_fact_expression": {
+                  "fact": "all_nodes_terminal"
+                },
+                "fact_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "max_steps": 1,
+                "selector": {
+                  "exits": [
+                    "done"
+                  ],
+                  "pick": {
+                    "type": "lowest_terminal_node_id"
+                  }
+                },
+                "selector_contract_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "priority": 100,
+                "monotonicity_proof": null,
+                "cancellation_safety_proof": null,
+                "rule_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            ],
+            "no_match": "error",
+            "early_close": "cancel_and_fence_remaining",
+            "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "complexity_summary": {
+            "node_count": 1,
+            "control_edge_count": 0,
+            "data_edge_count": 0,
+            "max_source_fan_out": 0,
+            "max_condition_steps": 0,
+            "max_trigger_steps": 1,
+            "max_completion_steps": 1,
+            "max_reconcile_facts_per_ingress": 1,
+            "max_frontier_bytes": 1,
+            "summary_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "static_child_plan_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "effective_limits": {
+            "max_scopes": null,
+            "max_nodes": 0,
+            "max_nodes_per_scope": null,
+            "max_edges_per_scope": null,
+            "max_nesting_depth": null,
+            "max_map_items": null,
+            "max_concurrency": 0,
+            "max_total_attempts": null,
+            "max_total_waits": null,
+            "max_total_output_bytes": 0,
+            "max_scope_spec_bytes": null,
+            "max_condition_steps": null,
+            "max_wait_duration_ms": null,
+            "max_pending_signals": null,
+            "max_fixed_point_facts": null,
+            "max_frontier_bytes": null
+          },
+          "effective_usage_budget": {
+            "max_total_tool_calls": 0,
+            "max_total_input_tokens": null,
+            "max_total_output_tokens": null,
+            "max_total_cost_micros": null
+          },
+          "runtime_safety_snapshot": {
+            "routing": {
+              "max_task_input_bytes": 1,
+              "max_route_hops": 1,
+              "max_schema_bytes": 1,
+              "max_schema_nodes": 1,
+              "max_schema_ref_depth": 1,
+              "max_schema_union_variants": 1,
+              "max_schema_validation_steps": 1
+            },
+            "workflow": {
+              "max_duration_ms": 1,
+              "max_state_activations": 1,
+              "max_graph_runs": 1,
+              "max_state_transitions": 1,
+              "max_child_workflows_per_workflow": 1,
+              "max_child_workflow_depth": 1,
+              "max_descendant_workflows_total": 1,
+              "max_required_child_creations_per_transition": 1
+            },
+            "run": {
+              "max_scopes_total": 1,
+              "max_nodes_total": 1,
+              "max_edges_total": 1,
+              "max_map_items_total": 1,
+              "max_attempts_total": 1,
+              "max_waits_total": 1,
+              "max_builds_total": 1,
+              "max_build_attempts_total": 1,
+              "max_evaluator_attempts_total": 1,
+              "max_effect_operations_total": 1,
+              "max_logical_output_bytes_total": 1,
+              "max_stored_bytes_total": 1,
+              "max_facts_total": 1
+            },
+            "scope": {
+              "max_nodes_per_scope": 1,
+              "max_edges_per_scope": 1,
+              "max_scope_spec_bytes": 1,
+              "max_nesting_depth": 1,
+              "max_frontier_bytes": 1
+            },
+            "map": {
+              "max_items_per_map": 1,
+              "max_child_concurrency_per_map": 1
+            },
+            "registry": {
+              "max_snapshot_entries": 1,
+              "max_dependency_depth": 1,
+              "max_execution_artifact_bytes": 1,
+              "max_total_pinned_execution_bytes_per_run": 1
+            },
+            "execution": {
+              "max_attempts_per_node": 1,
+              "max_attempt_duration_ms": 1,
+              "max_dispatch_duration_ms": 1,
+              "max_retry_backoff_ms": 1,
+              "max_build_attempts_per_build": 1,
+              "max_build_duration_ms": 1,
+              "max_evaluator_attempts_per_evaluation": 1,
+              "max_evaluator_duration_ms": 1,
+              "max_outbox_attempts_per_message": 1,
+              "max_outbox_reconcile_attempts_per_message": 1,
+              "max_outbox_attempt_duration_ms": 1,
+              "max_outbox_delivery_duration_ms": 1,
+              "max_root_finalization_attempts_per_schedule": 1,
+              "max_root_finalization_duration_ms": 1,
+              "max_operational_remediation_attempts_per_blocker": 1,
+              "max_operational_remediation_duration_ms": 1
+            },
+            "wait": {
+              "max_finite_wait_duration_ms": 1,
+              "max_pending_signals_per_workflow": 1,
+              "max_pending_signals_per_run": 1,
+              "max_pending_signals_per_principal": 1,
+              "max_pending_signal_age_ms": 1,
+              "max_signal_payload_bytes": 1,
+              "max_correlation_key_bytes": 1
+            },
+            "reconciliation": {
+              "max_condition_ast_nodes": 1,
+              "max_condition_steps_per_evaluation": 1,
+              "max_facts_per_transaction": 1
+            },
+            "value": {
+              "max_single_value_bytes": 1,
+              "max_single_artifact_bytes": 1,
+              "max_artifact_files": 1,
+              "max_artifact_manifest_bytes": 1
+            }
+          },
+          "runtime_safety_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "runtime_fallback": "recompile"
+        },
+        "expected_keyword": "additionalProperties",
+        "expected_instance_pointer": "",
+        "expected_additional_property": "runtime_fallback"
+      },
+      {
+        "case_id": "compiled_plan_rejects_both_generated_schema_sources",
+        "schema_format": "icarus.workflow-compiled-scope-plan-schema/1",
+        "instance": {
+          "format": "icarus.workflow-graph-scope-plan/1",
+          "compiler_version": "fixture-compiler-1",
+          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "compiler_toolchain_ref": {
+            "id": "example.compiler-toolchain",
+            "version": "1.0.0"
+          },
+          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "canonical_normalizer_version": "1",
+          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "proof_algorithm_version": "1",
+          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "policy_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "effective_policy_snapshot": {
+            "allowed_node_types": [
+              "delegation",
+              "system",
+              "wait",
+              "join",
+              "subgraph",
+              "expand",
+              "map",
+              "terminal"
+            ],
+            "allowed_capabilities": [
+              {
+                "id": "example.capability",
+                "version": "1.0.0"
+              }
+            ],
+            "allowed_templates": [],
+            "allowed_interface_refs": [
+              {
+                "id": "example.interface",
+                "version": "1.0.0"
+              }
+            ],
+            "allowed_wait_contracts": [],
+            "allowed_child_policy_refs": [],
+            "allowed_claim_ids": [],
+            "allow_early_close": false,
+            "allow_indefinite_waits": false,
+            "effect_policy": {
+              "allowed_recovery_kinds": [
+                "pure"
+              ],
+              "max_impact": "read_only"
+            },
+            "build_retry": null,
+            "limits": {
+              "max_scopes": null,
+              "max_nodes": 0,
+              "max_nodes_per_scope": null,
+              "max_edges_per_scope": null,
+              "max_nesting_depth": null,
+              "max_map_items": null,
+              "max_concurrency": 0,
+              "max_total_attempts": null,
+              "max_total_waits": null,
+              "max_total_output_bytes": 0,
+              "max_scope_spec_bytes": null,
+              "max_condition_steps": null,
+              "max_wait_duration_ms": null,
+              "max_pending_signals": null,
+              "max_fixed_point_facts": null,
+              "max_frontier_bytes": null
+            },
+            "usage_budget": {
+              "max_total_tool_calls": 0,
+              "max_total_input_tokens": null,
+              "max_total_output_tokens": null,
+              "max_total_cost_micros": null
+            }
+          },
+          "capability_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "wait_contract_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "interface_snapshot": {
+            "ref": {
+              "id": "example.interface",
+              "version": "1.0.0"
+            },
+            "inputs": {},
+            "exits": {
+              "done": {
+                "output_ports": {}
+              }
+            }
+          },
+          "nodes": [
+            {
+              "id": "work",
+              "type": "system",
+              "source_config_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "trigger_program": {
+                "normalized_expression": {
+                  "type": "root"
+                },
+                "referenced_edge_ids": [],
+                "max_steps": 1,
+                "truth_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "input_ports": {
+                "request": {
+                  "schema": {
+                    "type": "generated",
+                    "generator": "join_expose",
+                    "parameter_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "schema_ref": "schema:request",
+                    "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "schema_json": {
+                      "type": "string"
+                    }
+                  },
+                  "max_bytes": 0,
+                  "aggregation": {
+                    "type": "single",
+                    "required": false,
+                    "select": "only"
+                  }
+                }
+              },
+              "output_ports": {
+                "result": {
+                  "schema": {
+                    "type": "registry",
+                    "ref": {
+                      "id": "example.output",
+                      "version": "1.0.0"
+                    },
+                    "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                  },
+                  "max_bytes": null,
+                  "required": true
+                }
+              },
+              "effective_limits": {
+                "max_attempts": 0
+              },
+              "capability_binding": {
+                "ref": {
+                  "id": "example.capability",
+                  "version": "1.0.0"
+                },
+                "node_type": "system",
+                "executor_ref": {
+                  "id": "example.executor",
+                  "version": "1.0.0"
+                },
+                "skill_refs": [],
+                "input_ports": {},
+                "output_ports": {},
+                "no_artifact_expected": true,
+                "no_evaluation_expected": true,
+                "quality_revision_policy": null,
+                "required_tools": [],
+                "required_mcp_methods": [],
+                "required_file_scopes": [],
+                "required_claims": [],
+                "allowed_groups": [],
+                "retry_policy": {
+                  "max_attempts": null,
+                  "retry_on": [],
+                  "backoff": "fixed"
+                },
+                "timeout_ceiling_ms": null,
+                "effect_impact": "read_only",
+                "effect": {
+                  "type": "pure"
+                },
+                "cancellation": {
+                  "type": "fence_only",
+                  "safe_to_abandon": true
+                },
+                "dependency_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "effective_retry_policy": {
+                "effective_node_max_attempts": 1,
+                "effective_retry_on": [],
+                "backoff": "fixed",
+                "quality_revision": null,
+                "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            },
+            {
+              "id": "done",
+              "type": "terminal",
+              "source_config_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "trigger_program": {
+                "normalized_expression": {
+                  "type": "root"
+                },
+                "referenced_edge_ids": [],
+                "max_steps": 1,
+                "truth_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "input_ports": {},
+              "output_ports": {},
+              "effective_limits": {},
+              "exit": "done"
+            }
+          ],
+          "route_groups": [],
+          "control_edges": [],
+          "data_edges": [],
+          "completion": {
+            "early_rules": [],
+            "settled_rules": [
+              {
+                "id": "select_done",
+                "phase": "settled",
+                "normalized_fact_expression": {
+                  "fact": "all_nodes_terminal"
+                },
+                "fact_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "max_steps": 1,
+                "selector": {
+                  "exits": [
+                    "done"
+                  ],
+                  "pick": {
+                    "type": "lowest_terminal_node_id"
+                  }
+                },
+                "selector_contract_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "priority": 100,
+                "monotonicity_proof": null,
+                "cancellation_safety_proof": null,
+                "rule_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            ],
+            "no_match": "error",
+            "early_close": "cancel_and_fence_remaining",
+            "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "complexity_summary": {
+            "node_count": 1,
+            "control_edge_count": 0,
+            "data_edge_count": 0,
+            "max_source_fan_out": 0,
+            "max_condition_steps": 0,
+            "max_trigger_steps": 1,
+            "max_completion_steps": 1,
+            "max_reconcile_facts_per_ingress": 1,
+            "max_frontier_bytes": 1,
+            "summary_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "static_child_plan_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "effective_limits": {
+            "max_scopes": null,
+            "max_nodes": 0,
+            "max_nodes_per_scope": null,
+            "max_edges_per_scope": null,
+            "max_nesting_depth": null,
+            "max_map_items": null,
+            "max_concurrency": 0,
+            "max_total_attempts": null,
+            "max_total_waits": null,
+            "max_total_output_bytes": 0,
+            "max_scope_spec_bytes": null,
+            "max_condition_steps": null,
+            "max_wait_duration_ms": null,
+            "max_pending_signals": null,
+            "max_fixed_point_facts": null,
+            "max_frontier_bytes": null
+          },
+          "effective_usage_budget": {
+            "max_total_tool_calls": 0,
+            "max_total_input_tokens": null,
+            "max_total_output_tokens": null,
+            "max_total_cost_micros": null
+          },
+          "runtime_safety_snapshot": {
+            "routing": {
+              "max_task_input_bytes": 1,
+              "max_route_hops": 1,
+              "max_schema_bytes": 1,
+              "max_schema_nodes": 1,
+              "max_schema_ref_depth": 1,
+              "max_schema_union_variants": 1,
+              "max_schema_validation_steps": 1
+            },
+            "workflow": {
+              "max_duration_ms": 1,
+              "max_state_activations": 1,
+              "max_graph_runs": 1,
+              "max_state_transitions": 1,
+              "max_child_workflows_per_workflow": 1,
+              "max_child_workflow_depth": 1,
+              "max_descendant_workflows_total": 1,
+              "max_required_child_creations_per_transition": 1
+            },
+            "run": {
+              "max_scopes_total": 1,
+              "max_nodes_total": 1,
+              "max_edges_total": 1,
+              "max_map_items_total": 1,
+              "max_attempts_total": 1,
+              "max_waits_total": 1,
+              "max_builds_total": 1,
+              "max_build_attempts_total": 1,
+              "max_evaluator_attempts_total": 1,
+              "max_effect_operations_total": 1,
+              "max_logical_output_bytes_total": 1,
+              "max_stored_bytes_total": 1,
+              "max_facts_total": 1
+            },
+            "scope": {
+              "max_nodes_per_scope": 1,
+              "max_edges_per_scope": 1,
+              "max_scope_spec_bytes": 1,
+              "max_nesting_depth": 1,
+              "max_frontier_bytes": 1
+            },
+            "map": {
+              "max_items_per_map": 1,
+              "max_child_concurrency_per_map": 1
+            },
+            "registry": {
+              "max_snapshot_entries": 1,
+              "max_dependency_depth": 1,
+              "max_execution_artifact_bytes": 1,
+              "max_total_pinned_execution_bytes_per_run": 1
+            },
+            "execution": {
+              "max_attempts_per_node": 1,
+              "max_attempt_duration_ms": 1,
+              "max_dispatch_duration_ms": 1,
+              "max_retry_backoff_ms": 1,
+              "max_build_attempts_per_build": 1,
+              "max_build_duration_ms": 1,
+              "max_evaluator_attempts_per_evaluation": 1,
+              "max_evaluator_duration_ms": 1,
+              "max_outbox_attempts_per_message": 1,
+              "max_outbox_reconcile_attempts_per_message": 1,
+              "max_outbox_attempt_duration_ms": 1,
+              "max_outbox_delivery_duration_ms": 1,
+              "max_root_finalization_attempts_per_schedule": 1,
+              "max_root_finalization_duration_ms": 1,
+              "max_operational_remediation_attempts_per_blocker": 1,
+              "max_operational_remediation_duration_ms": 1
+            },
+            "wait": {
+              "max_finite_wait_duration_ms": 1,
+              "max_pending_signals_per_workflow": 1,
+              "max_pending_signals_per_run": 1,
+              "max_pending_signals_per_principal": 1,
+              "max_pending_signal_age_ms": 1,
+              "max_signal_payload_bytes": 1,
+              "max_correlation_key_bytes": 1
+            },
+            "reconciliation": {
+              "max_condition_ast_nodes": 1,
+              "max_condition_steps_per_evaluation": 1,
+              "max_facts_per_transaction": 1
+            },
+            "value": {
+              "max_single_value_bytes": 1,
+              "max_single_artifact_bytes": 1,
+              "max_artifact_files": 1,
+              "max_artifact_manifest_bytes": 1
+            }
+          },
+          "runtime_safety_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected_keyword": "oneOf",
+        "expected_instance_pointer": "/nodes/0/input_ports/request/schema",
+        "expected_additional_property": null
+      },
+      {
+        "case_id": "compiled_plan_rejects_both_artifact_contract_choices",
+        "schema_format": "icarus.workflow-compiled-scope-plan-schema/1",
+        "instance": {
+          "format": "icarus.workflow-graph-scope-plan/1",
+          "compiler_version": "fixture-compiler-1",
+          "compiler_build_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "compiler_toolchain_ref": {
+            "id": "example.compiler-toolchain",
+            "version": "1.0.0"
+          },
+          "compiler_toolchain_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "compiler_error_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "canonical_normalizer_version": "1",
+          "canonical_normalizer_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "proof_algorithm_version": "1",
+          "proof_algorithm_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "plan_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "interface_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "policy_snapshot_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "effective_policy_snapshot": {
+            "allowed_node_types": [
+              "delegation",
+              "system",
+              "wait",
+              "join",
+              "subgraph",
+              "expand",
+              "map",
+              "terminal"
+            ],
+            "allowed_capabilities": [
+              {
+                "id": "example.capability",
+                "version": "1.0.0"
+              }
+            ],
+            "allowed_templates": [],
+            "allowed_interface_refs": [
+              {
+                "id": "example.interface",
+                "version": "1.0.0"
+              }
+            ],
+            "allowed_wait_contracts": [],
+            "allowed_child_policy_refs": [],
+            "allowed_claim_ids": [],
+            "allow_early_close": false,
+            "allow_indefinite_waits": false,
+            "effect_policy": {
+              "allowed_recovery_kinds": [
+                "pure"
+              ],
+              "max_impact": "read_only"
+            },
+            "build_retry": null,
+            "limits": {
+              "max_scopes": null,
+              "max_nodes": 0,
+              "max_nodes_per_scope": null,
+              "max_edges_per_scope": null,
+              "max_nesting_depth": null,
+              "max_map_items": null,
+              "max_concurrency": 0,
+              "max_total_attempts": null,
+              "max_total_waits": null,
+              "max_total_output_bytes": 0,
+              "max_scope_spec_bytes": null,
+              "max_condition_steps": null,
+              "max_wait_duration_ms": null,
+              "max_pending_signals": null,
+              "max_fixed_point_facts": null,
+              "max_frontier_bytes": null
+            },
+            "usage_budget": {
+              "max_total_tool_calls": 0,
+              "max_total_input_tokens": null,
+              "max_total_output_tokens": null,
+              "max_total_cost_micros": null
+            }
+          },
+          "capability_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "wait_contract_catalog_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "interface_snapshot": {
+            "ref": {
+              "id": "example.interface",
+              "version": "1.0.0"
+            },
+            "inputs": {},
+            "exits": {
+              "done": {
+                "output_ports": {}
+              }
+            }
+          },
+          "nodes": [
+            {
+              "id": "work",
+              "type": "system",
+              "source_config_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "trigger_program": {
+                "normalized_expression": {
+                  "type": "root"
+                },
+                "referenced_edge_ids": [],
+                "max_steps": 1,
+                "truth_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "input_ports": {
+                "request": {
+                  "schema": {
+                    "type": "generated",
+                    "generator": "join_expose",
+                    "parameter_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "schema_ref": "schema:request",
+                    "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                  },
+                  "max_bytes": 0,
+                  "aggregation": {
+                    "type": "single",
+                    "required": false,
+                    "select": "only"
+                  }
+                }
+              },
+              "output_ports": {
+                "result": {
+                  "schema": {
+                    "type": "registry",
+                    "ref": {
+                      "id": "example.output",
+                      "version": "1.0.0"
+                    },
+                    "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                  },
+                  "max_bytes": null,
+                  "required": true
+                }
+              },
+              "effective_limits": {
+                "max_attempts": 0
+              },
+              "capability_binding": {
+                "ref": {
+                  "id": "example.capability",
+                  "version": "1.0.0"
+                },
+                "node_type": "system",
+                "executor_ref": {
+                  "id": "example.executor",
+                  "version": "1.0.0"
+                },
+                "skill_refs": [],
+                "input_ports": {},
+                "output_ports": {},
+                "no_artifact_expected": true,
+                "no_evaluation_expected": true,
+                "quality_revision_policy": null,
+                "required_tools": [],
+                "required_mcp_methods": [],
+                "required_file_scopes": [],
+                "required_claims": [],
+                "allowed_groups": [],
+                "retry_policy": {
+                  "max_attempts": null,
+                  "retry_on": [],
+                  "backoff": "fixed"
+                },
+                "timeout_ceiling_ms": null,
+                "effect_impact": "read_only",
+                "effect": {
+                  "type": "pure"
+                },
+                "cancellation": {
+                  "type": "fence_only",
+                  "safe_to_abandon": true
+                },
+                "dependency_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "artifact_contract_ref": {
+                  "id": "example.artifact-contract",
+                  "version": "1.0.0"
+                }
+              },
+              "effective_retry_policy": {
+                "effective_node_max_attempts": 1,
+                "effective_retry_on": [],
+                "backoff": "fixed",
+                "quality_revision": null,
+                "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            },
+            {
+              "id": "done",
+              "type": "terminal",
+              "source_config_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "trigger_program": {
+                "normalized_expression": {
+                  "type": "root"
+                },
+                "referenced_edge_ids": [],
+                "max_steps": 1,
+                "truth_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              "input_ports": {},
+              "output_ports": {},
+              "effective_limits": {},
+              "exit": "done"
+            }
+          ],
+          "route_groups": [],
+          "control_edges": [],
+          "data_edges": [],
+          "completion": {
+            "early_rules": [],
+            "settled_rules": [
+              {
+                "id": "select_done",
+                "phase": "settled",
+                "normalized_fact_expression": {
+                  "fact": "all_nodes_terminal"
+                },
+                "fact_program_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "max_steps": 1,
+                "selector": {
+                  "exits": [
+                    "done"
+                  ],
+                  "pick": {
+                    "type": "lowest_terminal_node_id"
+                  }
+                },
+                "selector_contract_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "priority": 100,
+                "monotonicity_proof": null,
+                "cancellation_safety_proof": null,
+                "rule_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            ],
+            "no_match": "error",
+            "early_close": "cancel_and_fence_remaining",
+            "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "complexity_summary": {
+            "node_count": 1,
+            "control_edge_count": 0,
+            "data_edge_count": 0,
+            "max_source_fan_out": 0,
+            "max_condition_steps": 0,
+            "max_trigger_steps": 1,
+            "max_completion_steps": 1,
+            "max_reconcile_facts_per_ingress": 1,
+            "max_frontier_bytes": 1,
+            "summary_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "static_child_plan_closure_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "effective_limits": {
+            "max_scopes": null,
+            "max_nodes": 0,
+            "max_nodes_per_scope": null,
+            "max_edges_per_scope": null,
+            "max_nesting_depth": null,
+            "max_map_items": null,
+            "max_concurrency": 0,
+            "max_total_attempts": null,
+            "max_total_waits": null,
+            "max_total_output_bytes": 0,
+            "max_scope_spec_bytes": null,
+            "max_condition_steps": null,
+            "max_wait_duration_ms": null,
+            "max_pending_signals": null,
+            "max_fixed_point_facts": null,
+            "max_frontier_bytes": null
+          },
+          "effective_usage_budget": {
+            "max_total_tool_calls": 0,
+            "max_total_input_tokens": null,
+            "max_total_output_tokens": null,
+            "max_total_cost_micros": null
+          },
+          "runtime_safety_snapshot": {
+            "routing": {
+              "max_task_input_bytes": 1,
+              "max_route_hops": 1,
+              "max_schema_bytes": 1,
+              "max_schema_nodes": 1,
+              "max_schema_ref_depth": 1,
+              "max_schema_union_variants": 1,
+              "max_schema_validation_steps": 1
+            },
+            "workflow": {
+              "max_duration_ms": 1,
+              "max_state_activations": 1,
+              "max_graph_runs": 1,
+              "max_state_transitions": 1,
+              "max_child_workflows_per_workflow": 1,
+              "max_child_workflow_depth": 1,
+              "max_descendant_workflows_total": 1,
+              "max_required_child_creations_per_transition": 1
+            },
+            "run": {
+              "max_scopes_total": 1,
+              "max_nodes_total": 1,
+              "max_edges_total": 1,
+              "max_map_items_total": 1,
+              "max_attempts_total": 1,
+              "max_waits_total": 1,
+              "max_builds_total": 1,
+              "max_build_attempts_total": 1,
+              "max_evaluator_attempts_total": 1,
+              "max_effect_operations_total": 1,
+              "max_logical_output_bytes_total": 1,
+              "max_stored_bytes_total": 1,
+              "max_facts_total": 1
+            },
+            "scope": {
+              "max_nodes_per_scope": 1,
+              "max_edges_per_scope": 1,
+              "max_scope_spec_bytes": 1,
+              "max_nesting_depth": 1,
+              "max_frontier_bytes": 1
+            },
+            "map": {
+              "max_items_per_map": 1,
+              "max_child_concurrency_per_map": 1
+            },
+            "registry": {
+              "max_snapshot_entries": 1,
+              "max_dependency_depth": 1,
+              "max_execution_artifact_bytes": 1,
+              "max_total_pinned_execution_bytes_per_run": 1
+            },
+            "execution": {
+              "max_attempts_per_node": 1,
+              "max_attempt_duration_ms": 1,
+              "max_dispatch_duration_ms": 1,
+              "max_retry_backoff_ms": 1,
+              "max_build_attempts_per_build": 1,
+              "max_build_duration_ms": 1,
+              "max_evaluator_attempts_per_evaluation": 1,
+              "max_evaluator_duration_ms": 1,
+              "max_outbox_attempts_per_message": 1,
+              "max_outbox_reconcile_attempts_per_message": 1,
+              "max_outbox_attempt_duration_ms": 1,
+              "max_outbox_delivery_duration_ms": 1,
+              "max_root_finalization_attempts_per_schedule": 1,
+              "max_root_finalization_duration_ms": 1,
+              "max_operational_remediation_attempts_per_blocker": 1,
+              "max_operational_remediation_duration_ms": 1
+            },
+            "wait": {
+              "max_finite_wait_duration_ms": 1,
+              "max_pending_signals_per_workflow": 1,
+              "max_pending_signals_per_run": 1,
+              "max_pending_signals_per_principal": 1,
+              "max_pending_signal_age_ms": 1,
+              "max_signal_payload_bytes": 1,
+              "max_correlation_key_bytes": 1
+            },
+            "reconciliation": {
+              "max_condition_ast_nodes": 1,
+              "max_condition_steps_per_evaluation": 1,
+              "max_facts_per_transaction": 1
+            },
+            "value": {
+              "max_single_value_bytes": 1,
+              "max_single_artifact_bytes": 1,
+              "max_artifact_files": 1,
+              "max_artifact_manifest_bytes": 1
+            }
+          },
+          "runtime_safety_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "expected_keyword": "oneOf",
+        "expected_instance_pointer": "/nodes/0/capability_binding",
+        "expected_additional_property": null
+      }
+    ]
+  }
+}

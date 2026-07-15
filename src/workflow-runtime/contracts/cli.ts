@@ -2,6 +2,10 @@ import {
   checkContractPackFoundation,
   generateContractPackFoundation,
 } from './contract-pack.js';
+import {
+  checkContractPackClosedSchemas,
+  generateContractPackClosedSchemas,
+} from './closed-schema-pack.js';
 
 function usage(): never {
   console.error('Usage: contract-pack <generate|check>');
@@ -16,16 +20,26 @@ if (
   usage();
 }
 
+let currentPack: 'foundation' | 'closed_schemas' = 'foundation';
+
 try {
-  const manifest =
+  const foundationManifest =
     command === 'generate'
       ? generateContractPackFoundation()
       : checkContractPackFoundation();
   console.log(`contract_pack_foundation=${command}:ok`);
-  console.log(`contract_pack_foundation_hash=${manifest.hash}`);
+  console.log(`contract_pack_foundation_hash=${foundationManifest.hash}`);
+
+  currentPack = 'closed_schemas';
+  const closedSchemaManifest =
+    command === 'generate'
+      ? generateContractPackClosedSchemas()
+      : checkContractPackClosedSchemas();
+  console.log(`contract_pack_closed_schemas=${command}:ok`);
+  console.log(`contract_pack_closed_schemas_hash=${closedSchemaManifest.hash}`);
 } catch (error) {
   console.error(
-    `contract_pack_foundation=${command}:failed: ${
+    `contract_pack_${currentPack}=${command}:failed: ${
       error instanceof Error ? error.message : String(error)
     }`,
   );

@@ -1,0 +1,199 @@
+{
+  "format": "icarus.workflow-contract-pack-closed-schemas/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-closed-schemas",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-closed-schemas:1\n",
+  "hash": "sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8",
+  "payload": {
+    "gate": "G0.3",
+    "status": "closed_schemas",
+    "foundation_manifest_hash": "sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d",
+    "schema_formats": [
+      "icarus.workflow-card-presentation-schema/1",
+      "icarus.workflow-compiled-scope-plan-schema/1",
+      "icarus.workflow-definition-schema/1",
+      "icarus.workflow-feature-manifest-v2-schema/1",
+      "icarus.workflow-graph-scope-source-schema/1",
+      "icarus.workflow-recipe-schema/1",
+      "icarus.workflow-runtime-command-schema/1",
+      "icarus.workflow-transition-schema/1"
+    ],
+    "schema_targets": [
+      {
+        "artifact_path": "schemas/card-presentation-schema.json",
+        "artifact_format": "icarus.workflow-card-presentation-schema/1",
+        "target_contract": "icarus.card-presentation/1"
+      },
+      {
+        "artifact_path": "schemas/compiled-scope-plan-schema.json",
+        "artifact_format": "icarus.workflow-compiled-scope-plan-schema/1",
+        "target_contract": "icarus.workflow-graph-scope-plan/1"
+      },
+      {
+        "artifact_path": "schemas/workflow-definition-schema.json",
+        "artifact_format": "icarus.workflow-definition-schema/1",
+        "target_contract": "icarus.workflow-definition/1"
+      },
+      {
+        "artifact_path": "schemas/feature-manifest-v2-schema.json",
+        "artifact_format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "target_contract": "icarus.feature-manifest/2"
+      },
+      {
+        "artifact_path": "schemas/graph-scope-source-schema.json",
+        "artifact_format": "icarus.workflow-graph-scope-source-schema/1",
+        "target_contract": "icarus.workflow-graph-scope/1"
+      },
+      {
+        "artifact_path": "schemas/workflow-recipe-schema.json",
+        "artifact_format": "icarus.workflow-recipe-schema/1",
+        "target_contract": "WorkflowRecipeDescriptor"
+      },
+      {
+        "artifact_path": "schemas/workflow-runtime-command-schema.json",
+        "artifact_format": "icarus.workflow-runtime-command-schema/1",
+        "target_contract": "WorkflowRuntimeCommand"
+      },
+      {
+        "artifact_path": "schemas/workflow-transition-schema.json",
+        "artifact_format": "icarus.workflow-transition-schema/1",
+        "target_contract": "WorkflowDefinitionTransition"
+      }
+    ],
+    "positive_case_count": 8,
+    "negative_case_count": 22,
+    "artifacts": [
+      {
+        "path": "catalogs/closed-schema-domain-separators.json",
+        "format": "icarus.workflow-closed-schema-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-closed-schema-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-closed-schema-domain-separators:1\n",
+        "hash": "sha256:a30a17e0fe62f8de42c6689ffd7d38f2cfb5d2cc56b180b113c18683ea63c635"
+      },
+      {
+        "path": "conformance/closed-schemas/negative-cases.json",
+        "format": "icarus.workflow-closed-schema-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-closed-schema-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-closed-schema-negative-cases:1\n",
+        "hash": "sha256:83b0ce8c333e68281ed54b4ef49d38383375e22fa415a57a6a513236896fc3e2"
+      },
+      {
+        "path": "conformance/closed-schemas/positive-cases.json",
+        "format": "icarus.workflow-closed-schema-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-closed-schema-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n",
+        "hash": "sha256:fe3b4894242ce502e73ca30febf02aad3867885b629919b083220d7418457f78"
+      },
+      {
+        "path": "schemas/card-presentation-schema.json",
+        "format": "icarus.workflow-card-presentation-schema/1",
+        "ref": {
+          "id": "icarus.workflow-card-presentation-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-card-presentation-schema:1\n",
+        "hash": "sha256:866cdf382a1cd70cfcd52c2b0173f66ce9aebeecd8b8f79c200ecd5202cde829"
+      },
+      {
+        "path": "schemas/compiled-scope-plan-schema.json",
+        "format": "icarus.workflow-compiled-scope-plan-schema/1",
+        "ref": {
+          "id": "icarus.workflow-compiled-scope-plan-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n",
+        "hash": "sha256:7d2371a5df632220ba82ab0739b163134978885b8baaae6d7b247d53623be400"
+      },
+      {
+        "path": "schemas/feature-manifest-v2-schema.json",
+        "format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "ref": {
+          "id": "icarus.workflow-feature-manifest-v2-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-feature-manifest-v2-schema:1\n",
+        "hash": "sha256:e47344ea2f4bebde3688f76b3450d5143adfd99ab4cc30eb6fc48a9d5a398e2d"
+      },
+      {
+        "path": "schemas/graph-scope-source-schema.json",
+        "format": "icarus.workflow-graph-scope-source-schema/1",
+        "ref": {
+          "id": "icarus.workflow-graph-scope-source-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-graph-scope-source-schema:1\n",
+        "hash": "sha256:f7eb1d418f9ed4e47f8cfd60d4a8af061e816439c1a2ba6b2e2a8a050c9b2927"
+      },
+      {
+        "path": "schemas/workflow-definition-schema.json",
+        "format": "icarus.workflow-definition-schema/1",
+        "ref": {
+          "id": "icarus.workflow-definition-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-definition-schema:1\n",
+        "hash": "sha256:a23f3ce0ebb562bed94e7736651ee8f9f87e659a7fd4640d2802603dae7df804"
+      },
+      {
+        "path": "schemas/workflow-recipe-schema.json",
+        "format": "icarus.workflow-recipe-schema/1",
+        "ref": {
+          "id": "icarus.workflow-recipe-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-recipe-schema:1\n",
+        "hash": "sha256:c2768894c7fe6aab492f11d2948a4c92ccefbadc44cb094e103df4a8cdca9bb2"
+      },
+      {
+        "path": "schemas/workflow-runtime-command-schema.json",
+        "format": "icarus.workflow-runtime-command-schema/1",
+        "ref": {
+          "id": "icarus.workflow-runtime-command-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-runtime-command-schema:1\n",
+        "hash": "sha256:859a26bc9d31c0ca3e1246ffde1fc79f5f53da884063c5868b7a82efd519b0e6"
+      },
+      {
+        "path": "schemas/workflow-transition-schema.json",
+        "format": "icarus.workflow-transition-schema/1",
+        "ref": {
+          "id": "icarus.workflow-transition-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-transition-schema:1\n",
+        "hash": "sha256:9807b8c0100a893d54821f59cfadaa0adb0939b8e2b0ce4c678e408c5f4b9e1f"
+      }
+    ],
+    "future_reserved_directories": [
+      "protocols",
+      "safety",
+      "sqlite",
+      "conformance/draft",
+      "conformance/sealed"
+    ]
+  }
+}

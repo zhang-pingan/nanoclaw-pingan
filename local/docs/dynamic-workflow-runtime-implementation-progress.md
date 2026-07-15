@@ -2,7 +2,7 @@
 
 > **状态**: IN_PROGRESS
 > **当前 Gate**: G0 Contract Pack / Static Baseline
-> **下一施工切片**: G0.3 Closed Schemas
+> **下一施工切片**: G0.4 Catalogs and Protocol Tables
 > **最后更新**: 2026-07-15
 > **规范权威**: `local/docs/dynamic-workflow-dag-framework.md`
 
@@ -130,7 +130,7 @@ Agent Container 运行于独立 VM，Node identity 由 VM image gate 保证；�
 | I8 | Subgraph、Expand、Map、child scope | `NOT_READY` | G6 起 |
 | I9 | Completion、Cancel、Compensation、Finalization、Recovery | `NOT_READY` | G6/G7 |
 | I10 | Runtime Command、Runtime Center、Trace | `NOT_READY` | G7 起 |
-| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1/G0.2 DONE；G0.3 READY |
+| I11 | Contract Pack、managed runtime toolchain/launcher、测试模型、发布门禁、absence baseline | `IN_PROGRESS` | G0.1/G0.2/G0.3 DONE；G0.4 READY |
 
 ## G0 施工切片
 
@@ -140,13 +140,66 @@ G0 只有全部切片满足退出条件后才能标记 `DONE`。切片编号描�
 | --- | --- | --- | --- | --- |
 | G0.1 | Toolchain Identity | `DONE` | Node/npm/direct dependency/lock/CI/managed distribution/launcher identity 一致，基础构建与测试通过 | 本原子提交 |
 | G0.2 | Contract Pack Foundation | `DONE` | artifact envelope、VersionedRef、hash/domain、strict parse、目录与 CI 骨架 | 本原子提交 |
-| G0.3 | Closed Schemas | `READY` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | - |
-| G0.4 | Catalogs and Protocol Tables | `NOT_READY` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | - |
+| G0.3 | Closed Schemas | `DONE` | Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR schemas 与 negative fixtures | 本原子提交 |
+| G0.4 | Catalogs and Protocol Tables | `READY` | Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表机器化 | - |
 | G0.5 | Safety / Retention / SQLite Contracts | `NOT_READY` | Safety、Capacity schema/baseline、Product Floor、Retention、SQLite Profile、Enforcement Matrix | - |
 | G0.6 | Logical Schema Metadata | `NOT_READY` | 全对象 Logical Schema manifest source、typed relation metadata、query catalog | - |
 | G0.7 | Static Absence and Surface Gates | `NOT_READY` | absence、surface coverage、candidate boundary generator/manifest/negative fixtures | - |
 | G0.8 | Golden Draft and Review Input | `NOT_READY` | raw cases、hand-authored semantic assertions、review request；不得伪造 sealed expected output | - |
 | G0.9 | G0 Conformance Exit | `NOT_READY` | Markdown/Contract 双向覆盖、完整 G0 CI、artifact hashes 和 Gate review | - |
+
+## 已完成切片：G0.3 Closed Schemas
+
+**状态**：`DONE`
+
+**工作包**：I11；合同联动 I2/I3/I10，仅冻结机器 Schema，不实现对应 Runtime 语义。
+
+I11/G0.3 的八个 closed Domain Schema、TypeScript conformance、正反例、确定性生成/只读检查、CI 和完整退出验证已完成原子交付。G0 总 Gate 继续为 `IN_PROGRESS`，仅 G0.4 转为 `READY`；G0.5-G0.9 与 G1-G9 未推进。
+
+已完成交付：
+
+- `schemas/` 已生成八个 artifact-envelope 包装的 Draft 2020-12 closed schema：Workflow Definition、Recipe、Runtime Command、Transition、Feature Manifest vNext、Card Presentation、Graph Scope Source IR 与 Compiled Scope Plan。
+- 顶层及所有嵌套对象默认 `additionalProperties=false`；仅显式 typed Record 与递归 JSON Value 保持受约束开放。Definition State、Graph Node、Runtime Command、Feature resource 和 binding source union 由共享 TypeScript 常量驱动并双向检查；顶层 required/optional keyset 也执行 TypeScript/Schema conformance。
+- 所有八个 Schema 内嵌的 `VersionedRef` 与 G0.2 standalone Schema 做 canonical semantic byte comparison，只允许 closed `{id,version}` 与 immutable exact version token。Graph limits、usage budget、`max_bytes` 和 compiled effective limits 保留 `0/null` 语义；Runtime Safety 和 attempt/proof 的正数合同保持分离。
+- Transition required/best-effort delivery、Compiled generated `schema_json/schema_ref`、Capability artifact/no-artifact 与 evaluator/no-evaluation 使用 exact-one contract；Command 的 13 个分支只接受对应 typed target，Actor/Session/Delegation 仍由服务端生成。
+- 最终审查修复了 Feature Manifest `source_path` 父目录正则的 TypeScript 转义错误，并收紧 Definition graph input 与 Transition child-effect input 的 TypeScript source union，避免 TS 接受 Schema 明确禁止的 binding。
+- `conformance/closed-schemas/` 最终包含 8 个正例与 22 个负例；除原 18 个回归外，新增合法两字符路径段/父目录拒绝、delivery exact-one、generated schema source exact-one 和 Capability artifact choice exact-one，并在正例中固定 `0/null` limits 与 Compiled binding。
+- G0.3 使用独立 `closed-schema-domain-separators` registry 和 `contract-pack-closed-schemas` manifest，复用 G0.2 envelope、strict JSON、RFC 8785 canonical hash、domain hash 与 generate/check；未修改 G0.2 foundation artifacts，foundation manifest 仍为 `sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d`。
+- `protocols/`、`safety/`、`sqlite/`、`conformance/draft/` 与 `conformance/sealed/` 仍各自只含 `.gitkeep`；没有写入 G0.4+、Golden、DDL/Store、Registry、T0-T8 或 Runtime Center artifact。
+
+最终 Artifact hashes：
+
+| Artifact | Hash |
+| --- | --- |
+| G0.3 closed-schema manifest | `sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8` |
+| Definition Schema | `sha256:a23f3ce0ebb562bed94e7736651ee8f9f87e659a7fd4640d2802603dae7df804` |
+| Recipe Schema | `sha256:c2768894c7fe6aab492f11d2948a4c92ccefbadc44cb094e103df4a8cdca9bb2` |
+| Runtime Command Schema | `sha256:859a26bc9d31c0ca3e1246ffde1fc79f5f53da884063c5868b7a82efd519b0e6` |
+| Transition Schema | `sha256:9807b8c0100a893d54821f59cfadaa0adb0939b8e2b0ce4c678e408c5f4b9e1f` |
+| Feature Manifest vNext Schema | `sha256:e47344ea2f4bebde3688f76b3450d5143adfd99ab4cc30eb6fc48a9d5a398e2d` |
+| Card Presentation Schema | `sha256:866cdf382a1cd70cfcd52c2b0173f66ce9aebeecd8b8f79c200ecd5202cde829` |
+| Source IR Schema | `sha256:f7eb1d418f9ed4e47f8cfd60d4a8af061e816439c1a2ba6b2e2a8a050c9b2927` |
+| Compiled IR Schema | `sha256:7d2371a5df632220ba82ab0739b163134978885b8baaae6d7b247d53623be400` |
+| Positive / negative fixture artifacts | `sha256:fe3b4894242ce502e73ca30febf02aad3867885b629919b083220d7418457f78` / `sha256:83b0ce8c333e68281ed54b4ef49d38383375e22fa415a57a6a513236896fc3e2` |
+
+最终退出验证证据：
+
+| 命令/证据 | 结果 |
+| --- | --- |
+| managed `npm run contracts:generate`（连续两次） | PASS；两次 G0.3 manifest 均为 `sha256:c5ea281d64480787322e8b6ef619b2f90784084d87ba4373c94288ed5e7aa3a8`，foundation manifest 均为 `sha256:e85b654581c036f8129677d7443a0704ebc8b8fbe87907b842aaefe1501e637d`；仅有 R-010 DEP0205 非阻塞告警 |
+| 完整 JSON/reserved tree digest | PASS；初始、第一次 generate、第二次 generate 均为 `4a8725266c7867da45e762f6c11bf75f8764fa00cea566501f9fb5afc892b28e` |
+| managed `npm run contracts:check` | PASS；check 前后 tree digest 同为 `4a8725266c7867da45e762f6c11bf75f8764fa00cea566501f9fb5afc892b28e`，证明只读 |
+| managed `npm ci` | PASS；554 packages installed；`package-lock.json` SHA-256 `2b8c87e5549915e2d53c1eecdabef3ebb149bc8f03054d40f1924d93bf2bd085`；30 项既有 audit 告警保持 R-007 |
+| managed `npm run typecheck` | PASS |
+| managed `npm test` | PASS，70 files / 635 tests |
+| managed `npm run test:g0.2` | PASS，1 file / 11 tests |
+| managed `npm run test:g0.3` | PASS，1 file / 5 tests；check 内逐项验证 8 positive / 22 negative fixtures |
+| managed legacy boundary | PASS，1 file / 6 tests |
+| managed `npm run build` | PASS |
+| managed targeted Prettier `--check` | PASS；全部 `src/workflow-runtime/contracts/*.ts` 符合 pinned Prettier |
+| managed runtime/Core binding | PASS；Node `v26.5.0 darwin/arm64` 来自 active content-addressed distribution；Core binding kind 为 `development_checkout` |
+| final commit/boundary scan | PASS；HEAD 基线仍为 `65aa8ca`；G0.1 `620863a`、范围外 `32f3c51` 与 G0.2 foundation bytes 未改写；`package-lock.json`、`container/`、Electron、Launcher/toolchain/setup/launchd 无改动；G0.4+ reserved 目录只有 `.gitkeep`；G0.3 路径无 symlink/temp/无关生成物；仓库既有 ignored `.tmp-wfcheck`（2026-04-10）与 `.DS_Store` 未修改、未纳入提交 |
+| `git diff --check` | PASS |
 
 ## 已完成切片：G0.1 Toolchain Identity
 
@@ -380,7 +433,7 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 | R-001 | Toolchain | CLOSED | exact Node/npm/direct dependency/lock/CI/managed distribution 已落地，最终 managed install/ci/typecheck/test/build 全部通过 | G0.1 |
 | R-002 | Host launch identity | CLOSED | 所有 Core service/start/restart path 已切到 stable Launcher/managed build；realpath/环境隔离/fail-closed、最终 hash和 Core rebind 已验证 | G0.1 |
 | R-003 | Static proof | OPEN | 当前只有定向 legacy boundary test，尚无规范要求的 AST/API/UI/schema/filesystem/resource manifests | G0.7 |
-| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 已原子交付 artifact/ref/strict-json/hash machine foundation 与 CI check；Domain Schema/Catalog/Protocol/Safety/DDL metadata 及 Markdown 双向覆盖仍未完成 | G0.3-G0.9 |
+| R-004 | Contract drift | PARTIALLY_MITIGATED | G0.2 foundation 与 G0.3 closed Domain Schema 已原子交付；Catalog/Protocol/Safety/DDL metadata 及 Markdown 双向覆盖仍未完成 | G0.4-G0.9 |
 | R-005 | DDL feasibility | DEFERRED | Logical Schema 尚未转换为 executable migration；不代表已发现冲突，但 G1 必须以真实 SQLite Gate 验证 | G1 |
 | R-006 | Certification | DEFERRED | Product Floor 和 profile 已冻结；Launcher/Core Release/Managed Node executable/native module 完整 key、Supported Limits 与事务预算尚未 benchmark 认证 | G8 |
 | R-007 | Dependency audit | OPEN_OUT_OF_SCOPE | exact lock 的 `npm ci` 报告 30 项 transitive dependency audit 告警；G0.1 不运行会漂移规范 pinned identity 的自动修复，需独立依赖维护评审 | 独立维护 |
@@ -390,4 +443,4 @@ G0.1 的实现、测试和本进度账本由同一个原子提交交付。Agent 
 
 ## 下一步
 
-下一会话开始 `G0.3 Closed Schemas`。先完整阅读架构规范和本文，复核本次 G0.2 原子提交及其 machine foundation，再按 G0.3 范围冻结 Definition/Recipe/Command/Transition/Feature/Card/Source/Compiled IR closed schemas、TypeScript conformance 与 negative fixtures。G0 总 Gate 继续为 `IN_PROGRESS`；不得越过 G0.3 开始 G0.4、G1 Store/DDL、G2 Compiler lowering/normalization/proof、Golden sealing、Registry、T0-T8、Runtime Center 或 UI。
+下一会话开始 `G0.4 Catalogs and Protocol Tables`。先完整阅读架构规范和本文，复核本次 G0.3 原子提交及其八个 closed Schema/fixtures/conformance，再按 G0.4 范围机器化 Error/Fact/Event/Permission/Reason/Denial、状态与 T0-T8/T6e 表。G0 总 Gate 继续为 `IN_PROGRESS`；不得越过 G0.4 开始 G0.5、G1 Store/DDL、G2 Compiler lowering/normalization/proof、Golden sealing、Registry、T0-T8 Runtime 语义、Runtime Center 或 UI。
